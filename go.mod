@@ -5,7 +5,6 @@ go 1.26.5
 require (
 	github.com/cockroachdb/pebble/v2 v2.1.6
 	github.com/google/go-cmp v0.7.0
-	github.com/tetratelabs/wazero v1.12.0
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-go v0.25.0
 	github.com/tree-sitter/tree-sitter-python v0.25.0

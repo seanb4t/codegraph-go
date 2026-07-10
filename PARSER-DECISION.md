@@ -243,15 +243,20 @@ production) remains a bounded swap behind this same interface.
 
 ## Disposition of Spike Artifacts
 
-Per this decision, `internal/parser/wazero/` (including its vendored WASM
-asset) and `tools/spike/` are spike-scope artifacts, not production code.
-They are being **retained in the repository** (not deleted) as the
-documented evidence trail for this decision and to keep the benchmark
-reproducible for future re-evaluation, per the plan's own artifact-produced
-note ("kept only if Option B is selected" — recorded here as an explicit,
-deliberate deviation from that default: the benchmark harness and the
-losing arm are kept as living documentation rather than deleted, since
-`internal/parser/wazero` is clearly package-doc-marked as a spike artifact
-and `tools/spike/` is build/test-time-only tooling never shipped in the
-production binary). If this is not the desired outcome, deletion is a
-follow-up, not a blocker to ratifying the decision itself.
+Per this decision (human-ratified 2026-07-10), the spike-scope artifacts are
+**deleted**, not retained. Removed:
+
+- `internal/parser/wazero/` (the Option-B arm and its vendored, pre-release
+  `malivvan/tree-sitter` WASM asset) — dropped so the experimental,
+  unaudited WASM dependency does not linger in a project whose core value is
+  a minimal, audited dependency tree.
+- `tools/spike/` (the CGo-vs-wazero benchmark harness, corpus, and
+  crash-isolation tests) and the `github.com/tetratelabs/wazero` require in
+  `go.mod`.
+
+The measured numbers, methodology, and reasoning are preserved in **this
+document** as the durable decision record (Success Criterion 3). A future
+re-evaluation of Option B (e.g. once a mature WASM tree-sitter pipeline with
+a complete `ts_tree_edit` ABI exists) rebuilds the harness from scratch; the
+narrow `parser.Parser` interface (D-05b) is retained precisely so that swap
+remains a backend change, not an architecture change.
