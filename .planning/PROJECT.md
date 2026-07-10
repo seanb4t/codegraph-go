@@ -26,6 +26,7 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 - [ ] Single static binary per platform (macOS/Linux/Windows), minimal audited dependency tree, no bundled runtime
 - [ ] Release integrity: cosign-signed artifacts, SLSA build provenance, published SBOM, vuln scanning gating CI, reproducible builds
 - [ ] Published benchmarks vs TS CodeGraph on real repos (indexing throughput, query latency, memory)
+- [ ] v1 storage format is schema-versioned and anticipates future annotations (embedding vectors, community assignments) and bulk graph export for visualization — future features bolt on without a format break
 
 ### Out of Scope
 
@@ -34,6 +35,7 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 - Hosted platform features (getcodegraph.com-style PR analysis) — different product; not this project's goal
 - Bundling any runtime with the binary — antithesis of the design; the static binary IS the distribution
 - Feature additions beyond TS parity in v1 — parity plus performance is the bar; new capabilities wait for v2
+- Embeddings/vector search, community detection, graph visualization UI — planned future milestones (post-v1); v1 schema must anticipate them (annotations, export), not implement them. Embeddings will be local-model-first; cloud-API embeddings are permanently out
 
 ## Context
 
@@ -63,6 +65,7 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 | Language priority: Go → Java/C# → Python → TS/JS | Matches Sean's daily usage and work-team stack | — Pending |
 | Full supply-chain suite from first release | Signing, SLSA, SBOM, reproducibility are the differentiator, not an afterthought | — Pending |
 | Parser strategy (CGo tree-sitter vs wazero WASM vs native Go) | Performance vs purity vs sandboxing — needs quantified research | — Pending research |
+| Plan for embeddings, communities, graph-viz UI as future milestones | Long-term product direction; v1 schema versioned + annotation-ready so they bolt on | — Pending |
 
 ## Evolution
 
