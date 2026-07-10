@@ -36,10 +36,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The parser strategy (CGo tree-sitter vs wazero WASM) is selected from a head-to-head spike, with parse throughput and static-build impact documented as the basis for the decision
   4. A golden-output corpus and the TS `.codegraph/` schema DDL are captured from the live TS CodeGraph v1.3.x so later phases can measure parity against ground truth
 
-**Plans**: 7 plans (3 waves)
+**Plans**: 1/7 plans executed
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Bootstrap Go module + pinned deps + package skeleton (Wave 1)
+- [x] 01-01-PLAN.md — Bootstrap Go module + pinned deps + package skeleton (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Storage, Schema & Parser Strategy | 0/7 | Not started | - |
+| 1. Foundation — Storage, Schema & Parser Strategy | 1/7 | In Progress|  |
 | 2. Go Indexing Pipeline | 0/TBD | Not started | - |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |

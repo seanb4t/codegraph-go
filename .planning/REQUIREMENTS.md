@@ -10,7 +10,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [ ] **INDX-02**: User can run `codegraph index` for a deterministic from-scratch rebuild with `--force`, `--quiet`, `--verbose`
 - [ ] **INDX-03**: User can run `codegraph sync` to incrementally reparse only changed files, using content-hash diffing with dependent-file edge recomputation (not full re-index of a subset)
 - [ ] **INDX-04**: File renames, deletes, and moves correctly prune stale symbols and edges — no orphaned nodes or dangling edges after any file operation, verified by a fixture suite
-- [ ] **INDX-05**: Storage engine (new format) supports concurrent lock-free readers with a single coordinated writer, implemented behind a `GraphStore` interface no other package bypasses
+- [x] **INDX-05**: Storage engine (new format) supports concurrent lock-free readers with a single coordinated writer, implemented behind a `GraphStore` interface no other package bypasses
 - [ ] **INDX-06**: User can index a 100k+ file monorepo within bounded memory; peak RSS is tracked as a first-class CI metric
 
 ### Graph Resolution
@@ -89,7 +89,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ### Architecture Future-Proofing
 
-- [ ] **ARCH-01**: The new storage format and `GraphStore` interface are schema-versioned from v1 and accommodate future node/edge annotations (embedding vectors, community/cluster assignments) and bulk graph export (for visualization) without a format break
+- [x] **ARCH-01**: The new storage format and `GraphStore` interface are schema-versioned from v1 and accommodate future node/edge annotations (embedding vectors, community/cluster assignments) and bulk graph export (for visualization) without a format break
 
 ## v2 Requirements (Deferred)
 
@@ -130,7 +130,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | INDX-02 | Phase 2 | Pending |
 | INDX-03 | Phase 4 | Pending |
 | INDX-04 | Phase 4 | Pending |
-| INDX-05 | Phase 1 | Pending |
+| INDX-05 | Phase 1 | Complete |
 | INDX-06 | Phase 8 | Pending |
 | RES-01 | Phase 2 | Pending |
 | RES-02 | Phase 5 | Pending |
@@ -176,4 +176,4 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | DIST-05 | Phase 8 | Pending |
 | PERF-01 | Phase 8 | Pending |
 | PERF-02 | Phase 8 | Pending |
-| ARCH-01 | Phase 1 | Pending |
+| ARCH-01 | Phase 1 | Complete |
