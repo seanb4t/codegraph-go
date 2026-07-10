@@ -1,0 +1,91 @@
+// Package codegraph.v1 defines the schema-versioned record format for the
+// codegraph-go graph store (D-02). Every message follows an additive-only
+// evolution discipline (D-02a): field numbers are never renumbered or
+// reused. When a field is retired, its number is added to a `reserved`
+// clause instead of being deleted outright. Each of Node and Edge reserves
+// a contiguous field-number range for post-v1 annotations (embedding
+// vectors, community/cluster assignments) so those fields land at a
+// pre-agreed number instead of "whatever's next" — this is the physical
+// mechanism behind ARCH-01's forward-compatibility guarantee.
+syntax = "proto3";
+
+package codegraph.v1;
+
+option go_package = "github.com/seanb4t/codegraph-go/internal/schema";
+
+// Node is a single symbol record (function, type, method, etc.) extracted
+// from a source file.
+//
+// NOTE: field names/types are designed against the TS `.codegraph/` DDL
+// captured in Plan 01-04. If 01-04 has not landed by the time this is read,
+// reconcile these fields against the captured DDL once it is available —
+// additively only, per D-02a.
+message Node {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  string qualified_name = 4;
+  string file_path = 5;
+  string language = 6;
+  int32 start_line = 7;
+  int32 end_line = 8;
+  int32 start_col = 9;
+  int32 end_col = 10;
+
+  // Reserved now, before any consumer exists, so a future embedding-vector
+  // or community/cluster-assignment field lands at a pre-agreed number
+  // instead of colliding with whatever the next organic field would be.
+  // This is the literal ARCH-01 annotation slot (D-03's `a/…` keyspace
+  // namespace is the storage-layer counterpart).
+  reserved 50 to 59; // future: embedding vector, community/cluster assignment
+}
+
+// Edge is a directed relationship between two Node ids (calls, imports,
+// implements, etc.).
+message Edge {
+  string source = 1;
+  string target = 2;
+  string kind = 3;
+
+  // Optional call-site coordinates. Per RESEARCH Pitfall 2 / Open Question
+  // 3: the Pebble edge KEY (`e/<src>/<kind>/<dst>`, D-03) intentionally
+  // omits line/col today, so two call sites between the same (source,
+  // kind, target) collapse to one stored edge. That key-identity decision
+  // is deferred to Phase 2 extractor design — this record must still be
+  // able to CARRY line/col so a future key-shape change (or an
+  // annotation/audit trail) doesn't lose the data that's available at
+  // extraction time.
+  int32 line = 4;
+  int32 col = 5;
+
+  reserved 50 to 59; // future: embedding vector, community/cluster assignment
+}
+
+// File is a per-source-file record: identity, content hash, and
+// aggregate counts for the symbols/edges attributed to it.
+message File {
+  string path = 1;
+
+  // content_hash MUST be a collision-resistant hash (SHA-256 — see
+  // Security Domain V6 in 01-RESEARCH.md), never a weak hash like MD5.
+  // The hash computation itself lands with the Phase 2 indexer; this
+  // field only defines its storage shape.
+  string content_hash = 2;
+  string language = 3;
+  int64 node_count = 4;
+  int64 edge_count = 5;
+}
+
+// Meta is the single versioned record (stored under the `meta/` key
+// prefix, D-03) that stamps the on-disk schema version plus aggregate
+// counts and index health. schema_version is bumped ONLY for a genuinely
+// breaking layout change — additive field changes never require a bump
+// (D-02a).
+message Meta {
+  uint32 schema_version = 1;
+  int64 node_count = 2;
+  int64 edge_count = 3;
+  int64 last_sync_unix_ms = 4;
+  bool healthy = 5;
+  string health_message = 6;
+}
