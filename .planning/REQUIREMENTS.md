@@ -122,4 +122,58 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ## Traceability
 
-(Filled by roadmap — maps each REQ-ID to its phase)
+Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphans, no duplicates.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| INDX-01 | Phase 2 | Pending |
+| INDX-02 | Phase 2 | Pending |
+| INDX-03 | Phase 4 | Pending |
+| INDX-04 | Phase 4 | Pending |
+| INDX-05 | Phase 1 | Pending |
+| INDX-06 | Phase 8 | Pending |
+| RES-01 | Phase 2 | Pending |
+| RES-02 | Phase 5 | Pending |
+| RES-03 | Phase 5 | Pending |
+| QRY-01 | Phase 3 | Pending |
+| QRY-02 | Phase 3 | Pending |
+| QRY-03 | Phase 3 | Pending |
+| QRY-04 | Phase 3 | Pending |
+| QRY-05 | Phase 3 | Pending |
+| QRY-06 | Phase 3 | Pending |
+| QRY-07 | Phase 3 | Pending |
+| QRY-08 | Phase 3 | Pending |
+| QRY-09 | Phase 3 | Pending |
+| MCP-01 | Phase 3 | Pending |
+| MCP-02 | Phase 3 | Pending |
+| MCP-03 | Phase 3 | Pending |
+| MCP-04 | Phase 3 | Pending |
+| SYNC-01 | Phase 4 | Pending |
+| SYNC-02 | Phase 4 | Pending |
+| SYNC-03 | Phase 4 | Pending |
+| SYNC-04 | Phase 4 | Pending |
+| SYNC-05 | Phase 4 | Pending |
+| SYNC-06 | Phase 4 | Pending |
+| CLI-01 | Phase 6 | Pending |
+| CLI-02 | Phase 6 | Pending |
+| CLI-03 | Phase 6 | Pending |
+| AGNT-01 | Phase 6 | Pending |
+| AGNT-02 | Phase 6 | Pending |
+| AGNT-03 | Phase 6 | Pending |
+| LANG-01 | Phase 2 | Pending |
+| LANG-02 | Phase 5 | Pending |
+| LANG-03 | Phase 5 | Pending |
+| LANG-04 | Phase 5 | Pending |
+| LANG-05 | Phase 5 | Pending |
+| LANG-06 | Phase 5 | Pending |
+| LANG-07 | Phase 5 | Pending |
+| MIGR-01 | Phase 7 | Pending |
+| MIGR-02 | Phase 7 | Pending |
+| DIST-01 | Phase 8 | Pending |
+| DIST-02 | Phase 8 | Pending |
+| DIST-03 | Phase 8 | Pending |
+| DIST-04 | Phase 8 | Pending |
+| DIST-05 | Phase 8 | Pending |
+| PERF-01 | Phase 8 | Pending |
+| PERF-02 | Phase 8 | Pending |
+| ARCH-01 | Phase 1 | Pending |
