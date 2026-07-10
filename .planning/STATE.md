@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: Foundation — Storage, Schema & Parser Strategy
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-07-10T13:48:32.925Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-07-10T13:58:01.702Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 01 (Foundation — Storage, Schema & Parser Strategy) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 01 execution started
 
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01 P01 | 6min | 2 tasks | 6 files |
+| Phase 01 P02 | 3min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Recent decisions affecting current work:
 - [Roadmap]: Migration tool (Phase 7) waits on Phase 2 schema stability; interface-dispatch synthesis + provenance land with language breadth in Phase 5
 - [Phase 01]: Used github.com/cockroachdb/pebble/v2 (not deprecated bare v1 path) per RESEARCH Pitfall 4
 - [Phase 01]: Did not run go mod tidy in 01-01 — deps pinned but unimported until Wave 2 code lands
+- [Phase 01]: Edge record carries optional line/col fields even though the D-03 Pebble edge key omits them; key-identity multiplicity deferred to Phase 2 extractor design — Preserves call-site data at extraction time per RESEARCH Pitfall 2, without prejudging the key-shape decision
+- [Phase 01]: Manually promoted google.golang.org/protobuf and github.com/google/go-cmp from indirect to direct in go.mod instead of running go mod tidy — A full tidy would have stripped 01-01's deliberately pre-pinned, still-unimported deps (pebble/v2, tree-sitter, wazero, x/tools)
 
 ### Pending Todos
 
@@ -92,6 +95,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-10T13:48:32.920Z
-Stopped at: Completed 01-01-PLAN.md
+Last session: 2026-07-10T13:58:01.697Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
