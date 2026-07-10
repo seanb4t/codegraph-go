@@ -74,4 +74,29 @@ func TestCGoCloseIsSafeToCallOnce(t *testing.T) {
 	}
 }
 
+func TestCGoTreeCloseIsSafeToCallTwice(t *testing.T) {
+	p, err := NewGoParser()
+	if err != nil {
+		t.Fatalf("NewGoParser: %v", err)
+	}
+	defer p.Close()
+
+	src := []byte("package main\n\nfunc main() {}\n")
+	tree, err := p.Parse(src, nil)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+
+	// Proves WR-05's fix: closing the same *parser.Tree twice must not
+	// double-free the underlying native C tree (go-tree-sitter's
+	// Tree.Close() unconditionally calls ts_tree_delete with no nil
+	// guard on repeat calls).
+	if err := tree.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := tree.Close(); err != nil {
+		t.Fatalf("second Close: want nil, got %v", err)
+	}
+}
+
 var _ parser.Parser = (*CGoParser)(nil)

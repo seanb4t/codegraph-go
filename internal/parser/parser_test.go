@@ -74,4 +74,19 @@ func TestParserCloseIsCallable(t *testing.T) {
 	}
 }
 
+func TestTreeCloseIsIdempotent(t *testing.T) {
+	var closeCalls int
+	tree := NewTree(nil, func() { closeCalls++ })
+
+	if err := tree.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := tree.Close(); err != nil {
+		t.Fatalf("second Close: want nil, got %v", err)
+	}
+	if closeCalls != 1 {
+		t.Fatalf("closeFn call count: want 1, got %d", closeCalls)
+	}
+}
+
 var _ Parser = (*stubParser)(nil)

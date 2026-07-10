@@ -1,6 +1,9 @@
 package parser
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 // MaxSourceBytes is the default file-size ceiling enforced before any bytes
 // reach a backend's underlying parser. This is the mitigation for the
@@ -33,6 +36,12 @@ type Tree struct {
 	// C-allocated tree-sitter memory). It is nil for trees that own no
 	// native resources (e.g. test stubs).
 	closeFn func()
+
+	// closeOnce guards closeFn so a Tree double-closed sequentially or
+	// concurrently invokes the backend's native release exactly once,
+	// mirroring the guard CGoParser.Close() uses for the same class of
+	// native double-free risk.
+	closeOnce sync.Once
 }
 
 // NewTree wraps a backend-specific tree value in the shared, opaque Tree
@@ -55,14 +64,17 @@ func (t *Tree) Inner() any {
 
 // Close releases any backend-native resources (e.g. C-allocated
 // tree-sitter memory) held by this Tree. Safe to call on a nil Tree or a
-// Tree with no associated closeFn. Callers MUST call Close() exactly once
-// when a Tree is discarded, including when it is superseded by a newer
-// tree produced via incremental reparse.
+// Tree with no associated closeFn, and safe to call more than once
+// (sequentially or concurrently): closeFn is invoked at most once.
+// Callers MUST call Close() exactly once when a Tree is discarded,
+// including when it is superseded by a newer tree produced via
+// incremental reparse — this guard exists as a backstop against that
+// discipline slipping, not as license to skip it.
 func (t *Tree) Close() error {
 	if t == nil || t.closeFn == nil {
 		return nil
 	}
-	t.closeFn()
+	t.closeOnce.Do(t.closeFn)
 	return nil
 }
 
