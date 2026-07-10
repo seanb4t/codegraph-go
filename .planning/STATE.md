@@ -6,14 +6,14 @@ current_phase: 01
 current_phase_name: Foundation — Storage, Schema & Parser Strategy
 status: executing
 stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-07-10T16:51:09.531Z"
+last_updated: "2026-07-10T17:01:54.278Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 01 (Foundation — Storage, Schema & Parser Strategy) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 01 execution started
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 3min | 2 tasks | 6 files |
 | Phase 01 P03 | 20min | 2 tasks | 5 files |
 | Phase 01 P04 | 25min | 2 tasks | 19 files |
+| Phase 01 P05 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Tree wraps backend value as an unexported any field (NewTree/Inner) rather than generics, keeping the Parser seam simple for the CGo/wazero A/B in 01-07
 - [Phase 01]: Used seanb4t/weft (public) + colbymchenry/codegraph (temp clone) as the D-06a golden-fixture corpus; only captured JSON outputs committed
 - [Phase 01]: Extended volatile-field strip beyond score/*_at/*At to dbSizeBytes + projectPath/indexPath normalization for byte-for-byte reproducibility
+- [Phase 01]: fileSubgraphPrefix scopes only the file's own f/ record in v1; extending to node/edge records deferred to Plan 01-06
+- [Phase 01]: rangeUpperBound implemented once as a namespace-agnostic byte-successor helper reused by edge range-scans and file range-deletes
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-10T16:50:27.136Z
+Last session: 2026-07-10T16:57:10.588Z
 Stopped at: Completed 01-03-PLAN.md
 Resume file: None
