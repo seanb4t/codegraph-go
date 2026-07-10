@@ -45,6 +45,20 @@ func TestConcurrentReadersSingleWriter(t *testing.T) {
 
 	var wg sync.WaitGroup
 
+	// Barrier forcing genuine overlap between the readers' Snapshot() calls
+	// and the writer's Commit() call (WR-03): without this, Go's scheduler
+	// could serialize the whole run (all readers finish before the writer
+	// is even scheduled, or vice versa) and the "no torn write" assertion
+	// below would pass vacuously, without ever observing the interleaved
+	// window it claims to prove is safe. readersReady tracks every reader
+	// goroutine reaching the start barrier; the writer stages its batch,
+	// waits for all readers to be poised at the barrier, then releases them
+	// and calls Commit() immediately after — so the readers' Snapshot()
+	// calls and the writer's Commit() race in earnest.
+	var readersReady sync.WaitGroup
+	readersReady.Add(numReaders)
+	start := make(chan struct{})
+
 	// Single coordinated writer: stages every node on one Batch and
 	// commits once (D-04) — not one Pebble write per symbol.
 	wg.Add(1)
@@ -66,6 +80,8 @@ func TestConcurrentReadersSingleWriter(t *testing.T) {
 				return
 			}
 		}
+		readersReady.Wait()
+		close(start)
 		if err := w.Commit(); err != nil {
 			t.Errorf("Commit: %v", err)
 		}
@@ -80,6 +96,9 @@ func TestConcurrentReadersSingleWriter(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			readersReady.Done()
+			<-start
+
 			snap, err := store.Snapshot()
 			if err != nil {
 				t.Errorf("Snapshot: %v", err)
