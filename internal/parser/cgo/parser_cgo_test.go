@@ -23,6 +23,7 @@ func TestCGoParsesGoSource(t *testing.T) {
 	if tree == nil {
 		t.Fatal("expected a non-nil tree for valid Go source")
 	}
+	defer tree.Close()
 }
 
 func TestCGoParsesPythonSource(t *testing.T) {
@@ -43,6 +44,7 @@ func TestCGoParsesPythonSource(t *testing.T) {
 	if tree == nil {
 		t.Fatal("expected a non-nil tree for valid Python source")
 	}
+	defer tree.Close()
 }
 
 func TestCGoParseRejectsOversizeInput(t *testing.T) {

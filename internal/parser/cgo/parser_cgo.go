@@ -6,6 +6,8 @@
 package cgo
 
 import (
+	"errors"
+	"sync"
 	"unsafe"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
@@ -15,11 +17,16 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/parser"
 )
 
+// ErrParseFailed is returned when the underlying tree-sitter C call
+// returns no tree (a NULL *TSTree), so callers never receive a
+// non-nil *parser.Tree wrapping a nil native tree.
+var ErrParseFailed = errors.New("cgo: tree-sitter parse returned no tree")
+
 // CGoParser implements parser.Parser using the CGo tree-sitter bindings
 // for a single language grammar.
 type CGoParser struct {
-	inner  *tree_sitter.Parser
-	closed bool
+	inner     *tree_sitter.Parser
+	closeOnce sync.Once
 }
 
 // NewGoParser returns a CGoParser configured for the Go grammar.
@@ -61,16 +68,17 @@ func (p *CGoParser) Parse(source []byte, oldTree *parser.Tree) (*parser.Tree, er
 	}
 
 	result := p.inner.Parse(source, native)
-	return parser.NewTree(result), nil
+	if result == nil {
+		return nil, ErrParseFailed
+	}
+	return parser.NewTree(result, result.Close), nil
 }
 
-// Close frees the underlying C parser's allocations. Safe to call once;
-// repeat calls are a no-op.
+// Close frees the underlying C parser's allocations. Safe to call once
+// or concurrently; repeat calls are a no-op.
 func (p *CGoParser) Close() error {
-	if p.closed {
-		return nil
-	}
-	p.inner.Close()
-	p.closed = true
+	p.closeOnce.Do(func() {
+		p.inner.Close()
+	})
 	return nil
 }

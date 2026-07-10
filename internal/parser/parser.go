@@ -28,12 +28,19 @@ type Tree struct {
 	// typically by embedding/wrapping this Tree rather than reaching into
 	// this field directly from outside the backend package.
 	inner any
+
+	// closeFn releases the backend-specific native tree's resources (e.g.
+	// C-allocated tree-sitter memory). It is nil for trees that own no
+	// native resources (e.g. test stubs).
+	closeFn func()
 }
 
 // NewTree wraps a backend-specific tree value in the shared, opaque Tree
-// type. Backend packages call this after a successful parse.
-func NewTree(inner any) *Tree {
-	return &Tree{inner: inner}
+// type. Backend packages call this after a successful parse. closeFn, if
+// non-nil, is invoked exactly once by Close() to release the backend's
+// native tree resources (e.g. C-allocated tree-sitter memory).
+func NewTree(inner any, closeFn func()) *Tree {
+	return &Tree{inner: inner, closeFn: closeFn}
 }
 
 // Inner returns the backend-specific tree value that was wrapped by
@@ -44,6 +51,19 @@ func (t *Tree) Inner() any {
 		return nil
 	}
 	return t.inner
+}
+
+// Close releases any backend-native resources (e.g. C-allocated
+// tree-sitter memory) held by this Tree. Safe to call on a nil Tree or a
+// Tree with no associated closeFn. Callers MUST call Close() exactly once
+// when a Tree is discarded, including when it is superseded by a newer
+// tree produced via incremental reparse.
+func (t *Tree) Close() error {
+	if t == nil || t.closeFn == nil {
+		return nil
+	}
+	t.closeFn()
+	return nil
 }
 
 // Parser is the narrow, backend-swappable seam between arbitrary source
@@ -74,7 +94,11 @@ func (t *Tree) Inner() any {
 // Resource contract: implementations allocate C or WASM-backed memory for
 // parsers/trees. Callers MUST call Close() exactly once when done with a
 // Parser to free those resources; Close() must be safe to call even if no
-// Parse call was made.
+// Parse call was made. Callers MUST ALSO call Close() on every *Tree
+// returned by Parse exactly once when done with it — including a
+// superseded oldTree once an incremental reparse produces its
+// replacement — to free the tree's own native memory, which is distinct
+// from and not released by Parser.Close().
 type Parser interface {
 	// Parse produces a Tree from source bytes. If oldTree is non-nil,
 	// implementations SHOULD perform an incremental reparse using it as a
