@@ -191,3 +191,41 @@ func TestDeleteFileSubgraphPrunesOnlyThatFile(t *testing.T) {
 		t.Fatalf("GetFile(pkg/foo.go.bak): want no error (sibling must survive the delete), got %v", err)
 	}
 }
+
+// TestStoreCloseIsIdempotent proves CR-05's fix: pebble.DB.Close() panics
+// on a second invocation, so pebbleStore.Close() must short-circuit after
+// the first call rather than re-delegating to pebble.
+func TestStoreCloseIsIdempotent(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("second Close: want nil, got %v", err)
+	}
+}
+
+// TestReaderCloseIsIdempotent proves the same idempotency guard applies
+// to pebbleReader.Close(): *pebble.Snapshot.Close() also panics on a
+// second invocation.
+func TestReaderCloseIsIdempotent(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer store.Close()
+
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if err := snap.Close(); err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	if err := snap.Close(); err != nil {
+		t.Fatalf("second Close: want nil, got %v", err)
+	}
+}

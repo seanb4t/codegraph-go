@@ -69,12 +69,15 @@ func (s *pebbleStore) NewWriter() (Writer, error) {
 	return &pebbleWriter{batch: s.db.NewBatch()}, nil
 }
 
-// Close releases the underlying Pebble handle. Safe to call once; marks
-// the store closed before delegating to pebble so subsequent
-// Snapshot/NewWriter/Export calls observe ErrClosed instead of racing
-// into pebble's own closed-DB panic path.
+// Close releases the underlying Pebble handle. Safe to call more than
+// once: the first call marks the store closed (so subsequent
+// Snapshot/NewWriter/Export calls observe ErrClosed) and delegates to
+// pebble; every call after that is a no-op, since pebble.DB.Close()
+// itself panics on a second invocation.
 func (s *pebbleStore) Close() error {
-	s.closed.Store(true)
+	if s.closed.Swap(true) {
+		return nil
+	}
 	return s.db.Close()
 }
 
@@ -105,7 +108,8 @@ func getProto(g getter, key []byte, msg proto.Message) error {
 // GetX/IterateEdges call on one pebbleReader observes the same consistent,
 // point-in-time view (INDX-05).
 type pebbleReader struct {
-	snap *pebble.Snapshot
+	snap   *pebble.Snapshot
+	closed atomic.Bool
 }
 
 func (r *pebbleReader) GetNode(id string) (*schema.Node, error) {
@@ -142,7 +146,13 @@ func (r *pebbleReader) IterateEdges(srcPrefix string) (EdgeIterator, error) {
 	return &pebbleEdgeIterator{iter: iter}, nil
 }
 
+// Close releases the underlying Pebble snapshot. Safe to call more than
+// once: *pebble.Snapshot.Close() panics on a second invocation, so repeat
+// calls after the first are a no-op.
 func (r *pebbleReader) Close() error {
+	if r.closed.Swap(true) {
+		return nil
+	}
 	return r.snap.Close()
 }
 
