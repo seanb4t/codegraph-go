@@ -32,7 +32,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The on-disk format is schema-versioned and round-trips future node/edge annotation fields (embedding vectors, community assignments) and a bulk graph export without a format break, verified by a version/export test
   3. The parser strategy (CGo tree-sitter vs wazero WASM) is selected from a head-to-head spike, with parse throughput and static-build impact documented as the basis for the decision
   4. A golden-output corpus and the TS `.codegraph/` schema DDL are captured from the live TS CodeGraph v1.3.x so later phases can measure parity against ground truth
-**Plans**: TBD
+**Plans**: 7 plans (3 waves)
+- [ ] 01-01-PLAN.md — Bootstrap Go module + pinned deps + package skeleton (Wave 1)
+- [ ] 01-02-PLAN.md — Protobuf schema-versioned records + forward-compat round-trip (Wave 2, ARCH-01)
+- [ ] 01-03-PLAN.md — Narrow Parser interface + CGo tree-sitter backend (Go+Python) with size ceiling (Wave 2)
+- [ ] 01-04-PLAN.md — Golden corpus + TS SQLite DDL capture from live TS v1.3.1 (Wave 2)
+- [ ] 01-05-PLAN.md — Typed keyspace encoders + delimiter-injection guard (Wave 2, INDX-05)
+- [ ] 01-06-PLAN.md — GraphStore interface + pebble/v2 impl + concurrency + bulk export + import-graph boundary test (Wave 3, INDX-05/ARCH-01)
+- [ ] 01-07-PLAN.md — Parser spike (CGo vs wazero) benchmark + crash isolation + PARSER-DECISION.md (Wave 3)
 
 ### Phase 2: Go Indexing Pipeline
 **Goal**: A user can index a Go repository from scratch and get a correct, cross-file-resolved, queryable graph — proving the two-pass indexer mechanism on the first language.
@@ -122,7 +129,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Storage, Schema & Parser Strategy | 0/TBD | Not started | - |
+| 1. Foundation — Storage, Schema & Parser Strategy | 0/7 | Not started | - |
 | 2. Go Indexing Pipeline | 0/TBD | Not started | - |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
