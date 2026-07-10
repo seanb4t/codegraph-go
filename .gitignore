@@ -1,1 +1,8 @@
 .planning/research/.cache/
+
+# Go build/test artifacts
+/dist/
+*.test
+*.out
+coverage.txt
+coverage.html
