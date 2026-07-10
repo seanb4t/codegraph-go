@@ -3,6 +3,7 @@ package graphstore
 import (
 	"errors"
 	"io"
+	"sync/atomic"
 
 	"github.com/cockroachdb/pebble/v2"
 	"google.golang.org/protobuf/proto"
@@ -16,6 +17,15 @@ import (
 // own error type outside this package would itself be a D-04a bypass.
 var ErrNotFound = errors.New("graphstore: not found")
 
+// ErrClosed is returned by Snapshot, NewWriter, and Export once the store
+// has been Closed, instead of letting the call reach pebble's own
+// closed-DB panic path (pebble/v2 panics rather than returning an error
+// once its *pebble.DB is closed — verified against db.go's NewSnapshot
+// and applyInternal). Commit on a Writer obtained just before Close is a
+// harder race to close entirely without additional coordination and is
+// not guarded by this sentinel.
+var ErrClosed = errors.New("graphstore: store is closed")
+
 // metaRecordName is the single well-known meta/ key name under which the
 // store's Meta record (schema version, aggregate counts, health) lives.
 const metaRecordName = "schema"
@@ -26,7 +36,8 @@ const metaRecordName = "schema"
 // archtest.TestNoPackageBypassesGraphStore enforces this at test time
 // (D-04a).
 type pebbleStore struct {
-	db *pebble.DB
+	db     *pebble.DB
+	closed atomic.Bool
 }
 
 // Open opens (creating if necessary) a pebble/v2-backed GraphStore at dir.
@@ -42,6 +53,9 @@ func Open(dir string) (GraphStore, error) {
 // snapshots do not pin memtables or block the writer, so this call is
 // lock-free with respect to any in-flight Writer.
 func (s *pebbleStore) Snapshot() (Reader, error) {
+	if s.closed.Load() {
+		return nil, ErrClosed
+	}
 	return &pebbleReader{snap: s.db.NewSnapshot()}, nil
 }
 
@@ -49,11 +63,18 @@ func (s *pebbleStore) Snapshot() (Reader, error) {
 // IndexedBatch: this write path needs no read-your-writes within the
 // batch, and an indexed batch is slower for inserts.
 func (s *pebbleStore) NewWriter() (Writer, error) {
+	if s.closed.Load() {
+		return nil, ErrClosed
+	}
 	return &pebbleWriter{batch: s.db.NewBatch()}, nil
 }
 
-// Close releases the underlying Pebble handle.
+// Close releases the underlying Pebble handle. Safe to call once; marks
+// the store closed before delegating to pebble so subsequent
+// Snapshot/NewWriter/Export calls observe ErrClosed instead of racing
+// into pebble's own closed-DB panic path.
 func (s *pebbleStore) Close() error {
+	s.closed.Store(true)
 	return s.db.Close()
 }
 

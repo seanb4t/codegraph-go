@@ -39,6 +39,9 @@ const maxImportRecordBytes = 64 * 1024 * 1024 // 64 MiB
 // single Pebble snapshot, so a writer committing after Export has captured
 // its snapshot cannot tear the in-flight stream (INDX-05).
 func (s *pebbleStore) Export(w io.Writer) error {
+	if s.closed.Load() {
+		return ErrClosed
+	}
 	snap := s.db.NewSnapshot()
 	defer snap.Close()
 
