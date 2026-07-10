@@ -80,7 +80,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [ ] **DIST-02**: Every release artifact is cosign-signed (keyless) with SLSA build provenance, and users can verify both with documented commands
 - [ ] **DIST-03**: Every release publishes an SBOM; `govulncheck` and dependency scanning gate CI
 - [ ] **DIST-04**: Builds are reproducible, verified by a double-build comparison gate in CI
-- [ ] **DIST-05**: Dependency tree stays minimal and audited; CGo (if the parser spike selects it) is the sole documented exception
+- [x] **DIST-05**: Dependency tree stays minimal and audited; CGo (if the parser spike selects it) is the sole documented exception
 
 ### Performance
 
@@ -173,7 +173,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | DIST-02 | Phase 8 | Pending |
 | DIST-03 | Phase 8 | Pending |
 | DIST-04 | Phase 8 | Pending |
-| DIST-05 | Phase 8 | Pending |
+| DIST-05 | Phase 8 | Complete |
 | PERF-01 | Phase 8 | Pending |
 | PERF-02 | Phase 8 | Pending |
 | ARCH-01 | Phase 1 | Complete |

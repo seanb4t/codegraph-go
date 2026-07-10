@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 01
 current_phase_name: Foundation — Storage, Schema & Parser Strategy
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-07-10T13:58:01.702Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-07-10T14:09:34.800Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 01 (Foundation — Storage, Schema & Parser Strategy) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 01 execution started
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01 P01 | 6min | 2 tasks | 6 files |
 | Phase 01 P02 | 3min | 2 tasks | 6 files |
+| Phase 01 P03 | 20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Did not run go mod tidy in 01-01 — deps pinned but unimported until Wave 2 code lands
 - [Phase 01]: Edge record carries optional line/col fields even though the D-03 Pebble edge key omits them; key-identity multiplicity deferred to Phase 2 extractor design — Preserves call-site data at extraction time per RESEARCH Pitfall 2, without prejudging the key-shape decision
 - [Phase 01]: Manually promoted google.golang.org/protobuf and github.com/google/go-cmp from indirect to direct in go.mod instead of running go mod tidy — A full tidy would have stripped 01-01's deliberately pre-pinned, still-unimported deps (pebble/v2, tree-sitter, wazero, x/tools)
+- [Phase 01]: Manually promoted go-tree-sitter + grammar modules from indirect to direct requires in go.mod instead of running go mod tidy (would strip 01-01 pre-pinned pebble/v2, wazero, x/tools)
+- [Phase 01]: Tree wraps backend value as an unexported any field (NewTree/Inner) rather than generics, keeping the Parser seam simple for the CGo/wazero A/B in 01-07
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-10T13:58:01.697Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-07-10T14:09:34.794Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
