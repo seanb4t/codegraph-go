@@ -36,7 +36,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [ ] **MCP-01**: Agent gets a stdio MCP server (`codegraph serve --mcp`) with `codegraph_explore` as the only default-visible tool
 - [ ] **MCP-02**: User can expose the 7 additional tools (`node`, `search`, `callers`, `callees`, `impact`, `files`, `status`) via the `CODEGRAPH_MCP_TOOLS` allowlist env var
 - [ ] **MCP-03**: MCP server exposes zero tools when no `.codegraph/` exists, so agents fall back to built-ins gracefully
-- [ ] **MCP-04**: MCP tool output shapes match TS CodeGraph v1.3.x, verified by a golden-output corpus captured from the live TS version before the MCP phase starts
+- [x] **MCP-04**: MCP tool output shapes match TS CodeGraph v1.3.x, verified by a golden-output corpus captured from the live TS version before the MCP phase starts
 
 ### Auto-Sync & Daemon
 
@@ -147,7 +147,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | MCP-01 | Phase 3 | Pending |
 | MCP-02 | Phase 3 | Pending |
 | MCP-03 | Phase 3 | Pending |
-| MCP-04 | Phase 3 | Pending |
+| MCP-04 | Phase 3 | Complete |
 | SYNC-01 | Phase 4 | Pending |
 | SYNC-02 | Phase 4 | Pending |
 | SYNC-03 | Phase 4 | Pending |
