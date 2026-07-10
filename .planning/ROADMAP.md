@@ -13,7 +13,7 @@ CodeGraph Go delivers a drop-in Go replacement for TypeScript CodeGraph: full v1
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation — Storage, Schema & Parser Strategy** - Schema-versioned graph store behind a `GraphStore` interface, with a benchmarked parser decision and captured TS ground-truth
+- [x] **Phase 1: Foundation — Storage, Schema & Parser Strategy** - Schema-versioned graph store behind a `GraphStore` interface, with a benchmarked parser decision and captured TS ground-truth (completed 2026-07-10)
 - [ ] **Phase 2: Go Indexing Pipeline** - Two-pass indexer proven on Go: `init`/`index` build a correct, cross-file-resolved graph from scratch
 - [ ] **Phase 3: Query Engine & MCP Server** - Full query command suite plus a parity stdio MCP server verified against the golden-output corpus
 - [ ] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak
@@ -36,7 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The parser strategy (CGo tree-sitter vs wazero WASM) is selected from a head-to-head spike, with parse throughput and static-build impact documented as the basis for the decision
   4. A golden-output corpus and the TS `.codegraph/` schema DDL are captured from the live TS CodeGraph v1.3.x so later phases can measure parity against ground truth
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Bootstrap Go module + pinned deps + package skeleton (Wave 1)
@@ -51,7 +51,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 01-06-PLAN.md — GraphStore interface + pebble/v2 impl + concurrency + bulk export + import-graph boundary test (Wave 3, INDX-05/ARCH-01)
-- [ ] 01-07-PLAN.md — Parser spike (CGo vs wazero) benchmark + crash isolation + PARSER-DECISION.md (Wave 3)
+- [x] 01-07-PLAN.md — Parser spike (CGo vs wazero) benchmark + crash isolation + PARSER-DECISION.md (Wave 3)
 
 ### Phase 2: Go Indexing Pipeline
 
@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Storage, Schema & Parser Strategy | 6/7 | In Progress|  |
+| 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete   | 2026-07-10 |
 | 2. Go Indexing Pipeline | 0/TBD | Not started | - |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
