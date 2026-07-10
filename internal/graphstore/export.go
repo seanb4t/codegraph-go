@@ -24,6 +24,14 @@ const (
 	exportKindFile uint8 = 4
 )
 
+// maxImportRecordBytes bounds the per-record length prefix read by Import,
+// mirroring parser.MaxSourceBytes's role on the parse path: it stops an
+// untrusted or corrupted stream's uvarint length prefix from driving an
+// unbounded make([]byte, length) allocation (a DoS vector on the one code
+// path in this phase explicitly designed to read externally-produced
+// data).
+const maxImportRecordBytes = 64 * 1024 * 1024 // 64 MiB
+
 // Export streams every record in the store — the Meta record first (per
 // D-04/ARCH-01: schema_version is always the first thing a reader of the
 // stream sees), then every Node, Edge, and File — as self-describing,
@@ -126,6 +134,9 @@ func Import(dst GraphStore, r io.Reader) error {
 		length, err := binary.ReadUvarint(br)
 		if err != nil {
 			return fmt.Errorf("import: read length: %w", err)
+		}
+		if length > maxImportRecordBytes {
+			return fmt.Errorf("import: record length %d exceeds ceiling %d", length, uint64(maxImportRecordBytes))
 		}
 		data := make([]byte, length)
 		if _, err := io.ReadFull(br, data); err != nil {
