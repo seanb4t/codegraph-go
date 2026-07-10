@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete   | 2026-07-10 |
+| 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
 | 2. Go Indexing Pipeline | 0/TBD | Not started | - |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
