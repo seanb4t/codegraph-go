@@ -8,6 +8,7 @@
 package archtest
 
 import (
+	"strings"
 	"testing"
 
 	"golang.org/x/tools/go/packages"
@@ -28,6 +29,12 @@ const (
 func TestNoPackageBypassesGraphStore(t *testing.T) {
 	cfg := &packages.Config{
 		Mode: packages.NeedImports | packages.NeedName | packages.NeedDeps,
+		// Tests: true is required so an import statement that appears only
+		// inside a _test.go file (including a hypothetical bypass package
+		// outside internal/graphstore that imports pebble/v2 solely from
+		// its test file) is not invisible to this check. Without it,
+		// go/packages loads only each package's non-test compilation unit.
+		Tests: true,
 	}
 	pkgs, err := packages.Load(cfg, "github.com/seanb4t/codegraph-go/...")
 	if err != nil {
@@ -60,8 +67,24 @@ func TestNoPackageBypassesGraphStore(t *testing.T) {
 }
 
 func isAllowedImporter(pkgPath string) bool {
-	if pkgPath == allowedImporterPrefix {
+	base := stripTestVariant(pkgPath)
+	if base == allowedImporterPrefix {
 		return true
 	}
-	return len(pkgPath) > len(allowedImporterPrefix) && pkgPath[:len(allowedImporterPrefix)+1] == allowedImporterPrefix+"/"
+	return len(base) > len(allowedImporterPrefix) && base[:len(allowedImporterPrefix)+1] == allowedImporterPrefix+"/"
+}
+
+// stripTestVariant normalizes the additional PkgPath forms Tests: true
+// introduces back to the underlying import path, so the allowed-prefix
+// check applies uniformly regardless of which variant loaded the import:
+//   - "domain/path [domain/path.test]"      (package compiled for test)
+//   - "domain/path_test [domain/path.test]" (external test package)
+//   - "domain/path.test"                    (synthesized test main)
+func stripTestVariant(pkgPath string) string {
+	if i := strings.IndexByte(pkgPath, ' '); i >= 0 {
+		pkgPath = pkgPath[:i]
+	}
+	pkgPath = strings.TrimSuffix(pkgPath, "_test")
+	pkgPath = strings.TrimSuffix(pkgPath, ".test")
+	return pkgPath
 }
