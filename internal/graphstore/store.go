@@ -103,4 +103,10 @@ type Writer interface {
 	// Commit atomically applies every staged mutation. Do not reuse a
 	// Writer after Commit.
 	Commit() error
+
+	// Close releases the Writer's underlying batch without applying it.
+	// Callers that abandon a Writer without calling Commit (e.g. after a
+	// marshal error mid-stage) MUST call Close to release the batch.
+	// Calling Close after a successful Commit is a safe no-op.
+	Close() error
 }
