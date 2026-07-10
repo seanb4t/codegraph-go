@@ -1,0 +1,140 @@
+{
+  "symbol": "searchNodes",
+  "depth": 2,
+  "nodeCount": 22,
+  "edgeCount": 23,
+  "affected": [
+    {
+      "name": "searchNodes",
+      "kind": "method",
+      "filePath": "src/index.ts",
+      "startLine": 1068
+    },
+    {
+      "name": "adaptive-explore-sizing.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/adaptive-explore-sizing.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "node-sqlite-backend.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/node-sqlite-backend.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "sync.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/sync.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "valueRefReaders",
+      "kind": "function",
+      "filePath": "__tests__/value-reference-edges.test.ts",
+      "startLine": 14
+    },
+    {
+      "name": "value-reference-edges.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/value-reference-edges.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "watcher.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/watcher.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "boundaryCandidates",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 2300
+    },
+    {
+      "name": "buildDynamicBoundaries",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 2160
+    },
+    {
+      "name": "findSymbolMatches",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 4375
+    },
+    {
+      "name": "pr19-improvements.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/pr19-improvements.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "symbol-lookup.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/symbol-lookup.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "handleNode",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 3672
+    },
+    {
+      "name": "findAllSymbols",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 4426
+    },
+    {
+      "name": "handleCallers",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 1571
+    },
+    {
+      "name": "handleCallees",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 1644
+    },
+    {
+      "name": "handleImpact",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 1714
+    },
+    {
+      "name": "buildFlowFromNamedSymbols",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 1881
+    },
+    {
+      "name": "handleExplore",
+      "kind": "method",
+      "filePath": "src/mcp/tools.ts",
+      "startLine": 2501
+    },
+    {
+      "name": "searchNodes",
+      "kind": "method",
+      "filePath": "src/db/queries.ts",
+      "startLine": 973
+    },
+    {
+      "name": "findRelevantContext",
+      "kind": "method",
+      "filePath": "src/context/index.ts",
+      "startLine": 432
+    },
+    {
+      "name": "buildContext",
+      "kind": "method",
+      "filePath": "src/context/index.ts",
+      "startLine": 216
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "initialized": true,
+  "version": "1.3.1",
+  "projectPath": "<CORPUS_PATH>",
+  "indexPath": "<CORPUS_PATH>",
+  "fileCount": 84,
+  "nodeCount": 1223,
+  "edgeCount": 4212,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 1,
+    "constant": 47,
+    "file": 77,
+    "function": 572,
+    "import": 366,
+    "interface": 1,
+    "method": 85,
+    "struct": 52,
+    "type_alias": 2,
+    "variable": 20
+  },
+  "languages": [
+    "go",
+    "javascript",
+    "python",
+    "yaml"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "1.3.1",
+    "builtWithExtractionVersion": 24,
+    "currentExtractionVersion": 24,
+    "reindexRecommended": false,
+    "state": "complete",
+    "pendingRefs": 0
+  }
+}

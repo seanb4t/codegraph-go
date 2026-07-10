@@ -1,0 +1,35 @@
+{
+  "symbol": "searchNodes",
+  "callers": [
+    {
+      "name": "adaptive-explore-sizing.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/adaptive-explore-sizing.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "node-sqlite-backend.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/node-sqlite-backend.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "sync.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/sync.test.ts",
+      "startLine": 1
+    },
+    {
+      "name": "valueRefReaders",
+      "kind": "function",
+      "filePath": "__tests__/value-reference-edges.test.ts",
+      "startLine": 14
+    },
+    {
+      "name": "value-reference-edges.test.ts",
+      "kind": "file",
+      "filePath": "__tests__/value-reference-edges.test.ts",
+      "startLine": 1
+    }
+  ]
+}

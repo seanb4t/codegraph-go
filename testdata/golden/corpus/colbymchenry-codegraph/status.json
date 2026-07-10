@@ -1,0 +1,46 @@
+{
+  "initialized": true,
+  "version": "1.3.1",
+  "projectPath": "<CORPUS_PATH>",
+  "indexPath": "<CORPUS_PATH>",
+  "fileCount": 335,
+  "nodeCount": 5535,
+  "edgeCount": 23022,
+  "backend": "node-sqlite",
+  "journalMode": "wal",
+  "nodesByKind": {
+    "class": 62,
+    "component": 4,
+    "constant": 934,
+    "file": 333,
+    "function": 1439,
+    "import": 1443,
+    "interface": 154,
+    "method": 722,
+    "property": 316,
+    "route": 1,
+    "type_alias": 36,
+    "variable": 91
+  },
+  "languages": [
+    "astro",
+    "javascript",
+    "python",
+    "typescript",
+    "yaml"
+  ],
+  "pendingChanges": {
+    "added": 0,
+    "modified": 0,
+    "removed": 0
+  },
+  "worktreeMismatch": null,
+  "index": {
+    "builtWithVersion": "1.3.1",
+    "builtWithExtractionVersion": 24,
+    "currentExtractionVersion": 24,
+    "reindexRecommended": false,
+    "state": "complete",
+    "pendingRefs": 0
+  }
+}

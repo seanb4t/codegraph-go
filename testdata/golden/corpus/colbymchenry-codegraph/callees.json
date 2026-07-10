@@ -1,0 +1,35 @@
+{
+  "symbol": "searchNodes",
+  "callees": [
+    {
+      "name": "SearchOptions",
+      "kind": "interface",
+      "filePath": "src/types.ts",
+      "startLine": 381
+    },
+    {
+      "name": "SearchResult",
+      "kind": "interface",
+      "filePath": "src/types.ts",
+      "startLine": 407
+    },
+    {
+      "name": "parseQuery",
+      "kind": "function",
+      "filePath": "src/search/query-parser.ts",
+      "startLine": 66
+    },
+    {
+      "name": "searchNodesFTS",
+      "kind": "method",
+      "filePath": "src/db/queries.ts",
+      "startLine": 1187
+    },
+    {
+      "name": "searchAllByFilters",
+      "kind": "method",
+      "filePath": "src/db/queries.ts",
+      "startLine": 1098
+    }
+  ]
+}

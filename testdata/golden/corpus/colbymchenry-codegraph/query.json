@@ -1,0 +1,104 @@
+[
+  {
+    "node": {
+      "id": "method:d247d12c1c515c33e886c8547405c3d7",
+      "kind": "method",
+      "name": "searchNodes",
+      "qualifiedName": "CodeGraph::searchNodes",
+      "filePath": "src/index.ts",
+      "language": "typescript",
+      "startLine": 1068,
+      "endLine": 1070,
+      "startColumn": 2,
+      "endColumn": 3,
+      "docstring": "Search nodes by text",
+      "signature": "(query: string, options?: SearchOptions): SearchResult[]",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "method:66c70e544cc179e69fad1bbe46f816d9",
+      "kind": "method",
+      "name": "searchNodes",
+      "qualifiedName": "QueryBuilder::searchNodes",
+      "filePath": "src/db/queries.ts",
+      "language": "typescript",
+      "startLine": 973,
+      "endLine": 1090,
+      "startColumn": 2,
+      "endColumn": 3,
+      "docstring": "Search nodes by name using FTS with fallback to LIKE for better matching\nSearch strategy:\n1. Try FTS5 prefix match (query*) for word-start matching\n2. If no results, try LIKE for substring matching (e.g., \"signIn\" finds \"signInWithGoogle\")\n3. Score results based on match quality",
+      "signature": "(query: string, options: SearchOptions = {}): SearchResult[]",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "class:d29e69d6dbfe834a50eb8c307a9bbd09",
+      "kind": "class",
+      "name": "SearchError",
+      "qualifiedName": "SearchError",
+      "filePath": "src/errors.ts",
+      "language": "typescript",
+      "startLine": 128,
+      "endLine": 139,
+      "startColumn": 7,
+      "endColumn": 1,
+      "docstring": "Error with search operations",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "interface:55b5a4649ba643c207efae1bb6760b7d",
+      "kind": "interface",
+      "name": "SearchResult",
+      "qualifiedName": "SearchResult",
+      "filePath": "src/types.ts",
+      "language": "typescript",
+      "startLine": 407,
+      "endLine": 421,
+      "startColumn": 7,
+      "endColumn": 1,
+      "docstring": "A search result with relevance scoring",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "interface:59d5d59e0dec1124b17b176b710c7cd0",
+      "kind": "interface",
+      "name": "SearchOptions",
+      "qualifiedName": "SearchOptions",
+      "filePath": "src/types.ts",
+      "language": "typescript",
+      "startLine": 381,
+      "endLine": 402,
+      "startColumn": 7,
+      "endColumn": 1,
+      "docstring": "Options for searching the graph",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  }
+]

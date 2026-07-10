@@ -1,0 +1,17 @@
+INSERT INTO nodes VALUES('class:1aa9ad9ada394f639ed0f8104462aef5','class','StopServerTest','StopServerTest','plugin/skills/sketch/scripts/tests/test_stop_server.py','python',50,160,0,79,NULL,NULL,NULL,0,0,0,0,NULL,NULL,NULL,<EPOCH_MS>);
+INSERT INTO nodes VALUES('constant:01228593622a5678b0879f06c50d971c','constant','EpicKey','EpicKey','internal/plan/plan.go','go',62,62,6,23,unistr('EpicKey is the internal bd create --graph node key for the epic. It is not a\u000avalid pick ref (Validate rejects a colliding ref), so it never clashes.'),'= "@epic"',NULL,0,0,0,0,NULL,NULL,NULL,<EPOCH_MS>);
+INSERT INTO nodes VALUES('constant:05113ae61976941b0b8cfc04c84cd39a','constant','helperScript','helperScript','plugin/skills/sketch/scripts/visual-companion/server.cjs','javascript',102,102,6,80,NULL,'= fs.readFileSync(path.join(__dirname, ''helper.js''), ''utf-8'')',NULL,0,0,0,0,NULL,NULL,NULL,<EPOCH_MS>);
+INSERT INTO nodes VALUES('constant:0f0ec02010b45f3735f3f6e3367ec872','constant','EdgeType','EdgeType','internal/plan/emit.go','go',21,21,6,25,'EdgeType is the bd dependency type weft emits for authored + derived edges.','= "blocks"',NULL,0,0,0,0,NULL,NULL,NULL,<EPOCH_MS>);
+INSERT INTO nodes VALUES('constant:15379472337a82b55e5346105788e24a','constant','DefaultShedMax','DefaultShedMax','internal/config/config.go','go',21,21,6,24,unistr('DefaultShedMax is the conservative wave-size cap when none is configured\u000a(spec §7: "Conservative default (≈3)").'),'= 3',NULL,0,0,0,0,NULL,NULL,NULL,<EPOCH_MS>);
+INSERT INTO edges VALUES(1,'file:cmd/weft/main.go','import:daa6c015f8ad8dc967790f8acd33dbd7','contains',NULL,NULL,NULL,NULL);
+INSERT INTO edges VALUES(2,'file:cmd/weft/main.go','import:a715a05a1e8b059f0a981c0a5b8e97f6','contains',NULL,NULL,NULL,NULL);
+INSERT INTO edges VALUES(3,'file:cmd/weft/main.go','import:ad966907667cc222f4be1d27e52f2f41','contains',NULL,NULL,NULL,NULL);
+INSERT INTO edges VALUES(4,'file:cmd/weft/main.go','import:7c5d52f05310a029c6a96e02d0c940bb','contains',NULL,NULL,NULL,NULL);
+INSERT INTO edges VALUES(5,'file:cmd/weft/main.go','import:05978606042c5caa5b35ff0a619e909b','contains',NULL,NULL,NULL,NULL);
+INSERT INTO files VALUES('.agents/skills/beads/agents/openai.yaml','c7ff618a9a6bcce71b25f722f67861b7685651d08fb72d8fff7d947aac403718','yaml',175,<EPOCH_MS>,<EPOCH_MS>,0,NULL);
+INSERT INTO files VALUES('.beads/config.yaml','e1312ea6735ee06142af23b4697f4abf9b90623a35c83917e6229ab9ad3be7a8','yaml',2682,<EPOCH_MS>,<EPOCH_MS>,0,NULL);
+INSERT INTO files VALUES('.github/workflows/ci.yml','a27fc1b45d439554384d7b9fdea9fa1796a2e3a1d51fd497a5a5b90a31785f99','yaml',7196,<EPOCH_MS>,<EPOCH_MS>,0,NULL);
+INSERT INTO files VALUES('.github/workflows/release.yml','c5f78caf329a96296b810bf5965a788dc449403a23c4c79f5a5edb48f83a75b2','yaml',2117,<EPOCH_MS>,<EPOCH_MS>,0,NULL);
+INSERT INTO files VALUES('.goreleaser.yml','c64d8069e307231ab0675f30c7dac7827d62a70613c0ec89a5113d9e9d44262f','yaml',1117,<EPOCH_MS>,<EPOCH_MS>,0,NULL);
+INSERT INTO schema_versions VALUES(1,<EPOCH_MS>,'Initial schema');
+INSERT INTO schema_versions VALUES(7,<EPOCH_MS>,'Initial schema includes all migrations');

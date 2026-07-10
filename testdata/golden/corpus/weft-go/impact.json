@@ -1,0 +1,38 @@
+{
+  "symbol": "mergeStyle",
+  "depth": 2,
+  "nodeCount": 5,
+  "edgeCount": 4,
+  "affected": [
+    {
+      "name": "mergeStyle",
+      "kind": "function",
+      "filePath": "internal/cli/finish.go",
+      "startLine": 378
+    },
+    {
+      "name": "newFinishReconcileCmd",
+      "kind": "method",
+      "filePath": "internal/cli/finish.go",
+      "startLine": 443
+    },
+    {
+      "name": "newFinishCmd",
+      "kind": "method",
+      "filePath": "internal/cli/finish.go",
+      "startLine": 155
+    },
+    {
+      "name": "TestMergeStyleDetectsTrueMergeVsSquash",
+      "kind": "function",
+      "filePath": "internal/cli/finish_test.go",
+      "startLine": 384
+    },
+    {
+      "name": "TestMergeStyleSurfacesNonZeroExit",
+      "kind": "function",
+      "filePath": "internal/cli/finish_test.go",
+      "startLine": 666
+    }
+  ]
+}

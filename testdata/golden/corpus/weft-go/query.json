@@ -1,0 +1,105 @@
+[
+  {
+    "node": {
+      "id": "function:fdfb6d7395c1fce8d245a491ea26bdac",
+      "kind": "function",
+      "name": "main",
+      "qualifiedName": "main",
+      "filePath": "cmd/weft/main.go",
+      "language": "go",
+      "startLine": 18,
+      "endLine": 29,
+      "startColumn": 0,
+      "endColumn": 1,
+      "signature": "()",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "file:cmd/weft/main.go",
+      "kind": "file",
+      "name": "main.go",
+      "qualifiedName": "cmd/weft/main.go",
+      "filePath": "cmd/weft/main.go",
+      "language": "go",
+      "startLine": 1,
+      "endLine": 30,
+      "startColumn": 0,
+      "endColumn": 0,
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "function:a727c557840a4e78b6f8a64eebbb1137",
+      "kind": "function",
+      "name": "mergeStyle",
+      "qualifiedName": "mergeStyle",
+      "filePath": "internal/cli/finish.go",
+      "language": "go",
+      "startLine": 378,
+      "endLine": 391,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "mergeStyle returns mergeStyleMergeCommit if the epic's pushed tip\n(<epic>@origin) is an ancestor of main@origin (a true-merge, reconcilable via\nrebase --skip-emptied), or mergeStyleSquashOrRebase otherwise (content landed\nunder a new commit id — needs jj new main + jj abandon). Spec §6.1 step 3.\nThe epic value is validated by validateEpicID before it reaches this revset.",
+      "signature": "(r run.Runner, epic string) (string, error)",
+      "visibility": null,
+      "isExported": false,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false,
+      "returnType": "string"
+    }
+  },
+  {
+    "node": {
+      "id": "function:4be19a8c1c1b74549b840396a1d3d0dd",
+      "kind": "function",
+      "name": "TestReconcileMergeBranchLeavesParkedSiblingUntouched",
+      "qualifiedName": "TestReconcileMergeBranchLeavesParkedSiblingUntouched",
+      "filePath": "internal/weave/finish_topology_test.go",
+      "language": "go",
+      "startLine": 545,
+      "endLine": 708,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "TestReconcileMergeBranchLeavesParkedSiblingUntouched proves that\n`jj rebase -b @ -o main --skip-emptied` (the production merge-commit reconcile\npath, seam-6 §6.1 step 3) does NOT drag a trunk()-sibling parked change into\nthe rebased branch.\n\nFixture (true merge-commit scenario):\n\nbase ← S1 ← S2        (the PR stack; S1 and S2 are ancestors of main via M)\nbase ← PARKED          (a separate parked change; base sibling)\nbase ← M1              (a mainline advance commit on base)\nM1, S2 ← M            (the merge commit; main bookmark points here)\nS2 ← @                 (the working copy, a NON-EMPTY child of S2)\n\nThe §6.1 ancestry condition holds: S1 and S2 are both in ::main (ancestors of\nM via M1 and the stack leg). main..@ = {@ alone} — a non-empty set — so the\nrebase actually has work to do (non-tautological). The parked change is a\nsibling of base, not reachable from main.\n\nIMPORTANT — why @ must be non-empty: if @ were an empty change, --skip-emptied\nwould abandon it in BOTH the correct merge-commit fixture AND a regressed no-op\nfixture (main=S2). The post-rebase state would be identical in both cases (@\ngone), so the non-triviality assertion would accept either. Making @ non-empty\n(carries wc.txt) prevents skip-emptied from abandoning it; after the rebase its\nparent must be mChID. Against the old no-op fixture the parent stays s2ChID,\nwhich causes the assertion to fail — that is the regression detector.\n\nThen run `jj rebase -b @ -o main --skip-emptied`. Assert:\n- NON-TRIVIALITY: @ still exists AND its parent is mChID (the merge tip). A\nregression to main=S2 would leave the parent as s2ChID and fail here.\n- PARKED's change-id is unchanged.\n- PARKED's parent is still baseChID (it is still a base sibling).\n- No live change has PARKED as its parent (it was not dragged in).\n- S1 and S2 remain as ancestors of main with their original parents unchanged\n(they were merged; the rebase must not move them).\n\nApproach: replays the literal jj rebase command rather than driving `weft finish\nreconcile` because reconcile requires a live GitHub remote for `gh pr view` and\n`jj git fetch`. The literal command is exactly what the production code executes\n(finish.go line ~488) and provides the same topological proof.",
+      "signature": "(t *testing.T)",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  },
+  {
+    "node": {
+      "id": "function:027404177fd58d646b41b81e8c66b88d",
+      "kind": "function",
+      "name": "TestReconcileVerbExcludesConflictedParkedSibling",
+      "qualifiedName": "TestReconcileVerbExcludesConflictedParkedSibling",
+      "filePath": "internal/weave/finish_topology_test.go",
+      "language": "go",
+      "startLine": 805,
+      "endLine": 922,
+      "startColumn": 0,
+      "endColumn": 1,
+      "docstring": "TestReconcileVerbExcludesConflictedParkedSibling drives the REAL\n`weft finish reconcile <epic>` verb end-to-end (gh intercepted, jj real) and\nproves its merge-commit rebase (`jj rebase -b @ -o main --skip-emptied`,\nfinish.go ~488) does not drag a parked change that is actually CONFLICTED.\nThis is the weft-x38.4 delta over TestReconcileMergeBranchLeavesParkedSiblingUntouched,\nwhich proves the same for a CLEAN parked sibling by replaying the raw jj\ncommand; here (a) the sibling E is a first-class jj conflict and (b) the whole\nverb runs (prState gate → jj git fetch → mergeStyle → rebase → bookmark/branch\ncleanup), not just the rebase.\n\nFixture (a true merge-commit topology plus a conflicted parked branch):\n\nbase ← X ← E          (parked side branch; E records an in-commit conflict)\nbase ← S1 ← S2        (the epic's PR stack; epic bookmark → S2, pushed)\nbase ← M1             (a mainline advance)\nM1, S2 ← M            (the merge commit; main bookmark → M, pushed)\nS2 ← @                (a NON-EMPTY working copy above the stack)\n\nAn in-commit jj conflict cannot coexist with the clean base as E's sole parent\n(a lone `add` never conflicts), so E is parked one hop out on X: E's stored\nchange is the conflict between \"add collide.txt=E\" and X's \"collide.txt\". This\nis the conflicted analogue of the clean test's base-sibling PARKED; the\ninvariant under test is identical — reconcile must never relocate E.\n\nBecause epic@origin (S2) is an ancestor of main@origin (M), mergeStyle returns\nmerge_commit and the rebase path runs. `jj rebase -b @` is `-s roots(main..@)`;\nhere roots(main..@)={@} (S1/S2 are already ancestors of main), so only @ moves\nonto M — E, off on its own branch, is never in the rebase set regardless of its\nconflict state. The test proves that empirically against the real verb.",
+      "signature": "(t *testing.T)",
+      "visibility": null,
+      "isExported": true,
+      "isAsync": false,
+      "isStatic": false,
+      "isAbstract": false
+    }
+  }
+]
