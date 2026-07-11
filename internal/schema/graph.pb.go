@@ -334,7 +334,17 @@ type File struct {
 	// unparseable source) so one bad file does not abort the whole index run
 	// (RESEARCH Assumptions Log A2, Pitfall 4). Additive extension of D-03's
 	// File record.
-	Errors        []string `protobuf:"bytes,6,rep,name=errors,proto3" json:"errors,omitempty"`
+	Errors []string `protobuf:"bytes,6,rep,name=errors,proto3" json:"errors,omitempty"`
+	// mtime_unix_ns is the file's on-disk modification time (nanoseconds
+	// since epoch) as observed by the writer. Additive Phase-4 field
+	// (D-01a); written by both `index` and `sync` so the incremental sync
+	// engine's stat pre-filter can cheaply shortlist changed files before
+	// paying for a content_hash recompute.
+	MtimeUnixNs int64 `protobuf:"varint,7,opt,name=mtime_unix_ns,json=mtimeUnixNs,proto3" json:"mtime_unix_ns,omitempty"`
+	// size_bytes is the file's on-disk size in bytes as observed by the
+	// writer. Additive Phase-4 field (D-01a); written by both `index` and
+	// `sync` alongside mtime_unix_ns for the same stat pre-filter.
+	SizeBytes     int64 `protobuf:"varint,8,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -411,6 +421,20 @@ func (x *File) GetErrors() []string {
 	return nil
 }
 
+func (x *File) GetMtimeUnixNs() int64 {
+	if x != nil {
+		return x.MtimeUnixNs
+	}
+	return 0
+}
+
+func (x *File) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
 // Meta is the single versioned record (stored under the `meta/` key
 // prefix, D-03) that stamps the on-disk schema version plus aggregate
 // counts and index health. schema_version is bumped ONLY for a genuinely
@@ -424,8 +448,14 @@ type Meta struct {
 	LastSyncUnixMs int64                  `protobuf:"varint,4,opt,name=last_sync_unix_ms,json=lastSyncUnixMs,proto3" json:"last_sync_unix_ms,omitempty"`
 	Healthy        bool                   `protobuf:"varint,5,opt,name=healthy,proto3" json:"healthy,omitempty"`
 	HealthMessage  string                 `protobuf:"bytes,6,opt,name=health_message,json=healthMessage,proto3" json:"health_message,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// has_file_index reports whether this graph's on-disk store has been
+	// populated with the Phase-4 `x/` file-owned secondary index (D-02).
+	// Additive Phase-4 field (D-02b); false means a pre-Phase-4 graph that
+	// lacks the index, signaling `sync` to perform a one-time full
+	// re-index backfill before switching to incremental updates.
+	HasFileIndex  bool `protobuf:"varint,7,opt,name=has_file_index,json=hasFileIndex,proto3" json:"has_file_index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Meta) Reset() {
@@ -500,6 +530,13 @@ func (x *Meta) GetHealthMessage() string {
 	return ""
 }
 
+func (x *Meta) GetHasFileIndex() bool {
+	if x != nil {
+		return x.HasFileIndex
+	}
+	return false
+}
+
 var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
 const file_internal_schema_graph_proto_rawDesc = "" +
@@ -539,7 +576,7 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"\bmetadata\x18\a \x03(\v2 .codegraph.v1.Edge.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xaf\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xf2\x01\n" +
 	"\x04File\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12!\n" +
 	"\fcontent_hash\x18\x02 \x01(\tR\vcontentHash\x12\x1a\n" +
@@ -548,7 +585,10 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"node_count\x18\x04 \x01(\x03R\tnodeCount\x12\x1d\n" +
 	"\n" +
 	"edge_count\x18\x05 \x01(\x03R\tedgeCount\x12\x16\n" +
-	"\x06errors\x18\x06 \x03(\tR\x06errors\"\xd7\x01\n" +
+	"\x06errors\x18\x06 \x03(\tR\x06errors\x12\"\n" +
+	"\rmtime_unix_ns\x18\a \x01(\x03R\vmtimeUnixNs\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\b \x01(\x03R\tsizeBytes\"\xfd\x01\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -557,7 +597,8 @@ const file_internal_schema_graph_proto_rawDesc = "" +
 	"edge_count\x18\x03 \x01(\x03R\tedgeCount\x12)\n" +
 	"\x11last_sync_unix_ms\x18\x04 \x01(\x03R\x0elastSyncUnixMs\x12\x18\n" +
 	"\ahealthy\x18\x05 \x01(\bR\ahealthy\x12%\n" +
-	"\x0ehealth_message\x18\x06 \x01(\tR\rhealthMessageB1Z/github.com/seanb4t/codegraph-go/internal/schemab\x06proto3"
+	"\x0ehealth_message\x18\x06 \x01(\tR\rhealthMessage\x12$\n" +
+	"\x0ehas_file_index\x18\a \x01(\bR\fhasFileIndexB1Z/github.com/seanb4t/codegraph-go/internal/schemab\x06proto3"
 
 var (
 	file_internal_schema_graph_proto_rawDescOnce sync.Once

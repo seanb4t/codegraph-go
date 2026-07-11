@@ -115,6 +115,18 @@ message File {
   // (RESEARCH Assumptions Log A2, Pitfall 4). Additive extension of D-03's
   // File record.
   repeated string errors = 6;
+
+  // mtime_unix_ns is the file's on-disk modification time (nanoseconds
+  // since epoch) as observed by the writer. Additive Phase-4 field
+  // (D-01a); written by both `index` and `sync` so the incremental sync
+  // engine's stat pre-filter can cheaply shortlist changed files before
+  // paying for a content_hash recompute.
+  int64 mtime_unix_ns = 7;
+
+  // size_bytes is the file's on-disk size in bytes as observed by the
+  // writer. Additive Phase-4 field (D-01a); written by both `index` and
+  // `sync` alongside mtime_unix_ns for the same stat pre-filter.
+  int64 size_bytes = 8;
 }
 
 // Meta is the single versioned record (stored under the `meta/` key
@@ -129,4 +141,11 @@ message Meta {
   int64 last_sync_unix_ms = 4;
   bool healthy = 5;
   string health_message = 6;
+
+  // has_file_index reports whether this graph's on-disk store has been
+  // populated with the Phase-4 `x/` file-owned secondary index (D-02).
+  // Additive Phase-4 field (D-02b); false means a pre-Phase-4 graph that
+  // lacks the index, signaling `sync` to perform a one-time full
+  // re-index backfill before switching to incremental updates.
+  bool has_file_index = 7;
 }
