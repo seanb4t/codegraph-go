@@ -14,7 +14,7 @@ func TestDebounceCoalescesBurst(t *testing.T) {
 	defer cancel()
 
 	flushed := make(chan map[string]struct{}, 8)
-	d := newDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
+	d := NewDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
 		flushed <- paths
 	})
 
@@ -47,7 +47,7 @@ func TestDebounceCoalescesBurst(t *testing.T) {
 	}
 
 	// A quiet gap longer than the window, then a fresh burst, flushes
-	// again — proving the debouncer resets after firing.
+	// again — proving the Debouncer resets after firing.
 	d.Add("d.go")
 	select {
 	case paths := <-flushed:
@@ -65,15 +65,15 @@ func TestDebounceCoalescesBurst(t *testing.T) {
 func TestDebounceEnvTunable(t *testing.T) {
 	t.Run("default when unset", func(t *testing.T) {
 		t.Setenv("CODEGRAPH_DEBOUNCE_MS", "")
-		if got := debounceDuration(); got != defaultDebounceMs*time.Millisecond {
-			t.Fatalf("debounceDuration() = %v, want %v", got, defaultDebounceMs*time.Millisecond)
+		if got := DebounceDuration(); got != defaultDebounceMs*time.Millisecond {
+			t.Fatalf("DebounceDuration() = %v, want %v", got, defaultDebounceMs*time.Millisecond)
 		}
 	})
 
 	t.Run("positive override honored", func(t *testing.T) {
 		t.Setenv("CODEGRAPH_DEBOUNCE_MS", "500")
-		if got, want := debounceDuration(), 500*time.Millisecond; got != want {
-			t.Fatalf("debounceDuration() = %v, want %v", got, want)
+		if got, want := DebounceDuration(), 500*time.Millisecond; got != want {
+			t.Fatalf("DebounceDuration() = %v, want %v", got, want)
 		}
 	})
 
@@ -81,8 +81,8 @@ func TestDebounceEnvTunable(t *testing.T) {
 	for _, v := range badValues {
 		t.Run("falls back to default for "+v, func(t *testing.T) {
 			t.Setenv("CODEGRAPH_DEBOUNCE_MS", v)
-			if got := debounceDuration(); got != defaultDebounceMs*time.Millisecond {
-				t.Fatalf("debounceDuration() with CODEGRAPH_DEBOUNCE_MS=%q = %v, want default %v", v, got, defaultDebounceMs*time.Millisecond)
+			if got := DebounceDuration(); got != defaultDebounceMs*time.Millisecond {
+				t.Fatalf("DebounceDuration() with CODEGRAPH_DEBOUNCE_MS=%q = %v, want default %v", v, got, defaultDebounceMs*time.Millisecond)
 			}
 		})
 	}
@@ -97,7 +97,7 @@ func TestDebounceNoFlushAfterCancel(t *testing.T) {
 	t.Run("ctx cancelled before window elapses, Stop not called", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		flushed := make(chan map[string]struct{}, 1)
-		d := newDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
+		d := NewDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
 			flushed <- paths
 		})
 
@@ -116,7 +116,7 @@ func TestDebounceNoFlushAfterCancel(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		flushed := make(chan map[string]struct{}, 1)
-		d := newDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
+		d := NewDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
 			flushed <- paths
 		})
 

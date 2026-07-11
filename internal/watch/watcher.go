@@ -3,7 +3,7 @@
 // primitive; no polling default. fsnotify does not recurse on its own, so
 // Watcher walks the tree at Open time and re-adds any newly-created
 // directory on a Create event. A burst of events is coalesced by a
-// debouncer (see debounce.go) into one flush call over the union of
+// Debouncer (see debounce.go) into one flush call over the union of
 // changed paths.
 //
 // internal/watch depends only on internal/indexer's exported ShouldSkipDir
@@ -76,7 +76,7 @@ func addRecursive(w *fsnotify.Watcher, root string, skip func(name string) bool)
 // changed path into deb so a burst coalesces into one debounced flush
 // (Pattern 3). Run returns (and stops deb's pending timer) once ctx is
 // done or the watcher's channels are closed.
-func (w *Watcher) Run(ctx context.Context, deb *debouncer) {
+func (w *Watcher) Run(ctx context.Context, deb *Debouncer) {
 	watchLoop(ctx, w.fsw, deb)
 }
 
@@ -86,7 +86,7 @@ func (w *Watcher) Run(ctx context.Context, deb *debouncer) {
 // fsnotify's own goroutine indefinitely. Errors are logged, never treated
 // as fatal — a stuck-not-crashed watcher is exactly the failure mode
 // Pitfall 6 warns about.
-func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *debouncer) {
+func watchLoop(ctx context.Context, w *fsnotify.Watcher, deb *Debouncer) {
 	for {
 		select {
 		case <-ctx.Done():

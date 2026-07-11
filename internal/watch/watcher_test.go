@@ -39,7 +39,7 @@ func TestWatcherRecursiveAdd(t *testing.T) {
 	flushed := make(chan map[string]struct{}, 8)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	deb := newDebouncer(ctx, debounceDuration(), func(paths map[string]struct{}) {
+	deb := NewDebouncer(ctx, DebounceDuration(), func(paths map[string]struct{}) {
 		flushed <- paths
 	})
 
@@ -100,7 +100,7 @@ func TestWatcherErrorsDrained(t *testing.T) {
 	flushed := make(chan map[string]struct{}, 8)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	deb := newDebouncer(ctx, debounceDuration(), func(paths map[string]struct{}) {
+	deb := NewDebouncer(ctx, DebounceDuration(), func(paths map[string]struct{}) {
 		flushed <- paths
 	})
 
