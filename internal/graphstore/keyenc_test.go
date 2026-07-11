@@ -109,6 +109,48 @@ func TestKeyEncodingRejectsDelimiterInjection(t *testing.T) {
 			seen[ks] = path
 		}
 	})
+
+	// T-04-01-01: file-index (x/) node/edge entries follow the same
+	// appendSegment collision-safety discipline as every other namespace
+	// (Phase 4 D-02) — mirrors the "distinct node ids never collide" and
+	// "no crafted node key falls inside another namespace's range"
+	// subtests above, substituting fileIndexNodeKey/fileIndexEdgeKey.
+	t.Run("distinct file-index node/edge entries never collide", func(t *testing.T) {
+		seen := map[string]string{}
+		for _, path := range adversarialSegments {
+			for _, id := range adversarialSegments {
+				k := fileIndexNodeKey(path, id)
+				ks := string(k)
+				want := path + "\x00" + id
+				if other, ok := seen[ks]; ok && other != want {
+					t.Fatalf("fileIndexNodeKey(%q,%q) collides with a distinct (path,id): both encode to %x", path, id, k)
+				}
+				seen[ks] = want
+				if k[0] != prefixFileIndex {
+					t.Fatalf("fileIndexNodeKey(%q,%q) does not start with prefixFileIndex: %x", path, id, k)
+				}
+				for _, foreign := range []byte{prefixMeta, prefixNode, prefixEdge, prefixFile, prefixAnnotation} {
+					if k[0] == foreign {
+						t.Fatalf("fileIndexNodeKey(%q,%q) leading byte %q collides with foreign namespace %q", path, id, k[0], foreign)
+					}
+				}
+			}
+		}
+		for _, path := range adversarialSegments {
+			for _, src := range adversarialSegments {
+				k := fileIndexEdgeKey(path, src, "calls", "dst")
+				ks := string(k)
+				want := "edge:" + path + "\x00" + src
+				if other, ok := seen[ks]; ok && other != want {
+					t.Fatalf("fileIndexEdgeKey(%q,%q,calls,dst) collides with a distinct entry: both encode to %x", path, src, k)
+				}
+				seen[ks] = want
+				if k[0] != prefixFileIndex {
+					t.Fatalf("fileIndexEdgeKey(%q,%q,...) does not start with prefixFileIndex: %x", path, src, k)
+				}
+			}
+		}
+	})
 }
 
 // TestEdgeKeyRangeScanOrdering asserts that, when byte-sorted (the order
