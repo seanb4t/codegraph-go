@@ -4,6 +4,7 @@ go 1.26.5
 
 require (
 	github.com/cockroachdb/pebble/v2 v2.1.6
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/spf13/cobra v1.10.2
