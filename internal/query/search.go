@@ -2,6 +2,7 @@ package query
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -108,11 +109,18 @@ func (e *Engine) matchNodes(term, kind string) ([]rankedNode, error) {
 }
 
 // Query returns full node records whose name or qualifiedName matches
-// term (D-06), optionally filtered by kind and capped at limit. kind is
-// validated via ValidateKind and limit via validateLimit before any scan
-// runs (V5, T-03-03-Kind, T-03-03-DoS) — an unknown kind or an
-// out-of-range limit returns an error without touching the store.
+// term (D-06), optionally filtered by kind and capped at limit. term is
+// validated non-empty (WR-05 — an empty/whitespace-only term would
+// otherwise match every node via lexicalMatchTier's degenerate
+// strings.HasPrefix(field, "") == true case, a "dump the whole graph"
+// footgun compounding CR-01), kind is validated via ValidateKind, and
+// limit via validateLimit, all before any scan runs (V5, T-03-03-Kind,
+// T-03-03-DoS) — an empty term, unknown kind, or out-of-range limit
+// returns an error without touching the store.
 func (e *Engine) Query(term, kind string, limit int) ([]*schema.Node, error) {
+	if strings.TrimSpace(term) == "" {
+		return nil, fmt.Errorf("query: search term must not be empty")
+	}
 	if err := ValidateKind(kind); err != nil {
 		return nil, err
 	}
@@ -141,8 +149,11 @@ func (e *Engine) Query(term, kind string, limit int) ([]*schema.Node, error) {
 
 // Search returns the same matches as Query, but projected to the
 // lightweight Location shape (D-06) — no source body, no signature.
-// kind/limit are validated identically to Query, before any scan.
+// term/kind/limit are validated identically to Query, before any scan.
 func (e *Engine) Search(term, kind string, limit int) ([]Location, error) {
+	if strings.TrimSpace(term) == "" {
+		return nil, fmt.Errorf("query: search term must not be empty")
+	}
 	if err := ValidateKind(kind); err != nil {
 		return nil, err
 	}

@@ -194,6 +194,43 @@ func TestSearchDefaultCapAtMaxLimit(t *testing.T) {
 	}
 }
 
+// TestQueryRejectsEmptyTerm pins WR-05: an empty or whitespace-only term
+// must be rejected before any scan, not silently match every node via
+// lexicalMatchTier's degenerate strings.HasPrefix(field, "") == true
+// case (a "dump the whole graph" footgun compounding CR-01's DoS
+// concern).
+func TestQueryRejectsEmptyTerm(t *testing.T) {
+	var scans int
+	e := New(&searchFakeReader{scanCounter: &scans})
+
+	if _, err := e.Query("", "", 0); err == nil {
+		t.Fatal("Query: expected error for an empty term, got nil")
+	}
+	if _, err := e.Query("   ", "", 0); err == nil {
+		t.Fatal("Query: expected error for a whitespace-only term, got nil")
+	}
+	if scans != 0 {
+		t.Fatalf("Query: IterateNodes was called %d time(s) despite an empty/whitespace-only term", scans)
+	}
+}
+
+// TestSearchRejectsEmptyTerm mirrors TestQueryRejectsEmptyTerm for Search
+// (WR-05).
+func TestSearchRejectsEmptyTerm(t *testing.T) {
+	var scans int
+	e := New(&searchFakeReader{scanCounter: &scans})
+
+	if _, err := e.Search("", "", 0); err == nil {
+		t.Fatal("Search: expected error for an empty term, got nil")
+	}
+	if _, err := e.Search("   ", "", 0); err == nil {
+		t.Fatal("Search: expected error for a whitespace-only term, got nil")
+	}
+	if scans != 0 {
+		t.Fatalf("Search: IterateNodes was called %d time(s) despite an empty/whitespace-only term", scans)
+	}
+}
+
 // TestQueryUnknownKindRejectedBeforeScan proves --kind is validated via
 // ValidateKind before any scan runs (V5, T-03-03-Kind, acceptance
 // criteria): a fake reader that increments scanCounter on every

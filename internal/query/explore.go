@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -98,8 +99,13 @@ func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge) 
 // blast radius via the D-04 reverse-adjacency map, then render each
 // selected file's verbatim source read fresh from disk (D-05a — never
 // from the stored Node/File record), confined to the repo root
-// (T-03-06-Path).
+// (T-03-06-Path). query is rejected if empty/whitespace-only (WR-05,
+// mirroring Query/Search) rather than falling through to
+// lexicalMatchTier's degenerate "matches everything" case.
 func (e *Engine) Explore(query string, maxFiles int) (string, error) {
+	if strings.TrimSpace(query) == "" {
+		return "", fmt.Errorf("query: explore query must not be empty")
+	}
 	if err := validateMaxFiles(maxFiles); err != nil {
 		return "", err
 	}
