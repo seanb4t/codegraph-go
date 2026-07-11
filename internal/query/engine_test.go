@@ -184,6 +184,15 @@ func TestValidateLimit(t *testing.T) {
 	if err := validateLimit(MaxLimit + 1); err == nil {
 		t.Fatal("validateLimit(MaxLimit+1): expected error, got nil")
 	}
+	if err := validateLimit(0); err != nil {
+		t.Fatalf("validateLimit(0): unexpected error: %v (0 must mean \"no explicit limit\")", err)
+	}
+	// WR-02: negative values are rejected outright, consistent with
+	// validateMaxFiles/validateDepth/validateFilesDepth, rather than
+	// silently treated the same as 0/"unset".
+	if err := validateLimit(-1); err == nil {
+		t.Fatal("validateLimit(-1): expected error, got nil (WR-02: negative must be rejected, not treated as unset)")
+	}
 }
 
 func TestValidateMaxFiles(t *testing.T) {
@@ -195,6 +204,32 @@ func TestValidateMaxFiles(t *testing.T) {
 	}
 	if err := validateMaxFiles(MaxFiles + 1); err == nil {
 		t.Fatal("validateMaxFiles(MaxFiles+1): expected error, got nil")
+	}
+	if err := validateMaxFiles(0); err != nil {
+		t.Fatalf("validateMaxFiles(0): unexpected error: %v (0 must mean \"use the default\")", err)
+	}
+	// WR-02: negative values are rejected outright, matching
+	// validateLimit/validateDepth/validateFilesDepth.
+	if err := validateMaxFiles(-1); err == nil {
+		t.Fatal("validateMaxFiles(-1): expected error, got nil (WR-02: negative must be rejected, not treated as unset)")
+	}
+}
+
+// TestValidateDepth pins WR-02's cross-command negative-value convention
+// for Impact's --depth: negative is rejected outright (previously
+// clampDepth silently treated it identically to 0/"unset"), while 0
+// still means "use the default" and an above-MaxDepth value is left to
+// clampDepth's existing silent-clamp behavior (TestImpact's "absurdly
+// large depth is clamped, not unbounded").
+func TestValidateDepth(t *testing.T) {
+	if err := validateDepth(0); err != nil {
+		t.Fatalf("validateDepth(0): unexpected error: %v (0 must mean \"use the default\")", err)
+	}
+	if err := validateDepth(10); err != nil {
+		t.Fatalf("validateDepth(10): unexpected error: %v", err)
+	}
+	if err := validateDepth(-1); err == nil {
+		t.Fatal("validateDepth(-1): expected error, got nil (WR-02: negative must be rejected)")
 	}
 }
 

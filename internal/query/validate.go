@@ -54,23 +54,50 @@ func clampDepth(n int) int {
 	return n
 }
 
-// validateLimit rejects n above MaxLimit with a clear error instead of
-// silently truncating (V5 — the caller should know its request was
-// out-of-range, not receive a silently-smaller result set). n<=0 is
-// accepted as "caller did not set a limit"; callers apply their own
-// default downstream.
+// validateLimit rejects n above MaxLimit, and (WR-02) a negative n, with a
+// clear error instead of silently truncating or falling back to a
+// default (V5 — the caller should know its request was out-of-range, not
+// receive a silently-smaller result set). n==0 is still accepted as
+// "caller did not set a limit"; callers apply their own default
+// downstream. Rejecting negatives outright unifies this with
+// validateFilesDepth's stricter "reject absurd input" posture — before
+// this fix, a negative --limit/--depth/--max-files was silently treated
+// as "unset" here and in clampDepth/clampMaxFiles, while files.go's
+// --depth explicitly rejected negatives: a genuine cross-command
+// consistency gap (WR-02).
 func validateLimit(n int) error {
+	if n < 0 {
+		return fmt.Errorf("query: limit %d must be non-negative", n)
+	}
 	if n > MaxLimit {
 		return fmt.Errorf("query: limit %d exceeds maximum %d", n, MaxLimit)
 	}
 	return nil
 }
 
-// validateMaxFiles rejects n above MaxFiles with a clear error, mirroring
-// validateLimit's contract.
+// validateMaxFiles rejects n above MaxFiles, and (WR-02) a negative n,
+// with a clear error, mirroring validateLimit's contract.
 func validateMaxFiles(n int) error {
+	if n < 0 {
+		return fmt.Errorf("query: max-files %d must be non-negative", n)
+	}
 	if n > MaxFiles {
 		return fmt.Errorf("query: max-files %d exceeds maximum %d", n, MaxFiles)
+	}
+	return nil
+}
+
+// validateDepth rejects a negative depth (WR-02), mirroring
+// validateLimit/validateMaxFiles/validateFilesDepth's "reject absurd
+// input outright" posture. 0 is accepted and clampDepth treats it as
+// "caller did not set a depth" (defaultDepth). An explicit depth above
+// MaxDepth is deliberately NOT rejected here — clampDepth silently caps
+// it, matching Impact's existing "absurdly large depth is clamped, not
+// unbounded" contract (TestImpact); only the negative-value convention is
+// unified across depth/max-files/limit by this fix.
+func validateDepth(n int) error {
+	if n < 0 {
+		return fmt.Errorf("query: depth %d must be non-negative", n)
 	}
 	return nil
 }

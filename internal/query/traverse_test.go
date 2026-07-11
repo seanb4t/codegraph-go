@@ -349,6 +349,15 @@ func TestImpact(t *testing.T) {
 			t.Fatalf("EdgeCount: got %d, want 3", got.EdgeCount)
 		}
 	})
+
+	// WR-02: a negative --depth is rejected outright, consistent with
+	// --limit/--max-files/files' --depth, instead of silently falling
+	// back to defaultDepth as clampDepth alone would do.
+	t.Run("negative depth is rejected, not silently defaulted", func(t *testing.T) {
+		if _, err := engine.Impact("helper", -1); err == nil {
+			t.Fatal("Impact with depth=-1: expected error, got nil")
+		}
+	})
 }
 
 // TestAffected pins the D-07 query-time derivation: no persisted

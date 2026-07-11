@@ -210,6 +210,9 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 // testdata/golden/corpus/weft-go/impact.json's arithmetic in
 // traverse_test.go's TestImpact doc comment.
 func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
+	if err := validateDepth(depth); err != nil {
+		return ImpactResult{}, err
+	}
 	depth = clampDepth(depth)
 
 	node, err := e.resolveSymbolNode(symbol)
