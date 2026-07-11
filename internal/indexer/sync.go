@@ -250,6 +250,19 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	}
 	collapsedEdges := collapseEdges(edges, nodeFilePath)
 
+	// CR-03: collapseEdges' own representative-selection above only needs
+	// nodeFilePath for edges whose Source is in THIS cycle's reparse batch
+	// (true for calls/embeds/imports, whose Source is always ref.FromID —
+	// the file currently being parsed). A `contains` edge's Source is the
+	// receiver TYPE's node id, which idx.resolveUnqualified can resolve
+	// into a completely unchanged, non-reparsed file (the "type in one
+	// file, methods in another" Go idiom) — nodeFilePath alone would miss
+	// it, silently writing the edge with ownerPath="" and permanently
+	// escaping the x/ index (never enumerable by a later prune of that
+	// type's file). ownerPathFor below falls back to r0 — the pre-Sync
+	// snapshot, unaffected by this cycle's staged-but-uncommitted writes —
+	// for exactly that case.
+
 	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
 	allNodes = append(allNodes, nodes...)
 	allNodes = append(allNodes, packageNodes...)
@@ -296,7 +309,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e, nodeFilePath[e.Source]); err != nil {
+		if err := w.PutEdge(e, ownerPathFor(e.Source, nodeFilePath, r0)); err != nil {
 			w.Close()
 			return Stats{}, err
 		}
@@ -455,6 +468,29 @@ func pruneOwnedEdgesOnly(r0 graphstore.Reader, w graphstore.Writer, path string,
 		*edgesRemoved++
 	}
 	return it.Err()
+}
+
+// ownerPathFor resolves e's ownerPath for CR-03: batch first (this cycle's
+// freshly reparsed nodes — always sufficient for calls/embeds/imports,
+// whose Source is always in-batch), falling back to a lookup against r0 —
+// the pre-Sync snapshot — when id belongs to a node that was NOT reparsed
+// this cycle, which is exactly the cross-file `contains` case (the
+// receiver type's node lives in an unchanged sibling file). r0 is a
+// point-in-time snapshot unaffected by this Sync's own staged-but-
+// uncommitted writes, so this lookup cannot observe a partial commit; it
+// also cannot resolve to a node id that is itself being pruned/superseded
+// this cycle, since newSymbolIndexFromStore's excludePaths already keeps
+// idx from ever resolving a reference into the batch's own files or a
+// deleted file in the first place (RESEARCH Pitfall 1's exclusion set).
+func ownerPathFor(id string, batch map[string]string, r0 graphstore.Reader) string {
+	if p, ok := batch[id]; ok {
+		return p
+	}
+	n, err := r0.GetNode(id)
+	if err != nil {
+		return ""
+	}
+	return n.GetFilePath()
 }
 
 // contentHash returns hex(sha256(file contents)) for the file at absPath

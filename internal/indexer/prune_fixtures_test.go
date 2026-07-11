@@ -374,3 +374,102 @@ func TestPruneFixtures(t *testing.T) {
 		assertNoOrphansOrDangling(t, r)
 	})
 }
+
+// assertFileIndexHasEdge fails the test unless path's x/ index contains an
+// edge entry matching (src, kind, dst) — opens its own store/reader so
+// callers can invoke it as a standalone assertion at any point in a test.
+func assertFileIndexHasEdge(t *testing.T, storeDir, path, src, kind, dst string) {
+	t.Helper()
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+
+	it, err := r.IterateFileIndex(path)
+	if err != nil {
+		t.Fatalf("IterateFileIndex(%s): %v", path, err)
+	}
+	defer it.Close()
+	for it.Next() {
+		e := it.Entry()
+		if !e.IsNode && e.Source == src && e.Kind == kind && e.Target == dst {
+			return
+		}
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("IterateFileIndex(%s) error: %v", path, err)
+	}
+	t.Fatalf("expected x/%s index to contain edge (%s -%s-> %s), not found", path, src, kind, dst)
+}
+
+// TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile is the CR-03
+// regression: a `contains` edge whose Source (the receiver type) lives in
+// an unchanged, non-reparsed file must still be recorded under that file's
+// x/ index after an INCREMENTAL sync — not silently dropped with
+// ownerPath="" — so a later prune of the type's file can find and remove
+// it. The bug does not manifest on the seed (from-scratch) sync, since
+// writeGraph's nodeFilePath there is built from every node in the repo;
+// it only shows up once a later incremental Sync reparses only
+// pkg/methods.go and leaves pkg/types.go (where Widget lives) untouched.
+func TestSyncIndexesCrossFileContainsEdgeUnderOwnerFile(t *testing.T) {
+	repoRoot := copyFixture(t, prunefixtureRoot)
+	storeDir := t.TempDir()
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "pkg/types.go")
+	describeID := nodeid.NodeID(goextract.KindMethod, "Widget.Describe", "pkg/methods.go")
+
+	// The seed (from-scratch) sync already indexes the edge correctly —
+	// confirms the fixture and ids are set up as expected before the
+	// incremental case under test.
+	assertFileIndexHasEdge(t, storeDir, "pkg/types.go", widgetID, "contains", describeID)
+
+	// Edit ONLY pkg/methods.go: nodeid.NodeID hashes (kind, qualifiedName,
+	// filePath) — not source content — so this comment-only edit changes
+	// the file's content hash (triggering a reparse) without changing
+	// Describe's node id. pkg/types.go is left byte-for-byte untouched and
+	// must NOT be reparsed this cycle — that is the exact precondition
+	// CR-03 requires.
+	writeFile(t, filepath.Join(repoRoot, "pkg", "methods.go"),
+		"package pkg\n\n// touched: still the same method, same signature.\nfunc (w Widget) Describe() string {\n\treturn w.Name\n}\n")
+
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (incremental): %v", err)
+	}
+
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+
+	if !hasEdge(t, r, widgetID, "contains", describeID) {
+		t.Fatalf("expected contains edge %s -> %s to survive the incremental sync", widgetID, describeID)
+	}
+
+	// The CR-03 assertion: the edge must be indexed under its OWNER file
+	// (pkg/types.go, where Widget lives), even though pkg/types.go itself
+	// was never reparsed this cycle — proving ownerPathFor's r0 fallback
+	// resolved it instead of silently writing ownerPath="". Reuses the
+	// snapshot already open above (graphstore/Pebble allows only one open
+	// handle per store directory at a time — assertFileIndexHasEdge's own
+	// graphstore.Open would otherwise contend with it).
+	found := false
+	xit, err := r.IterateFileIndex("pkg/types.go")
+	if err != nil {
+		t.Fatalf("IterateFileIndex(pkg/types.go): %v", err)
+	}
+	for xit.Next() {
+		e := xit.Entry()
+		if !e.IsNode && e.Source == widgetID && e.Kind == "contains" && e.Target == describeID {
+			found = true
+			break
+		}
+	}
+	if err := xit.Err(); err != nil {
+		t.Fatalf("IterateFileIndex(pkg/types.go) error: %v", err)
+	}
+	xit.Close()
+	if !found {
+		t.Fatalf("expected x/pkg/types.go index to contain edge (%s -contains-> %s) after the incremental sync, not found — CR-03 regression", widgetID, describeID)
+	}
+
+	assertNoOrphansOrDangling(t, r)
+}
