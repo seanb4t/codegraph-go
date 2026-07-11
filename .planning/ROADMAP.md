@@ -65,7 +65,28 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Cross-file resolution links imports, call edges, and type inheritance across a multi-package Go repo via two-pass parallel-extract → sequential-resolve
   4. Indexing a real-world Go project produces symbols and edges that match expected structure for that repo
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Additive schema extension (D-03) + content-hashed node identity (D-02/D-02a) + promote x/sync,x/mod
+- [ ] 02-02-PLAN.md — Multi-package Go test fixture + file discovery seam (go/build.MatchFile + import-path tagging)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-03-PLAN.md — Pass 1: Go AST→vocabulary mapper (LANG-01) + bounded worker pool (one Parser/worker)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-04-PLAN.md — Pass 2: symbol index + cross-file resolution (RES-01) + deterministic edge collapse + single-writer commit
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 02-05-PLAN.md — Pipeline orchestration + byte-identical determinism gate (INDX-02) + structural fixture-diff
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 02-06-PLAN.md — Cobra CLI lifecycle: init/index/uninit + binary entrypoint (INDX-01, INDX-02)
 
 ### Phase 3: Query Engine & MCP Server
 
@@ -163,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
-| 2. Go Indexing Pipeline | 0/TBD | Not started | - |
+| 2. Go Indexing Pipeline | 0/6 | Not started | - |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
