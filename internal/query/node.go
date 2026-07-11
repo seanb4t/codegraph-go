@@ -173,7 +173,7 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 		return "", err
 	}
 
-	rev, err := buildReverseAdjacency(e.reader)
+	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return "", err
 	}

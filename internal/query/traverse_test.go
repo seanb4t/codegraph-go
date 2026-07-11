@@ -289,7 +289,7 @@ func traverseFixture(t *testing.T) *Engine {
 }
 
 // TestCallersCallees pins forward (IterateEdges(src) directly, no scan)
-// vs. reverse (buildReverseAdjacency, D-04) traversal semantics against
+// vs. reverse (BuildReverseAdjacency, D-04) traversal semantics against
 // the fixture's deterministic call chain: main -> Run -> Alpha -> helper
 // (plus Run -> Widget.Describe).
 func TestCallersCallees(t *testing.T) {

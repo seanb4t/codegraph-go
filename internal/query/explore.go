@@ -121,7 +121,7 @@ func (e *Engine) Explore(query string, maxFiles int) (string, error) {
 		return fmt.Sprintf("**Exploration: %s**\n\nFound 0 symbols across 0 files.\n", query), nil
 	}
 
-	rev, err := buildReverseAdjacency(e.reader)
+	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return "", err
 	}

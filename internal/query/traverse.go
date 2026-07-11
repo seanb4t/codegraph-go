@@ -11,7 +11,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
-// buildReverseAdjacency builds an in-memory reverse-adjacency map keyed
+// BuildReverseAdjacency builds an in-memory reverse-adjacency map keyed
 // by edge.Target, from one full IterateEdges("") scan (D-04). It is
 // filtered to goextract.RefKindCalls only — callers/impact/affected are
 // call-graph traversals, and the golden callers.json/callees.json/
@@ -24,7 +24,11 @@ import (
 // T-03-04-Stale): a long-lived process (the future MCP server) must
 // never serve a stale point-in-time reverse view across multiple calls,
 // even though Phase 3's CLI invocations are one-scan-per-process anyway.
-func buildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+// Exported (Phase 4, 04-02) so internal/indexer.Sync() can reuse this
+// exact scan for dependent-file detection (D-02a) — callers outside
+// this package MUST follow the same fresh-per-call discipline: never
+// cache the result across a Sync() invocation.
+func BuildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, error) {
 	it, err := r.IterateEdges("")
 	if err != nil {
 		return nil, err
@@ -172,7 +176,7 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 }
 
 // Callers returns symbol's reverse callers via the D-04 in-memory
-// reverse-adjacency map (built fresh, buildReverseAdjacency), capped at
+// reverse-adjacency map (built fresh, BuildReverseAdjacency), capped at
 // limit identically to Callees.
 func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 	if err := validateLimit(limit); err != nil {
@@ -184,7 +188,7 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 		return CallersResult{}, err
 	}
 
-	rev, err := buildReverseAdjacency(e.reader)
+	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return CallersResult{}, err
 	}
@@ -230,7 +234,7 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 		return ImpactResult{}, err
 	}
 
-	rev, err := buildReverseAdjacency(e.reader)
+	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return ImpactResult{}, err
 	}
@@ -294,7 +298,7 @@ func isTestSymbol(n *schema.Node) bool {
 // (D-07a); parity is structural, proved in traverse_test.go against a
 // seeded test->symbol calls edge.
 func (e *Engine) Affected(files []string) (AffectedResult, error) {
-	rev, err := buildReverseAdjacency(e.reader)
+	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return AffectedResult{}, err
 	}
