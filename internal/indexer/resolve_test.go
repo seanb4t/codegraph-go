@@ -1,8 +1,12 @@
 package indexer
 
 import (
+	"errors"
+	"io"
+	"math/rand"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/parser"
@@ -239,5 +243,285 @@ func (w Widget) Describe() string { return "" }
 
 	if !findEdge(edges, widgetID, "contains", describeID) {
 		t.Fatalf("expected contains edge %s -> %s (Widget -> cross-file Describe), got %+v", widgetID, describeID, edges)
+	}
+}
+
+// --- Task 2: deterministic edge collapse + single-writer batched commit ---
+
+// candidateEdges builds the shared set of duplicate-triple call-site
+// candidates TestEdgeCollapse_Deterministic and
+// TestEdgeCollapse_OrderIndependent both exercise: three call sites from
+// the same (source, "calls", target) triple, at lines 30, 12, and 21, plus
+// one unrelated edge that must survive collapse untouched.
+func candidateEdges() []*schema.Edge {
+	return []*schema.Edge{
+		{Source: "fn:caller", Kind: "calls", Target: "fn:callee", Line: 30, Col: 5, Provenance: "ast"},
+		{Source: "fn:caller", Kind: "calls", Target: "fn:callee", Line: 12, Col: 2, Provenance: "ast"},
+		{Source: "fn:caller", Kind: "calls", Target: "fn:callee", Line: 21, Col: 9, Provenance: "ast"},
+		{Source: "fn:other", Kind: "calls", Target: "fn:unrelated", Line: 1, Col: 0, Provenance: "ast"},
+	}
+}
+
+func candidateNodeFilePath() map[string]string {
+	return map[string]string{
+		"fn:caller":    "pkg/caller.go",
+		"fn:other":     "pkg/caller.go",
+		"fn:callee":    "pkg/callee.go",
+		"fn:unrelated": "pkg/other.go",
+	}
+}
+
+// TestEdgeCollapse_Deterministic proves duplicate (source, kind, target)
+// candidates collapse to ONE edge whose representative line/col is chosen
+// by sorting candidates by (filePath, line, col) and taking the first —
+// never processing order (D-05, RESEARCH Pitfall 1).
+func TestEdgeCollapse_Deterministic(t *testing.T) {
+	collapsed := collapseEdges(candidateEdges(), candidateNodeFilePath())
+
+	var got *schema.Edge
+	for _, e := range collapsed {
+		if e.Source == "fn:caller" && e.Kind == "calls" && e.Target == "fn:callee" {
+			got = e
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected exactly one collapsed edge fn:caller -calls-> fn:callee, got %+v", collapsed)
+	}
+	if got.Line != 12 || got.Col != 2 {
+		t.Errorf("representative = (line %d, col %d), want (line 12, col 2) — the (filePath,line,col)-sorted first candidate", got.Line, got.Col)
+	}
+
+	// The unrelated edge must survive collapse untouched.
+	foundUnrelated := false
+	for _, e := range collapsed {
+		if e.Source == "fn:other" && e.Kind == "calls" && e.Target == "fn:unrelated" {
+			foundUnrelated = true
+		}
+	}
+	if !foundUnrelated {
+		t.Errorf("expected the unrelated edge to survive collapse, got %+v", collapsed)
+	}
+}
+
+// TestEdgeCollapse_OrderIndependent proves shuffling the candidate input
+// order never changes the chosen representative (order-independent total
+// order, not processing/goroutine/map order).
+func TestEdgeCollapse_OrderIndependent(t *testing.T) {
+	nodeFilePath := candidateNodeFilePath()
+	rng := rand.New(rand.NewSource(1))
+
+	for trial := 0; trial < 10; trial++ {
+		edges := candidateEdges()
+		rng.Shuffle(len(edges), func(i, j int) { edges[i], edges[j] = edges[j], edges[i] })
+
+		collapsed := collapseEdges(edges, nodeFilePath)
+		var got *schema.Edge
+		for _, e := range collapsed {
+			if e.Source == "fn:caller" && e.Kind == "calls" && e.Target == "fn:callee" {
+				got = e
+			}
+		}
+		if got == nil {
+			t.Fatalf("trial %d: expected collapsed edge, got %+v", trial, collapsed)
+		}
+		if got.Line != 12 || got.Col != 2 {
+			t.Errorf("trial %d: representative = (line %d, col %d), want (line 12, col 2) regardless of input shuffle", trial, got.Line, got.Col)
+		}
+	}
+}
+
+// errStubWrite is the sentinel error stubWriter returns for whichever
+// Put* method its failOn field names.
+var errStubWrite = errors.New("stub write error")
+
+// stubWriter is an in-memory graphstore.Writer stand-in so writeGraph's
+// single-writer/batched-commit contract can be tested without a real
+// Pebble-backed store. failOn, when non-empty, names the Put* method that
+// should fail (simulating a mid-write staging error).
+type stubWriter struct {
+	nodes []*schema.Node
+	edges []*schema.Edge
+	files []*schema.File
+	meta  *schema.Meta
+
+	commitCalls int
+	closeCalls  int
+
+	failOn string
+}
+
+func (w *stubWriter) PutNode(n *schema.Node) error {
+	if w.failOn == "PutNode" {
+		return errStubWrite
+	}
+	w.nodes = append(w.nodes, n)
+	return nil
+}
+
+func (w *stubWriter) PutEdge(e *schema.Edge) error {
+	if w.failOn == "PutEdge" {
+		return errStubWrite
+	}
+	w.edges = append(w.edges, e)
+	return nil
+}
+
+func (w *stubWriter) PutFile(f *schema.File) error {
+	if w.failOn == "PutFile" {
+		return errStubWrite
+	}
+	w.files = append(w.files, f)
+	return nil
+}
+
+func (w *stubWriter) PutMeta(m *schema.Meta) error {
+	if w.failOn == "PutMeta" {
+		return errStubWrite
+	}
+	w.meta = m
+	return nil
+}
+
+func (w *stubWriter) DeleteFileSubgraph(path string) error { return nil }
+
+func (w *stubWriter) Commit() error {
+	w.commitCalls++
+	return nil
+}
+
+func (w *stubWriter) Close() error {
+	w.closeCalls++
+	return nil
+}
+
+// stubStore is a graphstore.GraphStore stand-in whose NewWriter always
+// returns the same injected stubWriter, so a test can inspect it after
+// writeGraph returns.
+type stubStore struct {
+	writer *stubWriter
+}
+
+func (s *stubStore) Snapshot() (graphstore.Reader, error)  { return nil, nil }
+func (s *stubStore) NewWriter() (graphstore.Writer, error) { return s.writer, nil }
+func (s *stubStore) Export(w io.Writer) error              { return nil }
+func (s *stubStore) Close() error                          { return nil }
+
+// TestSingleWriter_CommitsOnce proves the entire resolved graph is written
+// through exactly ONE GraphStore.Writer with a single Commit() — no
+// per-symbol commits (D-04a) — and that Meta is stamped with correct
+// node/edge counts and schema_version == 1.
+func TestSingleWriter_CommitsOnce(t *testing.T) {
+	w := &stubWriter{}
+	store := &stubStore{writer: w}
+
+	nodes := []*schema.Node{
+		{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"},
+		{Id: "fn:b", Kind: "function", Name: "b", FilePath: "pkg/a.go"},
+	}
+	packageNodes := []*schema.Node{
+		{Id: "package:x", Kind: "package", Name: "x", QualifiedName: "example.com/x"},
+	}
+	edges := []*schema.Edge{
+		{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 30, Col: 1, Provenance: "ast"},
+		{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 12, Col: 1, Provenance: "ast"},
+	}
+	files := []*schema.File{
+		{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go", NodeCount: 2, EdgeCount: 1},
+	}
+
+	if err := writeGraph(store, nodes, packageNodes, edges, files); err != nil {
+		t.Fatalf("writeGraph returned error: %v", err)
+	}
+
+	if w.commitCalls != 1 {
+		t.Errorf("commitCalls = %d, want 1", w.commitCalls)
+	}
+	if w.closeCalls != 0 {
+		t.Errorf("closeCalls = %d, want 0 (Close is only for the error path)", w.closeCalls)
+	}
+	if len(w.nodes) != len(nodes)+len(packageNodes) {
+		t.Errorf("staged %d nodes, want %d (symbol + package pseudo-nodes)", len(w.nodes), len(nodes)+len(packageNodes))
+	}
+	if len(w.files) != len(files) {
+		t.Errorf("staged %d files, want %d", len(w.files), len(files))
+	}
+	if len(w.edges) != 1 {
+		t.Fatalf("staged %d edges, want 1 (the duplicate (fn:a,calls,fn:b) pair must collapse)", len(w.edges))
+	}
+	if w.edges[0].Line != 12 {
+		t.Errorf("collapsed edge Line = %d, want 12 (the (filePath,line,col)-sorted first candidate)", w.edges[0].Line)
+	}
+	if w.meta == nil {
+		t.Fatal("PutMeta was never called")
+	}
+	if w.meta.SchemaVersion != schema.SchemaVersion {
+		t.Errorf("Meta.SchemaVersion = %d, want %d", w.meta.SchemaVersion, schema.SchemaVersion)
+	}
+	if w.meta.NodeCount != int64(len(nodes)+len(packageNodes)) {
+		t.Errorf("Meta.NodeCount = %d, want %d", w.meta.NodeCount, len(nodes)+len(packageNodes))
+	}
+	if w.meta.EdgeCount != 1 {
+		t.Errorf("Meta.EdgeCount = %d, want 1", w.meta.EdgeCount)
+	}
+}
+
+// TestSingleWriter_CloseOnStagingError proves a staging error mid-write
+// calls Writer.Close() (releasing the batch) instead of Commit(), and
+// writeGraph returns the error — never a partial commit.
+func TestSingleWriter_CloseOnStagingError(t *testing.T) {
+	w := &stubWriter{failOn: "PutEdge"}
+	store := &stubStore{writer: w}
+
+	nodes := []*schema.Node{{Id: "fn:a", Kind: "function", Name: "a", FilePath: "pkg/a.go"}}
+	edges := []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}}
+	files := []*schema.File{{Path: "pkg/a.go"}}
+
+	err := writeGraph(store, nodes, nil, edges, files)
+	if err == nil {
+		t.Fatal("expected writeGraph to return the staging error, got nil")
+	}
+	if w.commitCalls != 0 {
+		t.Errorf("commitCalls = %d, want 0 (must not commit after a staging error)", w.commitCalls)
+	}
+	if w.closeCalls != 1 {
+		t.Errorf("closeCalls = %d, want 1 (must release the abandoned batch)", w.closeCalls)
+	}
+}
+
+// TestResolve_EndToEnd proves the exported Resolve entry point runs the
+// full Pass 2 pipeline against a REAL GraphStore (not a stub), over the
+// shared multi-package fixture.
+func TestResolve_EndToEnd(t *testing.T) {
+	results, modulePath := fixtureResults(t)
+
+	store, err := graphstore.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("graphstore.Open: %v", err)
+	}
+	defer store.Close()
+
+	if _, err := Resolve(store, results, modulePath); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	meta, err := (func() (*schema.Meta, error) {
+		r, err := store.Snapshot()
+		if err != nil {
+			return nil, err
+		}
+		defer r.Close()
+		return r.GetMeta()
+	})()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if meta.SchemaVersion != schema.SchemaVersion {
+		t.Errorf("Meta.SchemaVersion = %d, want %d", meta.SchemaVersion, schema.SchemaVersion)
+	}
+	if meta.NodeCount == 0 {
+		t.Error("Meta.NodeCount = 0, want > 0")
+	}
+	if meta.EdgeCount == 0 {
+		t.Error("Meta.EdgeCount = 0, want > 0")
 	}
 }
