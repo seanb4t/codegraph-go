@@ -145,7 +145,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. On MCP server (re)connect, offline changes are reconciled via stat comparison plus content hashing
   5. `codegraph daemon` runs a shared watch/index server (with in-process fallback where unsupported), `codegraph unlock` clears stale locks after a crash, and soak tests show the watcher/daemon is goroutine-leak-free
 
-**Plans**: 6/9 plans executed
+**Plans**: 7/9 plans executed
 **Wave 1**
 
 - [x] 04-01-PLAN.md — x/ file-owned secondary index for O(subgraph) prune (Wave 1, INDX-04)
@@ -163,7 +163,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 04-07-PLAN.md — internal/daemon: lockfile + shared single-writer daemon + unlock (Wave 4, SYNC-04/SYNC-05)
+- [x] 04-07-PLAN.md — internal/daemon: lockfile + shared single-writer daemon + unlock (Wave 4, SYNC-04/SYNC-05)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -239,7 +239,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
-| 4. Incremental Sync & File Watcher | 6/9 | In Progress|  |
+| 4. Incremental Sync & File Watcher | 7/9 | In Progress|  |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
 | 7. Migration Tool | 0/TBD | Not started | - |
