@@ -44,7 +44,7 @@ func TestBulkExportReimportsLosslessly(t *testing.T) {
 	}
 
 	edge := &schema.Edge{Source: nodeA.Id, Target: nodeB.Id, Kind: "calls", Line: 10, Col: 2}
-	if err := w.PutEdge(edge); err != nil {
+	if err := w.PutEdge(edge, nodeA.FilePath); err != nil {
 		t.Fatalf("PutEdge: %v", err)
 	}
 

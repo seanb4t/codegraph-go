@@ -358,7 +358,7 @@ func (w *stubWriter) PutNode(n *schema.Node) error {
 	return nil
 }
 
-func (w *stubWriter) PutEdge(e *schema.Edge) error {
+func (w *stubWriter) PutEdge(e *schema.Edge, ownerPath string) error {
 	if w.failOn == "PutEdge" {
 		return errStubWrite
 	}
@@ -383,6 +383,10 @@ func (w *stubWriter) PutMeta(m *schema.Meta) error {
 }
 
 func (w *stubWriter) DeleteFileSubgraph(path string) error { return nil }
+
+func (w *stubWriter) DeleteNode(id string) error { return nil }
+
+func (w *stubWriter) DeleteEdge(source, kind, target string) error { return nil }
 
 func (w *stubWriter) Commit() error {
 	w.commitCalls++

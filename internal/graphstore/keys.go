@@ -1,6 +1,9 @@
 package graphstore
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"fmt"
+)
 
 // Key namespace prefixes (D-03). Every stored record's key begins with
 // exactly one of these single bytes, so a whole namespace — or, for
@@ -21,6 +24,26 @@ const (
 	// namespace without touching meta/n/e/f layout or requiring a schema
 	// migration.
 	prefixAnnotation byte = 'a'
+
+	// prefixFileIndex is the file-owned secondary index (Phase 4 D-02):
+	// x/<path>/<marker>/<node-id | src/kind/dst> maps a file path to the
+	// node ids and outgoing edge triples it owns, so DeleteFileSubgraph
+	// can prune a file's scattered, content-hash-keyed n/ and e/ records
+	// in O(subgraph) time instead of a full-graph scan. Additive
+	// namespace — SchemaVersion stays 1 (internal/schema/meta.go's
+	// additive-only-no-bump rule; a new key namespace is not a
+	// record-format break).
+	prefixFileIndex byte = 'x'
+)
+
+// fileIndexKindNode and fileIndexKindEdge are fixed, code-controlled marker
+// bytes (never attacker/caller data) that distinguish a file-index entry's
+// two sub-ranges — 0x01 sorts before 0x02, so a file's node entries and
+// edge entries each form their own contiguous sub-scan, while
+// fileIndexPrefix still bounds both together as one range-delete window.
+const (
+	fileIndexKindNode byte = 0x01
+	fileIndexKindEdge byte = 0x02
 )
 
 // appendSegment appends a length-prefixed encoding of seg to buf.
@@ -119,6 +142,56 @@ func fileSubgraphPrefix(path string) []byte {
 	return fileKey(path)
 }
 
+// fileIndexPrefix returns the inclusive lower bound of the byte range that
+// bounds ALL of path's own file-index entries — both node and edge
+// sub-ranges together — for a single Pebble DeleteRange call
+// (DeleteFileSubgraph, Phase 4 D-02). Paired with rangeUpperBound,
+// [fileIndexPrefix(path), rangeUpperBound(prefix)) covers exactly path's
+// entries and excludes a lexicographically adjacent file whose path is a
+// naive prefix or suffix of it (e.g. "foo" vs "foobar") — the same
+// length-prefixed-segment argument as fileSubgraphPrefix.
+func fileIndexPrefix(path string) []byte {
+	buf := make([]byte, 0, 1+binary.MaxVarintLen64+len(path))
+	buf = append(buf, prefixFileIndex)
+	buf = appendSegment(buf, path)
+	return buf
+}
+
+// fileIndexNodePrefix returns the lower bound of the contiguous byte range
+// covering exactly path's owned node entries (the fileIndexKindNode
+// sub-range within fileIndexPrefix(path)).
+func fileIndexNodePrefix(path string) []byte {
+	buf := fileIndexPrefix(path)
+	return append(buf, fileIndexKindNode)
+}
+
+// fileIndexNodeKey encodes a (path, nodeID) file-index entry: path owns the
+// node identified by nodeID. No value payload is stored under this key —
+// the key itself encodes the reference (Sync's prune step decodes it
+// straight from the key bytes, RESEARCH Pattern 2).
+func fileIndexNodeKey(path, nodeID string) []byte {
+	buf := fileIndexNodePrefix(path)
+	return appendSegment(buf, nodeID)
+}
+
+// fileIndexEdgePrefix returns the lower bound of the contiguous byte range
+// covering exactly path's owned outgoing-edge entries (the
+// fileIndexKindEdge sub-range within fileIndexPrefix(path)).
+func fileIndexEdgePrefix(path string) []byte {
+	buf := fileIndexPrefix(path)
+	return append(buf, fileIndexKindEdge)
+}
+
+// fileIndexEdgeKey encodes a (path, src, kind, dst) file-index entry: path
+// owns the outgoing edge (src, kind, dst) — i.e. src is one of path's own
+// nodes (the edge's ownerPath, threaded from resolve.go's writeGraph).
+func fileIndexEdgeKey(path, src, kind, dst string) []byte {
+	buf := fileIndexEdgePrefix(path)
+	buf = appendSegment(buf, src)
+	buf = appendSegment(buf, kind)
+	return appendSegment(buf, dst)
+}
+
 // metaKey encodes a store-wide metadata entry (e.g. schema version) under
 // the m/ namespace.
 func metaKey(name string) []byte {
@@ -126,6 +199,28 @@ func metaKey(name string) []byte {
 	buf = append(buf, prefixMeta)
 	buf = appendSegment(buf, name)
 	return buf
+}
+
+// decodeSegment reads one appendSegment-encoded segment from buf starting
+// at offset, returning the segment's string value and the offset
+// immediately after it. It is the decode counterpart to appendSegment,
+// used by pebbleFileIndexIterator to reconstruct a file-index entry's
+// id/src/kind/dst fields directly from key bytes — the x/ namespace stores
+// no value payload, so the key alone encodes the reference.
+func decodeSegment(buf []byte, offset int) (string, int, error) {
+	if offset > len(buf) {
+		return "", 0, fmt.Errorf("graphstore: segment offset %d beyond key length %d", offset, len(buf))
+	}
+	length, n := binary.Uvarint(buf[offset:])
+	if n <= 0 {
+		return "", 0, fmt.Errorf("graphstore: invalid varint segment-length prefix at offset %d", offset)
+	}
+	start := offset + n
+	end := start + int(length)
+	if end > len(buf) {
+		return "", 0, fmt.Errorf("graphstore: segment length %d at offset %d exceeds key length %d", length, offset, len(buf))
+	}
+	return string(buf[start:end]), end, nil
 }
 
 // rangeUpperBound computes the exclusive upper bound for a Pebble range

@@ -119,12 +119,20 @@ func writeExportRecord(w io.Writer, kind uint8, msg proto.Message) error {
 // Writer and commits once, so the whole import is atomic (D-04). This is
 // the counterpart the ARCH-01 round-trip test drives: Export followed by
 // Import into a fresh store must reproduce an identical graph.
+//
+// nodeFilePath tracks each imported node's id -> FilePath as node records
+// stream past, so a later edge record can supply PutEdge's ownerPath
+// (Phase 4 D-02) and rebuild the x/ file-index for the imported store —
+// Export's own namespace ordering (nodes, then edges, then files) guarantees
+// every edge's source node has already been seen by the time the edge
+// arrives.
 func Import(dst GraphStore, r io.Reader) error {
 	w, err := dst.NewWriter()
 	if err != nil {
 		return err
 	}
 
+	nodeFilePath := make(map[string]string)
 	br := bufio.NewReader(r)
 	for {
 		kind, err := br.ReadByte()
@@ -146,7 +154,7 @@ func Import(dst GraphStore, r io.Reader) error {
 			return fmt.Errorf("import: read record: %w", err)
 		}
 
-		if err := importRecord(w, kind, data); err != nil {
+		if err := importRecord(w, kind, data, nodeFilePath); err != nil {
 			return err
 		}
 	}
@@ -154,7 +162,7 @@ func Import(dst GraphStore, r io.Reader) error {
 	return w.Commit()
 }
 
-func importRecord(w Writer, kind uint8, data []byte) error {
+func importRecord(w Writer, kind uint8, data []byte, nodeFilePath map[string]string) error {
 	switch kind {
 	case exportKindMeta:
 		var m schema.Meta
@@ -169,6 +177,7 @@ func importRecord(w Writer, kind uint8, data []byte) error {
 		if err := proto.Unmarshal(data, &n); err != nil {
 			return fmt.Errorf("import: unmarshal node: %w", err)
 		}
+		nodeFilePath[n.GetId()] = n.GetFilePath()
 		if err := w.PutNode(&n); err != nil {
 			return fmt.Errorf("import: put node: %w", err)
 		}
@@ -177,7 +186,7 @@ func importRecord(w Writer, kind uint8, data []byte) error {
 		if err := proto.Unmarshal(data, &e); err != nil {
 			return fmt.Errorf("import: unmarshal edge: %w", err)
 		}
-		if err := w.PutEdge(&e); err != nil {
+		if err := w.PutEdge(&e, nodeFilePath[e.GetSource()]); err != nil {
 			return fmt.Errorf("import: put edge: %w", err)
 		}
 	case exportKindFile:

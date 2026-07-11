@@ -65,6 +65,13 @@ type Reader interface {
 	// the f/ namespace — a single contiguous range scan (D-03).
 	IterateFiles() (FileIterator, error)
 
+	// IterateFileIndex returns a FileIndexIterator over every x/ entry
+	// path owns — its node ids and outgoing-edge triples — as a single
+	// contiguous range scan (Phase 4 D-02). Sync's prune step uses this
+	// to find the exact n/e keys to point-delete via DeleteNode/
+	// DeleteEdge for a changed/deleted file's scattered subgraph.
+	IterateFileIndex(path string) (FileIndexIterator, error)
+
 	// Close releases the Reader's underlying snapshot.
 	Close() error
 }
@@ -126,6 +133,38 @@ type FileIterator interface {
 	Close() error
 }
 
+// FileIndexEntry is one decoded x/ file-index record: either a node
+// reference (IsNode true, NodeID set) or an edge reference (IsNode false,
+// Source/Kind/Target set — the owning file's outgoing edge triple). The x/
+// namespace stores no value payload; every field here is decoded straight
+// from the key bytes (Phase 4 D-02).
+type FileIndexEntry struct {
+	IsNode bool
+	NodeID string
+
+	Source, Kind, Target string
+}
+
+// FileIndexIterator walks a contiguous range of one file's x/ index
+// entries (both its owned node ids and outgoing edge triples). Callers
+// must call Next before the first call to Entry, and check Err after Next
+// returns false to distinguish end-of-range from an error.
+type FileIndexIterator interface {
+	// Next advances the iterator and reports whether a record is
+	// available.
+	Next() bool
+
+	// Entry returns the decoded record at the iterator's current
+	// position. Only valid after a call to Next that returned true.
+	Entry() FileIndexEntry
+
+	// Err returns the first error encountered during iteration, if any.
+	Err() error
+
+	// Close releases the iterator's resources.
+	Close() error
+}
+
 // Writer batches graph mutations for one file-change / debounce window. A
 // Writer commits atomically: either every staged Put/Delete is applied, or
 // none is (D-04).
@@ -136,8 +175,11 @@ type Writer interface {
 	// PutEdge stages e for write. (e.Source, e.Kind, e.Target) determine
 	// its key (D-03); a second PutEdge with the same triple overwrites
 	// the first — see keys.go's edgeKey doc for the deliberate dedup
-	// behavior this implies.
-	PutEdge(e *schema.Edge) error
+	// behavior this implies. ownerPath is the file that owns e's source
+	// node (Phase 4 D-02) — when non-empty, PutEdge also stages the
+	// corresponding x/ file-index entry so the owning file's outgoing
+	// edges are enumerable via IterateFileIndex.
+	PutEdge(e *schema.Edge, ownerPath string) error
 
 	// PutFile stages f for write. f.Path determines its key (D-03).
 	PutFile(f *schema.File) error
@@ -145,9 +187,23 @@ type Writer interface {
 	// PutMeta stages the store-wide Meta record for write.
 	PutMeta(m *schema.Meta) error
 
-	// DeleteFileSubgraph stages a single range-delete over path's own
-	// file record (D-03) — the mechanism Phase 4's rename/delete pruning
-	// binds to.
+	// DeleteNode stages a point-delete of the node record identified by
+	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after
+	// finding id via IterateFileIndex.
+	DeleteNode(id string) error
+
+	// DeleteEdge stages a point-delete of the edge record identified by
+	// (source, kind, target) (Phase 4 D-02) — the mechanism Sync's prune
+	// step uses after finding the triple via IterateFileIndex.
+	DeleteEdge(source, kind, target string) error
+
+	// DeleteFileSubgraph stages a range-delete over path's own file
+	// record AND every x/<path>/... file-index entry it owns (D-03,
+	// extended by Phase 4 D-02) — the mechanism Phase 4's rename/delete
+	// pruning binds to. Still one logical "prune this file entirely"
+	// call from the caller's perspective; the node/edge records
+	// themselves are pruned separately via DeleteNode/DeleteEdge, driven
+	// by an IterateFileIndex scan taken before this call.
 	DeleteFileSubgraph(path string) error
 
 	// Commit atomically applies every staged mutation. Do not reuse a

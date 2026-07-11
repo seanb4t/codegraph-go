@@ -2,6 +2,7 @@ package graphstore
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 
@@ -179,6 +180,18 @@ func (r *pebbleReader) IterateFiles() (FileIterator, error) {
 	return &pebbleFileIterator{iter: iter}, nil
 }
 
+// IterateFileIndex bounds a scan to exactly path's own x/ file-index
+// entries — both its node and edge sub-ranges together (Phase 4 D-02).
+func (r *pebbleReader) IterateFileIndex(path string) (FileIndexIterator, error) {
+	lower := fileIndexPrefix(path)
+	upper := rangeUpperBound(lower)
+	iter, err := r.snap.NewIter(&pebble.IterOptions{LowerBound: lower, UpperBound: upper})
+	if err != nil {
+		return nil, err
+	}
+	return &pebbleFileIndexIterator{iter: iter}, nil
+}
+
 // Close releases the underlying Pebble snapshot. Safe to call more than
 // once: *pebble.Snapshot.Close() panics on a second invocation, so repeat
 // calls after the first are a no-op.
@@ -305,3 +318,91 @@ func (it *pebbleFileIterator) Next() bool {
 func (it *pebbleFileIterator) File() *schema.File { return it.cur }
 func (it *pebbleFileIterator) Err() error         { return it.err }
 func (it *pebbleFileIterator) Close() error       { return it.iter.Close() }
+
+// pebbleFileIndexIterator adapts a *pebble.Iterator ranging over one
+// file's x/ index prefix to the FileIndexIterator interface. Unlike the
+// other iterators above, the x/ namespace stores no value payload — every
+// field of the decoded FileIndexEntry comes straight from the key bytes
+// (decodeFileIndexKey), since the key itself is the reference (Phase 4
+// D-02, mirrors pebbleNodeIterator's started/err/Next() discipline).
+type pebbleFileIndexIterator struct {
+	iter    *pebble.Iterator
+	started bool
+	cur     FileIndexEntry
+	err     error
+}
+
+func (it *pebbleFileIndexIterator) Next() bool {
+	if it.err != nil {
+		return false
+	}
+	var ok bool
+	if !it.started {
+		it.started = true
+		ok = it.iter.First()
+	} else {
+		ok = it.iter.Next()
+	}
+	if !ok {
+		if err := it.iter.Error(); err != nil {
+			it.err = err
+		}
+		return false
+	}
+	entry, err := decodeFileIndexKey(it.iter.Key())
+	if err != nil {
+		it.err = err
+		return false
+	}
+	it.cur = entry
+	return true
+}
+
+func (it *pebbleFileIndexIterator) Entry() FileIndexEntry { return it.cur }
+func (it *pebbleFileIndexIterator) Err() error            { return it.err }
+func (it *pebbleFileIndexIterator) Close() error          { return it.iter.Close() }
+
+// decodeFileIndexKey reconstructs a FileIndexEntry from a raw x/ namespace
+// key: [prefixFileIndex][path segment][marker byte][node-id segment |
+// src/kind/dst segments]. The path segment's value is not decoded into
+// the result — IterateFileIndex's caller already supplied path as the
+// scan bound — only skipped over to reach the marker byte.
+func decodeFileIndexKey(key []byte) (FileIndexEntry, error) {
+	if len(key) == 0 || key[0] != prefixFileIndex {
+		return FileIndexEntry{}, fmt.Errorf("graphstore: file-index key missing prefixFileIndex: %x", key)
+	}
+	_, offset, err := decodeSegment(key, 1)
+	if err != nil {
+		return FileIndexEntry{}, fmt.Errorf("graphstore: decode file-index path segment: %w", err)
+	}
+	if offset >= len(key) {
+		return FileIndexEntry{}, fmt.Errorf("graphstore: file-index key missing marker byte: %x", key)
+	}
+	marker := key[offset]
+	offset++
+
+	switch marker {
+	case fileIndexKindNode:
+		nodeID, _, err := decodeSegment(key, offset)
+		if err != nil {
+			return FileIndexEntry{}, fmt.Errorf("graphstore: decode file-index node id: %w", err)
+		}
+		return FileIndexEntry{IsNode: true, NodeID: nodeID}, nil
+	case fileIndexKindEdge:
+		src, offset, err := decodeSegment(key, offset)
+		if err != nil {
+			return FileIndexEntry{}, fmt.Errorf("graphstore: decode file-index edge source: %w", err)
+		}
+		kind, offset, err := decodeSegment(key, offset)
+		if err != nil {
+			return FileIndexEntry{}, fmt.Errorf("graphstore: decode file-index edge kind: %w", err)
+		}
+		dst, _, err := decodeSegment(key, offset)
+		if err != nil {
+			return FileIndexEntry{}, fmt.Errorf("graphstore: decode file-index edge target: %w", err)
+		}
+		return FileIndexEntry{Source: src, Kind: kind, Target: dst}, nil
+	default:
+		return FileIndexEntry{}, fmt.Errorf("graphstore: unknown file-index marker byte %#x", marker)
+	}
+}

@@ -274,7 +274,7 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 		}
 	}
 	for _, e := range collapsedEdges {
-		if err := w.PutEdge(e); err != nil {
+		if err := w.PutEdge(e, nodeFilePath[e.Source]); err != nil {
 			w.Close()
 			return err
 		}

@@ -203,13 +203,13 @@ func TestIterateEdgesEmptyPrefixScansEveryEdge(t *testing.T) {
 		"b->c": true,
 		"c->a": true,
 	}
-	if err := w.PutEdge(&schema.Edge{Source: "a", Target: "b", Kind: "calls"}); err != nil {
+	if err := w.PutEdge(&schema.Edge{Source: "a", Target: "b", Kind: "calls"}, ""); err != nil {
 		t.Fatalf("PutEdge: %v", err)
 	}
-	if err := w.PutEdge(&schema.Edge{Source: "b", Target: "c", Kind: "calls"}); err != nil {
+	if err := w.PutEdge(&schema.Edge{Source: "b", Target: "c", Kind: "calls"}, ""); err != nil {
 		t.Fatalf("PutEdge: %v", err)
 	}
-	if err := w.PutEdge(&schema.Edge{Source: "c", Target: "a", Kind: "calls"}); err != nil {
+	if err := w.PutEdge(&schema.Edge{Source: "c", Target: "a", Kind: "calls"}, ""); err != nil {
 		t.Fatalf("PutEdge: %v", err)
 	}
 	if err := w.Commit(); err != nil {

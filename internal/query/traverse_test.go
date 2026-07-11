@@ -64,6 +64,10 @@ func (f *traverseFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("traverseFakeReader: IterateFiles not implemented")
 }
 
+func (f *traverseFakeReader) IterateFileIndex(string) (graphstore.FileIndexIterator, error) {
+	return nil, errors.New("traverseFakeReader: IterateFileIndex not implemented")
+}
+
 func (f *traverseFakeReader) Close() error { return nil }
 
 type traverseFakeEdgeIterator struct {
