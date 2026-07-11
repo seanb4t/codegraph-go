@@ -43,9 +43,9 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 
 **User environment:** Sean runs TS CodeGraph daily as an MCP server across his projects, so parity gaps will be felt immediately — a strength for validation. Work team uses Java/C# heavily (hence its priority position); open-source release is intended from day one, so docs, release engineering, and compatibility promises matter early.
 
-**Repo state:** Greenfield — empty repository, no commits yet.
+**Repo state:** Phases 1–2 shipped. Phase 1 landed the substrate (Pebble-backed `GraphStore` behind a concurrency-tested interface, protobuf schema-versioned records, CGo tree-sitter parser seam, golden TS ground-truth corpus). Phase 2 shipped the working Go indexer: `codegraph init`/`index`/`uninit` build a correct, cross-file-resolved graph from scratch via a deterministic two-pass (parallel-extract → sequential-resolve) pipeline — validated end-to-end (self-indexing this repo: files=48 nodes=414 edges=660, byte-identical rebuild).
 
-**Known open question (for research):** Parser strategy is the central performance-vs-purity tension: tree-sitter via CGo (fastest, breaks pure-Go static builds), tree-sitter grammars compiled to WASM run via wazero (pure Go, sandboxes grammar code — itself a supply-chain win, some speed cost), or native Go parsers (huge effort, best control). Research must quantify this before architecture locks.
+**Known open question (RESOLVED in Phase 1):** Parser strategy was decided by a benchmarked spike — **Option A, CGo tree-sitter** (`tree-sitter/go-tree-sitter` + per-language grammars), the single documented CGo exception (DIST-05). See `PARSER-DECISION.md`. wazero WASM remains a monitored future option behind the narrow `parser.Parser` seam.
 
 ## Constraints
 
@@ -64,7 +64,7 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 | Parity v1 → team features v2 | Ship replacement value first; architect so server/CI features bolt on | — Pending |
 | Language priority: Go → Java/C# → Python → TS/JS | Matches Sean's daily usage and work-team stack | — Pending |
 | Full supply-chain suite from first release | Signing, SLSA, SBOM, reproducibility are the differentiator, not an afterthought | — Pending |
-| Parser strategy (CGo tree-sitter vs wazero WASM vs native Go) | Performance vs purity vs sandboxing — needs quantified research | — Pending research |
+| Parser strategy (CGo tree-sitter vs wazero WASM vs native Go) | Performance vs purity vs sandboxing — needs quantified research | ✓ Resolved (Phase 1): CGo tree-sitter, benchmarked; single documented CGo exception (PARSER-DECISION.md) |
 | Plan for embeddings, communities, graph-viz UI as future milestones | Long-term product direction; v1 schema versioned + annotation-ready so they bolt on | — Pending |
 
 ## Evolution
@@ -85,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-10 after initialization*
+*Last updated: 2026-07-11 after Phase 2 (Go Indexing Pipeline) completion*
