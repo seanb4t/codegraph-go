@@ -32,6 +32,13 @@ const (
 	// (clampDepth's "0 means default" convention, matching the CLI flags'
 	// zero-value default).
 	defaultDepth = 5
+
+	// defaultMaxFiles is applied when a caller passes a non-positive
+	// max-files (clampMaxFiles's "0 means default" convention, mirroring
+	// clampDepth — Explore's per-file verbatim-source read is expensive
+	// enough that "unlimited by default" would be a DoS footgun, unlike
+	// Files' "0 means unlimited" browse-only convention).
+	defaultMaxFiles = 5
 )
 
 // clampDepth returns min(n, MaxDepth), treating n<=0 as defaultDepth
@@ -66,6 +73,20 @@ func validateMaxFiles(n int) error {
 		return fmt.Errorf("query: max-files %d exceeds maximum %d", n, MaxFiles)
 	}
 	return nil
+}
+
+// clampMaxFiles returns min(n, MaxFiles), treating n<=0 as defaultMaxFiles
+// (03-06) — mirrors clampDepth's "0 means a small useful default" shape.
+// Callers must run validateMaxFiles first so an explicit out-of-range
+// request is rejected rather than silently clamped (T-03-06-DoS).
+func clampMaxFiles(n int) int {
+	if n <= 0 {
+		n = defaultMaxFiles
+	}
+	if n > MaxFiles {
+		return MaxFiles
+	}
+	return n
 }
 
 // knownKinds is the authoritative --kind allow-list ValidateKind checks

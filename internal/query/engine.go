@@ -15,18 +15,29 @@ import (
 const storeSubdir = "store"
 
 // Engine is the read-only query engine over a single graphstore.Reader
-// snapshot (D-02). It implements no query verbs yet (those land in
-// 03-03/03-04/03-05/03-06) — this plan establishes the construction seam
-// every subsequent query method hangs off of.
+// snapshot (D-02), plus (03-06) the repo root Node (file mode) and Explore
+// confine their on-disk source reads to (D-05a — source is read fresh from
+// disk on every call, not from the stored Node/File record).
 type Engine struct {
-	reader graphstore.Reader
+	reader   graphstore.Reader
+	repoRoot string
 }
 
-// New wraps an already-open graphstore.Reader in an Engine. Most callers
-// should use OpenAt instead; New exists so tests (and OpenAt itself) can
-// construct an Engine from a Reader obtained however is convenient.
+// New wraps an already-open graphstore.Reader in an Engine with no repo
+// root configured. Most callers should use OpenAt instead; New exists so
+// tests (and OpenAt itself, via NewWithRoot) can construct an Engine from a
+// Reader obtained however is convenient. An Engine built via New rejects
+// Node (file mode) and Explore's disk reads with a clear error, since it
+// has no repo root to confine them to.
 func New(r graphstore.Reader) *Engine {
 	return &Engine{reader: r}
+}
+
+// NewWithRoot wraps reader together with repoRoot (03-06, D-05a) — the
+// directory Node (file mode) and Explore resolve every on-disk source read
+// against and confine it to (path-traversal defense, T-03-06-Path).
+func NewWithRoot(r graphstore.Reader, repoRoot string) *Engine {
+	return &Engine{reader: r, repoRoot: repoRoot}
 }
 
 // OpenAt is the single read seam CLI commands and MCP tool handlers both
@@ -57,7 +68,7 @@ func OpenAt(start string) (*Engine, io.Closer, error) {
 		return nil, nil, err
 	}
 
-	return New(reader), &engineCloser{reader: reader, store: store}, nil
+	return NewWithRoot(reader, dir), &engineCloser{reader: reader, store: store}, nil
 }
 
 // engineCloser closes an Engine's Reader then its underlying GraphStore,
