@@ -145,7 +145,17 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. On MCP server (re)connect, offline changes are reconciled via stat comparison plus content hashing
   5. `codegraph daemon` runs a shared watch/index server (with in-process fallback where unsupported), `codegraph unlock` clears stale locks after a crash, and soak tests show the watcher/daemon is goroutine-leak-free
 
-**Plans**: TBD
+**Plans**: 9 plans (5 waves)
+
+- [ ] 04-01-PLAN.md — x/ file-owned secondary index for O(subgraph) prune (Wave 1, INDX-04)
+- [ ] 04-02-PLAN.md — schema mtime/size/has_file_index fields + export BuildReverseAdjacency (Wave 1, INDX-03)
+- [ ] 04-03-PLAN.md — internal/indexer.Sync() store-seeded incremental engine (Wave 2, INDX-03)
+- [ ] 04-04-PLAN.md — rename/delete/move prune fixtures + sync-equals-reindex determinism (Wave 3, INDX-04/INDX-03)
+- [ ] 04-05-PLAN.md — internal/watch: fsnotify recursive watcher + debounce (Wave 3, SYNC-01)
+- [ ] 04-06-PLAN.md — staleness banner + MCP reconnect reconcile (Wave 3, SYNC-02/SYNC-03)
+- [ ] 04-07-PLAN.md — internal/daemon: lockfile + shared single-writer daemon + unlock (Wave 4, SYNC-04/SYNC-05)
+- [ ] 04-08-PLAN.md — CLI sync/daemon/unlock + root wiring + serve in-process fallback (Wave 5, INDX-03/SYNC-04/SYNC-05)
+- [ ] 04-09-PLAN.md — goroutine-leak soak (goleak) for watcher + daemon (Wave 5, SYNC-06)
 
 ### Phase 5: Language Coverage & Resolution Breadth
 
