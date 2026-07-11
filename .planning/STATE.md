@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 2
 current_phase_name: Go Indexing Pipeline
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-07-11T01:37:13.572Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-07-11T02:00:52.654Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 2 execution started
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 13
-  completed_plans: 9
+  completed_plans: 10
   percent: 13
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 2 (Go Indexing Pipeline) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 2 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P06 | 25min | 3 tasks | 9 files |
 | Phase 02-go-indexing-pipeline P01 | 12min | 2 tasks | 6 files |
 | Phase 02-go-indexing-pipeline P02 | 12min | 2 tasks | 9 files |
+| Phase 02-go-indexing-pipeline P03 | 10min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ Recent decisions affecting current work:
 - [Phase 02]: graph.proto extended additively only: new field numbers below reserved 50-59, SchemaVersion stayed at 1
 - [Phase 02]: Discover returns (files, modulePath, err) rather than embedding modulePath per-file, keeping DiscoveredFile to the three interfaces-block fields
 - [Phase 02]: Fixture keeps skip_linux.go and main.go both as package main at fixture root — no declaration collision, lets the discovery test assert GOOS-conditional inclusion without a second fixture dir
+- [Phase 02]: Both true type aliases and non-struct/interface type definitions map to the single type_alias node kind (D-06)
+- [Phase 02]: Cross-file method receiver containment recorded as a 4th UnresolvedRef.Kind value, contains, beyond the plan's illustrative calls/imports/embeds list
+- [Phase 02]: Pass 1 worker pool uses fixed persistent workers pulling file indices from a shared atomic counter, not the errgroup.Go-per-file pattern shown in RESEARCH/PATTERNS, to actually bound parser construction to limit
 
 ### Pending Todos
 
@@ -113,6 +117,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T01:37:13.567Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-07-11T02:00:52.648Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
