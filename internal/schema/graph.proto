@@ -32,6 +32,31 @@ message Node {
   int32 start_col = 9;
   int32 end_col = 10;
 
+  // signature is the extractor-rendered parameter/return signature string
+  // (e.g. "func(a int, b string) error"). Additive Go-parity field (D-03);
+  // written by the Phase 2 goextract symbol pass.
+  string signature = 11;
+
+  // docstring is the leading comment/doc block attached to the symbol, as
+  // captured verbatim by the extractor. Additive Go-parity field (D-03);
+  // written by the Phase 2 goextract symbol pass.
+  string docstring = 12;
+
+  // visibility is the language-level access modifier ("public", "private",
+  // "package", etc.) as classified by the extractor. Additive Go-parity
+  // field (D-03); written by the Phase 2 goextract symbol pass.
+  string visibility = 13;
+
+  // is_exported reports whether the symbol crosses the package/module
+  // boundary (Go: identifier starts uppercase). Additive Go-parity field
+  // (D-03); written by the Phase 2 goextract symbol pass.
+  bool is_exported = 14;
+
+  // return_type is the extractor-rendered return type string, when the
+  // symbol kind has one (function/method). Additive Go-parity field
+  // (D-03); written by the Phase 2 goextract symbol pass.
+  string return_type = 15;
+
   // Reserved now, before any consumer exists, so a future embedding-vector
   // or community/cluster-assignment field lands at a pre-agreed number
   // instead of colliding with whatever the next organic field would be.
@@ -58,6 +83,16 @@ message Edge {
   int32 line = 4;
   int32 col = 5;
 
+  // provenance records how this edge was derived. Phase 2 writes only
+  // ground-truth values ("ast" or empty) per D-03a; "heuristic" provenance
+  // (fuzzy/inferred edges) is Phase 5's addition, not written here.
+  string provenance = 6;
+
+  // metadata is an open extension bag for edge-kind-specific extractor
+  // annotations that do not warrant their own field yet. Additive Go-parity
+  // field (D-03).
+  map<string, string> metadata = 7;
+
   reserved 50 to 59; // future: embedding vector, community/cluster assignment
 }
 
@@ -74,6 +109,12 @@ message File {
   string language = 3;
   int64 node_count = 4;
   int64 edge_count = 5;
+
+  // errors records per-file extraction failures (e.g. oversized or
+  // unparseable source) so one bad file does not abort the whole index run
+  // (RESEARCH Assumptions Log A2, Pitfall 4). Additive extension of D-03's
+  // File record.
+  repeated string errors = 6;
 }
 
 // Meta is the single versioned record (stored under the `meta/` key

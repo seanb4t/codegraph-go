@@ -12,7 +12,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.35.1
-// source: graph.proto
+// source: internal/schema/graph.proto
 
 package schema
 
@@ -50,13 +50,33 @@ type Node struct {
 	EndLine       int32                  `protobuf:"varint,8,opt,name=end_line,json=endLine,proto3" json:"end_line,omitempty"`
 	StartCol      int32                  `protobuf:"varint,9,opt,name=start_col,json=startCol,proto3" json:"start_col,omitempty"`
 	EndCol        int32                  `protobuf:"varint,10,opt,name=end_col,json=endCol,proto3" json:"end_col,omitempty"`
+	// signature is the extractor-rendered parameter/return signature string
+	// (e.g. "func(a int, b string) error"). Additive Go-parity field (D-03);
+	// written by the Phase 2 goextract symbol pass.
+	Signature string `protobuf:"bytes,11,opt,name=signature,proto3" json:"signature,omitempty"`
+	// docstring is the leading comment/doc block attached to the symbol, as
+	// captured verbatim by the extractor. Additive Go-parity field (D-03);
+	// written by the Phase 2 goextract symbol pass.
+	Docstring string `protobuf:"bytes,12,opt,name=docstring,proto3" json:"docstring,omitempty"`
+	// visibility is the language-level access modifier ("public", "private",
+	// "package", etc.) as classified by the extractor. Additive Go-parity
+	// field (D-03); written by the Phase 2 goextract symbol pass.
+	Visibility string `protobuf:"bytes,13,opt,name=visibility,proto3" json:"visibility,omitempty"`
+	// is_exported reports whether the symbol crosses the package/module
+	// boundary (Go: identifier starts uppercase). Additive Go-parity field
+	// (D-03); written by the Phase 2 goextract symbol pass.
+	IsExported bool `protobuf:"varint,14,opt,name=is_exported,json=isExported,proto3" json:"is_exported,omitempty"`
+	// return_type is the extractor-rendered return type string, when the
+	// symbol kind has one (function/method). Additive Go-parity field
+	// (D-03); written by the Phase 2 goextract symbol pass.
+	ReturnType    string `protobuf:"bytes,15,opt,name=return_type,json=returnType,proto3" json:"return_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Node) Reset() {
 	*x = Node{}
-	mi := &file_graph_proto_msgTypes[0]
+	mi := &file_internal_schema_graph_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -68,7 +88,7 @@ func (x *Node) String() string {
 func (*Node) ProtoMessage() {}
 
 func (x *Node) ProtoReflect() protoreflect.Message {
-	mi := &file_graph_proto_msgTypes[0]
+	mi := &file_internal_schema_graph_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -81,7 +101,7 @@ func (x *Node) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Node.ProtoReflect.Descriptor instead.
 func (*Node) Descriptor() ([]byte, []int) {
-	return file_graph_proto_rawDescGZIP(), []int{0}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Node) GetId() string {
@@ -154,6 +174,41 @@ func (x *Node) GetEndCol() int32 {
 	return 0
 }
 
+func (x *Node) GetSignature() string {
+	if x != nil {
+		return x.Signature
+	}
+	return ""
+}
+
+func (x *Node) GetDocstring() string {
+	if x != nil {
+		return x.Docstring
+	}
+	return ""
+}
+
+func (x *Node) GetVisibility() string {
+	if x != nil {
+		return x.Visibility
+	}
+	return ""
+}
+
+func (x *Node) GetIsExported() bool {
+	if x != nil {
+		return x.IsExported
+	}
+	return false
+}
+
+func (x *Node) GetReturnType() string {
+	if x != nil {
+		return x.ReturnType
+	}
+	return ""
+}
+
 // Edge is a directed relationship between two Node ids (calls, imports,
 // implements, etc.).
 type Edge struct {
@@ -169,15 +224,23 @@ type Edge struct {
 	// able to CARRY line/col so a future key-shape change (or an
 	// annotation/audit trail) doesn't lose the data that's available at
 	// extraction time.
-	Line          int32 `protobuf:"varint,4,opt,name=line,proto3" json:"line,omitempty"`
-	Col           int32 `protobuf:"varint,5,opt,name=col,proto3" json:"col,omitempty"`
+	Line int32 `protobuf:"varint,4,opt,name=line,proto3" json:"line,omitempty"`
+	Col  int32 `protobuf:"varint,5,opt,name=col,proto3" json:"col,omitempty"`
+	// provenance records how this edge was derived. Phase 2 writes only
+	// ground-truth values ("ast" or empty) per D-03a; "heuristic" provenance
+	// (fuzzy/inferred edges) is Phase 5's addition, not written here.
+	Provenance string `protobuf:"bytes,6,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	// metadata is an open extension bag for edge-kind-specific extractor
+	// annotations that do not warrant their own field yet. Additive Go-parity
+	// field (D-03).
+	Metadata      map[string]string `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Edge) Reset() {
 	*x = Edge{}
-	mi := &file_graph_proto_msgTypes[1]
+	mi := &file_internal_schema_graph_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -189,7 +252,7 @@ func (x *Edge) String() string {
 func (*Edge) ProtoMessage() {}
 
 func (x *Edge) ProtoReflect() protoreflect.Message {
-	mi := &file_graph_proto_msgTypes[1]
+	mi := &file_internal_schema_graph_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -202,7 +265,7 @@ func (x *Edge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Edge.ProtoReflect.Descriptor instead.
 func (*Edge) Descriptor() ([]byte, []int) {
-	return file_graph_proto_rawDescGZIP(), []int{1}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Edge) GetSource() string {
@@ -240,6 +303,20 @@ func (x *Edge) GetCol() int32 {
 	return 0
 }
 
+func (x *Edge) GetProvenance() string {
+	if x != nil {
+		return x.Provenance
+	}
+	return ""
+}
+
+func (x *Edge) GetMetadata() map[string]string {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
 // File is a per-source-file record: identity, content hash, and
 // aggregate counts for the symbols/edges attributed to it.
 type File struct {
@@ -249,17 +326,22 @@ type File struct {
 	// Security Domain V6 in 01-RESEARCH.md), never a weak hash like MD5.
 	// The hash computation itself lands with the Phase 2 indexer; this
 	// field only defines its storage shape.
-	ContentHash   string `protobuf:"bytes,2,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
-	Language      string `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
-	NodeCount     int64  `protobuf:"varint,4,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
-	EdgeCount     int64  `protobuf:"varint,5,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	ContentHash string `protobuf:"bytes,2,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
+	Language    string `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	NodeCount   int64  `protobuf:"varint,4,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	EdgeCount   int64  `protobuf:"varint,5,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	// errors records per-file extraction failures (e.g. oversized or
+	// unparseable source) so one bad file does not abort the whole index run
+	// (RESEARCH Assumptions Log A2, Pitfall 4). Additive extension of D-03's
+	// File record.
+	Errors        []string `protobuf:"bytes,6,rep,name=errors,proto3" json:"errors,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *File) Reset() {
 	*x = File{}
-	mi := &file_graph_proto_msgTypes[2]
+	mi := &file_internal_schema_graph_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +353,7 @@ func (x *File) String() string {
 func (*File) ProtoMessage() {}
 
 func (x *File) ProtoReflect() protoreflect.Message {
-	mi := &file_graph_proto_msgTypes[2]
+	mi := &file_internal_schema_graph_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -284,7 +366,7 @@ func (x *File) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use File.ProtoReflect.Descriptor instead.
 func (*File) Descriptor() ([]byte, []int) {
-	return file_graph_proto_rawDescGZIP(), []int{2}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *File) GetPath() string {
@@ -322,6 +404,13 @@ func (x *File) GetEdgeCount() int64 {
 	return 0
 }
 
+func (x *File) GetErrors() []string {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
 // Meta is the single versioned record (stored under the `meta/` key
 // prefix, D-03) that stamps the on-disk schema version plus aggregate
 // counts and index health. schema_version is bumped ONLY for a genuinely
@@ -341,7 +430,7 @@ type Meta struct {
 
 func (x *Meta) Reset() {
 	*x = Meta{}
-	mi := &file_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -353,7 +442,7 @@ func (x *Meta) String() string {
 func (*Meta) ProtoMessage() {}
 
 func (x *Meta) ProtoReflect() protoreflect.Message {
-	mi := &file_graph_proto_msgTypes[3]
+	mi := &file_internal_schema_graph_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -366,7 +455,7 @@ func (x *Meta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Meta.ProtoReflect.Descriptor instead.
 func (*Meta) Descriptor() ([]byte, []int) {
-	return file_graph_proto_rawDescGZIP(), []int{3}
+	return file_internal_schema_graph_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Meta) GetSchemaVersion() uint32 {
@@ -411,11 +500,11 @@ func (x *Meta) GetHealthMessage() string {
 	return ""
 }
 
-var File_graph_proto protoreflect.FileDescriptor
+var File_internal_schema_graph_proto protoreflect.FileDescriptor
 
-const file_graph_proto_rawDesc = "" +
+const file_internal_schema_graph_proto_rawDesc = "" +
 	"\n" +
-	"\vgraph.proto\x12\fcodegraph.v1\"\x94\x02\n" +
+	"\x1binternal/schema/graph.proto\x12\fcodegraph.v1\"\xb2\x03\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -428,13 +517,29 @@ const file_graph_proto_rawDesc = "" +
 	"\bend_line\x18\b \x01(\x05R\aendLine\x12\x1b\n" +
 	"\tstart_col\x18\t \x01(\x05R\bstartCol\x12\x17\n" +
 	"\aend_col\x18\n" +
-	" \x01(\x05R\x06endColJ\x04\b2\x10<\"v\n" +
+	" \x01(\x05R\x06endCol\x12\x1c\n" +
+	"\tsignature\x18\v \x01(\tR\tsignature\x12\x1c\n" +
+	"\tdocstring\x18\f \x01(\tR\tdocstring\x12\x1e\n" +
+	"\n" +
+	"visibility\x18\r \x01(\tR\n" +
+	"visibility\x12\x1f\n" +
+	"\vis_exported\x18\x0e \x01(\bR\n" +
+	"isExported\x12\x1f\n" +
+	"\vreturn_type\x18\x0f \x01(\tR\n" +
+	"returnTypeJ\x04\b2\x10<\"\x91\x02\n" +
 	"\x04Edge\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x12\n" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04line\x18\x04 \x01(\x05R\x04line\x12\x10\n" +
-	"\x03col\x18\x05 \x01(\x05R\x03colJ\x04\b2\x10<\"\x97\x01\n" +
+	"\x03col\x18\x05 \x01(\x05R\x03col\x12\x1e\n" +
+	"\n" +
+	"provenance\x18\x06 \x01(\tR\n" +
+	"provenance\x12<\n" +
+	"\bmetadata\x18\a \x03(\v2 .codegraph.v1.Edge.MetadataEntryR\bmetadata\x1a;\n" +
+	"\rMetadataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b2\x10<\"\xaf\x01\n" +
 	"\x04File\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12!\n" +
 	"\fcontent_hash\x18\x02 \x01(\tR\vcontentHash\x12\x1a\n" +
@@ -442,7 +547,8 @@ const file_graph_proto_rawDesc = "" +
 	"\n" +
 	"node_count\x18\x04 \x01(\x03R\tnodeCount\x12\x1d\n" +
 	"\n" +
-	"edge_count\x18\x05 \x01(\x03R\tedgeCount\"\xd7\x01\n" +
+	"edge_count\x18\x05 \x01(\x03R\tedgeCount\x12\x16\n" +
+	"\x06errors\x18\x06 \x03(\tR\x06errors\"\xd7\x01\n" +
 	"\x04Meta\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\rR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -454,52 +560,54 @@ const file_graph_proto_rawDesc = "" +
 	"\x0ehealth_message\x18\x06 \x01(\tR\rhealthMessageB1Z/github.com/seanb4t/codegraph-go/internal/schemab\x06proto3"
 
 var (
-	file_graph_proto_rawDescOnce sync.Once
-	file_graph_proto_rawDescData []byte
+	file_internal_schema_graph_proto_rawDescOnce sync.Once
+	file_internal_schema_graph_proto_rawDescData []byte
 )
 
-func file_graph_proto_rawDescGZIP() []byte {
-	file_graph_proto_rawDescOnce.Do(func() {
-		file_graph_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_graph_proto_rawDesc), len(file_graph_proto_rawDesc)))
+func file_internal_schema_graph_proto_rawDescGZIP() []byte {
+	file_internal_schema_graph_proto_rawDescOnce.Do(func() {
+		file_internal_schema_graph_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_schema_graph_proto_rawDesc), len(file_internal_schema_graph_proto_rawDesc)))
 	})
-	return file_graph_proto_rawDescData
+	return file_internal_schema_graph_proto_rawDescData
 }
 
-var file_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_graph_proto_goTypes = []any{
+var file_internal_schema_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_internal_schema_graph_proto_goTypes = []any{
 	(*Node)(nil), // 0: codegraph.v1.Node
 	(*Edge)(nil), // 1: codegraph.v1.Edge
 	(*File)(nil), // 2: codegraph.v1.File
 	(*Meta)(nil), // 3: codegraph.v1.Meta
+	nil,          // 4: codegraph.v1.Edge.MetadataEntry
 }
-var file_graph_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+var file_internal_schema_graph_proto_depIdxs = []int32{
+	4, // 0: codegraph.v1.Edge.metadata:type_name -> codegraph.v1.Edge.MetadataEntry
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
-func init() { file_graph_proto_init() }
-func file_graph_proto_init() {
-	if File_graph_proto != nil {
+func init() { file_internal_schema_graph_proto_init() }
+func file_internal_schema_graph_proto_init() {
+	if File_internal_schema_graph_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_graph_proto_rawDesc), len(file_graph_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_schema_graph_proto_rawDesc), len(file_internal_schema_graph_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_graph_proto_goTypes,
-		DependencyIndexes: file_graph_proto_depIdxs,
-		MessageInfos:      file_graph_proto_msgTypes,
+		GoTypes:           file_internal_schema_graph_proto_goTypes,
+		DependencyIndexes: file_internal_schema_graph_proto_depIdxs,
+		MessageInfos:      file_internal_schema_graph_proto_msgTypes,
 	}.Build()
-	File_graph_proto = out.File
-	file_graph_proto_goTypes = nil
-	file_graph_proto_depIdxs = nil
+	File_internal_schema_graph_proto = out.File
+	file_internal_schema_graph_proto_goTypes = nil
+	file_internal_schema_graph_proto_depIdxs = nil
 }
