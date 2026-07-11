@@ -450,6 +450,17 @@ func pruneFileSubgraph(r0 graphstore.Reader, w graphstore.Writer, path string, g
 // survive (RESEARCH Pattern 1 step 8): only its outgoing edges are
 // discarded, to be regenerated fresh once it is re-extracted and
 // re-resolved.
+//
+// CR-04: DeleteEdge alone only removes the edge's own e/ record — it never
+// touches path's x/<path>/e/... file-index entry (that is what
+// DeleteFileSubgraph's whole-region range-delete is for, and this is
+// deliberately NOT a full-file prune, since path's own nodes/File record
+// must survive). Without the paired DeleteFileIndexEdge call below, a
+// dependent whose re-resolution produces a DIFFERENT edge target (or no
+// edge at all) leaves the OLD x/ entry stranded — no matching e/ record,
+// never cleaned up — until a later DIRECT prune of path enumerates it via
+// IterateFileIndex and phantom-counts a no-op delete as a real removal,
+// corrupting Meta.EdgeCount's arithmetic.
 func pruneOwnedEdgesOnly(r0 graphstore.Reader, w graphstore.Writer, path string, edgesRemoved *int) error {
 	it, err := r0.IterateFileIndex(path)
 	if err != nil {
@@ -463,6 +474,9 @@ func pruneOwnedEdgesOnly(r0 graphstore.Reader, w graphstore.Writer, path string,
 			continue
 		}
 		if err := w.DeleteEdge(entry.Source, entry.Kind, entry.Target); err != nil {
+			return err
+		}
+		if err := w.DeleteFileIndexEdge(path, entry.Source, entry.Kind, entry.Target); err != nil {
 			return err
 		}
 		*edgesRemoved++

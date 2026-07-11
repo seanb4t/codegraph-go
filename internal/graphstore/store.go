@@ -197,6 +197,22 @@ type Writer interface {
 	// step uses after finding the triple via IterateFileIndex.
 	DeleteEdge(source, kind, target string) error
 
+	// DeleteFileIndexEdge stages a point-delete of ownerPath's own x/
+	// file-index entry for the outgoing edge (source, kind, target) (Phase
+	// 4 D-02, CR-04) — WITHOUT touching the edge's own e/ record. Callers
+	// pair this with DeleteEdge when discarding a single owned edge in
+	// isolation (Sync's pruneOwnedEdgesOnly, for a dependent file whose
+	// own nodes/File record survive): a plain DeleteEdge alone would leave
+	// a stale x/<ownerPath>/e/<source>/<kind>/<target> entry with no
+	// matching e/ record, which a later IterateFileIndex(ownerPath) scan
+	// (e.g. a subsequent DIRECT prune of ownerPath) would enumerate and
+	// phantom-count as a real removal. Callers doing a FULL file prune use
+	// DeleteFileSubgraph instead, which range-deletes the owning file's
+	// whole x/ region — including every edge entry — in one call; this
+	// method exists for the narrower "just this one edge" case
+	// DeleteFileSubgraph does not cover.
+	DeleteFileIndexEdge(ownerPath, source, kind, target string) error
+
 	// DeleteFileSubgraph stages a range-delete over path's own file
 	// record AND every x/<path>/... file-index entry it owns (D-03,
 	// extended by Phase 4 D-02) — the mechanism Phase 4's rename/delete

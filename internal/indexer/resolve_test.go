@@ -388,6 +388,8 @@ func (w *stubWriter) DeleteNode(id string) error { return nil }
 
 func (w *stubWriter) DeleteEdge(source, kind, target string) error { return nil }
 
+func (w *stubWriter) DeleteFileIndexEdge(ownerPath, source, kind, target string) error { return nil }
+
 func (w *stubWriter) Commit() error {
 	w.commitCalls++
 	return nil

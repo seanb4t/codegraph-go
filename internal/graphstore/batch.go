@@ -67,6 +67,15 @@ func (w *pebbleWriter) DeleteEdge(source, kind, target string) error {
 	return w.batch.Delete(edgeKey(source, kind, target), nil)
 }
 
+// DeleteFileIndexEdge stages a point-delete of ownerPath's own x/
+// file-index entry for the outgoing edge (source, kind, target) (Phase 4
+// D-02, CR-04). It does not touch the edge's own e/ record — callers pair
+// this with DeleteEdge when discarding a single owned edge without a full
+// DeleteFileSubgraph prune (Sync's pruneOwnedEdgesOnly).
+func (w *pebbleWriter) DeleteFileIndexEdge(ownerPath, source, kind, target string) error {
+	return w.batch.Delete(fileIndexEdgeKey(ownerPath, source, kind, target), nil)
+}
+
 func (w *pebbleWriter) PutFile(f *schema.File) error {
 	data, err := proto.Marshal(f)
 	if err != nil {
