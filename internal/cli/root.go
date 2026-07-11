@@ -35,7 +35,9 @@ func newRootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(newInitCmd(), newIndexCmd(), newUninitCmd())
+	root.AddCommand(newInitCmd(), newIndexCmd(), newUninitCmd(),
+		newQueryCmd(), newSearchCmd(), newCallersCmd(), newCalleesCmd(),
+		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd())
 	return root
 }
 
