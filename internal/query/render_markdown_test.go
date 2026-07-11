@@ -239,4 +239,36 @@ func TestExplore(t *testing.T) {
 			t.Fatalf("Explore(\"e\", maxFiles=1): got %d fenced source blocks, want 1 (max-files must cap distinct files):\n%s", count, got)
 		}
 	})
+
+	t.Run("no staleness banner when the graph is current", func(t *testing.T) {
+		engine, _ := nodeExploreFixture(t)
+
+		got, err := engine.Explore("Alpha", 1)
+		if err != nil {
+			t.Fatalf("Explore: unexpected error: %v", err)
+		}
+		if !strings.HasPrefix(got, "**Exploration: Alpha**") {
+			t.Fatalf("Explore(Alpha): got %q, want no staleness banner prefix (graph is current)", got)
+		}
+	})
+
+	t.Run("staleness banner prepended when a sync is pending", func(t *testing.T) {
+		engine, dir := nodeExploreFixture(t)
+
+		sidecar := filepath.Join(dir, codegraphDirName, staleSidecarName)
+		if err := os.WriteFile(sidecar, nil, 0o644); err != nil {
+			t.Fatalf("write sidecar: %v", err)
+		}
+
+		got, err := engine.Explore("Alpha", 1)
+		if err != nil {
+			t.Fatalf("Explore: unexpected error: %v", err)
+		}
+		if !strings.HasPrefix(got, staleBannerText) {
+			t.Fatalf("Explore(Alpha) with pending sync: got %q, want it to start with the staleness banner %q", got, staleBannerText)
+		}
+		if !strings.Contains(got, "**Exploration: Alpha**") {
+			t.Fatalf("Explore(Alpha) with pending sync: banner must not replace the exploration header:\n%s", got)
+		}
+	})
 }

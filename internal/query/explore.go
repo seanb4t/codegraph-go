@@ -116,9 +116,18 @@ func (e *Engine) Explore(query string, maxFiles int) (string, error) {
 		return "", err
 	}
 
+	meta, err := e.reader.GetMeta()
+	if err != nil && !errors.Is(err, graphstore.ErrNotFound) {
+		return "", err
+	}
+	stale, err := e.computeStale(meta)
+	if err != nil {
+		return "", err
+	}
+
 	groups, symbolCount := groupMatchesByFile(ranked, maxFiles)
 	if len(groups) == 0 {
-		return fmt.Sprintf("**Exploration: %s**\n\nFound 0 symbols across 0 files.\n", query), nil
+		return fmt.Sprintf("%s**Exploration: %s**\n\nFound 0 symbols across 0 files.\n", staleBanner(stale), query), nil
 	}
 
 	rev, err := BuildReverseAdjacency(e.reader)
@@ -146,5 +155,5 @@ func (e *Engine) Explore(query string, maxFiles int) (string, error) {
 		sources[g.Path] = content
 	}
 
-	return RenderExplore(query, len(groups), symbolCount, groups, blasts, sources), nil
+	return RenderExplore(query, len(groups), symbolCount, groups, blasts, sources, stale), nil
 }

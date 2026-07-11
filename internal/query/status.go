@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -24,8 +29,9 @@ import (
 //	backend                          | "pebble" (a literal Pebble identifier)      | D-05's explicit example remapping
 //	journalMode                      | dropped (key omitted)                       | No Pebble user-facing WAL/journal-mode analog (RESEARCH Open Question 2); D-05 permits dropping keys with no Go analog
 //	nodesByKind / languages          | computed via a full IterateNodes() scan     | D-03's IterateNodes; Go-only until Phase 5 (a Go repo reads languages:["go"])
-//	pendingChanges                   | {added:0,modified:0,removed:0}              | Phase-4 sync concept; present-but-inert placeholder (RESEARCH A2) — status reports health but does not reconcile drift this phase
+//	pendingChanges                   | {added:0,modified:0,removed:0}              | Phase-4 sync concept; the added/modified/removed COUNT breakdown remains an inert placeholder — computing it would require re-running Sync's diff at Status()-time (out of scope, RESEARCH A2). The plain existence of pending changes is now live via the new top-level `stale` field below (D-04a)
 //	worktreeMismatch                 | null                                         | Phase-4 sync concept; present-but-inert placeholder (RESEARCH A2)
+//	stale                            | live bool (D-04a)                           | true when `.codegraph/.sync-pending` exists (watcher/daemon signal) OR — no-daemon fallback — the newest on-disk source-file mtime is newer than Meta.last_sync_unix_ms; this is the field that makes the sync-pending concept real this phase, see computeStale
 //	index.builtWithVersion            | fmt.Sprintf("%d", schema.SchemaVersion)     | Same Go analog as top-level version — no separate release/build-version concept
 //	index.builtWithExtractionVersion | uint32(schema.SchemaVersion)                | Go has one "extraction version" concept: the schema version stamped by NewMeta
 //	index.currentExtractionVersion   | uint32(schema.SchemaVersion)                | This build's own SchemaVersion constant
@@ -46,6 +52,7 @@ type StatusResult struct {
 	Languages        []string         `json:"languages"`
 	PendingChanges   PendingChanges   `json:"pendingChanges"`
 	WorktreeMismatch *string          `json:"worktreeMismatch"`
+	Stale            bool             `json:"stale"`
 	Index            IndexHealth      `json:"index"`
 }
 
@@ -68,6 +75,85 @@ type IndexHealth struct {
 	ReindexRecommended         bool   `json:"reindexRecommended"`
 	State                      string `json:"state"`
 	PendingRefs                int    `json:"pendingRefs"`
+}
+
+// staleSidecarName is the watcher/daemon's pending-sync touch-file (D-04a,
+// RESEARCH Pattern 4): present under the resolved .codegraph/ directory
+// between the first debounced file event and the next successful sync
+// commit, which removes it.
+const staleSidecarName = ".sync-pending"
+
+// shouldSkipStaleDir mirrors internal/indexer.ShouldSkipDir's directory
+// exclusions (vendor/ and any dot-prefixed directory), duplicated here
+// rather than imported to avoid an internal/query -> internal/indexer
+// dependency edge — the same package-local-duplication precedent Plan
+// 04-03 established for buildReverseAdjacency (04-03-SUMMARY.md).
+func shouldSkipStaleDir(name string) bool {
+	return name == "vendor" || strings.HasPrefix(name, ".")
+}
+
+// newestSourceMtime walks root (skipping vendor/ and dot-prefixed
+// directories) and returns the newest regular file's modification time —
+// the no-daemon staleness fallback's raw signal (D-04a).
+func newestSourceMtime(root string) (time.Time, error) {
+	var newest time.Time
+	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if p != root && shouldSkipStaleDir(d.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+		return nil
+	})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return newest, nil
+}
+
+// computeStale reports the live staleness signal (D-04a): true when the
+// watcher/daemon's .codegraph/.sync-pending sidecar is present, or — the
+// no-daemon fallback — when the newest on-disk source-file mtime under the
+// repo root is newer than meta's last_sync_unix_ms. meta may be nil (no
+// Meta record yet, e.g. a store that exists but was never indexed), in
+// which case any discovered file is considered newer than the zero-value
+// "never synced" timestamp. An Engine with no repoRoot configured (New,
+// not OpenAt) has no filesystem context to check and reports not stale
+// rather than erroring — Node/Explore's disk reads already reject that
+// configuration outright, but Status must degrade safely (T-04-06-02).
+func (e *Engine) computeStale(meta *schema.Meta) (bool, error) {
+	if e.repoRoot == "" {
+		return false, nil
+	}
+
+	sidecar := filepath.Join(e.repoRoot, codegraphDirName, staleSidecarName)
+	if _, err := os.Stat(sidecar); err == nil {
+		return true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return false, err
+	}
+
+	newest, err := newestSourceMtime(e.repoRoot)
+	if err != nil {
+		return false, err
+	}
+
+	var lastSync int64
+	if meta != nil {
+		lastSync = meta.GetLastSyncUnixMs()
+	}
+	return newest.UnixMilli() > lastSync, nil
 }
 
 // Status reports index health/counts (QRY-09) by scanning the frozen
@@ -135,12 +221,18 @@ func (e *Engine) Status() (StatusResult, error) {
 		reindexRecommended = !schema.IsCurrentSchemaVersion(meta)
 	}
 
+	stale, err := e.computeStale(meta)
+	if err != nil {
+		return StatusResult{}, err
+	}
+
 	return StatusResult{
 		Initialized: true,
 		Version:     version,
 		FileCount:   fileCount,
 		NodeCount:   nodeCount,
 		EdgeCount:   edgeCount,
+		Stale:       stale,
 		Backend:     "pebble",
 		NodesByKind: nodesByKind,
 		Languages:   languages,

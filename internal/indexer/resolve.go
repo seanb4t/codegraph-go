@@ -9,6 +9,7 @@ package indexer
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
@@ -305,6 +306,14 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// GENUINELY pre-Phase-4 store (built before this field/namespace
 	// existed) is ever missing it.
 	meta.HasFileIndex = true
+	// Phase 4 D-04a: stamp LastSyncUnixMs here too, not just in Sync's own
+	// meta-write step (internal/indexer/sync.go) — otherwise a graph built
+	// via a from-scratch `codegraph index` (this path) carries a zero
+	// last_sync_unix_ms forever until the first incremental sync runs,
+	// which would make query.Engine.Status's newest-mtime-vs-last_sync
+	// staleness fallback (04-06) report every freshly indexed repo as
+	// permanently stale.
+	meta.LastSyncUnixMs = time.Now().UnixMilli()
 	if err := w.PutMeta(meta); err != nil {
 		w.Close()
 		return err

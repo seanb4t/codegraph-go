@@ -14,6 +14,22 @@ import (
 // (T-03-06-Drift, RESEARCH Pitfall 3).
 const sourceDisclaimer = "The code below is the **verbatim, current on-disk source** of these files — re-read from disk on this call and line-numbered, byte-for-byte identical to what the Read tool returns. It is NOT a summary, outline, or stale cache. Treat each block as a Read you have already performed: do not Read a file shown here."
 
+// staleBannerText is the single bolded line prepended to explore output
+// while a sync is pending (D-04a) — exact wording is executor's discretion
+// per CONTEXT, kept to one line so it never disturbs the fixed golden
+// section order that follows it.
+const staleBannerText = "**⚠ Index may be stale — a sync is pending.**\n\n"
+
+// staleBanner returns staleBannerText when stale, or "" when the graph is
+// current — the shared prefix both RenderExplore and Explore's zero-match
+// early-return literal use, so the banner never has two implementations.
+func staleBanner(stale bool) string {
+	if !stale {
+		return ""
+	}
+	return staleBannerText
+}
+
 // renderNumberedSource renders content as a tab-indented, line-numbered
 // fenced "```go" code block (D-05a/D-05b): one "<n>\t<line>" row per source
 // line. A trailing newline in content (the common on-disk convention)
@@ -116,9 +132,12 @@ func joinSymbolKindList(nodes []*schema.Node) string {
 // "Found N symbol(s) across M file(s)." line, the blast-radius bullets,
 // the verbatim-source disclaimer, and one "**`path`** — sym(kind), ..."
 // header + fenced numbered-source block per matched file, in groups'
-// order.
-func RenderExplore(query string, fileCount, symbolCount int, groups []exploreFileGroup, blasts []exploreBlast, sources map[string][]byte) string {
+// order. When stale is true (D-04a), a single bolded staleness line is
+// prepended before the exploration header; a current graph (stale=false)
+// prepends nothing, keeping the golden's fixed section order untouched.
+func RenderExplore(query string, fileCount, symbolCount int, groups []exploreFileGroup, blasts []exploreBlast, sources map[string][]byte, stale bool) string {
 	var b strings.Builder
+	b.WriteString(staleBanner(stale))
 	fmt.Fprintf(&b, "**Exploration: %s**\n\n", query)
 	fmt.Fprintf(&b, "Found %d %s across %d %s.\n\n", symbolCount, pluralize(symbolCount, "symbol"), fileCount, pluralize(fileCount, "file"))
 	b.WriteString("**Blast radius — what depends on these (update/verify before editing)**\n\n")
