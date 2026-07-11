@@ -7,8 +7,10 @@
 package indexer
 
 import (
+	"sort"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -160,4 +162,131 @@ func lastPathSegment(importPath string) string {
 		return importPath[i+1:]
 	}
 	return importPath
+}
+
+// Resolve runs the whole of Pass 2: builds the global symbol index,
+// resolves every file's Unresolved references into edges, deterministically
+// collapses duplicates, and commits the resolved graph through exactly one
+// batched GraphStore.Writer (D-04a). It returns the count of references
+// that could not be resolved (surfaced later via --verbose, never silently
+// dropped — D-06a).
+func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string) (int, error) {
+	nodes, packageNodes, edges, files, unresolvedCount := resolveRefs(results, modulePath)
+	if err := writeGraph(store, nodes, packageNodes, edges, files); err != nil {
+		return unresolvedCount, err
+	}
+	return unresolvedCount, nil
+}
+
+// edgeTriple is the (source, kind, target) identity a duplicate edge
+// collapses on (D-05) — mirrors graphstore/keys.go's edgeKey shape exactly,
+// without needing to import that package's unexported key-building code.
+type edgeTriple struct {
+	source, kind, target string
+}
+
+// collapseEdges aggregates every candidate edge sharing a (source, kind,
+// target) triple, chooses ONE representative by sorting the candidates by
+// a TOTAL ORDER — (filePath, line, col), via nodeFilePath[candidate.Source]
+// — and takes the first (RESEARCH Pitfall 1). This is never "whichever
+// candidate was appended first/last" (processing order); the same input
+// set, in any order, always yields the same representative. The returned
+// slice is itself in sorted triple order, so staging it via PutEdge is
+// also deterministic.
+func collapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*schema.Edge {
+	groups := make(map[edgeTriple][]*schema.Edge, len(edges))
+	for _, e := range edges {
+		k := edgeTriple{e.Source, e.Kind, e.Target}
+		groups[k] = append(groups[k], e)
+	}
+
+	keys := make([]edgeTriple, 0, len(groups))
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].source != keys[j].source {
+			return keys[i].source < keys[j].source
+		}
+		if keys[i].kind != keys[j].kind {
+			return keys[i].kind < keys[j].kind
+		}
+		return keys[i].target < keys[j].target
+	})
+
+	collapsed := make([]*schema.Edge, 0, len(keys))
+	for _, k := range keys {
+		candidates := groups[k]
+		sort.Slice(candidates, func(i, j int) bool {
+			ci, cj := candidates[i], candidates[j]
+			fi, fj := nodeFilePath[ci.Source], nodeFilePath[cj.Source]
+			if fi != fj {
+				return fi < fj
+			}
+			if ci.Line != cj.Line {
+				return ci.Line < cj.Line
+			}
+			return ci.Col < cj.Col
+		})
+		collapsed = append(collapsed, candidates[0])
+	}
+	return collapsed
+}
+
+// writeGraph collapses edges deterministically and stages the whole
+// resolved graph — package pseudo-nodes and symbol nodes (sorted by id),
+// then files (sorted by path), then collapsed edges (sorted by
+// source/kind/target) — through exactly one GraphStore.Writer, committing
+// once (D-04a). Any staging error releases the batch via Close() (never a
+// partial Commit) and returns the error.
+func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File) error {
+	nodeFilePath := make(map[string]string, len(nodes))
+	for _, n := range nodes {
+		nodeFilePath[n.Id] = n.FilePath
+	}
+
+	allNodes := make([]*schema.Node, 0, len(nodes)+len(packageNodes))
+	allNodes = append(allNodes, nodes...)
+	allNodes = append(allNodes, packageNodes...)
+	sort.Slice(allNodes, func(i, j int) bool { return allNodes[i].Id < allNodes[j].Id })
+
+	sortedFiles := make([]*schema.File, len(files))
+	copy(sortedFiles, files)
+	sort.Slice(sortedFiles, func(i, j int) bool { return sortedFiles[i].Path < sortedFiles[j].Path })
+
+	collapsedEdges := collapseEdges(edges, nodeFilePath)
+
+	w, err := store.NewWriter()
+	if err != nil {
+		return err
+	}
+
+	for _, n := range allNodes {
+		if err := w.PutNode(n); err != nil {
+			w.Close()
+			return err
+		}
+	}
+	for _, f := range sortedFiles {
+		if err := w.PutFile(f); err != nil {
+			w.Close()
+			return err
+		}
+	}
+	for _, e := range collapsedEdges {
+		if err := w.PutEdge(e); err != nil {
+			w.Close()
+			return err
+		}
+	}
+
+	meta := schema.NewMeta()
+	meta.NodeCount = int64(len(allNodes))
+	meta.EdgeCount = int64(len(collapsedEdges))
+	if err := w.PutMeta(meta); err != nil {
+		w.Close()
+		return err
+	}
+
+	return w.Commit()
 }
