@@ -146,6 +146,26 @@ func (r *pebbleReader) IterateEdges(srcPrefix string) (EdgeIterator, error) {
 	return &pebbleEdgeIterator{iter: iter}, nil
 }
 
+func (r *pebbleReader) IterateNodes() (NodeIterator, error) {
+	lower := []byte{prefixNode}
+	upper := rangeUpperBound(lower)
+	iter, err := r.snap.NewIter(&pebble.IterOptions{LowerBound: lower, UpperBound: upper})
+	if err != nil {
+		return nil, err
+	}
+	return &pebbleNodeIterator{iter: iter}, nil
+}
+
+func (r *pebbleReader) IterateFiles() (FileIterator, error) {
+	lower := []byte{prefixFile}
+	upper := rangeUpperBound(lower)
+	iter, err := r.snap.NewIter(&pebble.IterOptions{LowerBound: lower, UpperBound: upper})
+	if err != nil {
+		return nil, err
+	}
+	return &pebbleFileIterator{iter: iter}, nil
+}
+
 // Close releases the underlying Pebble snapshot. Safe to call more than
 // once: *pebble.Snapshot.Close() panics on a second invocation, so repeat
 // calls after the first are a no-op.
@@ -194,3 +214,81 @@ func (it *pebbleEdgeIterator) Next() bool {
 func (it *pebbleEdgeIterator) Edge() *schema.Edge { return it.cur }
 func (it *pebbleEdgeIterator) Err() error         { return it.err }
 func (it *pebbleEdgeIterator) Close() error       { return it.iter.Close() }
+
+// pebbleNodeIterator adapts a *pebble.Iterator ranging over the whole n/
+// namespace to the NodeIterator interface.
+type pebbleNodeIterator struct {
+	iter    *pebble.Iterator
+	started bool
+	cur     *schema.Node
+	err     error
+}
+
+func (it *pebbleNodeIterator) Next() bool {
+	if it.err != nil {
+		return false
+	}
+	var ok bool
+	if !it.started {
+		it.started = true
+		ok = it.iter.First()
+	} else {
+		ok = it.iter.Next()
+	}
+	if !ok {
+		if err := it.iter.Error(); err != nil {
+			it.err = err
+		}
+		return false
+	}
+	var n schema.Node
+	if err := proto.Unmarshal(it.iter.Value(), &n); err != nil {
+		it.err = err
+		return false
+	}
+	it.cur = &n
+	return true
+}
+
+func (it *pebbleNodeIterator) Node() *schema.Node { return it.cur }
+func (it *pebbleNodeIterator) Err() error         { return it.err }
+func (it *pebbleNodeIterator) Close() error       { return it.iter.Close() }
+
+// pebbleFileIterator adapts a *pebble.Iterator ranging over the whole f/
+// namespace to the FileIterator interface.
+type pebbleFileIterator struct {
+	iter    *pebble.Iterator
+	started bool
+	cur     *schema.File
+	err     error
+}
+
+func (it *pebbleFileIterator) Next() bool {
+	if it.err != nil {
+		return false
+	}
+	var ok bool
+	if !it.started {
+		it.started = true
+		ok = it.iter.First()
+	} else {
+		ok = it.iter.Next()
+	}
+	if !ok {
+		if err := it.iter.Error(); err != nil {
+			it.err = err
+		}
+		return false
+	}
+	var f schema.File
+	if err := proto.Unmarshal(it.iter.Value(), &f); err != nil {
+		it.err = err
+		return false
+	}
+	it.cur = &f
+	return true
+}
+
+func (it *pebbleFileIterator) File() *schema.File { return it.cur }
+func (it *pebbleFileIterator) Err() error         { return it.err }
+func (it *pebbleFileIterator) Close() error       { return it.iter.Close() }
