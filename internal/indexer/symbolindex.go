@@ -1,6 +1,9 @@
 package indexer
 
-import "github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+import (
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+)
 
 // symbolIndex is the global (importPath, declaredName) -> nodeID index Pass
 // 2 builds from every Pass-1 result before resolving any cross-file
@@ -25,6 +28,16 @@ type symbolIndex struct {
 // contract.
 func newSymbolIndex(results []goextract.FileResult) *symbolIndex {
 	idx := &symbolIndex{byImportAndName: make(map[string]map[string]string, len(results))}
+	idx.overlay(results)
+	return idx
+}
+
+// overlay adds results' own declared symbols into idx, superseding any
+// existing entry for the same (importPath, name) — the shared per-result
+// loop both newSymbolIndex (fresh index) and Sync's store-seeded index
+// (layering the reparse batch on top) use, so the two never drift (Phase
+// 4 RESEARCH Pattern 1 step 10).
+func (idx *symbolIndex) overlay(results []goextract.FileResult) {
 	for _, r := range results {
 		if r.Err != nil {
 			continue
@@ -45,7 +58,48 @@ func newSymbolIndex(results []goextract.FileResult) *symbolIndex {
 			names[en.Node.Name] = en.Node.Id
 		}
 	}
-	return idx
+}
+
+// newSymbolIndexFromStore seeds a symbolIndex from the graph already
+// committed to r — every node's import path is recomputed via
+// importPathFor(modulePath, node.FilePath) rather than read off a
+// goextract.FileResult, since the store holds no FileResult (Phase 4
+// RESEARCH Pattern 1 step 10 / Pitfall 1). Nodes belonging to a path in
+// exclude are skipped entirely — the caller (Sync) is about to supersede
+// or has already removed those files' symbols and overlays fresh ones on
+// top, so any store-seeded entry for them would be stale.
+//
+// goextract.KindFile and kindPackage nodes are skipped, mirroring
+// newSymbolIndex's own exclusions: a file node is never a callable
+// target, and a package pseudo-node has no declaring source to seed a
+// (name -> id) entry from in this scan (it is re-minted, not looked up,
+// by resolveRefsWithIndex's imports-ref branch).
+func newSymbolIndexFromStore(r graphstore.Reader, modulePath string, exclude map[string]bool) (*symbolIndex, error) {
+	idx := &symbolIndex{byImportAndName: make(map[string]map[string]string)}
+
+	it, err := r.IterateNodes()
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	for it.Next() {
+		n := it.Node()
+		if n.Kind == goextract.KindFile || n.Kind == kindPackage || exclude[n.FilePath] {
+			continue
+		}
+		importPath := importPathFor(modulePath, n.FilePath)
+		names := idx.byImportAndName[importPath]
+		if names == nil {
+			names = make(map[string]string)
+			idx.byImportAndName[importPath] = names
+		}
+		names[n.Name] = n.Id
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	return idx, nil
 }
 
 // resolveSelector resolves a package-qualified reference (pkg.Name) using

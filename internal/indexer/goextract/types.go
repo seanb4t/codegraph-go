@@ -100,6 +100,14 @@ type FileResult struct {
 	// MD5 — computed regardless of whether extraction below it succeeds.
 	ContentHash string
 
+	// MtimeUnixNs and SizeBytes carry the on-disk file's stat info at
+	// extraction time (Phase 4 D-01a), copied verbatim from the
+	// DiscoveredFile that produced this result. Pass 2 stamps these onto
+	// the committed schema.File record so Sync's stat pre-filter has
+	// something cheap to compare against on a later invocation.
+	MtimeUnixNs int64
+	SizeBytes   int64
+
 	// Err is set instead of returning a non-nil error from Extract when
 	// this specific file could not be parsed/extracted.
 	Err error

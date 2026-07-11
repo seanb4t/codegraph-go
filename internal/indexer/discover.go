@@ -24,6 +24,24 @@ type DiscoveredFile struct {
 	// ImportPath is the module path joined with the file's relative
 	// directory ("" relative directory means the module root package).
 	ImportPath string
+
+	// MtimeUnixNs and SizeBytes are the file's on-disk stat info at
+	// discovery time (Phase 4 D-01a) — carried through Extract into the
+	// committed File record so Sync's stat pre-filter has something cheap
+	// to compare against on the next invocation, without hashing every
+	// file every sync.
+	MtimeUnixNs int64
+	SizeBytes   int64
+}
+
+// ShouldSkipDir reports whether a directory named name should be excluded
+// from traversal — Discover's own WalkDir callback and, per Phase 4 D-04,
+// the native filesystem watcher's recursive-add loop both call this exact
+// predicate so the two never silently diverge on which paths they cover.
+// vendor/ and any dot-prefixed directory (.git, .codegraph, etc.) are
+// excluded.
+func ShouldSkipDir(name string) bool {
+	return name == "vendor" || strings.HasPrefix(name, ".")
 }
 
 // Discover walks root and returns every *.go file the default build
@@ -56,7 +74,7 @@ func Discover(root string) ([]DiscoveredFile, string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if p != root && (d.Name() == "vendor" || strings.HasPrefix(d.Name(), ".")) {
+			if p != root && ShouldSkipDir(d.Name()) {
 				return fs.SkipDir
 			}
 			return nil
@@ -87,10 +105,17 @@ func Discover(root string) ([]DiscoveredFile, string, error) {
 		}
 		relPath = filepath.ToSlash(relPath)
 
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+
 		files = append(files, DiscoveredFile{
-			AbsPath:    abs,
-			RelPath:    relPath,
-			ImportPath: importPathFor(modulePath, relPath),
+			AbsPath:     abs,
+			RelPath:     relPath,
+			ImportPath:  importPathFor(modulePath, relPath),
+			MtimeUnixNs: info.ModTime().UnixNano(),
+			SizeBytes:   info.Size(),
 		})
 		return nil
 	})

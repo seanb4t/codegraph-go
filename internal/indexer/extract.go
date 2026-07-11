@@ -99,10 +99,12 @@ func extractWithFactory(files []DiscoveredFile, limit int, newParser parserFacto
 					// batch — recorded the same way goextract.Extract
 					// records a parse failure (Pitfall 4).
 					results[i] = goextract.FileResult{
-						ImportPath: f.ImportPath,
-						RelPath:    f.RelPath,
-						Language:   "go",
-						Err:        fmt.Errorf("indexer: reading %s: %w", f.AbsPath, err),
+						ImportPath:  f.ImportPath,
+						RelPath:     f.RelPath,
+						Language:    "go",
+						MtimeUnixNs: f.MtimeUnixNs,
+						SizeBytes:   f.SizeBytes,
+						Err:         fmt.Errorf("indexer: reading %s: %w", f.AbsPath, err),
 					}
 					continue
 				}
@@ -117,6 +119,11 @@ func extractWithFactory(files []DiscoveredFile, limit int, newParser parserFacto
 					// the batch.
 					return fmt.Errorf("indexer: extracting %s: %w", f.RelPath, err)
 				}
+				// Phase 4 D-01a: stamp the on-disk stat info Discover
+				// already captured onto the result, so Pass 2 can carry
+				// it onto the committed File record.
+				r.MtimeUnixNs = f.MtimeUnixNs
+				r.SizeBytes = f.SizeBytes
 				// Disjoint index, unique per file — safe under
 				// concurrent writes from other workers (each worker's
 				// `i` is obtained from a single atomic counter, so no

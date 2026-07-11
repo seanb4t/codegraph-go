@@ -37,7 +37,18 @@ const kindPackage = "package"
 // classify an "imports" ref's target as intra-module (gets a package
 // pseudo-node + edge) vs. external/stdlib (no node, no edge).
 func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
-	idx := newSymbolIndex(results)
+	return resolveRefsWithIndex(results, modulePath, newSymbolIndex(results))
+}
+
+// resolveRefsWithIndex is resolveRefs' implementation, parameterized on
+// the symbol index (Phase 4 D-01/RESEARCH Pattern 1 step 11): resolveRefs
+// keeps building its own from-scratch newSymbolIndex(results) unconditio-
+// nally; Sync() instead injects a store-seeded index overlaid with the
+// reparse batch (newSymbolIndexFromStore + symbolIndex.overlay), so an
+// unqualified/qualified reference into an UNCHANGED file still resolves
+// (RESEARCH Pitfall 1). Every other line here is reused verbatim by both
+// callers.
+func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx *symbolIndex) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
 	packageNodeIDs := make(map[string]struct{})
 
 	for _, r := range results {
@@ -122,6 +133,8 @@ func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, pack
 			Language:    r.Language,
 			NodeCount:   int64(len(r.Nodes)),
 			EdgeCount:   int64(len(r.IntraEdges) + resolvedForFile),
+			MtimeUnixNs: r.MtimeUnixNs,
+			SizeBytes:   r.SizeBytes,
 		}
 		if r.Err != nil {
 			f.Errors = []string{r.Err.Error()}
@@ -283,6 +296,15 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	meta := schema.NewMeta()
 	meta.NodeCount = int64(len(allNodes))
 	meta.EdgeCount = int64(len(collapsedEdges))
+	// Phase 4 D-02b: every PutNode/PutEdge this Writer stages already
+	// populates the x/ file-owned secondary index unconditionally (04-01)
+	// — so any graph committed through writeGraph genuinely HAS a
+	// complete x/ index by the time this Commit lands, regardless of
+	// whether the caller was a from-scratch Run or Sync. Stamping the
+	// flag here (not just in Sync's own backfill path) means only a
+	// GENUINELY pre-Phase-4 store (built before this field/namespace
+	// existed) is ever missing it.
+	meta.HasFileIndex = true
 	if err := w.PutMeta(meta); err != nil {
 		w.Close()
 		return err
