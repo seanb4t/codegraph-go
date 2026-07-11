@@ -14,7 +14,7 @@ CodeGraph Go delivers a drop-in Go replacement for TypeScript CodeGraph: full v1
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation — Storage, Schema & Parser Strategy** - Schema-versioned graph store behind a `GraphStore` interface, with a benchmarked parser decision and captured TS ground-truth (completed 2026-07-10)
-- [ ] **Phase 2: Go Indexing Pipeline** - Two-pass indexer proven on Go: `init`/`index` build a correct, cross-file-resolved graph from scratch
+- [x] **Phase 2: Go Indexing Pipeline** - Two-pass indexer proven on Go: `init`/`index` build a correct, cross-file-resolved graph from scratch (completed 2026-07-11)
 - [ ] **Phase 3: Query Engine & MCP Server** - Full query command suite plus a parity stdio MCP server verified against the golden-output corpus
 - [ ] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak
 - [ ] **Phase 5: Language Coverage & Resolution Breadth** - Parity languages, interface-dispatch synthesis with provenance, and framework-aware routing
@@ -65,7 +65,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Cross-file resolution links imports, call edges, and type inheritance across a multi-package Go repo via two-pass parallel-extract → sequential-resolve
   4. Indexing a real-world Go project produces symbols and edges that match expected structure for that repo
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 **Wave 1**
 
@@ -86,7 +86,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 02-06-PLAN.md — Cobra CLI lifecycle: init/index/uninit + binary entrypoint (INDX-01, INDX-02)
+- [x] 02-06-PLAN.md — Cobra CLI lifecycle: init/index/uninit + binary entrypoint (INDX-01, INDX-02)
 
 ### Phase 3: Query Engine & MCP Server
 
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
-| 2. Go Indexing Pipeline | 5/6 | In Progress|  |
+| 2. Go Indexing Pipeline | 6/6 | Complete   | 2026-07-11 |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
