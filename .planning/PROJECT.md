@@ -12,7 +12,9 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 
 ### Validated
 
-(None yet — ship to validate)
+- Schema-versioned Pebble `GraphStore` substrate behind a concurrency-tested interface + benchmarked CGo tree-sitter parser decision — **validated in Phase 1**
+- Go indexing pipeline (`init`/`index`/`uninit`, deterministic two-pass parallel-extract → sequential-resolve cross-file resolution) — **validated in Phase 2**
+- Read-only query engine + parity stdio MCP server: `query`/`node`/`search`/`callers`/`callees`/`impact`/`affected`/`files`/`status`/`explore` plus `serve --mcp` with `codegraph_explore`-default tool gating (`CODEGRAPH_MCP_TOOLS` allowlist, zero tools without `.codegraph/`); output shapes verified against the TS v1.3.1 golden corpus — **validated in Phase 3**
 
 ### Active
 
@@ -43,7 +45,7 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 
 **User environment:** Sean runs TS CodeGraph daily as an MCP server across his projects, so parity gaps will be felt immediately — a strength for validation. Work team uses Java/C# heavily (hence its priority position); open-source release is intended from day one, so docs, release engineering, and compatibility promises matter early.
 
-**Repo state:** Phases 1–2 shipped. Phase 1 landed the substrate (Pebble-backed `GraphStore` behind a concurrency-tested interface, protobuf schema-versioned records, CGo tree-sitter parser seam, golden TS ground-truth corpus). Phase 2 shipped the working Go indexer: `codegraph init`/`index`/`uninit` build a correct, cross-file-resolved graph from scratch via a deterministic two-pass (parallel-extract → sequential-resolve) pipeline — validated end-to-end (self-indexing this repo: files=48 nodes=414 edges=660, byte-identical rebuild).
+**Repo state:** Phases 1–3 shipped. Phase 1 landed the substrate (Pebble-backed `GraphStore` behind a concurrency-tested interface, protobuf schema-versioned records, CGo tree-sitter parser seam, golden TS ground-truth corpus). Phase 2 shipped the working Go indexer: `codegraph init`/`index`/`uninit` build a correct, cross-file-resolved graph from scratch via a deterministic two-pass (parallel-extract → sequential-resolve) pipeline — validated end-to-end (self-indexing this repo: files=48 nodes=414 edges=660, byte-identical rebuild). Phase 3 opened the graph to agents: the full read-only query command suite plus a stdio MCP server (`serve --mcp`, `mark3labs/mcp-go`), reading through the frozen Phase-2 graph via an additively-extended `Reader` (node/file iterators; query-time reverse adjacency). Output-shape parity with TS v1.3.1 is proven by a live golden-corpus diff (7/7 tools against the pinned `weft` checkout); a deep code review's two Critical findings (default-`--limit` DoS; MCP `path` confinement) were fixed before completion.
 
 **Known open question (RESOLVED in Phase 1):** Parser strategy was decided by a benchmarked spike — **Option A, CGo tree-sitter** (`tree-sitter/go-tree-sitter` + per-language grammars), the single documented CGo exception (DIST-05). See `PARSER-DECISION.md`. wazero WASM remains a monitored future option behind the narrow `parser.Parser` seam.
 
@@ -85,4 +87,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-11 after Phase 2 (Go Indexing Pipeline) completion*
+*Last updated: 2026-07-11 after Phase 3 (Query Engine & MCP Server) completion*
