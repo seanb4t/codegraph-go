@@ -347,3 +347,78 @@ func TestSyncNoOpWhenNothingChanged(t *testing.T) {
 		t.Errorf("Stats.FilesPruned = %d, want 0 (nothing changed)", stats.FilesPruned)
 	}
 }
+
+// TestSyncRefreshesStaleMtimeOnHashEqualSkip is the WR-03 regression: a
+// file whose on-disk mtime/size differs from the stored File record, but
+// whose recomputed content hash still matches (a touch, or a git checkout
+// that doesn't change content), must have its stored File.MtimeUnixNs/
+// SizeBytes refreshed to the current on-disk values — otherwise every
+// subsequent Sync re-fails the cheap stat pre-filter for this file forever
+// and pays the full content-hash cost again each time.
+func TestSyncRefreshesStaleMtimeOnHashEqualSkip(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/a.go": "package pkg\n\nfunc Foo() int { return 1 }\n",
+	})
+	storeDir := t.TempDir()
+
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	stored := func() *schema.File {
+		r, closeAll := openSnapshot(t, storeDir)
+		defer closeAll()
+		f, err := r.GetFile("pkg/a.go")
+		if err != nil {
+			t.Fatalf("GetFile(pkg/a.go): %v", err)
+		}
+		return f
+	}
+	before := stored()
+
+	// Touch the file (new mtime, byte-identical content) — the stat
+	// pre-filter must see mtime differ, recompute the hash, find it
+	// matches, and (per WR-03) still refresh the stored mtime/size.
+	full := filepath.Join(repoRoot, "pkg", "a.go")
+	data, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	writeFile(t, full, string(data))
+
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (touch-only): %v", err)
+	}
+	if stats.FilesReparsed != 0 {
+		t.Errorf("Stats.FilesReparsed = %d, want 0 (content unchanged, must not be treated as modified)", stats.FilesReparsed)
+	}
+
+	after := stored()
+	if after.GetContentHash() != before.GetContentHash() {
+		t.Fatalf("ContentHash changed across a touch-only sync: before=%s after=%s", before.GetContentHash(), after.GetContentHash())
+	}
+	if after.GetMtimeUnixNs() == before.GetMtimeUnixNs() {
+		t.Fatalf("stored MtimeUnixNs unchanged after a touch-only sync (%d) — WR-03 regression: the stale stat pre-filter metadata was never refreshed", after.GetMtimeUnixNs())
+	}
+
+	fileInfo, err := os.Stat(full)
+	if err != nil {
+		t.Fatalf("os.Stat: %v", err)
+	}
+	if after.GetMtimeUnixNs() != fileInfo.ModTime().UnixNano() {
+		t.Fatalf("stored MtimeUnixNs = %d, want it to match the current on-disk mtime %d", after.GetMtimeUnixNs(), fileInfo.ModTime().UnixNano())
+	}
+
+	// A further Sync with truly nothing changed must now be a clean no-op
+	// — proving the refreshed metadata restored the stat pre-filter's fast
+	// path (before WR-03's fix, this file would keep failing the cheap
+	// mtime/size comparison on every subsequent Sync, forever).
+	stats2, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (second, should be a clean no-op): %v", err)
+	}
+	if stats2.FilesReparsed != 0 {
+		t.Errorf("Stats.FilesReparsed on the follow-up sync = %d, want 0", stats2.FilesReparsed)
+	}
+}

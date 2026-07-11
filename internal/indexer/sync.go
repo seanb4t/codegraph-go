@@ -9,6 +9,8 @@ import (
 	"sort"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -81,6 +83,16 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 
 	// Stat pre-filter -> content-hash confirm (D-01a).
 	var added, modified []DiscoveredFile
+	// mtimeRefresh (WR-03) collects files whose stat metadata (mtime/size)
+	// differs from the stored File record but whose recomputed content
+	// hash still matches — a touch, a git checkout with no real content
+	// change, or a mtime-only editor save. These are NOT reparsed (their
+	// content is unchanged), but the stored File record's stale
+	// mtime/size must still be refreshed to the current on-disk values;
+	// otherwise every subsequent Sync re-fails this cheap stat check for
+	// the same file, forever, and pays the full contentHash read+hash cost
+	// again each time.
+	var mtimeRefresh []*schema.File
 	for _, f := range files {
 		stored, err := r0.GetFile(f.RelPath)
 		if err != nil {
@@ -98,6 +110,10 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 			return Stats{}, err
 		}
 		if hash == stored.GetContentHash() {
+			refreshed := proto.Clone(stored).(*schema.File)
+			refreshed.MtimeUnixNs = f.MtimeUnixNs
+			refreshed.SizeBytes = f.SizeBytes
+			mtimeRefresh = append(mtimeRefresh, refreshed)
 			continue
 		}
 		modified = append(modified, f)
@@ -122,11 +138,46 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	fit.Close()
 
 	if len(added) == 0 && len(modified) == 0 && len(deleted) == 0 {
-		// No-op sync: nothing changed on disk.
+		if len(mtimeRefresh) == 0 {
+			// Fully no-op sync: nothing changed on disk.
+			return Stats{
+				Files:    len(files),
+				Nodes:    int(meta.GetNodeCount()),
+				Edges:    int(meta.GetEdgeCount()),
+				Duration: time.Since(start),
+			}, nil
+		}
+		// WR-03: no content actually changed, but at least one File
+		// record's stored mtime/size is stale relative to disk — persist
+		// the refresh in its own small commit so the stat pre-filter's
+		// fast path is restored on the next Sync. NodeCount/EdgeCount are
+		// untouched (nothing was reparsed or pruned).
+		w, err := store.NewWriter()
+		if err != nil {
+			return Stats{}, err
+		}
+		for _, f := range mtimeRefresh {
+			if err := w.PutFile(f); err != nil {
+				w.Close()
+				return Stats{}, err
+			}
+		}
+		newMeta := schema.NewMeta()
+		newMeta.HasFileIndex = true
+		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
+		newMeta.NodeCount = meta.GetNodeCount()
+		newMeta.EdgeCount = meta.GetEdgeCount()
+		if err := w.PutMeta(newMeta); err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+		if err := w.Commit(); err != nil {
+			return Stats{}, err
+		}
 		return Stats{
 			Files:    len(files),
-			Nodes:    int(meta.GetNodeCount()),
-			Edges:    int(meta.GetEdgeCount()),
+			Nodes:    int(newMeta.NodeCount),
+			Edges:    int(newMeta.EdgeCount),
 			Duration: time.Since(start),
 		}, nil
 	}
@@ -303,6 +354,16 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		}
 	}
 	for _, f := range sortedFiles {
+		if err := w.PutFile(f); err != nil {
+			w.Close()
+			return Stats{}, err
+		}
+	}
+	// WR-03: also persist the mtime/size-only refresh for any file whose
+	// stat metadata was stale but content hash matched — these files are
+	// not part of sortedFiles (they were never reparsed), so they need
+	// their own PutFile pass here.
+	for _, f := range mtimeRefresh {
 		if err := w.PutFile(f); err != nil {
 			w.Close()
 			return Stats{}, err
