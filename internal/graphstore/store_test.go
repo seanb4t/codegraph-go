@@ -1,7 +1,9 @@
 package graphstore
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 
@@ -206,6 +208,74 @@ func TestStoreCloseIsIdempotent(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatalf("second Close: want nil, got %v", err)
 	}
+}
+
+// TestStoreConcurrentCloseNeverPanics is the WR-01 regression: races Close
+// against many concurrent Snapshot/NewWriter/Export attempts. Before WR-01's
+// fix, closed.Load() and the subsequent db.NewSnapshot()/db.NewBatch() call
+// were two separate, unguarded steps — a Close landing in between could let
+// one of these calls reach into an already-closed *pebble.DB, which pebble/v2
+// panics on rather than returning an error. Every call here must resolve to
+// either success or ErrClosed — a panic (which -race would also be well
+// positioned to flag as a data race on the underlying db) is the failure
+// mode this test exists to catch.
+func TestStoreConcurrentCloseNeverPanics(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	const racers = 16
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		if err := store.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	}()
+
+	for i := 0; i < racers; i++ {
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			<-start
+			r, err := store.Snapshot()
+			if err != nil && !errors.Is(err, ErrClosed) {
+				t.Errorf("Snapshot: unexpected error (want nil or ErrClosed): %v", err)
+				return
+			}
+			if r != nil {
+				r.Close()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			w, err := store.NewWriter()
+			if err != nil && !errors.Is(err, ErrClosed) {
+				t.Errorf("NewWriter: unexpected error (want nil or ErrClosed): %v", err)
+				return
+			}
+			if w != nil {
+				w.Close()
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			err := store.Export(io.Discard)
+			if err != nil && !errors.Is(err, ErrClosed) {
+				t.Errorf("Export: unexpected error (want nil or ErrClosed): %v", err)
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
 }
 
 // TestReaderCloseIsIdempotent proves the same idempotency guard applies

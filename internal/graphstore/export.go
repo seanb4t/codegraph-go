@@ -39,6 +39,23 @@ const maxImportRecordBytes = 64 * 1024 * 1024 // 64 MiB
 // single Pebble snapshot, so a writer committing after Export has captured
 // its snapshot cannot tear the in-flight stream (INDX-05).
 func (s *pebbleStore) Export(w io.Writer) error {
+	// WR-01: unlike Snapshot/NewWriter — which hand a long-lived Reader/
+	// Writer back to the caller and only need their own creation call
+	// guarded — Export is a single bounded, synchronous streaming
+	// operation, and a captured *pebble.Snapshot does NOT remain safely
+	// usable across a concurrent Close: pebble/v2's DB.Close() can leave
+	// an already-open snapshot's own NewIter call panicking with "pebble:
+	// closed" (confirmed via TestStoreConcurrentCloseNeverPanics — the
+	// panic was NOT at snapshot creation, it was at a later NewIter call
+	// on a snapshot captured while still open). So Export holds s.mu's
+	// RLock for its ENTIRE duration, not just the initial check — Close
+	// cannot proceed until any in-flight Export has finished, which is an
+	// acceptable, bounded-duration cost for this one non-hot-path
+	// operation (unlike Snapshot/NewWriter's per-call readers/writers,
+	// whose lifetimes are caller-controlled and would make this same
+	// approach block Close indefinitely).
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.closed.Load() {
 		return ErrClosed
 	}

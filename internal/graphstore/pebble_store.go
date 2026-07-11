@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"sync/atomic"
 
 	"github.com/cockroachdb/pebble/v2"
@@ -36,8 +37,29 @@ const metaRecordName = "schema"
 // GraphStore/Reader/Writer/EdgeIterator interfaces declared in store.go —
 // archtest.TestNoPackageBypassesGraphStore enforces this at test time
 // (D-04a).
+//
+// mu (WR-01) guards the closed-check-then-Pebble-call sequence in
+// Snapshot/NewWriter/Export as one atomic critical section against a
+// concurrent Close: Close takes mu's exclusive Lock, so it cannot mark the
+// store closed and call db.Close() while any of those three calls is
+// mid-flight holding RLock, and any call arriving after Close has released
+// the lock is guaranteed to observe closed==true and return ErrClosed
+// before ever touching db again — closing the plain atomic.Bool
+// check-then-act race this file's own comments used to flag as latent
+// (pebble/v2 panics, rather than returning an error, once its *pebble.DB
+// is closed). Every current call site in this codebase opens/closes its
+// own pebbleStore without sharing it across goroutines, so this was not
+// exercised in practice, but the guard is cheap (RWMutex, uncontended in
+// the common single-goroutine case) and closes the gap before a future
+// long-lived shared store handle (e.g. an MCP-server-owned store) needs it.
+//
+// Commit on a Writer already obtained via NewWriter remains outside mu's
+// protection — that race (a Writer whose Commit races a subsequent Close)
+// is a harder problem this fix does not attempt, consistent with
+// ErrClosed's existing doc.
 type pebbleStore struct {
 	db     *pebble.DB
+	mu     sync.RWMutex
 	closed atomic.Bool
 }
 
@@ -52,8 +74,11 @@ func Open(dir string) (GraphStore, error) {
 
 // Snapshot returns a consistent, point-in-time Reader (INDX-05): Pebble
 // snapshots do not pin memtables or block the writer, so this call is
-// lock-free with respect to any in-flight Writer.
+// lock-free with respect to any in-flight Writer. It IS guarded (RLock,
+// WR-01) against a concurrent Close.
 func (s *pebbleStore) Snapshot() (Reader, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.closed.Load() {
 		return nil, ErrClosed
 	}
@@ -62,8 +87,11 @@ func (s *pebbleStore) Snapshot() (Reader, error) {
 
 // NewWriter returns a batched Writer. It wraps a plain Pebble Batch, not an
 // IndexedBatch: this write path needs no read-your-writes within the
-// batch, and an indexed batch is slower for inserts.
+// batch, and an indexed batch is slower for inserts. It IS guarded (RLock,
+// WR-01) against a concurrent Close.
 func (s *pebbleStore) NewWriter() (Writer, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if s.closed.Load() {
 		return nil, ErrClosed
 	}
@@ -74,8 +102,12 @@ func (s *pebbleStore) NewWriter() (Writer, error) {
 // once: the first call marks the store closed (so subsequent
 // Snapshot/NewWriter/Export calls observe ErrClosed) and delegates to
 // pebble; every call after that is a no-op, since pebble.DB.Close()
-// itself panics on a second invocation.
+// itself panics on a second invocation. Takes mu's exclusive Lock (WR-01)
+// so it cannot run concurrently with any in-flight Snapshot/NewWriter/
+// Export call.
 func (s *pebbleStore) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.closed.Swap(true) {
 		return nil
 	}
