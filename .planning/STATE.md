@@ -6,14 +6,14 @@ current_phase: 3
 current_phase_name: Query Engine & MCP Server
 status: executing
 stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-07-11T14:24:24.214Z"
+last_updated: "2026-07-11T14:46:47.714Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 22
-  completed_plans: 18
+  completed_plans: 19
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 3 (Query Engine & MCP Server) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 3 execution started
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P03 | 7min | 2 tasks | 2 files |
 | Phase 03 P04 | 6min | 3 tasks | 4 files |
 | Phase 03-query-engine-mcp-server P05 | 12min | 2 tasks | 3 files |
+| Phase 03 P06 | 18min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,8 @@ Recent decisions affecting current work:
 - [Phase 03]: buildReverseAdjacency filters to goextract.RefKindCalls only — contains/embeds/imports edges excluded from callers/callees/impact/affected
 - [Phase 03]: status.go's StatusResult doc comment is the authoritative TS-to-Go/Pebble status.json remapping table (D-05, RESEARCH Open Question 2): backend=pebble, journalMode dropped, version/extraction fields derive from schema.SchemaVersion, pendingChanges/worktreeMismatch present-but-inert
 - [Phase 03]: files' Depth=0 means unlimited (diverges from clampDepth's 0-means-default-5 convention used by impact/callers/callees) — negative or above-MaxDepth values are rejected rather than silently clamped
+- [Phase 03]: Added Engine.repoRoot + NewWithRoot (engine.go) so Node/Explore have a confinement root for on-disk source reads — New() unchanged for existing Reader-only callers
+- [Phase 03]: Blast-radius bullet's caller count groups by the matched symbol's OWN defining file (not the callers' files), confirmed against explore.json/node.json arithmetic
 
 ### Pending Todos
 
@@ -143,6 +146,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T14:24:24.208Z
+Last session: 2026-07-11T14:43:53.960Z
 Stopped at: Completed 03-05-PLAN.md
 Resume file: None
