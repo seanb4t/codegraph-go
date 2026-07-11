@@ -15,6 +15,7 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 - Schema-versioned Pebble `GraphStore` substrate behind a concurrency-tested interface + benchmarked CGo tree-sitter parser decision — **validated in Phase 1**
 - Go indexing pipeline (`init`/`index`/`uninit`, deterministic two-pass parallel-extract → sequential-resolve cross-file resolution) — **validated in Phase 2**
 - Read-only query engine + parity stdio MCP server: `query`/`node`/`search`/`callers`/`callees`/`impact`/`affected`/`files`/`status`/`explore` plus `serve --mcp` with `codegraph_explore`-default tool gating (`CODEGRAPH_MCP_TOOLS` allowlist, zero tools without `.codegraph/`); output shapes verified against the TS v1.3.1 golden corpus — **validated in Phase 3**
+- Incremental sync + native file watcher: `codegraph sync` (stat→content-hash diff + dependent-file recomputation), correct rename/delete/move pruning via an additive `x/` file-owned secondary index (no orphaned nodes / dangling edges, incl. cross-file `contains` edges), fsnotify debounced watcher + agent-facing staleness banner, MCP-reconnect stat+hash reconcile, shared `codegraph daemon` (single-writer lockfile) + `codegraph unlock`, and a goroutine-leak-free goleak soak; sync-equals-reindex determinism preserved — **validated in Phase 4** (a deep code review caught and fixed 4 concurrency/prune bugs the green suite had missed)
 
 ### Active
 
@@ -87,4 +88,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-11 after Phase 3 (Query Engine & MCP Server) completion*
+*Last updated: 2026-07-11 after Phase 4 (Incremental Sync & File Watcher) completion*
