@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation — Storage, Schema & Parser Strategy** - Schema-versioned graph store behind a `GraphStore` interface, with a benchmarked parser decision and captured TS ground-truth (completed 2026-07-10)
 - [x] **Phase 2: Go Indexing Pipeline** - Two-pass indexer proven on Go: `init`/`index` build a correct, cross-file-resolved graph from scratch (completed 2026-07-11)
 - [x] **Phase 3: Query Engine & MCP Server** - Full query command suite plus a parity stdio MCP server verified against the golden-output corpus (completed 2026-07-11)
-- [ ] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak
+- [x] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak (completed 2026-07-11)
 - [ ] **Phase 5: Language Coverage & Resolution Breadth** - Parity languages, interface-dispatch synthesis with provenance, and framework-aware routing
 - [ ] **Phase 6: Agent Integrations & CLI Lifecycle** - 8-agent install/uninstall, self-upgrade, and CLI ergonomics for the drop-in swap
 - [ ] **Phase 7: Migration Tool** - Resumable, validated converter from TS SQLite `.codegraph/` to the new format
@@ -145,7 +145,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. On MCP server (re)connect, offline changes are reconciled via stat comparison plus content hashing
   5. `codegraph daemon` runs a shared watch/index server (with in-process fallback where unsupported), `codegraph unlock` clears stale locks after a crash, and soak tests show the watcher/daemon is goroutine-leak-free
 
-**Plans**: 8/9 plans executed
+**Plans**: 9/9 plans complete
 **Wave 1**
 
 - [x] 04-01-PLAN.md — x/ file-owned secondary index for O(subgraph) prune (Wave 1, INDX-04)
@@ -168,7 +168,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Wave 5** *(blocked on Wave 4 completion)*
 
 - [x] 04-08-PLAN.md — CLI sync/daemon/unlock + root wiring + serve in-process fallback (Wave 5, INDX-03/SYNC-04/SYNC-05)
-- [ ] 04-09-PLAN.md — goroutine-leak soak (goleak) for watcher + daemon (Wave 5, SYNC-06)
+- [x] 04-09-PLAN.md — goroutine-leak soak (goleak) for watcher + daemon (Wave 5, SYNC-06)
 
 ### Phase 5: Language Coverage & Resolution Breadth
 
@@ -239,7 +239,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
-| 4. Incremental Sync & File Watcher | 8/9 | In Progress|  |
+| 4. Incremental Sync & File Watcher | 9/9 | Complete   | 2026-07-11 |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
 | 7. Migration Tool | 0/TBD | Not started | - |

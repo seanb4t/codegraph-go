@@ -45,7 +45,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [ ] **SYNC-03**: On MCP server (re)connect, the index reconciles filesystem state via stat comparison + content hashing to catch offline changes
 - [x] **SYNC-04**: User can run `codegraph daemon` as a shared indexing/watch server reused across multiple agent sessions, with in-process fallback where unsupported
 - [x] **SYNC-05**: User can run `codegraph unlock` to remove stale lock files after a crashed daemon
-- [ ] **SYNC-06**: Long-running watcher/daemon is goroutine-leak-free, verified by soak tests
+- [x] **SYNC-06**: Long-running watcher/daemon is goroutine-leak-free, verified by soak tests
 
 ### CLI & Lifecycle
 
@@ -153,7 +153,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | SYNC-03 | Phase 4 | Pending |
 | SYNC-04 | Phase 4 | Complete |
 | SYNC-05 | Phase 4 | Complete |
-| SYNC-06 | Phase 4 | Pending |
+| SYNC-06 | Phase 4 | Complete |
 | CLI-01 | Phase 6 | Pending |
 | CLI-02 | Phase 6 | Pending |
 | CLI-03 | Phase 6 | Pending |
