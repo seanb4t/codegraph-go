@@ -215,6 +215,56 @@ func TestExploreHandlerDelegatesToEngine(t *testing.T) {
 	}
 }
 
+// TestOpenEnginePathConfinedToRepoRoot pins CR-02: a client-supplied
+// "path" argument that resolves outside the server's configured repo
+// root must be rejected with an MCP tool error, never opened as an
+// engine — even when that outside path is itself a validly-indexed
+// .codegraph/ project (proving this is a trust-boundary confinement
+// check, not just an "index not found" failure).
+func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	outside := copyFixture(t)
+	indexFixture(t, outside)
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir)
+
+	c, err := mcpclient.NewInProcessClient(s)
+	if err != nil {
+		t.Fatalf("NewInProcessClient: %v", err)
+	}
+	defer c.Close()
+
+	ctx := context.Background()
+	initClient(t, ctx, c)
+
+	result, err := c.CallTool(ctx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name: "codegraph_status",
+			Arguments: map[string]any{
+				"path": outside,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool codegraph_status: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("codegraph_status with a path outside the server's repo root: expected an error result, got success")
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("codegraph_status error result has no content")
+	}
+	text, ok := mcp.AsTextContent(result.Content[0])
+	if !ok {
+		t.Fatalf("codegraph_status error content[0] is not text: %+v", result.Content[0])
+	}
+	if !strings.Contains(text.Text, "outside") {
+		t.Fatalf("codegraph_status error message = %q, want it to explain the path is outside the repo root", text.Text)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -18,14 +21,42 @@ func resolvePath(req mcp.CallToolRequest, defaultPath string) string {
 	return req.GetString("path", defaultPath)
 }
 
+// confineToRepoRoot resolves path against the server's configured
+// repoPath and rejects it (CR-02, trust-boundary defense) unless it
+// resolves to repoPath itself or a descendant of it. An MCP client —
+// which in this product's threat model may be an AI agent processing
+// attacker-influenced content — must not be able to redirect a tool call
+// to an entirely different .codegraph/-indexed project elsewhere on the
+// host filesystem merely by supplying a "path" argument.
+func confineToRepoRoot(path, repoPath string) (string, error) {
+	repoAbs, err := filepath.Abs(repoPath)
+	if err != nil {
+		return "", err
+	}
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(repoAbs, pathAbs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("mcp: path %q is outside the server's configured repo root", path)
+	}
+	return pathAbs, nil
+}
+
 // openEngine is every handler's single read seam: it resolves req's
-// "path" arg against defaultPath and opens a FRESH query.OpenAt
-// snapshot for this call (D-02/D-08b, RESEARCH Pitfall 2 — never a
-// snapshot cached at server construction). The caller owns closing the
-// returned io.Closer.
+// "path" arg against defaultPath, confines it to the server's repo root
+// (CR-02, confineToRepoRoot), and opens a FRESH query.OpenAt snapshot
+// for this call (D-02/D-08b, RESEARCH Pitfall 2 — never a snapshot
+// cached at server construction). The caller owns closing the returned
+// io.Closer.
 func openEngine(req mcp.CallToolRequest, defaultPath string) (*query.Engine, func() error, error) {
 	path := resolvePath(req, defaultPath)
-	eng, closer, err := query.OpenAt(path)
+	confined, err := confineToRepoRoot(path, defaultPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	eng, closer, err := query.OpenAt(confined)
 	if err != nil {
 		return nil, nil, err
 	}
