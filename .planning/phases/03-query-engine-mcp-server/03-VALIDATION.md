@@ -58,7 +58,7 @@ created: 2026-07-11
 
 ## Wave 0 Requirements
 
-- [ ] `internal/query/engine_test.go` — engine-level logic for QRY-01…QRY-09 against a small in-repo fixture graph (reuse `internal/indexer/testdata/gofixture` per `cli_test.go`'s `copyFixture` pattern)
+- [ ] `internal/query/engine_test.go` — **shared test infrastructure, created once by plan 03-02** (Wave 2). It holds the package-`query` `copyFixture`/`indexFixture` harness (reusing `internal/indexer/testdata/gofixture` per `cli_test.go`'s `copyFixture` pattern) plus the engine-foundation tests. **Wave-3 plans 03-03/03-04/03-05 EXTEND it by reuse only** — they call `copyFixture`/`indexFixture` from `engine_test.go` at runtime and add their own cases to their **own isolated files** (`search_test.go`, `traverse_test.go`, `files_status_test.go` respectively). They MUST NOT re-create or edit `engine_test.go` (parallel Wave-3 execution would clobber it); `engine_test.go` is intentionally absent from 03-03/04/05's `files_modified`.
 - [ ] `internal/mcp/server_test.go` — MCP-01/02/03 tool-registration logic (construct the server, introspect registered tool names — no live stdio transport needed)
 - [ ] `testdata/golden/golden_parity_test.go` — MCP-04: run CLI commands against the `weft-go` corpus and diff vs `corpus/weft-go/*.json` with the D-05 normalizations (id fields ignored, edge-multiplicity tolerance, `status` field remapping, no `score` key)
 - [ ] Concrete plan for making the `seanb4t/weft` golden-corpus source tree reachable by the parity test (README says "weft is cloned/available separately" — needs a CI-reproducible fetch/submodule/skip-if-absent decision)
