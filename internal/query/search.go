@@ -129,6 +129,9 @@ func (e *Engine) Query(term, kind string, limit int) ([]*schema.Node, error) {
 	if limit > 0 && limit < n {
 		n = limit
 	}
+	if n > MaxLimit {
+		n = MaxLimit
+	}
 	nodes := make([]*schema.Node, n)
 	for i := 0; i < n; i++ {
 		nodes[i] = ranked[i].node
@@ -155,6 +158,9 @@ func (e *Engine) Search(term, kind string, limit int) ([]Location, error) {
 	n := len(ranked)
 	if limit > 0 && limit < n {
 		n = limit
+	}
+	if n > MaxLimit {
+		n = MaxLimit
 	}
 	locations := make([]Location, n)
 	for i := 0; i < n; i++ {

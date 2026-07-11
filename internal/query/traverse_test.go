@@ -1,10 +1,149 @@
 package query
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
+
+// traverseFakeReader is a minimal in-memory graphstore.Reader used to
+// exercise Callees/Callers/Impact against a fully-controlled node/edge set
+// — independent of a real Pebble-backed store — so CR-01's default-cap
+// behavior (thousands of synthetic edges) and WR-04's dangling-edge
+// graceful-degradation behavior can both be proven deterministically
+// without indexing a huge or deliberately-corrupt fixture. GetNode returns
+// graphstore.ErrNotFound for any id not present in nodes, matching a real
+// Reader's contract for a dangling reference.
+type traverseFakeReader struct {
+	nodes map[string]*schema.Node
+	edges []*schema.Edge
+}
+
+func (f *traverseFakeReader) GetNode(id string) (*schema.Node, error) {
+	n, ok := f.nodes[id]
+	if !ok {
+		return nil, graphstore.ErrNotFound
+	}
+	return n, nil
+}
+
+func (f *traverseFakeReader) GetFile(string) (*schema.File, error) {
+	return nil, errors.New("traverseFakeReader: GetFile not implemented")
+}
+
+func (f *traverseFakeReader) GetMeta() (*schema.Meta, error) {
+	return nil, errors.New("traverseFakeReader: GetMeta not implemented")
+}
+
+func (f *traverseFakeReader) IterateEdges(prefix string) (graphstore.EdgeIterator, error) {
+	var filtered []*schema.Edge
+	for _, e := range f.edges {
+		if prefix == "" || e.Source == prefix {
+			filtered = append(filtered, e)
+		}
+	}
+	return &traverseFakeEdgeIterator{edges: filtered}, nil
+}
+
+func (f *traverseFakeReader) IterateNodes() (graphstore.NodeIterator, error) {
+	nodes := make([]*schema.Node, 0, len(f.nodes))
+	for _, n := range f.nodes {
+		nodes = append(nodes, n)
+	}
+	return &traverseFakeNodeIterator{nodes: nodes}, nil
+}
+
+func (f *traverseFakeReader) IterateFiles() (graphstore.FileIterator, error) {
+	return nil, errors.New("traverseFakeReader: IterateFiles not implemented")
+}
+
+func (f *traverseFakeReader) Close() error { return nil }
+
+type traverseFakeEdgeIterator struct {
+	edges []*schema.Edge
+	i     int
+}
+
+func (it *traverseFakeEdgeIterator) Next() bool {
+	if it.i >= len(it.edges) {
+		return false
+	}
+	it.i++
+	return true
+}
+
+func (it *traverseFakeEdgeIterator) Edge() *schema.Edge { return it.edges[it.i-1] }
+func (it *traverseFakeEdgeIterator) Err() error         { return nil }
+func (it *traverseFakeEdgeIterator) Close() error       { return nil }
+
+type traverseFakeNodeIterator struct {
+	nodes []*schema.Node
+	i     int
+}
+
+func (it *traverseFakeNodeIterator) Next() bool {
+	if it.i >= len(it.nodes) {
+		return false
+	}
+	it.i++
+	return true
+}
+
+func (it *traverseFakeNodeIterator) Node() *schema.Node { return it.nodes[it.i-1] }
+func (it *traverseFakeNodeIterator) Err() error         { return nil }
+func (it *traverseFakeNodeIterator) Close() error       { return nil }
+
+// TestCalleesDefaultCapAtMaxLimit pins CR-01 for Callees: the MaxLimit
+// ceiling must apply even when limit==0 (no explicit --limit).
+func TestCalleesDefaultCapAtMaxLimit(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"origin": {Id: "origin", Kind: "function", Name: "Origin", QualifiedName: "Origin"},
+	}
+	var edges []*schema.Edge
+	for i := 0; i < MaxLimit+50; i++ {
+		id := fmt.Sprintf("target%04d", i)
+		nodes[id] = &schema.Node{Id: id, Kind: "function", Name: id, QualifiedName: id}
+		edges = append(edges, &schema.Edge{Source: "origin", Target: id, Kind: goextract.RefKindCalls})
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callees("Origin", 0)
+	if err != nil {
+		t.Fatalf("Callees: unexpected error: %v", err)
+	}
+	if len(got.Callees) != MaxLimit {
+		t.Fatalf("Callees with limit=0 (default): got %d entries, want the MaxLimit=%d ceiling to apply", len(got.Callees), MaxLimit)
+	}
+}
+
+// TestCallersDefaultCapAtMaxLimit mirrors TestCalleesDefaultCapAtMaxLimit
+// for Callers (CR-01).
+func TestCallersDefaultCapAtMaxLimit(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"target": {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target"},
+	}
+	var edges []*schema.Edge
+	for i := 0; i < MaxLimit+50; i++ {
+		id := fmt.Sprintf("caller%04d", i)
+		nodes[id] = &schema.Node{Id: id, Kind: "function", Name: id, QualifiedName: id}
+		edges = append(edges, &schema.Edge{Source: id, Target: "target", Kind: goextract.RefKindCalls})
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callers("Target", 0)
+	if err != nil {
+		t.Fatalf("Callers: unexpected error: %v", err)
+	}
+	if len(got.Callers) != MaxLimit {
+		t.Fatalf("Callers with limit=0 (default): got %d entries, want the MaxLimit=%d ceiling to apply", len(got.Callers), MaxLimit)
+	}
+}
 
 // traverseFixtureTargetFile and traverseFixtureTargetTestFile are seeded
 // into the *copied* gofixture's pkga package before indexing (the

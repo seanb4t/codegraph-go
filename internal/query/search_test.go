@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -67,8 +68,8 @@ func (it *searchFakeNodeIterator) Next() bool {
 }
 
 func (it *searchFakeNodeIterator) Node() *schema.Node { return it.nodes[it.i-1] }
-func (it *searchFakeNodeIterator) Err() error          { return nil }
-func (it *searchFakeNodeIterator) Close() error        { return nil }
+func (it *searchFakeNodeIterator) Err() error         { return nil }
+func (it *searchFakeNodeIterator) Close() error       { return nil }
 
 // TestQueryRankingTieBreak pins the D-06 tie-break: exact-name beats
 // prefix beats substring/token, with a stable secondary sort by
@@ -140,6 +141,56 @@ func TestQueryLimitCapsAfterRanking(t *testing.T) {
 		if got[i].Id != id {
 			t.Fatalf("Query with --limit 2, result[%d] = %q, want %q", i, got[i].Id, id)
 		}
+	}
+}
+
+// manyMatchingNodes builds n synthetic nodes whose name/qualifiedName all
+// share the "widget" prefix, so every one of them matches a "widget" term
+// scan — used by TestQueryDefaultCapAtMaxLimit/TestSearchDefaultCapAtMaxLimit
+// (CR-01) to prove the MaxLimit ceiling applies even when the caller never
+// supplies an explicit --limit (limit==0, the default/most common case).
+func manyMatchingNodes(n int) []*schema.Node {
+	nodes := make([]*schema.Node, n)
+	for i := range nodes {
+		name := fmt.Sprintf("widget%04d", i)
+		nodes[i] = &schema.Node{
+			Id:            fmt.Sprintf("function:%04d", i),
+			Kind:          "function",
+			Name:          name,
+			QualifiedName: name,
+		}
+	}
+	return nodes
+}
+
+// TestQueryDefaultCapAtMaxLimit pins CR-01: Query must cap its result set
+// at MaxLimit even when limit==0 (the caller did not supply an explicit
+// --limit) — previously only an explicit over-large --limit was rejected,
+// and the common no-flag invocation returned every match unbounded.
+func TestQueryDefaultCapAtMaxLimit(t *testing.T) {
+	e := New(&searchFakeReader{nodes: manyMatchingNodes(MaxLimit + 50)})
+
+	got, err := e.Query("widget", "", 0)
+	if err != nil {
+		t.Fatalf("Query: unexpected error: %v", err)
+	}
+	if len(got) != MaxLimit {
+		t.Fatalf("Query with limit=0 (default): got %d results, want the MaxLimit=%d ceiling to apply", len(got), MaxLimit)
+	}
+}
+
+// TestSearchDefaultCapAtMaxLimit mirrors TestQueryDefaultCapAtMaxLimit for
+// Search (CR-01) — the same unbounded-default gap existed independently in
+// Search's own limit-application code.
+func TestSearchDefaultCapAtMaxLimit(t *testing.T) {
+	e := New(&searchFakeReader{nodes: manyMatchingNodes(MaxLimit + 50)})
+
+	got, err := e.Search("widget", "", 0)
+	if err != nil {
+		t.Fatalf("Search: unexpected error: %v", err)
+	}
+	if len(got) != MaxLimit {
+		t.Fatalf("Search with limit=0 (default): got %d results, want the MaxLimit=%d ceiling to apply", len(got), MaxLimit)
 	}
 }
 

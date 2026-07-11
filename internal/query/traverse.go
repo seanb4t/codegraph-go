@@ -159,6 +159,9 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 	if limit > 0 && limit < len(locs) {
 		locs = locs[:limit]
 	}
+	if len(locs) > MaxLimit {
+		locs = locs[:MaxLimit]
+	}
 	return CalleesResult{Symbol: symbol, Callees: locs}, nil
 }
 
@@ -191,6 +194,9 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 
 	if limit > 0 && limit < len(locs) {
 		locs = locs[:limit]
+	}
+	if len(locs) > MaxLimit {
+		locs = locs[:MaxLimit]
 	}
 	return CallersResult{Symbol: symbol, Callers: locs}, nil
 }
