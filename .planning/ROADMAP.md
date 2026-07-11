@@ -65,11 +65,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Cross-file resolution links imports, call edges, and type inheritance across a multi-package Go repo via two-pass parallel-extract → sequential-resolve
   4. Indexing a real-world Go project produces symbols and edges that match expected structure for that repo
 
-**Plans**: 6 plans
+**Plans**: 1/6 plans executed
 
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Additive schema extension (D-03) + content-hashed node identity (D-02/D-02a) + promote x/sync,x/mod
+- [x] 02-01-PLAN.md — Additive schema extension (D-03) + content-hashed node identity (D-02/D-02a) + promote x/sync,x/mod
 - [ ] 02-02-PLAN.md — Multi-package Go test fixture + file discovery seam (go/build.MatchFile + import-path tagging)
 
 **Wave 2** *(blocked on Wave 1)*
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
-| 2. Go Indexing Pipeline | 0/6 | Not started | - |
+| 2. Go Indexing Pipeline | 1/6 | In Progress|  |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
