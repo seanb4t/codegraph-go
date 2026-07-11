@@ -6,14 +6,14 @@ current_phase: 3
 current_phase_name: Query Engine & MCP Server
 status: executing
 stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-07-11T13:55:35.167Z"
+last_updated: "2026-07-11T14:11:11.463Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 22
-  completed_plans: 16
+  completed_plans: 17
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 3 (Query Engine & MCP Server) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 3 execution started
 
@@ -71,6 +71,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-query-engine-mcp-server P01 | 13min | 2 tasks | 3 files |
 | Phase 03-query-engine-mcp-server P02 | 6min | 2 tasks | 4 files |
 | Phase 03 P03 | 7min | 2 tasks | 2 files |
+| Phase 03 P04 | 6min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Recent decisions affecting current work:
 - [Phase 03]: ValidateKind's package kind is a documented string literal, not an import of internal/indexer's unexported kindPackage const
 - [Phase 03]: Location (name/kind/filePath/startLine) exported from search.go so 03-04's callers/callees/impact reuse the same shape instead of redefining it
 - [Phase 03]: query --json renders Visibility as *string (null when unset) to match the golden fixture's literal visibility:null rather than omitting the key
+- [Phase 03]: D-07 auto-approved under --auto: affected derives impacted test files at query time (reverse calls + test-file heuristic) rather than persisting a new test-coverage edge type — persisting would require reindexing the frozen Phase-2 graph and pulling Phase-5 provenance work forward
+- [Phase 03]: Fixed Reader.IterateEdges("") to scan the whole e/ namespace (was scanning only empty-src edges) — prerequisite bug for D-04's reverse-adjacency scan, first exercised by 03-04
+- [Phase 03]: buildReverseAdjacency filters to goextract.RefKindCalls only — contains/embeds/imports edges excluded from callers/callees/impact/affected
 
 ### Pending Todos
 
@@ -136,6 +140,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T13:55:35.161Z
+Last session: 2026-07-11T14:08:14.957Z
 Stopped at: Completed 03-03-PLAN.md
 Resume file: None

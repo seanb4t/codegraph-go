@@ -24,9 +24,9 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [x] **QRY-01**: User can run `codegraph query <search>` for symbol search with `--kind`, `--limit`, `--json`
 - [ ] **QRY-02**: User can run `codegraph node <symbol|file>` for symbol detail (source + callers/callees) or line-numbered file read
 - [x] **QRY-03**: User can run lightweight locations-only symbol search (`search`) without source bodies
-- [ ] **QRY-04**: User can run `codegraph callers <symbol>` / `codegraph callees <symbol>` for reverse/forward call-graph traversal
-- [ ] **QRY-05**: User can run `codegraph impact <symbol> --depth` for transitive blast-radius analysis
-- [ ] **QRY-06**: User can run `codegraph affected [files...]` to identify impacted test files via a dedicated test-coverage edge type
+- [x] **QRY-04**: User can run `codegraph callers <symbol>` / `codegraph callees <symbol>` for reverse/forward call-graph traversal
+- [x] **QRY-05**: User can run `codegraph impact <symbol> --depth` for transitive blast-radius analysis
+- [x] **QRY-06**: User can run `codegraph affected [files...]` to identify impacted test files via a dedicated test-coverage edge type
 - [x] **QRY-07**: User can run `codegraph files` to browse indexed structure from the graph (not a filesystem scan) with format/filter/pattern/depth options
 - [ ] **QRY-08**: User can run `codegraph explore <query>` (natural-language or symbol/file) and get verbatim line-numbered source of relevant symbols grouped by file, call paths between them, and a blast-radius summary in one round trip
 - [x] **QRY-09**: User can run `codegraph status --json` for index health, node/edge counts, last-sync time, and staleness
@@ -138,9 +138,9 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | QRY-01 | Phase 3 | Complete |
 | QRY-02 | Phase 3 | Pending |
 | QRY-03 | Phase 3 | Complete |
-| QRY-04 | Phase 3 | Pending |
-| QRY-05 | Phase 3 | Pending |
-| QRY-06 | Phase 3 | Pending |
+| QRY-04 | Phase 3 | Complete |
+| QRY-05 | Phase 3 | Complete |
+| QRY-06 | Phase 3 | Complete |
 | QRY-07 | Phase 3 | Complete |
 | QRY-08 | Phase 3 | Pending |
 | QRY-09 | Phase 3 | Complete |
