@@ -16,6 +16,17 @@ import (
 // or any path that filepath.Clean/filepath.Rel resolves outside repoRoot
 // is rejected before any filesystem call is made. This is the single path
 // safety gate Node (file mode) and Explore share.
+//
+// The string-level Clean/Rel check alone is not sufficient (WR-03): if
+// relPath or an intermediate directory is a symlink pointing outside
+// repoRoot, the string-level check sees only the in-repo path text and
+// would let it through, while os.ReadFile silently follows the symlink to
+// wherever it actually points. After the string-level check passes,
+// filepath.EvalSymlinks resolves both the repo root and the candidate
+// path to their real, symlink-free form and re-verifies confinement
+// against those resolved paths (comparing resolved-to-resolved, not
+// resolved-to-unresolved, since the repo root itself may sit under a
+// symlinked path — e.g. macOS's /tmp -> /private/tmp).
 func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 	if e.repoRoot == "" {
 		return "", fmt.Errorf("query: engine has no repo root configured for source reads")
@@ -43,6 +54,21 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 		return "", err
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("query: path %q escapes the repo root", relPath)
+	}
+
+	// WR-03: re-verify confinement after resolving symlinks, so a
+	// symlink inside the repo cannot point outside repoRoot.
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	resolvedAbs, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	resolvedRel, err := filepath.Rel(resolvedRoot, resolvedAbs)
+	if err != nil || resolvedRel == ".." || strings.HasPrefix(resolvedRel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("query: path %q escapes the repo root", relPath)
 	}
 
