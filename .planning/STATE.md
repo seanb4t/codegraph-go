@@ -6,14 +6,14 @@ current_phase: 4
 current_phase_name: Incremental Sync & File Watcher
 status: executing
 stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-07-11T19:41:19.487Z"
+last_updated: "2026-07-11T19:50:10.367Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 4 execution started
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 31
-  completed_plans: 26
+  completed_plans: 27
   percent: 38
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 4 (Incremental Sync & File Watcher) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 4 execution started
 
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-incremental-sync-file-watcher P02 | 8min | 2 tasks | 6 files |
 | Phase 04 P03 | 6min | 3 tasks | 8 files |
 | Phase 04-incremental-sync-file-watcher P04 | 12min | 2 tasks | 8 files |
+| Phase 04 P05 | 6min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Dedicated testdata/prunefixture subfixture instead of extending shared testdata/gofixture (avoids breaking discover_test.go's exact file-list assertion)
 - [Phase ?]: MODIFY subtest re-scoped to within-file symbol rename since nodeid.NodeID hashes (kind,qualifiedName,filePath) not content
 - [Phase ?]: MOVE subtest relocates caller+callee pair together across a directory boundary since unqualified-call resolution is import-path scoped
+- [Phase 04]: internal/watch depends only on indexer.ShouldSkipDir — no graphstore import, keeping the archtest boundary clean
+- [Phase 04]: fsnotify promoted to go.mod direct require by manual edit, not go mod tidy, per Phase 1 convention
 
 ### Pending Todos
 
@@ -172,6 +175,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T19:41:19.480Z
+Last session: 2026-07-11T19:47:16.067Z
 Stopped at: Completed 04-04-PLAN.md
 Resume file: None
