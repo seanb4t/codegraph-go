@@ -63,6 +63,16 @@ type Daemon struct {
 	// time.Sleep. Production callers (Plan 04-08's `codegraph daemon` /
 	// serve's in-process fallback) leave it nil.
 	onSync func(indexer.Stats, error)
+
+	// onSyncStart, when non-nil, is invoked at the very start of flush,
+	// before touchPending or indexer.Sync run. It is a test-only
+	// control seam (mirrors onSync) that lets daemon_test.go
+	// deterministically hold a flush "in flight" — CR-01's exact
+	// untracked-goroutine window — long enough to prove Run's shutdown
+	// path genuinely waits for it, rather than racing a real
+	// indexer.Sync's typically sub-millisecond duration against a tiny
+	// test fixture. Production callers leave it nil.
+	onSyncStart func()
 }
 
 // New resolves repoRoot's .codegraph/ layout and returns a Daemon ready to
@@ -96,9 +106,11 @@ func New(repoRoot string) (*Daemon, error) {
 // pending event and removing it on a successful commit (D-04a). Run
 // blocks until ctx is cancelled; it releases the lock and returns only
 // after the watcher goroutine it spawned has joined (sync.WaitGroup, D-07)
-// — no goroutine outlives Run (SYNC-06). If another live daemon already
-// holds the lock, Run returns ErrLockLive immediately without starting a
-// watcher.
+// AND any debounce flush already in flight — including its indexer.Sync
+// call — has completed (deb.Wait(), CR-01) — no goroutine outlives Run and
+// no Sync is still writing when the lock is released (SYNC-06, INDX-05). If
+// another live daemon already holds the lock, Run returns ErrLockLive
+// immediately without starting a watcher.
 func (d *Daemon) Run(ctx context.Context) error {
 	if err := acquire(d.codegraphDir); err != nil {
 		return err
@@ -126,6 +138,16 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	<-ctx.Done()
 	wg.Wait()
+	// CR-01: wg.Wait() only joins the tracked watcher goroutine — it does
+	// NOT join a debounce flush that had already started running its
+	// indexer.Sync (on the timer's own untracked goroutine) when ctx was
+	// cancelled. watchLoop's deb.Stop() (called above, inside w.Run) can
+	// only cancel a timer that hasn't fired yet; deb.Wait() is the
+	// explicit join for one that has, closing the window where Run
+	// released the daemon lock (see the deferred release() above) while a
+	// Sync was still mid-commit against the single coordinated Writer
+	// (INDX-05, D-07, SYNC-06).
+	deb.Wait()
 	return nil
 }
 
@@ -141,6 +163,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 // sidecar in place so the next successful sync (or the no-daemon mtime
 // fallback, D-04a) is the only thing that clears staleness.
 func (d *Daemon) flush(_ map[string]struct{}) {
+	if d.onSyncStart != nil {
+		d.onSyncStart()
+	}
+
 	if err := d.touchPending(); err != nil {
 		log.Printf("daemon: touching pending sidecar: %v", err)
 	}

@@ -36,6 +36,15 @@ type Debouncer struct {
 	mu      sync.Mutex
 	pending map[string]struct{}
 	timer   *time.Timer
+
+	// fireWG tracks every fire() invocation that has actually started (or
+	// is guaranteed to start) running, in its own time.AfterFunc goroutine
+	// (CR-01). Wait blocks until all of them — including the flush(...)
+	// call each one makes — have completed, closing the race where a
+	// caller treats Stop() as a complete join: Stop can only cancel a
+	// timer that hasn't fired yet; it cannot wait for one that has already
+	// started running.
+	fireWG sync.WaitGroup
 }
 
 // NewDebouncer returns a Debouncer bound to ctx: once ctx is cancelled, no
@@ -59,8 +68,18 @@ func (d *Debouncer) Add(path string) {
 	defer d.mu.Unlock()
 	d.pending[path] = struct{}{}
 	if d.timer != nil {
-		d.timer.Stop()
+		if d.timer.Stop() {
+			// Successfully cancelled before firing: that scheduled fire()
+			// goroutine will now never run, so undo the fireWG.Add(1) made
+			// when it was scheduled (CR-01) — otherwise Wait would block
+			// forever on a goroutine that will never call Done.
+			d.fireWG.Done()
+		}
+		// If Stop returns false, fire() has already started running (or
+		// already returned) in its own goroutine; it owns its own
+		// fireWG.Done() call via defer, so nothing to undo here.
 	}
+	d.fireWG.Add(1)
 	d.timer = time.AfterFunc(d.window, d.fire)
 }
 
@@ -68,8 +87,11 @@ func (d *Debouncer) Add(path string) {
 // context tree by default, Pattern 7). It MUST check ctx.Err() before
 // flushing: Stop() cannot retroactively cancel a callback that has already
 // been scheduled to run, so this check is the belt to Stop's suspenders
-// against a late flush racing shutdown.
+// against a late flush racing shutdown. The deferred fireWG.Done() (CR-01)
+// is what lets Wait join this goroutine — including the flush(...) call
+// below — even though Stop can no longer cancel it once it has started.
 func (d *Debouncer) fire() {
+	defer d.fireWG.Done()
 	if d.ctx.Err() != nil {
 		return
 	}
@@ -87,12 +109,28 @@ func (d *Debouncer) fire() {
 // Stop cancels any pending timer so no late flush fires after shutdown
 // (Pattern 7) — required for Plan 04-09's leak-free soak gate: an
 // unstopped timer.AfterFunc callback goroutine, still scheduled to fire,
-// is exactly what goleak.VerifyNone would catch as a leak.
+// is exactly what goleak.VerifyNone would catch as a leak. Stop does NOT
+// wait for a fire() that has already started running — call Wait after
+// Stop for that (CR-01).
 func (d *Debouncer) Stop() {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.timer != nil {
-		d.timer.Stop()
+		if d.timer.Stop() {
+			d.fireWG.Done()
+		}
 		d.timer = nil
 	}
+}
+
+// Wait blocks until every fire() invocation that has actually started
+// running — i.e. that Stop could not cancel in time — has fully completed,
+// including the flush(...) call it makes (CR-01). Callers join the
+// Debouncer's lifecycle via Stop (cancel anything not yet running) followed
+// by Wait (join anything that is): together these give a caller a genuine
+// "no debounce-triggered work is still in flight" guarantee, which Stop
+// alone cannot provide since a timer that has already fired is no longer
+// cancellable.
+func (d *Debouncer) Wait() {
+	d.fireWG.Wait()
 }

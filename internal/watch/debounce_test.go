@@ -131,3 +131,66 @@ func TestDebounceNoFlushAfterCancel(t *testing.T) {
 		}
 	})
 }
+
+// TestDebounceWaitJoinsInFlightFire is the CR-01 regression: proves Wait
+// blocks until a fire() that had already started running — one Stop() can
+// no longer cancel, because the timer already fired — has fully completed,
+// including the flush(...) call it makes. Before CR-01's fix, Debouncer had
+// no Wait method at all, so a caller's only join primitive (Stop) could not
+// distinguish "timer never fired" from "timer fired and its callback is
+// still running" — exactly the gap that let Daemon.Run release the daemon
+// lock while a debounced indexer.Sync was still writing.
+func TestDebounceWaitJoinsInFlightFire(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	finished := make(chan struct{})
+	d := NewDebouncer(ctx, 10*time.Millisecond, func(paths map[string]struct{}) {
+		close(started)
+		<-release
+		close(finished)
+	})
+
+	d.Add("a.go")
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for fire() to start running flush")
+	}
+
+	// Simulate the daemon's shutdown sequence: cancel ctx, then Stop — but
+	// the timer has already fired, so Stop can only be a no-op against
+	// this in-flight invocation.
+	cancel()
+	d.Stop()
+
+	waitReturned := make(chan struct{})
+	go func() {
+		d.Wait()
+		close(waitReturned)
+	}()
+
+	select {
+	case <-waitReturned:
+		t.Fatal("Debouncer.Wait returned before the in-flight flush finished — CR-01 regression")
+	case <-time.After(150 * time.Millisecond):
+		// correct: Wait must still be blocked.
+	}
+
+	close(release)
+
+	select {
+	case <-waitReturned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Debouncer.Wait did not return after the in-flight flush finished")
+	}
+
+	select {
+	case <-finished:
+	default:
+		t.Fatal("Wait returned before flush's own body completed")
+	}
+}

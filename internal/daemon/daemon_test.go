@@ -204,3 +204,75 @@ func TestDaemonCleanShutdown(t *testing.T) {
 		t.Fatal("second Run did not return within 5s of ctx cancellation")
 	}
 }
+
+// TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock is the CR-01
+// regression: proves Run does not return — and does not release the daemon
+// lock — while a debounce-triggered flush is still in flight, even when ctx
+// is cancelled while that flush is running. onSyncStart blocks the flush
+// deterministically (a real indexer.Sync against a tiny test fixture
+// completes far too fast to reliably race against ctx cancellation
+// otherwise), reproducing the exact untracked-goroutine window CR-01
+// describes: the debounce timer has already fired, so watchLoop's
+// deb.Stop() (called on ctx.Done()) cannot cancel it — only deb.Wait()
+// (joined from Run after wg.Wait()) can make Run wait correctly.
+func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "10")
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	flushStarted := make(chan struct{})
+	releaseFlush := make(chan struct{})
+	d.onSyncStart = func() {
+		close(flushStarted)
+		<-releaseFlush
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+
+	writeFixtureFile(t, root, "extra.go", "package main\n\nfunc extra() {}\n")
+
+	select {
+	case <-flushStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the debounced flush to start")
+	}
+
+	// The flush's fire() goroutine is now blocked mid-flush — the exact
+	// CR-01 window. Cancel ctx: the watcher loop's deb.Stop() cannot
+	// cancel a timer that has already fired.
+	cancel()
+
+	select {
+	case err := <-runErr:
+		t.Fatalf("Run returned (err=%v) while a debounced flush was still in flight — CR-01 regression", err)
+	case <-time.After(200 * time.Millisecond):
+		// correct: Run must still be blocked.
+	}
+	if _, ok, lerr := readLock(codegraphDir); lerr != nil || !ok {
+		t.Fatalf("daemon lock released while a flush was still in flight (ok=%v err=%v) — CR-01 regression", ok, lerr)
+	}
+
+	close(releaseFlush) // let the flush — and its real indexer.Sync — proceed
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after the in-flight flush completed")
+	}
+
+	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
+		t.Fatalf("lockfile still present after flush completed and Run returned (ok=%v err=%v)", ok, lerr)
+	}
+}
