@@ -65,7 +65,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Cross-file resolution links imports, call edges, and type inheritance across a multi-package Go repo via two-pass parallel-extract → sequential-resolve
   4. Indexing a real-world Go project produces symbols and edges that match expected structure for that repo
 
-**Plans**: 3/6 plans executed
+**Plans**: 4/6 plans executed
 
 **Wave 1**
 
@@ -78,7 +78,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 02-04-PLAN.md — Pass 2: symbol index + cross-file resolution (RES-01) + deterministic edge collapse + single-writer commit
+- [x] 02-04-PLAN.md — Pass 2: symbol index + cross-file resolution (RES-01) + deterministic edge collapse + single-writer commit
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -184,7 +184,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
-| 2. Go Indexing Pipeline | 3/6 | In Progress|  |
+| 2. Go Indexing Pipeline | 4/6 | In Progress|  |
 | 3. Query Engine & MCP Server | 0/TBD | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
