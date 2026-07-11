@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 2
 current_phase_name: Go Indexing Pipeline
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-07-11T02:17:22.561Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-07-11T02:33:39.766Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 2 execution started
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 13
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 2 (Go Indexing Pipeline) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 2 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-go-indexing-pipeline P02 | 12min | 2 tasks | 9 files |
 | Phase 02-go-indexing-pipeline P03 | 10min | 2 tasks | 6 files |
 | Phase 02-go-indexing-pipeline P04 | 20min | 2 tasks | 3 files |
+| Phase 02 P05 | 25min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,7 @@ Recent decisions affecting current work:
 - [Phase 02]: resolveSelector's alias-membership check against the file's Imports map doubles as RQ-2's narrowest-safe-set boundary — no local-variable-type-tracking logic implemented, since goextract's UnresolvedRef data model gives Pass 2 no operand-type information to track
 - [Phase 02]: Cross-file method-receiver containment (RefKindContains) resolved into type->method edges beyond the plan's illustrative calls/imports/embeds vocabulary — Pass 1 emits no fallback edge for this case, so leaving it unresolved would orphan the method node
 - [Phase 02]: RQ-1 ratified — synthetic package pseudo-node for intra-module imports only; external/stdlib imports produce no node/edge
+- [Phase 02]: INDX-02 determinism gate: two from-scratch fixture rebuilds must produce byte-identical GraphStore.Export() streams after normalizing Meta.last_sync_unix_ms; verified under -race with GOMAXPROCS(8)
 
 ### Pending Todos
 
@@ -121,6 +123,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T02:17:22.556Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-07-11T02:33:39.762Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None
