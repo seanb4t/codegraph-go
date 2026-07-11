@@ -81,7 +81,12 @@ func newServeCmd() *cobra.Command {
 			// and serve simply defers to that daemon rather than failing.
 			if watchMode && hasIndex {
 				watchCtx, cancelWatch := context.WithCancel(context.Background())
-				d, err := daemon.New(repoPath)
+				// WR-04: the in-process fallback has no CLI flags of its own
+				// for daemon-side sync customization — Quiet mirrors the
+				// reconcile Sync call above, since this watcher's flushes are
+				// only ever logged (internal/daemon.flush), never printed to
+				// this command's stdout.
+				d, err := daemon.New(repoPath, indexer.Options{Quiet: true})
 				if err != nil {
 					cancelWatch()
 					return err

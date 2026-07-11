@@ -80,8 +80,11 @@ type Daemon struct {
 // inside Run, so a not-yet-started Daemon never holds any process-wide
 // resource. New fails with ErrNotInitialized if repoRoot has no
 // .codegraph/ (mirrors internal/cli's index/sync guidance: run `codegraph
-// init` first).
-func New(repoRoot string) (*Daemon, error) {
+// init` first). opts (WR-04) is threaded through to every debounced
+// indexer.Sync call this Daemon drives (flush, below) — e.g. Workers to
+// bound the daemon's own extraction pool independently of the CLI's
+// one-shot `codegraph sync`/`index` invocations.
+func New(repoRoot string, opts indexer.Options) (*Daemon, error) {
 	abs, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return nil, err
@@ -97,6 +100,7 @@ func New(repoRoot string) (*Daemon, error) {
 		repoRoot:     abs,
 		codegraphDir: codegraphDir,
 		storeDir:     filepath.Join(codegraphDir, storeDirName),
+		opts:         opts,
 	}, nil
 }
 

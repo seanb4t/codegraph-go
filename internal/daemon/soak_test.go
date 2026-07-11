@@ -38,7 +38,7 @@ func TestSoak(t *testing.T) {
 
 	root, codegraphDir, storeDir := initFixture(t)
 
-	d, err := New(root)
+	d, err := New(root, indexer.Options{Quiet: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

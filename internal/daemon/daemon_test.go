@@ -89,6 +89,24 @@ func nodeNames(t *testing.T, storeDir string) map[string]bool {
 	return names
 }
 
+// TestNewPopulatesOpts is the WR-04 regression: New previously never
+// assigned its opts parameter to the returned Daemon at all (there wasn't
+// even a parameter to assign) — d.opts stayed permanently the zero value,
+// making any --workers/--verbose/--quiet customization of the daemon's own
+// indexer.Sync calls unreachable. New now threads opts straight through.
+func TestNewPopulatesOpts(t *testing.T) {
+	root, _, _ := initFixture(t)
+
+	want := indexer.Options{Workers: 3, Verbose: true, Quiet: false}
+	d, err := New(root, want)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if d.opts != want {
+		t.Fatalf("d.opts = %+v, want %+v — WR-04 regression", d.opts, want)
+	}
+}
+
 // TestDaemonSharedWriter proves the daemon holds exactly one writer: an
 // on-disk edit drives a debounced Sync that updates the committed graph
 // while the daemon runs, and a second lock acquire fails while it holds
@@ -98,7 +116,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 
 	root, codegraphDir, storeDir := initFixture(t)
 
-	d, err := New(root)
+	d, err := New(root, indexer.Options{Quiet: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -160,7 +178,7 @@ func TestDaemonCleanShutdown(t *testing.T) {
 
 	root, codegraphDir, _ := initFixture(t)
 
-	d, err := New(root)
+	d, err := New(root, indexer.Options{Quiet: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -220,7 +238,7 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 
 	root, codegraphDir, _ := initFixture(t)
 
-	d, err := New(root)
+	d, err := New(root, indexer.Options{Quiet: true})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
