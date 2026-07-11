@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 3
 current_phase_name: Query Engine & MCP Server
 status: executing
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-07-11T14:59:45.647Z"
+stopped_at: Completed 03-08-PLAN.md
+last_updated: "2026-07-11T15:08:50.890Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 22
-  completed_plans: 20
+  completed_plans: 21
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 3 (Query Engine & MCP Server) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 3 execution started
 
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-query-engine-mcp-server P05 | 12min | 2 tasks | 3 files |
 | Phase 03 P06 | 18min | 2 tasks | 6 files |
 | Phase 03-query-engine-mcp-server P07 | 15min | 2 tasks | 5 files |
+| Phase 03-query-engine-mcp-server P08 | 25min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,10 @@ Recent decisions affecting current work:
 - [Phase 03]: Manually promoted github.com/mark3labs/mcp-go to go.mod's direct require block instead of running go mod tidy, per established project convention
 - [Phase 03]: ParseAllowlist (pure) split from WarnUnknownToolsTo (io.Writer) so unknown-name stderr warnings are directly unit-testable
 - [Phase 03]: search's MCP companion handler marshals []query.Location via a direct encoding/json.Marshal call — no MarshalSearchJSON exists in internal/query unlike its sibling commands, and Location's tags already own the shape
+- [Phase 03]: serve requires an explicit --mcp flag (errors if omitted) even though stdio is the only v1 transport — makes the future HTTP/SSE transport selection explicit
+- [Phase 03]: search's CLI --json marshals []query.Location directly via encoding/json.Marshal (no dedicated MarshalSearchJSON exists) — matches internal/mcp's companionHandler search branch
+- [Phase 03]: files' non-JSON default output renders --format tree as indented plain text via printFileTree; flat format is one line per file — no golden oracle constrains this shape (D-07a)
+- [Phase 03]: affected requires at least one positional file argument (cobra.MinimumNArgs(1)) — an empty changed-file set has no useful query-time-derivation output
 
 ### Pending Todos
 
@@ -150,6 +155,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T14:59:45.641Z
-Stopped at: Completed 03-07-PLAN.md
+Last session: 2026-07-11T15:08:50.884Z
+Stopped at: Completed 03-08-PLAN.md
 Resume file: None
