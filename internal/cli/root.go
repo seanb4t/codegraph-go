@@ -37,7 +37,8 @@ func newRootCmd() *cobra.Command {
 	}
 	root.AddCommand(newInitCmd(), newIndexCmd(), newUninitCmd(),
 		newQueryCmd(), newSearchCmd(), newCallersCmd(), newCalleesCmd(),
-		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd())
+		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd(),
+		newNodeCmd(), newExploreCmd(), newServeCmd())
 	return root
 }
 

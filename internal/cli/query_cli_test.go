@@ -259,6 +259,76 @@ func TestFilesCmd(t *testing.T) {
 	})
 }
 
+func TestNodeCmd(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	t.Run("symbol detail emits markdown, not JSON", func(t *testing.T) {
+		out, _, err := execCmd("node", "Alpha", "-p", dir)
+		if err != nil {
+			t.Fatalf("node: unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "**Alpha** (function)") {
+			t.Fatalf("node Alpha: expected markdown header, got %q", out)
+		}
+		if !strings.Contains(out, "**Calls →**") || !strings.Contains(out, "**Called by ←**") {
+			t.Fatalf("node Alpha: expected Calls/Called-by trail, got %q", out)
+		}
+		if strings.HasPrefix(strings.TrimSpace(out), "{") {
+			t.Fatalf("node Alpha: expected markdown, got JSON-shaped output: %q", out)
+		}
+	})
+
+	t.Run("file mode (-f, no symbol) emits a line-numbered read", func(t *testing.T) {
+		out, _, err := execCmd("node", "-p", dir, "-f", "pkga/pkga.go")
+		if err != nil {
+			t.Fatalf("node -f: unexpected error: %v", err)
+		}
+		if !strings.Contains(out, "```go") {
+			t.Fatalf("node -f: expected a fenced code block, got %q", out)
+		}
+		if !strings.Contains(out, "1\t") {
+			t.Fatalf("node -f: expected line-numbered output, got %q", out)
+		}
+	})
+
+	t.Run("no symbol and no file errors", func(t *testing.T) {
+		_, _, err := execCmd("node", "-p", dir)
+		if err == nil {
+			t.Fatal("node with no symbol and no -f: expected an error, got nil")
+		}
+	})
+}
+
+func TestExploreCmd(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	out, _, err := execCmd("explore", "Alpha", "-p", dir)
+	if err != nil {
+		t.Fatalf("explore: unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "**Exploration: Alpha**") {
+		t.Fatalf("explore: expected exploration header, got %q", out)
+	}
+	if !strings.Contains(out, "**Blast radius") {
+		t.Fatalf("explore: expected blast-radius section, got %q", out)
+	}
+	if !strings.Contains(out, "```go") {
+		t.Fatalf("explore: expected fenced verbatim source, got %q", out)
+	}
+	if strings.HasPrefix(strings.TrimSpace(out), "{") {
+		t.Fatalf("explore: expected markdown, got JSON-shaped output: %q", out)
+	}
+}
+
+func TestServeCmdRequiresMCPFlag(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	_, _, err := execCmd("serve", "-p", dir)
+	if err == nil {
+		t.Fatal("serve without --mcp: expected an error, got nil")
+	}
+}
+
 func TestStatusCmd(t *testing.T) {
 	dir := setupIndexedFixture(t)
 
