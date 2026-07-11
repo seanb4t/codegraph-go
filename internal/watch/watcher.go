@@ -30,7 +30,6 @@ import (
 // the caller's seam into indexer.Sync.
 type Watcher struct {
 	fsw    *fsnotify.Watcher
-	root   string
 	closed atomic.Bool
 }
 
@@ -44,7 +43,7 @@ func Open(root string) (*Watcher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("watch: creating fsnotify watcher: %w", err)
 	}
-	w := &Watcher{fsw: fsw, root: root}
+	w := &Watcher{fsw: fsw}
 	if err := addRecursive(fsw, root, indexer.ShouldSkipDir); err != nil {
 		_ = fsw.Close()
 		return nil, fmt.Errorf("watch: walking %s: %w", root, err)
