@@ -1,8 +1,8 @@
 package query
 
 import (
-	"errors"
 	"io"
+	"path/filepath"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 )
@@ -36,9 +36,57 @@ func New(r graphstore.Reader) *Engine {
 // reused across calls), and returns an Engine wrapping that snapshot plus
 // an io.Closer that releases both the Reader and the underlying store.
 //
-// The returned closer is idempotent.
-//
-// TODO(03-02 GREEN): unimplemented — RED stub.
+// The returned closer is idempotent: calling Close more than once is
+// safe and returns nil on the second and subsequent calls, so a defer
+// alongside an early explicit Close (or vice versa) never double-frees
+// the underlying Pebble handles.
 func OpenAt(start string) (*Engine, io.Closer, error) {
-	return nil, nil, errors.New("query: OpenAt not implemented")
+	dir, err := ResolveCodegraphDir(start)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	store, err := graphstore.Open(filepath.Join(dir, codegraphDirName, storeSubdir))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	reader, err := store.Snapshot()
+	if err != nil {
+		_ = store.Close()
+		return nil, nil, err
+	}
+
+	return New(reader), &engineCloser{reader: reader, store: store}, nil
+}
+
+// engineCloser closes an Engine's Reader then its underlying GraphStore,
+// exactly once, regardless of how many times Close is called.
+type engineCloser struct {
+	reader graphstore.Reader
+	store  graphstore.GraphStore
+	closed bool
+}
+
+// Close releases the Reader's snapshot and then the store's underlying
+// engine handle. It is safe to call more than once — the second and
+// subsequent calls are no-ops returning nil.
+func (c *engineCloser) Close() error {
+	if c.closed {
+		return nil
+	}
+	c.closed = true
+
+	var readerErr error
+	if c.reader != nil {
+		readerErr = c.reader.Close()
+	}
+	var storeErr error
+	if c.store != nil {
+		storeErr = c.store.Close()
+	}
+	if readerErr != nil {
+		return readerErr
+	}
+	return storeErr
 }

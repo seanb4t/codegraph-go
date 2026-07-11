@@ -6,6 +6,8 @@ package query
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 )
 
 // ErrNotInitialized mirrors the internal/cli sentinel of the same name
@@ -24,9 +26,23 @@ const codegraphDirName = ".codegraph"
 // RESEARCH Pattern 4), returning the nearest ancestor directory (inclusive
 // of start itself) that contains a .codegraph subdirectory. It returns
 // ErrNotInitialized once the filesystem root is reached without finding
-// one.
-//
-// TODO(03-02 GREEN): unimplemented — RED stub.
+// one. start is resolved to an absolute path first via filepath.Abs (V5 —
+// no unbounded/relative path is ever stat'd against unexpected cwd state).
 func ResolveCodegraphDir(start string) (string, error) {
-	return "", errors.New("query: ResolveCodegraphDir not implemented")
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", err
+	}
+	for {
+		candidate := filepath.Join(dir, codegraphDirName)
+		info, statErr := os.Stat(candidate)
+		if statErr == nil && info.IsDir() {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", ErrNotInitialized
+		}
+		dir = parent
+	}
 }

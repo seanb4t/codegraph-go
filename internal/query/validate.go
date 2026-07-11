@@ -1,5 +1,13 @@
 package query
 
+import (
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+)
+
 // Documented ceilings for the numeric flags every query command exposes
 // (--depth/--limit/--max-files). These bound BFS/scan/allocation work
 // before it starts (V5 Input Validation, RESEARCH Pitfall 4,
@@ -26,31 +34,80 @@ const (
 	defaultDepth = 5
 )
 
-// clampDepth returns min(n, MaxDepth), treating n<=0 as defaultDepth.
-//
-// TODO(03-02 GREEN): unimplemented — RED stub.
+// clampDepth returns min(n, MaxDepth), treating n<=0 as defaultDepth
+// rather than "unbounded" or "zero traversal" — a caller that omits
+// --depth gets a small, useful default instead of an error.
 func clampDepth(n int) int {
+	if n <= 0 {
+		n = defaultDepth
+	}
+	if n > MaxDepth {
+		return MaxDepth
+	}
 	return n
 }
 
-// validateLimit rejects n above MaxLimit with a clear error.
-//
-// TODO(03-02 GREEN): unimplemented — RED stub.
+// validateLimit rejects n above MaxLimit with a clear error instead of
+// silently truncating (V5 — the caller should know its request was
+// out-of-range, not receive a silently-smaller result set). n<=0 is
+// accepted as "caller did not set a limit"; callers apply their own
+// default downstream.
 func validateLimit(n int) error {
+	if n > MaxLimit {
+		return fmt.Errorf("query: limit %d exceeds maximum %d", n, MaxLimit)
+	}
 	return nil
 }
 
-// validateMaxFiles rejects n above MaxFiles with a clear error.
-//
-// TODO(03-02 GREEN): unimplemented — RED stub.
+// validateMaxFiles rejects n above MaxFiles with a clear error, mirroring
+// validateLimit's contract.
 func validateMaxFiles(n int) error {
+	if n > MaxFiles {
+		return fmt.Errorf("query: max-files %d exceeds maximum %d", n, MaxFiles)
+	}
 	return nil
 }
 
-// ValidateKind rejects an unknown --kind value against the known
-// node-kind set before any node scan (T-03-02-Kind, V5).
-//
-// TODO(03-02 GREEN): unimplemented — RED stub.
+// knownKinds is the authoritative --kind allow-list ValidateKind checks
+// against: every schema.Node kind the Phase-2 extractor can emit
+// (internal/indexer/goextract's Kind* constants, D-06) plus the synthetic
+// "package" pseudo-node kind (internal/indexer/resolve.go's unexported
+// kindPackage — its value is duplicated here as a string literal, not
+// imported, because it is deliberately unexported by internal/indexer and
+// this comment is what ties the two together; if kindPackage's value ever
+// changes, this literal must change with it). Building the set from the
+// extractor's own constants (rather than a hand-typed literal list for the
+// other eight kinds) means this set cannot silently drift from the
+// vocabulary goextract actually produces (T-03-02-Kind).
+var knownKinds = map[string]bool{
+	goextract.KindFile:      true,
+	goextract.KindFunction:  true,
+	goextract.KindMethod:    true,
+	goextract.KindStruct:    true,
+	goextract.KindInterface: true,
+	goextract.KindTypeAlias: true,
+	goextract.KindConstant:  true,
+	goextract.KindVariable:  true,
+	"package":               true, // internal/indexer/resolve.go's kindPackage
+}
+
+// ValidateKind rejects an unknown --kind value against knownKinds before
+// any node scan (T-03-02-Kind, V5): the empty string passes (no filter —
+// query/search's default "match every kind" behavior), any known kind
+// passes, and anything else returns an error naming the full allowed set
+// so the caller can self-correct instead of silently scanning to an
+// always-empty result.
 func ValidateKind(kind string) error {
-	return nil
+	if kind == "" {
+		return nil
+	}
+	if knownKinds[kind] {
+		return nil
+	}
+	allowed := make([]string, 0, len(knownKinds))
+	for k := range knownKinds {
+		allowed = append(allowed, k)
+	}
+	sort.Strings(allowed)
+	return fmt.Errorf("query: unknown kind %q — allowed kinds: %s", kind, strings.Join(allowed, ", "))
 }
