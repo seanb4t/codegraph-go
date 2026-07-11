@@ -6,14 +6,14 @@ current_phase: 4
 current_phase_name: Incremental Sync & File Watcher
 status: executing
 stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-07-11T21:02:13.443Z"
+last_updated: "2026-07-11T21:12:18.051Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 4 execution started
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 31
-  completed_plans: 29
+  completed_plans: 30
   percent: 38
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 4 (Incremental Sync & File Watcher) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 4 execution started
 
@@ -84,6 +84,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04-incremental-sync-file-watcher P04 | 12min | 2 tasks | 8 files |
 | Phase 04 P05 | 6min | 2 tasks | 6 files |
 | Phase 04 P07 | 22min | 2 tasks | 8 files |
+| Phase 04 P08 | 6min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,8 @@ Recent decisions affecting current work:
 - [Phase 04]: fsnotify promoted to go.mod direct require by manual edit, not go mod tidy, per Phase 1 convention
 - [Phase 04]: internal/daemon never holds a graphstore.GraphStore/Writer directly — indexer.Sync owns its own store lifecycle; single-writer enforced via lockfile + in-process syncMu
 - [Phase 04]: Exported internal/watch's debouncer/newDebouncer/debounceDuration as Debouncer/NewDebouncer/DebounceDuration (Rule 3 fix) so internal/daemon can construct and drive one
+- [Phase 04]: root.go's sync/daemon/unlock registration split across two commits so each task's own build-verify step stays green independently
+- [Phase 04]: serve --watch gates on hasIndex so MCP-03 absent-index behavior is unaffected; a live standalone daemon's ErrLockLive inside --watch is a graceful defer, not a serve failure
 
 ### Pending Todos
 
@@ -178,6 +181,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T21:02:13.436Z
+Last session: 2026-07-11T21:09:50.031Z
 Stopped at: Completed 04-07-PLAN.md
 Resume file: None
