@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 4
 current_phase_name: Incremental Sync & File Watcher
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-11T18:42:36.258Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-07-11T18:55:44.832Z"
 last_activity: 2026-07-11
-last_activity_desc: Phase 3 complete, transitioned to Phase 4
+last_activity_desc: Phase 4 execution started
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 31
+  completed_plans: 23
   percent: 38
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 3 — Query Engine & MCP Server
+**Current focus:** Phase 4 — Incremental Sync & File Watcher
 
 ## Current Position
 
-Phase: 4 — Incremental Sync & File Watcher
-Plan: Not started
+Phase: 4 (Incremental Sync & File Watcher) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Last activity: 2026-07-11 — Phase 3 complete, transitioned to Phase 4
+Last activity: 2026-07-11 — Phase 4 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -78,6 +78,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-query-engine-mcp-server P07 | 15min | 2 tasks | 5 files |
 | Phase 03-query-engine-mcp-server P08 | 25min | 3 tasks | 13 files |
 | Phase 03-query-engine-mcp-server P09 | 28min | 2 tasks | 1 files |
+| Phase 04 P01 | 20min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,9 @@ Recent decisions affecting current work:
 - [Phase 03-query-engine-mcp-server]: Golden parity test uses set-based subset comparison for callers/callees/impact-affected (never exact equality), generalizing D-05's edge-dedup tolerance to also cover the discovered callees-scope divergence (TS includes non-call references, RefKindCalls-only scoping excludes them)
 - [Phase 03-query-engine-mcp-server]: Explore parity subtest normalizes the golden's literal two-word query term ("main function", 0 matches under D-06's no-FTS lexical matcher) to the single-token "mergeStyle"
 - [Phase 03-query-engine-mcp-server]: Impact parity subtest asserts a tolerant (<=) NodeCount/EdgeCount relationship, not exact equality — closes RESEARCH Open Question 1's semantics question while documenting a real internal/indexer extraction gap (method call as call-argument not resolved to a calls edge) as a finding, not silently normalized away
+- [Phase 4]: x/ namespace stores no value payload — FileIndexEntry fields decode directly from key bytes, no proto.Marshal for index entries
+- [Phase 4]: DeleteFileSubgraph does not itself point-delete a file's scattered n/e records — callers must IterateFileIndex(path) before calling it and stage DeleteNode/DeleteEdge for each entry found (binds Plan 04-03's prune-step ordering)
+- [Phase 4]: PutEdge signature-change blast radius was wider than RESEARCH's single-call-site claim — also fixed graphstore.Import (with id->FilePath tracking so migrated stores rebuild the x/ index) and five test-double implementations
 
 ### Pending Todos
 
@@ -160,6 +164,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T17:47:26.546Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-incremental-sync-file-watcher/04-CONTEXT.md
+Last session: 2026-07-11T18:55:44.825Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
