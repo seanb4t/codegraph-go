@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 3
 current_phase_name: Query Engine & MCP Server
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-07-11T13:24:47.181Z"
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-07-11T13:39:13.076Z"
 last_activity: 2026-07-11
-last_activity_desc: Phase 2 complete, transitioned to Phase 3
+last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 13
-  completed_plans: 13
+  total_plans: 22
+  completed_plans: 14
   percent: 25
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 2 — Go Indexing Pipeline
+**Current focus:** Phase 3 — Query Engine & MCP Server
 
 ## Current Position
 
-Phase: 3 — Query Engine & MCP Server
-Plan: Not started
+Phase: 3 (Query Engine & MCP Server) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Last activity: 2026-07-11 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-07-11 — Phase 3 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -68,6 +68,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-go-indexing-pipeline P04 | 20min | 2 tasks | 3 files |
 | Phase 02 P05 | 25min | 2 tasks | 4 files |
 | Phase 02-go-indexing-pipeline P06 | 4min | 2 tasks | 8 files |
+| Phase 03-query-engine-mcp-server P01 | 13min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Recent decisions affecting current work:
 - [Phase 02]: INDX-02 determinism gate: two from-scratch fixture rebuilds must produce byte-identical GraphStore.Export() streams after normalizing Meta.last_sync_unix_ms; verified under -race with GOMAXPROCS(8)
 - [Phase 02-go-indexing-pipeline]: index without --force prompts interactively via a shared confirm() helper (also used by uninit) rather than hard-requiring --force
 - [Phase 02-go-indexing-pipeline]: .codegraph/store/ as the Pebble store subdirectory (D-01b) plus a self-contained .codegraph/.gitignore (*) rather than editing the repo's root .gitignore
+- [Phase 03]: No kind-scoped IterateNodes variant added — full-scan-with-in-memory-filter is v1 posture per D-03/RESEARCH Pitfall 1
+- [Phase 03]: No new keys.go namespace-prefix helpers — whole-namespace prefix inlined as []byte{prefixNode}/[]byte{prefixFile} literals
 
 ### Pending Todos
 
@@ -127,6 +130,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T12:34:57.504Z
-Stopped at: Phase 3 context gathered
-Resume file: .planning/phases/03-query-engine-mcp-server/03-CONTEXT.md
+Last session: 2026-07-11T13:39:13.070Z
+Stopped at: Completed 03-01-PLAN.md
+Resume file: None
