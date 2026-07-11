@@ -6,14 +6,14 @@ current_phase: 4
 current_phase_name: Incremental Sync & File Watcher
 status: executing
 stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-07-11T18:55:44.832Z"
+last_updated: "2026-07-11T19:03:07.108Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 4 execution started
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 31
-  completed_plans: 23
+  completed_plans: 24
   percent: 38
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 4 (Incremental Sync & File Watcher) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 4 execution started
 
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-query-engine-mcp-server P08 | 25min | 3 tasks | 13 files |
 | Phase 03-query-engine-mcp-server P09 | 28min | 2 tasks | 1 files |
 | Phase 04 P01 | 20min | 2 tasks | 12 files |
+| Phase 04-incremental-sync-file-watcher P02 | 8min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Recent decisions affecting current work:
 - [Phase 4]: x/ namespace stores no value payload — FileIndexEntry fields decode directly from key bytes, no proto.Marshal for index entries
 - [Phase 4]: DeleteFileSubgraph does not itself point-delete a file's scattered n/e records — callers must IterateFileIndex(path) before calling it and stage DeleteNode/DeleteEdge for each entry found (binds Plan 04-03's prune-step ordering)
 - [Phase 4]: PutEdge signature-change blast radius was wider than RESEARCH's single-call-site claim — also fixed graphstore.Import (with id->FilePath tracking so migrated stores rebuild the x/ index) and five test-double implementations
+- [Phase 4]: Confirmed Meta.has_file_index (field 7) was not already added by 04-01 before adding it — no reconciliation needed
+- [Phase 4]: query.buildReverseAdjacency exported as BuildReverseAdjacency (mechanical rename) so internal/indexer.Sync() (04-03) can reuse the D-04 reverse-adjacency scan without a circular import
 
 ### Pending Todos
 
@@ -164,6 +167,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T18:55:44.825Z
+Last session: 2026-07-11T19:00:33.082Z
 Stopped at: Completed 04-01-PLAN.md
 Resume file: None
