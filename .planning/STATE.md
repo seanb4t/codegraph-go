@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 3
 current_phase_name: Query Engine & MCP Server
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-07-11T13:39:13.076Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-07-11T13:46:04.643Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 22
-  completed_plans: 14
+  completed_plans: 15
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 3 (Query Engine & MCP Server) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 3 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P05 | 25min | 2 tasks | 4 files |
 | Phase 02-go-indexing-pipeline P06 | 4min | 2 tasks | 8 files |
 | Phase 03-query-engine-mcp-server P01 | 13min | 2 tasks | 3 files |
+| Phase 03-query-engine-mcp-server P02 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ Recent decisions affecting current work:
 - [Phase 02-go-indexing-pipeline]: .codegraph/store/ as the Pebble store subdirectory (D-01b) plus a self-contained .codegraph/.gitignore (*) rather than editing the repo's root .gitignore
 - [Phase 03]: No kind-scoped IterateNodes variant added — full-scan-with-in-memory-filter is v1 posture per D-03/RESEARCH Pitfall 1
 - [Phase 03]: No new keys.go namespace-prefix helpers — whole-namespace prefix inlined as []byte{prefixNode}/[]byte{prefixFile} literals
+- [Phase 03]: internal/query re-declares codegraphDirName/storeSubdir locally rather than importing internal/cli, keeping the CLI-depends-on-query dependency direction
+- [Phase 03]: ValidateKind's package kind is a documented string literal, not an import of internal/indexer's unexported kindPackage const
 
 ### Pending Todos
 
@@ -130,6 +133,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T13:39:13.070Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-07-11T13:46:04.638Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None

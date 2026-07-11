@@ -100,7 +100,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. An agent connects to `codegraph serve --mcp` and sees `codegraph_explore` as the only default tool; the 7 additional tools appear only when listed in `CODEGRAPH_MCP_TOOLS`; the server exposes zero tools when no `.codegraph/` exists
   4. MCP tool output shapes match TS CodeGraph v1.3.x, verified against the golden-output corpus captured in Phase 1
 
-**Plans**: 1/9 plans executed
+**Plans**: 2/9 plans executed
 
 **Wave 1**
 
@@ -108,7 +108,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 03-02-PLAN.md — Query engine foundation: resolve/OpenAt/validation clamps + test harness (Wave 2, QRY-01)
+- [x] 03-02-PLAN.md — Query engine foundation: resolve/OpenAt/validation clamps + test harness (Wave 2, QRY-01)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -215,7 +215,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
-| 3. Query Engine & MCP Server | 1/9 | In Progress|  |
+| 3. Query Engine & MCP Server | 2/9 | In Progress|  |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
