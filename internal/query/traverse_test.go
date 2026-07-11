@@ -146,6 +146,76 @@ func TestCallersDefaultCapAtMaxLimit(t *testing.T) {
 	}
 }
 
+// TestCalleesSkipsDanglingEdgeInsteadOfFailing pins WR-04: a dangling
+// edge (target node missing/pruned) must be skipped, not abort the whole
+// Callees call.
+func TestCalleesSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"origin": {Id: "origin", Kind: "function", Name: "Origin", QualifiedName: "Origin"},
+		"live":   {Id: "live", Kind: "function", Name: "Live", QualifiedName: "Live"},
+	}
+	edges := []*schema.Edge{
+		{Source: "origin", Target: "live", Kind: goextract.RefKindCalls},
+		{Source: "origin", Target: "missing", Kind: goextract.RefKindCalls}, // dangling
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callees("Origin", 0)
+	if err != nil {
+		t.Fatalf("Callees: unexpected error from a dangling edge, want graceful skip: %v", err)
+	}
+	if len(got.Callees) != 1 || got.Callees[0].Name != "Live" {
+		t.Fatalf("Callees: got %+v, want exactly [Live] (dangling edge skipped)", got.Callees)
+	}
+}
+
+// TestCallersSkipsDanglingEdgeInsteadOfFailing mirrors
+// TestCalleesSkipsDanglingEdgeInsteadOfFailing for Callers (WR-04).
+func TestCallersSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"target": {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target"},
+		"live":   {Id: "live", Kind: "function", Name: "Live", QualifiedName: "Live"},
+	}
+	edges := []*schema.Edge{
+		{Source: "live", Target: "target", Kind: goextract.RefKindCalls},
+		{Source: "missing", Target: "target", Kind: goextract.RefKindCalls}, // dangling
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callers("Target", 0)
+	if err != nil {
+		t.Fatalf("Callers: unexpected error from a dangling edge, want graceful skip: %v", err)
+	}
+	if len(got.Callers) != 1 || got.Callers[0].Name != "Live" {
+		t.Fatalf("Callers: got %+v, want exactly [Live] (dangling edge skipped)", got.Callers)
+	}
+}
+
+// TestImpactSkipsDanglingEdgeInsteadOfFailing pins WR-04 for Impact's
+// BFS: a dangling reverse-edge source must be skipped, not abort the
+// whole traversal, and must not be counted as a resolved node.
+func TestImpactSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"target": {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target"},
+		"live":   {Id: "live", Kind: "function", Name: "Live", QualifiedName: "Live"},
+	}
+	edges := []*schema.Edge{
+		{Source: "live", Target: "target", Kind: goextract.RefKindCalls},
+		{Source: "missing", Target: "target", Kind: goextract.RefKindCalls}, // dangling
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Impact("Target", 2)
+	if err != nil {
+		t.Fatalf("Impact: unexpected error from a dangling edge, want graceful skip: %v", err)
+	}
+	// target (self) + live (hop 1) = 2 nodes; the dangling edge is
+	// skipped entirely, not counted as a resolved node.
+	if got.NodeCount != 2 {
+		t.Fatalf("Impact NodeCount: got %d, want 2 (target, live) — dangling edge must be skipped, not counted", got.NodeCount)
+	}
+}
+
 // traverseFixtureTargetFile and traverseFixtureTargetTestFile are seeded
 // into the *copied* gofixture's pkga package before indexing (the
 // checked-in testdata tree has no _test.go file, and this plan's Wave-3

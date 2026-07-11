@@ -1,9 +1,11 @@
 package query
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -70,6 +72,11 @@ func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge) 
 	for _, edge := range callers {
 		src, err := e.reader.GetNode(edge.Source)
 		if err != nil {
+			// WR-04: a dangling caller reference is skipped rather than
+			// aborting the whole Explore call.
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
 			return exploreBlast{}, err
 		}
 		if isTestSymbol(src) {

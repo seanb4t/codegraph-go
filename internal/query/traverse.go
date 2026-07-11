@@ -2,6 +2,7 @@ package query
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -148,6 +149,11 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 		}
 		target, err := e.reader.GetNode(edge.Target)
 		if err != nil {
+			// WR-04: a dangling edge (target node pruned/missing) degrades
+			// gracefully — skip it rather than aborting the whole call.
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
 			return CalleesResult{}, err
 		}
 		locs = append(locs, nodeLocation(target))
@@ -187,6 +193,10 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 	for _, edge := range rev[node.Id] {
 		src, err := e.reader.GetNode(edge.Source)
 		if err != nil {
+			// WR-04: skip a dangling edge rather than aborting.
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
 			return CallersResult{}, err
 		}
 		locs = append(locs, nodeLocation(src))
@@ -241,6 +251,12 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 				visited[edge.Source] = true
 				srcNode, err := e.reader.GetNode(edge.Source)
 				if err != nil {
+					// WR-04: a dangling reverse-edge source is skipped —
+					// it cannot be expanded further, but must not abort
+					// the whole BFS.
+					if errors.Is(err, graphstore.ErrNotFound) {
+						continue
+					}
 					return ImpactResult{}, err
 				}
 				affected = append(affected, nodeLocation(srcNode))
@@ -314,6 +330,11 @@ func (e *Engine) Affected(files []string) (AffectedResult, error) {
 			}
 			target, err := e.reader.GetNode(edge.Source)
 			if err != nil {
+				// WR-04: skip a dangling edge rather than aborting —
+				// same convention as Callees/Callers/Impact above.
+				if errors.Is(err, graphstore.ErrNotFound) {
+					continue
+				}
 				return AffectedResult{}, err
 			}
 			if !isTestSymbol(target) {

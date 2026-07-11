@@ -1,12 +1,14 @@
 package query
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -158,6 +160,11 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 		}
 		target, err := e.reader.GetNode(edge.Target)
 		if err != nil {
+			// WR-04: a dangling calls-edge target is skipped rather than
+			// aborting the whole node detail render.
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
 			return "", err
 		}
 		calls = append(calls, target)
@@ -174,6 +181,10 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 	for _, edge := range rev[node.Id] {
 		src, err := e.reader.GetNode(edge.Source)
 		if err != nil {
+			// WR-04: skip a dangling reverse-edge source.
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
 			return "", err
 		}
 		calledBy = append(calledBy, src)
