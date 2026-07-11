@@ -11,6 +11,7 @@ require (
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-go v0.25.0
 	github.com/tree-sitter/tree-sitter-python v0.25.0
+	go.uber.org/goleak v1.3.0
 	golang.org/x/mod v0.38.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/tools v0.48.0
