@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 3
 current_phase_name: Query Engine & MCP Server
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-07-11T14:46:47.714Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-07-11T14:59:45.647Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 3 (Query Engine & MCP Server) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 3 execution started
 
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P04 | 6min | 3 tasks | 4 files |
 | Phase 03-query-engine-mcp-server P05 | 12min | 2 tasks | 3 files |
 | Phase 03 P06 | 18min | 2 tasks | 6 files |
+| Phase 03-query-engine-mcp-server P07 | 15min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -123,6 +124,9 @@ Recent decisions affecting current work:
 - [Phase 03]: files' Depth=0 means unlimited (diverges from clampDepth's 0-means-default-5 convention used by impact/callers/callees) — negative or above-MaxDepth values are rejected rather than silently clamped
 - [Phase 03]: Added Engine.repoRoot + NewWithRoot (engine.go) so Node/Explore have a confinement root for on-disk source reads — New() unchanged for existing Reader-only callers
 - [Phase 03]: Blast-radius bullet's caller count groups by the matched symbol's OWN defining file (not the callers' files), confirmed against explore.json/node.json arithmetic
+- [Phase 03]: Manually promoted github.com/mark3labs/mcp-go to go.mod's direct require block instead of running go mod tidy, per established project convention
+- [Phase 03]: ParseAllowlist (pure) split from WarnUnknownToolsTo (io.Writer) so unknown-name stderr warnings are directly unit-testable
+- [Phase 03]: search's MCP companion handler marshals []query.Location via a direct encoding/json.Marshal call — no MarshalSearchJSON exists in internal/query unlike its sibling commands, and Location's tags already own the shape
 
 ### Pending Todos
 
@@ -146,6 +150,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T14:43:53.960Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-07-11T14:59:45.641Z
+Stopped at: Completed 03-07-PLAN.md
 Resume file: None
