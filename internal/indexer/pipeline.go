@@ -35,6 +35,21 @@ type Stats struct {
 	Unresolved int
 	Skipped    int
 	Duration   time.Duration
+
+	// FilesReparsed, FilesPruned, NodesRemoved, EdgesRemoved, and
+	// DependentsRecomputed are Sync-only summary counts (Phase 4 D-01b) —
+	// zero-valued for a from-scratch Run. FilesReparsed is the size of the
+	// Extract() batch (added ∪ modified ∪ dependent); FilesPruned counts
+	// modified+deleted files whose subgraph was pruned via the x/ index;
+	// NodesRemoved/EdgesRemoved count the individual n/e records
+	// point-deleted during that prune; DependentsRecomputed counts files
+	// re-extracted purely because a symbol they referenced was pruned
+	// (RESEARCH Pitfall 2), not because their own content changed.
+	FilesReparsed        int
+	FilesPruned          int
+	NodesRemoved         int
+	EdgesRemoved         int
+	DependentsRecomputed int
 }
 
 // resolveFunc is Pass 2's entry point, matching Resolve's signature. It is
