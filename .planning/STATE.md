@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 2
 current_phase_name: Go Indexing Pipeline
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-11T01:31:00.117Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-07-11T01:37:13.572Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 2 execution started
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 13
-  completed_plans: 8
+  completed_plans: 9
   percent: 13
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 2 (Go Indexing Pipeline) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 2 execution started
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P05 | 5min | 2 tasks | 2 files |
 | Phase 01 P06 | 25min | 3 tasks | 9 files |
 | Phase 02-go-indexing-pipeline P01 | 12min | 2 tasks | 6 files |
+| Phase 02-go-indexing-pipeline P02 | 12min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Added golang.org/x/sync and golang.org/x/mod via go get (not go mod tidy) to satisfy go/packages transitive deps for the D-04a archtest; wazero left untouched
 - [Phase 02]: NodeID uses SHA-256 (never MD5) truncated to 32 hex chars for TS-parity id shape while retaining collision resistance (D-02a)
 - [Phase 02]: graph.proto extended additively only: new field numbers below reserved 50-59, SchemaVersion stayed at 1
+- [Phase 02]: Discover returns (files, modulePath, err) rather than embedding modulePath per-file, keeping DiscoveredFile to the three interfaces-block fields
+- [Phase 02]: Fixture keeps skip_linux.go and main.go both as package main at fixture root — no declaration collision, lets the discovery test assert GOOS-conditional inclusion without a second fixture dir
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T01:31:00.112Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-07-11T01:37:13.567Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
