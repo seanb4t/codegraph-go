@@ -6,44 +6,63 @@ import (
 	"testing"
 )
 
-// traverseFixtureTestFile is seeded into the *copied* gofixture's pkga
-// package before indexing (the checked-in testdata tree has no _test.go
-// file, and this plan's Wave-3 isolation forbids editing engine_test.go
-// or the checked-in fixture — 03-04-PLAN.md "Wave-3 test isolation").
-// It gives TestAffected a real test->symbol calls edge to derive
-// structural correctness from (D-07): Widget.Rename is otherwise
-// uncalled anywhere in the base fixture, so TestWidgetRename is the only
-// caller of Rename once seeded, keeping this fixture addition isolated
-// from TestCallersCallees/TestImpact's assertions (those exercise
-// Alpha/helper/Run, never Rename).
-const traverseFixtureTestFile = `package pkga
+// traverseFixtureTargetFile and traverseFixtureTargetTestFile are seeded
+// into the *copied* gofixture's pkga package before indexing (the
+// checked-in testdata tree has no _test.go file, and this plan's Wave-3
+// isolation forbids editing engine_test.go or the checked-in fixture —
+// 03-04-PLAN.md "Wave-3 test isolation"). They give TestAffected a real
+// test->symbol calls edge to derive structural correctness from (D-07).
+//
+// Target is called directly (an unqualified intra-package call) rather
+// than via a method call on a local variable — internal/indexer's
+// resolver does not track local-variable types (STATE.md Phase 2
+// decision: "no local-variable-type-tracking logic implemented"), so a
+// method call like `w.Rename(...)` on a locally-constructed receiver
+// produces no resolved `calls` edge at all. A brand-new function in its
+// own file also keeps this fixture addition fully isolated from
+// TestCallersCallees/TestImpact's Alpha/helper/Run assertions.
+const traverseFixtureTargetFile = `package pkga
 
-import "testing"
-
-// TestWidgetRename exercises Widget.Rename so TestAffected has a known
-// test->symbol calls edge to derive impacted-test-file structural
-// correctness from (D-07) — Rename has no other caller in the fixture.
-func TestWidgetRename(t *testing.T) {
-	w := &Widget{}
-	w.Rename("x")
+// Target is a fixture-only function that TestTarget calls directly, so
+// TestAffected has a real test->symbol calls edge to derive from (D-07).
+func Target() int {
+	return 42
 }
 `
 
-// traverseFixture copies gofixture, seeds pkga_test.go (above), indexes
-// the result via the shared indexFixture harness (engine_test.go,
-// reused at runtime, not modified), and opens an Engine on it. Every
-// traverse_test.go case shares this deterministic call topology:
+const traverseFixtureTargetTestFile = `package pkga
+
+import "testing"
+
+// TestTarget calls Target directly (unqualified intra-package call, the
+// same resolvable call shape as Alpha->helper) so TestAffected has a
+// known test->symbol calls edge to derive impacted-test-file structural
+// correctness from (D-07).
+func TestTarget(t *testing.T) {
+	_ = Target()
+}
+`
+
+// traverseFixture copies gofixture, seeds target.go/target_test.go
+// (above), indexes the result via the shared indexFixture harness
+// (engine_test.go, reused at runtime, not modified), and opens an
+// Engine on it. Every traverse_test.go case shares this deterministic
+// call topology:
 //
 //	main.main -> pkgb.Run -> pkga.Alpha -> pkga.helper
-//	                       -> pkga.Widget.Describe
-//	pkga_test.TestWidgetRename -> pkga.Widget.Rename
+//	                       -> pkga.Widget.Describe (unresolved — local-var method call)
+//	pkga.TestTarget -> pkga.Target
 func traverseFixture(t *testing.T) *Engine {
 	t.Helper()
 
 	dir := copyFixture(t)
-	testFile := filepath.Join(dir, "pkga", "pkga_test.go")
-	if err := os.WriteFile(testFile, []byte(traverseFixtureTestFile), 0o644); err != nil {
-		t.Fatalf("seed pkga_test.go: %v", err)
+	targetFile := filepath.Join(dir, "pkga", "target.go")
+	if err := os.WriteFile(targetFile, []byte(traverseFixtureTargetFile), 0o644); err != nil {
+		t.Fatalf("seed target.go: %v", err)
+	}
+	targetTestFile := filepath.Join(dir, "pkga", "target_test.go")
+	if err := os.WriteFile(targetTestFile, []byte(traverseFixtureTargetTestFile), 0o644); err != nil {
+		t.Fatalf("seed target_test.go: %v", err)
 	}
 	indexFixture(t, dir)
 
@@ -196,35 +215,35 @@ func TestImpact(t *testing.T) {
 // test-coverage edge, just reverse `calls` edges from a changed file's
 // symbols filtered by the _test.go/Test*/Benchmark* heuristic. There is
 // no golden oracle for this command (D-07a) — assert structural
-// correctness against the seeded TestWidgetRename -> Widget.Rename call.
+// correctness against the seeded TestTarget -> Target call.
 func TestAffected(t *testing.T) {
 	engine := traverseFixture(t)
 
-	got, err := engine.Affected([]string{"pkga/pkga.go"})
+	got, err := engine.Affected([]string{"pkga/target.go"})
 	if err != nil {
 		t.Fatalf("Affected: unexpected error: %v", err)
 	}
 
-	if len(got.Files) != 1 || got.Files[0] != "pkga/pkga.go" {
-		t.Fatalf("Files: got %+v, want [pkga/pkga.go]", got.Files)
+	if len(got.Files) != 1 || got.Files[0] != "pkga/target.go" {
+		t.Fatalf("Files: got %+v, want [pkga/target.go]", got.Files)
 	}
 
 	var found bool
 	for _, loc := range got.AffectedTests {
-		if loc.Name == "TestWidgetRename" {
+		if loc.Name == "TestTarget" {
 			found = true
-			if loc.FilePath != "pkga/pkga_test.go" {
-				t.Fatalf("TestWidgetRename.FilePath: got %q, want pkga/pkga_test.go", loc.FilePath)
+			if loc.FilePath != "pkga/target_test.go" {
+				t.Fatalf("TestTarget.FilePath: got %q, want pkga/target_test.go", loc.FilePath)
 			}
 		}
-		// Non-test callers (e.g. Run, which calls Widget.Describe — also
-		// defined via pkga.go's Widget methods) must never leak into the
-		// heuristic-filtered result.
-		if loc.Name == "Run" {
+		// Non-test callers must never leak into the heuristic-filtered
+		// result — only names matching the _test.go/Test*/Benchmark*
+		// heuristic belong in AffectedTests.
+		if loc.Name == "Run" || loc.Name == "Alpha" {
 			t.Fatalf("AffectedTests unexpectedly includes non-test caller %q", loc.Name)
 		}
 	}
 	if !found {
-		t.Fatalf("AffectedTests: got %+v, want TestWidgetRename present", got.AffectedTests)
+		t.Fatalf("AffectedTests: got %+v, want TestTarget present", got.AffectedTests)
 	}
 }
