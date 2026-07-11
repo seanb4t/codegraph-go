@@ -114,7 +114,7 @@ func (e *Engine) Files(opts FilesOptions) (FilesResult, error) {
 	}
 	defer it.Close()
 
-	var entries []FileEntry
+	entries := []FileEntry{}
 	for it.Next() {
 		f := it.File()
 		p := filepath.ToSlash(f.Path)

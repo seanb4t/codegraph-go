@@ -1,6 +1,7 @@
 package query
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -385,4 +386,79 @@ func TestAffected(t *testing.T) {
 	if !found {
 		t.Fatalf("AffectedTests: got %+v, want TestTarget present", got.AffectedTests)
 	}
+}
+
+// assertJSONArrayNotNull fails t if data's top-level object key marshaled
+// as JSON null — WR-01: a zero-match array field must marshal as [], not
+// null, so a JSON consumer that assumes an array field is always an array
+// (result.callers.map(...), etc.) never crashes on the zero-match case.
+func assertJSONArrayNotNull(t *testing.T, data []byte, key string) {
+	t.Helper()
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("unmarshal JSON: %v\n%s", err, data)
+	}
+	raw, ok := m[key]
+	if !ok {
+		t.Fatalf("missing top-level key %q in %s", key, data)
+	}
+	if string(raw) == "null" {
+		t.Fatalf("key %q marshaled as null, want []: %s", key, data)
+	}
+}
+
+// TestZeroMatchJSONShapesAreEmptyArraysNotNull pins WR-01: Callees,
+// Callers, and Affected all build their array field via `var x []T` and
+// only ever append — on a genuine zero-match result the slice stays nil
+// and previously marshaled as JSON null instead of [].
+func TestZeroMatchJSONShapesAreEmptyArraysNotNull(t *testing.T) {
+	engine := traverseFixture(t)
+
+	t.Run("Callees zero-match", func(t *testing.T) {
+		// Target (fixture-seeded, traverse_test.go) calls nothing itself.
+		got, err := engine.Callees("Target", 0)
+		if err != nil {
+			t.Fatalf("Callees: unexpected error: %v", err)
+		}
+		if len(got.Callees) != 0 {
+			t.Fatalf("Callees(Target): got %+v, want zero callees (fixture invariant)", got.Callees)
+		}
+		data, err := MarshalCalleesJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalCalleesJSON: unexpected error: %v", err)
+		}
+		assertJSONArrayNotNull(t, data, "callees")
+	})
+
+	t.Run("Callers zero-match", func(t *testing.T) {
+		// TestTarget (fixture-seeded) is called by nothing in the fixture.
+		got, err := engine.Callers("TestTarget", 0)
+		if err != nil {
+			t.Fatalf("Callers: unexpected error: %v", err)
+		}
+		if len(got.Callers) != 0 {
+			t.Fatalf("Callers(TestTarget): got %+v, want zero callers (fixture invariant)", got.Callers)
+		}
+		data, err := MarshalCallersJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalCallersJSON: unexpected error: %v", err)
+		}
+		assertJSONArrayNotNull(t, data, "callers")
+	})
+
+	t.Run("Affected zero-match", func(t *testing.T) {
+		got, err := engine.Affected([]string{"nonexistent-file-with-no-callers.go"})
+		if err != nil {
+			t.Fatalf("Affected: unexpected error: %v", err)
+		}
+		if len(got.AffectedTests) != 0 {
+			t.Fatalf("Affected(nonexistent file): got %+v, want zero affected tests", got.AffectedTests)
+		}
+		data, err := MarshalAffectedJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalAffectedJSON: unexpected error: %v", err)
+		}
+		assertJSONArrayNotNull(t, data, "affectedTests")
+	})
 }

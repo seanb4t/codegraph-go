@@ -266,6 +266,36 @@ func TestFiles(t *testing.T) {
 			t.Fatal("Files with format=bogus: expected error, got nil")
 		}
 	})
+
+	// WR-01: a zero-match flat-format result's "files" array field must
+	// never marshal as JSON null (FilesResult.Files carries `omitempty`,
+	// by design, for the flat-vs-tree mutually-exclusive shape — so a
+	// zero-match result omits the key entirely rather than emitting
+	// null; either way a JSON consumer must never observe a literal
+	// null there).
+	t.Run("zero-match files JSON never marshals \"files\" as null", func(t *testing.T) {
+		engine, _ := filesStatusFixture(t)
+
+		got, err := engine.Files(FilesOptions{Filter: "nonexistent-language"})
+		if err != nil {
+			t.Fatalf("Files with unknown filter: unexpected error: %v", err)
+		}
+		if len(got.Files) != 0 {
+			t.Fatalf("Files with filter=nonexistent-language: got %d entries, want 0", len(got.Files))
+		}
+
+		data, err := MarshalFilesJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalFilesJSON: unexpected error: %v", err)
+		}
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("unmarshal files JSON: %v\n%s", err, data)
+		}
+		if raw, present := m["files"]; present && string(raw) == "null" {
+			t.Fatalf(`Files JSON "files" key marshaled as null, want omitted or a valid []: %s`, data)
+		}
+	})
 }
 
 func TestStatus(t *testing.T) {

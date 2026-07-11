@@ -140,7 +140,7 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 	}
 	defer it.Close()
 
-	var locs []Location
+	locs := []Location{}
 	for it.Next() {
 		edge := it.Edge()
 		if edge.Kind != goextract.RefKindCalls {
@@ -183,7 +183,7 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 		return CallersResult{}, err
 	}
 
-	var locs []Location
+	locs := []Location{}
 	for _, edge := range rev[node.Id] {
 		src, err := e.reader.GetNode(edge.Source)
 		if err != nil {
@@ -303,7 +303,7 @@ func (e *Engine) Affected(files []string) (AffectedResult, error) {
 	}
 
 	visited := make(map[string]bool)
-	var tests []Location
+	tests := []Location{}
 	for _, id := range seedIDs {
 		for _, edge := range rev[id] {
 			if visited[edge.Source] {
