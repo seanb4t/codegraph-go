@@ -46,9 +46,9 @@ func newStatusCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "backend=%s files=%d nodes=%d edges=%d state=%s reindexRecommended=%t\n",
+			fmt.Fprintf(out, "backend=%s files=%d nodes=%d edges=%d state=%s reindexRecommended=%t stale=%t\n",
 				result.Backend, result.FileCount, result.NodeCount, result.EdgeCount,
-				result.Index.State, result.Index.ReindexRecommended)
+				result.Index.State, result.Index.ReindexRecommended, result.Stale)
 			return nil
 		},
 	}

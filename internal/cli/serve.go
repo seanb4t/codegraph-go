@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
@@ -50,6 +52,21 @@ func newServeCmd() *cobra.Command {
 				repoPath = dir
 			} else if !errors.Is(err, query.ErrNotInitialized) {
 				return err
+			}
+
+			// D-06/SYNC-03: on (re)connect, reconcile any offline changes
+			// (made while the watcher/daemon was down) via the same
+			// indexer.Sync entry `codegraph sync` and the daemon use —
+			// before the first tool is served, so the first
+			// codegraph_explore reads a current graph. A no-op when
+			// nothing changed (the stat pre-filter makes this cheap by
+			// construction). MCP-03's absent-index case is unaffected:
+			// hasIndex false skips reconcile entirely.
+			if hasIndex {
+				storeDir := filepath.Join(repoPath, codegraphDirName, storeDirName)
+				if _, err := indexer.Sync(repoPath, storeDir, indexer.Options{Quiet: true}); err != nil {
+					return err
+				}
 			}
 
 			allowlist, unknown := mcp.ParseAllowlist(os.Getenv(codegraphMCPToolsEnv))
