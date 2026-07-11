@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/daemon"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -30,6 +32,7 @@ const codegraphMCPToolsEnv = "CODEGRAPH_MCP_TOOLS"
 func newServeCmd() *cobra.Command {
 	var path string
 	var mcpMode bool
+	var watchMode bool
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -69,6 +72,37 @@ func newServeCmd() *cobra.Command {
 				}
 			}
 
+			// D-05/SYNC-04 in-process watcher fallback: where a separate
+			// `codegraph daemon` process is undesired, --watch runs the same
+			// watch/debounce/Sync loop in-process, under the SAME lockfile
+			// internal/daemon uses. That shared lock makes an in-process
+			// watcher and a standalone daemon mutually exclusive (T-04-08-01)
+			// — if a live daemon already holds it, Run returns ErrLockLive
+			// and serve simply defers to that daemon rather than failing.
+			if watchMode && hasIndex {
+				watchCtx, cancelWatch := context.WithCancel(context.Background())
+				d, err := daemon.New(repoPath)
+				if err != nil {
+					cancelWatch()
+					return err
+				}
+				watchDone := make(chan struct{})
+				go func() {
+					defer close(watchDone)
+					if runErr := d.Run(watchCtx); runErr != nil {
+						if errors.Is(runErr, daemon.ErrLockLive) {
+							fmt.Fprintln(cmd.ErrOrStderr(), "codegraph serve: --watch: a daemon is already running, deferring to it")
+						} else {
+							fmt.Fprintf(cmd.ErrOrStderr(), "codegraph serve: --watch: %v\n", runErr)
+						}
+					}
+				}()
+				defer func() {
+					cancelWatch()
+					<-watchDone
+				}()
+			}
+
 			allowlist, unknown := mcp.ParseAllowlist(os.Getenv(codegraphMCPToolsEnv))
 			mcp.WarnUnknownToolsTo(cmd.ErrOrStderr(), unknown)
 
@@ -79,6 +113,7 @@ func newServeCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().BoolVar(&mcpMode, "mcp", false, "run the stdio MCP server")
+	cmd.Flags().BoolVar(&watchMode, "watch", false, "run an in-process watcher alongside the MCP server, under the same lockfile a standalone `codegraph daemon` uses (mutually exclusive with one)")
 
 	return cmd
 }
