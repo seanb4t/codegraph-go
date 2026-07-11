@@ -118,3 +118,11 @@ None - no external service configuration required.
 ---
 *Phase: 03-query-engine-mcp-server*
 *Completed: 2026-07-11*
+
+## Self-Check: PASSED
+
+- FOUND: internal/query/files.go
+- FOUND: internal/query/status.go
+- FOUND: internal/query/files_status_test.go
+- FOUND: commit d55eead (test(03-05): RED)
+- FOUND: commit 2c8866a (feat(03-05): GREEN)
