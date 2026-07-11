@@ -178,6 +178,77 @@ func TestIterateNodesEmptyStore(t *testing.T) {
 	}
 }
 
+// TestIterateEdgesEmptyPrefixScansEveryEdge proves IterateEdges("") scans
+// the whole e/ namespace — every edge regardless of source — rather than
+// only edges whose source happens to be the literal empty string. D-04
+// (Phase 3's reverse-adjacency builder, internal/query/traverse.go) does
+// exactly one IterateEdges("") scan per invocation and relies on this
+// contract; edgeSrcPrefix("") alone would otherwise bound the scan to
+// just the (never-written) empty-src slice of the keyspace, since
+// appendSegment length-prefixes "" as a real, addressable zero-length
+// segment rather than "no segment restriction".
+func TestIterateEdgesEmptyPrefixScansEveryEdge(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer store.Close()
+
+	w, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("NewWriter: %v", err)
+	}
+	want := map[string]bool{
+		"a->b": true,
+		"b->c": true,
+		"c->a": true,
+	}
+	if err := w.PutEdge(&schema.Edge{Source: "a", Target: "b", Kind: "calls"}); err != nil {
+		t.Fatalf("PutEdge: %v", err)
+	}
+	if err := w.PutEdge(&schema.Edge{Source: "b", Target: "c", Kind: "calls"}); err != nil {
+		t.Fatalf("PutEdge: %v", err)
+	}
+	if err := w.PutEdge(&schema.Edge{Source: "c", Target: "a", Kind: "calls"}); err != nil {
+		t.Fatalf("PutEdge: %v", err)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	defer snap.Close()
+
+	it, err := snap.IterateEdges("")
+	if err != nil {
+		t.Fatalf("IterateEdges(\"\"): %v", err)
+	}
+	defer it.Close()
+
+	got := make(map[string]bool)
+	count := 0
+	for it.Next() {
+		e := it.Edge()
+		got[e.Source+"->"+e.Target] = true
+		count++
+	}
+	if err := it.Err(); err != nil {
+		t.Fatalf("Err after iteration: %v", err)
+	}
+
+	if count != len(want) {
+		t.Fatalf("IterateEdges(\"\"): visited %d edges, want %d", count, len(want))
+	}
+	for k := range want {
+		if !got[k] {
+			t.Fatalf("IterateEdges(\"\"): missing edge %q in results", k)
+		}
+	}
+}
+
 // TestIterateFilesEmptyStore proves an empty store yields zero iterations
 // and a nil Err() for IterateFiles.
 func TestIterateFilesEmptyStore(t *testing.T) {

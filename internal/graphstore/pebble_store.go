@@ -137,7 +137,20 @@ func (r *pebbleReader) GetMeta() (*schema.Meta, error) {
 }
 
 func (r *pebbleReader) IterateEdges(srcPrefix string) (EdgeIterator, error) {
-	lower := edgeSrcPrefix(srcPrefix)
+	// srcPrefix == "" means "every edge" (D-04 — the reverse-adjacency
+	// builder's single full-namespace scan), not "edges whose source is
+	// the empty string". edgeSrcPrefix("") length-prefixes an empty src
+	// segment, which — being a real, addressable (if never-written)
+	// segment value in the appendSegment encoding — would otherwise
+	// bound the scan to just that empty-src slice of the keyspace
+	// instead of the whole e/ namespace. Mirror IterateNodes/
+	// IterateFiles' whole-namespace-prefix pattern for this case.
+	var lower []byte
+	if srcPrefix == "" {
+		lower = []byte{prefixEdge}
+	} else {
+		lower = edgeSrcPrefix(srcPrefix)
+	}
 	upper := rangeUpperBound(lower)
 	iter, err := r.snap.NewIter(&pebble.IterOptions{LowerBound: lower, UpperBound: upper})
 	if err != nil {
