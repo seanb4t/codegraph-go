@@ -4,17 +4,17 @@ milestone: v1.3
 milestone_name: milestone
 current_phase: 3
 current_phase_name: Query Engine & MCP Server
-status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-07-11T15:08:50.890Z"
+status: verifying
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-07-11T15:39:11.663Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 3 execution started
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 22
-  completed_plans: 21
-  percent: 25
+  completed_plans: 22
+  percent: 38
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 
 Phase: 3 (Query Engine & MCP Server) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-11 — Phase 3 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P06 | 18min | 2 tasks | 6 files |
 | Phase 03-query-engine-mcp-server P07 | 15min | 2 tasks | 5 files |
 | Phase 03-query-engine-mcp-server P08 | 25min | 3 tasks | 13 files |
+| Phase 03-query-engine-mcp-server P09 | 28min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,9 @@ Recent decisions affecting current work:
 - [Phase 03]: search's CLI --json marshals []query.Location directly via encoding/json.Marshal (no dedicated MarshalSearchJSON exists) — matches internal/mcp's companionHandler search branch
 - [Phase 03]: files' non-JSON default output renders --format tree as indented plain text via printFileTree; flat format is one line per file — no golden oracle constrains this shape (D-07a)
 - [Phase 03]: affected requires at least one positional file argument (cobra.MinimumNArgs(1)) — an empty changed-file set has no useful query-time-derivation output
+- [Phase 03-query-engine-mcp-server]: Golden parity test uses set-based subset comparison for callers/callees/impact-affected (never exact equality), generalizing D-05's edge-dedup tolerance to also cover the discovered callees-scope divergence (TS includes non-call references, RefKindCalls-only scoping excludes them)
+- [Phase 03-query-engine-mcp-server]: Explore parity subtest normalizes the golden's literal two-word query term ("main function", 0 matches under D-06's no-FTS lexical matcher) to the single-token "mergeStyle"
+- [Phase 03-query-engine-mcp-server]: Impact parity subtest asserts a tolerant (<=) NodeCount/EdgeCount relationship, not exact equality — closes RESEARCH Open Question 1's semantics question while documenting a real internal/indexer extraction gap (method call as call-argument not resolved to a calls edge) as a finding, not silently normalized away
 
 ### Pending Todos
 
@@ -155,6 +159,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-11T15:08:50.884Z
-Stopped at: Completed 03-08-PLAN.md
+Last session: 2026-07-11T15:39:11.657Z
+Stopped at: Completed 03-09-PLAN.md
 Resume file: None
