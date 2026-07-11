@@ -31,12 +31,13 @@ var ErrLockLive = errors.New("daemon: lock is held by a live process")
 
 // lockInfo is the lockfile's JSON payload: pid + start timestamp
 // (RESEARCH Pattern 6). StartedAt corroborates pid liveness to reduce the
-// residual PID-reuse false-negative risk in containers (T-04-07-02, A3) —
-// documented, not eliminated: v1's isStale does not read the OS's own
-// process-start-time (e.g. /proc/<pid>/stat on Linux) to cross-check a
-// live pid against StartedAt; it records this daemon's own wall-clock
-// start so a future corroboration pass has the data available without a
-// lockfile-format change.
+// residual PID-reuse false-negative risk in containers (T-04-07-02, A3,
+// WR-02): isStale cross-checks a live pid's OS-reported actual start time
+// (processStartTime — /proc/<pid>/stat on Linux; unavailable elsewhere)
+// against StartedAt, so a pid recycled by an unrelated process after the
+// original daemon crashed is caught even though Signal(0) alone reports it
+// as live. Falls back to liveness-only wherever the OS corroboration data
+// isn't available.
 type lockInfo struct {
 	PID       int       `json:"pid"`
 	StartedAt time.Time `json:"startedAt"`
@@ -64,9 +65,51 @@ func readLock(codegraphDir string) (info lockInfo, ok bool, err error) {
 	return info, true, nil
 }
 
-// isStale reports whether info's owning process is dead.
+// isStale reports whether info's owning process is dead — or, when OS
+// corroboration data is available, whether a live pid appears to have been
+// reused by an unrelated process since the lockfile was written (WR-02).
+// isProcessLive alone cannot distinguish "the original daemon is still
+// running" from "the original daemon crashed and its pid was recycled by
+// the OS for a different process" — both look identical to Signal(0). On
+// platforms where processStartTime can read the OS's own record of when
+// pid actually started (Linux today, via /proc), a mismatch against the
+// StartedAt this daemon itself recorded at acquire time is a strong
+// PID-reuse signal and is treated as stale despite passing the liveness
+// check. Corroboration is skipped (never a false-positive-stale) whenever
+// the data is unavailable — a different platform, missing /proc access, or
+// any parse failure — falling back to the liveness-only check documented
+// on lockInfo.
 func isStale(info lockInfo) bool {
-	return !isProcessLive(info.PID)
+	if !isProcessLive(info.PID) {
+		return true
+	}
+	if actualStart, ok := processStartTime(info.PID); ok {
+		if !startTimesCorroborate(info.StartedAt, actualStart) {
+			return true
+		}
+	}
+	return false
+}
+
+// procStartTimeSlack is the tolerance for comparing info.StartedAt (our own
+// time.Now().UTC() wall-clock reading at acquire time) against the OS's
+// derived process-start wall-clock time (itself computed from a
+// boot-relative monotonic tick count plus a whole-second boot time) —
+// generous enough to absorb second-level rounding and scheduling jitter
+// between the two independent clock sources without masking a genuine
+// PID-reuse (which, in practice, is separated from the original process's
+// start by at least the time it took the original process to crash and the
+// OS to recycle the pid — far larger than this slack).
+const procStartTimeSlack = 5 * time.Second
+
+// startTimesCorroborate reports whether recorded and actual plausibly refer
+// to the same process instance, within procStartTimeSlack.
+func startTimesCorroborate(recorded, actual time.Time) bool {
+	delta := recorded.Sub(actual)
+	if delta < 0 {
+		delta = -delta
+	}
+	return delta <= procStartTimeSlack
 }
 
 // isProcessLive checks pid liveness via os.FindProcess + Signal(0)
@@ -95,25 +138,92 @@ func isProcessLive(pid int) bool {
 // acquire fails with ErrLockLive without touching it (T-04-07-01 — never
 // stomp a live daemon). If a stale lock is found (a crashed daemon), it is
 // cleared first so a new daemon can start.
+//
+// CR-02: the initial attempt uses exclusive creation, not a read-then-
+// write, so two processes racing acquire() for the very first lockfile can
+// never both "win" — exactly one create succeeds; the other observes
+// EEXIST and falls through to the ordinary read-and-check-staleness path
+// below (which itself remains racy against a THIRD concurrent acquirer
+// within the narrow stale-remove-then-recreate window — closing that
+// window entirely would need a filesystem-level lock, out of scope for
+// this fix; this closes the specific "nothing exists yet" TOCTOU the
+// finding describes).
 func acquire(codegraphDir string) error {
-	info, ok, err := readLock(codegraphDir)
-	if err != nil {
-		return err
-	}
-	if ok {
-		if !isStale(info) {
-			return fmt.Errorf("%w: pid=%d — stop it first, or run `codegraph unlock` once it has exited", ErrLockLive, info.PID)
-		}
-		if err := os.Remove(lockPath(codegraphDir)); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-
 	data, err := json.Marshal(lockInfo{PID: os.Getpid(), StartedAt: time.Now().UTC()})
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(lockPath(codegraphDir), data, 0o644)
+
+	if err := createLockExclusive(codegraphDir, data); err == nil {
+		return nil
+	} else if !os.IsExist(err) {
+		return err
+	}
+
+	// A lockfile already existed at the moment of the O_EXCL attempt above
+	// — read it and apply the same staleness check acquire always has.
+	info, ok, err := readLock(codegraphDir)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		// Vanished between the O_EXCL failure and this read (another
+		// process's release() raced us) — nothing to remove; fall through
+		// to the retry create below.
+	} else if !isStale(info) {
+		return fmt.Errorf("%w: pid=%d — stop it first, or run `codegraph unlock` once it has exited", ErrLockLive, info.PID)
+	} else if err := os.Remove(lockPath(codegraphDir)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := createLockExclusive(codegraphDir, data); err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%w: another process acquired the lock during stale-lock recovery — try again", ErrLockLive)
+		}
+		return err
+	}
+	return nil
+}
+
+// createLockExclusive stages codegraphDir's lockfile so it can only ever be
+// observed either fully-written or not-yet-existing — never partially
+// written (CR-02).
+//
+// A plain os.OpenFile(..., O_EXCL) create-then-Write is NOT sufficient
+// here: O_EXCL makes the CREATE step exclusive (only one racing caller's
+// open succeeds), but the file exists — empty — for the whole interval
+// between that open and the subsequent Write completing. A concurrent
+// LOSING racer's readLock() can land in that interval and observe a
+// present-but-empty file, failing with a JSON decode error instead of the
+// EEXIST-driven staleness path acquire() expects (this was caught by
+// TestAcquireConcurrentRaceOnlyOneWinner flaking under -race). Instead,
+// this writes the complete payload to a uniquely-named temp file in the
+// same directory (so an os.Rename fallback would be same-filesystem, if
+// ever needed) and then os.Link()s it into place: Link is atomic with
+// respect to both existence (fails EEXIST if the destination already
+// exists — the same exclusivity O_EXCL gave us) and content (the linked
+// name always resolves to the temp file's already-fully-written inode; a
+// concurrent reader can never observe a partial write through it).
+func createLockExclusive(codegraphDir string, data []byte) error {
+	tmp, err := os.CreateTemp(codegraphDir, ".daemon.lock.tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath) // best-effort; a no-op once Link below moves past this point's need for it
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Link(tmpPath, lockPath(codegraphDir)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // release removes the daemon lockfile unconditionally. Only the process

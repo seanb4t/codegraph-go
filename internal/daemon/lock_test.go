@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 )
@@ -138,5 +139,83 @@ func TestIsStale(t *testing.T) {
 	dead := deadPID(t)
 	if !isStale(lockInfo{PID: dead, StartedAt: time.Now()}) {
 		t.Fatalf("isStale: reported dead pid %d as live", dead)
+	}
+}
+
+// TestAcquireConcurrentRaceOnlyOneWinner is the CR-02 regression: many
+// goroutines racing acquire() against the SAME (initially absent)
+// lockfile path must see exactly one success — the exclusive-create fix
+// (O_EXCL) makes this deterministic; the prior read-then-unconditional-
+// WriteFile implementation could let more than one "win" within the same
+// race window, each believing it was the sole daemon.
+func TestAcquireConcurrentRaceOnlyOneWinner(t *testing.T) {
+	dir := t.TempDir()
+
+	const racers = 32
+	var wg sync.WaitGroup
+	results := make(chan error, racers)
+	// A barrier so every goroutine's acquire() call starts as close to
+	// simultaneously as possible, maximizing the chance of exercising the
+	// TOCTOU window if the fix regresses.
+	start := make(chan struct{})
+
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			results <- acquire(dir)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	successes := 0
+	for err := range results {
+		if err == nil {
+			successes++
+			continue
+		}
+		if !errors.Is(err, ErrLockLive) {
+			t.Fatalf("acquire: unexpected error (want nil or ErrLockLive): %v", err)
+		}
+	}
+	if successes != 1 {
+		t.Fatalf("acquire: %d of %d concurrent racers succeeded, want exactly 1 — CR-02 regression (two daemons both believe they hold the lock)", successes, racers)
+	}
+
+	info, ok, err := readLock(dir)
+	if err != nil || !ok {
+		t.Fatalf("readLock after race: ok=%v err=%v, want a lockfile present", ok, err)
+	}
+	if info.PID != os.Getpid() {
+		t.Fatalf("readLock after race: pid=%d, want this process's pid %d", info.PID, os.Getpid())
+	}
+}
+
+// TestStartTimesCorroborate proves the WR-02 slack-window comparison: times
+// within procStartTimeSlack of each other (in either direction) corroborate,
+// times further apart do not.
+func TestStartTimesCorroborate(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name             string
+		recorded, actual time.Time
+		want             bool
+	}{
+		{"identical", base, base, true},
+		{"recorded slightly after actual, within slack", base.Add(2 * time.Second), base, true},
+		{"recorded slightly before actual, within slack", base.Add(-2 * time.Second), base, true},
+		{"recorded well after actual, beyond slack", base.Add(time.Hour), base, false},
+		{"recorded well before actual, beyond slack (PID reuse)", base.Add(-time.Hour), base, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := startTimesCorroborate(tc.recorded, tc.actual); got != tc.want {
+				t.Errorf("startTimesCorroborate(%v, %v) = %v, want %v", tc.recorded, tc.actual, got, tc.want)
+			}
+		})
 	}
 }
