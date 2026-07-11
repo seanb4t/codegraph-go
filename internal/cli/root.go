@@ -3,7 +3,9 @@
 // directly to the internal/indexer pipeline (D-01). Commands contain no
 // extraction/resolution logic of their own — they resolve paths, manage
 // the .codegraph/ directory layout (D-01b), and delegate all indexing work
-// to indexer.Run.
+// to indexer.Run. sync/daemon/unlock (D-01/D-05) extend the surface with
+// incremental update, the shared watch/index server, and stale-lock
+// clearing, delegating to indexer.Sync and internal/daemon respectively.
 package cli
 
 import (
@@ -22,8 +24,11 @@ var ErrAlreadyInitialized = errors.New("cli: already initialized")
 var ErrNotInitialized = errors.New("cli: not initialized")
 
 // newRootCmd builds the "codegraph" root command and attaches the
-// init/index/uninit subcommands (D-01). Usage/error text is printed by the
-// caller (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
+// init/index/uninit subcommands (D-01), plus sync/daemon/unlock (D-01/D-05)
+// — the incremental-update surface: sync updates the graph in one shot,
+// daemon runs the shared watch/index server, and unlock clears a stale
+// daemon lock. Usage/error text is printed by the caller
+// (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
 // SilenceErrors are set on every command in the tree.
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -38,7 +43,7 @@ func newRootCmd() *cobra.Command {
 	root.AddCommand(newInitCmd(), newIndexCmd(), newUninitCmd(),
 		newQueryCmd(), newSearchCmd(), newCallersCmd(), newCalleesCmd(),
 		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd(),
-		newNodeCmd(), newExploreCmd(), newServeCmd())
+		newNodeCmd(), newExploreCmd(), newServeCmd(), newSyncCmd())
 	return root
 }
 
