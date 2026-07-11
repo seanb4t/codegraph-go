@@ -100,7 +100,37 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. An agent connects to `codegraph serve --mcp` and sees `codegraph_explore` as the only default tool; the 7 additional tools appear only when listed in `CODEGRAPH_MCP_TOOLS`; the server exposes zero tools when no `.codegraph/` exists
   4. MCP tool output shapes match TS CodeGraph v1.3.x, verified against the golden-output corpus captured in Phase 1
 
-**Plans**: TBD
+**Plans**: 9 plans
+
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Additive Reader node/file enumeration (D-03) (Wave 1, QRY-01/03/07/09)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — Query engine foundation: resolve/OpenAt/validation clamps + test harness (Wave 2, QRY-01)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-03-PLAN.md — Deterministic lexical search: query + search (Wave 3, QRY-01/03)
+- [ ] 03-04-PLAN.md — Traversal: callers/callees/impact/affected over reverse adjacency (Wave 3, QRY-04/05/06)
+- [ ] 03-05-PLAN.md — files browse + status --json with D-05 remapping (Wave 3, QRY-07/09)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 03-06-PLAN.md — node + explore markdown templates (D-05a/b) (Wave 4, QRY-02/08)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 03-07-PLAN.md — Stdio MCP server + tool gating + mcp-go dep (Wave 5, MCP-01/02/03)
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 03-08-PLAN.md — CLI wiring: 11 commands + serve + live-MCP checkpoint (Wave 6, QRY-01..09/MCP-01)
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 03-09-PLAN.md — Golden parity harness vs weft corpus (Wave 7, MCP-04)
 
 ### Phase 4: Incremental Sync & File Watcher
 
@@ -185,7 +215,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Foundation — Storage, Schema & Parser Strategy | 7/7 | Complete    | 2026-07-10 |
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
-| 3. Query Engine & MCP Server | 0/TBD | Not started | - |
+| 3. Query Engine & MCP Server | 0/9 | Not started | - |
 | 4. Incremental Sync & File Watcher | 0/TBD | Not started | - |
 | 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
