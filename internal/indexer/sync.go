@@ -212,12 +212,26 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	// Dependent detection (D-02a): a file with an edge targeting a
 	// now-gone node id must be re-extracted so its Unresolved refs
 	// regenerate against the current graph state (RESEARCH Pitfall 2).
-	changedSet := make(map[string]struct{}, len(added)+len(modified))
+	//
+	// WR-05: changedSet also includes `deleted` (not just added/modified)
+	// — a now-deleted file that used to call a pruned symbol would
+	// otherwise be added to dependentPaths too, running through
+	// pruneOwnedEdgesOnly redundantly (a harmless no-op against records
+	// pruneFileSubgraph's DeleteFileSubgraph already range-deleted for
+	// that same path above) before being silently dropped from
+	// batchFiles anyway (it is absent from `discovered`, since it no
+	// longer exists on disk) — unnecessary churn on every sync that
+	// deletes a file with outgoing edges, not a correctness bug (the
+	// redundant work is idempotent).
+	changedSet := make(map[string]struct{}, len(added)+len(modified)+len(deleted))
 	for _, f := range added {
 		changedSet[f.RelPath] = struct{}{}
 	}
 	for _, f := range modified {
 		changedSet[f.RelPath] = struct{}{}
+	}
+	for _, p := range deleted {
+		changedSet[p] = struct{}{}
 	}
 
 	dependentPaths := make(map[string]struct{})

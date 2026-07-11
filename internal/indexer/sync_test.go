@@ -422,3 +422,53 @@ func TestSyncRefreshesStaleMtimeOnHashEqualSkip(t *testing.T) {
 		t.Errorf("Stats.FilesReparsed on the follow-up sync = %d, want 0", stats2.FilesReparsed)
 	}
 }
+
+// TestSyncDeletedDependentNotDoubleCounted is the WR-05 regression:
+// deleting a file that is ITSELF a dependent of another pruned symbol
+// (i.e. it both goes through the direct pruneFileSubgraph path AND would
+// otherwise be discovered via the reverse-adjacency dependent scan) must
+// not also be recomputed as a "dependent" — dependentPaths must exclude
+// paths already present in `deleted`.
+func TestSyncDeletedDependentNotDoubleCounted(t *testing.T) {
+	repoRoot := writeFixture(t, map[string]string{
+		"pkg/a.go": "package pkg\n\nfunc Foo() int { return 1 }\n",
+		"pkg/b.go": "package pkg\n\nfunc UseFoo() int { return Foo() }\n",
+	})
+	storeDir := t.TempDir()
+
+	if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Sync (seed): %v", err)
+	}
+
+	// Delete BOTH a.go (Foo's own file) AND b.go (a caller of Foo) in the
+	// same cycle: b.go is directly deleted, but its edge into the now-gone
+	// Foo would ALSO make it match the reverse-adjacency dependent scan —
+	// exactly the WR-05 double-classification.
+	if err := os.Remove(filepath.Join(repoRoot, "pkg", "a.go")); err != nil {
+		t.Fatalf("os.Remove(a.go): %v", err)
+	}
+	if err := os.Remove(filepath.Join(repoRoot, "pkg", "b.go")); err != nil {
+		t.Fatalf("os.Remove(b.go): %v", err)
+	}
+
+	stats, err := Sync(repoRoot, storeDir, Options{})
+	if err != nil {
+		t.Fatalf("Sync (delete both): %v", err)
+	}
+	if stats.DependentsRecomputed != 0 {
+		t.Errorf("Stats.DependentsRecomputed = %d, want 0 (pkg/b.go was itself deleted, not merely a dependent) — WR-05 regression", stats.DependentsRecomputed)
+	}
+	if stats.FilesPruned != 2 {
+		t.Errorf("Stats.FilesPruned = %d, want 2 (both a.go and b.go directly deleted)", stats.FilesPruned)
+	}
+
+	r, closeAll := openSnapshot(t, storeDir)
+	defer closeAll()
+	if _, err := r.GetFile("pkg/a.go"); err == nil {
+		t.Error("expected pkg/a.go File record pruned after deletion")
+	}
+	if _, err := r.GetFile("pkg/b.go"); err == nil {
+		t.Error("expected pkg/b.go File record pruned after deletion")
+	}
+	assertNoOrphansOrDangling(t, r)
+}
