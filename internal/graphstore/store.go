@@ -53,6 +53,18 @@ type Reader interface {
 	// range scan (D-03), suitable for callers/callees/impact queries.
 	IterateEdges(srcPrefix string) (EdgeIterator, error)
 
+	// IterateNodes returns a NodeIterator over every node record in the
+	// store — a single contiguous range scan over the whole n/ namespace
+	// (D-03). Phase 3 v1 kind-filtering, if any, is applied in-memory by
+	// the caller/query engine: the stored n/ key length-prefixes the
+	// whole id (keys.go's appendSegment), so a byte-prefix scan cannot
+	// cleanly isolate one kind (RESEARCH Pitfall 1).
+	IterateNodes() (NodeIterator, error)
+
+	// IterateFiles returns a FileIterator over every file record under
+	// the f/ namespace — a single contiguous range scan (D-03).
+	IterateFiles() (FileIterator, error)
+
 	// Close releases the Reader's underlying snapshot.
 	Close() error
 }
@@ -68,6 +80,44 @@ type EdgeIterator interface {
 	// Edge returns the record at the iterator's current position. Only
 	// valid after a call to Next that returned true.
 	Edge() *schema.Edge
+
+	// Err returns the first error encountered during iteration, if any.
+	Err() error
+
+	// Close releases the iterator's resources.
+	Close() error
+}
+
+// NodeIterator walks a contiguous range of Node records. Callers must call
+// Next before the first call to Node, and check Err after Next returns
+// false to distinguish end-of-range from an error.
+type NodeIterator interface {
+	// Next advances the iterator and reports whether a record is
+	// available.
+	Next() bool
+
+	// Node returns the record at the iterator's current position. Only
+	// valid after a call to Next that returned true.
+	Node() *schema.Node
+
+	// Err returns the first error encountered during iteration, if any.
+	Err() error
+
+	// Close releases the iterator's resources.
+	Close() error
+}
+
+// FileIterator walks a contiguous range of File records. Callers must call
+// Next before the first call to File, and check Err after Next returns
+// false to distinguish end-of-range from an error.
+type FileIterator interface {
+	// Next advances the iterator and reports whether a record is
+	// available.
+	Next() bool
+
+	// File returns the record at the iterator's current position. Only
+	// valid after a call to Next that returned true.
+	File() *schema.File
 
 	// Err returns the first error encountered during iteration, if any.
 	Err() error
