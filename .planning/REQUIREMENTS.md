@@ -66,7 +66,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [x] **LANG-03**: C# — full extraction + resolution
 - [x] **LANG-04**: Python — full extraction + resolution
 - [x] **LANG-05**: TypeScript/JavaScript — full extraction + resolution
-- [ ] **LANG-06**: Mainstream tier — Rust, Ruby, PHP, C/C++, Swift, Kotlin at full or documented-partial support
+- [x] **LANG-06**: Mainstream tier — Rust, Ruby, PHP, C/C++, Swift, Kotlin at full or documented-partial support
 - [ ] **LANG-07**: Framework-aware routing for priority-language frameworks (Gin, Spring, ASP.NET, Django/Flask/FastAPI, Express/NestJS) emitting `route` nodes linked to handlers
 
 ### Migration
@@ -165,7 +165,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | LANG-03 | Phase 5 | Complete |
 | LANG-04 | Phase 5 | Complete |
 | LANG-05 | Phase 5 | Complete |
-| LANG-06 | Phase 5 | Pending |
+| LANG-06 | Phase 5 | Complete |
 | LANG-07 | Phase 5 | Pending |
 | MIGR-01 | Phase 7 | Pending |
 | MIGR-02 | Phase 7 | Pending |

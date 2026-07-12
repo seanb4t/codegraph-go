@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-07-PLAN.md
-last_updated: "2026-07-12T12:19:30.494Z"
+stopped_at: Completed 05-08-PLAN.md
+last_updated: "2026-07-12T13:42:32.606Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 38
+  completed_plans: 39
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 8 of 13
+Plan: 9 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
@@ -94,6 +94,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P05 | 40min | 2 tasks | 7 files |
 | Phase 05 P06 | 40min | 2 tasks | 11 files |
 | Phase 05 P07 | 30min | 2 tasks | 8 files |
+| Phase 05 P08 | 25min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -187,6 +188,8 @@ Recent decisions affecting current work:
 - [Phase 05]: TS/JS ModuleKey is unconditionally NormalizeModuleKey(relPath) regardless of descriptor presence — Diverges from every sibling's nil-descriptor-fallback convention; required for relative-specifier resolution correctness even without a tsconfig.json/package.json
 - [Phase 05]: tsconfig.json paths/baseUrl reach tsextract.Extract via a package-level Config/SetConfig singleton, not a shared-signature change — Extract's cross-language signature (established 05-01) carries no descriptor parameter; generalizing it is outside this plan's file scope
 - [Phase 05]: TS/JS: a namedImportOrigin table resolves bare identifier calls/heritage refs to named/default imports — ES named imports bind directly into local scope, unlike every priority-4 sibling's pkg.Symbol() qualifier shape
+- [Phase 05]: Swift pinned at alex-pinkus/tree-sitter-swift@v0.0.0-20260601004120-31d17fe7e818 (with-generated-files lineage); originally-approved commit lacked generated parser.c and failed to build
+- [Phase 05]: Kotlin pinned at tree-sitter-grammars/tree-sitter-kotlin@v1.1.0 (proper semver, community org, root module); replaces originally-approved fwcd source which failed to build
 
 ### Pending Todos
 
@@ -210,6 +213,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T12:19:14.564Z
-Stopped at: Completed 05-07-PLAN.md
+Last session: 2026-07-12T13:42:32.601Z
+Stopped at: Completed 05-08-PLAN.md
 Resume file: None
