@@ -220,6 +220,108 @@ func TestImpactSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
 	}
 }
 
+// dispatchFixtureNodesEdges builds a small in-memory graph proving RES-02's
+// query-time dispatch traversal: structs A and B both implement interface
+// I and both declare a method named "Handle" — A's node id sorts lower
+// than B's ("method:a-handle" < "method:b-handle"), so
+// resolveSymbolNode("Handle") deterministically picks A.Handle, which has
+// NO direct caller of its own. Only B.Handle is actually called (by
+// Caller). The dispatch-traversal composition must still surface Caller
+// as a "Handle" caller/impact result, since a call dispatched dynamically
+// through interface I could have reached either implementer.
+func dispatchFixtureNodesEdges() (map[string]*schema.Node, []*schema.Edge) {
+	nodes := map[string]*schema.Node{
+		"iface:I":         {Id: "iface:I", Kind: "interface", Name: "I", QualifiedName: "I"},
+		"struct:A":        {Id: "struct:A", Kind: "struct", Name: "A", QualifiedName: "A"},
+		"struct:B":        {Id: "struct:B", Kind: "struct", Name: "B", QualifiedName: "B"},
+		"method:a-handle": {Id: "method:a-handle", Kind: "method", Name: "Handle", QualifiedName: "A.Handle"},
+		"method:b-handle": {Id: "method:b-handle", Kind: "method", Name: "Handle", QualifiedName: "B.Handle"},
+		"func:caller":     {Id: "func:caller", Kind: "function", Name: "Caller", QualifiedName: "Caller"},
+	}
+	edges := []*schema.Edge{
+		{Source: "struct:A", Target: "iface:I", Kind: goextract.EdgeKindImplements, Provenance: "heuristic"},
+		{Source: "struct:B", Target: "iface:I", Kind: goextract.EdgeKindImplements, Provenance: "heuristic"},
+		{Source: "struct:A", Target: "method:a-handle", Kind: "contains", Provenance: "ast"},
+		{Source: "struct:B", Target: "method:b-handle", Kind: "contains", Provenance: "ast"},
+		{Source: "func:caller", Target: "method:b-handle", Kind: goextract.RefKindCalls, Provenance: "ast"},
+	}
+	return nodes, edges
+}
+
+// TestCallers_DispatchTraversal proves RES-02: Callers("Handle") resolves
+// to A.Handle (lower node id) but must ALSO surface Caller — the caller of
+// SIBLING implementer B's same-named Handle method — via the "implements"
+// edge composition, even though no edge points at A.Handle directly.
+func TestCallers_DispatchTraversal(t *testing.T) {
+	nodes, edges := dispatchFixtureNodesEdges()
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callers("Handle", 0)
+	if err != nil {
+		t.Fatalf("Callers: unexpected error: %v", err)
+	}
+
+	var found bool
+	for _, loc := range got.Callers {
+		if loc.Name == "Caller" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Callers(Handle) = %+v, want Caller present (dispatch traversal through interface I)", got.Callers)
+	}
+}
+
+// TestCallers_DispatchTraversal_NoImplementsEdgesUnaffected proves the
+// dispatch composition is a strict no-op when the graph has no
+// "implements" edges at all (the pre-Phase-5 common case) — regression
+// guard alongside TestCallersCallees's own real-fixture assertions.
+func TestCallers_DispatchTraversal_NoImplementsEdgesUnaffected(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"target": {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target"},
+		"live":   {Id: "live", Kind: "function", Name: "Live", QualifiedName: "Live"},
+	}
+	edges := []*schema.Edge{
+		{Source: "live", Target: "target", Kind: goextract.RefKindCalls},
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callers("Target", 0)
+	if err != nil {
+		t.Fatalf("Callers: unexpected error: %v", err)
+	}
+	if len(got.Callers) != 1 || got.Callers[0].Name != "Live" {
+		t.Fatalf("Callers: got %+v, want exactly [Live] (no implements edges, no composition)", got.Callers)
+	}
+}
+
+// TestImpact_DispatchTraversal proves RES-02: Impact("Handle") at depth 1
+// includes Caller in Affected/NodeCount — dispatch traversal composed into
+// the BFS frontier expansion, not just Callers' single-hop case.
+func TestImpact_DispatchTraversal(t *testing.T) {
+	nodes, edges := dispatchFixtureNodesEdges()
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Impact("Handle", 1)
+	if err != nil {
+		t.Fatalf("Impact: unexpected error: %v", err)
+	}
+
+	var found bool
+	for _, loc := range got.Affected {
+		if loc.Name == "Caller" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Impact(Handle, depth=1).Affected = %+v, want Caller present (dispatch traversal through interface I)", got.Affected)
+	}
+	// self (A.Handle) + Caller = 2 distinct visited nodes.
+	if got.NodeCount != 2 {
+		t.Errorf("NodeCount = %d, want 2 (A.Handle self + Caller via dispatch)", got.NodeCount)
+	}
+}
+
 // traverseFixtureTargetFile and traverseFixtureTargetTestFile are seeded
 // into the *copied* gofixture's pkga package before indexing (the
 // checked-in testdata tree has no _test.go file, and this plan's Wave-3
