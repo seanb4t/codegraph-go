@@ -93,6 +93,13 @@ func atomicSwap(targetPath string, newBinary []byte) error {
 // path, and the aside copy is removed. On failure to rename the new file
 // into place, it attempts to restore the original from the aside path
 // rather than leaving the install with no binary at targetPath at all.
+//
+// WR-04: the restore attempt's own error is checked. If restoring also
+// fails, targetPath would otherwise end up pointing at nothing — the
+// user's codegraph binary gone, with no way to fix it by re-running the
+// now-missing tool. In that case the error message points at asidePath
+// (still holding the original binary) as the manual recovery path, rather
+// than silently discarding the restore failure.
 func swapWindows(targetPath, tmpPath string, cleanupTemp *bool) error {
 	asidePath := targetPath + ".old"
 	os.Remove(asidePath) // best-effort: a stale .old from an interrupted prior upgrade
@@ -101,7 +108,10 @@ func swapWindows(targetPath, tmpPath string, cleanupTemp *bool) error {
 		return fmt.Errorf("upgrade: rename running binary aside: %w", err)
 	}
 	if err := os.Rename(tmpPath, targetPath); err != nil {
-		_ = os.Rename(asidePath, targetPath) // best-effort restore, don't brick the install
+		if restoreErr := os.Rename(asidePath, targetPath); restoreErr != nil {
+			return fmt.Errorf("upgrade: install failed (%v) AND restoring the original binary failed (%v); "+
+				"your original binary is preserved at %s — rename it back to %s manually", err, restoreErr, asidePath, targetPath)
+		}
 		return fmt.Errorf("upgrade: rename new binary into place: %w", err)
 	}
 	os.Remove(asidePath)
