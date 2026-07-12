@@ -158,4 +158,75 @@ func TestCGoParsesPriority4Sources(t *testing.T) {
 	}
 }
 
+// TestCGoParsesMainstreamSources proves each of the seven mainstream-tier
+// grammar constructors (D-11, LANG-06) routes through newCGoParser and its
+// Parse seam, parsing a trivial valid source snippet without error. Swift
+// and Kotlin are the two [SUS] community-maintained grammars gated behind
+// the T-05-SC human-verify checkpoint before pinning.
+func TestCGoParsesMainstreamSources(t *testing.T) {
+	cases := []struct {
+		name  string
+		newFn func() (*CGoParser, error)
+		src   []byte
+	}{
+		{
+			name:  "Rust",
+			newFn: NewRustParser,
+			src:   []byte("fn main() {}\n"),
+		},
+		{
+			name:  "Ruby",
+			newFn: NewRubyParser,
+			src:   []byte("def f\n  1\nend\n"),
+		},
+		{
+			name:  "PHP",
+			newFn: NewPHPParser,
+			src:   []byte("<?php\nfunction f() { return 1; }\n"),
+		},
+		{
+			name:  "C",
+			newFn: NewCParser,
+			src:   []byte("int main() { return 0; }\n"),
+		},
+		{
+			name:  "Cpp",
+			newFn: NewCppParser,
+			src:   []byte("int main() { return 0; }\n"),
+		},
+		{
+			name:  "Swift",
+			newFn: NewSwiftParser,
+			src:   []byte("func f() -> Int { return 1 }\n"),
+		},
+		{
+			name:  "Kotlin",
+			newFn: NewKotlinParser,
+			src:   []byte("fun f(): Int { return 1 }\n"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := tc.newFn()
+			if err != nil {
+				t.Fatalf("%s: constructor: %v", tc.name, err)
+			}
+			if p == nil {
+				t.Fatalf("%s: expected a non-nil *CGoParser", tc.name)
+			}
+			defer p.Close()
+
+			tree, err := p.Parse(tc.src, nil)
+			if err != nil {
+				t.Fatalf("%s: Parse: %v", tc.name, err)
+			}
+			if tree == nil {
+				t.Fatalf("%s: expected a non-nil tree for valid source", tc.name)
+			}
+			defer tree.Close()
+		})
+	}
+}
+
 var _ parser.Parser = (*CGoParser)(nil)

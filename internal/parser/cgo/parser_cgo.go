@@ -11,6 +11,9 @@ import (
 	"unsafe"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+
+	tree_sitter_swift "github.com/alex-pinkus/tree-sitter-swift/bindings/go"
+	tree_sitter_kotlin "github.com/tree-sitter-grammars/tree-sitter-kotlin/bindings/go"
 	tree_sitter_c_sharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
 	tree_sitter_c "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	tree_sitter_cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
@@ -116,6 +119,24 @@ func NewCParser() (*CGoParser, error) {
 // (mainstream-tier, LANG-06). Carries an external C scanner.
 func NewCppParser() (*CGoParser, error) {
 	return newCGoParser(tree_sitter_cpp.Language())
+}
+
+// NewSwiftParser returns a CGoParser configured for the Swift grammar
+// (mainstream-tier, LANG-06). This is a [SUS] community-maintained grammar
+// (T-05-SC) pinned by exact commit pseudo-version after human-verify
+// approval — never @latest. Carries an external C scanner.
+func NewSwiftParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_swift.Language())
+}
+
+// NewKotlinParser returns a CGoParser configured for the Kotlin grammar
+// (mainstream-tier, LANG-06). This is a [SUS] community-maintained grammar
+// (T-05-SC), pinned at the tree-sitter-grammars/tree-sitter-kotlin v1.1.0
+// proper semver tag (root module, not a bindings/go subpath) after
+// human-verify approval — replaces the originally-approved fwcd source,
+// which does not build. Carries an external C scanner.
+func NewKotlinParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_kotlin.Language())
 }
 
 func newCGoParser(languagePtr unsafe.Pointer) (*CGoParser, error) {

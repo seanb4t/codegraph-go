@@ -3,11 +3,13 @@ module github.com/seanb4t/codegraph-go
 go 1.26.5
 
 require (
+	github.com/alex-pinkus/tree-sitter-swift v0.0.0-20260601004120-31d17fe7e818
 	github.com/cockroachdb/pebble/v2 v2.1.6
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/spf13/cobra v1.10.2
+	github.com/tree-sitter-grammars/tree-sitter-kotlin v1.1.0
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-c v0.24.2
 	github.com/tree-sitter/tree-sitter-c-sharp v0.23.5
