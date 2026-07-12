@@ -372,7 +372,16 @@ func (ex *extractor) collectBaseClasses(classID string, classNode *tree_sitter.N
 		arg := superWrap.NamedChild(i)
 		switch arg.Kind() {
 		case "identifier":
-			ex.emitBaseClassRef(classID, arg, arg.Utf8Text(ex.src), "")
+			// A plain base-class identifier may itself be an imported
+			// simple name (`from pkg.base import Base` then
+			// `class Derived(Base):`) — pass it as its own pkgAlias
+			// candidate; emitBaseClassRef checks Imports membership and
+			// falls through to an unqualified same-module reference when
+			// it is not a genuine import (a same-module base class needs
+			// no import in Python, mirroring javaextract's
+			// emitSupertypeRef).
+			name := arg.Utf8Text(ex.src)
+			ex.emitBaseClassRef(classID, arg, name, name)
 		case "attribute":
 			field := arg.ChildByFieldName("attribute")
 			object := arg.ChildByFieldName("object")
