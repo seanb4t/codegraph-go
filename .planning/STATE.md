@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-07-12T11:29:15.978Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-07-12T11:53:53.907Z"
 last_activity: 2026-07-12
-last_activity_desc: Completed 05-01 (multi-language seam foundation)
+last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 36
+  completed_plans: 37
   percent: 50
 ---
 
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 6 of 13
+Plan: 7 of 13
 Status: Ready to execute
-Last activity: 2026-07-12 — Completed 05-01 (multi-language seam foundation)
+Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
 Progress: [███████░░░] 73%
 
@@ -92,6 +92,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P03 | 35min | 2 tasks | 5 files |
 | Phase 05 P04 | 25min | 2 tasks | 8 files |
 | Phase 05 P05 | 40min | 2 tasks | 7 files |
+| Phase 05 P06 | 40min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -180,6 +181,8 @@ Recent decisions affecting current work:
 - [Phase 05]: TestGoldenParity_Java implements RESEARCH's source-as-specification + self-consistency D-12 fallback (no live TS CodeGraph CLI available to capture a byte-comparable golden fixture)
 - [Phase 05]: csharpextract implements Pitfall 5 partial-class scheme (b) with a deterministic sentinel FilePath/StartLine instead of resolve.go-coordinated first-fragment tie-break, staying within this plan's file scope — Cross-file first-fragment coordination would require resolve.go changes outside this plan's file scope; the sentinel achieves the same core goal (one shared node, no data loss, deterministic)
 - [Phase 05]: C# cross-namespace call/embeds resolution bounded to fully-qualified references + same-namespace PascalCase heuristic — Bare using-shortened cross-namespace resolution would require a global symbol table or resolve-time multi-candidate retry, both out of this plan's file scope; documented as an accepted gap
+- [Phase ?]: [Phase 5-06]: Python needs no parse-time ModuleKey override — discovery-time dotted-module-path computation is already fully authoritative (first priority-4 language with directory-structure-derived, not in-source-declared, identity)
+- [Phase ?]: [Phase 5-06]: A plain unaliased 'import foo.bar' populates no Imports entry (Python binds only the top-level name); aliased-plain-import and from-import both populate Imports; relative imports are genuinely resolved via the file's own enclosing dotted package
 
 ### Pending Todos
 
@@ -203,6 +206,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T11:29:10.276Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-07-12T11:53:53.900Z
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None
