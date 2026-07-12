@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-07-12T14:12:30.587Z"
+stopped_at: Completed 05-10-PLAN.md
+last_updated: "2026-07-12T14:38:47.542Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 40
+  completed_plans: 41
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 10 of 13
+Plan: 11 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
@@ -96,6 +96,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P07 | 30min | 2 tasks | 8 files |
 | Phase 05 P08 | 25min | 1 tasks | 4 files |
 | Phase 05 P09 | 55min | 3 tasks | 9 files |
+| Phase 05 P10 | 50min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -194,6 +195,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Declared-implements promotion (Pattern 2) applies uniformly across languages, not gated by r.Language — a Go struct embedding an interface value genuinely satisfies that interface too
 - [Phase 05]: Go structural implements edges anchor Line at the implementing struct's own declaration; an empty interface is never a synthesis target
 - [Phase 05]: query.BuildImplementsIndex is a separate index from BuildReverseAdjacency (name-joined dispatch traversal, not a widened calls-only filter)
+- [Phase 05]: Rust use never populates Imports (crate name unknown at Extract time) -- documented cross-file gap, same-file/same-module resolution only
+- [Phase 05]: Ruby require/require_relative recognized via call-shape detection (no dedicated import node); a bare no-parens method call is grammatically ambiguous with a local variable and is not extracted as a call
+- [Phase 05]: PHP reuses csharpextract's parse-time namespace-override pattern; composer.json PSR-4 autoload map is the fallback moduleKey for namespace-less files
 
 ### Pending Todos
 
@@ -217,6 +221,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T14:10:03.883Z
-Stopped at: Completed 05-08-PLAN.md
+Last session: 2026-07-12T14:38:47.536Z
+Stopped at: Completed 05-10-PLAN.md
 Resume file: None
