@@ -52,6 +52,59 @@ func TestLanguageRegistry(t *testing.T) {
 	}
 }
 
+// TestLanguageRegistry_Java proves the registry resolves Java by both ID
+// and extension, hands back a working parser + extractor, and that Java's
+// ModuleKey degrades to path-based identity absent a resolvable descriptor
+// (D-03) — mirroring TestLanguageRegistry's shape for Go (LANG-02).
+func TestLanguageRegistry_Java(t *testing.T) {
+	spec, ok := lookupLanguageByID("java")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"java\") to return ok=true")
+	}
+
+	foundExt := false
+	for _, ext := range spec.Extensions {
+		if ext == ".java" {
+			foundExt = true
+			break
+		}
+	}
+	if !foundExt {
+		t.Fatalf("expected java spec Extensions to contain \".java\", got %v", spec.Extensions)
+	}
+
+	byExt, ok := lookupLanguageByExt(".java")
+	if !ok {
+		t.Fatal("expected lookupLanguageByExt(\".java\") to return ok=true")
+	}
+	if byExt.ID != "java" {
+		t.Fatalf("expected .java to resolve to the java spec, got ID=%q", byExt.ID)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "sub/Widget.java"), "sub/Widget.java"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
+
 // TestKindRouteAdditive proves the Phase 5 KindRoute constant was added
 // additively — every pre-existing Kind* constant must remain unchanged.
 func TestKindRouteAdditive(t *testing.T) {
