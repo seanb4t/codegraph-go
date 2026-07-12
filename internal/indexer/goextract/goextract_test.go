@@ -282,6 +282,83 @@ type ReadWriter interface {
 	}
 }
 
+// TestExtract_InterfaceMethodSpecs proves an interface's own method_elem
+// signatures land in FileResult.InterfaceMethods, keyed by the interface's
+// node id, WITHOUT flattening an embedded interface's specs in (Phase 5
+// RES-02/Pattern 3) — ReadWriter's own entry has only Write, not Read.
+func TestExtract_InterfaceMethodSpecs(t *testing.T) {
+	src := `package p
+
+type Reader interface {
+	Read(b []byte) (int, error)
+}
+
+type ReadWriter interface {
+	Reader
+	Write(b []byte) (int, error)
+}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	reader := findNode(result, KindInterface, "Reader")
+	if reader == nil {
+		t.Fatalf("expected an interface node named Reader, nodes: %+v", result.Nodes)
+	}
+	readSpecs := result.InterfaceMethods[reader.Node.Id]
+	if len(readSpecs) != 1 || readSpecs[0].Name != "Read" || readSpecs[0].Arity != 1 {
+		t.Fatalf("Reader's InterfaceMethods = %+v, want [{Read 1}]", readSpecs)
+	}
+
+	readWriter := findNode(result, KindInterface, "ReadWriter")
+	if readWriter == nil {
+		t.Fatalf("expected an interface node named ReadWriter, nodes: %+v", result.Nodes)
+	}
+	rwSpecs := result.InterfaceMethods[readWriter.Node.Id]
+	if len(rwSpecs) != 1 || rwSpecs[0].Name != "Write" || rwSpecs[0].Arity != 1 {
+		t.Fatalf("ReadWriter's own InterfaceMethods = %+v, want [{Write 1}] (embedded Reader's spec must NOT be flattened in here)", rwSpecs)
+	}
+}
+
+// TestExtract_MethodArity proves FileResult.MethodArity records each
+// method's true declared parameter count — including a grouped
+// multi-identifier parameter ("a, b int" is 2 parameters, not 1 node) and
+// a zero-parameter method (Phase 5 RES-02/Pattern 3).
+func TestExtract_MethodArity(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func (w Widget) Combine(a, b int) int { return a + b }
+
+func (w Widget) Noop() {}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	combine := findNode(result, KindMethod, "Combine")
+	if combine == nil {
+		t.Fatalf("expected a method node named Combine, nodes: %+v", result.Nodes)
+	}
+	if got := result.MethodArity[combine.Node.Id]; got != 2 {
+		t.Errorf("MethodArity[Combine] = %d, want 2 (grouped \"a, b int\" is 2 parameters)", got)
+	}
+
+	noop := findNode(result, KindMethod, "Noop")
+	if noop == nil {
+		t.Fatalf("expected a method node named Noop, nodes: %+v", result.Nodes)
+	}
+	if got := result.MethodArity[noop.Node.Id]; got != 0 {
+		t.Errorf("MethodArity[Noop] = %d, want 0", got)
+	}
+}
+
 // TestExtract_Calls proves a cross-package qualified call and an
 // intra-package unqualified call both yield an unresolved "calls" ref
 // carrying name, kind, and call-site line/col (RES-01).

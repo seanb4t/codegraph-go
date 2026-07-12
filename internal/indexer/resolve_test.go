@@ -115,6 +115,164 @@ func TestResolve_InterfaceEmbeds(t *testing.T) {
 	}
 }
 
+// findEdgeFull returns the first edge matching (source, kind, target)
+// exactly, or nil — like findEdge, but returns the edge itself so a test
+// can assert on Provenance/Metadata/Line (RES-03).
+func findEdgeFull(edges []*schema.Edge, source, kind, target string) *schema.Edge {
+	for _, e := range edges {
+		if e.Source == source && e.Kind == kind && e.Target == target {
+			return e
+		}
+	}
+	return nil
+}
+
+// TestResolve_GoStructuralImplements proves RES-02 Pattern 3: a struct
+// whose method set structurally satisfies an interface's method-spec set
+// is synthesized as an "implements" edge, carrying heuristic provenance +
+// a synthesizedBy tag + a non-zero Line anchored at the struct's own
+// declaration (RES-03) — distinct from every ground-truth "ast" edge.
+func TestResolve_GoStructuralImplements(t *testing.T) {
+	src := `package p
+
+type Reader interface {
+	Read() int
+}
+
+type File struct{}
+
+func (f File) Read() int { return 0 }
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	fileStructID := nodeid.NodeID(goextract.KindStruct, "File", "p.go")
+	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "p.go")
+
+	e := findEdgeFull(edges, fileStructID, "implements", readerID)
+	if e == nil {
+		t.Fatalf("expected implements edge %s -> %s (File implements Reader), got %+v", fileStructID, readerID, edges)
+	}
+	if e.Provenance != "heuristic" {
+		t.Errorf("Provenance = %q, want %q (RES-03)", e.Provenance, "heuristic")
+	}
+	if e.Metadata["synthesizedBy"] != "go-structural-methodset" {
+		t.Errorf("Metadata[synthesizedBy] = %q, want %q", e.Metadata["synthesizedBy"], "go-structural-methodset")
+	}
+	if e.Line == 0 {
+		t.Errorf("Line = 0, want a non-zero anchor at File's own declaration (RES-03)")
+	}
+}
+
+// TestResolve_GoStructuralImplements_NonSuperset proves a struct whose
+// method set does NOT satisfy an interface's method spec produces no
+// implements edge.
+func TestResolve_GoStructuralImplements_NonSuperset(t *testing.T) {
+	src := `package p
+
+type Reader interface {
+	Read() int
+}
+
+type Empty struct{}
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	emptyID := nodeid.NodeID(goextract.KindStruct, "Empty", "p.go")
+	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "p.go")
+
+	if e := findEdgeFull(edges, emptyID, "implements", readerID); e != nil {
+		t.Fatalf("expected no implements edge for Empty (no Read method), got %+v", e)
+	}
+}
+
+// TestResolve_DeclaredImplementsPromotion proves Pattern 2: an
+// UnresolvedRef.Kind==RefKindEmbeds ref whose resolved target is an
+// interface node (and whose source is not itself an interface) promotes
+// to an "implements" edge carrying heuristic provenance + a
+// synthesizedBy tag — the shape Java's extends/implements and C#'s
+// base_list both emit at extraction time (undistinguished, per 05-04/
+// 05-05's javaextract/csharpextract). A class-extends-class reference
+// (target is NOT an interface) stays a plain "embeds" edge, unchanged.
+func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
+	interfaceID := nodeid.NodeID(goextract.KindInterface, "Iface", "iface.go")
+	baseID := nodeid.NodeID(goextract.KindStruct, "Base", "base.go")
+	implID := nodeid.NodeID(goextract.KindStruct, "Impl", "impl.go")
+	derivedID := nodeid.NodeID(goextract.KindStruct, "Derived", "derived.go")
+
+	results := []goextract.FileResult{
+		{
+			ImportPath: "example.com/p", RelPath: "iface.go", Language: "csharp",
+			Nodes: []goextract.ExtractedNode{{Node: &schema.Node{
+				Id: interfaceID, Kind: goextract.KindInterface, Name: "Iface", QualifiedName: "Iface", FilePath: "iface.go",
+			}}},
+		},
+		{
+			ImportPath: "example.com/p", RelPath: "base.go", Language: "csharp",
+			Nodes: []goextract.ExtractedNode{{Node: &schema.Node{
+				Id: baseID, Kind: goextract.KindStruct, Name: "Base", QualifiedName: "Base", FilePath: "base.go",
+			}}},
+		},
+		{
+			ImportPath: "example.com/p", RelPath: "impl.go", Language: "csharp",
+			Nodes: []goextract.ExtractedNode{{Node: &schema.Node{
+				Id: implID, Kind: goextract.KindStruct, Name: "Impl", QualifiedName: "Impl", FilePath: "impl.go",
+			}}},
+			Unresolved: []goextract.UnresolvedRef{
+				{FromID: implID, Name: "Iface", Kind: goextract.RefKindEmbeds, Line: 5, Col: 10},
+			},
+		},
+		{
+			ImportPath: "example.com/p", RelPath: "derived.go", Language: "csharp",
+			Nodes: []goextract.ExtractedNode{{Node: &schema.Node{
+				Id: derivedID, Kind: goextract.KindStruct, Name: "Derived", QualifiedName: "Derived", FilePath: "derived.go",
+			}}},
+			Unresolved: []goextract.UnresolvedRef{
+				{FromID: derivedID, Name: "Base", Kind: goextract.RefKindEmbeds, Line: 7, Col: 3},
+			},
+		},
+	}
+
+	_, _, edges, _, _ := resolveRefs(results, "example.com/p")
+
+	implEdge := findEdgeFull(edges, implID, "implements", interfaceID)
+	if implEdge == nil {
+		t.Fatalf("expected implements edge %s -> %s (Impl -> Iface, promoted), got %+v", implID, interfaceID, edges)
+	}
+	if implEdge.Provenance != "heuristic" {
+		t.Errorf("Provenance = %q, want %q (RES-03)", implEdge.Provenance, "heuristic")
+	}
+	if implEdge.Metadata["synthesizedBy"] != "declared-implements" {
+		t.Errorf("Metadata[synthesizedBy] = %q, want %q", implEdge.Metadata["synthesizedBy"], "declared-implements")
+	}
+	if implEdge.Line != 5 {
+		t.Errorf("Line = %d, want 5 (ref.Line — the extends/implements clause's own source location)", implEdge.Line)
+	}
+
+	if e := findEdgeFull(edges, implID, "embeds", interfaceID); e != nil {
+		t.Fatalf("expected NO plain embeds edge once promoted to implements, got %+v", e)
+	}
+
+	derivedEdge := findEdgeFull(edges, derivedID, "embeds", baseID)
+	if derivedEdge == nil {
+		t.Fatalf("expected embeds edge %s -> %s (Derived -> Base, class extends class, NOT promoted), got %+v", derivedID, baseID, edges)
+	}
+	if derivedEdge.Provenance != "ast" {
+		t.Errorf("Derived->Base Provenance = %q, want %q (ground truth, not promoted)", derivedEdge.Provenance, "ast")
+	}
+}
+
 // TestResolve_IntraModuleImport proves an intra-module import produces a
 // synthetic package pseudo-node and a file -> package "imports" edge
 // (RQ-1 recommendation (a)).
