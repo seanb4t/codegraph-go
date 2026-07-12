@@ -1,6 +1,8 @@
 package indexer
 
 import (
+	"sort"
+
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/parser"
 )
@@ -89,4 +91,20 @@ func lookupLanguageByExt(ext string) (LanguageSpec, bool) {
 		return LanguageSpec{}, false
 	}
 	return lookupLanguageByID(id)
+}
+
+// RegisteredLanguageIDs returns every language ID currently registered in
+// the LanguageSpec registry (D-01), sorted ascending. This is the D-11
+// capability matrix's source of truth for "which languages must the
+// human-/machine-readable coverage matrix cover" —
+// internal/indexer/capability/matrix_test.go consumes this to assert the
+// matrix descriptor covers exactly the registered languages, no missing,
+// no extra.
+func RegisteredLanguageIDs() []string {
+	ids := make([]string, 0, len(registry))
+	for id := range registry {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
