@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
 stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-07-12T01:35:59.568Z"
+last_updated: "2026-07-12T10:37:36.776Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-01 (multi-language seam foundation)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 33
+  completed_plans: 34
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 3 of 13
+Plan: 4 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-01 (multi-language seam foundation)
 
@@ -89,6 +89,7 @@ Progress: [███████░░░] 73%
 | Phase 04-incremental-sync-file-watcher P09 | 5min | 2 tasks | 5 files |
 | Phase 05 P01 | 15min | 2 tasks | 8 files |
 | Phase 05 P02 | 20min | 2 tasks | 5 files |
+| Phase 05 P03 | 35min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 5-01]: Four new grammar go.mod requires manually promoted from indirect to direct — no go mod tidy, per established project convention
 - [Phase 05]: Discover's missing-go.mod behavior relaxed to Go's own nil-descriptor path fallback instead of a hard error, per D-03's never-drop-a-supported-extension guarantee
 - [Phase 05]: extract.go's multi-language worker-pool fix proven via a go-dup registry entry (real Go parser/extractor under a second ID) rather than waiting on a real second-language extractor
+- [Phase 05]: WR-01 tie-break mirrors query.Engine.resolveSymbolNode's lowest-Id-wins convention; single addSymbol() chokepoint used by both overlay() and newSymbolIndexFromStore()
+- [Phase 05]: WR-02 fix lives in goextract.go's recordCall (synthetic non-matching PkgAlias for non-identifier operands), not resolve.go
+- [Phase 05]: Call-as-argument extraction gap (D-05 third item, 252e2sav94) investigated and found already-fixed by existing walkDescendants; no code change made, only regression tests added
 
 ### Pending Todos
 
@@ -191,6 +195,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T01:35:36.000Z
+Last session: 2026-07-12T10:36:57.243Z
 Stopped at: Completed 05-01-PLAN.md
 Resume file: None
