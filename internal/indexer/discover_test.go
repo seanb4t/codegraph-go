@@ -17,37 +17,25 @@ import (
 const fixtureRoot = "testdata/gofixture"
 const mixedLangFixtureRoot = "testdata/mixedlangfixture"
 
-// init registers two test-only LanguageSpecs — "java" (Descriptor always
-// errors, simulating a manifest that can't be resolved) and "python"
-// (Descriptor is nil entirely, simulating a language with no descriptor
-// hook at all) — solely to prove Discover's extension->language-registry
-// generalization (D-03) mechanically, without depending on a real
-// Java/Python extractor landing in a later Wave-B plan. NewParser/Extract
-// are never invoked by any test in this file (Discover never parses file
-// content), so they are inert stubs.
+// init registers one test-only LanguageSpec — "python" (Descriptor is nil
+// entirely, simulating a language with no descriptor hook at all) — solely
+// to prove Discover's extension->language-registry generalization (D-03)
+// mechanically, without depending on a real Python extractor landing in a
+// later Wave-B plan. NewParser/Extract are never invoked by any test in
+// this file (Discover never parses file content), so they are inert stubs.
+//
+// A matching "java" test-only spec previously lived here (05-02) to prove
+// the erroring-Descriptor fallback shape; it was removed once a REAL "java"
+// LanguageSpec landed (languages_java.go, 05-04) — registerLanguage keys
+// its registry/extToLang maps by a single string ID, so a second "java"
+// registration here would silently collide with (and, depending on Go's
+// package-file init order, potentially override) the real one. The
+// erroring-Descriptor fallback shape this used to prove is now exercised
+// against the real java spec directly, in
+// TestDiscover_MixedLanguage_DescriptorAbsentFallback below (the
+// mixedlangfixture root has no pom.xml/build.gradle, so
+// javaextract's own Descriptor genuinely errors the same way).
 func init() {
-	registerLanguage(LanguageSpec{
-		ID:         "java",
-		Extensions: []string{".java"},
-		NewParser: func() (parser.Parser, error) {
-			return nil, fmt.Errorf("discover_test: java parser not implemented")
-		},
-		Extract: func(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.FileResult, error) {
-			return goextract.FileResult{}, fmt.Errorf("discover_test: java extractor not implemented")
-		},
-		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
-			if descriptor != nil {
-				return descriptor.ModulePath() + "/" + path.Dir(relPath)
-			}
-			// D-03 path-identity fallback: no descriptor resolved for this
-			// language, so the file's own slash-normalized parent
-			// directory stands in for its module/namespace identity.
-			return path.Dir(relPath)
-		},
-		Descriptor: func(root string) (ProjectDescriptor, error) {
-			return nil, fmt.Errorf("discover_test: no java manifest resolution implemented")
-		},
-	})
 	registerLanguage(LanguageSpec{
 		ID:         "python",
 		Extensions: []string{".py"},
@@ -236,10 +224,11 @@ func TestDiscover_MixedLanguage_ExtensionRegistry(t *testing.T) {
 }
 
 // TestDiscover_MixedLanguage_DescriptorAbsentFallback asserts a file whose
-// language has no resolvable project descriptor (here: "java", whose test
-// Descriptor always errors, and "python", whose Descriptor hook is nil
-// entirely) is still returned with a path-based ModuleKey — never dropped
-// (D-03's central guarantee).
+// language has no resolvable project descriptor (here: "java" — the real
+// javaextract LanguageSpec's own Descriptor genuinely errors against
+// mixedlangfixture, which has no pom.xml/build.gradle — and "python", whose
+// Descriptor hook is nil entirely) is still returned with a path-based
+// ModuleKey — never dropped (D-03's central guarantee).
 func TestDiscover_MixedLanguage_DescriptorAbsentFallback(t *testing.T) {
 	files, _, err := Discover(mixedLangFixtureRoot)
 	if err != nil {
@@ -255,8 +244,8 @@ func TestDiscover_MixedLanguage_DescriptorAbsentFallback(t *testing.T) {
 	if !ok {
 		t.Fatal("sub/Greeter.java was dropped, want present with path-based fallback identity")
 	}
-	if want := "sub"; javaFile.ImportPath != want {
-		t.Errorf("java ImportPath = %q, want %q (path-based fallback: erroring Descriptor)", javaFile.ImportPath, want)
+	if want := "sub/Greeter.java"; javaFile.ImportPath != want {
+		t.Errorf("java ImportPath = %q, want %q (path-based fallback: real javaextract Descriptor errors on no pom.xml/build.gradle)", javaFile.ImportPath, want)
 	}
 
 	pyFile, ok := byRelPath["app.py"]
