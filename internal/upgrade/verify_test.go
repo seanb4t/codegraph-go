@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -107,6 +108,31 @@ func TestVerifyRelease_RejectsWrongIdentity(t *testing.T) {
 	err := verifyRelease(b, tr, fixtureDigestAlgorithm, digest, "^https://github.com/some-other-org/some-other-repo/")
 	if err == nil {
 		t.Fatal("verifyRelease: expected a non-nil error for a wrong certificate identity, got nil")
+	}
+}
+
+// TestReleaseWorkflowRefPattern_RejectsNonReleaseWorkflowInSameRepo is the
+// WR-08 regression test: the pre-fix pattern was an unanchored PREFIX
+// match, so a SAN merely starting with this repo's GitHub URL would pass
+// — including a signature produced by an unrelated, weaker-trust-boundary
+// workflow (e.g. a pull_request-triggered CI workflow) in the same repo,
+// not just the intended tag-triggered release workflow.
+func TestReleaseWorkflowRefPattern_RejectsNonReleaseWorkflowInSameRepo(t *testing.T) {
+	re := regexp.MustCompile(releaseWorkflowRefPattern)
+	unrelated := "https://github.com/" + releaseRepoSlug + "/.github/workflows/ci.yml@refs/heads/main"
+	if re.MatchString(unrelated) {
+		t.Fatalf("releaseWorkflowRefPattern must reject a non-release workflow in the same repo, matched: %q", unrelated)
+	}
+}
+
+// TestReleaseWorkflowRefPattern_AcceptsReleaseWorkflowTagRef proves the
+// anchored pattern still accepts the identity it's meant to authorize: the
+// release workflow itself, triggered by a version-tag push.
+func TestReleaseWorkflowRefPattern_AcceptsReleaseWorkflowTagRef(t *testing.T) {
+	re := regexp.MustCompile(releaseWorkflowRefPattern)
+	valid := "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yml@refs/tags/v1.2.3"
+	if !re.MatchString(valid) {
+		t.Fatalf("releaseWorkflowRefPattern must accept the release workflow's own tag-triggered ref, got no match for: %q", valid)
 	}
 }
 

@@ -1,12 +1,21 @@
 package upgrade
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/sigstore/sigstore-go/pkg/bundle"
 	"github.com/sigstore/sigstore-go/pkg/root"
+	"github.com/sigstore/sigstore-go/pkg/tuf"
 	"github.com/sigstore/sigstore-go/pkg/verify"
 )
+
+// fetchTrustedRootTimeout bounds fetchTrustedRoot's TUF network round trip
+// (WR-02): a hung or slow-lorising Sigstore TUF endpoint must never block
+// `codegraph upgrade` indefinitely with no way for the user to know it's
+// stuck versus still working.
+const fetchTrustedRootTimeout = 30 * time.Second
 
 // Named release-identity constants (D-12/D-14). releaseOIDCIssuer is
 // GitHub Actions' Sigstore-public-good OIDC issuer — stable, not a
@@ -18,10 +27,21 @@ import (
 // production upgrade traffic exercises them (Phase 6 tests exercise
 // verifyRelease directly against a fixture identity instead, see
 // verify_test.go).
+//
+// releaseWorkflowRefPattern is a FULL-MATCH pattern (WR-08): anchored at
+// both ^ and $, and scoped to the specific release-publishing workflow
+// file and a tag-triggered ref — not merely a "starts with this repo's
+// URL" prefix. An unanchored/prefix-only pattern would authorize a
+// signature produced by ANY workflow in this repo (including a much
+// weaker trust boundary, e.g. a pull_request-triggered CI workflow), not
+// just the intended release workflow. The workflow filename
+// (release.yml) matches goreleaser's own convention and is expected to
+// be finalized alongside DIST-02 (D-14) — update this pattern if the
+// actual shipped workflow file is ever renamed.
 const (
 	releaseOIDCIssuer         = "https://token.actions.githubusercontent.com"
 	releaseRepoSlug           = "seanb4t/codegraph-go"
-	releaseWorkflowRefPattern = "^https://github.com/" + releaseRepoSlug + "/"
+	releaseWorkflowRefPattern = `^https://github\.com/` + releaseRepoSlug + `/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^\s]*$`
 )
 
 // loadBundle parses a downloaded release's sigstore signature bundle from
@@ -41,8 +61,15 @@ func loadBundle(bundleJSON []byte) (*bundle.Bundle, error) {
 // an embedded fixture trust root instead, per Open Question 1), so `go
 // test` never touches the network for the security-critical reject-path
 // assertion.
+//
+// A fetchTrustedRootTimeout-bounded context is threaded through to the TUF
+// client via tuf.Options.WithContext (WR-02) so a hung Sigstore endpoint
+// can't block `codegraph upgrade` indefinitely.
 func fetchTrustedRoot() (root.TrustedMaterial, error) {
-	tr, err := root.FetchTrustedRoot()
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTrustedRootTimeout)
+	defer cancel()
+
+	tr, err := root.FetchTrustedRootWithOptions(tuf.DefaultOptions().WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("upgrade: fetch sigstore trusted root: %w", err)
 	}
