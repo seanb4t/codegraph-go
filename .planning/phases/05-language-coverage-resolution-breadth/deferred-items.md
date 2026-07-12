@@ -28,3 +28,25 @@ task's changes).
   TestSoak -count=1 -v` in isolation and it passed. Same pre-existing
   timing sensitivity already logged above from 05-06 — not fixed, out of
   this plan's file scope.
+
+## From 05-12 (framework-aware routing, LANG-07)
+
+- **`internal/indexer/resolve.go` has a pre-existing `gofmt -l` violation**
+  (`retryConformanceCalls`'s three `map[...]` var-decl comment alignment,
+  lines ~262-264) that predates this plan's edit to the same file — verified
+  via `git stash`/`gofmt -l` before this plan's own change was applied. This
+  plan's own edit (the `r.RelPath == ""` synthetic-result skip in the
+  file-record loop) is itself gofmt-clean; the pre-existing misalignment is
+  in an unrelated function this plan never touches. Out of scope per the
+  executor's scope-boundary rule — left unfixed for whichever plan next
+  touches `resolve.go`.
+- **`internal/daemon`'s `TestSoak` flaked again** on a full non-required
+  `go test ./... -count=1` sweep (a goroutine panic trace pointing at
+  `watch.(*Debouncer).fire`); the plan's own required verification (`go
+  test ./internal/indexer/routes/ ./internal/indexer/ -run ... -race
+  -count=1` for each task) passed cleanly, and `go test
+  ./internal/daemon/... -count=1` in isolation immediately after also
+  passed. Same pre-existing timing sensitivity already logged twice above
+  (05-06, 05-07) and called out explicitly in this plan's own
+  `critical_constraints` ("the pre-existing internal/daemon race flake is
+  unrelated (do NOT fix)") — not fixed, out of this plan's file scope.

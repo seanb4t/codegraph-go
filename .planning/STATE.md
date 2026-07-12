@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-11-PLAN.md
-last_updated: "2026-07-12T15:27:45.844Z"
+stopped_at: Completed 05-12-PLAN.md
+last_updated: "2026-07-12T16:18:31.674Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 42
+  completed_plans: 43
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 12 of 13
+Plan: 13 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
@@ -98,6 +98,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P09 | 55min | 3 tasks | 9 files |
 | Phase 05 P10 | 50min | 2 tasks | 14 files |
 | Phase 05-language-coverage-resolution-breadth P11 | 50min | 2 tasks | 14 files |
+| Phase 05 P12 | 3h | 3 tasks | 39 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,9 @@ Recent decisions affecting current work:
 - [Phase 05-language-coverage-resolution-breadth]: C and C++ share one cextract package across two LanguageSpec registrations; Extract determines language from relPath's own extension since the shared cross-language signature carries no language field
 - [Phase 05-language-coverage-resolution-breadth]: C++ out-of-line method definitions (Type::method() {}) are extracted as KindMethod via rustextract's own cross-file RefKindContains pattern, a deliberate scope extension since this is the dominant real-world C++ idiom
 - [Phase 05-language-coverage-resolution-breadth]: Swift and Kotlin grammars turned out to use one unified class_declaration node covering class/struct/enum/interface/etc, distinguished only by an anonymous keyword token -- adapted and documented per the plan's guidance for [SUS] grammar rough edges
+- [Phase 05]: Route detection re-parses eligible opt-in files via the language's own LanguageSpec.NewParser rather than threading the Pass-1 AST through goextract.FileResult
+- [Phase 05]: Route node QualifiedName includes the HTTP verb (filePath::route:VERB path) to avoid node-id collisions between different-verb routes on the same path
+- [Phase 05]: Fixed a proto.Marshal map-field-ordering determinism bug (deterministicMarshal in graphstore/batch.go+export.go), surfaced by route edges' first multi-key Metadata usage
 
 ### Pending Todos
 
@@ -225,6 +229,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T15:27:45.839Z
-Stopped at: Completed 05-11-PLAN.md
+Last session: 2026-07-12T16:18:31.668Z
+Stopped at: Completed 05-12-PLAN.md
 Resume file: None
