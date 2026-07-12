@@ -1,0 +1,10 @@
+<project>
+  <groupId>com.example</groupId>
+  <artifactId>springfixture</artifactId>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+  </dependencies>
+</project>
