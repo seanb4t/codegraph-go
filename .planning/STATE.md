@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-07-12T11:53:53.907Z"
+stopped_at: Completed 05-07-PLAN.md
+last_updated: "2026-07-12T12:19:30.494Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 37
+  completed_plans: 38
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 7 of 13
+Plan: 8 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
@@ -93,6 +93,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P04 | 25min | 2 tasks | 8 files |
 | Phase 05 P05 | 40min | 2 tasks | 7 files |
 | Phase 05 P06 | 40min | 2 tasks | 11 files |
+| Phase 05 P07 | 30min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -183,6 +184,9 @@ Recent decisions affecting current work:
 - [Phase 05]: C# cross-namespace call/embeds resolution bounded to fully-qualified references + same-namespace PascalCase heuristic — Bare using-shortened cross-namespace resolution would require a global symbol table or resolve-time multi-candidate retry, both out of this plan's file scope; documented as an accepted gap
 - [Phase ?]: [Phase 5-06]: Python needs no parse-time ModuleKey override — discovery-time dotted-module-path computation is already fully authoritative (first priority-4 language with directory-structure-derived, not in-source-declared, identity)
 - [Phase ?]: [Phase 5-06]: A plain unaliased 'import foo.bar' populates no Imports entry (Python binds only the top-level name); aliased-plain-import and from-import both populate Imports; relative imports are genuinely resolved via the file's own enclosing dotted package
+- [Phase 05]: TS/JS ModuleKey is unconditionally NormalizeModuleKey(relPath) regardless of descriptor presence — Diverges from every sibling's nil-descriptor-fallback convention; required for relative-specifier resolution correctness even without a tsconfig.json/package.json
+- [Phase 05]: tsconfig.json paths/baseUrl reach tsextract.Extract via a package-level Config/SetConfig singleton, not a shared-signature change — Extract's cross-language signature (established 05-01) carries no descriptor parameter; generalizing it is outside this plan's file scope
+- [Phase 05]: TS/JS: a namedImportOrigin table resolves bare identifier calls/heritage refs to named/default imports — ES named imports bind directly into local scope, unlike every priority-4 sibling's pkg.Symbol() qualifier shape
 
 ### Pending Todos
 
@@ -206,6 +210,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T11:53:53.900Z
-Stopped at: Completed 05-06-PLAN.md
+Last session: 2026-07-12T12:19:14.564Z
+Stopped at: Completed 05-07-PLAN.md
 Resume file: None
