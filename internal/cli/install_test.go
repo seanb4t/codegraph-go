@@ -244,3 +244,180 @@ func TestInstall_InvalidLocation_Errors(t *testing.T) {
 		t.Fatal("expected an error for an invalid --location value")
 	}
 }
+
+// TestUninstall_ReportsRemovedAndNotConfigured asserts uninstall reports
+// "removed" for an agent install actually configured and
+// "not-configured" for one that was never touched (D-08).
+func TestUninstall_ReportsRemovedAndNotConfigured(t *testing.T) {
+	fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude: %v", err)
+	}
+
+	out, _, err := execCmd("uninstall", "--target", "claude,cursor", "--location", "global")
+	if err != nil {
+		t.Fatalf("uninstall --target claude,cursor: %v", err)
+	}
+	if !strings.Contains(out, "Claude Code: removed") {
+		t.Fatalf("expected 'Claude Code: removed', got:\n%s", out)
+	}
+	if !strings.Contains(out, "Cursor: not-configured") {
+		t.Fatalf("expected 'Cursor: not-configured', got:\n%s", out)
+	}
+}
+
+// TestUninstall_ReportsUnsupportedForWrongLocation asserts uninstall
+// reports "unsupported" (never an error) for a target/location
+// combination the agent doesn't support (Codex is global-only).
+func TestUninstall_ReportsUnsupportedForWrongLocation(t *testing.T) {
+	fakeHome(t)
+
+	out, _, err := execCmd("uninstall", "--target", "codex", "--location", "local")
+	if err != nil {
+		t.Fatalf("uninstall --target codex --location local: %v", err)
+	}
+	if !strings.Contains(out, "Codex CLI: unsupported") {
+		t.Fatalf("expected 'Codex CLI: unsupported', got:\n%s", out)
+	}
+}
+
+// TestUninstall_NeverInstalledAgent_NoError asserts uninstalling an agent
+// that was never configured is a clean not-configured status, never an
+// error (D-08).
+func TestUninstall_NeverInstalledAgent_NoError(t *testing.T) {
+	fakeHome(t)
+
+	out, _, err := execCmd("uninstall", "--target", "hermes", "--location", "global")
+	if err != nil {
+		t.Fatalf("uninstall --target hermes (never installed): unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Hermes Agent: not-configured") {
+		t.Fatalf("expected 'Hermes Agent: not-configured', got:\n%s", out)
+	}
+}
+
+// TestUninstall_NoTargetDefaultsToAllWithoutPrompting asserts a plain
+// `uninstall` with no --target and no TTY operates on every registered
+// target without prompting (D-08's parity fallback — a destructive
+// reversal command defaults to "all", not an interactive picker).
+func TestUninstall_NoTargetDefaultsToAllWithoutPrompting(t *testing.T) {
+	fakeHome(t)
+
+	out, _, err := execCmd("uninstall")
+	if err != nil {
+		t.Fatalf("uninstall (no --target): %v", err)
+	}
+	for _, name := range []string{"Claude Code:", "Cursor:", "Kiro:"} {
+		if !strings.Contains(out, name) {
+			t.Fatalf("expected default uninstall to cover %s, got:\n%s", name, out)
+		}
+	}
+}
+
+// TestInstallUninstallRoundTrip_PreservesSiblingEntry asserts install
+// then uninstall via the real commands preserves an unrelated sibling
+// mcpServers entry untouched (D-07, D-08) — the command-level analog of
+// 06-02/06-03's per-target round-trip tests.
+func TestInstallUninstallRoundTrip_PreservesSiblingEntry(t *testing.T) {
+	home := fakeHome(t)
+
+	claudeConfig := filepath.Join(home, ".claude.json")
+	seed := map[string]any{
+		"mcpServers": map[string]any{
+			"other-server": map[string]any{"command": "other-binary"},
+		},
+	}
+	seedData, err := json.MarshalIndent(seed, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal seed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(claudeConfig), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(claudeConfig, seedData, 0o644); err != nil {
+		t.Fatalf("seed write: %v", err)
+	}
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude: %v", err)
+	}
+
+	afterInstall := readJSONMap(t, claudeConfig)
+	mcpServers, _ := afterInstall["mcpServers"].(map[string]any)
+	if _, ok := mcpServers["other-server"]; !ok {
+		t.Fatalf("expected other-server entry to survive install, got: %v", mcpServers)
+	}
+	if _, ok := mcpServers["codegraph"]; !ok {
+		t.Fatalf("expected codegraph entry after install, got: %v", mcpServers)
+	}
+
+	if _, _, err := execCmd("uninstall", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("uninstall --target claude: %v", err)
+	}
+
+	afterUninstall := readJSONMap(t, claudeConfig)
+	mcpServersAfter, _ := afterUninstall["mcpServers"].(map[string]any)
+	if _, ok := mcpServersAfter["codegraph"]; ok {
+		t.Fatalf("expected codegraph entry removed after uninstall, got: %v", mcpServersAfter)
+	}
+	other, ok := mcpServersAfter["other-server"].(map[string]any)
+	if !ok || other["command"] != "other-binary" {
+		t.Fatalf("expected other-server entry preserved untouched after uninstall, got: %v", mcpServersAfter)
+	}
+}
+
+// TestInstallUninstallRoundTrip_TempHome_RestoresPreInstallState is the
+// automated substitute for this plan's live-agent-verify checkpoint (a
+// real agent handshake can't be exercised in this environment): it drives
+// a full install→uninstall round trip against a throwaway $HOME and
+// asserts the written config/instructions files' shape and that
+// uninstall restores pre-install state modulo the CodeGraph section
+// (D-01). The residual live-agent handshake itself remains a manual
+// follow-up — see SUMMARY.md.
+func TestInstallUninstallRoundTrip_TempHome_RestoresPreInstallState(t *testing.T) {
+	home := fakeHome(t)
+
+	claudeConfig := filepath.Join(home, ".claude.json")
+	claudeInstructions := filepath.Join(home, ".claude", "CLAUDE.md")
+
+	if _, statErr := os.Stat(claudeConfig); !os.IsNotExist(statErr) {
+		t.Fatalf("precondition: %s should not exist yet", claudeConfig)
+	}
+
+	if _, _, err := execCmd("install", "--target", "auto", "--location", "global"); err != nil {
+		t.Fatalf("install --target auto: %v", err)
+	}
+	if _, statErr := os.Stat(claudeConfig); statErr != nil {
+		t.Fatalf("expected %s to exist after install: %v", claudeConfig, statErr)
+	}
+	if _, statErr := os.Stat(claudeInstructions); statErr != nil {
+		t.Fatalf("expected %s to exist after install: %v", claudeInstructions, statErr)
+	}
+	instructions := readFileString(t, claudeInstructions)
+	if !strings.Contains(instructions, "CODEGRAPH_START") {
+		t.Fatalf("expected instructions file to carry the marker block, got:\n%s", instructions)
+	}
+	if !strings.Contains(instructions, "codegraph_explore") {
+		t.Fatalf("expected instructions file to reference codegraph_explore, got:\n%s", instructions)
+	}
+
+	if _, _, err := execCmd("uninstall", "--target", "auto", "--location", "global"); err != nil {
+		t.Fatalf("uninstall --target auto: %v", err)
+	}
+
+	// The marker-fenced instructions file had nothing but the codegraph
+	// block, so removing it restores the file to its pre-install
+	// (nonexistent) state entirely (shared.go's removeMarkedSection).
+	if _, statErr := os.Stat(claudeInstructions); !os.IsNotExist(statErr) {
+		t.Fatalf("expected %s to be removed entirely after uninstall, stat err: %v", claudeInstructions, statErr)
+	}
+
+	// The MCP config file itself remains (D-01: "pre-install bytes modulo
+	// the CodeGraph section") but must carry no codegraph/mcpServers
+	// trace, since it was codegraph-only.
+	final := readJSONMap(t, claudeConfig)
+	if _, ok := final["mcpServers"]; ok {
+		t.Fatalf("expected mcpServers removed entirely (was codegraph-only), got: %v", final)
+	}
+}
