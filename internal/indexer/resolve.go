@@ -76,6 +76,15 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		}
 	}
 
+	// pending accumulates every RefKindCalls ref that fails pass 1 —
+	// Pitfall 3's conformance retry (Task 2) re-attempts these AFTER
+	// implements/extends edges exist for the whole graph, walking the
+	// supertype chain, rather than interleaving the retry into this same
+	// loop. pc.file is filled in once this file's own *schema.File is
+	// built below (files holds pointers, so mutating pc.file.EdgeCount
+	// after appending to files is safe and visible).
+	var pending []pendingCall
+
 	for _, r := range results {
 		for _, en := range r.Nodes {
 			nodes = append(nodes, en.Node)
@@ -85,12 +94,17 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		}
 
 		resolvedForFile := 0
+		var filePending []goextract.UnresolvedRef
 		for _, ref := range r.Unresolved {
 			switch ref.Kind {
 			case goextract.RefKindCalls:
 				calleeID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
 				if !ok {
-					unresolvedCount++
+					// Deferred, not counted as unresolved yet (Pitfall 3):
+					// this call may still resolve via the conformance
+					// retry below, once the calling method's enclosing
+					// type's supertype chain is known.
+					filePending = append(filePending, ref)
 					continue
 				}
 				edges = append(edges, &schema.Edge{
@@ -189,11 +203,112 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 			f.Errors = []string{r.Err.Error()}
 		}
 		files = append(files, f)
+
+		for _, ref := range filePending {
+			pending = append(pending, pendingCall{ref: ref, file: f})
+		}
 	}
 
 	edges = append(edges, synthesizeGoImplements(results, edges, nodeKindByID, nodeNameByID, nodeStartLineByID)...)
 
+	// Pitfall 3's conformance retry (Task 2): now that every "contains"
+	// (type->method) and "embeds"/"implements" (type->supertype) edge
+	// exists for the WHOLE graph — including this file's own
+	// synthesized implements edges above — retry every call that failed
+	// pass 1, walking the supertype chain from the calling method's own
+	// enclosing type. This is a SEPARATE loop over the deferred refs, not
+	// interleaved into the resolution loop above (Pitfall 3's explicit
+	// requirement).
+	edges = append(edges, retryConformanceCalls(pending, edges, nodeNameByID, &unresolvedCount)...)
+
 	return nodes, packageNodes, edges, files, unresolvedCount
+}
+
+// pendingCall is a RefKindCalls ref that failed pass-1 resolution,
+// deferred to the conformance retry (Pitfall 3), paired with the
+// *schema.File its resolvedForFile/EdgeCount bookkeeping belongs to — a
+// retry success increments file.EdgeCount exactly like a pass-1
+// resolution would have.
+type pendingCall struct {
+	ref  goextract.UnresolvedRef
+	file *schema.File
+}
+
+// retryConformanceCalls implements Pitfall 3's two-pass conformance
+// retry: for each pending call, find the calling method's OWN enclosing
+// type (via a "contains" edge, type->method) and walk that type's
+// supertype chain (via "embeds"/"implements" edges, bounded by a
+// visited-set-guarded BFS — cycle-safe, independent of graph width)
+// looking for a method sharing the call's bare name. A call whose
+// FromID has no enclosing type at all (e.g. a plain function, not a
+// method — TestResolve_UnresolvedMethodCall's local-variable-receiver
+// case) never resolves here, exactly matching pass 1's own behavior for
+// that case. unresolvedCount is incremented for exactly those refs that
+// fail BOTH passes — never double-counted (pass 1 no longer increments
+// it for a deferred call).
+func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeNameByID map[string]string, unresolvedCount *int) []*schema.Edge {
+	typeMethods := make(map[string]map[string]string) // typeID -> methodName -> methodID
+	methodOwner := make(map[string]string)             // methodID -> typeID
+	typeSupertypes := make(map[string][]string)        // typeID -> []supertypeID
+
+	for _, e := range edges {
+		switch e.Kind {
+		case "contains":
+			methods := typeMethods[e.Source]
+			if methods == nil {
+				methods = make(map[string]string)
+				typeMethods[e.Source] = methods
+			}
+			methods[nodeNameByID[e.Target]] = e.Target
+			methodOwner[e.Target] = e.Source
+		case "embeds", goextract.EdgeKindImplements:
+			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
+		}
+	}
+
+	var resolved []*schema.Edge
+	for _, pc := range pending {
+		ownerType, ok := methodOwner[pc.ref.FromID]
+		var targetID string
+		if ok {
+			targetID, ok = walkSupertypesForMethod(ownerType, pc.ref.Name, typeMethods, typeSupertypes)
+		}
+		if !ok {
+			*unresolvedCount++
+			continue
+		}
+		resolved = append(resolved, &schema.Edge{
+			Source: pc.ref.FromID, Target: targetID, Kind: "calls",
+			Line: pc.ref.Line, Col: pc.ref.Col, Provenance: "ast",
+		})
+		pc.file.EdgeCount++
+	}
+	return resolved
+}
+
+// walkSupertypesForMethod performs a visited-set-guarded BFS from
+// typeID's OWN supertypes (never typeID itself — pass 1 already
+// attempted the calling type's own method set via resolveUnqualified)
+// looking for methodName in typeMethods, returning the first match's
+// node id. Bounded by the number of distinct types reachable through
+// the supertype graph — cycle-safe regardless of malformed/cyclic
+// embeds data.
+func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]map[string]string, typeSupertypes map[string][]string) (string, bool) {
+	visited := map[string]bool{typeID: true}
+	queue := append([]string(nil), typeSupertypes[typeID]...)
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if visited[cur] {
+			continue
+		}
+		visited[cur] = true
+		if id, ok := typeMethods[cur][methodName]; ok {
+			return id, true
+		}
+		queue = append(queue, typeSupertypes[cur]...)
+	}
+	return "", false
 }
 
 // synthesizeGoImplements wires dispatch.SynthesizeImplements (RES-02
