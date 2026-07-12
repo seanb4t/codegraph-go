@@ -61,10 +61,13 @@ type Stats struct {
 type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string) (int, error)
 
 // Run executes the full from-scratch indexing pipeline (D-04, D-01a):
-// Discover walks repoRoot for every Go source file the build context
-// includes, Extract runs Pass 1 (parallel, bounded worker pool) over them,
-// and Resolve runs Pass 2 (the single coordinated writer) against the
-// GraphStore at storeDir, committing the resolved graph and stamping Meta.
+// Discover walks repoRoot for every source file whose extension is claimed
+// by a registered LanguageSpec (Phase 5 D-03 — Go was the only such
+// language through Phase 4), Extract runs Pass 1 (parallel, bounded worker
+// pool, selecting a parser+extractor per file's own Language — Phase 5
+// Pitfall 1) over them, and Resolve runs Pass 2 (the single coordinated
+// writer) against the GraphStore at storeDir, committing the resolved
+// graph and stamping Meta.
 //
 // The store is opened exactly once and Closed on every return path —
 // success or failure — mirroring pebble_store.Open's Close-once lifecycle
