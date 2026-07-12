@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/dispatch"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/indexer/nodeid"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -52,6 +53,29 @@ func resolveRefs(results []goextract.FileResult, modulePath string) (nodes, pack
 func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx *symbolIndex) (nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, unresolvedCount int) {
 	packageNodeIDs := make(map[string]struct{})
 
+	// nodeKindByID/nodeNameByID are GLOBAL (cross-file) node-id lookups,
+	// built BEFORE any ref is resolved (Phase 5 RES-02 Pattern 2/3): the
+	// RefKindEmbeds branch below needs to know a resolved target's Kind
+	// (interface vs. not) to decide whether to promote the edge to
+	// "implements" — and that target may be declared in a DIFFERENT file
+	// than the one currently being resolved, exactly like
+	// TestResolve_CrossFileMethodContainment's cross-file struct/method
+	// pair. synthesizeGoImplements (below) reuses nodeNameByID for O(1)
+	// method-name lookups instead of a per-edge linear scan over every
+	// result's Nodes. This is a cheap, separate pass over results' own
+	// Nodes; it does not touch the `nodes`/`edges` slices this function
+	// accumulates incrementally below.
+	nodeKindByID := make(map[string]string)
+	nodeNameByID := make(map[string]string)
+	nodeStartLineByID := make(map[string]int32)
+	for _, r := range results {
+		for _, en := range r.Nodes {
+			nodeKindByID[en.Node.Id] = en.Node.Kind
+			nodeNameByID[en.Node.Id] = en.Node.Name
+			nodeStartLineByID[en.Node.Id] = en.Node.StartLine
+		}
+	}
+
 	for _, r := range results {
 		for _, en := range r.Nodes {
 			nodes = append(nodes, en.Node)
@@ -81,9 +105,33 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 					unresolvedCount++
 					continue
 				}
+				// Pattern 2 (RES-02): a class/struct extends/implements
+				// reference is syntactically undistinguished at
+				// extraction time (Java's implements/extends, C#'s
+				// comma-separated base_list, Go's struct/interface
+				// embedding all emit the same RefKindEmbeds shape). Now
+				// that the target is resolved, promote to "implements"
+				// iff the target is an interface AND the source is not
+				// itself an interface — a class-extends-class (or
+				// interface-embeds-interface) stays a plain "embeds"
+				// edge. This is deliberately NOT gated by r.Language: a
+				// Go struct embedding an interface value
+				// (`type W struct { io.Reader }`) genuinely does
+				// promote that interface's methods onto the struct too
+				// (real Go semantics), so the same structural rule
+				// applies uniformly across every language.
+				kind := "embeds"
+				provenance := "ast"
+				var metadata map[string]string
+				if nodeKindByID[targetID] == goextract.KindInterface && nodeKindByID[ref.FromID] != goextract.KindInterface {
+					kind = goextract.EdgeKindImplements
+					provenance = "heuristic"
+					metadata = map[string]string{"synthesizedBy": "declared-implements"}
+				}
 				edges = append(edges, &schema.Edge{
-					Source: ref.FromID, Target: targetID, Kind: "embeds",
-					Line: ref.Line, Col: ref.Col, Provenance: "ast",
+					Source: ref.FromID, Target: targetID, Kind: kind,
+					Line: ref.Line, Col: ref.Col, Provenance: provenance,
+					Metadata: metadata,
 				})
 				resolvedForFile++
 
@@ -143,7 +191,66 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 		files = append(files, f)
 	}
 
+	edges = append(edges, synthesizeGoImplements(results, edges, nodeKindByID, nodeNameByID, nodeStartLineByID)...)
+
 	return nodes, packageNodes, edges, files, unresolvedCount
+}
+
+// synthesizeGoImplements wires dispatch.SynthesizeImplements (RES-02
+// Pattern 3, Go's structural method-set match) into Pass 2: it composes a
+// struct node id -> method-spec-set map from the fully-resolved "contains"
+// edges (a struct's method set may span multiple files, exactly like
+// TestResolve_CrossFileMethodContainment) and an interface node id ->
+// method-spec-set map directly from every FileResult's own
+// InterfaceMethods, then hands both — plus an interface-embeds-interface
+// adjacency derived from the already-resolved "embeds" edges — to
+// dispatch.SynthesizeImplements. The returned edges are appended to the
+// SAME edges slice this function already builds, so they flow through
+// collapseEdges exactly like every other edge (D-06/D-07: no parallel
+// dedup path, additive within SchemaVersion 1).
+func synthesizeGoImplements(results []goextract.FileResult, edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, nodeStartLineByID map[string]int32) []*schema.Edge {
+	methodArity := make(map[string]int32)
+	interfaceMethods := make(dispatch.InterfaceSpecs)
+	for _, r := range results {
+		for id, arity := range r.MethodArity {
+			methodArity[id] = arity
+		}
+		for ifaceID, specs := range r.InterfaceMethods {
+			interfaceMethods[ifaceID] = append(interfaceMethods[ifaceID], specs...)
+		}
+	}
+
+	structMethods := make(dispatch.TypeMethods)
+	interfaceEmbeds := make(map[string][]string)
+	for _, e := range edges {
+		switch e.Kind {
+		case "contains":
+			if nodeKindByID[e.Source] != goextract.KindStruct || nodeKindByID[e.Target] != goextract.KindMethod {
+				continue
+			}
+			structMethods[e.Source] = append(structMethods[e.Source], goextract.MethodSpec{
+				Name:  nodeNameByID[e.Target],
+				Arity: methodArity[e.Target],
+			})
+		case "embeds":
+			if nodeKindByID[e.Source] == goextract.KindInterface && nodeKindByID[e.Target] == goextract.KindInterface {
+				interfaceEmbeds[e.Source] = append(interfaceEmbeds[e.Source], e.Target)
+			}
+		}
+	}
+
+	synthesized := dispatch.SynthesizeImplements(structMethods, interfaceMethods, interfaceEmbeds)
+	// dispatch.SynthesizeImplements has no source-location data of its
+	// own (it operates purely on name/arity sets) — anchor each
+	// synthesized edge's Line at the implementing struct's OWN
+	// declaration line (RES-03's "where a source location exists"
+	// qualifier: unlike a declared `implements X` clause, Go's implicit
+	// satisfaction has no single syntactic reference site, so the
+	// struct's own declaration is the closest meaningful anchor).
+	for _, e := range synthesized {
+		e.Line = nodeStartLineByID[e.Source]
+	}
+	return synthesized
 }
 
 // resolveNameRef resolves a (pkgAlias, name) reference against idx: an

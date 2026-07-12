@@ -30,11 +30,13 @@ import (
 func Extract(p parser.Parser, importPath, relPath string, src []byte) (FileResult, error) {
 	sum := sha256.Sum256(src)
 	result := FileResult{
-		ImportPath:  importPath,
-		RelPath:     relPath,
-		Language:    "go",
-		ContentHash: hex.EncodeToString(sum[:]),
-		Imports:     make(map[string]string),
+		ImportPath:       importPath,
+		RelPath:          relPath,
+		Language:         "go",
+		ContentHash:      hex.EncodeToString(sum[:]),
+		Imports:          make(map[string]string),
+		InterfaceMethods: make(map[string][]MethodSpec),
+		MethodArity:      make(map[string]int32),
 	}
 
 	tree, err := p.Parse(src, nil)
@@ -176,6 +178,7 @@ func (ex *extractor) emitTypeSpec(spec *tree_sitter.Node) {
 	case KindInterface:
 		if typeNode != nil {
 			ex.collectInterfaceEmbeds(id, typeNode)
+			ex.collectInterfaceMethods(id, typeNode)
 		}
 	}
 }
@@ -248,6 +251,62 @@ func (ex *extractor) collectInterfaceEmbeds(interfaceID string, interfaceType *t
 			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
 		})
 	}
+}
+
+// collectInterfaceMethods records each interface_type's own "method_elem"
+// method-signature nodes (siblings of the "type_elem" embed nodes
+// collectInterfaceEmbeds walks — verified via the same live parse this
+// session) into result.InterfaceMethods, keyed by interfaceID (Phase 5
+// RES-02/Pattern 3). Embedded interfaces' method specs are intentionally
+// NOT flattened in here — dispatch.SynthesizeImplements composes them at
+// resolve time via the "embeds" edges collectInterfaceEmbeds' unresolved
+// refs eventually become.
+func (ex *extractor) collectInterfaceMethods(interfaceID string, interfaceType *tree_sitter.Node) {
+	for i := uint(0); i < interfaceType.NamedChildCount(); i++ {
+		elem := interfaceType.NamedChild(i)
+		if elem.Kind() != "method_elem" {
+			continue
+		}
+		nameNode := elem.ChildByFieldName("name")
+		if nameNode == nil {
+			continue
+		}
+		spec := MethodSpec{
+			Name:  nameNode.Utf8Text(ex.src),
+			Arity: countParams(elem.ChildByFieldName("parameters"), ex.src),
+		}
+		ex.result.InterfaceMethods[interfaceID] = append(ex.result.InterfaceMethods[interfaceID], spec)
+	}
+}
+
+// countParams counts a parameter_list's actual declared parameters (Phase
+// 5 RES-02/Pattern 3's "arity" bound) — NOT its named-child count, since a
+// single parameter_declaration node may group several identifiers under
+// one shared type ("a, b int" is 2 parameters, one node). A parameter
+// with no identifier children at all (an unnamed parameter, e.g. an
+// interface method spec's "(int, string)") counts as exactly 1.
+func countParams(paramsNode *tree_sitter.Node, src []byte) int32 {
+	if paramsNode == nil {
+		return 0
+	}
+	var count int32
+	for i := uint(0); i < paramsNode.NamedChildCount(); i++ {
+		p := paramsNode.NamedChild(i)
+		switch p.Kind() {
+		case "parameter_declaration", "variadic_parameter_declaration":
+			names := int32(0)
+			for j := uint(0); j < p.NamedChildCount(); j++ {
+				if p.NamedChild(j).Kind() == "identifier" {
+					names++
+				}
+			}
+			if names == 0 {
+				names = 1
+			}
+			count += names
+		}
+	}
+	return count
 }
 
 // typeRefName extracts the (name, pkgAlias) of a type_identifier or
@@ -459,6 +518,7 @@ func (ex *extractor) emitMethod(decl *tree_sitter.Node) {
 	id := nodeid.NodeID(KindMethod, qualifiedName, ex.relPath)
 
 	ex.result.Nodes = append(ex.result.Nodes, ExtractedNode{Node: ex.buildSymbolNode(KindMethod, id, name, qualifiedName, decl)})
+	ex.result.MethodArity[id] = countParams(decl.ChildByFieldName("parameters"), ex.src)
 
 	switch {
 	case hasRecv && ex.typeNodesByName[recvType] != "":

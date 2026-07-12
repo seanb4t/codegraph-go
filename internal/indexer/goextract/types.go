@@ -36,6 +36,30 @@ const (
 	RefKindContains = "contains"
 )
 
+// EdgeKindImplements is a Phase 5 addition (RES-02, D-06): resolve.go sets
+// this literal on schema.Edge.Kind for two distinct synthesis paths — the
+// declared-implements promotion (Pattern 2: a RefKindEmbeds-shaped
+// unresolved ref whose resolved target is an interface node) and Go's
+// structural method-set match (dispatch.SynthesizeImplements, Pattern 3).
+// Named here (not left as a bare string literal, unlike "calls"/"embeds"/
+// "contains"/"imports" today) so dispatch.go, resolve.go's promotion
+// check, and query/traverse.go's dispatch-index filter share ONE
+// definition rather than three copies of "implements". Distinct from
+// RefKindEmbeds — do not repurpose that constant (D-06/RES-03: additive
+// only, no existing edge kind is renamed).
+const EdgeKindImplements = "implements"
+
+// MethodSpec is a bare (name, parameter-count) signature captured during
+// extraction. Go's implicit interface-satisfaction synthesis (RES-02,
+// Phase 5 Pattern 3) compares a struct's method set against an
+// interface's method-spec set by (Name, Arity), not full type identity —
+// D-06's bounded-matching discipline (name+arity), never a full Go type
+// checker.
+type MethodSpec struct {
+	Name  string
+	Arity int32
+}
+
 // ExtractedNode wraps a fully-formed schema.Node produced during the
 // tree-walk. Its id is already computed via nodeid.NodeID, so Pass 2 never
 // needs to recompute or rename it.
@@ -101,6 +125,22 @@ type FileResult struct {
 	// alias, "." for dot imports, "_" for blank imports, or the default
 	// last-path-segment name) to its import path.
 	Imports map[string]string
+
+	// InterfaceMethods records, per interface node this file declares, the
+	// method specs declared directly in that interface's own body (Phase 5
+	// RES-02/Pattern 3). Embedded interfaces (`type A interface { B }`)
+	// are NOT flattened here — dispatch.SynthesizeImplements composes an
+	// interface's transitive method set itself, via the "embeds" edges
+	// Pass 2 already resolves between two interface nodes.
+	InterfaceMethods map[string][]MethodSpec
+
+	// MethodArity maps a method node's id to its declared parameter count
+	// (Phase 5 RES-02/Pattern 3). Keyed by the method's OWN node id (not
+	// scoped by struct or file) because Pass 2 resolves a struct's full,
+	// possibly cross-file, method set via "contains" edges — exactly like
+	// TestResolve_CrossFileMethodContainment — so dispatch synthesis looks
+	// arity up post-resolution, by method id, not at extraction time.
+	MethodArity map[string]int32
 
 	// ContentHash is hex(sha256(source bytes)) — SHA-256 per D-02a, never
 	// MD5 — computed regardless of whether extraction below it succeeds.
