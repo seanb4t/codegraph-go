@@ -235,3 +235,66 @@ func TestKindRouteAdditive(t *testing.T) {
 		}
 	}
 }
+
+// TestLanguageRegistry_TypeScript proves the registry resolves all three
+// TS/JS grammars ("typescript"/"tsx"/"javascript") by both ID and every
+// registered extension, hands back a working parser + shared extractor per
+// registration, and that ModuleKey is UNCONDITIONALLY the extension-
+// stripped relPath — even with a nil descriptor, diverging from every
+// other priority-4 sibling's "nil descriptor -> raw relPath" convention
+// (languages_typescript.go's own doc comment explains why: TS/JS's
+// relative-specifier resolution inside tsextract.Extract must match this
+// file's own key by construction, descriptor or not) — mirroring
+// TestLanguageRegistry_Java/_CSharp/_Python's shape (LANG-05).
+func TestLanguageRegistry_TypeScript(t *testing.T) {
+	cases := []struct {
+		id   string
+		exts []string
+	}{
+		{id: "typescript", exts: []string{".ts"}},
+		{id: "tsx", exts: []string{".tsx"}},
+		{id: "javascript", exts: []string{".js", ".jsx", ".mjs", ".cjs"}},
+	}
+
+	for _, c := range cases {
+		t.Run(c.id, func(t *testing.T) {
+			spec, ok := lookupLanguageByID(c.id)
+			if !ok {
+				t.Fatalf("expected lookupLanguageByID(%q) to return ok=true", c.id)
+			}
+
+			for _, ext := range c.exts {
+				byExt, ok := lookupLanguageByExt(ext)
+				if !ok {
+					t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+				}
+				if byExt.ID != c.id {
+					t.Fatalf("expected %s to resolve to the %s spec, got ID=%q", ext, c.id, byExt.ID)
+				}
+			}
+
+			if spec.NewParser == nil {
+				t.Fatal("expected a non-nil NewParser func")
+			}
+			p, err := spec.NewParser()
+			if err != nil {
+				t.Fatalf("NewParser: %v", err)
+			}
+			if p == nil {
+				t.Fatal("expected NewParser to return a non-nil parser")
+			}
+			defer p.Close()
+
+			if spec.Extract == nil {
+				t.Fatal("expected a non-nil Extract func")
+			}
+
+			if spec.ModuleKey == nil {
+				t.Fatal("expected a non-nil ModuleKey func")
+			}
+			if got, want := spec.ModuleKey(nil, "sub/Widget"+c.exts[0]), "sub/Widget"; got != want {
+				t.Errorf("ModuleKey(nil descriptor) = %q, want %q (unconditional extension-stripped identity)", got, want)
+			}
+		})
+	}
+}
