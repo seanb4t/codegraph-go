@@ -348,11 +348,16 @@ func TestGoldenParity(t *testing.T) {
 		if got.PendingChanges != (query.PendingChanges{}) {
 			t.Errorf("status.PendingChanges = %+v, want the zero value (Phase-4 sync placeholder)", got.PendingChanges)
 		}
-		// D-05: languages/nodesByKind reflect Go-only extraction until
-		// Phase 5 — weft also has js/py/yaml files the TS extractor
-		// parsed that internal/indexer does not yet.
-		if len(got.Languages) != 1 || got.Languages[0] != "go" {
-			t.Errorf("status.Languages = %v, want [\"go\"] (D-05 Go-only extraction)", got.Languages)
+		// D-05: languages/nodesByKind reflect whichever LanguageSpecs are
+		// registered and have discoverable files in weft — weft also has
+		// js/yaml files the TS extractor parsed that internal/indexer does
+		// not (yet); its committed .py files ARE now extracted, since
+		// Phase 5's Python registration (05-06) makes pyextract fire on
+		// them the same way it already did for Go.
+		wantLanguages := []string{"go", "python"}
+		gotJoined, wantJoined := strings.Join(got.Languages, ","), strings.Join(wantLanguages, ",")
+		if gotJoined != wantJoined {
+			t.Errorf("status.Languages = %v, want %v (D-05 Go+Python extraction)", got.Languages, wantLanguages)
 		}
 
 		raw, err := query.MarshalStatusJSON(got)
