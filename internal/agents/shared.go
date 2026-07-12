@@ -316,6 +316,14 @@ func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (
 // this one function — these targets are a materially higher-risk
 // surface than codegraph's own self-contained store directory, since
 // they are arbitrary third-party tool configs this project does not own.
+//
+// os.CreateTemp creates the temp file with mode 0600 on POSIX; if path
+// already exists, its mode is preserved by chmod'ing the temp file to
+// match before the rename (WR-05) — otherwise the very first codegraph
+// write to a config that previously had, say, 0644 permissions would
+// silently tighten it to 0600, a behavior change with no corresponding
+// note anywhere in the tool's output. A new file gets the conventional
+// 0644 default, mirroring what every agent's own config tooling writes.
 func atomicWriteFile(path, content string) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -333,6 +341,14 @@ func atomicWriteFile(path, content string) error {
 		return err
 	}
 	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	mode := os.FileMode(0o644)
+	if info, statErr := os.Stat(path); statErr == nil {
+		mode = info.Mode().Perm()
+	}
+	if err := os.Chmod(tmpPath, mode); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}

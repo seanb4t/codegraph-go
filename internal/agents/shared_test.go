@@ -3,6 +3,7 @@ package agents
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -388,6 +389,51 @@ func TestSharedUpsertInstructionsEntry_WritesFencedBlock(t *testing.T) {
 		!strings.Contains(got, "reach for codegraph_explore") ||
 		!strings.Contains(got, testEndMarker) {
 		t.Fatalf("written content missing expected fenced block: %q", got)
+	}
+}
+
+// --- atomicWriteFile permission preservation (WR-05) ---
+
+func TestAtomicWriteFile_PreservesExistingFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp.json")
+	if err := os.WriteFile(path, []byte("{}"), 0o644); err != nil {
+		t.Fatalf("seed file: %v", err)
+	}
+
+	if err := atomicWriteFile(path, `{"a":1}`); err != nil {
+		t.Fatalf("atomicWriteFile: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("atomicWriteFile changed permissions of an existing file: got %o, want %o", got, 0o644)
+	}
+}
+
+func TestAtomicWriteFile_NewFileGetsConventionalDefaultPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits are not meaningful on Windows")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "new.json")
+
+	if err := atomicWriteFile(path, `{"a":1}`); err != nil {
+		t.Fatalf("atomicWriteFile: %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("new file has unexpected permissions: got %o, want %o", got, 0o644)
 	}
 }
 
