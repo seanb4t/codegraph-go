@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Query Engine & MCP Server** - Full query command suite plus a parity stdio MCP server verified against the golden-output corpus (completed 2026-07-11)
 - [x] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak (completed 2026-07-11)
 - [x] **Phase 5: Language Coverage & Resolution Breadth** - Parity languages, interface-dispatch synthesis with provenance, and framework-aware routing (completed 2026-07-12)
-- [ ] **Phase 6: Agent Integrations & CLI Lifecycle** - 8-agent install/uninstall, self-upgrade, and CLI ergonomics for the drop-in swap
+- [x] **Phase 6: Agent Integrations & CLI Lifecycle** - 8-agent install/uninstall, self-upgrade, and CLI ergonomics for the drop-in swap (completed 2026-07-12)
 - [ ] **Phase 7: Migration Tool** - Resumable, validated converter from TS SQLite `.codegraph/` to the new format
 - [ ] **Phase 8: Release Hardening & Benchmarks** - Signed, attested, reproducible static-binary releases with published head-to-head benchmarks and CI regression gates
 
@@ -232,7 +232,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. User runs `codegraph help [command]` and `codegraph version` with standard ergonomics, and `codegraph upgrade [version]` self-updates via signature-verified download-and-swap with `--check`
   5. `codegraph telemetry` reports that the build contains no telemetry, and the binary contains zero phone-home code
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans complete
 
 **Wave 1**
 
@@ -247,7 +247,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 06-04-PLAN.md — `install`/`uninstall` commands: --target/--location, os.Executable(), TTY multi-select w/ auto fallback, per-agent status + live-agent checkpoint (AGNT-01/02/03)
+- [x] 06-04-PLAN.md — `install`/`uninstall` commands: --target/--location, os.Executable(), TTY multi-select w/ auto fallback, per-agent status + live-agent checkpoint (AGNT-01/02/03)
 
 ### Phase 7: Migration Tool
 
@@ -290,6 +290,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
-| 6. Agent Integrations & CLI Lifecycle | 5/6 | In Progress|  |
+| 6. Agent Integrations & CLI Lifecycle | 6/6 | Complete   | 2026-07-12 |
 | 7. Migration Tool | 0/TBD | Not started | - |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |

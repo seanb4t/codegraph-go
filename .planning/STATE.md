@@ -4,17 +4,17 @@ milestone: v1.3
 milestone_name: milestone
 current_phase: 6
 current_phase_name: Agent Integrations & CLI Lifecycle
-status: executing
+status: verifying
 stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-07-12T19:46:12.531Z"
+last_updated: "2026-07-12T21:02:50.801Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 6 execution started
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 50
-  completed_plans: 50
-  percent: 63
+  completed_plans: 51
+  percent: 75
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 
 Phase: 6 (Agent Integrations & CLI Lifecycle) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-12 — Phase 6 execution started
 
 Progress: [███████░░░] 73%
@@ -106,6 +106,7 @@ Progress: [███████░░░] 73%
 | Phase 06 P02 | 3min | 3 tasks | 10 files |
 | Phase 06 P03 | 9min | 3 tasks | 8 files |
 | Phase 06-agent-integrations-cli-lifecycle P06 | 7min | 3 tasks | 15 files |
+| Phase 06 P04 | 25min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -226,6 +227,8 @@ Recent decisions affecting current work:
 - [Phase ?]: Hermes cli-toolset removal uses a simple global first-match line delete rather than block-range logic, since append only ever emits one exact line
 - [Phase ?]: [Phase 06-06]: Tampered-artifact reject test modeled as digest mismatch against a real signed bundle (sigstore-go's own sigstore-js fixture), not a hand-corrupted bundle file
 - [Phase ?]: [Phase 06-06]: go.mod/go.sum resynced via GOFLAGS=-mod=mod go build ./... after manually pinning sigstore-go direct require (no go mod tidy, no direct deps removed)
+- [Phase ?]: uninstall defaults --target to "all" (not "auto") when omitted, with no interactive prompt — a destructive-by-default reversal is safe across the whole roster since Uninstall never errors on an unconfigured agent (D-08)
+- [Phase ?]: printAgentResults checks SupportsLocation(loc) in the CLI layer before calling Install/Uninstall so unsupported target/location combos print an explicit "unsupported" status instead of a silent no-op
 
 ### Pending Todos
 
@@ -249,6 +252,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T19:43:46.328Z
+Last session: 2026-07-12T20:58:25.455Z
 Stopped at: Completed 06-03-PLAN.md
 Resume file: None
