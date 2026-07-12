@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-07-12T10:37:36.776Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-07-12T11:02:51.740Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-01 (multi-language seam foundation)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 34
+  completed_plans: 35
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 4 of 13
+Plan: 5 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-01 (multi-language seam foundation)
 
@@ -90,6 +90,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P01 | 15min | 2 tasks | 8 files |
 | Phase 05 P02 | 20min | 2 tasks | 5 files |
 | Phase 05 P03 | 35min | 2 tasks | 5 files |
+| Phase 05 P04 | 25min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,10 @@ Recent decisions affecting current work:
 - [Phase 05]: WR-01 tie-break mirrors query.Engine.resolveSymbolNode's lowest-Id-wins convention; single addSymbol() chokepoint used by both overlay() and newSymbolIndexFromStore()
 - [Phase 05]: WR-02 fix lives in goextract.go's recordCall (synthetic non-matching PkgAlias for non-identifier operands), not resolve.go
 - [Phase 05]: Call-as-argument extraction gap (D-05 third item, 252e2sav94) investigated and found already-fixed by existing walkDescendants; no code change made, only regression tests added
+- [Phase 05]: javaextract: class_declaration maps to KindStruct (not a new class kind) to keep struct/class-shaped downstream consumers language-agnostic
+- [Phase 05]: javaextract: parse-time ModuleKey override — Extract parses the file's declared package statement and overrides the discovery-time path-based ModuleKey placeholder
+- [Phase 05]: javaextract: same-package qualified calls disambiguated from local-variable receivers via PascalCase-vs-camelCase naming convention
+- [Phase 05]: TestGoldenParity_Java implements RESEARCH's source-as-specification + self-consistency D-12 fallback (no live TS CodeGraph CLI available to capture a byte-comparable golden fixture)
 
 ### Pending Todos
 
@@ -195,6 +200,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T10:36:57.243Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-07-12T11:02:51.734Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None

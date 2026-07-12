@@ -62,7 +62,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 ### Language Support
 
 - [x] **LANG-01**: Go — full structural extraction + cross-file resolution (first language, validates the pipeline)
-- [ ] **LANG-02**: Java — full extraction + resolution
+- [x] **LANG-02**: Java — full extraction + resolution
 - [ ] **LANG-03**: C# — full extraction + resolution
 - [ ] **LANG-04**: Python — full extraction + resolution
 - [ ] **LANG-05**: TypeScript/JavaScript — full extraction + resolution
@@ -161,7 +161,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | AGNT-02 | Phase 6 | Pending |
 | AGNT-03 | Phase 6 | Pending |
 | LANG-01 | Phase 2 | Complete |
-| LANG-02 | Phase 5 | Pending |
+| LANG-02 | Phase 5 | Complete |
 | LANG-03 | Phase 5 | Pending |
 | LANG-04 | Phase 5 | Pending |
 | LANG-05 | Phase 5 | Pending |
