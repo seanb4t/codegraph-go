@@ -4,17 +4,17 @@ milestone: v1.3
 milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
-status: executing
+status: verifying
 stopped_at: Completed 05-12-PLAN.md
-last_updated: "2026-07-12T16:18:31.674Z"
+last_updated: "2026-07-12T16:31:49.682Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 44
-  completed_plans: 43
-  percent: 50
+  completed_plans: 44
+  percent: 63
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
 Plan: 13 of 13
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
 Progress: [███████░░░] 73%
@@ -99,6 +99,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P10 | 50min | 2 tasks | 14 files |
 | Phase 05-language-coverage-resolution-breadth P11 | 50min | 2 tasks | 14 files |
 | Phase 05 P12 | 3h | 3 tasks | 39 files |
+| Phase 05 P13 | 35min | - tasks | - files |
 
 ## Accumulated Context
 
@@ -206,6 +207,7 @@ Recent decisions affecting current work:
 - [Phase 05]: Route detection re-parses eligible opt-in files via the language's own LanguageSpec.NewParser rather than threading the Pass-1 AST through goextract.FileResult
 - [Phase 05]: Route node QualifiedName includes the HTTP verb (filePath::route:VERB path) to avoid node-id collisions between different-verb routes on the same path
 - [Phase 05]: Fixed a proto.Marshal map-field-ordering determinism bug (deterministicMarshal in graphstore/batch.go+export.go), surfaced by route edges' first multi-key Metadata usage
+- [Phase 05]: D-11 capability matrix ships in internal/indexer/capability/matrix.go + docs/LANGUAGE-CAPABILITY-MATRIX.md, self-consistency-tested; Python/JavaScript Dispatch is honestly recorded as none (neither extractor emits an interface-shaped node, so RES-02's promotion never fires), not full, per the plan's own "do not overstate" discipline
 
 ### Pending Todos
 
@@ -229,6 +231,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T16:18:31.668Z
+Last session: 2026-07-12T16:31:18.542Z
 Stopped at: Completed 05-12-PLAN.md
 Resume file: None

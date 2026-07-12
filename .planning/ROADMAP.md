@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Go Indexing Pipeline** - Two-pass indexer proven on Go: `init`/`index` build a correct, cross-file-resolved graph from scratch (completed 2026-07-11)
 - [x] **Phase 3: Query Engine & MCP Server** - Full query command suite plus a parity stdio MCP server verified against the golden-output corpus (completed 2026-07-11)
 - [x] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak (completed 2026-07-11)
-- [ ] **Phase 5: Language Coverage & Resolution Breadth** - Parity languages, interface-dispatch synthesis with provenance, and framework-aware routing
+- [x] **Phase 5: Language Coverage & Resolution Breadth** - Parity languages, interface-dispatch synthesis with provenance, and framework-aware routing (completed 2026-07-12)
 - [ ] **Phase 6: Agent Integrations & CLI Lifecycle** - 8-agent install/uninstall, self-upgrade, and CLI ergonomics for the drop-in swap
 - [ ] **Phase 7: Migration Tool** - Resumable, validated converter from TS SQLite `.codegraph/` to the new format
 - [ ] **Phase 8: Release Hardening & Benchmarks** - Signed, attested, reproducible static-binary releases with published head-to-head benchmarks and CI regression gates
@@ -183,7 +183,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every heuristic (synthesized) edge carries a `provenance: heuristic` tag with source location, distinguishing it from ground-truth AST edges
   5. Framework-aware routing for Gin, Spring, ASP.NET, Django/Flask/FastAPI, and Express/NestJS emits `route` nodes linked to their handlers
 
-**Plans**: 12/13 plans executed
+**Plans**: 13/13 plans complete
 
 **Wave 1 — Foundation seam**
 
@@ -217,7 +217,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 7 — Coverage matrix + closeout** *(blocked on Wave 6)*
 
-- [ ] 05-13-PLAN.md — D-11 capability matrix (human + machine-readable) + cross-language regression closeout (LANG-06)
+- [x] 05-13-PLAN.md — D-11 capability matrix (human + machine-readable) + cross-language regression closeout (LANG-06)
 
 ### Phase 6: Agent Integrations & CLI Lifecycle
 
@@ -274,7 +274,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
-| 5. Language Coverage & Resolution Breadth | 12/13 | In Progress|  |
+| 5. Language Coverage & Resolution Breadth | 13/13 | Complete   | 2026-07-12 |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
 | 7. Migration Tool | 0/TBD | Not started | - |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |
