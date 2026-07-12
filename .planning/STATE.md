@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 5
+current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-12T00:04:13.898Z"
-last_activity: 2026-07-11
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-07-12T01:14:46.014Z"
+last_activity: 2026-07-12
+last_activity_desc: Completed 05-01 (multi-language seam foundation)
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 31
-  completed_plans: 31
-  percent: 50
+  total_plans: 44
+  completed_plans: 32
+  percent: 73
 ---
 
 # Project State
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 4 — Incremental Sync & File Watcher
+**Current focus:** Phase 05 — Language Coverage & Resolution Breadth
 
 ## Current Position
 
-Phase: 5 — Language Coverage & Resolution Breadth
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-11 — Phase 4 complete, transitioned to Phase 5
+Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
+Plan: 2 of 13
+Status: Executing Phase 05
+Last activity: 2026-07-12 — Completed 05-01 (multi-language seam foundation)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -87,6 +87,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P07 | 22min | 2 tasks | 8 files |
 | Phase 04 P08 | 6min | 2 tasks | 6 files |
 | Phase 04-incremental-sync-file-watcher P09 | 5min | 2 tasks | 5 files |
+| Phase 05 P01 | 15min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -161,6 +162,9 @@ Recent decisions affecting current work:
 - [Phase 04]: root.go's sync/daemon/unlock registration split across two commits so each task's own build-verify step stays green independently
 - [Phase 04]: serve --watch gates on hasIndex so MCP-03 absent-index behavior is unaffected; a live standalone daemon's ErrLockLive inside --watch is a graceful defer, not a serve failure
 - [Phase ?]: SYNC-06 proven via goleak soak (internal/watch TestMain + TestSoak, internal/daemon TestMain + TestSoak) — no real goroutine leaks found on first run, Plan 04-05/04-07 context+WaitGroup discipline held
+- [Phase ?]: [Phase 5-01]: TypeScript module exposes two grammar accessors (LanguageTypescript/LanguageTSX) in one bindings/go package, confirmed against the module's own binding_test.go before wiring
+- [Phase ?]: [Phase 5-01]: ProjectDescriptor declared as a minimal ModulePath() string interface in languages.go, forward-compatible for Wave 2's discover.go generalization without redesigning the seam now
+- [Phase ?]: [Phase 5-01]: Four new grammar go.mod requires manually promoted from indirect to direct — no go mod tidy, per established project convention
 
 ### Pending Todos
 
@@ -184,6 +188,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T00:04:13.891Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-language-coverage-resolution-breadth/05-CONTEXT.md
+Last session: 2026-07-12T01:14:46.008Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
