@@ -185,6 +185,86 @@ func TestHermes_GlobalRoundTrip_ByteInvariant(t *testing.T) {
 	}
 }
 
+// TestHermes_CRLF_InstallThenUninstall_RoundTrips is the CR-03 regression
+// test: a CRLF-line-ended config.yaml (a realistic case for a project
+// that ships Windows release binaries) must not break install idempotency
+// (duplicate mcp_servers/platform_toolsets blocks appended on every run)
+// or make uninstall a permanent no-op.
+func TestHermes_CRLF_InstallThenUninstall_RoundTrips(t *testing.T) {
+	home := fakeHome(t)
+	configPath := filepath.Join(home, ".hermes", "config.yaml")
+	crlf := strings.ReplaceAll(hermesPyYAMLDefaultFixture, "\n", "\r\n")
+	writeFile(t, configPath, crlf)
+
+	h := hermesTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+	h.Install(LocationGlobal, opts)
+
+	afterFirst := readFile(t, configPath)
+	if strings.Count(afterFirst, "mcp_servers:") != 1 {
+		t.Fatalf("want exactly one mcp_servers block on a CRLF config, got: %q", afterFirst)
+	}
+	if strings.Count(afterFirst, "mcp-codegraph") != 1 {
+		t.Fatalf("want exactly one cli toolset entry on a CRLF config, got: %q", afterFirst)
+	}
+
+	// Re-running install on a CRLF config must be idempotent, not append a
+	// second duplicate block (the pre-fix bug: the header match never
+	// found the block it had just written, since it also carries "\r").
+	h.Install(LocationGlobal, opts)
+	afterSecond := readFile(t, configPath)
+	if strings.Count(afterSecond, "mcp_servers:") != 1 {
+		t.Fatalf("re-run duplicated the mcp_servers block on a CRLF config: %q", afterSecond)
+	}
+	if strings.Count(afterSecond, "mcp-codegraph") != 1 {
+		t.Fatalf("re-run duplicated the cli toolset entry on a CRLF config: %q", afterSecond)
+	}
+
+	h.Uninstall(LocationGlobal)
+	afterUninstall := readFile(t, configPath)
+	if strings.Contains(afterUninstall, "mcp_servers:") {
+		t.Fatalf("uninstall did not remove the mcp_servers block on a CRLF config: %q", afterUninstall)
+	}
+	if strings.Contains(afterUninstall, "mcp-codegraph") {
+		t.Fatalf("uninstall did not remove the cli toolset entry on a CRLF config: %q", afterUninstall)
+	}
+	if !strings.Contains(afterUninstall, "log_level: info") {
+		t.Fatalf("uninstall lost an unrelated top-level key on a CRLF config: %q", afterUninstall)
+	}
+}
+
+// TestHermes_Uninstall_CliToolsetRemoval_ScopedToPlatformToolsetsCli is
+// the WR-07 regression test: hermesRemoveCliToolset must only remove a
+// "- mcp-codegraph" line inside platform_toolsets.cli, never the first
+// line anywhere in the file that happens to equal that literal — an
+// unrelated list elsewhere in the user's config must survive uninstall
+// untouched.
+func TestHermes_Uninstall_CliToolsetRemoval_ScopedToPlatformToolsetsCli(t *testing.T) {
+	home := fakeHome(t)
+	configPath := filepath.Join(home, ".hermes", "config.yaml")
+	fixture := "unrelated_list:\n" +
+		"  - mcp-codegraph\n" +
+		"platform_toolsets:\n" +
+		"  cli:\n" +
+		"  - shell\n" +
+		"  - mcp-codegraph\n"
+	writeFile(t, configPath, fixture)
+
+	h := hermesTarget{}
+	h.Uninstall(LocationGlobal)
+
+	got := readFile(t, configPath)
+	if !strings.Contains(got, "unrelated_list:\n  - mcp-codegraph") {
+		t.Fatalf("uninstall deleted an unrelated list entry outside platform_toolsets.cli: %q", got)
+	}
+	if strings.Contains(got, "  cli:\n  - shell\n  - mcp-codegraph") {
+		t.Fatalf("expected the cli toolset entry inside platform_toolsets.cli to be removed: %q", got)
+	}
+	if !strings.Contains(got, "- shell") {
+		t.Fatalf("uninstall removed an unrelated sibling cli toolset entry: %q", got)
+	}
+}
+
 func TestHermes_Uninstall_MissingConfigNoError(t *testing.T) {
 	fakeHome(t)
 	h := hermesTarget{}

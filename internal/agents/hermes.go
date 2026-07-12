@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +50,12 @@ func hermesConfigPath() (string, error) {
 // ends at the next non-blank line whose own indentation is <= indent (a
 // sibling or ancestor key), or at len(content) if none follows. found is
 // false if no line exactly matches the indented header.
+//
+// Every comparison strips a trailing "\r" first (CR-03): a CRLF-line-ended
+// config.yaml (a realistic case for a project that ships Windows release
+// binaries) would otherwise never match headerLine, and a bare "\r" blank
+// line would otherwise be mistaken for a non-blank sibling/ancestor line
+// ending the block — both mirror toml.go's TrimSpace-based CRLF safety.
 func yamlBlockRange(content, header string, indent int) (start, end int, found bool) {
 	headerLine := strings.Repeat(" ", indent) + header
 	lines := strings.Split(content, "\n")
@@ -56,7 +63,7 @@ func yamlBlockRange(content, header string, indent int) (start, end int, found b
 	offset := 0
 	headerIdx := -1
 	for i, line := range lines {
-		if line == headerLine {
+		if strings.TrimRight(line, "\r") == headerLine {
 			headerIdx = i
 			start = offset
 			break
@@ -70,8 +77,9 @@ func yamlBlockRange(content, header string, indent int) (start, end int, found b
 	scanOffset := start + len(lines[headerIdx]) + 1
 	for i := headerIdx + 1; i < len(lines); i++ {
 		line := lines[i]
-		trimmed := strings.TrimLeft(line, " ")
-		lineIndent := len(line) - len(trimmed)
+		bare := strings.TrimRight(line, "\r")
+		trimmed := strings.TrimLeft(bare, " ")
+		lineIndent := len(bare) - len(trimmed)
 		if trimmed != "" && lineIndent <= indent {
 			return start, scanOffset, true
 		}
@@ -96,7 +104,7 @@ func yamlListBlockRange(content, header string, indent int) (start, end int, fou
 	offset := 0
 	headerIdx := -1
 	for i, line := range lines {
-		if line == headerLine {
+		if strings.TrimRight(line, "\r") == headerLine {
 			headerIdx = i
 			start = offset
 			break
@@ -110,8 +118,9 @@ func yamlListBlockRange(content, header string, indent int) (start, end int, fou
 	scanOffset := start + len(lines[headerIdx]) + 1
 	for i := headerIdx + 1; i < len(lines); i++ {
 		line := lines[i]
-		trimmed := strings.TrimLeft(line, " ")
-		lineIndent := len(line) - len(trimmed)
+		bare := strings.TrimRight(line, "\r")
+		trimmed := strings.TrimLeft(bare, " ")
+		lineIndent := len(bare) - len(trimmed)
 		if strings.HasPrefix(trimmed, "- ") && lineIndent >= indent {
 			scanOffset += len(line) + 1
 			continue
@@ -264,9 +273,25 @@ func hermesAppendCliToolset(content string) string {
 
 // hermesRemoveCliToolset removes the single "- mcp-codegraph" list item
 // line this package's own hermesAppendCliToolset would have added,
-// regardless of its indent — the inverse of hermesAppendCliToolset.
+// regardless of its indent — the inverse of hermesAppendCliToolset. The
+// search is scoped to the platform_toolsets.cli block via
+// yamlListBlockRange (WR-07), matching hermesAppendCliToolset's own
+// scoping — an unscoped whole-file search would delete the first line
+// anywhere that happens to equal "- mcp-codegraph", including an
+// unrelated list elsewhere in the user's config.
 func hermesRemoveCliToolset(content string) string {
-	lines := strings.Split(content, "\n")
+	parentStart, parentEnd, parentFound := yamlBlockRange(content, "platform_toolsets:", 0)
+	if !parentFound {
+		return content
+	}
+	parentBlock := content[parentStart:parentEnd]
+	cliStart, cliEnd, cliFound := yamlListBlockRange(parentBlock, "cli:", 2)
+	if !cliFound {
+		return content
+	}
+	cliBlock := parentBlock[cliStart:cliEnd]
+
+	lines := strings.Split(cliBlock, "\n")
 	removed := false
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -279,7 +304,9 @@ func hermesRemoveCliToolset(content string) string {
 	if !removed {
 		return content
 	}
-	return strings.Join(out, "\n")
+	newCliBlock := strings.Join(out, "\n")
+	newParentBlock := parentBlock[:cliStart] + newCliBlock + parentBlock[cliEnd:]
+	return content[:parentStart] + newParentBlock + content[parentEnd:]
 }
 
 func hermesConfigured(content string) bool {
@@ -320,6 +347,7 @@ func (hermesTarget) Install(loc Location, opts InstallOptions) WriteResult {
 
 	configPath, err := hermesConfigPath()
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve hermes config path: %w", err))
 		return result
 	}
 	existed := fileExists(configPath)
@@ -333,6 +361,7 @@ func (hermesTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		return result
 	}
 	if err := atomicWriteFile(configPath, updated); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
 		return result
 	}
 	action := ActionUpdated
@@ -351,6 +380,7 @@ func (hermesTarget) Uninstall(loc Location) WriteResult {
 
 	configPath, err := hermesConfigPath()
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve hermes config path: %w", err))
 		return result
 	}
 	if !fileExists(configPath) {
@@ -367,6 +397,7 @@ func (hermesTarget) Uninstall(loc Location) WriteResult {
 		return result
 	}
 	if err := atomicWriteFile(configPath, updated); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
 		return result
 	}
 	result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionRemoved})
