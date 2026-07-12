@@ -183,7 +183,41 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every heuristic (synthesized) edge carries a `provenance: heuristic` tag with source location, distinguishing it from ground-truth AST edges
   5. Framework-aware routing for Gin, Spring, ASP.NET, Django/Flask/FastAPI, and Express/NestJS emits `route` nodes linked to their handlers
 
-**Plans**: TBD
+**Plans**: 13 plans
+
+**Wave 1 — Foundation seam**
+
+- [ ] 05-01-PLAN.md — Language registry + priority-4 parser constructors + grammar pins + additive vocabulary (LANG-02/03/04/05)
+
+**Wave 2 — Pass-1 generalization** *(blocked on Wave 1)*
+
+- [ ] 05-02-PLAN.md — Discovery ext→language walker + descriptor/ModuleKey hook + worker-pool per-language fix (Pitfall 1) + pipeline dispatch (LANG-02/03/04/05)
+
+**Wave 3 — Pass-2 generalization** *(blocked on Wave 2)*
+
+- [ ] 05-03-PLAN.md — Resolve/symbolindex per-language ModuleKey (Pitfall 2) + D-05 Go fixes (WR-01, WR-02, call-as-argument) (LANG-02/03/04/05)
+
+**Wave 4 — Priority-4 languages + mainstream grammar setup** *(blocked on Wave 3, parallel)*
+
+- [ ] 05-04-PLAN.md — Java full extraction + resolution + golden parity (LANG-02)
+- [ ] 05-05-PLAN.md — C# full extraction + resolution + partial-class decision + golden parity (LANG-03)
+- [ ] 05-06-PLAN.md — Python full extraction + resolution + golden parity (LANG-04)
+- [ ] 05-07-PLAN.md — TypeScript/TSX/JavaScript full extraction + resolution + golden parity (LANG-05)
+- [ ] 05-08-PLAN.md — Mainstream grammar setup: 7 parser constructors + pins + Swift/Kotlin [SUS] human-verify gate (LANG-06)
+
+**Wave 5 — Dispatch synthesis + mainstream extractors** *(blocked on Wave 4, parallel)*
+
+- [ ] 05-09-PLAN.md — implements-edge synthesis (Go structural + Java/C# declared) + conformance retry + query-time dispatch traversal + provenance (RES-02, RES-03)
+- [ ] 05-10-PLAN.md — Mainstream extractors: Rust, Ruby, PHP (LANG-06)
+- [ ] 05-11-PLAN.md — Mainstream extractors: C/C++ (shared) + Swift/Kotlin (LANG-06)
+
+**Wave 6 — Framework routing** *(blocked on Wave 5)*
+
+- [ ] 05-12-PLAN.md — Route detector registry + Gin/Spring/ASP.NET/Django-Flask-FastAPI/Express-NestJS detectors (LANG-07)
+
+**Wave 7 — Coverage matrix + closeout** *(blocked on Wave 6)*
+
+- [ ] 05-13-PLAN.md — D-11 capability matrix (human + machine-readable) + cross-language regression closeout (LANG-06)
 
 ### Phase 6: Agent Integrations & CLI Lifecycle
 
@@ -240,7 +274,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
-| 5. Language Coverage & Resolution Breadth | 0/TBD | Not started | - |
+| 5. Language Coverage & Resolution Breadth | 0/13 | Not started | - |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
 | 7. Migration Tool | 0/TBD | Not started | - |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |
