@@ -153,3 +153,7 @@ None - no external service configuration required. (Actual `-ldflags -X` wiring 
 ---
 *Phase: 06-agent-integrations-cli-lifecycle*
 *Completed: 2026-07-12*
+
+## Self-Check: PASSED
+
+All claimed files (`internal/version/version.go`, `internal/cli/version.go`, `internal/cli/version_test.go`, `internal/cli/telemetry.go`, `internal/cli/telemetry_test.go`, `internal/cli/root.go`, this SUMMARY.md) exist on disk. All claimed commit hashes (`0328f83`, `c745e99`, `fce793d`, `158ec0b`) found in `git log`.

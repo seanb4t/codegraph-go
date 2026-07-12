@@ -49,9 +49,9 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ### CLI & Lifecycle
 
-- [ ] **CLI-01**: User can run `codegraph help [command]` and `codegraph version` with standard CLI ergonomics
+- [x] **CLI-01**: User can run `codegraph help [command]` and `codegraph version` with standard CLI ergonomics
 - [ ] **CLI-02**: User can run `codegraph upgrade [version]` to self-update via signature-verified binary download-and-swap, with `--check` support
-- [ ] **CLI-03**: `codegraph telemetry` reports that this build contains no telemetry; the binary contains zero phone-home code
+- [x] **CLI-03**: `codegraph telemetry` reports that this build contains no telemetry; the binary contains zero phone-home code
 
 ### Agent Integrations
 
@@ -154,9 +154,9 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | SYNC-04 | Phase 4 | Complete |
 | SYNC-05 | Phase 4 | Complete |
 | SYNC-06 | Phase 4 | Complete |
-| CLI-01 | Phase 6 | Pending |
+| CLI-01 | Phase 6 | Complete |
 | CLI-02 | Phase 6 | Pending |
-| CLI-03 | Phase 6 | Pending |
+| CLI-03 | Phase 6 | Complete |
 | AGNT-01 | Phase 6 | Complete |
 | AGNT-02 | Phase 6 | Complete |
 | AGNT-03 | Phase 6 | Pending |
