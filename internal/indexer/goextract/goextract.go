@@ -607,8 +607,28 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 			return
 		}
 		var pkgAlias string
-		if operand != nil && operand.Kind() == "identifier" {
+		switch {
+		case operand == nil:
+			// No operand at all (malformed/unusual source) — fall through
+			// to the pre-existing empty-PkgAlias (unqualified) shape;
+			// unchanged from before this fix.
+		case operand.Kind() == "identifier":
 			pkgAlias = operand.Utf8Text(ex.src)
+		default:
+			// WR-02: a non-identifier operand (call_expression,
+			// index_expression, etc. — e.g. `foo().Bar()` or
+			// `arr[i].Bar()`) is never a package alias. Leaving PkgAlias
+			// empty here would make resolveNameRef treat this as an
+			// UNQUALIFIED same-package reference, which could wrongly
+			// match an unrelated same-package symbol that happens to
+			// share the bare field name (the exact WR-02 mis-resolution
+			// bug). Force this ref through resolveSelector's
+			// narrowest-safe-set alias-membership boundary instead, using
+			// a synthetic alias that can never equal a real import alias
+			// (a valid Go package_identifier never contains "<"/">"), so
+			// it deterministically ends up "unresolved" — matching the
+			// local-variable-receiver case's own fall-through behavior.
+			pkgAlias = "<" + operand.Kind() + ">"
 		}
 		ex.result.Unresolved = append(ex.result.Unresolved, UnresolvedRef{
 			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: RefKindCalls, Line: line, Col: col,
