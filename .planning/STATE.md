@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Agent Integrations & CLI Lifecycle
 status: executing
-stopped_at: Phase 6 context gathered
-last_updated: "2026-07-12T18:20:29.265Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-07-12T18:36:27.472Z"
 last_activity: 2026-07-12
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
+last_activity_desc: Phase 6 execution started
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 44
-  completed_plans: 45
+  total_plans: 50
+  completed_plans: 46
   percent: 63
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 05 — Language Coverage & Resolution Breadth
+**Current focus:** Phase 6 — Agent Integrations & CLI Lifecycle
 
 ## Current Position
 
-Phase: 6 — Agent Integrations & CLI Lifecycle
-Plan: Not started
+Phase: 6 (Agent Integrations & CLI Lifecycle) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-12 — Phase 05 complete, transitioned to Phase 6
+Last activity: 2026-07-12 — Phase 6 execution started
 
 Progress: [███████░░░] 73%
 
@@ -101,6 +101,7 @@ Progress: [███████░░░] 73%
 | Phase 05-language-coverage-resolution-breadth P11 | 50min | 2 tasks | 14 files |
 | Phase 05 P12 | 3h | 3 tasks | 39 files |
 | Phase 05 P13 | 35min | - tasks | - files |
+| Phase 06-agent-integrations-cli-lifecycle P01 | 12min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -209,6 +210,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Route node QualifiedName includes the HTTP verb (filePath::route:VERB path) to avoid node-id collisions between different-verb routes on the same path
 - [Phase 05]: Fixed a proto.Marshal map-field-ordering determinism bug (deterministicMarshal in graphstore/batch.go+export.go), surfaced by route edges' first multi-key Metadata usage
 - [Phase 05]: D-11 capability matrix ships in internal/indexer/capability/matrix.go + docs/LANGUAGE-CAPABILITY-MATRIX.md, self-consistency-tested; Python/JavaScript Dispatch is honestly recorded as none (neither extractor emits an interface-shaped node, so RES-02's promotion never fires), not full, per the plan's own "do not overstate" discipline
+- [Phase ?]: upsertInstructionsEntry takes markers as parameters rather than importing instructions.go's consts, per the plan's own Task-2-before-Task-3 sequencing note
+- [Phase ?]: removeMarkedSection strips the blank-line separator on both sides of the marked span so insert->remove round-trips to byte-exact pre-insert content
+- [Phase ?]: ResolveTargetFlag('auto', ...) falls back to just the Claude target when zero agents are detected, avoiding a silent no-op install on a clean environment
 
 ### Pending Todos
 
@@ -232,6 +236,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T17:39:15.741Z
-Stopped at: Phase 6 context gathered
-Resume file: .planning/phases/06-agent-integrations-cli-lifecycle/06-CONTEXT.md
+Last session: 2026-07-12T18:36:27.466Z
+Stopped at: Completed 06-01-PLAN.md
+Resume file: None

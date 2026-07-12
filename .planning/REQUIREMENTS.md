@@ -55,8 +55,8 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ### Agent Integrations
 
-- [ ] **AGNT-01**: User can run `codegraph install` to detect and configure the 8-agent roster (Claude Code, Cursor, Codex CLI, opencode, Hermes Agent, Gemini CLI, Antigravity IDE, Kiro) — MCP config plus marker-fenced instruction injection, idempotent on re-run
-- [ ] **AGNT-02**: User can run `codegraph uninstall` to cleanly reverse everything `install` wrote, preserving user edits outside markers
+- [x] **AGNT-01**: User can run `codegraph install` to detect and configure the 8-agent roster (Claude Code, Cursor, Codex CLI, opencode, Hermes Agent, Gemini CLI, Antigravity IDE, Kiro) — MCP config plus marker-fenced instruction injection, idempotent on re-run
+- [x] **AGNT-02**: User can run `codegraph uninstall` to cleanly reverse everything `install` wrote, preserving user edits outside markers
 - [ ] **AGNT-03**: Per-agent quirks are handled (e.g., Cursor's injected `--path` arg for MCP subprocess cwd)
 
 ### Language Support
@@ -157,8 +157,8 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | CLI-01 | Phase 6 | Pending |
 | CLI-02 | Phase 6 | Pending |
 | CLI-03 | Phase 6 | Pending |
-| AGNT-01 | Phase 6 | Pending |
-| AGNT-02 | Phase 6 | Pending |
+| AGNT-01 | Phase 6 | Complete |
+| AGNT-02 | Phase 6 | Complete |
 | AGNT-03 | Phase 6 | Pending |
 | LANG-01 | Phase 2 | Complete |
 | LANG-02 | Phase 5 | Complete |

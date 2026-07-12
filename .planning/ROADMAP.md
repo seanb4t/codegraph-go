@@ -232,11 +232,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. User runs `codegraph help [command]` and `codegraph version` with standard ergonomics, and `codegraph upgrade [version]` self-updates via signature-verified download-and-swap with `--check`
   5. `codegraph telemetry` reports that the build contains no telemetry, and the binary contains zero phone-home code
 
-**Plans**: 6 plans
+**Plans**: 1/6 plans executed
 
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — internal/agents foundation: AgentTarget interface + surgical write helpers + registry + instructions block + hujson pin (AGNT-01/02)
+- [x] 06-01-PLAN.md — internal/agents foundation: AgentTarget interface + surgical write helpers + registry + instructions block + hujson pin (AGNT-01/02)
 - [ ] 06-05-PLAN.md — internal/version package + `version`/`telemetry` commands + help ergonomics (CLI-01/03)
 
 **Wave 2** *(blocked on Wave 1)*
@@ -290,6 +290,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
-| 6. Agent Integrations & CLI Lifecycle | 0/6 | Planned | - |
+| 6. Agent Integrations & CLI Lifecycle | 1/6 | In Progress|  |
 | 7. Migration Tool | 0/TBD | Not started | - |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |
