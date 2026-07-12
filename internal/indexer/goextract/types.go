@@ -14,6 +14,12 @@ const (
 	KindTypeAlias = "type_alias"
 	KindConstant  = "constant"
 	KindVariable  = "variable"
+
+	// KindRoute is a Phase 5 addition (LANG-07, D-08): a framework-detected
+	// HTTP route (path + method), linked to its handler symbol via a
+	// heuristic-provenance edge. Additive within SchemaVersion 1 — no
+	// pre-existing Kind* constant above is renamed or removed.
+	KindRoute = "route"
 )
 
 // UnresolvedRef.Kind values. "calls" and "imports" and "embeds" are the
