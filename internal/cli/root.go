@@ -32,8 +32,9 @@ var ErrNotInitialized = errors.New("cli: not initialized")
 // SilenceErrors are set on every command in the tree.
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "codegraph",
-		Short: "Pre-indexed code knowledge graph for coding agents",
+		Use:     "codegraph",
+		Short:   "Pre-indexed code knowledge graph for coding agents",
+		Version: versionLine(),
 		Long: "codegraph builds and maintains a local knowledge graph of a " +
 			"repository's symbols, edges, and files so coding agents can " +
 			"query code structure without repeated grep/read passes.",
@@ -44,7 +45,7 @@ func newRootCmd() *cobra.Command {
 		newQueryCmd(), newSearchCmd(), newCallersCmd(), newCalleesCmd(),
 		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd(),
 		newNodeCmd(), newExploreCmd(), newServeCmd(), newSyncCmd(),
-		newDaemonCmd(), newUnlockCmd())
+		newDaemonCmd(), newUnlockCmd(), newVersionCmd())
 	return root
 }
 
