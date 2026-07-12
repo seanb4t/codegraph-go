@@ -1,15 +1,72 @@
 package indexer
 
 import (
+	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/parser"
 )
 
 const fixtureRoot = "testdata/gofixture"
+const mixedLangFixtureRoot = "testdata/mixedlangfixture"
+
+// init registers two test-only LanguageSpecs — "java" (Descriptor always
+// errors, simulating a manifest that can't be resolved) and "python"
+// (Descriptor is nil entirely, simulating a language with no descriptor
+// hook at all) — solely to prove Discover's extension->language-registry
+// generalization (D-03) mechanically, without depending on a real
+// Java/Python extractor landing in a later Wave-B plan. NewParser/Extract
+// are never invoked by any test in this file (Discover never parses file
+// content), so they are inert stubs.
+func init() {
+	registerLanguage(LanguageSpec{
+		ID:         "java",
+		Extensions: []string{".java"},
+		NewParser: func() (parser.Parser, error) {
+			return nil, fmt.Errorf("discover_test: java parser not implemented")
+		},
+		Extract: func(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.FileResult, error) {
+			return goextract.FileResult{}, fmt.Errorf("discover_test: java extractor not implemented")
+		},
+		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
+			if descriptor != nil {
+				return descriptor.ModulePath() + "/" + path.Dir(relPath)
+			}
+			// D-03 path-identity fallback: no descriptor resolved for this
+			// language, so the file's own slash-normalized parent
+			// directory stands in for its module/namespace identity.
+			return path.Dir(relPath)
+		},
+		Descriptor: func(root string) (ProjectDescriptor, error) {
+			return nil, fmt.Errorf("discover_test: no java manifest resolution implemented")
+		},
+	})
+	registerLanguage(LanguageSpec{
+		ID:         "python",
+		Extensions: []string{".py"},
+		NewParser: func() (parser.Parser, error) {
+			return nil, fmt.Errorf("discover_test: python parser not implemented")
+		},
+		Extract: func(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.FileResult, error) {
+			return goextract.FileResult{}, fmt.Errorf("discover_test: python extractor not implemented")
+		},
+		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
+			// D-03 path-identity fallback, same discipline as "java"
+			// above, exercised via a nil Descriptor hook instead of an
+			// erroring one — both shapes must degrade the same way.
+			return path.Dir(relPath)
+		},
+		// Descriptor intentionally left nil: this language has no
+		// project-descriptor hook implementation at all yet.
+	})
+}
 
 // TestDiscover_Fixture asserts Discover returns the fixture's .go files in a
 // stable, deterministic RelPath-sorted order, with skip_linux.go included
@@ -33,6 +90,9 @@ func TestDiscover_Fixture(t *testing.T) {
 	var got []string
 	for _, f := range files {
 		got = append(got, f.RelPath)
+		if f.Language != "go" {
+			t.Errorf("Language(%s) = %q, want %q", f.RelPath, f.Language, "go")
+		}
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("RelPaths = %v, want %v", got, want)
@@ -56,7 +116,9 @@ func TestDiscover_Deterministic(t *testing.T) {
 }
 
 // TestDiscover_ImportPaths asserts each DiscoveredFile carries the correct
-// module-path + relative-dir import path.
+// module-path + relative-dir import path — Go behavior byte-identical to
+// pre-Phase-5, now routed through the LanguageSpec.ModuleKey hook instead
+// of being computed inline.
 func TestDiscover_ImportPaths(t *testing.T) {
 	files, _, err := Discover(fixtureRoot)
 	if err != nil {
@@ -105,15 +167,137 @@ func TestDiscover_SkipsVendorAndDotDirs(t *testing.T) {
 	}
 }
 
-// TestDiscover_MissingGoMod asserts a directory with no go.mod returns a
-// clear error rather than panicking.
-func TestDiscover_MissingGoMod(t *testing.T) {
+// TestDiscover_MissingGoMod_FallsBackToPathIdentity asserts a root with no
+// go.mod no longer hard-fails Discover (D-03's relaxation of the
+// pre-Phase-5 all-or-nothing readModulePath error): the Go file is still
+// discovered, with Go's own nil-descriptor ModuleKey fallback (bare
+// relPath, languages_go.go) rather than a module-path-joined import path.
+func TestDiscover_MissingGoMod_FallsBackToPathIdentity(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "a.go"), "package main\n")
 
-	_, _, err := Discover(root)
-	if err == nil {
-		t.Fatal("Discover: expected error for missing go.mod, got nil")
+	files, modulePath, err := Discover(root)
+	if err != nil {
+		t.Fatalf("Discover: unexpected error for missing go.mod: %v", err)
+	}
+	if modulePath != "" {
+		t.Errorf("modulePath = %q, want \"\" (no go.mod to resolve)", modulePath)
+	}
+	if len(files) != 1 {
+		t.Fatalf("len(files) = %d, want 1 (descriptor-absent file must not be dropped)", len(files))
+	}
+	if files[0].RelPath != "a.go" {
+		t.Fatalf("RelPath = %q, want %q", files[0].RelPath, "a.go")
+	}
+	if files[0].Language != "go" {
+		t.Fatalf("Language = %q, want %q", files[0].Language, "go")
+	}
+	if files[0].ImportPath != "a.go" {
+		t.Fatalf("ImportPath = %q, want %q (Go's own nil-descriptor path fallback)", files[0].ImportPath, "a.go")
+	}
+}
+
+// TestDiscover_MixedLanguage_ExtensionRegistry asserts a mixed-tree fixture
+// (.go + .java + .py) yields one DiscoveredFile per supported extension,
+// each carrying the correct Language resolved via lookupLanguageByExt, and
+// that an unsupported extension (.md, .json) is never discovered.
+func TestDiscover_MixedLanguage_ExtensionRegistry(t *testing.T) {
+	files, modulePath, err := Discover(mixedLangFixtureRoot)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if modulePath != "example.com/mixed" {
+		t.Fatalf("modulePath = %q, want %q", modulePath, "example.com/mixed")
+	}
+
+	got := make(map[string]string, len(files))
+	for _, f := range files {
+		got[f.RelPath] = f.Language
+	}
+
+	want := map[string]string{
+		"main.go":          "go",
+		"sub/Greeter.java": "java",
+		"app.py":           "python",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("discovered %d files %v, want exactly %v (unsupported extensions must be excluded)", len(got), got, want)
+	}
+	for relPath, wantLang := range want {
+		if got[relPath] != wantLang {
+			t.Errorf("Language(%s) = %q, want %q", relPath, got[relPath], wantLang)
+		}
+	}
+	for relPath := range got {
+		if relPath == "README.md" || relPath == "config.json" {
+			t.Errorf("unsupported extension %s was discovered, must be excluded", relPath)
+		}
+	}
+}
+
+// TestDiscover_MixedLanguage_DescriptorAbsentFallback asserts a file whose
+// language has no resolvable project descriptor (here: "java", whose test
+// Descriptor always errors, and "python", whose Descriptor hook is nil
+// entirely) is still returned with a path-based ModuleKey — never dropped
+// (D-03's central guarantee).
+func TestDiscover_MixedLanguage_DescriptorAbsentFallback(t *testing.T) {
+	files, _, err := Discover(mixedLangFixtureRoot)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	byRelPath := make(map[string]DiscoveredFile, len(files))
+	for _, f := range files {
+		byRelPath[f.RelPath] = f
+	}
+
+	javaFile, ok := byRelPath["sub/Greeter.java"]
+	if !ok {
+		t.Fatal("sub/Greeter.java was dropped, want present with path-based fallback identity")
+	}
+	if want := "sub"; javaFile.ImportPath != want {
+		t.Errorf("java ImportPath = %q, want %q (path-based fallback: erroring Descriptor)", javaFile.ImportPath, want)
+	}
+
+	pyFile, ok := byRelPath["app.py"]
+	if !ok {
+		t.Fatal("app.py was dropped, want present with path-based fallback identity")
+	}
+	if want := "."; pyFile.ImportPath != want {
+		t.Errorf("python ImportPath = %q, want %q (path-based fallback: nil Descriptor hook)", pyFile.ImportPath, want)
+	}
+}
+
+// TestDiscover_SortedByRelPath asserts Discover's output is always sorted
+// ascending by RelPath, using a fixture whose files are named so that
+// neither directory-lexical walk order nor declaration order already
+// happens to match the required RelPath order — the sort.Slice call itself
+// must be doing the work, not incidental filesystem ordering.
+func TestDiscover_SortedByRelPath(t *testing.T) {
+	root := t.TempDir()
+
+	mustWrite(t, filepath.Join(root, "go.mod"), "module example.com/shuffled\n\ngo 1.26\n")
+	mustWrite(t, filepath.Join(root, "zzz.go"), "package shuffled\n")
+	mustWrite(t, filepath.Join(root, "aaa", "yyy.go"), "package aaa\n")
+	mustWrite(t, filepath.Join(root, "mmm.go"), "package shuffled\n")
+	mustWrite(t, filepath.Join(root, "bbb", "xxx.go"), "package bbb\n")
+
+	files, _, err := Discover(root)
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	var got []string
+	for _, f := range files {
+		got = append(got, f.RelPath)
+	}
+
+	want := make([]string, len(got))
+	copy(want, got)
+	sort.Strings(want)
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RelPaths = %v, not sorted ascending (want %v)", got, want)
 	}
 }
 
