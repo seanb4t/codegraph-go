@@ -212,6 +212,77 @@ func F() {
 	}
 }
 
+// TestResolve_SelectorNonIdentifierOperandNeverMisresolvesSamePackage
+// proves WR-02: a selector call whose operand is a non-identifier
+// expression (`foo().Bar()`, where the operand is itself a call_expression)
+// never resolves as a same-package unqualified reference to an unrelated
+// symbol that happens to share the bare name "Bar" (here, Widget.Bar) —
+// it must stay unresolved, exactly like a local-variable-receiver call.
+func TestResolve_SelectorNonIdentifierOperandNeverMisresolvesSamePackage(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func (w Widget) Bar() int { return 1 }
+
+func foo() Widget { return Widget{} }
+
+func Run() {
+	foo().Bar()
+}
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, unresolved := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	barID := nodeid.NodeID(goextract.KindMethod, "Widget.Bar", "p.go")
+
+	if findEdge(edges, runID, "calls", barID) {
+		t.Fatalf("WR-02: foo().Bar() must NOT mis-resolve to Widget.Bar as a same-package unqualified call, got edges %+v", edges)
+	}
+	if unresolved == 0 {
+		t.Errorf("expected the foo().Bar() call ref to be counted as unresolved, got 0")
+	}
+}
+
+// TestResolve_CallAsArgument locks in that a call passed as an argument to
+// another call (`outer(inner())`) resolves into calls edges for BOTH the
+// outer and the inner call (D-05's call-as-argument item) — a regression
+// test proving this stays true going forward.
+func TestResolve_CallAsArgument(t *testing.T) {
+	src := `package p
+
+func Run() {
+	outer(inner())
+}
+func outer(x int) int { return x }
+func inner() int { return 1 }
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	outerID := nodeid.NodeID(goextract.KindFunction, "outer", "p.go")
+	innerID := nodeid.NodeID(goextract.KindFunction, "inner", "p.go")
+
+	if !findEdge(edges, runID, "calls", outerID) {
+		t.Errorf("expected calls edge Run -> outer, got %+v", edges)
+	}
+	if !findEdge(edges, runID, "calls", innerID) {
+		t.Errorf("expected calls edge Run -> inner (call-as-argument), got %+v", edges)
+	}
+}
+
 // TestResolve_CrossFileMethodContainment proves a method whose receiver
 // type is declared in a DIFFERENT file resolves into a type -> method
 // "contains" edge once Pass 2 has the global symbol index (extends the

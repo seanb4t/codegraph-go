@@ -317,6 +317,105 @@ func Run() {
 	}
 }
 
+// TestExtract_CallAsArgument locks in that a call passed as an argument to
+// another call (`outer(inner())`) is extracted as TWO separate calls refs —
+// one for the outer call, one for the inner call (D-05's call-as-argument
+// item). Investigation for this plan confirmed walkDescendants already
+// visits argument-position call_expression nodes correctly (it continues
+// descending into every node's children regardless of kind); this test
+// locks that behavior in as a regression guard.
+func TestExtract_CallAsArgument(t *testing.T) {
+	src := `package p
+
+func Run() {
+	outer(inner())
+}
+func outer(x int) int { return x }
+func inner() int { return 1 }
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if !hasUnresolved(result, RefKindCalls, "outer", "") {
+		t.Errorf("expected calls ref to outer, got %+v", result.Unresolved)
+	}
+	if !hasUnresolved(result, RefKindCalls, "inner", "") {
+		t.Errorf("expected calls ref to inner (call-as-argument), got %+v", result.Unresolved)
+	}
+}
+
+// TestExtract_SelectorNonIdentifierOperandNeverAliasQualified proves WR-02:
+// a selector call whose operand is a non-identifier expression
+// (`foo().Bar()`, operand is a call_expression) never carries a PkgAlias
+// that would route resolveNameRef to a same-package unqualified match —
+// its PkgAlias must be non-empty (so resolveNameRef routes it through
+// resolveSelector, not resolveUnqualified) and must never equal a real
+// import alias present in the file.
+func TestExtract_SelectorNonIdentifierOperandNeverAliasQualified(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func (w Widget) Bar() int { return 1 }
+
+func foo() Widget { return Widget{} }
+
+func Run() {
+	foo().Bar()
+}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	var found *UnresolvedRef
+	for i := range result.Unresolved {
+		u := &result.Unresolved[i]
+		if u.Kind == RefKindCalls && u.Name == "Bar" {
+			found = u
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected a calls ref for Bar, got %+v", result.Unresolved)
+	}
+	if found.PkgAlias == "" {
+		t.Fatalf("WR-02: Bar's calls ref has empty PkgAlias, which resolveNameRef treats as unqualified and would mis-resolve to a same-package Bar symbol")
+	}
+}
+
+// TestExtract_LocalVariableReceiverCallUnchanged proves an identifier
+// operand that is a local variable (not a real import alias) keeps its
+// existing behavior: PkgAlias is set to the identifier text, later falling
+// through to "unresolved" via resolveSelector's own alias-membership
+// boundary — this plan does not touch that path.
+func TestExtract_LocalVariableReceiverCallUnchanged(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func (w Widget) Describe() string { return "" }
+
+func F() {
+	var w Widget
+	_ = w.Describe()
+}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+	if !hasUnresolved(result, RefKindCalls, "Describe", "w") {
+		t.Errorf("expected calls ref to Describe with PkgAlias %q (local-var receiver, unchanged), got %+v", "w", result.Unresolved)
+	}
+}
+
 // TestExtract_Imports proves the file's import_spec list is parsed into
 // Imports keyed by local alias (default, explicit alias).
 func TestExtract_Imports(t *testing.T) {
