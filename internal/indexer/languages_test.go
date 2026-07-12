@@ -605,3 +605,115 @@ func TestLanguageRegistry_Cpp(t *testing.T) {
 		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
 	}
 }
+
+// TestLanguageRegistry_Swift proves the registry resolves Swift by both ID
+// and extension, hands back a working parser + extractor, and that
+// Swift's ModuleKey applies the SPM `Sources/<Target>/...` convention with
+// a path-identity fallback (LANG-06, mainstream tier — gated on 05-08's
+// human-verify approval of the [SUS] alex-pinkus/tree-sitter-swift pin).
+func TestLanguageRegistry_Swift(t *testing.T) {
+	spec, ok := lookupLanguageByID("swift")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"swift\") to return ok=true")
+	}
+
+	foundExt := false
+	for _, ext := range spec.Extensions {
+		if ext == ".swift" {
+			foundExt = true
+			break
+		}
+	}
+	if !foundExt {
+		t.Fatalf("expected swift spec Extensions to contain \".swift\", got %v", spec.Extensions)
+	}
+
+	byExt, ok := lookupLanguageByExt(".swift")
+	if !ok {
+		t.Fatal("expected lookupLanguageByExt(\".swift\") to return ok=true")
+	}
+	if byExt.ID != "swift" {
+		t.Fatalf("expected .swift to resolve to the swift spec, got ID=%q", byExt.ID)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "Sources/MyTarget/widget.swift"), "MyTarget"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (SPM target-dir convention)", got, want)
+	}
+	if got, want := spec.ModuleKey(nil, "widget.swift"), "widget.swift"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (path-identity fallback)", got, want)
+	}
+}
+
+// TestLanguageRegistry_Kotlin proves the registry resolves Kotlin by both
+// ID and extension (".kt" and ".kts"), hands back a working parser +
+// extractor, and that Kotlin's ModuleKey is the D-03 path-identity fallback
+// (LANG-06, mainstream tier — gated on 05-08's human-verify approval of the
+// [SUS] tree-sitter-grammars/tree-sitter-kotlin pin).
+func TestLanguageRegistry_Kotlin(t *testing.T) {
+	spec, ok := lookupLanguageByID("kotlin")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"kotlin\") to return ok=true")
+	}
+
+	for _, ext := range []string{".kt", ".kts"} {
+		found := false
+		for _, e := range spec.Extensions {
+			if e == ext {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected kotlin spec Extensions to contain %q, got %v", ext, spec.Extensions)
+		}
+		byExt, ok := lookupLanguageByExt(ext)
+		if !ok {
+			t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+		}
+		if byExt.ID != "kotlin" {
+			t.Fatalf("expected %q to resolve to the kotlin spec, got ID=%q", ext, byExt.ID)
+		}
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "src/main/kotlin/Widget.kt"), "src/main/kotlin/Widget.kt"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
