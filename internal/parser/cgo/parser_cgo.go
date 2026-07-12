@@ -12,10 +12,15 @@ import (
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	tree_sitter_c_sharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
+	tree_sitter_c "github.com/tree-sitter/tree-sitter-c/bindings/go"
+	tree_sitter_cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
 	tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	tree_sitter_java "github.com/tree-sitter/tree-sitter-java/bindings/go"
 	tree_sitter_javascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
+	tree_sitter_php "github.com/tree-sitter/tree-sitter-php/bindings/go"
 	tree_sitter_python "github.com/tree-sitter/tree-sitter-python/bindings/go"
+	tree_sitter_ruby "github.com/tree-sitter/tree-sitter-ruby/bindings/go"
+	tree_sitter_rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 	tree_sitter_typescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
 	"github.com/seanb4t/codegraph-go/internal/parser"
@@ -78,6 +83,39 @@ func NewTypeScriptParser() (*CGoParser, error) {
 // both bindings shipped by the same tree-sitter-typescript module.
 func NewTSXParser() (*CGoParser, error) {
 	return newCGoParser(tree_sitter_typescript.LanguageTSX())
+}
+
+// NewRustParser returns a CGoParser configured for the Rust grammar
+// (mainstream-tier, LANG-06). Carries an external C scanner (raw strings).
+func NewRustParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_rust.Language())
+}
+
+// NewRubyParser returns a CGoParser configured for the Ruby grammar
+// (mainstream-tier, LANG-06). Carries an external C scanner (heredocs).
+func NewRubyParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_ruby.Language())
+}
+
+// NewPHPParser returns a CGoParser configured for the PHP grammar
+// (mainstream-tier, LANG-06). Uses the `php/src` grammar accessor
+// (LanguagePHP), not the sibling `php_only/src` grammar (LanguagePHPOnly)
+// — the tree-sitter-php module ships both in the same bindings/go package.
+// Carries an external C scanner (PHP tag-switching).
+func NewPHPParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_php.LanguagePHP())
+}
+
+// NewCParser returns a CGoParser configured for the C grammar
+// (mainstream-tier, LANG-06). Carries no external C scanner.
+func NewCParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_c.Language())
+}
+
+// NewCppParser returns a CGoParser configured for the C++ grammar
+// (mainstream-tier, LANG-06). Carries an external C scanner.
+func NewCppParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_cpp.Language())
 }
 
 func newCGoParser(languagePtr unsafe.Pointer) (*CGoParser, error) {
