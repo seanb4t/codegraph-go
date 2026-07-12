@@ -99,4 +99,63 @@ func TestCGoTreeCloseIsSafeToCallTwice(t *testing.T) {
 	}
 }
 
+// TestCGoParsesPriority4Sources proves each of the five priority-4 grammar
+// constructors (D-01, LANG-02/03/05) routes through newCGoParser and its
+// Parse seam, parsing a trivial valid source snippet without error.
+func TestCGoParsesPriority4Sources(t *testing.T) {
+	cases := []struct {
+		name  string
+		newFn func() (*CGoParser, error)
+		src   []byte
+	}{
+		{
+			name:  "Java",
+			newFn: NewJavaParser,
+			src:   []byte("class Main { void f() {} }\n"),
+		},
+		{
+			name:  "CSharp",
+			newFn: NewCSharpParser,
+			src:   []byte("class Main { void F() {} }\n"),
+		},
+		{
+			name:  "JavaScript",
+			newFn: NewJavaScriptParser,
+			src:   []byte("function f() { return 1; }\n"),
+		},
+		{
+			name:  "TypeScript",
+			newFn: NewTypeScriptParser,
+			src:   []byte("function f(): number { return 1; }\n"),
+		},
+		{
+			name:  "TSX",
+			newFn: NewTSXParser,
+			src:   []byte("const el = <div>hi</div>;\n"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, err := tc.newFn()
+			if err != nil {
+				t.Fatalf("%s: constructor: %v", tc.name, err)
+			}
+			if p == nil {
+				t.Fatalf("%s: expected a non-nil *CGoParser", tc.name)
+			}
+			defer p.Close()
+
+			tree, err := p.Parse(tc.src, nil)
+			if err != nil {
+				t.Fatalf("%s: Parse: %v", tc.name, err)
+			}
+			if tree == nil {
+				t.Fatalf("%s: expected a non-nil tree for valid source", tc.name)
+			}
+			defer tree.Close()
+		})
+	}
+}
+
 var _ parser.Parser = (*CGoParser)(nil)

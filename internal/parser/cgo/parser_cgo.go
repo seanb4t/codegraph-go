@@ -11,8 +11,12 @@ import (
 	"unsafe"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
+	tree_sitter_c_sharp "github.com/tree-sitter/tree-sitter-c-sharp/bindings/go"
 	tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	tree_sitter_java "github.com/tree-sitter/tree-sitter-java/bindings/go"
+	tree_sitter_javascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
 	tree_sitter_python "github.com/tree-sitter/tree-sitter-python/bindings/go"
+	tree_sitter_typescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
 	"github.com/seanb4t/codegraph-go/internal/parser"
 )
@@ -39,6 +43,41 @@ func NewGoParser() (*CGoParser, error) {
 // tokenizer), the crash-isolation dimension the Plan 01-07 spike measures.
 func NewPythonParser() (*CGoParser, error) {
 	return newCGoParser(tree_sitter_python.Language())
+}
+
+// NewJavaParser returns a CGoParser configured for the Java grammar
+// (priority-4, LANG-02). Java's grammar carries no external C scanner.
+func NewJavaParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_java.Language())
+}
+
+// NewCSharpParser returns a CGoParser configured for the C# grammar
+// (priority-4, LANG-03). C#'s grammar carries an external C scanner —
+// see parser.Parser's crash-isolation contract.
+func NewCSharpParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_c_sharp.Language())
+}
+
+// NewJavaScriptParser returns a CGoParser configured for the JavaScript
+// grammar (priority-4, LANG-05). Carries an external C scanner.
+func NewJavaScriptParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_javascript.Language())
+}
+
+// NewTypeScriptParser returns a CGoParser configured for the TypeScript
+// grammar (priority-4, LANG-05). Carries an external C scanner. The
+// tree-sitter-typescript module ships two grammars in one repo
+// (typescript/ and tsx/ subdirs) — this constructor uses the typescript
+// accessor; see NewTSXParser for the sibling .tsx grammar.
+func NewTypeScriptParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_typescript.LanguageTypescript())
+}
+
+// NewTSXParser returns a CGoParser configured for the TSX grammar
+// (priority-4, LANG-05) — the JSX-aware sibling of NewTypeScriptParser,
+// both bindings shipped by the same tree-sitter-typescript module.
+func NewTSXParser() (*CGoParser, error) {
+	return newCGoParser(tree_sitter_typescript.LanguageTSX())
 }
 
 func newCGoParser(languagePtr unsafe.Pointer) (*CGoParser, error) {
