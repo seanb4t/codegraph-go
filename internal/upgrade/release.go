@@ -13,7 +13,15 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"time"
 )
+
+// latestRedirectClientTimeout bounds every call the redirect-trick/API
+// fallback client makes (WR-02): a hung or slow-responding GitHub endpoint
+// must never block `codegraph upgrade --check` (or the resolve step of a
+// real upgrade) indefinitely with no way for the user to know it's stuck
+// versus still working.
+const latestRedirectClientTimeout = 30 * time.Second
 
 // tagFromLocation extracts a release tag (e.g. "v1.2.3") from a GitHub
 // Releases redirect's Location header of the form
@@ -37,6 +45,7 @@ type httpDoer interface {
 // fallback.
 func newLatestRedirectClient() *http.Client {
 	return &http.Client{
+		Timeout: latestRedirectClientTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

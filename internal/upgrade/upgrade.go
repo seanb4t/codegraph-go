@@ -6,7 +6,27 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"time"
 )
+
+// downloadHTTPTimeout bounds every release-asset download (WR-02): the
+// binary and its signature bundle can legitimately take longer than a
+// quick API call, but a hung connection must still fail eventually rather
+// than blocking `codegraph upgrade` forever.
+const downloadHTTPTimeout = 5 * time.Minute
+
+// maxReleaseAssetBytes caps how much of a release-asset response body is
+// ever read into memory (WR-01): verification only runs AFTER the full
+// download completes, so an unbounded io.ReadAll on a compromised or
+// misbehaving asset response (or CDN/cache poisoning at the GitHub
+// Releases layer) could exhaust memory before the signature check ever
+// gets a chance to reject it. 500 MiB is generous for a single-binary Go
+// release archive while still being a hard ceiling.
+const maxReleaseAssetBytes = 500 << 20
+
+// downloadHTTPClient is the shared, timeout-bounded client every release
+// download in this package uses.
+var downloadHTTPClient = &http.Client{Timeout: downloadHTTPTimeout}
 
 // resolveLatestFunc/downloadFunc/verifyFunc/swapFunc are the injectable
 // orchestration seams Options carries — upgrade_test.go drives Run's whole
@@ -177,11 +197,15 @@ func releaseAssetName(version string) string {
 }
 
 // downloadReleaseAsset fetches one named asset from this project's GitHub
-// Releases for the given tag.
+// Releases for the given tag, via downloadHTTPClient (WR-02: bounded by
+// downloadHTTPTimeout) and capped at maxReleaseAssetBytes (WR-01): the
+// response body is read through an io.LimitReader one byte past the cap,
+// so exceeding it is detected and treated as a download error rather than
+// silently truncating the asset or exhausting memory.
 func downloadReleaseAsset(tag, assetName string) ([]byte, error) {
 	url := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", releaseRepoSlug, tag, assetName)
 
-	resp, err := http.Get(url) //nolint:gosec,noctx // release asset URL is built from a fixed repo slug + caller-provided tag, not arbitrary user input
+	resp, err := downloadHTTPClient.Get(url) //nolint:gosec,noctx // release asset URL is built from a fixed repo slug + caller-provided tag, not arbitrary user input
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", url, err)
 	}
@@ -190,5 +214,14 @@ func downloadReleaseAsset(tag, assetName string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("download %s: unexpected status %s", url, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+
+	limited := io.LimitReader(resp.Body, maxReleaseAssetBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, fmt.Errorf("download %s: %w", url, err)
+	}
+	if len(data) > maxReleaseAssetBytes {
+		return nil, fmt.Errorf("download %s: exceeds %d byte limit", url, maxReleaseAssetBytes)
+	}
+	return data, nil
 }
