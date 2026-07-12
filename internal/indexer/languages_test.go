@@ -406,3 +406,86 @@ func TestLanguageRegistry_Ruby(t *testing.T) {
 		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (unconditional extension-stripped identity)", got, want)
 	}
 }
+
+// TestLanguageRegistry_PHP proves the registry resolves PHP by both ID and
+// extension, hands back a working parser + extractor, and that PHP's
+// ModuleKey degrades to path-based identity absent a resolvable descriptor
+// (D-03) — mirroring TestLanguageRegistry_CSharp's parse-time-override
+// rationale (LANG-06, mainstream tier).
+func TestLanguageRegistry_PHP(t *testing.T) {
+	spec, ok := lookupLanguageByID("php")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"php\") to return ok=true")
+	}
+
+	foundExt := false
+	for _, ext := range spec.Extensions {
+		if ext == ".php" {
+			foundExt = true
+			break
+		}
+	}
+	if !foundExt {
+		t.Fatalf("expected php spec Extensions to contain \".php\", got %v", spec.Extensions)
+	}
+
+	byExt, ok := lookupLanguageByExt(".php")
+	if !ok {
+		t.Fatal("expected lookupLanguageByExt(\".php\") to return ok=true")
+	}
+	if byExt.ID != "php" {
+		t.Fatalf("expected .php to resolve to the php spec, got ID=%q", byExt.ID)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "sub/Widget.php"), "sub/Widget.php"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
+
+// TestPHPNamespaceFor proves the PSR-4 longest-prefix-match resolution
+// (languages_php.go) picks the most specific directory mapping and joins
+// the remaining path segments with PHP's own "\" separator.
+func TestPHPNamespaceFor(t *testing.T) {
+	psr4 := map[string]string{
+		`App\`:       "src/",
+		`App\Sub\`:   "src/sub/",
+		`Vendor\Ns\`: "lib/",
+	}
+
+	cases := []struct {
+		relPath string
+		want    string
+		wantOK  bool
+	}{
+		{relPath: "src/Widget.php", want: `App`, wantOK: true},
+		{relPath: "src/Models/Widget.php", want: `App\Models`, wantOK: true},
+		{relPath: "src/sub/Widget.php", want: `App\Sub`, wantOK: true},
+		{relPath: "lib/Widget.php", want: `Vendor\Ns`, wantOK: true},
+		{relPath: "unrelated/Widget.php", want: "", wantOK: false},
+	}
+	for _, c := range cases {
+		got, ok := phpNamespaceFor(psr4, c.relPath)
+		if ok != c.wantOK || got != c.want {
+			t.Errorf("phpNamespaceFor(%q) = (%q, %v), want (%q, %v)", c.relPath, got, ok, c.want, c.wantOK)
+		}
+	}
+}
