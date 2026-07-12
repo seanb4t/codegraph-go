@@ -97,6 +97,22 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 		return Stats{Files: len(files), Duration: time.Since(start)}, err
 	}
 
+	// LANG-07/D-08/D-09: opt-in, per-framework route detection runs once
+	// per from-scratch Run, after Pass 1 (route detectors re-parse only
+	// the files whose language has a FIRED detector — never a blanket
+	// AST re-walk) and before Pass 2, so its route nodes/heuristic calls
+	// edges flow through the SAME resolveRefsWithIndex/collapseEdges/
+	// writeGraph path every other edge already uses (D-06/D-07: no
+	// parallel commit). Wired into Run only, not Sync (incremental sync
+	// stays out of this plan's scope — see 05-12-SUMMARY.md).
+	routeNodes, routeEdges, err := detectRoutes(repoRoot, files, results)
+	if err != nil {
+		return Stats{Files: len(files), Duration: time.Since(start)}, err
+	}
+	if len(routeNodes) > 0 || len(routeEdges) > 0 {
+		results = append(results, routeResultFrom(routeNodes, routeEdges))
+	}
+
 	store, err := graphstore.Open(storeDir)
 	if err != nil {
 		return Stats{Files: len(files), Duration: time.Since(start)}, err

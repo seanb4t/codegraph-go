@@ -190,6 +190,18 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 			}
 		}
 
+		// RelPath == "" marks a synthetic, non-file result (Phase 5 LANG-07:
+		// pipeline.go's Run appends exactly one such result carrying every
+		// detected route's nodes/IntraEdges, via detectRoutes) — it
+		// contributes Nodes/IntraEdges above like any other result, but
+		// mints NO schema.File record, since it has no real source file to
+		// attribute node/edge counts to (a synthetic "" path would collide
+		// with nothing but would still be a misleading phantom File entry
+		// in every file-listing surface).
+		if r.RelPath == "" {
+			continue
+		}
+
 		f := &schema.File{
 			Path:        r.RelPath,
 			ContentHash: r.ContentHash,

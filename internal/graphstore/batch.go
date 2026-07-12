@@ -17,12 +17,30 @@ type pebbleWriter struct {
 	batch *pebble.Batch
 }
 
+// deterministicMarshal marshals msg with map-field key ordering forced
+// deterministic (Go's protobuf runtime otherwise iterates a Go map in its
+// own randomized order every call, which is invisible for a map-free
+// message but produces a genuinely different byte sequence run-to-run for
+// any message carrying a map field — schema.Edge.Metadata, Phase 5's
+// LANG-07/RES-03 addition, being the first field in this schema to ever
+// exercise that path). Every PutX call below routes through this helper,
+// not raw proto.Marshal, so a future map field on Node/File/Meta inherits
+// the same determinism guarantee without a second bug needing to be found
+// (05-12-PLAN.md's "route nodes/edges flow through collapseEdges
+// (deterministic)" acceptance criterion — the marshal step sits between
+// collapseEdges' own deterministic ordering and the bytes actually
+// persisted, so it must preserve that guarantee, not just the ordering
+// collapseEdges already establishes).
+func deterministicMarshal(msg proto.Message) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+}
+
 // PutNode stages n's own n/ record, plus — when n has a FilePath (i.e. it
 // is not the kindPackage pseudo-node, which has no owning file) — its
 // x/<FilePath>/... file-index entry (Phase 4 D-02), so the owning file's
 // nodes are enumerable via IterateFileIndex.
 func (w *pebbleWriter) PutNode(n *schema.Node) error {
-	data, err := proto.Marshal(n)
+	data, err := deterministicMarshal(n)
 	if err != nil {
 		return err
 	}
@@ -39,7 +57,7 @@ func (w *pebbleWriter) PutNode(n *schema.Node) error {
 // its x/<ownerPath>/... file-index entry (Phase 4 D-02), so the owning
 // file's outgoing edges are enumerable via IterateFileIndex.
 func (w *pebbleWriter) PutEdge(e *schema.Edge, ownerPath string) error {
-	data, err := proto.Marshal(e)
+	data, err := deterministicMarshal(e)
 	if err != nil {
 		return err
 	}
@@ -77,7 +95,7 @@ func (w *pebbleWriter) DeleteFileIndexEdge(ownerPath, source, kind, target strin
 }
 
 func (w *pebbleWriter) PutFile(f *schema.File) error {
-	data, err := proto.Marshal(f)
+	data, err := deterministicMarshal(f)
 	if err != nil {
 		return err
 	}
@@ -85,7 +103,7 @@ func (w *pebbleWriter) PutFile(f *schema.File) error {
 }
 
 func (w *pebbleWriter) PutMeta(m *schema.Meta) error {
-	data, err := proto.Marshal(m)
+	data, err := deterministicMarshal(m)
 	if err != nil {
 		return err
 	}

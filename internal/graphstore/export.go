@@ -116,8 +116,16 @@ func exportNamespace(bw *bufio.Writer, snap *pebble.Snapshot, ns byte, kind uint
 }
 
 // writeExportRecord frames one record as [kind][uvarint length][bytes].
+// Uses deterministicMarshal (batch.go), not raw proto.Marshal, for the
+// SAME reason PutX does: this re-marshals a message freshly unmarshaled
+// from the store (exportNamespace, above), and a map-valued field
+// (schema.Edge.Metadata) would otherwise re-randomize its key order on
+// every Export() call regardless of what was originally persisted —
+// exactly the byte-identical-rebuild guarantee determinism_test.go's
+// TestDeterministicRebuild (and Phase 5's route-specific
+// TestRoute_DeterministicRebuild) verify against this stream.
 func writeExportRecord(w io.Writer, kind uint8, msg proto.Message) error {
-	data, err := proto.Marshal(msg)
+	data, err := deterministicMarshal(msg)
 	if err != nil {
 		return err
 	}
