@@ -350,14 +350,14 @@ func TestGoldenParity(t *testing.T) {
 		}
 		// D-05: languages/nodesByKind reflect whichever LanguageSpecs are
 		// registered and have discoverable files in weft — weft also has
-		// js/yaml files the TS extractor parsed that internal/indexer does
-		// not (yet); its committed .py files ARE now extracted, since
-		// Phase 5's Python registration (05-06) makes pyextract fire on
-		// them the same way it already did for Go.
-		wantLanguages := []string{"go", "python"}
+		// yaml files the TS extractor parsed that internal/indexer does
+		// not (yet); its committed .py files (05-06) and its three
+		// .js/.mjs/.cjs files (05-07, this plan — all three register under
+		// the single "javascript" LanguageSpec ID) ARE now extracted.
+		wantLanguages := []string{"go", "javascript", "python"}
 		gotJoined, wantJoined := strings.Join(got.Languages, ","), strings.Join(wantLanguages, ",")
 		if gotJoined != wantJoined {
-			t.Errorf("status.Languages = %v, want %v (D-05 Go+Python extraction)", got.Languages, wantLanguages)
+			t.Errorf("status.Languages = %v, want %v (D-05 Go+JS+Python extraction)", got.Languages, wantLanguages)
 		}
 
 		raw, err := query.MarshalStatusJSON(got)
