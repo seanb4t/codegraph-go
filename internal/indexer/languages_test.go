@@ -489,3 +489,119 @@ func TestPHPNamespaceFor(t *testing.T) {
 		}
 	}
 }
+
+// TestLanguageRegistry_C proves the registry resolves C by both ID and
+// extension (including the shared ".h" disposition), hands back a working
+// parser + extractor, and that C's ModuleKey is UNCONDITIONALLY the
+// path-based relPath — mirroring TestLanguageRegistry_Ruby's own
+// descriptor-independent pattern (LANG-06, mainstream tier).
+func TestLanguageRegistry_C(t *testing.T) {
+	spec, ok := lookupLanguageByID("c")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"c\") to return ok=true")
+	}
+
+	for _, ext := range []string{".c", ".h"} {
+		found := false
+		for _, e := range spec.Extensions {
+			if e == ext {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected c spec Extensions to contain %q, got %v", ext, spec.Extensions)
+		}
+		byExt, ok := lookupLanguageByExt(ext)
+		if !ok {
+			t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+		}
+		if byExt.ID != "c" {
+			t.Fatalf("expected %q to resolve to the c spec, got ID=%q", ext, byExt.ID)
+		}
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "src/widget.c"), "src/widget.c"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
+
+// TestLanguageRegistry_Cpp proves the registry resolves C++ by both ID and
+// extension, hands back a working parser + extractor SHARED with C
+// (cextract.Extract), and that C++'s ModuleKey is UNCONDITIONALLY the
+// path-based relPath (LANG-06, mainstream tier).
+func TestLanguageRegistry_Cpp(t *testing.T) {
+	spec, ok := lookupLanguageByID("cpp")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"cpp\") to return ok=true")
+	}
+
+	for _, ext := range []string{".cpp", ".cc", ".cxx", ".hpp", ".hh"} {
+		found := false
+		for _, e := range spec.Extensions {
+			if e == ext {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected cpp spec Extensions to contain %q, got %v", ext, spec.Extensions)
+		}
+		byExt, ok := lookupLanguageByExt(ext)
+		if !ok {
+			t.Fatalf("expected lookupLanguageByExt(%q) to return ok=true", ext)
+		}
+		if byExt.ID != "cpp" {
+			t.Fatalf("expected %q to resolve to the cpp spec, got ID=%q", ext, byExt.ID)
+		}
+	}
+
+	// ".h" is NOT claimed by cpp -- it resolves to c (the documented
+	// header-ambiguity disposition).
+	byExt, ok := lookupLanguageByExt(".h")
+	if !ok || byExt.ID != "c" {
+		t.Fatalf("expected \".h\" to resolve to the c spec, got ID=%q ok=%v", byExt.ID, ok)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "src/shape.cpp"), "src/shape.cpp"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
