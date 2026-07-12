@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 05
 current_phase_name: Language Coverage & Resolution Breadth
 status: executing
-stopped_at: Completed 05-10-PLAN.md
-last_updated: "2026-07-12T14:38:47.542Z"
+stopped_at: Completed 05-11-PLAN.md
+last_updated: "2026-07-12T15:27:45.844Z"
 last_activity: 2026-07-12
 last_activity_desc: Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 44
-  completed_plans: 41
+  completed_plans: 42
   percent: 50
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 05 (Language Coverage & Resolution Breadth) — EXECUTING
-Plan: 11 of 13
+Plan: 12 of 13
 Status: Ready to execute
 Last activity: 2026-07-12 — Completed 05-06 (Python extraction + cross-file resolution, LANG-04)
 
@@ -97,6 +97,7 @@ Progress: [███████░░░] 73%
 | Phase 05 P08 | 25min | 1 tasks | 4 files |
 | Phase 05 P09 | 55min | 3 tasks | 9 files |
 | Phase 05 P10 | 50min | 2 tasks | 14 files |
+| Phase 05-language-coverage-resolution-breadth P11 | 50min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,9 @@ Recent decisions affecting current work:
 - [Phase 05]: Rust use never populates Imports (crate name unknown at Extract time) -- documented cross-file gap, same-file/same-module resolution only
 - [Phase 05]: Ruby require/require_relative recognized via call-shape detection (no dedicated import node); a bare no-parens method call is grammatically ambiguous with a local variable and is not extracted as a call
 - [Phase 05]: PHP reuses csharpextract's parse-time namespace-override pattern; composer.json PSR-4 autoload map is the fallback moduleKey for namespace-less files
+- [Phase 05-language-coverage-resolution-breadth]: C and C++ share one cextract package across two LanguageSpec registrations; Extract determines language from relPath's own extension since the shared cross-language signature carries no language field
+- [Phase 05-language-coverage-resolution-breadth]: C++ out-of-line method definitions (Type::method() {}) are extracted as KindMethod via rustextract's own cross-file RefKindContains pattern, a deliberate scope extension since this is the dominant real-world C++ idiom
+- [Phase 05-language-coverage-resolution-breadth]: Swift and Kotlin grammars turned out to use one unified class_declaration node covering class/struct/enum/interface/etc, distinguished only by an anonymous keyword token -- adapted and documented per the plan's guidance for [SUS] grammar rough edges
 
 ### Pending Todos
 
@@ -221,6 +225,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T14:38:47.536Z
-Stopped at: Completed 05-10-PLAN.md
+Last session: 2026-07-12T15:27:45.839Z
+Stopped at: Completed 05-11-PLAN.md
 Resume file: None
