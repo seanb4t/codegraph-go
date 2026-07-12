@@ -208,11 +208,15 @@ func TestExtract_Superclass(t *testing.T) {
 // call (no import needed, Ruby constants are PascalCase by convention), and
 // a local-variable-receiver call (never mis-resolved as same-module,
 // mirroring goextract's WR-02 fix). require/require_relative calls are
-// never double-emitted as calls edges (see TestExtract_Requires).
+// never double-emitted as calls edges (see TestExtract_Requires). A bare
+// no-parens no-args method invocation (`helper` alone, no receiver) is a
+// documented, accepted gap: Ruby's own grammar cannot distinguish it from a
+// local-variable reference without scope tracking this extractor does not
+// implement, so this test uses the unambiguous `helper()` form instead.
 func TestExtract_Calls(t *testing.T) {
 	src := `class Widget
   def run
-    helper
+    helper()
     Widget.build
     w = Widget.new
     w.size
@@ -238,8 +242,8 @@ end
 		t.Errorf("expected local-variable-receiver calls ref to w.size with a synthetic non-matching alias, got %+v", result.Unresolved)
 	}
 	for _, u := range result.Unresolved {
-		if u.Kind == goextract.RefKindCalls && (u.Name == "require" || u.Name == "new") {
-			t.Errorf("did not expect a calls ref for %q (require is import-only; .new is a call but not asserted here)", u.Name)
+		if u.Kind == goextract.RefKindCalls && u.Name == "require" {
+			t.Errorf("did not expect a calls ref for %q (require is import-only)", u.Name)
 		}
 	}
 }

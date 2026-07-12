@@ -298,3 +298,111 @@ func TestLanguageRegistry_TypeScript(t *testing.T) {
 		})
 	}
 }
+
+// TestLanguageRegistry_Rust proves the registry resolves Rust by both ID
+// and extension, hands back a working parser + extractor, and that Rust's
+// ModuleKey degrades to path-based identity absent a resolvable descriptor
+// (D-03) — mirroring TestLanguageRegistry_Python's shape (LANG-06,
+// mainstream tier).
+func TestLanguageRegistry_Rust(t *testing.T) {
+	spec, ok := lookupLanguageByID("rust")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"rust\") to return ok=true")
+	}
+
+	foundExt := false
+	for _, ext := range spec.Extensions {
+		if ext == ".rs" {
+			foundExt = true
+			break
+		}
+	}
+	if !foundExt {
+		t.Fatalf("expected rust spec Extensions to contain \".rs\", got %v", spec.Extensions)
+	}
+
+	byExt, ok := lookupLanguageByExt(".rs")
+	if !ok {
+		t.Fatal("expected lookupLanguageByExt(\".rs\") to return ok=true")
+	}
+	if byExt.ID != "rust" {
+		t.Fatalf("expected .rs to resolve to the rust spec, got ID=%q", byExt.ID)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "sub/widget.rs"), "sub/widget.rs"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
+
+// TestLanguageRegistry_Ruby proves the registry resolves Ruby by both ID
+// and extension, hands back a working parser + extractor, and that Ruby's
+// ModuleKey is UNCONDITIONALLY the extension-stripped relPath — mirroring
+// TestLanguageRegistry_TypeScript's own descriptor-independent pattern
+// (LANG-06, mainstream tier).
+func TestLanguageRegistry_Ruby(t *testing.T) {
+	spec, ok := lookupLanguageByID("ruby")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"ruby\") to return ok=true")
+	}
+
+	foundExt := false
+	for _, ext := range spec.Extensions {
+		if ext == ".rb" {
+			foundExt = true
+			break
+		}
+	}
+	if !foundExt {
+		t.Fatalf("expected ruby spec Extensions to contain \".rb\", got %v", spec.Extensions)
+	}
+
+	byExt, ok := lookupLanguageByExt(".rb")
+	if !ok {
+		t.Fatal("expected lookupLanguageByExt(\".rb\") to return ok=true")
+	}
+	if byExt.ID != "ruby" {
+		t.Fatalf("expected .rb to resolve to the ruby spec, got ID=%q", byExt.ID)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "sub/widget.rb"), "sub/widget"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (unconditional extension-stripped identity)", got, want)
+	}
+}
