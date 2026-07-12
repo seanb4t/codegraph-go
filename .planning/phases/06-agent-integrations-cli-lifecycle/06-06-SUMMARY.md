@@ -195,3 +195,7 @@ None - no external service configuration required. `codegraph upgrade --check` w
 ---
 *Phase: 06-agent-integrations-cli-lifecycle*
 *Completed: 2026-07-12*
+
+## Self-Check: PASSED
+
+All claimed files (internal/upgrade/{release,verify,swap,upgrade}.go, their _test.go counterparts, testdata/{valid-bundle,trusted-root}.json, internal/cli/{upgrade.go,upgrade_test.go,root.go}, go.mod, go.sum, this SUMMARY.md) exist on disk. All claimed commit hashes (cee06e1, ee9707f, 248da15, c6a5161, 0d378f8, 665a22b, 4392859) found in `git log`.
