@@ -183,7 +183,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every heuristic (synthesized) edge carries a `provenance: heuristic` tag with source location, distinguishing it from ground-truth AST edges
   5. Framework-aware routing for Gin, Spring, ASP.NET, Django/Flask/FastAPI, and Express/NestJS emits `route` nodes linked to their handlers
 
-**Plans**: 1/13 plans executed
+**Plans**: 2/13 plans executed
 
 **Wave 1 — Foundation seam**
 
@@ -191,7 +191,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 2 — Pass-1 generalization** *(blocked on Wave 1)*
 
-- [ ] 05-02-PLAN.md — Discovery ext→language walker + descriptor/ModuleKey hook + worker-pool per-language fix (Pitfall 1) + pipeline dispatch (LANG-02/03/04/05)
+- [x] 05-02-PLAN.md — Discovery ext→language walker + descriptor/ModuleKey hook + worker-pool per-language fix (Pitfall 1) + pipeline dispatch (LANG-02/03/04/05)
 
 **Wave 3 — Pass-2 generalization** *(blocked on Wave 2)*
 
@@ -274,7 +274,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Go Indexing Pipeline | 6/6 | Complete    | 2026-07-11 |
 | 3. Query Engine & MCP Server | 9/9 | Complete    | 2026-07-11 |
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
-| 5. Language Coverage & Resolution Breadth | 1/13 | In Progress|  |
+| 5. Language Coverage & Resolution Breadth | 2/13 | In Progress|  |
 | 6. Agent Integrations & CLI Lifecycle | 0/TBD | Not started | - |
 | 7. Migration Tool | 0/TBD | Not started | - |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |
