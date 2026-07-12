@@ -2,7 +2,9 @@ package agents
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -124,6 +126,65 @@ func TestAntigravity_NoInstructionsFileWritten(t *testing.T) {
 
 	if fileExists(filepath.Join(home, ".gemini", "GEMINI.md")) {
 		t.Fatalf("antigravity must not write GEMINI.md itself (only the Gemini target does)")
+	}
+}
+
+// TestAntigravity_Install_UnifiedWriteFailure_PreservesLegacyEntryNoMarker
+// is the CR-02 regression test: if the write of the migrated entry into
+// the unified config fails, the legacy entry must NOT be removed and the
+// ".migrated" marker must NOT be written — otherwise a partial-write
+// failure would permanently record "migration done" while the codegraph
+// entry exists in neither file (silent data loss with no rollback). The
+// failure is simulated by chmod'ing the unified config's parent directory
+// read-only AFTER it exists (so the pre-migration fileExists(unified)
+// check still sees "no unified file yet" and the sweep proceeds), which
+// makes atomicWriteFile's os.CreateTemp fail with a genuine permission
+// error for both the migration write and the final writeMcpEntry call.
+func TestAntigravity_Install_UnifiedWriteFailure_PreservesLegacyEntryNoMarker(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission-bit write-failure simulation is POSIX-specific")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses permission bits")
+	}
+
+	home := fakeHome(t)
+	legacyPath := filepath.Join(home, ".gemini", "antigravity", "mcp_config.json")
+	writeFile(t, legacyPath, `{
+  "mcpServers": {
+    "codegraph": { "command": "/old/codegraph", "args": ["serve", "--mcp"] }
+  }
+}
+`)
+
+	unifiedDir := filepath.Join(home, ".gemini", "config")
+	if err := os.MkdirAll(unifiedDir, 0o755); err != nil {
+		t.Fatalf("seed unified dir: %v", err)
+	}
+	if err := os.Chmod(unifiedDir, 0o500); err != nil {
+		t.Fatalf("chmod unified dir read-only: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(unifiedDir, 0o755) })
+
+	a := antigravityTarget{}
+	result := a.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	if len(result.Errors) == 0 {
+		t.Fatalf("expected Install to report an error on unified write failure, got none: %+v", result)
+	}
+
+	legacyAfter, err := readJSONFile(legacyPath)
+	if err != nil {
+		t.Fatalf("re-read legacy: %v", err)
+	}
+	mcpServers, _ := legacyAfter["mcpServers"].(map[string]any)
+	if _, ok := mcpServers["codegraph"]; !ok {
+		t.Fatalf("legacy entry was removed despite the unified write failing (CR-02 data loss): %v", legacyAfter)
+	}
+
+	markerPath := filepath.Join(unifiedDir, ".migrated")
+	if fileExists(markerPath) {
+		t.Fatalf("migrated marker was written despite the unified write failing (CR-02): %s exists", markerPath)
 	}
 }
 

@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -126,16 +127,28 @@ func (antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult 
 
 	unified, err := antigravityUnifiedPath()
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity unified config path: %w", err))
 		return result
 	}
 	legacy, err := antigravityLegacyPath()
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity legacy config path: %w", err))
 		return result
 	}
 	marker, err := antigravityMigratedMarker()
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity migrated marker path: %w", err))
 		return result
 	}
+
+	// migrationOK tracks whether it's safe to (a) drop the legacy entry
+	// and (b) write the ".migrated" marker. CR-02: neither may happen
+	// unless the unified file is confirmed to actually hold the
+	// codegraph entry — otherwise a partial-write failure here would
+	// permanently record "migration done" while the entry exists in
+	// NEITHER file, silently reverting the user's antigravity MCP config
+	// to unconfigured with no rollback.
+	migrationOK := true
 
 	if !fileExists(marker) && !fileExists(unified) && fileExists(legacy) {
 		// Pre-migration legacy config, no unified file yet — sweep the
@@ -149,27 +162,47 @@ func (antigravityTarget) Install(loc Location, opts InstallOptions) WriteResult 
 			}
 			unifiedServers["codegraph"] = legacyEntry
 			unifiedExisting["mcpServers"] = unifiedServers
-			if err := writeJSONFile(unified, unifiedExisting); err == nil {
+			if err := writeJSONFile(unified, unifiedExisting); err != nil {
+				migrationOK = false
+				result.Errors = append(result.Errors, fmt.Errorf("migrate legacy entry into %s: %w", unified, err))
+			} else {
 				result.Files = append(result.Files, FileResult{Path: unified, Action: ActionUpdated})
 			}
 		}
-		if fr, err := removeMcpEntry(legacy); err == nil && fr.Action == ActionRemoved {
-			result.Files = append(result.Files, fr)
+		// Only remove the legacy entry once the unified write above is
+		// confirmed successful (CR-02) — never lose the entry to a
+		// partial-write failure with no file left holding it.
+		if migrationOK {
+			fr, err := removeMcpEntry(legacy)
+			if err != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacy, err))
+			} else if fr.Action == ActionRemoved {
+				result.Files = append(result.Files, fr)
+			}
 		}
 	}
 
 	fr, err := writeMcpEntry(unified, func() any {
 		return antigravityEntry(opts.ExecPath)
 	})
-	if err == nil {
+	if err != nil {
+		migrationOK = false
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", unified, err))
+	} else {
 		result.Files = append(result.Files, fr)
 	}
 
-	if !fileExists(marker) {
-		if err := os.MkdirAll(filepath.Dir(marker), 0o755); err == nil {
-			if err := os.WriteFile(marker, []byte("migrated\n"), 0o644); err == nil {
-				result.Files = append(result.Files, FileResult{Path: marker, Action: ActionCreated})
-			}
+	// The ".migrated" marker is only written once the unified file is
+	// confirmed to hold the current entry (CR-02) — writing it
+	// unconditionally would permanently record "migration done" even on
+	// a write failure above.
+	if migrationOK && !fileExists(marker) {
+		if err := os.MkdirAll(filepath.Dir(marker), 0o755); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", marker, err))
+		} else if err := os.WriteFile(marker, []byte("migrated\n"), 0o644); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", marker, err))
+		} else {
+			result.Files = append(result.Files, FileResult{Path: marker, Action: ActionCreated})
 		}
 	}
 
@@ -183,11 +216,11 @@ func (antigravityTarget) Uninstall(loc Location) WriteResult {
 	}
 	configPath, err := antigravityConfigPath()
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve antigravity config path: %w", err))
 		return result
 	}
-	if fr, err := removeMcpEntry(configPath); err == nil {
-		result.Files = append(result.Files, fr)
-	}
+	fr, err := removeMcpEntry(configPath)
+	recordFile(&result, configPath, fr, err)
 	return result
 }
 
