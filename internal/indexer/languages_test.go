@@ -158,6 +158,60 @@ func TestLanguageRegistry_CSharp(t *testing.T) {
 	}
 }
 
+// TestLanguageRegistry_Python proves the registry resolves Python by both
+// ID and extension, hands back a working parser + extractor, and that
+// Python's ModuleKey degrades to path-based identity absent a resolvable
+// descriptor (D-03) — mirroring TestLanguageRegistry_Java/_CSharp's shape
+// (LANG-04).
+func TestLanguageRegistry_Python(t *testing.T) {
+	spec, ok := lookupLanguageByID("python")
+	if !ok {
+		t.Fatal("expected lookupLanguageByID(\"python\") to return ok=true")
+	}
+
+	foundExt := false
+	for _, ext := range spec.Extensions {
+		if ext == ".py" {
+			foundExt = true
+			break
+		}
+	}
+	if !foundExt {
+		t.Fatalf("expected python spec Extensions to contain \".py\", got %v", spec.Extensions)
+	}
+
+	byExt, ok := lookupLanguageByExt(".py")
+	if !ok {
+		t.Fatal("expected lookupLanguageByExt(\".py\") to return ok=true")
+	}
+	if byExt.ID != "python" {
+		t.Fatalf("expected .py to resolve to the python spec, got ID=%q", byExt.ID)
+	}
+
+	if spec.NewParser == nil {
+		t.Fatal("expected a non-nil NewParser func")
+	}
+	p, err := spec.NewParser()
+	if err != nil {
+		t.Fatalf("NewParser: %v", err)
+	}
+	if p == nil {
+		t.Fatal("expected NewParser to return a non-nil parser")
+	}
+	defer p.Close()
+
+	if spec.Extract == nil {
+		t.Fatal("expected a non-nil Extract func")
+	}
+
+	if spec.ModuleKey == nil {
+		t.Fatal("expected a non-nil ModuleKey func")
+	}
+	if got, want := spec.ModuleKey(nil, "sub/widget.py"), "sub/widget.py"; got != want {
+		t.Errorf("ModuleKey(nil descriptor) = %q, want %q (D-03 path-identity fallback)", got, want)
+	}
+}
+
 // TestKindRouteAdditive proves the Phase 5 KindRoute constant was added
 // additively — every pre-existing Kind* constant must remain unchanged.
 func TestKindRouteAdditive(t *testing.T) {

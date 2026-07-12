@@ -1,60 +1,31 @@
 package indexer
 
 import (
-	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
 	"testing"
-
-	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
-	"github.com/seanb4t/codegraph-go/internal/parser"
 )
 
 const fixtureRoot = "testdata/gofixture"
 const mixedLangFixtureRoot = "testdata/mixedlangfixture"
 
-// init registers one test-only LanguageSpec — "python" (Descriptor is nil
-// entirely, simulating a language with no descriptor hook at all) — solely
-// to prove Discover's extension->language-registry generalization (D-03)
-// mechanically, without depending on a real Python extractor landing in a
-// later Wave-B plan. NewParser/Extract are never invoked by any test in
-// this file (Discover never parses file content), so they are inert stubs.
-//
-// A matching "java" test-only spec previously lived here (05-02) to prove
-// the erroring-Descriptor fallback shape; it was removed once a REAL "java"
-// LanguageSpec landed (languages_java.go, 05-04) — registerLanguage keys
-// its registry/extToLang maps by a single string ID, so a second "java"
-// registration here would silently collide with (and, depending on Go's
-// package-file init order, potentially override) the real one. The
-// erroring-Descriptor fallback shape this used to prove is now exercised
-// against the real java spec directly, in
+// A matching "java" test-only spec, and later a "python" test-only spec,
+// previously lived here (05-02) to prove Discover's extension->language-
+// registry generalization (D-03) mechanically, ahead of the real
+// extractors landing. Both were removed once their REAL LanguageSpecs
+// landed (languages_java.go 05-04, languages_python.go 05-06) —
+// registerLanguage keys its registry/extToLang maps by a single string ID,
+// so a second same-ID registration here would silently collide with (and,
+// depending on Go's package-file init order, potentially override) the
+// real one. The fallback shapes these test-only specs used to prove are
+// now exercised against the real java/python specs directly, in
 // TestDiscover_MixedLanguage_DescriptorAbsentFallback below (the
-// mixedlangfixture root has no pom.xml/build.gradle, so
-// javaextract's own Descriptor genuinely errors the same way).
-func init() {
-	registerLanguage(LanguageSpec{
-		ID:         "python",
-		Extensions: []string{".py"},
-		NewParser: func() (parser.Parser, error) {
-			return nil, fmt.Errorf("discover_test: python parser not implemented")
-		},
-		Extract: func(p parser.Parser, moduleKey, relPath string, src []byte) (goextract.FileResult, error) {
-			return goextract.FileResult{}, fmt.Errorf("discover_test: python extractor not implemented")
-		},
-		ModuleKey: func(descriptor ProjectDescriptor, relPath string) string {
-			// D-03 path-identity fallback, same discipline as "java"
-			// above, exercised via a nil Descriptor hook instead of an
-			// erroring one — both shapes must degrade the same way.
-			return path.Dir(relPath)
-		},
-		// Descriptor intentionally left nil: this language has no
-		// project-descriptor hook implementation at all yet.
-	})
-}
+// mixedlangfixture root has neither pom.xml/build.gradle nor
+// pyproject.toml/setup.py, so javaextract's and pyextract's own
+// Descriptors genuinely fall back to path-based identity the same way).
 
 // TestDiscover_Fixture asserts Discover returns the fixture's .go files in a
 // stable, deterministic RelPath-sorted order, with skip_linux.go included
@@ -227,8 +198,9 @@ func TestDiscover_MixedLanguage_ExtensionRegistry(t *testing.T) {
 // language has no resolvable project descriptor (here: "java" — the real
 // javaextract LanguageSpec's own Descriptor genuinely errors against
 // mixedlangfixture, which has no pom.xml/build.gradle — and "python", whose
-// Descriptor hook is nil entirely) is still returned with a path-based
-// ModuleKey — never dropped (D-03's central guarantee).
+// real pyextract LanguageSpec's own Descriptor also genuinely errors, since
+// mixedlangfixture has no pyproject.toml/setup.py either) is still returned
+// with a path-based ModuleKey — never dropped (D-03's central guarantee).
 func TestDiscover_MixedLanguage_DescriptorAbsentFallback(t *testing.T) {
 	files, _, err := Discover(mixedLangFixtureRoot)
 	if err != nil {
@@ -252,8 +224,8 @@ func TestDiscover_MixedLanguage_DescriptorAbsentFallback(t *testing.T) {
 	if !ok {
 		t.Fatal("app.py was dropped, want present with path-based fallback identity")
 	}
-	if want := "."; pyFile.ImportPath != want {
-		t.Errorf("python ImportPath = %q, want %q (path-based fallback: nil Descriptor hook)", pyFile.ImportPath, want)
+	if want := "app.py"; pyFile.ImportPath != want {
+		t.Errorf("python ImportPath = %q, want %q (path-based fallback: real pyextract Descriptor errors on no pyproject.toml/setup.py)", pyFile.ImportPath, want)
 	}
 }
 
