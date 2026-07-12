@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -87,13 +88,17 @@ func (codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		return result
 	}
 
-	if configPath, err := codexConfigPath(); err == nil {
+	if configPath, err := codexConfigPath(); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve codex config path: %w", err))
+	} else {
 		existed := fileExists(configPath)
 		existing := readFileOrEmpty(configPath)
 		updated := spliceTOMLTable(existing, codexTOMLTable, codexTableBody(opts.ExecPath))
 		if updated == existing {
 			result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionUnchanged})
-		} else if err := atomicWriteFile(configPath, updated); err == nil {
+		} else if err := atomicWriteFile(configPath, updated); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
+		} else {
 			action := ActionUpdated
 			if !existed {
 				action = ActionCreated
@@ -102,10 +107,11 @@ func (codexTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		}
 	}
 
-	if instrPath, err := codexInstructionsPath(); err == nil {
-		if fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody()); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if instrPath, err := codexInstructionsPath(); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve codex instructions path: %w", err))
+	} else {
+		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+		recordFile(&result, instrPath, fr, err)
 	}
 
 	return result
@@ -117,24 +123,27 @@ func (codexTarget) Uninstall(loc Location) WriteResult {
 		return result
 	}
 
-	if configPath, err := codexConfigPath(); err == nil {
-		if !fileExists(configPath) {
+	if configPath, err := codexConfigPath(); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve codex config path: %w", err))
+	} else if !fileExists(configPath) {
+		result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
+	} else {
+		existing := readFileOrEmpty(configPath)
+		updated := stripTOMLTable(existing, codexTOMLTable)
+		if updated == existing {
 			result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
+		} else if err := atomicWriteFile(configPath, updated); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", configPath, err))
 		} else {
-			existing := readFileOrEmpty(configPath)
-			updated := stripTOMLTable(existing, codexTOMLTable)
-			if updated == existing {
-				result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionNotFound})
-			} else if err := atomicWriteFile(configPath, updated); err == nil {
-				result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionRemoved})
-			}
+			result.Files = append(result.Files, FileResult{Path: configPath, Action: ActionRemoved})
 		}
 	}
 
-	if instrPath, err := codexInstructionsPath(); err == nil {
-		if action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd); err == nil {
-			result.Files = append(result.Files, FileResult{Path: instrPath, Action: action})
-		}
+	if instrPath, err := codexInstructionsPath(); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve codex instructions path: %w", err))
+	} else {
+		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
+		recordAction(&result, instrPath, action, err)
 	}
 
 	return result

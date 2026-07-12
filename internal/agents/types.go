@@ -97,6 +97,14 @@ type WriteResult struct {
 	// (e.g. Kiro's "enable MCP in Settings" reminder); empty for most
 	// targets.
 	Notes []string
+	// Errors carries every I/O error encountered while writing/removing a
+	// file this call attempted to touch — path context is included in
+	// each error's message. A non-empty Errors means the corresponding
+	// file's Install/Uninstall step did NOT complete, so the caller (the
+	// CLI's install/uninstall commands) MUST surface these and report a
+	// non-zero exit rather than a silent "unchanged"/"not-configured"
+	// (CR-01: a swallowed write error must never look like a no-op).
+	Errors []error
 }
 
 // InstallOptions carries per-run install configuration threaded down from

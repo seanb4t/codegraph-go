@@ -2,10 +2,36 @@ package agents
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// recordFile appends fr to result.Files, or — if err is non-nil — wraps
+// err with path context and appends it to result.Errors instead. This is
+// the single write-outcome funnel every AgentTarget.Install/Uninstall call
+// site uses so a returned I/O error can never be silently swallowed
+// (CR-01): every one of the ~40 `if fr, err := ...; err == nil { append }`
+// sites this package used to have is now `recordFile(&result, path, fr, err)`.
+func recordFile(result *WriteResult, path string, fr FileResult, err error) {
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", path, err))
+		return
+	}
+	result.Files = append(result.Files, fr)
+}
+
+// recordAction is recordFile's analog for helpers (removeMarkedSection,
+// stripTOMLTable-style callers) that report a bare FileAction rather than
+// a full FileResult.
+func recordAction(result *WriteResult, path string, action FileAction, err error) {
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("%s: %w", path, err))
+		return
+	}
+	result.Files = append(result.Files, FileResult{Path: path, Action: action})
+}
 
 // readJSONFile parses path as a JSON object and returns it as a generic
 // map. A missing file, an empty file, or unparseable content all fall

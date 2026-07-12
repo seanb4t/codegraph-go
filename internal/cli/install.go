@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -98,10 +99,9 @@ func newInstallCmd() *cobra.Command {
 			}
 
 			opts := agents.InstallOptions{AutoAllow: autoAllow, ExecPath: execPath}
-			printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
+			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Install(loc, opts)
 			}, installStatus)
-			return nil
 		},
 	}
 
@@ -203,12 +203,20 @@ func installStatus(result agents.WriteResult) string {
 // print as a confusing no-op rather than an explicit status (D-08). For
 // every supported target, call do(), print statusOf(result) as the
 // headline, then one indented line per touched file and note.
-func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) {
+//
+// Any WriteResult.Errors are printed as "  error: ..." lines and joined
+// into the returned error (CR-01): a hard write failure — EACCES, a full
+// disk, a failed MkdirAll — must never look identical to "unchanged"/
+// "not-configured" in the CLI's own status line, and `codegraph
+// install`/`uninstall` must exit non-zero when it happens. A nil return
+// means every touched file's write/remove actually completed.
+func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc agents.Location, do func(agents.AgentTarget) agents.WriteResult, statusOf func(agents.WriteResult) string) error {
 	out := cmd.OutOrStdout()
 	if len(targets) == 0 {
 		fmt.Fprintln(out, "no agents selected")
-		return
+		return nil
 	}
+	var errs []error
 	for _, t := range targets {
 		if !t.SupportsLocation(loc) {
 			fmt.Fprintf(out, "%s: unsupported (%s not supported)\n", t.DisplayName(), loc)
@@ -222,5 +230,10 @@ func printAgentResults(cmd *cobra.Command, targets []agents.AgentTarget, loc age
 		for _, note := range result.Notes {
 			fmt.Fprintf(out, "  note: %s\n", note)
 		}
+		for _, e := range result.Errors {
+			fmt.Fprintf(out, "  error: %v\n", e)
+			errs = append(errs, fmt.Errorf("%s: %w", t.DisplayName(), e))
+		}
 	}
+	return errors.Join(errs...)
 }

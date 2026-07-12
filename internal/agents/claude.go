@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -214,30 +215,36 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// Pitfall 3: migrate a legacy ./.claude.json local entry into
 	// ./.mcp.json before writing the correct entry.
 	if loc == LocationLocal {
-		if fr, err := removeMcpEntry(claudeLegacyLocalConfigPath()); err == nil && fr.Action == ActionRemoved {
+		legacyPath := claudeLegacyLocalConfigPath()
+		if fr, err := removeMcpEntry(legacyPath); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacyPath, err))
+		} else if fr.Action == ActionRemoved {
 			result.Files = append(result.Files, fr)
 		}
 	}
 
-	if configPath, err := claudeConfigPath(loc); err == nil {
-		if fr, err := writeMcpEntry(configPath, func() any {
+	if configPath, err := claudeConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude config path: %w", err))
+	} else {
+		fr, err := writeMcpEntry(configPath, func() any {
 			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
-		}); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+		})
+		recordFile(&result, configPath, fr, err)
 	}
 
-	if instrPath, err := claudeInstructionsPath(loc); err == nil {
-		if fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody()); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if instrPath, err := claudeInstructionsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude instructions path: %w", err))
+	} else {
+		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+		recordFile(&result, instrPath, fr, err)
 	}
 
 	if opts.AutoAllow {
-		if settingsPath, err := claudeSettingsPath(loc); err == nil {
-			if fr, err := addClaudeAllowPermission(settingsPath); err == nil {
-				result.Files = append(result.Files, fr)
-			}
+		if settingsPath, err := claudeSettingsPath(loc); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+		} else {
+			fr, err := addClaudeAllowPermission(settingsPath)
+			recordFile(&result, settingsPath, fr, err)
 		}
 	}
 
@@ -247,28 +254,31 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 func (claudeTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 
-	if configPath, err := claudeConfigPath(loc); err == nil {
-		if fr, err := removeMcpEntry(configPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if configPath, err := claudeConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude config path: %w", err))
+	} else {
+		fr, err := removeMcpEntry(configPath)
+		recordFile(&result, configPath, fr, err)
 	}
 
 	if loc == LocationLocal {
-		if fr, err := removeMcpEntry(claudeLegacyLocalConfigPath()); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+		legacyPath := claudeLegacyLocalConfigPath()
+		fr, err := removeMcpEntry(legacyPath)
+		recordFile(&result, legacyPath, fr, err)
 	}
 
-	if instrPath, err := claudeInstructionsPath(loc); err == nil {
-		if action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd); err == nil {
-			result.Files = append(result.Files, FileResult{Path: instrPath, Action: action})
-		}
+	if instrPath, err := claudeInstructionsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude instructions path: %w", err))
+	} else {
+		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
+		recordAction(&result, instrPath, action, err)
 	}
 
-	if settingsPath, err := claudeSettingsPath(loc); err == nil {
-		if fr, err := removeClaudeAllowPermission(settingsPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if settingsPath, err := claudeSettingsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+	} else {
+		fr, err := removeClaudeAllowPermission(settingsPath)
+		recordFile(&result, settingsPath, fr, err)
 	}
 
 	return result

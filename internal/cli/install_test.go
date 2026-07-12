@@ -245,6 +245,28 @@ func TestInstall_InvalidLocation_Errors(t *testing.T) {
 	}
 }
 
+// TestInstall_WriteFailure_ReportsErrorAndNonZeroExit is the CR-01
+// regression test: a hard I/O failure while writing an agent's config
+// (simulated here by seeding ~/.claude.json as a directory, so the write
+// helper's read-before-write step fails with a genuine, non-"not exist"
+// error) must surface as a non-zero exit and an "error:" line in the
+// per-agent report — never look identical to a silent no-op/"unchanged".
+func TestInstall_WriteFailure_ReportsErrorAndNonZeroExit(t *testing.T) {
+	home := fakeHome(t)
+	claudeConfig := filepath.Join(home, ".claude.json")
+	if err := os.Mkdir(claudeConfig, 0o755); err != nil {
+		t.Fatalf("seed directory-in-place-of-file: %v", err)
+	}
+
+	out, _, err := execCmd("install", "--target", "claude", "--location", "global")
+	if err == nil {
+		t.Fatalf("expected install to return a non-nil error when a target's config write fails; output:\n%s", out)
+	}
+	if !strings.Contains(out, "error:") {
+		t.Fatalf("expected install output to include an 'error:' line, got:\n%s", out)
+	}
+}
+
 // TestUninstall_ReportsRemovedAndNotConfigured asserts uninstall reports
 // "removed" for an agent install actually configured and
 // "not-configured" for one that was never touched (D-08).

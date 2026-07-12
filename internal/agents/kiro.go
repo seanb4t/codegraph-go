@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -69,18 +70,23 @@ func (kiroTarget) Detect(loc Location) DetectionResult {
 func (kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
-	if legacy, err := kiroLegacySteeringPath(loc); err == nil && fileExists(legacy) {
-		if err := os.Remove(legacy); err == nil {
+	if legacy, err := kiroLegacySteeringPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro legacy steering path: %w", err))
+	} else if fileExists(legacy) {
+		if err := os.Remove(legacy); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacy, err))
+		} else {
 			result.Files = append(result.Files, FileResult{Path: legacy, Action: ActionRemoved})
 		}
 	}
 
-	if configPath, err := kiroConfigPath(loc); err == nil {
-		if fr, err := writeMcpEntry(configPath, func() any {
+	if configPath, err := kiroConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro config path: %w", err))
+	} else {
+		fr, err := writeMcpEntry(configPath, func() any {
 			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
-		}); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+		})
+		recordFile(&result, configPath, fr, err)
 	}
 
 	result.Notes = append(result.Notes, kiroDisabledByDefaultNote)
@@ -90,11 +96,12 @@ func (kiroTarget) Install(loc Location, opts InstallOptions) WriteResult {
 func (kiroTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 	configPath, err := kiroConfigPath(loc)
-	if err == nil {
-		if fr, err := removeMcpEntry(configPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve kiro config path: %w", err))
+		return result
 	}
+	fr, err := removeMcpEntry(configPath)
+	recordFile(&result, configPath, fr, err)
 	return result
 }
 

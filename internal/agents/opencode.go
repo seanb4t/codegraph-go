@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -265,16 +266,18 @@ func (opencodeTarget) Detect(loc Location) DetectionResult {
 func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
-	if configPath, err := opencodeConfigPath(loc); err == nil {
-		if fr, err := writeOpencodeEntry(configPath, opts.ExecPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if configPath, err := opencodeConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode config path: %w", err))
+	} else {
+		fr, err := writeOpencodeEntry(configPath, opts.ExecPath)
+		recordFile(&result, configPath, fr, err)
 	}
 
-	if instrPath, err := opencodeInstructionsPath(loc); err == nil {
-		if fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody()); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
+	} else {
+		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+		recordFile(&result, instrPath, fr, err)
 	}
 
 	if loc == LocationGlobal {
@@ -289,16 +292,18 @@ func (opencodeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 func (opencodeTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 
-	if configPath, err := opencodeConfigPath(loc); err == nil {
-		if fr, err := removeOpencodeEntry(configPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if configPath, err := opencodeConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode config path: %w", err))
+	} else {
+		fr, err := removeOpencodeEntry(configPath)
+		recordFile(&result, configPath, fr, err)
 	}
 
-	if instrPath, err := opencodeInstructionsPath(loc); err == nil {
-		if action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd); err == nil {
-			result.Files = append(result.Files, FileResult{Path: instrPath, Action: action})
-		}
+	if instrPath, err := opencodeInstructionsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve opencode instructions path: %w", err))
+	} else {
+		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
+		recordAction(&result, instrPath, action, err)
 	}
 
 	return result

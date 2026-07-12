@@ -43,10 +43,9 @@ func newUninstallCmd() *cobra.Command {
 				return fmt.Errorf("codegraph uninstall: %w", err)
 			}
 
-			printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
+			return printAgentResults(cmd, targets, loc, func(t agents.AgentTarget) agents.WriteResult {
 				return t.Uninstall(loc)
 			}, uninstallStatus)
-			return nil
 		},
 	}
 

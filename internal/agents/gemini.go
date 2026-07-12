@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -63,18 +64,20 @@ func (geminiTarget) Detect(loc Location) DetectionResult {
 func (geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
-	if configPath, err := geminiConfigPath(loc); err == nil {
-		if fr, err := writeMcpEntry(configPath, func() any {
+	if configPath, err := geminiConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))
+	} else {
+		fr, err := writeMcpEntry(configPath, func() any {
 			return stdioMcpEntry(opts.ExecPath, "serve", "--mcp")
-		}); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+		})
+		recordFile(&result, configPath, fr, err)
 	}
 
-	if instrPath, err := geminiInstructionsPath(loc); err == nil {
-		if fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody()); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if instrPath, err := geminiInstructionsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
+	} else {
+		fr, err := upsertInstructionsEntry(instrPath, codegraphSectionStart, codegraphSectionEnd, instructionsBody())
+		recordFile(&result, instrPath, fr, err)
 	}
 
 	return result
@@ -83,16 +86,18 @@ func (geminiTarget) Install(loc Location, opts InstallOptions) WriteResult {
 func (geminiTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 
-	if configPath, err := geminiConfigPath(loc); err == nil {
-		if fr, err := removeMcpEntry(configPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if configPath, err := geminiConfigPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini config path: %w", err))
+	} else {
+		fr, err := removeMcpEntry(configPath)
+		recordFile(&result, configPath, fr, err)
 	}
 
-	if instrPath, err := geminiInstructionsPath(loc); err == nil {
-		if action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd); err == nil {
-			result.Files = append(result.Files, FileResult{Path: instrPath, Action: action})
-		}
+	if instrPath, err := geminiInstructionsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve gemini instructions path: %w", err))
+	} else {
+		action, err := removeMarkedSection(instrPath, codegraphSectionStart, codegraphSectionEnd)
+		recordAction(&result, instrPath, action, err)
 	}
 
 	return result

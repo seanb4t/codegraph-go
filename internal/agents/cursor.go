@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -68,8 +69,12 @@ func (cursorTarget) Detect(loc Location) DetectionResult {
 func (cursorTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
-	if legacy, err := cursorLegacyRulesPath(loc); err == nil && fileExists(legacy) {
-		if err := os.Remove(legacy); err == nil {
+	if legacy, err := cursorLegacyRulesPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor legacy rules path: %w", err))
+	} else if fileExists(legacy) {
+		if err := os.Remove(legacy); err != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", legacy, err))
+		} else {
 			result.Files = append(result.Files, FileResult{Path: legacy, Action: ActionRemoved})
 		}
 	}
@@ -86,25 +91,25 @@ func (cursorTarget) Install(loc Location, opts InstallOptions) WriteResult {
 
 	configPath, err := cursorConfigPath(loc)
 	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor config path: %w", err))
 		return result
 	}
 	fr, err := writeMcpEntry(configPath, func() any {
 		return stdioMcpEntry(opts.ExecPath, "serve", "--mcp", "--path", pathArg)
 	})
-	if err == nil {
-		result.Files = append(result.Files, fr)
-	}
+	recordFile(&result, configPath, fr, err)
 	return result
 }
 
 func (cursorTarget) Uninstall(loc Location) WriteResult {
 	var result WriteResult
 	configPath, err := cursorConfigPath(loc)
-	if err == nil {
-		if fr, err := removeMcpEntry(configPath); err == nil {
-			result.Files = append(result.Files, fr)
-		}
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve cursor config path: %w", err))
+		return result
 	}
+	fr, err := removeMcpEntry(configPath)
+	recordFile(&result, configPath, fr, err)
 	return result
 }
 
