@@ -1,0 +1,6 @@
+{
+  "name": "nestjsfixture",
+  "dependencies": {
+    "@nestjs/common": "^10.0.0"
+  }
+}

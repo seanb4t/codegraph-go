@@ -7,6 +7,34 @@ import (
 	"testing"
 )
 
+// TestRoute_RegistryHasFivePriorityFrameworks proves every priority
+// framework family named in LANG-07 (Gin, Spring, ASP.NET, Django, Flask,
+// FastAPI, Express, NestJS) registered itself via its own file's init()
+// (D-08) — a missing registration would silently mean that framework's
+// routes can never be detected, with no compile error to catch it.
+func TestRoute_RegistryHasFivePriorityFrameworks(t *testing.T) {
+	want := map[string]bool{
+		"gin-route":     false,
+		"spring-route":  false,
+		"aspnet-route":  false,
+		"django-route":  false,
+		"flask-route":   false,
+		"fastapi-route": false,
+		"express-route": false,
+		"nestjs-route":  false,
+	}
+	for _, d := range Registered() {
+		if _, ok := want[d.ID]; ok {
+			want[d.ID] = true
+		}
+	}
+	for id, found := range want {
+		if !found {
+			t.Errorf("Registered() missing detector %q", id)
+		}
+	}
+}
+
 // TestRoute_RegisteredIsDefensiveCopy proves mutating Registered()'s
 // returned slice never corrupts the package-level registry.
 func TestRoute_RegisteredIsDefensiveCopy(t *testing.T) {
