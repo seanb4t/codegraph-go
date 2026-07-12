@@ -273,6 +273,67 @@ func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
 	}
 }
 
+// TestResolve_ConformanceRetryResolvesInheritedCall proves Pitfall 3's
+// two-pass conformance retry (Task 2): an unqualified call
+// (`baseMethod()`) whose target is declared ONLY on a supertype in a
+// DIFFERENT module-key scope cannot resolve via pass 1's own
+// resolveUnqualified (same-moduleKey-only lookup) — it resolves only once
+// the retry walks Derived's own "embeds" edge to Base and finds
+// baseMethod there. unresolvedCount ends at 0; a single-pass-only run
+// (i.e. this fixture minus the retry step) would leave it at 1 — this is
+// exactly the "unresolvedCount drops" acceptance criterion, verified by
+// controlling the fixture precisely enough that the retry is the ONLY
+// path that could resolve this call.
+func TestResolve_ConformanceRetryResolvesInheritedCall(t *testing.T) {
+	baseID := nodeid.NodeID(goextract.KindStruct, "Base", "base.java")
+	baseMethodID := nodeid.NodeID(goextract.KindMethod, "Base.baseMethod", "base.java")
+	derivedID := nodeid.NodeID(goextract.KindStruct, "Derived", "derived.java")
+	runID := nodeid.NodeID(goextract.KindMethod, "Derived.run", "derived.java")
+
+	results := []goextract.FileResult{
+		{
+			ImportPath: "pkgA", RelPath: "base.java", Language: "java",
+			Nodes: []goextract.ExtractedNode{
+				{Node: &schema.Node{Id: baseID, Kind: goextract.KindStruct, Name: "Base", QualifiedName: "Base", FilePath: "base.java"}},
+				{Node: &schema.Node{Id: baseMethodID, Kind: goextract.KindMethod, Name: "baseMethod", QualifiedName: "Base.baseMethod", FilePath: "base.java"}},
+			},
+			IntraEdges: []goextract.IntraEdge{
+				{Edge: &schema.Edge{Source: baseID, Target: baseMethodID, Kind: "contains", Provenance: "ast"}},
+			},
+		},
+		{
+			ImportPath: "pkgB", RelPath: "derived.java", Language: "java",
+			Nodes: []goextract.ExtractedNode{
+				{Node: &schema.Node{Id: derivedID, Kind: goextract.KindStruct, Name: "Derived", QualifiedName: "Derived", FilePath: "derived.java"}},
+				{Node: &schema.Node{Id: runID, Kind: goextract.KindMethod, Name: "run", QualifiedName: "Derived.run", FilePath: "derived.java"}},
+			},
+			IntraEdges: []goextract.IntraEdge{
+				{Edge: &schema.Edge{Source: derivedID, Target: runID, Kind: "contains", Provenance: "ast"}},
+			},
+			Imports: map[string]string{"Base": "pkgA"},
+			Unresolved: []goextract.UnresolvedRef{
+				{FromID: derivedID, Name: "Base", PkgAlias: "Base", Kind: goextract.RefKindEmbeds, Line: 3, Col: 1},
+				{FromID: runID, Name: "baseMethod", Kind: goextract.RefKindCalls, Line: 5, Col: 3},
+			},
+		},
+	}
+
+	_, _, edges, _, unresolved := resolveRefs(results, "example.com/root")
+
+	if !findEdge(edges, runID, "calls", baseMethodID) {
+		t.Fatalf("expected calls edge %s -> %s (Derived.run -> Base.baseMethod, resolved via conformance retry), got %+v", runID, baseMethodID, edges)
+	}
+	if unresolved != 0 {
+		t.Errorf("unresolvedCount = %d, want 0 (the retry must resolve the inherited call)", unresolved)
+	}
+}
+
+// TestResolve_UnresolvedMethodCall (above) already proves the retry does
+// NOT introduce a false resolution for a plain function's local-variable-
+// receiver call — F() has no enclosing type at all, so methodOwner never
+// has an entry for it, and the retry correctly leaves it unresolved
+// exactly like pass 1 did.
+
 // TestResolve_IntraModuleImport proves an intra-module import produces a
 // synthetic package pseudo-node and a file -> package "imports" edge
 // (RQ-1 recommendation (a)).

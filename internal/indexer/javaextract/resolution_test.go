@@ -183,3 +183,33 @@ func TestResolve_ImportedCrossPackageInheritance(t *testing.T) {
 		t.Errorf("expected an embeds edge Derived -> Base (cross-package, imported inheritance), got edges: %+v", edges)
 	}
 }
+
+// TestResolve_InheritedMethodCallResolvesViaConformanceRetry proves Phase
+// 5's Pitfall 3 two-pass conformance retry (05-09 Task 2): an implicit,
+// unqualified call to a method declared ONLY on a superclass in a
+// DIFFERENT package (`baseMethod()`, no `this.`/qualifier — Java's
+// implicit-receiver call shape) resolves into a real "calls" edge by
+// walking the extends chain, even though pass 1's own resolveUnqualified
+// (same-moduleKey-only lookup) cannot see across the package boundary on
+// its own.
+func TestResolve_InheritedMethodCallResolvesViaConformanceRetry(t *testing.T) {
+	root := writeJavaFixture(t, []javaFixtureFile{
+		{relPath: "com/example/Base.java", src: "package com.example;\n\npublic class Base {\n\tpublic void baseMethod() {}\n}\n"},
+		{relPath: "com/other/Derived.java", src: "package com.other;\n\nimport com.example.Base;\n\npublic class Derived extends Base {\n\tpublic void run() {\n\t\tbaseMethod();\n\t}\n}\n"},
+	})
+
+	nodes, edges := buildJavaGraph(t, root)
+
+	baseMethod, ok := nodes[nodeKey{kind: "method", name: "baseMethod", filePath: "com/example/Base.java"}]
+	if !ok {
+		t.Fatal("Base.baseMethod node not found in committed graph")
+	}
+	run, ok := nodes[nodeKey{kind: "method", name: "run", filePath: "com/other/Derived.java"}]
+	if !ok {
+		t.Fatal("Derived.run node not found in committed graph")
+	}
+
+	if !hasEdge(edges, run.Id, baseMethod.Id, "calls") {
+		t.Errorf("expected a calls edge Derived.run -> Base.baseMethod (inherited-method call, resolved via the conformance retry walking the extends chain), got edges: %+v", edges)
+	}
+}
