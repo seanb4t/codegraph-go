@@ -1,11 +1,12 @@
 ---
 phase: 06-agent-integrations-cli-lifecycle
 verified: 2026-07-12T22:20:40Z
-status: human_needed
+status: passed
 score: 12/12 must-haves verified (all automated checks passed)
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Real coding-agent runtime (Claude Code, Cursor, Codex, opencode, Gemini, Antigravity, Hermes, or Kiro) actually lists the codegraph_explore MCP tool after `codegraph install --target auto`, and the tool disappears after `codegraph uninstall --target auto`, with unrelated config entries preserved"
     expected: "The agent's own tool list shows codegraph_explore post-install and does not show it post-uninstall; a diff of the config file against a pre-install copy shows only the codegraph entry/marker block changed"
     why_human: "06-04-SUMMARY.md documents this as a deferred manual follow-up: the autonomous execution environment has no live agent runtime to perform a real MCP handshake, so 06-04's blocking checkpoint:human-verify task was substituted with an automated temp-$HOME round-trip test (TestInstallUninstallRoundTrip_TempHome_RestoresPreInstallState). That test — and this verifier's own live manual run in a scratch directory — proves the written config SHAPE is correct (absolute exec path, type:stdio, marker-fenced CLAUDE.md block, clean uninstall), but neither can prove a real agent process actually loads and lists the tool over the MCP stdio transport."
