@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
@@ -47,6 +48,140 @@ func BuildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 		return nil, err
 	}
 	return rev, nil
+}
+
+// BuildImplementsIndex builds an in-memory index of "implements" edges
+// keyed by edge.Target (the interface node), from one full
+// IterateEdges("") scan — mirrors BuildReverseAdjacency's shape exactly
+// (same fresh-per-call discipline, no package-level cache/sync.Once), but
+// is a SEPARATE, purpose-built index (RES-02/D-06): dispatch traversal is
+// name-joined (an interface method's callers must also reach every
+// concrete implementation's SAME-NAMED method), not identity-followed
+// like a "calls" edge, so BuildReverseAdjacency's goextract.RefKindCalls
+// -only filter is deliberately NOT widened to admit "implements" edges —
+// this is new, separate traversal code (per 05-PATTERNS.md).
+func BuildImplementsIndex(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+	it, err := r.IterateEdges("")
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	idx := make(map[string][]*schema.Edge)
+	for it.Next() {
+		e := it.Edge()
+		if e.Kind != goextract.EdgeKindImplements {
+			continue
+		}
+		idx[e.Target] = append(idx[e.Target], e)
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	for _, edges := range idx {
+		sort.Slice(edges, func(i, j int) bool { return edges[i].Source < edges[j].Source })
+	}
+	return idx, nil
+}
+
+// buildContainsIndex builds two in-memory views of "contains" edges from
+// one full IterateEdges("") scan, mirroring BuildReverseAdjacency's/
+// BuildImplementsIndex's fresh-per-call discipline: byType (a type node
+// id -> the "contains" edges it owns, i.e. its methods) and methodOwner
+// (a method node id -> its OWN enclosing type's id, the reverse
+// direction). dispatchSiblingIDs uses both to find, for a queried method
+// node, which type declares it, and then which OTHER types' methods to
+// compose in.
+func buildContainsIndex(r graphstore.Reader) (byType map[string][]*schema.Edge, methodOwner map[string]string, err error) {
+	it, err := r.IterateEdges("")
+	if err != nil {
+		return nil, nil, err
+	}
+	defer it.Close()
+
+	byType = make(map[string][]*schema.Edge)
+	methodOwner = make(map[string]string)
+	for it.Next() {
+		e := it.Edge()
+		if e.Kind != "contains" {
+			continue
+		}
+		byType[e.Source] = append(byType[e.Source], e)
+		methodOwner[e.Target] = e.Source
+	}
+	if err := it.Err(); err != nil {
+		return nil, nil, err
+	}
+	return byType, methodOwner, nil
+}
+
+// implementedInterfaces inverts implementsIdx (Target/interface-keyed)
+// into a Source/struct-keyed view (typeID -> []interfaceID) — cheap,
+// built once per Callers/Impact call from the SAME already-materialized
+// implementsIdx (no second IterateEdges scan): the number of implements
+// edges is small relative to the whole graph.
+func implementedInterfaces(implementsIdx map[string][]*schema.Edge) map[string][]string {
+	out := make(map[string][]string)
+	ifaceIDs := make([]string, 0, len(implementsIdx))
+	for ifaceID := range implementsIdx {
+		ifaceIDs = append(ifaceIDs, ifaceID)
+	}
+	sort.Strings(ifaceIDs)
+	for _, ifaceID := range ifaceIDs {
+		for _, e := range implementsIdx[ifaceID] {
+			out[e.Source] = append(out[e.Source], ifaceID)
+		}
+	}
+	return out
+}
+
+// dispatchSiblingIDs returns, for a resolved method node, every OTHER
+// concrete implementation's same-named method id reachable through a
+// shared "implements" edge (RES-02, D-06's name-joined traversal): node's
+// own enclosing type's implemented interfaces, every OTHER type also
+// implementing one of those interfaces, and — for each — its own method
+// sharing node.Name, if any. Deterministic (sorted) output. Built fresh
+// per call from indices that are themselves fresh-per-call
+// (Callers/Impact's existing no-cache discipline is preserved, not
+// relaxed, by this composition).
+func dispatchSiblingIDs(reader graphstore.Reader, node *schema.Node, methodOwner map[string]string, containsByType map[string][]*schema.Edge, implementsIdx map[string][]*schema.Edge) ([]string, error) {
+	ownerType, ok := methodOwner[node.Id]
+	if !ok {
+		return nil, nil
+	}
+	ifaces := implementedInterfaces(implementsIdx)[ownerType]
+	if len(ifaces) == 0 {
+		return nil, nil
+	}
+
+	seenImpl := map[string]bool{ownerType: true}
+	var siblings []string
+	for _, ifaceID := range ifaces {
+		for _, e := range implementsIdx[ifaceID] {
+			implID := e.Source
+			if seenImpl[implID] {
+				continue
+			}
+			seenImpl[implID] = true
+			for _, ce := range containsByType[implID] {
+				if ce.Target == node.Id {
+					continue
+				}
+				m, err := reader.GetNode(ce.Target)
+				if err != nil {
+					if errors.Is(err, graphstore.ErrNotFound) {
+						continue
+					}
+					return nil, err
+				}
+				if m.Name == node.Name {
+					siblings = append(siblings, m.Id)
+				}
+			}
+		}
+	}
+	sort.Strings(siblings)
+	return siblings, nil
 }
 
 // resolveSymbolNode resolves a CLI-supplied symbol string to a concrete
@@ -177,7 +312,14 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 
 // Callers returns symbol's reverse callers via the D-04 in-memory
 // reverse-adjacency map (built fresh, BuildReverseAdjacency), capped at
-// limit identically to Callees.
+// limit identically to Callees. RES-02: when symbol resolves to a method
+// declared on a type that implements one or more interfaces, callers ALSO
+// include callers of every OTHER implementer's same-named method — a call
+// dispatched dynamically through the shared interface could have reached
+// symbol, so its callers are relevant dispatch targets too (D-06's
+// name-joined traversal, composed from BuildImplementsIndex + a
+// "contains" index — both fresh-per-call, same discipline as
+// BuildReverseAdjacency).
 func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 	if err := validateLimit(limit); err != nil {
 		return CallersResult{}, err
@@ -192,18 +334,38 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 	if err != nil {
 		return CallersResult{}, err
 	}
+	implementsIdx, err := BuildImplementsIndex(e.reader)
+	if err != nil {
+		return CallersResult{}, err
+	}
+	containsByType, methodOwner, err := buildContainsIndex(e.reader)
+	if err != nil {
+		return CallersResult{}, err
+	}
+	siblings, err := dispatchSiblingIDs(e.reader, node, methodOwner, containsByType, implementsIdx)
+	if err != nil {
+		return CallersResult{}, err
+	}
+	targetIDs := append([]string{node.Id}, siblings...)
 
+	seen := make(map[string]bool)
 	locs := []Location{}
-	for _, edge := range rev[node.Id] {
-		src, err := e.reader.GetNode(edge.Source)
-		if err != nil {
-			// WR-04: skip a dangling edge rather than aborting.
-			if errors.Is(err, graphstore.ErrNotFound) {
+	for _, tid := range targetIDs {
+		for _, edge := range rev[tid] {
+			if seen[edge.Source] {
 				continue
 			}
-			return CallersResult{}, err
+			src, err := e.reader.GetNode(edge.Source)
+			if err != nil {
+				// WR-04: skip a dangling edge rather than aborting.
+				if errors.Is(err, graphstore.ErrNotFound) {
+					continue
+				}
+				return CallersResult{}, err
+			}
+			seen[edge.Source] = true
+			locs = append(locs, nodeLocation(src))
 		}
-		locs = append(locs, nodeLocation(src))
 	}
 
 	if limit > 0 && limit < len(locs) {
@@ -222,7 +384,14 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 // reverse edges inspected while expanding each depth's frontier — this
 // counting rule is cross-checked against
 // testdata/golden/corpus/weft-go/impact.json's arithmetic in
-// traverse_test.go's TestImpact doc comment.
+// traverse_test.go's TestImpact doc comment. RES-02: at each frontier
+// node, dispatch siblings (same composition Callers uses — every OTHER
+// implementer's same-named method, reached via a shared "implements"
+// edge) are ALSO expanded, so a change's blast radius includes callers
+// reachable only through dynamic dispatch. When no implements edges
+// exist in the graph (the common case, and every pre-existing fixture
+// this method's tests exercise), dispatch siblings are always empty and
+// this composition is a no-op — the arithmetic above is unchanged.
 func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 	if err := validateDepth(depth); err != nil {
 		return ImpactResult{}, err
@@ -238,33 +407,49 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 	if err != nil {
 		return ImpactResult{}, err
 	}
+	implementsIdx, err := BuildImplementsIndex(e.reader)
+	if err != nil {
+		return ImpactResult{}, err
+	}
+	containsByType, methodOwner, err := buildContainsIndex(e.reader)
+	if err != nil {
+		return ImpactResult{}, err
+	}
 
 	visited := map[string]bool{node.Id: true}
 	affected := []Location{nodeLocation(node)}
-	frontier := []string{node.Id}
+	frontier := []*schema.Node{node}
 	edgeCount := 0
 
 	for d := 0; d < depth && len(frontier) > 0; d++ {
-		var next []string
-		for _, id := range frontier {
-			for _, edge := range rev[id] {
-				edgeCount++
-				if visited[edge.Source] {
-					continue
-				}
-				visited[edge.Source] = true
-				srcNode, err := e.reader.GetNode(edge.Source)
-				if err != nil {
-					// WR-04: a dangling reverse-edge source is skipped —
-					// it cannot be expanded further, but must not abort
-					// the whole BFS.
-					if errors.Is(err, graphstore.ErrNotFound) {
+		var next []*schema.Node
+		for _, n := range frontier {
+			siblings, err := dispatchSiblingIDs(e.reader, n, methodOwner, containsByType, implementsIdx)
+			if err != nil {
+				return ImpactResult{}, err
+			}
+			targetIDs := append([]string{n.Id}, siblings...)
+
+			for _, tid := range targetIDs {
+				for _, edge := range rev[tid] {
+					edgeCount++
+					if visited[edge.Source] {
 						continue
 					}
-					return ImpactResult{}, err
+					visited[edge.Source] = true
+					srcNode, err := e.reader.GetNode(edge.Source)
+					if err != nil {
+						// WR-04: a dangling reverse-edge source is skipped —
+						// it cannot be expanded further, but must not abort
+						// the whole BFS.
+						if errors.Is(err, graphstore.ErrNotFound) {
+							continue
+						}
+						return ImpactResult{}, err
+					}
+					affected = append(affected, nodeLocation(srcNode))
+					next = append(next, srcNode)
 				}
-				affected = append(affected, nodeLocation(srcNode))
-				next = append(next, edge.Source)
 			}
 		}
 		frontier = next
