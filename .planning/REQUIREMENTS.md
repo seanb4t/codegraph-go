@@ -16,8 +16,8 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 ### Graph Resolution
 
 - [x] **RES-01**: Cross-file resolution resolves imports, call edges, and type inheritance across the repo via two-pass indexing (parallel extract → resolve)
-- [ ] **RES-02**: Interface→implementation dispatch edges are synthesized (Go implicit interfaces, Java/C# interface implementations) so callers/impact traverse dynamic dispatch
-- [ ] **RES-03**: Every heuristic edge carries a `provenance: heuristic` tag with source location, distinguishing it from ground-truth AST edges
+- [x] **RES-02**: Interface→implementation dispatch edges are synthesized (Go implicit interfaces, Java/C# interface implementations) so callers/impact traverse dynamic dispatch
+- [x] **RES-03**: Every heuristic edge carries a `provenance: heuristic` tag with source location, distinguishing it from ground-truth AST edges
 
 ### Query & Analysis
 
@@ -133,8 +133,8 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | INDX-05 | Phase 1 | Complete |
 | INDX-06 | Phase 8 | Pending |
 | RES-01 | Phase 2 | Complete |
-| RES-02 | Phase 5 | Pending |
-| RES-03 | Phase 5 | Pending |
+| RES-02 | Phase 5 | Complete |
+| RES-03 | Phase 5 | Complete |
 | QRY-01 | Phase 3 | Complete |
 | QRY-02 | Phase 3 | Complete |
 | QRY-03 | Phase 3 | Complete |
