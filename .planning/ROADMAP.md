@@ -260,7 +260,29 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Migration is resumable after interruption and version-stamped so partial runs recover correctly
   3. Migration is validated against real aged `.codegraph/` directories and runs structural-invariant checks on the result, failing loudly on corruption rather than producing a silently-wrong graph
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — modernc.org/sqlite dep + in-Go aged-DB fixture harness + modernc-confinement archtest (MIGR-01/02)
+- [ ] 07-02-PLAN.md — graphstore additive PutMigration/GetMigration progress-record interface (MIGR-02)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 07-03-PLAN.md — reader.go (read-only source, detection, schema guard, defensive scan) + translate.go (row→proto, D-02/D-05) (MIGR-01)
+- [ ] 07-04-PLAN.md — progress.go (resumable cursor) + swap.go (crash-safe atomic dir swap, D-07) (MIGR-02)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 07-05-PLAN.md — validate.go: count reconciliation (edge-dedup aware) + dangling check (file: exempt) + drop-dangling (D-09) (MIGR-02)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 07-06-PLAN.md — migrate.Run orchestration: detect→write(x/ index)→resume→validate→atomic swap + healthy gating (MIGR-01/02)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 07-07-PLAN.md — `codegraph migrate` cobra command + root registration + reconciliation report + first-sync note (MIGR-01/02)
 
 ### Phase 8: Release Hardening & Benchmarks
 
@@ -291,5 +313,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
 | 6. Agent Integrations & CLI Lifecycle | 6/6 | Complete    | 2026-07-12 |
-| 7. Migration Tool | 0/TBD | Not started | - |
+| 7. Migration Tool | 0/7 | Not started | - |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |
