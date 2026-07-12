@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 6
 current_phase_name: Agent Integrations & CLI Lifecycle
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-07-12T19:04:49.658Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-07-12T19:27:42.453Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 6 execution started
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 50
-  completed_plans: 48
+  completed_plans: 49
   percent: 63
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 6 (Agent Integrations & CLI Lifecycle) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 6 execution started
 
@@ -104,6 +104,7 @@ Progress: [███████░░░] 73%
 | Phase 06-agent-integrations-cli-lifecycle P01 | 12min | 3 tasks | 9 files |
 | Phase 06-agent-integrations-cli-lifecycle P05 | 12min | 2 tasks | 6 files |
 | Phase 06 P02 | 3min | 3 tasks | 10 files |
+| Phase 06 P03 | 9min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -220,6 +221,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 06-02]: stdioMcpEntry/fileExists/mcpEntryPresent/instructionsBody live in claude.go rather than 06-01's shared.go; Antigravity deliberately bypasses stdioMcpEntry with its own antigravityEntry builder (Pitfall 6)
 - [Phase ?]: [Phase 06-02]: instructionsBody() derives Claude/Gemini instructions content by stripping instructions.go's markers off codegraphInstructionsBlock at runtime rather than duplicating the block text, guaranteeing byte-for-byte sync (D-01a)
 - [Phase ?]: [Phase 06-02]: Antigravity's .migrated marker is written by the Go port itself on first install (not just read for compatibility) — a fresh install writes straight to the unified path and creates the marker in the same call
+- [Phase ?]: opencode's mcp.codegraph entry compares hujson.Standardize-stripped current value against desired via existing jsonDeepEqual/normalizeJSON helpers
+- [Phase ?]: Hermes cli-toolset removal uses a simple global first-match line delete rather than block-range logic, since append only ever emits one exact line
 
 ### Pending Todos
 
@@ -243,6 +246,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T19:04:37.804Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-07-12T19:27:32.981Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None
