@@ -1,7 +1,8 @@
 ---
 phase: 08-release-hardening-benchmarks
 verified: 2026-07-13T00:00:00Z
-status: passed-with-pending
+status: human_needed
+verdict: passed-with-pending
 score: 8/8 requirements built and locally proven; 2 items require a real tagged release to fully close
 overrides_applied: 0
 known_gaps:
@@ -17,7 +18,7 @@ known_gaps:
 
 **Phase Goal:** A trustworthy, fast v1.0 release — signed, attested, reproducible static binaries with a minimal audited dependency tree, plus published head-to-head benchmarks and CI regression gates that validate the whole project.
 **Verified:** 2026-07-13
-**Status:** passed-with-pending
+**Status:** human_needed (verdict: passed-with-pending) — automated + local proof all pass; 2 manual items require a real tagged release to close (DIST-02 live signing, PERF-01 published numbers)
 **Re-verification:** No — initial verification
 
 ## Method
