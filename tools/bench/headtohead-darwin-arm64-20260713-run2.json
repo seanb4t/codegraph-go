@@ -1,0 +1,68 @@
+[
+  {
+    "subject": "go",
+    "repo": "weft-go",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "files_per_sec": 149118.58974358975,
+    "bytes_per_sec": 1558049874.0842493,
+    "query_latency_median_ms": 40.529,
+    "peak_rss_bytes": 55885824,
+    "cold_start_ms": 12.716
+  },
+  {
+    "subject": "ts",
+    "repo": "weft-go",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "files_per_sec": 25414.321527161344,
+    "bytes_per_sec": 265538860.87185538,
+    "query_latency_median_ms": 107.703,
+    "peak_rss_bytes": 305037312,
+    "cold_start_ms": 68.172
+  },
+  {
+    "subject": "go",
+    "repo": "colbymchenry-codegraph",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "files_per_sec": 2066.658196756024,
+    "bytes_per_sec": 225199364.7567018,
+    "query_latency_median_ms": 42.702,
+    "peak_rss_bytes": 103120896,
+    "cold_start_ms": 12.132
+  },
+  {
+    "subject": "ts",
+    "repo": "colbymchenry-codegraph",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "files_per_sec": 163.50424440936104,
+    "bytes_per_sec": 17816711.071917742,
+    "query_latency_median_ms": 118.71,
+    "peak_rss_bytes": 509804544,
+    "cold_start_ms": 72.985
+  },
+  {
+    "subject": "go",
+    "repo": "cockroachdb-pebble",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "files_per_sec": 2566.2561644096445,
+    "bytes_per_sec": 40438690.17269867,
+    "query_latency_median_ms": 51.945,
+    "peak_rss_bytes": 165347328,
+    "cold_start_ms": 11.968
+  },
+  {
+    "subject": "ts",
+    "repo": "cockroachdb-pebble",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "files_per_sec": 43.0109646756585,
+    "bytes_per_sec": 677760.5052331011,
+    "query_latency_median_ms": 117.581,
+    "peak_rss_bytes": 586629120,
+    "cold_start_ms": 70.419
+  }
+]
