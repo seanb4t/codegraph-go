@@ -1,6 +1,6 @@
 ---
 phase: 07-migration-tool
-reviewed: 2026-07-13T01:37:23Z
+reviewed: 2026-07-13T00:00:00Z
 depth: deep
 files_reviewed: 13
 files_reviewed_list:
@@ -18,222 +18,227 @@ files_reviewed_list:
   - internal/graphstore/pebble_store.go
   - internal/graphstore/keys.go
 findings:
-  critical: 0
-  warning: 5
-  info: 5
-  total: 10
+  critical: 1
+  warning: 1
+  info: 4
+  total: 6
 status: issues_found
 ---
 
-# Phase 7: Code Review Report
+# Phase 7: Code Review Report (Re-Review)
 
-**Reviewed:** 2026-07-13T01:37:23Z
+**Reviewed:** 2026-07-13
 **Depth:** deep (cross-file call-chain + import-graph analysis)
 **Files Reviewed:** 13
 **Status:** issues_found
 
 ## Summary
 
-The Phase 7 migration tool is, on the whole, unusually disciplined for its I/O-heavy,
-partial-recovery profile. I verified the specific defect classes this project has been
-bitten by before, and the high-risk ones are handled correctly:
+This is the second deep pass, after WR-01..WR-05 from the prior review were fixed
+(07-REVIEW-FIX.md). I re-verified all five fixes against the current code and
+scrutinized the fixes themselves for regressions. **All five are genuinely and
+completely fixed** — details in the re-verification section below.
 
-- **Silent I/O truncation:** every `database/sql` `rows.Next()` loop is followed by a
-  `rows.Err()` check (`ScanTable`, `presentColumns`, fixture `closeReferentialGaps`).
-  Every iterator loop checks `.Err()`. No swallowed truncation found.
-- **Read-only source:** `OpenSource` uses `mode=ro&_pragma=query_only(1)`; the source is
-  never written and no `-wal`/`-shm` sidecar is created (D-08 holds).
-- **Checkpoint ordering (D-06):** data batch commits *before* the progress cursor, so the
-  cursor never advances ahead of durable data; a crash re-scans idempotently (same keys).
-- **Field-mapping fidelity (D-01/D-02/D-05):** verified `wantedColumns` against the real
-  `testdata/golden/ts-schema.sql` DDL. `start_column`/`end_column` are carried (StartCol/
-  EndCol), `line`/`col` carried, nullable columns coerce to proto zero, dropped TS-only
-  columns (`is_async`/`is_static`/`is_abstract`/`decorators`/`type_parameters`/`updated_at`/
-  `indexed_at`) match the documented D-05 drop list, and FTS shadow tables / `unresolved_refs`
-  are not read as data. `msToNs` epoch-ms→ns uses exact integer `*1_000_000`.
-- **Edge-count reconciliation (D-09.1):** validate compares against
-  `CountDistinctEdges()` (DISTINCT source,kind,target), which correctly matches the Pebble
-  key's line/col-collapsing behavior. The DDL's `UNIQUE INDEX idx_edges_identity ... (source,
-  target, kind, IFNULL(line,-1), IFNULL(col,-1))` confirms multi-callsite collapse is real,
-  and the check accounts for it. `file:`-prefixed endpoints are correctly exempted from the
-  dangling check; `--drop-dangling` is opt-in with fail-loud default.
-- **Graphstore additive record:** `m/migration` is a clean length-prefixed sibling of
-  `m/schema` — no key collision; `getRaw` copies bytes out of Pebble's reused buffer.
+The fresh full-surface pass, however, surfaced a defect the prior review missed
+that is more serious than any of WR-01..WR-05: the read-only source handle is held
+open across the atomic directory swap. On the primary (default, in-place) code path
+this is invisible on POSIX — an open fd survives a directory rename/unlink — but on
+Windows it deterministically breaks the swap, because Windows refuses to rename a
+directory that still contains an open file handle. The default `codegraph migrate`
+command therefore cannot complete on Windows, and re-running does not self-heal.
 
-No Critical (crash / security / core-data-loss) defect was proven. The findings below are
-real correctness/robustness defects concentrated in the `--drop-dangling` path, the atomic
-swap, resource lifecycle, and the overwrite-refusal check.
+The remaining findings are lower-severity robustness/reporting issues in the
+resume/recover paths.
 
-## Warnings
+## Previously-fixed findings re-verified
 
-### WR-01: `File.edge_count` is left stale/over-counted after `--drop-dangling`
+- **WR-01 (File.edge_count after `--drop-dangling`): FIXED.** `migrate.go:217-221`
+  re-runs `recomputeFileEdgeCounts(store)` after `validate` returns nil when
+  `report.Dropped > 0`. `dropDanglingEdges` (validate.go:330-368) deletes the `x/`
+  file-index entry only for edges whose source resolved (`!d.MissingSource`), which
+  is exactly the set whose owning `File.EdgeCount` was over-counted; the post-drop
+  recompute re-derives each count from the live `x/` index taken from a fresh
+  snapshot. `Meta.EdgeCount` is computed afterward (line 227) from the post-drop
+  `countEdges`, so Meta stays consistent with the store. No regression.
 
-**File:** `internal/migrate/migrate.go:176-180`, `internal/migrate/validate.go:330-368`
-**Issue:** `recomputeFileEdgeCounts` (which derives each `File.EdgeCount` by counting that
-file's `x/` file-index edge entries) runs at line 176 — *before* `validate` at line 180.
-When `--drop-dangling` is set, `scanDangling`→`dropDanglingEdges` then deletes both the `e/`
-record and the `x/` file-index entry for each dropped edge whose **source resolved but target
-dangled** (`d.MissingSource == false`, so `DeleteFileIndexEdge(ownerPath, …)` runs). Those
-`x/` entries were already counted into `File.EdgeCount`, and nothing recomputes the count
-afterward.
+- **WR-02 (trailing `batchWriter` batch leaked): FIXED.** `batchWriter.Close()`
+  (migrate.go:565-572) nils out and closes the currently-open (always fresh,
+  per `commitData`'s eager reopen) Writer, and `defer bw.Close()` (line 173)
+  releases it on every exit path. Idempotent (guards `bw.w == nil`) and safe after
+  Commit (`pebbleWriter.Close` swallows `pebble.ErrClosed`, batch.go:162-167).
 
-**Concrete failure scenario:** TS index has file `a.go` owning edge `(sym:a, calls, sym:missing)`
-where `sym:missing` is in no `nodes` row. Migrate with `--drop-dangling`. `recompute` counts
-that `x/` entry → `a.go.edge_count = 1`. `validate` drops the edge and deletes the `x/` entry
-→ `IterateFileIndex(a.go)` now yields 0 edges, but the persisted `File.edge_count` remains 1.
-The migration exits 0 with silently-wrong per-file edge counts (inconsistent with the actual
-`x/` index that downstream sync/query relies on). Core Meta/node/edge totals are correct;
-only the derived per-file field is wrong.
+- **WR-03 (overwrite-refusal probe created a `store/` dir): FIXED.**
+  `checkTargetOverwrite` now `os.Stat`s `target/store` first (migrate.go:339-340)
+  and only opens the Pebble store when it already exists, so a non-migration target
+  (e.g. a TS `.codegraph/` with only `*.db`) is never mutated during refusal. (One
+  residual noted as IN-03 below.)
 
-**Fix:** Re-run `recomputeFileEdgeCounts(store)` *after* `validate` returns nil when
-`report.Dropped > 0`, or move the recompute to after validation unconditionally:
+- **WR-04 (interrupted swap self-heal): FIXED, conservative.**
+  `recoverInterruptedSwap` (migrate.go:396-443) runs before `resolveSourceDB` and
+  acts only when the target is absent/empty AND the deterministic partial carries a
+  `StatusComplete` cursor — an `in_progress`/unvalidated partial, a populated
+  target, or a missing partial are all declined, so an unvalidated store is never
+  swapped in. No loop or deadlock (linear, single pass). It finishes via
+  `finishFromComplete` and removes the stale `<target>.old`. Recovery cannot delete
+  the "wrong" dir: it only ever renames the already-validated partial into an
+  absent/empty target. (Two edge behaviors noted as WR-01/IN-01/IN-02 below.)
+
+- **WR-05 (source path spliced into `file:` DSN unescaped): FIXED.** `sourceDSN`
+  (reader.go:105-114) carries the path through `net/url.URL{Scheme:"file", Path:…}`,
+  percent-encoding spaces / `?` / `#` / `%`, then appends the fixed
+  `?mode=ro&_pragma=query_only(1)&_txlock=deferred` verbatim (pragma preserved
+  byte-for-byte). Windows `C:\…` normalizes via `ToSlash` + leading-slash to
+  `file:///C:/…`. Correct.
+
+## Critical Issues
+
+### CR-01: In-place migration holds the source DB open across the directory swap — deterministically breaks the default command on Windows
+
+**File:** `internal/migrate/migrate.go:109-113` (source opened, `defer src.Close()`),
+`internal/migrate/migrate.go:268-273` and `461-484` (`finishFromComplete`),
+`internal/migrate/swap.go:78-100`
+
+**Issue:** `Run` opens the source read-only at line 109 and defers its `Close()` to
+function return (line 113). The atomic swap runs *before* that deferred close — at
+line 271 on the happy path, and inside `finishFromComplete` (line 482) on the
+resume-complete path. For the **default in-place migration** (`--from` and `--to`
+both default to `.codegraph/` — see `cli/migrate.go:48-63`), the source `*.db`
+resolved by `FindDBFile` lives *inside* the target directory that `atomicSwapDir`
+renames.
+
+`atomicSwapDir` step 1 (`swap.go:80`) does `os.Rename(targetDir, asidePath)` — it
+renames `.codegraph/` (which still contains the open `index.db`) aside to
+`.codegraph.old`.
+
+- On **POSIX** this works: the open fd follows the inode through the rename, and
+  step 3's `os.RemoveAll(.codegraph.old)` unlinks a still-open file (valid until
+  `src.Close()`). Invisible on the dev platform.
+- On **Windows**, a directory containing an open file handle cannot be renamed —
+  `MoveFile` returns a sharing violation. Step 1 fails and `atomicSwapDir` returns
+  `"migrate: rename existing target aside"` (swap.go:81), so a fully written,
+  validated, `Meta.healthy=true` store is **never swapped into place**.
+
+**Concrete failure scenario (Windows):** User runs the documented default
+`codegraph migrate` in a repo with a TS `.codegraph/`. Migration reads, validates,
+stamps the partial complete — then the swap fails at step 1 because `index.db` is
+still open. The command exits non-zero. On re-run, `recoverInterruptedSwap` is a
+no-op (the target `.codegraph/` still exists and is populated with the TS source),
+so `Run` proceeds, hits the `StatusComplete` branch (line 148), re-opens the source
+(line 109, handle open again), and `finishFromComplete`'s swap fails at step 1
+identically. **The default command can never complete on Windows, and every retry
+fails the same way** — no data loss (source untouched, partial preserved), but a
+hard functional break on a supported platform for the primary use case.
+
+**Fix:** Close the source before any swap. `src` is unused after `validate`
+(reconcileCounts is its last consumer), so close it explicitly and drop the defer,
+or close it right after `validate`:
 ```go
 report, err := validate(src, store, opts)
 if err != nil {
     return Result{Report: report}, err
 }
-if report.Dropped > 0 {
-    if err := recomputeFileEdgeCounts(store); err != nil {
-        return Result{}, err
-    }
+if err := src.Close(); err != nil {
+    return Result{}, err
 }
+// ... recompute / counts / meta ...
+// store.Close(); atomicSwapDir(...)
 ```
+Apply the same ordering to the `StatusComplete` resume branch (line 148-154): close
+`src` before calling `finishFromComplete`. (This also tightens POSIX hygiene — it
+stops step 3 from unlinking the live source out from under the open handle.)
 
-### WR-02: Final `batchWriter` Pebble batch is never `Close()`d (leak + contract violation)
+## Warnings
 
-**File:** `internal/migrate/migrate.go:448-462` (`commitData`), `152-174` (write loop)
-**Issue:** `commitData` commits `bw.w`, then *eagerly opens a fresh empty writer*
-(`bw.w = w; bw.n = 0`). After the last table's final `commitData`, that fresh writer holds an
-open `*pebble.Batch` with `n == 0`. Nothing ever commits or closes it — `Run` proceeds to
-`recomputeFileEdgeCounts`, opens a separate `mw` for meta, and eventually `store.Close()`.
-The `Writer` interface doc (store.go:244-248) explicitly states an abandoned Writer MUST be
-`Close()`d to return its batch to Pebble's `sync.Pool`. Here `bw.w` is always abandoned
-un-closed at the end of every successful run (and on the error return paths after
-`newBatchWriter`).
+### WR-01: `finishFromComplete` returns a zero-valued `Report`, so a resumed/recovered migration prints "migrated: N/0" source counts
 
-**Concrete failure scenario:** every migration leaks one Pebble batch (its backing memory is
-not returned to the pool and is only reclaimed by GC). Low impact for a short-lived CLI, but
-it is a real lifecycle defect and a documented-contract violation; in a future long-lived /
-server-hosted migration path it becomes a per-run leak.
+**File:** `internal/migrate/migrate.go:461-493`, `internal/cli/migrate.go:125-133`
 
-**Fix:** Give `batchWriter` a `Close()` that closes `bw.w`, and `defer bw.Close()` after
-`newBatchWriter`. Or make `commitData` lazy (only open a new batch on the next `Put`, not
-eagerly after commit), so a trailing no-op commit leaves nothing open.
+**Issue:** The happy path builds `Result.Report` from `validate` and the CLI prints
+`files=%d/%d nodes=%d/%d edges=%d/%d (migrated/source)` using
+`result.Report.Files.Source` etc. But `finishFromComplete` (used by both the
+`StatusComplete` resume branch at line 153 and the WR-04 recovery at line 427)
+returns `Result{Nodes, Edges, Files, Resumed, HealthMessage}` with `Report` left at
+its zero value — it never re-opens the source to populate `Report.*.Source` (and in
+the in-place recovery case it *cannot*, the source is gone).
 
-### WR-03: `checkTargetOverwrite` writes a Pebble store into the target dir while *refusing*
+**Concrete failure scenario:** Any migration that is interrupted after the partial
+is stamped complete and then re-run prints, e.g.,
+`migrated: files=5/0 nodes=42/0 edges=88/0 (migrated/source)` — the reconciliation
+line a user relies on to trust the migration shows every source count as 0, looking
+like a failed/empty migration even though it succeeded and was fully validated.
 
-**File:** `internal/migrate/migrate.go:288-315`
-**Issue:** When `force == false` and the target is a non-empty directory, the "is this a prior
-healthy migration?" probe calls `graphstore.Open(filepath.Join(target, "store"))`.
-`graphstore.Open` → `pebble.Open(dir, &pebble.Options{})` **creates** the directory and writes
-`MANIFEST`/`OPTIONS`/`CURRENT`/etc. if absent. For a target that is *not* a prior migration
-(e.g. an in-place `.codegraph/` still holding the TS source `*.db`), this litters a fresh
-`store/` subdirectory into the target — and then the function returns the "refusing" error
-anyway. This mutates the target (and, for the in-place default where `from == to`, the source
-`.codegraph/` directory) during what is supposed to be a read-only refusal check, brushing
-against the D-08 non-destructive guarantee.
-
-**Reachability:** guarded from the `codegraph migrate` CLI (the CLI flips `force = true` after
-its own confirm before calling `Run`), but `migrate.Run` is documented as the "authoritative
-last line of defense" public API and is reachable directly with `Options{Force: false}`.
-
-**Fix:** Probe read-only. Open with `pebble.Options{ReadOnly: true}` (returns an error instead
-of creating), or `os.Stat(filepath.Join(target,"store"))` first and only attempt the
-health-read when the store already exists.
-
-### WR-04: A crash inside the swap window leaves no target and no automatic recovery
-
-**File:** `internal/migrate/swap.go:78-95`, `internal/migrate/migrate.go:265-274`
-**Issue:** `atomicSwapDir` does rename-aside (`targetDir` → `targetDir.old`) then rename-into-
-place (`tmpDir` → `targetDir`). Its restore logic only fires when the *second `os.Rename`
-returns an error*; it does not (cannot) cover a process crash/kill in the window **between**
-the two renames. If the process dies there, `.codegraph/` does not exist, the original is at
-`.codegraph.old`, and the validated new store is at `.codegraph.migrate-partial`. On the next
-`codegraph migrate` run, `resolveSourceDB(from)` does `os.Stat(".codegraph")` → `IsNotExist` →
-hard error `migrate: resolve source …`. The tool cannot detect "target missing + `.old` +
-complete partial present" and finish the swap, so a *fully validated* migration is left
-requiring manual `mv` to recover, breaking the resumability guarantee (D-06/D-07) for this
-window. Data is not lost, but the tool cannot self-heal.
-
-**Fix:** On startup, before resolving the source, detect an orphaned swap state (target absent
-or empty, `<target>.old` present, and/or a partial store carrying a `StatusComplete` cursor)
-and complete/roll back the swap. At minimum, if the deterministic partial store exists with a
-`complete` cursor, prefer finishing it over erroring on the missing source.
-
-### WR-05: Source DB path is concatenated into a `file:` URI DSN without escaping
-
-**File:** `internal/migrate/reader.go:78-93`
-**Issue:** `dsn := "file:" + abs + "?mode=ro&_pragma=query_only(1)&_txlock=deferred"`. `abs`
-is a raw filesystem path spliced directly into a URI. A path containing URI-significant
-characters is mis-parsed: a space is not percent-encoded, and — more dangerously — a `?` in
-the path (legal on POSIX) terminates the path and turns the remainder into query parameters,
-while a `#` truncates it. This can break `sql.Open`/`Ping` for repos under paths like
-`/Users/me/My Repo/…` or, in the pathological `?` case, cause the trailing path text to be
-interpreted as connection/pragma parameters.
-
-**Concrete failure scenario:** a repo checked out at `…/proj?x/.codegraph/index.db` yields DSN
-`file:…/proj?x/.codegraph/index.db?mode=ro&…`; SQLite parses `x/.codegraph/index.db` as a
-query key, opens the wrong (or an empty) database, and migration proceeds against garbage or
-fails confusingly rather than pointing at the path.
-
-**Fix:** Build the DSN with proper URI escaping, e.g. construct a `net/url.URL{Scheme:"file",
-Path: abs}` and set `RawQuery` via `url.Values`, or percent-encode `abs` before concatenation.
-Also normalize Windows `C:\…` paths to the `file:/C:/…` form.
+**Fix:** Persist the reconciled counts into the partial store's Meta at
+completion (Meta already carries `NodeCount`/`EdgeCount`) or into the `Progress`
+record, and have `finishFromComplete` read them back into `Report.*.Source`; or have
+the CLI suppress the `/source` denominator (and print a "resumed — source counts
+unavailable" note) when `result.Resumed` is true and the Report is zero.
 
 ## Info
 
-### IN-01: `msToNs` float path loses precision above 2^53 ns
+### IN-01: `recoverInterruptedSwap` leaks the opened partial store on `finishFromComplete`'s error paths
 
-**File:** `internal/migrate/translate.go:143`, `160-161`
-**Issue:** `int64(t * 1e6)` for a `float64` millisecond value ≥ ~9.0e6 ms produces a
-nanosecond magnitude > 2^53, so the low ~8 bits of the nanosecond value are rounded. The
-comment acknowledges "does not panic or truncate-crash," but the mtime is silently quantized
-to ~256 ns. Harmless in practice (mtimes need second-ish resolution). No action required
-beyond noting the accepted lossiness.
+**File:** `internal/migrate/migrate.go:407-430`
 
-### IN-02: `checkWritableDir` ignores `f.Close()` and `os.Remove` errors
+**Issue:** Unlike the main `Run` (which sets `defer store.Close()` at line 140),
+`recoverInterruptedSwap` opens the partial store (line 407) with no deferred close;
+it closes it explicitly on the decline paths (lines 423, 417) and relies on
+`finishFromComplete` to close it on success. But if `finishFromComplete` errors
+*before* its own `store.Close()` (any of the `countNodes/countEdges/countFiles/
+getStoreMeta` calls fail, migrate.go:462-477), it returns without closing, and
+`recoverInterruptedSwap` returns `true, res, ferr` without closing either — leaking
+the Pebble handle (and its `LOCK`) for the remainder of the process.
 
-**File:** `internal/migrate/swap.go:21-22`
-**Issue:** After the create-probe, `f.Close()` and `os.Remove(name)` return values are
-dropped. If `Remove` fails, a `.codegraph-migrate-writable-check-*` temp file leaks into the
-parent dir while the check still reports "writable." Low impact.
-**Fix:** Check and, at minimum, wrap/log the `Remove` error; the leftover temp file otherwise
-accumulates on repeated runs.
+**Fix:** `defer store.Close()` immediately after `graphstore.Open` in
+`recoverInterruptedSwap` (Pebble `Close` is idempotent, so the later explicit close
+in `finishFromComplete` remains a safe no-op).
 
-### IN-03: `normalizeFilePath` drive-letter heuristic can strip a legitimate `x:` prefix
+### IN-02: `targetPopulated` treats an existing-but-unreadable target as empty, letting recovery bypass the D-08 overwrite guard
 
-**File:** `internal/migrate/translate.go:175-177`
-**Issue:** `if len(p) >= 2 && p[1] == ':' { p = p[2:] }` treats any 2nd-char colon as a Windows
-drive letter. A POSIX-legal relative path whose first segment contains a colon at index 1
-(e.g. `a:b/foo`) would be corrupted to `b/foo`. The captured corpus is repo-relative
-forward-slash so this is defensive-only, but the heuristic is broader than "single ASCII
-letter followed by `:`".
-**Fix:** Gate on `unicode.IsLetter(rune(p[0])) && p[1] == ':'` (single-letter drive).
+**File:** `internal/migrate/migrate.go:448-454`
 
-### IN-04: Resume does not verify the cursor's `SourceSchemaVersion` matches the current source
+**Issue:** `targetPopulated` returns `false` whenever `os.ReadDir(target)` errors —
+including permission-denied or "target is a regular file", not just not-exist. In
+those cases `recoverInterruptedSwap` proceeds as if the target were absent and, if a
+`StatusComplete` partial happens to exist, swaps it into place via
+`finishFromComplete` — which never calls `checkTargetOverwrite` and never consults
+`Force`. Recovery thus bypasses the D-08 non-destructive guard for a populated but
+unreadable target.
 
-**File:** `internal/migrate/migrate.go:126-140`, `internal/migrate/progress.go:20-26`
-**Issue:** The deterministic partial store is keyed only by target parent directory. If a run
-is interrupted and then re-invoked with a *different* `--from` into the same `--to`, `Run`
-resumes the foreign partial store without comparing the persisted
-`Progress.SourceSchemaVersion` (or a source fingerprint) against the freshly-read
-`srcVersion`. In most cases `validate`'s count reconciliation is a strong backstop and fails
-loud, but the mixed-source partial is only caught incidentally.
-**Fix:** In the resume branch, reject (or discard and restart) a partial whose
-`SourceSchemaVersion` differs from the current source's; consider recording a source
-path/hash in `Progress` for a stronger match.
+**Fix:** Distinguish `os.IsNotExist` from other `ReadDir` errors; on a
+non-not-exist error, treat the target as populated (decline recovery) so the normal
+`Run` path applies the overwrite guard and surfaces the real error.
 
-### IN-05: Iterator `Close()` errors dropped via `_ =` in `recomputeFileEdgeCounts`
+### IN-03: WR-03 residual — the health probe still opens an existing store read-write during the "no changes made" refusal check
 
-**File:** `internal/migrate/migrate.go:597`, `602`, `605`
-**Issue:** `_ = it.Close()` on the files iterator discards close errors, inconsistent with the
-package's otherwise fail-loud posture. Pebble iterator `Close()` surfaces accumulated iterator
-errors; dropping them could mask a late read error. Very low likelihood in practice.
-**Fix:** Capture and return the `Close()` error on the success path (join with any pending
-error), matching the `rows.Err()` discipline used elsewhere.
+**File:** `internal/migrate/migrate.go:341`
+
+**Issue:** WR-03's fix stops *creating* a `store/` dir, but when `target/store`
+already exists the probe calls `graphstore.Open` (→ `pebble.Open(dir,
+&pebble.Options{})`), which opens read-write: Pebble writes a fresh `OPTIONS-NNN`,
+rewrites `MANIFEST`/`CURRENT`, and replays/creates a WAL on open. So probing a prior
+migration's store to read `Meta.Healthy` mutates it, contradicting the error
+message's "(no changes made)". Harmless in practice (that store is a prior migration
+we may overwrite anyway), but it is a residual write during a check documented as
+non-destructive.
+
+**Fix:** Open the probe read-only: `pebble.Open(dir, &pebble.Options{ReadOnly:
+true})` behind a small graphstore helper (a read-only open also returns an error
+rather than mutating when the store is absent, subsuming the `os.Stat` guard).
+
+### IN-04: Carry-forward — original IN-01..IN-05 remain open
+
+**File:** various (see 07-REVIEW-FIX.md §Skipped)
+
+The five Info findings from the first review — `msToNs` float precision
+(translate.go:143), `checkWritableDir` dropped `Remove` error (swap.go:22),
+`normalizeFilePath` drive-letter heuristic (translate.go:175), resume
+source-fingerprint check (migrate.go:126-140/progress.go), and iterator `Close()`
+errors dropped in `recomputeFileEdgeCounts` (migrate.go:724-733) — were explicitly
+out of the fix scope and are still present. None is elevated by this pass; noting
+them so the record stays complete.
 
 ---
 
-_Reviewed: 2026-07-13T01:37:23Z_
+_Reviewed: 2026-07-13_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
