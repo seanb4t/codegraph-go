@@ -260,7 +260,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Migration is resumable after interruption and version-stamped so partial runs recover correctly
   3. Migration is validated against real aged `.codegraph/` directories and runs structural-invariant checks on the result, failing loudly on corruption rather than producing a silently-wrong graph
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 **Wave 1**
 
@@ -278,7 +278,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 07-06-PLAN.md — migrate.Run orchestration: detect→write(x/ index)→resume→validate→atomic swap + healthy gating (MIGR-01/02)
+- [x] 07-06-PLAN.md — migrate.Run orchestration: detect→write(x/ index)→resume→validate→atomic swap + healthy gating (MIGR-01/02)
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -313,5 +313,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
 | 6. Agent Integrations & CLI Lifecycle | 6/6 | Complete    | 2026-07-12 |
-| 7. Migration Tool | 5/7 | In Progress|  |
+| 7. Migration Tool | 6/7 | In Progress|  |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |

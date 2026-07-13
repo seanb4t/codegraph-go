@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 7
 current_phase_name: Migration Tool
 status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-07-13T00:59:40.711Z"
+stopped_at: Completed 07-06-PLAN.md
+last_updated: "2026-07-13T01:19:35.541Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 57
-  completed_plans: 56
+  completed_plans: 57
   percent: 75
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 7 (Migration Tool) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 7 execution started
 
@@ -113,6 +113,7 @@ Progress: [███████░░░] 73%
 | Phase 07 P03 | 40min | 2 tasks | 4 files |
 | Phase 07 P04 | 15min | 2 tasks | 4 files |
 | Phase 07-migration-tool P05 | 25min | 1 tasks | 2 files |
+| Phase 07-migration-tool P06 | 55min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -245,6 +246,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 07-migration-tool]: atomicSwapDir step-3 .old cleanup failure is returned as a real error (not logged-and-discarded) to satisfy the never-swallowed prohibition
 - [Phase ?]: [Phase 07-migration-tool]: Options{Force, DropDangling bool} defined in validate.go (no migrate.go yet) as the package's single shared options struct — 07-06 reconciles with it rather than redeclaring
 - [Phase ?]: [Phase 07-migration-tool]: dropDanglingEdges best-effort-cleans the x/ file-index entry only when the dangling edge's source resolves to a node (target-only dangling); a missing source means no owner was ever recorded (ownerPath empty per D-04) so nothing to clean up
+- [Phase 07-migration-tool]: partialDir uses a FIXED deterministic name (.codegraph.migrate-partial), not swap.go's randomly-named siblingTempDir, since resumability requires the same path across process invocations
+- [Phase 07-migration-tool]: checkTargetOverwrite/migrate.Run open <target>/store, not <target> directly, matching internal/cli's established .codegraph/store/ subdirectory convention
 
 ### Pending Todos
 
@@ -268,6 +271,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T00:59:16.768Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-07-13T01:19:35.534Z
+Stopped at: Completed 07-06-PLAN.md
 Resume file: None
