@@ -27,8 +27,9 @@ var ErrNotInitialized = errors.New("cli: not initialized")
 // init/index/uninit subcommands (D-01), plus sync/daemon/unlock (D-01/D-05)
 // — the incremental-update surface: sync updates the graph in one shot,
 // daemon runs the shared watch/index server, and unlock clears a stale
-// daemon lock. Usage/error text is printed by the caller
-// (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
+// daemon lock — and migrate (D-08), the one-step TS CodeGraph SQLite ->
+// new-format Pebble store conversion. Usage/error text is printed by the
+// caller (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
 // SilenceErrors are set on every command in the tree.
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
@@ -46,7 +47,7 @@ func newRootCmd() *cobra.Command {
 		newImpactCmd(), newAffectedCmd(), newFilesCmd(), newStatusCmd(),
 		newNodeCmd(), newExploreCmd(), newServeCmd(), newSyncCmd(),
 		newDaemonCmd(), newUnlockCmd(), newVersionCmd(), newTelemetryCmd(),
-		newUpgradeCmd(), newInstallCmd(), newUninstallCmd())
+		newUpgradeCmd(), newInstallCmd(), newUninstallCmd(), newMigrateCmd())
 	return root
 }
 
