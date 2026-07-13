@@ -37,6 +37,10 @@ func (f *searchFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("searchFakeReader: GetMeta not implemented")
 }
 
+func (f *searchFakeReader) GetMigration() ([]byte, error) {
+	return nil, errors.New("searchFakeReader: GetMigration not implemented")
+}
+
 func (f *searchFakeReader) IterateEdges(string) (graphstore.EdgeIterator, error) {
 	return nil, errors.New("searchFakeReader: IterateEdges not implemented")
 }

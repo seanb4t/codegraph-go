@@ -136,6 +136,28 @@ func getProto(g getter, key []byte, msg proto.Message) error {
 	return proto.Unmarshal(val, msg)
 }
 
+// getRaw looks up key via g and returns a COPY of its raw value bytes (07-02
+// — the migration-progress cursor's opaque payload, unlike getProto's
+// proto.Unmarshal path). Copying is mandatory: pebble/v2 reuses the value's
+// backing buffer once closer.Close runs, so returning the slice as-is would
+// hand the caller memory that can be overwritten by a later read (T-07-02-02
+// — Information Disclosure via a reused buffer). It returns ErrNotFound
+// (never the underlying pebble.ErrNotFound) when key is absent, mirroring
+// getProto.
+func getRaw(g getter, key []byte) ([]byte, error) {
+	val, closer, err := g.Get(key)
+	if err != nil {
+		if errors.Is(err, pebble.ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	defer closer.Close()
+	out := make([]byte, len(val))
+	copy(out, val)
+	return out, nil
+}
+
 // pebbleReader is the Reader implementation. Every read goes through a
 // single Pebble snapshot captured at construction time, so every
 // GetX/IterateEdges call on one pebbleReader observes the same consistent,
@@ -167,6 +189,13 @@ func (r *pebbleReader) GetMeta() (*schema.Meta, error) {
 		return nil, err
 	}
 	return &m, nil
+}
+
+// GetMigration returns the migration-progress cursor blob (07-02) via
+// getRaw — a raw-bytes lookup, not proto.Unmarshal, since the payload is an
+// opaque blob owned by internal/migrate. Returns ErrNotFound if absent.
+func (r *pebbleReader) GetMigration() ([]byte, error) {
+	return getRaw(r.snap, metaKey(migrationRecordName))
 }
 
 func (r *pebbleReader) IterateEdges(srcPrefix string) (EdgeIterator, error) {

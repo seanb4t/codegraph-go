@@ -42,6 +42,10 @@ func (f *traverseFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("traverseFakeReader: GetMeta not implemented")
 }
 
+func (f *traverseFakeReader) GetMigration() ([]byte, error) {
+	return nil, errors.New("traverseFakeReader: GetMigration not implemented")
+}
+
 func (f *traverseFakeReader) IterateEdges(prefix string) (graphstore.EdgeIterator, error) {
 	var filtered []*schema.Edge
 	for _, e := range f.edges {

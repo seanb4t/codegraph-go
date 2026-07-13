@@ -110,6 +110,14 @@ func (w *pebbleWriter) PutMeta(m *schema.Meta) error {
 	return w.batch.Set(metaKey(metaRecordName), data, nil)
 }
 
+// PutMigration stages the migration-progress cursor blob under its own
+// m/migration key (07-02). Unlike PutMeta/PutNode/PutEdge/PutFile, this is
+// a raw Set — data is an opaque []byte owned by internal/migrate, not a
+// proto message, so it does NOT route through deterministicMarshal.
+func (w *pebbleWriter) PutMigration(data []byte) error {
+	return w.batch.Set(metaKey(migrationRecordName), data, nil)
+}
+
 // DeleteFileSubgraph stages two Pebble range-deletes — path's own file
 // record under f/ (D-03: [fileSubgraphPrefix(path), rangeUpperBound(...)),
 // the exact byte range that isolates path's record from a
