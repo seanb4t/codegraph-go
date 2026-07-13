@@ -148,6 +148,13 @@ func Run(from, to string, opts Options) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	// WR-02: commitData eagerly opens a fresh Writer after every commit, so
+	// after the final table's commit bw.w holds an open, never-committed
+	// Pebble batch. The Writer contract (store.go) requires an abandoned
+	// Writer be Closed to return its batch to Pebble's pool; defer guarantees
+	// that on every exit path (success and the error returns below), Close
+	// after a successful Commit being a documented safe no-op.
+	defer bw.Close()
 
 	for i, table := range migrateTableOrder {
 		if i < resumeIdx {
@@ -460,6 +467,22 @@ func newBatchWriter(store graphstore.GraphStore) (*batchWriter, error) {
 		return nil, fmt.Errorf("migrate: new writer: %w", err)
 	}
 	return &batchWriter{store: store, w: w}, nil
+}
+
+// Close releases the currently-open Writer's underlying Pebble batch (WR-02).
+// It is safe to call more than once and safe after the open Writer's data was
+// already Committed (graphstore.Writer.Close is a documented no-op after
+// Commit) — commitData always leaves a fresh, uncommitted Writer open, and
+// this returns that trailing batch to Pebble's pool. Idempotent: nils out the
+// Writer so a second call (e.g. an explicit call plus the deferred one) does
+// nothing.
+func (bw *batchWriter) Close() error {
+	if bw.w == nil {
+		return nil
+	}
+	w := bw.w
+	bw.w = nil
+	return w.Close()
 }
 
 // commitData commits whatever is currently staged (a no-op if nothing is
