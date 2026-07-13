@@ -12,3 +12,7 @@ coverage.html
 
 # graphify skill scratch output
 graphify-out/
+
+# Generated knowledge-graph output — keep only the human-readable report
+.planning/graphs/*
+!.planning/graphs/GRAPH_REPORT.md
