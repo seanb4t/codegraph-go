@@ -85,7 +85,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 ### Performance
 
 - [x] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers)
-- [ ] **PERF-02**: Performance regression gates run in CI against a benchmark corpus including a 100k+ file monorepo
+- [x] **PERF-02**: Performance regression gates run in CI against a benchmark corpus including a 100k+ file monorepo
 
 ### Architecture Future-Proofing
 
@@ -175,5 +175,5 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | DIST-04 | Phase 8 | Complete |
 | DIST-05 | Phase 8 | Complete |
 | PERF-01 | Phase 8 | Complete |
-| PERF-02 | Phase 8 | Pending |
+| PERF-02 | Phase 8 | Complete |
 | ARCH-01 | Phase 1 | Complete |
