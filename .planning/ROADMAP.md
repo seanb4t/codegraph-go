@@ -296,7 +296,28 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos use comparable methodology with raw per-repo numbers
   4. User can index a 100k+ file monorepo within bounded memory, with peak RSS tracked as a first-class CI metric and performance-regression gates running against a benchmark corpus that includes that monorepo
 
-**Plans**: TBD
+**Plans**: 9 plans
+
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — GoReleaser 6-target CGo build config + reproducibility flags + version ldflags + local build proof (DIST-01/DIST-04)
+- [ ] 08-02-PLAN.md — internal/bench OS-level peak-RSS capture + KB/bytes normalization + Metrics (TDD) (PERF-01/INDX-06)
+- [ ] 08-03-PLAN.md — tools/bench/gencorpus deterministic synthetic 100k+ corpus generator (TDD) (PERF-02/INDX-06)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 08-04-PLAN.md — release.yml native-matrix build + per-binary cosign + SLSA + SBOM + publish + first-release checkpoint (DIST-01/02/03)
+- [ ] 08-05-PLAN.md — verify_release e2e test + releaseAssetName↔name_template finalization (TDD) (DIST-02)
+- [ ] 08-06-PLAN.md — internal/bench tolerance-band + absolute-ceiling regression gate (TDD) (PERF-02/INDX-06)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 08-07-PLAN.md — tools/bench/runner (head-to-head + regression) + pinned real-corpus manifest + committed baseline.json (PERF-01/02/INDX-06)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 08-08-PLAN.md — ci.yml (test + govulncheck + double-build + perf gate) + bench.yml head-to-head publish (DIST-03/04/PERF-01/02/INDX-06)
+- [ ] 08-09-PLAN.md — docs/RELEASE.md (verify + DIST-05 audit narrative) + docs/BENCHMARKS.md (methodology + raw numbers) (DIST-05/02/03/PERF-01)
 
 ## Progress
 
@@ -314,4 +335,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
 | 6. Agent Integrations & CLI Lifecycle | 6/6 | Complete    | 2026-07-12 |
 | 7. Migration Tool | 7/7 | Complete    | 2026-07-13 |
-| 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |
+| 8. Release Hardening & Benchmarks | 0/9 | Planned | - |
