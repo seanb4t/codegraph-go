@@ -186,8 +186,11 @@ func defaultDownload(version string) (binary []byte, bundleJSON []byte, err erro
 	return binary, bundleJSON, nil
 }
 
-// releaseAssetName is Phase-8-finalized (D-14): goreleaser's real archive
-// naming template determines the production value once DIST-02 ships.
+// releaseAssetName is D-14-finalized: TestReleaseAssetNameMatchesGoReleaser
+// (verify_release_e2e_test.go) pins this literal shape
+// (codegraph_<tag>_<goos>_<goarch>[.exe]) against .goreleaser.yaml's
+// archives.name_template for all 6 shipped release targets, proving the two
+// agree rather than merely asserting it in a comment.
 func releaseAssetName(version string) string {
 	ext := ""
 	if runtime.GOOS == "windows" {
