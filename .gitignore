@@ -13,6 +13,9 @@ coverage.html
 # Local dev binary (produced by `go build ./tools/bench/gencorpus/`)
 /gencorpus
 
+# Local dev binary (produced by `go build ./tools/bench/runner/`)
+/runner
+
 # graphify skill scratch output
 graphify-out/
 
