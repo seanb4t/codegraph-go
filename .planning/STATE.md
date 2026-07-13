@@ -4,17 +4,17 @@ milestone: v1.3
 milestone_name: milestone
 current_phase: 8
 current_phase_name: Release Hardening & Benchmarks
-status: executing
+status: verifying
 stopped_at: Completed 08-05-PLAN.md (upgrade e2e verification loop-closer)
-last_updated: "2026-07-13T21:34:05.337Z"
+last_updated: "2026-07-13T21:42:19.474Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 66
-  completed_plans: 66
-  percent: 88
+  completed_plans: 67
+  percent: 100
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 
 Phase: 8 (Release Hardening & Benchmarks) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-13 — Phase 8 execution started
 
 Progress: [███████░░░] 73%
@@ -124,6 +124,7 @@ Progress: [███████░░░] 73%
 | Phase 8 P06 | 2min | 2 tasks | 2 files |
 | Phase 08 P07 | 2h45min | 3 tasks | 6 files |
 | Phase 08 P08 | 25min | 2 tasks | 2 files |
+| Phase 08 P09 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -274,6 +275,8 @@ Recent decisions affecting current work:
 - [Phase 08-07]: Established the committed baseline.json at the full 120000-file production scale rather than a smaller stand-in -- a real run completed in ~8s/index
 - [Phase 08]: govulncheck-action (pinned SHA) used instead of hand-rolled go install step for the CI vuln gate
 - [Phase 08]: Reproducibility double-build gate blocks on linux/amd64, reports linux/arm64 via continue-on-error (D-03); real cross-compile behavior deferred to first live CI run, not exercisable on darwin dev machine
+- [Phase ?]: [Phase 08-09]: Reported DIST-05 dependency count precisely (134 total go.mod requires: 27 direct/107 indirect, 14 of 27 direct are tree-sitter grammar modules) rather than restating CONTEXT.md's less-precise 134-direct-requires phrasing verbatim
+- [Phase ?]: [Phase 08-09]: BENCHMARKS.md head-to-head numbers table left TBD with the exact regenerate command rather than citing 08-07's uncaptured manual run output — no fabricated benchmark numbers
 
 ### Pending Todos
 
@@ -297,6 +300,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T21:30:51.552Z
+Last session: 2026-07-13T21:39:35.943Z
 Stopped at: Completed 08-05-PLAN.md (upgrade e2e verification loop-closer)
 Resume file: None
