@@ -6,14 +6,14 @@ current_phase: 8
 current_phase_name: Release Hardening & Benchmarks
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-13T16:59:53.517Z"
+last_updated: "2026-07-13T17:07:55.236Z"
 last_activity: 2026-07-13
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
+last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 57
-  completed_plans: 58
+  total_plans: 66
+  completed_plans: 59
   percent: 88
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 7 — Migration Tool
+**Current focus:** Phase 8 — Release Hardening & Benchmarks
 
 ## Current Position
 
-Phase: 8 — Release Hardening & Benchmarks
-Plan: Not started
+Phase: 8 (Release Hardening & Benchmarks) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Last activity: 2026-07-13 — Phase 7 complete, transitioned to Phase 8
+Last activity: 2026-07-13 — Phase 8 execution started
 
 Progress: [███████░░░] 73%
 
@@ -116,6 +116,7 @@ Progress: [███████░░░] 73%
 | Phase 07-migration-tool P05 | 25min | 1 tasks | 2 files |
 | Phase 07-migration-tool P06 | 55min | 1 tasks | 2 files |
 | Phase 07 P07 | 45min | 2 tasks | 3 files |
+| Phase 08 P01 | 12min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -252,6 +253,7 @@ Recent decisions affecting current work:
 - [Phase 07-migration-tool]: checkTargetOverwrite/migrate.Run open <target>/store, not <target> directly, matching internal/cli's established .codegraph/store/ subdirectory convention
 - [Phase ?]: 07-07: CLI confirm gate checks only 'target non-empty', not 'recognized prior migration' — avoids duplicating migrate.Run's checkTargetOverwrite store-open probe at the CLI layer
 - [Phase ?]: 07-07: codegraph migrate defaults --from and --to to the same cwd/.codegraph path (in-place conversion per D-08)
+- [Phase 08]: archives.formats: [binary] used instead of deprecated archives.format: binary (GoReleaser v2.6+ schema)
 
 ### Pending Todos
 
@@ -275,6 +277,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T16:05:33.497Z
+Last session: 2026-07-13T17:07:19.766Z
 Stopped at: Phase 8 context gathered
 Resume file: .planning/phases/08-release-hardening-benchmarks/08-CONTEXT.md
