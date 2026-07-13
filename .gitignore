@@ -10,6 +10,9 @@ coverage.html
 # Local dev binary (produced by `go build -o codegraph ./cmd/codegraph`)
 /codegraph
 
+# Local dev binary (produced by `go build ./tools/bench/gencorpus/`)
+/gencorpus
+
 # graphify skill scratch output
 graphify-out/
 
