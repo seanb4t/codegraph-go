@@ -2,12 +2,23 @@
 #
 # IMPORTANT CONTRACTS — do not change without reading the linked findings:
 #
-#   (a) archives.name_template below MUST produce the exact same string as
-#       internal/upgrade.releaseAssetName() for a given tag/os/arch, or
-#       `codegraph upgrade` 404s trying to download the release asset
-#       (Finding 1, Phase 8 research). The contract shape is:
-#           codegraph_<tag>_<goos>_<goarch>[.exe]
-#       using {{ .Tag }} (v-prefixed), NOT {{ .Version }} (prefix stripped).
+#   (a) release.yml's build job invokes `goreleaser build --single-target`
+#       ONLY (never `goreleaser release`), so the archives/checksum blocks
+#       below are NOT executed by this project's pipeline — GoReleaser's
+#       `build` subcommand compiles binaries only and does not run the
+#       archive/checksum/sign/sbom pipes. The real asset-naming/checksum
+#       contract is enforced entirely by release.yml's own shell steps
+#       ("Rename to release-asset contract name" in the build job, and
+#       "Checksums" in the assemble job), which must independently agree
+#       with internal/upgrade.releaseAssetName() (Finding 1, Phase 8
+#       research; contract shape: codegraph_<tag>_<goos>_<goarch>[.exe],
+#       using the v-prefixed tag, not the prefix-stripped version). The
+#       archives.name_template below documents that same shape for a
+#       human reader but is otherwise inert — if you change the asset
+#       name shape, change BOTH release.yml's DEST= line and
+#       internal/upgrade.releaseAssetName(); editing name_template alone
+#       has no effect on the actual release artifacts (WR-01, Phase 8
+#       re-review).
 #
 #   (b) The reproducibility flags on every build entry (-trimpath,
 #       -buildid=, mod_timestamp) exist so the DIST-04 double-build
@@ -118,6 +129,12 @@ builds:
 # Raw per-platform binaries, NEVER tar.gz/zip (D-02/Finding 1): the
 # upgrade path in internal/upgrade downloads and swaps in this exact
 # byte stream directly, with no archive extraction step.
+#
+# NOTE (WR-01, Phase 8 re-review): this block (and the checksum: block
+# below) is dead configuration under this project's pipeline — see the
+# header comment at the top of this file. It never executes because
+# release.yml only runs `goreleaser build --single-target`, never
+# `goreleaser release`. Kept as documentation of intent only.
 archives:
   - formats: [binary]
     name_template: >-
