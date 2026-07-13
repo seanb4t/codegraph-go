@@ -6,14 +6,14 @@ current_phase: 8
 current_phase_name: Release Hardening & Benchmarks
 status: executing
 stopped_at: Completed 08-05-PLAN.md (upgrade e2e verification loop-closer)
-last_updated: "2026-07-13T18:25:54.117Z"
+last_updated: "2026-07-13T21:21:15.124Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 66
-  completed_plans: 64
+  completed_plans: 65
   percent: 88
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 8 (Release Hardening & Benchmarks) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-07-13 — Phase 8 execution started
 
@@ -122,6 +122,7 @@ Progress: [███████░░░] 73%
 | Phase 08 P04 | 2min | 3 tasks | 1 files |
 | Phase 08-release-hardening-benchmarks P05 | 3min | 2 tasks | 2 files |
 | Phase 8 P06 | 2min | 2 tasks | 2 files |
+| Phase 08 P07 | 2h45min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -266,6 +267,10 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 08]: releaseAssetName already agreed byte-for-byte with GoReleaser's name_template for all 6 os/arch targets (D-14) — TestReleaseAssetNameMatchesGoReleaser proves it; only the doc comment was updated, no logic change
 - [Phase ?]: [Phase 08]: TestVerifyReleaseE2E sources a real signed artifact via a committed testdata fixture (primary) or CODEGRAPH_E2E_BINARY/CODEGRAPH_E2E_BUNDLE env vars (live variant), else skips cleanly — no real DIST-02 release exists yet so it currently skips, never fails
 - [Phase ?]: [Phase 08]: CheckRegression's absolute peak-RSS ceiling checked independently of relative RSS-tolerance delta (INDX-06) - a baseline already near budget can't mask further growth behind a large denominator
+- [Phase 08-07]: Reused testdata/golden's own pinned real-repo commits (weft-go, colbymchenry-codegraph) for the PERF-01 manifest instead of the plan's incorrect example names (spf13/cobra, pallets/flask), which don't exist in this repo
+- [Phase 08-07]: Chose cockroachdb/pebble@v2.1.6 as the larger-scale real-repo entry for PERF-01 head-to-head -- this project's own storage dependency
+- [Phase 08-07]: gencorpus is invoked as a built subprocess (not imported) since Go disallows importing a package named main
+- [Phase 08-07]: Established the committed baseline.json at the full 120000-file production scale rather than a smaller stand-in -- a real run completed in ~8s/index
 
 ### Pending Todos
 
@@ -289,6 +294,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T18:25:05.395Z
+Last session: 2026-07-13T21:18:27.052Z
 Stopped at: Completed 08-05-PLAN.md (upgrade e2e verification loop-closer)
 Resume file: None
