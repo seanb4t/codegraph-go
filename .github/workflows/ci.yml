@@ -18,10 +18,11 @@
 #     the linux/arm64 cross-target leg is reported via continue-on-error,
 #     never silently green across all targets.
 #   - perf-regression: tools/bench/runner -mode regression against the
-#     committed tools/bench/baseline.json, gating PERF-02 (throughput/query
-#     tolerance bands) and INDX-06 (absolute peak-RSS ceiling) — entirely
-#     offline against the deterministic synthetic corpus (D-04: this gate
-#     MUST NOT clone a remote repo).
+#     committed tools/bench/baseline.json, gating PERF-02 (throughput and
+#     peak-RSS tolerance bands; query latency and cold start are measured
+#     and reported, not yet gated) and INDX-06 (absolute peak-RSS ceiling)
+#     — entirely offline against the deterministic synthetic corpus (D-04:
+#     this gate MUST NOT clone a remote repo).
 #
 # Security note: every third-party Action below is pinned to a full commit
 # SHA (resolved at execution time via `gh api`, matching release.yml's own
