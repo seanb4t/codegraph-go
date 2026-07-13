@@ -169,7 +169,7 @@ func Run(from, to string, opts Options) (Result, error) {
 		if testBeforeSwap != nil {
 			testBeforeSwap(src)
 		}
-		return finishFromComplete(store, tmpDir, target)
+		return finishFromComplete(store, progress, tmpDir, target)
 	}
 
 	resumeIdx, resumeAfterRowID := resumePosition(found, progress)
@@ -285,6 +285,12 @@ func Run(from, to string, opts Options) (Result, error) {
 		LastTable:           "edges",
 		LastRowID:           0,
 		Status:              StatusComplete,
+		// WR-01: persist the reconciled source counts so a resumed/recovered
+		// run can report accurate "migrated/source" denominators without the
+		// source (which may be gone on an in-place recovery).
+		SourceNodeCount: report.Nodes.Source,
+		SourceEdgeCount: report.Edges.Source,
+		SourceFileCount: report.Files.Source,
 	}); err != nil {
 		_ = mw.Close()
 		return Result{}, err
@@ -455,7 +461,7 @@ func recoverInterruptedSwap(target string) (bool, Result, error) {
 		return false, Result{}, nil
 	}
 
-	res, ferr := finishFromComplete(store, tmpDir, target)
+	res, ferr := finishFromComplete(store, progress, tmpDir, target)
 	if ferr != nil {
 		return true, res, ferr
 	}
@@ -489,7 +495,7 @@ func targetPopulated(target string) bool {
 // process was interrupted before the atomic swap ran. No re-write or
 // re-validate is needed or performed — just read back the already-final
 // counts/health message and swap.
-func finishFromComplete(store graphstore.GraphStore, tmpDir, target string) (Result, error) {
+func finishFromComplete(store graphstore.GraphStore, progress Progress, tmpDir, target string) (Result, error) {
 	nodeCount, err := countNodes(store)
 	if err != nil {
 		return Result{}, err
@@ -514,12 +520,23 @@ func finishFromComplete(store graphstore.GraphStore, tmpDir, target string) (Res
 		return Result{}, err
 	}
 
+	// WR-01: reconstruct the reconciliation Report from the migrated counts
+	// (read back from the store) and the source counts persisted into the
+	// cursor when it was stamped StatusComplete, so the resumed/recovered run
+	// prints the real "migrated/source" line instead of "N/0".
+	report := Report{
+		Nodes: TableCounts{Source: progress.SourceNodeCount, Migrated: nodeCount},
+		Files: TableCounts{Source: progress.SourceFileCount, Migrated: fileCount},
+		Edges: TableCounts{Source: progress.SourceEdgeCount, Migrated: edgeCount},
+	}
+
 	return Result{
 		Nodes:         nodeCount,
 		Edges:         edgeCount,
 		Files:         fileCount,
 		Resumed:       true,
 		HealthMessage: meta.GetHealthMessage(),
+		Report:        report,
 	}, nil
 }
 

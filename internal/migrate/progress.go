@@ -23,6 +23,16 @@ type Progress struct {
 	LastTable           string `json:"last_table"`
 	LastRowID           int64  `json:"last_row_id"`
 	Status              string `json:"status"`
+
+	// Reconciled source row counts, persisted when the cursor is stamped
+	// StatusComplete (WR-01). finishFromComplete reads these back into the
+	// resumed/recovered Result.Report so the CLI's "migrated/source"
+	// reconciliation line shows the real source denominators instead of 0 —
+	// on an in-place recovery the source is gone and cannot be re-counted, so
+	// it must have been persisted at completion. Zero on in_progress cursors.
+	SourceNodeCount int64 `json:"source_node_count,omitempty"`
+	SourceEdgeCount int64 `json:"source_edge_count,omitempty"`
+	SourceFileCount int64 `json:"source_file_count,omitempty"`
 }
 
 // Status values for Progress.Status.

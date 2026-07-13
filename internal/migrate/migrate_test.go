@@ -649,6 +649,62 @@ func TestRun_RecoversInterruptedSwap(t *testing.T) {
 	}
 }
 
+// TestRun_RecoveredSwapReportsSourceCounts proves WR-01: a resumed/recovered
+// migration (which returns through finishFromComplete) reports the real source
+// counts in Result.Report, not the zero value. Before the fix
+// finishFromComplete left Report zero-valued, so the CLI printed
+// "files=N/0 nodes=N/0 edges=N/0", making a fully-validated migration look
+// empty. This drives the same interrupted-swap recovery path as
+// TestRun_RecoversInterruptedSwap and asserts the reconciliation denominators.
+func TestRun_RecoveredSwapReportsSourceCounts(t *testing.T) {
+	dbPath := migratetest.BuildTSIndex(t, migratetest.VariantHappy)
+	target := runTarget(t)
+
+	// A full clean migration first, capturing the real source counts.
+	want, err := Run(dbPath, target, Options{})
+	if err != nil {
+		t.Fatalf("initial Run: %v", err)
+	}
+	if want.Report.Nodes.Source == 0 || want.Report.Files.Source == 0 || want.Report.Edges.Source == 0 {
+		t.Fatalf("fixture must have non-zero source counts: %+v", want.Report)
+	}
+
+	// Simulate a crash between atomicSwapDir's two renames: the validated,
+	// StatusComplete store sits at the deterministic partial path and the
+	// target is absent.
+	partial := partialDir(target)
+	if err := os.Rename(target, partial); err != nil {
+		t.Fatalf("stage partial store: %v", err)
+	}
+	if exists(target) {
+		t.Fatalf("precondition: target %s must be absent to simulate the interrupted swap", target)
+	}
+
+	// In-place semantics: from == to; recovery finishes via finishFromComplete.
+	res, err := Run(target, target, Options{})
+	if err != nil {
+		t.Fatalf("recovery Run: %v", err)
+	}
+	if !res.Resumed {
+		t.Fatal("recovery Run should report Resumed=true")
+	}
+
+	if res.Report.Files.Source != want.Report.Files.Source ||
+		res.Report.Nodes.Source != want.Report.Nodes.Source ||
+		res.Report.Edges.Source != want.Report.Edges.Source {
+		t.Errorf("recovered Report source counts = files=%d nodes=%d edges=%d, want files=%d nodes=%d edges=%d (WR-01: finishFromComplete must not return a zero Report)",
+			res.Report.Files.Source, res.Report.Nodes.Source, res.Report.Edges.Source,
+			want.Report.Files.Source, want.Report.Nodes.Source, want.Report.Edges.Source)
+	}
+	if res.Report.Files.Source == 0 || res.Report.Nodes.Source == 0 || res.Report.Edges.Source == 0 {
+		t.Errorf("recovered Report source counts must be non-zero (WR-01): %+v", res.Report)
+	}
+	// Migrated side must reconcile with the returned counts too.
+	if res.Report.Nodes.Migrated != res.Nodes || res.Report.Files.Migrated != res.Files || res.Report.Edges.Migrated != res.Edges {
+		t.Errorf("recovered Report migrated counts %+v disagree with Result (n=%d f=%d e=%d)", res.Report, res.Nodes, res.Files, res.Edges)
+	}
+}
+
 // TestRun_RecoveryLeavesInProgressPartialAlone proves the recovery guard is
 // conservative: an in_progress (NOT StatusComplete) partial with an absent
 // target must NOT be swapped in by recoverInterruptedSwap — that store is
