@@ -6,3 +6,9 @@
 *.out
 coverage.txt
 coverage.html
+
+# Local dev binary (produced by `go build -o codegraph ./cmd/codegraph`)
+/codegraph
+
+# graphify skill scratch output
+graphify-out/
