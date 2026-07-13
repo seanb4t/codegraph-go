@@ -3,15 +3,15 @@ phase: 08-release-hardening-benchmarks
 verified: 2026-07-13T00:00:00Z
 status: human_needed
 verdict: passed-with-pending
-score: 8/8 requirements built and locally proven; 2 items require a real tagged release to fully close
+score: 8/8 requirements built and locally proven; PERF-01 numbers ratified + published (2026-07-13); 1 item (DIST-02 live signed release) requires a real tagged release to fully close
 overrides_applied: 0
 known_gaps:
   - id: DIST-02-live-release
     statement: "Live 6-target signed release (real OIDC cert, darwin DNS resolution under CI, cosign SAN match) has not been exercised — no v* tag has ever been pushed."
     disposition: "publish-pending — code/config verified correct by static + local proof; requires cutting a real tag to close"
   - id: PERF-01-raw-numbers
-    statement: "docs/BENCHMARKS.md's head-to-head numbers table is TBD — no committed raw per-repo Go-vs-TS numbers exist yet, only the regenerate command."
-    disposition: "publish-pending — harness proven functional (manual run + this session's local regression-mode run); numbers themselves not yet captured/committed"
+    statement: "docs/BENCHMARKS.md now publishes the median-of-3 head-to-head numbers vs installed TS 1.3.1 (Go wins every metric); 3 raw runs committed."
+    disposition: "RESOLVED + RATIFIED 2026-07-13 — real median-of-3 numbers published and committed. Follow-up (non-blocking): re-run on standardized CI hardware via bench.yml for the canonical absolute figures; ratios are hardware-durable."
 ---
 
 # Phase 8: Release Hardening & Benchmarks Verification Report

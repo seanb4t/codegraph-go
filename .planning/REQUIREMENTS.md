@@ -84,7 +84,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ### Performance
 
-- [ ] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers) _(runner + methodology complete and proven working against installed TS 1.3.1; raw per-repo numbers PENDING publish to docs/BENCHMARKS.md — see 08-VERIFICATION.md)_
+- [x] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers) _(RATIFIED 2026-07-13 — median-of-3 runs vs installed TS 1.3.1 published in docs/BENCHMARKS.md; Go wins every metric 6.1×–59.7× throughput, ~2.3–2.8× query, 3.6×–5.5× RSS, ~6× cold start; 3 raw runs committed. Canonical CI-hardware re-run via bench.yml still recommended post-release)_
 - [x] **PERF-02**: Performance regression gates run in CI against a benchmark corpus including a 100k+ file monorepo
 
 ### Architecture Future-Proofing
@@ -174,6 +174,6 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | DIST-03 | Phase 8 | Complete |
 | DIST-04 | Phase 8 | Complete |
 | DIST-05 | Phase 8 | Complete |
-| PERF-01 | Phase 8 | Pending (publish) |
+| PERF-01 | Phase 8 | Complete |
 | PERF-02 | Phase 8 | Complete |
 | ARCH-01 | Phase 1 | Complete |
