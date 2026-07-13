@@ -545,6 +545,132 @@ func TestRun_DropDangling_FileEdgeCountReconciled(t *testing.T) {
 	}
 }
 
+// TestRun_RecoversInterruptedSwap proves WR-04: a crash between
+// atomicSwapDir's two renames leaves the target absent, the validated
+// StatusComplete store at the deterministic partial path, and the
+// pre-migration original aside at <target>.old. For an in-place (from==to)
+// migration the source is now gone (it became <target>.old), so before the fix
+// resolveSourceDB hard-errored and the fully-validated migration required a
+// manual mv. Run must instead detect the orphaned swap and finish it.
+func TestRun_RecoversInterruptedSwap(t *testing.T) {
+	dbPath := migratetest.BuildTSIndex(t, migratetest.VariantHappy)
+	target := runTarget(t)
+
+	// A full clean migration first, giving us a real validated, StatusComplete
+	// store to stand in for the partial an interrupted swap leaves behind.
+	want, err := Run(dbPath, target, Options{})
+	if err != nil {
+		t.Fatalf("initial Run: %v", err)
+	}
+
+	// Simulate a crash BETWEEN atomicSwapDir's two renames.
+	partial := partialDir(target)
+	if err := os.Rename(target, partial); err != nil {
+		t.Fatalf("stage partial store: %v", err)
+	}
+	aside := target + ".old"
+	if err := os.MkdirAll(aside, 0o755); err != nil {
+		t.Fatalf("stage %s: %v", aside, err)
+	}
+	if err := os.WriteFile(filepath.Join(aside, "original-marker"), []byte("orig"), 0o600); err != nil {
+		t.Fatalf("stage .old marker: %v", err)
+	}
+	if exists(target) {
+		t.Fatalf("precondition: target %s must be absent to simulate the interrupted swap", target)
+	}
+
+	// In-place semantics: from == to, and the source directory is now gone
+	// (it became <target>.old).
+	res, err := Run(target, target, Options{})
+	if err != nil {
+		t.Fatalf("recovery Run: %v", err)
+	}
+	if !res.Resumed {
+		t.Error("recovery Run should report Resumed=true")
+	}
+	if res.Nodes != want.Nodes || res.Edges != want.Edges || res.Files != want.Files {
+		t.Errorf("recovered counts (n=%d e=%d f=%d) != original (n=%d e=%d f=%d)",
+			res.Nodes, res.Edges, res.Files, want.Nodes, want.Edges, want.Files)
+	}
+
+	if !exists(target) {
+		t.Fatalf("target %s must exist after recovery", target)
+	}
+	if exists(aside) {
+		t.Errorf("stale %s must be removed after recovery", aside)
+	}
+	if exists(partial) {
+		t.Errorf("partial %s must be gone (renamed into place) after recovery", partial)
+	}
+
+	store := openTargetStore(t, target)
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	defer snap.Close()
+	meta, err := snap.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if !meta.GetHealthy() {
+		t.Error("recovered Meta.Healthy = false, want true")
+	}
+}
+
+// TestRun_RecoveryLeavesInProgressPartialAlone proves the recovery guard is
+// conservative: an in_progress (NOT StatusComplete) partial with an absent
+// target must NOT be swapped in by recoverInterruptedSwap — that store is
+// unvalidated. With a live source present, the normal resume path handles it;
+// recovery must step aside.
+func TestRun_RecoveryLeavesInProgressPartialAlone(t *testing.T) {
+	dbPath := migratetest.BuildTSIndex(t, migratetest.VariantHappy)
+	target := runTarget(t)
+
+	// Interrupt the first run at its first durable checkpoint, leaving an
+	// in_progress partial and no swapped target.
+	stopped := false
+	testStopAfterBatch = func(string, int64) bool {
+		if stopped {
+			return false
+		}
+		stopped = true
+		return true
+	}
+	t.Cleanup(func() { testStopAfterBatch = nil })
+
+	if _, err := Run(dbPath, target, Options{}); err == nil {
+		t.Fatal("expected the interrupted first Run to error")
+	}
+	if exists(target) {
+		t.Fatalf("target %s must not exist after an interrupted (pre-swap) run", target)
+	}
+	testStopAfterBatch = nil
+
+	// Recovery must decline the in_progress partial; the normal resume path
+	// (with the live source) then completes it.
+	res, err := Run(dbPath, target, Options{})
+	if err != nil {
+		t.Fatalf("resume Run: %v", err)
+	}
+	if !res.Resumed {
+		t.Error("expected the resume Run to report Resumed=true")
+	}
+	store := openTargetStore(t, target)
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	defer snap.Close()
+	meta, err := snap.GetMeta()
+	if err != nil {
+		t.Fatalf("GetMeta: %v", err)
+	}
+	if !meta.GetHealthy() {
+		t.Error("resumed Meta.Healthy = false, want true")
+	}
+}
+
 func mustAbs(t *testing.T, p string) string {
 	t.Helper()
 	abs, err := filepath.Abs(p)

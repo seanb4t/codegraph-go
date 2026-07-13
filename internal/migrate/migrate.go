@@ -82,6 +82,26 @@ type Result struct {
 // (D-07/D-10). Every error is wrapped with a "migrate: ..." prefix and
 // returned — never swallowed.
 func Run(from, to string, opts Options) (Result, error) {
+	target, err := filepath.Abs(to)
+	if err != nil {
+		return Result{}, fmt.Errorf("migrate: resolve target %q: %w", to, err)
+	}
+
+	// WR-04: self-heal an interrupted atomic swap BEFORE resolving the source.
+	// atomicSwapDir renames the existing target aside to <target>.old, then
+	// renames the validated partial store into place; a crash between those
+	// two renames leaves the target absent while a fully-validated,
+	// StatusComplete partial store (and the aside <target>.old) both remain.
+	// For an in-place (from==to) migration the source directory IS the target,
+	// so resolveSourceDB would otherwise hard-error on the now-missing source
+	// and the tool could never finish an already-complete migration. Detect
+	// that orphaned-swap state and complete the swap; data is not re-written or
+	// re-validated (the partial already passed D-09 before it was stamped
+	// complete).
+	if recovered, res, rerr := recoverInterruptedSwap(target); recovered || rerr != nil {
+		return res, rerr
+	}
+
 	dbPath, err := resolveSourceDB(from)
 	if err != nil {
 		return Result{}, err
@@ -100,10 +120,6 @@ func Run(from, to string, opts Options) (Result, error) {
 		return Result{}, err
 	}
 
-	target, err := filepath.Abs(to)
-	if err != nil {
-		return Result{}, fmt.Errorf("migrate: resolve target %q: %w", to, err)
-	}
 	if err := checkWritableDir(filepath.Dir(target)); err != nil {
 		return Result{}, err
 	}
@@ -365,6 +381,76 @@ func resumePosition(found bool, p Progress) (idx int, afterRowID int64) {
 		}
 	}
 	return 0, 0
+}
+
+// recoverInterruptedSwap detects and completes an atomic swap that was
+// interrupted mid-flight (WR-04) and reports whether it acted. The recoverable
+// state is: the target is absent or empty (the swap's second rename never
+// landed) AND the deterministic partial store exists carrying a StatusComplete
+// cursor (its data was fully written and D-09-validated before the crash). In
+// that case the swap is finished by renaming the partial into place and the
+// leftover <target>.old (the pre-migration original renamed aside by the swap's
+// first step) is removed. Any other state (target populated, no partial, or a
+// partial that is only in_progress) is left untouched for the normal Run path
+// to handle — recovery must NEVER swap in an unvalidated or incomplete partial.
+func recoverInterruptedSwap(target string) (bool, Result, error) {
+	if targetPopulated(target) {
+		return false, Result{}, nil // swap already completed (or never started)
+	}
+
+	tmpDir := partialDir(target)
+	storeDir := filepath.Join(tmpDir, "store")
+	if _, err := os.Stat(storeDir); err != nil {
+		return false, Result{}, nil // no partial store → nothing to recover
+	}
+
+	store, err := graphstore.Open(storeDir)
+	if err != nil {
+		// Can't open the partial; let the normal Run path surface a clear
+		// error rather than guessing here.
+		return false, Result{}, nil
+	}
+
+	progress, found, perr := readProgress(store)
+	if perr != nil {
+		_ = store.Close()
+		return false, Result{}, perr
+	}
+	if !found || progress.Status != StatusComplete {
+		// Only a fully-validated, complete partial is safe to swap in without
+		// re-validating. An in_progress partial is left for the normal resume
+		// path (which still has a live source to reconcile against).
+		_ = store.Close()
+		return false, Result{}, nil
+	}
+
+	res, ferr := finishFromComplete(store, tmpDir, target)
+	if ferr != nil {
+		return true, res, ferr
+	}
+
+	// The swap left the pre-migration original aside as <target>.old; with the
+	// completed store now in place, that stale copy is safe to remove. The new
+	// target was absent when we started, so finishFromComplete's atomicSwapDir
+	// (targetExists=false path) does not clean it up itself.
+	asidePath := target + ".old"
+	if _, err := os.Stat(asidePath); err == nil {
+		if rmErr := os.RemoveAll(asidePath); rmErr != nil {
+			return true, res, fmt.Errorf("migrate: recovered interrupted swap but cleanup of stale %s failed (manual removal recommended): %w", asidePath, rmErr)
+		}
+	}
+	return true, res, nil
+}
+
+// targetPopulated reports whether target exists and contains at least one
+// entry. An absent, unreadable, or empty target counts as not populated — the
+// two states in which an interrupted swap may have left the target.
+func targetPopulated(target string) bool {
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		return false
+	}
+	return len(entries) > 0
 }
 
 // finishFromComplete handles the narrow resume case where a prior Run
