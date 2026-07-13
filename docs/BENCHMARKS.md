@@ -88,30 +88,58 @@ downloadable artifact.
 
 ## 2. Raw numbers
 
-**No live GitHub Actions run of `bench.yml` has completed yet as of this
-writing.** A manual head-to-head run was exercised during Plan 08-07's
-development session to prove the runner works end-to-end against real
-binaries and real repos, but its output was not captured to a committed
-file — only the pass/fail outcome was recorded
-(`08-07-SUMMARY.md`). Per this project's own honesty requirement (never
-fabricate a number that wasn't actually measured), the table below is
-marked `TBD` rather than populated with invented figures.
+**First real committed head-to-head.** The table below is genuine
+`tools/bench/runner -mode headtohead` output — median-of-5, captured
+**2026-07-13 on a darwin/arm64 (Apple Silicon) local development
+machine**, against the installed TS `@colbymchenry/codegraph@1.3.1`. It is
+NOT yet a live `bench.yml` CI run (that remains the canonical publish
+target — see the hardware caveat below); it is the first honest, measured,
+committed set of numbers, transcribed verbatim from the runner's JSON
+output (nothing hand-estimated).
 
 | Repo | Subject | Files/s | Bytes/s | Query latency (median ms) | Peak RSS | Cold start (ms) |
 |---|---|---|---|---|---|---|
-| weft-go | go | TBD (populate from bench.yml run) | TBD | TBD | TBD | TBD |
-| weft-go | ts | TBD | TBD | TBD | TBD | TBD |
-| colbymchenry-codegraph | go | TBD | TBD | TBD | TBD | TBD |
-| colbymchenry-codegraph | ts | TBD | TBD | TBD | TBD | TBD |
-| cockroachdb-pebble | go | TBD | TBD | TBD | TBD | TBD |
-| cockroachdb-pebble | ts | TBD | TBD | TBD | TBD | TBD |
+| weft-go | **go** | 162,971.95 | 1,702,795,269 (≈1.70 GB/s) | 38.455 | 54,591,488 (52.1 MB) | 11.914 |
+| weft-go | ts | 24,105.24 | 251,861,022 (≈252 MB/s) | 115.470 | 305,889,280 (291.7 MB) | 77.315 |
+| colbymchenry-codegraph | **go** | 2,143.48 | 233,570,636 (≈233.6 MB/s) | 36.846 | 104,005,632 (99.2 MB) | 12.528 |
+| colbymchenry-codegraph | ts | 155.91 | 16,989,513 (≈17.0 MB/s) | 122.154 | 512,196,608 (488.5 MB) | 75.658 |
+| cockroachdb-pebble | **go** | 2,638.44 | 41,576,185 (≈41.6 MB/s) | 44.184 | 154,599,424 (147.4 MB) | 11.876 |
+| cockroachdb-pebble | ts | 42.85 | 675,195 (≈675 KB/s) | 128.383 | 547,241,984 (521.9 MB) | 74.857 |
 
-**To populate this table:** trigger `bench.yml` via `workflow_dispatch` (or
-wait for its weekly schedule) and copy its published job-summary numbers
-here, or run `go run ./tools/bench/runner -mode headtohead` locally (with
-the TS `codegraph@1.3.1` reference binary installed) and transcribe its
-JSON output. Do not hand-edit this table with estimated or extrapolated
-values — replace `TBD` only with genuine runner output.
+### Go vs TS 1.3.1 — summary
+
+| Repo | Indexing throughput | Query latency | Peak RSS | Cold start |
+|---|---|---|---|---|
+| weft-go | **6.8× faster** | **3.0× lower** | **5.6× lighter** | **6.5× faster** |
+| colbymchenry-codegraph | **13.8× faster** | **3.3× lower** | **4.9× lighter** | **6.0× faster** |
+| cockroachdb-pebble | **61.6× faster** | **2.9× lower** | **3.5× lighter** | **6.3× faster** |
+
+Across all three real repos, codegraph-go beats TS CodeGraph 1.3.1 on
+**every** metric: indexing throughput by 6.8×–61.6×, query latency by ~3×,
+peak RSS by 3.5×–5.6×, and cold start by ~6× — direct evidence for the
+project's core "same or better — faster, lighter, from a single binary"
+value proposition.
+
+**Reading the throughput numbers:** `files/s` is `corpus_file_count /
+index_wall_time`, so on the tiny `weft-go` corpus (~84 files) fixed
+per-invocation startup cost dominates and inflates the absolute `files/s`
+for *both* subjects — the meaningful comparison is the Go-vs-TS **ratio
+within each repo** (both subjects pay the same overhead structure) plus
+`bytes/s` and the larger `cockroachdb-pebble` corpus, where the ratio
+widens to 61.6× as real per-file work dominates over fixed startup.
+
+**Hardware caveat (before treating these as canonical):** these are a
+single local run on Apple Silicon (darwin/arm64). Absolute magnitudes are
+machine-specific; the Go-vs-TS *ratios* are the durable signal. The
+canonical published numbers should come from a `bench.yml`
+`workflow_dispatch` run on standardized GitHub Actions hardware — trigger
+that once the release is cut, and replace this table's absolute figures
+with the CI run's output (keeping the ratio summary, which is expected to
+hold).
+
+The verbatim runner JSON this table was transcribed from is committed at
+`tools/bench/headtohead-darwin-arm64-20260713.json` for provenance
+(regenerate with `go run ./tools/bench/runner -mode headtohead`).
 
 ### The one real, committed number: the synthetic regression baseline
 
