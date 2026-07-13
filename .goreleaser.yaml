@@ -1,0 +1,128 @@
+# GoReleaser v2 build configuration for codegraph-go (DIST-01, DIST-04).
+#
+# IMPORTANT CONTRACTS — do not change without reading the linked findings:
+#
+#   (a) archives.name_template below MUST produce the exact same string as
+#       internal/upgrade.releaseAssetName() for a given tag/os/arch, or
+#       `codegraph upgrade` 404s trying to download the release asset
+#       (Finding 1, Phase 8 research). The contract shape is:
+#           codegraph_<tag>_<goos>_<goarch>[.exe]
+#       using {{ .Tag }} (v-prefixed), NOT {{ .Version }} (prefix stripped).
+#
+#   (b) The reproducibility flags on every build entry (-trimpath,
+#       -buildid=, mod_timestamp) exist so the DIST-04 double-build
+#       determinism gate (Plan 08-08) can byte-for-byte diff two builds
+#       of the same commit. Do not remove them.
+#
+#   (c) Signing and SBOM generation are performed by release.yml's
+#       assembly job (Plan 08-04, Finding 2), NOT here — the native
+#       6-target matrix is built per-runner via
+#       `goreleaser build --single-target` (OSS-only; no Pro
+#       release --split/--merge or prebuilt-builder directives).
+#       This file intentionally has no `signs:` or `sbom:` block.
+
+version: 2
+
+project_name: codegraph
+
+builds:
+  - id: codegraph-linux-amd64
+    main: ./cmd/codegraph
+    binary: codegraph
+    goos: [linux]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -trimpath
+    ldflags: &version_ldflags
+      - -s
+      - -w
+      - -buildid=
+      - -X github.com/seanb4t/codegraph-go/internal/version.Version={{ .Tag }}
+      - -X github.com/seanb4t/codegraph-go/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/seanb4t/codegraph-go/internal/version.Date={{ .CommitDate }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: codegraph-linux-arm64
+    main: ./cmd/codegraph
+    binary: codegraph
+    goos: [linux]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target aarch64-linux-gnu
+      - CXX=zig c++ -target aarch64-linux-gnu
+    flags:
+      - -trimpath
+    ldflags: *version_ldflags
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: codegraph-windows-amd64
+    main: ./cmd/codegraph
+    binary: codegraph
+    goos: [windows]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-windows-gnu
+      - CXX=zig c++ -target x86_64-windows-gnu
+    flags:
+      - -trimpath
+    ldflags: *version_ldflags
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: codegraph-windows-arm64
+    main: ./cmd/codegraph
+    binary: codegraph
+    goos: [windows]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+      - CC=zig cc -target aarch64-windows-gnu
+      - CXX=zig c++ -target aarch64-windows-gnu
+    flags:
+      - -trimpath
+    ldflags: *version_ldflags
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  # darwin/amd64 and darwin/arm64 are built NATIVELY on a macos-latest
+  # runner (Finding 2): cross-compiling darwin from Linux via zig risks
+  # breaking libresolv-based DNS resolution in the resulting binary, so
+  # no CC/CXX override is set here — the runner's own Xcode clang
+  # already targets both darwin arches correctly.
+  - id: codegraph-darwin-amd64
+    main: ./cmd/codegraph
+    binary: codegraph
+    goos: [darwin]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -trimpath
+    ldflags: *version_ldflags
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: codegraph-darwin-arm64
+    main: ./cmd/codegraph
+    binary: codegraph
+    goos: [darwin]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -trimpath
+    ldflags: *version_ldflags
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# Raw per-platform binaries, NEVER tar.gz/zip (D-02/Finding 1): the
+# upgrade path in internal/upgrade downloads and swaps in this exact
+# byte stream directly, with no archive extraction step.
+archives:
+  - formats: [binary]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}{{ if eq .Os "windows" }}.exe{{ end }}
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Tag }}_checksums.txt"
+  algorithm: sha256
