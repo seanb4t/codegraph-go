@@ -1,0 +1,11 @@
+{
+  "subject": "go",
+  "repo": "synthetic-seed42-count120000",
+  "goos": "darwin",
+  "goarch": "arm64",
+  "files_per_sec": 12816.383131473423,
+  "bytes_per_sec": 1941331.3590571666,
+  "query_latency_median_ms": 137.572,
+  "peak_rss_bytes": 842350592,
+  "cold_start_ms": 11.147
+}
