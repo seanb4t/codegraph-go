@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,8 +81,7 @@ func OpenSource(dbPath string) (*Source, error) {
 	if err != nil {
 		return nil, fmt.Errorf("migrate: resolve source path %q: %w", dbPath, err)
 	}
-	dsn := "file:" + abs + "?mode=ro&_pragma=query_only(1)&_txlock=deferred"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", sourceDSN(abs))
 	if err != nil {
 		return nil, fmt.Errorf("migrate: open source %q: %w", dbPath, err)
 	}
@@ -90,6 +90,27 @@ func OpenSource(dbPath string) (*Source, error) {
 		return nil, fmt.Errorf("migrate: open source %q: %w", dbPath, err)
 	}
 	return &Source{db: db}, nil
+}
+
+// sourceDSN builds the read-only SQLite URI DSN for an absolute source path.
+// The path is carried through net/url.URL so URI-significant characters in the
+// filesystem path (spaces, and — critically — a literal `?` or `#`, both legal
+// on POSIX) are percent-encoded rather than mis-parsed as the query/fragment
+// delimiter (a raw `?` would otherwise terminate the path and turn the trailing
+// path text into connection parameters). The fixed pragma query string is
+// appended verbatim after escaping the path, so the exact mode=ro /
+// query_only(1) / _txlock=deferred behavior is preserved byte-for-byte. Windows
+// drive paths (C:\...) are normalized to forward slashes with a leading slash
+// so they render as file:///C:/... rather than a mangled opaque URI.
+func sourceDSN(abs string) string {
+	p := filepath.ToSlash(abs)
+	if !strings.HasPrefix(p, "/") {
+		// Windows drive-letter path (e.g. C:/Users/...): SQLite's file: URI
+		// wants a leading slash before the drive letter (file:/C:/...).
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
+	return u.String() + "?mode=ro&_pragma=query_only(1)&_txlock=deferred"
 }
 
 // Close releases the underlying database handle.

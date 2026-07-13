@@ -31,6 +31,45 @@ func TestOpenSource_NonexistentPathErrors(t *testing.T) {
 	}
 }
 
+// TestOpenSource_PathWithURISpecialChars proves WR-05: a source .db living
+// under a directory whose name contains URI-significant characters (a space
+// AND a literal `?`, both legal on POSIX) opens and reads correctly. Before
+// the DSN was built through net/url, the raw `?` terminated the file: URI path
+// and turned the trailing path text into connection parameters, so OpenSource
+// pointed at the wrong (or an empty) database.
+func TestOpenSource_PathWithURISpecialChars(t *testing.T) {
+	dbPath := migratetest.BuildTSIndex(t, migratetest.VariantHappy)
+	data, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatalf("read fixture db: %v", err)
+	}
+
+	// A directory name with a space and a `?` — both URI-significant, both
+	// legal filesystem characters on the test platform.
+	spooky := filepath.Join(t.TempDir(), "My Repo ?x")
+	if err := os.MkdirAll(spooky, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", spooky, err)
+	}
+	dst := filepath.Join(spooky, "index.db")
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		t.Fatalf("write db under special path: %v", err)
+	}
+
+	src, err := OpenSource(dst)
+	if err != nil {
+		t.Fatalf("OpenSource on a path with a space and `?`: %v", err)
+	}
+	defer src.Close()
+
+	n, err := src.CountRows("nodes")
+	if err != nil {
+		t.Fatalf("CountRows(nodes) on special-char path: %v", err)
+	}
+	if n <= 0 {
+		t.Errorf("expected nodes count > 0 (opened the right db), got %d", n)
+	}
+}
+
 // TestSource_ByteIdentity proves the source .db file's bytes (and absence
 // of -wal/-shm sidecars) are unchanged after a full OpenSource + ScanTable
 // pass + Close (D-08 non-destructive-to-source).
