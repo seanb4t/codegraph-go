@@ -134,11 +134,16 @@ jobs:
       - name: Rename to release-asset contract name
         id: asset
         shell: bash
+        # Pass workflow context via env (never interpolate ${{ }} directly
+        # into the run script — a crafted tag name could otherwise inject
+        # shell commands into the release runner). Referencing $TAG/$GOOS/
+        # $GOARCH treats the values as data, not script text.
+        env:
+          TAG: ${{ github.ref_name }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          GOOS="${{ matrix.goos }}"
-          GOARCH="${{ matrix.goarch }}"
           EXT=""
           if [ "$GOOS" = "windows" ]; then
             EXT=".exe"
@@ -209,9 +214,10 @@ jobs:
 
       - name: Checksums
         working-directory: release
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
           sha256sum codegraph_* > "codegraph_${TAG}_checksums.txt"
 
       - name: Install cosign
@@ -251,25 +257,27 @@ jobs:
       - name: Base64-encode checksums for SLSA provenance
         id: hash
         working-directory: release
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
           echo "hashes=$(base64 -w0 < "codegraph_${TAG}_checksums.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
         working-directory: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
           PRERELEASE_FLAG=""
           case "$TAG" in
           *-*) PRERELEASE_FLAG="--prerelease" ;;
           esac
           # shellcheck disable=SC2086
           gh release create "$TAG" \
-            --repo "${{ github.repository }}" \
+            --repo "$REPO" \
             --title "$TAG" \
             --generate-notes \
             $PRERELEASE_FLAG \
