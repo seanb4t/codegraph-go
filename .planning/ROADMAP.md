@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Incremental Sync & File Watcher** - Auto-updating graph with correct rename/delete pruning, debounced native watchers, daemon, and leak-free soak (completed 2026-07-11)
 - [x] **Phase 5: Language Coverage & Resolution Breadth** - Parity languages, interface-dispatch synthesis with provenance, and framework-aware routing (completed 2026-07-12)
 - [x] **Phase 6: Agent Integrations & CLI Lifecycle** - 8-agent install/uninstall, self-upgrade, and CLI ergonomics for the drop-in swap (completed 2026-07-12)
-- [ ] **Phase 7: Migration Tool** - Resumable, validated converter from TS SQLite `.codegraph/` to the new format
+- [x] **Phase 7: Migration Tool** - Resumable, validated converter from TS SQLite `.codegraph/` to the new format (completed 2026-07-13)
 - [ ] **Phase 8: Release Hardening & Benchmarks** - Signed, attested, reproducible static-binary releases with published head-to-head benchmarks and CI regression gates
 
 ## Phase Details
@@ -260,7 +260,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Migration is resumable after interruption and version-stamped so partial runs recover correctly
   3. Migration is validated against real aged `.codegraph/` directories and runs structural-invariant checks on the result, failing loudly on corruption rather than producing a silently-wrong graph
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 
 **Wave 1**
 
@@ -282,7 +282,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 07-07-PLAN.md — `codegraph migrate` cobra command + root registration + reconciliation report + first-sync note (MIGR-01/02)
+- [x] 07-07-PLAN.md — `codegraph migrate` cobra command + root registration + reconciliation report + first-sync note (MIGR-01/02)
 
 ### Phase 8: Release Hardening & Benchmarks
 
@@ -313,5 +313,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Incremental Sync & File Watcher | 9/9 | Complete    | 2026-07-11 |
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
 | 6. Agent Integrations & CLI Lifecycle | 6/6 | Complete    | 2026-07-12 |
-| 7. Migration Tool | 6/7 | In Progress|  |
+| 7. Migration Tool | 7/7 | Complete   | 2026-07-13 |
 | 8. Release Hardening & Benchmarks | 0/TBD | Not started | - |

@@ -4,17 +4,17 @@ milestone: v1.3
 milestone_name: milestone
 current_phase: 7
 current_phase_name: Migration Tool
-status: executing
+status: verifying
 stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-07-13T01:19:35.541Z"
+last_updated: "2026-07-13T01:27:55.667Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 57
-  completed_plans: 57
-  percent: 75
+  completed_plans: 58
+  percent: 88
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 
 Phase: 7 (Migration Tool) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-12 — Phase 7 execution started
 
 Progress: [███████░░░] 73%
@@ -114,6 +114,7 @@ Progress: [███████░░░] 73%
 | Phase 07 P04 | 15min | 2 tasks | 4 files |
 | Phase 07-migration-tool P05 | 25min | 1 tasks | 2 files |
 | Phase 07-migration-tool P06 | 55min | 1 tasks | 2 files |
+| Phase 07 P07 | 45min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -248,6 +249,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 07-migration-tool]: dropDanglingEdges best-effort-cleans the x/ file-index entry only when the dangling edge's source resolves to a node (target-only dangling); a missing source means no owner was ever recorded (ownerPath empty per D-04) so nothing to clean up
 - [Phase 07-migration-tool]: partialDir uses a FIXED deterministic name (.codegraph.migrate-partial), not swap.go's randomly-named siblingTempDir, since resumability requires the same path across process invocations
 - [Phase 07-migration-tool]: checkTargetOverwrite/migrate.Run open <target>/store, not <target> directly, matching internal/cli's established .codegraph/store/ subdirectory convention
+- [Phase ?]: 07-07: CLI confirm gate checks only 'target non-empty', not 'recognized prior migration' — avoids duplicating migrate.Run's checkTargetOverwrite store-open probe at the CLI layer
+- [Phase ?]: 07-07: codegraph migrate defaults --from and --to to the same cwd/.codegraph path (in-place conversion per D-08)
 
 ### Pending Todos
 
@@ -271,6 +274,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T01:19:35.534Z
+Last session: 2026-07-13T01:27:14.711Z
 Stopped at: Completed 07-06-PLAN.md
 Resume file: None
