@@ -11,7 +11,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 - [x] **INDX-03**: User can run `codegraph sync` to incrementally reparse only changed files, using content-hash diffing with dependent-file edge recomputation (not full re-index of a subset)
 - [x] **INDX-04**: File renames, deletes, and moves correctly prune stale symbols and edges — no orphaned nodes or dangling edges after any file operation, verified by a fixture suite
 - [x] **INDX-05**: Storage engine (new format) supports concurrent lock-free readers with a single coordinated writer, implemented behind a `GraphStore` interface no other package bypasses
-- [ ] **INDX-06**: User can index a 100k+ file monorepo within bounded memory; peak RSS is tracked as a first-class CI metric
+- [x] **INDX-06**: User can index a 100k+ file monorepo within bounded memory; peak RSS is tracked as a first-class CI metric
 
 ### Graph Resolution
 
@@ -84,7 +84,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ### Performance
 
-- [ ] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers)
+- [x] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers)
 - [ ] **PERF-02**: Performance regression gates run in CI against a benchmark corpus including a 100k+ file monorepo
 
 ### Architecture Future-Proofing
@@ -131,7 +131,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | INDX-03 | Phase 4 | Complete |
 | INDX-04 | Phase 4 | Complete |
 | INDX-05 | Phase 1 | Complete |
-| INDX-06 | Phase 8 | Pending |
+| INDX-06 | Phase 8 | Complete |
 | RES-01 | Phase 2 | Complete |
 | RES-02 | Phase 5 | Complete |
 | RES-03 | Phase 5 | Complete |
@@ -174,6 +174,6 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | DIST-03 | Phase 8 | Pending |
 | DIST-04 | Phase 8 | Complete |
 | DIST-05 | Phase 8 | Complete |
-| PERF-01 | Phase 8 | Pending |
+| PERF-01 | Phase 8 | Complete |
 | PERF-02 | Phase 8 | Pending |
 | ARCH-01 | Phase 1 | Complete |

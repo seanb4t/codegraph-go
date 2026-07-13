@@ -296,12 +296,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos use comparable methodology with raw per-repo numbers
   4. User can index a 100k+ file monorepo within bounded memory, with peak RSS tracked as a first-class CI metric and performance-regression gates running against a benchmark corpus that includes that monorepo
 
-**Plans**: 1/9 plans executed
+**Plans**: 2/9 plans executed
 
 **Wave 1**
 
 - [x] 08-01-PLAN.md — GoReleaser 6-target CGo build config + reproducibility flags + version ldflags + local build proof (DIST-01/DIST-04)
-- [ ] 08-02-PLAN.md — internal/bench OS-level peak-RSS capture + KB/bytes normalization + Metrics (TDD) (PERF-01/INDX-06)
+- [x] 08-02-PLAN.md — internal/bench OS-level peak-RSS capture + KB/bytes normalization + Metrics (TDD) (PERF-01/INDX-06)
 - [ ] 08-03-PLAN.md — tools/bench/gencorpus deterministic synthetic 100k+ corpus generator (TDD) (PERF-02/INDX-06)
 
 **Wave 2** *(blocked on Wave 1)*
@@ -335,4 +335,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Language Coverage & Resolution Breadth | 14/13 | Complete    | 2026-07-12 |
 | 6. Agent Integrations & CLI Lifecycle | 6/6 | Complete    | 2026-07-12 |
 | 7. Migration Tool | 7/7 | Complete    | 2026-07-13 |
-| 8. Release Hardening & Benchmarks | 1/9 | In Progress|  |
+| 8. Release Hardening & Benchmarks | 2/9 | In Progress|  |
