@@ -6,14 +6,14 @@ current_phase: 7
 current_phase_name: Migration Tool
 status: executing
 stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-07-13T00:45:59.129Z"
+last_updated: "2026-07-13T00:51:34.425Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
   percent: 75
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 7 (Migration Tool) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 7 execution started
 
@@ -111,6 +111,7 @@ Progress: [███████░░░] 73%
 | Phase 07-migration-tool P01 | 45min | 3 tasks | 5 files |
 | Phase 07-migration-tool P02 | 8min | 1 tasks | 8 files |
 | Phase 07 P03 | 40min | 2 tasks | 4 files |
+| Phase 07 P04 | 15min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -239,6 +240,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 07-migration-tool]: getRaw (sibling of getProto) copies the value before closer.Close and maps pebble.ErrNotFound to graphstore.ErrNotFound — general reusable raw-bytes meta getter, not GetMigration-specific
 - [Phase ?]: D-05 correction implemented: start_col/end_col CARRIED (modeled proto fields 9/10), only is_async/is_static/is_abstract/decorators/type_parameters dropped
 - [Phase ?]: msToNs branches on concrete driver type (int64 direct multiply vs float64 fractional) to avoid float64 precision loss on large ms values
+- [Phase ?]: [Phase 07-migration-tool]: saveProgress does not call Commit() internally — caller commits the cursor in its own small batch after each data batch (D-06)
+- [Phase ?]: [Phase 07-migration-tool]: atomicSwapDir step-3 .old cleanup failure is returned as a real error (not logged-and-discarded) to satisfy the never-swallowed prohibition
 
 ### Pending Todos
 
@@ -262,6 +265,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T00:45:59.121Z
+Last session: 2026-07-13T00:50:55.673Z
 Stopped at: Completed 07-03-PLAN.md
 Resume file: None
