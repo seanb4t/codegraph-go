@@ -8,17 +8,18 @@ import "testing"
 func TestCheckRegression(t *testing.T) {
 	const ceiling = int64(1_000_000_000) // 1GB absolute bounded-memory budget
 
-	baseline := Metrics{
+	defaultBaseline := Metrics{
 		FilesPerSec:  100.0,
 		PeakRSSBytes: 500_000_000,
 	}
 
 	tests := []struct {
-		name    string
-		current Metrics
-		ceiling int64
-		wantErr bool
-		errHint string // substring the error message must contain
+		name     string
+		baseline Metrics // zero value means "use defaultBaseline"
+		current  Metrics
+		ceiling  int64
+		wantErr  bool
+		errHint  string // substring the error message must contain
 	}{
 		{
 			name: "clean run: faster and smaller, under ceiling passes",
@@ -68,13 +69,18 @@ func TestCheckRegression(t *testing.T) {
 			errHint: "RSS",
 		},
 		{
+			// A baseline that already sits close to the ceiling: growing
+			// only +10.5% (well within the 15% RSS tolerance band) still
+			// pushes current over the absolute ceiling. Proves the ceiling
+			// fires independently of the relative-delta check.
 			name: "above absolute ceiling fails even when relative RSS delta is in-band",
+			baseline: Metrics{
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 950_000_000,
+			},
 			current: Metrics{
 				FilesPerSec:  100.0,
-				// Same baseline (500M), current relative growth is 0% (well
-				// within the 15% tolerance band) but the absolute value
-				// itself exceeds the ceiling.
-				PeakRSSBytes: 1_100_000_000,
+				PeakRSSBytes: 1_050_000_000, // +10.5% vs baseline, but > 1GB ceiling
 			},
 			ceiling: ceiling,
 			wantErr: true,
@@ -82,15 +88,23 @@ func TestCheckRegression(t *testing.T) {
 		},
 		{
 			name: "below absolute ceiling passes",
+			baseline: Metrics{
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 950_000_000,
+			},
 			current: Metrics{
 				FilesPerSec:  100.0,
-				PeakRSSBytes: 900_000_000,
+				PeakRSSBytes: 980_000_000, // +3.2% vs baseline, under 1GB ceiling
 			},
 			ceiling: ceiling,
 			wantErr: false,
 		},
 		{
 			name: "zero baseline throughput yields a clear error, not a panic",
+			baseline: Metrics{
+				FilesPerSec:  0,
+				PeakRSSBytes: 500_000_000,
+			},
 			current: Metrics{
 				FilesPerSec:  50.0,
 				PeakRSSBytes: 500_000_000,
@@ -103,9 +117,9 @@ func TestCheckRegression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := baseline
-			if tt.name == "zero baseline throughput yields a clear error, not a panic" {
-				b.FilesPerSec = 0
+			b := tt.baseline
+			if b == (Metrics{}) {
+				b = defaultBaseline
 			}
 
 			err := CheckRegression(b, tt.current, tt.ceiling)
