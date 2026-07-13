@@ -223,6 +223,32 @@ func TestParseFlags_OverridesApply(t *testing.T) {
 	}
 }
 
+// --- resolveTSBinary (IN-02, Phase 8 re-review) ---
+
+func TestResolveTSBinary_FindsOnPath(t *testing.T) {
+	dir := t.TempDir()
+	fakeBinary := filepath.Join(dir, "codegraph")
+	mustWriteFile(t, fakeBinary, "#!/bin/sh\n")
+	if err := os.Chmod(fakeBinary, 0o755); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	t.Setenv("PATH", dir)
+
+	got := resolveTSBinary()
+	if got != fakeBinary {
+		t.Errorf("resolveTSBinary() = %q, want %q", got, fakeBinary)
+	}
+}
+
+func TestResolveTSBinary_EmptyWhenNotFound(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	got := resolveTSBinary()
+	if got != "" && got != macOSHomebrewTSBinary {
+		t.Errorf("resolveTSBinary() = %q, want empty or the Homebrew fallback", got)
+	}
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {

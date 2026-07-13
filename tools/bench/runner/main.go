@@ -74,6 +74,15 @@ const regressionFileCount = 120000
 // FileCount >= 1 — see tools/bench/gencorpus/gen.go's generateGo.
 const regressionQueryTerm = "Fn0000_0000"
 
+// macOSHomebrewTSBinary is the conventional Apple-Silicon Homebrew
+// install path for the TS codegraph@1.3.1 CLI. It is used only as a
+// last-resort fallback when -ts-binary isn't set and "codegraph" isn't
+// on PATH (IN-02, Phase 8 re-review) — never as the flag's own default,
+// since that default previously broke silently on Linux and Intel
+// macOS. bench.yml always passes -ts-binary explicitly and is
+// unaffected either way.
+const macOSHomebrewTSBinary = "/opt/homebrew/bin/codegraph"
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "runner: %v\n", err)
@@ -109,6 +118,10 @@ func run(args []string) error {
 		cfg.goBinary = built
 	}
 
+	if cfg.mode == "headtohead" && cfg.tsBinary == "" {
+		cfg.tsBinary = resolveTSBinary()
+	}
+
 	switch cfg.mode {
 	case "headtohead":
 		return runHeadToHead(cfg)
@@ -127,7 +140,7 @@ func parseFlags(args []string) (config, error) {
 	var cfg config
 	fs.StringVar(&cfg.mode, "mode", "", "benchmark mode: headtohead or regression (required)")
 	fs.StringVar(&cfg.goBinary, "go-binary", "", "path to the Go codegraph binary; if empty, the runner builds one fresh from ./cmd/codegraph")
-	fs.StringVar(&cfg.tsBinary, "ts-binary", "/opt/homebrew/bin/codegraph", "path to the installed TS codegraph@1.3.1 binary (headtohead mode only)")
+	fs.StringVar(&cfg.tsBinary, "ts-binary", "", "path to the installed TS codegraph@1.3.1 binary (headtohead mode only); if empty, resolved via PATH lookup, falling back to the macOS Homebrew default")
 	fs.StringVar(&cfg.baselinePath, "baseline", filepath.Join("tools", "bench", "baseline.json"), "path to the committed regression baseline JSON (regression mode only)")
 	fs.Int64Var(&cfg.ceilingBytes, "ceiling-bytes", defaultCeilingBytes, "absolute peak-RSS ceiling in bytes (INDX-06, regression mode only); 0 disables the ceiling check")
 	fs.BoolVar(&cfg.rebless, "rebless", false, "regression mode only: overwrite -baseline with the freshly-measured metrics instead of gating against it — the ONLY path that writes baseline.json")
@@ -143,6 +156,24 @@ func parseFlags(args []string) (config, error) {
 		return config{}, fmt.Errorf("-mode is required")
 	}
 	return cfg, nil
+}
+
+// resolveTSBinary finds the installed TS codegraph@1.3.1 binary when
+// -ts-binary wasn't set explicitly (IN-02, Phase 8 re-review): first via
+// a PATH lookup (portable across Linux/macOS/Windows and any install
+// method), falling back to the conventional Apple-Silicon Homebrew path
+// if that exists. If neither resolves, it returns "" and
+// measureSubject's existing "no binary configured for subject %q" error
+// path reports the failure clearly rather than silently trying an
+// unrunnable macOS-only default.
+func resolveTSBinary() string {
+	if p, err := exec.LookPath("codegraph"); err == nil {
+		return p
+	}
+	if info, err := os.Stat(macOSHomebrewTSBinary); err == nil && !info.IsDir() {
+		return macOSHomebrewTSBinary
+	}
+	return ""
 }
 
 // ---------------------------------------------------------------------
