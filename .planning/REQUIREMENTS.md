@@ -77,14 +77,14 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 ### Distribution & Supply Chain
 
 - [x] **DIST-01**: User can download a single static binary per platform (macOS/Linux/Windows, amd64+arm64) with no bundled runtime and no install-time compilation
-- [x] **DIST-02**: Every release artifact is cosign-signed (keyless) with SLSA build provenance, and users can verify both with documented commands
+- [ ] **DIST-02**: Every release artifact is cosign-signed (keyless) with SLSA build provenance, and users can verify both with documented commands _(pipeline code-complete + matches shipped verifier exactly; PENDING first real `v*` tag to prove live OIDC signing + 6-target CI matrix/darwin DNS — see 08-VERIFICATION.md)_
 - [x] **DIST-03**: Every release publishes an SBOM; `govulncheck` and dependency scanning gate CI
 - [x] **DIST-04**: Builds are reproducible, verified by a double-build comparison gate in CI
 - [x] **DIST-05**: Dependency tree stays minimal and audited; CGo (if the parser spike selects it) is the sole documented exception
 
 ### Performance
 
-- [x] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers)
+- [ ] **PERF-01**: Published head-to-head benchmarks vs TS CodeGraph (indexing throughput, query latency, peak RSS, cold start) on real repos using comparable methodology (median-of-N, raw per-repo numbers) _(runner + methodology complete and proven working against installed TS 1.3.1; raw per-repo numbers PENDING publish to docs/BENCHMARKS.md — see 08-VERIFICATION.md)_
 - [x] **PERF-02**: Performance regression gates run in CI against a benchmark corpus including a 100k+ file monorepo
 
 ### Architecture Future-Proofing
@@ -170,10 +170,10 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | MIGR-01 | Phase 7 | Complete |
 | MIGR-02 | Phase 7 | Complete |
 | DIST-01 | Phase 8 | Complete |
-| DIST-02 | Phase 8 | Complete |
+| DIST-02 | Phase 8 | Pending (first release) |
 | DIST-03 | Phase 8 | Complete |
 | DIST-04 | Phase 8 | Complete |
 | DIST-05 | Phase 8 | Complete |
-| PERF-01 | Phase 8 | Complete |
+| PERF-01 | Phase 8 | Pending (publish) |
 | PERF-02 | Phase 8 | Complete |
 | ARCH-01 | Phase 1 | Complete |
