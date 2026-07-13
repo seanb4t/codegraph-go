@@ -758,6 +758,27 @@ func TestRun_RecoveryLeavesInProgressPartialAlone(t *testing.T) {
 	}
 }
 
+// TestTargetPopulated_UnreadableCountsAsPopulated proves IN-02: targetPopulated
+// treats only a genuinely-absent target as not-populated (the recoverable
+// interrupted-swap state). An existing-but-unreadable target — here a regular
+// file, whose os.ReadDir errors with ENOTDIR (not IsNotExist) — must count as
+// populated so recoverInterruptedSwap declines and the normal Run path applies
+// the D-08 overwrite guard instead of bypassing it.
+func TestTargetPopulated_UnreadableCountsAsPopulated(t *testing.T) {
+	absent := filepath.Join(t.TempDir(), "does-not-exist")
+	if targetPopulated(absent) {
+		t.Error("an absent target must be reported not-populated (the recoverable state)")
+	}
+
+	regular := filepath.Join(t.TempDir(), "a-file-not-a-dir")
+	if err := os.WriteFile(regular, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write regular file: %v", err)
+	}
+	if !targetPopulated(regular) {
+		t.Error("an existing-but-unreadable target (regular file) must be reported populated so recovery declines (IN-02)")
+	}
+}
+
 func mustAbs(t *testing.T, p string) string {
 	t.Helper()
 	abs, err := filepath.Abs(p)

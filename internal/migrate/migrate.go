@@ -479,13 +479,18 @@ func recoverInterruptedSwap(target string) (bool, Result, error) {
 	return true, res, nil
 }
 
-// targetPopulated reports whether target exists and contains at least one
-// entry. An absent, unreadable, or empty target counts as not populated — the
-// two states in which an interrupted swap may have left the target.
+// targetPopulated reports whether target should be treated as populated for
+// the purpose of declining interrupted-swap recovery. Only a genuinely absent
+// target (os.IsNotExist) is "not populated" — the state an interrupted swap
+// leaves behind. IN-02: any OTHER ReadDir error (permission denied, or target
+// is a regular file, not a directory) must be treated as populated so recovery
+// declines and the normal Run path applies the D-08 overwrite guard and
+// surfaces the real error, rather than silently treating the target as absent
+// and swapping a StatusComplete partial in over it.
 func targetPopulated(target string) bool {
 	entries, err := os.ReadDir(target)
 	if err != nil {
-		return false
+		return !os.IsNotExist(err)
 	}
 	return len(entries) > 0
 }
