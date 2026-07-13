@@ -70,3 +70,52 @@ None — all 5 in-scope Warning findings (WR-01..WR-05) were fixed. The 5 Info f
 _Fixed: 2026-07-12T22:00:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+---
+
+# Phase 7: Code Review Fix Report — Iteration 2 (re-review)
+
+**Fixed at:** 2026-07-13
+**Source review:** .planning/phases/07-migration-tool/07-REVIEW.md (re-review: CR-01, WR-01, IN-01..IN-04)
+**Iteration:** 2
+
+**Summary:**
+- Findings addressed: 3 (CR-01 blocker, WR-01 warning, IN-02 info-hardening)
+- Fixed: 3
+- Skipped/out of scope: IN-01, IN-03, IN-04 (left open per task instructions)
+
+## Fixed Issues
+
+### CR-01: In-place migration holds the source DB open across the directory swap
+
+**Files modified:** `internal/migrate/reader.go`, `internal/migrate/migrate.go`, `internal/migrate/migrate_test.go`
+**Commit:** `4a79f73`
+**Applied fix:** The read-only source handle was held open across `atomicSwapDir`. For the default in-place migration the source `*.db` lives inside the directory being renamed; on Windows `os.Rename` of a directory containing an open handle fails with a sharing violation, so the validated store never swaps in and every re-run fails identically. `Source.Close` is now idempotent (a `closed` guard) with a `Closed()` probe. Run closes `src` explicitly before the swap on both paths: on the happy path right after `validate` (its last consumer), and on the `StatusComplete` resume branch before calling `finishFromComplete`. The deferred `src.Close()` remains for error paths and is now a safe no-op. Behavior is unchanged on POSIX. Regression test `TestRun_ClosesSourceBeforeSwap` uses a new `testBeforeSwap` seam (mirroring `testStopAfterBatch`) to assert `src.Closed()` is true at the moment the swap runs; it fails on the pre-fix ordering.
+
+### WR-01: `finishFromComplete` returned a zero-valued `Report` (prints "migrated: N/0")
+
+**Files modified:** `internal/migrate/progress.go`, `internal/migrate/migrate.go`, `internal/migrate/migrate_test.go`
+**Commit:** `c416f0a`
+**Applied fix:** A resumed/recovered migration returned `Report{}` with all `.Source` denominators at 0, so the CLI printed `migrated: files=N/0 nodes=N/0 edges=N/0`, making a fully-validated migration look empty. The reconciled source counts are now persisted into the `Progress` cursor (`SourceNodeCount`/`SourceEdgeCount`/`SourceFileCount`) when it is stamped `StatusComplete` — durable because the source may be gone on an in-place recovery — and `finishFromComplete` reconstructs `Report` from those plus the migrated counts read back from the store. Regression test `TestRun_RecoveredSwapReportsSourceCounts` drives the interrupted-swap recovery path and asserts the returned `Report` source counts are the real non-zero values matching a clean run, and that the migrated side reconciles with the returned `Result`.
+
+### IN-02: `targetPopulated` treated an unreadable target as empty (bypasses D-08 guard)
+
+**Files modified:** `internal/migrate/migrate.go`, `internal/migrate/migrate_test.go`
+**Commit:** `42ca5f4`
+**Applied fix:** `targetPopulated` returned `false` on any `os.ReadDir` error, so a permission-denied or "target is a regular file" error was treated as an absent (recoverable) target — letting `recoverInterruptedSwap` swap a `StatusComplete` partial in over it, bypassing the D-08 overwrite guard (`finishFromComplete` never consults `Force`). It now returns `!os.IsNotExist(err)` on error: only a genuinely-absent target is recoverable; any other error declines recovery so the normal Run path applies `checkTargetOverwrite` and surfaces the real error. Regression test `TestTargetPopulated_UnreadableCountsAsPopulated` asserts an absent path is not-populated and a regular file (ENOTDIR on ReadDir) is populated.
+
+## Skipped Issues
+
+- **IN-01** (`recoverInterruptedSwap` leaks the partial store on `finishFromComplete` error paths), **IN-03** (WR-03 residual: read-write probe open), and **IN-04** (carry-forward of original IN-01..IN-05) — excluded per task instructions ("Do NOT touch IN-01/IN-03/IN-04").
+
+## Verification
+
+- `go build ./...` — clean
+- `go test ./internal/migrate/... ./internal/graphstore/... ./internal/cli/... -race -count=1` — all pass
+- `go test ./... -count=1 -p 1` (serial) — exit 0, all 31 packages pass, no failures (the internal/daemon parallel flake did not trip under serial `-p 1`)
+
+---
+
+_Fixed: 2026-07-13T00:00:00Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
