@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 7
 current_phase_name: Migration Tool
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-07-12T23:45:59.453Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-07-13T00:27:02.188Z"
 last_activity: 2026-07-12
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
+last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 50
-  completed_plans: 51
+  total_plans: 57
+  completed_plans: 52
   percent: 75
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-10)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 6 — Agent Integrations & CLI Lifecycle
+**Current focus:** Phase 7 — Migration Tool
 
 ## Current Position
 
-Phase: 7 — Migration Tool
-Plan: Not started
+Phase: 7 (Migration Tool) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-12 — Phase 6 complete, transitioned to Phase 7
+Last activity: 2026-07-12 — Phase 7 execution started
 
 Progress: [███████░░░] 73%
 
@@ -108,6 +108,7 @@ Progress: [███████░░░] 73%
 | Phase 06 P03 | 9min | 3 tasks | 8 files |
 | Phase 06-agent-integrations-cli-lifecycle P06 | 7min | 3 tasks | 15 files |
 | Phase 06 P04 | 25min | 2 tasks | 4 files |
+| Phase 07-migration-tool P01 | 45min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -230,6 +231,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 06-06]: go.mod/go.sum resynced via GOFLAGS=-mod=mod go build ./... after manually pinning sigstore-go direct require (no go mod tidy, no direct deps removed)
 - [Phase ?]: uninstall defaults --target to "all" (not "auto") when omitted, with no interactive prompt — a destructive-by-default reversal is safe across the whole roster since Uninstall never errors on an unconfigured agent (D-08)
 - [Phase ?]: printAgentResults checks SupportsLocation(loc) in the CLI layer before calling Install/Uninstall so unsupported target/location combos print an explicit "unsupported" status instead of a silent no-op
+- [Phase 07-migration-tool]: modernc.org/sqlite v1.53.0 added via go get then manually promoted to direct require (no go mod tidy) — confined to internal/migrate via archtest
+- [Phase 07-migration-tool]: TS-schema fixture reconstruction strips SQLite-managed CREATE TABLE statements (sqlite_sequence/sqlite_stat1/nodes_fts shadow tables) and synthesizes minimal node rows to close referential gaps in the representative dump before use
 
 ### Pending Todos
 
@@ -253,6 +256,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-12T23:00:00.424Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-migration-tool/07-CONTEXT.md
+Last session: 2026-07-13T00:27:02.179Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None

@@ -71,8 +71,8 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 
 ### Migration
 
-- [ ] **MIGR-01**: User can run a migration command converting an existing TS `.codegraph/` SQLite index to the new format in one step
-- [ ] **MIGR-02**: Migration is resumable, version-stamped, validated against real aged `.codegraph/` directories, and runs structural-invariant checks on the result
+- [x] **MIGR-01**: User can run a migration command converting an existing TS `.codegraph/` SQLite index to the new format in one step
+- [x] **MIGR-02**: Migration is resumable, version-stamped, validated against real aged `.codegraph/` directories, and runs structural-invariant checks on the result
 
 ### Distribution & Supply Chain
 
@@ -167,8 +167,8 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | LANG-05 | Phase 5 | Complete |
 | LANG-06 | Phase 5 | Complete |
 | LANG-07 | Phase 5 | Complete |
-| MIGR-01 | Phase 7 | Pending |
-| MIGR-02 | Phase 7 | Pending |
+| MIGR-01 | Phase 7 | Complete |
+| MIGR-02 | Phase 7 | Complete |
 | DIST-01 | Phase 8 | Pending |
 | DIST-02 | Phase 8 | Pending |
 | DIST-03 | Phase 8 | Pending |
