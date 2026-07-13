@@ -6,14 +6,14 @@ current_phase: 7
 current_phase_name: Migration Tool
 status: executing
 stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-07-13T00:51:34.425Z"
+last_updated: "2026-07-13T00:59:40.711Z"
 last_activity: 2026-07-12
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 57
-  completed_plans: 55
+  completed_plans: 56
   percent: 75
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 7 (Migration Tool) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-12 — Phase 7 execution started
 
@@ -112,6 +112,7 @@ Progress: [███████░░░] 73%
 | Phase 07-migration-tool P02 | 8min | 1 tasks | 8 files |
 | Phase 07 P03 | 40min | 2 tasks | 4 files |
 | Phase 07 P04 | 15min | 2 tasks | 4 files |
+| Phase 07-migration-tool P05 | 25min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -242,6 +243,8 @@ Recent decisions affecting current work:
 - [Phase ?]: msToNs branches on concrete driver type (int64 direct multiply vs float64 fractional) to avoid float64 precision loss on large ms values
 - [Phase ?]: [Phase 07-migration-tool]: saveProgress does not call Commit() internally — caller commits the cursor in its own small batch after each data batch (D-06)
 - [Phase ?]: [Phase 07-migration-tool]: atomicSwapDir step-3 .old cleanup failure is returned as a real error (not logged-and-discarded) to satisfy the never-swallowed prohibition
+- [Phase ?]: [Phase 07-migration-tool]: Options{Force, DropDangling bool} defined in validate.go (no migrate.go yet) as the package's single shared options struct — 07-06 reconciles with it rather than redeclaring
+- [Phase ?]: [Phase 07-migration-tool]: dropDanglingEdges best-effort-cleans the x/ file-index entry only when the dangling edge's source resolves to a node (target-only dangling); a missing source means no owner was ever recorded (ownerPath empty per D-04) so nothing to clean up
 
 ### Pending Todos
 
@@ -265,6 +268,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T00:50:55.673Z
+Last session: 2026-07-13T00:59:16.768Z
 Stopped at: Completed 07-03-PLAN.md
 Resume file: None
