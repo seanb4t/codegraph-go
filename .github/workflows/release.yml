@@ -1,0 +1,177 @@
+# Tag-triggered release workflow (DIST-01, DIST-02, DIST-03).
+#
+# LOCKED CONTRACT — do not change without reading internal/upgrade/verify.go
+# (releaseWorkflowRefPattern) and .planning/phases/08-release-hardening-benchmarks/08-RESEARCH.md
+# Finding 1/2 first:
+#
+#   - This file MUST be named release.yml (or release.yaml) and live at
+#     .github/workflows/, and MUST trigger ONLY on tag pushes matching
+#     v[0-9]* (see `on:` below). internal/upgrade/verify.go's
+#     releaseWorkflowRefPattern anchors the cosign OIDC certificate's SAN
+#     to exactly this file+ref shape:
+#       ^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^\s]*$
+#     Renaming this file, changing its trigger, or signing from a
+#     different workflow silently breaks `codegraph upgrade` for every
+#     user. If this file is ever renamed, releaseWorkflowRefPattern in
+#     verify.go MUST change in lockstep.
+#
+#   - Native 2-OS runner matrix (RESEARCH.md Finding 2): darwin targets
+#     build NATIVELY on macos-latest (Xcode clang, no zig, no osxcross)
+#     because a Linux-hosted CGo cross-link to darwin risks silently
+#     breaking libresolv-based DNS resolution in the resulting binary —
+#     a real, multi-source-corroborated risk for a binary
+#     (`codegraph upgrade`) that makes real HTTPS calls on every
+#     platform, including macOS. Only linux/arm64 and both windows
+#     targets cross-compile via zig, from ubuntu-latest.
+#
+#   - Per-binary signing (RESEARCH.md Finding 1, see the `assemble` job):
+#     internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY
+#     ITSELF (sha256.Sum256(binary)), not a checksums file — cosign MUST
+#     sign each binary individually.
+#
+#   - Every third-party Action below is pinned to a full commit SHA
+#     (resolved from the exact release tag noted in the trailing
+#     comment) except the SLSA generic generator, which slsa-verifier
+#     requires to be referenced by a full @vX.Y.Z semver tag, not a SHA
+#     (see the `provenance` job).
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: read
+
+env:
+  # Pinned to the GoReleaser version validated locally in Plan 08-01
+  # (goreleaser --version -> v2.17.0) for build-config reproducibility.
+  GORELEASER_VERSION: "v2.17.0"
+
+jobs:
+  # Native 2-OS matrix: each of the 6 (goos,goarch) targets in
+  # .goreleaser.yaml is built independently via
+  # `goreleaser build --single-target` (an OSS command — no GoReleaser
+  # Pro `release --split`/`continue --merge`/prebuilt-builder directive
+  # is used anywhere in this workflow, per RESEARCH.md Finding 2/
+  # Pitfall 3) and uploaded as a CI artifact. A later `assemble` job
+  # downloads all 6 and does the release/sign/SBOM/publish work.
+  build:
+    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-latest builds linux + windows: native gcc for
+          # linux/amd64 (no cross-toolchain needed); zig cc for the
+          # linux/arm64 and windows cross targets (CC/CXX for these are
+          # already set per-build-id inside .goreleaser.yaml itself —
+          # this job only needs to ensure the `zig` binary is on PATH).
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            needs_zig: false
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            needs_zig: true
+          - runner: ubuntu-latest
+            goos: windows
+            goarch: amd64
+            needs_zig: true
+          - runner: ubuntu-latest
+            goos: windows
+            goarch: arm64
+            needs_zig: true
+          # macos-latest builds BOTH darwin arches NATIVELY (Xcode's own
+          # clang, arch-only cross for darwin/amd64) — no zig, no
+          # osxcross, no manually-sourced SDK: this is the darwin-DNS-
+          # resolver mitigation (Finding 2 / Pitfall 2).
+          - runner: macos-latest
+            goos: darwin
+            goarch: amd64
+            needs_zig: false
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            needs_zig: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # goreleaser needs full history + tags to resolve
+          # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install zig (linux/arm64 + windows cross targets only)
+        if: matrix.needs_zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: "0.15.1"
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: ${{ env.GORELEASER_VERSION }}
+          install-only: true
+
+      - name: Build single target
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: goreleaser build --single-target --clean
+
+      - name: Rename to release-asset contract name
+        id: asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          GOOS="${{ matrix.goos }}"
+          GOARCH="${{ matrix.goarch }}"
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+
+          # internal/upgrade.releaseAssetName()'s exact contract shape
+          # (Finding 1): codegraph_<tag>_<goos>_<goarch>[.exe]. Locate the
+          # built binary via dist/artifacts.json — GoReleaser's own
+          # documented stable lookup (dist/ subdirectory names are NOT
+          # guaranteed stable across GoReleaser versions) — with a
+          # defensive find(1) fallback if artifacts.json is absent or
+          # doesn't contain a matching entry.
+          BIN_PATH=""
+          if [ -f dist/artifacts.json ]; then
+            BIN_PATH=$(jq -r --arg goos "$GOOS" --arg goarch "$GOARCH" \
+              '[.[] | select(.type=="Binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "$BIN_PATH" ] || [ ! -f "$BIN_PATH" ]; then
+            BIN_PATH=$(find dist -type f \( -name 'codegraph' -o -name 'codegraph.exe' \) | head -n1)
+          fi
+          if [ -z "$BIN_PATH" ] || [ ! -f "$BIN_PATH" ]; then
+            echo "::error::could not locate built binary for ${GOOS}/${GOARCH} under dist/"
+            exit 1
+          fi
+
+          DEST="codegraph_${TAG}_${GOOS}_${GOARCH}${EXT}"
+          cp "$BIN_PATH" "$DEST"
+          echo "name=${DEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.asset.outputs.name }}
+          path: ${{ steps.asset.outputs.name }}
+          if-no-files-found: error
