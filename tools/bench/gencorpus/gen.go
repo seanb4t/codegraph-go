@@ -92,6 +92,15 @@ func Generate(opts Options) (Stats, error) {
 	rng := rand.New(rand.NewSource(opts.Seed))
 
 	goCount := int(float64(opts.FileCount) * goWeight)
+	if goCount < 1 {
+		// Guarantee at least one Go file for any FileCount >= 1 (IN-03,
+		// Phase 8 re-review): without this clamp, goWeight's truncation
+		// makes goCount == 0 for FileCount < 2, so generateGo never
+		// writes pkg0000/file0000.go -- the file regressionQueryTerm
+		// (tools/bench/runner) queries against. Production always uses
+		// ProductionFileCount (120000), where this clamp never engages.
+		goCount = 1
+	}
 	pyCount := int(float64(opts.FileCount) * pyWeight)
 	jsCount := opts.FileCount - goCount - pyCount
 	if jsCount < 0 {

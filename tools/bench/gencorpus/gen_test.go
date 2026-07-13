@@ -188,3 +188,28 @@ func TestHasCrossFileRefs(t *testing.T) {
 		t.Fatalf("no generated Go file calls a qualified cross-package symbol (pkgNNNN.FnNNNN_NNNN(...)) — corpus has zero cross-file call edges")
 	}
 }
+
+// TestTinyFileCountStillWritesRootSymbol proves the IN-03 (Phase 8
+// re-review) fix: goWeight's truncation used to make goCount == 0 for
+// FileCount == 1, so tools/bench/runner's regressionQueryTerm
+// ("Fn0000_0000", the corpus reference chain's root symbol written to
+// pkg0000/file0000.go) never existed for a manual smoke-test run like
+// `-mode regression -count 1`. Generate must now guarantee that file
+// exists for any FileCount >= 1, not just the production-scale
+// FileCount (120000) that always happened to clamp goCount above zero.
+func TestTinyFileCountStillWritesRootSymbol(t *testing.T) {
+	for _, count := range []int{1, 2, 3} {
+		dir := t.TempDir()
+		if _, err := Generate(Options{Seed: 1, FileCount: count, OutDir: dir}); err != nil {
+			t.Fatalf("Generate(FileCount=%d): %v", count, err)
+		}
+		rootFile := filepath.Join(dir, "pkg", "pkg0000", "file0000.go")
+		data, err := os.ReadFile(rootFile)
+		if err != nil {
+			t.Fatalf("FileCount=%d: expected %s to exist: %v", count, rootFile, err)
+		}
+		if !strings.Contains(string(data), "func Fn0000_0000() int {") {
+			t.Fatalf("FileCount=%d: %s does not define Fn0000_0000", count, rootFile)
+		}
+	}
+}
