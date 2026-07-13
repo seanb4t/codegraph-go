@@ -157,10 +157,13 @@ var ErrNeedsClone = errors.New("realcorpus: no local checkout found; shallow-clo
 //
 // Resolve does not verify the checkout is actually pinned at
 // e.CommitSHA — callers that need that guarantee (as
-// golden_parity_test.go does for weft) should check it themselves; this
-// function's job is only path discovery, kept deliberately simple so it
-// has no network or git-plumbing surface of its own beyond a single
-// local `git rev-parse --show-toplevel` to locate the sibling directory.
+// golden_parity_test.go does for weft, and as
+// tools/bench/runner.resolveOrClone's pinnedAt check does for the
+// PERF-01 head-to-head benchmark, WR-02 Phase 8 re-review) should check
+// it themselves; this function's job is only path discovery, kept
+// deliberately simple so it has no network or git-plumbing surface of
+// its own beyond a single local `git rev-parse --show-toplevel` to
+// locate the sibling directory.
 func (e Entry) Resolve() (string, error) {
 	if e.EnvVar != "" {
 		if p := os.Getenv(e.EnvVar); p != "" {

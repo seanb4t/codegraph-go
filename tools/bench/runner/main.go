@@ -361,7 +361,11 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 // commit, never HEAD (V5).
 func resolveOrClone(entry realcorpus.Entry, scratchRoot string) (string, error) {
 	if p, err := entry.Resolve(); err == nil {
-		return p, nil
+		head := pinnedAt(p)
+		if head == entry.CommitSHA {
+			return p, nil
+		}
+		fmt.Fprintf(os.Stderr, "runner: %s checkout at %s is not pinned at %s (HEAD=%s); cloning fresh\n", entry.Name, p, entry.CommitSHA, head)
 	}
 
 	dest := filepath.Join(scratchRoot, "clone-"+entry.Name)
@@ -388,6 +392,20 @@ func runGit(dir string, args ...string) error {
 		return fmt.Errorf("%s: %w", string(out), err)
 	}
 	return nil
+}
+
+// pinnedAt returns dir's current HEAD commit SHA, or "" if dir is not a
+// git checkout or the rev-parse fails. Used by resolveOrClone (WR-02,
+// Phase 8 re-review) to verify an existing local checkout found via
+// realcorpus.Entry.Resolve is actually pinned at the expected commit
+// before trusting it, rather than silently benchmarking a stale sibling
+// checkout that has since moved.
+func pinnedAt(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // ---------------------------------------------------------------------
