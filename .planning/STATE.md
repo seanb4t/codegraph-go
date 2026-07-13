@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 8
 current_phase_name: Release Hardening & Benchmarks
 status: executing
-stopped_at: Completed 08-03-PLAN.md (gencorpus synthetic corpus generator)
-last_updated: "2026-07-13T18:09:45.166Z"
+stopped_at: Completed 08-05-PLAN.md (upgrade e2e verification loop-closer)
+last_updated: "2026-07-13T18:20:34.938Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 66
-  completed_plans: 62
+  completed_plans: 63
   percent: 88
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 ## Current Position
 
 Phase: 8 (Release Hardening & Benchmarks) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-07-13 — Phase 8 execution started
 
@@ -120,6 +120,7 @@ Progress: [███████░░░] 73%
 | Phase 08 P02 | 6min | 2 tasks | 3 files |
 | Phase 08 P03 | 35min | 2 tasks | 4 files |
 | Phase 08 P04 | 2min | 3 tasks | 1 files |
+| Phase 08-release-hardening-benchmarks P05 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -261,6 +262,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 08]: gencorpus cross-file/cross-package reference wiring scoped to the Go population only — Python/JS add extractor-registry language diversity without complicating the one tested reference chain
 - [Phase ?]: [Phase 08]: Added /gencorpus to .gitignore (mirrors /codegraph) after go build ./tools/bench/gencorpus/ without -o wrote a stray binary to repo root
 - [Phase 08]: Task 3 checkpoint (real 6-target signed release + darwin DNS validation) was auto-approved under --auto pipeline mode; real CI validation is deferred and documented as pending in SUMMARY + REQUIREMENTS (DIST-02/DIST-03 remain Pending)
+- [Phase ?]: [Phase 08]: releaseAssetName already agreed byte-for-byte with GoReleaser's name_template for all 6 os/arch targets (D-14) — TestReleaseAssetNameMatchesGoReleaser proves it; only the doc comment was updated, no logic change
+- [Phase ?]: [Phase 08]: TestVerifyReleaseE2E sources a real signed artifact via a committed testdata fixture (primary) or CODEGRAPH_E2E_BINARY/CODEGRAPH_E2E_BUNDLE env vars (live variant), else skips cleanly — no real DIST-02 release exists yet so it currently skips, never fails
 
 ### Pending Todos
 
@@ -284,6 +287,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-13T18:05:07.680Z
-Stopped at: Completed 08-03-PLAN.md (gencorpus synthetic corpus generator)
-Resume file: .planning/phases/08-release-hardening-benchmarks/08-CONTEXT.md
+Last session: 2026-07-13T18:20:34.932Z
+Stopped at: Completed 08-05-PLAN.md (upgrade e2e verification loop-closer)
+Resume file: None
