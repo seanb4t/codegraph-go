@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -423,6 +424,36 @@ func TestRun_DropDangling(t *testing.T) {
 	}
 	if !meta.GetHealthy() {
 		t.Error("drop-dangling Meta.Healthy = false, want true")
+	}
+}
+
+// TestRun_RefusesWithoutCreatingStore proves WR-03: calling Run with
+// Options{Force:false} against a non-empty target that is NOT a prior healthy
+// migration (e.g. an in-place .codegraph/ still holding the TS source db)
+// refuses loudly AND does not create a pebble store/ directory in the target
+// while refusing. Before the fix, the "is this a prior migration?" probe
+// called graphstore.Open, which pebble.Open-creates the store/ dir even as it
+// refuses — mutating the target (and, for in-place from==to, the source),
+// brushing against the D-08 non-destructive guarantee.
+func TestRun_RefusesWithoutCreatingStore(t *testing.T) {
+	dbPath := migratetest.BuildTSIndex(t, migratetest.VariantHappy)
+
+	target := runTarget(t)
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", target, err)
+	}
+	// A stray file makes the target non-empty and NOT a recognizable store.
+	if err := os.WriteFile(filepath.Join(target, "index.db"), []byte("not a store"), 0o600); err != nil {
+		t.Fatalf("seed non-migration target: %v", err)
+	}
+
+	if _, err := Run(dbPath, target, Options{}); err == nil {
+		t.Fatal("expected Run to refuse overwriting a non-empty, non-migration target")
+	}
+
+	storeDir := filepath.Join(target, "store")
+	if _, statErr := os.Stat(storeDir); statErr == nil {
+		t.Errorf("refusal check created a pebble store at %s (the probe must be read-only, D-08)", storeDir)
 	}
 }
 

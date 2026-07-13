@@ -297,17 +297,25 @@ func checkTargetOverwrite(target string, force bool) error {
 		return nil
 	}
 
-	if store, openErr := graphstore.Open(filepath.Join(target, "store")); openErr == nil {
-		healthy := false
-		if r, snapErr := store.Snapshot(); snapErr == nil {
-			if m, metaErr := r.GetMeta(); metaErr == nil && m.GetHealthy() {
-				healthy = true
+	// WR-03: probe read-only. graphstore.Open → pebble.Open CREATES the store
+	// directory (MANIFEST/OPTIONS/CURRENT) when it is absent, which would
+	// mutate the target — and, for the in-place from==to default, the source
+	// .codegraph/ — during what must be a non-destructive refusal check (D-08).
+	// Only attempt the health-read when a store/ directory already exists.
+	storeDir := filepath.Join(target, "store")
+	if _, statErr := os.Stat(storeDir); statErr == nil {
+		if store, openErr := graphstore.Open(storeDir); openErr == nil {
+			healthy := false
+			if r, snapErr := store.Snapshot(); snapErr == nil {
+				if m, metaErr := r.GetMeta(); metaErr == nil && m.GetHealthy() {
+					healthy = true
+				}
+				_ = r.Close()
 			}
-			_ = r.Close()
-		}
-		_ = store.Close()
-		if healthy {
-			return nil
+			_ = store.Close()
+			if healthy {
+				return nil
+			}
 		}
 	}
 
