@@ -175,3 +175,121 @@ jobs:
           name: ${{ steps.asset.outputs.name }}
           path: ${{ steps.asset.outputs.name }}
           if-no-files-found: error
+
+  # Downloads all 6 binaries, computes checksums, signs EACH BINARY
+  # individually with cosign v3 keyless (Finding 1 — internal/upgrade's
+  # defaultVerify hashes the downloaded binary itself, never a checksums
+  # file), emits a per-binary SBOM via syft, and publishes everything as
+  # one GitHub release. SLSA provenance runs as a separate job below,
+  # over this job's checksums file — provenance and the per-binary
+  # cosign bundle serve different verifiers (slsa-verifier vs.
+  # `codegraph upgrade`) and are allowed different scopes (Finding 1).
+  assemble:
+    name: sign, SBOM, and publish release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release create + asset uploads
+      id-token: write # cosign keyless OIDC signing (Finding 1) — this
+      # job's OIDC token is what produces the cert SAN
+      # releaseWorkflowRefPattern anchors on: this exact
+      # workflow file, triggered by this exact tag ref.
+    outputs:
+      hashes: ${{ steps.hash.outputs.hashes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Download all built binaries
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: "codegraph_*"
+          path: release
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: release
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          sha256sum codegraph_* > "codegraph_${TAG}_checksums.txt"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign each binary individually (Finding 1)
+        working-directory: release
+        run: |
+          set -euo pipefail
+          # internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY
+          # ITSELF (sha256.Sum256(binary)) — cosign MUST sign each
+          # binary individually here, producing a per-binary
+          # <asset>.sigstore.json sidecar (cosign v3's --bundle flag).
+          # Signing only the checksums file would make every real
+          # `codegraph upgrade` fail signature verification (Finding 1).
+          for f in codegraph_*; do
+            case "$f" in
+            *_checksums.txt | *.sigstore.json | *.spdx.json) continue ;;
+            esac
+            cosign sign-blob --bundle="${f}.sigstore.json" --yes "$f"
+          done
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: Per-binary SBOM (DIST-03)
+        working-directory: release
+        run: |
+          set -euo pipefail
+          for f in codegraph_*; do
+            case "$f" in
+            *_checksums.txt | *.sigstore.json | *.spdx.json) continue ;;
+            esac
+            syft "$f" -o spdx-json="${f}.spdx.json"
+          done
+
+      - name: Base64-encode checksums for SLSA provenance
+        id: hash
+        working-directory: release
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          echo "hashes=$(base64 -w0 < "codegraph_${TAG}_checksums.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+          PRERELEASE_FLAG=""
+          case "$TAG" in
+          *-*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
+          # shellcheck disable=SC2086
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --generate-notes \
+            $PRERELEASE_FLAG \
+            codegraph_*
+
+  # SLSA3 provenance via the GENERIC generator (not the Go builder,
+  # which would rebuild the binary under its own fixed config and
+  # cannot accommodate the zig-cc CGo cross-build) over the assemble
+  # job's checksums file. Per slsa-github-generator's own documented
+  # requirement, this reusable workflow MUST be referenced by a full
+  # @vX.Y.Z semver tag — a SHA pin is explicitly rejected/unsupported
+  # and a short tag (@v2) is rejected by slsa-verifier.
+  provenance:
+    name: SLSA provenance
+    needs: assemble
+    permissions:
+      actions: read # required for the generator to detect the GH Actions environment
+      id-token: write # provenance signing identity
+      contents: write # upload provenance to the release created by `assemble`
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.assemble.outputs.hashes }}"
+      upload-assets: ${{ startsWith(github.ref, 'refs/tags/') }}
