@@ -67,7 +67,8 @@ var wantedColumns = map[string][]string{
 
 // Source is a read-only handle onto a TS CodeGraph SQLite index.
 type Source struct {
-	db *sql.DB
+	db     *sql.DB
+	closed bool
 }
 
 // OpenSource opens dbPath read-only via the modernc.org/sqlite driver. The
@@ -113,12 +114,27 @@ func sourceDSN(abs string) string {
 	return u.String() + "?mode=ro&_pragma=query_only(1)&_txlock=deferred"
 }
 
-// Close releases the underlying database handle.
+// Close releases the underlying database handle. It is idempotent: a second
+// call is a no-op. CR-01: Run closes the source explicitly before the atomic
+// directory swap (an open source handle inside the swapped directory breaks
+// os.Rename on Windows), and a deferred Close still runs on every error path —
+// the idempotency guard makes that double-close safe.
 func (s *Source) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("migrate: close source: %w", err)
 	}
 	return nil
+}
+
+// Closed reports whether Close has been called. Used by the CR-01 regression
+// test to assert the source handle is released before atomicSwapDir runs
+// (Windows refuses to rename a directory that still contains an open handle).
+func (s *Source) Closed() bool {
+	return s.closed
 }
 
 // DetectTS probes sqlite_master for the three tables that make a SQLite

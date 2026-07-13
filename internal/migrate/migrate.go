@@ -61,6 +61,14 @@ var errTestInterrupted = fmt.Errorf("migrate: test-injected interruption")
 // test-only" instruction). Never set outside tests.
 var testStopAfterBatch func(table string, rowid int64) bool
 
+// testBeforeSwap, when non-nil, is invoked with the source handle Run is
+// holding (nil on paths that never opened one) immediately before Run hands
+// off to a directory swap — both the happy-path atomicSwapDir and the
+// StatusComplete resume branch's finishFromComplete. It is the CR-01
+// regression seam: the source must already be Closed() at this point, or the
+// swap's os.Rename fails on Windows. Never set outside tests.
+var testBeforeSwap func(src *Source)
+
 // Result summarizes a completed (or resumed-to-completion) migration run:
 // final record counts (read back from the migrated store, so they reflect
 // this run's writes plus anything already committed from a prior
@@ -150,6 +158,17 @@ func Run(from, to string, opts Options) (Result, error) {
 		// the final swap didn't happen (the process was interrupted between
 		// saveProgress(complete) and atomicSwapDir). Re-read the already-
 		// stamped Meta/counts and swap directly — no re-write, no re-validate.
+		//
+		// CR-01: close the source BEFORE the swap. finishFromComplete does not
+		// use src, and for an in-place migration the source *.db lives inside
+		// the directory atomicSwapDir renames — an open handle makes that
+		// rename fail on Windows.
+		if err := src.Close(); err != nil {
+			return Result{}, err
+		}
+		if testBeforeSwap != nil {
+			testBeforeSwap(src)
+		}
 		return finishFromComplete(store, tmpDir, target)
 	}
 
@@ -207,6 +226,15 @@ func Run(from, to string, opts Options) (Result, error) {
 		// in_progress cursor) so a future --drop-dangling or corrected run
 		// can resume/inspect it; the target directory is untouched.
 		return Result{Report: report}, err
+	}
+
+	// CR-01: validate (reconcileCounts) is the last consumer of src; close it
+	// now, before the atomic swap below. For an in-place migration the source
+	// *.db lives inside the directory atomicSwapDir renames, and an open handle
+	// makes os.Rename of that directory fail on Windows. The deferred Close
+	// above remains as a safe (idempotent) no-op on error paths.
+	if err := src.Close(); err != nil {
+		return Result{}, err
 	}
 
 	// WR-01: recomputeFileEdgeCounts ran BEFORE validate, but --drop-dangling
@@ -267,6 +295,9 @@ func Run(from, to string, opts Options) (Result, error) {
 
 	if err := store.Close(); err != nil {
 		return Result{}, fmt.Errorf("migrate: close partial store: %w", err)
+	}
+	if testBeforeSwap != nil {
+		testBeforeSwap(src)
 	}
 	if err := atomicSwapDir(tmpDir, target); err != nil {
 		return Result{}, err

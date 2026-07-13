@@ -281,6 +281,37 @@ func TestRun_Resume(t *testing.T) {
 	}
 }
 
+// TestRun_ClosesSourceBeforeSwap proves CR-01: the read-only source DB handle
+// is released BEFORE atomicSwapDir runs. On Windows a directory containing an
+// open file handle cannot be renamed, so holding the source (which, for the
+// default in-place migration, lives inside the swapped directory) open across
+// the swap deterministically breaks the default command. This can't reproduce
+// a real Windows sharing violation on the CI host, so it proves the ordering
+// invariant structurally via the testBeforeSwap seam.
+func TestRun_ClosesSourceBeforeSwap(t *testing.T) {
+	dbPath := migratetest.BuildTSIndex(t, migratetest.VariantHappy)
+	target := runTarget(t)
+
+	var sawSwap, srcOpenAtSwap bool
+	testBeforeSwap = func(src *Source) {
+		sawSwap = true
+		if src != nil && !src.Closed() {
+			srcOpenAtSwap = true
+		}
+	}
+	t.Cleanup(func() { testBeforeSwap = nil })
+
+	if _, err := Run(dbPath, target, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !sawSwap {
+		t.Fatal("expected the before-swap seam to fire (the happy path must reach atomicSwapDir)")
+	}
+	if srcOpenAtSwap {
+		t.Error("source DB handle was still open when atomicSwapDir ran (CR-01: Windows cannot rename a directory that still contains an open handle)")
+	}
+}
+
 // TestRun_AgedDB proves D-09.4: migrating a source missing later-added
 // columns (nodes.return_type, edges.provenance) completes healthy, with
 // the migrated records carrying the proto zero value for the absent
