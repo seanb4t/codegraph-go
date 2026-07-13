@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"testing"
@@ -454,6 +455,93 @@ func TestRun_RefusesWithoutCreatingStore(t *testing.T) {
 	storeDir := filepath.Join(target, "store")
 	if _, statErr := os.Stat(storeDir); statErr == nil {
 		t.Errorf("refusal check created a pebble store at %s (the probe must be read-only, D-08)", storeDir)
+	}
+}
+
+// buildDanglingUnderFileDB writes a minimal but complete TS-shaped SQLite
+// source in which a File record's OWN symbol owns a dangling edge — the exact
+// shape WR-01 needs but the shared migratetest fixture cannot express (its
+// seeded node file_paths do not correspond to any files-table row, so no File
+// record ever carries an x/ edge entry). One file (pkg/a.go), one node
+// (func:a in pkg/a.go), and one edge (func:a -> func:missing) whose source
+// resolves but whose target is absent: dropping it removes the x/ entry under
+// pkg/a.go, so pkg/a.go's File.edge_count must be recomputed post-drop.
+func buildDanglingUnderFileDB(t *testing.T) string {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "dangling-under-file.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open source db: %v", err)
+	}
+	defer db.Close()
+
+	const ddl = `
+CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL, description TEXT);
+CREATE TABLE files (path TEXT PRIMARY KEY, content_hash TEXT, language TEXT, size INTEGER, modified_at INTEGER, node_count INTEGER, errors TEXT);
+CREATE TABLE nodes (id TEXT PRIMARY KEY, kind TEXT, name TEXT, qualified_name TEXT, file_path TEXT, language TEXT, start_line INTEGER, end_line INTEGER, start_column INTEGER, end_column INTEGER, docstring TEXT, signature TEXT, visibility TEXT, is_exported INTEGER, return_type TEXT);
+CREATE TABLE edges (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, target TEXT, kind TEXT, line INTEGER, col INTEGER, provenance TEXT, metadata TEXT);
+`
+	if _, err := db.Exec(ddl); err != nil {
+		t.Fatalf("exec ddl: %v", err)
+	}
+	stmts := []struct {
+		q    string
+		args []any
+	}{
+		{`INSERT INTO schema_versions(version, applied_at, description) VALUES (7, 0, '')`, nil},
+		{`INSERT INTO files(path, content_hash, language, size, modified_at, node_count, errors) VALUES ('pkg/a.go', 'h', 'go', 10, 1700000000000, 1, NULL)`, nil},
+		{`INSERT INTO nodes(id, kind, name, qualified_name, file_path, language, start_line, end_line, start_column, end_column, docstring, signature, visibility, is_exported, return_type) VALUES ('func:a', 'function', 'A', 'pkg.A', 'pkg/a.go', 'go', 1, 2, 0, 0, NULL, 'func A()', 'public', 1, NULL)`, nil},
+		{`INSERT INTO edges(source, target, kind, line, col, provenance, metadata) VALUES ('func:a', 'func:missing', 'calls', 1, 1, NULL, NULL)`, nil},
+	}
+	for _, s := range stmts {
+		if _, err := db.Exec(s.q, s.args...); err != nil {
+			t.Fatalf("exec %q: %v", s.q, err)
+		}
+	}
+	return dbPath
+}
+
+// TestRun_DropDangling_FileEdgeCountReconciled proves WR-01: after a
+// --drop-dangling migration deletes a dangling edge whose source resolved but
+// target did not (so its x/ file-index entry under the owning file WAS written
+// and then deleted), the owning file's persisted File.edge_count equals the
+// actual number of edge entries remaining in that file's x/ index.
+// recomputeFileEdgeCounts originally ran only BEFORE validate's drop, leaving
+// the owning file's count over-counted by one; the post-drop recompute
+// reconciles it.
+func TestRun_DropDangling_FileEdgeCountReconciled(t *testing.T) {
+	dbPath := buildDanglingUnderFileDB(t)
+	target := runTarget(t)
+
+	result, err := Run(dbPath, target, Options{DropDangling: true})
+	if err != nil {
+		t.Fatalf("Run with DropDangling: %v", err)
+	}
+	if result.Report.Dropped != 1 {
+		t.Fatalf("Report.Dropped = %d, want 1 (the single dangling edge)", result.Report.Dropped)
+	}
+
+	store := openTargetStore(t, target)
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	defer snap.Close()
+
+	const owner = "pkg/a.go"
+	f, err := snap.GetFile(owner)
+	if err != nil {
+		t.Fatalf("GetFile(%s): %v", owner, err)
+	}
+	want, err := countFileIndexEdges(snap, owner)
+	if err != nil {
+		t.Fatalf("countFileIndexEdges(%s): %v", owner, err)
+	}
+	if want != 0 {
+		t.Fatalf("owner %s x/ edge count = %d, want 0 after the only edge was dropped", owner, want)
+	}
+	if f.GetEdgeCount() != want {
+		t.Errorf("file %s: persisted edge_count = %d, want %d (live x/ index count) — recompute did not run after --drop-dangling", owner, f.GetEdgeCount(), want)
 	}
 }
 

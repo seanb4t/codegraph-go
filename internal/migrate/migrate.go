@@ -186,6 +186,17 @@ func Run(from, to string, opts Options) (Result, error) {
 		return Result{Report: report}, err
 	}
 
+	// WR-01: recomputeFileEdgeCounts ran BEFORE validate, but --drop-dangling
+	// deletes edges and their x/ file-index entries during validate. Any
+	// owning file whose x/ entry was removed is now over-counted. Re-derive
+	// the per-file edge_count from the (post-drop) x/ index so File.EdgeCount
+	// stays consistent with the file index downstream sync/query relies on.
+	if report.Dropped > 0 {
+		if err := recomputeFileEdgeCounts(store); err != nil {
+			return Result{}, err
+		}
+	}
+
 	nodeCount, err := countNodes(store)
 	if err != nil {
 		return Result{}, err
