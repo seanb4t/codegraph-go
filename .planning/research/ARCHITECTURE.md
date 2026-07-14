@@ -1,370 +1,442 @@
-# Architecture Research
+# Architecture Research: v1.0 Integration into codegraph-go
 
-**Domain:** Local-first code knowledge-graph indexer / code intelligence tool for AI coding agents (Go port of TypeScript CodeGraph)
-**Researched:** 2026-07-10
-**Confidence:** HIGH (Go/Rust indexer architecture patterns cross-verified across 7+ real open-source implementations); MEDIUM (TS CodeGraph internals — sourced via a single GitHub README fetch, not primary docs)
+**Domain:** CLI + MCP server for a Go static-binary code-knowledge-graph tool (subsequent-milestone integration research, not greenfield)
+**Researched:** 2026-07-14
+**Confidence:** HIGH (grounded directly in the read v0.1 source — `internal/query`, `internal/mcp`, `internal/cli`, `internal/daemon`, `internal/watch`, `internal/agents`; MEDIUM on git-hooks-in-worktrees mechanics, which is corroborated by general git documentation, not this project's own prior art)
+
+> Supersedes the pre-implementation ARCHITECTURE.md written before v0.1 was built (2026-07-10, general code-graph-indexer ecosystem survey). This document is scoped to v1.0's integration into the ACTUAL shipped v0.1 codebase, not a greenfield design.
 
 ## Standard Architecture
 
-Every code-graph indexer surveyed (gleann, tessera, code-review-graph-go, code-context, graphindex, arbor, doctree, plus Sourcegraph's SCIP ecosystem) converges on the same five-layer shape. TS CodeGraph itself follows it. This is not incidental — it's the shape forced by the problem (parse → resolve → store → query → serve), and it's the shape that lets you swap the storage layer later without touching the rest.
-
-### System Overview
+### System Overview (v0.1, unchanged skeleton v1.0 bolts onto)
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                         ACCESS LAYER (per-invocation)                     │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────────┐   │
-│  │  CLI (cobra)  │  │ MCP server   │  │ Installer / uninstaller       │   │
-│  │  init/index/  │  │ (stdio, long-│  │ (agent config writers:        │   │
-│  │  explore/     │  │  running per │  │  Claude Code, Cursor, Codex,  │   │
-│  │  migrate      │  │  agent sess.)│  │  OpenCode, Gemini, etc.)      │   │
-│  └──────┬───────┘  └──────┬───────┘  └───────────────┬───────────────┘   │
-├─────────┼──────────────────┼──────────────────────────┼──────────────────┤
-│         │           QUERY ENGINE (read path)          │                  │
-│         │  explore / call-paths / blast-radius / search│                 │
-│         │  — talks ONLY to the GraphStore port, never  │                 │
-│         │    to SQL/driver code directly                │                 │
-├─────────┴──────────────────────────────────────────────┴──────────────────┤
-│                    INCREMENTAL UPDATE ENGINE (write path)                 │
-│  ┌────────────────┐   ┌───────────────────┐   ┌─────────────────────┐   │
-│  │ fsnotify watcher│──▶│ Dirty-file tracker │──▶│ Two-pass indexer     │   │
-│  │ (debounce 100ms-│   │ (content-hash +    │   │ (local extract, then │   │
-│  │  60s window)     │   │  dependency-aware  │   │  cross-file link)    │   │
-│  └────────────────┘   │  invalidation)      │   └──────────┬───────────┘   │
-│                        └───────────────────┘              │               │
-├──────────────────────────────────────────────────────────┼───────────────┤
-│                     EXTRACTION PIPELINE                   ▼               │
-│  ┌───────────┐   ┌────────────────┐   ┌──────────────────────────────┐  │
-│  │ File walker│──▶│ Parser (per-lang│──▶│ Symbol/Edge extractor        │  │
-│  │ (gitignore-│   │ tree-sitter,    │   │ (single parse per file,      │  │
-│  │  aware)    │   │ behind a Parser │   │  shared AST for symbols+calls│  │
-│  │            │   │ interface)      │   │  + framework-route heuristics)│  │
-│  └───────────┘   └────────────────┘   └──────────────┬───────────────┘  │
-├───────────────────────────────────────────────────────┼───────────────────┤
-│                        STORAGE LAYER (GraphStore port)  ▼                 │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │  GraphStore interface: PutSymbols, PutEdges, GetSymbol, Callers,     │ │
-│  │  Callees, BlastRadius, Search, DeleteFile, Migrate                   │ │
-│  └───────────────────────┬────────────────────────────┬────────────────┘ │
-│           ┌───────────────▼──────────────┐   ┌─────────▼──────────────┐  │
-│           │ v1: SQLite adapter (WAL,     │   │ v2 (future, same       │  │
-│           │ single-writer, FTS5, recursive│   │ interface): gRPC/HTTP  │  │
-│           │ CTE traversal)                │   │ client → central       │  │
-│           │ .codegraph/index.db           │   │ graph server, CI-built │  │
-│           └───────────────────────────────┘   │ shared indexes         │  │
-│                                                 └────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  internal/cli (Cobra)          internal/mcp (stdio, mark3labs/mcp-go) │
+│  thin commands, plain fmt.Fprint   handlers, plain text/JSON only     │
+└───────────────┬─────────────────────────────┬─────────────────────────┘
+                │                             │
+                └──────────────┬──────────────┘
+                               ▼
+                  internal/query.Engine (shared, read-only)
+              query/search/callers/callees/impact/affected/
+              files/status/node/explore — ONE snapshot per call
+                               │
+                               ▼
+                 internal/graphstore.Reader (Pebble snapshot)
+
+  internal/daemon (single-writer lockfile) ──drives──> indexer.Sync
+        ▲                                                   ▲
+        │ shares lockfile                                   │
+  internal/cli `serve --mcp --watch` (in-process fallback)───┘
+        │
+  internal/watch (fsnotify + debouncer)
+
+  internal/agents (self-registering AgentTarget registry,
+                    marker-fenced instruction injection,
+                    surgical MCP-config writes)
 ```
 
-### Component Responsibilities
+v1.0 adds four things to this picture, all as **siblings**, not rewrites:
 
-| Component | Responsibility | Typical Implementation |
-|-----------|----------------|-------------------------|
-| File walker | Enumerate source files, respect `.gitignore`/ignore config, detect language by extension | `filepath.WalkDir` + gitignore matcher |
-| Parser | Turn file bytes into an AST for one language | tree-sitter grammar behind a `Parser` interface — CGo (`smacker/go-tree-sitter`), WASM+wazero (`malivvan/tree-sitter`), or native-Go (`gotreesitter`) implementation swapped per build/per-language |
-| Symbol/Edge extractor | Walk the AST once, emit `Symbol` (function/class/type/route) and *local* `Edge` (calls, imports) structs | Tree-sitter S-expression queries, compiled+cached per language; one parse shared by symbol extraction and call extraction |
-| Two-pass indexer | Pass 1: per-file local extraction (parallelizable across files). Pass 2: cross-file link/resolve pass that turns unresolved references (e.g. `foo()` call) into resolved edges pointing at a specific symbol ID, using a global symbol table built after pass 1 | Worker pool (goroutines = NumCPU) for pass 1; single-threaded or sharded resolver for pass 2 since it needs global visibility |
-| Dirty-file tracker | Decide what needs re-parsing after a change: same-file content hash AND transitive dependents (files that referenced changed symbols) | SHA-256 content hash cache (bbolt/SQLite) + reverse-dependency lookup in the graph itself |
-| Watcher | OS-level file change notifications, debounced | `fsnotify` (Linux inotify / macOS FSEvents / Windows ReadDirectoryChangesW under the hood) |
-| GraphStore (storage port) | The **only** boundary between "how we ask questions about the graph" and "where the graph physically lives" | Go interface; v1 = SQLite adapter, v2 = remote adapter — see Anti-Patterns for why this boundary is the single most important architectural decision here |
-| Query engine | Bounded graph traversals: call paths, blast radius (BFS/DFS to depth N), symbol search, file/module summaries | Recursive CTEs against SQLite in v1; same queries become RPCs against a server in v2 — the query engine's Go code doesn't change, only which GraphStore implementation it's wired to |
-| MCP server | Long-lived stdio process per agent session; exposes `codegraph_explore` and companion tools; the natural home for the watcher's writer role while it's running | `mcp-go` or hand-rolled JSON-RPC over stdio; holds the single writer lock for its lifetime |
-| CLI | One-shot commands: `init`, `install`, `uninstall`, `uninit`, `upgrade`, `explore`, `migrate` | `cobra`; acquires writer lock only for write commands (`index`, `migrate`), otherwise read-only |
-| Installer | Write/remove per-agent config files (`.claude/`, `.cursor/`, etc.) that register the MCP server | Registry of per-agent adapters (one file per agent), not a growing switch statement |
-| Migration tool | One-way converter: TS CodeGraph's `codegraph.db` (old schema) → new Go schema | Reads old SQLite read-only, streams rows into new schema via the same `GraphStore.PutSymbols/PutEdges` write path used by the indexer |
+1. A **rendering seam** inside `internal/cli` only (TTY-gated lipgloss/bubbletea presenter wrapping the same plain data `internal/query` already returns).
+2. Behavioral changes **inside `internal/query.Engine`** (`explore`/`node` relevance/disambiguation) — no new package, shared by construction because CLI and MCP already both call `Engine`.
+3. A new **`internal/gitmeta`** package (worktree detection), consumed by `internal/query` (to populate `WorktreeMismatch`/live staleness) and by `internal/cli` (for the pretty status banner) and threaded into MCP tool results as a compact string prefix.
+4. A new **`internal/githooks`** package (git hook install/remove), structurally parallel to `internal/agents` but not part of it — different trust boundary, different registry shape (fixed 3 hooks, not 8 targets).
 
-## Recommended Project Structure
+### Component Responsibilities (v1.0 deltas only)
 
-```
-codegraph-go/
-├── cmd/
-│   └── codegraph/                 # main package, cobra root command wiring
-├── internal/
-│   ├── types/                     # Symbol, Edge, File, Occurrence — the shared domain model.
-│   │                               # Zero dependencies on SQL/tree-sitter/MCP. Everything else depends on this.
-│   ├── parser/                    # Parser interface + per-language implementations
-│   │   ├── parser.go               # type Parser interface { Parse(ctx, path, content) (*AST, error) }
-│   │   ├── golang/                 # first language, per PROJECT.md priority order
-│   │   ├── java/ csharp/ python/ typescript/ ...  # added later, same interface
-│   │   └── registry.go             # extension → Parser lookup, mirrors storage registry pattern below
-│   ├── extract/                    # AST → []Symbol, []Edge (unresolved) — pure functions, easy to unit test
-│   ├── resolve/                    # cross-file linking pass: unresolved refs → resolved Edge.TargetSymbolID
-│   ├── graph/                      # STORAGE LAYER
-│   │   ├── store.go                 # GraphStore interface (the port)
-│   │   ├── sqlite/                  # v1 adapter: schema, migrations, WAL config, recursive-CTE queries
-│   │   ├── registry.go              # config-driven factory: NewGraphStore(cfg) — same pattern as v2 remote adapter later
-│   │   └── migrate/                 # old-TS-schema → new-schema converter, built on the same GraphStore port
-│   ├── indexer/                     # walker + two-pass orchestration + content-hash dirty tracking
-│   ├── watcher/                     # fsnotify wrapper, debounce, dirty-file propagation, owns the writer role while running
-│   ├── query/                       # explore / call-paths / blast-radius / search — talks only to graph.GraphStore
-│   ├── mcp/                         # stdio MCP server, tool handlers wrapping query/
-│   ├── install/                     # per-agent config-writer adapters (registry pattern, one file per agent)
-│   └── cli/                         # cobra command implementations, thin — delegate to indexer/query/install
-├── pkg/                             # (only if you want a stable public Go API surface — optional for v1)
-└── .codegraph/                      # PER-PROJECT runtime directory (not part of the repo above; created by `codegraph init`)
-```
+| Component | Responsibility | New/Modified |
+|-----------|----------------|--------------|
+| `internal/query.Engine` | Add relevance scoring to `Explore`, multi-def disambiguation + `⚠️ no covering tests` to `Node`, multi-word query arity, richer `Status` fields (DB size; nodes-by-kind/languages already scaffolded) | **Modified** — same package, same public methods, richer internals |
+| `internal/gitmeta` (new) | Detect `.codegraph/` "borrowed index" (repo root resolved by `ResolveCodegraphDir` is a different worktree than the one the caller is actually in); compute `worktreeMismatch` string and a live "pending changes" signal | **New**, imported by `internal/query` and `internal/cli` |
+| `internal/githooks` (new) | Install/remove `post-commit`/`post-merge`/`post-checkout` hook scripts that shell out to `codegraph sync`; idempotent, marker-fenced like `internal/agents` but a separate package/trust boundary | **New**, imported only by `internal/cli` |
+| `internal/cli/present` (new, or a `render*.go` cluster inside `internal/cli`) | TTY-gated lipgloss styling + bubbletea interactive pickers, wrapping `query.StatusResult`/`query.FilesResult`/agent registry data | **New**, imported only by `internal/cli` — **never** by `internal/query` or `internal/mcp` |
+| `internal/mcp` | Unchanged shape; benefits automatically from `Engine` improvements; gets a short inline worktree-mismatch notice prefixed onto tool results | **Thin modification** (prefix line only) |
+| `internal/cli/serve.go` | `--mcp` implies watch by default; add `--no-watch` | **Modified** |
+| `internal/daemon`, `internal/watch` | No structural change — `serve --mcp`'s watcher-by-default just flips the existing `--watch` bool's default and wires it through the same `daemon.New`/lockfile path already there | **Unmodified** (one small new exported read, `daemon.Status`, for the interactive picker) |
 
-### .codegraph/ Directory Layout (redesigned vs TS CodeGraph)
-
-TS CodeGraph puts everything flat: `codegraph.db` + `-wal`/`-shm` directly in `.codegraph/`, with no version marker and no separation between "local cache" and "the graph itself." That's fine for a single-file SQLite-only design, but it doesn't leave room for milestone-2 (CI-built shared indexes, a remote server pointer, multiple cache types). Recommended layout:
+## Recommended Project Structure (delta from v0.1)
 
 ```
-.codegraph/
-├── VERSION                 # schema version int, read by `codegraph upgrade` and the migration tool
-├── config.yaml              # language list, ignore patterns, storage backend selection
-├── index.db                 # v1: local SQLite graph (WAL mode) — the source of truth
-├── index.db-wal
-├── index.db-shm
-├── cache/
-│   └── filehash.db          # SHA-256 content-hash cache for incremental skip-logic (separate from the graph itself
-│                             #  so it can be blown away/rebuilt without touching the graph)
-├── writer.lock               # advisory lock file — see Concurrency Model below
-└── logs/
-    └── watcher.log
+internal/
+├── query/                    # UNCHANGED package boundary — richer internals
+│   ├── explore.go            # + relevance scoring (rankedNode already carries a `tier`; extend)
+│   ├── node.go                # + multi-def disambiguation prompt/list, "no covering tests" check
+│   ├── status.go              # + DB size (Pebble disk usage); nodes-by-kind/languages already scaffolded
+│   ├── resolve.go             # ResolveCodegraphDir stays upward-walk; gitmeta cross-checks it, doesn't replace it
+│   └── gitmeta_bridge.go      # NEW: thin glue — Engine.Status()/Explore() calls gitmeta.Detect(repoRoot) and folds
+│                               #      the result into StatusResult.WorktreeMismatch / a new blast/status field
+├── gitmeta/                   # NEW package
+│   ├── worktree.go            # git-common-dir vs git-dir detection, "borrowed index" comparison
+│   └── worktree_test.go
+├── githooks/                  # NEW package
+│   ├── hooks.go                # Install/Remove/Status for post-commit/post-merge/post-checkout
+│   ├── scripts.go              # embedded hook-script templates (marker-fenced, like agents/instructions.go)
+│   └── hooks_test.go
+├── fsatomic/                   # NEW package (extraction from internal/agents/shared.go)
+│   ├── fsatomic.go              # atomicWriteFile, replaceOrAppendMarkedSection, removeMarkedSection
+│   └── fsatomic_test.go         # moved verbatim from agents/shared_test.go
+├── cli/
+│   ├── present/                # NEW subpackage (or file cluster) — the ONLY place lipgloss/bubbletea is imported
+│   │   ├── style.go             # lipgloss styles, TTY gate (isatty check on cmd.OutOrStdout())
+│   │   ├── status_view.go       # pretty status renderer wrapping query.StatusResult
+│   │   ├── files_view.go        # pretty tree renderer wrapping query.FilesResult
+│   │   ├── daemon_picker.go     # bubbletea daemon-status/attach picker
+│   │   ├── install_picker.go    # bubbletea multi-select, REPLACES promptAgentMultiSelect's bufio prompt when TTY
+│   │   └── progress.go          # bubbletea progress model for init/index/sync
+│   ├── status.go                # calls present.RenderStatus(result) when TTY, else existing plain fmt.Fprintf
+│   ├── files.go                 # same TTY branch for --format tree
+│   ├── serve.go                 # --mcp implies watch; --no-watch opt-out
+│   ├── githooks.go              # NEW: `codegraph githooks install|remove|status` (dedicated command — see Q4 below)
+│   └── archtest/                 # NEW: import-graph guard mirroring graphstore/archtest and migrate/archtest
+│       └── no_charm_leak_test.go # asserts bubbletea/lipgloss import path only appears under internal/cli(/present)
+└── mcp/
+    └── tools.go                  # + one-line worktree-mismatch prefix on tool results; otherwise unchanged
 ```
-
-For milestone 2, `config.yaml` gains a `storage.backend: sqlite|remote` field. When `remote`, `index.db` is absent and a `remote.json` (server URL, project ID, auth token path) replaces it. **No other component needs to know this happened** — `graph.NewGraphStore(cfg)` returns a different adapter, and `internal/query`, `internal/mcp`, `internal/cli` are unchanged. This is the concrete payoff of the storage-port boundary.
 
 ### Structure Rationale
 
-- **`internal/types` has zero dependencies.** Every other package (parser, extract, graph, query) depends on it, nothing depends back. This is what makes the two-pass indexer, the storage swap, and unit testing all possible without import cycles.
-- **`internal/graph` is the only package that imports a SQL driver or knows the word "SQLite."** `internal/query`, `internal/mcp`, `internal/cli` call `graph.GraphStore` methods only. This is the single boundary the milestone-2 constraint is asking you to protect.
-- **`internal/parser` isolates the CGo-vs-WASM-vs-native decision per language.** Because Go/Java/C#/Python/TS all get separate sub-packages behind one `Parser` interface, you can ship Go with a pure-Go WASM backend and revisit CGo for a specific language later without an architecture change — the parser-strategy research question (noted as open in PROJECT.md) is fully decoupled from everything else.
-- **`internal/watcher` and `internal/indexer` are separate** even though the watcher's only job is to call the indexer, because the watcher owns process-lifetime concerns (debounce timers, the writer lock, OS-level fsnotify quirks) that have nothing to do with the indexing algorithm itself, and you'll want to unit-test the two-pass indexer without spinning up fsnotify.
+- **`internal/query` stays the seam of truth.** It already has `WorktreeMismatch *string` and `PendingChanges` fields sitting inert in `StatusResult` (see `internal/query/status.go`'s mapping table) — v1.0's job for worktree awareness is to make those live, not invent a new shape. Both CLI `status` and MCP `codegraph_status` read the same `StatusResult`, so wiring `gitmeta` in at the `Engine` level means CLI and MCP get worktree awareness in the same commit, with zero risk of the two surfaces drifting.
+- **`internal/gitmeta` is new, not folded into `internal/query`,** for the same reason `internal/watch` isn't folded into `internal/daemon`: it's a distinct, independently testable concern (parsing `.git`/`git-common-dir` layout) that `internal/query` calls into, mirroring the existing precedent of `internal/query` depending on `internal/graphstore` and `internal/indexer/goextract` (for `RefKindCalls`) — a read-only engine composing narrow, focused packages is the established pattern here, not a monolith.
+- **`internal/githooks` is a new top-level package, not a member of `internal/agents`,** because the trust boundary and registry shape are genuinely different (see Pattern 4 below for the detailed argument) — but it deliberately reuses `internal/agents/shared.go`'s already-proven idioms (marker-fenced replace-or-append, atomic temp-file-then-rename writes). **Recommendation: extract `internal/fsatomic`** from `internal/agents/shared.go` — `atomicWriteFile`, `replaceOrAppendMarkedSection`, `removeMarkedSection` — so both `internal/agents` and `internal/githooks` import it, rather than `internal/githooks` importing `internal/agents` directly (a naming/conceptual smell — a git-plumbing package has no business depending on an agent-config package) or duplicating non-trivial, security-relevant (V12 atomic-write) logic a second time. This breaks the codebase's OTHER established precedent — trivial single-constant duplication across packages (`codegraphDirName` duplicated verbatim in `internal/cli`, `internal/query`, `internal/daemon`, each with a comment explaining why) — but deliberately: that precedent is for one-line constants with nothing to drift; these are ~40-line, tested, security-sensitive functions where a second implementation is a real duplication-drift risk, not cosmetic.
+- **`internal/cli/present` (or equivalent) is the ONLY package that imports `bubbletea`/`lipgloss`.** This is the direct analog of the `internal/graphstore/archtest` (pebble confinement) and `internal/migrate/archtest` (`modernc.org/sqlite` confinement) precedents already in this codebase — same pattern, new dependency. Add `internal/cli/archtest` with a `go/packages`-based test (structurally identical to `internal/graphstore/archtest/import_graph_test.go`) asserting `github.com/charmbracelet/{bubbletea,lipgloss}` only appears under `internal/cli/...`. This is the load-bearing guarantee behind "MCP never sees ANSI" — not a design intention alone, but a CI-enforced boundary, matching how this codebase already treats its other supply-chain-sensitive imports.
 
 ## Architectural Patterns
 
-### Pattern 1: Two-Pass Indexing (local extract, then global resolve)
+### Pattern 1: Plain-data-core + TTY-gated presenter (the rendering seam)
 
-**What:** Every symbol-graph indexer that supports cross-file references (not just single-file outlines) splits indexing into two passes. Pass 1 walks each file independently (fully parallelizable — no file needs to see another file) and emits symbols plus *unresolved* references (`calls("someFunc")`, `imports("pkg/foo")`). Pass 2 runs after all files are parsed, when a complete symbol table exists, and turns those unresolved references into resolved edges (`Edge{From: sym123, To: sym456, Kind: CALLS}`).
+**What:** `internal/query.Engine` methods keep returning exactly what they return today — Go structs (`StatusResult`, `FilesResult`) for JSON-shaped commands, and plain markdown strings (`Explore`, `Node`) for the two flagship agent-facing commands. `internal/mcp` is untouched: it marshals structs to JSON or passes markdown strings through verbatim, exactly as it does now (`tools.go`'s `companionHandler`/`exploreHandler` bodies do not change at all). `internal/cli` adds a presentation layer that takes the SAME `StatusResult`/`FilesResult` value the plain-text branch already prints and, when the output is a real terminal, renders a styled version instead.
 
-**When to use:** Any time symbols in one file can reference symbols in another (which is the entire point of a *cross-file* code graph — this is explicitly a CodeGraph requirement). Single-file-only tools (ctags-style) can skip pass 2.
+**When to use:** Any command whose CLI output currently branches on `--json` (`status`, `files`) is exactly where this seam goes — that branch already proves the command has a clean data/presentation split; add a third branch (pretty) alongside the existing plain and `--json` ones, gated on TTY rather than a flag.
 
-**Trade-offs:** Pass 1 parallelizes trivially (goroutine pool). Pass 2 is inherently more sequential/coordinated because it needs global state, but it's cheap relative to parsing — it's dictionary lookups, not AST walks. The real cost this pattern imposes is on *incremental* updates: changing one file can only ever need pass-1 re-run on that file, but may require pass-2 re-run on every file that referenced symbols the changed file redefined or removed (see Pitfall below, and the Dirty-file tracker component).
+**Trade-offs:** Three render paths per command (`--json` / plain / pretty) instead of two is more surface, but it's additive — the existing two paths are untouched code, so this is zero risk to the golden-template tests that already pin `explore`/`node`/`status` shapes. `explore` and `node` themselves get NO pretty path in v1.0 (per the milestone's own scope: "lipgloss-styled `status`/`files`" only) — their markdown output already IS the human-facing format (it's what the golden corpus pins), so there is nothing to prettify without risking exactly the drift the milestone is trying to avoid.
 
 **Example:**
 ```go
-// Pass 1 — parallel, per-file, no cross-file knowledge needed
-type LocalExtraction struct {
-    Symbols     []types.Symbol
-    UnresolvedRefs []types.UnresolvedRef // {FromSymbol, TargetName, Kind}
+// internal/cli/status.go — the TTY branch added alongside the existing two
+result, err := eng.Status()
+if err != nil { return err }
+
+if jsonOut {
+    data, _ := query.MarshalStatusJSON(result)
+    return writeJSONLine(cmd, data)
 }
 
-func ExtractFile(ctx context.Context, path string, ast *parser.AST) (LocalExtraction, error)
+if present.IsInteractive(cmd.OutOrStdout()) {
+    return present.RenderStatus(cmd.OutOrStdout(), result) // lipgloss, TTY only
+}
 
-// Pass 2 — after all files are parsed, symbol table is complete
-func Resolve(symbolTable map[string]types.SymbolID, refs []types.UnresolvedRef) []types.Edge
+// unchanged plain fallback — exactly today's fmt.Fprintf line
+fmt.Fprintf(cmd.OutOrStdout(), "backend=%s files=%d ...\n", ...)
 ```
 
-### Pattern 2: Storage Port / GraphStore Interface (ports & adapters)
-
-**What:** Define a Go interface (`GraphStore`) covering every operation the rest of the system needs from the graph — writes (`PutSymbols`, `PutEdges`, `DeleteFile`) and reads (`GetSymbol`, `Callers`, `Callees`, `BlastRadius`, `Search`). Every other package — extractor, indexer, query engine, MCP server, CLI — depends on this interface, never on `database/sql`, a SQLite driver, or SQL strings directly.
-
-**When to use:** This is *the* pattern the milestone context calls for explicitly ("storage and process architecture must anticipate milestone-2 team features... without a rewrite"). It's how real projects with a documented local→server migration path (see the `shaktiman` ADR-003 "pluggable storage backends" pattern found in research: registry + config-driven factory, capability-validated backend combinations) avoid a rewrite. The factory (`graph.NewGraphStore(cfg)`) is the one place that knows how to build a concrete adapter from config; everything else takes the interface as a constructor argument.
-
-**Trade-offs:** Slight upfront cost (defining the interface before you have a second implementation feels premature) but the alternative — SQL embedded in query/MCP/CLI code — is the single most common reason these projects need a rewrite for server support. Keep the interface narrow (don't leak SQLite-specific concepts like "connection," "transaction," or "pragma" into it — those stay inside the adapter).
-
-**Example:**
 ```go
-// internal/graph/store.go — the port. No package here imports database/sql.
-type GraphStore interface {
-    PutSymbols(ctx context.Context, syms []types.Symbol) error
-    PutEdges(ctx context.Context, edges []types.Edge) error
-    DeleteFile(ctx context.Context, path string) error // cascades symbols+edges for that file
-
-    GetSymbol(ctx context.Context, id types.SymbolID) (types.Symbol, error)
-    Callers(ctx context.Context, id types.SymbolID) ([]types.Symbol, error)
-    Callees(ctx context.Context, id types.SymbolID) ([]types.Symbol, error)
-    BlastRadius(ctx context.Context, id types.SymbolID, depth int) (types.Subgraph, error)
-    Search(ctx context.Context, query string, kind types.SymbolKind) ([]types.Symbol, error)
-}
-
-// internal/graph/registry.go — config-driven factory, same shape v2's remote adapter will use
-func NewGraphStore(cfg Config) (GraphStore, func() error /*close*/, error) {
-    switch cfg.Backend {
-    case "sqlite":
-        return sqlite.Open(cfg.SQLitePath)
-    case "remote": // milestone 2 — same interface, different wire
-        return remote.Dial(cfg.ServerURL, cfg.AuthToken)
-    default:
-        return nil, nil, fmt.Errorf("unknown storage backend %q", cfg.Backend)
+// internal/cli/present/style.go
+// IsInteractive gates ALL styling — piped/redirected output (a script, a
+// CI log, an agent's captured stdout) NEVER receives ANSI, matching the
+// same isatty-style check install.go already uses for its own TTY gate
+// (installStdinIsInteractive) — just applied to stdout instead of stdin.
+func IsInteractive(w io.Writer) bool {
+    f, ok := w.(*os.File)
+    if !ok {
+        return false
     }
+    fi, err := f.Stat()
+    if err != nil {
+        return false
+    }
+    return fi.Mode()&os.ModeCharDevice != 0
 }
 ```
 
-### Pattern 3: Single-Writer / Multi-Reader Concurrency, with the Writer Role as a Process Concern (not a storage concern)
+The one thing to get right: `IsInteractive` must check the SAME writer `cmd.OutOrStdout()` returns (which is `os.Stdout` in production, a `bytes.Buffer` in every test — mirroring `installStdinIsInteractive`'s existing `cmd.InOrStdin() != os.Stdin` short-circuit) — not a bare `os.Stdout` global check, or tests that inject a buffer lose the ability to force the plain branch.
 
-**What:** SQLite in WAL mode gives you *many concurrent readers* and *exactly one writer at a time*, enforced at the file level via a shared-memory (`-shm`) wal-index — which is same-host-only by construction (confirmed directly in SQLite's own WAL documentation). Every project surveyed that uses SQLite this way converges on the same shape: one designated writer connection (`BEGIN IMMEDIATE`, `busy_timeout` set, retry with exponential backoff+jitter on `SQLITE_BUSY`), and any number of separate read-only connections/processes.
+### Pattern 2: Shared-engine algorithm changes, never surface-specific logic
 
-For CodeGraph specifically, there are *three* processes that might want to write: the CLI (`codegraph index`), the watcher (auto-sync), and — if it's ever made a write path — the MCP server. **Decide the writer role at the process-coordination layer, not by fighting SQLite's model.** Concretely:
-- The **watcher** (whether it runs standalone via `codegraph watch` or embedded inside the running MCP server process) is the canonical writer whenever it's alive. It holds `.codegraph/writer.lock` (an `flock`-style advisory lock) for its lifetime.
-- **One-shot CLI writes** (`codegraph index`, `codegraph migrate`) try to acquire the same lock; if the watcher already holds it, they either queue a request to the live watcher (best) or fail fast with a clear "watcher is running, changes will be picked up automatically" message (acceptable for v1) rather than racing SQLite's own lock and surfacing a raw `database is locked` error.
-- **Reads** (CLI `explore`, MCP tool calls) never need the writer lock — they open the SQLite file read-only (or WAL-mode default) and get SQLite's snapshot-isolation guarantees for free.
+**What:** `explore`'s relevance ranking and `node`'s multi-definition disambiguation are algorithmic changes to `internal/query.Engine.Explore`/`Engine.Node` and their private helpers (`matchNodes`, `lexicalMatchTier` in `internal/query/search.go`; `resolveNodeForDetail` in `internal/query/resolve.go`). They must NOT be implemented as a CLI-side post-filter on `Engine`'s output, and must NOT be duplicated in `internal/mcp`.
 
-**Why this matters for milestone 2:** if "writer" is a role coordinated by a lock file and a config-driven factory rather than something baked into "the CLI process," it transfers cleanly to a world where the writer is a CI job pushing into a central server and every local process (CLI, MCP server) is *only* ever a reader. You are not rearchitecting concurrency for team mode — you are pointing the `GraphStore` factory at a remote adapter and deleting the local writer-lock logic, which was already isolated in one place (`internal/watcher` + `internal/graph/sqlite`).
+**When to use:** Always, for this project — `internal/mcp`'s own package doc comment states the invariant explicitly ("one engine, two front-ends, so MCP output shapes cannot drift into two code paths") and `internal/mcp/tools.go`'s handlers already prove it structurally: `exploreHandler`/`companionHandler` call `eng.Explore(...)`/`eng.Node(...)` and pass the result straight to `mcp.NewToolResultText`, with zero local re-rendering.
 
-**Trade-offs:** A lock file adds one more thing that can go stale (crashed process holding a lock) — mitigate with PID-in-lockfile + liveness check, a well-known pattern (same shape as `.git/index.lock`).
+**Trade-offs:** None, really — this is not an optional design choice given the existing architecture, it's the only choice that doesn't create a second rendering/ranking path. The one real risk is regression against the golden corpus (`testdata/golden/corpus/weft-go/*.json`): `rankedNode.tier` already carries a lexical match tier (`internal/query/search.go`); extending it with a numeric relevance score (rather than replacing the tier concept) keeps ties broken the same deterministic way the golden tests currently pin, and the new `⚠️ no covering tests` warning is an ADDITIVE line appended to existing blast-radius output (`exploreBlast` already carries `TestFiles []string` — a warning is just "when `TestFiles` is empty for a symbol with `CallerCount > 0`, emit the line"), not a reshape of the existing section order the golden tests assert on.
 
-### Pattern 4: Content-Hash + Dependency-Aware Incremental Re-Indexing
+**Example (conceptual — extend, don't replace):**
+```go
+// internal/query/explore.go — additive: a new field, not a new code path
+type exploreBlast struct {
+    Symbol      *schema.Node
+    CallerCount int
+    TestFiles   []string
+    // NEW: derived, not stored — computed in buildBlastEntry
+}
 
-**What:** On every watcher tick (post-debounce), for each changed file: (1) compute SHA-256, compare to the cached hash — if unchanged (touch/rebuild noise), skip entirely; (2) if changed, delete that file's existing symbols/edges (cascade) and re-run pass 1 on it; (3) **critically**, also identify every symbol that this file used to export/define and re-run pass 2 (resolve) for any file that referenced those symbols, even though *those* files' own content hash didn't change. This second step is what every naive "SHA-256 skip" implementation surveyed gets wrong initially (see Pitfalls) — Tessera's and gleann's public write-ups are explicit that the resolve pass, not just the extract pass, must be re-triggered for dependents.
+func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge) (exploreBlast, error) {
+    // ...unchanged existing logic...
+    bl := exploreBlast{Symbol: n, CallerCount: len(callers), TestFiles: testFiles}
+    return bl, nil
+}
 
-**When to use:** Always, once cross-file resolution exists — this is not optional for a "code knowledge graph" as opposed to a per-file outline tool.
+// render_markdown.go's RenderExplore appends "⚠️ no covering tests" only
+// when bl.CallerCount > 0 && len(bl.TestFiles) == 0 — a pure function of
+// data already computed, not a new query.
+```
 
-**Trade-offs:** Requires the graph to answer "who references symbols defined in file X" cheaply (a reverse index on `Edge.TargetSymbolID` grouped by originating file) — build this as a first-class query, not an afterthought, because the dirty-tracker depends on it on every incremental cycle.
+### Pattern 3: Narrow-package worktree detection, cross-checked (not replacing) the upward-walk resolver
+
+**What:** `ResolveCodegraphDir` (`internal/query/resolve.go`) walks upward from `start` looking for the nearest `.codegraph/` — this IS the "borrowed index" bug: in a linked worktree with no `.codegraph/` of its own, the walk finds the MAIN worktree's `.codegraph/` and silently queries it. `internal/gitmeta` doesn't change that walk (v1.0 is explicitly TS-parity scoped: "detect+warn+notice", not "auto-init or share" — see PROJECT.md's Key Decisions). It adds a SEPARATE check, run alongside `ResolveCodegraphDir`, that answers "is `start`'s actual git worktree the same one `.codegraph/`'s resolved directory sits in?"
+
+**When to use:** Called once per `Engine` construction path that has a `repoRoot` (i.e. `OpenAt`), threaded into `StatusResult.WorktreeMismatch` (already a `*string` field, currently always `nil`) and into a new lightweight field/prefix `Explore`/`Node`/every MCP tool result can surface.
+
+**Trade-offs:** Git worktree layout has real edge cases (bare repos, submodules, `.git` as a file vs directory) — scope the v1.0 implementation to the common case (walk for a `.git` file containing `gitdir: <path>` vs a `.git` directory, without shelling out to `git rev-parse`) and fail SOFT (treat "can't determine" as "no mismatch detected", never block a query over it) — this is a UX nicety per the milestone scope, not a correctness gate.
+
+**Example:**
+```go
+// internal/gitmeta/worktree.go
+package gitmeta
+
+// WorktreeInfo answers whether repoRoot's resolved .codegraph/ directory
+// belongs to a DIFFERENT git worktree than the one `start` is actually in.
+type WorktreeInfo struct {
+    Mismatch        bool
+    MainWorktree    string // the worktree .codegraph/ actually belongs to
+    CurrentWorktree string // the worktree `start` is actually in
+}
+
+// Detect never errors out to the caller for anything but a genuine I/O
+// failure reading .git — an ambiguous/unsupported git layout resolves to
+// Mismatch: false (fail soft), matching Status()'s existing degrade-safely
+// precedent for computeStale with no repoRoot.
+func Detect(codegraphResolvedDir, callerStartDir string) (WorktreeInfo, error)
+```
+
+```go
+// internal/query/status.go (or a new gitmeta_bridge.go) — Status wiring
+info, _ := gitmeta.Detect(e.repoRoot, e.startDir) // startDir: new Engine field, the ORIGINAL start path OpenAt received, before ResolveCodegraphDir's walk
+var mismatch *string
+if info.Mismatch {
+    msg := fmt.Sprintf("querying %s's index from worktree %s", info.MainWorktree, info.CurrentWorktree)
+    mismatch = &msg
+}
+result.WorktreeMismatch = mismatch
+```
+
+Note the ONE structural addition this requires to `Engine`/`OpenAt`: today `NewWithRoot(reader, dir)` only stores the RESOLVED `.codegraph/`-containing directory (`dir` — the walk's answer), not the ORIGINAL `start` the caller passed in. `gitmeta.Detect` needs both (resolved dir vs actual caller cwd) to notice a mismatch. `OpenAt(start string)` must thread `start` itself through to the `Engine` (a new unexported field, e.g. `startDir`) alongside the existing `repoRoot` — a small, additive `Engine` struct change, not a signature-breaking one (`OpenAt`'s existing callers in `internal/cli` and `internal/mcp` don't change).
+
+### Pattern 4: Two independent marker-fenced-write registries (agents vs git hooks), sharing low-level plumbing only
+
+**What:** `internal/agents.AgentTarget` is a per-agent interface implemented by 8 concrete types self-registering via `init()`. Git hooks are NOT the same shape: there are exactly 3 fixed hook names (`post-commit`, `post-merge`, `post-checkout`), one script body (a thin shell wrapper invoking `codegraph sync --quiet` against the worktree the hook fires in), and no "detection" concept analogous to `AgentTarget.Detect` (there's no ambiguity about whether git hooks are "installed" — either the marker-fenced block is in `.git/hooks/<name>` or it isn't).
+
+**When to use:** `internal/githooks` as its own package, exposing `Install(repoRoot string) (WriteResult, error)` / `Remove(repoRoot string) (WriteResult, error)` / `Status(repoRoot string) ([]HookStatus, error)` — deliberately mirroring `agents.WriteResult`'s shape (`Files []FileResult`, `Errors []error`, `Notes []string`) so `internal/cli` can reuse `printAgentResults`-style reporting, but NOT implementing `agents.AgentTarget` or registering into `agents.registry` — these are genuinely different write targets (`.git/hooks/*`, executable shell scripts, vs `~/.claude.json`-style JSON/TOML configs) with a different failure mode worth keeping visually distinct (a broken git hook can silently no-op a sync; a broken agent config just means the agent falls back to grep).
+
+**Trade-offs:** Reusing `agents`'s low-level file-write helpers (`atomicWriteFile`, `replaceOrAppendMarkedSection`, `removeMarkedSection`) means either (a) importing `internal/agents` from `internal/githooks` — cheap but creates a dependency edge from a git-plumbing package to an agent-config package that has nothing to do with git — or (b) extracting those three functions into a new `internal/fsatomic` package both import. **Recommend (b)** — it's a pure refactor of existing, already-tested code (`internal/agents/shared_test.go` covers it), low risk, and removes an awkward cross-domain import.
+
+**Critical git-hooks-specific concern the agents pattern does NOT have to deal with:** hooks must not silently clobber a pre-existing hook installed by another tool (Husky, Lefthook, pre-commit, a repo's own custom hook). `replaceOrAppendMarkedSection`'s existing "no markers present → append after existing content" behavior handles this correctly for the common case (a shell script with other content already in it) as long as the git-hook shell scripts codegraph writes are POSIX-sh (not bash-specific) and end each marker-fenced block in a way that never short-circuits the rest of the hook chain — verify this at implementation time; it's the one place git hooks are meaningfully riskier to auto-write than an agent's JSON config (a malformed JSON write fails loud on next parse; a malformed shell hook fails silently and can block `git commit`/`git checkout` entirely for the user). **Recommendation: git hooks in v1.0 are opt-in only** (per PROJECT.md's "opt-in git sync hooks"), never installed by default `codegraph install`, and the install path should detect+warn (not clobber) an existing non-codegraph hook file that has no marker-fenced insertion point available (e.g., a hook that's a symlink to a shared Lefthook binary, not a plain editable script).
+
+**Worktree note (MEDIUM confidence, general git knowledge not this project's own prior art):** git hooks live under `$(git rev-parse --git-common-dir)/hooks/` — the hooks directory is SHARED across all linked worktrees of a repo (not duplicated per-worktree) unless the repo has `core.hooksPath` overridden. This means a single `codegraph githooks install` run from ANY worktree installs the hook for every worktree of that repo — a genuine, if partial, positive side-effect for the worktree-mismatch problem: a `post-checkout` firing in a linked worktree can run `codegraph sync` scoped to `$(pwd)` (the worktree the hook actually fired in) rather than the main worktree's index — but only if that worktree ALSO has its own `.codegraph/` (auto-init across worktrees is explicitly deferred per PROJECT.md, out of scope for v1.0's "detect+warn" bar).
+
+### Pattern 5: Watcher-on-MCP-by-default, mechanically a default flip plus a deference message, not new plumbing
+
+**What:** `internal/cli/serve.go` already has full `--watch` in-process-fallback plumbing (the `if watchMode && hasIndex { ... daemon.New(...); d.Run(watchCtx) ... }` block) — it is complete and already gracefully defers to a live standalone daemon via the shared lockfile (`daemon.ErrLockLive` is caught and logged, not treated as fatal). v1.0's job here is almost entirely a **default-value flip**: `watchMode` currently defaults `false` via `cmd.Flags().BoolVar(&watchMode, "watch", false, ...)`; it needs to default `true` when `--mcp` is set, with a new `--no-watch` flag to opt out.
+
+**When to use:** This is the correct integration point precisely because it's not a new mechanism — the existing `--watch` code path (debounced fsnotify watcher, shared daemon lockfile, `ErrLockLive` graceful-defer) is already correct and tested; only the flag DEFAULT needs to change.
+
+**Trade-offs:** The one real design decision is flag semantics: Cobra `BoolVar` gives every flag one static default, so "watch defaults true only when `--mcp` is set" needs either (a) a tri-state (`--watch`/`--no-watch`/unset) resolved in `RunE` rather than at flag-registration time, or (b) since `--mcp` is ALWAYS required today (`serve` without it already errors: "`--mcp` is required (stdio is the only supported transport)"), simply defaulting the existing bool to `true` unconditionally is equivalent in practice. **Recommend (b)**: flip the literal default in `BoolVar` from `false` to `true`, rename the flag registration to `--no-watch` with an inverted variable (`noWatch bool`, default `false`), and change the guard from `if watchMode && hasIndex` to `if !noWatch && hasIndex`. This is a two-line diff, not a redesign.
+
+**Example:**
+```go
+// internal/cli/serve.go — the flag-default flip
+var noWatch bool
+// ...
+cmd.Flags().BoolVar(&noWatch, "no-watch", false, "disable the in-process watcher that runs by default alongside --mcp")
+// ...
+if !noWatch && hasIndex {
+    // ...existing watchMode block body, unchanged...
+}
+```
+
+`install.go` already writes the byte-identical `serve --mcp` invocation into every agent's MCP config (per PROJECT.md's context: "our `install` already writes the byte-identical `serve --mcp` invocation; only the watch default differs") — so this flip requires ZERO changes to `internal/agents` or any agent config-writer; every already-installed agent gets watch-by-default for free the next time the user upgrades the binary, with no re-`install` needed.
+
+### Pattern 6: Interactive TUI stays CLI-local; engine/MCP see only its inputs and outputs
+
+**What:** The daemon picker (interactive attach/status view over `internal/daemon`) and the `install`/`uninstall` multi-select upgrade (replacing `promptAgentMultiSelect`'s bare `bufio`-scanned numeric-list prompt with a bubbletea list model) both live entirely in `internal/cli/present`. They call INTO existing read-only surfaces — a NEW `daemon.Status(repoRoot) (DaemonStatus, error)` read, `agents.AllTargets()`/`agents.DetectAll()` — and never the reverse.
+
+**When to use:** Any new interactive flow added in v1.0.
+
+**Trade-offs:** `internal/daemon` currently has no "is a daemon running, and what is it doing" read API — `Run` is the only entry point, and liveness/staleness logic (`isStale`, `readLock`) is unexported in `lock.go`. The interactive picker needs a read-only status query (pid, started-at, live/stale) WITHOUT acquiring or releasing the lock. **Add `daemon.Status(codegraphDir string) (DaemonStatus, error)`** — a thin new exported function wrapping the existing unexported `readLock`/`isStale`, returned as a small struct (`Running bool`, `PID int`, `StartedAt time.Time`) — this is the one small `internal/daemon` surface addition v1.0's interactive picker needs; everything else (`Unlock`) already exists and is already a safe read-then-conditionally-write op the picker can call directly.
+
+**Example:**
+```go
+// internal/daemon/lock.go — new small exported read, no behavior change
+type DaemonStatus struct {
+    Running   bool
+    PID       int
+    StartedAt time.Time
+}
+
+func Status(codegraphDir string) (DaemonStatus, error) {
+    info, ok, err := readLock(codegraphDir)
+    if err != nil || !ok {
+        return DaemonStatus{}, err
+    }
+    return DaemonStatus{Running: !isStale(info), PID: info.PID, StartedAt: info.StartedAt}, nil
+}
+```
+
+```go
+// internal/cli/present/daemon_picker.go — bubbletea model, CLI-only
+type daemonPickerModel struct {
+    status daemon.DaemonStatus // plain data in, from internal/daemon — no bubbletea leak the other direction
+}
+```
 
 ## Data Flow
 
-### Indexing Flow (write path)
+### Explore/Node request flow (unchanged shape, richer internals)
 
 ```
-[fsnotify event] or [`codegraph index` CLI invocation]
-    ↓
-[Watcher: debounce window] (100ms–60s, configurable — mirrors TS CodeGraph's CODEGRAPH_WATCH_DEBOUNCE_MS)
-    ↓
-[Dirty-file tracker]: hash each touched file → unchanged? skip. changed? mark dirty.
-    ↓                                          also: mark dependents of dirty files' exported symbols as "needs re-resolve"
-[Indexer Pass 1 — parallel worker pool]:
-    file walker → language dispatch → Parser.Parse(content) → *AST
-                                            ↓ (single shared AST)
-                    extract.Symbols(ast), extract.UnresolvedRefs(ast)
-    ↓
-[GraphStore.DeleteFile(path)] then [GraphStore.PutSymbols(...)]   ← acquires writer lock
-    ↓
-[Indexer Pass 2 — resolve, sequential-ish]:
-    build/update symbol table → resolve.Resolve(unresolvedRefs, symbolTable) → []Edge
-    ↓
-[GraphStore.PutEdges(...)]   ← same writer lock, same transaction where possible
-    ↓
-[index.db updated, WAL checkpointed on schedule]
+CLI `explore <q>`  ──┐
+                      ├──> query.Engine.Explore(q, maxFiles)  [ALL relevance/disambiguation logic here]
+MCP codegraph_explore─┘         │
+                                 ├──> matchNodes (extended ranking)
+                                 ├──> buildBlastEntry (+ no-covering-tests check)
+                                 └──> RenderExplore (markdown, unchanged section order)
+                                          │
+                      ┌───────────────────┴──────────────────┐
+                      ▼                                       ▼
+        CLI: fmt.Fprint(stdout, out)              MCP: mcp.NewToolResultText(out)
+        (present/ NOT involved — explore/node      (unchanged — never touches present/)
+         stay plain markdown, no pretty path)
 ```
 
-### Query Flow (read path — CLI `explore` or MCP tool call)
+### Status request flow (the rendering-seam pattern in full)
 
 ```
-[Agent tool call: codegraph_explore("someFunc")]
-    ↓
-[MCP server / CLI] → [Query engine]
-    ↓
-[GraphStore.Search / GetSymbol / Callers / Callees / BlastRadius]  (read-only connection, no lock needed)
-    ↓
-[SQLite adapter: recursive CTE for bounded-depth traversal]
-    ↓
-[Query engine assembles response: verbatim source (re-read from disk by line range) + call paths + blast-radius summary]
-    ↓
-[Response to agent — one round trip, per TS CodeGraph's design goal]
+CLI `status`  ──┐
+                 ├──> query.Engine.Status()  [gitmeta.Detect wired in here]
+MCP codegraph_status─┘        │
+                               ▼
+                      query.StatusResult{..., WorktreeMismatch: *string, Stale: bool}
+                               │
+              ┌────────────────┼─────────────────────┐
+              ▼                ▼                      ▼
+     CLI --json:         CLI plain (piped/CI):    CLI TTY (present.RenderStatus):
+     MarshalStatusJSON   fmt.Fprintf (unchanged)   lipgloss table/box, colored
+                                                     Stale/WorktreeMismatch banners
+              │
+              ▼
+     MCP: MarshalStatusJSON + a short worktree-mismatch
+     text PREFIX line ("⚠ borrowed index: ...\n\n" + json),
+     analogous to staleBanner's existing prefix pattern in
+     render_markdown.go — same idiom, new field.
 ```
 
-### Key Data Flows
+### Watcher-on-MCP flow
 
-1. **File → Symbol/Edge → Graph:** one-directional, extraction never reads the graph (pass 1 is graph-agnostic; only pass 2 reads the symbol table).
-2. **Graph → Query response:** one-directional, read-only; query engine never mutates the store.
-3. **Staleness signaling:** while the debounce window is open or pass 2 hasn't finished for a dirty file, query responses for affected symbols should carry a "stale" flag (TS CodeGraph does this) rather than silently returning outdated data — this requires the dirty-tracker's in-flight state to be visible to the query engine, e.g. via a small in-memory "currently indexing" set the watcher updates.
+```
+codegraph serve --mcp  (no --no-watch)
+        │
+        ├──> indexer.Sync (one-shot reconcile, unchanged — already there today)
+        │
+        ├──> daemon.New(repoPath, opts) + d.Run(watchCtx) in a goroutine
+        │         │
+        │         ├──> acquire(lockfile)  ──X──> ErrLockLive?  ──> log "deferring to it", MCP still serves reads
+        │         └──> OK ──> watch.Open + Debouncer ──> indexer.Sync on every debounced flush
+        │
+        └──> mcp.BuildServer + server.ServeStdio  (blocks; on ctx cancel, watcher goroutine joins before exit)
+```
+
+This flow is IDENTICAL to today's `--watch` opt-in path — only the caller's decision to enter the `if` branch changes (default true vs default false).
 
 ## Scaling Considerations
 
-| Scale | Architecture Adjustments |
-|-------|--------------------------|
-| Single small repo (< 5k files) | Full reindex on `init` is fine; SQLite default config; no in-memory snapshot needed |
-| Larger repo / monorepo (5k–100k files) | Content-hash incremental is mandatory (not full reindex per save); batch writes into large transactions (don't commit per-file); consider periodic `PRAGMA wal_checkpoint` tuning since long-running MCP-server readers can otherwise starve checkpoints (documented SQLite WAL failure mode); consider an in-memory adjacency-list snapshot rebuilt after each index cycle for the hot query path (pattern seen in Tessera's mmap snapshot) — optional, only if recursive-CTE latency becomes a measured problem, not upfront |
-| Team scale (milestone 2: shared/CI-built indexes, concurrent multi-agent access across machines) | This is exactly where local SQLite's WAL model structurally stops working — the `-shm` wal-index is same-host-only by SQLite's own design, so a shared team index cannot be "the same SQLite file on a network drive." The `GraphStore` port pattern above is what makes this a config change (swap adapter to a real client/server database with proper cross-host concurrency, e.g. Postgres) rather than a rewrite. CI-built indexes become an upload-to-server step; local agents become pure `GraphStore` readers against the remote adapter |
+Not the primary axis of this milestone (v1.0 is behavioral parity + human UX on the existing single-repo, single-writer-daemon model — team-scale is explicitly deferred per PROJECT.md's "Deferred to later releases"). Noted only where it interacts with v1.0's specific additions:
 
-### Scaling Priorities
-
-1. **First bottleneck (any repo size):** full reindex on every save. Fixed by content-hash + dependency-aware dirty tracking (Pattern 4) — this alone is table stakes, not an optimization.
-2. **Second bottleneck (monorepo scale):** SQLite write-transaction granularity. Fixed by batching writes per debounce cycle into one transaction instead of one-per-file, and by keeping the writer role single and lock-coordinated (Pattern 3) so contention never compounds across processes.
-3. **Third bottleneck (team scale, explicitly out of v1 scope):** same-host-only SQLite WAL concurrency. Not fixed within SQLite — this is the reason the storage port (Pattern 2) exists at all. Do not attempt to solve this with SQLite tricks (network-mounted DB files, custom VFS) — the research is unambiguous that this is unsafe (SQLite's own docs, and independent write-ups, agree a live network-mounted WAL file corrupts).
+| Concern | v1.0 (this milestone) | Later (team scale, out of scope here) |
+|---------|------------------------|----------------------------------------|
+| Worktree count | `gitmeta.Detect` does a lightweight `.git`-file/dir read per call — fine at N worktrees for a human-scale monorepo; no caching needed | A central server milestone would want worktree metadata cached, not re-read per query |
+| Git hooks across worktrees | Shared hooks dir means one install covers all worktrees "for free" (see Pattern 4) — a feature of git's own design, not something this project has to build | N/A |
+| Watcher-by-default on every `serve --mcp` | One fsnotify watcher per repo-root process; the existing single-writer lockfile already prevents two watchers double-syncing the same repo — unchanged cost profile from today's opt-in `--watch` | CI-distributed index milestone removes the need for per-agent-session watchers entirely |
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: SQL (or any storage detail) leaking outside `internal/graph`
+### Anti-Pattern 1: Rendering inside `internal/query` or `internal/mcp`
 
-**What people do:** Write `db.Query("SELECT ... FROM symbols WHERE ...")` directly inside the MCP tool handler or the CLI command because "it's just faster for now."
-**Why it's wrong:** This is precisely what forces a rewrite when milestone 2 arrives — every call site that assumed "the graph is a local SQLite file" has to be found and changed. It also makes the migration tool and query engine impossible to unit test without a real SQLite file.
-**Instead:** Every non-storage package takes a `graph.GraphStore` as a constructor argument. Only `internal/graph/sqlite` (and later `internal/graph/remote`) import a driver.
+**What people do:** Add an `if isTTY { ... }` branch, or a lipgloss import, directly inside `Engine.Status()`/`RenderExplore` "since it's convenient" or "just for the CLI's benefit."
+**Why it's wrong:** `internal/mcp` calls the exact same `Engine` methods and `render_markdown.go` formatters as the CLI (`internal/mcp`'s own package doc says so explicitly). Any styling that leaks into that shared layer reaches MCP's stdout — which IS the JSON-RPC transport itself (`tools.go`'s `WarnUnknownToolsTo` comment: "Diagnostics never go to stdout — stdout is reserved for the MCP JSON-RPC transport"). ANSI escape codes in an MCP tool result are, at best, garbage the agent has to strip and, at worst, a transport-corrupting bug.
+**Do this instead:** `internal/query`/`internal/mcp` return/emit plain data or plain text, unconditionally, forever. All conditional styling lives in `internal/cli/present`, gated by `present.IsInteractive`, called only from `internal/cli`'s own command files.
 
-### Anti-Pattern 2: Parser implementation baked directly into the extractor
+### Anti-Pattern 2: Duplicating relevance/disambiguation logic per surface
 
-**What people do:** Call `sitter.NewParser()` / a specific CGo binding directly inside symbol-extraction code, once per language, copy-pasted.
-**Why it's wrong:** The project's own open research question is CGo vs WASM(wazero) vs native-Go per language — a real, measured trade-off (research found ~2x slower than CGo but zero-CGO cross-compilation and crash-isolation for the WASM route; native-Go reimplementations can have real correctness gaps on adversarial input). If the parser call is inline in every language's extractor, you cannot make that call independently per language or change it later without touching extraction logic everywhere.
-**Instead:** `Parser` interface in `internal/parser`, one implementation per language, chosen via the same registry/factory pattern as storage. This also directly serves the "single static binary" constraint — the build can decide per-language whether CGo is acceptable for that target.
+**What people do:** Implement `explore`'s new relevance ranking as a CLI-side re-sort of `Engine.Explore`'s markdown output (e.g., regex-parsing the rendered markdown to reorder file blocks), because "the algorithm only needs to affect what the human sees."
+**Why it's wrong:** This is exactly the two-code-path drift `internal/mcp`'s package doc warns against, and it's strictly worse than adding the logic to `Engine` directly — post-processing rendered markdown is fragile (couples to exact string shape) AND leaves MCP's output unimproved, defeating the milestone's own stated goal ("v0.1's golden test proved template shape but never the selection/relevance algorithms" — for BOTH surfaces, not just CLI).
+**Do this instead:** Every relevance/disambiguation change is a change to `Engine.Explore`/`Engine.Node`'s Go logic (ranking, tie-breaking, warning computation) before rendering — `RenderExplore`/`RenderNode` stay dumb formatters of already-decided data, exactly as they are today.
 
-### Anti-Pattern 3: Full reindex as the only incremental strategy ("just re-run init")
+### Anti-Pattern 3: Auto-installing git hooks by default
 
-**What people do:** On file change, blow away and rebuild the whole graph because it's simpler than tracking dirty state.
-**Why it's wrong:** Explicitly called out as unacceptable by the project's own "auto-sync... with no manual re-runs" requirement, and it's the first thing that breaks at monorepo scale (Java/C# work-team codebase, per PROJECT.md context).
-**Instead:** Pattern 4 (content-hash + dependency-aware dirty propagation), with `--full` as an explicit escape hatch (every surveyed project keeps one), not the default path.
+**What people do:** Fold git-hook installation into `codegraph install`'s default flow (alongside the 8 agent targets), reasoning "it's just another sync mechanism, why make the user ask for it twice."
+**Why it's wrong:** Unlike agent MCP-config edits (JSON files the tool safely round-trips and can cleanly detect/repair), a malformed or interacting-badly-with-another-tool git hook can silently block `git commit`/`git checkout`/`git merge` for the user — a much higher blast radius for a much smaller convenience win, and PROJECT.md's own milestone scope explicitly calls these "opt-in."
+**Do this instead:** A separate, explicit command (`codegraph githooks install`) the user must actively choose, with a clear status/remove path, and detect-but-don't-clobber behavior toward any existing non-codegraph hook content.
 
-### Anti-Pattern 4: Multiple uncoordinated writers to the same SQLite file
+### Anti-Pattern 4: A `present`-package dependency cycle back into foundational packages
 
-**What people do:** Let the watcher, a manually-run `codegraph index`, and the MCP server all open the DB for writes independently, relying on SQLite's `busy_timeout` to smooth over collisions.
-**Why it's wrong:** `busy_timeout` has a ceiling; under real contention (a monorepo watcher mid-transaction plus a user manually running `codegraph index`) you get `SQLITE_BUSY` surfaced to a user or agent as an opaque error, and worse, no single process ever "owns" a consistent view of what's currently being written.
-**Instead:** Pattern 3 — a single writer-lock file coordinates which process is allowed to write at any moment, independent of SQLite's own locking, so failures are explicit ("watcher is already running") instead of racy.
-
-### Anti-Pattern 5: Growing installer if/else chain instead of a per-agent adapter registry
-
-**What people do:** One `install.go` with a giant switch over agent names, each branch hand-writing config file paths inline.
-**Why it's wrong:** The parity requirement lists 8 agents today (Claude Code, Cursor, Codex, OpenCode, Hermes, Gemini, Antigravity, Kiro) and TS CodeGraph's own roster will keep growing — a switch statement becomes an increasingly risky file to touch for any single-agent change.
-**Instead:** One small file per agent implementing a common `AgentInstaller` interface (`Install(projectPath) error`, `Uninstall(projectPath) error`, `IsInstalled(projectPath) bool`), registered in a table. Mirrors the same registry pattern already used for parsers and storage backends — one idiom, three uses.
+**What people do:** Let the bubbletea daemon-picker model import `internal/daemon` directly for convenience, then later let something in `internal/daemon` (a future feature) reach back into `internal/cli/present` for a status string, creating a cycle.
+**Why it's wrong:** Go forbids import cycles outright (compile error), but the softer version — a "just this once" dependency from a foundational package toward a CLI-presentation package — is a design smell that will resurface as a real compile error the moment someone tries to reuse `internal/daemon` from a second entry point (e.g. a future central-server milestone).
+**Do this instead:** `internal/cli/present` depends downward on `internal/daemon`, `internal/query`, `internal/agents`, `internal/gitmeta`, `internal/githooks` — never the reverse. Enforce with the same `internal/cli/archtest` import-graph test that also confines bubbletea/lipgloss (one test, two assertions: "no bubbletea/lipgloss outside `internal/cli`" AND "no package under `internal/{query,mcp,daemon,watch,gitmeta,githooks,agents}` imports `internal/cli`").
 
 ## Integration Points
 
-### External Services
-
-| Service | Integration Pattern | Notes |
-|---------|---------------------|-------|
-| MCP-speaking agents (Claude Code, Cursor, etc.) | stdio JSON-RPC, long-lived process per session | The MCP server process is the natural home for the watcher/writer role while a session is active — avoid spinning up a *second* independent daemon that also wants write access |
-| Original TS CodeGraph installs | One-way migration, read-only access to their `codegraph.db` | Migration tool should not assume it can write back to the old format; open old DB `mode=ro` |
-
-### Internal Boundaries
+### Internal Boundaries (v1.0 deltas)
 
 | Boundary | Communication | Notes |
 |----------|---------------|-------|
-| extract ↔ resolve | In-process Go function calls, `[]UnresolvedRef` / `map[string]SymbolID` | Pass 1 output feeds pass 2 input; no I/O in between for a single indexing run |
-| indexer ↔ graph | `GraphStore` interface calls only | The boundary that must survive the v1→v2 storage swap untouched |
-| watcher ↔ indexer | Direct function calls (watcher triggers indexer on debounced paths) | Watcher owns timing/locking; indexer owns algorithm — keep them separable for unit testing |
-| query ↔ graph | `GraphStore` interface calls only (read methods) | Same interface as indexer's write side — one port, both directions |
-| mcp / cli ↔ query | Direct function calls, no network hop (same process) | MCP and CLI are both just callers of the query engine, differing only in transport (stdio JSON-RPC vs terminal output) |
+| `internal/cli` ↔ `internal/query.Engine` | Direct Go calls, same as today | No change — `status`/`files`/`explore`/`node` command files gain a TTY branch calling into `internal/cli/present`, still calling `Engine` first exactly as before |
+| `internal/mcp` ↔ `internal/query.Engine` | Direct Go calls, same as today | `Status`/`Explore`/`Node` results carry richer data (worktree, relevance, warnings) automatically — zero `internal/mcp` code changes needed for the algorithm improvements themselves; only the worktree-prefix formatting (a few lines in `tools.go` or a new `internal/mcp` helper) is new |
+| `internal/query.Engine` ↔ `internal/gitmeta` | Direct Go calls | New edge. `internal/gitmeta` has NO dependency back on `internal/query` — it takes plain paths in, returns a plain struct, matching every other package `Engine` composes (`graphstore.Reader`, `goextract.RefKindCalls`) |
+| `internal/cli` ↔ `internal/githooks` | Direct Go calls | New edge, CLI-only — mirrors `internal/cli` ↔ `internal/agents` |
+| `internal/cli/present` ↔ `internal/daemon` | Direct Go calls (new `daemon.Status` read) | New edge, one direction only |
+| `internal/cli` (`serve.go`) ↔ `internal/daemon` | Unchanged — same `daemon.New`/`Run`/`ErrLockLive` calls, just gated by `!noWatch` instead of `watchMode` | No new edge |
+| `internal/agents` + `internal/githooks` ↔ `internal/fsatomic` (new) | Direct Go calls, replacing today's package-local `internal/agents/shared.go` helpers | Refactor + new capability — needed so `internal/githooks` can reuse the same atomic-write/marker-fence primitives without importing `internal/agents` |
 
-## Build Order Implications
+### External Services
 
-The dependency chain below is the natural phase order — each phase's output is a hard prerequisite for the next, except where marked parallelizable:
+None new for v1.0 — no external service calls are introduced by any of the six integration areas. (`internal/upgrade`'s existing GitHub-releases network path is unaffected and out of this research's scope.)
 
-1. **Core domain types + `GraphStore` interface** (`internal/types`, `internal/graph/store.go`) — foundation; nothing else compiles meaningfully without it.
-2. **SQLite adapter** (`internal/graph/sqlite`) — schema (symbols, edges, files, FTS5), WAL pragmas, writer-lock coordination. Needed before anything can persist data, so it should land before real parsing work, even with a stub/synthetic dataset for testing.
-3. **Parser interface + first language (Go)** (`internal/parser`, `internal/parser/golang`) — per PROJECT.md's stated priority order; proves the `Parser` interface shape before adding more languages.
-4. **Extractor for Go** (`internal/extract`) — symbols + unresolved refs from a Go AST.
-5. **Two-pass indexer** (`internal/indexer`) — wires walker + parser + extractor + resolve + `GraphStore`, single-shot (`codegraph index`, no watch yet). *Depends on 1–4.*
-6. **Query engine** (`internal/query`) — call paths, blast radius, search, explore — built and tested against data produced by step 5. *Depends on 2 (interface) and benefits from 5 (real data to query), but the interface contract from step 1 means query code can start against a mocked `GraphStore` in parallel with step 5.*
-7. **CLI** (`internal/cli`, `cmd/codegraph`) — `init`, `index`, `explore` wrap steps 5+6. *Depends on 5, 6.*
-8. **MCP server** (`internal/mcp`) — wraps step 6's query engine with the stdio tool surface. *Depends on 6; parallelizable with 7 once 6 is stable — CLI and MCP are two independent consumers of the same query engine.*
-9. **Watcher + incremental/dirty-file re-index** (`internal/watcher`, content-hash cache, dependency-aware invalidation) — extends step 5 from one-shot to continuous. *Depends on 5 already supporting single-file re-index (delete-then-reinsert per file).*
-10. **Additional languages** (Java/C#, Python, TypeScript/JavaScript, remainder per PROJECT.md order) — *depends on 3's `Parser` interface being proven correct on Go; otherwise fully parallelizable across languages once the interface is stable.*
-11. **Migration tool** (`internal/graph/migrate`) — TS SQLite schema → new schema. *Depends on 2 (new schema finalized) and requires separately researching the exact TS CodeGraph schema (flagged as its own research task — this document only confirms it's SQLite+FTS5, not the literal column layout).*
-12. **Agent installer/uninstaller** (`internal/install`) — mostly independent; can start as soon as the CLI skeleton (step 7) exists to hang `codegraph install <agent>` off of.
-13. **Release engineering** (signing, SLSA, SBOM, reproducible builds) — orthogonal to the above; can be scaffolded early (CI pipeline) but only meaningfully validated once steps 1–9 produce a real binary to sign.
+## Suggested Build Order
 
-**Research flags for later phases:**
-- Phase covering the **exact TS CodeGraph SQLite schema** (for the migration tool) needs its own dedicated research pass — this document did not get primary-source access to the literal DDL, only confirmed the general shape (SQLite + FTS5, WAL mode, symbols/edges/files).
-- Phase covering **parser strategy per language** (CGo vs WASM/wazero vs native-Go) should re-run the quantified benchmark research per language as it's added, since the trade-off (measured elsewhere as ~2x slower for WASM vs CGo, with correctness gaps reported for at least one native-Go reimplementation on adversarial input) may not hold identically for every grammar.
+Front-loads shared-engine behavioral work (highest risk to the golden-template contract and to MCP/CLI parity) before CLI-only polish, per the milestone's own stated priority ("close behavioral gaps... then... human-facing TUI"). Each phase below is independently shippable/testable; later phases depend on earlier ones only where noted.
+
+**Phase A — `explore`/`node` relevance & disambiguation (internal/query only)**
+Highest risk (golden-template regression, the core parity gap), zero new dependencies, zero new packages. Touches `internal/query/explore.go`, `search.go`, `resolve.go`, `render_markdown.go`. Both CLI and MCP improve simultaneously by construction — no MCP-specific work needed. Validate against the existing golden corpus plus new fixtures for ambiguous names / multi-word queries (the milestone's own "behavioral parity test harness" requirement) before moving on.
+
+**Phase B — `status` richer content + worktree awareness (internal/query + new internal/gitmeta)**
+Depends on Phase A only for shared test-harness infrastructure, not code. Add `internal/gitmeta`, wire it into `Engine.Status`/`OpenAt` (the `startDir` field addition from Pattern 3), add DB-size to `StatusResult` (nodes-by-kind and languages are already computed in `Status()` today — this is mostly surfacing one new Pebble disk-size call plus the worktree field going live). Both CLI plain-text `status` and MCP `codegraph_status` get worktree-mismatch and the DB-size field in the same commit.
+
+**Phase C — Watcher-on-MCP default flip (internal/cli only)**
+Small, mechanical (Pattern 5's two-line diff), but sequenced after A/B so it's validated against the now-final `Engine` behavior it's wrapping, not against code that's still changing under it. No new packages.
+
+**Phase D — Output hygiene (Pebble WAL log silencing, stderr discipline)**
+Small, can run in parallel with C — no shared surface. Confirm Pebble's logger can be redirected/silenced (a `pebble.Options{Logger: ...}` at store-open time is the likely mechanism — `internal/graphstore` already controls store-open options centrally, so this is a change confined to `internal/graphstore/pebble_store.go`, not a stderr-suppression hack elsewhere).
+
+**Phase E — Git hooks (new internal/githooks, opt-in surface)**
+Depends on the `internal/fsatomic` extraction (a small, low-risk prerequisite refactor of `internal/agents/shared.go` — do this extraction as the first step of Phase E, verified by re-running `internal/agents`'s existing test suite unchanged against the extracted functions). Independent of Phases A-D otherwise. CLI surface: `codegraph githooks install|remove|status` as a new top-level command — the cleaner choice over folding into `install`/`init`, since git hooks are a genuinely separate concern from agent MCP-config (different trust boundary per Anti-Pattern 3), and a dedicated command gives `status`/idempotent `remove` a natural home without overloading `install`'s existing `--target`/`--location` flag semantics, which are agent-registry concepts that don't map onto "3 fixed git hook names."
+
+**Phase F — Rendering seam + TTY-gated pretty `status`/`files` (new internal/cli/present, new dep: lipgloss)**
+Depends on B (richer `StatusResult` is what's being prettified) and D (silenced Pebble logs matter more once output is styled — noisy WAL lines under a lipgloss box look worse than under plain text). Add `internal/cli/present` with `IsInteractive` + `RenderStatus`/`RenderFiles` (Pattern 1), plus the `internal/cli/archtest` import-graph guard (write the guard test FIRST, red, then add the lipgloss import — TDD the boundary itself). This phase also adds the `lipgloss` dependency to `go.mod`, so it's the natural place to run `govulncheck`/update the SBOM story for the new dep, per the milestone's own "audits the new Charm deps via govulncheck/SBOM" requirement.
+
+**Phase G — Interactive daemon picker + install multi-select (internal/cli/present, new dep: bubbletea)**
+Depends on F (same `present` package, same archtest boundary already in place) and on the small `daemon.Status` read addition (Pattern 6). Replace `promptAgentMultiSelect`'s `bufio` prompt with a bubbletea list model — but only when `installStdinIsInteractive` is true; the existing non-interactive/CI fallback path (`agents.ResolveTargetFlag("auto", loc)`) is untouched, so this is additive to `install.go`, not a rewrite of its control flow. Add a `codegraph daemon status` interactive view (or a picker embedded in an existing command) as the bubbletea entry point.
+
+**Phase H — Behavioral parity test harness formalization + surface reconciliation + `v1.0.0` release cut**
+Last, by design — this is the milestone's own closing validation + release phase (per-command flag parity audit, `search` stance decision, signed `v1.0.0` tag), depending on every prior phase being complete and stable.
+
+**Why this order:** A/B (shared engine) come first because they're both the highest-parity-value work AND the riskiest to the golden-template contract — get them stable before building CLI-only polish on top of a still-moving target. C/D are small, low-risk, and unblock nothing else, so they can slot in wherever convenient (shown as C/D for narrative clarity, not a hard dependency). E (git hooks) is fully independent of the rendering work and could run in parallel with F/G if resourced separately — it's ordered after D only to reuse the `fsatomic` extraction's validation cycle, not because of a true dependency. F before G because G's archtest boundary and TTY-gate helper are things G reuses, not reinvents. H last because it's the release gate.
 
 ## Sources
 
-- [SQLite WAL documentation](https://sqlite.org/wal.html) — HIGH confidence, primary source, same-host-only wal-index, single-writer model
-- [Bugsink: Single-writer Database Architecture with SQLite](https://www.bugsink.com/blog/database-transactions/) — MEDIUM-HIGH, production write-up, BEGIN IMMEDIATE pattern
-- [ChatML: SQLite Concurrency in Go — Desktop AI IDE](https://chatml.com/blog/sqlite-concurrency-in-go-desktop-ai-ide) — MEDIUM, real Go multi-writer war story (retry+backoff+jitter pattern), closely analogous use case (multiple agent processes writing one local SQLite file)
-- Tessera `docs/architecture.md` (github.com/iamsaquib8/tessera) — MEDIUM, tree-sitter→SQLite(WAL)→mmap-snapshot pipeline, incremental indexing algorithm
-- gleann indexer commit (github.com/tevfik/gleann) — MEDIUM, single-parse-per-file + content-hash incremental cache pattern
-- code-review-graph-go (github.com/harshsh-dev/code-review-graph-go) — MEDIUM, Go/CGo/tree-sitter/SQLite-WAL project structure and worker-pool pattern, closest direct analog to this project
-- code-context (github.com/sjzsdu/code-context) — MEDIUM, pure-Go SQLite (modernc.org/sqlite), single-binary Go code-graph MCP tool, project layout
-- graphindex (pkg.go.dev/github.com/254binaryninja/graphindex) — MEDIUM, minimal Go MCP+SQLite+fsnotify code-graph server, closest architecture diagram analog
-- arbor `docs/ARCHITECTURE.md` (github.com/Anandb71/arbor) — MEDIUM, Rust but directly documents debounced watcher + delta engine + surgical vs full re-parse decision, same pattern applies
-- shaktiman ADR-003 "pluggable storage backends" (github.com/midhunkrishna/shaktiman) — MEDIUM, directly documents the registry/factory pattern for swapping SQLite→Postgres and the backend-combination-validation approach recommended above
-- SCIP Code Intelligence Protocol docs (scip-code.org, github.com/scip-code/scip) — HIGH, primary protocol source; informs the stable-symbol-ID design note and cross-repo symbol addressing scheme for future milestone-2 work
-- Sourcegraph "Cross-repository code navigation" (sourcegraph.com/blog) — MEDIUM, context for how SCIP-based systems scale symbol resolution across repo boundaries, relevant to milestone-2 anticipation
-- Tree-sitter Go binding trade-off research: dvcdsys/code-index PR #81 (WASM/wazero vs cgo benchmark), tree-sitter/go-tree-sitter issue #16, malivvan/tree-sitter, wazero.io, dev.to "Parsing 11 languages in pure Go without CGO" — MEDIUM (mix of PoC benchmarks and blog write-ups), informs the Parser-interface-isolation anti-pattern rationale
-- colbymchenry/codegraph GitHub repository (WebFetch summary) — MEDIUM (single indirect fetch, not primary docs) — confirms `.codegraph/codegraph.db` SQLite+FTS5+WAL layout, tree-sitter-based 30+ language parsing, and the three-layer native-watcher/debounce/staleness-signal auto-sync design that this document's Pattern 4 and "Key Data Flows" staleness note are built on
+- Direct read of this repository's v0.1 source (HIGH confidence — primary source, not inferred): `internal/query/{engine,explore,node,status,resolve,search,render_markdown}.go`, `internal/mcp/{server,tools}.go`, `internal/cli/{serve,daemon,status,root,files,explore,install}.go`, `internal/daemon/{daemon,lock}.go`, `internal/watch/watcher.go`, `internal/agents/{registry,shared}.go`, `internal/graphstore/archtest/import_graph_test.go`, `go.mod`, `.planning/PROJECT.md`
+- `charmbracelet/lipgloss` (Context7, resolved — library confirmed current/actively maintained; TTY/color-profile detection is a documented lipgloss concern, corroborating the TTY-gate design rather than needing this project to hand-roll ANSI stripping)
+- Git hooks general mechanics (web search, MEDIUM confidence — general git documentation, not project-specific prior art): [Git - Git Hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks), [Git - githooks Documentation](https://git-scm.com/docs/githooks) — confirms post-commit/post-merge/post-checkout semantics and the shared-hooks-directory-across-worktrees behavior (`git-common-dir`) this research's Pattern 4 relies on
 
 ---
-*Architecture research for: local-first code knowledge-graph indexer (Go)*
-*Researched: 2026-07-10*
+*Architecture research for: codegraph-go v1.0 milestone integration*
+*Researched: 2026-07-14*

@@ -146,3 +146,101 @@ This is the one recommendation in this document that should be treated as **prov
 ---
 *Stack research for: local-first code knowledge graph / MCP server tool, Go*
 *Researched: 2026-07-10*
+
+---
+
+# Addendum: v1.0 Milestone — Human TUI & Parity Stack
+
+**Project:** CodeGraph Go — v1.0 Drop-in Parity & Human UX
+**Researched:** 2026-07-14
+**Confidence:** MEDIUM-HIGH (versions/import-paths verified directly against tagged `go.mod` files on GitHub, not just search snippets; audit posture is directional, not a ground-truth `govulncheck` run)
+
+**Scope:** Only the NEW stack surface for v1.0 — the Charm TUI, TTY-gating, and git/worktree detection. Everything in the v0.1 sections above (Pebble, tree-sitter, mcp-go, Cobra, fsnotify, sigstore-go, hujson, modernc.org/sqlite) is unchanged and already in `go.mod`.
+
+## Recommended Additions
+
+### Core Technologies
+
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `charm.land/bubbletea/v2` | v2.0.8 (stable, released 2026-07-03) | Event-loop framework for the **interactive** screens only — `daemon` picker, `install`/`uninstall` multi-select, `init`/`index`/`sync` progress | The only mature, pure-Go, actively maintained TUI event-loop for Go (Elm-architecture Model-Update-View). **Do NOT use it for one-shot output** (`status`, `files`) — that's lipgloss's job (see below). Each interactive Cobra `RunE` constructs its own `tea.NewProgram(model).Run()` and returns control afterward; bubbletea does not wrap the whole CLI. |
+| `charm.land/lipgloss/v2` | v2.0.5 | Declarative styling (colors, borders, layout) for **static, one-shot prints** — `status`, `files`, and any plain agent-facing text that gets a human-facing styled variant | CSS-like styling API; v2's `lipgloss.Println`/`Printf` auto-downsample colors per-stream via `colorprofile`, fixing v1's stdin/stdout TTY-detection bugs (see TTY-gating below). This is the mechanism for "styled when human, plain when piped." |
+| `charm.land/bubbles/v2` | v2.1.1 | Pre-built interactive components: `list` (daemon picker, multi-select), `spinner`/`progress` (`init`/`index`/`sync` progress), `textinput` (if any interactive prompts are needed) | Maintained in lockstep with bubbletea/lipgloss v2 by the same org; reimplementing list/spinner/progress from scratch is wasted effort with no upside. |
+
+**Critical: v2 import paths changed to Charm's vanity domain.** All three moved from `github.com/charmbracelet/{bubbletea,lipgloss,bubbles}` to `charm.land/{bubbletea,lipgloss,bubbles}/v2` as part of the v2 release. Verified directly against each repo's tagged `go.mod` (not just docs/blog claims, which lag — pkg.go.dev's own cache still showed a stale `v2.0.0-beta.6` as "latest" for bubbletea at research time; GitHub tags/go.mod are the source of truth here). Use the `charm.land/...` path in new code — the old `github.com/charmbracelet/...` v2 path will not resolve for current tags.
+
+### TTY Detection — Use `colorprofile`, gate interactivity with `golang.org/x/term`
+
+Two distinct decisions need two distinct mechanisms:
+
+1. **"Should this one-shot print use color/styling?"** → `github.com/charmbracelet/colorprofile` (`colorprofile.Detect(os.Stdout, os.Environ())`), which lipgloss v2 uses internally via `lipgloss.Println`/`Printf`. It checks isatty on the *specific stream being written to* (fixing v1's stdout/stdin conflation bug — matters here because MCP writes JSON-RPC to stdout while a human might be watching stderr, or vice versa), plus `NO_COLOR`/`CLICOLOR`/`TERM=dumb`/CI-env conventions. This is already pulled in transitively by lipgloss v2 — do not hand-roll a second isatty check for styling decisions; let lipgloss own it.
+2. **"Should this command even attempt to launch an interactive bubbletea program?"** → `golang.org/x/term.IsTerminal(int(os.Stdout.Fd()))` (and stdin, since bubbletea reads keystrokes). **Already an indirect dependency in `go.mod` today** (`golang.org/x/term v0.45.0`, pulled in by sigstore-go) — promoting it to a direct, explicit use costs nothing new in the dependency graph. Gate every interactive command (`daemon` picker, `install`/`uninstall` multi-select) on this check up front: non-TTY → fall back to a flag-driven/scripted path (or a plain-text error telling the user to pass explicit flags) instead of calling `tea.NewProgram(...).Run()`, which would otherwise hang or misbehave when stdin/stdout are pipes. This is exactly the mechanism that keeps `serve --mcp` (stdio JSON-RPC) and golden-parity test output clean — MCP and CI never see ANSI or an interactive prompt.
+
+`github.com/mattn/go-isatty` is also already an indirect dep (v0.0.20, likely via a transitive path) but should NOT be used as a third, competing isatty check — pick `golang.org/x/term` for the boolean gate (stdlib-adjacent, already used this way in the Go ecosystem) and let `colorprofile` own the styling decision. Don't mix three isatty implementations for what is conceptually one policy.
+
+### Git / Worktree Detection — stdlib `os/exec`, no new dependency
+
+The TS reference (`dist/sync/worktree.d.ts`, inspected directly) confirms the exact shape to port: `gitWorktreeRoot(dir)` shells out to `git rev-parse --show-toplevel` (per-worktree root — main checkout and each linked worktree report distinct paths) and `gitCommonDir(dir)` to `git rev-parse --git-common-dir` (the shared `.git` all worktrees of one repo point at — same value across worktrees of one repo, different for a submodule/nested repo). Detection is explicitly best-effort: git unavailable or not-a-repo → report "no mismatch," never fail the command.
+
+**Use `os/exec.Command("git", "rev-parse", ...)` directly — no library needed.** This is two simple subprocess calls with string output, not general git object access. A pure-Go git implementation (`go-git/go-git`) would be strictly worse here: it pulls dozens of transitive dependencies (crypto/ssh, gcfg, sha256-simd, billy filesystem abstraction, etc.) to replace two `exec.Command` calls, works against a real installed `git` the user already trusts and has configured (credential helpers, worktree metadata, hooks), and TS parity is explicitly "shell out to the git binary, degrade gracefully if missing" — reimplementing that in a pure-Go git library is scope creep, not parity.
+
+### Git Hooks (post-commit/merge/checkout)
+
+Also stdlib-only: writing an executable shell script (or a shim invoking `codegraph sync`) into `$(git rev-parse --git-dir)/hooks/post-commit` etc. is `os.WriteFile` + `os.Chmod(..., 0o755)`, using the already-necessary `--git-common-dir`/`--git-dir` resolution above. No hook-management library exists or is warranted for three static shim files.
+
+## Installation
+
+```bash
+go get charm.land/bubbletea/v2@v2.0.8
+go get charm.land/lipgloss/v2@v2.0.5
+go get charm.land/bubbles/v2@v2.1.1
+# golang.org/x/term: already an indirect dep; go.mod will promote it to direct
+# automatically once code imports it directly — no separate `go get` required,
+# but running `go mod tidy` after adding the import is sufficient.
+```
+
+No new dependency is needed for git/worktree detection or git hooks (`os/exec`, `os.WriteFile`, `os.Chmod` — stdlib).
+
+## Supply-Chain Impact (quantified against the "minimal audited deps, no new CGo" constraint)
+
+**No new CGo.** The entire Charm ecosystem (bubbletea/lipgloss/bubbles + their terminal-I/O helpers `charmbracelet/x/term`, `charmbracelet/x/termios`, `charmbracelet/x/windows`, `muesli/cancelreader`) is pure Go — terminal raw-mode/ioctl access is done via `golang.org/x/sys` syscalls, not cgo. tree-sitter remains the sole documented CGo exception, unchanged by this addendum.
+
+**New transitive modules pulled in (deduplicated across all three Charm libraries):** approximately 20 new `go.sum` entries — `charm.land/{bubbletea,lipgloss,bubbles}/v2` (3 direct) plus indirect: `charmbracelet/colorprofile`, `charmbracelet/ultraviolet`, `charmbracelet/x/{ansi,term,termios,windows,exp/golden}`, `lucasb-eyer/go-colorful`, `muesli/cancelreader`, `rivo/uniseg`, `mattn/go-runewidth`, `clipperhouse/{displaywidth,uax29/v2,stringish}`, `xo/terminfo`, `aymanbagabas/go-udiff`, `MakeNowJust/heredoc`, `atotto/clipboard`, `charmbracelet/harmonica`, `sahilm/fuzzy`, `kylelemons/godebug`. A handful overlap with what's already in `go.mod` (`golang.org/x/sync`, `golang.org/x/sys`, `dustin/go-humanize` are all already indirect deps from Pebble/sigstore-go, so those specific version constraints just get unified, not net-new). This is a moderate, bounded addition for what a TUI framework needs — no bloated kitchen-sink transitive tree (no HTTP clients, no crypto beyond what's already pulled by sigstore-go, no database drivers).
+
+**Audit posture:** All Charm-org modules (`charmbracelet/*`, and the vanity `charm.land/*` re-exports of the same repos) are actively maintained by a company (Charm) whose tools (`gh`'s `glamour` rendering, `soft-serve`, Kubernetes-adjacent tooling) have wide production adoption — treat as MEDIUM-HIGH confidence, same tier as the v0.1 stack's `mcp-go`/`cobra`. The smaller peripheral libs (`sahilm/fuzzy`, `MakeNowJust/heredoc`, `kylelemons/godebug`, `clipperhouse/*`) are lower-profile single-purpose utilities with thinner track records — LOW-MEDIUM confidence individually, but low-risk given their narrow scope (fuzzy string matching, heredoc string parsing, diff formatting) and the fact they run only in the interactive human-TUI code path, never in the MCP/agent-facing hot path. Run `govulncheck ./...` (already gating CI per the v0.1 release-hardening phase) after adding these — no known blocking CVEs identified during this research, but this addendum does not substitute for that gate.
+
+**One runtime-only caveat, not a build/supply-chain one:** `atotto/clipboard` (pulled in by `bubbles/v2` for components that support copy/paste) shells out to `pbcopy`/`pbpaste` on macOS and `xclip`/`xsel`/`wl-copy` on Linux at runtime if a component's clipboard feature is actually exercised. This does not affect the static-binary build or CGo status — it's an optional runtime `exec.Command` call, exactly analogous to the git shell-outs above — but note it if any interactive component ends up wiring clipboard support, since it can silently no-op on a minimal Linux container without those binaries.
+
+## What NOT to Use (v1.0 addendum)
+
+| Avoid | Why | Use Instead |
+|-------|-----|--------------|
+| `bubbletea` for `status`/`files`/any one-shot printed output | It's an event-loop framework for *interactive* programs (keystroke handling, a render loop, alt-screen management) — using it to print a static table is architectural overkill and, worse, would force those commands through TTY/raw-mode negotiation they don't need, risking exactly the "hangs when piped" failure mode the parity requirement explicitly rules out. | `lipgloss` styling + a plain `fmt.Println`/`lipgloss.Println` call, gated by `colorprofile`/`x/term` as above |
+| `github.com/charmbracelet/bubbletea` (old, non-vanity v2 import path) | Doesn't resolve for current v2 tags — the module was renamed to `charm.land/bubbletea/v2` as part of the v2 release; only the v1 line (now unmaintained-for-new-features) still lives under the old path. | `charm.land/bubbletea/v2` |
+| `go-git/go-git` for worktree/common-dir detection | Pure-Go git implementation pulling dozens of transitive deps (SSH, crypto, custom filesystem abstraction) to replace two `git rev-parse` subprocess calls — the TS reference itself just shells out; matching that is parity, reimplementing git is not. | `os/exec.Command("git", "rev-parse", ...)` |
+| A second/third isatty library (`mattn/go-isatty` used directly, alongside `colorprofile` and `x/term`) for TTY-gating decisions | Three different isatty mechanisms making three independently-reasoned decisions is a bug magnet — e.g. one code path thinking it's a TTY while another doesn't, producing inconsistent styled/plain output within the same command. | Pick `golang.org/x/term.IsTerminal` for the "launch interactive program?" boolean; let `colorprofile` (already load-bearing inside lipgloss v2) own styling decisions. `mattn/go-isatty` stays an untouched transitive dep, not a direct import. |
+
+## Version Compatibility
+
+| Package A | Compatible With | Notes |
+|-----------|------------------|-------|
+| `charm.land/bubbletea/v2@v2.0.8` | `charm.land/lipgloss/v2@v2.0.5`, `charm.land/bubbles/v2@v2.1.1` | All three are released and versioned independently by the same Charm org but developed in lockstep for v2; `bubbles/v2`'s own `go.mod` requires `bubbletea/v2` and `lipgloss/v2` directly, so `go mod tidy` will resolve a mutually consistent set — don't hand-pin mismatched majors (v1 lipgloss with v2 bubbletea, etc.), the v1→v2 APIs are not source-compatible. |
+| `charm.land/bubbletea/v2` | Go 1.25.0+ (per its own `go.mod`) | Below the project's `go 1.26.5` floor — no conflict. |
+| `charm.land/lipgloss/v2` / `charm.land/bubbles/v2` | Go 1.24.2+ | Also below the project floor — no conflict. |
+| `golang.org/x/term` (TTY gate) | Already pinned `v0.45.0` in `go.mod` (indirect, via sigstore-go) | No version bump forced by adding a direct import — verify `go mod tidy` doesn't need to raise it once Charm's own `golang.org/x/sys` requirement is reconciled (Charm modules currently request `x/sys` in the `v0.41.0`–`v0.46.0` range depending on which was fetched; Go's MVS will pick the highest, still compatible). |
+
+## Sources
+
+- `charmbracelet/bubbletea` GitHub tags API + raw `go.mod` at tag `v2.0.8` (web, direct GitHub content — HIGH confidence, ground truth over docs/blog claims) — confirmed latest stable version, vanity import path `charm.land/bubbletea/v2`, pure-Go dependency list
+- `charmbracelet/lipgloss` raw `go.mod` at tag `v2.0.0` + GitHub tags API (web, HIGH confidence) — confirmed v2.0.5 latest, vanity import path, dependency list
+- `charmbracelet/bubbles` raw `go.mod` at tag `v2.0.0` + GitHub tags API (web, HIGH confidence) — confirmed v2.1.1 latest, vanity import path, dependency list
+- `charmbracelet/colorprofile` raw `go.mod` (web, HIGH confidence) — confirmed pure-Go, dependency footprint
+- Context7 `/websites/pkg_go_dev_github_com_charmbracelet_bubbletea` and `/charmbracelet/{bubbles,lipgloss}` (Context7, MEDIUM confidence — pkg.go.dev's own version cache was stale relative to GitHub tags at research time, so version numbers were cross-verified against raw `go.mod` rather than trusted from Context7/pkg.go.dev alone)
+- Lip Gloss v2 discussion #506 "What's New" + GitHub issue #439 (web, MEDIUM confidence, official repo discussion) — confirmed `colorprofile`-based per-stream TTY detection replacing v1's stdin/stdout conflation bug, `lipgloss.Println`/`Printf` auto-downsampling behavior
+- `/opt/homebrew/lib/node_modules/@colbymchenry/codegraph/dist/sync/worktree.d.ts` (installed TS CodeGraph v1.3.1 reference, direct inspection — HIGH confidence, this IS the parity target) — confirmed `git rev-parse --show-toplevel`/`--git-common-dir` shell-out approach and best-effort-degrade semantics to port
+- Existing project `go.mod` (direct inspection) — confirmed `golang.org/x/term v0.45.0` and `github.com/mattn/go-isatty v0.0.20` are already present as indirect dependencies, zero net-new cost for the TTY-gate boolean check
+- `slsa-framework`/`govulncheck` posture: extrapolated from the v0.1 STACK.md's already-established CI gates (Sources section above); no new CVE database query performed for the Charm module set — treat the "no known blocking CVEs" statement as LOW-MEDIUM confidence pending an actual `govulncheck ./...` run once these deps land in `go.mod`
+
+---
+*Stack research for: human-facing TUI + git/worktree parity, Go*
+*Researched: 2026-07-14*

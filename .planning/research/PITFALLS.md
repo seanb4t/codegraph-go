@@ -1,280 +1,332 @@
 # Pitfalls Research
 
-**Domain:** Local-first code knowledge graph / code intelligence tool for AI coding agents (Go port of TypeScript CodeGraph)
-**Researched:** 2026-07-10
-**Confidence:** HIGH (SQLite concurrency, fsnotify/FSEvents limits, CGo cross-compilation, SLSA/reproducible-build mechanics — all sourced from official docs, maintainer threads, and multiple independent reproductions) / MEDIUM (wazero-vs-CGo tree-sitter benchmarks, incremental-graph correctness patterns, monorepo memory profiles — sourced from a handful of comparable projects' issue trackers and PRs, not yet reproduced independently)
+**Domain:** Adding drop-in TS-parity behavior + a human bubbletea/lipgloss TUI to codegraph-go's existing shared CLI/MCP binary (milestone v1.0)
+**Researched:** 2026-07-14
+**Confidence:** HIGH (grounded in this repo's actual code — `internal/mcp/server.go`, `internal/cli/serve.go`, `internal/daemon/lock.go`, `internal/query/{explore,render_markdown,node}.go` — and the TS reference's own `worktree.d.ts` / `git-hooks.d.ts` / `watch-policy.d.ts` which document the exact edge cases to match)
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: CGo tree-sitter bindings silently break the "single static binary, all platforms" promise
+### Pitfall 1: ANSI/TUI styling bleeding into the AGENT path (breaks `codegraph_explore` and every piped consumer)
 
 **What goes wrong:**
-Every mainstream Go tree-sitter binding (`smacker/go-tree-sitter`, `tree-sitter/go-tree-sitter`) is CGo-based. CGo is **disabled by default when cross-compiling** (opposite of native builds), so a `GOOS=windows GOARCH=amd64 go build` from a macOS/Linux CI runner silently produces a broken or non-CGo build unless you explicitly wire up a C cross-toolchain per target OS/arch. Teams that get this working with a cross C toolchain (mingw-w64, zig cc) then hit a second wall: the resulting binaries can crash at runtime due to linker flag mismatches between host and cross builds (confirmed in a still-open golang/go linker issue on `-target` vs `--target` clang flag handling), or ship without required runtime DLLs on Windows.
+A lipgloss-styled string, a `colorprofile` writer, or a bubbletea event loop emits ANSI escape sequences (or, worse, cursor-movement / alt-screen control bytes) onto a stream that an agent is parsing. Two concrete blast zones in *this* codebase:
+1. **MCP stdout is the JSON-RPC transport.** `server.ServeStdio(s)` (serve.go:115) frames JSON-RPC over stdout. Any stray byte on stdout — a lipgloss default-writer `Println`, a bubbletea render frame, even a color-reset `\x1b[0m` — corrupts the framing and the agent's connection dies or desyncs. The code already knows this: `WarnUnknownToolsTo` (server.go:64-69) documents "Diagnostics never go to stdout — stdout is reserved for the MCP JSON-RPC transport."
+2. **The CLI and MCP share the SAME markdown templates** (`RenderExplore`/`RenderNode` in render_markdown.go). These strings are an agent-facing byte-for-byte contract (the `sourceDisclaimer` is "reproduce it, do not paraphrase it"). If v1.0's "prettify explore/status" work reaches into that shared renderer and wraps a symbol name in `lipgloss.NewStyle().Bold(...)`, every MCP `codegraph_explore` result now carries escape codes and the golden corpus diverges.
 
 **Why it happens:**
-The project's "single static binary per platform, no bundled runtime" constraint directly conflicts with CGo's dependency on a per-target C toolchain and dynamic libc/libstdc++ linkage on some platforms. This tension is invisible during local development (native builds work fine) and only surfaces in CI when cross-compiling for the first non-native target — often late in a release cycle.
+lipgloss v2's ergonomics actively invite it: `lipgloss.Println` / `lipgloss.Sprint` use a *global* `lipgloss.Writer` and auto-downsample, so a developer "just styling the status output" reaches for the global and it silently targets stdout process-wide. lipgloss only strips color when it detects no TTY — but inside `serve --mcp` stdout is a pipe (not a TTY), so downsampling to "no color" is the *lucky* case; cursor/layout control bytes from bubbletea are not stripped by color profiling at all. The shared-renderer coupling means the styling entry point is one import statement away from the contract-bearing code.
 
 **How to avoid:**
-Decide the parser strategy (this is PROJECT.md's flagged open question) before writing any parser-integration code, using this decision rule: if CGo tree-sitter is chosen, budget for a full C cross-toolchain matrix in CI (Docker images per target, or zig cc) and validate boot-time behavior on real Windows/Linux/macOS hardware (or in CI-hosted VMs), not just "it links." If pure-Go static builds are the hard requirement (which the project's constraints imply), the two viable non-CGo paths are: (a) tree-sitter grammars compiled to WASM and run via wazero, or (b) a pure-Go tree-sitter reimplementation (e.g. the `gotreesitter`-class projects now emerging). Benchmark data from a comparable Go project (dvcdsys/code-index) found wazero-run real tree-sitter ~2x slower than native CGo but ~5x faster than a pure-Go reimplementation, with zero parse errors vs. some parse failures in the pure-Go path — making wazero the practical default unless the perf gap is proven to matter for this project's target repo sizes.
+- **Name the discipline: single-seam TTY gating enforced by an import-graph archtest.** Styling must live in exactly one place — a `internal/tui` (or `internal/render/human`) package that the *CLI human path* imports and that `internal/query` and `internal/mcp` MUST NOT. This repo already has the mechanism: `internal/graphstore/archtest/import_graph_test.go` and `internal/migrate/archtest/modernc_confinement_test.go` are import-graph tests that fail the build if a forbidden dependency edge appears. **Add a third archtest asserting `internal/query` and `internal/mcp` do not (transitively) import `charmbracelet/lipgloss`, `charmbracelet/bubbletea`, or `charmbracelet/bubbles`.** That converts "don't leak ANSI into the agent path" from a code-review hope into a compile-time invariant.
+- **The gate location:** styling decision belongs at the CLI command boundary (`internal/cli/*.go`), keyed on `term.IsTerminal(os.Stdout.Fd())` (via `golang.org/x/term`, or the already-present indirect `mattn/go-isatty`) AND honoring `NO_COLOR` / a `CODEGRAPH_NO_COLOR`. The shared `query.Render*` functions stay pure plain-text and are the ONLY thing MCP ever calls.
+- **Never use lipgloss global writer/print functions.** Construct an explicit writer bound to the command's `cmd.OutOrStdout()`; never `lipgloss.Println`. For MCP, the plain renderer output is returned as tool-result text — lipgloss is never in that call graph at all (guaranteed by the archtest).
+- **bubbletea Program must target the human command's streams explicitly** and never be constructed in any code path reachable from `serve`.
 
-**Warning signs:** `CGO_ENABLED=0` needed anywhere in the build for other reasons (e.g. `netgo`/`osusergo` tags, minimal container images) conflicts with a CGo parser dependency; first Windows cross-build from a non-Windows CI runner fails or produces a binary that crashes at startup; release binary size/dependency graph includes libc variants per platform.
+**Warning signs:**
+- Golden-corpus diff shows `\x1b[` sequences or byte-count drift in `explore`/`node`/`status` MCP output.
+- An agent client (Claude Code, opencode) reports the MCP server "disconnected" or "invalid JSON" shortly after a tool call.
+- `go list -deps ./internal/mcp` or `./internal/query` shows a `charmbracelet/*` module.
+- `codegraph explore ... | cat` (piped) shows raw escape codes.
 
-**Phase to address:** Architecture/parser-strategy phase, before any language extractor work begins — this is a foundational, expensive-to-reverse decision, not a per-language detail.
+**Phase to address:**
+Earliest TUI phase — introduce the `internal/tui` package + the import-graph archtest *in the same phase as, or before, the first lipgloss import*. The archtest is cheap and must predate any styling code.
 
 ---
 
-### Pitfall 2: SQLite "WAL mode" is mistaken for "concurrent writes," causing silent data loss or `database is locked` storms under multi-agent-session load
+### Pitfall 2: Regressing proven output parity while "improving" explore relevance / node disambiguation (v0.1's golden test has a blind spot)
 
 **What goes wrong:**
-WAL mode enables concurrent *readers* alongside a single *writer* — it does not allow concurrent writers. Teams that enable `journal_mode=WAL` and assume the concurrency problem is solved then hit `SQLITE_BUSY`/"database is locked" errors under real multi-session load (multiple agent sessions or an MCP server + a background watcher writing simultaneously), or — worse — a transaction silently fails and the caller doesn't notice because Go's `database/sql` connection pool opens multiple physical connections that each need per-connection PRAGMA configuration and get out of sync. A documented real-world instance of this exact failure mode: TS CodeGraph itself shipped a bug (issue #773 on the source repo) where the daemon's incremental watch-sync intermittently hit `FOREIGN KEY constraint failed` because a single-file re-sync inserted edges referencing a node id deleted earlier in the same transaction; the edge insert silently failed, the daemon logged it but reported "healthy," and call-graph accuracy degraded invisibly over days until a full reindex.
+v1.0's headline parity work changes the *selection and ranking algorithms* — `explore` semantic-relevance selection, `node` multi-definition disambiguation, multi-word `<query...>` arity. But v0.1's golden-parity test only fed **single, unambiguous symbols** through the frozen templates. So the test proves *template shape* (the markdown skeleton `RenderExplore`/`RenderNode` produce) and is **blind to which symbols get selected, in what order, and how ties break**. A developer "improving relevance" can:
+- Change `matchNodes` ranking (explore.go:114) and pass every existing golden test while silently returning different symbols than TS for an ambiguous query.
+- "Fix" `node` to disambiguate multiple definitions and break the single-def golden because the disambiguation header now prints even for the one-def case.
+- Add multi-word arity and have `strings.TrimSpace(query)` (explore.go:106) or the matcher treat `"foo bar"` as one token vs. TS's two-term semantics — a divergence no single-token fixture exercises.
+
+Template-parity ≠ behavior-parity. The proven templates can stay byte-perfect while the *answers* diverge from TS.
 
 **Why it happens:**
-`database/sql`'s connection pool is not a single connection — `SetMaxOpenConns` defaults to unlimited, so each new pooled connection needs its own PRAGMA configuration (journal_mode, busy_timeout, foreign_keys are per-connection state, not per-database). Deferred (default) `BEGIN` transactions don't acquire the write lock until the first write statement, so a read-then-write transaction can get an immediate `SQLITE_BUSY` even with `busy_timeout` set, because SQLite determines waiting is pointless once another connection has already modified the DB.
+The golden corpus was built from cases that were easy to make deterministic (one symbol, one file). Ambiguity, ranking, and multi-word queries are exactly the cases that are *hard* to fixture, so they were omitted — and the omission is invisible: the suite is green, so "parity" feels done. The shared renderer makes it worse: because MCP and CLI share `Render*`, a green golden run feels like it covers both surfaces, when in fact neither surface's *selection* logic is covered for the hard inputs.
 
 **How to avoid:**
-Split the connection pool into two `sql.DB` handles: a writer pool with `SetMaxOpenConns(1)` and `_txlock=immediate` (issues `BEGIN IMMEDIATE`, acquiring the write lock at transaction start instead of on first write), and a reader pool with a bounded number of connections (e.g. 4–16) with no txlock override. Set `busy_timeout >= 5000ms` via DSN pragma parameters (not a one-time `db.Exec`, which only configures whichever connection happens to be checked out) so it applies to every connection the pool opens. For incremental edge writes specifically, insert edges in a way that's immune to intra-transaction node-id ordering (batch-lookup which endpoint ids actually exist in the DB before inserting, rather than delete-then-insert-by-row-id) — this is exactly the fix TS CodeGraph shipped for issue #773. Fail loud on any FK violation or busy timeout rather than logging-and-continuing; surface index staleness in `status`/`sync` output instead of reporting "healthy" on a degraded graph.
+- **Build BEHAVIORAL fixtures, not just template fixtures, before touching the algorithms.** Capture TS CodeGraph v1.3.1 output for: (a) an **ambiguous name** with 2+ definitions across files (`node <name>` disambiguation), (b) a **multi-word query** (`explore user auth token`), (c) a **relevance-ordering** case where several symbols match and order matters, (d) a **no-covering-tests** symbol (the `⚠️ no covering tests` warning). Dual-index the same tree in both binaries (the milestone was already scoped from a live bake-off — reuse that setup) and snapshot both.
+- **Golden test asserts selection + order + warnings, not just the skeleton.** Assert *which* symbols appear and *in what order*, and that the disambiguation/warning lines appear only when they should.
+- **Run the same behavioral fixtures through BOTH front-ends** (CLI and MCP tool handler) so a divergence can't hide on one surface — cheap here because both call the same `query.Engine`.
+- **Change the algorithm behind the frozen render contract, never the contract.** Relevance/disambiguation changes belong in `explore.go`/`node.go` (selection); `render_markdown.go` (shape) should change only if TS's shape genuinely changes.
 
-**Warning signs:** "database is locked" errors under any concurrent load test with 2+ simultaneous writers (multiple MCP client sessions, or watcher + explicit CLI reindex); FK constraint failures anywhere in logs; `callers`/`callees` query results that silently shrink over the life of a long-running daemon without a corresponding full reindex.
+**Warning signs:**
+- A relevance/disambiguation PR touches only `*_test.go` fixtures that contain a single symbol.
+- Someone edits `render_markdown.go` to add a conditional header for the multi-def case (shape change driven by selection change — smell).
+- No fixture in the repo contains two nodes with the same `Name` and different `FilePath`.
+- The bake-off tree isn't re-diffed after the algorithm change.
 
-**Phase to address:** Storage-engine/schema-design phase (concurrency model must be decided alongside the new SQLite schema, since PROJECT.md explicitly calls out "new storage format designed for concurrent access" as a requirement) and again at watcher/auto-sync implementation (where the actual write pattern under concurrent load is exercised).
+**Phase to address:**
+The behavioral-parity phase — and the fixture-harness work must land *first within that phase*, gating the algorithm changes. (PROJECT.md already lists "Behavioral parity test harness" as a target feature; treat it as a prerequisite, not a sibling deliverable.)
 
 ---
 
-### Pitfall 3: Naive incremental re-indexing silently corrupts the graph — stale nodes after renames, orphaned edges after deletes, dropped inbound edges
+### Pitfall 3: Watcher-default flip breaks the daemon lockfile interplay / double-watches / stalls MCP startup
 
 **What goes wrong:**
-This is the single most common and highest-impact bug class across every comparable project surveyed (FalkorDB/code-graph, Understand-Anything, graphify, TS CodeGraph itself). Three distinct, independently-observed failure modes:
-1. **Rename orphans:** if the changed-file detection is git-diff-based with default rename detection, a rename shows up as only the new path; the old path's nodes and edges are never pruned and persist forever as ghosts pointing at a file that no longer exists.
-2. **Inbound-edge pruning bug:** a naive "delete edges where source OR target references a removed node" rule deletes edges *into* a changed file from files that were *not* re-analyzed in this pass — because those unchanged source files never get re-run, the inbound edges are gone forever, not just temporarily stale. (Documented in Understand-Anything issue #366: 194 inbound edges lost in one 64-file incremental run from this exact bug.)
-3. **Symbol-removed-from-surviving-file leak:** when a file still exists but a symbol was deleted from it, incremental logic that only evicts nodes for files that "no longer exist on disk" never notices the symbol is gone — the stale node and its inbound edges survive indefinitely until a full clean rebuild. (Documented in graphify issue #1116.)
+v1.0 flips `serve --mcp` to watch **by default** (with `--no-watch` opt-out). Today watching is opt-in via `--watch` and runs "under the SAME lockfile `internal/daemon` uses… mutually exclusive with a standalone daemon" (serve.go:79-81); a live daemon makes `d.Run` return `ErrLockLive` and serve defers. Flipping the default multiplies the exposure:
+- **Every** MCP session now tries to acquire the writer lock. If a user also runs `codegraph daemon`, that's fine (serve defers). But if two agents each spawn `serve --mcp` (common — Claude Code + Cursor on the same repo), the second logs "deferring" and runs watcher-less; its offline-reconcile-on-connect (serve.go:68-73) is the only thing keeping it current, which is correct — but only if that reconcile path stays wired.
+- **Startup latency / hang on slow FS.** The TS project disables the watcher on WSL2 `/mnt/*` precisely because "recursive `fs.watch`… stalls the event loop during startup long enough to blow past host handshake timeouts (opencode's 30s), so the tools never appear" (watch-policy.d.ts, issue #199). Flipping watch-on-by-default without porting that policy means codegraph-go will hang MCP init on WSL2/9p/network mounts and the agent will see zero tools.
+- **Double-watching / leaked goroutines** if the default watcher and an explicit `--watch` or a daemon both start.
 
 **Why it happens:**
-Incremental update logic is almost always written and tested against the "happy path" (a file's content changed, re-parse it) and under-tested against the boundary cases (rename, delete, partial-content-removal-in-a-surviving-file) because those require multi-step fixtures to catch. The evidence-based invalidation model used by more mature projects (CoreGraph-class tools) — tagging every node/edge with the source file that "evidenced" it, and pruning strictly by evidence-file rather than by naive source/target matching — is the correct pattern but is not the obvious first implementation.
+"Match TS's live auto-sync" reads as a one-line default flip, but TS pairs the default with a `watch-policy` module (`CODEGRAPH_NO_WATCH` > `CODEGRAPH_FORCE_WATCH` > WSL2-`/mnt` auto-off precedence) that codegraph-go doesn't have yet. The lockfile mutual-exclusion already works for the opt-in case, so it *looks* safe to flip — but the failure mode (startup hang) only appears on the exact slow filesystems that don't show up in the developer's local test.
 
 **How to avoid:**
-Design the incremental-update algorithm around **evidence-based invalidation** from day one: every node and edge carries the file path whose parse produced it. On a file-change event: (a) for the changed file, delete all nodes/edges it produced (by evidence, not by re-checking target existence); (b) re-parse and re-insert; (c) re-run cross-file resolution only for edges whose *unresolved* endpoint could now point at something in the changed file — do not re-run resolution project-wide on every change (perf), but do not skip re-resolving inbound edges either (correctness). For renames, detect them explicitly (compare old-path/new-path pairs from `git diff --name-status -M`, or content-hash matching for non-git workflows) and treat as delete(old)+add(new), not as an unrelated pair of independent changes. For deletes-of-symbols-within-surviving-files, mark every extracted-this-run node ("origin" tag) and evict any previously-known node for that file whose id is absent from the fresh extraction, regardless of whether the file itself still exists. Build a differential test suite explicitly for these three cases (rename, delete-a-symbol-keep-the-file, delete-a-whole-file) before considering incremental sync "done" — treat this as a first-class Nyquist-style verification gate, not a nice-to-have.
+- **Port `watch-policy` before flipping the default.** Implement the same precedence: `--no-watch` / `CODEGRAPH_NO_WATCH=1` (explicit off wins) → `CODEGRAPH_FORCE_WATCH=1` (on) → WSL2 + `/mnt/*` auto-off. Detect WSL via env vars then `/proc/version` "microsoft", cached.
+- **Start the watcher AFTER MCP init completes / tools are advertised**, or in a goroutine that cannot block `ServeStdio`. The offline reconcile (serve.go:68-73) already runs before serving — keep that, but ensure the *watcher setup* (recursive add walk) never sits on the handshake path.
+- **Keep the shared-lockfile deferral** exactly as-is (serve.go:96-104) and add a test that N concurrent `serve --mcp` processes → exactly one watcher, N-1 deferrals, zero errors surfaced to the agent.
+- **goleak the flipped default**, not just the opt-in path (Phase-4 already has a goleak soak — extend it).
 
-**Warning signs:** node/edge counts that only grow over a long-running watcher session and never shrink even when code is deleted; `callers`/`callees` results that differ between a freshly-synced graph and a freshly-full-reindexed graph on the same commit; git-mv or IDE-rename operations followed by stale search results referencing the old path.
+**Warning signs:**
+- MCP tools never appear on a WSL2 or network-mounted repo; works fine locally.
+- `daemon.lock` churn or `ErrLockLive` surfacing to the agent instead of being swallowed as a deferral.
+- Two `serve` processes both logging watcher activity for the same repo.
+- goleak reports a lingering fsnotify goroutine after serve shutdown.
 
-**Phase to address:** Incremental-indexer/watcher phase — this needs its own dedicated verification pass with rename/delete/edit fixtures, separate from "basic parsing works" and separate from "full index works." Do not let it ride along as an afterthought of the full-indexer phase.
+**Phase to address:**
+Watcher-default-flip phase — bundle the `watch-policy` port + WSL2 detection into the *same* phase as the default change; they are not separable.
 
 ---
 
-### Pitfall 4: File watcher reliability gaps across macOS/Linux/Windows are treated as "someone else's library's problem" and go unhandled
+### Pitfall 4: Worktree detection FALSE POSITIVES (submodules, nested clones, monorepo subdirs, symlinks)
 
 **What goes wrong:**
-fsnotify (the standard Go cross-platform watcher) has real, documented, per-platform limits that differ enough to cause production incidents if unhandled: Linux inotify has a `fs.inotify.max_user_watches` ceiling (distro-dependent default, commonly 8192–65536) that a large monorepo can exceed, producing "no space left on device" — a genuinely confusing error message for a disk-space-unrelated problem; macOS FSEvents/kqueue-based watching opens a file descriptor per watched path (not per directory) under some backends, hitting "too many open files" faster than Linux; Windows `ReadDirectoryChangesW` has a fixed default 64KB event buffer that silently drops events (`ErrEventOverflow`) under a burst of changes (e.g. `git checkout` of a large branch, `npm install`, a build tool touching thousands of files), and — critically — the Windows backend does **not** remove/re-target a watch when the watched directory itself is renamed, unlike every other backend. Additionally: fsnotify only watches *directories* non-recursively by default (subdirectories require explicit `Add` calls), and watching individual files rather than directories is explicitly discouraged because editors write via atomic temp-file-then-rename and the watch on the original path is silently lost after the first edit.
+The borrowed-index warning fires when it shouldn't, training the user to ignore it (or, worse, it fires in Sean's GSD worktree workflow inconsistently). The naive implementation ("is the resolved `.codegraph/` in a different directory than where I'm standing?") false-positives on:
+- **Submodules and embedded/nested clones** — a different *repository* whose parent index legitimately doesn't cover it. TS distinguishes this with **`git rev-parse --git-common-dir`**: linked worktrees of one repo share the SAME common dir; a submodule reports `…/.git/modules/<name>` and a nested clone reports its own `.git` (worktree.d.ts). Comparing `--show-toplevel` alone can't tell a borrowed worktree from a nested repo.
+- **Monorepo subdirs / non-git trees** — an unrelated parent dir that merely happens to contain a `.codegraph/`. TS guards this: it returns "no mismatch" unless `indexRoot` is *itself a working-tree root*, "which keeps non-git and monorepo-subdir layouts from producing false warnings."
+- **Symlinks** — macOS `/tmp -> /private/tmp` and symlinked worktree paths. Comparisons must be on **absolute, symlink-resolved** paths (both `gitWorktreeRoot` and `gitCommonDir` in the TS reference are documented as "Absolute, symlink-resolved"). The repo already learned this lesson in `resolveSourcePath` (node.go:63-77, WR-03: EvalSymlinks both sides).
+
+Getting this wrong specifically bites **Sean's** workflow: GSD spins a worktree per phase under gitignored paths (`.claude/worktrees/...`), which is the *exact* borrowed-index scenario TS was built to catch — so both a false negative (miss it) and a false positive (warn on a submodule inside that worktree) are real daily-driver bugs.
 
 **Why it happens:**
-The library's cross-platform abstraction hides real semantic differences (recursive vs. non-recursive, file-based vs. inode-based identity, buffer sizing) behind one API, so it's easy to write code that "works on my Mac" and fails invisibly on a teammate's Linux/Windows box or on a large enough repo.
+`git rev-parse --show-toplevel` is the obvious call and it's *almost* right — it returns the per-worktree root, which is what you want for the primary detection. The subtlety is that toplevel alone can't classify *why* two roots differ (linked worktree vs. separate repo); that requires `--git-common-dir`. Skipping the common-dir check is the single most likely mistake.
 
 **How to avoid:**
-Watch directories, not individual files, and re-establish subdirectory watches on every `Create` event for a directory (fsnotify does not recurse automatically). Detect and handle `ErrEventOverflow` explicitly rather than assuming the events channel is complete — treat overflow as "trigger a full reconciliation scan of the affected subtree," not as an error to log and ignore. On Linux, document (and where possible programmatically check via `/proc/sys/fs/inotify/max_user_watches`) the sysctl requirement for large monorepos, and fail with an actionable error message rather than the raw "no space left on device" when the watch limit is hit. On Windows, explicitly re-add the watch after any rename event on a watched directory, since the platform won't do it automatically. Build a periodic reconciliation pass (hash-diff against the filesystem, independent of the watcher's event stream) as a correctness backstop — every comparable project surveyed that ships a `--full`/reconciliation fallback treats it as required infrastructure, not optional; watcher event streams should be treated as a performance optimization over polling, not a correctness guarantee.
+- **Port the TS three-way logic exactly:** use `git rev-parse --show-toplevel` for the worktree root AND `git rev-parse --git-common-dir` to decide whether `indexRoot` and `startPath` are the *same repository's* worktrees (share common dir → genuine borrow) vs. different repos (submodule/nested clone → no warning).
+- **Only warn when `indexRoot` is itself a working-tree root** (guards monorepo-subdir / plain-parent-dir cases).
+- **Resolve to absolute + EvalSymlinks on every path** before comparing; reuse the WR-03 pattern already in `resolveSourcePath`.
+- **Best-effort/fail-open:** when git is missing or the path isn't a repo, report "no mismatch" and carry on (matches TS: "Detection is best-effort").
+- **Fixture the edge cases:** a linked worktree (warn), a submodule (no warn), a nested clone (no warn), a monorepo subdir with a parent `.codegraph/` (no warn), a symlinked worktree path (warn, resolved correctly), a non-git tree (no warn). Include a `.claude/worktrees/<name>/` layout to mirror Sean's real setup.
 
-**Warning signs:** graph staleness reports correlate with large file-count operations (git checkout, dependency install, IDE bulk-rename) rather than single-file edits; issues that reproduce only on Windows or only on Linux CI runners; watcher silently stops producing events after a directory rename on Windows.
+**Warning signs:**
+- The mismatch notice appears when running inside a submodule or a freshly-cloned nested repo.
+- The notice does NOT appear inside a GSD phase worktree under `.claude/worktrees/`.
+- Path comparisons use raw `os.Getwd()` output without `EvalSymlinks` (works on Linux, fails on macOS `/tmp`).
 
-**Phase to address:** Auto-sync/watcher phase, with explicit platform-matrix testing (not just "runs on the dev's machine") before calling the feature done.
+**Phase to address:**
+Git/worktree-awareness phase. Port `worktree.ts` semantics wholesale; the compact inline MCP notice + `status` warning are the two surfaces (PROJECT.md scopes this as detect+warn+notice only — do not over-build).
 
 ---
 
-### Pitfall 5: Underestimating cross-file resolution complexity per language — attempting all 12+ languages "at parity" in one pass stalls the whole port
+### Pitfall 5: Git-hook install/removal that corrupts user hooks, duplicates, blocks git, or fails when codegraph isn't on PATH
 
 **What goes wrong:**
-Cross-file resolution is not a single algorithm applied uniformly across languages — every comparable multi-language code-graph tool surveyed (CoreGraph, sqry, SDL-MCP, the TS CodeGraph source itself) implements a *distinct* resolver per language family: TypeScript/JavaScript needs import-alias mapping, barrel re-export following, and namespace-import resolution; Java needs package-based namespacing and wildcard-import resolution; C#/C++ need header-pair inference and `using`/`#include` chain traversal; Rust needs module-tree construction from file paths and trait-method resolution via impl-block ownership; and several ecosystems (Swift↔Objective-C, React Native JS↔native bridge, Spring/DI interface-to-implementation binding) require framework-specific "dynamic dispatch synthesis" passes that go beyond static import-following entirely. Teams that treat "cross-file resolution" as one shared component to build once and parametrize per language consistently discover, language by language, that the shared abstraction doesn't fit and requires per-language rework — this is why TS CodeGraph itself ships a whole taxonomy of per-language bridge/synthesizer passes (React Native, Fabric/Codegen, Expo Modules, MyBatis XML-to-DAO, DI container binding) rather than one generic resolver.
+The opt-in sync hooks (`post-commit`/`post-merge`/`post-checkout`) are the classic footgun surface. Failure modes the TS reference explicitly guards (git-hooks.d.ts):
+- **Non-idempotent install** — re-running appends a second copy of the snippet. Prevented by a **marker-delimited block** ("delimited by marker comments so install is idempotent and removal preserves any user-authored hook content"). The repo already has the exact pattern for instruction files: `<!-- CODEGRAPH_START/END -->` fences (validated in Phase 6) — reuse the marker-block discipline.
+- **Clobbering user hook content** — writing the whole file instead of splicing. Removal must "strip only our marker block; delete the hook file entirely when nothing but a shebang remains, otherwise rewrite the user's content untouched."
+- **Blocking git** — a synchronous `codegraph sync` in `post-commit` makes every commit wait for a reindex. Must "run `codegraph sync` in the background so they never block git."
+- **Failing when codegraph isn't on PATH** — a fresh checkout on another machine whose hooks reference a missing binary errors on every commit. Must be "guarded by `command -v codegraph` so they no-op cleanly when the CLI isn't on PATH."
 
 **Why it happens:**
-The surface area looks similar (name → definition lookup) but the actual resolution rules are semantically different per language and per framework convention, and framework-level dynamic dispatch (DI containers, native bridges) requires bespoke pattern recognition that has nothing to do with the base language's import syntax.
+Hook files are shell scripts users may already own; the tempting implementation is `os.WriteFile(hookPath, snippet)`, which silently destroys a pre-existing hook. And "run sync" reads as a foreground call because that's how you'd write it in a test.
 
 **How to avoid:**
-This validates PROJECT.md's chosen sequencing (Go → Java/C# → Python → TS/JS → remainder) — but make the phase boundaries explicit about *what "parity" means per language*: ship a language's static (same-file + explicit-import) resolution first, and treat framework-level dynamic-dispatch synthesis (DI, native bridges, ORMs) as a separate, later-sequenced capability per language rather than a blocking requirement for that language's "done" milestone. Build a generic fallback resolver (project-wide name index with confidence-based disambiguation: 0 candidates → drop as external, 1 candidate → high-confidence edge, 2–5 candidates → emit all as ambiguous-but-useful, >5 → drop as too-generic-to-be-useful) as the baseline for every language, then layer semantic per-language resolvers (import-aware, scope-aware) on top only where it's proven to matter — this pattern appears independently in both TS CodeGraph-adjacent projects and lets a language ship with an 80%-useful resolver before its full semantic resolver is built. Track resolution completeness with an explicit "why unresolved" taxonomy (external package / dynamic dispatch not yet supported / genuinely missing) per language rather than a single "% resolved" number, so gaps are visible and prioritizable instead of hidden inside an aggregate metric.
+- **Marker-fenced splice, idempotent by replace-in-place** — reuse the `CODEGRAPH_START/END` marker discipline from the Phase-6 instruction-injection work.
+- **Preserve/rewrite user content on removal**; delete the file only when nothing but a shebang remains.
+- **Background the sync** (`codegraph sync &` / `nohup`, detached) so git never blocks.
+- **Guard with `command -v codegraph`** so the hook is a clean no-op off-PATH.
+- **`isGitRepo` gate + best-effort skip** with a reason (matches `GitHookResult.skipped`).
+- **Round-trip test:** install → user-edits-around-the-block → install again (no dup) → uninstall (user content intact, byte-identical). Mirror the Phase-6 install→uninstall byte-invariance test.
 
-**Warning signs:** a language's resolver PR keeps growing in scope because "just one more framework case" keeps surfacing; parity claims based on "the language parses" rather than "cross-file calls resolve correctly on a real-world sample repo in that language"; no visibility into what fraction of edges are unresolved and why.
+**Warning signs:**
+- A user's existing `post-commit` hook vanishes after `codegraph` hook install.
+- Two identical codegraph blocks in one hook file after two installs.
+- Commits noticeably slower after enabling hooks (foreground sync).
+- A teammate without codegraph on PATH sees `codegraph: command not found` on every commit.
 
-**Phase to address:** Every language-support phase should split into (a) structural extraction + same-file resolution, (b) explicit-import cross-file resolution, (c) framework/dynamic-dispatch synthesis — with (c) explicitly allowed to lag behind and ship as a follow-up within the same language rather than gating the language's initial release.
+**Phase to address:**
+Git/worktree-awareness phase (same phase as worktree detection — both are the "git sync" feature in PROJECT.md). It is opt-in; ensure the default is off.
 
 ---
 
-### Pitfall 6: Migration tool against the TS SQLite schema is treated as a one-shot script instead of a defensive, resumable, validated conversion
+### Pitfall 6: Interactive TUI launched in a non-interactive context (CI, piped, agent-driven) — hangs or errors
 
 **What goes wrong:**
-SQLite's `ALTER TABLE` support is deliberately minimal (rename table, rename column, add column, drop column only in newer versions) — any structural change beyond that (changing a column type, adding a NOT NULL column with no default to a populated table, restructuring relationships) requires the full create-new-table/copy-data/drop-old/rename dance. A migration tool that does this in one large locked transaction on a real user's multi-GB `.codegraph/` SQLite file will hold a write lock for seconds-to-minutes, is entirely non-resumable if interrupted (disk full, process killed, laptop sleep mid-migration), and — because the new storage format is intentionally *not* schema-compatible with the old one (PROJECT.md explicitly calls for "a new storage format... with a migration tool converting existing indexes") — any partial or off-by-one-version-assumption failure risks silently producing a corrupt or incomplete Go-format index that "looks" migrated but is missing nodes/edges, since there's no equivalent of a foreign schema validator to catch it.
+The `daemon` picker, `install`/`uninstall` multi-select, and `init`/`index`/`sync` progress are interactive bubbletea programs. If launched when stdin/stdout isn't a TTY they either **block forever waiting for keypresses that never come** (a hung CI job, a hung agent tool call) or crash trying to enter raw mode / alt-screen on a pipe. Because the same binary is what agents drive, an agent invoking `codegraph install` non-interactively must get a deterministic non-interactive result, not a picker.
 
 **Why it happens:**
-Migration is usually built and tested against a small, clean, single-run fixture DB, not against a real user's `.codegraph/` directory that has been through years of incremental syncs, partial failures, and possibly multiple TS CodeGraph versions with schema drift of its own.
+bubbletea's `tea.NewProgram(...).Run()` assumes a controlling terminal; the interactive path is the "happy path" a developer tests by hand, and the non-TTY branch is easy to forget. There's an open upstream issue (bubbletea #860) about exactly this ambiguity — the framework does not auto-fallback for you.
 
 **How to avoid:**
-Build the migration as an explicit multi-phase, resumable process (record progress per file/table processed, not just a single pass/fail), and validate against multiple *real* `.codegraph/` databases pulled from actual daily-use TS CodeGraph installs (Sean's own indexes are the obvious first fixtures, given PROJECT.md's context) rather than only synthetic small fixtures — real databases surface version-drift and partial-corruption edge cases synthetic ones don't. Never mutate the source TS SQLite file in place; migration should always read-only from the old file and write a fresh Go-format store, so a failed or interrupted migration leaves the original untouched and the migration is trivially re-runnable. Add a post-migration validation pass that checks structural invariants (node count sanity, no dangling edges, file-count parity with a fresh scan) and reports discrepancies rather than assuming success from "the script exited 0." Version-stamp the migration tool against the specific TS CodeGraph schema version(s) it supports and fail loudly (not silently skip rows) on an unrecognized schema shape, since TS CodeGraph's own schema has evolved across its 1.3.x line.
+- **TTY-gate every interactive entry point.** Check `term.IsTerminal(os.Stdin.Fd())` **and** `os.Stdout` before constructing the Program; if either is not a terminal, take a deterministic non-interactive path (e.g. `install` with no explicit target → error listing required flags, or a sensible default; `daemon` picker → print the list as plain text or require an argument).
+- **Honor an explicit override** (`--no-tui` / `CI` env / `NO_COLOR` adjacency) so agents and scripts can force non-interactive without TTY heuristics.
+- **Same gate function as the color gate** (Pitfall 1) — one `isInteractive()` helper feeds both styling and interactivity decisions, so they can't disagree.
+- **Test with piped stdin/stdout** in CI to prove no interactive command hangs.
 
-**Warning signs:** migration "succeeds" but node/edge counts in the new store don't match what a fresh full index of the same repo produces; migration tested only against freshly-created small test repos, never against an aged multi-month real index; no resumability if the migration process is killed partway.
+**Warning signs:**
+- A CI job or agent tool call on `install`/`daemon` hangs with no output.
+- `codegraph daemon < /dev/null` blocks instead of erroring/printing.
+- bubbletea "open /dev/tty" or raw-mode errors in non-TTY logs.
 
-**Phase to address:** Dedicated migration-tool phase, sequenced after the new storage format is finalized and stable — do not build the migration tool against a moving-target schema, and do not treat it as a footnote of the storage-format phase.
+**Phase to address:**
+The TUI phase — every interactive component ships with its non-TTY fallback in the same commit; add a piped-context test alongside each.
 
 ---
 
-### Pitfall 7: Monorepo-scale indexing blows up memory because materialization patterns that are fine at demo scale (a few thousand files) are not fine at 10k+ files / millions of nodes
+### Pitfall 7: Pebble WAL replay noise on stderr misclassified / suppressed too broadly
 
 **What goes wrong:**
-Every comparable project's issue tracker surveyed shows the same recurring shape: code that works fine on demo-sized repos allocates unbounded in-memory structures that scale with total graph size rather than with the size of the change being processed, and blows up RSS on real monorepos. Concrete documented instances: (a) a `getAllNodes()`/`getNodesByKind('method')`-style "load broad set into an array, then filter" pattern that materializes millions of rows before filtering — TS CodeGraph itself hit this exact bug on a 10M-node validation repo (PR #900: reference resolution allocating large same-name candidate arrays for common names like `Output`/`Result`/`string` drove the process to its heap limit, and a native-bridge method-map builder that eagerly materialized 2.6M method nodes drove RSS to ~4GB on its own); (b) tree-sitter parser-table/arena churn where a parser's internal LR tables get rebuilt on every `NewParser()` call instead of being cached/pooled, observed to drive one comparable Go indexer's RSS from an expected ~1.8GB to 9–100GB on a large external repo; (c) entity-ID duplication where long fully-qualified string IDs (e.g. `app/services/user.ts::function::createUser`) are cloned into every edge/index structure that references them, becoming the dominant memory cost at multi-million-entity scale.
+Pebble is opened with `pebble.Open(dir, &pebble.Options{})` (pebble_store.go:68) — a zero-value Options means Pebble's default logger writes WAL-replay and other info lines to stderr on **every command**. PROJECT.md lists "silence Pebble WAL log noise on stderr" as a v1.0 hygiene item. Three ways to get the fix wrong:
+- **Over-suppression:** globally redirecting stderr or swallowing all Pebble output also hides genuine corruption/error diagnostics — a silent data-loss risk.
+- **Under-scoping:** silencing only in `serve` but leaving the noise in CLI commands, so piped CLI consumers still get polluted stderr; or vice-versa.
+- **Confusing the stream:** the noise is on **stderr**, which does NOT corrupt MCP stdout framing — but a careless "route Pebble logs somewhere" fix that sends them to stdout would newly break MCP. Fixing hygiene must not create Pitfall 1.
 
 **Why it happens:**
-These patterns are invisible at the repo sizes used during day-to-day development and only manifest on genuinely large monorepos, which are rarely part of a fast local dev loop — so they ship, pass CI (small fixture repos), and then OOM on the first large real-world repo a user tries.
+The default `pebble.Options{}` logger is implicit; nobody chose stderr, it's just the default. The fix ("make it quiet") is one-line and tempting to do with a blunt instrument.
 
 **How to avoid:**
-From the outset, push filtering into SQL/storage-layer queries rather than loading broad result sets into Go memory and filtering in-process (this is directly analogous to the fix TS CodeGraph shipped in PR #900: filtered lookups by name+kind+file-prefix pushed into the query layer instead of `SELECT *` + in-memory filter). Cache/pool expensive per-parse resources (tree-sitter parser instances, grammar tables) rather than reconstructing them per file or per call. Intern repeated strings (entity IDs, file paths, symbol names) using an interning scheme (a `HashMap<string,int32>` handle table, or Go equivalent) once graph size crosses a threshold where duplication becomes the dominant memory cost — this is a well-known win pattern across multiple comparable projects and directly supports the "monorepo scale" requirement in PROJECT.md. Build a large-repo benchmark into the test/CI matrix early (a real 100k+-file open-source monorepo, not just fixtures) specifically to catch memory-scaling regressions before they reach users, and track peak RSS as a tracked metric alongside indexing throughput and query latency (which PROJECT.md already commits to publishing as benchmarks).
+- **Set an explicit `Options.Logger`** that routes Pebble INFO/WAL-replay to the codegraph structured logger at debug level (or discards INFO) while **preserving error-level messages**. Never `io.Discard` unconditionally.
+- **Never route Pebble logs to stdout** in any path reachable from `serve` (protects MCP framing).
+- **Verify both surfaces:** CLI stderr clean on a normal command; MCP stdout still valid JSON-RPC (unchanged); a deliberately-corrupted store still surfaces an error.
 
-**Warning signs:** indexing throughput that degrades non-linearly as repo size grows (rather than roughly linearly); CI/dev-loop test repos are all small-to-medium, with no large-repo test in the regular suite; memory profiling only happens reactively after a user reports an OOM, not proactively as a gate.
+**Warning signs:**
+- `codegraph status 2>/dev/null` needed to get clean output (noise still present).
+- After the fix, a corrupt store fails silently with no diagnostic.
+- Any Pebble log line appears on stdout under `serve --mcp`.
 
-**Phase to address:** Should be an explicit non-functional requirement validated at the end of the core-indexer phase and re-validated whenever a new language extractor or cross-file resolver is added (since resolvers are exactly where the candidate-set-materialization pattern above tends to reappear) — not deferred to a later "scale/perf" phase, since PROJECT.md commits to monorepo-scale storage design from v1.
+**Phase to address:**
+Output-hygiene phase (pairs with TTY-gating). Small, but sequence it with the color gate so both stream-hygiene fixes are validated together against the MCP golden.
 
 ---
 
-### Pitfall 8: Goroutine leaks in the long-running watcher/daemon process go undetected until memory/goroutine-count creeps up over days
+### Pitfall 8: Charm dependency tree inflating the audited-deps / reproducible-build / govulncheck story
 
 **What goes wrong:**
-A long-running watcher process is exactly the shape of Go program most prone to slow-burn goroutine leaks: a `context.Context` that's created but never canceled on the happy path (only handled on error), a `time.Ticker` started without a paired `defer t.Stop()`, or a channel send/receive with no corresponding receiver/sender after a shutdown path runs. These leaks are invisible in short-lived test runs and integration tests (the process exits before the leak accumulates) and only manifest as slowly climbing RSS/goroutine count over hours-to-days of real daemon uptime — exactly the operating profile of an "auto-sync keeps the graph current" watcher that PROJECT.md requires. fsnotify's own maintainers have documented and worked around a related deadlock class in their own event-draining loop (fsnotify/fsnotify#502), underscoring that this failure mode is real even in well-maintained watcher code, not just application-level bugs.
+The project's differentiator is "minimal, audited dependencies; reproducible/signed/SBOM'd releases," with **tree-sitter CGo as the single documented exception**. Pulling in `bubbletea` + `lipgloss` + `bubbles` drags a transitive fan-out (`muesli/termenv`, `mattn/go-runewidth`, `charmbracelet/x/*`, `colorprofile`, `ansi`, etc.). Risks specific to *this* project's guarantees:
+- **New CGo** — must verify none of the Charm chain introduces a CGo dependency (would violate the "tree-sitter is the sole CGo exception" invariant and break `CGO_ENABLED=0` cross-builds for the non-parser paths).
+- **Reproducible double-build breakage** — the Phase-8 `ci.yml` runs a `-mod=readonly` reproducible double-build; a Charm dep that embeds build-time timestamps, or version drift across the two builds, breaks bit-for-bit reproducibility.
+- **govulncheck surface** — PROJECT.md explicitly requires auditing the new Charm deps via govulncheck/SBOM as part of v1.0. A vuln in the TUI chain that's reachable only from the human path still needs triage.
+- **SBOM/attestation churn** — each new module widens the syft SBOM and the SLSA provenance material.
 
 **Why it happens:**
-Context-cancellation and ticker-cleanup discipline is easy to get right in the "obvious" code path and easy to miss in error/shutdown paths that are exercised rarely in tests; unit tests that don't assert "goroutine count returned to baseline after Close()" will pass indefinitely while leaking.
+TUI deps feel "cosmetic" so their supply-chain weight is underestimated; they're added late (polish phase) after the supply-chain gates were designed around a lean tree.
 
 **How to avoid:**
-Every long-running goroutine the watcher/daemon spawns must take a `context.Context` and be provably torn down on `Close()`/shutdown — pair every `context.WithCancel` with a deferred `cancel()`, every `time.NewTicker` with a deferred `Stop()`, and every fan-out goroutine with a `sync.WaitGroup` that `Close()` waits on before returning (mirroring the pattern used by Go's own gopls filewatcher: a `run()`/`process()` goroutine pair with an explicit `stop` channel and `wg.Wait()` in `Close()`). Add goroutine-leak detection to the test suite (e.g. `goleak`-style "no goroutines running after test/Close() that don't match an expected baseline") specifically for watcher and daemon lifecycle tests, not just unit tests of pure functions. Expose a debug/metrics endpoint (or at minimum a `pprof` hook, gated behind an explicit flag/env var as several comparable projects do) so goroutine-count and RSS drift can be diagnosed in the field without needing to reproduce locally.
+- **Audit the full transitive closure before adopting:** `go mod graph` / `go list -deps` on the Charm imports; confirm **zero new CGo** (`CGO_ENABLED=0 go build` of the human-path package must succeed).
+- **Pin exact versions** and run the reproducible double-build in CI *with the Charm deps in* before merging the TUI phase, not at release time.
+- **Run govulncheck on the new closure** (call-graph-aware, so human-path-only vulns are visible) and regenerate the SBOM as an explicit v1.0 gate (matches the milestone's stated "audits the new Charm deps via govulncheck/SBOM").
+- **Isolate the imports** to the `internal/tui` package so the archtest (Pitfall 1) also bounds the supply-chain blast radius to one package — query/mcp/graphstore stay Charm-free.
 
-**Warning signs:** daemon/watcher RSS or goroutine count (visible via `runtime.NumGoroutine()` or pprof) that only grows over a multi-day uptime and never plateaus; issue reports describing "codegraph got slow/used a lot of memory after running for a while" with no obvious single trigger.
+**Warning signs:**
+- `CGO_ENABLED=0 go build ./...` starts failing after adding a Charm dep.
+- The reproducible double-build diffs after the TUI phase.
+- govulncheck reports a new advisory in a `charmbracelet/*` or `muesli/*` module.
+- SBOM diff shows an unexpectedly large module fan-out.
 
-**Phase to address:** Auto-sync/watcher phase, with an explicit soak-test (run the watcher against a repo with simulated ongoing changes for an extended period, assert stable goroutine/memory baseline) as part of that phase's verification, not deferred to a post-launch bug report.
-
----
-
-### Pitfall 9: MCP tool output shape and CLI semantics drift from the TS original in ways that silently break existing agent configs
-
-**What goes wrong:**
-The project's core value proposition is "an agent user can uninstall TS CodeGraph, install the Go binary... and everything works the same or better" — this is a much stricter bar than typical API compatibility, because MCP clients (Claude Code, Cursor, etc.) parse tool *output* shape, not just tool *input* schema, and any drift (a renamed field, a restructured JSON response, a changed error-message format, different exit codes from CLI commands) breaks agents that have learned to parse the old shape, often silently: the agent doesn't crash, it just gets worse results and no one notices immediately. Documented failure patterns from other MCP server rewrites/ports: schema drift between a tool's declared `inputSchema` and what the handler actually validates (a parameter rename that the SDK doesn't enforce at the framework boundary, so malformed calls pass through silently and the handler either crashes or returns garbage); tool descriptions/response shapes changing without a corresponding "breaking change" signal, which is exactly why dedicated MCP-schema-diffing tools (mcp-drift, mcp-schema-evolution) now exist as a category.
-
-**Why it happens:**
-Ports naturally reimplement rather than literally copy every response-formatting detail, and it's tempting to "improve" a response shape while porting it — but for a drop-in-replacement goal, any such improvement is a breaking change unless it's additive-only (new optional fields) and the original shape is preserved.
-
-**How to avoid:**
-Before writing the Go MCP server, capture a **golden-output corpus**: run the actual TS CodeGraph MCP server and CLI against a fixed set of real repos and record exact tool-call outputs, CLI stdout/stderr/exit-codes, and error message formats for every tool/command in the parity surface (`codegraph_explore` and companions, `init`/`install`/`uninstall`/`uninit`/`upgrade`/`explore`). Treat that corpus as the acceptance test for the Go port — a byte-for-byte or structurally-equivalent match (excluding genuinely nondeterministic fields like timestamps) is the parity bar, not "looks similar." Validate JSON-RPC/stdio hygiene explicitly (never write non-protocol bytes to stdout in the MCP server; all diagnostics to stderr) since this is a common, easy-to-miss mistake in any new MCP server implementation, TS or Go. Where the new implementation deliberately changes behavior (e.g. a new storage format enabling something the old one couldn't), make it additive (new optional fields/tools) rather than altering existing response shapes, and gate any genuinely breaking change behind an explicit version negotiation rather than silent drift.
-
-**Warning signs:** golden-corpus diffing isn't part of the test suite (parity is being asserted by eyeballing, not by automated comparison); tool response fields get renamed or restructured "because it's cleaner in Go" during the port; no test coverage of CLI exit codes and stderr/stdout separation.
-
-**Phase to address:** Should be set up as test infrastructure *before* the MCP-server and CLI phases begin (capture the golden corpus from the TS original early, while it's still easy to run both side by side), then used as the acceptance gate for those phases.
-
----
-
-### Pitfall 10: Supply-chain "theater" — signing, SBOM, and reproducible-build claims that don't actually verify anything
-
-**What goes wrong:**
-It's easy to add cosign signing, an SLSA workflow, and an SBOM generator to a release pipeline and have every step individually "work" (commands exit 0, artifacts are produced) while the overall chain doesn't actually deliver the security property being claimed. Concrete gaps observed in real Go supply-chain setups: (a) using `goreleaser` alone for multi-target builds only achieves SLSA **Build L2** (not L3) because the build environment isn't isolated from the calling workflow — L3 requires the provenance to be generated by a separate reusable workflow with its own OIDC identity that the calling workflow cannot influence, which most goreleaser-only setups don't wire up; (b) reproducible-build claims broken by non-obvious non-determinism sources: embedded absolute filesystem paths (fixed by `-trimpath`), embedded build timestamps via `time.Now()` in `init()` or a stamped `BuildTime` ldflag (fixed by deriving the timestamp from the commit rather than build-wall-clock), CGo-linked dependencies pulling in a non-deterministic system C toolchain (a second reason to avoid CGo for parser bindings, beyond cross-compilation), and unpinned Go toolchain versions across CI runs; (c) an SBOM that lists declared dependencies but was never cross-checked against what's actually compiled into the binary (dead-code-eliminated deps still appearing in a naive SBOM), which weakens its value as an attack-surface description even though it's technically "generated."
-
-**Why it happens:**
-Each individual tool (cosign, SLSA generator, SBOM generator) is easy to bolt on and demo successfully in isolation; the properties that actually matter (build isolation for L3, byte-for-byte reproducibility, SBOM-matches-actual-binary-contents) require integration discipline across the whole pipeline that isn't enforced by any single tool succeeding.
-
-**How to avoid:**
-Decide explicitly which SLSA build level is the actual target (L2 via goreleaser is meaningfully cheaper and may be adequate; L3 requires the `slsa-framework/slsa-github-generator` reusable-workflow pattern, run as an isolated second job that attests to already-built binaries/images rather than building them itself) and verify the choice was actually achieved — don't assume goreleaser + a signing step equals L3. Set `-trimpath`, disable or carefully pin CGO for release builds, derive any embedded build-time value from the commit timestamp (`git log -1 --format=%ct`) rather than wall-clock `time.Now()`, and pin the Go toolchain version via the `go.mod` toolchain directive so CI and any independent verifier use byte-identical compilers. Validate reproducibility empirically, not just by following a recipe: build the same commit twice (ideally on two independent runners/environments) and diff the SHA-256 of the output binaries as a CI gate, catching regressions the moment they're introduced rather than discovering non-reproducibility later when someone tries to independently verify a release. Run `govulncheck` (or equivalent) as a distinct step from SBOM generation — the SBOM proves what's in the binary, vuln scanning is what actually catches known-bad dependencies; don't conflate the two or treat SBOM presence as vulnerability coverage.
-
-**Warning signs:** SLSA provenance badge/claim exists but no one has run `slsa-verifier` against a real release to confirm it actually verifies; two builds of the same tag produce binaries with different hashes; SBOM generation and dependency-vuln-scanning are the same CI step (a sign they're being conflated); no CI job that specifically re-builds and hash-diffs to prove reproducibility.
-
-**Phase to address:** Release-engineering phase, with an explicit verification step (not just "the workflow ran") — reproducibility and SLSA-level claims should be proven with a CI gate (double-build hash diff, `slsa-verifier` run against a real published release) before they're advertised as project features, since PROJECT.md commits to this as a differentiator, not an afterthought.
+**Phase to address:**
+Split across the TUI phase (adopt + isolate + CGo check) and the final `v1.0.0` release-hardening phase (govulncheck/SBOM/reproducibility gate on the finished tree).
 
 ---
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|-----------------|------------------|
-| Ship CGo tree-sitter for the first native-only milestone build (e.g. Go-language support only, on the dev's own platform) | Fastest possible parse throughput, unblocks early feature work | Cross-compilation and the "single static binary, all platforms" story break the moment a second platform target is needed; expensive to retrofit if language-extractor code assumes CGo-only tree-sitter APIs | Only as a throwaway spike to validate parser output quality before committing to a strategy — never as the shipped v1 parser path, given the project's explicit static-binary constraint |
-| Full-rebuild-on-every-change instead of evidence-based incremental invalidation | Trivially correct, no rename/delete edge cases to get wrong | Unusable auto-sync UX on any repo large enough to matter (defeats the "no manual re-runs" requirement); may mask the very correctness bugs that need fixing before incremental sync ships | Acceptable as the CLI-triggered `--force`/full-reindex fallback path (every comparable project keeps one) — never acceptable as the *only* sync mechanism given PROJECT.md's auto-sync requirement |
-| Skip evidence-tagging on nodes/edges and prune by naive source/target file match | Simpler initial data model | Directly reproduces the rename-orphan and inbound-edge-pruning bugs documented in Pitfall 3 across multiple comparable projects | Never — this is cheap to build correctly from the start and expensive to retrofit into an existing schema/index |
-| Defer per-language framework/dynamic-dispatch synthesis (DI, native bridges, ORMs) past a language's initial ship | Unblocks shipping a language's static resolution sooner | Some real-world call graphs will look incomplete/wrong (interface calls, cross-language bridges) until synthesis passes land | Acceptable and recommended per Pitfall 5 — as long as it's tracked and visible (resolution-outcome taxonomy), not silently absent |
-| Single-connection SQLite writer with no write queue prioritization | Simple to reason about, avoids most lock contention bugs immediately | Under heavy concurrent multi-agent-session load, writes serialize and queue depth could grow; acceptable until proven otherwise by load testing | Acceptable for v1 given SQLite's actual single-writer nature — revisit only if benchmarks show writer-queue latency is a real problem at target scale |
+|----------|-------------------|----------------|-----------------|
+| Style directly in the shared `query.Render*` templates instead of a separate `internal/tui` package | One fewer package; "just wrap the name in bold" | ANSI leaks into MCP + golden corpus; the load-bearing contract now has a styling dependency | **Never** — this is the #1 pitfall |
+| Add relevance/disambiguation with only single-symbol golden fixtures | Green suite fast | Silent behavioral divergence from TS on the exact hard cases parity is about | **Never** — behavioral fixtures are the whole point |
+| Flip watch-on-by-default without the `watch-policy` port | One-line change, matches TS headline | MCP startup hangs on WSL2/slow FS; #199 reproduced | **Never** — port the policy in the same phase |
+| Foreground `codegraph sync` in git hooks | Simplest to write/test | Every commit blocks on reindex | Only in a throwaway spike; never shipped |
+| `io.Discard` the Pebble logger wholesale | Silences noise in one line | Hides corruption/error diagnostics | Never — gate by level, preserve errors |
+| Adopt Charm deps in the polish phase without re-running the reproducible build | Ships the TUI faster | Reproducibility/CGo/vuln regression discovered at release | Only if the supply-chain gate runs before merge |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|-------------|----------------|-------------------|
-| MCP stdio transport | Writing debug/log output to stdout, corrupting the JSON-RPC message stream and producing a cryptic "MCP server disconnected" error with no clue pointing at the real cause | All diagnostic/log output must go to stderr; never `fmt.Println`/`log.Print`-to-stdout anywhere in the MCP server binary's code path |
-| `database/sql` connection pooling with SQLite | Assuming one `PRAGMA` exec at startup configures every future connection; assuming `SetMaxOpenConns` default (unlimited) is safe for a writer pool | Configure PRAGMAs via DSN parameters so every new pooled connection gets them; explicitly set `SetMaxOpenConns(1)` on the writer pool |
-| fsnotify on Windows | Assuming a watch survives a directory rename, as it does on every other backend | Explicitly detect rename events on watched directories and re-add the watch on Windows; don't assume backend parity |
-| Cross-language MCP client compatibility | Assuming an MCP SDK enforces the declared `inputSchema` at the framework boundary | Validate/parse arguments explicitly inside the handler (don't trust the client sent a schema-conformant payload) and return a structured tool-error, not a thrown exception, on mismatch |
+|-------------|----------------|------------------|
+| MCP stdio (`server.ServeStdio`) | Any byte on stdout (lipgloss global print, bubbletea frame, Pebble log) corrupts JSON-RPC framing | Stdout is JSON-RPC ONLY; all diagnostics/styling to stderr or the human-CLI path; enforce via archtest |
+| lipgloss v2 | Using the global `lipgloss.Writer` / `lipgloss.Println` (process-wide, targets stdout) | Construct an explicit writer bound to `cmd.OutOrStdout()`; never touch the global in a shared/MCP-reachable path |
+| bubbletea | `tea.NewProgram().Run()` in a non-TTY context hangs/crashes | TTY-gate the entry point; deterministic non-interactive fallback (upstream #860 won't do it for you) |
+| git worktrees | Comparing `--show-toplevel` alone; can't tell linked worktree from submodule/nested clone | Also use `--git-common-dir`; only warn when index root is itself a worktree root; EvalSymlinks both sides |
+| git hooks | `os.WriteFile` whole hook file; foreground sync; no PATH guard | Marker-fenced splice (reuse `CODEGRAPH_START/END`); background sync; `command -v codegraph` guard |
+| Pebble | Zero-value `Options{}` → default stderr logger noise | Explicit `Options.Logger` routing INFO→debug/discard, preserving errors; never to stdout |
+| Charm transitive deps | Assuming TUI deps are supply-chain-free | Full `go list -deps` audit; verify zero CGo; re-run reproducible double-build + govulncheck + SBOM |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|-----------------|
-| In-memory materialize-then-filter on node/edge queries (`getAllNodes()`-style) | Indexing throughput degrades non-linearly as repo size grows; RSS spikes during reference resolution specifically | Push name/kind/file-prefix filters into SQL; use streaming iterators for scan-and-filter passes | Documented to hit hard OOM around 10M-node graphs (TS CodeGraph's own validation repo); likely visible well before that on constrained dev machines |
-| Re-constructing tree-sitter parser instances/grammar tables per file or per call instead of pooling | RSS balloons far beyond the size of the actual parsed content; process instability under sustained indexing | Pool/reuse parser instances; cache grammar tables once per language, not per parse call | Observed to drive RSS from an expected ~1.8GB to 9–100GB on a large external repo in a comparable Go indexer |
-| Un-interned duplicate string IDs (fully-qualified entity names) cloned across every edge/index structure | Peak memory scales faster than node/edge count would suggest, dominated by string duplication rather than actual graph content | Intern entity IDs/paths/names behind integer handles once graph size crosses a meaningful threshold | Documented as the dominant memory cost at ~2.7M-entity / ~1.7M-edge scale in a comparable project |
-| Watcher event-stream treated as a complete, gap-free source of truth | Graph silently diverges from disk state after event-buffer overflow (large git operations, dependency installs) with no visible error | Treat overflow (`ErrEventOverflow`) as a trigger for full-subtree reconciliation, and run periodic hash-diff reconciliation independent of the event stream as a backstop | Breaks specifically under high-event-volume operations (bulk file operations), not steady-state single-file edits |
+|------|----------|------------|----------------|
+| Recursive watcher setup on the MCP handshake path | Tools never appear; agent times out | Port `watch-policy` (WSL2 `/mnt` auto-off); start watcher off the handshake path | WSL2 `/mnt/*`, 9p/drvfs, network mounts, very large trees |
+| Foreground `sync` in git hooks | Commits/checkouts noticeably slow | Background/detached sync | Any repo big enough for sync to take >100ms |
+| N concurrent `serve --mcp` each acquiring the writer lock after the default flip | Lock churn, spurious deferrals | Keep shared-lockfile deferral; test N-process → 1 watcher | Multi-agent (Claude Code + Cursor) on one repo — Sean's setup |
+| `explore` verbatim-source reads uncapped | Huge payloads / slow calls | `groupMatchesByFile` already caps distinct files (`maxFiles`) — preserve when adding relevance | Ambiguous multi-word queries matching many files |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Treating cosign signing + SLSA workflow presence as proof of a specific SLSA build level | Users/downstream consumers trust a security claim (e.g. "L3") that wasn't actually achieved, because goreleaser-only pipelines top out at L2 without the isolated reusable-workflow step | Explicitly verify the achieved level with `slsa-verifier` against a real published release before advertising it |
-| SBOM generated from declared `go.mod` dependencies rather than what's actually linked into the binary | SBOM overstates or misrepresents the real attack surface (dead-code-eliminated deps still listed), undermining its value for downstream vulnerability triage | Generate SBOM from the actual binary (Syft-against-artifact style) where feasible, not purely from the module graph |
-| Conflating SBOM generation with vulnerability scanning as "supply chain done" | Known-vulnerable transitive dependencies ship undetected because no one is actually running `govulncheck`/equivalent as a distinct gate | Run vulnerability scanning as its own CI gate, separate from and in addition to SBOM generation |
-| MCP tool input trusted without validation because "the client declared the schema" | A hallucinated or malformed tool-call argument (e.g. wrong type, unexpected array) reaches business logic unchecked, potentially causing crashes or, in a worse case, being used to construct unsafe filesystem/shell operations if the CLI-wrapping pattern is used anywhere internally | Validate at the handler boundary explicitly; never pass client-supplied strings into shell/`exec.Command` with `shell: true`-equivalent semantics — always pass args as an array |
+| Styling/path code following symlinks out of the repo | Info disclosure (read outside repo) | The WR-03 EvalSymlinks-both-sides gate in `resolveSourcePath` already handles source reads; reuse the same discipline for any new path handling in worktree/hook code |
+| Git hook that runs a binary resolved from a relative/attacker-controlled PATH | Arbitrary command execution on commit | Guard with `command -v codegraph`; bind to the resolved absolute path (matches the Phase-6 `os.Executable()` install discipline) |
+| Wholesale stderr suppression hiding corruption | Silent data loss goes unnoticed | Level-gated Pebble logger; preserve error-level output |
+| New Charm deps introducing an unaudited/vulnerable transitive module | Supply-chain regression against the project's core promise | govulncheck the full closure; SBOM diff; pin versions |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
-|---------|-------------|-------------------|
-| Full reindex on a large existing DB does row-by-row `DELETE` before rebuilding, making the CLI appear hung for minutes with no progress indicator | User assumes the tool crashed or is broken; loses trust in the port before parity is even evaluated | Drop and recreate the DB file (under the same lock) instead of row-by-row delete for full rebuilds, and show a progress indicator immediately, not only after the slow pre-step completes — TS CodeGraph itself hit and fixed this exact issue (PR #900) |
-| Auto-sync reports "healthy"/"up to date" even when incremental updates have been silently failing (e.g. FK violations dropped edges) | Users trust stale/wrong query results for an extended period with no signal anything is wrong | Surface degraded-index state explicitly in `status`/`sync` output whenever any incremental update step fails, rather than only logging it |
-| Migration tool gives no indication of progress or resumability on a large existing index | User can't tell if a multi-minute migration on a large `.codegraph/` directory is progressing or stuck, and has no safe way to retry after an interruption | Make migration explicitly resumable with visible per-file/per-table progress, and never mutate the source file so retry is always safe |
+|---------|-------------|-----------------|
+| Borrowed-index warning false-positives on submodules/monorepo subdirs | Alarm fatigue; user ignores the real warning | Full TS worktree logic (`--git-common-dir` + index-root-is-worktree-root guard) |
+| Interactive picker hangs when piped/CI/agent-driven | Hung job, no feedback | TTY-gate + deterministic non-interactive fallback |
+| Colorized output dumped into a file/pager as raw escapes | Unreadable logs, broken grep | TTY-gate color at the CLI boundary; honor `NO_COLOR` |
+| Git hooks silently blocking commits | User blames git, not codegraph | Background sync; opt-in and clearly announced |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Incremental sync:** Often missing rename-detection and inbound-edge preservation — verify with a fixture test that does git-mv on a file with cross-file callers and asserts both the old-path node is gone and the inbound edges to the new path survive.
-- [ ] **Cross-file resolution "parity" for a language:** Often means "parses without error," not "resolves calls correctly" — verify against a real-world sample repo in that language with known call-graph shape, not just a syntax-coverage fixture.
-- [ ] **MCP tool parity:** Often verified by manual eyeballing of one or two example calls — verify with an automated golden-output diff against the TS original across the full tool surface and a representative repo set.
-- [ ] **Static binary / cross-platform build:** Often verified only on the developer's native platform — verify CI actually cross-builds and boots (not just links) on all three target OSes, including a check that no CGo dependency slipped in.
-- [ ] **SQLite concurrency:** Often "tested" only with a single writer in dev — verify under an explicit concurrent-writer load test (simulated multiple agent sessions + watcher) that reproduces `SITE_BUSY`/FK-failure conditions before shipping.
-- [ ] **Reproducible builds / SLSA claims:** Often "implemented" by following a recipe once — verify with an actual double-build hash-diff CI gate and a `slsa-verifier` run against a real release artifact.
-- [ ] **Watcher reliability:** Often tested only with single-file edits — verify against bulk operations (git checkout of a large diff, `go mod tidy`-scale file churn) that can overflow platform event buffers.
-- [ ] **Migration tool:** Often tested only against small synthetic fixtures — verify against multiple real, aged `.codegraph/` directories with a post-migration structural-invariant check.
+- [ ] **Explore/node "improvements":** Often missing behavioral fixtures — verify ambiguous-name, multi-word, and relevance-ordering cases are diffed against TS 1.3.1, not just single-symbol templates.
+- [ ] **TUI styling:** Often missing the archtest — verify `go list -deps ./internal/mcp ./internal/query` shows zero `charmbracelet/*`, and MCP golden output is byte-identical.
+- [ ] **Watcher default flip:** Often missing `watch-policy` — verify WSL2/`/mnt` auto-off and that MCP tools still appear on a slow FS within the handshake timeout.
+- [ ] **Worktree detection:** Often missing the submodule/nested-clone/monorepo-subdir negative cases — verify no false warning; verify it DOES fire in a `.claude/worktrees/` layout.
+- [ ] **Git hooks:** Often missing the preserve-user-content removal path — verify install→edit-around→install→uninstall is byte-invariant and no-ops off-PATH.
+- [ ] **Interactive commands:** Often missing the non-TTY branch — verify each hangs-never when stdin/stdout piped.
+- [ ] **Pebble hygiene:** Often missing error-preservation — verify a corrupt store still surfaces a diagnostic, and nothing lands on MCP stdout.
+- [ ] **Charm supply chain:** Often missing the re-run of the reproducible double-build + govulncheck + SBOM on the final tree.
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
-|---------|----------------|-----------------|
-| Stale/orphaned nodes from incremental-sync bugs (Pitfall 3) | LOW | Ship a `--force`/full-reindex path (as every comparable project does) as the immediate user-facing recovery; fix the incremental algorithm separately, informed by the specific failure fixture |
-| CGo/cross-compilation lock-in discovered late (Pitfall 1) | HIGH | Requires re-architecting the parser integration layer around an abstraction that can swap CGo/WASM/pure-Go backends; cost scales with how much per-language extractor code directly assumed CGo-specific APIs, so isolating the tree-sitter binding behind an internal interface from day one drastically lowers this cost if a switch is later needed |
-| SQLite lock contention under real multi-session load discovered post-launch (Pitfall 2) | MEDIUM | Split reader/writer pools and add `_txlock=immediate` — a schema-compatible change that doesn't require a data migration, but does require a release and user upgrade |
-| Migration tool corrupts or incompletely converts a user's index (Pitfall 6) | LOW (if source untouched) / HIGH (if source was mutated) | If the migration tool is correctly read-only against the source, recovery is "delete the bad output, re-run the (fixed) migration tool" — this is exactly why never mutating the source file is a hard requirement, not a nice-to-have |
-| Non-reproducible or under-leveled supply-chain claims discovered by an external auditor (Pitfall 10) | MEDIUM | Re-run the release pipeline with the isolated-workflow / `-trimpath` / pinned-toolchain fixes, re-publish provenance for the affected release, and add the double-build hash-diff CI gate so it can't regress silently again |
+|---------|---------------|----------------|
+| ANSI leaked into MCP path | MEDIUM | Add the import-graph archtest (fails immediately at the leak), move styling to `internal/tui`, re-diff golden corpus |
+| Behavioral divergence shipped | HIGH | Build the behavioral fixtures retroactively, diff against TS, patch selection logic; every shipped agent got wrong answers in the interim |
+| Watcher-flip MCP hang on WSL2 | MEDIUM | Ship `watch-policy` port + `CODEGRAPH_NO_WATCH` escape hatch; users unblock via env var immediately |
+| Worktree false positives | LOW | Add `--git-common-dir` + index-root guard + negative fixtures |
+| Git hook clobbered user content | HIGH | Data already lost on that machine; restore from git reflog/backup; ship marker-fenced splice + preserve-on-removal |
+| Interactive hang in CI/agent | LOW | Add TTY gate + fallback; users unblock via `--no-tui`/piped detection |
+| Charm supply-chain regression | MEDIUM | Pin/rollback the offending module; re-run reproducible build + govulncheck before re-releasing |
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
-|---------|-------------------|----------------|
-| CGo tree-sitter breaks static-binary/cross-compile story | Parser-strategy/architecture phase (before any language extractor work) | CI cross-builds and boot-tests on all three target OSes; confirm zero CGo dependency if pure-Go/WASM path chosen |
-| SQLite WAL misunderstood as full concurrency | Storage-engine/schema-design phase; re-verified at watcher phase | Concurrent-writer load test reproduces and confirms absence of `SQLITE_BUSY`/FK failures under simulated multi-agent-session load |
-| Incremental sync corrupts graph on rename/delete | Incremental-indexer/watcher phase (dedicated verification, not folded into full-indexer phase) | Fixture suite explicitly covering rename, symbol-delete-in-surviving-file, and file-delete, diffed against a full-reindex baseline |
-| Watcher unreliable across platforms | Auto-sync/watcher phase | Platform-matrix test including bulk-file-operation event-overflow scenarios on Linux/macOS/Windows |
-| Cross-file resolution complexity per language stalls parity | Every language-support phase, split into static/import/framework-synthesis sub-stages | Resolution-outcome taxonomy tracked per language; "parity" defined as call-graph correctness on a real sample repo, not just parse coverage |
-| Migration tool corrupts/loses data | Dedicated migration-tool phase, after storage format is finalized | Post-migration structural-invariant check against multiple real aged `.codegraph/` fixtures; resumability verified by killing the process mid-run |
-| Monorepo-scale memory blowup | End of core-indexer phase; re-verified whenever a new resolver/extractor is added | Large real-world repo (100k+ files) in the benchmark/CI matrix; peak RSS tracked as a first-class metric alongside throughput and query latency |
-| Goroutine leaks in long-running watcher/daemon | Auto-sync/watcher phase | Soak test (extended-duration run with simulated ongoing changes) asserting stable goroutine count/RSS baseline; leak-detection assertions in lifecycle tests |
-| MCP/CLI behavioral drift from TS original | Test-infrastructure setup before MCP-server/CLI phases begin | Golden-output corpus captured from the real TS CodeGraph, diffed automatically against the Go port's output on every relevant tool/command |
-| Supply-chain signing/SBOM/reproducibility theater | Release-engineering phase | Double-build hash-diff CI gate; `slsa-verifier` run against a real published release confirming the claimed build level; `govulncheck` as a distinct gate from SBOM generation |
+|---------|------------------|--------------|
+| ANSI/TUI bleed into agent path | TUI phase (archtest lands first) | `go list -deps ./internal/mcp ./internal/query` has zero `charmbracelet/*`; MCP golden byte-identical |
+| Behavior-vs-template parity gap | Behavioral-parity phase (harness first) | Ambiguous/multi-word/relevance fixtures diff clean vs TS 1.3.1 on BOTH front-ends |
+| Watcher-default flip hazards | Watcher-flip phase | WSL2/`/mnt` auto-off test; N-process → 1-watcher test; goleak clean |
+| Worktree false positives | Git/worktree-awareness phase | Submodule/nested/monorepo/symlink/`.claude/worktrees` fixture matrix |
+| Git-hook corruption/blocking | Git/worktree-awareness phase | install→edit→install→uninstall byte-invariant; off-PATH no-op; background sync |
+| Interactive TUI in non-interactive context | TUI phase | Every interactive command tested with piped stdin/stdout (hangs-never) |
+| Pebble stderr hygiene | Output-hygiene phase | CLI stderr clean; MCP stdout valid JSON-RPC; corrupt store still errors |
+| Charm supply-chain inflation | TUI phase + release-hardening phase | Zero new CGo; reproducible double-build passes; govulncheck + SBOM regenerated |
 
 ## Sources
 
-- fsnotify/fsnotify official docs and source (`fsnotify.go`, `backend_inotify.go`) — platform-specific watch limits, rename-on-Windows gap, buffer overflow behavior
-- fsnotify/fsevents (macOS FSEvents wrapper) — 4096-path watch ceiling, per-file descriptor cost, "unstable API" caveats
-- `smacker/go-tree-sitter` GitHub issue #120 and `golang/go` issue #73406 — CGo cross-compilation breakage and cross-linked-binary crash reports
-- dvcdsys/code-index PR #78 and PR #81 — real-world OOM root-caused to tree-sitter parser-table churn; wazero-vs-CGo-vs-pure-Go tree-sitter benchmark data
-- colbymchenry/codegraph (source project) issue #773 and PR #900 — documented incremental-sync FK-drop bug and its fix; documented large-repo OOM root causes and fixes, directly on the project being ported
-- FalkorDB/code-graph issue #665, Egonex-AI/Understand-Anything issue #366, safishamsi/graphify issue #1116 — independently-observed incremental-indexing correctness bugs (rename orphans, inbound-edge pruning, surviving-file symbol-delete leaks)
-- simplecore-inc/coregraph docs (`change-tracking.md`) — evidence-based invalidation model as the correct pattern
-- mattn/go-sqlite3 issue #274/#1022, modernc.org/sqlite usage guide, tenthousandmeters.com SQLite concurrent-writes analysis — WAL-mode semantics, `BEGIN IMMEDIATE` vs deferred, reader/writer pool splitting
-- Reproducible Builds in Go practical guides (safeguard.sh) and `slsa-framework/slsa-github-generator` README — `-trimpath`, toolchain pinning, SLSA L2-vs-L3 distinction, goreleaser integration gaps
-- Stack Harbor goroutine-leak runbook, Go gopls `filewatcher.go` source, kubernetes/kubernetes PR #137213 — goroutine-leak patterns and the context-cancel/ticker-stop/WaitGroup-teardown fix pattern
-- MCP production-gotchas writeups (albinogeek.com, mcp-drift, mcp-schema-evolution) and mark3labs/mcp-go PR #834 — stdio stdout-corruption trap, schema-validation gaps, tool-schema-drift detection tooling as a now-emerging category
-- zzet.org (gortex) cross-language resolution writeup, simplecore-inc/coregraph, sqry.dev docs, GlitterKill/sdl-mcp docs — per-language and per-framework resolver complexity as the norm across comparable multi-language code-graph tools
+- This repo's code (HIGH): `internal/mcp/server.go` (stdout-is-transport discipline, conditional tool registration), `internal/cli/serve.go` (`--watch`/daemon shared-lockfile interplay, offline reconcile-on-connect), `internal/daemon/lock.go` (lockfile mutual-exclusion, `ErrLockLive`), `internal/query/{explore,render_markdown,node}.go` (shared agent-facing templates, `maxFiles` cap, WR-03 EvalSymlinks path confinement), `internal/graphstore/pebble_store.go` (`pebble.Open` zero-Options default logger)
+- Existing archtest precedent (HIGH): `internal/graphstore/archtest/import_graph_test.go`, `internal/migrate/archtest/modernc_confinement_test.go` — the enforcement mechanism to reuse for the Charm/query/mcp import boundary
+- TS CodeGraph v1.3.x reference typedefs (HIGH, directly authoritative for parity): `sync/worktree.d.ts` (`--show-toplevel` vs `--git-common-dir`, submodule/nested/monorepo false-positive guards, symlink resolution, best-effort), `sync/git-hooks.d.ts` (marker-block idempotency, preserve-user-content removal, background sync, `command -v codegraph` guard), `sync/watch-policy.d.ts` (WSL2 `/mnt` auto-off, `CODEGRAPH_NO_WATCH`/`FORCE_WATCH` precedence, issue #199 handshake-timeout rationale)
+- lipgloss v2 docs (MEDIUM, Context7 `/charmbracelet/lipgloss`): global `lipgloss.Writer`/print functions target stdout process-wide; color auto-downsamples on no-TTY but control bytes do not — motivates the single-seam gate
+- bubbletea non-interactive handling (MEDIUM, web): TTY-detection-before-`NewProgram` is the required pattern; framework does not auto-fallback (issue #860); `term.IsTerminal(os.Stdin.Fd())` gate
 
 ---
-*Pitfalls research for: local-first code knowledge graph / code intelligence tool for AI coding agents (Go port)*
-*Researched: 2026-07-10*
+*Pitfalls research for: v1.0 drop-in parity + human TUI on codegraph-go's shared CLI/MCP binary*
+*Researched: 2026-07-14*
