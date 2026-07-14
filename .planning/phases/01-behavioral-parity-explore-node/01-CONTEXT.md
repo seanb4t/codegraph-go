@@ -39,9 +39,23 @@ NODE-03, NODE-04, TEST-01 (10 total).
 - **Highest-risk, load-bearing phase.** EXPL-02's RWR is the single hardest
   item and puts the golden-corpus contract at stake.
 
+**⚠️ SCOPE EXPANSION (post-research, user-decided 2026-07-14 — see D-09/D-10).**
+Research (01-RESEARCH.md, commit 6de928a) discovered the roadmap/requirements
+ASSUMED 9 RWR edge kinds exist, but the v0.1 extraction pipeline emits only ~5
+(`calls`/`imports`/`embeds`/`contains`/`implements`) — the other ~4
+(`references`/`overrides`/`instantiates`/`returns`/`type_of`) exist in NO
+extractor. It also found TS's `explore` is a ~1,700-line multi-stage pipeline
+(~15 auxiliary heuristics), not a drop-in RWR reranker. The user chose the
+maximum-fidelity path on both forks, so Phase 1 now ALSO reopens the extraction
+pipeline + schema and ports the full heuristic stack. This deliberately enlarges
+the phase well past its original "shared query engine only" boundary; the
+planner should expect many plans / multiple waves and may surface a
+`## PHASE SPLIT RECOMMENDED` — but the user explicitly rejected splitting the
+edge-kind work out, so keep it in Phase 1 (prefer more waves over a phase split).
+
 **Not in this phase:** `status` content (Phase 2), worktree awareness (Phase 2),
 watcher default (Phase 3), any TUI/styling (Phase 6/7), `query`/`search`
-relevance ranking (they keep their current lexical matcher).
+relevance ranking (they keep their current lexical matcher — D-05 still holds).
 
 </domain>
 
@@ -108,8 +122,35 @@ relevance ranking (they keep their current lexical matcher).
 - **D-07:** `node`'s generated-files-last sort uses **TS's exact generated-file
   predicate** (to be extracted verbatim from the dist source — likely path/name
   patterns; researcher confirms the precise rule, do not approximate).
-- **D-08:** The file-relevance-gate threshold (memory notes "≥ ~6% mass") is
-  taken from the **TS dist source constant**, not the remembered approximation.
+- **D-08:** The file-relevance-gate threshold is taken from the **TS dist source
+  constant** (research pinned it to `0.06`, but the real gate is a **5-way OR**,
+  not a bare threshold — port the full gate, not just the constant).
+
+### Edge-Kind Coverage (user-decided post-research — SCOPE EXPANSION)
+- **D-09:** **Expand extraction to all 9 RWR edge kinds.** Research found the
+  graph emits only ~5 of TS's `RANK_EDGES` set; the missing ~4
+  (`references`/`overrides`/`instantiates`/`returns`/`type_of` — confirm the
+  exact TS set + names from 01-RESEARCH.md) are added to the schema AND emitted
+  by the language extractors, then the graph is re-indexed, so RWR ranks over
+  the full 9-kind set (not a reduced subset). This reopens the v0.1 Phase-5
+  extraction pipeline + schema and is the single largest scope item in the
+  phase. Planner MUST account for: whether `Edge.kind` is a proto enum (needs a
+  bump) or a string; a `SchemaVersion` bump if required; re-indexing this repo's
+  own `.codegraph`; **regenerating the golden corpus**; and the **migrate-tool
+  impact** (v0.1 Phase-7 `internal/migrate` reads TS SQLite → Pebble — a schema
+  change may ripple there). RANK_EDGES is **undirected and UNWEIGHTED** in TS
+  (no per-kind weights despite the phase description's phrasing — research
+  confirmed). Prioritize the validated-full priority-4 languages
+  (Go/Java/C#/Python/TS-JS) for the new edge kinds; mainstream-6 follow the
+  existing D-11 full-or-documented-partial capability matrix.
+- **D-10:** **Port TS's full auxiliary heuristic stack faithfully** (~15 items:
+  the 5-channel hybrid match, type-hierarchy expansion, glue-node injection,
+  per-overload seeding/disambiguation tiers, the 5-way relevance gate, the
+  5-tier file sort, both tokenizers). This is a faithful port of the ~1,700-line
+  TS pipeline, not a minimal RWR. Each heuristic's constants/rules come verbatim
+  from the TS dist source (01-RESEARCH.md citations). Where a heuristic depends
+  on data Go genuinely cannot produce, document it as an explicit D-02 allowed
+  divergence rather than silently dropping it.
 
 ### Claude's Discretion
 - Package layout within `internal/query` for the RWR pipeline (new file(s) vs
@@ -159,6 +200,22 @@ None folded. (See Reviewed Todos below.)
   MCP surface; already delegates to `Engine.Explore`/`Engine.Node` (EXPL-05/NODE-04).
 - `internal/cli/explore.go`, `internal/cli/node.go` — CLI surface (arg parsing;
   `explore` must accept variadic `<query...>` per EXPL-01).
+
+### Extraction pipeline & schema (D-09 edge-kind expansion — reopened)
+- `internal/schema/graph.pb.go` + the `.proto` source — `Edge.kind` definition;
+  determines whether new edge kinds need a proto/enum change + `SchemaVersion`
+  bump. (Memory: `Edge` provenance fields were pre-reserved, but new KINDS are a
+  different change — verify.)
+- `internal/indexer/resolve.go` — cross-file resolution (two-pass
+  parallel-extract → sequential-resolve); where new edge kinds get resolved.
+- `internal/indexer/goextract/` + per-language extractor packages
+  (`internal/indexer/pyextract/`, `csharpextract/`, etc.) + the `LanguageSpec`
+  registry — the v0.1 Phase-5 pattern the new edge kinds are added into
+  (Go/Java/C#/Python/TS-JS first per D-09).
+- `internal/indexer/routes/` — the `route`/`implements` synthesized-edge
+  precedent (heuristic provenance) to mirror for any synthesized new kinds.
+- `internal/migrate/translate.go` — migrate-tool read path; check whether a
+  schema change ripples into TS-SQLite→Pebble translation (D-09 migrate impact).
 
 ### Behavioral fixture harness (extend, don't rebuild)
 - `testdata/golden/README.md` — golden-fixture provenance + capture protocol (D-06).
