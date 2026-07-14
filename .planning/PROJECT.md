@@ -8,6 +8,20 @@ A ground-up Go rewrite of [CodeGraph](https://github.com/colbymchenry/codegraph)
 
 An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
 
+## Current Milestone: v1.0 Drop-in Parity & Human UX
+
+**Goal:** Close the behavioral and surface gaps between codegraph-go and TS CodeGraph v1.3.x so an existing user can swap binaries with zero change in experience, then cut the first real signed `v1.0.0` release — retiring the "not yet drop-in" caveat v0.1 shipped with.
+
+**Target features:**
+- **Agent-output behavioral parity** — `explore` semantic-relevance selection (+ `⚠️ no covering tests` warnings), `node` multi-definition disambiguation, multi-word `<query...>` arity, and richer `status` content (DB size, nodes-by-kind, files-by-language). v0.1's golden test proved template shape but never the selection/relevance algorithms.
+- **Watcher-on-MCP by default** — `serve --mcp` runs the fsnotify watcher automatically with a `--no-watch` opt-out, matching TS's live auto-sync (our `install` already writes the byte-identical `serve --mcp` invocation; only the watch default differs).
+- **Git/worktree awareness** — borrowed-index detection (compute the currently-inert `worktreeMismatch`: a `status` warning + a compact inline MCP-result notice) plus opt-in git sync hooks (post-commit/merge/checkout). Directly fixes the silent "worktree queries the main branch's graph" correctness gap.
+- **Output hygiene** — silence Pebble WAL log noise on stderr; TTY-gate all styling.
+- **Human-facing TUI (Charm/bubbletea)** — lipgloss-styled `status`/`files` (plain when piped), an interactive `daemon` picker, `install`/`uninstall` multi-select, and `init`/`index`/`sync` progress. The agent/MCP output path stays plain, stable, parseable text.
+- **Surface reconciliation** — systematic per-command flag parity; decide the `search` stance; keep `serve`/`migrate` as documented (`serve` is not a divergence — TS has it too).
+- **Behavioral parity test harness** — fixtures for ambiguous names, multi-word queries, and relevance, closing the v0.1 golden-test blind spot.
+- **First signed `v1.0.0` release** — closes v0.1's still-pending DIST-02 (real `v*` tag) and PERF-01 (published numbers); audits the new Charm deps via govulncheck/SBOM.
+
 ## Requirements
 
 ### Validated
@@ -23,12 +37,15 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 
 ### Active
 
-**v0.1 (Initial Release) shipped the core capabilities** across Phases 1–8 (see Validated above): indexing, query engine, stdio MCP server (tool-surface output shapes verified against the TS v1.3.1 golden corpus), incremental sync + daemon, 14-language coverage, agent install/uninstall, TS→Pebble migration, and a signed/attested/SBOM'd/reproducible release with published benchmarks. **v0.1 is NOT yet a drop-in parity replacement** — the CLI command surface diverges from TS CodeGraph. Open goals for later releases:
+**Current milestone — v1.0 (Drop-in Parity & Human UX):** closing the behavioral and surface gaps that keep v0.1 from being a true drop-in replacement (see Current Milestone above), then cutting the first signed `v1.0.0`. The parity work is evidence-scoped from a live TS 1.3.1 vs codegraph-go bake-off (dual-indexed the same tree): the command surface is already a **superset** — no TS command is missing — so the gaps are behavioral (`explore` relevance, `node` multi-def), the watcher-on-MCP default, git/worktree awareness, output hygiene, and human-facing polish, not missing commands.
 
-- [ ] **Full CLI-surface parity with TS CodeGraph v1.3.x** — align the command surface so existing users / agent configs work unchanged. This is the remaining bar for a "drop-in swap" claim and a 1.0.
+Deferred to later releases:
+
 - [ ] Central graph server — multi-user, remote queries, auth (Team Scale; v0.1's architecture was designed to accommodate it without a rewrite)
 - [ ] CI-built shared index distribution / caching (Team Scale)
 - [ ] Graph annotations the v0.1 schema reserved space for — embedding vectors, community assignments, bulk export for visualization
+- [ ] Local Svelte web UI for browsing/querying the graph (SEED-001 — triggers once parity lands; the v1.0 bubbletea TUI is a distinct terminal surface)
+- [ ] Worktree support **beyond** TS parity — auto-init or `git-common-dir` index sharing (v1.0 ships TS-parity detect+warn+notice only; going further is a deliberate later call)
 
 ### Out of Scope
 
@@ -65,6 +82,9 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 | Full supply-chain suite from first release | Signing, SLSA, SBOM, reproducibility are the differentiator, not an afterthought | ✓ Shipped (Phase 8): per-binary cosign keyless + SLSA provenance + syft SBOM + govulncheck + reproducible double-build, proven on real `v0.0.0-rc.3` |
 | Parser strategy (CGo tree-sitter vs wazero WASM vs native Go) | Performance vs purity vs sandboxing — needs quantified research | ✓ Resolved (Phase 1): CGo tree-sitter, benchmarked; single documented CGo exception (PARSER-DECISION.md) |
 | Plan for embeddings, communities, graph-viz UI as future milestones | Long-term product direction; v1 schema versioned + annotation-ready so they bolt on | — Pending |
+| Milestone v1.0 = drop-in parity + human UX | v0.1 shipped core value but diverges from TS *behavior*; parity is the honest 1.0 bar. Scope derived from a live dual-indexed bake-off, not docs | — In progress: behavioral parity (`explore`/`node`), watcher-on-MCP default, git/worktree awareness, output hygiene, Charm TUI, then signed v1.0.0 |
+| Include bubbletea/Charm TUI in v1.0 | TS's human output is colorized + interactive (`daemon` picker) — prettiness is part of parity, not gold-plating | — Planned; agent/MCP output stays plain/parseable, human path gets lipgloss/bubbletea, all TTY-gated |
+| Worktree awareness scoped at parity for v1.0 | TS `sync/worktree.js` only detects a borrowed index + warns; matching that is the 1.0 bar. Auto-init/share is a larger design | — v1.0 = detect+warn+notice; "make worktree support better later" (user-confirmed) |
 
 ## Evolution
 
@@ -84,4 +104,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-14 after v0.1 (Initial Release) milestone completion*
+*Last updated: 2026-07-14 — started milestone v1.0 (Drop-in Parity & Human UX)*

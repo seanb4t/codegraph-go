@@ -1,37 +1,33 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: milestone
-current_phase: 1
-status: Awaiting next milestone
-stopped_at: "Phase 8 executed + verified (passed-with-pending): 9/9 plans; DIST-02 pending first v* tag, PERF-01 pending published numbers"
-last_updated: "2026-07-14T16:46:48.982Z"
+milestone: v1.0
+milestone_name: Drop-in Parity & Human UX
+status: planning
+last_updated: "2026-07-14T18:46:39.502Z"
 last_activity: 2026-07-14
-last_activity_desc: Milestone v0.1 completed and archived
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 66
-  completed_plans: 67
-  percent: 100
-current_phase_name: Release Hardening & Benchmarks
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-10)
+See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 8 — Release Hardening & Benchmarks
+**Current focus:** v1.0 (Drop-in Parity & Human UX) — defining requirements
 
 ## Current Position
 
-Phase: Milestone v0.1 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-14 — Milestone v0.1 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-14 — Milestone v1.0 started
 
 ## Performance Metrics
 
