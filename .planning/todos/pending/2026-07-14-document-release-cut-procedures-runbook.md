@@ -2,6 +2,7 @@
 created: 2026-07-14T17:43:30.073Z
 title: Document release procedures (maintainer runbook)
 area: docs
+resolves_phase: 8
 files:
   - docs/RELEASE.md
   - .github/workflows/release.yml
