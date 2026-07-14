@@ -125,17 +125,67 @@ Explicitly excluded from v1.0. Documented to prevent scope creep.
 
 ## Traceability
 
-Populated during roadmap creation. Each requirement maps to exactly one phase.
+Each requirement maps to exactly one phase. Phase numbering is scoped to milestone v1.0 (v0.1 phases archived).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| _(pending roadmap)_ | — | Pending |
+| EXPL-01 | Phase 1 | Pending |
+| EXPL-02 | Phase 1 | Pending |
+| EXPL-03 | Phase 1 | Pending |
+| EXPL-04 | Phase 1 | Pending |
+| EXPL-05 | Phase 1 | Pending |
+| NODE-01 | Phase 1 | Pending |
+| NODE-02 | Phase 1 | Pending |
+| NODE-03 | Phase 1 | Pending |
+| NODE-04 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| STAT-01 | Phase 2 | Pending |
+| STAT-02 | Phase 2 | Pending |
+| STAT-03 | Phase 2 | Pending |
+| WORK-01 | Phase 2 | Pending |
+| WORK-02 | Phase 2 | Pending |
+| WORK-03 | Phase 2 | Pending |
+| TEST-02 | Phase 2 | Pending |
+| WATCH-01 | Phase 3 | Pending |
+| WATCH-02 | Phase 3 | Pending |
+| WATCH-03 | Phase 3 | Pending |
+| WATCH-04 | Phase 3 | Pending |
+| HYG-01 | Phase 4 | Pending |
+| HYG-02 | Phase 4 | Pending |
+| HOOK-01 | Phase 5 | Pending |
+| HOOK-02 | Phase 5 | Pending |
+| HOOK-03 | Phase 5 | Pending |
+| TUI-01 | Phase 6 | Pending |
+| TUI-02 | Phase 6 | Pending |
+| TUI-05 | Phase 6 | Pending |
+| DMON-01 | Phase 7 | Pending |
+| DMON-02 | Phase 7 | Pending |
+| DMON-03 | Phase 7 | Pending |
+| DMON-04 | Phase 7 | Pending |
+| TUI-03 | Phase 7 | Pending |
+| TUI-04 | Phase 7 | Pending |
+| TEST-03 | Phase 7 | Pending |
+| SURF-01 | Phase 8 | Pending |
+| SURF-02 | Phase 8 | Pending |
+| SURF-03 | Phase 8 | Pending |
+| SURF-04 | Phase 8 | Pending |
+| SURF-05 | Phase 8 | Pending |
+| REL-01 | Phase 8 | Pending |
+| REL-02 | Phase 8 | Pending |
+| REL-03 | Phase 8 | Pending |
+| REL-04 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.0 requirements: 45 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 5, TEST 3, REL 4)
-- Mapped to phases: TBD (roadmapper)
-- Unmapped: TBD
+- Mapped to phases: 45 / 45 ✓
+- Unmapped: 0
+- Per phase: P1=10, P2=7, P3=4, P4=2, P5=3, P6=3, P7=7, P8=9
+
+**Mapping notes:**
+- **TEST-01** (explore/node/status behavioral harness) → Phase 1: the harness lands with the hardest algorithm (RWR) so parity is validated as it's built. Phase 8's REL-04 re-runs it green as the drop-in gate but does not own it.
+- **TEST-03** (hook byte-invariance + TUI piped-stream safety) → Phase 7: the only phase where both hooks (built Phase 5) and the new bubbletea components (built Phase 7) coexist, so both halves of the assertion are satisfiable. HOOK-01/02 already bake idempotency/marker-preservation into Phase 5.
+- **TUI** split: TUI-01/02/05 (rendering seam + non-interactive pretty output) → Phase 6; TUI-03/04 (interactive components) → Phase 7.
 
 ---
 *Requirements defined: 2026-07-14*
-*Last updated: 2026-07-14 after initial v1.0 definition*
+*Last updated: 2026-07-14 — traceability populated during roadmap creation (45/45 mapped, 8 phases)*
