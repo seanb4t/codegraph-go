@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: milestone
-current_phase: 8
-current_phase_name: Release Hardening & Benchmarks
-status: verifying
+current_phase: 1
+status: Awaiting next milestone
 stopped_at: "Phase 8 executed + verified (passed-with-pending): 9/9 plans; DIST-02 pending first v* tag, PERF-01 pending published numbers"
-last_updated: "2026-07-13T21:52:52.741Z"
-last_activity: 2026-07-13
-last_activity_desc: Phase 8 execution started
+last_updated: "2026-07-14T16:46:48.982Z"
+last_activity: 2026-07-14
+last_activity_desc: Milestone v0.1 completed and archived
 progress:
   total_phases: 8
   completed_phases: 8
   total_plans: 66
   completed_plans: 67
   percent: 100
+current_phase_name: Release Hardening & Benchmarks
 ---
 
 # Project State
@@ -28,12 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-10)
 
 ## Current Position
 
-Phase: 8 (Release Hardening & Benchmarks) — EXECUTING
-Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-07-13 — Phase 8 execution started
-
-Progress: [███████░░░] 73%
+Phase: Milestone v0.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-14 — Milestone v0.1 completed and archived
 
 ## Performance Metrics
 
@@ -303,3 +301,7 @@ Items acknowledged and carried forward from previous milestone close:
 Last session: 2026-07-13T21:52:52.734Z
 Stopped at: Phase 8 executed + verified (passed-with-pending): 9/9 plans; DIST-02 pending first v* tag, PERF-01 pending published numbers
 Resume file: .planning/phases/08-release-hardening-benchmarks/08-VERIFICATION.md
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
