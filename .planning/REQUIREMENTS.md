@@ -1,0 +1,141 @@
+# Requirements: CodeGraph Go — Milestone v1.0 (Drop-in Parity & Human UX)
+
+**Defined:** 2026-07-14
+**Core Value:** An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
+
+**Milestone goal:** Close the behavioral + surface gaps against TS CodeGraph v1.3.1 so an existing user swaps binaries with zero change in experience, add a human-facing terminal UI, then cut the first signed `v1.0.0`. Scope is evidence-based (a live dual-indexed bake-off + reverse-engineering the installed TS dist), not docs.
+
+## v1.0 Requirements
+
+### Behavioral Parity — explore (EXPL)
+
+- [ ] **EXPL-01**: User can run `explore` with a multi-word query (variadic `<query...>`), tokenized (CamelCase/snake_case/acronym/dot-notation/plain) with stopword filtering, matching TS (ours currently takes a single `<query>` and returns 0 on multi-word)
+- [ ] **EXPL-02**: `explore` ranks results by graph relevance (Random-Walk-with-Restart, α=0.25, ~25 iterations, TS's 9 edge kinds + type-hierarchy/BFS/glue-node expansion), not lexical name-match
+- [ ] **EXPL-03**: `explore` applies a file-level relevance gate so weakly-connected symbols (e.g. `Test*` funcs with no graph connectivity) no longer surface as top results, matching TS selection
+- [ ] **EXPL-04**: `explore` emits a per-root "⚠️ no covering tests" warning when a symbol has direct callers but no covering test files, matching TS
+- [ ] **EXPL-05**: `explore` output is identical across the CLI command and the `codegraph_explore` MCP tool (shared engine), verified against TS on behavioral fixtures
+
+### Behavioral Parity — node (NODE)
+
+- [ ] **NODE-01**: `node` enumerates ALL exact-name definitions of an overloaded symbol (not just one), sorted generated-files-last, matching TS (ours currently returns a single definition)
+- [ ] **NODE-02**: `node` renders multiple definitions with a "N definitions named X — returning M in full" header, full bodies up to TS's budget (≤16 defs / 12,000 chars), and an overflow list of the rest
+- [ ] **NODE-03**: `node` accepts optional file/line narrowing that never empties the result set (best-effort hints)
+- [ ] **NODE-04**: single-definition `node` output stays byte-comparable to TS (CLI + MCP)
+
+### Behavioral Parity — status content (STAT)
+
+- [ ] **STAT-01**: `status` reports DB size (Pebble on-disk bytes), reversing the Phase-3 golden-corpus strip
+- [ ] **STAT-02**: `status` reports nodes-by-kind and files-by-language breakdowns (data already computed in `StatusResult` — surface it)
+- [ ] **STAT-03**: `status` reports a live pending-changes / reindex-recommended state (the top-level `stale` signal), not the inert placeholder
+
+### Watcher-on-MCP (WATCH)
+
+- [ ] **WATCH-01**: `serve --mcp` runs the file watcher by default (live in-process auto-sync) with `--no-watch` to opt out, matching TS's default-on behavior (ours is currently opt-in via `--watch`); `install` already writes the byte-identical `serve --mcp` invocation, so this restores live sync with zero config change
+- [ ] **WATCH-02**: watcher startup never delays the MCP handshake or first-tool availability (watcher started off the handshake path)
+- [ ] **WATCH-03**: a WSL2 / slow-filesystem watch-policy auto-disables the watcher (env precedence: `CODEGRAPH_NO_WATCH` / force-on), matching TS's escape hatch
+- [ ] **WATCH-04**: concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean
+
+### Daemon Model (DMON)
+
+- [ ] **DMON-01**: `codegraph daemon` (no args) opens an interactive picker listing running daemons (current project first) to stop one / stop-all / cancel, resolving the TS name-collision (TS `daemon` = picker; ours was a foreground server)
+- [ ] **DMON-02**: explicit `daemon start` / `daemon stop` / `daemon stop --all` manage the shared background daemon lifecycle (no silent auto-spawn — `serve --mcp` watches in-process per WATCH-01, so a separate daemon is only for the explicit shared-writer case)
+- [ ] **DMON-03**: a PPID watchdog shuts down any daemon / in-process watcher when its supervising host or agent process dies (POSIX ppid-reparent + Windows liveness poll), preventing leaked daemons
+- [ ] **DMON-04**: a global daemon registry (`~/.codegraph/daemons`) lets the picker list/stop daemons across projects, self-healing stale records
+
+### Git / Worktree Awareness (WORK)
+
+- [ ] **WORK-01**: a query run from a git worktree whose resolved index belongs to a DIFFERENT working tree is detected (`git rev-parse --show-toplevel` vs `--git-common-dir`), computing the now-live `worktreeMismatch` (fixes the silent "worktree queries the main branch's graph" bug)
+- [ ] **WORK-02**: `status` prints a verbose borrowed-index warning, and every other read tool (CLI + MCP) prefixes a compact single-line notice via a shared `withWorktreeNotice` wrapper
+- [ ] **WORK-03**: worktree detection is best-effort and never blocks queries — no false positive on submodules, nested clones, monorepo subdirs, non-git trees, or symlinked paths (EvalSymlinks both sides)
+
+### Git Sync Hooks (HOOK)
+
+- [ ] **HOOK-01**: `codegraph githooks install` writes marker-fenced `post-commit`/`post-merge`/`post-checkout` hooks that background-run `codegraph sync`, guarded by `command -v codegraph`, idempotent (replace-in-place), preserving any user hook content
+- [ ] **HOOK-02**: `codegraph githooks remove` strips only codegraph's marker block (preserving user content); `githooks status` reports install state
+- [ ] **HOOK-03**: hooks are surfaced as the fallback for when the watcher is disabled (WSL2 / `CODEGRAPH_NO_WATCH`), matching TS's narrower trigger — not an always-on feature
+
+### Output Hygiene (HYG)
+
+- [ ] **HYG-01**: Pebble's internal WAL/INFO log noise no longer prints on any command (explicit `pebble.Options.Logger` routing INFO→discard) while real errors are preserved
+- [ ] **HYG-02**: no library log output ever reaches MCP stdout — JSON-RPC framing stays clean; diagnostics go to stderr only
+
+### Human TUI / Rendering (TUI)
+
+- [ ] **TUI-01**: an import-graph archtest fails the build if `charm.land/lipgloss`/`bubbletea`/`bubbles` are reachable from `internal/query` or `internal/mcp` (the ANSI-isolation guarantee; mirrors the existing graphstore/migrate archtests)
+- [ ] **TUI-02**: `status` and `files` render colorized, sectioned output on a TTY (lipgloss) and byte-identical plain output when piped or non-TTY
+- [ ] **TUI-03**: `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global — matching TS (per decision this session)
+- [ ] **TUI-04**: the `daemon` picker (DMON-01) is a bubbletea UI, and every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs)
+- [ ] **TUI-05**: `init`/`index`/`sync` show progress feedback (spinner/progress) on a TTY, plain otherwise
+
+### Surface Reconciliation (SURF)
+
+- [ ] **SURF-01**: `impact` default depth changes to 2 (from 5), matching TS
+- [ ] **SURF-02**: `files` gains a directory filter matching TS's `--filter` semantics as a NEW flag, while our existing language `--filter` is retained (documented intentional divergence — per decision this session: keep ours + add TS's)
+- [ ] **SURF-03**: missing short-flag aliases (`-l`, `-k`, `-j`, `-d`, etc.) are added across commands to match TS
+- [ ] **SURF-04**: `affected` gains `--stdin`, `--depth`, `--filter <glob>`, and `--quiet` for git-hook/CI scripting, matching TS
+- [ ] **SURF-05**: a systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` retained as a documented Go-only extension; `migrate` documented as an accepted divergence
+
+### Behavioral Parity Test Harness (TEST)
+
+- [ ] **TEST-01**: a behavioral fixture harness diffs `explore`/`node`/`status` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings — on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot
+- [ ] **TEST-02**: worktree detection has fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/` layout, and symlinked paths
+- [ ] **TEST-03**: git-hook install→edit→remove is byte-invariant, and interactive TUI components are tested against piped streams (never hang)
+
+### v1.0.0 Release (REL)
+
+- [ ] **REL-01**: the new Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerated, reproducible double-build still passes
+- [ ] **REL-02**: a real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing v0.1's pending DIST-02
+- [ ] **REL-03**: head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01
+- [ ] **REL-04**: the "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired
+
+## Future Requirements
+
+Deferred to later releases. Tracked, not in this roadmap.
+
+### Worktree (beyond parity)
+
+- **WORK-FUT-01**: auto-`init` a borrowed-index worktree, or share the parent index via `git-common-dir`, instead of only warning (v1.0 ships TS-parity detect+warn+notice; "make worktree support better later" — user-confirmed)
+
+### Daemon (beyond explicit model)
+
+- **DMON-FUT-01**: full TS auto-spawn parity (detached per-project daemon + unix-socket sharing) if the in-process watcher model proves insufficient for the shared-across-many-agents case
+
+### Human Web UI
+
+- **UI-FUT-01**: local Svelte + shadcn-svelte web UI for browsing/querying the graph (SEED-001 — triggers once parity lands; 1.1; distinct from the v1.0 terminal TUI)
+
+### Team Scale / Annotations (later milestones, per PROJECT.md)
+
+- **TEAM-FUT-01**: central graph server (multi-user, remote queries, auth)
+- **TEAM-FUT-02**: CI-built shared index distribution / caching
+- **ANNO-FUT-01**: embedding vectors, community detection, bulk export for visualization (local-model-first)
+
+## Out of Scope
+
+Explicitly excluded from v1.0. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Repointing `files --filter` to directory (breaking our language filter) | Per decision: keep language `--filter` + add a separate directory flag; do not break the existing capability |
+| Auto-spawning daemons on `serve --mcp` | Explicit-lifecycle model chosen; the in-process watcher (WATCH-01) already delivers live MCP sync without daemon sprawl |
+| Local Svelte web UI (SEED-001) | Triggers after parity lands (1.1); distinct from the v1.0 terminal TUI |
+| `pendingChanges` exact added/modified/removed COUNT at `status`-time | Requires re-running Sync's diff on every `status` call (expensive, RESEARCH A2); the live `stale`/reindex signal (STAT-03) suffices for v1.0 |
+| Cloud-API embeddings, vector search, community detection, graph-viz UI | Permanently or later-milestone out of scope per PROJECT.md (embeddings will be local-model-first) |
+| Central graph server / CI index distribution | Team Scale — a later milestone (architecture already accommodates it) |
+
+## Traceability
+
+Populated during roadmap creation. Each requirement maps to exactly one phase.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| _(pending roadmap)_ | — | Pending |
+
+**Coverage:**
+- v1.0 requirements: 45 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 5, TEST 3, REL 4)
+- Mapped to phases: TBD (roadmapper)
+- Unmapped: TBD
+
+---
+*Requirements defined: 2026-07-14*
+*Last updated: 2026-07-14 after initial v1.0 definition*
