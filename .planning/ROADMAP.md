@@ -49,3 +49,14 @@ Not yet planned — start with `/gsd-new-milestone`. Candidate scope:
 | 6. Agent Integrations & CLI Lifecycle | v0.1 | 6/6 | Complete | 2026-07-12 |
 | 7. Migration Tool | v0.1 | 7/7 | Complete | 2026-07-13 |
 | 8. Release Hardening & Benchmarks | v0.1 | 9/9 | Complete | 2026-07-14 |
+
+## Backlog
+
+### Phase 999.1: local build/contribution and taskfile.yml setup (BACKLOG)
+
+**Goal:** [Captured for future planning] Contributor-facing local dev tooling — the repo currently has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows (build with the release ldflags, test with the daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, cross-`GOOS` `go list -mod=readonly` pre-tag check) plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites (zig for cross-builds) so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (promote with /gsd-review-backlog when ready)
