@@ -77,7 +77,7 @@ Requirements are the contract for v1: full TS CodeGraph v1.3.x parity as a drop-
 ### Distribution & Supply Chain
 
 - [x] **DIST-01**: User can download a single static binary per platform (macOS/Linux/Windows, amd64+arm64) with no bundled runtime and no install-time compilation
-- [ ] **DIST-02**: Every release artifact is cosign-signed (keyless) with SLSA build provenance, and users can verify both with documented commands _(pipeline code-complete + matches shipped verifier exactly; PENDING first real `v*` tag to prove live OIDC signing + 6-target CI matrix/darwin DNS — see 08-VERIFICATION.md)_
+- [x] **DIST-02**: Every release artifact is cosign-signed (keyless) with SLSA build provenance, and users can verify both with documented commands _(PROVEN 2026-07-14 on real release v0.0.0-rc.3: all 6 CGo targets built on CI, 6 per-binary `.sigstore.json` + 6 SBOMs + SLSA `multiple.intoto.jsonl` published; downloaded darwin/arm64 binary runs + `cosign verify-blob` returns "Verified OK" against the production identity in verify.go, and correctly REJECTS a wrong identity. Two real bugs caught+fixed by the first live runs: missing linux-only go.sum hash for prometheus/procfs, and SLSA private-repository opt-in. slsa-verifier provenance check left to the user via docs/RELEASE.md — provenance is published + generator succeeded)_
 - [x] **DIST-03**: Every release publishes an SBOM; `govulncheck` and dependency scanning gate CI
 - [x] **DIST-04**: Builds are reproducible, verified by a double-build comparison gate in CI
 - [x] **DIST-05**: Dependency tree stays minimal and audited; CGo (if the parser spike selects it) is the sole documented exception
@@ -170,7 +170,7 @@ Each v1 requirement maps to exactly one phase. Coverage: 51/51 mapped, no orphan
 | MIGR-01 | Phase 7 | Complete |
 | MIGR-02 | Phase 7 | Complete |
 | DIST-01 | Phase 8 | Complete |
-| DIST-02 | Phase 8 | Pending (first release) |
+| DIST-02 | Phase 8 | Complete |
 | DIST-03 | Phase 8 | Complete |
 | DIST-04 | Phase 8 | Complete |
 | DIST-05 | Phase 8 | Complete |

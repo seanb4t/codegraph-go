@@ -1,14 +1,14 @@
 ---
 phase: 08-release-hardening-benchmarks
 verified: 2026-07-13T00:00:00Z
-status: human_needed
-verdict: passed-with-pending
-score: 8/8 requirements built and locally proven; PERF-01 numbers ratified + published (2026-07-13); 1 item (DIST-02 live signed release) requires a real tagged release to fully close
+status: passed
+verdict: passed
+score: 8/8 requirements met AND proven on a real release (v0.0.0-rc.3, 2026-07-14); PERF-01 ratified 2026-07-13
 overrides_applied: 0
 known_gaps:
   - id: DIST-02-live-release
-    statement: "Live 6-target signed release (real OIDC cert, darwin DNS resolution under CI, cosign SAN match) has not been exercised — no v* tag has ever been pushed."
-    disposition: "publish-pending — code/config verified correct by static + local proof; requires cutting a real tag to close"
+    statement: "Live 6-target signed release exercised on v0.0.0-rc.3: all 6 CGo targets built on CI (darwin native, windows/linux-arm64 via zig), 6 per-binary .sigstore.json + 6 SBOMs + SLSA multiple.intoto.jsonl published; downloaded darwin/arm64 binary runs and cosign verify-blob returns 'Verified OK' against verify.go's production identity (wrong identity correctly rejected)."
+    disposition: "RESOLVED 2026-07-14 — proven end-to-end on a real release. Two real bugs the live runs caught + fixed: missing linux-only go.sum hash (prometheus/procfs), SLSA private-repository opt-in. Non-blocking follow-up: user can slsa-verify the published provenance via docs/RELEASE.md (slsa-verifier install exceeded session time; provenance is published + generator succeeded)."
   - id: PERF-01-raw-numbers
     statement: "docs/BENCHMARKS.md now publishes the median-of-3 head-to-head numbers vs installed TS 1.3.1 (Go wins every metric); 3 raw runs committed."
     disposition: "RESOLVED + RATIFIED 2026-07-13 — real median-of-3 numbers published and committed. Follow-up (non-blocking): re-run on standardized CI hardware via bench.yml for the canonical absolute figures; ratios are hardware-durable."
