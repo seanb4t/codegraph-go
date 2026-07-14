@@ -301,3 +301,10 @@ jobs:
     with:
       base64-subjects: "${{ needs.assemble.outputs.hashes }}"
       upload-assets: ${{ startsWith(github.ref, 'refs/tags/') }}
+      # This repo is private (for now — it is destined to be public OSS). The
+      # SLSA generic generator halts by default on a private repo to avoid
+      # writing the repo name into the PUBLIC Sigstore/Rekor transparency log.
+      # We opt in: keyless cosign signing (the `assemble` job) already publishes
+      # the repo name via the certificate SAN, so provenance exposes nothing new,
+      # and the intended end state is a public repo anyway.
+      private-repository: true
