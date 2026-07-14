@@ -55,7 +55,27 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
   3. `node` enumerates ALL exact-name definitions of an overloaded symbol (generated-files-last) with the "N definitions named X — returning M in full" header, full bodies to TS's budget (≤16 defs / 12,000 chars), and an overflow list of the rest; optional file/line narrowing never empties the set (NODE-01/02/03)
   4. `explore` and `node` output is byte-identical across the CLI command and the MCP tool (shared engine), and single-definition `node` stays byte-comparable to TS (EXPL-05/NODE-04)
   5. A behavioral fixture harness diffs `explore`/`node` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot (TEST-01)
-**Plans**: TBD
+**Plans**: 17 plans (6 waves; D-09 edge-kind expansion + D-10 full H1–H21 heuristic port, kept whole per user decision)
+
+Plans:
+- [ ] 01-01-PLAN.md — Behavioral fixture harness + TS 1.3.1 golden capture (CLI + MCP, synthetic corpus)
+- [ ] 01-02-PLAN.md — F1: 6 new edge-kind constants (additive string, no schema bump)
+- [ ] 01-03-PLAN.md — Query tokenizers (H1 extractSymbolsFromQuery + H2 extractSearchTerms/STOP_WORDS)
+- [ ] 01-04-PLAN.md — node multi-def enumeration + budget/overflow + never-empty narrowing (NODE-01/02/03/04)
+- [ ] 01-05-PLAN.md — Go edge-kind extraction: resolve.go Pass-2 (extends/overrides) + Pass-1 (references/instantiates/type_of/returns)
+- [ ] 01-06-PLAN.md — RWR core: computeGraphRelevance + 9-kind RankEdges (deterministic, α=0.25, 25 iters)
+- [ ] 01-07-PLAN.md — Hybrid gather channels 1-3 + merge (H3–H6) + shared isTestFile
+- [ ] 01-08-PLAN.md — Java + C# extractor edge-kind emission
+- [ ] 01-09-PLAN.md — Python + TS/JS extractor edge-kind emission
+- [ ] 01-10-PLAN.md — Gather re-rankers: test-dampen + core-dir + multi-term (H7–H9)
+- [ ] 01-11-PLAN.md — Subgraph expansion: type-hierarchy + BFS bounds + glue-node (H10–H12)
+- [ ] 01-12-PLAN.md — Named-symbol seeding + per-overload disambiguation tiers (H13)
+- [ ] 01-13-PLAN.md — Per-file score tiers + hard exclusion + buried-rescue (H14–H16)
+- [ ] 01-14-PLAN.md — 5-way relevance gate + central-file + 5-tier sort (H17–H19, EXPL-03 core)
+- [ ] 01-15-PLAN.md — F4: force re-index repo + golden corpora (9-kind graph)
+- [ ] 01-16-PLAN.md — Explore orchestration + EXPL-04 warning + skeletonization/adaptive budget (H20/H21) + CLI variadic
+- [ ] 01-17-PLAN.md — F5 golden regen + behavioral parity harness (Go vs TS, CLI==MCP)
+
 **Notes**: Highest-risk, load-bearing work. EXPL-02's RWR relevance algorithm is the single hardest item — it lives in the shared `internal/query.Engine` (CLI + MCP improve in the same commit) and puts the golden-corpus contract at stake. Fixtures MUST exist before/with the algorithm change (template-parity ≠ behavior-parity). No styling anywhere in this phase — plain-text output only (the archtest lands in Phase 6 but the constraint holds from day one).
 
 ### Phase 2: status Content & Git/Worktree Awareness
@@ -150,7 +170,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Behavioral Parity — explore & node | v1.0 | 0/TBD | Not started | - |
+| 1. Behavioral Parity — explore & node | v1.0 | 0/17 | Planned | - |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 0/TBD | Not started | - |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
