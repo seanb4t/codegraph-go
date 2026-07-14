@@ -886,3 +886,190 @@ frozen ground truth per `testdata/golden/README.md`'s own stated policy
 remain the frozen ground truth; do not attempt to hand-edit them"). No
 external-ecosystem staleness clock applies (this is not a moving-target
 library dependency).
+
+---
+
+## Scope-Expansion Addendum (D-09/D-10)
+
+**Resolution of Open Questions §1 and §2 (locked in CONTEXT.md D-09/D-10,
+commit `2c9a85d`):** the user chose the MAXIMUM-fidelity path on both. D-09 —
+expand Phase 1 to add ALL of TS's RANK_EDGES kinds to the schema + priority-4
+language extractors + re-index, so RWR ranks over the full edge set (not a
+reduced subset). D-10 — port the FULL ~15-heuristic explore stack faithfully
+(no documented-divergence drops except where a specific kind is genuinely
+intractable in a specific language, which becomes a narrower D-02 divergence
+per-language, not a whole-heuristic drop).
+
+This addendum supersedes Open Questions §1 and §2 above and the Summary's
+"treat the wider auxiliary-heuristic stack as an allowed divergence"
+recommendation — that recommendation is now overridden by D-10. Assumption A1
+is resolved (full stack IS in scope); A2 is resolved (see §B below — `embeds`
+is NOT the answer; a distinct `extends` kind is added).
+
+### A. Schema-bump mechanics — the load-bearing risk, and why it is smaller than feared
+
+**Finding: `Edge.kind` is a free-form proto3 `string`, NOT an enum. Adding
+edge kinds is purely additive DATA — no proto regeneration, no `SchemaVersion`
+bump is required by the schema's own discipline.** Evidence:
+
+- `internal/schema/graph.proto:73` — `string kind = 3;` (Edge). Free-form
+  string field, not `enum`. `[VERIFIED: repo]`
+- `internal/schema/graph.pb.go:218` — `Kind string ... protobuf:"bytes,3,..."`
+  confirms the generated Go type is a plain `string`. `[VERIFIED: repo]`
+- `internal/schema/meta.go:3-12` — `SchemaVersion uint32 = 1`, doc: "bumped
+  ONLY when a genuinely breaking layout change is unavoidable — a well-formed
+  additive change (a new field, a newly reserved range) never requires a
+  bump." A new VALUE on an existing string field is additive by construction.
+  `[VERIFIED: repo]`
+- `internal/graphstore/keys.go:96` — `edgeKey(src, kind, dst)` folds `kind`
+  into the Pebble key; a new kind therefore lands at a fresh, non-colliding
+  key range with zero migration of existing edge keys. `[VERIFIED: repo]`
+
+**So no `SchemaVersion` increment and no `Meta`-gating change is needed.** The
+existing edge kinds (`calls`/`imports`/`embeds`/`contains`/`implements`) are
+already bare string literals in `resolve.go`; new kinds are the same pattern.
+
+**Migration is UNAFFECTED — the faithful-conversion contract already carries
+all 9 kinds.** `internal/migrate/translate.go:58` sets
+`Kind: asString(row["kind"])` — a verbatim passthrough of the TS SQLite
+`edges.kind` column. A migrated TS index ALREADY contains all 9 RANK_EDGES
+kinds (TS emits them), and the reader copies them through unchanged. The new
+kinds are produced by NATIVE RE-INDEXING only; migration neither gains nor
+loses anything from D-09. **No change to `translate.go` is required, and the
+migrate archtest/golden fixtures for the reader path are untouched.**
+`[VERIFIED: repo — translate.go:50-64]`
+
+**What DOES ripple (the real, ordered foundation wave):**
+
+| # | Task | Why | Files |
+|---|------|-----|-------|
+| F1 | Add the 6 new edge-kind string constants (see §B for the exact set — it is 6, not 5) to `goextract`'s vocabulary, mirroring `RefKind*`/`EdgeKindImplements`. | One definition shared by all extractors + resolve + the RWR RANK_EDGES set, per the existing "one definition not three copies" discipline. | `internal/indexer/goextract/types.go:32-50` |
+| F2 | Add the Go-side `RANK_EDGES` set (all 9 now available) to the new `rwr.go`. | EXPL-02 core consumes it. | `internal/query/rwr.go` (new) |
+| F3 | Emit the new kinds from each priority-4 extractor + resolve pass (§B). | Produces the data F2 ranks over. | `internal/indexer/{goextract,javaextract,csharpextract,pyextract,tsextract}`, `internal/indexer/resolve.go` |
+| F4 | Re-index this repo's own `.codegraph/` (the MCP server this session uses) AFTER F3 lands, so its graph carries the new kinds. | The live index is stale w.r.t. new extractor output until re-indexed; `sync`'s stat pre-filter won't re-extract unchanged files, so a **`codegraph index --force`** (not `sync`) is required. | operational, not code |
+| F5 | Regenerate the golden corpus (`capture.sh`) AND the Go-side expected fixtures. | New edges change explore ranking/output on the existing `weft-go`/`colbymchenry-codegraph` corpora — the committed `explore.json` fixtures become stale the moment F3 changes extractor output. TS-side `capture.sh` re-run captures the TS ground truth WITH all 9 kinds (TS already emits them, so TS output is unchanged — but the Go side must be re-baselined against it). | `testdata/golden/` |
+
+**No `SchemaVersion` bump (F-none):** explicitly confirmed above — do not add
+a version-gate task; it would be a no-op against an additive string-value
+change and would wrongly signal older indexes as incompatible.
+
+**Ordering constraint:** F1 → F3 → F4 → F5 is a hard chain (can't re-index
+before extractors emit; can't re-baseline fixtures before re-indexing). F2 is
+parallel to F3 but both must precede any EXPL-02 ranking task that asserts on
+real edges.
+
+### B. Per-language extraction for the new edge kinds (priority-4: Go, Java, C#, Python, TS/JS)
+
+**Correction to the coordinator's set (requested):** the coordinator listed 5
+kinds (`references`, `overrides`, `instantiates`, `returns`, `type_of`) and
+omitted `extends`. The full missing set to reach TS's 9 RANK_EDGES is **6
+kinds**, because TS's `extends` is a DISTINCT edge kind and Go currently emits
+`embeds` (a different literal string) for class-extends-class — see
+`resolve.go:137`, `kind := "embeds"` stays `"embeds"` for the non-interface
+case; only the interface case promotes to `implements`. So Assumption A2's
+"reuse `embeds` as the `extends` analog" is NOT the D-09 answer: to rank over
+TS's actual `RANK_EDGES`, a distinct `extends` edge kind must be emitted (a
+class/struct extending a class/struct — the branch that today falls through to
+`embeds`). The 6 missing kinds are: **`extends`, `references`, `overrides`,
+`instantiates`, `returns`, `type_of`.** (`calls`, `implements`, `imports`
+already exist and are correct.)
+
+**The extraction mechanism every new kind follows** (the existing pattern to
+mirror, `[VERIFIED: repo — resolve.go:98-190]`): Pass 1 (per-file, parallel
+tree-walk) emits a `goextract.UnresolvedRef{FromID, Name, PkgAlias, Kind,
+Line, Col}` for each cross-file reference; Pass 2 (`resolveRefsWithIndex`,
+sequential, has the global `symbolIndex`) resolves `Name`→target node id and
+emits `schema.Edge{Source, Target, Kind, Provenance:"ast", ...}`. Same-file
+refs that resolve at extract time become `IntraEdge`s directly. Every new kind
+is a new `case` in the Pass-1 emit sites and the Pass-2 `switch ref.Kind`.
+
+| New kind | TS semantic | Where produced | Tree-sitter anchor (priority-4) | Mirrors existing pattern | Difficulty / D-02 flag |
+|----------|-------------|----------------|----------------------------------|--------------------------|------------------------|
+| `extends` | class/struct extends a class/struct (NOT interface) | Pass 2 — it is exactly the branch `resolve.go:137` currently leaves as `embeds` when the target Kind is class/struct. Split that branch: interface target → `implements` (unchanged); class/struct target → new `extends`. | Already captured as `RefKindEmbeds` at extract time (Java `superclass`, C# `base_list`, Python base-class arg, TS `extends_type_clause`, Go struct embedding) — **no new extract-time work; only the Pass-2 promotion split.** | Mirrors the existing embeds→implements promotion exactly (`resolve.go:116-150`). | LOW — smallest of the six; pure resolve-time reclassification of data already captured. |
+| `implements` (already exists) | class implements interface | — | — | — | Done. Listed only to confirm it is NOT in the missing set. |
+| `references` | a symbol names/uses another symbol (broad identifier use not caught by `calls`) | Pass 1 → Pass 2, new `RefKindReferences` | An identifier/type-identifier use inside a body that is neither a call callee nor an import — e.g. Go `identifier` resolving to a package-level symbol; Java/C# field/type reference; Python `attribute`/`identifier` load; TS `identifier` in expression position. | Mirrors `RefKindCalls` extract→resolve, but the extract-time filter is "named identifier that is not the callee of a call_expression". | MEDIUM — high volume; needs a de-dup vs. `calls`/`imports` so a called symbol isn't ALSO a `references` edge. Candidate for a per-language scope note if a grammar makes "reference but not call" hard to isolate. |
+| `overrides` | a method overrides a supertype's same-named method | Pass 2 — derivable from data already present: for a method whose enclosing type has an `extends`/`implements`/`embeds` supertype declaring a same-named method, emit `overrides` method→supertype-method. | No new extract-time capture — reuses the `contains` (type→method) + `extends`/`implements` edges already built. This is the same supertype-walk `retryConformanceCalls`/`walkSupertypesForMethod` already implement (`resolve.go:261-326`). | Mirrors `synthesizeGoImplements` (`resolve.go:338`) — a Pass-2 synthesis over existing edges, not a new tree-walk. | MEDIUM — Go has no `override` keyword (structural only); Java `@Override`/C# `override`/Python MRO/TS are explicit or semi-explicit. Go's structural case is the same method-set logic as `implements`; flag Go `overrides` as "structural, name+arity matched" (a documented precision note, not a drop). |
+| `instantiates` | code constructs an instance of a type | Pass 1 → Pass 2, new `RefKindInstantiates` | Go `composite_literal`/`&T{}`; Java/C# `object_creation_expression` (`new T()`); Python a `call` whose callee resolves to a class Kind; TS `new_expression`. | Mirrors `RefKindCalls` (a use-site ref resolved to a target node) — same extract→resolve shape, target filtered to type-Kind nodes. | MEDIUM — Python overlaps `calls` (construction IS a call syntactically); resolve-time Kind check (target is a class) disambiguates. Clean in Go/Java/C#/TS. |
+| `returns` | a function/method's declared return type → that type node | Pass 1 (signature already parsed) → Pass 2, new `RefKindReturns` | The return-type node already read for `Node.ReturnType` (`graph.proto:58`): Go `function_declaration` result; Java/C# method return type; TS return type annotation; Python `-> T`. Emit a ref from the function node to the named return type. | Mirrors `RefKindEmbeds` (a declared type name resolved to its node) — the return type string is already extracted; add a ref carrying it. | LOW-MEDIUM — the return-type TEXT is already captured; needs the type NAME isolated for node resolution (generics/unions may resolve to the outer type only — a documented precision note per language). Python dynamic/un-annotated returns simply emit no edge (absence, not error). |
+| `type_of` | a variable/field/parameter → its declared type node | Pass 1 → Pass 2, new `RefKindTypeOf` | Go `var`/field `type`; Java/C# field/local declared type; TS type annotation; Python annotated assignment `x: T`. | Mirrors `RefKindEmbeds`/`returns` — a declared type name resolved to its node. | MEDIUM — highest volume after `references`; un-annotated Python vars emit nothing (absence). Generic/composite types resolve to the outer named type (documented precision note). |
+
+**Mainstream-6 languages (Ruby/Rust/Swift/Kotlin/PHP/C/C++):** out of scope
+for this addendum per the coordinator — they follow the existing D-11
+full-or-documented-partial matrix. Each new kind that a mainstream grammar
+can't cleanly produce is a per-language D-02 documented divergence under that
+existing matrix, not new research here.
+
+**Net new extract-time tree-walk work is smaller than the 6-kind count
+suggests:** `extends` and `overrides` are Pass-2 synthesis over data already
+captured (zero new tree-walking); `returns` reuses the already-parsed return
+type; only `references`, `instantiates`, and `type_of` need genuinely new
+Pass-1 capture — and all three mirror the existing `RefKindCalls`/
+`RefKindEmbeds` extract→resolve shape.
+
+### C. Definitive spec confirmation — the planner's D-10 checklist
+
+Every item below is already pinned with a file:line citation earlier in this
+document; this table consolidates them so no heuristic is silently dropped
+under D-10. "Do not re-derive" — cross-reference the Code Examples section for
+the verbatim source.
+
+#### C.1 — The 9 RANK_EDGES members (EXPL-02)
+
+`[VERIFIED: TS 1.3.1 dist — mcp/tools.js:2329-2332]`
+
+| # | Kind | Go status after D-09 |
+|---|------|----------------------|
+| 1 | `calls` | exists |
+| 2 | `references` | NEW (§B, Pass-1) |
+| 3 | `extends` | NEW (§B, Pass-2 split from `embeds`) |
+| 4 | `implements` | exists |
+| 5 | `overrides` | NEW (§B, Pass-2 synthesis) |
+| 6 | `instantiates` | NEW (§B, Pass-1) |
+| 7 | `returns` | NEW (§B, reuse return-type) |
+| 8 | `type_of` | NEW (§B, Pass-1) |
+| 9 | `imports` | exists |
+
+Undirected, **unweighted** (plain `Set` membership — no per-kind weight),
+α=0.25, fixed 25 iterations, dangling-mass retained. (Code Examples §3.)
+
+#### C.2 — The full auxiliary-heuristic stack to port (D-10, in pipeline order)
+
+`[VERIFIED: TS 1.3.1 dist — file:line per row]`
+
+| # | Heuristic | Key constants / rule | Source |
+|---|-----------|----------------------|--------|
+| H1 | Tokenizer A — exact-symbol extraction (feeds named-symbol seeding) | CamelCase (≥2), snake_case (≥3), SCREAMING_SNAKE, acronym (≥2), dot-notation (full + parts ≥2), plain lowercase (≥3); filtered by a ~90-word `commonWords` set | context/index.js:64-145 |
+| H2 | Tokenizer B — FTS term extraction (EXPL-01's literal "stopword-filtered") | preserve compounds (≥3), camel/snake split, `[_.]`→space, len<3 + `STOP_WORDS` drop; optional stem variants | search/query-utils.js:189-242, STOP_WORDS 102-120 |
+| H3 | Channel 1 — exact-name lookup + co-location boost | `+20 × (distinctSymbolsInFile − 1)` when >1 query symbol co-occurs in a file; trim to `searchLimit×2` | context/index.js:449-478 |
+| H4 | Channel 2 — titlecase definition-prefix search | class/interface/struct/trait/protocol/enum/type_alias kinds; `+15 + brevityBonus` where `brevityBonus = max(0, 10 − (nameLen − prefixLen)/3)`; stem variants via `getStemVariants` | context/index.js:485-528 |
+| H5 | Channel 3 — FTS text search, multi-term merge | per-term search, `+5 × (termHits − 1)`; import kind excluded unless explicit kind filter | context/index.js:530-575 |
+| H6 | Merge — max-score-wins across channels | dedup by node id, keep max score from any channel | context/index.js:580-606 |
+| H7 | Test-file dampening | `score ×= 0.3` for test-file nodes unless query mentions test/spec | context/index.js:607-616 |
+| H8 | Core-directory boost | if a dominant file holds ≥3× the next file's edge count, `+25` to results sharing its directory prefix | context/index.js:617-647 |
+| H9 | Multi-term co-occurrence re-rank | stem-grouped term groups; `score ×= 1 + matchCount×0.5` when ≥2 groups match name/dir; distinctive-identifier exact matches exempt from dampening | context/index.js:648-712+ |
+| H10 | Type-hierarchy expansion | class/interface/struct/trait/protocol; budget `ceil(maxNodes/4)`; 2 passes (focal ancestors/descendants via extends/implements, then newly-found parents' siblings) | context/index.js:921-955; traversal.js:332-380 |
+| H11 | BFS traversal bounds | `maxNodes:200, traversalDepth:3, minScore:0.2, searchLimit:8` (explore's overrides of the defaults) | mcp/tools.js:2422-2427 |
+| H12 | Glue-node injection | callers+callees of each root, ONLY if in a file the subgraph already surfaces; `GLUE_NODE_CAP = 60` | mcp/tools.js:2439-2467 |
+| H13 | Named-symbol seeding + per-overload disambiguation tiers | tokens ≥3, ≤16 tokens; bare name via `getNodesByName` (not FTS); ≤3 defs → inject all, tier = def0 + any co-named with `callers ≥ 0.25×maxCallers`; >3 defs → type-token-corroborated ≤4 else top-1 by body substance; PascalCase type tokens (excl. project name) bias overload selection | mcp/tools.js:2477-2562 |
+| H14 | Per-file score tiers | named-seed `+50`, entry (root/named) `+10`, connected-to-entry `+3`, other `+1`; keep files with `score ≥ 3` | mcp/tools.js:2632-2647 |
+| H15 | Hard test/spec exclusion | drop all low-value (test/spec/icon/i18n) files unless query mentions test AND ≥2 non-test candidates remain | mcp/tools.js:2652-2684 |
+| H16 | Change-surface buried-rescue | for each tier-seed callable's signature types (references/type_of/returns edges), surface ONLY if `fileGraphScore < maxGraph×0.06` AND `termHits < 2` (genuinely buried); rescued file forced-kept + `score = max(score,45)` | mcp/tools.js:2574-2613, 2733-2762 |
+| H17 | Relevance GATE (EXPL-03) — 5-way OR, the `0.06` role | keep file if `fileGraphScore ≥ maxGraph × 0.06` OR central OR entry/named-file OR change-surface-rescued OR `distinctTermHits ≥ 2`; only applied when `maxGraph > 0`; never prunes below 2 files | mcp/tools.js:2763-2783 |
+| H18 | 5-tier file sort | (1) named-seed file, (2) corroborated = entry/central + ≥2 terms, (3) graph mass with 1%-of-max epsilon, (4) term hits, (5) !low-value, then !generated, then score, then node count | mcp/tools.js:2823-2863 |
+| H19 | Central-file selection | 1-2 files with highest graph mass AND ≥1 term hit; earn the larger whole-file render ceiling | mcp/tools.js:2716-2720 |
+| H20 | Polymorphic-sibling skeletonization (render-time) | off-spine file whose classes share a supertype with `≥ MIN_SIBLINGS = 3` implementers → skeletonize (signatures only) | mcp/tools.js:2927-2939 |
+| H21 | Adaptive output budget | `getExploreOutputBudget(fileCount)` sets maxFiles/relationship caps/whole-file ceilings by project size (#185); `maxFiles` clamped `[1,20]` | mcp/tools.js:2410-2417 |
+
+**Node-side (NODE-01/02/03) — already fully consolidated in Code Examples
+§6–9; no heuristic omitted:** `findSymbolMatches` enumeration + generated-last
+stable sort (§6, tools.js:4193-4234), `isGeneratedFile` regex list (§7),
+`HARD_CAP=16`/`BODY_BUDGET=12000` + two-line header + `LIST_CAP=20` overflow
+(§8, tools.js:3633-3676), file/line narrowing never-empty guard (§9,
+tools.js:3603-3620).
+
+**D-10 completeness assertion for the planner:** H1–H21 above IS the full
+explore heuristic set present in TS 1.3.1's `handleExplore` +
+`findRelevantContext`. A plan that ports fewer than 21 explore heuristics (or
+drops any node-side item) is dropping a locked-in D-10 behavior and must
+justify each omission as an explicit per-item D-02 divergence with user
+sign-off — the default under D-10 is "port all of them."
