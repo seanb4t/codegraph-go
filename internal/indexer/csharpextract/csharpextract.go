@@ -240,6 +240,9 @@ func (ex *extractor) emitTypeDecl(node *tree_sitter.Node, kind string) {
 	ex.typeNodesByName[name] = id
 
 	ex.collectSupertypeRefs(id, node)
+	if body := node.ChildByFieldName("body"); body != nil {
+		ex.collectFieldTypeOfRefs(id, body)
+	}
 }
 
 // collectSupertypeRefs emits one RefKindEmbeds unresolved ref per entry in
@@ -400,11 +403,13 @@ func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node)
 	end := decl.EndPosition()
 
 	var signature, returnType string
+	var returnTypeNode *tree_sitter.Node
 	if params := decl.ChildByFieldName("parameters"); params != nil {
 		signature = params.Utf8Text(ex.src)
 	}
 	if rt := decl.ChildByFieldName("returns"); rt != nil {
 		returnType = rt.Utf8Text(ex.src)
+		returnTypeNode = rt
 	}
 	vis := csharpVisibility(modifiersOf(decl, ex.src), "private")
 
@@ -428,8 +433,272 @@ func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node)
 		Source: typeID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
 
+	// D-09 (01-RESEARCH.md §B): reuses the already-parsed return-type node
+	// (returnTypeNode, above) — emitNamedTypeRef isolates the type NAME for
+	// node resolution via namedTypeRef, mirroring goextract's
+	// collectReturnTypeRef. A primitive/void return (predefined_type) or a
+	// constructor (returnTypeNode stays nil, C# constructor_declaration has
+	// no "returns" field) emits no ref — absence, not error.
+	ex.emitNamedTypeRef(id, returnTypeNode, goextract.RefKindReturns)
+
 	if body := decl.ChildByFieldName("body"); body != nil {
 		ex.collectCalls(id, body)
+		ex.collectReferencesAndInstantiates(id, body)
+	}
+}
+
+// namedTypeRef resolves a type expression node to a (name, pkgAlias) pair
+// via csharpQualifiedParts, filtering C#'s predefined/primitive types (int,
+// string, void, ...) — mirrors goextract.namedTypeRef's Go predeclared-type
+// filtering discipline (01-RESEARCH.md §B). A compound/unnamed type shape
+// (array_type, nullable_type, tuple_type, implicit_type/"var", ...) is
+// already excluded by csharpQualifiedParts' own switch.
+func (ex *extractor) namedTypeRef(t *tree_sitter.Node) (name, pkgAlias string, ok bool) {
+	if t == nil || t.Kind() == "predefined_type" {
+		return "", "", false
+	}
+	simple, prefix, ok := csharpQualifiedParts(t, ex.src)
+	if !ok {
+		return "", "", false
+	}
+	return simple, ex.namespacePrefixAlias(prefix, simple), true
+}
+
+// emitNamedTypeRef emits a D-09 Pass-1 ref (01-RESEARCH.md §B) of the given
+// kind (RefKindReturns/RefKindTypeOf) from fromID to typeNode's simple named
+// type reference, when typeNode resolves to one via namedTypeRef. A
+// primitive/void/compound-shaped type emits no ref — absence, not error.
+func (ex *extractor) emitNamedTypeRef(fromID string, typeNode *tree_sitter.Node, kind string) {
+	if typeNode == nil {
+		return
+	}
+	name, pkgAlias, ok := ex.namedTypeRef(typeNode)
+	if !ok {
+		return
+	}
+	pos := typeNode.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: kind,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
+}
+
+// recordInstantiate emits a D-09 `instantiates` Pass-1 ref (01-RESEARCH.md
+// §B) for a `new T(...)` object_creation_expression whose "type" field is a
+// single named type reference (namedTypeRef) — mirrors
+// goextract.recordInstantiate's shape exactly. The resolved target's
+// Kind-check disambiguation (must be a class, not an interface) happens at
+// Pass 2 (resolve.go), not here.
+func (ex *extractor) recordInstantiate(fromID string, creation *tree_sitter.Node) {
+	t := creation.ChildByFieldName("type")
+	if t == nil {
+		return
+	}
+	name, pkgAlias, ok := ex.namedTypeRef(t)
+	if !ok {
+		return
+	}
+	pos := creation.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindInstantiates,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
+}
+
+// collectReferencesAndInstantiates walks a method/constructor body for
+// three D-09 Pass-1 capture kinds (01-RESEARCH.md §B): instantiates (via
+// recordInstantiate), type_of for LOCAL variable declarations (anchored at
+// the enclosing method id fromID — field type_of is handled separately by
+// collectFieldTypeOfRefs, anchored at the enclosing type, since this
+// extractor emits no field OR local-variable node either), and references
+// (a value read of an identifier/member-access that is NOT an
+// invocation_expression's own callee/qualifier — collectCalls already
+// captures those via its own independent whole-body scan, and de-dup
+// requires a called symbol never ALSO emit a references ref).
+//
+// C# D-02 precision note (mirrors goextract's/javaextract's own note
+// exactly, per 01-RESEARCH.md §B): this walk is scoped to a bounded
+// allow-list of unambiguous read positions — call/constructor arguments,
+// return values, local-variable initializers, and assignment right-hand
+// sides — plus the common compound-expression wrappers reachable from them
+// via captureExprRead — rather than exhaustively covering every C#
+// expression shape. This is a deliberate, bounded scope, not a silent drop
+// of ground truth — an over-broad walk risks the exact false
+// same-namespace-name-collision resolution recordCall's local-vs-type
+// discipline (mirrored below in captureMemberAccessRead) already guards
+// against for `calls`.
+func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_sitter.Node) {
+	walkDescendants(body, func(n *tree_sitter.Node) bool {
+		switch n.Kind() {
+		case "invocation_expression":
+			// De-dup: the callee ("function") is already captured by
+			// collectCalls' own separate walk — only "arguments" are
+			// additional read positions.
+			if args := n.ChildByFieldName("arguments"); args != nil {
+				for i := uint(0); i < args.NamedChildCount(); i++ {
+					ex.captureExprRead(fromID, args.NamedChild(i))
+				}
+			}
+			return false
+		case "object_creation_expression":
+			ex.recordInstantiate(fromID, n)
+			if args := n.ChildByFieldName("arguments"); args != nil {
+				for i := uint(0); i < args.NamedChildCount(); i++ {
+					ex.captureExprRead(fromID, args.NamedChild(i))
+				}
+			}
+			return false
+		case "return_statement":
+			for i := uint(0); i < n.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, n.NamedChild(i))
+			}
+			return false
+		case "local_declaration_statement":
+			for i := uint(0); i < n.NamedChildCount(); i++ {
+				vd := n.NamedChild(i)
+				if vd.Kind() != "variable_declaration" {
+					continue
+				}
+				ex.emitNamedTypeRef(fromID, vd.ChildByFieldName("type"), goextract.RefKindTypeOf)
+				for j := uint(0); j < vd.NamedChildCount(); j++ {
+					c := vd.NamedChild(j)
+					if c.Kind() != "variable_declarator" {
+						continue
+					}
+					// A variable_declarator's optional initializer is its
+					// SECOND named child (index 1) with no field name — C#'s
+					// grammar exposes only "name" as a field here, unlike
+					// Java's variable_declarator which names its initializer
+					// "value" (verified via a live parse this session, not
+					// just the docs).
+					if c.NamedChildCount() > 1 {
+						ex.captureExprRead(fromID, c.NamedChild(1))
+					}
+				}
+			}
+			return false
+		case "assignment_expression":
+			if right := n.ChildByFieldName("right"); right != nil {
+				ex.captureExprRead(fromID, right)
+			}
+			return false
+		}
+		return true
+	})
+}
+
+// captureExprRead classifies a single expression node reached from an
+// allow-listed read position (see collectReferencesAndInstantiates) and
+// emits a references ref for a bare identifier or member-access value read,
+// recursing through common compound-expression wrappers so a nested read
+// inside one of those is still found — mirrors goextract.captureExprRead's
+// shape.
+func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
+	if expr == nil {
+		return
+	}
+	switch expr.Kind() {
+	case "identifier":
+		pos := expr.StartPosition()
+		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+			FromID: fromID, Name: expr.Utf8Text(ex.src), Kind: goextract.RefKindReferences,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		})
+	case "member_access_expression":
+		ex.captureMemberAccessRead(fromID, expr)
+	case "parenthesized_expression":
+		if expr.NamedChildCount() > 0 {
+			ex.captureExprRead(fromID, expr.NamedChild(0))
+		}
+	case "cast_expression":
+		if v := expr.ChildByFieldName("value"); v != nil {
+			ex.captureExprRead(fromID, v)
+		}
+	case "unary_expression":
+		if o := expr.ChildByFieldName("argument"); o != nil {
+			ex.captureExprRead(fromID, o)
+		}
+	case "binary_expression":
+		if l := expr.ChildByFieldName("left"); l != nil {
+			ex.captureExprRead(fromID, l)
+		}
+		if r := expr.ChildByFieldName("right"); r != nil {
+			ex.captureExprRead(fromID, r)
+		}
+	case "invocation_expression":
+		// A nested call (e.g. an argument that is itself a call) — its own
+		// callee is never a reference (de-dup, mirroring the outer
+		// collectReferencesAndInstantiates rule); only its arguments are
+		// walked here.
+		if args := expr.ChildByFieldName("arguments"); args != nil {
+			for i := uint(0); i < args.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, args.NamedChild(i))
+			}
+		}
+	case "object_creation_expression":
+		ex.recordInstantiate(fromID, expr)
+		if args := expr.ChildByFieldName("arguments"); args != nil {
+			for i := uint(0); i < args.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, args.NamedChild(i))
+			}
+		}
+	}
+	// Every other expression kind (literals, lambda_expression bodies,
+	// is_pattern_expression, array_creation_expression, ...) is out of this
+	// bounded allow-list per the C# D-02 precision note above — no
+	// reference captured, no error.
+}
+
+// captureMemberAccessRead handles a member_access_expression VALUE read
+// (`Type.Field`/`obj.Field` used as a value, not called — recordCall's own
+// invocation_expression handling already captures the call-callee shape
+// via collectCalls' separate walk). Mirrors recordCall's memberAccessAlias/
+// local-vs-type alias discipline for PkgAlias, and mirrors
+// goextract.captureSelectorRead's recursion discipline exactly: an
+// identifier (or `this`) operand's own read is fully represented by the
+// emitted ref's PkgAlias/Name pair (never re-walked as its own reference);
+// any other operand shape (a nested member_access_expression chain, an
+// invocation_expression result, ...) is walked further via captureExprRead.
+func (ex *extractor) captureMemberAccessRead(fromID string, sel *tree_sitter.Node) {
+	object := sel.ChildByFieldName("expression")
+	field := sel.ChildByFieldName("name")
+	if field == nil {
+		return
+	}
+	name := field.Utf8Text(ex.src)
+	if field.Kind() == "generic_name" && field.NamedChildCount() > 0 {
+		name = field.NamedChild(0).Utf8Text(ex.src)
+	}
+	pkgAlias := ex.memberAccessAlias(object)
+	if object != nil && object.Kind() != "identifier" && object.Kind() != "this" {
+		ex.captureExprRead(fromID, object)
+	}
+	pos := sel.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
+}
+
+// collectFieldTypeOfRefs emits a D-09 `type_of` Pass-1 ref (01-RESEARCH.md
+// §B) for each of typeID's own type body's direct field_declaration
+// children, anchored at typeID itself — a documented C# D-02 precision
+// note (mirrors this package's pre-existing "no field node" skip, types.go's
+// package doc): since this extractor never emits a field node, a field's
+// declared-type ref has no field-level FromID to anchor on, so it is
+// recorded against the enclosing type instead. A primitive-typed field
+// (predefined_type) emits no ref via emitNamedTypeRef's own filtering.
+func (ex *extractor) collectFieldTypeOfRefs(typeID string, body *tree_sitter.Node) {
+	for i := uint(0); i < body.NamedChildCount(); i++ {
+		fd := body.NamedChild(i)
+		if fd.Kind() != "field_declaration" {
+			continue
+		}
+		for j := uint(0); j < fd.NamedChildCount(); j++ {
+			if vd := fd.NamedChild(j); vd.Kind() == "variable_declaration" {
+				ex.emitNamedTypeRef(typeID, vd.ChildByFieldName("type"), goextract.RefKindTypeOf)
+			}
+		}
 	}
 }
 
