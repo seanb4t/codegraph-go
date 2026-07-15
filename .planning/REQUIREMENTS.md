@@ -10,7 +10,7 @@
 ### Behavioral Parity — explore (EXPL)
 
 - [ ] **EXPL-01**: User can run `explore` with a multi-word query (variadic `<query...>`), tokenized (CamelCase/snake_case/acronym/dot-notation/plain) with stopword filtering, matching TS (ours currently takes a single `<query>` and returns 0 on multi-word)
-- [ ] **EXPL-02**: `explore` ranks results by graph relevance (Random-Walk-with-Restart, α=0.25, ~25 iterations, TS's 9 edge kinds + type-hierarchy/BFS/glue-node expansion), not lexical name-match
+- [x] **EXPL-02**: `explore` ranks results by graph relevance (Random-Walk-with-Restart, α=0.25, ~25 iterations, TS's 9 edge kinds + type-hierarchy/BFS/glue-node expansion), not lexical name-match
 - [ ] **EXPL-03**: `explore` applies a file-level relevance gate so weakly-connected symbols (e.g. `Test*` funcs with no graph connectivity) no longer surface as top results, matching TS selection
 - [ ] **EXPL-04**: `explore` emits a per-root "⚠️ no covering tests" warning when a symbol has direct callers but no covering test files, matching TS
 - [ ] **EXPL-05**: `explore` output is identical across the CLI command and the `codegraph_explore` MCP tool (shared engine), verified against TS on behavioral fixtures
@@ -130,7 +130,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | EXPL-01 | Phase 1 | Pending |
-| EXPL-02 | Phase 1 | Pending |
+| EXPL-02 | Phase 1 | Complete |
 | EXPL-03 | Phase 1 | Pending |
 | EXPL-04 | Phase 1 | Pending |
 | EXPL-05 | Phase 1 | Pending |
