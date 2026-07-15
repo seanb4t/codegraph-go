@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
-stopped_at: Completed 01-11-PLAN.md
-last_updated: "2026-07-15T14:10:48.885Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-07-15T14:30:45.272Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 10 of 17
+Plan: 11 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -68,6 +68,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P07 | 15min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P11 | 5min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P12 | 35min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P08 | 20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 1]: 01-07 gather channels (H3-H6) shipped without matchNodes wiring by design -- plan 10 wires this into Explore() and adds H7-H21 rerankers
 - [Phase 01-behavioral-parity-explore-node]: H10-H12 subgraph-construction primitives (expandTypeHierarchy/expandBFS/expandGlueNodes) close the T-01-18 DoS mitigation gap plan 06 deliberately deferred; every cited constant (ceil(maxNodes/4), maxNodes=200/traversalDepth=3/minScore=0.2/searchLimit=8, GLUE_NODE_CAP=60) ported verbatim from RESEARCH; traversal mechanics (RankEdges-walk, sorted-Id tie-break) documented as this plan's own design since no verbatim TS source for H10-H12 survives in the frozen capture
 - [Phase 1]: H13 named seeding: body-substance measure (line span) and type-token corroboration mechanism (owning-type-name match, not self-name match) are this plan's own documented D-02 design since no verbatim TS source for these specifics survives the frozen RESEARCH capture
+- [Phase 1]: Java/C# field type_of is anchored on the ENCLOSING TYPE id (not a field node, since neither extractor emits one) — a documented D-02 divergence distinct from Go's package-level-var-anchored type_of
+- [Phase 1]: Local-variable type_of added beyond the plan's literal 'field' behavior spec for Java/C#, anchored at the enclosing method — RESEARCH §B describes the missing kind as 'field/local declared type', and the existing method-body walk made this near-zero-cost
 
 ### Pending Todos
 
@@ -123,8 +126,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T14:09:38.881Z
-Stopped at: Completed 01-11-PLAN.md
+Last session: 2026-07-15T14:30:45.266Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
