@@ -91,3 +91,110 @@ func TestRWRAdjacency_UndirectedBothDirections(t *testing.T) {
 		t.Errorf("expected b->a adjacency (undirected), got adj[1]=%v", adj[1])
 	}
 }
+
+// starSubgraph builds a small deterministic fixture: seed node "a" at the
+// center of a star (a-b, a-c), plus a distant node "z" reachable only
+// through a long chain (c-d-e-z), and a dangling node "iso" (degree 0).
+func starSubgraph() ([]string, []*schema.Edge) {
+	nodeIDs := []string{"a", "b", "c", "d", "e", "z", "iso"}
+	edges := []*schema.Edge{
+		{Source: "a", Target: "b", Kind: goextract.RefKindCalls},
+		{Source: "a", Target: "c", Kind: goextract.RefKindCalls},
+		{Source: "c", Target: "d", Kind: goextract.RefKindCalls},
+		{Source: "d", Target: "e", Kind: goextract.RefKindCalls},
+		{Source: "e", Target: "z", Kind: goextract.RefKindCalls},
+	}
+	return nodeIDs, edges
+}
+
+// TestComputeGraphRelevance_SeedOutranksDistant asserts a seed node ends
+// with higher mass than a node many hops away (RESEARCH §3's core claim:
+// structurally-connected symbols must outrank distant/lexical matches).
+func TestComputeGraphRelevance_SeedOutranksDistant(t *testing.T) {
+	nodeIDs, edges := starSubgraph()
+	seeds := map[string]bool{"a": true}
+	scores := computeGraphRelevance(nodeIDs, edges, seeds)
+	if scores["a"] <= scores["z"] {
+		t.Fatalf("expected seed a's score (%v) > distant z's score (%v)", scores["a"], scores["z"])
+	}
+}
+
+// TestComputeGraphRelevance_NoSeedUniformRestart asserts that when no seed
+// lands in the candidate set, the restart vector falls back to
+// uniform-over-all and every node ends up with non-zero mass.
+func TestComputeGraphRelevance_NoSeedUniformRestart(t *testing.T) {
+	nodeIDs, edges := starSubgraph()
+	seeds := map[string]bool{"not-in-graph": true}
+	scores := computeGraphRelevance(nodeIDs, edges, seeds)
+	for _, id := range nodeIDs {
+		if scores[id] <= 0 {
+			t.Errorf("expected non-zero mass for %q under uniform restart fallback, got %v", id, scores[id])
+		}
+	}
+}
+
+// TestComputeGraphRelevance_DanglingNodeRetainsMass asserts a degree-0
+// node keeps its own mass across all 25 iterations rather than losing it
+// (RESEARCH §3: "dangling: keep its mass").
+func TestComputeGraphRelevance_DanglingNodeRetainsMass(t *testing.T) {
+	nodeIDs, edges := starSubgraph()
+	seeds := map[string]bool{"iso": true}
+	scores := computeGraphRelevance(nodeIDs, edges, seeds)
+	// iso is seeded and has no edges, so its restart mass never leaks
+	// away to any neighbor and never receives redistribution from
+	// elsewhere; its final score must still be positive.
+	if scores["iso"] <= 0 {
+		t.Fatalf("expected dangling seeded node iso to retain positive mass, got %v", scores["iso"])
+	}
+}
+
+// TestComputeGraphRelevance_EmptyNodeIDs asserts n==0 returns an empty map
+// without panicking.
+func TestComputeGraphRelevance_EmptyNodeIDs(t *testing.T) {
+	scores := computeGraphRelevance(nil, nil, nil)
+	if len(scores) != 0 {
+		t.Fatalf("expected empty map for empty nodeIDs, got %v", scores)
+	}
+}
+
+// TestRWRDeterminism_RepeatedRunsIdentical asserts two (or more, via
+// -count=5) runs over the identical subgraph produce bit-identical
+// (post-rounding) score maps — the golden-corpus determinism contract
+// (D-04).
+func TestRWRDeterminism_RepeatedRunsIdentical(t *testing.T) {
+	nodeIDs, edges := starSubgraph()
+	seeds := map[string]bool{"a": true, "iso": true}
+
+	first := computeGraphRelevance(nodeIDs, edges, seeds)
+	for run := 0; run < 10; run++ {
+		got := computeGraphRelevance(nodeIDs, edges, seeds)
+		if len(got) != len(first) {
+			t.Fatalf("run %d: score map size %d != first run's %d", run, len(got), len(first))
+		}
+		for id, want := range first {
+			if got[id] != want {
+				t.Fatalf("run %d: score for %q = %v, want %v (first run)", run, id, got[id], want)
+			}
+		}
+	}
+}
+
+// TestSortRWRScores_TieBreakScoreDescIdAsc asserts equal scores resolve
+// score-desc-then-Id-asc (D-04, the codebase's lowest-Id convention).
+func TestSortRWRScores_TieBreakScoreDescIdAsc(t *testing.T) {
+	scores := map[string]float64{
+		"z": 0.5,
+		"a": 0.5,
+		"m": 0.9,
+	}
+	got := sortRWRScores(scores)
+	want := []string{"m", "a", "z"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d entries, want %d", len(got), len(want))
+	}
+	for i, id := range want {
+		if got[i].ID != id {
+			t.Fatalf("position %d: got %q, want %q (full: %v)", i, got[i].ID, id, got)
+		}
+	}
+}
