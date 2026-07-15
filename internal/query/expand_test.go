@@ -332,3 +332,123 @@ func TestBFSBounds_SearchLimit(t *testing.T) {
 		}
 	}
 }
+
+// --- H12: TestGlueNodeInjection / TestGlueNodeCap ---
+
+// TestGlueNodeInjection_SameFileOnly pins H12's same-file-only
+// constraint: a root's caller living in a file already surfaced by the
+// subgraph is injected; a caller in a file NOT yet surfaced is not.
+func TestGlueNodeInjection_SameFileOnly(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"root":        {Id: "root", Kind: goextract.KindFunction, Name: "root", FilePath: "pkg/root.go"},
+		"sameFile":    {Id: "sameFile", Kind: goextract.KindFunction, Name: "sameFile", FilePath: "pkg/root.go"},
+		"otherFile":   {Id: "otherFile", Kind: goextract.KindFunction, Name: "otherFile", FilePath: "pkg/other.go"},
+		"calleeSame":  {Id: "calleeSame", Kind: goextract.KindFunction, Name: "calleeSame", FilePath: "pkg/root.go"},
+		"calleeOther": {Id: "calleeOther", Kind: goextract.KindFunction, Name: "calleeOther", FilePath: "pkg/other.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "sameFile", Target: "root", Kind: goextract.RefKindCalls},    // caller, same file
+		{Source: "otherFile", Target: "root", Kind: goextract.RefKindCalls},   // caller, other file
+		{Source: "root", Target: "calleeSame", Kind: goextract.RefKindCalls},  // callee, same file
+		{Source: "root", Target: "calleeOther", Kind: goextract.RefKindCalls}, // callee, other file
+	}
+	r := &expandFakeReader{nodes: nodes, edges: edges}
+
+	surfaced := map[string]bool{"pkg/root.go": true}
+	got, err := expandGlueNodes(r, []string{"root"}, surfaced, GlueNodeCap)
+	if err != nil {
+		t.Fatalf("expandGlueNodes: unexpected error: %v", err)
+	}
+	if !containsID(got, "sameFile") {
+		t.Errorf("expected same-file caller sameFile injected, got %v", got)
+	}
+	if !containsID(got, "calleeSame") {
+		t.Errorf("expected same-file callee calleeSame injected, got %v", got)
+	}
+	if containsID(got, "otherFile") {
+		t.Errorf("expected other-file caller otherFile EXCLUDED, got %v", got)
+	}
+	if containsID(got, "calleeOther") {
+		t.Errorf("expected other-file callee calleeOther EXCLUDED, got %v", got)
+	}
+}
+
+// TestGlueNodeCap_Binds pins H12's exact, cited constant: total glue
+// nodes across every root are capped at GLUE_NODE_CAP=60, kept in
+// deterministic sorted-Id order when the cap binds.
+func TestGlueNodeCap_Binds(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"root": {Id: "root", Kind: goextract.KindFunction, Name: "root", FilePath: "pkg/root.go"},
+	}
+	var edges []*schema.Edge
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("caller%03d", i)
+		nodes[id] = &schema.Node{Id: id, Kind: goextract.KindFunction, Name: id, FilePath: "pkg/root.go"}
+		edges = append(edges, &schema.Edge{Source: id, Target: "root", Kind: goextract.RefKindCalls})
+	}
+	r := &expandFakeReader{nodes: nodes, edges: edges}
+
+	surfaced := map[string]bool{"pkg/root.go": true}
+	got, err := expandGlueNodes(r, []string{"root"}, surfaced, GlueNodeCap)
+	if err != nil {
+		t.Fatalf("expandGlueNodes: unexpected error: %v", err)
+	}
+	if len(got) != GlueNodeCap {
+		t.Fatalf("expandGlueNodes cap: got %d glue nodes, want exactly GlueNodeCap=%d", len(got), GlueNodeCap)
+	}
+	for i := 1; i < len(got); i++ {
+		if got[i-1] >= got[i] {
+			t.Fatalf("expandGlueNodes cap must keep the lowest-Id candidates in sorted order, got %v", got)
+		}
+	}
+	// Confirm it kept the LOWEST 60 ids (caller000..caller059), not an
+	// arbitrary subset.
+	if got[0] != "caller000" || got[len(got)-1] != "caller059" {
+		t.Fatalf("expandGlueNodes cap: got range [%s, %s], want [caller000, caller059]", got[0], got[len(got)-1])
+	}
+}
+
+// TestGlueNodeInjection_RootNeverInjectedAsOwnGlue asserts a root itself
+// is never re-injected as a glue node even if reachable via another
+// root's caller/callee edges.
+func TestGlueNodeInjection_RootNeverInjectedAsOwnGlue(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"rootA": {Id: "rootA", Kind: goextract.KindFunction, Name: "rootA", FilePath: "pkg/a.go"},
+		"rootB": {Id: "rootB", Kind: goextract.KindFunction, Name: "rootB", FilePath: "pkg/a.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "rootA", Target: "rootB", Kind: goextract.RefKindCalls},
+	}
+	r := &expandFakeReader{nodes: nodes, edges: edges}
+
+	surfaced := map[string]bool{"pkg/a.go": true}
+	got, err := expandGlueNodes(r, []string{"rootA", "rootB"}, surfaced, GlueNodeCap)
+	if err != nil {
+		t.Fatalf("expandGlueNodes: unexpected error: %v", err)
+	}
+	if containsID(got, "rootA") || containsID(got, "rootB") {
+		t.Fatalf("expandGlueNodes must never inject an existing root as its own glue node, got %v", got)
+	}
+}
+
+// TestGlueNodeInjection_SubgraphFileSetHelper pins subgraphFileSet's own
+// contract: it resolves ids to their distinct, non-empty FilePath set,
+// skipping a dangling id (WR-04) rather than erroring.
+func TestGlueNodeInjection_SubgraphFileSetHelper(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"a": {Id: "a", Kind: goextract.KindFunction, Name: "a", FilePath: "pkg/a.go"},
+		"b": {Id: "b", Kind: goextract.KindFunction, Name: "b", FilePath: "pkg/b.go"},
+	}
+	r := &expandFakeReader{nodes: nodes}
+
+	got, err := subgraphFileSet(r, []string{"a", "b", "dangling"})
+	if err != nil {
+		t.Fatalf("subgraphFileSet: unexpected error: %v", err)
+	}
+	if !got["pkg/a.go"] || !got["pkg/b.go"] {
+		t.Fatalf("subgraphFileSet: got %v, want pkg/a.go and pkg/b.go present", got)
+	}
+	if len(got) != 2 {
+		t.Fatalf("subgraphFileSet: got %d files, want exactly 2 (dangling id must be skipped, not error)", len(got))
+	}
+}
