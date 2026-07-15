@@ -290,3 +290,189 @@ func TestSeedingSmallOverload_ThreeDefsAllInjected(t *testing.T) {
 		t.Fatalf("expected all 3 defs injected at the <=3 boundary, got SeedIDs=%v", res.SeedIDs)
 	}
 }
+
+// --- TestSeedingLargeOverload: >3-defs type-token-corroborated (<=4) /
+// top-1-by-substance disambiguation ---
+
+// sixOverloadedDefs builds 6 "Process" methods, each owned (via a
+// "contains" edge) by a distinct type, plus the 6 owner type nodes
+// themselves — the >3-defs fixture shared by the large-overload tests.
+// ownerNames lets each test choose which owner type names corroborate.
+func sixOverloadedDefs(ownerNames [6]string, spans [6]int32) (nodes map[string]*schema.Node, edges []*schema.Edge, defs []*schema.Node) {
+	nodes = make(map[string]*schema.Node)
+	defIDs := [6]string{"d1", "d2", "d3", "d4", "d5", "d6"}
+	ownerIDs := [6]string{"own1", "own2", "own3", "own4", "own5", "own6"}
+	for i := 0; i < 6; i++ {
+		nodes[ownerIDs[i]] = &schema.Node{Id: ownerIDs[i], Kind: goextract.KindStruct, Name: ownerNames[i]}
+		nodes[defIDs[i]] = &schema.Node{
+			Id: defIDs[i], Kind: goextract.KindMethod, Name: "Process",
+			StartLine: 1, EndLine: spans[i],
+		}
+		edges = append(edges, &schema.Edge{Source: ownerIDs[i], Target: defIDs[i], Kind: goextract.RefKindContains})
+		defs = append(defs, nodes[defIDs[i]])
+	}
+	return nodes, edges, defs
+}
+
+// TestSeedingLargeOverload_TypeTokenCorroboration pins H13's >3-defs
+// corroboration rule directly: a query PascalCase type token matching 2
+// of 6 defs' OWNING types (here, 2 owners both named "OrderProcessor")
+// seeds exactly those 2 corroborated defs — the other 4, whose owners
+// don't match, are excluded.
+func TestSeedingLargeOverload_TypeTokenCorroboration(t *testing.T) {
+	owners := [6]string{"OrderProcessor", "OrderProcessor", "InvoiceHandler", "ReportBuilder", "ExportWriter", "ImportReader"}
+	spans := [6]int32{5, 5, 5, 5, 5, 5}
+	nodes, edges, defs := sixOverloadedDefs(owners, spans)
+	r := &seedingFakeReader{nodes: nodes, edges: edges}
+
+	got, err := largeOverloadSeed(r, defs, []string{"OrderProcessor"})
+	if err != nil {
+		t.Fatalf("largeOverloadSeed: unexpected error: %v", err)
+	}
+	if len(got) != 2 || !seedingContainsID(got, "d1") || !seedingContainsID(got, "d2") {
+		t.Fatalf("expected exactly the 2 defs owned by the matching type token, got %v", got)
+	}
+}
+
+// TestSeedingLargeOverload_CorroboratedCapAtFour pins the <=4 cap: 5 of 6
+// defs corroborate, but only the first 4 (in Id-sorted order) are seeded.
+func TestSeedingLargeOverload_CorroboratedCapAtFour(t *testing.T) {
+	owners := [6]string{"Matcher", "Matcher", "Matcher", "Matcher", "Matcher", "Other"}
+	spans := [6]int32{5, 5, 5, 5, 5, 5}
+	nodes, edges, defs := sixOverloadedDefs(owners, spans)
+	r := &seedingFakeReader{nodes: nodes, edges: edges}
+
+	got, err := largeOverloadSeed(r, defs, []string{"Matcher"})
+	if err != nil {
+		t.Fatalf("largeOverloadSeed: unexpected error: %v", err)
+	}
+	if len(got) != largeOverloadCorroboratedCap {
+		t.Fatalf("expected the corroborated set capped at %d, got %d: %v", largeOverloadCorroboratedCap, len(got), got)
+	}
+	for _, want := range []string{"d1", "d2", "d3", "d4"} {
+		if !seedingContainsID(got, want) {
+			t.Fatalf("expected the first %d (Id-sorted) corroborated defs, missing %q in %v", largeOverloadCorroboratedCap, want, got)
+		}
+	}
+	if seedingContainsID(got, "d5") {
+		t.Fatalf("expected the 5th corroborated def dropped by the <=4 cap, got %v", got)
+	}
+}
+
+// TestSeedingLargeOverload_TopOneBySubstance pins the no-corroboration
+// fallback: when no query type token corroborates any of the 6 defs, the
+// single def with the greatest body substance (line span) is seeded
+// alone.
+func TestSeedingLargeOverload_TopOneBySubstance(t *testing.T) {
+	owners := [6]string{"Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"}
+	spans := [6]int32{5, 5, 5, 40, 5, 5} // d4 has by far the largest body
+	nodes, edges, defs := sixOverloadedDefs(owners, spans)
+	r := &seedingFakeReader{nodes: nodes, edges: edges}
+
+	got, err := largeOverloadSeed(r, defs, []string{"NoMatch"})
+	if err != nil {
+		t.Fatalf("largeOverloadSeed: unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0] != "d4" {
+		t.Fatalf("expected the single greatest-body-substance def (d4) seeded alone, got %v", got)
+	}
+}
+
+// TestSeedingLargeOverload_NoTypeTokensFallsBackToSubstance pins the
+// empty-typeTokens case (a query naming only the overloaded symbol
+// itself, no PascalCase bias token at all): falls straight to
+// top-1-by-substance.
+func TestSeedingLargeOverload_NoTypeTokensFallsBackToSubstance(t *testing.T) {
+	owners := [6]string{"Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"}
+	spans := [6]int32{5, 5, 5, 5, 5, 40} // d6 has the largest body
+	nodes, edges, defs := sixOverloadedDefs(owners, spans)
+	r := &seedingFakeReader{nodes: nodes, edges: edges}
+
+	got, err := largeOverloadSeed(r, defs, nil)
+	if err != nil {
+		t.Fatalf("largeOverloadSeed: unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0] != "d6" {
+		t.Fatalf("expected the single greatest-body-substance def (d6) seeded alone, got %v", got)
+	}
+}
+
+// TestSeedingLargeOverload_WiredThroughSeedNamedSymbols is a thin
+// integration check that seedNamedSymbols actually calls the >3-def
+// branch (not just leaves it stubbed): 6 real "Process" defs behind a
+// query naming only "Process" (no corroborating token in scope) — the
+// "Process" entry seeds exactly one def, the top-substance one.
+func TestSeedingLargeOverload_WiredThroughSeedNamedSymbols(t *testing.T) {
+	owners := [6]string{"Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"}
+	spans := [6]int32{5, 5, 5, 5, 40, 5} // d5 has the largest body
+	nodes, edges, _ := sixOverloadedDefs(owners, spans)
+	r := &seedingFakeReader{nodes: nodes, edges: edges}
+
+	res, err := seedNamedSymbols(r, "Process", "")
+	if err != nil {
+		t.Fatalf("seedNamedSymbols: unexpected error: %v", err)
+	}
+	var got *seedName
+	for i := range res.Names {
+		if res.Names[i].Name == "Process" {
+			got = &res.Names[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected a resolved %q entry, got Names=%+v", "Process", res.Names)
+	}
+	if len(got.Injected) != 1 || got.Injected[0] != "d5" {
+		t.Fatalf("expected exactly the top-substance def (d5) seeded for the >3-def branch, got Injected=%v", got.Injected)
+	}
+	if len(got.Primary) != 1 || got.Primary[0] != "d5" {
+		t.Fatalf("expected Primary == Injected for the large-overload branch (the selection IS the tier), got Primary=%v", got.Primary)
+	}
+}
+
+// --- TestSeedingProjectNameExcluded: project name never biases overload selection ---
+
+// TestSeedingProjectNameExcluded_TokenFiltered is a direct unit test of
+// pascalCaseTypeTokens: the project name must never appear in the
+// PascalCase type-token bias set, matched case-insensitively.
+func TestSeedingProjectNameExcluded_TokenFiltered(t *testing.T) {
+	got := pascalCaseTypeTokens("Widget MyProject Report myproject", "MyProject")
+	if seedingContainsID(got, "MyProject") {
+		t.Fatalf("expected the project name excluded (case-sensitive spelling), got %v", got)
+	}
+	if !seedingContainsID(got, "Widget") || !seedingContainsID(got, "Report") {
+		t.Fatalf("expected other PascalCase tokens preserved, got %v", got)
+	}
+}
+
+// TestSeedingProjectNameExcluded_NoFalseCorroboration pins the
+// end-to-end behavior: when the ONLY PascalCase bias token in a query is
+// the project's own name, and one def's owning type happens to share
+// that name, the project-name exclusion must prevent that def from being
+// spuriously corroborated — seedNamedSymbols must fall back to
+// top-1-by-substance instead.
+func TestSeedingProjectNameExcluded_NoFalseCorroboration(t *testing.T) {
+	owners := [6]string{"Acme", "Beta", "Gamma", "Delta", "Epsilon", "Zeta"}
+	spans := [6]int32{1, 40, 1, 1, 1, 1} // d2 (owned by "Beta") has the largest body, NOT d1 (owned by "Acme")
+	nodes, edges, _ := sixOverloadedDefs(owners, spans)
+	r := &seedingFakeReader{nodes: nodes, edges: edges}
+
+	res, err := seedNamedSymbols(r, "Process Acme", "Acme")
+	if err != nil {
+		t.Fatalf("seedNamedSymbols: unexpected error: %v", err)
+	}
+	var got *seedName
+	for i := range res.Names {
+		if res.Names[i].Name == "Process" {
+			got = &res.Names[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected a resolved %q entry, got Names=%+v", "Process", res.Names)
+	}
+	if seedingContainsID(got.Injected, "d1") {
+		t.Fatalf("expected d1 (owned by the excluded project-name type) NEVER corroborated, got Injected=%v", got.Injected)
+	}
+	if len(got.Injected) != 1 || got.Injected[0] != "d2" {
+		t.Fatalf("expected the fallback top-1-by-substance def (d2) seeded instead, got Injected=%v", got.Injected)
+	}
+}
