@@ -309,6 +309,113 @@ var (
 	}
 )
 
+// gatherChannel3 is H5: FTS-style multi-term text search (RESEARCH
+// §C.2, context/index.js:530-575). Every node whose Name or
+// QualifiedName contains (case-insensitively — terms are already
+// lowercased by extractSearchTerms) at least one term is a match, scored
+// channel3BaseScore + 5*(termHits-1), where termHits is the count of
+// DISTINCT terms that matched. A node whose Kind is channel3ImportKind
+// ("import") is excluded when kindFilter is empty (mirrors query/
+// search's "" == no filter convention, see ValidateKind); an explicit
+// kindFilter both admits import-kind nodes and restricts every other
+// node to that one kind.
+func gatherChannel3(r graphstore.Reader, terms []string, kindFilter string) ([]gatherCandidate, error) {
+	if len(terms) == 0 {
+		return nil, nil
+	}
+
+	it, err := r.IterateNodes()
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	var candidates []gatherCandidate
+	for it.Next() {
+		n := it.Node()
+		if kindFilter == "" {
+			if n.Kind == channel3ImportKind {
+				continue
+			}
+		} else if n.Kind != kindFilter {
+			continue
+		}
+
+		nameLower := strings.ToLower(n.Name)
+		qualLower := strings.ToLower(n.QualifiedName)
+		hits := 0
+		for _, t := range terms {
+			if t == "" {
+				continue
+			}
+			if strings.Contains(nameLower, t) || strings.Contains(qualLower, t) {
+				hits++
+			}
+		}
+		if hits == 0 {
+			continue
+		}
+
+		score := channel3BaseScore
+		if hits > 1 {
+			score += channel3MultiTermBoost * float64(hits-1)
+		}
+		candidates = append(candidates, gatherCandidate{
+			Node:     n,
+			Score:    score,
+			Channels: map[gatherChannelKind]bool{gatherChannelFTS: true},
+		})
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+
+	sortGatherCandidates(candidates)
+	return candidates, nil
+}
+
+// gatherMerge is H6: dedup by node id across any number of channel
+// result sets, keeping the MAX score seen for any given id (not summed)
+// and the UNION of every channel that surfaced it (RESEARCH §C.2/H6,
+// context/index.js:580-606).
+func gatherMerge(channelResults ...[]gatherCandidate) []gatherCandidate {
+	merged := make(map[string]*gatherCandidate)
+	var order []string
+	for _, ch := range channelResults {
+		for _, c := range ch {
+			id := c.Node.Id
+			existing, ok := merged[id]
+			if !ok {
+				cp := gatherCandidate{
+					Node:     c.Node,
+					Score:    c.Score,
+					Channels: make(map[gatherChannelKind]bool, len(c.Channels)),
+				}
+				for k := range c.Channels {
+					cp.Channels[k] = true
+				}
+				merged[id] = &cp
+				order = append(order, id)
+				continue
+			}
+			for k := range c.Channels {
+				existing.Channels[k] = true
+			}
+			if c.Score > existing.Score {
+				existing.Score = c.Score
+				existing.Node = c.Node
+			}
+		}
+	}
+
+	out := make([]gatherCandidate, 0, len(order))
+	for _, id := range order {
+		out = append(out, *merged[id])
+	}
+	sortGatherCandidates(out)
+	return out
+}
+
 // isTestFile is TS's file-PATH predicate (RESEARCH §5,
 // search/query-utils.js:300-332 [VERIFIED: TS 1.3.1 dist]) — NOT
 // traverse.go's isTestSymbol (a SYMBOL-name heuristic; that one is left
