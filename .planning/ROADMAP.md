@@ -112,7 +112,17 @@ Plans:
   5. Worktree detection has passing fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, and symlinked layouts (TEST-02)
   6. The 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) emit markdown like `explore`/`node` already do, so all 7 non-status read tools take the same text-prefix notice; MCP `status` also gains a markdown renderer (D-12's blockquote warning requires it — it emits JSON today); CLI `--json` still emits JSON on every command, and no `Marshal*JSON` helper body changes (SURF-06)
 
-**Plans**: TBD
+**Plans**: 7 plans (3 waves)
+
+Plans:
+- [ ] 02-01-PLAN.md — `internal/gitmeta`: the 4-gate detection cascade, verbatim TS notice/warning strings, `CachingDetector`, and the six real-`git` fixture layouts (wave 1)
+- [ ] 02-02-PLAN.md — `StatusResult` gains `dbSizeBytes` + `filesByLanguage`; the golden `dbSizeBytes` strip is reversed Go-side as a documented divergence (wave 1)
+- [ ] 02-03-PLAN.md — the 5 SURF-06 markdown renderers, added as siblings of the untouched `Marshal*JSON` helpers (wave 1)
+- [ ] 02-04-PLAN.md — `OpenAt` retains `startPath`; `worktreeMismatch` goes live in TS's `{worktreeRoot, indexRoot}` shape; the two notice helpers (wave 2)
+- [ ] 02-05-PLAN.md — the two status renderers TS ships: CLI padded columns (D-09) and MCP bolded-key bullets (D-17), plus the hand-rolled comma grouper (wave 2)
+- [ ] 02-06-PLAN.md — MCP wiring: six call sites to markdown, one server-scoped detector, the notice on 7 tools; closes the zero-coverage blind spot (wave 3)
+- [ ] 02-07-PLAN.md — CLI wiring: the sectioned `status` layout replaces the terse one-liner; the notice on 7 read commands, human-output only (wave 3)
+
 **Notes**: New `internal/gitmeta` package (stdlib `os/exec` only — two `git rev-parse` calls, no pure-Go git lib), consumed by `internal/query` so both CLI and MCP get worktree awareness in one commit. Validate the edge-case fixtures before any pretty rendering. SURF-06 was pulled in from Phase 8 (user decision, 2026-07-15): Phase 2 already rewires all 7 MCP read-tool result paths for WORK-02, so changing the output shape in the same pass avoids double-touching them and removes the "prefix text onto a JSON payload" problem. Still plain-text-only — markdown here means structure/wording, NOT color (Phase 6 owns TUI-02).
 
 ### Phase 3: Watcher-on-MCP Default
