@@ -294,3 +294,144 @@ func TestIsTestFile(t *testing.T) {
 		})
 	}
 }
+
+// TestGatherChannel3_MultiTermBoost pins H5's exact constant: a node
+// matching 3 distinct query terms scores channel3BaseScore +
+// 5*(3-1)=+10 over a node matching only 1 term.
+func TestGatherChannel3_MultiTermBoost(t *testing.T) {
+	nodes := []*schema.Node{
+		{Id: "func:fooBarBaz", Kind: goextract.KindFunction, Name: "fooBarBaz", QualifiedName: "pkg.fooBarBaz"},
+		{Id: "func:foo", Kind: goextract.KindFunction, Name: "fooOnly", QualifiedName: "pkg.fooOnly"},
+	}
+	r := &gatherFakeReader{nodes: nodes}
+
+	got, err := gatherChannel3(r, []string{"foo", "bar", "baz"}, "")
+	if err != nil {
+		t.Fatalf("gatherChannel3: unexpected error: %v", err)
+	}
+
+	multi := findGatherCandidate(t, got, "func:fooBarBaz")
+	single := findGatherCandidate(t, got, "func:foo")
+
+	wantMulti := channel3BaseScore + channel3MultiTermBoost*2
+	if multi.Score != wantMulti {
+		t.Fatalf("3-term-hit score = %v, want %v (base + 5*(3-1))", multi.Score, wantMulti)
+	}
+	if single.Score != channel3BaseScore {
+		t.Fatalf("1-term-hit score = %v, want exactly channel3BaseScore=%v (no multi-term boost)", single.Score, channel3BaseScore)
+	}
+	if delta := multi.Score - single.Score; delta != channel3MultiTermBoost*2 {
+		t.Fatalf("multi-term boost delta = %v, want exactly %v", delta, channel3MultiTermBoost*2)
+	}
+
+	if !multi.Channels[gatherChannelFTS] {
+		t.Errorf("expected gatherChannelFTS recorded, got %+v", multi.Channels)
+	}
+}
+
+// TestGatherChannel3_ExcludesImportKindWithoutFilter asserts an
+// import-Kind node is excluded from channel 3 results when no explicit
+// kind filter is given, but included when the caller explicitly filters
+// to "import".
+func TestGatherChannel3_ExcludesImportKindWithoutFilter(t *testing.T) {
+	nodes := []*schema.Node{
+		{Id: "import:foo", Kind: "import", Name: "foo", QualifiedName: "foo"},
+	}
+	r := &gatherFakeReader{nodes: nodes}
+
+	withoutFilter, err := gatherChannel3(r, []string{"foo"}, "")
+	if err != nil {
+		t.Fatalf("gatherChannel3: unexpected error: %v", err)
+	}
+	if len(withoutFilter) != 0 {
+		t.Fatalf("expected import-kind node excluded without an explicit kind filter, got %+v", withoutFilter)
+	}
+
+	withFilter, err := gatherChannel3(r, []string{"foo"}, "import")
+	if err != nil {
+		t.Fatalf("gatherChannel3: unexpected error: %v", err)
+	}
+	if len(withFilter) != 1 || withFilter[0].Node.Id != "import:foo" {
+		t.Fatalf("expected import-kind node included with an explicit kind filter, got %+v", withFilter)
+	}
+}
+
+// TestGatherChannel3_NoTermHitExcluded asserts a node matching none of
+// the terms is excluded entirely (not merely scored 0).
+func TestGatherChannel3_NoTermHitExcluded(t *testing.T) {
+	nodes := []*schema.Node{
+		{Id: "func:unrelated", Kind: goextract.KindFunction, Name: "unrelated", QualifiedName: "pkg.unrelated"},
+	}
+	r := &gatherFakeReader{nodes: nodes}
+
+	got, err := gatherChannel3(r, []string{"foo"}, "")
+	if err != nil {
+		t.Fatalf("gatherChannel3: unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got %d candidates, want 0 (no term hit): %+v", len(got), got)
+	}
+}
+
+// TestGatherMerge_MaxScoreWinsNotSummed pins H6's exact merge rule: a
+// node hit by two channels merges once, keeping the MAX score seen (not
+// the sum), and the union of channels that hit it.
+func TestGatherMerge_MaxScoreWinsNotSummed(t *testing.T) {
+	node := &schema.Node{Id: "struct:Widget", Kind: goextract.KindStruct, Name: "Widget"}
+
+	channel1 := []gatherCandidate{
+		{Node: node, Score: 30, Channels: map[gatherChannelKind]bool{gatherChannelExactName: true}},
+	}
+	channel3 := []gatherCandidate{
+		{Node: node, Score: 15, Channels: map[gatherChannelKind]bool{gatherChannelFTS: true}},
+	}
+
+	got := gatherMerge(channel1, channel3)
+	if len(got) != 1 {
+		t.Fatalf("got %d merged candidates, want exactly 1 (deduped by node id): %+v", len(got), got)
+	}
+	if got[0].Score != 30 {
+		t.Fatalf("merged score = %v, want exactly 30 (max, not 45=sum)", got[0].Score)
+	}
+	if !got[0].Channels[gatherChannelExactName] || !got[0].Channels[gatherChannelFTS] {
+		t.Fatalf("expected the union of both channels recorded, got %+v", got[0].Channels)
+	}
+}
+
+// TestGatherMerge_UnionAcrossDistinctNodes asserts candidates from
+// different channels for DIFFERENT node ids are all preserved (a plain
+// union, not just a max-collapse).
+func TestGatherMerge_UnionAcrossDistinctNodes(t *testing.T) {
+	a := &schema.Node{Id: "a", Name: "A"}
+	b := &schema.Node{Id: "b", Name: "B"}
+	c := &schema.Node{Id: "c", Name: "C"}
+
+	channel1 := []gatherCandidate{{Node: a, Score: 10, Channels: map[gatherChannelKind]bool{gatherChannelExactName: true}}}
+	channel2 := []gatherCandidate{{Node: b, Score: 20, Channels: map[gatherChannelKind]bool{gatherChannelTitlePrefix: true}}}
+	channel3 := []gatherCandidate{{Node: c, Score: 5, Channels: map[gatherChannelKind]bool{gatherChannelFTS: true}}}
+
+	got := gatherMerge(channel1, channel2, channel3)
+	if len(got) != 3 {
+		t.Fatalf("got %d merged candidates, want 3 (a, b, c all distinct): %+v", len(got), got)
+	}
+	// Deterministic order: score-descending then Id-ascending (D-04).
+	wantOrder := []string{"b", "a", "c"}
+	for i, id := range wantOrder {
+		if got[i].Node.Id != id {
+			t.Fatalf("position %d: got %q, want %q (full: %+v)", i, got[i].Node.Id, id, got)
+		}
+	}
+}
+
+// TestGatherMerge_Empty asserts merging zero channels (or channels with
+// no candidates) returns an empty, non-nil-panicking slice.
+func TestGatherMerge_Empty(t *testing.T) {
+	got := gatherMerge()
+	if len(got) != 0 {
+		t.Fatalf("got %d candidates, want 0", len(got))
+	}
+	got = gatherMerge(nil, []gatherCandidate{})
+	if len(got) != 0 {
+		t.Fatalf("got %d candidates, want 0", len(got))
+	}
+}
