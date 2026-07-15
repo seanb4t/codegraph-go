@@ -416,6 +416,144 @@ func gatherMerge(channelResults ...[]gatherCandidate) []gatherCandidate {
 	return out
 }
 
+// --- H7 test-file dampening + H8 core-directory boost (RESEARCH §C.2,
+// context/index.js:607-647) ---
+//
+// These are post-merge rerankers plan 10 layers on top of H3-H6's merged
+// candidate set (gatherMerge's output) — pure functions over
+// []gatherCandidate, no reader access. Both mutate candidates IN PLACE
+// (matching gatherMerge's own already-deterministic ordering contract);
+// callers that need a fresh sort afterward call sortGatherCandidates
+// themselves (see applyPostMergeRerankers below).
+
+const (
+	// testFileDampeningFactor is H7's exact, cited constant: score *= 0.3
+	// for test-file nodes (RESEARCH §C.2/H7, context/index.js:607-616).
+	testFileDampeningFactor = 0.3
+
+	// coreDirectoryBoost is H8's exact, cited constant: +25 to every
+	// candidate sharing a dominant file's directory prefix (RESEARCH
+	// §C.2/H8, context/index.js:617-647).
+	coreDirectoryBoost = 25.0
+
+	// coreDirectoryDominanceRatio is H8's exact, cited threshold: a file
+	// is "dominant" when its count is >=3x the next-most-frequent file's
+	// count (RESEARCH §C.2/H8).
+	coreDirectoryDominanceRatio = 3.0
+)
+
+// queryMentionsTestOrSpec is H7's exemption check: the raw query text
+// (case-insensitive substring) mentions "test" or "spec" — RESEARCH
+// §C.2/H7 pins this exact wording ("unless query mentions test/spec"),
+// not a tokenized/stemmed match.
+func queryMentionsTestOrSpec(query string) bool {
+	q := strings.ToLower(query)
+	return strings.Contains(q, "test") || strings.Contains(q, "spec")
+}
+
+// applyTestFileDampening is H7 (RESEARCH §C.2, context/index.js:607-616):
+// multiplies every test-file candidate's score by testFileDampeningFactor
+// (0.3), UNLESS the query mentions test/spec (queryMentionsTestOrSpec) —
+// in which case NO candidate is dampened at all, matching TS's short-
+// circuit. exemptIDs (keyed by Node.Id) skips dampening for candidates
+// H9's distinctive-identifier exact-match exemption has already flagged
+// (plan 10 Task 2, applyPostMergeRerankers) — nil/empty exemptIDs is a
+// no-op filter, so Task 1's tests (no exemption yet in play) pass nil.
+func applyTestFileDampening(candidates []gatherCandidate, query string, exemptIDs map[string]bool) {
+	if queryMentionsTestOrSpec(query) {
+		return
+	}
+	for i := range candidates {
+		if exemptIDs[candidates[i].Node.Id] {
+			continue
+		}
+		if isTestFile(candidates[i].Node.FilePath) {
+			candidates[i].Score *= testFileDampeningFactor
+		}
+	}
+}
+
+// fileDir returns the directory portion of a forward-slash-normalized
+// file path ("pkg/sub/foo.go" -> "pkg/sub"; a root-level "foo.go" -> "").
+func fileDir(filePath string) string {
+	norm := strings.ReplaceAll(filePath, "\\", "/")
+	idx := strings.LastIndex(norm, "/")
+	if idx < 0 {
+		return ""
+	}
+	return norm[:idx]
+}
+
+// sharesDirectoryPrefix reports whether dir is the SAME directory as
+// prefixDir, or a nested subdirectory of it (H8's "shares a dominant
+// file's directory prefix", RESEARCH §C.2/H8).
+func sharesDirectoryPrefix(dir, prefixDir string) bool {
+	if dir == prefixDir {
+		return true
+	}
+	return strings.HasPrefix(dir, prefixDir+"/")
+}
+
+// applyCoreDirectoryBoost is H8 (RESEARCH §C.2, context/index.js:617-647):
+// finds the file with the most candidates in the set (a per-file
+// candidate-density proxy for TS's per-file graph-edge count — this pure
+// candidate-set function has no reader/graph access to count actual
+// edges, a documented substitution consistent with plan 07's base-score
+// defaults). If that file's count is >=3x the NEXT most-frequent
+// distinct file's count, it is "dominant": every candidate whose file
+// shares its directory prefix (sharesDirectoryPrefix, including nested
+// subdirectories) earns a flat +coreDirectoryBoost. Deterministic:
+// candidates are grouped/sorted by (count desc, file asc) before
+// selecting the dominant file, so ties never depend on map iteration
+// order — and any tie for the max count trivially fails the >=3x test
+// (ratio 1), so tie-break order can never change the pass/fail outcome.
+func applyCoreDirectoryBoost(candidates []gatherCandidate) {
+	counts := make(map[string]int)
+	for _, c := range candidates {
+		if c.Node.FilePath == "" {
+			continue
+		}
+		counts[c.Node.FilePath]++
+	}
+	if len(counts) == 0 {
+		return
+	}
+
+	type fileCount struct {
+		file  string
+		count int
+	}
+	fcs := make([]fileCount, 0, len(counts))
+	for f, n := range counts {
+		fcs = append(fcs, fileCount{f, n})
+	}
+	sort.SliceStable(fcs, func(i, j int) bool {
+		if fcs[i].count != fcs[j].count {
+			return fcs[i].count > fcs[j].count
+		}
+		return fcs[i].file < fcs[j].file
+	})
+
+	dominant := fcs[0]
+	var next int
+	if len(fcs) > 1 {
+		next = fcs[1].count
+	}
+	if float64(dominant.count) < coreDirectoryDominanceRatio*float64(next) {
+		return
+	}
+
+	dominantDir := fileDir(dominant.file)
+	for i := range candidates {
+		if candidates[i].Node.FilePath == "" {
+			continue
+		}
+		if sharesDirectoryPrefix(fileDir(candidates[i].Node.FilePath), dominantDir) {
+			candidates[i].Score += coreDirectoryBoost
+		}
+	}
+}
+
 // isTestFile is TS's file-PATH predicate (RESEARCH §5,
 // search/query-utils.js:300-332 [VERIFIED: TS 1.3.1 dist]) — NOT
 // traverse.go's isTestSymbol (a SYMBOL-name heuristic; that one is left
