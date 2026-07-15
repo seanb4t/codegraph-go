@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // goldenExploreOutput/goldenNodeOutput load the golden fixture's "output"
@@ -271,4 +273,189 @@ func TestExplore(t *testing.T) {
 			t.Fatalf("Explore(Alpha) with pending sync: banner must not replace the exploration header:\n%s", got)
 		}
 	})
+}
+
+// mkMultiDefNode builds a minimal schema.Node for RenderNodeMultiDef unit
+// tests — only the fields the multi-def renderer touches (Name/Kind/
+// FilePath/StartLine/Signature/Id) need to be populated.
+func mkMultiDefNode(id, file string, startLine int32) *schema.Node {
+	return &schema.Node{Id: id, Name: "X", Kind: "function", FilePath: file, StartLine: startLine, Signature: "() error"}
+}
+
+// TestRenderNodeMultiDef pins NODE-02's exact multi-def markdown shape
+// (RESEARCH §8, Pitfall 4): the two-line header, the HARD_CAP=16/
+// BODY_BUDGET=12000 full-body budget (always rendering at least the
+// first), and the LIST_CAP=20 overflow list. Exercises RenderNodeMultiDef
+// directly with a fake fetch closure — no Engine/reader needed, since the
+// renderer's I/O is injected (RESEARCH Pitfall — keep the renderer pure).
+func TestRenderNodeMultiDef(t *testing.T) {
+	t.Run("two defs renders the two-line header and both full bodies with no overflow", func(t *testing.T) {
+		matches := []*schema.Node{mkMultiDefNode("a", "pkg/a.go", 10), mkMultiDefNode("b", "pkg/b.go", 20)}
+		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
+			return []byte("func X() error {\n\treturn nil\n}\n"), nil, nil, nil
+		}
+
+		got, err := RenderNodeMultiDef("X", matches, fetch)
+		if err != nil {
+			t.Fatalf("RenderNodeMultiDef: unexpected error: %v", err)
+		}
+
+		wantHead := "**2 definitions named \"X\"**\nReturning 2 in full — pick the one you need (no Read required).\n\n"
+		if !strings.HasPrefix(got, wantHead) {
+			t.Fatalf("RenderNodeMultiDef head mismatch:\ngot:  %q\nwant prefix: %q", got, wantHead)
+		}
+		if !strings.Contains(got, "\n\n---\n\n") {
+			t.Fatalf("RenderNodeMultiDef: expected the two bodies separated by \"\\n\\n---\\n\\n\":\n%s", got)
+		}
+		if strings.Contains(got, "**Other definitions**") {
+			t.Fatalf("RenderNodeMultiDef: unexpected overflow list for 2 defs within HARD_CAP:\n%s", got)
+		}
+		if !strings.HasSuffix(got, "```\n") {
+			t.Fatalf("RenderNodeMultiDef: got %q, want it to end with the closing code fence (no Trail — calls/calledBy are both empty)", got)
+		}
+	})
+
+	t.Run("more than HARD_CAP defs renders 16 full bodies and lists the rest", func(t *testing.T) {
+		var matches []*schema.Node
+		for i := 0; i < 20; i++ {
+			matches = append(matches, mkMultiDefNode(fmt.Sprintf("n%02d", i), fmt.Sprintf("pkg/f%02d.go", i), int32(i+1)))
+		}
+		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
+			return []byte("func X() {}\n"), nil, nil, nil
+		}
+
+		got, err := RenderNodeMultiDef("X", matches, fetch)
+		if err != nil {
+			t.Fatalf("RenderNodeMultiDef: unexpected error: %v", err)
+		}
+
+		wantSecondLine := "Returning 16 in full; 4 more listed below — pick the one you need (no Read required)."
+		if !strings.Contains(got, wantSecondLine) {
+			t.Fatalf("RenderNodeMultiDef: got %q, want it to contain %q", got, wantSecondLine)
+		}
+		if count := strings.Count(got, "\n\n---\n\n"); count != 15 {
+			t.Fatalf("RenderNodeMultiDef: got %d section separators, want 15 (16 rendered bodies)", count)
+		}
+		if !strings.Contains(got, "**Other definitions**") {
+			t.Fatalf("RenderNodeMultiDef: expected an overflow list for 20 defs > HARD_CAP=16:\n%s", got)
+		}
+		if n := strings.Count(got, "- `X` (function) —"); n != 4 {
+			t.Fatalf("RenderNodeMultiDef: got %d listed overflow bullets, want 4:\n%s", n, got)
+		}
+		if strings.Contains(got, "more\n") && strings.Contains(got, "- …") {
+			t.Fatalf("RenderNodeMultiDef: unexpected \"+K more\" line for only 4 overflow defs (LIST_CAP=20):\n%s", got)
+		}
+		if !strings.Contains(got, "> Need one of these in full? Call codegraph_node again with `file` (e.g. `\"f16.go\"`) or `line` — do NOT Read it.\n") {
+			t.Fatalf("RenderNodeMultiDef: missing or mismatched closing hint line:\n%s", got)
+		}
+	})
+
+	t.Run("bodies exceeding BODY_BUDGET stop early but always render the first", func(t *testing.T) {
+		big := strings.Repeat("x", 13000)
+		var matches []*schema.Node
+		for i := 0; i < 3; i++ {
+			matches = append(matches, mkMultiDefNode(fmt.Sprintf("n%d", i), fmt.Sprintf("pkg/f%d.go", i), int32(i+1)))
+		}
+		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
+			return []byte(big + "\n"), nil, nil, nil
+		}
+
+		got, err := RenderNodeMultiDef("X", matches, fetch)
+		if err != nil {
+			t.Fatalf("RenderNodeMultiDef: unexpected error: %v", err)
+		}
+		if !strings.Contains(got, "Returning 1 in full; 2 more listed below") {
+			t.Fatalf("RenderNodeMultiDef: expected exactly 1 rendered body when the first alone exceeds BODY_BUDGET=12000:\n%s", got[:min(200, len(got))])
+		}
+	})
+
+	t.Run("a def with both empty Calls and CalledBy omits the Trail line entirely", func(t *testing.T) {
+		matches := []*schema.Node{mkMultiDefNode("a", "pkg/a.go", 10), mkMultiDefNode("b", "pkg/b.go", 20)}
+		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
+			return []byte("func X() error {\n\treturn nil\n}\n"), nil, nil, nil
+		}
+
+		got, err := RenderNodeMultiDef("X", matches, fetch)
+		if err != nil {
+			t.Fatalf("RenderNodeMultiDef: unexpected error: %v", err)
+		}
+		if strings.Contains(got, "Trail") || strings.Contains(got, "Calls") || strings.Contains(got, "Called by") {
+			t.Fatalf("RenderNodeMultiDef: Trail/Calls/CalledBy lines must be omitted when both are empty (matches live TS golden captures):\n%s", got)
+		}
+	})
+}
+
+// TestRenderNodeSingleDefUnchanged is NODE-04's regression pin: a symbol
+// with exactly one definition must still render via the original
+// single-def RenderNode path, byte-for-byte identical to a direct
+// RenderNode call — the multi-def machinery must never touch it.
+func TestRenderNodeSingleDefUnchanged(t *testing.T) {
+	engine, _ := nodeExploreFixture(t)
+
+	alpha, err := engine.resolveSymbolNode("Alpha")
+	if err != nil {
+		t.Fatalf("resolveSymbolNode(Alpha): unexpected error: %v", err)
+	}
+	calls, err := engine.fetchCalls(alpha)
+	if err != nil {
+		t.Fatalf("fetchCalls(Alpha): unexpected error: %v", err)
+	}
+	rev, err := BuildReverseAdjacency(engine.reader)
+	if err != nil {
+		t.Fatalf("BuildReverseAdjacency: unexpected error: %v", err)
+	}
+	calledBy, err := engine.fetchCalledBy(alpha, rev)
+	if err != nil {
+		t.Fatalf("fetchCalledBy(Alpha): unexpected error: %v", err)
+	}
+	want := RenderNode(alpha, calls, calledBy)
+
+	got, err := engine.Node("Alpha", "")
+	if err != nil {
+		t.Fatalf("Node(Alpha): unexpected error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("Node(Alpha) diverges from a direct RenderNode call (NODE-04 regression):\ngot:  %q\nwant: %q", got, want)
+	}
+}
+
+// TestNodeMultiDefWiring proves Engine.Node dispatches to the multi-def
+// render path end-to-end (not just the isolated enumeration/render unit
+// tests) when a symbol has more than one definition — the CLI and MCP
+// call the same Engine.Node method (D-08b), so this is the shared
+// integration point both surfaces rely on (EXPL-05/NODE-04's "shared
+// engine" structural constraint applied to NODE-01/02).
+func TestNodeMultiDefWiring(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(full), err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+	write("a/dup.go", "package a\n\nfunc Dup() int {\n\treturn 1\n}\n")
+	write("b/dup.go", "package b\n\nfunc Dup() int {\n\treturn 2\n}\n")
+
+	nodes := map[string]*schema.Node{
+		"a-dup": {Id: "a-dup", Name: "Dup", Kind: "function", FilePath: "a/dup.go", StartLine: 3, Signature: "() int"},
+		"b-dup": {Id: "b-dup", Name: "Dup", Kind: "function", FilePath: "b/dup.go", StartLine: 3, Signature: "() int"},
+	}
+	e := NewWithRoot(&traverseFakeReader{nodes: nodes}, dir)
+
+	got, err := e.Node("Dup", "")
+	if err != nil {
+		t.Fatalf("Node(Dup): unexpected error: %v", err)
+	}
+
+	wantHead := "**2 definitions named \"Dup\"**\nReturning 2 in full — pick the one you need (no Read required).\n\n"
+	if !strings.HasPrefix(got, wantHead) {
+		t.Fatalf("Node(Dup) head mismatch:\ngot:  %q\nwant prefix: %q", got, wantHead)
+	}
+	if !strings.Contains(got, "**Dup** (function)") {
+		t.Fatalf("Node(Dup): missing per-def header in:\n%s", got)
+	}
 }
