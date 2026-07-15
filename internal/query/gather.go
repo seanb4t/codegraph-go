@@ -554,6 +554,195 @@ func applyCoreDirectoryBoost(candidates []gatherCandidate) {
 	}
 }
 
+// --- H9 multi-term co-occurrence re-rank + distinctive-identifier
+// exemption (RESEARCH §C.2, context/index.js:648-712+) ---
+
+const (
+	// multiTermRerankStep is H9's exact, cited constant: score *= 1 +
+	// matchCount*0.5 when >=2 stem-grouped term groups match a
+	// candidate's name/directory (RESEARCH §C.2/H9,
+	// context/index.js:648-712+).
+	multiTermRerankStep = 0.5
+
+	// multiTermRerankMinGroups is H9's ">=2 groups match" gate.
+	multiTermRerankMinGroups = 2
+
+	// distinctiveIdentifierMinLength is isDistinctiveIdentifier's length
+	// floor. RESEARCH §C.2/H9 cites isDistinctiveIdentifier
+	// (search/query-utils.js) as gating the H9-exempts-H7 rule but does
+	// not pin its exact algorithm in the frozen citation set, and the TS
+	// dist JS is unreadable on this machine (see the package doc
+	// comment) — this is a documented, conservative substitute (see
+	// isDistinctiveIdentifier's own doc comment), consistent with plan
+	// 07's precedent of documenting undocumented-but-cited constants.
+	distinctiveIdentifierMinLength = 6
+)
+
+// stemTerm reduces a lowercase query term to a naive stem by stripping
+// the most common English inflectional suffixes (plural -s/-es/-ies,
+// verb -ing/-ed). This is a documented, deterministic, lightweight
+// substitute for TS's getStemVariants() (search/query-utils.js:129-175),
+// which 01-03 explicitly deferred porting (tokenize.go's
+// extractSearchTerms doc comment, D-02) — RESEARCH §C.2/H9 requires
+// terms be "stem-grouped" but does not pin a specific stemming algorithm,
+// only the grouping OUTCOME (near-duplicate inflections of the same root
+// count as one group). Not a full Porter-stemmer port; sufficient to
+// merge "handler"/"handlers"-shaped variants without over-engineering a
+// case RESEARCH doesn't cite a verbatim constant for.
+func stemTerm(term string) string {
+	t := strings.ToLower(term)
+	switch {
+	case strings.HasSuffix(t, "ies") && len(t) > 4:
+		return t[:len(t)-3] + "y"
+	case strings.HasSuffix(t, "es") && len(t) > 4:
+		return t[:len(t)-2]
+	case strings.HasSuffix(t, "ing") && len(t) > 5:
+		return t[:len(t)-3]
+	case strings.HasSuffix(t, "ed") && len(t) > 4:
+		return t[:len(t)-2]
+	case strings.HasSuffix(t, "s") && !strings.HasSuffix(t, "ss") && len(t) > 3:
+		return t[:len(t)-1]
+	}
+	return t
+}
+
+// groupTermsByStem groups terms by stemTerm's result, preserving
+// first-seen group order (D-04 determinism — never map iteration for
+// output order).
+func groupTermsByStem(terms []string) [][]string {
+	var order []string
+	groups := make(map[string][]string)
+	for _, t := range terms {
+		if t == "" {
+			continue
+		}
+		s := stemTerm(t)
+		if _, ok := groups[s]; !ok {
+			order = append(order, s)
+		}
+		groups[s] = append(groups[s], t)
+	}
+	out := make([][]string, 0, len(order))
+	for _, s := range order {
+		out = append(out, groups[s])
+	}
+	return out
+}
+
+// applyMultiTermReRank is H9's co-occurrence multiplier (RESEARCH §C.2,
+// context/index.js:648-712+): groups terms by stem (groupTermsByStem),
+// then for each candidate counts how many DISTINCT groups have at least
+// one member term appearing (case-insensitive substring) in the
+// candidate's Name or its file's directory (fileDir). When
+// multiTermRerankMinGroups (2) or more groups match, the score is
+// multiplied by 1 + matchCount*multiTermRerankStep.
+func applyMultiTermReRank(candidates []gatherCandidate, terms []string) {
+	groups := groupTermsByStem(terms)
+	if len(groups) == 0 {
+		return
+	}
+	for i := range candidates {
+		nameLower := strings.ToLower(candidates[i].Node.Name)
+		dirLower := strings.ToLower(fileDir(candidates[i].Node.FilePath))
+
+		matchCount := 0
+		for _, group := range groups {
+			for _, term := range group {
+				if term == "" {
+					continue
+				}
+				if strings.Contains(nameLower, term) || strings.Contains(dirLower, term) {
+					matchCount++
+					break
+				}
+			}
+		}
+		if matchCount >= multiTermRerankMinGroups {
+			candidates[i].Score *= 1 + float64(matchCount)*multiTermRerankStep
+		}
+	}
+}
+
+// isDistinctiveIdentifier is a documented heuristic substitute for TS's
+// isDistinctiveIdentifier (search/query-utils.js — cited by RESEARCH
+// §C.2/H9 as gating the H9-exempts-H7 rule, but its exact algorithm was
+// not captured in RESEARCH's frozen citations and the TS dist JS is
+// unreadable on this machine — see the package doc comment). Captures
+// the load-bearing intent RESEARCH DOES pin: a "distinctive identifier"
+// is a structured, multi-word symbol name — not a short/common single
+// English word — via a conservative, deterministic rule: name is
+// distinctive when it is at least distinctiveIdentifierMinLength (6)
+// runes AND contains either an underscore (snake_case) or an internal
+// case transition (camelCase/PascalCase, i.e. an uppercase rune after
+// position 0). Short or single-case names ("Run", "foo") are never
+// distinctive.
+func isDistinctiveIdentifier(name string) bool {
+	if len([]rune(name)) < distinctiveIdentifierMinLength {
+		return false
+	}
+	if strings.Contains(name, "_") {
+		return true
+	}
+	for i, r := range name {
+		if i == 0 {
+			continue
+		}
+		if r >= 'A' && r <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+// distinctiveExactMatchExemptIDs computes the set of candidate Node.Ids
+// that are a distinctive-identifier EXACT match against one of terms —
+// RESEARCH §C.2/H9's "distinctive-identifier exact matches are exempt
+// from the H7 dampening" rule. A candidate is exempt when its Node.Name
+// case-insensitively equals one of terms AND that name is distinctive
+// (isDistinctiveIdentifier). Computing this set is a prerequisite step
+// for applyPostMergeRerankers, which must run it BEFORE applyTestFileDampening
+// (order-sensitive per RESEARCH §C.2's H7/H9 interaction note) so the
+// exemption can actually gate the dampening rather than being overridden
+// by it.
+func distinctiveExactMatchExemptIDs(candidates []gatherCandidate, terms []string) map[string]bool {
+	exempt := make(map[string]bool)
+	for _, c := range candidates {
+		name := c.Node.Name
+		if name == "" {
+			continue
+		}
+		nameLower := strings.ToLower(name)
+		for _, t := range terms {
+			if t == "" {
+				continue
+			}
+			if strings.ToLower(t) == nameLower && isDistinctiveIdentifier(name) {
+				exempt[c.Node.Id] = true
+				break
+			}
+		}
+	}
+	return exempt
+}
+
+// applyPostMergeRerankers applies H7, H8 and H9 (RESEARCH §C.2,
+// context/index.js:607-712+) to a merged candidate set (gatherMerge's
+// output), in RESEARCH's pipeline order — with one deliberate exception:
+// the H9 distinctive-identifier exemption set is computed FIRST, before
+// H7 runs, so a distinctive-identifier exact match that also happens to
+// be a test file is never dampened (RESEARCH §C.2/H9's explicit
+// order-sensitive note: "Implement H7 and H9 so the exemption is
+// honored"). Mutates candidates in place and returns the same slice,
+// re-sorted (score-desc/Id-asc, D-04) after every mutation.
+func applyPostMergeRerankers(candidates []gatherCandidate, query string, terms []string) []gatherCandidate {
+	exempt := distinctiveExactMatchExemptIDs(candidates, terms)
+	applyTestFileDampening(candidates, query, exempt)
+	applyCoreDirectoryBoost(candidates)
+	applyMultiTermReRank(candidates, terms)
+	sortGatherCandidates(candidates)
+	return candidates
+}
+
 // isTestFile is TS's file-PATH predicate (RESEARCH §5,
 // search/query-utils.js:300-332 [VERIFIED: TS 1.3.1 dist]) — NOT
 // traverse.go's isTestSymbol (a SYMBOL-name heuristic; that one is left
