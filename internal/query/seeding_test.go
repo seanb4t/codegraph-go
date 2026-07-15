@@ -187,8 +187,8 @@ func TestSeedingResolve_TokenMaxCountSixteen(t *testing.T) {
 // tier too.
 func TestSeedingSmallOverload_BothInjectedTierByCallerRatio(t *testing.T) {
 	nodes := map[string]*schema.Node{
-		"a-hot":  {Id: "a-hot", Kind: goextract.KindFunction, Name: "Process"},
-		"b-cold": {Id: "b-cold", Kind: goextract.KindFunction, Name: "Process"},
+		"a-hot":   {Id: "a-hot", Kind: goextract.KindFunction, Name: "Process"},
+		"b-cold":  {Id: "b-cold", Kind: goextract.KindFunction, Name: "Process"},
 		"caller1": {Id: "caller1", Kind: goextract.KindFunction, Name: "Caller1"},
 		"caller2": {Id: "caller2", Kind: goextract.KindFunction, Name: "Caller2"},
 		"caller3": {Id: "caller3", Kind: goextract.KindFunction, Name: "Caller3"},
@@ -232,8 +232,8 @@ func TestSeedingSmallOverload_BothInjectedTierByCallerRatio(t *testing.T) {
 // from the seed tier.
 func TestSeedingSmallOverload_BelowThresholdExcludedFromTier(t *testing.T) {
 	nodes := map[string]*schema.Node{
-		"a-hot":  {Id: "a-hot", Kind: goextract.KindFunction, Name: "Process"},
-		"b-cold": {Id: "b-cold", Kind: goextract.KindFunction, Name: "Process"},
+		"a-hot":   {Id: "a-hot", Kind: goextract.KindFunction, Name: "Process"},
+		"b-cold":  {Id: "b-cold", Kind: goextract.KindFunction, Name: "Process"},
 		"caller1": {Id: "caller1", Kind: goextract.KindFunction, Name: "Caller1"},
 		"caller2": {Id: "caller2", Kind: goextract.KindFunction, Name: "Caller2"},
 		"caller3": {Id: "caller3", Kind: goextract.KindFunction, Name: "Caller3"},

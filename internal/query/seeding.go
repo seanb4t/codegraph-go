@@ -18,16 +18,44 @@
 //     unordered SELECT per Assumption A3) plus any OTHER co-named def
 //     whose caller count is >= 0.25*maxCallers among that name's defs
 //   - >3 defs for a name: only the disambiguated subset is injected (and
-//     IS the seed tier) — this task lands the small-overload (<=3 defs)
-//     branch only; a following task (RESEARCH §C.2/H13's PascalCase
-//     type-token corroboration + top-1-by-substance) adds the >3-def
-//     branch. Until then, a name resolving to >3 defs is conservatively
-//     skipped (not seeded, not added to Names) rather than seeding an
-//     unbounded/undisambiguated set.
+//     IS the seed tier, no further split) — PascalCase type tokens from
+//     the query (excluding the project name) corroborate up to 4 defs by
+//     matching a def's OWNING type's name (via the contains index,
+//     traverse.go's buildContainsIndex); if none corroborate, the single
+//     def with the greatest "body substance" wins
+//
+// Divergence (D-02, no verbatim TS source survives for these specifics —
+// the live TS dist is no longer readable on this machine, see gather.go's
+// package doc comment for the same constraint): the RESEARCH capture pins
+// H13's constants and branch structure but not (a) the exact
+// "body-substance" measure TS uses to rank a large-overload def with no
+// corroborating type token, or (b) the exact mechanism TS uses to
+// correlate a PascalCase type token with an overloaded def. This plan's
+// own, documented design:
+//   - body substance = a def's own line span (EndLine-StartLine+1) — a
+//     cheap, Reader-only proxy for "how much implementation a def
+//     contains" without a second disk read (this function stays a pure
+//     graphstore.Reader-driven algorithm, mirroring rwr.go/expand.go/
+//     gather.go's discipline)
+//   - corroboration = a def's OWNING type (the type that "contains" it,
+//     per traverse.go's buildContainsIndex) has a Name matching one of
+//     the query's PascalCase type tokens. A def with no owning type (a
+//     free function, not a method) never corroborates via a type token —
+//     it can only win via the top-1-by-substance fallback. Deliberately
+//     does NOT also match a def's own Name against the type-token set:
+//     the resolved query token itself is frequently PascalCase-shaped
+//     (e.g. "Process"), which would otherwise trivially self-corroborate
+//     every def sharing that name and defeat the disambiguation entirely.
+//   - project name = the caller-supplied projectName string (typically
+//     filepath.Base(repoRoot)), excluded case-insensitively from the
+//     PascalCase type-token set before corroboration runs.
 package query
 
 import (
+	"errors"
+	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -35,11 +63,18 @@ import (
 
 // H13's exact, cited constants (RESEARCH §C.2/H13).
 const (
-	seedTokenMinLen          = 3
-	seedTokenMaxCount        = 16
-	smallOverloadMaxDefs     = 3
-	smallOverloadCallerRatio = 0.25
+	seedTokenMinLen              = 3
+	seedTokenMaxCount            = 16
+	smallOverloadMaxDefs         = 3
+	smallOverloadCallerRatio     = 0.25
+	largeOverloadCorroboratedCap = 4
 )
+
+// pascalCaseTokenPattern matches a whole token shaped like a type name —
+// an initial uppercase letter followed by any run of letters/digits (no
+// separators; extractSymbolsFromQuery has already split compounds into
+// individual identifier-shaped tokens by the time this runs).
+var pascalCaseTokenPattern = regexp.MustCompile(`^[A-Z][a-zA-Z0-9]*$`)
 
 // seedName is one query token's full-scan resolution + disambiguation-tier
 // result.
@@ -47,13 +82,15 @@ type seedName struct {
 	// Name is the resolved query token.
 	Name string
 	// Injected is every def id actually added to the RWR seed set for
-	// this name: ALL <=3 defs (small-overload "inject all"), or (a
-	// following task) the >3-def disambiguated selection.
+	// this name: ALL <=3 defs (small-overload "inject all"), or the >3-def
+	// disambiguated selection (large-overload).
 	Injected []string
 	// Primary is the "seed tier" subset RESEARCH §C.2/H13 names — plan
 	// 13's +50 named-seed file score keys off this, not Injected, when a
 	// small overload injects more defs than the tier itself contains.
 	// Small-overload: def0 + co-named callers>=0.25*maxCallers.
+	// Large-overload: identical to Injected — the disambiguated selection
+	// IS the tier once >3 defs force a cut.
 	Primary []string
 }
 
@@ -86,6 +123,28 @@ func seedQueryTokens(query string) []string {
 		if len(out) >= seedTokenMaxCount {
 			break
 		}
+	}
+	return out
+}
+
+// pascalCaseTypeTokens extracts H13's PascalCase type-token bias set from
+// query — every extractSymbolsFromQuery token shaped like a type name
+// (initial uppercase, no separators), excluding projectName
+// (case-insensitive) so a query that simply names the project itself
+// never spuriously corroborates an overload. Unlike seedQueryTokens, this
+// is NOT length- or count-capped — H13's biasing signal is a separate
+// concern from the >=3/<=16 name-resolution filter.
+func pascalCaseTypeTokens(query, projectName string) []string {
+	all := extractSymbolsFromQuery(query)
+	var out []string
+	for _, t := range all {
+		if !pascalCaseTokenPattern.MatchString(t) {
+			continue
+		}
+		if projectName != "" && strings.EqualFold(t, projectName) {
+			continue
+		}
+		out = append(out, t)
 	}
 	return out
 }
@@ -157,26 +216,110 @@ func smallOverloadSeed(r graphstore.Reader, defs []*schema.Node) (injected, prim
 	return injected, primary, nil
 }
 
+// bodySubstance is this plan's documented body-substance proxy (package
+// doc comment Divergence note): a def's own line span, a cheap
+// Reader-only measure of "how much implementation this def contains"
+// without a second disk read.
+func bodySubstance(n *schema.Node) int {
+	span := int(n.EndLine) - int(n.StartLine) + 1
+	if span < 0 {
+		return 0
+	}
+	return span
+}
+
+// topBySubstance returns the id of the def with the greatest bodySubstance
+// among defs. defs is assumed already Id-sorted (resolveDefsByName's
+// contract); ties are resolved by keeping the first (lowest-Id) def seen
+// with the max substance, matching the codebase-wide D-04 tie-break.
+func topBySubstance(defs []*schema.Node) string {
+	best := defs[0]
+	bestSubstance := bodySubstance(best)
+	for _, d := range defs[1:] {
+		if s := bodySubstance(d); s > bestSubstance {
+			best = d
+			bestSubstance = s
+		}
+	}
+	return best.Id
+}
+
+// corroboratedDefs is this plan's documented type-token corroboration
+// mechanism (package doc comment Divergence note): a def is corroborated
+// if its OWNING type's Name (via traverse.go's buildContainsIndex — the
+// type that "contains" this def as a method) matches one of typeTokens. A
+// def with no owning type never corroborates. defs is assumed already
+// Id-sorted; returned ids preserve that order (deterministic).
+func corroboratedDefs(r graphstore.Reader, defs []*schema.Node, typeTokens []string) ([]string, error) {
+	if len(typeTokens) == 0 {
+		return nil, nil
+	}
+	wanted := make(map[string]bool, len(typeTokens))
+	for _, t := range typeTokens {
+		wanted[t] = true
+	}
+
+	_, methodOwner, err := buildContainsIndex(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, d := range defs {
+		ownerID, ok := methodOwner[d.Id]
+		if !ok {
+			continue
+		}
+		owner, err := r.GetNode(ownerID)
+		if err != nil {
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue // WR-04: dangling owner reference, not an error
+			}
+			return nil, err
+		}
+		if wanted[owner.Name] {
+			out = append(out, d.Id)
+		}
+	}
+	return out, nil
+}
+
+// largeOverloadSeed implements H13's >3-defs branch: prefer defs
+// corroborated by a query PascalCase type token (capped at 4, in
+// defs' Id-sorted order); when none corroborate, fall back to the single
+// def with the greatest body substance. The selected subset both is
+// injected into the seed set AND is the seed tier (no further split, per
+// RESEARCH §C.2/H13).
+func largeOverloadSeed(r graphstore.Reader, defs []*schema.Node, typeTokens []string) ([]string, error) {
+	corroborated, err := corroboratedDefs(r, defs, typeTokens)
+	if err != nil {
+		return nil, err
+	}
+	if len(corroborated) > 0 {
+		if len(corroborated) > largeOverloadCorroboratedCap {
+			corroborated = corroborated[:largeOverloadCorroboratedCap]
+		}
+		return corroborated, nil
+	}
+	return []string{topBySubstance(defs)}, nil
+}
+
 // seedNamedSymbols is H13 end-to-end: re-tokenize query (seedQueryTokens),
 // resolve each token via a full-scan exact-name lookup
-// (resolveDefsByName), and apply the small-overload (<=3 defs)
-// disambiguation tier per name — a token that resolves to zero defs is
-// silently skipped (not every query token names an existing symbol). A
-// name resolving to >3 defs is provisionally skipped (see package doc
-// comment); a following task replaces this branch with the >3-def
-// type-token-corroborated/top-1-by-substance disambiguation. projectName
-// (typically filepath.Base(repoRoot)) is accepted now so this task's
-// signature is stable for that task's PascalCase type-token exclusion —
-// it is unused until that branch lands. Deterministic throughout (D-04):
-// tokens are processed in first-seen scan order, each name's defs are
-// Id-sorted, and the returned SeedIDs union is lexicographically sorted.
+// (resolveDefsByName), and apply the small-overload (<=3 defs) or
+// large-overload (>3 defs) disambiguation tier per name — a token that
+// resolves to zero defs is silently skipped (not every query token names
+// an existing symbol). projectName (typically filepath.Base(repoRoot))
+// is excluded from the PascalCase type-token bias set before large-overload
+// corroboration runs. Deterministic throughout (D-04): tokens are
+// processed in first-seen scan order, each name's defs are Id-sorted, and
+// the returned SeedIDs union is lexicographically sorted.
 func seedNamedSymbols(r graphstore.Reader, query, projectName string) (seedResult, error) {
-	_ = projectName // consumed by the >3-def branch (following task)
-
 	tokens := seedQueryTokens(query)
 	if len(tokens) == 0 {
 		return seedResult{}, nil
 	}
+	typeTokens := pascalCaseTypeTokens(query, projectName)
 
 	var names []seedName
 	seedSet := make(map[string]bool)
@@ -185,11 +328,17 @@ func seedNamedSymbols(r graphstore.Reader, query, projectName string) (seedResul
 		if err != nil {
 			return seedResult{}, err
 		}
-		if len(defs) == 0 || len(defs) > smallOverloadMaxDefs {
+		if len(defs) == 0 {
 			continue
 		}
 
-		injected, primary, err := smallOverloadSeed(r, defs)
+		var injected, primary []string
+		if len(defs) <= smallOverloadMaxDefs {
+			injected, primary, err = smallOverloadSeed(r, defs)
+		} else {
+			injected, err = largeOverloadSeed(r, defs, typeTokens)
+			primary = injected
+		}
 		if err != nil {
 			return seedResult{}, err
 		}
