@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -372,6 +373,12 @@ func TestStatus(t *testing.T) {
 	})
 
 	t.Run("no volatile keys leak into the JSON shape", func(t *testing.T) {
+		// dbSizeBytes is deliberately EXCLUDED from this forbidden-key list
+		// (D-08): our own status --json intentionally DOES emit it now,
+		// asserted for presence-and-plausibility in the
+		// "dbSizeBytes is present and plausible" subtest below. Only the
+		// frozen TS golden oracle keeps it stripped (testdata/golden's
+		// shared volatileKeys map, untouched by this plan).
 		raw, err := MarshalStatusJSON(got)
 		if err != nil {
 			t.Fatalf("MarshalStatusJSON: unexpected error: %v", err)
@@ -380,10 +387,120 @@ func TestStatus(t *testing.T) {
 		if err := json.Unmarshal(raw, &m); err != nil {
 			t.Fatalf("unmarshal status JSON: %v", err)
 		}
-		for _, volatile := range []string{"dbSizeBytes", "lastIndexed", "createdAt", "updatedAt"} {
+		for _, volatile := range []string{"lastIndexed", "createdAt", "updatedAt"} {
 			if _, present := m[volatile]; present {
 				t.Fatalf("Status JSON unexpectedly contains volatile key %q", volatile)
 			}
+		}
+	})
+
+	t.Run("dbSizeBytes is present and plausible", func(t *testing.T) {
+		// D-08: byte-for-byte stability across reindexes is deliberately
+		// NOT asserted here — Pebble's LSM compaction makes the on-disk
+		// byte total genuinely nondeterministic across identical
+		// reindexes, a STRONGER version of the SQLite WAL/page-
+		// fragmentation rationale that made the frozen TS golden strip
+		// this key in the first place. We assert only presence, integer
+		// type, and plausibility (> 0), never a fixed or prior-run value.
+		if got.DbSizeBytes <= 0 {
+			t.Fatalf("Status.DbSizeBytes: got %d, want > 0 for a real indexed Pebble store", got.DbSizeBytes)
+		}
+
+		raw, err := MarshalStatusJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalStatusJSON: unexpected error: %v", err)
+		}
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("unmarshal status JSON: %v", err)
+		}
+		rawSize, present := m["dbSizeBytes"]
+		if !present {
+			t.Fatal(`Status JSON missing "dbSizeBytes" key (STAT-01)`)
+		}
+		var size int64
+		if err := json.Unmarshal(rawSize, &size); err != nil {
+			t.Fatalf("dbSizeBytes did not decode as an integer: %v (%s)", err, rawSize)
+		}
+		if size <= 0 {
+			t.Fatalf("Status JSON dbSizeBytes = %d, want > 0", size)
+		}
+	})
+
+	t.Run("filesByLanguage counts files per language, languages derived from it", func(t *testing.T) {
+		if len(got.FilesByLanguage) == 0 {
+			t.Fatal("Status.FilesByLanguage: got empty map, want at least one language")
+		}
+		if got.FilesByLanguage["go"] != got.FileCount {
+			t.Fatalf(`Status.FilesByLanguage["go"] = %d, want %d (gofixture is Go-only, equal to FileCount)`, got.FilesByLanguage["go"], got.FileCount)
+		}
+		for lang, count := range got.FilesByLanguage {
+			if count <= 0 {
+				t.Fatalf("Status.FilesByLanguage[%q] = %d, want > 0 for a present key", lang, count)
+			}
+		}
+
+		// D-05: Languages must stay derived from FilesByLanguage (count >
+		// 0, sorted) — same order/shape as before this plan — so the
+		// golden JSON shape stays parity-stable.
+		var wantLanguages []string
+		for lang, count := range got.FilesByLanguage {
+			if count > 0 {
+				wantLanguages = append(wantLanguages, lang)
+			}
+		}
+		sort.Strings(wantLanguages)
+		if strings.Join(got.Languages, ",") != strings.Join(wantLanguages, ",") {
+			t.Fatalf("Status.Languages = %v, want %v (derived from FilesByLanguage per D-05)", got.Languages, wantLanguages)
+		}
+	})
+
+	t.Run("filesByLanguage is internal-only and absent from the JSON shape", func(t *testing.T) {
+		// D-05: TS's --json derives `languages` from filesByLanguage and
+		// discards the counts entirely — emitting a filesByLanguage key
+		// here would be a NEW Go-vs-TS divergence in the exact shape the
+		// golden oracle guards. The counts exist only to feed renderers.
+		raw, err := MarshalStatusJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalStatusJSON: unexpected error: %v", err)
+		}
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("unmarshal status JSON: %v", err)
+		}
+		if _, present := m["filesByLanguage"]; present {
+			t.Fatal(`Status JSON unexpectedly contains "filesByLanguage" key (D-05: internal-only, json:"-")`)
+		}
+	})
+}
+
+// TestDbSizeBytes exercises the D-07 best-effort dbSizeBytes helper
+// directly against a nonexistent directory, and confirms Status() as a
+// whole degrades to DbSizeBytes == 0 (never erroring) when no repoRoot is
+// configured — mirroring computeStale's e.repoRoot == "" degrade-safely
+// contract (D-07/T-02-07: a missing/unreadable store dir must never fail
+// the whole status call).
+func TestDbSizeBytes(t *testing.T) {
+	t.Run("nonexistent store dir returns 0 and an error, never panics", func(t *testing.T) {
+		got, err := dbSizeBytes(filepath.Join(t.TempDir(), "does-not-exist"))
+		if err == nil {
+			t.Fatal("dbSizeBytes: expected error for a nonexistent directory, got nil")
+		}
+		if got != 0 {
+			t.Fatalf("dbSizeBytes: got %d, want 0 for a nonexistent directory", got)
+		}
+	})
+
+	t.Run("Status degrades DbSizeBytes to 0 when repoRoot is unset (New, not OpenAt)", func(t *testing.T) {
+		engine, _ := filesStatusFixture(t)
+		noRootEngine := New(engine.reader)
+
+		got, err := noRootEngine.Status()
+		if err != nil {
+			t.Fatalf("Status: unexpected error with no repoRoot configured: %v", err)
+		}
+		if got.DbSizeBytes != 0 {
+			t.Fatalf("Status.DbSizeBytes: got %d, want 0 when Engine has no repoRoot (D-07 best-effort degrade)", got.DbSizeBytes)
 		}
 	})
 }
