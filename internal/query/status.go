@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -30,7 +31,7 @@ import (
 //	journalMode                      | dropped (key omitted)                       | No Pebble user-facing WAL/journal-mode analog (RESEARCH Open Question 2); D-05 permits dropping keys with no Go analog
 //	nodesByKind / languages          | computed via a full IterateNodes() scan     | D-03's IterateNodes; reflects whichever LanguageSpecs are registered AND have discoverable files in the repo (a Go-only repo reads languages:["go"]; a repo with both Go and Python source, e.g. the weft corpus, reads languages:["go","python"] once Phase 5's Python extraction lands)
 //	pendingChanges                   | {added:0,modified:0,removed:0}              | Phase-4 sync concept; the added/modified/removed COUNT breakdown remains an inert placeholder — computing it would require re-running Sync's diff at Status()-time (out of scope, RESEARCH A2). The plain existence of pending changes is now live via the new top-level `stale` field below (D-04a)
-//	worktreeMismatch                 | null                                         | Phase-4 sync concept; present-but-inert placeholder (RESEARCH A2)
+//	worktreeMismatch                 | live *gitmeta.Mismatch, {worktreeRoot,indexRoot} object or null | D-14/WORK-01 — computed via Engine.WorktreeMismatch(), which runs gitmeta.DetectIndexMismatch's 4-gate cascade against Engine.startPath (where the caller stood) vs repoRoot (the resolved index root). ★ Deliberate, scoped exception to this table's own projectPath/indexPath privacy stance below: those two keys are blanked to avoid leaking host-local absolute paths through the MCP surface, but the mismatch warning is USELESS without naming the two trees involved, and TS interpolates the identical raw paths (T-02-14, accepted) — so this key intentionally carries absolute host paths, but ONLY when a mismatch is genuinely detected; a clean tree still leaks nothing (nil)
 //	stale                            | live bool (D-04a)                           | true when `.codegraph/.sync-pending` exists (watcher/daemon signal) OR — no-daemon fallback — the newest on-disk source-file mtime is newer than Meta.last_sync_unix_ms; this is the field that makes the sync-pending concept real this phase, see computeStale
 //	index.builtWithVersion            | fmt.Sprintf("%d", schema.SchemaVersion)     | Same Go analog as top-level version — no separate release/build-version concept
 //	index.builtWithExtractionVersion | uint32(schema.SchemaVersion)                | Go has one "extraction version" concept: the schema version stamped by NewMeta
@@ -42,22 +43,22 @@ import (
 //	filesByLanguage                  | map[string]int64, json:"-" (Go-internal only) | D-05 — genuinely NEW computation (not already-scanned data): computed in the existing IterateFiles() scan by reading fileIt.File().Language. NOT emitted in --json — TS's own --json derives `languages` from this map and discards the counts, so emitting the key here would be a NEW Go-vs-TS divergence in the exact shape the golden oracle guards. Exists solely to feed the human/markdown renderers (Phase 2 wave 2)
 //	(no lastIndexed / *_at keys)      | omitted entirely                           | Volatile fields per testdata/golden/README.md's stripping rules — never rendered (dbSizeBytes above is the one documented exception, D-08)
 type StatusResult struct {
-	Initialized      bool             `json:"initialized"`
-	Version          string           `json:"version"`
-	ProjectPath      string           `json:"projectPath"`
-	IndexPath        string           `json:"indexPath"`
-	FileCount        int64            `json:"fileCount"`
-	NodeCount        int64            `json:"nodeCount"`
-	EdgeCount        int64            `json:"edgeCount"`
-	DbSizeBytes      int64            `json:"dbSizeBytes"`
-	Backend          string           `json:"backend"`
-	NodesByKind      map[string]int64 `json:"nodesByKind"`
-	FilesByLanguage  map[string]int64 `json:"-"`
-	Languages        []string         `json:"languages"`
-	PendingChanges   PendingChanges   `json:"pendingChanges"`
-	WorktreeMismatch *string          `json:"worktreeMismatch"`
-	Stale            bool             `json:"stale"`
-	Index            IndexHealth      `json:"index"`
+	Initialized      bool              `json:"initialized"`
+	Version          string            `json:"version"`
+	ProjectPath      string            `json:"projectPath"`
+	IndexPath        string            `json:"indexPath"`
+	FileCount        int64             `json:"fileCount"`
+	NodeCount        int64             `json:"nodeCount"`
+	EdgeCount        int64             `json:"edgeCount"`
+	DbSizeBytes      int64             `json:"dbSizeBytes"`
+	Backend          string            `json:"backend"`
+	NodesByKind      map[string]int64  `json:"nodesByKind"`
+	FilesByLanguage  map[string]int64  `json:"-"`
+	Languages        []string          `json:"languages"`
+	PendingChanges   PendingChanges    `json:"pendingChanges"`
+	WorktreeMismatch *gitmeta.Mismatch `json:"worktreeMismatch"`
+	Stale            bool              `json:"stale"`
+	Index            IndexHealth       `json:"index"`
 }
 
 // PendingChanges mirrors the golden's pendingChanges shape — a Phase-4
@@ -284,17 +285,18 @@ func (e *Engine) Status() (StatusResult, error) {
 	}
 
 	return StatusResult{
-		Initialized:     true,
-		Version:         version,
-		FileCount:       fileCount,
-		NodeCount:       nodeCount,
-		EdgeCount:       edgeCount,
-		DbSizeBytes:     dbSize,
-		Stale:           stale,
-		Backend:         "pebble",
-		NodesByKind:     nodesByKind,
-		FilesByLanguage: filesByLang,
-		Languages:       languages,
+		Initialized:      true,
+		Version:          version,
+		FileCount:        fileCount,
+		NodeCount:        nodeCount,
+		EdgeCount:        edgeCount,
+		DbSizeBytes:      dbSize,
+		Stale:            stale,
+		Backend:          "pebble",
+		NodesByKind:      nodesByKind,
+		FilesByLanguage:  filesByLang,
+		Languages:        languages,
+		WorktreeMismatch: e.WorktreeMismatch(),
 		Index: IndexHealth{
 			BuiltWithVersion:           version,
 			BuiltWithExtractionVersion: schema.SchemaVersion,
