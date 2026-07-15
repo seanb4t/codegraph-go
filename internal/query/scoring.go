@@ -28,9 +28,12 @@ package query
 
 import (
 	"errors"
+	"regexp"
 	"sort"
+	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -160,4 +163,194 @@ func aggregateFileGraphScore(r graphstore.Reader, nodeIDs []string, rwrScores ma
 		out[n.FilePath] += rwrScores[id]
 	}
 	return out, nil
+}
+
+// --- H15: hard test/spec exclusion ---
+
+// isIconOrI18nFile is this plan's documented D-02 substitute for TS's
+// icon/i18n low-value-file component of H15 (RESEARCH §C.2/H15 cites the
+// RULE — "test/spec/icon/i18n" — but no further source detail on the
+// icon/i18n predicate's exact patterns survives the frozen capture, and
+// the live TS dist JS is unreadable on this machine, see gather.go's
+// package doc comment). A conservative, path-based heuristic mirroring
+// isTestFile's own directory-segment + filename-pattern shape: a file is
+// icon/i18n low-value when an icon/i18n-named directory segment appears
+// in its path, OR its base filename itself is icon/i18n-shaped.
+var (
+	iconI18nDirNames = map[string]bool{
+		"icon": true, "icons": true,
+		"i18n": true, "l10n": true,
+		"locale": true, "locales": true,
+		"translation": true, "translations": true,
+	}
+	iconI18nFilenamePattern = regexp.MustCompile(`(?i)^(icons?|i18n|l10n|locales?|translations?)[._-]`)
+)
+
+func isIconOrI18nFile(filePath string) bool {
+	if filePath == "" {
+		return false
+	}
+	norm := strings.ReplaceAll(filePath, "\\", "/")
+	segments := strings.Split(norm, "/")
+	base := segments[len(segments)-1]
+	if iconI18nFilenamePattern.MatchString(base) {
+		return true
+	}
+	for _, seg := range segments[:len(segments)-1] {
+		if seg == "" {
+			continue
+		}
+		if iconI18nDirNames[strings.ToLower(seg)] {
+			return true
+		}
+	}
+	return false
+}
+
+// isLowValueFile is H15's low-value predicate: test/spec (gather.go's
+// shared isTestFile, plan 07) OR icon/i18n (isIconOrI18nFile).
+func isLowValueFile(filePath string) bool {
+	return isTestFile(filePath) || isIconOrI18nFile(filePath)
+}
+
+// queryMentionsTest is H15's own exemption-check wording (RESEARCH
+// §C.2/H15: "unless query mentions test") — deliberately narrower than
+// gather.go's queryMentionsTestOrSpec (H7's "test/spec" wording): the two
+// heuristics cite DIFFERENT query substrings in RESEARCH's frozen
+// capture, so this is its own function rather than a reuse.
+func queryMentionsTest(query string) bool {
+	return strings.Contains(strings.ToLower(query), "test")
+}
+
+// applyHardTestExclusion is H15 (RESEARCH §C.2, mcp/tools.js:2652-2684):
+// drops every low-value (isLowValueFile) file from fileScores UNLESS the
+// query mentions "test" (queryMentionsTest) AND at least 2 non-low-value
+// files remain in the candidate set — in which case NO file is dropped
+// at all (matching TS's short-circuit: the exemption is all-or-nothing,
+// not a partial keep). Mutates fileScores in place.
+func applyHardTestExclusion(fileScores map[string]float64, query string) {
+	var lowValue []string
+	nonLowValueCount := 0
+	for f := range fileScores {
+		if isLowValueFile(f) {
+			lowValue = append(lowValue, f)
+		} else {
+			nonLowValueCount++
+		}
+	}
+	if len(lowValue) == 0 {
+		return
+	}
+	if queryMentionsTest(query) && nonLowValueCount >= 2 {
+		return
+	}
+	for _, f := range lowValue {
+		delete(fileScores, f)
+	}
+}
+
+// --- H16: change-surface buried-rescue ---
+
+// H16's exact, cited constants (RESEARCH §C.2/H16, mcp/tools.js:2574-2613,
+// 2733-2762 [VERIFIED: TS 1.3.1 dist — cited from the frozen RESEARCH
+// capture]): rescue a signature-type file only if genuinely buried
+// (fileGraphScore < maxGraph*0.06 AND termHits < 2); a rescued file is
+// force-kept with score = max(score, 45).
+const (
+	buriedRescueMassFraction = 0.06
+	buriedRescueMaxTermHits  = 2
+	buriedRescueScoreFloor   = 45.0
+)
+
+// signatureTypeEdgeKinds is H16's edge-kind filter: a tier-seed
+// callable's "signature types" are the nodes it points at via
+// references/type_of/returns edges (RESEARCH §C.2/H16 names all three
+// explicitly) — the new D-09 edge kinds this heuristic exists to
+// exercise.
+var signatureTypeEdgeKinds = map[string]bool{
+	goextract.RefKindReferences: true,
+	goextract.RefKindTypeOf:     true,
+	goextract.RefKindReturns:    true,
+}
+
+// signatureTypeTargets resolves srcID's OWN references/type_of/returns
+// edges (a direct IterateEdges(srcID) scan, mirroring expand.go's
+// calleeCallEdges) to their Target node ids, deterministically ordered
+// (sorted).
+func signatureTypeTargets(r graphstore.Reader, srcID string) ([]string, error) {
+	it, err := r.IterateEdges(srcID)
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	var out []string
+	for it.Next() {
+		e := it.Edge()
+		if !signatureTypeEdgeKinds[e.Kind] {
+			continue
+		}
+		out = append(out, e.Target)
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// isGenuinelyBuried is H16's buried test (RESEARCH §C.2/H16): a file is
+// "genuinely buried" only when its graph mass is under 6% of the maximum
+// AND it has fewer than 2 distinct query-term hits — BOTH conditions,
+// not either (a file with real term hits, or real graph mass, is not
+// "buried" no matter how low the other signal is).
+func isGenuinelyBuried(filePath string, fileGraphScore map[string]float64, maxGraph float64, fileTermHits map[string]int) bool {
+	return fileGraphScore[filePath] < maxGraph*buriedRescueMassFraction && fileTermHits[filePath] < buriedRescueMaxTermHits
+}
+
+// applyBuriedRescue is H16 (RESEARCH §C.2, mcp/tools.js:2574-2613,
+// 2733-2762): for each tier-seed callable id in tierSeedIDs, follows its
+// signature-type edges (signatureTypeTargets) to their target nodes'
+// files, and rescues (isGenuinelyBuried) ONLY the genuinely-buried
+// ones — a signature-type file with enough graph mass or term hits is
+// left alone entirely, not partially rescued. A rescued file is
+// force-kept in fileScores at score = max(existing, 45) (mutated in
+// place — a file that was already dropped by H15/never scored by H14 is
+// ADDED to fileScores at exactly 45, since max(0, 45) == 45) and
+// recorded in the returned rescued set, which the H17 gate consumes as
+// one of its 5-way OR admission conditions ("changeSurfaceFiles"). WR-04:
+// a signature-type edge whose Target no longer resolves is skipped, not
+// an error. Deterministic: tierSeedIDs are walked in sorted order and
+// each id's own targets are already sorted (signatureTypeTargets).
+func applyBuriedRescue(r graphstore.Reader, tierSeedIDs []string, fileGraphScore map[string]float64, maxGraph float64, fileTermHits map[string]int, fileScores map[string]float64) (map[string]bool, error) {
+	sorted := append([]string(nil), tierSeedIDs...)
+	sort.Strings(sorted)
+
+	rescued := make(map[string]bool)
+	for _, seedID := range sorted {
+		targets, err := signatureTypeTargets(r, seedID)
+		if err != nil {
+			return nil, err
+		}
+		for _, tid := range targets {
+			n, err := r.GetNode(tid)
+			if err != nil {
+				if errors.Is(err, graphstore.ErrNotFound) {
+					continue
+				}
+				return nil, err
+			}
+			if n.FilePath == "" {
+				continue
+			}
+			if !isGenuinelyBuried(n.FilePath, fileGraphScore, maxGraph, fileTermHits) {
+				continue
+			}
+			rescued[n.FilePath] = true
+			if fileScores[n.FilePath] < buriedRescueScoreFloor {
+				fileScores[n.FilePath] = buriedRescueScoreFloor
+			}
+		}
+	}
+	return rescued, nil
 }
