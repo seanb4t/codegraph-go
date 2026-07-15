@@ -571,8 +571,18 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
+
+	// D-09 (01-RESEARCH.md §B): reuses the already-parsed "return_type"
+	// field (also read by buildFuncNode for the node's own ReturnType text)
+	// — emitNamedTypeRef isolates the type NAME for node resolution. A
+	// missing return_type field (no `: T` — including every plain JS file,
+	// which has no type-annotation syntax at all) emits no ref: absence,
+	// not error (the documented D-02 divergence).
+	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
+
 	if body := decl.ChildByFieldName("body"); body != nil {
 		ex.collectCalls(id, body)
+		ex.collectReferencesAndInstantiates(id, body)
 	}
 }
 
@@ -621,8 +631,10 @@ func (ex *extractor) emitExportedConstDeclarator(d *tree_sitter.Node) {
 			ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 				Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 			}})
+			ex.emitNamedTypeRef(id, valueNode.ChildByFieldName("return_type"), goextract.RefKindReturns)
 			if body := valueNode.ChildByFieldName("body"); body != nil {
 				ex.collectCalls(id, body)
+				ex.collectReferencesAndInstantiates(id, body)
 			}
 			return
 		}
@@ -743,8 +755,14 @@ func (ex *extractor) emitMethod(typeID, typeName string, decl *tree_sitter.Node)
 	ex.result.IntraEdges = append(ex.result.IntraEdges, goextract.IntraEdge{Edge: &schema.Edge{
 		Source: typeID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
+
+	// D-09 (01-RESEARCH.md §B): see emitFunction's identical comment — a
+	// missing return_type field emits no ref (absence, not error).
+	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
+
 	if body := decl.ChildByFieldName("body"); body != nil {
 		ex.collectCalls(id, body)
+		ex.collectReferencesAndInstantiates(id, body)
 	}
 }
 
@@ -838,6 +856,232 @@ func (ex *extractor) memberAccessAlias(object *tree_sitter.Node) string {
 		// synthetic-alias treatment, mirroring goextract's WR-02 fix.
 		return "<" + object.Kind() + ">"
 	}
+}
+
+// --- D-09 edge kinds (01-RESEARCH.md §B): instantiates/type_of/returns/references ---
+
+// emitNamedTypeRef emits a D-09 Pass-1 ref (01-RESEARCH.md §B) of the given
+// kind (RefKindReturns/RefKindTypeOf) from fromID to annotation's simple
+// named type reference. annotation is the raw "type_annotation" wrapper
+// node TS's grammar produces for both a function/method's return_type field
+// and a variable_declarator's type field (verified via a live parse this
+// session: `(type_annotation (type_identifier))`) — its own single named
+// child is the real type expression, resolved the exact same way
+// emitSupertypeRef already resolves a heritage-clause type (reusing
+// typeRefFromExpr + resolveBareIdentifier, with member_expression handled
+// inline for a qualified `mod.Foo` annotation). A nil annotation (no `: T`
+// at all — every plain JS file, which has no type-annotation syntax) or a
+// predefined/primitive type (`number`, `void`, `boolean`, ... — a distinct
+// node kind TS's own grammar already separates from type_identifier, so no
+// per-name filter list is needed here, mirroring javaextract/csharpextract's
+// identical "grammar already distinguishes" note) emits no ref — absence,
+// not error, the documented D-02 divergence.
+func (ex *extractor) emitNamedTypeRef(fromID string, annotation *tree_sitter.Node, kind string) {
+	if annotation == nil || annotation.NamedChildCount() == 0 {
+		return
+	}
+	t := annotation.NamedChild(0)
+	var name, pkgAlias string
+	switch t.Kind() {
+	case "member_expression":
+		propNode := t.ChildByFieldName("property")
+		if propNode == nil {
+			return
+		}
+		name = propNode.Utf8Text(ex.src)
+		pkgAlias = ex.memberAccessAlias(t.ChildByFieldName("object"))
+	default:
+		n, ok := typeRefFromExpr(t, ex.src)
+		if !ok {
+			return
+		}
+		pkgAlias, name = ex.resolveBareIdentifier(n)
+	}
+	pos := t.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: kind,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
+}
+
+// recordInstantiate emits a D-09 `instantiates` Pass-1 ref (01-RESEARCH.md
+// §B) for a `new T(...)` new_expression whose "constructor" field is a
+// simple identifier or member_expression — mirrors recordCall's own switch
+// on the analogous "function" field exactly (a new_expression's
+// "constructor" field takes the identical shapes a call_expression's
+// "function" field does). The resolved target's Kind-check disambiguation
+// (must be a class, not an interface) happens at Pass 2 (resolve.go), not
+// here.
+func (ex *extractor) recordInstantiate(fromID string, expr *tree_sitter.Node) {
+	ctor := expr.ChildByFieldName("constructor")
+	if ctor == nil {
+		return
+	}
+	pos := expr.StartPosition()
+	line, col := int32(pos.Row)+1, int32(pos.Column)
+
+	switch ctor.Kind() {
+	case "identifier":
+		pkgAlias, name := ex.resolveBareIdentifier(ctor.Utf8Text(ex.src))
+		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindInstantiates, Line: line, Col: col,
+		})
+	case "member_expression":
+		propNode := ctor.ChildByFieldName("property")
+		if propNode == nil {
+			return
+		}
+		pkgAlias := ex.memberAccessAlias(ctor.ChildByFieldName("object"))
+		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+			FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindInstantiates, Line: line, Col: col,
+		})
+	}
+}
+
+// collectReferencesAndInstantiates walks a function/method/arrow-function
+// body for two D-09 Pass-1 capture kinds (01-RESEARCH.md §B): instantiates
+// (via recordInstantiate, for `new_expression` — a syntactically DISTINCT
+// node kind from call_expression in TS/JS, unlike Python, so it needs its
+// own case here rather than being folded into recordCall) and type_of for a
+// LOCAL variable_declarator's own "type" field (anchored at the enclosing
+// function/method id fromID), plus references (a value read of an
+// identifier/member-access that is NOT a call_expression's own callee —
+// collectCalls already captures those via its own independent whole-body
+// scan; de-dup requires a called symbol never ALSO emit a references ref).
+//
+// TS/JS D-02 precision note (mirrors goextract's/javaextract's/
+// csharpextract's/pyextract's own note exactly, per 01-RESEARCH.md §B):
+// this walk is scoped to a bounded allow-list of unambiguous read
+// positions — call/constructor arguments, return values, variable-
+// declarator initializers, and assignment right-hand sides — plus the
+// common compound-expression wrappers reachable from them via
+// captureExprRead — rather than exhaustively covering every TS/JS
+// expression shape. This is a deliberate, bounded scope, not a silent drop
+// of ground truth.
+func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_sitter.Node) {
+	walkDescendants(body, func(n *tree_sitter.Node) bool {
+		switch n.Kind() {
+		case "call_expression":
+			// De-dup: the callee ("function") is already captured by
+			// collectCalls' own separate walk — only "arguments" are
+			// additional read positions.
+			if args := n.ChildByFieldName("arguments"); args != nil {
+				for i := uint(0); i < args.NamedChildCount(); i++ {
+					ex.captureExprRead(fromID, args.NamedChild(i))
+				}
+			}
+			return false
+		case "new_expression":
+			ex.recordInstantiate(fromID, n)
+			if args := n.ChildByFieldName("arguments"); args != nil {
+				for i := uint(0); i < args.NamedChildCount(); i++ {
+					ex.captureExprRead(fromID, args.NamedChild(i))
+				}
+			}
+			return false
+		case "return_statement":
+			for i := uint(0); i < n.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, n.NamedChild(i))
+			}
+			return false
+		case "variable_declarator":
+			ex.emitNamedTypeRef(fromID, n.ChildByFieldName("type"), goextract.RefKindTypeOf)
+			if v := n.ChildByFieldName("value"); v != nil {
+				ex.captureExprRead(fromID, v)
+			}
+			return false
+		case "assignment_expression":
+			if right := n.ChildByFieldName("right"); right != nil {
+				ex.captureExprRead(fromID, right)
+			}
+			return false
+		}
+		return true
+	})
+}
+
+// captureExprRead classifies a single expression node reached from an
+// allow-listed read position (see collectReferencesAndInstantiates) and
+// emits a references ref for a bare identifier or member-access value read,
+// recursing through common compound-expression wrappers so a nested read
+// inside one of those is still found — mirrors goextract/javaextract/
+// csharpextract/pyextract's own captureExprRead shape.
+func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
+	if expr == nil {
+		return
+	}
+	switch expr.Kind() {
+	case "identifier":
+		pkgAlias, name := ex.resolveBareIdentifier(expr.Utf8Text(ex.src))
+		pos := expr.StartPosition()
+		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		})
+	case "member_expression":
+		ex.captureMemberAccessRead(fromID, expr)
+	case "parenthesized_expression":
+		if expr.NamedChildCount() > 0 {
+			ex.captureExprRead(fromID, expr.NamedChild(0))
+		}
+	case "unary_expression":
+		if o := expr.ChildByFieldName("argument"); o != nil {
+			ex.captureExprRead(fromID, o)
+		}
+	case "binary_expression":
+		if l := expr.ChildByFieldName("left"); l != nil {
+			ex.captureExprRead(fromID, l)
+		}
+		if r := expr.ChildByFieldName("right"); r != nil {
+			ex.captureExprRead(fromID, r)
+		}
+	case "call_expression":
+		// A nested call (e.g. an argument that is itself a call) — its own
+		// callee is never a reference (de-dup, mirroring the outer
+		// collectReferencesAndInstantiates rule); only its arguments are
+		// walked here.
+		if args := expr.ChildByFieldName("arguments"); args != nil {
+			for i := uint(0); i < args.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, args.NamedChild(i))
+			}
+		}
+	case "new_expression":
+		ex.recordInstantiate(fromID, expr)
+		if args := expr.ChildByFieldName("arguments"); args != nil {
+			for i := uint(0); i < args.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, args.NamedChild(i))
+			}
+		}
+	}
+	// Every other expression kind (literals, arrow_function bodies,
+	// template_string, ternary/conditional expressions, ...) is out of this
+	// bounded allow-list per the TS/JS D-02 precision note above — no
+	// reference captured, no error.
+}
+
+// captureMemberAccessRead handles a member_expression VALUE read
+// (`Type.prop`/`obj.prop` used as a value, not called — recordCall's own
+// call_expression handling already captures the call-callee shape via
+// collectCalls' separate walk). Mirrors recordCall's memberAccessAlias
+// discipline for PkgAlias exactly; a non-identifier/non-this operand (a
+// nested member_expression chain, a call_expression result, ...) is walked
+// further via captureExprRead, mirroring goextract's captureSelectorRead
+// recursion discipline.
+func (ex *extractor) captureMemberAccessRead(fromID string, sel *tree_sitter.Node) {
+	object := sel.ChildByFieldName("object")
+	propNode := sel.ChildByFieldName("property")
+	if propNode == nil {
+		return
+	}
+	pkgAlias := ex.memberAccessAlias(object)
+	if object != nil && object.Kind() != "identifier" && object.Kind() != "this" {
+		ex.captureExprRead(fromID, object)
+	}
+	pos := sel.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: propNode.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
 }
 
 // --- shared helpers ---
