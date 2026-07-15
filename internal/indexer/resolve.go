@@ -215,6 +215,61 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 					Line: ref.Line, Col: ref.Col, Provenance: "ast",
 				})
 				resolvedForFile++
+
+			case goextract.RefKindReferences:
+				// D-09 (01-RESEARCH.md §B): mirrors RefKindCalls' resolve
+				// shape exactly — no Kind-check disambiguation on the
+				// target (any resolvable symbol is a valid references
+				// target, unlike instantiates/type_of/returns below).
+				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
+				if !ok {
+					unresolvedCount++
+					continue
+				}
+				edges = append(edges, &schema.Edge{
+					Source: ref.FromID, Target: targetID, Kind: goextract.RefKindReferences,
+					Line: ref.Line, Col: ref.Col, Provenance: "ast",
+				})
+				resolvedForFile++
+
+			case goextract.RefKindInstantiates:
+				// D-09 Kind-check disambiguation (RESEARCH §B): the
+				// resolved target must actually be a type-Kind node a Go
+				// composite literal can instantiate — a struct. (Go has
+				// no "class" kind; an interface can never be
+				// instantiated, and a type_alias's underlying type is not
+				// resolved here, so it is intentionally excluded rather
+				// than guessed at.) A resolved-but-wrong-Kind target
+				// counts as unresolved — this is a real, deliberate
+				// absence, not a silent drop of ground truth Pass 1 never
+				// claimed in the first place.
+				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
+				if !ok || nodeKindByID[targetID] != goextract.KindStruct {
+					unresolvedCount++
+					continue
+				}
+				edges = append(edges, &schema.Edge{
+					Source: ref.FromID, Target: targetID, Kind: goextract.RefKindInstantiates,
+					Line: ref.Line, Col: ref.Col, Provenance: "ast",
+				})
+				resolvedForFile++
+
+			case goextract.RefKindReturns, goextract.RefKindTypeOf:
+				// D-09 (RESEARCH §B): both mirror RefKindCalls' resolve
+				// shape (a declared type name resolved to its node), no
+				// Kind-check disambiguation beyond "resolves to any
+				// in-repo symbol at all" — a returns/type_of target may
+				// legitimately be a struct, interface, or type_alias.
+				targetID, ok := resolveNameRef(idx, r, ref.PkgAlias, ref.Name)
+				if !ok {
+					unresolvedCount++
+					continue
+				}
+				edges = append(edges, &schema.Edge{
+					Source: ref.FromID, Target: targetID, Kind: ref.Kind,
+					Line: ref.Line, Col: ref.Col, Provenance: "ast",
+				})
+				resolvedForFile++
 			}
 		}
 

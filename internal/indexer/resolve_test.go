@@ -550,6 +550,154 @@ func F() {
 	}
 }
 
+// TestReferences_ResolvesEdge proves a package-level identifier read as a
+// value (not called) resolves into a "references" edge with "ast"
+// provenance — D-09 Pass-1 capture + Pass-2 resolution (01-RESEARCH.md
+// §B), mirroring RefKindCalls' resolve shape exactly.
+func TestReferences_ResolvesEdge(t *testing.T) {
+	src := `package p
+
+var Shared int
+
+func Run() {
+	Consume(Shared)
+}
+func Consume(x int) {}
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	sharedID := nodeid.NodeID(goextract.KindVariable, "Shared", "p.go")
+
+	e := findEdgeFull(edges, runID, goextract.RefKindReferences, sharedID)
+	if e == nil {
+		t.Fatalf("expected references edge %s -> %s (Run -> Shared), got %+v", runID, sharedID, edges)
+	}
+	if e.Provenance != "ast" {
+		t.Errorf("Provenance = %q, want %q (ground truth, not synthesized)", e.Provenance, "ast")
+	}
+}
+
+// TestInstantiates_ResolvesToStructKind proves `Widget{}` resolves into an
+// "instantiates" edge to Widget's struct node — D-09 Pass-1 capture +
+// Pass-2 Kind-check disambiguation (01-RESEARCH.md §B).
+func TestInstantiates_ResolvesToStructKind(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func Run() {
+	_ = Widget{}
+}
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "p.go")
+
+	if !findEdge(edges, runID, goextract.RefKindInstantiates, widgetID) {
+		t.Fatalf("expected instantiates edge %s -> %s (Run -> Widget), got %+v", runID, widgetID, edges)
+	}
+}
+
+// TestInstantiates_NonStructTargetUnresolved proves Pass 2's Kind-check
+// disambiguation (RESEARCH §B): an instantiates ref whose resolved target
+// is NOT a struct-Kind node (here, an interface — syntactically
+// impossible to construct via valid Go composite-literal syntax, so this
+// FileResult is hand-built like TestResolve_DeclaredImplementsPromotion)
+// produces no edge — counted as unresolved, never silently mis-typed.
+func TestInstantiates_NonStructTargetUnresolved(t *testing.T) {
+	ifaceID := nodeid.NodeID(goextract.KindInterface, "Iface", "p.go")
+	runID := nodeid.NodeID(goextract.KindFunction, "Run", "p.go")
+
+	results := []goextract.FileResult{
+		{
+			ImportPath: "example.com/p", RelPath: "p.go", Language: "go",
+			Nodes: []goextract.ExtractedNode{
+				{Node: &schema.Node{Id: ifaceID, Kind: goextract.KindInterface, Name: "Iface", QualifiedName: "Iface", FilePath: "p.go"}},
+				{Node: &schema.Node{Id: runID, Kind: goextract.KindFunction, Name: "Run", QualifiedName: "Run", FilePath: "p.go"}},
+			},
+			Unresolved: []goextract.UnresolvedRef{
+				{FromID: runID, Name: "Iface", Kind: goextract.RefKindInstantiates, Line: 3, Col: 5},
+			},
+		},
+	}
+
+	_, _, edges, _, unresolved := resolveRefs(results, "example.com/p")
+
+	if e := findEdgeFull(edges, runID, goextract.RefKindInstantiates, ifaceID); e != nil {
+		t.Fatalf("expected no instantiates edge for a non-struct target, got %+v", e)
+	}
+	if unresolved != 1 {
+		t.Errorf("unresolvedCount = %d, want 1 (the Kind-check-rejected ref)", unresolved)
+	}
+}
+
+// TestTypeOf_ResolvesEdge proves `var W Widget` resolves into a "type_of"
+// edge W -> Widget — D-09 Pass-1 capture + Pass-2 resolution
+// (01-RESEARCH.md §B).
+func TestTypeOf_ResolvesEdge(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+var W Widget
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	wID := nodeid.NodeID(goextract.KindVariable, "W", "p.go")
+	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "p.go")
+
+	if !findEdge(edges, wID, goextract.RefKindTypeOf, widgetID) {
+		t.Fatalf("expected type_of edge %s -> %s (W -> Widget), got %+v", wID, widgetID, edges)
+	}
+}
+
+// TestReturns_ResolvesEdge proves `func MakeWidget() Widget` resolves
+// into a "returns" edge MakeWidget -> Widget — D-09 Pass-1 capture (reuse
+// of the already-parsed return type) + Pass-2 resolution (01-RESEARCH.md
+// §B).
+func TestReturns_ResolvesEdge(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func MakeWidget() Widget { return Widget{} }
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	makeWidgetID := nodeid.NodeID(goextract.KindFunction, "MakeWidget", "p.go")
+	widgetID := nodeid.NodeID(goextract.KindStruct, "Widget", "p.go")
+
+	if !findEdge(edges, makeWidgetID, goextract.RefKindReturns, widgetID) {
+		t.Fatalf("expected returns edge %s -> %s (MakeWidget -> Widget), got %+v", makeWidgetID, widgetID, edges)
+	}
+}
+
 // TestResolve_UnresolvedMethodCall proves a method call whose receiver
 // type cannot be determined without interface/inference is left
 // unresolved (D-06a) — never emitted as an edge, but counted.

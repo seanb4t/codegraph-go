@@ -643,3 +643,186 @@ func TestExtract_SharedFixture(t *testing.T) {
 		t.Errorf("fixture: expected embeds ref to Reader from ReadWriter, got %+v", embedResult.Unresolved)
 	}
 }
+
+// TestExtract_Instantiates proves a Go composite_literal (`T{}`) and its
+// pointer-taking form (`&T{}`) both emit a RefKindInstantiates ref to T's
+// name — D-09 Pass-1 capture (01-RESEARCH.md §B).
+func TestExtract_Instantiates(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func Run() {
+	_ = Widget{}
+	_ = &Widget{}
+}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	count := 0
+	for _, u := range result.Unresolved {
+		if u.Kind == RefKindInstantiates && u.Name == "Widget" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("expected 2 instantiates refs to Widget (T{} and &T{}), got %d in %+v", count, result.Unresolved)
+	}
+}
+
+// TestExtract_InstantiatesUnnamedTypeNoRef proves a slice/map composite
+// literal (`[]int{1,2,3}`) emits NO instantiates ref — its "type" field
+// is a compound/unnamed shape (slice_type), not a single named type
+// reference (RESEARCH §B's documented precision note).
+func TestExtract_InstantiatesUnnamedTypeNoRef(t *testing.T) {
+	src := `package p
+
+func Run() {
+	_ = []int{1, 2, 3}
+}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if hasUnresolved(result, RefKindInstantiates, "int", "") {
+		t.Errorf("expected NO instantiates ref for a slice literal's unnamed element type, got %+v", result.Unresolved)
+	}
+}
+
+// TestExtract_References proves a package-level identifier read as a
+// VALUE (not called) — here, passed as a call argument — emits a
+// RefKindReferences ref, and TestNewKindDedup (below) proves a CALLED
+// symbol never also emits one (D-09 Pass-1 capture, 01-RESEARCH.md §B).
+func TestExtract_References(t *testing.T) {
+	src := `package p
+
+var Shared int
+
+func Run() {
+	Consume(Shared)
+}
+func Consume(x int) {}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if !hasUnresolved(result, RefKindReferences, "Shared", "") {
+		t.Errorf("expected references ref to Shared (call-argument value read), got %+v", result.Unresolved)
+	}
+}
+
+// TestExtract_ReferencesQualifiedSelector proves a package-qualified
+// value read (`pkg.Const` used as a value, not called) emits a
+// RefKindReferences ref carrying the package alias — mirroring
+// RefKindCalls' qualified shape exactly.
+func TestExtract_ReferencesQualifiedSelector(t *testing.T) {
+	src := `package pkgb
+
+import "example.com/gofixture/pkga"
+
+func Run() {
+	Consume(pkga.SharedConst)
+}
+func Consume(x int) {}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/pkgb", "pkgb.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if !hasUnresolved(result, RefKindReferences, "SharedConst", "pkga") {
+		t.Errorf("expected references ref to pkga.SharedConst, got %+v", result.Unresolved)
+	}
+}
+
+// TestNewKindDedup proves D-09's explicit de-dup requirement: a CALLED
+// symbol emits ONLY a RefKindCalls ref, never ALSO a RefKindReferences
+// ref for the same identifier occurrence (RESEARCH §B).
+func TestNewKindDedup(t *testing.T) {
+	src := `package p
+
+func Run() {
+	helper()
+}
+func helper() {}
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if !hasUnresolved(result, RefKindCalls, "helper", "") {
+		t.Errorf("expected calls ref to helper, got %+v", result.Unresolved)
+	}
+	if hasUnresolved(result, RefKindReferences, "helper", "") {
+		t.Errorf("expected NO references ref for a called symbol (de-dup), got %+v", result.Unresolved)
+	}
+}
+
+// TestExtract_TypeOf proves `var x T` emits a RefKindTypeOf ref from x's
+// own node to T's name — D-09 Pass-1 capture (01-RESEARCH.md §B). An
+// un-annotated `var y = expr` (no declared type) emits no ref.
+func TestExtract_TypeOf(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+var W Widget
+var Inferred = 5
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if !hasUnresolved(result, RefKindTypeOf, "Widget", "") {
+		t.Errorf("expected type_of ref from W to Widget, got %+v", result.Unresolved)
+	}
+	if hasUnresolved(result, RefKindTypeOf, "int", "") {
+		t.Errorf("expected NO type_of ref for an un-annotated var, got %+v", result.Unresolved)
+	}
+}
+
+// TestExtract_Returns proves `func F() T` emits a RefKindReturns ref from
+// F's own node to T's name — D-09 Pass-1 capture (01-RESEARCH.md §B),
+// reusing the already-parsed return type. A primitive return (`int`) and
+// a multi-value return (`(int, error)`) both emit no ref (absence, not
+// error — RESEARCH §B's documented precision note).
+func TestExtract_Returns(t *testing.T) {
+	src := `package p
+
+type Widget struct{}
+
+func MakeWidget() Widget { return Widget{} }
+func Count() int { return 0 }
+func Pair() (int, error) { return 0, nil }
+`
+	p := newTestParser(t)
+	result, err := Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract returned error: %v", err)
+	}
+
+	if !hasUnresolved(result, RefKindReturns, "Widget", "") {
+		t.Errorf("expected returns ref from MakeWidget to Widget, got %+v", result.Unresolved)
+	}
+
+	for _, u := range result.Unresolved {
+		if u.Kind == RefKindReturns && (u.Name == "int" || u.Name == "error") {
+			t.Errorf("expected NO returns ref for a primitive/multi-value return, got %+v", u)
+		}
+	}
+}
