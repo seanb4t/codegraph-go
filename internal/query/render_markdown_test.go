@@ -393,6 +393,109 @@ func TestRenderNodeMultiDef(t *testing.T) {
 	})
 }
 
+// TestNoCoveringTestsWarning pins EXPL-04's exact trigger + exact string
+// (RESEARCH §5, verbatim): a root with >=1 direct caller and NO covering
+// test file ends with "; ⚠️ no covering tests found"; a root with covering
+// test files keeps the existing "; tests: ..." clause (no warning); a
+// root with ZERO callers gets NEITHER clause (mirrors TS's early-continue
+// before the callers/tests block is ever reached).
+func TestNoCoveringTestsWarning(t *testing.T) {
+	root := &schema.Node{Name: "recoverAccount", Kind: "function", FilePath: "recovery/recovery.go", StartLine: 8}
+
+	t.Run("callers but no covering test file appends the exact warning", func(t *testing.T) {
+		got := renderBlastBullet(exploreBlast{Symbol: root, CallerCount: 1})
+		want := "- `recoverAccount` (recovery/recovery.go:8) — 1 caller in `recovery/recovery.go`; ⚠️ no covering tests found"
+		if got != want {
+			t.Fatalf("renderBlastBullet: got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("callers with a covering test file keeps the existing tests: clause, no warning", func(t *testing.T) {
+		got := renderBlastBullet(exploreBlast{Symbol: root, CallerCount: 1, TestFiles: []string{"recovery/recovery_test.go"}})
+		want := "- `recoverAccount` (recovery/recovery.go:8) — 1 caller in `recovery/recovery.go`; tests: `recovery/recovery_test.go`"
+		if got != want {
+			t.Fatalf("renderBlastBullet: got %q, want %q", got, want)
+		}
+		if strings.Contains(got, "no covering tests") {
+			t.Fatalf("renderBlastBullet: unexpected warning alongside a tests: clause:\n%s", got)
+		}
+	})
+
+	t.Run("zero callers gets neither clause", func(t *testing.T) {
+		got := renderBlastBullet(exploreBlast{Symbol: root, CallerCount: 0})
+		want := "- `recoverAccount` (recovery/recovery.go:8) — 0 callers in `recovery/recovery.go`"
+		if got != want {
+			t.Fatalf("renderBlastBullet: got %q, want %q (no tests: clause, no warning)", got, want)
+		}
+	})
+}
+
+// TestSkeletonization pins H20's polymorphic-sibling skeletonization
+// (RESEARCH §C.2/H20): an off-spine file whose class implements an
+// interface with >= MIN_SIBLINGS=3 total implementers renders as a
+// signature-only skeleton; below the threshold, or when the file IS
+// on-spine (a central file), it renders full source as usual.
+func TestSkeletonization(t *testing.T) {
+	widget := &schema.Node{Id: "widget", Name: "Widget", Kind: "struct", FilePath: "pkg/widget.go", Signature: " struct{}"}
+	gadget := &schema.Node{Id: "gadget", Name: "Gadget", Kind: "struct", FilePath: "pkg/gadget.go", Signature: " struct{}"}
+
+	t.Run(">=3 implementers on an off-spine file triggers skeletonization", func(t *testing.T) {
+		implementsIdx := map[string][]*schema.Edge{
+			"iface": {
+				{Source: "widget", Target: "iface", Kind: "implements"},
+				{Source: "typeB", Target: "iface", Kind: "implements"},
+				{Source: "typeC", Target: "iface", Kind: "implements"},
+			},
+		}
+		groups := []exploreFileGroup{{Path: "pkg/widget.go", Symbols: []*schema.Node{widget}}}
+
+		skeleton := computeSkeletonFiles(groups, nil, implementsIdx)
+		if !skeleton["pkg/widget.go"] {
+			t.Fatal("computeSkeletonFiles: expected pkg/widget.go to be flagged for skeletonization at 3 implementers")
+		}
+
+		got := RenderExplore("widget", 1, 1, groups, nil, map[string][]byte{"pkg/widget.go": []byte("package pkg\n\ntype Widget struct{}\n")}, false, skeleton)
+		if !strings.Contains(got, "struct Widget struct{}\n```") {
+			t.Fatalf("RenderExplore: expected a signature-only skeleton block, got:\n%s", got)
+		}
+		if strings.Contains(got, "package pkg") {
+			t.Fatalf("RenderExplore: skeletonized file must not render full source (no 'package pkg' line):\n%s", got)
+		}
+	})
+
+	t.Run("below MIN_SIBLINGS=3 does not skeletonize", func(t *testing.T) {
+		implementsIdx := map[string][]*schema.Edge{
+			"iface": {
+				{Source: "gadget", Target: "iface", Kind: "implements"},
+				{Source: "typeB", Target: "iface", Kind: "implements"},
+			},
+		}
+		groups := []exploreFileGroup{{Path: "pkg/gadget.go", Symbols: []*schema.Node{gadget}}}
+
+		skeleton := computeSkeletonFiles(groups, nil, implementsIdx)
+		if skeleton["pkg/gadget.go"] {
+			t.Fatal("computeSkeletonFiles: 2 implementers must not trigger skeletonization (MIN_SIBLINGS=3)")
+		}
+	})
+
+	t.Run("an on-spine (central) file never skeletonizes, even at >=3 implementers", func(t *testing.T) {
+		implementsIdx := map[string][]*schema.Edge{
+			"iface": {
+				{Source: "widget", Target: "iface", Kind: "implements"},
+				{Source: "typeB", Target: "iface", Kind: "implements"},
+				{Source: "typeC", Target: "iface", Kind: "implements"},
+			},
+		}
+		groups := []exploreFileGroup{{Path: "pkg/widget.go", Symbols: []*schema.Node{widget}}}
+		centralFiles := map[string]bool{"pkg/widget.go": true}
+
+		skeleton := computeSkeletonFiles(groups, centralFiles, implementsIdx)
+		if skeleton["pkg/widget.go"] {
+			t.Fatal("computeSkeletonFiles: a central (on-spine) file must never skeletonize")
+		}
+	})
+}
+
 // TestRenderNodeSingleDefUnchanged is NODE-04's regression pin: a symbol
 // with exactly one definition must still render via the original
 // single-def RenderNode path, byte-for-byte identical to a direct
