@@ -435,3 +435,101 @@ func TestGatherMerge_Empty(t *testing.T) {
 		t.Fatalf("got %d candidates, want 0", len(got))
 	}
 }
+
+// TestGatherTestDampen pins H7's exact rule: a test-file candidate's score
+// is multiplied by testFileDampeningFactor (0.3) UNLESS the query mentions
+// "test" or "spec" — in which case no dampening applies to anyone. A
+// non-test-file candidate is never touched.
+func TestGatherTestDampen(t *testing.T) {
+	testNode := &schema.Node{Id: "func:TestFoo", Kind: goextract.KindFunction, Name: "TestFoo", FilePath: "pkg/foo_test.go"}
+	prodNode := &schema.Node{Id: "func:Bar", Kind: goextract.KindFunction, Name: "Bar", FilePath: "pkg/bar.go"}
+
+	t.Run("dampened when query has no test/spec token", func(t *testing.T) {
+		candidates := []gatherCandidate{
+			{Node: testNode, Score: 100},
+			{Node: prodNode, Score: 100},
+		}
+		applyTestFileDampening(candidates, "find the bar helper", nil)
+
+		got := findGatherCandidate(t, candidates, "func:TestFoo")
+		want := 100 * testFileDampeningFactor
+		if got.Score != want {
+			t.Fatalf("test-file score = %v, want exactly %v (100*0.3)", got.Score, want)
+		}
+		prod := findGatherCandidate(t, candidates, "func:Bar")
+		if prod.Score != 100 {
+			t.Fatalf("non-test-file score = %v, want untouched 100", prod.Score)
+		}
+	})
+
+	t.Run("not dampened when query mentions test", func(t *testing.T) {
+		candidates := []gatherCandidate{{Node: testNode, Score: 100}}
+		applyTestFileDampening(candidates, "find the test helper", nil)
+		if candidates[0].Score != 100 {
+			t.Fatalf("score = %v, want untouched 100 (query mentions test)", candidates[0].Score)
+		}
+	})
+
+	t.Run("not dampened when query mentions spec", func(t *testing.T) {
+		candidates := []gatherCandidate{{Node: testNode, Score: 100}}
+		applyTestFileDampening(candidates, "find the spec for this", nil)
+		if candidates[0].Score != 100 {
+			t.Fatalf("score = %v, want untouched 100 (query mentions spec)", candidates[0].Score)
+		}
+	})
+}
+
+// TestGatherCoreDirBoost pins H8's exact rule: when one file holds >=3x
+// the next-most-frequent file's candidate count, every candidate whose
+// file shares that dominant file's directory prefix (including nested
+// subdirectories) earns a flat +25 boost; candidates outside that prefix
+// are untouched, and no boost applies at all when no file is >=3x
+// dominant.
+func TestGatherCoreDirBoost(t *testing.T) {
+	t.Run("dominant file boosts its directory prefix, including nested", func(t *testing.T) {
+		domA := &schema.Node{Id: "domA", Name: "A", FilePath: "pkg/core/service.go"}
+		domB := &schema.Node{Id: "domB", Name: "B", FilePath: "pkg/core/service.go"}
+		domC := &schema.Node{Id: "domC", Name: "C", FilePath: "pkg/core/service.go"}
+		sibling := &schema.Node{Id: "sibling", Name: "D", FilePath: "pkg/core/sub/helper.go"}
+		outsider := &schema.Node{Id: "outsider", Name: "E", FilePath: "pkg/utils/other.go"}
+
+		candidates := []gatherCandidate{
+			{Node: domA, Score: 10}, {Node: domB, Score: 10}, {Node: domC, Score: 10},
+			{Node: sibling, Score: 5}, {Node: outsider, Score: 5},
+		}
+		applyCoreDirectoryBoost(candidates)
+
+		for _, id := range []string{"domA", "domB", "domC"} {
+			c := findGatherCandidate(t, candidates, id)
+			if c.Score != 10+coreDirectoryBoost {
+				t.Fatalf("%s score = %v, want %v (10+25)", id, c.Score, 10+coreDirectoryBoost)
+			}
+		}
+		sib := findGatherCandidate(t, candidates, "sibling")
+		if sib.Score != 5+coreDirectoryBoost {
+			t.Fatalf("sibling (nested under dominant dir) score = %v, want %v (5+25)", sib.Score, 5+coreDirectoryBoost)
+		}
+		out := findGatherCandidate(t, candidates, "outsider")
+		if out.Score != 5 {
+			t.Fatalf("outsider (different directory) score = %v, want untouched 5", out.Score)
+		}
+	})
+
+	t.Run("no boost when no file reaches 3x dominance", func(t *testing.T) {
+		a := &schema.Node{Id: "a", Name: "A", FilePath: "pkg/core/a.go"}
+		b := &schema.Node{Id: "b", Name: "B", FilePath: "pkg/core/a.go"}
+		c := &schema.Node{Id: "c", Name: "C", FilePath: "pkg/utils/c.go"}
+
+		candidates := []gatherCandidate{
+			{Node: a, Score: 10}, {Node: b, Score: 10}, {Node: c, Score: 10},
+		}
+		applyCoreDirectoryBoost(candidates)
+
+		for _, id := range []string{"a", "b", "c"} {
+			cand := findGatherCandidate(t, candidates, id)
+			if cand.Score != 10 {
+				t.Fatalf("%s score = %v, want untouched 10 (2x ratio, not >=3x dominant)", id, cand.Score)
+			}
+		}
+	})
+}
