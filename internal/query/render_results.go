@@ -109,11 +109,67 @@ func RenderSearchMarkdown(term string, locs []Location) string {
 	return b.String()
 }
 
-// RenderFilesMarkdown placeholder — Task 3 fills in the flat/tree union
-// branches. This stub exists only so the package (which already carries
-// Task 3's tests in render_results_test.go, written during Task 1's RED
-// commit) compiles for Task 2's `-run` filtered GREEN check; Task 3
-// replaces this body before its own tests run.
+// RenderFilesMarkdown renders a FilesResult as markdown. FilesResult is a
+// UNION — exactly one of Files (flat format) or Tree (tree format) is
+// populated, per Format — so, unlike the four Location-backed renderers
+// above, this one branches on shape rather than sharing a single table.
+//
+// Both the empty string and the literal "flat" value are treated as the
+// flat branch, matching FilesOptions.Format's documented "empty means
+// flat" default and the MCP files tool's own req.GetString("format", "")
+// default.
+//
+// Note: TS's MCP files tool defaults to the tree format; ours defaults to
+// flat. That is a PRE-EXISTING divergence, not introduced by this plan —
+// do not "fix" it here; it is Phase 8 SURF territory.
 func RenderFilesMarkdown(r FilesResult) string {
-	panic("query: RenderFilesMarkdown not yet implemented (Task 3)")
+	if r.Format == "tree" {
+		var b strings.Builder
+		b.WriteString("**Files (tree)**\n\n")
+		b.WriteString(renderFileTreeMarkdown(r.Tree, ""))
+		return b.String()
+	}
+
+	// Flat branch (Format == "" or "flat"). A table cannot represent the
+	// tree branch's nested shape, but the flat branch is a uniform record
+	// list — this is where SURF-06's measured -41% win comes from: JSON
+	// re-states Path/Language/Nodes/Edges on every one of 308 records; a
+	// table states them once.
+	if len(r.Files) == 0 {
+		return "**Files** — no files found.\n"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "**Files** — %d indexed\n\n", len(r.Files))
+	b.WriteString("| Path | Language | Nodes | Edges |\n")
+	b.WriteString("|---|---|---|---|\n")
+	for _, f := range r.Files {
+		fmt.Fprintf(&b, "| `%s` | %s | %d | %d |\n", f.Path, f.Language, f.NodeCount, f.EdgeCount)
+	}
+	return b.String()
+}
+
+// renderFileTreeMarkdown ports internal/cli/files.go's printFileTree
+// algorithm into internal/query as a string-returning renderer, matching
+// this file's Render* convention (strings.Builder, not io.Writer).
+// Directory nodes render "name/" then recurse two spaces deeper; leaf
+// nodes render "name (language)".
+//
+// internal/cli/files.go's own printFileTree is left in place and
+// unmodified — moving it is out of this plan's scope and would put a CLI
+// file in this plan's files_modified, creating a wave conflict with plan
+// 02-07. This is a deliberate, bounded package-local duplication, the
+// same precedent status.go's shouldSkipStaleDir already set (duplicated
+// rather than imported to avoid an unwanted dependency edge —
+// internal/query must not import internal/cli).
+func renderFileTreeMarkdown(nodes []*FileTreeNode, indent string) string {
+	var b strings.Builder
+	for _, n := range nodes {
+		if n.IsDir {
+			fmt.Fprintf(&b, "%s%s/\n", indent, n.Name)
+			b.WriteString(renderFileTreeMarkdown(n.Children, indent+"  "))
+		} else {
+			fmt.Fprintf(&b, "%s%s (%s)\n", indent, n.Name, n.Language)
+		}
+	}
+	return b.String()
 }
