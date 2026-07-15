@@ -24,9 +24,15 @@ same commit:
 - **TEST-02 fixtures:** worktree detection has passing fixtures for
   linked-worktree, submodule, nested-clone, monorepo-subdir,
   `.claude/worktrees/`, and symlinked layouts.
+- **MCP output shape (SURF-06 — pulled in from Phase 8, user decision
+  2026-07-15):** the 5 JSON-shaped MCP read tools
+  (`callers`/`callees`/`impact`/`search`/`files`) switch from raw
+  `json.Marshal` output to markdown, matching the 3 tools that already do
+  (`explore`/`node`/`status`) and matching TS (which returns markdown from
+  *every* MCP tool). CLI `--json` is unaffected. See D-16.
 
 **Requirements:** STAT-01, STAT-02, STAT-03, WORK-01, WORK-02, WORK-03,
-TEST-02 (7 total).
+TEST-02, SURF-06 (8 total).
 
 **Hard constraints for this phase:**
 - **Plain text only, content-not-color.** Phase 6 ("Rendering Seam & Pretty
@@ -42,7 +48,10 @@ TEST-02 (7 total).
 **Not in this phase:** watcher-on-MCP default (Phase 3), Pebble WAL/log stderr
 noise — HYG-01 (Phase 4), git sync hooks — HOOK-* (Phase 5), any
 colorization/TTY-gating/lipgloss of `status` — TUI-02 (Phase 6), `impact`
-depth / short-flag aliases / `affected` flags — SURF-* (Phase 8).
+depth / short-flag aliases / `affected` flags — SURF-01..05 (Phase 8).
+**Note:** SURF-06 (MCP markdown output) IS in this phase — pulled forward from
+Phase 8 by explicit user decision on 2026-07-15 while resolving 02-RESEARCH.md
+Open Question #3. SURF-01..05 remain Phase 8.
 
 **Explicitly out of scope (REQUIREMENTS.md "Out of Scope" table):** the exact
 `pendingChanges` added/modified/removed **count** at `status`-time — it would
@@ -216,14 +225,15 @@ require re-running Sync's diff on every `status` call. STAT-03's live
   selector** — verified by hexdump this session. It is **not** the `⚠️` used by
   Phase 1's "no covering tests" warning. Getting this wrong is a silent
   byte-parity failure. It matches our existing `staleBannerText`'s `⚠`.
-- **D-12:** **Mirror the `staleBanner` precedent for delivery.** TS's
+- **D-12:** **Mirror the `staleBanner` precedent — ONE uniform text-prefix across
+  all 7 non-status read tools.** TS's
   `withWorktreeNotice` prefixes `${notice}\n\n${first.text}` onto the first text
   content block, **no-ops on `isError` results**, and **excludes
   `codegraph_status`** (which embeds its own verbose form). Our
   `staleBanner(stale)` already establishes exactly this prepend-to-rendered-string
   pattern in `render_markdown.go`. **Decision:** implement
-  `worktreeNotice(mismatch)` alongside it and apply it in the shared engine's
-  render path for the 7 non-status read tools
+  `worktreeNotice(mismatch)` alongside it and apply the literal TS text-prefix
+  to all 7 non-status read tools
   (`explore`/`node`/`search`/`callers`/`callees`/`impact`/`files`), with `status`
   taking the verbose form. **MCP `status` wraps the verbose warning as a
   blockquote** (`> ⚠ ` + warning with `\n` → `\n> `), matching TS's
@@ -231,14 +241,34 @@ require re-running Sync's diff on every `status` call. STAT-03's live
   ⚠️ **TS's CLI `warn()` writes to `console.log` = STDOUT, not stderr** — match
   that for CLI parity, while keeping MCP's JSON-RPC stdout clean (diagnostics
   ride *inside* the tool result payload, never raw stdout — HYG-02's rule holds).
-- **D-13:** **Detection is computed once per Engine and cached, including
-  negative results.** TS caches per `${startPath} ${indexRoot}` and holds
+  **★ CORRECTED 2026-07-15 (post-research). A proposed `_worktreeNotice`
+  JSON-field hybrid is WITHDRAWN — it rested on a false premise.** The idea was
+  to protect `json.Unmarshal` on the 5 JSON-shaped tools by giving them a field
+  instead of a text prefix. 02-RESEARCH.md Pitfall 1 + a direct source read
+  killed it: those handlers do `mcp.NewToolResultText(string(json.Marshal(...)))`
+  — they put JSON *inside a text block*, and **MCP text content is consumed by a
+  language model, not a parser** (nothing in this repo, nor Claude Code,
+  unmarshals it). The "contract" being protected had no consumer. D-16 moves
+  those 5 tools to markdown regardless, so the question is moot: one shape, one
+  mechanism. **Do not reintroduce a per-tool notice mechanism.**
+- **D-13:** **Detection is computed once and cached (negative results included) —
+  but the cache MUST NOT live only on `Engine`.** TS caches per `${startPath}\u0000${indexRoot}` and holds
   "that first verdict until restart" (#926), because detection costs **2 `git`
   subprocesses** and MCP is long-lived — re-probing on every tool call would be
-  a real latency regression. **Decision:** resolve lazily-once (`sync.Once`) on
-  the `Engine` and cache the `*Mismatch` (nil == "checked, no mismatch" — must be
-  distinguishable from "not yet checked"). CLI is one-shot so caching is free
-  there; MCP gets the win.
+  a real latency regression.
+  **★ CORRECTED 2026-07-15 (post-research; 02-RESEARCH.md Corrections #1 +
+  Open Question #2).** This decision originally read "resolve lazily-once
+  (`sync.Once`) on the `Engine` … MCP gets the win." **That is FALSE:**
+  `internal/mcp/tools.go`'s `openEngine` builds a **fresh `Engine` on every
+  single tool call** by design, so an Engine-scoped cache yields **zero**
+  cross-call benefit on the exact surface the cache exists for. **Corrected
+  decision:** put the cache in `internal/gitmeta` itself (e.g. a
+  `CachingDetector` — mutex-guarded `map[string]*Mismatch` + a
+  `Detect(startPath, indexRoot) *Mismatch` method); `internal/mcp` constructs
+  **one per server** and closes over it in every handler; the CLI constructs one
+  per invocation (free — it's one-shot) so both surfaces share the identical
+  type. Cache **negative results too** (nil == "checked, no mismatch", which must
+  stay distinguishable from "not yet checked").
 
 ### Plumbing: the Engine must learn `startPath` (WORK-01)
 
@@ -277,6 +307,46 @@ require re-running Sync's diff on every `status` call. STAT-03's live
   mismatch (gate 4); monorepo-subdir ⇒ **no** mismatch (gate 3); non-git ⇒
   **no** mismatch (gate 1); symlinked ⇒ **no** mismatch when it's really the
   same tree (gate 2 after `EvalSymlinks`).
+
+### MCP output shape (SURF-06 — pulled in from Phase 8 by user decision)
+
+- **D-16:** ★ **The 5 JSON-shaped MCP read tools switch to markdown**
+  (`callers`/`callees`/`impact`/`search`/`files`), joining the 3 that already do
+  (`explore`/`node`/`status`). **The CLI `--json` flag is UNTOUCHED and keeps
+  emitting JSON.** Rationale, in priority order:
+  1. **The consumer is a language model, not a parser.** Every one of those
+     handlers currently does `mcp.NewToolResultText(string(json.Marshal(...)))`
+     — JSON stuffed into a *text* block. Nothing unmarshals it. JSON is paying
+     parser tax with no parser.
+  2. **Token cost, measured on this repo's own index (not estimated):**
+     `files` → **28,506 bytes JSON vs ~16,835 markdown = -41%**. ~14KB of that
+     is the keys `path`/`language`/`nodeCount`/`edgeCount` repeated once per
+     record across **308 records**. JSON is the worst shape for uniform record
+     lists precisely because it re-states every key on every row.
+  3. **It CLOSES a TS divergence rather than opening one.** TS returns markdown
+     from *every* MCP tool; our 5 JSON tools are the anomaly. This moves toward
+     the drop-in-parity bar.
+  4. **It dissolves the D-12 notice problem** — with all 7 non-status read tools
+     on one shape, a single text-prefix mechanism works everywhere, and no
+     handler gets touched twice (Phase 2 is already rewiring all 7 result paths
+     for WORK-02; doing the shape change in the same pass is strictly cheaper
+     than a second visit in Phase 8).
+  **Rejected alternatives (do not revisit without new evidence):** **TOON** —
+  measured **13,740 bytes (-52%)**, a further ~11pt win over markdown, but it is
+  a 2025-era format with thin model exposure; trading comprehension reliability
+  for 11% on a tool whose entire value is agent legibility is a bad trade, and it
+  adds an encoder + novel syntax. **YAML** — whitespace-fragile, barely cheaper
+  for tabular data, no comprehension win over markdown. **TOML** — a config
+  format; arrays-of-records are its weakness. **Bare path list** (-61%) — lossy,
+  drops the counts.
+  **Shape guidance:** these payloads are uniform record lists, so a **markdown
+  table** (header row once, then rows) captures the win; keep it plain-text (no
+  ANSI — Phase 6 owns color). Exact table vs. list-per-record formatting is
+  Claude's Discretion; optimize for model legibility and stable ordering.
+  **Parity note:** the golden/parity harness asserts the **CLI** `--json` shape —
+  confirm which existing tests assert MCP text content and update them
+  deliberately; do not let a JSON→markdown change silently pass a test that was
+  only ever checking the CLI path.
 
 ### Claude's Discretion
 - File layout within `internal/query` for the status sections + the notice
@@ -323,7 +393,7 @@ require re-running Sync's diff on every `status` call. STAT-03's live
   `padEnd(15)` + `formatNumber`. `formatNumber` (line ~247) = `toLocaleString()`
   (D-10); `warn` (line ~319) = `console.log` → **stdout** (D-12).
 - `…/codegraph-darwin-arm64/lib/dist/mcp/tools.js` lines ~1040–1080 —
-  `worktreeMismatchFor` (the `${startPath} ${indexRoot}` cache, negative
+  `worktreeMismatchFor` (the `${startPath}\u0000${indexRoot}` cache, negative
   results cached, #926) and `withWorktreeNotice` (prefix `notice\n\n`, skip
   `isError`, exclude `codegraph_status`). Lines ~3880–3945 — the MCP `status`
   blockquote form (`> ⚠ …`) and its `**Nodes by Kind:**` / `**Languages:**`

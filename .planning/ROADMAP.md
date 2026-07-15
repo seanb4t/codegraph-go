@@ -100,9 +100,9 @@ Plans:
 
 ### Phase 2: status Content & Git/Worktree Awareness
 
-**Goal**: `status` reports the full TS-parity content (DB size, nodes-by-kind, files-by-language, live staleness), and every read tool — CLI and MCP — detects a borrowed worktree index and warns, closing the silent "worktree queries the main branch's graph" correctness bug.
+**Goal**: `status` reports the full TS-parity content (DB size, nodes-by-kind, files-by-language, live staleness), and every read tool — CLI and MCP — detects a borrowed worktree index and warns, closing the silent "worktree queries the main branch's graph" correctness bug. Every MCP read tool settles on one markdown output shape, so the worktree notice rides a single uniform mechanism.
 **Depends on**: Phase 1
-**Requirements**: STAT-01, STAT-02, STAT-03, WORK-01, WORK-02, WORK-03, TEST-02
+**Requirements**: STAT-01, STAT-02, STAT-03, WORK-01, WORK-02, WORK-03, TEST-02, SURF-06
 **Success Criteria** (what must be TRUE):
 
   1. `status` reports Pebble on-disk DB size, nodes-by-kind and files-by-language breakdowns, and a live pending-changes / reindex-recommended signal instead of the Phase-3 inert placeholders (STAT-01/02/03)
@@ -110,9 +110,10 @@ Plans:
   3. `status` prints a verbose borrowed-index warning, and every other read tool (CLI + MCP) prefixes a compact single-line notice via a shared `withWorktreeNotice` wrapper (WORK-02)
   4. Worktree detection is best-effort and never blocks queries — no false positive on submodules, nested clones, monorepo subdirs, non-git trees, or symlinked paths (EvalSymlinks both sides) (WORK-03)
   5. Worktree detection has passing fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, and symlinked layouts (TEST-02)
+  6. The 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) emit markdown like the other 3, so all 7 non-status read tools take the same text-prefix notice; CLI `--json` still emits JSON (SURF-06)
 
 **Plans**: TBD
-**Notes**: New `internal/gitmeta` package (stdlib `os/exec` only — two `git rev-parse` calls, no pure-Go git lib), consumed by `internal/query` so both CLI and MCP get worktree awareness in one commit. Validate the edge-case fixtures before any pretty rendering.
+**Notes**: New `internal/gitmeta` package (stdlib `os/exec` only — two `git rev-parse` calls, no pure-Go git lib), consumed by `internal/query` so both CLI and MCP get worktree awareness in one commit. Validate the edge-case fixtures before any pretty rendering. SURF-06 was pulled in from Phase 8 (user decision, 2026-07-15): Phase 2 already rewires all 7 MCP read-tool result paths for WORK-02, so changing the output shape in the same pass avoids double-touching them and removes the "prefix text onto a JSON payload" problem. Still plain-text-only — markdown here means structure/wording, NOT color (Phase 6 owns TUI-02).
 
 ### Phase 3: Watcher-on-MCP Default
 

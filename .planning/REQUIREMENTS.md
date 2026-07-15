@@ -74,6 +74,7 @@
 - [ ] **SURF-03**: missing short-flag aliases (`-l`, `-k`, `-j`, `-d`, etc.) are added across commands to match TS
 - [ ] **SURF-04**: `affected` gains `--stdin`, `--depth`, `--filter <glob>`, and `--quiet` for git-hook/CI scripting, matching TS
 - [ ] **SURF-05**: a systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` retained as a documented Go-only extension; `migrate` documented as an accepted divergence
+- [ ] **SURF-06**: the 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) return human/agent-readable markdown instead of raw `json.Marshal` output, matching TS (which returns markdown from every MCP tool) and the 3 already-markdown Go tools (`explore`/`node`/`status`) — closing a silent Go-vs-TS MCP surface divergence. The CLI `--json` flag keeps emitting JSON (a genuinely different consumer: jq/scripts/CI). Measured on this repo's own index: `files` drops 28,506 → ~16,835 bytes (**-41%**), the saving being ~14KB of JSON keys repeated once per record across 308 records.
 
 ### Behavioral Parity Test Harness (TEST)
 
@@ -146,6 +147,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | WORK-02 | Phase 2 | Pending |
 | WORK-03 | Phase 2 | Pending |
 | TEST-02 | Phase 2 | Pending |
+| SURF-06 | Phase 2 | Pending |
 | WATCH-01 | Phase 3 | Pending |
 | WATCH-02 | Phase 3 | Pending |
 | WATCH-03 | Phase 3 | Pending |
@@ -177,10 +179,12 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 
 **Coverage:**
 
-- v1.0 requirements: 45 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 5, TEST 3, REL 4)
-- Mapped to phases: 45 / 45 ✓
+- v1.0 requirements: 46 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 6, TEST 3, REL 4)
+- Mapped to phases: 46 / 46 ✓
 - Unmapped: 0
-- Per phase: P1=10, P2=7, P3=4, P4=2, P5=3, P6=3, P7=7, P8=9
+- Per phase: P1=10, P2=8, P3=4, P4=2, P5=3, P6=3, P7=7, P8=9
+
+**SURF-06 note (added 2026-07-15, during Phase-2 planning):** SURF-01..05 are Phase 8; SURF-06 is mapped to **Phase 2** by explicit user decision. It landed there because Phase 2 already rewires every MCP read tool's result path for the WORK-02 worktree notice — doing the format change in the same pass avoids touching those 5 handlers twice and dissolves the "text-prefix a JSON payload" question entirely (with all 7 tools on markdown, one uniform notice mechanism works). Discovered while resolving 02-RESEARCH.md Open Question #3.
 
 **Mapping notes:**
 
