@@ -41,6 +41,48 @@ var (
 	searchWordSplit       = regexp.MustCompile(`[^a-zA-Z0-9]+`)
 )
 
+// commonWords is the identifier-noise filter consumed by
+// extractSymbolsFromQuery — ported verbatim from TS CodeGraph 1.3.1's
+// context/index.js (context/index.js:118-143). A distinct, larger list
+// than stopWords (used by extractSearchTerms) — do not reuse stopWords
+// here (RESEARCH Anti-Pattern "Conflating the two tokenizers").
+var commonWords = map[string]bool{
+	"the": true, "and": true, "for": true, "with": true, "from": true, "this": true, "that": true, "have": true, "been": true,
+	"will": true, "would": true, "could": true, "should": true, "does": true, "done": true, "make": true, "made": true,
+	"use": true, "used": true, "using": true, "work": true, "works": true, "find": true, "found": true, "show": true,
+	"call": true, "called": true, "calling": true, "get": true, "set": true, "add": true, "all": true, "any": true,
+	"how": true, "what": true, "when": true, "where": true, "which": true, "who": true, "why": true,
+	"not": true, "but": true, "are": true, "was": true, "were": true, "has": true, "had": true, "its": true,
+	"can": true, "did": true, "may": true, "also": true, "into": true, "than": true, "then": true, "them": true,
+	"each": true, "other": true, "some": true, "such": true, "only": true, "same": true, "about": true,
+	"after": true, "before": true, "between": true, "through": true, "during": true, "without": true,
+	"again": true, "further": true, "once": true, "here": true, "there": true, "both": true, "just": true,
+	"more": true, "most": true, "very": true, "being": true, "having": true, "doing": true,
+	"system": true, "need": true, "needs": true, "want": true, "wants": true, "like": true, "look": true,
+	"change": true, "changes": true, "changed": true, "changing": true,
+	// Common English nouns/verbs that match thousands of unrelated code
+	// symbols.
+	"layer": true, "handle": true, "handles": true, "handling": true, "incoming": true, "outgoing": true,
+	"data": true, "flow": true, "flows": true, "level": true, "levels": true, "request": true, "requests": true,
+	"response": true, "responses": true, "implement": true, "implements": true, "implementation": true,
+	"interface": true, "interfaces": true, "class": true, "classes": true, "method": true, "methods": true,
+	"trigger": true, "triggers": true, "affected": true, "affect": true, "affects": true,
+	"else": true, "code": true, "failing": true, "failed": true, "silently": true, "decide": true, "decides": true,
+	"return": true, "returns": true, "returned": true, "take": true, "takes": true, "taken": true,
+	"check": true, "checks": true, "checked": true, "create": true, "creates": true, "created": true,
+	"read": true, "reads": true, "write": true, "writes": true, "written": true,
+	"start": true, "starts": true, "stop": true, "stops": true, "run": true, "runs": true, "running": true,
+}
+
+var (
+	symbolCamelPattern     = regexp.MustCompile(`\b([A-Z][a-z]+(?:[A-Z][a-z]*)*|[a-z]+(?:[A-Z][a-z]*)+)\b`)
+	symbolSnakePattern     = regexp.MustCompile(`(?i)\b([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b`)
+	symbolScreamingPattern = regexp.MustCompile(`\b([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\b`)
+	symbolAcronymPattern   = regexp.MustCompile(`\b([A-Z]{2,})\b`)
+	symbolDotPattern       = regexp.MustCompile(`\b([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)+)\b`)
+	symbolLowercasePattern = regexp.MustCompile(`\b([a-z][a-z0-9]{2,})\b`)
+)
+
 // extractSearchTerms is TS CodeGraph 1.3.1's H2 tokenizer
 // (search/query-utils.js:189-242, extractSearchTerms) — EXPL-01's literal
 // "stopword-filtered" target, feeding the FTS gather channel (plan 07).
@@ -105,4 +147,69 @@ func extractSearchTerms(query string) []string {
 	}
 
 	return tokens
+}
+
+// extractSymbolsFromQuery is TS CodeGraph 1.3.1's H1 tokenizer
+// (context/index.js:64-145, extractSymbolsFromQuery) — feeds explore's
+// named-symbol seeding (plan 12, the +50 file score). Ported verbatim:
+// unions matches from 6 identifier-shape patterns, applied in TS's exact
+// order — CamelCase (>=2 chars), snake_case (>=3), SCREAMING_SNAKE,
+// ALL_CAPS acronym (>=2), dot.notation (full path AND each part >=2),
+// plain lowercase (>=3) — then drops anything present (case-insensitive)
+// in commonWords, a SEPARATE, larger list than stopWords (do not reuse
+// stopWords here; RESEARCH Anti-Pattern "Conflating the two
+// tokenizers"). Symbols are returned in first-seen scan order (D-04
+// determinism) — never map iteration.
+//
+// Security (V5/WR-05): an empty or whitespace-only query returns an
+// empty slice.
+func extractSymbolsFromQuery(query string) []string {
+	if strings.TrimSpace(query) == "" {
+		return []string{}
+	}
+
+	symbols := make([]string, 0)
+	seen := make(map[string]bool)
+	add := func(s string) {
+		if !seen[s] {
+			seen[s] = true
+			symbols = append(symbols, s)
+		}
+	}
+
+	for _, m := range symbolCamelPattern.FindAllString(query, -1) {
+		if len(m) >= 2 {
+			add(m)
+		}
+	}
+	for _, m := range symbolSnakePattern.FindAllString(query, -1) {
+		if len(m) >= 3 {
+			add(m)
+		}
+	}
+	for _, m := range symbolScreamingPattern.FindAllString(query, -1) {
+		add(m)
+	}
+	for _, m := range symbolAcronymPattern.FindAllString(query, -1) {
+		add(m)
+	}
+	for _, m := range symbolDotPattern.FindAllString(query, -1) {
+		add(m)
+		for _, part := range strings.Split(m, ".") {
+			if len(part) >= 2 {
+				add(part)
+			}
+		}
+	}
+	for _, m := range symbolLowercasePattern.FindAllString(query, -1) {
+		add(m)
+	}
+
+	out := make([]string, 0, len(symbols))
+	for _, s := range symbols {
+		if !commonWords[strings.ToLower(s)] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
