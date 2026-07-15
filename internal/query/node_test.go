@@ -195,3 +195,62 @@ func TestNodeMultiDef(t *testing.T) {
 		}
 	})
 }
+
+// TestNarrowNeverEmpty pins NODE-03: file/line narrowing is a PURE
+// in-memory filter over an already-enumerated node slice (RESEARCH §9)
+// that never empties the working set — a fileHint or lineHint that
+// matches nothing simply leaves the set (or the prior stage's result)
+// unchanged rather than erroring or returning zero matches.
+func TestNarrowNeverEmpty(t *testing.T) {
+	mk := func(id, file string, start, end int32) *schema.Node {
+		return &schema.Node{Id: id, Name: "Dup", FilePath: file, StartLine: start, EndLine: end}
+	}
+	a := mk("a", "pkg/a.go", 10, 20)
+	b := mk("b", "pkg/b.go", 30, 40)
+	c := mk("c", "pkg/c.go", 50, 60)
+	matches := []*schema.Node{a, b, c}
+
+	t.Run("fileHint matching exactly one narrows to that one", func(t *testing.T) {
+		got := narrowNodeMatches(matches, "pkg/b.go", nil)
+		if len(got) != 1 || got[0] != b {
+			t.Fatalf("narrowNodeMatches(fileHint=pkg/b.go): got %d matches, want [b]", len(got))
+		}
+	})
+
+	t.Run("fileHint matching zero retains all matches (never empties)", func(t *testing.T) {
+		got := narrowNodeMatches(matches, "nope/nowhere.go", nil)
+		if len(got) != 3 {
+			t.Fatalf("narrowNodeMatches(fileHint=no-match): got %d matches, want 3 (never empty)", len(got))
+		}
+	})
+
+	t.Run("lineHint inside a def's [startLine,endLine] narrows to that def", func(t *testing.T) {
+		line := 35
+		got := narrowNodeMatches(matches, "", &line)
+		if len(got) != 1 || got[0] != b {
+			t.Fatalf("narrowNodeMatches(lineHint=35): got %d matches, want [b]", len(got))
+		}
+	})
+
+	t.Run("lineHint inside no def falls back to the single nearest by startLine distance", func(t *testing.T) {
+		line := 22 // |10-22|=12 (a), |30-22|=8 (b), |50-22|=28 (c) -> nearest is b
+		got := narrowNodeMatches(matches, "", &line)
+		if len(got) != 1 || got[0] != b {
+			t.Fatalf("narrowNodeMatches(lineHint=22, no containing def): got %d matches, want nearest [b]", len(got))
+		}
+	})
+
+	t.Run("both hints absent returns the full set unchanged", func(t *testing.T) {
+		got := narrowNodeMatches(matches, "", nil)
+		if len(got) != 3 {
+			t.Fatalf("narrowNodeMatches(no hints): got %d matches, want 3", len(got))
+		}
+	})
+
+	t.Run("a single match is returned unchanged regardless of hints", func(t *testing.T) {
+		got := narrowNodeMatches([]*schema.Node{a}, "no/such/file.go", nil)
+		if len(got) != 1 || got[0] != a {
+			t.Fatalf("narrowNodeMatches(single match): got %d matches, want the single match unchanged", len(got))
+		}
+	})
+}
