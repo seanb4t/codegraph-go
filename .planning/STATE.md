@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
 stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-07-15T12:56:43.180Z"
+last_updated: "2026-07-15T13:18:44.389Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 5 of 17
+Plan: 6 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 5min | 1 tasks | 1 files |
 | Phase 01-behavioral-parity-explore-node P03 | 20min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P04 | 25min | 3 tasks | 4 files |
+| Phase 01-behavioral-parity-explore-node P05 | 19min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 01-behavioral-parity-explore-node]: Deferred getStemVariants() FTS-prefix stem expansion from extractSearchTerms entirely (no stub parameter) per the plan's explicit D-02 divergence allowance
 - [Phase 1]: narrowNodeMatches (NODE-03) is fully implemented and tested but not wired into the public Node() signature — no line hint exists in the CLI/MCP surface yet; ready for a future plan to wire it
 - [Phase 1]: Fixed a real bug during ad-hoc golden verification: multi-def source blocks rendered the whole file instead of the definition's own line range (renderNumberedSourceRange added)
+- [Phase 1]: extends is a 3-way Pass-2 split of the pre-existing embeds-promotion branch (implements/extends/embeds by target+source Kind) — shared code that rippled into every language extractor's class-extends-class regression test, not just Go's
+- [Phase 1]: references' Go Pass-1 capture is scoped to a bounded allow-list of unambiguous read positions rather than exhaustive AST coverage, to avoid false same-package-name-collision resolutions
+- [Phase 1]: type_of applies only to package-level var declarations for Go (struct-field/local-var type_of is an explicit per-language divergence — this extractor emits no field or local-var nodes to anchor those refs on)
 
 ### Pending Todos
 
@@ -110,7 +114,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T12:56:43.174Z
+Last session: 2026-07-15T13:18:44.383Z
 Stopped at: Completed 01-04-PLAN.md
 Resume file: None
 
