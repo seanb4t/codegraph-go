@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
 stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-07-15T14:30:45.272Z"
+last_updated: "2026-07-15T14:47:09.874Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 10
+  completed_plans: 11
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 11 of 17
+Plan: 12 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -69,6 +69,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P11 | 5min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P12 | 35min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P08 | 20min | 2 tasks | 4 files |
+| Phase 01-behavioral-parity-explore-node P09 | 24min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 1]: H13 named seeding: body-substance measure (line span) and type-token corroboration mechanism (owning-type-name match, not self-name match) are this plan's own documented D-02 design since no verbatim TS source for these specifics survives the frozen RESEARCH capture
 - [Phase 1]: Java/C# field type_of is anchored on the ENCLOSING TYPE id (not a field node, since neither extractor emits one) — a documented D-02 divergence distinct from Go's package-level-var-anchored type_of
 - [Phase 1]: Local-variable type_of added beyond the plan's literal 'field' behavior spec for Java/C#, anchored at the enclosing method — RESEARCH §B describes the missing kind as 'field/local declared type', and the existing method-body walk made this near-zero-cost
+- [Phase 1]: Python's instantiates capture is folded directly into recordCall (not a parallel object-creation walk) since Foo() is syntactically identical to any function call in Python; a PascalCase gate trims candidate volume, resolve.go's unchanged Kind-check disambiguates the real edge
+- [Phase 1]: All five priority-4 languages (Go/Java/C#/Python/TS-JS) now emit the full 9-member RANK_EDGES set -- D-09's extraction scope is complete; F4 (re-index) and F5 (regenerate golden corpus) are unblocked for a downstream plan
 
 ### Pending Todos
 
@@ -126,7 +129,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T14:30:45.266Z
+Last session: 2026-07-15T14:46:36.290Z
 Stopped at: Completed 01-08-PLAN.md
 Resume file: None
 
