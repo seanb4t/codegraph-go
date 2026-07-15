@@ -170,7 +170,7 @@ func TestGatherChannel1_EmptySymbols(t *testing.T) {
 // bonus; a much longer name scores less.
 func TestGatherChannel2_TitlecasePrefixBrevity(t *testing.T) {
 	nodes := []*schema.Node{
-		{Id: "struct:Widget", Kind: goextract.KindStruct, Name: "Widget"},                             // len 6, prefix "Widget" len 6 -> brevity 10
+		{Id: "struct:Widget", Kind: goextract.KindStruct, Name: "Widget"},                                             // len 6, prefix "Widget" len 6 -> brevity 10
 		{Id: "struct:WidgetServiceProviderFactory", Kind: goextract.KindStruct, Name: "WidgetServiceProviderFactory"}, // len 28 -> brevity 10-22/3
 	}
 	r := &gatherFakeReader{nodes: nodes}
