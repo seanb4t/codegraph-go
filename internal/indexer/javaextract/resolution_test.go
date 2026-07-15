@@ -159,9 +159,10 @@ func TestResolve_ImportedCrossPackageCall(t *testing.T) {
 
 // TestResolve_ImportedCrossPackageInheritance proves a class that extends
 // a superclass imported from a different package resolves into a real
-// "embeds" edge (the RefKindEmbeds shape RESEARCH Pattern 2 promotes to
-// "implements" only at Wave 6's resolve-time pass, out of this plan's
-// scope) — the "inheritance" leg of Task 2's cross-file resolution truth.
+// "extends" edge (the RefKindEmbeds shape RESEARCH Pattern 2 promotes to
+// "implements" when the target is an interface, and — since 01-05's D-09
+// split — to "extends" when the target is a class/struct, as here) — the
+// "inheritance" leg of Task 2's cross-file resolution truth.
 func TestResolve_ImportedCrossPackageInheritance(t *testing.T) {
 	root := writeJavaFixture(t, []javaFixtureFile{
 		{relPath: "com/example/Base.java", src: "package com.example;\n\npublic class Base {\n\tpublic void baseMethod() {}\n}\n"},
@@ -179,8 +180,8 @@ func TestResolve_ImportedCrossPackageInheritance(t *testing.T) {
 		t.Fatal("Derived node not found in committed graph")
 	}
 
-	if !hasEdge(edges, derived.Id, base.Id, "embeds") {
-		t.Errorf("expected an embeds edge Derived -> Base (cross-package, imported inheritance), got edges: %+v", edges)
+	if !hasEdge(edges, derived.Id, base.Id, "extends") {
+		t.Errorf("expected an extends edge Derived -> Base (cross-package, imported inheritance), got edges: %+v", edges)
 	}
 }
 

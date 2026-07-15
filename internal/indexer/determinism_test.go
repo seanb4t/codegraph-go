@@ -233,7 +233,7 @@ func TestRealRepoStructure(t *testing.T) {
 
 	for _, want := range []struct{ src, kind, dst, label string }{
 		{runID, "calls", alphaID, "pkgb.Run -calls-> pkga.Alpha"},
-		{derivedID, "embeds", baseID, "Derived -embeds-> Base"},
+		{derivedID, "extends", baseID, "Derived -extends-> Base"},
 		{rwID, "embeds", readerID, "ReadWriter -embeds-> Reader"},
 		{pkgbFileID, "imports", pkgID, "pkgb/pkgb.go -imports-> package example.com/gofixture/pkga"},
 	} {

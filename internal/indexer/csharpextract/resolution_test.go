@@ -165,10 +165,10 @@ func TestResolve_FullyQualifiedCrossNamespaceCall(t *testing.T) {
 
 // TestResolve_FullyQualifiedCrossNamespaceInheritance proves a class that
 // extends a FULLY-QUALIFIED base type from a different namespace resolves
-// into a real "embeds" edge (the RefKindEmbeds shape RESEARCH Pattern 2
-// promotes to "implements" only at Wave 6's resolve-time pass, out of this
-// plan's scope) — the "inheritance" leg of Task 2's cross-file resolution
-// truth.
+// into a real "extends" edge (the RefKindEmbeds shape RESEARCH Pattern 2
+// promotes to "implements" when the target is an interface, and — since
+// 01-05's D-09 split — to "extends" when the target is a class/struct, as
+// here) — the "inheritance" leg of Task 2's cross-file resolution truth.
 func TestResolve_FullyQualifiedCrossNamespaceInheritance(t *testing.T) {
 	root := writeCSharpFixture(t, []csharpFixtureFile{
 		{relPath: "base/Base.cs", src: "namespace Other.Namespace;\n\npublic class Base {\n\tpublic void BaseMethod() {}\n}\n"},
@@ -186,8 +186,8 @@ func TestResolve_FullyQualifiedCrossNamespaceInheritance(t *testing.T) {
 		t.Fatal("Derived node not found in committed graph")
 	}
 
-	if !hasEdge(edges, derived.Id, base.Id, "embeds") {
-		t.Errorf("expected an embeds edge Derived -> Base (fully-qualified cross-namespace inheritance), got edges: %+v", edges)
+	if !hasEdge(edges, derived.Id, base.Id, "extends") {
+		t.Errorf("expected an extends edge Derived -> Base (fully-qualified cross-namespace inheritance), got edges: %+v", edges)
 	}
 }
 

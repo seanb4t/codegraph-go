@@ -87,17 +87,164 @@ func TestResolve_IntraPackageCall(t *testing.T) {
 	}
 }
 
-// TestResolve_StructEmbeds proves `type Derived struct { Base }` yields an
-// embeds edge Derived -> Base when both are in-repo.
-func TestResolve_StructEmbeds(t *testing.T) {
+// TestResolveExtends_StructTarget proves `type Derived struct { Base }`
+// (a class/struct-extends-class/struct RefKindEmbeds ref) yields an
+// EdgeKindExtends edge Derived -> Base, NOT "embeds" and NOT "implements"
+// — D-09's split of the old unconditional "embeds" fallback (formerly
+// TestResolve_StructEmbeds, which asserted the pre-D-09 "embeds" edge;
+// this is the intentional behavior change RESEARCH §B documents).
+func TestResolveExtends_StructTarget(t *testing.T) {
 	results, modulePath := fixtureResults(t)
 	_, _, edges, _, _ := resolveRefs(results, modulePath)
 
 	derivedID := nodeid.NodeID(goextract.KindStruct, "Derived", "pkga/embed.go")
 	baseID := nodeid.NodeID(goextract.KindStruct, "Base", "pkga/embed.go")
 
-	if !findEdge(edges, derivedID, "embeds", baseID) {
-		t.Fatalf("expected embeds edge %s -> %s (Derived -> Base), got %+v", derivedID, baseID, edges)
+	if findEdge(edges, derivedID, "embeds", baseID) {
+		t.Fatalf("expected NO plain embeds edge %s -> %s (Derived -> Base) — D-09 reclassifies class/struct targets as extends", derivedID, baseID)
+	}
+	if findEdge(edges, derivedID, goextract.EdgeKindImplements, baseID) {
+		t.Fatalf("expected NO implements edge %s -> %s (Derived -> Base) — Base is not an interface", derivedID, baseID)
+	}
+	e := findEdgeFull(edges, derivedID, goextract.EdgeKindExtends, baseID)
+	if e == nil {
+		t.Fatalf("expected extends edge %s -> %s (Derived -> Base), got %+v", derivedID, baseID, edges)
+	}
+	if e.Provenance != "heuristic" {
+		t.Errorf("Provenance = %q, want %q (D-09 synthesis discipline)", e.Provenance, "heuristic")
+	}
+	if e.Metadata["synthesizedBy"] != "declared-extends" {
+		t.Errorf("Metadata[synthesizedBy] = %q, want %q", e.Metadata["synthesizedBy"], "declared-extends")
+	}
+}
+
+// TestResolveExtends_StructEmbedsInterfaceStaysImplements proves the
+// interface-target promotion path is unregressed by the D-09 split: a
+// struct embedding an interface value still promotes to "implements", not
+// "extends".
+func TestResolveExtends_StructEmbedsInterfaceStaysImplements(t *testing.T) {
+	src := `package p
+
+type Reader interface {
+	Read() int
+}
+
+type Wrapper struct {
+	Reader
+}
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	wrapperID := nodeid.NodeID(goextract.KindStruct, "Wrapper", "p.go")
+	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "p.go")
+
+	if !findEdge(edges, wrapperID, goextract.EdgeKindImplements, readerID) {
+		t.Fatalf("expected implements edge %s -> %s (Wrapper embeds Reader interface, unregressed), got %+v", wrapperID, readerID, edges)
+	}
+	if findEdge(edges, wrapperID, goextract.EdgeKindExtends, readerID) {
+		t.Fatalf("expected NO extends edge %s -> %s (target is an interface), got %+v", wrapperID, readerID, edges)
+	}
+}
+
+// TestResolveExtends_InterfaceEmbedsInterfaceUnregressed proves
+// interface-embeds-interface (both ends are interfaces) stays a plain
+// "embeds" edge, unregressed by the D-09 split — neither the implements
+// promotion condition (source must NOT be an interface) nor the new
+// extends condition (target must NOT be an interface) matches this case.
+func TestResolveExtends_InterfaceEmbedsInterfaceUnregressed(t *testing.T) {
+	results, modulePath := fixtureResults(t)
+	_, _, edges, _, _ := resolveRefs(results, modulePath)
+
+	rwID := nodeid.NodeID(goextract.KindInterface, "ReadWriter", "pkga/embed.go")
+	readerID := nodeid.NodeID(goextract.KindInterface, "Reader", "pkga/embed.go")
+
+	if !findEdge(edges, rwID, "embeds", readerID) {
+		t.Fatalf("expected embeds edge %s -> %s (ReadWriter -> Reader, unregressed), got %+v", rwID, readerID, edges)
+	}
+	if findEdge(edges, rwID, goextract.EdgeKindExtends, readerID) {
+		t.Fatalf("expected NO extends edge %s -> %s (target is an interface), got %+v", rwID, readerID, edges)
+	}
+}
+
+// TestResolveOverrides_StructMethodOverridesSupertypeMethod proves a
+// method on a struct that extends another struct, sharing a supertype
+// method's name+arity, synthesizes an EdgeKindOverrides edge
+// method -> supertype-method carrying heuristic provenance + a
+// synthesizedBy tag (D-09, mirroring synthesizeGoImplements's
+// composition-from-already-resolved-edges pattern).
+func TestResolveOverrides_StructMethodOverridesSupertypeMethod(t *testing.T) {
+	src := `package p
+
+type A struct{}
+
+func (a A) Greet() string { return "hi" }
+
+type B struct {
+	A
+}
+
+func (b B) Greet() string { return "hello" }
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	aGreetID := nodeid.NodeID(goextract.KindMethod, "A.Greet", "p.go")
+	bGreetID := nodeid.NodeID(goextract.KindMethod, "B.Greet", "p.go")
+
+	e := findEdgeFull(edges, bGreetID, goextract.EdgeKindOverrides, aGreetID)
+	if e == nil {
+		t.Fatalf("expected overrides edge %s -> %s (B.Greet overrides A.Greet), got %+v", bGreetID, aGreetID, edges)
+	}
+	if e.Provenance != "heuristic" {
+		t.Errorf("Provenance = %q, want %q (D-09 synthesis discipline)", e.Provenance, "heuristic")
+	}
+	if e.Metadata["synthesizedBy"] == "" {
+		t.Errorf("Metadata[synthesizedBy] is empty, want a non-empty synthesizedBy tag")
+	}
+}
+
+// TestResolveOverrides_ArityMismatchNoEdge proves Go's structural
+// name+arity match (RESEARCH §B's documented precision note) does NOT
+// synthesize an overrides edge when a subtype method shares its
+// supertype's name but NOT its arity — a genuinely different method, not
+// an override.
+func TestResolveOverrides_ArityMismatchNoEdge(t *testing.T) {
+	src := `package p
+
+type A struct{}
+
+func (a A) Greet() string { return "hi" }
+
+type B struct {
+	A
+}
+
+func (b B) Greet(name string) string { return "hello " + name }
+`
+	p := newTestParser(t)
+	result, err := goextract.Extract(p, "example.com/p", "p.go", []byte(src))
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+
+	_, _, edges, _, _ := resolveRefs([]goextract.FileResult{result}, "example.com/p")
+
+	aGreetID := nodeid.NodeID(goextract.KindMethod, "A.Greet", "p.go")
+	bGreetID := nodeid.NodeID(goextract.KindMethod, "B.Greet", "p.go")
+
+	if e := findEdgeFull(edges, bGreetID, goextract.EdgeKindOverrides, aGreetID); e != nil {
+		t.Fatalf("expected NO overrides edge for an arity-mismatched same-named method, got %+v", e)
 	}
 }
 
@@ -204,7 +351,10 @@ type Empty struct{}
 // synthesizedBy tag — the shape Java's extends/implements and C#'s
 // base_list both emit at extraction time (undistinguished, per 05-04/
 // 05-05's javaextract/csharpextract). A class-extends-class reference
-// (target is NOT an interface) stays a plain "embeds" edge, unchanged.
+// (target is NOT an interface) now promotes to an "extends" edge (D-09
+// split of the branch this doc comment used to describe as "stays a
+// plain embeds edge" — see TestResolveExtends_StructTarget for the
+// dedicated coverage of that case).
 func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
 	interfaceID := nodeid.NodeID(goextract.KindInterface, "Iface", "iface.go")
 	baseID := nodeid.NodeID(goextract.KindStruct, "Base", "base.go")
@@ -264,12 +414,15 @@ func TestResolve_DeclaredImplementsPromotion(t *testing.T) {
 		t.Fatalf("expected NO plain embeds edge once promoted to implements, got %+v", e)
 	}
 
-	derivedEdge := findEdgeFull(edges, derivedID, "embeds", baseID)
+	derivedEdge := findEdgeFull(edges, derivedID, goextract.EdgeKindExtends, baseID)
 	if derivedEdge == nil {
-		t.Fatalf("expected embeds edge %s -> %s (Derived -> Base, class extends class, NOT promoted), got %+v", derivedID, baseID, edges)
+		t.Fatalf("expected extends edge %s -> %s (Derived -> Base, class extends class, D-09 split), got %+v", derivedID, baseID, edges)
 	}
-	if derivedEdge.Provenance != "ast" {
-		t.Errorf("Derived->Base Provenance = %q, want %q (ground truth, not promoted)", derivedEdge.Provenance, "ast")
+	if derivedEdge.Provenance != "heuristic" {
+		t.Errorf("Derived->Base Provenance = %q, want %q (D-09 synthesis discipline)", derivedEdge.Provenance, "heuristic")
+	}
+	if findEdge(edges, derivedID, "embeds", baseID) {
+		t.Fatalf("expected NO plain embeds edge %s -> %s once reclassified as extends, got %+v", derivedID, baseID, edges)
 	}
 }
 

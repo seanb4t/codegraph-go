@@ -68,11 +68,21 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 	nodeKindByID := make(map[string]string)
 	nodeNameByID := make(map[string]string)
 	nodeStartLineByID := make(map[string]int32)
+	// methodArity is a GLOBAL (cross-file) methodID -> declared-parameter-
+	// count lookup, aggregated once here (D-09/RESEARCH §B) rather than
+	// re-derived separately by both synthesizeGoImplements (which already
+	// builds its own copy from r.MethodArity) and synthesizeOverrides
+	// (which needs the identical data to structurally match a method
+	// against its supertype's same-named method by name+arity).
+	methodArity := make(map[string]int32)
 	for _, r := range results {
 		for _, en := range r.Nodes {
 			nodeKindByID[en.Node.Id] = en.Node.Kind
 			nodeNameByID[en.Node.Id] = en.Node.Name
 			nodeStartLineByID[en.Node.Id] = en.Node.StartLine
+		}
+		for id, arity := range r.MethodArity {
+			methodArity[id] = arity
 		}
 	}
 
@@ -119,28 +129,46 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 					unresolvedCount++
 					continue
 				}
-				// Pattern 2 (RES-02): a class/struct extends/implements
-				// reference is syntactically undistinguished at
-				// extraction time (Java's implements/extends, C#'s
-				// comma-separated base_list, Go's struct/interface
-				// embedding all emit the same RefKindEmbeds shape). Now
-				// that the target is resolved, promote to "implements"
-				// iff the target is an interface AND the source is not
-				// itself an interface — a class-extends-class (or
-				// interface-embeds-interface) stays a plain "embeds"
-				// edge. This is deliberately NOT gated by r.Language: a
-				// Go struct embedding an interface value
-				// (`type W struct { io.Reader }`) genuinely does
-				// promote that interface's methods onto the struct too
-				// (real Go semantics), so the same structural rule
-				// applies uniformly across every language.
+				// Pattern 2 (RES-02) + D-09 split (01-RESEARCH.md §B): a
+				// class/struct extends/implements reference is
+				// syntactically undistinguished at extraction time
+				// (Java's implements/extends, C#'s comma-separated
+				// base_list, Go's struct/interface embedding all emit
+				// the same RefKindEmbeds shape). Now that the target is
+				// resolved, this splits three ways:
+				//   1. target is an interface AND source is NOT itself
+				//      an interface -> promote to "implements"
+				//      (unchanged from pre-D-09 behavior). A Go struct
+				//      embedding an interface value
+				//      (`type W struct { io.Reader }`) genuinely does
+				//      promote that interface's methods onto the struct
+				//      too (real Go semantics), so this rule applies
+				//      uniformly across every language, not just Go.
+				//   2. target is NOT an interface (a class/struct target
+				//      — D-09's new case) -> "extends", distinct from
+				//      the bare "embeds" string this branch used to fall
+				//      through to unconditionally. This is the D-09
+				//      addendum's answer to Open Question A2: Go's
+				//      structural composition is the closest analog TS's
+				//      `extends` RANK_EDGES kind has in Go, so a
+				//      class/struct-extends-class/struct reference is
+				//      reclassified rather than left as "embeds".
+				//   3. target IS an interface but source is ALSO an
+				//      interface (interface-embeds-interface) -> stays
+				//      the plain "embeds" edge, unchanged — neither new
+				//      branch's condition matches this case.
 				kind := "embeds"
 				provenance := "ast"
 				var metadata map[string]string
-				if nodeKindByID[targetID] == goextract.KindInterface && nodeKindByID[ref.FromID] != goextract.KindInterface {
+				switch {
+				case nodeKindByID[targetID] == goextract.KindInterface && nodeKindByID[ref.FromID] != goextract.KindInterface:
 					kind = goextract.EdgeKindImplements
 					provenance = "heuristic"
 					metadata = map[string]string{"synthesizedBy": "declared-implements"}
+				case nodeKindByID[targetID] != goextract.KindInterface:
+					kind = goextract.EdgeKindExtends
+					provenance = "heuristic"
+					metadata = map[string]string{"synthesizedBy": "declared-extends"}
 				}
 				edges = append(edges, &schema.Edge{
 					Source: ref.FromID, Target: targetID, Kind: kind,
@@ -223,6 +251,15 @@ func resolveRefsWithIndex(results []goextract.FileResult, modulePath string, idx
 
 	edges = append(edges, synthesizeGoImplements(results, edges, nodeKindByID, nodeNameByID, nodeStartLineByID)...)
 
+	// D-09's overrides Pass-2 synthesis (01-RESEARCH.md §B): runs AFTER
+	// synthesizeGoImplements so a structurally-synthesized "implements"
+	// edge is ALSO available as a supertype edge to walk — though in
+	// practice interface method specs never have their own "contains"
+	// (type->method) edge (only concrete struct methods do), so overrides
+	// only ever fires across "embeds"/"extends" supertype edges today; see
+	// synthesizeOverrides' doc comment.
+	edges = append(edges, synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nodeStartLineByID)...)
+
 	// Pitfall 3's conformance retry (Task 2): now that every "contains"
 	// (type->method) and "embeds"/"implements" (type->supertype) edge
 	// exists for the WHOLE graph — including this file's own
@@ -273,7 +310,13 @@ func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeName
 			}
 			methods[nodeNameByID[e.Target]] = e.Target
 			methodOwner[e.Target] = e.Source
-		case "embeds", goextract.EdgeKindImplements:
+		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
+			// D-09: a class/struct-extends-class/struct RefKindEmbeds ref
+			// now resolves to "extends" (not "embeds" — see the
+			// RefKindEmbeds case above), so the conformance retry's
+			// supertype walk must recognize "extends" as a type->
+			// supertype edge too, or an inherited call through an
+			// extends chain would silently stop resolving.
 			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
 		}
 	}
@@ -298,14 +341,16 @@ func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeName
 	return resolved
 }
 
-// walkSupertypesForMethod performs a visited-set-guarded BFS from
-// typeID's OWN supertypes (never typeID itself — pass 1 already
-// attempted the calling type's own method set via resolveUnqualified)
-// looking for methodName in typeMethods, returning the first match's
-// node id. Bounded by the number of distinct types reachable through
-// the supertype graph — cycle-safe regardless of malformed/cyclic
-// embeds data.
-func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]map[string]string, typeSupertypes map[string][]string) (string, bool) {
+// walkSupertypes performs a visited-set-guarded BFS from typeID's OWN
+// supertypes (never typeID itself), invoking visit on each reachable
+// supertype id in discovery order and stopping as soon as visit returns
+// true. Bounded by the number of distinct types reachable through the
+// supertype graph — cycle-safe regardless of malformed/cyclic
+// embeds/extends/implements data. This is the shared BFS primitive both
+// walkSupertypesForMethod (calls edge resolution, Pitfall 3) and
+// synthesizeOverrides (D-09's overrides synthesis) build on, rather than
+// each writing its own traversal.
+func walkSupertypes(typeID string, typeSupertypes map[string][]string, visit func(supertypeID string) bool) bool {
 	visited := map[string]bool{typeID: true}
 	queue := append([]string(nil), typeSupertypes[typeID]...)
 	for len(queue) > 0 {
@@ -315,12 +360,114 @@ func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]m
 			continue
 		}
 		visited[cur] = true
-		if id, ok := typeMethods[cur][methodName]; ok {
-			return id, true
+		if visit(cur) {
+			return true
 		}
 		queue = append(queue, typeSupertypes[cur]...)
 	}
-	return "", false
+	return false
+}
+
+// walkSupertypesForMethod looks for methodName in typeMethods among
+// typeID's own supertypes (never typeID itself — pass 1 already
+// attempted the calling type's own method set via resolveUnqualified),
+// returning the first match's node id. See walkSupertypes for the
+// underlying BFS.
+func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]map[string]string, typeSupertypes map[string][]string) (string, bool) {
+	var found string
+	ok := walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
+		if id, exists := typeMethods[cur][methodName]; exists {
+			found = id
+			return true
+		}
+		return false
+	})
+	return found, ok
+}
+
+// synthesizeOverrides implements D-09's overrides Pass-2 synthesis
+// (01-RESEARCH.md §B): for every type with a supertype (via "embeds",
+// EdgeKindImplements, or EdgeKindExtends — every kind resolve.go already
+// treats as a type->supertype relationship), find each of the type's OWN
+// methods (via the already-built "contains" type->method edges) that
+// shares a name+arity with a method declared directly on one of its
+// supertypes (walked transitively via walkSupertypes, mirroring
+// retryConformanceCalls' supertype-walk shape rather than writing a new
+// BFS), and emit an EdgeKindOverrides edge method -> supertype-method.
+//
+// Go has no `override` keyword: this is structural (name+arity) matching
+// — a documented precision note per RESEARCH §B, not a drop. A Go method
+// that happens to share a supertype method's name+arity is treated as an
+// override even without an explicit language marker, exactly like Go's
+// implicit interface satisfaction (dispatch.SynthesizeImplements) already
+// works. In practice this only ever matches through "embeds"/"extends"
+// supertype edges: an interface's own method signatures never get a real
+// "contains" (type->method) edge (collectInterfaceMethods only records
+// them as MethodSpecs for structural implements matching), so
+// typeMethods[interfaceID] is always empty and an implements-only
+// supertype chain never yields an override match.
+func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, methodArity map[string]int32, nodeStartLineByID map[string]int32) []*schema.Edge {
+	typeMethods := make(map[string]map[string]string) // typeID -> methodName -> methodID
+	typeSupertypes := make(map[string][]string)        // typeID -> []supertypeID
+
+	for _, e := range edges {
+		switch e.Kind {
+		case "contains":
+			if nodeKindByID[e.Target] != goextract.KindMethod {
+				continue
+			}
+			methods := typeMethods[e.Source]
+			if methods == nil {
+				methods = make(map[string]string)
+				typeMethods[e.Source] = methods
+			}
+			methods[nodeNameByID[e.Target]] = e.Target
+		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
+			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
+		}
+	}
+
+	// Deterministic iteration (D-05/D-09): map order is randomized, so
+	// sort both the type ids and each type's own method names before
+	// walking, ensuring the emitted edge slice's order never depends on
+	// Go's map iteration order.
+	typeIDs := make([]string, 0, len(typeMethods))
+	for typeID := range typeMethods {
+		typeIDs = append(typeIDs, typeID)
+	}
+	sort.Strings(typeIDs)
+
+	var synthesized []*schema.Edge
+	for _, typeID := range typeIDs {
+		names := make([]string, 0, len(typeMethods[typeID]))
+		for name := range typeMethods[typeID] {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		for _, name := range names {
+			methodID := typeMethods[typeID][name]
+			arity := methodArity[methodID]
+
+			var superMethodID string
+			walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
+				if id, ok := typeMethods[cur][name]; ok && methodArity[id] == arity {
+					superMethodID = id
+					return true
+				}
+				return false
+			})
+			if superMethodID == "" {
+				continue
+			}
+			synthesized = append(synthesized, &schema.Edge{
+				Source: methodID, Target: superMethodID, Kind: goextract.EdgeKindOverrides,
+				Provenance: "heuristic", Line: nodeStartLineByID[methodID],
+				Metadata: map[string]string{"synthesizedBy": "structural-override"},
+			})
+		}
+	}
+	return synthesized
 }
 
 // synthesizeGoImplements wires dispatch.SynthesizeImplements (RES-02

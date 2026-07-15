@@ -166,9 +166,10 @@ func TestResolve_AliasedImportCall(t *testing.T) {
 
 // TestResolve_CrossModuleInheritance proves a class that subclasses a base
 // class imported from a different module (`from pkg.base import Base`)
-// resolves into a real "embeds" edge (the RefKindEmbeds shape RESEARCH
-// Pattern 2 promotes to "implements" only at Wave 6's resolve-time pass,
-// out of this plan's scope) — the "inheritance" leg of Task 2's cross-file
+// resolves into a real "extends" edge (the RefKindEmbeds shape RESEARCH
+// Pattern 2 promotes to "implements" when the target is an interface, and
+// — since 01-05's D-09 split — to "extends" when the target is a
+// class/struct, as here) — the "inheritance" leg of Task 2's cross-file
 // resolution truth.
 func TestResolve_CrossModuleInheritance(t *testing.T) {
 	root := writePyFixture(t, []pyFixtureFile{
@@ -187,7 +188,7 @@ func TestResolve_CrossModuleInheritance(t *testing.T) {
 		t.Fatal("Derived node not found in committed graph")
 	}
 
-	if !hasEdge(edges, derived.Id, base.Id, "embeds") {
-		t.Errorf("expected an embeds edge Derived -> Base (cross-module, imported inheritance), got edges: %+v", edges)
+	if !hasEdge(edges, derived.Id, base.Id, "extends") {
+		t.Errorf("expected an extends edge Derived -> Base (cross-module, imported inheritance), got edges: %+v", edges)
 	}
 }

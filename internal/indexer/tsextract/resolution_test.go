@@ -175,7 +175,9 @@ func TestResolve_TSConfigPathsAliasedCrossFileCall(t *testing.T) {
 
 // TestResolve_CrossFileInheritance proves an imported base class
 // (`import { Base } from './base'; class Derived extends Base {}`)
-// resolves into a real "embeds" edge via the resolved module specifier.
+// resolves into a real "extends" edge via the resolved module specifier
+// (01-05's D-09 split: a class/struct target now promotes to "extends",
+// not the bare "embeds" this test asserted pre-D-09).
 func TestResolve_CrossFileInheritance(t *testing.T) {
 	root := writeTSFixture(t, []tsFixtureFile{
 		{relPath: "src/app/base.ts", src: "export class Base {}\n"},
@@ -193,8 +195,8 @@ func TestResolve_CrossFileInheritance(t *testing.T) {
 		t.Fatal("Derived node not found in committed graph")
 	}
 
-	if !hasEdge(edges, derived.Id, base.Id, "embeds") {
-		t.Errorf("expected an embeds edge Derived -> Base (cross-file, relative specifier), got edges: %+v", edges)
+	if !hasEdge(edges, derived.Id, base.Id, "extends") {
+		t.Errorf("expected an extends edge Derived -> Base (cross-file, relative specifier), got edges: %+v", edges)
 	}
 }
 
