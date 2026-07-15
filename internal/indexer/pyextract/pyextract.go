@@ -354,6 +354,9 @@ func (ex *extractor) emitClass(node *tree_sitter.Node) {
 	ex.typeNodesByName[name] = id
 
 	ex.collectBaseClasses(id, node)
+	if body := node.ChildByFieldName("body"); body != nil {
+		ex.collectClassBodyTypeOf(id, body)
+	}
 }
 
 // collectBaseClasses emits one RefKindEmbeds unresolved ref per positional
@@ -509,8 +512,16 @@ func (ex *extractor) emitFunction(decl *tree_sitter.Node) {
 		Source: ex.fileID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
 
+	// D-09 (01-RESEARCH.md §B): reuses the already-parsed "return_type"
+	// field (also read by buildFuncNode for the node's own ReturnType text)
+	// — emitNamedTypeRef isolates the type NAME for node resolution. A
+	// missing return_type field (no `-> T`) emits no ref: Python's dynamic
+	// typing means absence, not error (the documented D-02 divergence).
+	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
+
 	if body := decl.ChildByFieldName("body"); body != nil {
 		ex.collectCalls(id, body)
+		ex.collectReferencesAndInstantiates(id, body)
 	}
 }
 
@@ -528,8 +539,14 @@ func (ex *extractor) emitMethod(classID, className string, decl *tree_sitter.Nod
 		Source: classID, Target: id, Kind: "contains", Provenance: "ast",
 	}})
 
+	// D-09 (01-RESEARCH.md §B): see emitFunction's identical comment — a
+	// missing return_type field emits no ref (Python dynamic-typing
+	// absence, not error).
+	ex.emitNamedTypeRef(id, decl.ChildByFieldName("return_type"), goextract.RefKindReturns)
+
 	if body := decl.ChildByFieldName("body"); body != nil {
 		ex.collectCalls(id, body)
+		ex.collectReferencesAndInstantiates(id, body)
 	}
 }
 
@@ -584,9 +601,11 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 
 	switch fn.Kind() {
 	case "identifier":
+		name := fn.Utf8Text(ex.src)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: fn.Utf8Text(ex.src), Kind: goextract.RefKindCalls, Line: line, Col: col,
+			FromID: fromID, Name: name, Kind: goextract.RefKindCalls, Line: line, Col: col,
 		})
+		ex.recordInstantiateCandidate(fromID, name, "", line, col)
 	case "attribute":
 		object := fn.ChildByFieldName("object")
 		field := fn.ChildByFieldName("attribute")
@@ -631,11 +650,292 @@ func (ex *extractor) recordCall(fromID string, call *tree_sitter.Node) {
 			// synthetic-alias treatment as the local-variable case above.
 			pkgAlias = "<" + object.Kind() + ">"
 		}
+		name := field.Utf8Text(ex.src)
 		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
-			FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindCalls,
+			FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindCalls,
 			Line: line, Col: col,
 		})
+		ex.recordInstantiateCandidate(fromID, name, pkgAlias, line, col)
 	}
+}
+
+// recordInstantiateCandidate emits a D-09 `instantiates` Pass-1 ref
+// (01-RESEARCH.md §B) candidate alongside a `calls` ref recordCall already
+// emitted, gated on isLikelyTypeName(name): Python instantiation is
+// syntactically IDENTICAL to a plain call (`Foo()` may call a function OR
+// construct a class — RESEARCH §B's "overlaps calls syntactically" note),
+// so resolve.go's existing Kind-check disambiguation (plan 05, the resolved
+// target must be a struct/class node) is what actually decides whether this
+// becomes a real edge, not this Pass-1 site. The PascalCase gate here is a
+// volume-reduction precision note (mirrors goextract's predeclared-type
+// filtering discipline), not a semantic decision: it avoids emitting an
+// instantiates candidate — and inflating unresolvedCount — for every
+// ordinary snake_case function call, which by PEP 8 convention is never a
+// class reference.
+func (ex *extractor) recordInstantiateCandidate(fromID, name, pkgAlias string, line, col int32) {
+	if !isLikelyTypeName(name) {
+		return
+	}
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: goextract.RefKindInstantiates,
+		Line: line, Col: col,
+	})
+}
+
+// --- D-09 edge kinds (01-RESEARCH.md §B): type_of / returns / references ---
+
+// pythonBuiltinTypes are Python's own built-in type names — filtered out of
+// type_of/returns capture the same way goextract.isGoPredeclaredType filters
+// Go's predeclared types (01-RESEARCH.md §B, D-09): tree-sitter-python has
+// no distinct node kind separating a built-in name from a user-defined class
+// reference (both parse as a plain "identifier" inside a "type" wrapper
+// node), so without this filter every `-> int`/`x: str` annotation would
+// emit a ref no resolve pass could ever resolve (no "int"/"str" node exists
+// in the graph), inflating unresolvedCount with noise unrelated to any real
+// extraction gap.
+var pythonBuiltinTypes = map[string]bool{
+	"int": true, "str": true, "float": true, "bool": true, "bytes": true,
+	"bytearray": true, "complex": true, "list": true, "dict": true,
+	"tuple": true, "set": true, "frozenset": true, "object": true,
+	"None": true, "type": true,
+}
+
+// pythonTypeRefFromExpr extracts a simple named-type reference from a Python
+// type-annotation expression (the child of a "type" wrapper node — see
+// emitNamedTypeRef): a plain identifier, a dotted `module.Attr` attribute
+// chain (pkgAliasCandidate is the leading identifier, checked against
+// Imports by the caller), or a generic_type (`Optional[Foo]`, `List[Foo]`)
+// unwrapped to its own base-name child — RESEARCH §B's "generic/composite
+// types resolve to the outer named type" precision note; the
+// type_parameter's own inner type is never separately resolved.
+func pythonTypeRefFromExpr(t *tree_sitter.Node, src []byte) (name, pkgAliasCandidate string, ok bool) {
+	switch t.Kind() {
+	case "identifier":
+		return t.Utf8Text(src), "", true
+	case "attribute":
+		field := t.ChildByFieldName("attribute")
+		object := t.ChildByFieldName("object")
+		if field == nil {
+			return "", "", false
+		}
+		if object != nil && object.Kind() == "identifier" {
+			pkgAliasCandidate = object.Utf8Text(src)
+		}
+		return field.Utf8Text(src), pkgAliasCandidate, true
+	case "generic_type":
+		if t.NamedChildCount() == 0 {
+			return "", "", false
+		}
+		return pythonTypeRefFromExpr(t.NamedChild(0), src)
+	default:
+		return "", "", false
+	}
+}
+
+// emitNamedTypeRef emits a D-09 Pass-1 ref (01-RESEARCH.md §B) of the given
+// kind (RefKindReturns/RefKindTypeOf) from fromID to annotation's simple
+// named type reference. annotation is the raw "type" wrapper node tree-
+// sitter-python's grammar produces for BOTH a function's return_type field
+// and an assignment's/parameter's type field (verified via a live parse
+// this session, not just docs: `(type (identifier))`, `(type (attribute ...))`,
+// `(type (generic_type ...))`) — its own single named child is the real
+// type expression pythonTypeRefFromExpr resolves. A nil annotation (no `->`/
+// `: T` present at all) or a filtered built-in type name emits no ref —
+// absence, not error, the documented Python dynamic-typing D-02 divergence
+// (01-RESEARCH.md §B, un-annotated vars/returns).
+func (ex *extractor) emitNamedTypeRef(fromID string, annotation *tree_sitter.Node, kind string) {
+	if annotation == nil || annotation.NamedChildCount() == 0 {
+		return
+	}
+	t := annotation.NamedChild(0)
+	name, pkgAliasCandidate, ok := pythonTypeRefFromExpr(t, ex.src)
+	if !ok || pythonBuiltinTypes[name] {
+		return
+	}
+	pkgAlias := ""
+	if pkgAliasCandidate != "" {
+		if _, imported := ex.result.Imports[pkgAliasCandidate]; imported {
+			pkgAlias = pkgAliasCandidate
+		}
+	}
+	pos := t.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: name, PkgAlias: pkgAlias, Kind: kind,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
+}
+
+// collectClassBodyTypeOf emits a D-09 `type_of` Pass-1 ref (01-RESEARCH.md
+// §B) for each of classID's own class-body direct annotated-assignment
+// statements (`x: Foo` / `x: Foo = val`), anchored at classID itself — a
+// documented Python D-02 precision note mirroring Java/C#'s "no field node"
+// pattern (this extractor never emits a field/attribute node either, so a
+// class-level annotation's declared type has no field-level FromID to
+// anchor on). A bare `x = val` (no annotation) is an "assignment" node with
+// no "type" field — emitNamedTypeRef's nil check correctly emits no ref for
+// it (absence, not error).
+func (ex *extractor) collectClassBodyTypeOf(classID string, body *tree_sitter.Node) {
+	for i := uint(0); i < body.NamedChildCount(); i++ {
+		stmt := body.NamedChild(i)
+		if stmt.Kind() != "expression_statement" || stmt.NamedChildCount() == 0 {
+			continue
+		}
+		assign := stmt.NamedChild(0)
+		if assign.Kind() != "assignment" {
+			continue
+		}
+		ex.emitNamedTypeRef(classID, assign.ChildByFieldName("type"), goextract.RefKindTypeOf)
+	}
+}
+
+// collectReferencesAndInstantiates walks a function/method body for a D-09
+// Pass-1 capture kind (01-RESEARCH.md §B): type_of for a LOCAL annotated
+// assignment (`x: Foo = val` / `x: Foo`, anchored at the enclosing
+// function/method id fromID — class-level annotations are handled
+// separately by collectClassBodyTypeOf, anchored at the enclosing class) and
+// references (a value read of an identifier/attribute that is NOT a call's
+// own callee — collectCalls already captures those via its own independent
+// whole-body scan, which also records `instantiates` candidates directly in
+// recordCall, since Python instantiation is syntactically identical to a
+// plain call; de-dup requires a called symbol never ALSO emit a references
+// ref).
+//
+// Python D-02 precision note (mirrors goextract's/javaextract's/
+// csharpextract's own note exactly, per 01-RESEARCH.md §B): this walk is
+// scoped to a bounded allow-list of unambiguous read positions — call
+// arguments, return values, and assignment right-hand sides — plus the
+// common compound-expression wrappers reachable from them via
+// captureExprRead — rather than exhaustively covering every Python
+// expression shape (a bare expression_statement, a condition/comprehension
+// scrutinee are not captured). This is a deliberate, bounded scope, not a
+// silent drop of ground truth — an over-broad walk risks the exact false
+// same-module-name-collision resolution recordCall's local-vs-type
+// discipline (mirrored below in captureAttributeRead) already guards
+// against for `calls`.
+func (ex *extractor) collectReferencesAndInstantiates(fromID string, body *tree_sitter.Node) {
+	walkDescendants(body, func(n *tree_sitter.Node) bool {
+		switch n.Kind() {
+		case "call":
+			// De-dup: the callee is captured by collectCalls' own separate
+			// walk (which also records instantiates via recordCall) — only
+			// "arguments" are additional read positions.
+			if args := n.ChildByFieldName("arguments"); args != nil {
+				for i := uint(0); i < args.NamedChildCount(); i++ {
+					ex.captureExprRead(fromID, args.NamedChild(i))
+				}
+			}
+			return false
+		case "return_statement":
+			for i := uint(0); i < n.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, n.NamedChild(i))
+			}
+			return false
+		case "assignment":
+			ex.emitNamedTypeRef(fromID, n.ChildByFieldName("type"), goextract.RefKindTypeOf)
+			if right := n.ChildByFieldName("right"); right != nil {
+				ex.captureExprRead(fromID, right)
+			}
+			return false
+		}
+		return true
+	})
+}
+
+// captureExprRead classifies a single expression node reached from an
+// allow-listed read position (see collectReferencesAndInstantiates) and
+// emits a references ref for a bare identifier or attribute value read,
+// recursing through common compound-expression wrappers so a nested read
+// inside one of those is still found — mirrors goextract/javaextract/
+// csharpextract's own captureExprRead shape.
+func (ex *extractor) captureExprRead(fromID string, expr *tree_sitter.Node) {
+	if expr == nil {
+		return
+	}
+	switch expr.Kind() {
+	case "identifier":
+		pos := expr.StartPosition()
+		ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+			FromID: fromID, Name: expr.Utf8Text(ex.src), Kind: goextract.RefKindReferences,
+			Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+		})
+	case "attribute":
+		ex.captureAttributeRead(fromID, expr)
+	case "parenthesized_expression":
+		if expr.NamedChildCount() > 0 {
+			ex.captureExprRead(fromID, expr.NamedChild(0))
+		}
+	case "not_operator", "unary_operator":
+		if o := expr.ChildByFieldName("argument"); o != nil {
+			ex.captureExprRead(fromID, o)
+		}
+	case "binary_operator":
+		if l := expr.ChildByFieldName("left"); l != nil {
+			ex.captureExprRead(fromID, l)
+		}
+		if r := expr.ChildByFieldName("right"); r != nil {
+			ex.captureExprRead(fromID, r)
+		}
+	case "call":
+		// A nested call (e.g. an argument that is itself a call) — its own
+		// callee is never a reference (de-dup, mirroring the outer
+		// collectReferencesAndInstantiates rule); only its arguments are
+		// walked here. recordCall's own separate collectCalls walk already
+		// visited this node too (both walks independently traverse body),
+		// so instantiates candidacy for a nested call is not re-derived
+		// here.
+		if args := expr.ChildByFieldName("arguments"); args != nil {
+			for i := uint(0); i < args.NamedChildCount(); i++ {
+				ex.captureExprRead(fromID, args.NamedChild(i))
+			}
+		}
+	}
+	// Every other expression kind (literals, lambda bodies, comprehensions,
+	// conditional expressions, comparison chains, ...) is out of this
+	// bounded allow-list per the Python D-02 precision note above — no
+	// reference captured, no error.
+}
+
+// captureAttributeRead handles an attribute VALUE read (`Type.attr`/
+// `obj.attr` used as a value, not called — recordCall's own "call" handling
+// already captures the call-callee shape via collectCalls' separate walk).
+// Mirrors recordCall's local-vs-type alias discipline exactly (self/cls,
+// isLikelyTypeName, the WR-02 synthetic-non-matching-alias pattern for a
+// local-variable/parameter receiver).
+func (ex *extractor) captureAttributeRead(fromID string, sel *tree_sitter.Node) {
+	object := sel.ChildByFieldName("object")
+	field := sel.ChildByFieldName("attribute")
+	if field == nil {
+		return
+	}
+	var pkgAlias string
+	switch {
+	case object == nil:
+		// No object at all (malformed/unusual source) — fall through to
+		// the empty-PkgAlias (unqualified) shape.
+	case object.Kind() == "identifier":
+		ident := object.Utf8Text(ex.src)
+		_, isImport := ex.result.Imports[ident]
+		switch {
+		case ident == "self" || ident == "cls":
+			// self.attr/cls.attr — same-class implicit reference, mirrors
+			// recordCall's identical self/cls handling.
+		case isImport:
+			pkgAlias = ident
+		case isLikelyTypeName(ident):
+			// Same-module type reference — empty PkgAlias correctly routes
+			// through resolveUnqualified.
+		default:
+			pkgAlias = "<local:" + ident + ">"
+		}
+	default:
+		pkgAlias = "<" + object.Kind() + ">"
+		ex.captureExprRead(fromID, object)
+	}
+	pos := sel.StartPosition()
+	ex.result.Unresolved = append(ex.result.Unresolved, goextract.UnresolvedRef{
+		FromID: fromID, Name: field.Utf8Text(ex.src), PkgAlias: pkgAlias, Kind: goextract.RefKindReferences,
+		Line: int32(pos.Row) + 1, Col: int32(pos.Column),
+	})
 }
 
 // isLikelyTypeName reports whether name starts with an uppercase Unicode
