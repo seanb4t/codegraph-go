@@ -24,8 +24,8 @@
 
 ### Behavioral Parity — status content (STAT)
 
-- [ ] **STAT-01**: `status` reports DB size (Pebble on-disk bytes), reversing the Phase-3 golden-corpus strip
-- [ ] **STAT-02**: `status` reports nodes-by-kind and files-by-language breakdowns (data already computed in `StatusResult` — surface it)
+- [x] **STAT-01**: `status` reports DB size (Pebble on-disk bytes), reversing the Phase-3 golden-corpus strip
+- [x] **STAT-02**: `status` reports nodes-by-kind and files-by-language breakdowns (data already computed in `StatusResult` — surface it)
 - [ ] **STAT-03**: `status` reports a live pending-changes / reindex-recommended state (the top-level `stale` signal), not the inert placeholder
 
 ### Watcher-on-MCP (WATCH)
@@ -140,8 +140,8 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | NODE-03 | Phase 1 | Complete |
 | NODE-04 | Phase 1 | Complete |
 | TEST-01 | Phase 1 | Complete |
-| STAT-01 | Phase 2 | Pending |
-| STAT-02 | Phase 2 | Pending |
+| STAT-01 | Phase 2 | Complete |
+| STAT-02 | Phase 2 | Complete |
 | STAT-03 | Phase 2 | Pending |
 | WORK-01 | Phase 2 | Complete |
 | WORK-02 | Phase 2 | Pending |

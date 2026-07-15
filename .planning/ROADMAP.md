@@ -112,13 +112,13 @@ Plans:
   5. Worktree detection has passing fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, and symlinked layouts (TEST-02)
   6. The 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) emit markdown like `explore`/`node` already do, so all 7 non-status read tools take the same text-prefix notice; MCP `status` also gains a markdown renderer (D-12's blockquote warning requires it — it emits JSON today); CLI `--json` still emits JSON on every command, and no `Marshal*JSON` helper body changes (SURF-06)
 
-**Plans**: 1/7 plans executed
+**Plans**: 2/7 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 02-01-PLAN.md — `internal/gitmeta`: the 4-gate detection cascade, verbatim TS notice/warning strings, `CachingDetector`, and the six real-`git` fixture layouts (wave 1)
-- [ ] 02-02-PLAN.md — `StatusResult` gains `dbSizeBytes` + `filesByLanguage`; the golden `dbSizeBytes` strip is reversed Go-side as a documented divergence (wave 1)
+- [x] 02-02-PLAN.md — `StatusResult` gains `dbSizeBytes` + `filesByLanguage`; the golden `dbSizeBytes` strip is reversed Go-side as a documented divergence (wave 1)
 - [ ] 02-03-PLAN.md — the 5 SURF-06 markdown renderers, added as siblings of the untouched `Marshal*JSON` helpers (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -231,7 +231,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
-| 2. status Content & Git/Worktree Awareness | v1.0 | 1/7 | In Progress|  |
+| 2. status Content & Git/Worktree Awareness | v1.0 | 2/7 | In Progress|  |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
