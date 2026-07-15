@@ -169,7 +169,17 @@ function toolText(resp, toolName) {
 
     const nodeResp = await call(
       'tools/call',
-      { name: 'codegraph_node', arguments: { symbol: nodeSymbol, projectPath } },
+      {
+        name: 'codegraph_node',
+        // includeCode:true matches the TS CLI's `node` command, which has
+        // no flag to suppress full bodies (its multi-def path always
+        // renders them) — the MCP tool's own default is false. Passing it
+        // explicitly keeps the CLI and MCP captures testing the same
+        // semantic scenario (full multi-def bodies) rather than
+        // introducing an incidental TS-native CLI/MCP default asymmetry
+        // unrelated to what NODE-04/EXPL-05 actually port.
+        arguments: { symbol: nodeSymbol, projectPath, includeCode: true },
+      },
       CALL_TIMEOUT_MS,
     );
     const nodeText = toolText(nodeResp, 'codegraph_node');

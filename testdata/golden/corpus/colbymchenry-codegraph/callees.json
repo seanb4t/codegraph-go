@@ -5,13 +5,13 @@
       "name": "SearchOptions",
       "kind": "interface",
       "filePath": "src/types.ts",
-      "startLine": 381
+      "startLine": 392
     },
     {
       "name": "SearchResult",
       "kind": "interface",
       "filePath": "src/types.ts",
-      "startLine": 407
+      "startLine": 418
     },
     {
       "name": "parseQuery",
@@ -23,13 +23,13 @@
       "name": "searchNodesFTS",
       "kind": "method",
       "filePath": "src/db/queries.ts",
-      "startLine": 1187
+      "startLine": 1201
     },
     {
       "name": "searchAllByFilters",
       "kind": "method",
       "filePath": "src/db/queries.ts",
-      "startLine": 1098
+      "startLine": 1112
     }
   ]
 }

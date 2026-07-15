@@ -8,7 +8,7 @@
       "name": "searchNodes",
       "kind": "method",
       "filePath": "src/index.ts",
-      "startLine": 1068
+      "startLine": 1107
     },
     {
       "name": "adaptive-explore-sizing.test.ts",
@@ -50,19 +50,19 @@
       "name": "boundaryCandidates",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 2300
+      "startLine": 2301
     },
     {
       "name": "buildDynamicBoundaries",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 2160
+      "startLine": 2161
     },
     {
       "name": "findSymbolMatches",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 4375
+      "startLine": 4422
     },
     {
       "name": "pr19-improvements.test.ts",
@@ -80,49 +80,49 @@
       "name": "handleNode",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 3672
+      "startLine": 3711
     },
     {
       "name": "findAllSymbols",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 4426
+      "startLine": 4473
     },
     {
       "name": "handleCallers",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 1571
+      "startLine": 1572
     },
     {
       "name": "handleCallees",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 1644
+      "startLine": 1645
     },
     {
       "name": "handleImpact",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 1714
+      "startLine": 1715
     },
     {
       "name": "buildFlowFromNamedSymbols",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 1881
+      "startLine": 1882
     },
     {
       "name": "handleExplore",
       "kind": "method",
       "filePath": "src/mcp/tools.ts",
-      "startLine": 2501
+      "startLine": 2502
     },
     {
       "name": "searchNodes",
       "kind": "method",
       "filePath": "src/db/queries.ts",
-      "startLine": 973
+      "startLine": 987
     },
     {
       "name": "findRelevantContext",

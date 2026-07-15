@@ -22,28 +22,33 @@ This directory does **not** contain a converter. It is capture-only.
 | Capture host | darwin/arm64, `sqlite3` 3.54.0, `jq` 1.8.2 |
 | Capture harness | `capture.sh` (re-runnable, `set -euo pipefail`) |
 
-## Corpus (D-06a)
+## Corpus (D-06a, extended by D-03)
 
-Two repos, chosen per D-06a ("a compact Go repo... plus the TS
+Two real-world repos, chosen per D-06a ("a compact Go repo... plus the TS
 `colbymchenry/codegraph` repo itself, multi-language, exercises the tool
-surface broadly"):
+surface broadly"), plus a third purpose-built synthetic corpus added in
+Phase 1 (D-03) for behavioral fixtures neither real repo reliably exercises:
 
 | Corpus dir | Repo | Why | Pinned state at capture |
 |---|---|---|---|
-| `corpus/weft-go/` | [`seanb4t/weft`](https://github.com/seanb4t/weft) (public) | Compact (84 files), mostly-Go repo already available locally; aligns with Phase 2's first parser-target language | commit `f89ae3ea4e4c37509f7302fd4e37986212a72079` |
-| `corpus/colbymchenry-codegraph/` | [`colbymchenry/codegraph`](https://github.com/colbymchenry/codegraph) | The original TS CodeGraph project itself — multi-language (TS/JS/Python/Astro/YAML), exercises the tool surface broadly | commit `edb9f2f14cd7394a4d31f94ebc871531ef498ab0` (shallow clone, default branch, at capture time) |
+| `corpus/weft-go/` | [`seanb4t/weft`](https://github.com/seanb4t/weft) (public) | Compact (84 files), mostly-Go repo already available locally; aligns with Phase 2's first parser-target language | commit `f89ae3ea4e4c37509f7302fd4e37986212a72079` (baseline fixtures); behavioral fixtures re-captured at whatever `$WEFT_REPO` HEAD was checked out to at capture time — see `ts-version.txt` for the date |
+| `corpus/colbymchenry-codegraph/` | [`colbymchenry/codegraph`](https://github.com/colbymchenry/codegraph) | The original TS CodeGraph project itself — multi-language (TS/JS/Python/Astro/YAML), exercises the tool surface broadly | commit `e871c49a3173a637172f501f21f6a2753ea5a39f` (shallow clone, default branch, at capture time — **not pinned**: every `capture.sh` re-run clones fresh HEAD, so ALL fixtures for this corpus, baseline included, drift with upstream; see `ts-version.txt` for the exact capture date) |
+| `corpus/synthetic-parity/` | in-repo only — `testdata/golden/corpus/synthetic-parity/src/` | Purpose-built Go source tree (D-03) exercising the exact v0.1 blind spot: overloaded/same-named symbols, multi-word queries, a `Test*`-heavy weakly-connected cluster, and a structural-beats-lexical ranking case. See `corpus/synthetic-parity/README.md` for the per-file case map (a/b/c/d). **Behavioral fixtures only** — no `status`/`query`/`callers`/`callees`/`impact`/baseline `explore`/`node` fixtures, since this corpus exists solely to drive the new multi-def/multi-word/gate/RWR cases, not general tool-surface coverage. |
 
-Per RESEARCH Open Question 2, both indexes are rebuilt with
-`codegraph index --force` immediately before capture, so `builtWithVersion`
-in `status.json` reflects the current CLI (`1.3.1`), not a stale earlier
-extraction-version stamp.
+Per RESEARCH Open Question 2, `weft-go` and `colbymchenry-codegraph`'s
+indexes are rebuilt with `codegraph index --force` immediately before
+capture, so `builtWithVersion` in `status.json` reflects the current CLI
+(`1.3.1`), not a stale earlier extraction-version stamp.
 
-Only the **captured JSON tool outputs** are committed here — not the corpus
-source trees themselves. `weft` is cloned/available separately;
-`colbymchenry/codegraph` is cloned into a throwaway temp directory by
-`capture.sh` and discarded after capture.
+Only the **captured JSON tool outputs** are committed for `weft-go` and
+`colbymchenry-codegraph` — not their corpus source trees. `weft` is
+cloned/available separately; `colbymchenry/codegraph` is cloned into a
+throwaway temp directory by `capture.sh` and discarded after capture.
+`synthetic-parity`'s source tree IS committed (it's purpose-built and lives
+nowhere else) — only its local `.codegraph/` index data is excluded (see
+`.gitignore`).
 
-Each corpus directory contains:
+Each of `weft-go`/`colbymchenry-codegraph`'s corpus directories contains:
 
 | File | Command | Notes |
 |---|---|---|
@@ -54,6 +59,45 @@ Each corpus directory contains:
 | `impact.json` | `codegraph impact <symbol> -p <path> --json` | |
 | `explore.json` | `codegraph explore <query> -p <path> --max-files 1` | No native `--json` flag — wrapped as `{"command": ..., "output": "<markdown text>"}` so every fixture is uniformly JSON |
 | `node.json` | `codegraph node <symbol> -p <path> -f <file>` | Same wrapping as `explore.json` |
+
+## Behavioral fixtures (Phase 1, D-01/D-03/D-06 extension)
+
+The fixtures above only ever exercised the **template-parity baseline**:
+`explore` capped to one file (`--max-files 1`) and `node` pre-disambiguated
+to a single definition (`-f <file>`) — never TS's actual multi-file ranking
+or multi-definition enumeration (RESEARCH.md Pitfall 3). `capture.sh`'s
+`capture_behavioral()` adds four NEW fixtures per corpus (all three:
+`weft-go`, `colbymchenry-codegraph`, `synthetic-parity`), on **both** the
+CLI and the `codegraph_explore`/`codegraph_node` MCP tools (EXPL-05/NODE-04):
+
+| File | Surface | Command | Proves |
+|---|---|---|---|
+| `explore-multi.json` | CLI | `codegraph explore <multi-word query> -p <path>` (no `--max-files 1`) | Multi-word `<query...>` tokenization (EXPL-01) ranking across multiple files, not template shape |
+| `node-multi.json` | CLI | `codegraph node <name> -p <path>` (no `-f`) | Multi-definition enumeration (NODE-01/02) on a name with 2+ real defs — the "N definitions named X" header, budget, and overflow list |
+| `explore-mcp.json` | MCP | `codegraph_explore` tool call, same query as `explore-multi.json` | CLI/MCP output parity (EXPL-05) on the exact same behavioral query |
+| `node-mcp.json` | MCP | `codegraph_node` tool call, same symbol as `node-multi.json` | CLI/MCP output parity (NODE-04) on the exact same overloaded symbol |
+
+The MCP-surface fixtures are captured by `testdata/golden/mcp-capture.mjs`,
+a small Node harness that spawns the live TS `codegraph serve --mcp` stdio
+server (`CODEGRAPH_MCP_TOOLS=explore,node` — TS gates `codegraph_node` off
+by default) and drives it via a minimal JSON-RPC 2.0
+`initialize`/`notifications/initialized`/`tools/call` handshake. It is
+gated on `codegraph --version` == `1.3.1` and hard-fails rather than
+silently capturing against an unexpected TS version (D-01).
+
+Per-corpus queries/symbols (see `capture.sh` for the exact invocations):
+
+| Corpus | `node-multi`/`node-mcp` symbol | `explore-multi`/`explore-mcp` query |
+|---|---|---|
+| `weft-go` | `Run` (10 same-named function/method defs, verified via the TS SQLite index) | `epic worktree` (spans 4+ files) |
+| `colbymchenry-codegraph` | `resolve` (27 same-named function defs) | `generated file detection` (spans 4+ files) |
+| `synthetic-parity` | `Validate` (2 defs — `accounts/validate.go` + `orders/validate.go`, D-03 case a) | `user account` (tokenizes to match `UserAccountManager`, D-03 case b) |
+
+**These are TS-side goldens ONLY.** The Go-side EXPECTED fixtures (what
+`internal/query`'s ported RWR/multi-def pipeline should produce) are NOT
+regenerated in this plan — they land in plan 17 (F5), after the D-09
+edge-kind expansion and the RWR pipeline itself are implemented. Until then,
+these fixtures exist purely as the frozen TS 1.3.1 oracle to diff against.
 
 ## Volatile fields (Pitfall 1) — stripped for byte-for-byte reproducibility
 
@@ -116,8 +160,19 @@ WEFT_REPO=/path/to/a/small/committable/go/repo ./testdata/golden/capture.sh
 ```
 
 Requires the live TS `codegraph` CLI (v1.3.1+) on `PATH`, plus `sqlite3`,
-`jq`, and `git`. This is a time-sensitive, one-shot capture — the TS CLI may
-drift in behavior or be uninstalled in the future. If `capture.sh` can no
-longer run (TS CLI unavailable), the already-committed fixtures under
-`corpus/`, `ts-schema.sql`, and `ts-schema.dump.sql` remain the frozen
-ground truth; do not attempt to hand-edit them.
+`jq`, `git`, and (since Phase 1's behavioral fixtures) `node` — for
+`mcp-capture.mjs`'s MCP-surface capture. This is a time-sensitive, one-shot
+capture — the TS CLI may drift in behavior or be uninstalled in the future.
+If `capture.sh` can no longer run (TS CLI unavailable), the
+already-committed fixtures under `corpus/`, `ts-schema.sql`, and
+`ts-schema.dump.sql` remain the frozen ground truth; do not attempt to
+hand-edit them.
+
+Note: `colbymchenry-codegraph`'s fixtures (baseline AND behavioral) are
+**not pinned to a commit** — `capture.sh` clones the default branch's
+current HEAD on every run, so re-running it will update those fixtures to
+match wherever upstream is at re-capture time (this is expected, not a
+regression; see the Corpus table above). `weft-go`'s baseline fixtures are
+effectively pinned by the state of the local `$WEFT_REPO` checkout at
+capture time. `synthetic-parity` is fully reproducible — it is a fixed,
+in-repo source tree.
