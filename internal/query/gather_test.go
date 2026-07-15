@@ -533,3 +533,95 @@ func TestGatherCoreDirBoost(t *testing.T) {
 		}
 	})
 }
+
+// TestGatherMultiTermReRank pins H9's exact rule: query terms are grouped
+// by stem, and a candidate whose name/directory matches >=2 distinct
+// stem-groups gets score *= 1 + matchCount*0.5. A candidate matching
+// fewer than 2 groups is untouched.
+func TestGatherMultiTermReRank(t *testing.T) {
+	// "handler"/"handlers" share a stem -> 1 group; "parser" and
+	// "gateway" are each their own group -> 3 groups total.
+	terms := []string{"handler", "handlers", "parser", "gateway"}
+
+	threeGroups := &schema.Node{Id: "three", Name: "GatewayParserHandler", FilePath: "pkg/x.go"}
+	oneGroup := &schema.Node{Id: "one", Name: "GatewayOnly", FilePath: "pkg/y.go"}
+
+	candidates := []gatherCandidate{
+		{Node: threeGroups, Score: 10},
+		{Node: oneGroup, Score: 10},
+	}
+	applyMultiTermReRank(candidates, terms)
+
+	three := findGatherCandidate(t, candidates, "three")
+	want := 10 * (1 + 3*multiTermRerankStep)
+	if three.Score != want {
+		t.Fatalf("3-group match score = %v, want %v (10*(1+3*0.5)=25)", three.Score, want)
+	}
+
+	one := findGatherCandidate(t, candidates, "one")
+	if one.Score != 10 {
+		t.Fatalf("<2-group match score = %v, want untouched 10", one.Score)
+	}
+}
+
+// TestDistinctiveIdentifierExemption pins H9's exemption rule: a
+// candidate that is a distinctive-identifier EXACT match against a query
+// term is exempt from H7's test-file dampening, even though it is a test
+// file and the query does not otherwise mention test/spec. A plain/short
+// name exact match is NOT distinctive and so is NOT exempt — it dampens
+// normally. Verified both via the exemption-set helper directly and via
+// the full applyPostMergeRerankers composition (order-sensitive: the
+// exemption must be computed before H7 applies).
+func TestDistinctiveIdentifierExemption(t *testing.T) {
+	distinctiveTestNode := &schema.Node{Id: "distinctive", Name: "ParseNodeIterator", FilePath: "pkg/parse_node_iterator_test.go"}
+	plainTestNode := &schema.Node{Id: "plain", Name: "Run", FilePath: "pkg/run_test.go"}
+
+	terms := []string{"ParseNodeIterator"}
+
+	exempt := distinctiveExactMatchExemptIDs([]gatherCandidate{
+		{Node: distinctiveTestNode, Score: 100},
+		{Node: plainTestNode, Score: 100},
+	}, terms)
+	if !exempt["distinctive"] {
+		t.Fatalf("expected distinctive exact match exempt, got exempt=%+v", exempt)
+	}
+	if exempt["plain"] {
+		t.Fatalf("expected plain short name NOT exempt, got exempt=%+v", exempt)
+	}
+
+	t.Run("applyTestFileDampening honors the exemption", func(t *testing.T) {
+		candidates := []gatherCandidate{
+			{Node: distinctiveTestNode, Score: 100},
+			{Node: plainTestNode, Score: 100},
+		}
+		applyTestFileDampening(candidates, "find the parse node iterator", exempt)
+
+		dist := findGatherCandidate(t, candidates, "distinctive")
+		if dist.Score != 100 {
+			t.Fatalf("exempt distinctive-identifier test-file score = %v, want untouched 100", dist.Score)
+		}
+		plain := findGatherCandidate(t, candidates, "plain")
+		want := 100 * testFileDampeningFactor
+		if plain.Score != want {
+			t.Fatalf("non-exempt test-file score = %v, want %v (dampened)", plain.Score, want)
+		}
+	})
+
+	t.Run("applyPostMergeRerankers composes the exemption before H7", func(t *testing.T) {
+		candidates := []gatherCandidate{
+			{Node: distinctiveTestNode, Score: 100},
+			{Node: plainTestNode, Score: 100},
+		}
+		applyPostMergeRerankers(candidates, "find the parse node iterator", terms)
+
+		dist := findGatherCandidate(t, candidates, "distinctive")
+		if dist.Score != 100 {
+			t.Fatalf("composed pipeline: exempt candidate score = %v, want untouched 100", dist.Score)
+		}
+		plain := findGatherCandidate(t, candidates, "plain")
+		want := 100 * testFileDampeningFactor
+		if plain.Score != want {
+			t.Fatalf("composed pipeline: non-exempt candidate score = %v, want %v (dampened)", plain.Score, want)
+		}
+	})
+}
