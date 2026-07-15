@@ -38,7 +38,9 @@ import (
 //	index.reindexRecommended          | !schema.IsCurrentSchemaVersion(meta)        | Derived, not a literal placeholder — true when the stored Meta predates this build's schema version
 //	index.state                      | "complete" if Meta exists, else "not_indexed" | Best-effort Go analog of TS's index lifecycle state
 //	index.pendingRefs                | 0 (always)                                  | Phase 2 resolves all refs at index time (no unresolved-ref persistence in Go v1); inert placeholder matching the golden's own steady-state 0
-//	(no dbSizeBytes / lastIndexed / *_at keys) | omitted entirely                  | Volatile fields per testdata/golden/README.md's stripping rules — never rendered
+//	dbSizeBytes                      | filepath.WalkDir byte sum over .codegraph/store/ | D-07 — Pebble has no single-file page-count analog to SQLite; a recursive byte sum over the store dir (SSTables+WAL+MANIFEST) is the honest Go-truthful reading. Best-effort: an Engine with no repoRoot (New, not OpenAt) or an unreadable/missing store dir degrades to 0 rather than failing Status(). Reverses the golden-corpus strip on the Go side only — see D-08 and testdata/golden/README.md's volatile-fields table
+//	filesByLanguage                  | map[string]int64, json:"-" (Go-internal only) | D-05 — genuinely NEW computation (not already-scanned data): computed in the existing IterateFiles() scan by reading fileIt.File().Language. NOT emitted in --json — TS's own --json derives `languages` from this map and discards the counts, so emitting the key here would be a NEW Go-vs-TS divergence in the exact shape the golden oracle guards. Exists solely to feed the human/markdown renderers (Phase 2 wave 2)
+//	(no lastIndexed / *_at keys)      | omitted entirely                           | Volatile fields per testdata/golden/README.md's stripping rules — never rendered (dbSizeBytes above is the one documented exception, D-08)
 type StatusResult struct {
 	Initialized      bool             `json:"initialized"`
 	Version          string           `json:"version"`
@@ -47,8 +49,10 @@ type StatusResult struct {
 	FileCount        int64            `json:"fileCount"`
 	NodeCount        int64            `json:"nodeCount"`
 	EdgeCount        int64            `json:"edgeCount"`
+	DbSizeBytes      int64            `json:"dbSizeBytes"`
 	Backend          string           `json:"backend"`
 	NodesByKind      map[string]int64 `json:"nodesByKind"`
+	FilesByLanguage  map[string]int64 `json:"-"`
 	Languages        []string         `json:"languages"`
 	PendingChanges   PendingChanges   `json:"pendingChanges"`
 	WorktreeMismatch *string          `json:"worktreeMismatch"`
@@ -156,14 +160,55 @@ func (e *Engine) computeStale(meta *schema.Meta) (bool, error) {
 	return newest.UnixMilli() > lastSync, nil
 }
 
+// dbSizeBytes sums every regular file's size under storeDir (D-07),
+// mirroring newestSourceMtime's best-effort degrade-on-error philosophy
+// with one refinement: a per-entry error DEEPER in the tree (e.g. an
+// SSTable deleted mid-walk by a live Pebble compaction) is skipped rather
+// than aborting the walk, so a partially unreadable store still yields a
+// partial sum; but a failure to even start walking storeDir itself (e.g.
+// it does not exist) is surfaced as this function's own error return,
+// which Status() below deliberately swallows — DbSizeBytes stays 0 and
+// the whole status call still succeeds (T-02-07's "a failed walk leaves
+// DbSizeBytes at 0 without erroring Status()"). Note
+// pebble.DB.Metrics().DiskSpaceUsage() exists in the pinned pebble/v2
+// v2.1.6 and is a cheaper, more idiomatic future path, but it requires
+// extending graphstore.GraphStore/Reader and giving Engine a store handle
+// rather than just its snapshot Reader — plumbing this plan deliberately
+// did not take on. Documented future optimization, not a blocker.
+func dbSizeBytes(storeDir string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(storeDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if p == storeDir {
+				return err // can't even start the walk — surface it, caller degrades
+			}
+			return nil // best-effort: skip unreadable entries deeper in the tree, don't abort
+		}
+		if d.IsDir() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		total += info.Size()
+		return nil
+	})
+	return total, err
+}
+
 // Status reports index health/counts (QRY-09) by scanning the frozen
-// graph: fileCount from IterateFiles, nodeCount + nodesByKind + languages
-// from a single IterateNodes scan, and edgeCount from GetMeta (avoiding a
-// second full edge scan — the indexer stamps Meta.EdgeCount at index
-// time, internal/indexer/resolve.go). A missing Meta record (a store
-// that exists but was never indexed) is tolerated rather than treated as
-// an error: counts fall back to the scanned values and index.state
-// reports "not_indexed".
+// graph: fileCount + filesByLanguage from a single IterateFiles scan,
+// nodeCount + nodesByKind from a single IterateNodes scan, and edgeCount
+// from GetMeta (avoiding a second full edge scan — the indexer stamps
+// Meta.EdgeCount at index time, internal/indexer/resolve.go). languages
+// is derived from filesByLanguage (D-05: count > 0, sorted), not from a
+// separate node-scan languageSet, so it reflects every file the indexer
+// discovered and stored — including a file that yields zero extracted
+// nodes — rather than only files with at least one resolved node. A
+// missing Meta record (a store that exists but was never indexed) is
+// tolerated rather than treated as an error: counts fall back to the
+// scanned values and index.state reports "not_indexed".
 func (e *Engine) Status() (StatusResult, error) {
 	fileIt, err := e.reader.IterateFiles()
 	if err != nil {
@@ -172,8 +217,12 @@ func (e *Engine) Status() (StatusResult, error) {
 	defer fileIt.Close()
 
 	var fileCount int64
+	filesByLang := make(map[string]int64)
 	for fileIt.Next() {
 		fileCount++
+		if lang := fileIt.File().Language; lang != "" {
+			filesByLang[lang]++
+		}
 	}
 	if err := fileIt.Err(); err != nil {
 		return StatusResult{}, err
@@ -186,23 +235,21 @@ func (e *Engine) Status() (StatusResult, error) {
 	defer nodeIt.Close()
 
 	nodesByKind := make(map[string]int64)
-	languageSet := make(map[string]bool)
 	var nodeCount int64
 	for nodeIt.Next() {
 		n := nodeIt.Node()
 		nodeCount++
 		nodesByKind[n.Kind]++
-		if n.Language != "" {
-			languageSet[n.Language] = true
-		}
 	}
 	if err := nodeIt.Err(); err != nil {
 		return StatusResult{}, err
 	}
 
-	languages := make([]string, 0, len(languageSet))
-	for lang := range languageSet {
-		languages = append(languages, lang)
+	languages := make([]string, 0, len(filesByLang))
+	for lang, count := range filesByLang {
+		if count > 0 {
+			languages = append(languages, lang)
+		}
 	}
 	sort.Strings(languages)
 
@@ -226,16 +273,28 @@ func (e *Engine) Status() (StatusResult, error) {
 		return StatusResult{}, err
 	}
 
+	// D-07: best-effort — an Engine with no repoRoot (New, not OpenAt) or
+	// a missing/unreadable store dir degrades DbSizeBytes to 0 rather
+	// than failing the whole status call (T-02-07).
+	var dbSize int64
+	if e.repoRoot != "" {
+		if size, err := dbSizeBytes(filepath.Join(e.repoRoot, codegraphDirName, storeSubdir)); err == nil {
+			dbSize = size
+		}
+	}
+
 	return StatusResult{
-		Initialized: true,
-		Version:     version,
-		FileCount:   fileCount,
-		NodeCount:   nodeCount,
-		EdgeCount:   edgeCount,
-		Stale:       stale,
-		Backend:     "pebble",
-		NodesByKind: nodesByKind,
-		Languages:   languages,
+		Initialized:     true,
+		Version:         version,
+		FileCount:       fileCount,
+		NodeCount:       nodeCount,
+		EdgeCount:       edgeCount,
+		DbSizeBytes:     dbSize,
+		Stale:           stale,
+		Backend:         "pebble",
+		NodesByKind:     nodesByKind,
+		FilesByLanguage: filesByLang,
+		Languages:       languages,
 		Index: IndexHealth{
 			BuiltWithVersion:           version,
 			BuiltWithExtractionVersion: schema.SchemaVersion,
