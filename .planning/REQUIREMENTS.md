@@ -44,9 +44,9 @@
 
 ### Git / Worktree Awareness (WORK)
 
-- [ ] **WORK-01**: a query run from a git worktree whose resolved index belongs to a DIFFERENT working tree is detected (`git rev-parse --show-toplevel` vs `--git-common-dir`), computing the now-live `worktreeMismatch` (fixes the silent "worktree queries the main branch's graph" bug)
+- [x] **WORK-01**: a query run from a git worktree whose resolved index belongs to a DIFFERENT working tree is detected (`git rev-parse --show-toplevel` vs `--git-common-dir`), computing the now-live `worktreeMismatch` (fixes the silent "worktree queries the main branch's graph" bug)
 - [ ] **WORK-02**: `status` prints a verbose borrowed-index warning, and every other read tool (CLI + MCP) prefixes a compact single-line notice via a shared `withWorktreeNotice` wrapper
-- [ ] **WORK-03**: worktree detection is best-effort and never blocks queries — no false positive on submodules, nested clones, monorepo subdirs, non-git trees, or symlinked paths (EvalSymlinks both sides)
+- [x] **WORK-03**: worktree detection is best-effort and never blocks queries — no false positive on submodules, nested clones, monorepo subdirs, non-git trees, or symlinked paths (EvalSymlinks both sides)
 
 ### Git Sync Hooks (HOOK)
 
@@ -79,7 +79,7 @@
 ### Behavioral Parity Test Harness (TEST)
 
 - [x] **TEST-01**: a behavioral fixture harness diffs `explore`/`node`/`status` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings — on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot
-- [ ] **TEST-02**: worktree detection has fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/` layout, and symlinked paths
+- [x] **TEST-02**: worktree detection has fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/` layout, and symlinked paths
 - [ ] **TEST-03**: git-hook install→edit→remove is byte-invariant, and interactive TUI components are tested against piped streams (never hang)
 
 ### v1.0.0 Release (REL)
@@ -143,10 +143,10 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | STAT-01 | Phase 2 | Pending |
 | STAT-02 | Phase 2 | Pending |
 | STAT-03 | Phase 2 | Pending |
-| WORK-01 | Phase 2 | Pending |
+| WORK-01 | Phase 2 | Complete |
 | WORK-02 | Phase 2 | Pending |
-| WORK-03 | Phase 2 | Pending |
-| TEST-02 | Phase 2 | Pending |
+| WORK-03 | Phase 2 | Complete |
+| TEST-02 | Phase 2 | Complete |
 | SURF-06 | Phase 2 | Pending |
 | WATCH-01 | Phase 3 | Pending |
 | WATCH-02 | Phase 3 | Pending |

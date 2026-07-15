@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
-current_phase: 2
+current_phase: 02
 current_phase_name: status Content & Git/Worktree Awareness
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-15T22:22:10.241Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-07-15T22:35:34.758Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 1 complete, transitioned to Phase 2
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 17
-  completed_plans: 18
+  total_plans: 24
+  completed_plans: 19
   percent: 13
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 1 — Behavioral Parity — explore & node
+**Current focus:** Phase 02 — status Content & Git/Worktree Awareness
 
 ## Current Position
 
-Phase: 2 — status Content & Git/Worktree Awareness
-Plan: Not started
+Phase: 02 (status Content & Git/Worktree Awareness) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-15 — Phase 1 complete, transitioned to Phase 2
+Last activity: 2026-07-15 — Phase 02 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -76,6 +76,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node PP15 | 12min | 2 tasks | 0 files |
 | Phase 01-behavioral-parity-explore-node P16 | 55min | 3 tasks | 5 files |
 | Phase 01-behavioral-parity-explore-node P17 | 25min | 3 tasks | 13 files |
+| Phase 02 P01 | 22min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 01-behavioral-parity-explore-node]: H21's getExploreOutputBudget is a documented D-02 monotonic step function substitute (TS dist unreadable); only overrides the maxFiles default, never an explicit --max-files
 - [Phase 01-behavioral-parity-explore-node]: F5 Go-side fixture regeneration lands under a distinct go-*.json naming convention (via a new gocapture tool), never overwriting the TS 1.3.1 frozen oracle fixtures from plan 01
 - [Phase 01-behavioral-parity-explore-node]: D-02's oracle applies at two tiers: full ordering+membership+warning+header+counts on synthetic-parity (purpose-built, tractable); shape-only plus four newly-documented allowed divergences (AD-01..04: TS stemming precision, TS/JS object-literal-method extraction gap, a weft-go def-count delta, file-selection/bullet-scope breadth) on the real-world weft-go/colbymchenry-codegraph corpora
+- [Phase 02-status-content-git-worktree-awareness]: Ported TS sync/worktree.js's 4-gate cascade verbatim (gate order + gate-4 polarity: differing common dirs SUPPRESS the warning, not trigger it)
+- [Phase 02-status-content-git-worktree-awareness]: CachingDetector lives in internal/gitmeta, not on query.Engine, since MCP rebuilds Engine per call and an Engine-scoped cache would give zero cross-call benefit
+- [Phase 02-status-content-git-worktree-awareness]: T-02-04 accepted: Mismatch.WorktreeRoot/IndexRoot intentionally carry absolute host paths in the warning/notice text, a scoped exception to the codebase's usual no-host-paths-in-MCP-output stance
 
 ### Pending Todos
 
@@ -147,9 +151,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T21:12:44.536Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-status-content-git-worktree-awareness/02-CONTEXT.md
+Last session: 2026-07-15T22:35:34.752Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
