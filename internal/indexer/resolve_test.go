@@ -248,6 +248,63 @@ func (b B) Greet(name string) string { return "hello " + name }
 	}
 }
 
+// TestResolveOverrides_OverloadedMethodsBothSynthesized proves CR-01's
+// fix: when a supertype declares two overloads of the same method name
+// (legal in Java/C#, impossible in Go — hence this drives
+// synthesizeOverrides directly with hand-built edges rather than through
+// the Go extractor) and a subtype overrides both, synthesizeOverrides
+// must emit BOTH overrides edges to their respective same-arity targets,
+// not collapse the name->methodID map to a single arbitrary overload on
+// either the subtype or supertype side.
+//
+// Edge order is deliberately arranged so the pre-fix map[string]string
+// (methodName -> last-written methodID) keeps a MISMATCHED arity pair on
+// each side (Base collapses to its arity-2 overload, Derived collapses
+// to its arity-1 overload) — under the old code this yields ZERO
+// overrides edges even though both real overrides exist, proving the
+// bug isn't merely "misses one edge" but can silently drop all of them.
+func TestResolveOverrides_OverloadedMethodsBothSynthesized(t *testing.T) {
+	const (
+		baseType    = "Base"
+		derivedType = "Derived"
+		baseFoo1    = "base.Foo/1" // Foo(x) — arity 1
+		baseFoo2    = "base.Foo/2" // Foo(x, y) — arity 2
+		derivedFoo1 = "derived.Foo/1"
+		derivedFoo2 = "derived.Foo/2"
+	)
+
+	edges := []*schema.Edge{
+		{Source: baseType, Target: baseFoo1, Kind: "contains"},
+		{Source: baseType, Target: baseFoo2, Kind: "contains"},
+		{Source: derivedType, Target: derivedFoo2, Kind: "contains"},
+		{Source: derivedType, Target: derivedFoo1, Kind: "contains"},
+		{Source: derivedType, Target: baseType, Kind: goextract.EdgeKindExtends},
+	}
+	nodeKindByID := map[string]string{
+		baseFoo1: goextract.KindMethod, baseFoo2: goextract.KindMethod,
+		derivedFoo1: goextract.KindMethod, derivedFoo2: goextract.KindMethod,
+	}
+	nodeNameByID := map[string]string{
+		baseFoo1: "Foo", baseFoo2: "Foo", derivedFoo1: "Foo", derivedFoo2: "Foo",
+	}
+	methodArity := map[string]int32{
+		baseFoo1: 1, baseFoo2: 2, derivedFoo1: 1, derivedFoo2: 2,
+	}
+	nodeStartLineByID := map[string]int32{}
+
+	synthesized := synthesizeOverrides(edges, nodeKindByID, nodeNameByID, methodArity, nodeStartLineByID)
+
+	if e := findEdgeFull(synthesized, derivedFoo1, goextract.EdgeKindOverrides, baseFoo1); e == nil {
+		t.Errorf("expected overrides edge %s -> %s (arity-1 overload), got %+v", derivedFoo1, baseFoo1, synthesized)
+	}
+	if e := findEdgeFull(synthesized, derivedFoo2, goextract.EdgeKindOverrides, baseFoo2); e == nil {
+		t.Errorf("expected overrides edge %s -> %s (arity-2 overload), got %+v", derivedFoo2, baseFoo2, synthesized)
+	}
+	if len(synthesized) != 2 {
+		t.Errorf("len(synthesized) = %d, want 2 (both overloads' overrides edges, no cross-arity misattribution): %+v", len(synthesized), synthesized)
+	}
+}
+
 // TestResolve_InterfaceEmbeds proves `type ReadWriter interface { Reader }`
 // yields an embeds edge ReadWriter -> Reader.
 func TestResolve_InterfaceEmbeds(t *testing.T) {

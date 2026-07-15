@@ -352,8 +352,8 @@ type pendingCall struct {
 // it for a deferred call).
 func retryConformanceCalls(pending []pendingCall, edges []*schema.Edge, nodeNameByID map[string]string, unresolvedCount *int) []*schema.Edge {
 	typeMethods := make(map[string]map[string]string) // typeID -> methodName -> methodID
-	methodOwner := make(map[string]string)             // methodID -> typeID
-	typeSupertypes := make(map[string][]string)        // typeID -> []supertypeID
+	methodOwner := make(map[string]string)            // methodID -> typeID
+	typeSupertypes := make(map[string][]string)       // typeID -> []supertypeID
 
 	for _, e := range edges {
 		switch e.Kind {
@@ -462,8 +462,18 @@ func walkSupertypesForMethod(typeID, methodName string, typeMethods map[string]m
 // typeMethods[interfaceID] is always empty and an implements-only
 // supertype chain never yields an override match.
 func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[string]string, methodArity map[string]int32, nodeStartLineByID map[string]int32) []*schema.Edge {
-	typeMethods := make(map[string]map[string]string) // typeID -> methodName -> methodID
-	typeSupertypes := make(map[string][]string)        // typeID -> []supertypeID
+	// typeMethods is typeID -> methodName -> ALL methodIDs sharing that
+	// name (CR-01 fix): a bare map[string]string here would collapse
+	// same-name/different-arity overloads — legal and common in Java/C#
+	// (impossible in Go, hence this can't be exercised through the Go
+	// extractor; see TestResolveOverrides_OverloadedMethodsBothSynthesized
+	// in resolve_test.go, which drives this function directly) — to a
+	// single arbitrary candidate on BOTH the self side (line ~503 below)
+	// and the supertype side (the walkSupertypes closure), silently
+	// dropping or misattributing overrides edges for the discarded
+	// overload(s).
+	typeMethods := make(map[string]map[string][]string) // typeID -> methodName -> []methodID (all overloads)
+	typeSupertypes := make(map[string][]string)         // typeID -> []supertypeID
 
 	for _, e := range edges {
 		switch e.Kind {
@@ -473,22 +483,27 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 			}
 			methods := typeMethods[e.Source]
 			if methods == nil {
-				methods = make(map[string]string)
+				methods = make(map[string][]string)
 				typeMethods[e.Source] = methods
 			}
-			methods[nodeNameByID[e.Target]] = e.Target
+			name := nodeNameByID[e.Target]
+			methods[name] = append(methods[name], e.Target)
 		case "embeds", goextract.EdgeKindImplements, goextract.EdgeKindExtends:
 			typeSupertypes[e.Source] = append(typeSupertypes[e.Source], e.Target)
 		}
 	}
 
 	// Deterministic iteration (D-05/D-09): map order is randomized, so
-	// sort both the type ids and each type's own method names before
-	// walking, ensuring the emitted edge slice's order never depends on
-	// Go's map iteration order.
+	// sort the type ids, each type's own method names, AND (CR-01) each
+	// name's own overload-id slice before walking, ensuring the emitted
+	// edge slice's order never depends on Go's map iteration order or
+	// edges' append order.
 	typeIDs := make([]string, 0, len(typeMethods))
 	for typeID := range typeMethods {
 		typeIDs = append(typeIDs, typeID)
+		for _, ids := range typeMethods[typeID] {
+			sort.Strings(ids)
+		}
 	}
 	sort.Strings(typeIDs)
 
@@ -501,25 +516,31 @@ func synthesizeOverrides(edges []*schema.Edge, nodeKindByID, nodeNameByID map[st
 		sort.Strings(names)
 
 		for _, name := range names {
-			methodID := typeMethods[typeID][name]
-			arity := methodArity[methodID]
+			for _, methodID := range typeMethods[typeID][name] {
+				arity := methodArity[methodID]
 
-			var superMethodID string
-			walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
-				if id, ok := typeMethods[cur][name]; ok && methodArity[id] == arity {
-					superMethodID = id
-					return true
+				var superMethodID string
+				walkSupertypes(typeID, typeSupertypes, func(cur string) bool {
+					// CR-01: check every same-named candidate on the
+					// supertype side against arity, not just a single
+					// collapsed methodID.
+					for _, candidateID := range typeMethods[cur][name] {
+						if methodArity[candidateID] == arity {
+							superMethodID = candidateID
+							return true
+						}
+					}
+					return false
+				})
+				if superMethodID == "" {
+					continue
 				}
-				return false
-			})
-			if superMethodID == "" {
-				continue
+				synthesized = append(synthesized, &schema.Edge{
+					Source: methodID, Target: superMethodID, Kind: goextract.EdgeKindOverrides,
+					Provenance: "heuristic", Line: nodeStartLineByID[methodID],
+					Metadata: map[string]string{"synthesizedBy": "structural-override"},
+				})
 			}
-			synthesized = append(synthesized, &schema.Edge{
-				Source: methodID, Target: superMethodID, Kind: goextract.EdgeKindOverrides,
-				Provenance: "heuristic", Line: nodeStartLineByID[methodID],
-				Metadata: map[string]string{"synthesizedBy": "structural-override"},
-			})
 		}
 	}
 	return synthesized
