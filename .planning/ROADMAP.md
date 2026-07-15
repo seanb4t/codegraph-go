@@ -115,11 +115,19 @@ Plans:
 **Plans**: 7 plans (3 waves)
 
 Plans:
+**Wave 1**
+
 - [ ] 02-01-PLAN.md — `internal/gitmeta`: the 4-gate detection cascade, verbatim TS notice/warning strings, `CachingDetector`, and the six real-`git` fixture layouts (wave 1)
 - [ ] 02-02-PLAN.md — `StatusResult` gains `dbSizeBytes` + `filesByLanguage`; the golden `dbSizeBytes` strip is reversed Go-side as a documented divergence (wave 1)
 - [ ] 02-03-PLAN.md — the 5 SURF-06 markdown renderers, added as siblings of the untouched `Marshal*JSON` helpers (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 02-04-PLAN.md — `OpenAt` retains `startPath`; `worktreeMismatch` goes live in TS's `{worktreeRoot, indexRoot}` shape; the two notice helpers (wave 2)
 - [ ] 02-05-PLAN.md — the two status renderers TS ships: CLI padded columns (D-09) and MCP bolded-key bullets (D-17), plus the hand-rolled comma grouper (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 02-06-PLAN.md — MCP wiring: six call sites to markdown, one server-scoped detector, the notice on 7 tools; closes the zero-coverage blind spot (wave 3)
 - [ ] 02-07-PLAN.md — CLI wiring: the sectioned `status` layout replaces the terse one-liner; the notice on 7 read commands, human-output only (wave 3)
 
