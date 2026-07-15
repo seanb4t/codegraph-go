@@ -259,19 +259,28 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 // "- `name` (path:line) — N caller(s) in `path`" where path is the
 // symbol's OWN file (not the callers' files — the golden's "3 callers in
 // `internal/cli/finish.go`" counts all 3 callers of mergeStyle, which is
-// itself defined in finish.go), plus an optional "; tests: `path`, ..."
-// clause listing the distinct files among those callers that are test
-// symbols (isTestSymbol, D-07's heuristic).
+// itself defined in finish.go), plus one of two mutually-exclusive
+// trailing clauses (EXPL-04, RESEARCH §5): "; tests: `path`, ..." listing
+// the distinct files among those callers that are test symbols
+// (isTestSymbol, D-07's heuristic) when at least one exists, or — when the
+// root has direct callers but NONE of them are covered by a test — the
+// EXACT string "; ⚠️ no covering tests found" (verbatim, note "found", the
+// emoji, and that it is appended, not a standalone line). A root with
+// ZERO callers gets NEITHER clause, mirroring TS's early-continue before
+// this block is ever reached for a caller-less root.
 func renderBlastBullet(bl exploreBlast) string {
 	n := bl.Symbol
 	s := fmt.Sprintf("- `%s` (%s:%d) — %d %s in `%s`",
 		n.Name, n.FilePath, n.StartLine, bl.CallerCount, pluralize(bl.CallerCount, "caller"), n.FilePath)
-	if len(bl.TestFiles) > 0 {
+	switch {
+	case len(bl.TestFiles) > 0:
 		quoted := make([]string, len(bl.TestFiles))
 		for i, f := range bl.TestFiles {
 			quoted[i] = "`" + f + "`"
 		}
 		s += "; tests: " + strings.Join(quoted, ", ")
+	case bl.CallerCount > 0:
+		s += "; ⚠️ no covering tests found"
 	}
 	return s
 }
@@ -287,15 +296,68 @@ func joinSymbolKindList(nodes []*schema.Node) string {
 	return strings.Join(parts, ", ")
 }
 
+// minPolymorphicSiblings is H20's exact, cited threshold (RESEARCH
+// §C.2/H20, mcp/tools.js:2927-2939): an off-spine file whose classes
+// share a supertype with >= 3 total implementers renders as a
+// signature-only skeleton instead of full source.
+const minPolymorphicSiblings = 3
+
+// computeSkeletonFiles is H20 (RESEARCH §C.2, mcp/tools.js:2927-2939):
+// determines which selected files should render as signature-only
+// skeletons instead of full source. An "on-spine" file (centralFiles,
+// H19's central-file selection) NEVER skeletonizes — H20 only applies to
+// off-spine files. An off-spine file skeletonizes when at least one of
+// its shown symbols implements an interface that has
+// >= minPolymorphicSiblings (3) TOTAL implementers (a "polymorphic
+// sibling" cluster too large to usefully show every member's full body).
+// implementsIdx is BuildImplementsIndex's output (traverse.go, interface
+// id -> its implementer edges); implementedInterfaces (traverse.go)
+// inverts it to the struct-id -> []interfaceID view this function walks.
+func computeSkeletonFiles(groups []exploreFileGroup, centralFiles map[string]bool, implementsIdx map[string][]*schema.Edge) map[string]bool {
+	skeleton := make(map[string]bool)
+	typeIfaces := implementedInterfaces(implementsIdx)
+	for _, g := range groups {
+		if centralFiles[g.Path] {
+			continue // on-spine files never skeletonize
+		}
+		for _, n := range g.Symbols {
+			for _, ifaceID := range typeIfaces[n.Id] {
+				if len(implementsIdx[ifaceID]) >= minPolymorphicSiblings {
+					skeleton[g.Path] = true
+				}
+			}
+		}
+	}
+	return skeleton
+}
+
+// renderSkeleton renders H20's signature-only view of symbols: one
+// "<kind> <name><signature>" line per symbol inside a fenced code block —
+// plain text, no ANSI, matching render_markdown.go's package-wide
+// constraint (Phase 6 archtest will enforce it later).
+func renderSkeleton(symbols []*schema.Node) string {
+	var b strings.Builder
+	b.WriteString("```go\n")
+	for _, n := range symbols {
+		fmt.Fprintf(&b, "%s %s%s\n", n.Kind, n.Name, n.Signature)
+	}
+	b.WriteString("```\n")
+	return b.String()
+}
+
 // RenderExplore reproduces the golden explore.json markdown shape
 // byte-for-byte in its fixed regions (D-05a): the exploration header, the
 // "Found N symbol(s) across M file(s)." line, the blast-radius bullets,
 // the verbatim-source disclaimer, and one "**`path`** — sym(kind), ..."
-// header + fenced numbered-source block per matched file, in groups'
-// order. When stale is true (D-04a), a single bolded staleness line is
-// prepended before the exploration header; a current graph (stale=false)
-// prepends nothing, keeping the golden's fixed section order untouched.
-func RenderExplore(query string, fileCount, symbolCount int, groups []exploreFileGroup, blasts []exploreBlast, sources map[string][]byte, stale bool) string {
+// header + fenced source block per matched file, in groups' order. When
+// stale is true (D-04a), a single bolded staleness line is prepended
+// before the exploration header; a current graph (stale=false) prepends
+// nothing, keeping the golden's fixed section order untouched.
+// skeletonFiles (H20, may be nil) renders a file's SIGNATURES ONLY
+// (renderSkeleton) instead of its full verbatim source
+// (renderNumberedSource) — an off-spine file whose classes share a
+// >=3-implementer supertype.
+func RenderExplore(query string, fileCount, symbolCount int, groups []exploreFileGroup, blasts []exploreBlast, sources map[string][]byte, stale bool, skeletonFiles map[string]bool) string {
 	var b strings.Builder
 	b.WriteString(staleBanner(stale))
 	fmt.Fprintf(&b, "**Exploration: %s**\n\n", query)
@@ -309,7 +371,11 @@ func RenderExplore(query string, fileCount, symbolCount int, groups []exploreFil
 	fmt.Fprintf(&b, "> %s\n\n", sourceDisclaimer)
 	for _, g := range groups {
 		fmt.Fprintf(&b, "**`%s`** — %s\n\n", g.Path, joinSymbolKindList(g.Symbols))
-		b.WriteString(renderNumberedSource(sources[g.Path]))
+		if skeletonFiles[g.Path] {
+			b.WriteString(renderSkeleton(g.Symbols))
+		} else {
+			b.WriteString(renderNumberedSource(sources[g.Path]))
+		}
 		b.WriteByte('\n')
 	}
 	return b.String()

@@ -585,5 +585,12 @@ func (e *Engine) Explore(query string, maxFiles int) (string, error) {
 		sources[g.Path] = content
 	}
 
-	return RenderExplore(query, len(groups), symbolCount, groups, blasts, sources, stale), nil
+	// H20: polymorphic-sibling skeletonization for off-spine files.
+	implementsIdx, err := BuildImplementsIndex(e.reader)
+	if err != nil {
+		return "", err
+	}
+	skeletonFiles := computeSkeletonFiles(groups, centralFiles, implementsIdx)
+
+	return RenderExplore(query, len(groups), symbolCount, groups, blasts, sources, stale, skeletonFiles), nil
 }
