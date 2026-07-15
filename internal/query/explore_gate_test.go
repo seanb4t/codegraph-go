@@ -1,7 +1,6 @@
 package query
 
 import (
-	"sort"
 	"testing"
 )
 
@@ -436,10 +435,6 @@ func TestFiveTierFileSort_UsesSliceStable(t *testing.T) {
 	shuffled := []string{"b.go", "c.go", "a.go"}
 	second := fiveTierFileSort(shuffled, fileScores, fileGraphScore, nil, fileTermHits, fileNodeCounts)
 
-	if !sort.StringsAreSorted(append([]string(nil), first...)) {
-		// not required to be alphabetically sorted in general, but in
-		// this fully-tied fixture the path tail makes it so
-	}
 	if len(first) != 3 || len(second) != 3 {
 		t.Fatalf("expected 3 files in both results, got %v / %v", first, second)
 	}
