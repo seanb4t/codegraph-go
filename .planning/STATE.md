@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
 stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-07-15T15:36:13.184Z"
+last_updated: "2026-07-15T16:03:10.279Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 16
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 16 of 17
+Plan: 17 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -74,6 +74,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P13 | 25min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P14 | 12min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node PP15 | 12min | 2 tasks | 0 files |
+| Phase 01-behavioral-parity-explore-node P16 | 55min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 01-behavioral-parity-explore-node]: H17's entry/named-file gate clause (3) derives from plan 13's fileScores tier (score>=fileScoreEntry) rather than a separate caller-supplied entryFiles set -- plan 13's own readiness note names only fileScores/fileGraphScore/rescued as this plan's inputs
 - [Phase 01-behavioral-parity-explore-node]: H18's 5-tier sort uses ascending file path as the final deterministic tie-break -- files have no stable Id field (unlike nodes), so path is the documented D-04 substitute
 - [Phase 1]: D-09 F4 re-index complete: this repo + weft-go + colbymchenry-codegraph + synthetic-parity force-re-indexed (index --force, never sync); colbymchenry-codegraph independently confirms all 6 new edge kinds fire correctly; this repo's own zero overrides/type_of count is a documented corpus-content fact, not a missing emit site
+- [Phase 01-behavioral-parity-explore-node]: Wired the full H1-H21 explore pipeline; 'matched' symbols shown per file are gather+seed candidates (RWR-ordered), not the whole bounded subgraph, with a single-node structural fallback for files selected purely via connectivity
+- [Phase 01-behavioral-parity-explore-node]: computeFileTermHits is a new wiring-level primitive this plan added — plans 13/14 both documented fileTermHits as unwired/caller-supplied
+- [Phase 01-behavioral-parity-explore-node]: H21's getExploreOutputBudget is a documented D-02 monotonic step function substitute (TS dist unreadable); only overrides the maxFiles default, never an explicit --max-files
 
 ### Pending Todos
 
@@ -140,7 +144,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T15:35:42.447Z
+Last session: 2026-07-15T16:02:34.672Z
 Stopped at: Completed 01-14-PLAN.md
 Resume file: None
 
