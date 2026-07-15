@@ -1,6 +1,7 @@
 # Phase 2: status Content & Git/Worktree Awareness - Research
 
 **Researched:** 2026-07-15
+**Extended:** 2026-07-15 — scope change: SURF-06 (MCP markdown output) pulled in from Phase 8; D-12/D-13 corrected upstream using this research's findings
 **Domain:** Go stdlib `os/exec` git introspection, Pebble on-disk store, MCP/CLI shared-engine rendering
 **Confidence:** HIGH
 
@@ -95,27 +96,60 @@ only here are missing. Run "codegraph init -i" here for a worktree-local
 index." The glyph is U+26A0 `⚠` (bytes `e2 9a a0`), NO U+FE0F variation
 selector — distinct from Phase 1's `⚠️`.
 
-**D-12 (Notice delivery — mirror `staleBanner`):** TS's `withWorktreeNotice`
-prefixes `${notice}\n\n${first.text}` onto the first text content block,
-no-ops on `isError` results, and excludes `codegraph_status` (which embeds
-its own verbose form). Mirror `staleBanner`'s prepend-to-rendered-string
-pattern via a new `worktreeNotice(mismatch)`, applied in the shared
-engine's render path for the 7 non-status read tools
+**D-12 (Notice delivery — ONE uniform text-prefix across all 7 non-status
+read tools) — ★ CORRECTED 2026-07-15 post-research:** TS's
+`withWorktreeNotice` prefixes `${notice}\n\n${first.text}` onto the first
+text content block, no-ops on `isError` results, and excludes
+`codegraph_status` (which embeds its own verbose form). Mirror
+`staleBanner`'s prepend-to-rendered-string pattern via a new
+`worktreeNotice(mismatch)`, applying the **literal TS text-prefix** to all 7
+non-status read tools
 (`explore`/`node`/`search`/`callers`/`callees`/`impact`/`files`), with
 `status` taking the verbose form. MCP `status` wraps the verbose warning as
 a blockquote (`> ⚠ ` + warning with `\n` → `\n> `). TS's CLI `warn()` writes
 to `console.log` = STDOUT, not stderr — match that for CLI parity, while
-keeping MCP's JSON-RPC stdout clean.
+keeping MCP's JSON-RPC stdout clean. **The proposed `_worktreeNotice`
+JSON-field hybrid is WITHDRAWN** — this research's Pitfall 1 established the
+premise was false (MCP text content is model-facing, never unmarshaled by
+any consumer in this repo or by Claude Code), and D-16 moves those 5 tools
+to markdown regardless, making the question moot. Do not reintroduce a
+per-tool notice mechanism.
 
-**D-13 (Detection cached once per Engine, including negative results):** TS
-caches per `${startPath} ${indexRoot}` and holds the first verdict until
-restart, because detection costs 2 `git` subprocesses and MCP is long-lived.
-Resolve lazily-once (`sync.Once`) on the `Engine` and cache the `*Mismatch`
-(nil == "checked, no mismatch" — must be distinguishable from "not yet
-checked"). CLI is one-shot so caching is free there; MCP gets the win. **See
-this document's Corrections section — this literal Engine-scoped cache does
-NOT deliver the MCP win as written; a server-scoped cache is additionally
-required.**
+**D-13 (Detection cached once, negative results included — cache MUST NOT
+live only on `Engine`) — ★ CORRECTED 2026-07-15 post-research:** TS caches
+per `${startPath}\u0000${indexRoot}` and holds the first verdict until
+restart (#926), because detection costs git subprocesses and MCP is
+long-lived. The original "resolve lazily-once (`sync.Once`) on the `Engine`
+… MCP gets the win" is **FALSE** — `openEngine` builds a fresh `Engine` per
+tool call, so an Engine-scoped cache yields zero cross-call benefit on the
+exact surface the cache exists for (this research's Corrections #1).
+**Corrected decision:** put the cache in `internal/gitmeta` itself (a
+`CachingDetector` — mutex-guarded `map[string]*Mismatch` + a
+`Detect(startPath, indexRoot) *Mismatch` method); `internal/mcp` constructs
+one per server and closes over it in every handler; the CLI constructs one
+per invocation. Cache negative results too (nil == "checked, no mismatch",
+distinguishable from "not yet checked").
+
+**D-16 (SURF-06 — the 5 JSON-shaped MCP read tools switch to markdown):**
+`callers`/`callees`/`impact`/`search`/`files` move from raw `json.Marshal`
+output to markdown. **The CLI `--json` flag is UNTOUCHED and keeps emitting
+JSON.** Rationale: (1) the consumer is a language model, not a parser —
+nothing unmarshals MCP text content; (2) measured token cost on this repo's
+index: `files` = 28,506 B JSON vs ~16,835 B markdown (**-41%**), ~14 KB of
+which is 4 keys repeated across 308 records; (3) it CLOSES a TS divergence
+(TS returns markdown from every MCP tool); (4) it dissolves the D-12 notice
+problem — one shape, one mechanism, no handler touched twice. **Rejected (do
+not revisit without new evidence):** TOON (13,740 B, -52%, but thin model
+exposure + encoder cost), YAML (whitespace-fragile, no comprehension win),
+TOML (config format, arrays-of-records are its weakness), bare path list
+(-61% but lossy). **Shape guidance:** markdown table (header once, then
+rows) for these uniform record lists; plain-text only (no ANSI — Phase 6
+owns color); exact table vs list-per-record is Claude's Discretion,
+optimizing for model legibility and stable ordering. **Parity note:** the
+golden/parity harness asserts the CLI `--json` shape — confirm which
+existing tests assert MCP text content and update them deliberately; do not
+let a JSON→markdown change silently pass a test that only checked the CLI
+path.
 
 **D-14 (★ Engine must learn `startPath`):** `OpenAt` currently DISCARDS the
 caller's start path. `Engine{reader, repoRoot}` holds `repoRoot` = the
@@ -176,6 +210,7 @@ plain-text-only, shared-engine, and never-blocking constraints hold.
 | WORK-02 | Verbose `status` warning + compact notice on 6 other read tools (CLI+MCP) | Corrections #3 + Pitfall 1 + Open Questions #3/#4 (the JSON-vs-markdown MCP tension and the no-TS-precedent CLI design) |
 | WORK-03 | Best-effort, never-blocking detection | Pattern 1 (bounded timeout, error-as-no-signal) + Security Domain (DoS mitigation) |
 | TEST-02 | Fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, symlinked | Don't Hand-Roll (real git via os/exec) + Validation Architecture Wave 0 Gaps (no existing repo-building test helper) |
+| SURF-06 | The 5 JSON-shaped MCP read tools return markdown; CLI `--json` unchanged | § SURF-06 (shared-helper risk, renderer placement, markdown shapes) + Corrections #5 (status is NOT already markdown — D-16's premise is wrong) + Validation Architecture (zero existing MCP coverage for these 5 tools) |
 </phase_requirements>
 
 ## Summary
@@ -216,10 +251,22 @@ cache must live at `BuildServer`/server-construction scope instead.
 needed there); implement `dbSizeBytes` via `filepath.WalkDir` over
 `.codegraph/store/` (zero new plumbing, D-04a-compliant by construction);
 add `startPath` to `Engine` and computed-once mismatch state, but put the
-**cross-call cache** in `internal/mcp`'s server construction, not on the
-per-call `Engine`; and resolve the "MCP JSON tools vs. literal text-prefix
-notice" tension explicitly in planning (see Open Questions) rather than
-leaving it implicit.
+**cross-call cache** in a `gitmeta.CachingDetector` constructed once per MCP
+server (D-13, corrected); and treat SURF-06 as **strictly additive** — new
+`Render*` functions in `internal/query`, with the shared `Marshal*JSON`
+helpers left untouched because the CLI `--json` path depends on them.
+
+**Scope-change addendum (2026-07-15).** SURF-06 was added as an 8th
+requirement after this research's Open Question #3 was escalated to the user.
+Three findings from investigating it materially affect planning: (1) **all
+five `Marshal*JSON` helpers are shared with the CLI `--json` path** — SURF-06
+is not a swap, it is an addition (§ SURF-06); (2) **no existing test asserts
+the MCP success payload of any of the 5 tools** — SURF-06 could be skipped
+entirely and CI stays green, so the MCP assertion must be written first as
+the TDD red test (§ Validation Architecture); and (3) **D-16's premise that
+`status` "already" emits markdown on MCP is factually wrong** — it emits JSON
+today, and D-12's blockquote requirement means it needs its own markdown
+renderer in TS's distinct `handleStatus` shape (Corrections #5).
 
 ## Architectural Responsibility Map
 
@@ -229,7 +276,15 @@ leaving it implicit.
 | Worktree-mismatch caching | Backend (`internal/mcp` server construction for MCP; none needed for one-shot CLI) | Backend (`internal/query.Engine`, intra-call only) | MCP is the only long-lived process in this codebase; the cache must outlive a single tool call, which only server-construction scope provides |
 | Status content aggregation (DB size, nodes-by-kind, files-by-language, staleness) | Backend (`internal/query.Engine.Status`) | Storage (`internal/graphstore`, if the Pebble-Metrics route is chosen) | `internal/query` is the single read seam both CLI and MCP call (D-08b); `internal/graphstore` is the only package allowed to touch pebble/v2 directly (D-04a) |
 | Status/notice rendering (plain text, sections, comma-grouping) | Backend (`internal/query` render helpers) | CLI / MCP (thin presentation glue) | Matches the existing `RenderExplore`/`RenderNode` precedent — one render function per output surface, called identically by both CLI and MCP |
-| `--json` / MCP JSON-shaped output (callers/callees/impact/search/files) | Backend (`internal/query.Marshal*JSON`) | MCP (`internal/mcp/tools.go`, wraps or extends the marshaled payload) | These 5 tools' MCP surface currently emits raw JSON text (not markdown, unlike TS) — the notice-injection point for these 5 must respect that existing JSON contract, which node/explore's markdown-only surface does not have to |
+| CLI `--json` output (callers/callees/impact/search/files/status) | Backend (`internal/query.Marshal*JSON`) | CLI (`internal/cli/*.go`, thin `writeJSONLine`) | **Unchanged by this phase.** These helpers are the golden-parity JSON-shape oracle AND the CLI `--json` contract — SURF-06 must not touch them (see § SURF-06's shared-helper finding) |
+| MCP markdown output (callers/callees/impact/search/files) — SURF-06 | Backend (`internal/query`, new `Render*` funcs next to `RenderExplore`/`RenderNode`) | MCP (`internal/mcp/tools.go`, swaps its `Marshal*JSON` call for the `Render*` call) | The shared-engine rule (D-08b) puts every rendering in `internal/query` so CLI and MCP can never drift into two shapes; `internal/mcp` stays a thin delegation layer that re-renders nothing, exactly as its existing doc comments promise |
+
+> **★ Superseded row (kept for traceability):** an earlier version of this
+> map recorded "these 5 tools' MCP surface emits raw JSON text — the
+> notice-injection point must respect that existing JSON contract." SURF-06
+> (D-16) **dissolves that constraint entirely**: the JSON contract on the MCP
+> surface is being deleted, not worked around. The two rows above replace it.
+> See § SURF-06 and Corrections #3's follow-up note.
 
 ## Standard Stack
 
@@ -324,6 +379,47 @@ not, without a codebase read) account for:
    `tools.go`, since CONTEXT.md's canonical refs point only at TS's
    `mcp/tools.js`. See Open Questions #3 for the concrete design choice this
    forces.
+   > **★ RESOLVED 2026-07-15 — escalated to the user, who folded the fix into
+   > this phase as SURF-06 (D-16).** The JSON-parseability concern was
+   > correctly diagnosed but the *conclusion* inverted on inspection: the
+   > "contract" had **no consumer** (MCP text content is model-facing; nothing
+   > in this repo nor Claude Code unmarshals it), so rather than protect the
+   > JSON shape, the decision is to **delete it** — all 5 tools move to
+   > markdown. The `_worktreeNotice` field hybrid is withdrawn; D-12 is now a
+   > single uniform text-prefix across all 7 non-status read tools. This
+   > finding's value was surfacing the fork, not the shape it recommended.
+5. **★ NEW — D-16's premise is factually wrong about `status`: MCP
+   `codegraph_status` does NOT currently emit markdown.** D-16 states the 5
+   tools switch to markdown *"matching the 3 tools that already do
+   (`explore`/`node`/`status`)"*. Direct source read of
+   `internal/mcp/tools.go` lines 327-344 shows `codegraph_status`'s handler
+   ends with `data, err := query.MarshalStatusJSON(result)` →
+   `mcp.NewToolResultText(string(data))` — **raw JSON, identical in shape to
+   the 5 tools D-16 is changing.** Only **2** Go MCP tools emit markdown
+   today (`explore` via `Engine.Explore`, `node` via `Engine.Node`); **6**
+   emit JSON (`search`/`callers`/`callees`/`impact`/`files`/`status`).
+   **Why this matters to the planner (scope, not pedantry):** D-12 already
+   requires MCP `status` to render a **blockquote verbose warning** (`> ⚠ ` +
+   the warning with `\n` → `\n> `) "matching TS's `mcp/tools.js`" — a
+   markdown construct that is meaningless prepended to a JSON blob. So MCP
+   `status` needs a markdown renderer too, and it is **not** covered by
+   SURF-06's 5-tool scope, **nor** by D-09's CLI layout — because **TS has
+   two structurally different status renderings**, both verified this session:
+   - CLI (`bin/codegraph.js` ~900-935): `Index Statistics:` / `  Files:
+     <n>` / `Nodes by Kind:` / `  <kind padEnd(15)> <count>` — D-09's target.
+   - MCP (`mcp/tools.js` ~3894-3938): `**CodeGraph Status**` / `**Files
+     indexed:** <n>` / `**Total nodes:** <n>` / `**Nodes by Kind:**` /
+     `- <kind>: <count>` / `**Languages:**` / `- <lang>: <count>` — a
+     bolded-key + bullet-list markdown form, NOT the CLI's padded columns.
+   **Recommendation:** treat "MCP `status` markdown renderer (TS
+   `handleStatus` form)" as an explicit task under STAT-01/02/03 + D-12,
+   sized separately from D-09's CLI renderer. Do not assume one renderer
+   serves both surfaces — TS deliberately ships two, and D-12's blockquote
+   requirement only makes sense against the markdown one. Note this does not
+   contradict the shared-engine rule: **both** renderers live in
+   `internal/query` (like `RenderExplore`), they are just two functions
+   (`RenderStatus` for the CLI form, `RenderStatusMarkdown` for the MCP form),
+   each called by exactly one surface — the same way TS does it.
 4. **`FilesByLanguage` is one field-read inside the scan `Status()` already
    runs, not a second scan.** `schema.File` (via `internal/schema/graph.pb.go`
    line 330) already carries a `Language string` field, and
@@ -570,7 +666,17 @@ dependency is the right call.
 
 ## Common Pitfalls
 
-### Pitfall 1: Prepending the notice breaks the existing JSON-only contract for 5 of 7 MCP tools
+### Pitfall 1: Prepending the notice breaks the existing JSON-only contract for 5 of 7 MCP tools — ★ RESOLVED by SURF-06, retained as the reasoning trail
+
+> **★ STATUS: RESOLVED 2026-07-15. Do not action this pitfall as written.**
+> It correctly surfaced the fork, and was escalated to the user, who folded
+> the fix into this phase as **SURF-06 / D-16**: the 5 tools move to
+> markdown, so the JSON contract this pitfall protects **ceases to exist**.
+> The recommended mitigation below (choose between text-prefix and a JSON
+> field) is **superseded** — the answer is "neither." Retained because the
+> analysis is what produced SURF-06, and because a future reader hitting a
+> JSON-shaped MCP tool should understand why it isn't one anymore. See
+> § SURF-06.
 
 **What goes wrong:** Literally porting TS's `withWorktreeNotice`
 (`${notice}\n\n${first.text}`) onto Go's `callers`/`callees`/`impact`/
@@ -657,6 +763,170 @@ fire.
 command's human-output layout (D-09's target structure already omits them)
 — they are TS-only states with no Go analog, not omissions to fix.
 
+## SURF-06: MCP Markdown Output (added 2026-07-15 — scope change, D-16)
+
+### ★ The highest-risk finding: every `Marshal*JSON` helper is SHARED with the CLI `--json` path
+
+**This is not a simple swap.** All five helpers the MCP handlers call are the
+*same functions* the CLI `--json` flag calls. Verified exhaustively by
+grepping every call site of each helper:
+
+| Helper | Defined at | MCP caller (changes) | **CLI `--json` caller (MUST NOT change)** | Also called by |
+|--------|-----------|---------------------|-------------------------------------------|----------------|
+| `query.MarshalCallersJSON` | `internal/query/traverse.go:546` | `internal/mcp/tools.go:248` | **`internal/cli/callers.go:41`** | `internal/query/traverse_test.go:632` |
+| `query.MarshalCalleesJSON` | `internal/query/traverse.go:545` | `internal/mcp/tools.go:272` | **`internal/cli/callees.go:42`** | `internal/query/traverse_test.go:616` |
+| `query.MarshalImpactJSON` | `internal/query/traverse.go:547` | `internal/mcp/tools.go:296` | **`internal/cli/impact.go:43`** | — |
+| `query.MarshalFilesJSON` | `internal/query/files.go:219` | `internal/mcp/tools.go:321` | **`internal/cli/files.go:51`** | `internal/query/files_status_test.go:287` |
+| *(none — `search` has no helper)* | — | `internal/mcp/tools.go:224` (`json.Marshal(locs)` inline) | **`internal/cli/search.go:45`** (`json.Marshal(locs)` inline) | — |
+| `query.MarshalStatusJSON` | `internal/query/status.go:252` | `internal/mcp/tools.go:339` ← **also JSON today, see Corrections #5** | **`internal/cli/status.go:41`** | `files_status_test.go:375`, `golden_parity_test.go:635` |
+
+**The implication the planner must internalize:** *mutating any
+`Marshal*JSON` helper to emit markdown would silently break the CLI `--json`
+contract and the golden parity oracle simultaneously.* SURF-06 is therefore
+**strictly additive**:
+
+- **Do NOT touch** any `Marshal*JSON` function body. They stay JSON forever —
+  they are the CLI contract *and* `golden_parity_test.go`'s shape oracle.
+- **DO add** new sibling `Render*` functions in `internal/query` (markdown,
+  plain-text, ANSI-free — next to `RenderExplore`/`RenderNode`).
+- **DO change** only the six `internal/mcp/tools.go` call sites (lines
+  ~224, 248, 272, 296, 321, and — per Corrections #5 — 339) to call
+  `Render*` instead of `Marshal*JSON`.
+
+After the change, each helper family has exactly one caller per surface:
+`Marshal*JSON` ← CLI only; `Render*` ← MCP only. That asymmetry is
+intentional and worth a doc comment on each, since a future reader will
+otherwise "helpfully" reunify them.
+
+### Where the markdown renderers live: `internal/query`, not `internal/mcp`
+
+**Recommendation: `internal/query`.** Three converging reasons:
+
+1. **The shared-engine rule (D-08b) is explicit and already enforced by
+   precedent.** `internal/mcp/tools.go`'s own doc comments state the
+   invariant twice: *"returns the markdown result as-is (no re-rendering in
+   internal/mcp, D-08b)"* (line ~79) and *"marshal via the matching
+   internal/query Marshal\*JSON formatter (D-08b — no JSON shaping
+   re-implemented here)"* (line ~169). Putting renderers in `internal/mcp`
+   would violate a rule the file documents about itself.
+2. **`RenderExplore`/`RenderNode` already establish the location.** They live
+   in `internal/query/render_markdown.go` and are called by both surfaces.
+   The new `Render*` functions are the same category of thing.
+3. **Testability.** `internal/query` renderers are unit-testable without
+   standing up an MCP server; `internal/mcp` ones would need the in-process
+   client harness for every assertion.
+
+**Placement within `internal/query` is Claude's Discretion** (CONTEXT.md
+grants this). Suggested: a new `render_results.go` for the 5 SURF-06
+renderers, keeping `render_markdown.go` focused on explore/node — but
+extending `render_markdown.go` is equally defensible.
+
+**Naming caution:** avoid `RenderFiles`/`RenderStatus` colliding with
+Phase 6's TUI-02 work (which will add *colorized* renderers for `status` and
+`files`). Phase 6 owns the ANSI/lipgloss layer and will need its own names;
+picking `Render*Markdown` or `Render*Text` now may save a rename later. Flag
+only — not a blocker.
+
+### Recommended markdown shape
+
+**Key structural finding: 4 of the 5 payloads are the SAME record type.**
+`Location{Name, Kind, FilePath, StartLine}` (`internal/query/search.go:17`)
+backs `callers`, `callees`, `impact`, and `search`. Only `files` differs
+(`FileEntry{Path, Language, NodeCount, EdgeCount}`). So **one shared
+`renderLocationTable([]Location) string` helper serves 4 tools**, and `files`
+gets its own. That is 2 table renderers + 4 thin headers, not 5 bespoke
+implementations.
+
+**Shape: markdown table.** Header row once, then one row per record — this is
+exactly where the -41% win comes from (JSON re-states all 4 keys on every one
+of 308 records; a table states them once). Rejected alternatives are recorded
+in D-16 and are not revisited here.
+
+```markdown
+**Callers of `Alpha`** — 3 callers
+
+| Name | Kind | Location |
+|---|---|---|
+| `helper` | function | `internal/a/helper.go:12` |
+| `Run` | method | `internal/b/run.go:40` |
+```
+
+```markdown
+**Impact of `helper`** — depth 2, 5 nodes, 7 edges
+
+| Name | Kind | Location |
+|---|---|---|
+| `helper` | function | `internal/a/helper.go:12` |
+```
+
+```markdown
+**Files** — 308 indexed
+
+| Path | Language | Nodes | Edges |
+|---|---|---|---|
+| `internal/a/helper.go` | go | 12 | 30 |
+```
+
+Notes:
+- **Collapse `FilePath`+`StartLine` into one `path:line` cell.** It matches
+  the existing `formatNodeRef` convention (`render_markdown.go:107`,
+  `"%s (%s:%d)"`) that explore/node already use, and saves a column.
+- **Backtick identifiers and paths** — consistent with `RenderExplore`'s
+  per-file headers and `RenderNodeMultiDef`'s overflow list.
+- **Header line carries the scalars** (`symbol`, `depth`, `nodeCount`,
+  `edgeCount`) that have no place in a per-row table — mirroring
+  `ImpactResult`'s non-list fields and TS's own `**Files indexed:** N`
+  bolded-key style.
+- **Empty result sets:** render the header plus an explicit "No callers
+  found." line rather than a headerless empty table — a bare table header
+  with zero rows reads as a rendering bug to a model.
+
+**`files --format tree` needs a SECOND shape — a table cannot represent it.**
+`FilesResult` is a union: `Format:"flat"` populates `Files []FileEntry`
+(tabular), but `Format:"tree"` populates `Tree []*FileTreeNode` (nested,
+`internal/query/files.go:57-71`). The MCP `files` tool exposes `format`
+(`tools.go:152`) and defaults to `""` → flat, so the tree path is reachable
+but non-default. Render the tree as an indented plain-text list, mirroring
+the CLI's existing `printFileTree` (`internal/cli/files.go:60`) — and
+consider whether that helper should move to `internal/query` for reuse rather
+than being reimplemented (Claude's Discretion; noting that TS's MCP `files`
+defaults to `'tree'` while ours defaults to flat is a pre-existing,
+out-of-scope divergence — do NOT "fix" it here, that is SURF-territory for
+Phase 8).
+
+### Ordering determinism
+
+**No new sorting work is needed — every result slice is already
+deterministically ordered before it reaches a renderer.** The renderer must
+simply **preserve slice order** and never re-sort. Verified per tool:
+
+| Tool | Ordering source | Deterministic? |
+|------|----------------|----------------|
+| `files` | `sort.Slice(entries, ...Path < ...Path)` — `files.go:149` | ✓ path-ascending |
+| `search` | `sort.SliceStable(results, ...)` by lexical tier — `search.go:98` | ✓ tier + stable input order |
+| `callers` | `BuildReverseAdjacency` map iteration, edges sorted `edges[i].Source < edges[j].Source` — `traverse.go:82` | ✓ (via the sorted adjacency) |
+| `callees` | `IterateEdges(node.Id)` — a single contiguous range scan ordered `(src, kind, dst)` by the store contract (`graphstore/store.go:58-61`) | ✓ storage-key order |
+| `impact` | BFS over the sorted reverse adjacency, `visited` guard — `traverse.go:424-449` | ✓ BFS order over deterministic input |
+
+**Do not add a `sort` call inside a renderer.** Doing so would silently
+diverge MCP's row order from the CLI `--json` array order for the same query
+— reintroducing exactly the CLI/MCP drift the shared-engine rule exists to
+prevent.
+
+### Conflicts with this document's earlier findings
+
+| Earlier finding | Status after SURF-06 |
+|---|---|
+| **Pitfall 1** ("prepending the notice breaks the JSON contract for 5 of 7 MCP tools") | **Dissolved, not contradicted.** The pitfall correctly identified the fork; D-16 removes the JSON shape entirely, so there is no contract left to break. Pitfall 1 is retained below as the *reasoning trail* that produced SURF-06, annotated as resolved. |
+| **Open Question #3** (text-prefix vs. JSON field) | **Answered by the user:** neither — the JSON goes away. Annotated in place. |
+| **Architectural Responsibility Map** row for "`--json` / MCP JSON-shaped output" | **Split into two rows** (CLI-JSON vs MCP-markdown) — the original conflated two surfaces that SURF-06 now separates. Superseded row noted inline. |
+| **Corrections #3** ("Go's MCP surface for these 5 is raw JSON, unlike TS") | **Still accurate as a statement of the pre-phase state**, and it is the *evidence* for SURF-06. After this phase it becomes historical. |
+| **Anti-Patterns** ("never prepend the notice inside `Marshal*JSON`") | **Strengthened.** Now doubly true: those helpers are the CLI contract, and SURF-06 gives MCP its own render path, so there is zero reason for MCP concerns to reach them. |
+| **D-12/D-13 as originally written in CONTEXT.md** | Both corrected upstream using this research's findings; the `<user_constraints>` block above reflects the corrected text. |
+
+No finding is invalidated. SURF-06 resolves a fork this research surfaced
+rather than overturning any verified fact.
+
 ## Code Examples
 
 ### Verified TS worktree detection cascade (verbatim source read this session)
@@ -720,6 +990,8 @@ this phase.
 |---|-------|---------|---------------|
 | A1 | `pebble.DB.Metrics().DiskSpaceUsage()` (verified to exist via `go doc`) behaves identically across concurrent snapshot reads the way `filepath.WalkDir` does — i.e. it's safe to call from a read-only context without racing an in-flight writer | Standard Stack / Pattern 2 alternative | Low — this is presented only as an alternative not chosen; if picked later, verify against Pebble's own concurrency docs before adopting |
 | A2 | No `internal/mcp` test currently exercises multi-call caching behavior (confirmed via grep — no cache exists to test) | Corrections #1 | Low — grep-verified absence, not an assumption about behavior |
+| A3 | D-16's token measurements (`files` = 28,506 B JSON → ~16,835 B markdown, -41%; TOON 13,740 B, -52%) are accurate — **[CITED: coordinator measurement, not independently re-run in this session]** | § SURF-06 / D-16 | Low — the *decision* (markdown over JSON) rests on three other independent rationales (no parser consumer, closes a TS divergence, dissolves the D-12 notice problem), any one of which carries it. A wrong percentage would not change the choice; the ~41% figure is directionally corroborated by the structural fact (verified) that JSON re-states 4 keys × 308 records |
+| A4 | The markdown table shape recommended in § SURF-06 is more legible to a model than the JSON it replaces — asserted from the record-list structure, **not** measured against a model in this session | § SURF-06 (Recommended markdown shape) | Low-Medium — if wrong, the fix is a shape change inside the new `Render*` funcs (a bounded, single-file edit), not an architectural rework; D-16 explicitly leaves exact table-vs-list to Claude's Discretion |
 
 **If this table is empty:** N/A — two low-risk assumptions logged above,
 both about an alternative path this research does not recommend adopting
@@ -760,8 +1032,14 @@ without further validation.
      handler; have the CLI construct one per invocation too (free, since
      it's one-shot) so `Engine`/CLI code paths share the exact same type.
 
-3. **Do the 5 JSON-shaped MCP tools get a literal text-prefix notice
-   (byte-parity with TS) or a new JSON field (preserves JSON-parseability)?**
+3. **~~Do the 5 JSON-shaped MCP tools get a literal text-prefix notice
+   (byte-parity with TS) or a new JSON field (preserves JSON-parseability)?~~
+   — ★ ANSWERED 2026-07-15: NEITHER. Escalated to the user → became SURF-06
+   (D-16). The 5 tools move to markdown; the JSON shape is deleted, so the
+   question is moot and the `_worktreeNotice` field hybrid is withdrawn. D-12
+   is now one uniform text-prefix across all 7 non-status read tools. The
+   original analysis is preserved below for traceability; see § SURF-06 for
+   the live guidance.**
    - What we know: `node`/`explore`/`status` are markdown-or-JSON-with-a-
      known-shape already; `callers`/`callees`/`impact`/`search`/`files` are
      currently *always* valid JSON on their MCP surface.
@@ -832,6 +1110,74 @@ best-effort fallback built into the locked design.
 | WORK-02 | Verbose warning (`status`) + compact notice (6 other tools, CLI+MCP) | integration | `go test ./internal/mcp/... -run TestNotice -v` and `go test ./internal/cli/... -run TestNotice -v` | ❌ Wave 0 |
 | WORK-03 | Best-effort, never-blocking, no false positives | unit | `go test ./internal/gitmeta/... -run TestNoFalsePositive -v` | ❌ Wave 0 |
 | TEST-02 | Six fixture layouts (linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, symlinked) | integration | `go test ./internal/gitmeta/... -run TestFixture -v` | ❌ Wave 0 — no repo-building test helper exists anywhere in this codebase yet (closest precedent: `testdata/golden/golden_parity_test.go`'s `resolveColbymchenryCorpus`, which only *clones*, never *builds*, a repo) |
+| SURF-06 | The 5 MCP tools (`callers`/`callees`/`impact`/`search`/`files`) return markdown, not JSON | unit | `go test ./internal/query/... -run TestRender -v` | ❌ Wave 0 — new `Render*` funcs + their tests |
+| SURF-06 | Each of the 5 MCP tools' **success payload** is markdown end-to-end (not just the renderer in isolation) | integration | `go test ./internal/mcp/... -run TestMarkdownOutput -v` | ❌ Wave 0 — **zero existing coverage, see the blind spot below** |
+| SURF-06 | CLI `--json` still emits valid JSON for all 5 commands (the regression guard) | integration | `go test ./internal/cli/... -run "TestSearchCmd\|TestCallersCalleesCmd\|TestImpactCmd\|TestFilesCmd" -v` | ✅ `internal/cli/query_cli_test.go` — these already `json.Unmarshal` the CLI output and MUST keep passing untouched |
+
+### ★ SURF-06 test-surface analysis (CONTEXT.md D-16 explicitly asks for this)
+
+**Which tests assert MCP text content:**
+
+| File | Test | Tool exercised | Asserts | Breaks under SURF-06? |
+|---|---|---|---|---|
+| `internal/mcp/server_test.go:176` | `TestExploreHandlerDelegatesToEngine` | `codegraph_explore` | text contains `"**Exploration:"` | **No** — explore is already markdown, untouched |
+| `internal/mcp/server_test.go:224` | `TestOpenEnginePathConfinedToRepoRoot` | `codegraph_status` | **error path only** (`IsError`, text contains `"outside"`) | **No** — asserts a refusal message, never the success payload |
+| `internal/mcp/reconnect_test.go:24` | `TestReconnectReconcile` | `codegraph_explore` | text content | **No** — explore, already markdown |
+| `testdata/golden/golden_parity_test.go:1352` | `TestExploreCLIMatchesMCP` | `codegraph_explore` | CLI output == MCP output | **No** — explore |
+| `testdata/golden/golden_parity_test.go:1395` | `TestNodeCLIMatchesMCP` | `codegraph_node` | CLI output == MCP output | **No** — node, already markdown |
+| `testdata/golden/golden_parity_test.go:1447` | `TestNodeLineHintCLIMatchesMCP` | `codegraph_node` | CLI output == MCP output | **No** — node |
+
+**Which tests assert the CLI `--json` shape (must keep passing, unchanged):**
+
+| File | Test | Asserts |
+|---|---|---|
+| `internal/cli/query_cli_test.go:82` | `TestSearchCmd` | `json.Unmarshal` of `search --json` |
+| `internal/cli/query_cli_test.go:100` | `TestCallersCalleesCmd` | `json.Unmarshal` of `callers`/`callees --json` |
+| `internal/cli/query_cli_test.go:154` | `TestImpactCmd` | `json.Unmarshal` of `impact --json` |
+| `internal/cli/query_cli_test.go:217` | `TestFilesCmd` | `json.Unmarshal` of `files --json` |
+| `internal/query/traverse_test.go:616,632` | (subtests) | `MarshalCalleesJSON`/`MarshalCallersJSON` output directly |
+| `internal/query/files_status_test.go:287,375` | (subtests) | `MarshalFilesJSON`/`MarshalStatusJSON` output directly |
+| `testdata/golden/golden_parity_test.go:635` | `TestGoldenParity/status` | `MarshalStatusJSON` shape vs. the frozen TS oracle |
+
+**★ THE BLIND SPOT (this is what D-16's parity note is warning about, and it
+is worse than expected):**
+
+> **Not one existing test asserts the MCP success-payload text of ANY of the
+> 5 tools SURF-06 changes.** MCP coverage is `explore` (markdown) + `status`
+> (error path only). `callers`/`callees`/`impact`/`search`/`files` have
+> **zero** MCP-surface assertions of any kind.
+
+Consequences the planner must design around:
+
+1. **SURF-06 could be implemented wrong — or not implemented at all — and
+   `go test ./...` stays fully green.** There is no failing test to drive the
+   change, and no test to catch a future regression back to JSON. This is a
+   TDD-mode phase (`tdd_mode: true` in `.planning/config.json`), so the new
+   `internal/mcp` markdown assertions should be written **first**, as the
+   red test that SURF-06 turns green.
+2. **The risk is inverted from the intuition.** One might fear "we'll break
+   the CLI `--json` contract by mutating a shared helper." In fact the CLI
+   path is *well* guarded (7 tests across 3 files would catch it instantly) —
+   so the shared-helper hazard is loud, not silent. The genuinely silent
+   failure mode is the MCP side going unverified, in either direction.
+3. **Recommended new test (Wave 0):** an `internal/mcp` table-driven test
+   that `CallTool`s each of the 5 tools against the existing `copyFixture` +
+   `indexFixture` harness (already in `server_test.go`) and asserts the text
+   is markdown **and is NOT valid JSON** — i.e. assert
+   `json.Unmarshal([]byte(text.Text), &any{})` **fails** *and* the text
+   contains the expected markdown marker (e.g. a `| Name | Kind |` header
+   row). The negative JSON assertion is what makes a silent regression to
+   `json.Marshal` impossible; the positive marker assertion is what makes an
+   empty/garbage render impossible. Both are needed — either alone is
+   defeatable.
+4. **Do not extend `TestExploreCLIMatchesMCP` to the 5 tools.** That harness
+   asserts *CLI output == MCP output*, which is exactly what SURF-06 makes
+   **intentionally false** for these 5 (CLI JSON ≠ MCP markdown). The
+   CLI==MCP byte-identity invariant holds only for `explore`/`node`, whose
+   CLI surface has no `--json` mode at all (`internal/cli/{explore,node}.go`
+   — "Emits markdown text only — no --json, per D-01b"). Codifying that
+   distinction in a comment would prevent a future contributor from
+   "restoring parity" by breaking SURF-06.
 
 ### Sampling Rate
 
@@ -847,6 +1193,10 @@ best-effort fallback built into the locked design.
 - [ ] `internal/mcp/server_test.go` extension — server-scoped mismatch cache behavior (Open Questions #2)
 - [ ] `testdata/golden/golden_parity_test.go` line ~651 — the `dbSizeBytes` volatility exemption (Pitfall 2) plus a plausibility assertion
 - [ ] `testdata/golden/README.md` — new row in the volatile-fields table recording the D-08 exemption + rationale
+- [ ] **SURF-06:** `internal/query/render_results.go` (or extend `render_markdown.go`) — `renderLocationTable` + the 5 `Render*` funcs (4 share the `Location` shape; `files` needs both a flat table and a tree form)
+- [ ] **SURF-06:** `internal/query/render_results_test.go` — renderer unit tests (empty sets, single row, multi-row, tree format, order preservation)
+- [ ] **SURF-06:** `internal/mcp/server_test.go` extension — the 5-tool markdown assertion described in the blind-spot section above (**write first — TDD red test**; nothing exists today)
+- [ ] **SURF-06 / Corrections #5:** `internal/query` — an MCP-form status markdown renderer (TS `handleStatus`'s bolded-key + bullet-list shape), distinct from D-09's CLI padded-column form; D-12's blockquote warning requires it
 
 ## Security Domain
 
@@ -888,7 +1238,8 @@ MCP output" convention, not an oversight.
 - `/opt/homebrew/lib/node_modules/@colbymchenry/codegraph/node_modules/@colbymchenry/codegraph-darwin-arm64/lib/dist/sync/worktree.js` — read in full this session; confirmed `codegraph --version` → `1.3.1` live on PATH
 - `…/lib/dist/bin/codegraph.js` (lines 240-340, 793-969) — `formatNumber`, `warn`, the full `status` command body
 - `…/lib/dist/mcp/tools.js` (lines 1020-1120, 1220-1290, 3860-3960) — `worktreeMismatchFor`, `withWorktreeNotice`, `handleStatus`
-- This codebase's own source, read directly: `internal/query/{status,engine,resolve,render_markdown}.go`, `internal/cli/{status,callers,node,explore}.go`, `internal/mcp/{tools,server}.go`, `internal/graphstore/{store,pebble_store}.go`, `internal/schema/graph.pb.go`, `internal/indexer/{languages,discover}.go`
+- This codebase's own source, read directly: `internal/query/{status,engine,resolve,render_markdown,traverse,files,search}.go`, `internal/cli/{status,callers,callees,impact,files,search,node,explore,query}.go`, `internal/mcp/{tools,server}.go`, `internal/graphstore/{store,pebble_store}.go`, `internal/schema/graph.pb.go`, `internal/indexer/{languages,discover}.go`
+- **SURF-06 test-surface analysis (2026-07-15):** `internal/mcp/{server_test,reconnect_test}.go`, `internal/cli/query_cli_test.go`, `internal/query/{traverse_test,files_status_test}.go`, `testdata/golden/golden_parity_test.go` — all read directly; plus an exhaustive grep of every `Marshal*JSON` call site across the module, which is what established the CLI/MCP helper sharing and the zero-MCP-coverage blind spot
 - `go doc github.com/cockroachdb/pebble/v2 DB.Metrics / Metrics / DB.EstimateDiskUsage` and `$GOMODCACHE/github.com/cockroachdb/pebble/v2@v2.1.6/metrics.go`'s `DiskSpaceUsage()` source — read directly against the pinned `v2.1.6` module in this repo's module cache
 - `testdata/golden/{golden_test.go,golden_parity_test.go,README.md}` — read directly for the D-08 volatile-key exemption location and mechanism
 
@@ -907,6 +1258,7 @@ MCP output" convention, not an oversight.
 - Standard stack: HIGH — no new dependencies; stdlib-only, verified against the pinned `go.mod`/`go doc` output
 - Architecture: HIGH — every claim about current Go code structure (Engine, OpenAt, MCP handler shapes, GraphStore boundary) is a direct source read this session, not inference
 - Pitfalls: HIGH — the JSON-vs-text-prefix and Engine-cache findings are derived from direct code inspection (grep for cache usage, reading `openEngine`'s doc comment), not speculation
+- SURF-06 (added 2026-07-15): HIGH — the shared-helper table, the test-surface tables, and the "status is JSON not markdown" correction are each an exhaustive grep or a direct file read with cited line numbers; the only [CITED]-not-[VERIFIED] item is D-16's byte measurements (28,506 B → ~16,835 B), taken from the coordinator's own measurement and not independently re-run here
 
-**Research date:** 2026-07-15
+**Research date:** 2026-07-15 (extended same day for the SURF-06 scope change)
 **Valid until:** 30 days (stable domain — stdlib `os/exec`/`filepath`, a pinned Pebble version, and a frozen TS 1.3.1 reference source; re-verify only if `go.mod`'s `pebble/v2` version bumps or the TS reference package is pruned per D-01's "capture anything still needed before a future npm prune" note)
