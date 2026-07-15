@@ -49,6 +49,39 @@ const (
 // only, no existing edge kind is renamed).
 const EdgeKindImplements = "implements"
 
+// New RefKind* constants for D-09's 6 missing RANK_EDGES kinds (01-RESEARCH.md
+// §B/§C.1). These four are Pass-1-captured: each language extractor emits an
+// UnresolvedRef with one of these Kind values, and Pass 2 (resolve.go)
+// resolves the referenced name to a target node id, exactly like the
+// existing RefKindCalls/RefKindEmbeds shape. extends/overrides (below) are
+// Pass-2 synthesis only and do NOT get a RefKind*/UnresolvedRef.Kind case.
+const (
+	RefKindReferences   = "references"   // new Pass-1 capture
+	RefKindInstantiates = "instantiates" // new Pass-1 capture
+	RefKindReturns      = "returns"      // new Pass-1 capture (reuses parsed ReturnType)
+	RefKindTypeOf       = "type_of"      // new Pass-1 capture
+)
+
+// EdgeKindExtends is a D-09 addition (01-RESEARCH.md §B): resolve.go's
+// existing RefKindEmbeds promotion branch (today an unconditional "embeds"
+// fallback when the target is not an interface) splits further —
+// class/struct-extends-class/struct becomes this kind instead. Pass-2
+// SYNTHESIS ONLY; no new UnresolvedRef.Kind case is added for it. Named
+// here (mirroring EdgeKindImplements's doc-comment discipline above) so
+// resolve.go's promotion check and query/rwr.go's RankEdges share ONE
+// definition rather than separate copies of "extends".
+const EdgeKindExtends = "extends"
+
+// EdgeKindOverrides is a D-09 addition (01-RESEARCH.md §B): derived at
+// Pass-2 by walking already-resolved "contains" (type->method) and
+// extends/implements/embeds (type->supertype) edges to find a same-named
+// method on a supertype — mirrors synthesizeGoImplements's
+// composition-from-already-resolved-edges pattern (resolve.go). Pass-2
+// SYNTHESIS ONLY; no new UnresolvedRef.Kind case. Named here so
+// resolve.go's synthesis and query/rwr.go's RankEdges share ONE definition
+// rather than separate copies of "overrides".
+const EdgeKindOverrides = "overrides"
+
 // MethodSpec is a bare (name, parameter-count) signature captured during
 // extraction. Go's implicit interface-satisfaction synthesis (RES-02,
 // Phase 5 Pattern 3) compares a struct's method set against an
@@ -96,8 +129,10 @@ type UnresolvedRef struct {
 	// (pkg.Fn(), pkg.Type embedding) — empty for an unqualified
 	// reference.
 	PkgAlias string
-	// Kind is one of RefKindCalls, RefKindImports, RefKindEmbeds, or
-	// RefKindContains.
+	// Kind is one of RefKindCalls, RefKindImports, RefKindEmbeds,
+	// RefKindContains, RefKindReferences, RefKindInstantiates,
+	// RefKindReturns, or RefKindTypeOf. (EdgeKindExtends/EdgeKindOverrides
+	// are Pass-2 synthesis only and are never a Kind here.)
 	Kind string
 	// Line and Col are the 1-based line / 0-based column of the
 	// reference's call/use site (D-04).
