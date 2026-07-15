@@ -111,6 +111,7 @@ func companionTool(name string) mcp.Tool {
 			mcp.WithDescription("Show a symbol's signature, calls, and callers, or a line-numbered file read"),
 			mcp.WithString("symbol", mcp.Description("Symbol name to look up (omit for a file-mode read)")),
 			mcp.WithString("file", mcp.Description("File path — disambiguates symbol, or selects file-mode when symbol is omitted")),
+			mcp.WithNumber("line", mcp.Description("Line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)")),
 			mcp.WithString("path", mcp.Description("Repo path (default: server cwd)")),
 		)
 	case "search":
@@ -174,6 +175,15 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			symbol := req.GetString("symbol", "")
 			file := req.GetString("file", "")
+			// NODE-03: 0 (GetInt's zero-value default) means "no line hint" —
+			// not a valid 1-indexed source line — matching Engine.Node's own
+			// nil-means-unset convention (EXPL-05/NODE-04: keeps this handler
+			// a thin delegation to the same Engine the CLI uses).
+			line := req.GetInt("line", 0)
+			var lineHint *int
+			if line != 0 {
+				lineHint = &line
+			}
 
 			eng, close, err := openEngine(req, defaultPath)
 			if err != nil {
@@ -181,7 +191,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			}
 			defer close()
 
-			out, err := eng.Node(symbol, file)
+			out, err := eng.Node(symbol, file, lineHint)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

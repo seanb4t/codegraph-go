@@ -21,7 +21,7 @@ func TestResolveSourcePathAllowsRegularFileInRepo(t *testing.T) {
 	}
 	defer closer.Close()
 
-	out, err := engine.Node("", "main.go")
+	out, err := engine.Node("", "main.go", nil)
 	if err != nil {
 		t.Fatalf("Node: unexpected error reading a regular in-repo file: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestResolveSourcePathRejectsSymlinkEscape(t *testing.T) {
 		t.Fatalf("create symlink: %v", err)
 	}
 
-	_, err = engine.Node("", "escape-link/secret.txt")
+	_, err = engine.Node("", "escape-link/secret.txt", nil)
 	if err == nil {
 		t.Fatal("Node: expected an error for a path escaping the repo root via a symlink, got nil")
 	}

@@ -295,15 +295,23 @@ func (e *Engine) resolveNodeForDetail(symbol, file string) (*schema.Node, error)
 
 // Node renders symbol detail (QRY-02, D-05b) when symbol is non-empty, or
 // a line-numbered verbatim file read when symbol is empty and file is
-// given. file additionally disambiguates symbol when both are supplied
-// (matching multiple same-named symbols to the one defined in file, via
-// resolveNodeForDetail's existing exact-match single-winner behavior,
-// unchanged — NODE-04). When symbol is given without file, Node
-// enumerates every exact-name definition (NODE-01): a single match
-// renders via the original single-def RenderNode path unchanged
-// (NODE-04), while multiple matches render via NODE-02's multi-def
-// budget/overflow path (RenderNodeMultiDef).
-func (e *Engine) Node(symbol, file string) (string, error) {
+// given. file additionally disambiguates symbol when both are supplied.
+// line is an optional NODE-03 narrowing hint (RESEARCH §9); a nil line
+// with a non-empty file tries resolveNodeForDetail's existing exact-match
+// single-winner behavior FIRST and returns immediately on success, so
+// every pre-CR-02 exact-match caller — the CLI's `-f`/`--file` flag used
+// without `--line`, and any existing golden fixture — gets byte-for-byte
+// identical output (NODE-04). When symbol is given without file, or when
+// the exact-match attempt above didn't apply/succeed, Node enumerates
+// every exact-name definition (NODE-01) and narrows it via
+// narrowNodeMatches (NODE-03: substring file hint + line-containment
+// hint, never emptying the set — a pure in-memory filter, D-07, never a
+// fresh disk read keyed on the raw hint): a single narrowed match renders
+// via the original single-def RenderNode path unchanged (NODE-04's
+// no-hints case is a no-op through narrowNodeMatches), while multiple
+// narrowed matches render via NODE-02's multi-def budget/overflow path
+// (RenderNodeMultiDef).
+func (e *Engine) Node(symbol, file string, line *int) (string, error) {
 	if symbol == "" {
 		if file == "" {
 			return "", fmt.Errorf("query: node requires a symbol name or a file path")
@@ -315,25 +323,35 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 		return renderNumberedSource(content), nil
 	}
 
-	if file == "" {
-		matches, err := e.enumerateSymbolDefs(symbol)
-		if err != nil {
-			return "", err
+	// NODE-04: file supplied with no line hint tries the pre-CR-02
+	// exact-match single-def path first, returning immediately on
+	// success — unchanged output for every existing exact-match caller.
+	if file != "" && line == nil {
+		if node, err := e.resolveNodeForDetail(symbol, file); err == nil {
+			return e.renderSingleDefNode(node)
 		}
-		if len(matches) == 0 {
-			return "", fmt.Errorf("query: symbol %q not found", symbol)
-		}
-		if len(matches) > 1 {
-			return e.renderMultiDefNode(symbol, matches)
-		}
-		return e.renderSingleDefNode(matches[0])
 	}
 
-	node, err := e.resolveNodeForDetail(symbol, file)
+	matches, err := e.enumerateSymbolDefs(symbol)
 	if err != nil {
 		return "", err
 	}
-	return e.renderSingleDefNode(node)
+	if len(matches) == 0 {
+		return "", fmt.Errorf("query: symbol %q not found", symbol)
+	}
+
+	// NODE-03: narrow by substring file hint and/or line containment; a
+	// no-op when neither hint is set (narrowNodeMatches returns matches
+	// unchanged), preserving NODE-01/02 byte-parity for the plain
+	// `node <symbol>` case. Also the fallback for a file hint that didn't
+	// exactly match anything above — TS's substring semantics rather than
+	// a hard "not found in file" error.
+	matches = narrowNodeMatches(matches, file, line)
+
+	if len(matches) == 1 {
+		return e.renderSingleDefNode(matches[0])
+	}
+	return e.renderMultiDefNode(symbol, matches)
 }
 
 // fetchCalls resolves node's forward "calls" edges into their target

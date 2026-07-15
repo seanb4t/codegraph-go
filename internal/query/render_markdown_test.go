@@ -101,7 +101,7 @@ func TestNode(t *testing.T) {
 			t.Fatalf("resolveSymbolNode(Run): unexpected error: %v", err)
 		}
 
-		got, err := engine.Node("Alpha", "")
+		got, err := engine.Node("Alpha", "", nil)
 		if err != nil {
 			t.Fatalf("Node: unexpected error: %v", err)
 		}
@@ -137,7 +137,7 @@ func TestNode(t *testing.T) {
 			wantLines = wantLines[:len(wantLines)-1]
 		}
 
-		got, err := engine.Node("", "pkga/pkga.go")
+		got, err := engine.Node("", "pkga/pkga.go", nil)
 		if err != nil {
 			t.Fatalf("Node (file mode): unexpected error: %v", err)
 		}
@@ -157,10 +157,10 @@ func TestNode(t *testing.T) {
 	t.Run("path escaping the repo root is rejected", func(t *testing.T) {
 		engine, _ := nodeExploreFixture(t)
 
-		if _, err := engine.Node("", "../../../../etc/passwd"); err == nil {
+		if _, err := engine.Node("", "../../../../etc/passwd", nil); err == nil {
 			t.Fatal("Node (file mode): expected an error for a path escaping the repo root, got nil")
 		}
-		if _, err := engine.Node("", "/etc/passwd"); err == nil {
+		if _, err := engine.Node("", "/etc/passwd", nil); err == nil {
 			t.Fatal("Node (file mode): expected an error for an absolute path, got nil")
 		}
 	})
@@ -521,7 +521,7 @@ func TestRenderNodeSingleDefUnchanged(t *testing.T) {
 	}
 	want := RenderNode(alpha, calls, calledBy)
 
-	got, err := engine.Node("Alpha", "")
+	got, err := engine.Node("Alpha", "", nil)
 	if err != nil {
 		t.Fatalf("Node(Alpha): unexpected error: %v", err)
 	}
@@ -557,7 +557,7 @@ func TestNodeMultiDefWiring(t *testing.T) {
 	}
 	e := NewWithRoot(&traverseFakeReader{nodes: nodes}, dir)
 
-	got, err := e.Node("Dup", "")
+	got, err := e.Node("Dup", "", nil)
 	if err != nil {
 		t.Fatalf("Node(Dup): unexpected error: %v", err)
 	}
@@ -568,5 +568,75 @@ func TestNodeMultiDefWiring(t *testing.T) {
 	}
 	if !strings.Contains(got, "**Dup** (function)") {
 		t.Fatalf("Node(Dup): missing per-def header in:\n%s", got)
+	}
+}
+
+// TestNodeLineHintNarrowsToSingleDef proves CR-02's fix: a `line` hint
+// passed through Engine.Node's public (symbol, file, line) surface — the
+// same surface the CLI's --line flag and the MCP codegraph_node tool's
+// "line" arg both delegate to — now actually REACHES narrowNodeMatches
+// (NODE-03). Before this fix, narrowNodeMatches had zero production
+// callers: Engine.Node had no line parameter at all, so this exact
+// scenario (three same-named defs, a line hint that falls within only
+// one candidate's [StartLine,EndLine]) had no way to narrow the result
+// down from a 3-way multi-def render to a single-def render.
+func TestNodeLineHintNarrowsToSingleDef(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"a-dup": {Id: "a-dup", Name: "Dup", Kind: "function", FilePath: "a/dup.go", StartLine: 3, EndLine: 5, Signature: "() int"},
+		"b-dup": {Id: "b-dup", Name: "Dup", Kind: "function", FilePath: "b/dup.go", StartLine: 30, EndLine: 32, Signature: "() int"},
+		"c-dup": {Id: "c-dup", Name: "Dup", Kind: "function", FilePath: "c/dup.go", StartLine: 60, EndLine: 62, Signature: "() int"},
+	}
+	e := New(&traverseFakeReader{nodes: nodes})
+
+	line := 31 // falls inside b-dup's [30,32] only
+	got, err := e.Node("Dup", "", &line)
+	if err != nil {
+		t.Fatalf("Node(Dup, line=31): unexpected error: %v", err)
+	}
+	if strings.Contains(got, "definitions named") {
+		t.Fatalf("Node(Dup, line=31): expected the line hint to narrow to a SINGLE def (no multi-def header), got:\n%s", got)
+	}
+	wantLocation := "**Location:** b/dup.go:30\n"
+	if !strings.Contains(got, wantLocation) {
+		t.Fatalf("Node(Dup, line=31): expected the line hint to select b-dup (%q) in:\n%s", wantLocation, got)
+	}
+}
+
+// TestNodeFileHintNeverEmptiesOnNoMatch proves CR-02/NODE-03's
+// never-empty guarantee end-to-end: a fileHint that doesn't exactly match
+// any candidate (so the NODE-04 exact-match fast path falls through) and
+// doesn't substring-match any candidate either must fall back to the FULL
+// enumerated set — never zero results, never an error — reaching the
+// existing multi-def render path with all 3 candidates still present.
+func TestNodeFileHintNeverEmptiesOnNoMatch(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		full := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(full), err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+	write("a/dup.go", "package a\n\nfunc Dup() int {\n\treturn 1\n}\n")
+	write("b/dup.go", "package b\n\nfunc Dup() int {\n\treturn 2\n}\n")
+	write("c/dup.go", "package c\n\nfunc Dup() int {\n\treturn 3\n}\n")
+
+	nodes := map[string]*schema.Node{
+		"a-dup": {Id: "a-dup", Name: "Dup", Kind: "function", FilePath: "a/dup.go", StartLine: 3, Signature: "() int"},
+		"b-dup": {Id: "b-dup", Name: "Dup", Kind: "function", FilePath: "b/dup.go", StartLine: 3, Signature: "() int"},
+		"c-dup": {Id: "c-dup", Name: "Dup", Kind: "function", FilePath: "c/dup.go", StartLine: 3, Signature: "() int"},
+	}
+	e := NewWithRoot(&traverseFakeReader{nodes: nodes}, dir)
+
+	got, err := e.Node("Dup", "nope/nowhere.go", nil)
+	if err != nil {
+		t.Fatalf("Node(Dup, file=nope/nowhere.go): unexpected error (NODE-03 must never empty/error on a non-matching hint): %v", err)
+	}
+	wantHead := "**3 definitions named \"Dup\"**\n"
+	if !strings.HasPrefix(got, wantHead) {
+		t.Fatalf("Node(Dup, file=nope/nowhere.go): expected all 3 defs (never-empty fallback), got head:\n%s", got)
 	}
 }

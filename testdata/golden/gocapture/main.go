@@ -160,7 +160,7 @@ func regenerateCorpus(spec corpusSpec, corpusDir string) error {
 			return err
 		}
 
-		nodeOut, err := eng.Node(spec.baselineSymbol, spec.baselineSymbolFile)
+		nodeOut, err := eng.Node(spec.baselineSymbol, spec.baselineSymbolFile, nil)
 		if err != nil {
 			return fmt.Errorf("Node(%q, %q): %w", spec.baselineSymbol, spec.baselineSymbolFile, err)
 		}
@@ -190,7 +190,7 @@ func regenerateCorpus(spec corpusSpec, corpusDir string) error {
 		return err
 	}
 
-	nodeMultiOut, err := eng.Node(spec.multiSymbol, "")
+	nodeMultiOut, err := eng.Node(spec.multiSymbol, "", nil)
 	if err != nil {
 		nodeErr := fmt.Errorf("Node(%q, \"\"): %w (see AD-02 in golden_parity_test.go if this is colbymchenry-codegraph's \"resolve\" — a documented TS/JS object-literal-method extraction-coverage gap, not a bug this tool should paper over)", spec.multiSymbol, err)
 		fmt.Fprintf(os.Stderr, "gocapture: [%s] WARNING: %v\n", spec.name, nodeErr)

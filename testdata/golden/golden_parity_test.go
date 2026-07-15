@@ -866,7 +866,7 @@ func TestGoldenParity(t *testing.T) {
 	})
 
 	t.Run("node", func(t *testing.T) {
-		got, err := engine.Node("mergeStyle", "internal/cli/finish.go")
+		got, err := engine.Node("mergeStyle", "internal/cli/finish.go", nil)
 		if err != nil {
 			t.Fatalf("Node(mergeStyle, internal/cli/finish.go): %v", err)
 		}
@@ -985,7 +985,7 @@ func TestGoldenBehavioralSyntheticParity(t *testing.T) {
 		// Symbol/query per README.md's per-corpus table: "Validate" has
 		// exactly 2 real defs (accounts/validate.go + orders/validate.go,
 		// D-03 case a).
-		got, err := eng.Node("Validate", "")
+		got, err := eng.Node("Validate", "", nil)
 		if err != nil {
 			t.Fatalf("Node(Validate, \"\"): %v", err)
 		}
@@ -1113,7 +1113,7 @@ func TestGoldenBehavioralRealCorpora(t *testing.T) {
 		})
 
 		t.Run("node-multi", func(t *testing.T) {
-			got, err := eng.Node("Run", "")
+			got, err := eng.Node("Run", "", nil)
 			if err != nil {
 				t.Fatalf("Node(Run, \"\"): %v", err)
 			}
@@ -1145,7 +1145,7 @@ func TestGoldenBehavioralRealCorpora(t *testing.T) {
 			// "searchNodes" instead, the same symbol capture.sh's
 			// capture_repo baseline already exercises here, confirmed
 			// to resolve via the committed go-node.json fixture.
-			got, err := eng.Node("searchNodes", "")
+			got, err := eng.Node("searchNodes", "", nil)
 			if err != nil {
 				t.Fatalf("Node(searchNodes, \"\"): %v", err)
 			}
@@ -1271,6 +1271,17 @@ func callExploreViaMCP(t *testing.T, repoDir, query string) string {
 // drives codegraph_explore.
 func callNodeViaMCP(t *testing.T, repoDir, symbol string) string {
 	t.Helper()
+	return callNodeViaMCPWithArgs(t, repoDir, symbol, "", nil)
+}
+
+// callNodeViaMCPWithArgs is callNodeViaMCP's fuller sibling (CR-02): it
+// additionally accepts the "file" and "line" args codegraph_node's schema
+// exposes, so TestNodeLineHintCLIMatchesMCP can drive the SAME
+// codegraph_node MCP call the CLI's --line flag now reaches, proving
+// EXPL-05/NODE-04 byte-identity extends to the new NODE-03 narrowing
+// parameter, not just the pre-CR-02 (symbol, file) surface.
+func callNodeViaMCPWithArgs(t *testing.T, repoDir, symbol, file string, line *int) string {
+	t.Helper()
 
 	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir)
 	c, err := mcpclient.NewInProcessClient(s)
@@ -1282,10 +1293,18 @@ func callNodeViaMCP(t *testing.T, repoDir, symbol string) string {
 	ctx := context.Background()
 	initMCPClient(t, ctx, c)
 
+	args := map[string]any{"symbol": symbol}
+	if file != "" {
+		args["file"] = file
+	}
+	if line != nil {
+		args["line"] = float64(*line)
+	}
+
 	result, err := c.CallTool(ctx, mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Name:      "codegraph_node",
-			Arguments: map[string]any{"symbol": symbol},
+			Arguments: args,
 		},
 	})
 	if err != nil {
@@ -1399,7 +1418,7 @@ func TestNodeCLIMatchesMCP(t *testing.T) {
 			if err != nil {
 				t.Fatalf("query.OpenAt(%s): %v", dir, err)
 			}
-			cliOut, err := eng.Node(tc.symbol, "")
+			cliOut, err := eng.Node(tc.symbol, "", nil)
 			closer.Close()
 			if err != nil {
 				t.Fatalf("Engine.Node(%q, \"\"): %v", tc.symbol, err)
@@ -1411,6 +1430,62 @@ func TestNodeCLIMatchesMCP(t *testing.T) {
 				t.Errorf("node(%q) on %s: CLI and MCP output diverge (NODE-04):\nCLI:\n%s\nMCP:\n%s", tc.symbol, tc.corpus, cliOut, mcpOut)
 			}
 		})
+	}
+}
+
+// TestNodeLineHintCLIMatchesMCP is CR-02's CLI==MCP regression pin for
+// NODE-03's new `line` narrowing parameter: it builds a tiny real,
+// indexed fixture with two same-named "Dup" definitions at deliberately
+// distinct line numbers, drives the CLI-facing call (Engine.Node with a
+// line hint, exactly what internal/cli/node.go's new --line flag now
+// calls) and the MCP-facing call (codegraph_node's new "line" arg, via
+// callNodeViaMCPWithArgs) with the SAME hint, and asserts both: (a) the
+// hint actually narrowed the 2-def match down to a single-def render
+// (proving NODE-03 is reachable, not just byte-identical-but-still-dead),
+// and (b) CLI and MCP output are byte-identical (EXPL-05/NODE-04 extended
+// to the new parameter).
+func TestNodeLineHintCLIMatchesMCP(t *testing.T) {
+	src := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		full := filepath.Join(src, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", filepath.Dir(full), err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+	write("go.mod", "module example.com/nodeline\n\ngo 1.24\n")
+	write("a/dup.go", "package a\n\nfunc Dup() int {\n\treturn 1\n}\n")
+	// b/dup.go pads the function's start line well past a/dup.go's (3),
+	// so a line hint can unambiguously select one over the other.
+	write("b/dup.go", "package b\n\n// padding\n// padding\n// padding\n// padding\n// padding\n// padding\n// padding\nfunc Dup() int {\n\treturn 2\n}\n")
+
+	dir := buildIndexedFixture(t, src)
+
+	line := 10 // b/dup.go's "func Dup() int {" line
+
+	eng, closer, err := query.OpenAt(dir)
+	if err != nil {
+		t.Fatalf("query.OpenAt(%s): %v", dir, err)
+	}
+	cliOut, err := eng.Node("Dup", "", &line)
+	closer.Close()
+	if err != nil {
+		t.Fatalf("Engine.Node(Dup, line=%d): %v", line, err)
+	}
+	if strings.Contains(cliOut, "definitions named") {
+		t.Fatalf("Engine.Node(Dup, line=%d): expected the line hint to narrow to a single def, got:\n%s", line, cliOut)
+	}
+	if !strings.Contains(cliOut, "**Location:** b/dup.go:10\n") {
+		t.Fatalf("Engine.Node(Dup, line=%d): expected b/dup.go's def to be selected, got:\n%s", line, cliOut)
+	}
+
+	mcpOut := callNodeViaMCPWithArgs(t, dir, "Dup", "", &line)
+
+	if cliOut != mcpOut {
+		t.Errorf("node(Dup, line=%d): CLI and MCP output diverge:\nCLI:\n%s\nMCP:\n%s", line, cliOut, mcpOut)
 	}
 }
 

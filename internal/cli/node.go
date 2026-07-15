@@ -13,10 +13,16 @@ import (
 // given, or a line-numbered verbatim read of --file when symbol is
 // omitted. --file additionally disambiguates symbol when both are
 // supplied (multiple same-named symbols, matched to the one defined in
-// file). Emits markdown text only — no --json, per D-01b (the golden
-// node.json corpus wraps this exact markdown as {command, output}).
+// file). --line optionally narrows a multi-definition match further
+// (NODE-03) — the line number containing (or nearest to) the intended
+// definition; 0 (the flag's default, and not a valid 1-indexed line
+// number) means "no line hint", matching narrowNodeMatches'/Engine.Node's
+// own nil-means-unset convention. Emits markdown text only — no --json,
+// per D-01b (the golden node.json corpus wraps this exact markdown as
+// {command, output}).
 func newNodeCmd() *cobra.Command {
 	var path, file string
+	var line int
 
 	cmd := &cobra.Command{
 		Use:   "node [symbol]",
@@ -26,6 +32,11 @@ func newNodeCmd() *cobra.Command {
 			var symbol string
 			if len(args) > 0 {
 				symbol = args[0]
+			}
+
+			var lineHint *int
+			if line != 0 {
+				lineHint = &line
 			}
 
 			start, err := resolveStartPath(path)
@@ -39,7 +50,7 @@ func newNodeCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			out, err := eng.Node(symbol, file)
+			out, err := eng.Node(symbol, file, lineHint)
 			if err != nil {
 				return err
 			}
@@ -50,6 +61,7 @@ func newNodeCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().StringVarP(&file, "file", "f", "", "file path — disambiguates symbol, or selects file-mode when symbol is omitted")
+	cmd.Flags().IntVarP(&line, "line", "l", 0, "line number — narrows an overloaded symbol to the definition containing (or nearest) this line (NODE-03)")
 
 	return cmd
 }
