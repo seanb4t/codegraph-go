@@ -6,14 +6,14 @@ current_phase: 02
 current_phase_name: status Content & Git/Worktree Awareness
 status: executing
 stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-07-15T23:40:24.215Z"
+last_updated: "2026-07-15T23:53:26.886Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 24
-  completed_plans: 21
+  completed_plans: 22
   percent: 13
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 02 (status Content & Git/Worktree Awareness) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-07-15 — Phase 02 execution started
 
@@ -79,6 +79,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P01 | 22min | 3 tasks | 8 files |
 | Phase 02 P02 | 28min | 3 tasks | 4 files |
 | Phase 02 P03 | 48min | 3 tasks | 2 files |
+| Phase 02 P04 | 35min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -129,6 +130,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 02-status-content-git-worktree-awareness]: dbSizeBytes' WalkDir callback distinguishes root-level failure (propagated as error, caller degrades) from per-entry failure deeper in the tree (skipped) — a refinement over RESEARCH's literal sample, needed to satisfy both the RED test's (0,err) contract and Status()'s degrade-to-0-without-erroring contract
 - [Phase 02-status-content-git-worktree-awareness]: Languages re-derivation from FilesByLanguage produced no value-set change on the weft golden corpus — wantLanguages assertion passes unmodified
 - [Phase ?]: renderFileTreeMarkdown duplicates internal/cli/files.go's printFileTree rather than importing it, to avoid an internal/query -> internal/cli dependency edge and a wave conflict with plan 02-07
+- [Phase 02-status-content-git-worktree-awareness]: OpenAt retains an absolutized start path as Engine.startPath (D-14) — the plumbing fix that delivers CLI+MCP worktree awareness through the single shared read seam
+- [Phase 02-status-content-git-worktree-awareness]: WorktreeMismatch cross-call caching lives via an injectable gitmeta.CachingDetector (UseDetector), not solely on Engine's own sync.Once, since MCP's openEngine rebuilds a fresh Engine per tool call (D-13 corrected)
+- [Phase 02-status-content-git-worktree-awareness]: StatusResult.WorktreeMismatch type-changed from *string to *gitmeta.Mismatch to match TS's {worktreeRoot,indexRoot}/null shape; T-02-14 accepted as a deliberate, documented host-path-disclosure exception
 
 ### Pending Todos
 
@@ -156,7 +160,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T23:38:52.268Z
+Last session: 2026-07-15T23:51:56.145Z
 Stopped at: Completed 02-02-PLAN.md
 Resume file: None
 

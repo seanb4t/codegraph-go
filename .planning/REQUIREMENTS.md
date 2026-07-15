@@ -45,7 +45,7 @@
 ### Git / Worktree Awareness (WORK)
 
 - [x] **WORK-01**: a query run from a git worktree whose resolved index belongs to a DIFFERENT working tree is detected (`git rev-parse --show-toplevel` vs `--git-common-dir`), computing the now-live `worktreeMismatch` (fixes the silent "worktree queries the main branch's graph" bug)
-- [ ] **WORK-02**: `status` prints a verbose borrowed-index warning, and every other read tool (CLI + MCP) prefixes a compact single-line notice via a shared `withWorktreeNotice` wrapper
+- [x] **WORK-02**: `status` prints a verbose borrowed-index warning, and every other read tool (CLI + MCP) prefixes a compact single-line notice via a shared `withWorktreeNotice` wrapper
 - [x] **WORK-03**: worktree detection is best-effort and never blocks queries — no false positive on submodules, nested clones, monorepo subdirs, non-git trees, or symlinked paths (EvalSymlinks both sides)
 
 ### Git Sync Hooks (HOOK)
@@ -144,7 +144,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | STAT-02 | Phase 2 | Complete |
 | STAT-03 | Phase 2 | Pending |
 | WORK-01 | Phase 2 | Complete |
-| WORK-02 | Phase 2 | Pending |
+| WORK-02 | Phase 2 | Complete |
 | WORK-03 | Phase 2 | Complete |
 | TEST-02 | Phase 2 | Complete |
 | SURF-06 | Phase 2 | Complete |
