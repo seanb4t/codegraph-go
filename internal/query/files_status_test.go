@@ -363,12 +363,20 @@ func TestStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("Phase-4-only keys render present-but-inert", func(t *testing.T) {
+	t.Run("PendingChanges stays an inert placeholder; WorktreeMismatch is live and genuinely nil here", func(t *testing.T) {
+		// PendingChanges remains the Phase-4 sync placeholder (D-06,
+		// explicit REQUIREMENTS out-of-scope row) — unchanged rationale.
 		if got.PendingChanges.Added != 0 || got.PendingChanges.Modified != 0 || got.PendingChanges.Removed != 0 {
 			t.Fatalf("Status.PendingChanges: got %+v, want all-zero placeholder", got.PendingChanges)
 		}
+		// WorktreeMismatch is now LIVE (D-14/WORK-01), computed from
+		// gitmeta.DetectIndexMismatch via Engine.WorktreeMismatch(). It is
+		// nil here because this fixture is an ordinary indexed directory
+		// with no borrowed worktree — a genuine "no mismatch" verdict, not
+		// an inert placeholder. See engine_worktree_test.go's
+		// TestEngineWorktreeMismatchViaOpenAt for the live, non-nil case.
 		if got.WorktreeMismatch != nil {
-			t.Fatalf("Status.WorktreeMismatch: got %v, want nil placeholder", got.WorktreeMismatch)
+			t.Fatalf("Status.WorktreeMismatch: got %v, want nil (no borrowed worktree in this fixture)", got.WorktreeMismatch)
 		}
 	})
 
