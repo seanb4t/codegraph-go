@@ -77,7 +77,7 @@
 
 ### Behavioral Parity Test Harness (TEST)
 
-- [ ] **TEST-01**: a behavioral fixture harness diffs `explore`/`node`/`status` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings — on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot
+- [x] **TEST-01**: a behavioral fixture harness diffs `explore`/`node`/`status` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings — on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot
 - [ ] **TEST-02**: worktree detection has fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/` layout, and symlinked paths
 - [ ] **TEST-03**: git-hook install→edit→remove is byte-invariant, and interactive TUI components are tested against piped streams (never hang)
 
@@ -138,7 +138,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | NODE-02 | Phase 1 | Pending |
 | NODE-03 | Phase 1 | Pending |
 | NODE-04 | Phase 1 | Pending |
-| TEST-01 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Complete |
 | STAT-01 | Phase 2 | Pending |
 | STAT-02 | Phase 2 | Pending |
 | STAT-03 | Phase 2 | Pending |
@@ -176,12 +176,14 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | REL-04 | Phase 8 | Pending |
 
 **Coverage:**
+
 - v1.0 requirements: 45 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 5, TEST 3, REL 4)
 - Mapped to phases: 45 / 45 ✓
 - Unmapped: 0
 - Per phase: P1=10, P2=7, P3=4, P4=2, P5=3, P6=3, P7=7, P8=9
 
 **Mapping notes:**
+
 - **TEST-01** (explore/node/status behavioral harness) → Phase 1: the harness lands with the hardest algorithm (RWR) so parity is validated as it's built. Phase 8's REL-04 re-runs it green as the drop-in gate but does not own it.
 - **TEST-03** (hook byte-invariance + TUI piped-stream safety) → Phase 7: the only phase where both hooks (built Phase 5) and the new bubbletea components (built Phase 7) coexist, so both halves of the assertion are satisfiable. HOOK-01/02 already bake idempotency/marker-preservation into Phase 5.
 - **TUI** split: TUI-01/02/05 (rendering seam + non-interactive pretty output) → Phase 6; TUI-03/04 (interactive components) → Phase 7.

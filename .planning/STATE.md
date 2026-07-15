@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-14T21:42:57.508Z"
+last_updated: "2026-07-15T12:15:06.859Z"
 last_activity: 2026-07-14
-last_activity_desc: ROADMAP.md created for v1.0 (8 phases, 45/45 requirements mapped)
+last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 17
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** v1.0 (Drop-in Parity & Human UX) — Phase 1 (Behavioral Parity — explore & node)
+**Current focus:** Phase 1 — Behavioral Parity — explore & node
 
 ## Current Position
 
-Phase: 1 of 8 (Behavioral Parity — explore & node)
-Plan: — (roadmap created; ready to plan)
+Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
+Plan: 2 of 17
 Status: Ready to execute
-Last activity: 2026-07-14 — ROADMAP.md created for v1.0 (8 phases, 45/45 requirements mapped)
+Last activity: 2026-07-14 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -59,6 +59,7 @@ Progress: [░░░░░░░░░░] 0%
 **Recent Trend:** — (no v1.0 plans executed yet)
 
 *Updated after each plan completion*
+| Phase 01-behavioral-parity-explore-node P01 | 55min | 3 tasks | 30 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Milestone v1.0]: Worktree awareness scoped at TS parity (detect+warn+notice); auto-init / git-common-dir sharing deferred (WORK-FUT-01).
 - [Milestone v1.0]: No daemon auto-spawn — `serve --mcp` watches in-process (WATCH-01); the daemon is only the explicit shared-writer + picker case.
 - [Roadmap v1.0]: Phase numbering reset to 1 (v0.1's 8 phases archived to milestones/v0.1-phases/).
+- [Phase 1]: MCP node capture passes includeCode:true explicitly to match the TS CLI's unconditional full-body multi-def rendering (TS MCP tool defaults it false), avoiding an incidental CLI/MCP asymmetry unrelated to NODE-04/EXPL-05
+- [Phase 1]: synthetic-parity corpus gets behavioral-only fixtures (no baseline status/query/callers/callees/impact/explore/node) -- it exists solely to drive the D-03 multi-def/multi-word/gate/RWR cases
 
 ### Pending Todos
 
@@ -98,7 +101,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-14T20:43:26.635Z
+Last session: 2026-07-15T12:13:55.788Z
 Stopped at: Phase 1 context gathered
 Resume file: .planning/phases/01-behavioral-parity-explore-node/01-CONTEXT.md
 
