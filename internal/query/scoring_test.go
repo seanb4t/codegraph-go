@@ -245,3 +245,217 @@ func TestFileGraphScoreAgg_SkipsDanglingNode(t *testing.T) {
 		t.Errorf("expected a.go fileGraphScore ~0.4, got %v", got["a.go"])
 	}
 }
+
+// --- H15: TestHardTestExclusion ---
+
+// TestHardTestExclusion_DropsTestFileByDefault pins H15's default
+// behavior: a test-file candidate is dropped when the query does not
+// mention "test".
+func TestHardTestExclusion_DropsTestFileByDefault(t *testing.T) {
+	fileScores := map[string]float64{
+		"pkg/foo_test.go": 10,
+		"pkg/foo.go":      10,
+		"pkg/bar.go":      10,
+	}
+	applyHardTestExclusion(fileScores, "widget handler")
+
+	if _, ok := fileScores["pkg/foo_test.go"]; ok {
+		t.Errorf("expected pkg/foo_test.go to be dropped, got present: %v", fileScores)
+	}
+	if len(fileScores) != 2 {
+		t.Errorf("expected 2 remaining non-test files, got %v", fileScores)
+	}
+}
+
+// TestHardTestExclusion_DropsIconI18nFileByDefault pins H15's icon/i18n
+// component of the low-value set.
+func TestHardTestExclusion_DropsIconI18nFileByDefault(t *testing.T) {
+	fileScores := map[string]float64{
+		"assets/icons/plus.go": 10,
+		"pkg/foo.go":           10,
+		"pkg/bar.go":           10,
+	}
+	applyHardTestExclusion(fileScores, "widget handler")
+
+	if _, ok := fileScores["assets/icons/plus.go"]; ok {
+		t.Errorf("expected assets/icons/plus.go to be dropped, got present: %v", fileScores)
+	}
+}
+
+// TestHardTestExclusion_ExemptWhenQueryMentionsTestAndTwoNonTestRemain
+// pins H15's exemption: query mentions "test" AND >=2 non-test candidates
+// remain -> NOTHING is dropped, including the low-value files.
+func TestHardTestExclusion_ExemptWhenQueryMentionsTestAndTwoNonTestRemain(t *testing.T) {
+	fileScores := map[string]float64{
+		"pkg/foo_test.go": 10,
+		"pkg/foo.go":      10,
+		"pkg/bar.go":      10,
+	}
+	applyHardTestExclusion(fileScores, "test coverage for widget")
+
+	if _, ok := fileScores["pkg/foo_test.go"]; !ok {
+		t.Errorf("expected pkg/foo_test.go to be EXEMPT (query mentions test, >=2 non-test remain), got dropped: %v", fileScores)
+	}
+	if len(fileScores) != 3 {
+		t.Errorf("expected all 3 files retained under exemption, got %v", fileScores)
+	}
+}
+
+// TestHardTestExclusion_StillDropsWhenFewerThanTwoNonTestRemain pins
+// H15's safety net: even when the query mentions "test", the exemption
+// requires >=2 non-test candidates to remain — with only 1 non-test file,
+// the low-value files are still dropped.
+func TestHardTestExclusion_StillDropsWhenFewerThanTwoNonTestRemain(t *testing.T) {
+	fileScores := map[string]float64{
+		"pkg/foo_test.go": 10,
+		"pkg/bar.go":      10,
+	}
+	applyHardTestExclusion(fileScores, "test coverage for widget")
+
+	if _, ok := fileScores["pkg/foo_test.go"]; ok {
+		t.Errorf("expected pkg/foo_test.go to be dropped (<2 non-test remain), got present: %v", fileScores)
+	}
+	if len(fileScores) != 1 {
+		t.Errorf("expected 1 remaining file, got %v", fileScores)
+	}
+}
+
+// --- H16: TestBuriedRescue ---
+
+// TestBuriedRescue_RescuesGenuinelyBuriedSignatureTypeFile pins H16's
+// core rule: a tier-seed callable's signature-type file with
+// fileGraphScore < maxGraph*0.06 AND termHits < 2 is rescued, forced to
+// score = max(existing, 45).
+func TestBuriedRescue_RescuesGenuinelyBuriedSignatureTypeFile(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"callable": {Id: "callable", Name: "Callable", FilePath: "svc.go"},
+		"sigType":  {Id: "sigType", Name: "SigType", FilePath: "buried.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "callable", Target: "sigType", Kind: goextract.RefKindReturns},
+	}
+	r := &scoringFakeReader{nodes: nodes, edges: edges}
+
+	fileGraphScore := map[string]float64{"svc.go": 100.0, "buried.go": 0.5} // 0.5 < 100*0.06=6
+	fileTermHits := map[string]int{"buried.go": 0}
+	fileScores := map[string]float64{}
+
+	rescued, err := applyBuriedRescue(r, []string{"callable"}, fileGraphScore, 100.0, fileTermHits, fileScores)
+	if err != nil {
+		t.Fatalf("applyBuriedRescue: unexpected error: %v", err)
+	}
+	if !rescued["buried.go"] {
+		t.Errorf("expected buried.go to be rescued, got %v", rescued)
+	}
+	if fileScores["buried.go"] != buriedRescueScoreFloor {
+		t.Errorf("expected buried.go score forced to %v, got %v", buriedRescueScoreFloor, fileScores["buried.go"])
+	}
+}
+
+// TestBuriedRescue_ForcedScoreIsMaxNotOverwrite pins the "max(score,45)"
+// wording literally: an existing HIGHER score is never lowered by rescue.
+func TestBuriedRescue_ForcedScoreIsMaxNotOverwrite(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"callable": {Id: "callable", Name: "Callable", FilePath: "svc.go"},
+		"sigType":  {Id: "sigType", Name: "SigType", FilePath: "buried.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "callable", Target: "sigType", Kind: goextract.RefKindTypeOf},
+	}
+	r := &scoringFakeReader{nodes: nodes, edges: edges}
+
+	fileGraphScore := map[string]float64{"buried.go": 0.0}
+	fileTermHits := map[string]int{}
+	fileScores := map[string]float64{"buried.go": 60.0} // already above 45
+
+	_, err := applyBuriedRescue(r, []string{"callable"}, fileGraphScore, 100.0, fileTermHits, fileScores)
+	if err != nil {
+		t.Fatalf("applyBuriedRescue: unexpected error: %v", err)
+	}
+	if fileScores["buried.go"] != 60.0 {
+		t.Errorf("expected buried.go score to remain 60 (max(60,45)=60), got %v", fileScores["buried.go"])
+	}
+}
+
+// TestBuriedRescue_NotBuriedNotRescued pins the negative case: a
+// signature-type file with enough graph mass (>=6% of max) is NOT
+// rescued, even though it is reachable via a tier-seed's signature-type
+// edge.
+func TestBuriedRescue_NotBuriedNotRescued(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"callable": {Id: "callable", Name: "Callable", FilePath: "svc.go"},
+		"sigType":  {Id: "sigType", Name: "SigType", FilePath: "notburied.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "callable", Target: "sigType", Kind: goextract.RefKindReferences},
+	}
+	r := &scoringFakeReader{nodes: nodes, edges: edges}
+
+	// 10.0 >= 100*0.06=6, so mass alone disqualifies "buried" regardless of termHits.
+	fileGraphScore := map[string]float64{"notburied.go": 10.0}
+	fileTermHits := map[string]int{"notburied.go": 0}
+	fileScores := map[string]float64{}
+
+	rescued, err := applyBuriedRescue(r, []string{"callable"}, fileGraphScore, 100.0, fileTermHits, fileScores)
+	if err != nil {
+		t.Fatalf("applyBuriedRescue: unexpected error: %v", err)
+	}
+	if rescued["notburied.go"] {
+		t.Errorf("expected notburied.go NOT rescued (mass >= threshold), got rescued: %v", rescued)
+	}
+	if _, ok := fileScores["notburied.go"]; ok {
+		t.Errorf("expected notburied.go absent from fileScores (never rescued), got %v", fileScores)
+	}
+}
+
+// TestBuriedRescue_TermHitsAboveThresholdNotRescued pins the OTHER half
+// of the buried AND condition: low mass but termHits>=2 is also NOT
+// rescued.
+func TestBuriedRescue_TermHitsAboveThresholdNotRescued(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"callable": {Id: "callable", Name: "Callable", FilePath: "svc.go"},
+		"sigType":  {Id: "sigType", Name: "SigType", FilePath: "termy.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "callable", Target: "sigType", Kind: goextract.RefKindReturns},
+	}
+	r := &scoringFakeReader{nodes: nodes, edges: edges}
+
+	fileGraphScore := map[string]float64{"termy.go": 0.1} // low mass
+	fileTermHits := map[string]int{"termy.go": 2}         // but >=2 term hits
+	fileScores := map[string]float64{}
+
+	rescued, err := applyBuriedRescue(r, []string{"callable"}, fileGraphScore, 100.0, fileTermHits, fileScores)
+	if err != nil {
+		t.Fatalf("applyBuriedRescue: unexpected error: %v", err)
+	}
+	if rescued["termy.go"] {
+		t.Errorf("expected termy.go NOT rescued (termHits >= 2), got rescued: %v", rescued)
+	}
+}
+
+// TestBuriedRescue_NonSignatureEdgeKindIgnored pins H16's edge-kind
+// filter: a "calls" edge from a tier-seed is not a signature-type edge
+// and its target is never considered for rescue.
+func TestBuriedRescue_NonSignatureEdgeKindIgnored(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"callable": {Id: "callable", Name: "Callable", FilePath: "svc.go"},
+		"callee":   {Id: "callee", Name: "Callee", FilePath: "buried.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "callable", Target: "callee", Kind: goextract.RefKindCalls},
+	}
+	r := &scoringFakeReader{nodes: nodes, edges: edges}
+
+	fileGraphScore := map[string]float64{"buried.go": 0.0}
+	fileTermHits := map[string]int{}
+	fileScores := map[string]float64{}
+
+	rescued, err := applyBuriedRescue(r, []string{"callable"}, fileGraphScore, 100.0, fileTermHits, fileScores)
+	if err != nil {
+		t.Fatalf("applyBuriedRescue: unexpected error: %v", err)
+	}
+	if rescued["buried.go"] {
+		t.Errorf("expected buried.go NOT rescued (calls edge is not a signature-type edge), got rescued: %v", rescued)
+	}
+}
