@@ -67,3 +67,57 @@ func TestExtractSearchTerms(t *testing.T) {
 		}
 	})
 }
+
+// TestExtractSymbolsFromQuery exercises H1 (extractSymbolsFromQuery +
+// commonWords, context/index.js:64-145, RESEARCH §1) — feeds explore's
+// named-symbol seeding (plan 12, the +50 file score).
+func TestExtractSymbolsFromQuery(t *testing.T) {
+	t.Run("PascalCase compound retained as one identifier", func(t *testing.T) {
+		got := extractSymbolsFromQuery("UserAccountManager")
+		want := []string{"UserAccountManager"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("extractSymbolsFromQuery(%q) = %v, want %v", "UserAccountManager", got, want)
+		}
+	})
+
+	t.Run("acronyms and plain lowercase identifiers", func(t *testing.T) {
+		got := extractSymbolsFromQuery("REST HTTP api")
+		want := []string{"REST", "HTTP", "api"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("extractSymbolsFromQuery(%q) = %v, want %v", "REST HTTP api", got, want)
+		}
+	})
+
+	t.Run("dot notation extracts full path and each part", func(t *testing.T) {
+		got := extractSymbolsFromQuery("config.database.host")
+		want := []string{"config.database.host", "config", "database", "host"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("extractSymbolsFromQuery(%q) = %v, want %v", "config.database.host", got, want)
+		}
+	})
+
+	t.Run("commonWords-only query filtered to empty", func(t *testing.T) {
+		got := extractSymbolsFromQuery("the and or")
+		if len(got) != 0 {
+			t.Errorf("extractSymbolsFromQuery(%q) = %v, want empty", "the and or", got)
+		}
+	})
+
+	t.Run("empty query never becomes match-all (WR-05/V5)", func(t *testing.T) {
+		for _, q := range []string{"", "   "} {
+			got := extractSymbolsFromQuery(q)
+			if len(got) != 0 {
+				t.Errorf("extractSymbolsFromQuery(%q) = %v, want empty slice (WR-05 guard)", q, got)
+			}
+		}
+	})
+
+	t.Run("deterministic order across repeated calls", func(t *testing.T) {
+		const q = "config.database.host REST HTTP api"
+		first := extractSymbolsFromQuery(q)
+		second := extractSymbolsFromQuery(q)
+		if !reflect.DeepEqual(first, second) {
+			t.Errorf("extractSymbolsFromQuery(%q) not deterministic: %v vs %v", q, first, second)
+		}
+	})
+}
