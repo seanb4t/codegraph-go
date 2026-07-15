@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
-current_phase: 1
-current_phase_name: Behavioral Parity — explore & node
+current_phase: 2
+current_phase_name: status Content & Git/Worktree Awareness
 status: verifying
 stopped_at: Completed 01-17-PLAN.md (final plan of Phase 1)
-last_updated: "2026-07-15T16:25:43.555Z"
-last_activity: 2026-07-14
-last_activity_desc: Phase 1 execution started
+last_updated: "2026-07-15T17:35:28.037Z"
+last_activity: 2026-07-15
+last_activity_desc: Phase 1 complete, transitioned to Phase 2
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 17
-  completed_plans: 17
+  completed_plans: 18
   percent: 13
 ---
 
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 17 of 17
+Phase: 2 — status Content & Git/Worktree Awareness
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-14 — Phase 1 execution started
+Last activity: 2026-07-15 — Phase 1 complete, transitioned to Phase 2
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -39,7 +39,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity (v1.0):**
 
-- Total plans completed: 0 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 18 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -47,7 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 0/TBD | - | - |
+| 1 | 18 | - | - |
 | 2 | 0/TBD | - | - |
 | 3 | 0/TBD | - | - |
 | 4 | 0/TBD | - | - |
