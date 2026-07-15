@@ -125,15 +125,22 @@ func TestEngineWorktreeMismatchDegradesSafely(t *testing.T) {
 func TestStatusWorktreeMismatchLive(t *testing.T) {
 	wt, main := worktreeMismatchFixture(t)
 
+	// mismatchEngine and cleanEngine both resolve to the SAME store dir
+	// (main's .codegraph/store) — Pebble holds an exclusive lock per store
+	// directory, so mismatchEngine must be closed before cleanEngine opens
+	// (mirrors internal/mcp's openEngine: fresh Engine per call, never two
+	// held open concurrently on one store).
 	mismatchEngine, closer1, err := OpenAt(wt)
 	if err != nil {
 		t.Fatalf("OpenAt(%s): unexpected error: %v", wt, err)
 	}
-	t.Cleanup(func() { _ = closer1.Close() })
 
 	got, err := mismatchEngine.Status()
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
+	}
+	if err := closer1.Close(); err != nil {
+		t.Fatalf("closer1.Close(): unexpected error: %v", err)
 	}
 	if got.WorktreeMismatch == nil {
 		t.Fatal("Status().WorktreeMismatch = nil, want a live mismatch")
@@ -161,15 +168,20 @@ func TestStatusWorktreeMismatchLive(t *testing.T) {
 func TestStatusWorktreeMismatchJSONShape(t *testing.T) {
 	wt, main := worktreeMismatchFixture(t)
 
+	// mismatchEngine and cleanEngine both resolve to the SAME store dir
+	// (main's .codegraph/store) — Pebble holds an exclusive lock per store
+	// directory, so mismatchEngine must be closed before cleanEngine opens.
 	mismatchEngine, closer1, err := OpenAt(wt)
 	if err != nil {
 		t.Fatalf("OpenAt(%s): unexpected error: %v", wt, err)
 	}
-	t.Cleanup(func() { _ = closer1.Close() })
 
 	got, err := mismatchEngine.Status()
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
+	}
+	if err := closer1.Close(); err != nil {
+		t.Fatalf("closer1.Close(): unexpected error: %v", err)
 	}
 
 	raw, err := MarshalStatusJSON(got)
@@ -288,6 +300,11 @@ func TestWorktreeMismatchCachedPerEngine(t *testing.T) {
 // total — proven here by pointer identity of the returned *Mismatch
 // across two independently-constructed Engines (a private, per-Engine
 // detection would produce an equal-value but distinct-pointer *Mismatch).
+// eng1 is closed before eng2 opens — Pebble holds an exclusive lock per
+// store directory, so two Engines on the SAME store cannot be open
+// simultaneously; this also mirrors internal/mcp's openEngine, which
+// opens and closes a fresh Engine per call rather than holding two open
+// concurrently.
 func TestWorktreeMismatchSharedDetector(t *testing.T) {
 	wt, _ := worktreeMismatchFixture(t)
 
@@ -297,8 +314,11 @@ func TestWorktreeMismatchSharedDetector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenAt(%s): unexpected error: %v", wt, err)
 	}
-	t.Cleanup(func() { _ = closer1.Close() })
 	eng1.UseDetector(shared)
+	m1 := eng1.WorktreeMismatch()
+	if err := closer1.Close(); err != nil {
+		t.Fatalf("closer1.Close(): unexpected error: %v", err)
+	}
 
 	eng2, closer2, err := OpenAt(wt)
 	if err != nil {
@@ -306,9 +326,8 @@ func TestWorktreeMismatchSharedDetector(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closer2.Close() })
 	eng2.UseDetector(shared)
-
-	m1 := eng1.WorktreeMismatch()
 	m2 := eng2.WorktreeMismatch()
+
 	if m1 == nil || m2 == nil {
 		t.Fatalf("WorktreeMismatch() = (%v, %v), want both non-nil to exercise the shared cache", m1, m2)
 	}
