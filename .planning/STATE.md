@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-07-15T15:14:24.279Z"
+stopped_at: Completed 01-14-PLAN.md
+last_updated: "2026-07-15T15:26:59.601Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 14 of 17
+Plan: 15 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P09 | 24min | 2 tasks | 4 files |
 | Phase 01-behavioral-parity-explore-node P10 | 20min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P13 | 25min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P14 | 12min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 1]: H9 stem grouping uses a new lightweight suffix-stripping stemTerm(), not TS's deferred getStemVariants() or a full Porter stemmer
 - [Phase 1]: isDistinctiveIdentifier is a documented heuristic (>=6 runes + underscore/case-transition) substituting for TS's uncited algorithm
 - [Phase 1]: applyPostMergeRerankers computes the H9 exemption set BEFORE H7 runs — deliberate inversion of the naive pipeline order so the exemption actually gates the dampening
+- [Phase 01-behavioral-parity-explore-node]: H17's entry/named-file gate clause (3) derives from plan 13's fileScores tier (score>=fileScoreEntry) rather than a separate caller-supplied entryFiles set -- plan 13's own readiness note names only fileScores/fileGraphScore/rescued as this plan's inputs
+- [Phase 01-behavioral-parity-explore-node]: H18's 5-tier sort uses ascending file path as the final deterministic tie-break -- files have no stable Id field (unlike nodes), so path is the documented D-04 substitute
 
 ### Pending Todos
 
@@ -135,8 +138,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T15:14:06.519Z
-Stopped at: Completed 01-08-PLAN.md
+Last session: 2026-07-15T15:26:59.595Z
+Stopped at: Completed 01-14-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

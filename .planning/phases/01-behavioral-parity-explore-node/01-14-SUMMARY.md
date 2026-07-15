@@ -136,3 +136,7 @@ None - no external service configuration required.
 ---
 *Phase: 01-behavioral-parity-explore-node*
 *Completed: 2026-07-15*
+
+## Self-Check: PASSED
+
+All created files (internal/query/explore_gate.go, internal/query/explore_gate_test.go) and commit hashes (cb231ea, ed86161, d296928) verified present.
