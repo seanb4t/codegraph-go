@@ -23,8 +23,9 @@ CORPUS_DIR="$GOLDEN_DIR/corpus"
 CODEGRAPH_BIN="${CODEGRAPH_BIN:-codegraph}"
 WEFT_REPO="${WEFT_REPO:-/Volumes/Code/github.com/seanb4t/weft}"
 TS_REPO_URL="${TS_REPO_URL:-https://github.com/colbymchenry/codegraph.git}"
+SYNTHETIC_PARITY_SRC="$CORPUS_DIR/synthetic-parity/src"
 
-for bin in "$CODEGRAPH_BIN" sqlite3 jq git; do
+for bin in "$CODEGRAPH_BIN" sqlite3 jq git node; do
   command -v "$bin" >/dev/null 2>&1 || {
     echo "capture.sh: required tool '$bin' not found on PATH" >&2
     exit 1
@@ -102,6 +103,36 @@ capture_repo() {
   echo "capture.sh: [$name] captured $(ls "$out" | wc -l | tr -d ' ') fixture files" >&2
 }
 
+# capture_behavioral adds the NEW behavioral + MCP-surface invocations
+# (RESEARCH.md Pitfall 3 / D-06's TEST-01 extension): a multi-word `explore`
+# call WITHOUT --max-files 1 (explore-multi.json) and a bare `node <name>`
+# call WITHOUT -f on a name with 2+ definitions (node-multi.json) -- the
+# EXISTING capture_repo invocations above (--max-files 1 / -f) are left
+# completely untouched as the template-parity baseline. Then drives the TS
+# stdio MCP server via mcp-capture.mjs for the same two queries
+# (explore-mcp.json/node-mcp.json), the MCP-surface half of D-01/D-06's
+# oracle capture.sh never previously exercised.
+#
+# Assumes $path is ALREADY indexed (capture_repo or an explicit
+# init/index --force call by the caller) -- capture_behavioral does not
+# reindex, so it can be called immediately after capture_repo without a
+# redundant second index pass.
+capture_behavioral() {
+  local name="$1" path="$2" multi_symbol="$3" multi_query="$4"
+  local out="$CORPUS_DIR/$name"
+  mkdir -p "$out"
+
+  "$CODEGRAPH_BIN" explore "$multi_query" -p "$path" |
+    wrap_text "explore \"$multi_query\" -p $name" >"$out/explore-multi.json"
+  "$CODEGRAPH_BIN" node "$multi_symbol" -p "$path" |
+    wrap_text "node \"$multi_symbol\" -p $name" >"$out/node-multi.json"
+
+  echo "capture.sh: [$name] MCP-surface capture (explore-mcp/node-mcp)..." >&2
+  node "$GOLDEN_DIR/mcp-capture.mjs" "$name" "$path" "$multi_query" "$multi_symbol" "$out"
+
+  echo "capture.sh: [$name] captured behavioral + MCP fixtures" >&2
+}
+
 # --- schema DDL capture (from the Go corpus index; D-06) --------------------
 echo "capture.sh: capturing TS schema DDL from $WEFT_REPO ..." >&2
 "$CODEGRAPH_BIN" index --force -q "$WEFT_REPO" >/dev/null
@@ -126,6 +157,11 @@ SQL
 
 # --- golden corpus capture (D-06a) ------------------------------------------
 capture_repo "weft-go" "$WEFT_REPO" "mergeStyle" "internal/cli/finish.go" "main" "main function"
+# Behavioral fixtures (RESEARCH Pitfall 3): "Run" has 10 same-named
+# function/method defs across weft-go (verified via the TS SQLite index);
+# "epic worktree" is a multi-word query spanning 4+ files without
+# --max-files 1.
+capture_behavioral "weft-go" "$WEFT_REPO" "Run" "epic worktree"
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -134,5 +170,27 @@ echo "capture.sh: cloning $TS_REPO_URL ..." >&2
 git clone --depth 1 --quiet "$TS_REPO_URL" "$TS_REPO"
 "$CODEGRAPH_BIN" init "$TS_REPO" >/dev/null 2>&1
 capture_repo "colbymchenry-codegraph" "$TS_REPO" "searchNodes" "src/db/queries.ts" "search" "search nodes"
+# Behavioral fixtures: "resolve" has 27 same-named function defs in the TS
+# repo itself; "generated file detection" is a multi-word query spanning
+# 4+ files without --max-files 1.
+capture_behavioral "colbymchenry-codegraph" "$TS_REPO" "resolve" "generated file detection"
+
+# --- synthetic-parity corpus (D-03) ------------------------------------------
+# Purpose-built corpus (testdata/golden/corpus/synthetic-parity/src/,
+# README.md documents the D-03 case map) -- behavioral-only, no baseline
+# status/query/callers/callees/impact/explore/node fixtures (capture_repo is
+# NOT called here; this corpus exists solely to exercise the multi-def /
+# multi-word / weakly-connected / structural-beats-lexical cases).
+if [ ! -d "$SYNTHETIC_PARITY_SRC" ]; then
+  echo "capture.sh: synthetic-parity corpus not found at $SYNTHETIC_PARITY_SRC" >&2
+  exit 1
+fi
+echo "capture.sh: [synthetic-parity] indexing..." >&2
+"$CODEGRAPH_BIN" init "$SYNTHETIC_PARITY_SRC" >/dev/null 2>&1 || true
+"$CODEGRAPH_BIN" index --force -q "$SYNTHETIC_PARITY_SRC" >/dev/null
+# "Validate" is deliberately duplicated (accounts/validate.go +
+# orders/validate.go, D-03 case a); "user account" tokenizes to match
+# UserAccountManager (D-03 case b).
+capture_behavioral "synthetic-parity" "$SYNTHETIC_PARITY_SRC" "Validate" "user account"
 
 echo "capture.sh: done. Fixtures written under $CORPUS_DIR" >&2

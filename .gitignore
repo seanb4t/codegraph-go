@@ -22,3 +22,8 @@ graphify-out/
 # Generated knowledge-graph output — keep only the human-readable report
 .planning/graphs/*
 !.planning/graphs/GRAPH_REPORT.md
+
+# Local TS/Go index data for the synthetic-parity golden fixture corpus
+# (rebuilt by testdata/golden/capture.sh; never committed — same "local to
+# each machine" convention as .codegraph/'s own nested .gitignore).
+testdata/golden/corpus/*/src/.codegraph/
