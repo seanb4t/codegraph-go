@@ -6,14 +6,14 @@ current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
 stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-07-15T15:26:59.601Z"
+last_updated: "2026-07-15T15:36:13.184Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 15 of 17
+Plan: 16 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P10 | 20min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P13 | 25min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P14 | 12min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node PP15 | 12min | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 1]: applyPostMergeRerankers computes the H9 exemption set BEFORE H7 runs — deliberate inversion of the naive pipeline order so the exemption actually gates the dampening
 - [Phase 01-behavioral-parity-explore-node]: H17's entry/named-file gate clause (3) derives from plan 13's fileScores tier (score>=fileScoreEntry) rather than a separate caller-supplied entryFiles set -- plan 13's own readiness note names only fileScores/fileGraphScore/rescued as this plan's inputs
 - [Phase 01-behavioral-parity-explore-node]: H18's 5-tier sort uses ascending file path as the final deterministic tie-break -- files have no stable Id field (unlike nodes), so path is the documented D-04 substitute
+- [Phase 1]: D-09 F4 re-index complete: this repo + weft-go + colbymchenry-codegraph + synthetic-parity force-re-indexed (index --force, never sync); colbymchenry-codegraph independently confirms all 6 new edge kinds fire correctly; this repo's own zero overrides/type_of count is a documented corpus-content fact, not a missing emit site
 
 ### Pending Todos
 
@@ -138,7 +140,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T15:26:59.595Z
+Last session: 2026-07-15T15:35:42.447Z
 Stopped at: Completed 01-14-PLAN.md
 Resume file: None
 
