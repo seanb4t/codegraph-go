@@ -174,6 +174,88 @@ func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
 	return matches, nil
 }
 
+// normalizeNarrowPath canonicalizes a path for narrowNodeMatches's
+// fileHint comparison (RESEARCH §9): backslash->slash, then lowercased,
+// so a hint typed with the "wrong" separator or casing still matches.
+func normalizeNarrowPath(p string) string {
+	return strings.ToLower(strings.ReplaceAll(p, "\\", "/"))
+}
+
+// absInt32 returns the absolute value of n.
+func absInt32(n int32) int32 {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// narrowNodeMatches filters matches by an optional fileHint and/or
+// lineHint (NODE-03, RESEARCH §9) — a PURE in-memory filter over the
+// already-enumerated slice: it opens no file handle and performs no
+// fresh disk read keyed on the raw hint (T-01-06 — the file-READ path
+// stays behind resolveSourcePath/readSourceFile). fileHint matches when
+// the normalized node path ends with or contains the normalized hint;
+// the working set is only replaced when the filtered result is
+// non-empty. lineHint first prefers a def whose [StartLine,EndLine]
+// contains it, falling back to the single nearest def by
+// |StartLine-lineHint| when none contains it. The final result is never
+// empty as long as matches was non-empty — every stage is a
+// best-effort narrowing, never a hard filter that can zero out the set.
+func narrowNodeMatches(matches []*schema.Node, fileHint string, lineHint *int) []*schema.Node {
+	if len(matches) <= 1 {
+		return matches
+	}
+	if fileHint == "" && lineHint == nil {
+		return matches
+	}
+
+	narrowed := matches
+	if fileHint != "" {
+		fh := normalizeNarrowPath(fileHint)
+		var byFile []*schema.Node
+		for _, n := range narrowed {
+			np := normalizeNarrowPath(n.FilePath)
+			if strings.HasSuffix(np, fh) || strings.Contains(np, fh) {
+				byFile = append(byFile, n)
+			}
+		}
+		if len(byFile) > 0 {
+			narrowed = byFile // only replace if non-empty
+		}
+	}
+
+	if lineHint != nil && len(narrowed) > 1 {
+		line := int32(*lineHint)
+		var containing []*schema.Node
+		for _, n := range narrowed {
+			end := n.EndLine
+			if end == 0 {
+				end = n.StartLine
+			}
+			if n.StartLine <= line && end >= line {
+				containing = append(containing, n)
+			}
+		}
+		if len(containing) > 0 {
+			narrowed = containing
+		} else {
+			nearest := narrowed[0]
+			best := absInt32(nearest.StartLine - line)
+			for _, n := range narrowed[1:] {
+				if d := absInt32(n.StartLine - line); d < best {
+					nearest, best = n, d
+				}
+			}
+			narrowed = []*schema.Node{nearest}
+		}
+	}
+
+	if len(narrowed) > 0 {
+		return narrowed // final guard: never assign an empty working set
+	}
+	return matches
+}
+
 // resolveNodeForDetail resolves symbol to a concrete node for Node's
 // symbol-detail mode. When file is empty, it reuses traverse.go's
 // resolveSymbolNode (D-03 full-scan, deterministic lowest-Id tie-break) —
