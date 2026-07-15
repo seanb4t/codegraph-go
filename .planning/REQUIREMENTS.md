@@ -17,10 +17,10 @@
 
 ### Behavioral Parity — node (NODE)
 
-- [ ] **NODE-01**: `node` enumerates ALL exact-name definitions of an overloaded symbol (not just one), sorted generated-files-last, matching TS (ours currently returns a single definition)
-- [ ] **NODE-02**: `node` renders multiple definitions with a "N definitions named X — returning M in full" header, full bodies up to TS's budget (≤16 defs / 12,000 chars), and an overflow list of the rest
-- [ ] **NODE-03**: `node` accepts optional file/line narrowing that never empties the result set (best-effort hints)
-- [ ] **NODE-04**: single-definition `node` output stays byte-comparable to TS (CLI + MCP)
+- [x] **NODE-01**: `node` enumerates ALL exact-name definitions of an overloaded symbol (not just one), sorted generated-files-last, matching TS (ours currently returns a single definition)
+- [x] **NODE-02**: `node` renders multiple definitions with a "N definitions named X — returning M in full" header, full bodies up to TS's budget (≤16 defs / 12,000 chars), and an overflow list of the rest
+- [x] **NODE-03**: `node` accepts optional file/line narrowing that never empties the result set (best-effort hints)
+- [x] **NODE-04**: single-definition `node` output stays byte-comparable to TS (CLI + MCP)
 
 ### Behavioral Parity — status content (STAT)
 
@@ -134,10 +134,10 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | EXPL-03 | Phase 1 | Pending |
 | EXPL-04 | Phase 1 | Pending |
 | EXPL-05 | Phase 1 | Pending |
-| NODE-01 | Phase 1 | Pending |
-| NODE-02 | Phase 1 | Pending |
-| NODE-03 | Phase 1 | Pending |
-| NODE-04 | Phase 1 | Pending |
+| NODE-01 | Phase 1 | Complete |
+| NODE-02 | Phase 1 | Complete |
+| NODE-03 | Phase 1 | Complete |
+| NODE-04 | Phase 1 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | STAT-01 | Phase 2 | Pending |
 | STAT-02 | Phase 2 | Pending |

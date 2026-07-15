@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-07-15T12:32:07.386Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-07-15T12:56:43.180Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 4 of 17
+Plan: 5 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P01 | 55min | 3 tasks | 30 files |
 | Phase 01 P02 | 5min | 1 tasks | 1 files |
 | Phase 01-behavioral-parity-explore-node P03 | 20min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P04 | 25min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 1]: extends/overrides get EdgeKind* constants (Pass-2 synthesis only); references/instantiates/returns/type_of get RefKind* constants (Pass-1 captured)
 - [Phase 01-behavioral-parity-explore-node]: Read the live TS 1.3.1 dist source directly (D-01) to correct two RESEARCH.md excerpt gaps in the H1/H2 tokenizer port: STOP_WORDS/commonWords conflation in the plan's illustrative example, and H2's omitted compound-preservation regex
 - [Phase 01-behavioral-parity-explore-node]: Deferred getStemVariants() FTS-prefix stem expansion from extractSearchTerms entirely (no stub parameter) per the plan's explicit D-02 divergence allowance
+- [Phase 1]: narrowNodeMatches (NODE-03) is fully implemented and tested but not wired into the public Node() signature — no line hint exists in the CLI/MCP surface yet; ready for a future plan to wire it
+- [Phase 1]: Fixed a real bug during ad-hoc golden verification: multi-def source blocks rendered the whole file instead of the definition's own line range (renderNumberedSourceRange added)
 
 ### Pending Todos
 
@@ -107,8 +110,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T12:32:07.380Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-07-15T12:56:43.174Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
