@@ -324,8 +324,32 @@ require re-running Sync's diff on every `status` call. STAT-03's live
      record across **308 records**. JSON is the worst shape for uniform record
      lists precisely because it re-states every key on every row.
   3. **It CLOSES a TS divergence rather than opening one.** TS returns markdown
-     from *every* MCP tool; our 5 JSON tools are the anomaly. This moves toward
+     from *every* MCP tool; our JSON tools are the anomaly. This moves toward
      the drop-in-parity bar.
+  **★ D-16 PREMISE CORRECTED 2026-07-15 (post-research).** This decision's first
+  draft said the 5 tools would join "the 3 that already do
+  (`explore`/`node`/`status`)". **That is factually WRONG: MCP `codegraph_status`
+  emits JSON today** (`internal/mcp/tools.go:339-343` → `MarshalStatusJSON`).
+  Only **2** MCP tools are markdown (`explore`, `node`); **6** are JSON. The
+  error came from reading TS's markdown MCP-status renderer and assuming our Go
+  side matched. Consequence: see **D-17** — MCP status needs its own markdown
+  renderer, which D-12's blockquote requirement already implicitly demanded.
+  **★ SURF-06 IS ADDITIVE, NOT A SWAP (research finding — highest-risk detail).**
+  **Every one of the 5 `Marshal*JSON` helpers is SHARED with the CLI `--json`
+  path** (e.g. `MarshalCallersJSON` ← MCP `tools.go:248` **and** CLI
+  `callers.go:41`; `search` has no helper and inline-`json.Marshal`s on *both*
+  surfaces). Therefore: **NEVER modify a `Marshal*JSON` body** — it is
+  simultaneously the CLI contract and the golden oracle. Add **sibling `Render*`
+  functions** and change **only the six `tools.go` call sites**.
+  **★ TEST BLIND SPOT (research finding — treat as CR-02 recurrence risk).**
+  **Zero existing tests assert the MCP success payload of ANY of these 5 tools**
+  (MCP coverage today = `explore` markdown + `status` error-path only). SURF-06
+  could be skipped wholesale and `go test ./...` would stay green — the exact
+  "implemented/marked-complete but undelivered" trap from memory `9zt8afrs8k`.
+  **Required TDD red test:** assert the MCP text **is not valid JSON** *AND*
+  contains a markdown marker — either assertion alone is defeatable. **Do NOT
+  extend `TestExploreCLIMatchesMCP` to these 5** — SURF-06 makes CLI≠MCP
+  *intentionally* true for them.
   4. **It dissolves the D-12 notice problem** — with all 7 non-status read tools
      on one shape, a single text-prefix mechanism works everywhere, and no
      handler gets touched twice (Phase 2 is already rewiring all 7 result paths
@@ -347,6 +371,26 @@ require re-running Sync's diff on every `status` call. STAT-03's live
   confirm which existing tests assert MCP text content and update them
   deliberately; do not let a JSON→markdown change silently pass a test that was
   only ever checking the CLI path.
+
+- **D-17:** ★ **MCP `status` gets its OWN markdown renderer — TS ships TWO
+  structurally different status renderings, and we need both.** Surfaced by
+  research after D-16's premise error. This is **latent scope that D-12 already
+  demanded**, not a new capability: D-12 requires MCP status to wrap the verbose
+  warning in a **blockquote** (`> ⚠ …`), which is meaningless prepended to a JSON
+  blob — so MCP status cannot stay `MarshalStatusJSON`. Verified in the TS
+  source, the two renderings are genuinely different shapes:
+  - **CLI** (`bin/codegraph.js` ~900-985) — padded columns:
+    `Index Statistics:` / `  Files:     1,234` / `  DB Size:   1.23 MB`, with
+    `padEnd(15)` breakdowns. This is **D-09's** target.
+  - **MCP** (`mcp/tools.js` ~3890-3945) — bolded-key bullet lists:
+    `**CodeGraph Status**`, `**Files indexed:** N`, `**Database size:** X.XX MB`,
+    `**Nodes by Kind:**` + `- kind: count`, `**Languages:**` + `- lang: count`.
+  **Decision:** implement both, sourced verbatim from their respective TS call
+  sites. They share the same `StatusResult` data (STAT-01/02/03) but NOT the same
+  renderer. Neither is covered by SURF-06's 5-tool scope (`status` is a 6th JSON
+  tool) nor by D-09 (CLI-only) — plan it as its own task. Both stay plain-text
+  (no ANSI — Phase 6 owns TUI-02). **`MarshalStatusJSON` itself is untouched** —
+  the CLI `--json` path still uses it (same additive rule as D-16).
 
 ### Claude's Discretion
 - File layout within `internal/query` for the status sections + the notice
