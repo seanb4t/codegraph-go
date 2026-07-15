@@ -393,3 +393,133 @@ func expandBFS(r graphstore.Reader, roots []gatherCandidate, bounds ExpandBFSBou
 	sort.Strings(order)
 	return order, seedIDs, edges, nil
 }
+
+// --- H12: glue-node injection ---
+
+// subgraphFileSet resolves each id in ids to its Node.FilePath and
+// returns the set of DISTINCT non-empty paths — "the files the subgraph
+// already surfaces" that H12's same-file-only constraint checks
+// against. WR-04: an id that no longer resolves (already-pruned/
+// dangling) is skipped, not an error.
+func subgraphFileSet(r graphstore.Reader, ids []string) (map[string]bool, error) {
+	files := make(map[string]bool)
+	for _, id := range ids {
+		n, err := r.GetNode(id)
+		if err != nil {
+			if errors.Is(err, graphstore.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if n.FilePath != "" {
+			files[n.FilePath] = true
+		}
+	}
+	return files, nil
+}
+
+// calleeCallEdges returns srcID's forward RefKindCalls edges via a
+// direct IterateEdges(srcID) range scan — mirrors Callees' (traverse.go)
+// exact filter, reused here rather than re-implemented, since H12's
+// "callees" are precisely that forward call-graph edge set.
+func calleeCallEdges(r graphstore.Reader, srcID string) ([]*schema.Edge, error) {
+	it, err := r.IterateEdges(srcID)
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	var out []*schema.Edge
+	for it.Next() {
+		e := it.Edge()
+		if e.Kind != goextract.RefKindCalls {
+			continue
+		}
+		out = append(out, e)
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// admitGlueCandidate looks up id and, if it is not already a subgraph
+// root and its FilePath is in surfacedFiles (H12's same-file-only
+// constraint), records it in candidates. WR-04: a dangling edge
+// endpoint is skipped, not an error.
+func admitGlueCandidate(r graphstore.Reader, id string, rootSet, surfacedFiles, candidates map[string]bool) error {
+	if rootSet[id] {
+		return nil
+	}
+	n, err := r.GetNode(id)
+	if err != nil {
+		if errors.Is(err, graphstore.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !surfacedFiles[n.FilePath] {
+		return nil
+	}
+	candidates[id] = true
+	return nil
+}
+
+// expandGlueNodes is H12: for every root in rootIDs, find its DIRECT
+// callers (via BuildReverseAdjacency, traverse.go) and callees (via
+// calleeCallEdges) — RefKindCalls only, "callers+callees" per RESEARCH
+// §C.2/H12 — and inject each ONLY if it lives in a file already in
+// surfacedFiles (the subgraph's already-surfaced file set, e.g. from
+// subgraphFileSet); a caller/callee in a NOT-yet-surfaced file is never
+// pulled in as a glue node, no matter how central. Total glue nodes
+// across every root are capped at glueCap; when the cap binds,
+// candidates are kept in sorted-Id order — RESEARCH §C.2/H12's own
+// admission order is not recoverable from the frozen capture, so D-04's
+// lowest-Id-first convention is used (matching
+// resolveSymbolNode/sortRWRScores), giving repeated calls over the same
+// input an identical result.
+func expandGlueNodes(r graphstore.Reader, rootIDs []string, surfacedFiles map[string]bool, glueCap int) ([]string, error) {
+	if glueCap <= 0 || len(rootIDs) == 0 {
+		return nil, nil
+	}
+
+	rev, err := BuildReverseAdjacency(r)
+	if err != nil {
+		return nil, err
+	}
+
+	sortedRoots := append([]string(nil), rootIDs...)
+	sort.Strings(sortedRoots)
+	rootSet := make(map[string]bool, len(sortedRoots))
+	for _, id := range sortedRoots {
+		rootSet[id] = true
+	}
+
+	candidates := make(map[string]bool)
+	for _, root := range sortedRoots {
+		for _, e := range rev[root] { // callers
+			if err := admitGlueCandidate(r, e.Source, rootSet, surfacedFiles, candidates); err != nil {
+				return nil, err
+			}
+		}
+		callees, err := calleeCallEdges(r, root)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range callees {
+			if err := admitGlueCandidate(r, e.Target, rootSet, surfacedFiles, candidates); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	ids := make([]string, 0, len(candidates))
+	for id := range candidates {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	if len(ids) > glueCap {
+		ids = ids[:glueCap]
+	}
+	return ids, nil
+}
