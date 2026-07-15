@@ -68,6 +68,40 @@ import (
 // tree (T-03-09-Repro).
 const pinnedWeftCommit = "f89ae3ea4e4c37509f7302fd4e37986212a72079"
 
+// mbShapeRE pins D-07's MB-rendering contract at the parity layer, where
+// dbSizeBytes comes from a real corpus index rather than a synthetic
+// fixture value: fmt.Sprintf("%.2f MB", bytes/1024/1024).
+var mbShapeRE = regexp.MustCompile(`^\d+\.\d{2} MB$`)
+
+// findVolatileKeysExcept wraps golden_test.go's findVolatileKeys (shared
+// with TestGoldenFixturesExist, which correctly continues to enforce that
+// the FROZEN TS oracle fixtures in corpus/*/*.json never re-include a
+// volatile key such as dbSizeBytes) with a named exemption list, used
+// ONLY at this file's own-output call site. It never mutates the shared
+// volatileKeys map in golden_test.go — that map keeps governing the
+// frozen corpus fixtures, and must keep failing if a TS golden ever
+// re-includes dbSizeBytes (D-08, RESEARCH Pitfall 2).
+func findVolatileKeysExcept(v interface{}, path string, except ...string) []string {
+	exempt := make(map[string]bool, len(except))
+	for _, k := range except {
+		exempt[k] = true
+	}
+	var kept []string
+	for _, k := range findVolatileKeys(v, path) {
+		// findVolatileKeys reports dotted paths like "our status.json.dbSizeBytes";
+		// match on the trailing key segment against the exempt set.
+		leaf := k
+		if i := strings.LastIndexByte(k, '.'); i >= 0 {
+			leaf = k[i+1:]
+		}
+		if exempt[leaf] {
+			continue
+		}
+		kept = append(kept, k)
+	}
+	return kept
+}
+
 // corpusCandidate is one place resolveWeftCorpus looks for a weft
 // checkout, paired with a human-readable label for skip/failure messages.
 type corpusCandidate struct {
@@ -648,10 +682,50 @@ func TestGoldenParity(t *testing.T) {
 		if _, ok := decoded["score"]; ok {
 			t.Error(`status --json unexpectedly includes "score" — D-05d: no FTS5/BM25 ranking exists`)
 		}
-		if volatile := findVolatileKeys(decoded, "our status.json"); len(volatile) > 0 {
+		// D-08: dbSizeBytes is exempted from the volatility check HERE,
+		// at this call site only — the shared volatileKeys map in
+		// golden_test.go is deliberately left untouched, because it
+		// still governs the FROZEN TS oracle fixtures in corpus/*/*.json
+		// and must keep failing if a TS golden ever re-includes
+		// dbSizeBytes. That is a wholly separate concern from OUR OWN
+		// status --json output, which now intentionally carries the key
+		// (Pebble has no dbPath-file analog, so a directory byte sum is
+		// the Go-truthful reading — see status.go's decision table). The
+		// plausibility assertions immediately below replace the blanket
+		// "must be absent" check for this one key.
+		if volatile := findVolatileKeysExcept(decoded, "our status.json", "dbSizeBytes"); len(volatile) > 0 {
 			t.Errorf("our status --json output contains volatile field(s) that must never be emitted: %v", volatile)
 		}
 
+		// D-08 plausibility assertions: presence, integer type, > 0, and a
+		// well-formed MB rendering — never cross-run byte stability
+		// (Pebble's LSM compaction makes the on-disk total genuinely
+		// nondeterministic across identical reindexes, a STRONGER version
+		// of the SQLite WAL/page-fragmentation rationale that made the
+		// frozen TS golden strip this key in the first place).
+		rawSize, present := decoded["dbSizeBytes"]
+		if !present {
+			t.Fatal(`our status --json output is missing "dbSizeBytes" (STAT-01)`)
+		}
+		size, ok := rawSize.(float64)
+		if !ok {
+			t.Fatalf("dbSizeBytes = %v (%T), want a JSON number", rawSize, rawSize)
+		}
+		if size != float64(int64(size)) || size <= 0 {
+			t.Fatalf("dbSizeBytes = %v, want a positive integer", rawSize)
+		}
+		mbRendering := fmt.Sprintf("%.2f MB", size/1024/1024)
+		if !mbShapeRE.MatchString(mbRendering) {
+			t.Errorf("dbSizeBytes MB rendering %q does not match %s (D-07)", mbRendering, mbShapeRE.String())
+		}
+
+		// This list asserts against the FROZEN TS golden fixture (golden,
+		// below), not our own output (decoded, above) — deliberately does
+		// NOT include "dbSizeBytes": the golden's own capture.sh strips it
+		// (testdata/golden/README.md's volatile-fields table) and that
+		// strip is correctly untouched by D-08. Our output carries the
+		// key (asserted above); the golden's does not (asymmetry by
+		// design, not an oversight).
 		golden := loadGoldenFixture[map[string]interface{}](t, "status.json")
 		for _, key := range []string{"initialized", "version", "fileCount", "nodeCount", "edgeCount", "backend", "nodesByKind", "languages", "pendingChanges", "worktreeMismatch", "index"} {
 			if _, ok := golden[key]; !ok {
