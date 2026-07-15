@@ -145,3 +145,7 @@ None - no external service configuration required.
 ---
 *Phase: 01-behavioral-parity-explore-node*
 *Completed: 2026-07-15*
+
+## Self-Check: PASSED
+
+All created files (`internal/query/seeding.go`, `internal/query/seeding_test.go`, this SUMMARY.md) and all commit hashes (`2c4d12a`, `bf2e4ad`, `9dd7f7d`, `9c0e4df`, `7d86fa7`) verified present via `git log --oneline --all`.
