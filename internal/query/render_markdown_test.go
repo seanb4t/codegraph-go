@@ -233,12 +233,20 @@ func TestExplore(t *testing.T) {
 	t.Run("max-files caps the number of rendered file blocks", func(t *testing.T) {
 		engine, _ := nodeExploreFixture(t)
 
-		got, err := engine.Explore("e", 1)
+		// "widget" (not "e") — the TS-parity tokenizers (H1/H2, plan 03)
+		// apply the same length-floor filtering real TS does, so a
+		// single-character query now tokenizes to nothing (matching real
+		// TS behavior, not the old lexical substring matcher's degenerate
+		// "everything with an e in it" match). "widget" instead matches
+		// pkga's Widget struct AND structurally reaches pkgb.go (Run
+		// constructs a Widget{} and calls its Describe method), so the
+		// maxFiles cap still has 2+ candidate files to cap down to 1.
+		got, err := engine.Explore("widget", 1)
 		if err != nil {
 			t.Fatalf("Explore: unexpected error: %v", err)
 		}
 		if count := strings.Count(got, "```go\n"); count != 1 {
-			t.Fatalf("Explore(\"e\", maxFiles=1): got %d fenced source blocks, want 1 (max-files must cap distinct files):\n%s", count, got)
+			t.Fatalf("Explore(\"widget\", maxFiles=1): got %d fenced source blocks, want 1 (max-files must cap distinct files):\n%s", count, got)
 		}
 	})
 
