@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-07-15T13:41:34.254Z"
+stopped_at: Completed 01-11-PLAN.md
+last_updated: "2026-07-15T13:55:17.085Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 8 of 17
+Plan: 9 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P05 | 19min | 2 tasks | 9 files |
 | Phase 01-behavioral-parity-explore-node P06 | 15min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P07 | 15min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P11 | 5min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 01-behavioral-parity-explore-node]: Task 1/2 combined into one feat commit (shared file, no independent dependency); Task 2's tests committed separately to lock in D-04's determinism contract
 - [Phase 01-behavioral-parity-explore-node]: T-01-10 DoS mitigation for rwr.go is documentation-only (precondition doc comment) — maxNodes=200/GLUE_NODE_CAP=60 enforcement deferred to upstream subgraph-gathering plans 11/16 per this plan's threat_model disposition
 - [Phase 1]: 01-07 gather channels (H3-H6) shipped without matchNodes wiring by design -- plan 10 wires this into Explore() and adds H7-H21 rerankers
+- [Phase 01-behavioral-parity-explore-node]: H10-H12 subgraph-construction primitives (expandTypeHierarchy/expandBFS/expandGlueNodes) close the T-01-18 DoS mitigation gap plan 06 deliberately deferred; every cited constant (ceil(maxNodes/4), maxNodes=200/traversalDepth=3/minScore=0.2/searchLimit=8, GLUE_NODE_CAP=60) ported verbatim from RESEARCH; traversal mechanics (RankEdges-walk, sorted-Id tie-break) documented as this plan's own design since no verbatim TS source for H10-H12 survives in the frozen capture
 
 ### Pending Todos
 
@@ -119,8 +121,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T13:41:34.249Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-07-15T13:55:17.080Z
+Stopped at: Completed 01-11-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

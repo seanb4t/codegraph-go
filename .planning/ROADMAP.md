@@ -58,7 +58,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
   4. `explore` and `node` output is byte-identical across the CLI command and the MCP tool (shared engine), and single-definition `node` stays byte-comparable to TS (EXPL-05/NODE-04)
   5. A behavioral fixture harness diffs `explore`/`node` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot (TEST-01)
 
-**Plans**: 7/17 plans executed
+**Plans**: 8/17 plans executed
 
 Plans:
 **Wave 1**
@@ -79,7 +79,7 @@ Plans:
 - [ ] 01-08-PLAN.md — Java + C# extractor edge-kind emission
 - [ ] 01-09-PLAN.md — Python + TS/JS extractor edge-kind emission
 - [ ] 01-10-PLAN.md — Gather re-rankers: test-dampen + core-dir + multi-term (H7–H9)
-- [ ] 01-11-PLAN.md — Subgraph expansion: type-hierarchy + BFS bounds + glue-node (H10–H12)
+- [x] 01-11-PLAN.md — Subgraph expansion: type-hierarchy + BFS bounds + glue-node (H10–H12)
 - [ ] 01-12-PLAN.md — Named-symbol seeding + per-overload disambiguation tiers (H13)
 - [ ] 01-13-PLAN.md — Per-file score tiers + hard exclusion + buried-rescue (H14–H16)
 
@@ -211,7 +211,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Behavioral Parity — explore & node | v1.0 | 7/17 | In Progress|  |
+| 1. Behavioral Parity — explore & node | v1.0 | 8/17 | In Progress|  |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 0/TBD | Not started | - |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
