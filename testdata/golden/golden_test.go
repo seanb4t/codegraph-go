@@ -138,3 +138,40 @@ func TestGoldenFixturesExist(t *testing.T) {
 		}
 	})
 }
+
+// TestGoSideFixturesRegenerated pins F5 (plan 17, 01-RESEARCH.md §A): the
+// Go-side EXPECTED fixtures (go-explore-multi.json/go-node-multi.json,
+// produced by `go run ./testdata/golden/gocapture` running the CURRENT Go
+// explore/node pipeline against the re-indexed corpora) must exist and be
+// non-empty for synthetic-parity, the one corpus always available in-repo
+// (no network/external checkout dependency, unlike weft-go/
+// colbymchenry-codegraph — see gocapture/main.go's corpusSpec.resolveSource
+// docs). This guards against F5 silently going stale again the way the
+// PRE-plan-17 explore.json/node.json fixtures did after the D-09 re-index
+// (01-15-SUMMARY.md) — a future contributor who changes the explore/node
+// pipeline without re-running gocapture will at least not have a MISSING
+// go-*.json fixture slip past review, even though this test cannot by
+// itself detect a STALE (present but outdated) one.
+func TestGoSideFixturesRegenerated(t *testing.T) {
+	for _, name := range []string{"go-explore-multi.json", "go-node-multi.json"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join("corpus", "synthetic-parity", name)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("%s: %v (run `go run ./testdata/golden/gocapture` to regenerate — F5, plan 17)", path, err)
+			}
+			if len(data) == 0 {
+				t.Fatalf("%s is empty", path)
+			}
+			// goldenCapture (golden_parity_test.go, same package) mirrors
+			// gocapture/main.go's own envelope shape.
+			var parsed goldenCapture
+			if err := json.Unmarshal(data, &parsed); err != nil {
+				t.Fatalf("%s: does not parse as JSON: %v", path, err)
+			}
+			if parsed.Output == "" {
+				t.Fatalf("%s has an empty \"output\" field", path)
+			}
+		})
+	}
+}

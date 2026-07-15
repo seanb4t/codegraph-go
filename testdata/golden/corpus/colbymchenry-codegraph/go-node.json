@@ -1,0 +1,4 @@
+{
+  "command": "node \"searchNodes\" -p colbymchenry-codegraph -f src/db/queries.ts",
+  "output": "**searchNodes** (method)\n\n**Location:** src/db/queries.ts:987\n**Signature:** `(query: string, options: SearchOptions = {})`\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** searchNodesFuzzy (src/db/queries.ts:1142), searchAllByFilters (src/db/queries.ts:1112), searchNodesFTS (src/db/queries.ts:1201), searchNodesLike (src/db/queries.ts:1270), scorePathRelevance (src/search/query-utils.ts:221), kindBonus (src/search/query-utils.ts:388), nameMatchBonus (src/search/query-utils.ts:343), rowToNode (src/db/queries.ts:131), parseQuery (src/search/query-parser.ts:66)\n**Called by ←** \n"
+}

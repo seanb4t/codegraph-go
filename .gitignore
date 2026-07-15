@@ -16,6 +16,9 @@ coverage.html
 # Local dev binary (produced by `go build ./tools/bench/runner/`)
 /runner
 
+# Local dev binary (produced by `go build ./testdata/golden/gocapture/...`)
+/gocapture
+
 # graphify skill scratch output
 graphify-out/
 
