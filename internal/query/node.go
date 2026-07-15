@@ -296,7 +296,13 @@ func (e *Engine) resolveNodeForDetail(symbol, file string) (*schema.Node, error)
 // Node renders symbol detail (QRY-02, D-05b) when symbol is non-empty, or
 // a line-numbered verbatim file read when symbol is empty and file is
 // given. file additionally disambiguates symbol when both are supplied
-// (matching multiple same-named symbols to the one defined in file).
+// (matching multiple same-named symbols to the one defined in file, via
+// resolveNodeForDetail's existing exact-match single-winner behavior,
+// unchanged — NODE-04). When symbol is given without file, Node
+// enumerates every exact-name definition (NODE-01): a single match
+// renders via the original single-def RenderNode path unchanged
+// (NODE-04), while multiple matches render via NODE-02's multi-def
+// budget/overflow path (RenderNodeMultiDef).
 func (e *Engine) Node(symbol, file string) (string, error) {
 	if symbol == "" {
 		if file == "" {
@@ -309,14 +315,35 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 		return renderNumberedSource(content), nil
 	}
 
+	if file == "" {
+		matches, err := e.enumerateSymbolDefs(symbol)
+		if err != nil {
+			return "", err
+		}
+		if len(matches) == 0 {
+			return "", fmt.Errorf("query: symbol %q not found", symbol)
+		}
+		if len(matches) > 1 {
+			return e.renderMultiDefNode(symbol, matches)
+		}
+		return e.renderSingleDefNode(matches[0])
+	}
+
 	node, err := e.resolveNodeForDetail(symbol, file)
 	if err != nil {
 		return "", err
 	}
+	return e.renderSingleDefNode(node)
+}
 
+// fetchCalls resolves node's forward "calls" edges into their target
+// nodes, skipping a dangling target rather than aborting the render
+// (WR-04) — shared by the single-def and multi-def render paths so the
+// edge-read logic exists in exactly one place.
+func (e *Engine) fetchCalls(node *schema.Node) ([]*schema.Node, error) {
 	it, err := e.reader.IterateEdges(node.Id)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer it.Close()
 
@@ -333,18 +360,23 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 			if errors.Is(err, graphstore.ErrNotFound) {
 				continue
 			}
-			return "", err
+			return nil, err
 		}
 		calls = append(calls, target)
 	}
 	if err := it.Err(); err != nil {
-		return "", err
+		return nil, err
 	}
+	return calls, nil
+}
 
-	rev, err := BuildReverseAdjacency(e.reader)
-	if err != nil {
-		return "", err
-	}
+// fetchCalledBy resolves node's reverse callers from a pre-built
+// reverse-adjacency map (BuildReverseAdjacency), skipping a dangling
+// source rather than aborting the render (WR-04). rev is passed in
+// (rather than rebuilt per call) so the multi-def path — which fetches
+// call trails for up to HARD_CAP candidates — builds it once and shares
+// it, instead of paying its O(edges) cost once per candidate.
+func (e *Engine) fetchCalledBy(node *schema.Node, rev map[string][]*schema.Edge) ([]*schema.Node, error) {
 	var calledBy []*schema.Node
 	for _, edge := range rev[node.Id] {
 		src, err := e.reader.GetNode(edge.Source)
@@ -353,10 +385,61 @@ func (e *Engine) Node(symbol, file string) (string, error) {
 			if errors.Is(err, graphstore.ErrNotFound) {
 				continue
 			}
-			return "", err
+			return nil, err
 		}
 		calledBy = append(calledBy, src)
 	}
+	return calledBy, nil
+}
 
+// renderSingleDefNode renders node via the original single-def path
+// (RenderNode) — unchanged behavior, just extracted from Node into its
+// own function so both the symbol+file and the single-match symbol-only
+// branches share it without duplicating the fetch logic (NODE-04: the
+// output is byte-for-byte identical to before this plan).
+func (e *Engine) renderSingleDefNode(node *schema.Node) (string, error) {
+	calls, err := e.fetchCalls(node)
+	if err != nil {
+		return "", err
+	}
+	rev, err := BuildReverseAdjacency(e.reader)
+	if err != nil {
+		return "", err
+	}
+	calledBy, err := e.fetchCalledBy(node, rev)
+	if err != nil {
+		return "", err
+	}
 	return RenderNode(node, calls, calledBy), nil
+}
+
+// renderMultiDefNode renders NODE-02's multi-def markdown for an
+// overloaded symbol (RenderNodeMultiDef): the reverse-adjacency map is
+// built ONCE and shared across every candidate's fetch (see
+// fetchCalledBy), and each candidate's source is read fresh from disk
+// via the existing repo-root-confined readSourceFile (T-03-06-Path) —
+// the same safety gate Node's file mode uses, not a new read path.
+func (e *Engine) renderMultiDefNode(symbol string, matches []*schema.Node) (string, error) {
+	rev, err := BuildReverseAdjacency(e.reader)
+	if err != nil {
+		return "", err
+	}
+
+	fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
+		source, err := e.readSourceFile(n.FilePath)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		calls, err := e.fetchCalls(n)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		calledBy, err := e.fetchCalledBy(n, rev)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return source, calls, calledBy, nil
+	}
+
+	return RenderNodeMultiDef(symbol, matches, fetch)
 }

@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 
@@ -53,6 +54,45 @@ func renderNumberedSource(content []byte) string {
 	return b.String()
 }
 
+// renderNumberedSourceRange is renderNumberedSource's sibling for
+// NODE-02's multi-def body rendering: TS's renderNodeSection shows only
+// the definition's own body (its [StartLine,EndLine] span), not its
+// enclosing file, and each row keeps its TRUE on-disk line number
+// (matching the golden captures, e.g. a definition starting at line 10
+// is numbered "10\t...", not renumbered from 1). startLine/endLine are
+// 1-indexed and inclusive; a zero or out-of-range endLine clamps to the
+// file's last line, and an out-of-range startLine clamps into range, so
+// a stale/inconsistent Node record degrades to "as much as fits" rather
+// than panicking on a slice out of bounds.
+func renderNumberedSourceRange(content []byte, startLine, endLine int32) string {
+	lines := strings.Split(string(content), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+
+	start, end := int(startLine), int(endLine)
+	if start < 1 {
+		start = 1
+	}
+	if start > len(lines) {
+		start = len(lines)
+	}
+	if end < start || end > len(lines) {
+		end = len(lines)
+	}
+
+	var b strings.Builder
+	b.WriteString("```go\n")
+	for i := start; i <= end && i >= 1; i++ {
+		b.WriteString(strconv.Itoa(i))
+		b.WriteByte('\t')
+		b.WriteString(lines[i-1])
+		b.WriteByte('\n')
+	}
+	b.WriteString("```\n")
+	return b.String()
+}
+
 // pluralize returns s unchanged for n==1, else s+"s" — every noun this
 // package pluralizes (symbol/file/caller) is regular.
 func pluralize(n int, s string) string {
@@ -93,6 +133,126 @@ func RenderNode(n *schema.Node, calls, calledBy []*schema.Node) string {
 	fmt.Fprintf(&b, "**Calls →** %s\n", joinNodeRefs(calls))
 	fmt.Fprintf(&b, "**Called by ←** %s\n", joinNodeRefs(calledBy))
 	return b.String()
+}
+
+// nodeMultiDefHardCap, nodeMultiDefBodyBudget, and nodeMultiDefListCap
+// are TS's exact NODE-02 budget constants (RESEARCH §8, verbatim):
+// HARD_CAP bounds how many full bodies are ever rendered, BODY_BUDGET is
+// the cumulative char budget those bodies must fit within (the first
+// body always renders regardless of budget), and LIST_CAP bounds how
+// many overflow definitions are listed inline before an "+K more" tail.
+// Together they bound NODE-02's output size (T-01-07, DoS mitigation).
+const (
+	nodeMultiDefHardCap    = 16
+	nodeMultiDefBodyBudget = 12000
+	nodeMultiDefListCap    = 20
+)
+
+// nodeSectionFetch resolves the full-body render inputs (verbatim
+// on-disk source plus the forward/reverse call trail) for one multi-def
+// candidate. RenderNodeMultiDef calls this LAZILY, in matches order,
+// and stops calling it once HARD_CAP renders have been produced —
+// mirroring TS's loop (RESEARCH §8) so a symbol with far more
+// definitions than the budget allows never pays the I/O cost of
+// resolving bodies past HARD_CAP.
+type nodeSectionFetch func(n *schema.Node) (source []byte, calls, calledBy []*schema.Node, err error)
+
+// renderNodeSection renders one multi-def candidate's full detail
+// (name/kind, Location, Signature, verbatim source, and — only when
+// non-empty — the Trail/Calls/CalledBy lines): TS's
+// renderNodeSection(cg, n, true) (RESEARCH §8). source is the
+// definition's ENCLOSING FILE's full content — renderNodeSection slices
+// it down to n's own [StartLine,EndLine] span (renderNumberedSourceRange),
+// matching the golden captures, which show only the definition's body,
+// not its whole file. Unlike the single-def RenderNode, the Trail line
+// (and its Calls/CalledBy children) is OMITTED ENTIRELY when both calls
+// and calledBy are empty — confirmed against the live TS golden captures
+// (testdata/golden/corpus/*/node-multi.json; e.g. the synthetic-parity
+// "Validate" case, where both definitions have zero callers and neither
+// section renders a "**Called by ←**" line at all, unlike the single-def
+// path which always renders it even when empty).
+func renderNodeSection(n *schema.Node, source []byte, calls, calledBy []*schema.Node) string {
+	parts := []string{
+		fmt.Sprintf("**%s** (%s)", n.Name, n.Kind),
+		"",
+		fmt.Sprintf("**Location:** %s:%d", n.FilePath, n.StartLine),
+		fmt.Sprintf("**Signature:** `%s`", n.Signature),
+		"",
+		strings.TrimSuffix(renderNumberedSourceRange(source, n.StartLine, n.EndLine), "\n"),
+	}
+	if len(calls) > 0 || len(calledBy) > 0 {
+		parts = append(parts, "**Trail — codegraph_node any of these to follow it (no Read needed)**")
+		if len(calls) > 0 {
+			parts = append(parts, fmt.Sprintf("**Calls →** %s", joinNodeRefs(calls)))
+		}
+		if len(calledBy) > 0 {
+			parts = append(parts, fmt.Sprintf("**Called by ←** %s", joinNodeRefs(calledBy)))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// RenderNodeMultiDef reproduces TS's multi-def node markdown shape
+// verbatim (NODE-02, RESEARCH §8, Pitfall 4): the "**N definitions
+// named "X"**" header line, immediately followed (single newline, NOT a
+// blank line — Pitfall 4) by the "Returning M in full[; K more listed
+// below] — pick the one you need (no Read required)." line, a blank
+// line, then up to HARD_CAP full bodies (renderNodeSection) joined by
+// "\n\n---\n\n" and capped at a BODY_BUDGET char budget (always
+// rendering at least the first, regardless of budget). When any
+// definitions overflow the cap or budget, a "**Other definitions**"
+// list follows — capped at LIST_CAP entries with a trailing "+K more"
+// line beyond that — plus a closing "Need one of these in full?" hint.
+func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSectionFetch) (string, error) {
+	var rendered []string
+	var listed []*schema.Node
+	used := 0
+	for _, n := range matches {
+		if len(rendered) >= nodeMultiDefHardCap {
+			listed = append(listed, n)
+			continue
+		}
+		source, calls, calledBy, err := fetch(n)
+		if err != nil {
+			return "", err
+		}
+		section := renderNodeSection(n, source, calls, calledBy)
+		if len(rendered) == 0 || used+len(section) <= nodeMultiDefBodyBudget {
+			rendered = append(rendered, section)
+			used += len(section)
+		} else {
+			listed = append(listed, n)
+		}
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "**%d definitions named %q**\n", len(matches), symbol)
+	overflowClause := ""
+	if len(listed) > 0 {
+		overflowClause = fmt.Sprintf("; %d more listed below", len(listed))
+	}
+	fmt.Fprintf(&b, "Returning %d in full%s — pick the one you need (no Read required).\n\n", len(rendered), overflowClause)
+	b.WriteString(strings.Join(rendered, "\n\n---\n\n"))
+	b.WriteByte('\n')
+
+	if len(listed) > 0 {
+		b.WriteByte('\n')
+		b.WriteString("**Other definitions**\n")
+		capped := listed
+		if len(capped) > nodeMultiDefListCap {
+			capped = capped[:nodeMultiDefListCap]
+		}
+		for _, n := range capped {
+			fmt.Fprintf(&b, "- `%s` (%s) — %s:%d\n", n.Name, n.Kind, n.FilePath, n.StartLine)
+		}
+		if len(listed) > nodeMultiDefListCap {
+			fmt.Fprintf(&b, "- … +%d more\n", len(listed)-nodeMultiDefListCap)
+		}
+		b.WriteByte('\n')
+		fmt.Fprintf(&b, "> Need one of these in full? Call codegraph_node again with `file` (e.g. `%q`) or `line` — do NOT Read it.\n", path.Base(listed[0].FilePath))
+	}
+
+	return b.String(), nil
 }
 
 // renderBlastBullet renders one explore.json blast-radius bullet (D-05a):
