@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -86,6 +87,91 @@ func (e *Engine) readSourceFile(relPath string) ([]byte, error) {
 		return nil, err
 	}
 	return os.ReadFile(abs)
+}
+
+// generatedFilePatterns is TS's GENERATED_PATTERNS list ported VERBATIM
+// (D-07, RESEARCH §7, extraction/generated-detection.js:27-82) — the
+// primary sort key for NODE-01's multi-def enumeration (generated files
+// last). Do not reorder, add, or drop entries without re-verifying
+// against the TS dist source; this is a byte-for-byte regex port, not an
+// approximation.
+var generatedFilePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`\.pb\.go$`),
+	regexp.MustCompile(`\.pulsar\.go$`),
+	regexp.MustCompile(`_grpc\.pb\.go$`),
+	regexp.MustCompile(`_mock\.go$`),
+	regexp.MustCompile(`_mocks\.go$`),
+	regexp.MustCompile(`^mock_[^/]+\.go$`),
+	regexp.MustCompile(`\.generated\.[jt]sx?$`),
+	regexp.MustCompile(`\.gen\.[jt]sx?$`),
+	regexp.MustCompile(`\.pb\.[jt]s$`),
+	regexp.MustCompile(`_pb\.[jt]s$`),
+	regexp.MustCompile(`_grpc_pb\.[jt]s$`),
+	regexp.MustCompile(`\.min\.m?js$`),
+	regexp.MustCompile(`_pb2(_grpc)?\.py$`),
+	regexp.MustCompile(`_pb2\.pyi$`),
+	regexp.MustCompile(`\.pb\.(cc|h)$`),
+	regexp.MustCompile(`\.g\.cs$`),
+	regexp.MustCompile(`Grpc\.cs$`),
+	regexp.MustCompile(`OuterClass\.java$`),
+	regexp.MustCompile(`Grpc\.java$`),
+	regexp.MustCompile(`\.pb\.swift$`),
+	regexp.MustCompile(`\.g\.dart$`),
+	regexp.MustCompile(`\.freezed\.dart$`),
+	regexp.MustCompile(`\.pb\.dart$`),
+	regexp.MustCompile(`\.pbgrpc\.dart$`),
+	regexp.MustCompile(`\.chopper\.dart$`),
+	regexp.MustCompile(`\.generated\.rs$`),
+}
+
+// isGeneratedFile reports whether filePath matches TS's generated-file
+// predicate (D-07) — used as NODE-01's multi-def sort's primary key so
+// hand-written definitions surface before generated/vendored duplicates
+// sharing the same symbol name.
+func isGeneratedFile(filePath string) bool {
+	for _, p := range generatedFilePatterns {
+		if p.MatchString(filePath) {
+			return true
+		}
+	}
+	return false
+}
+
+// enumerateSymbolDefs collects EVERY node whose Name equals symbol — a
+// full IterateNodes scan, the same D-03 base resolveSymbolNode uses —
+// instead of resolving to a single winner (NODE-01, RESEARCH §6
+// findSymbolMatches). The result is sorted generated-files-last
+// (isGeneratedFile, primary key) then lowest-Id-first (secondary key —
+// a documented divergence from TS's implicit, non-deterministic row
+// order per RESEARCH Pattern 2: TS's own sort has no secondary
+// tie-break, so this is an intentional Go-side determinism
+// improvement, not a byte-for-byte TS port of the ordering).
+func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
+	it, err := e.reader.IterateNodes()
+	if err != nil {
+		return nil, err
+	}
+	defer it.Close()
+
+	var matches []*schema.Node
+	for it.Next() {
+		n := it.Node()
+		if n.Name == symbol {
+			matches = append(matches, n)
+		}
+	}
+	if err := it.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.SliceStable(matches, func(i, j int) bool {
+		gi, gj := isGeneratedFile(matches[i].FilePath), isGeneratedFile(matches[j].FilePath)
+		if gi != gj {
+			return !gi // non-generated first
+		}
+		return matches[i].Id < matches[j].Id
+	})
+	return matches, nil
 }
 
 // resolveNodeForDetail resolves symbol to a concrete node for Node's
