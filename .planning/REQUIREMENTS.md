@@ -13,7 +13,7 @@
 - [x] **EXPL-02**: `explore` ranks results by graph relevance (Random-Walk-with-Restart, α=0.25, ~25 iterations, TS's 9 edge kinds + type-hierarchy/BFS/glue-node expansion), not lexical name-match
 - [x] **EXPL-03**: `explore` applies a file-level relevance gate so weakly-connected symbols (e.g. `Test*` funcs with no graph connectivity) no longer surface as top results, matching TS selection
 - [x] **EXPL-04**: `explore` emits a per-root "⚠️ no covering tests" warning when a symbol has direct callers but no covering test files, matching TS
-- [ ] **EXPL-05**: `explore` output is identical across the CLI command and the `codegraph_explore` MCP tool (shared engine), verified against TS on behavioral fixtures
+- [x] **EXPL-05**: `explore` output is identical across the CLI command and the `codegraph_explore` MCP tool (shared engine), verified against TS on behavioral fixtures
 
 ### Behavioral Parity — node (NODE)
 
@@ -133,7 +133,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | EXPL-02 | Phase 1 | Complete |
 | EXPL-03 | Phase 1 | Complete |
 | EXPL-04 | Phase 1 | Complete |
-| EXPL-05 | Phase 1 | Pending |
+| EXPL-05 | Phase 1 | Complete |
 | NODE-01 | Phase 1 | Complete |
 | NODE-02 | Phase 1 | Complete |
 | NODE-03 | Phase 1 | Complete |

@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
 current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
-status: executing
-stopped_at: Completed 01-14-PLAN.md
-last_updated: "2026-07-15T16:03:10.279Z"
+status: verifying
+stopped_at: Completed 01-17-PLAN.md (final plan of Phase 1)
+last_updated: "2026-07-15T16:25:43.555Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 17
-  completed_plans: 16
-  percent: 0
+  completed_plans: 17
+  percent: 13
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
 Plan: 17 of 17
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-14 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -75,6 +75,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P14 | 12min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node PP15 | 12min | 2 tasks | 0 files |
 | Phase 01-behavioral-parity-explore-node P16 | 55min | 3 tasks | 5 files |
+| Phase 01-behavioral-parity-explore-node P17 | 25min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 01-behavioral-parity-explore-node]: Wired the full H1-H21 explore pipeline; 'matched' symbols shown per file are gather+seed candidates (RWR-ordered), not the whole bounded subgraph, with a single-node structural fallback for files selected purely via connectivity
 - [Phase 01-behavioral-parity-explore-node]: computeFileTermHits is a new wiring-level primitive this plan added — plans 13/14 both documented fileTermHits as unwired/caller-supplied
 - [Phase 01-behavioral-parity-explore-node]: H21's getExploreOutputBudget is a documented D-02 monotonic step function substitute (TS dist unreadable); only overrides the maxFiles default, never an explicit --max-files
+- [Phase 01-behavioral-parity-explore-node]: F5 Go-side fixture regeneration lands under a distinct go-*.json naming convention (via a new gocapture tool), never overwriting the TS 1.3.1 frozen oracle fixtures from plan 01
+- [Phase 01-behavioral-parity-explore-node]: D-02's oracle applies at two tiers: full ordering+membership+warning+header+counts on synthetic-parity (purpose-built, tractable); shape-only plus four newly-documented allowed divergences (AD-01..04: TS stemming precision, TS/JS object-literal-method extraction gap, a weft-go def-count delta, file-selection/bullet-scope breadth) on the real-world weft-go/colbymchenry-codegraph corpora
 
 ### Pending Todos
 
@@ -144,8 +147,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T16:02:34.672Z
-Stopped at: Completed 01-14-PLAN.md
+Last session: 2026-07-15T16:25:43.550Z
+Stopped at: Completed 01-17-PLAN.md (final plan of Phase 1)
 Resume file: None
 
 ## Operator Next Steps

@@ -34,7 +34,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 
 **Milestone Goal:** Close the behavioral + surface gaps against TS CodeGraph v1.3.1 so an existing user swaps binaries with zero change in experience, add a human-facing terminal UI (agent/MCP path stays plain), then cut the first signed `v1.0.0`. Phase numbering resets to 1 for this milestone (v0.1 archived).
 
-- [ ] **Phase 1: Behavioral Parity — explore & node** - TS-identical relevance-ranked exploration + full multi-definition disambiguation, validated by a behavioral fixture harness
+- [x] **Phase 1: Behavioral Parity — explore & node** - TS-identical relevance-ranked exploration + full multi-definition disambiguation, validated by a behavioral fixture harness (completed 2026-07-15)
 - [ ] **Phase 2: status Content & Git/Worktree Awareness** - Rich `status` content + borrowed-index detection across every read tool
 - [ ] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch
 - [ ] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC
@@ -58,7 +58,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
   4. `explore` and `node` output is byte-identical across the CLI command and the MCP tool (shared engine), and single-definition `node` stays byte-comparable to TS (EXPL-05/NODE-04)
   5. A behavioral fixture harness diffs `explore`/`node` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot (TEST-01)
 
-**Plans**: 16/17 plans executed
+**Plans**: 17/17 plans complete
 
 Plans:
 **Wave 1**
@@ -94,7 +94,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-17-PLAN.md — F5 golden regen + behavioral parity harness (Go vs TS, CLI==MCP)
+- [x] 01-17-PLAN.md — F5 golden regen + behavioral parity harness (Go vs TS, CLI==MCP)
 
 **Notes**: Highest-risk, load-bearing work. EXPL-02's RWR relevance algorithm is the single hardest item — it lives in the shared `internal/query.Engine` (CLI + MCP improve in the same commit) and puts the golden-corpus contract at stake. Fixtures MUST exist before/with the algorithm change (template-parity ≠ behavior-parity). No styling anywhere in this phase — plain-text output only (the archtest lands in Phase 6 but the constraint holds from day one).
 
@@ -211,7 +211,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Behavioral Parity — explore & node | v1.0 | 16/17 | In Progress|  |
+| 1. Behavioral Parity — explore & node | v1.0 | 17/17 | Complete   | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 0/TBD | Not started | - |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
