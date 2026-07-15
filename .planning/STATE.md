@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 1
 current_phase_name: Behavioral Parity — explore & node
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-07-15T13:26:49.341Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-07-15T13:41:34.254Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 17
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 1 (Behavioral Parity — explore & node) — EXECUTING
-Plan: 7 of 17
+Plan: 8 of 17
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 1 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01-behavioral-parity-explore-node P04 | 25min | 3 tasks | 4 files |
 | Phase 01-behavioral-parity-explore-node P05 | 19min | 2 tasks | 9 files |
 | Phase 01-behavioral-parity-explore-node P06 | 15min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P07 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 1]: type_of applies only to package-level var declarations for Go (struct-field/local-var type_of is an explicit per-language divergence — this extractor emits no field or local-var nodes to anchor those refs on)
 - [Phase 01-behavioral-parity-explore-node]: Task 1/2 combined into one feat commit (shared file, no independent dependency); Task 2's tests committed separately to lock in D-04's determinism contract
 - [Phase 01-behavioral-parity-explore-node]: T-01-10 DoS mitigation for rwr.go is documentation-only (precondition doc comment) — maxNodes=200/GLUE_NODE_CAP=60 enforcement deferred to upstream subgraph-gathering plans 11/16 per this plan's threat_model disposition
+- [Phase 1]: 01-07 gather channels (H3-H6) shipped without matchNodes wiring by design -- plan 10 wires this into Explore() and adds H7-H21 rerankers
 
 ### Pending Todos
 
@@ -117,8 +119,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T13:25:27.848Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-07-15T13:41:34.249Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

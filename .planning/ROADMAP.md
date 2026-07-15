@@ -58,7 +58,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
   4. `explore` and `node` output is byte-identical across the CLI command and the MCP tool (shared engine), and single-definition `node` stays byte-comparable to TS (EXPL-05/NODE-04)
   5. A behavioral fixture harness diffs `explore`/`node` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot (TEST-01)
 
-**Plans**: 6/17 plans executed
+**Plans**: 7/17 plans executed
 
 Plans:
 **Wave 1**
@@ -72,7 +72,7 @@ Plans:
 
 - [x] 01-05-PLAN.md — Go edge-kind extraction: resolve.go Pass-2 (extends/overrides) + Pass-1 (references/instantiates/type_of/returns)
 - [x] 01-06-PLAN.md — RWR core: computeGraphRelevance + 9-kind RankEdges (deterministic, α=0.25, 25 iters)
-- [ ] 01-07-PLAN.md — Hybrid gather channels 1-3 + merge (H3–H6) + shared isTestFile
+- [x] 01-07-PLAN.md — Hybrid gather channels 1-3 + merge (H3–H6) + shared isTestFile
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -211,7 +211,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Behavioral Parity — explore & node | v1.0 | 6/17 | In Progress|  |
+| 1. Behavioral Parity — explore & node | v1.0 | 7/17 | In Progress|  |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 0/TBD | Not started | - |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
