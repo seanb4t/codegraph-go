@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
 current_phase: 04
 current_phase_name: Output Hygiene
-status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-07-16T21:18:59.724Z"
+status: verifying
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-07-16T21:26:58.677Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 32
-  completed_plans: 31
-  percent: 38
+  completed_plans: 32
+  percent: 50
 ---
 
 # Project State
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 04 (Output Hygiene) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-16 — Phase 04 execution started
 
-Progress: [██████████] 97%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Progress: [██████████] 97%
 |------|----------|-------|-------|
 | Phase 04 P01 | 4min | 2 tasks | 3 files |
 | Phase 04-output-hygiene P02 | 9min | 2 tasks | 2 files |
+| Phase 04-output-hygiene P03 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 3]: Both watch_default_test.go tasks landed in one commit — same new file created in a single pass, no independently-buildable intermediate state (03-04 precedent)
 - [Phase ?]: [Phase 3]: newServeClientWithEnv is a new package-local sibling helper, not a signature change to worktree_notice_test.go's newServeClient — this plan's files_modified is scoped to watch_default_test.go alone
 - [Phase ?]: [Phase 4]: D-08 mutation-proof wiring test redirects stdlib log's default output into the same buffer as diagWriter, since Pebble's DefaultLogger writes via log.Output directly and never touches diagWriter — capturing diagWriter alone would vacuously pass whether or not the Open seam is wired
+- [Phase 04-output-hygiene]: CODEGRAPH_MCP_TOOLS=status allowlisted on the spawned serve --mcp test process so the D-06a tools/call to codegraph_status actually registers and opens the store — companion tools are allowlist-gated (MCP-02/D-08a); codegraph_explore alone needs no allowlist entry
+- [Phase 04-output-hygiene]: sync (not status) drives D-09's CLI-noise-absence check — exercises strictly more of Pebble's Infof surface (flush + possible compaction) per RESEARCH Open Question #1
 
 ### Pending Todos
 
@@ -189,8 +192,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T21:18:59.717Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-07-16T21:26:48.221Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
