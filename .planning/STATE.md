@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 02
 current_phase_name: status Content & Git/Worktree Awareness
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-07-15T23:53:26.886Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-07-16T00:04:18.020Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 13
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 02 (status Content & Git/Worktree Awareness) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-15 — Phase 02 execution started
 
@@ -80,6 +80,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P02 | 28min | 3 tasks | 4 files |
 | Phase 02 P03 | 48min | 3 tasks | 2 files |
 | Phase 02 P04 | 35min | 3 tasks | 5 files |
+| Phase 02 P05 | 25min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 02-status-content-git-worktree-awareness]: OpenAt retains an absolutized start path as Engine.startPath (D-14) — the plumbing fix that delivers CLI+MCP worktree awareness through the single shared read seam
 - [Phase 02-status-content-git-worktree-awareness]: WorktreeMismatch cross-call caching lives via an injectable gitmeta.CachingDetector (UseDetector), not solely on Engine's own sync.Once, since MCP's openEngine rebuilds a fresh Engine per tool call (D-13 corrected)
 - [Phase 02-status-content-git-worktree-awareness]: StatusResult.WorktreeMismatch type-changed from *string to *gitmeta.Mismatch to match TS's {worktreeRoot,indexRoot}/null shape; T-02-14 accepted as a deliberate, documented host-path-disclosure exception
+- [Phase 02-status-content-git-worktree-awareness]: Combined Task 2/Task 3 GREEN commits into one: Go's whole-package compilation model means Task 1's RED test file (referencing RenderStatusMarkdown) blocks the package from building until both renderers exist — No independently-buildable intermediate state exists between the two tasks
+- [Phase 02-status-content-git-worktree-awareness]: Status advisory wording (staleness/reindex lines) is this plan's own text, not a byte-for-byte TS port, since the captured TS source did not preserve the exact advisory strings; tests match on substrings (stale/pending/up to date/reindex) — CONTEXT.md's D-09 target structure specifies the advisory's presence and live-signal source, not exact prose
+- [Phase 02-status-content-git-worktree-awareness]: sortedCounts breaks count ties on key ascending rather than TS's Object.entries insertion order — Go's map iteration is deliberately randomized, so a key tiebreak is the only deterministic substitute
 
 ### Pending Todos
 
@@ -160,8 +164,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-15T23:51:56.145Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-07-16T00:04:18.015Z
+Stopped at: Completed 02-05-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
