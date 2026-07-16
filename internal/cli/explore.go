@@ -41,8 +41,23 @@ func newExploreCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			query := strings.Join(args, " ")
-			out, err := eng.Explore(query, maxFiles)
+			// Compact worktree notice (WORK-02, D-12): printed immediately
+			// after OpenAt succeeds, before the command's main output, on
+			// stdout (TS's CLI warn() is console.log = stdout, matched here
+			// for parity). query.WorktreeNotice is nil-safe and returns ""
+			// when there is no mismatch, so a clean tree prints nothing.
+			//
+			// This CLI placement has NO TS precedent: TS never wires the
+			// compact notice into any command but `status` (verified: zero
+			// other call sites in mcp/tools.js's withWorktreeNotice or
+			// bin/codegraph.js). It is deliberate Go-side design, granted as
+			// Claude's Discretion (02-CONTEXT.md), chosen to mirror
+			// `status`'s own placement (project context, then the warning,
+			// then the output) across the other 7 read commands.
+			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch()))
+
+			exploreQuery := strings.Join(args, " ")
+			out, err := eng.Explore(exploreQuery, maxFiles)
 			if err != nil {
 				return err
 			}

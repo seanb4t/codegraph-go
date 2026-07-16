@@ -47,6 +47,10 @@ func newCalleesCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
+			// Compact worktree notice (WORK-02, D-12): lives strictly inside
+			// the human-output branch, AFTER the --json early return above —
+			// see explore.go's call site for the full rationale.
+			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch()))
 			fmt.Fprintf(out, "%s calls %d callee(s):\n", result.Symbol, len(result.Callees))
 			for _, l := range result.Callees {
 				fmt.Fprintf(out, "  %s (%s) %s:%d\n", l.Name, l.Kind, l.FilePath, l.StartLine)
