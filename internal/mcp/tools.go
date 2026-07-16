@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -165,10 +164,22 @@ func companionTool(name string) mcp.Tool {
 // companionHandler returns the ToolHandlerFunc for one of the 7
 // companion tools. Every branch follows the same shape: parse args,
 // open a fresh engine snapshot (openEngine), delegate to the matching
-// Engine method, marshal via the matching internal/query Marshal*JSON
-// formatter (D-08b — no JSON shaping re-implemented here), and return
-// the JSON text. Panics on an unrecognized name — callers only ever
+// Engine method, render via the matching internal/query Render*Markdown
+// formatter (D-08b — no rendering re-implemented here), and return the
+// markdown text. Panics on an unrecognized name — callers only ever
 // pass names from companionNames.
+//
+// SURF-06 (D-16) moved this file's six call sites (search/callers/
+// callees/impact/files/status) from json.Marshal / Marshal*JSON to the
+// matching Render*Markdown function. This creates a deliberate,
+// intentional asymmetry that must NOT be "unified": after this change,
+// each Marshal*JSON helper (traverse.go, files.go, status.go) has
+// exactly one caller — the CLI --json path, whose consumer is a parser
+// (jq, scripts, CI) and which is also testdata/golden's shape oracle —
+// while each Render*Markdown function has exactly one caller — this
+// file, whose consumer is a language model, not a parser. This closes a
+// Go-vs-TS divergence: TS returns markdown from every MCP tool; our
+// JSON-shaped tools were the anomaly.
 func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 	switch name {
 	case "node":
@@ -216,16 +227,8 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			// Search's []query.Location result carries its own json tags
-			// (search.go) — no dedicated MarshalSearchJSON exists (unlike
-			// its sibling commands), so this is a thin encoding/json.Marshal
-			// pass over an already-fully-shaped internal/query type, not a
-			// second rendering path (D-08b).
-			data, err := json.Marshal(locs)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(string(data)), nil
+			out := query.RenderSearchMarkdown(term, locs)
+			return mcp.NewToolResultText(out), nil
 		}
 	case "callers":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -245,11 +248,8 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			data, err := query.MarshalCallersJSON(result)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(string(data)), nil
+			out := query.RenderCallersMarkdown(result)
+			return mcp.NewToolResultText(out), nil
 		}
 	case "callees":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -269,11 +269,8 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			data, err := query.MarshalCalleesJSON(result)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(string(data)), nil
+			out := query.RenderCalleesMarkdown(result)
+			return mcp.NewToolResultText(out), nil
 		}
 	case "impact":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -293,11 +290,8 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			data, err := query.MarshalImpactJSON(result)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(string(data)), nil
+			out := query.RenderImpactMarkdown(result)
+			return mcp.NewToolResultText(out), nil
 		}
 	case "files":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -318,11 +312,8 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			data, err := query.MarshalFilesJSON(result)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(string(data)), nil
+			out := query.RenderFilesMarkdown(result)
+			return mcp.NewToolResultText(out), nil
 		}
 	case "status":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -336,11 +327,8 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			data, err := query.MarshalStatusJSON(result)
-			if err != nil {
-				return mcp.NewToolResultError(err.Error()), nil
-			}
-			return mcp.NewToolResultText(string(data)), nil
+			out := query.RenderStatusMarkdown(result)
+			return mcp.NewToolResultText(out), nil
 		}
 	default:
 		panic("mcp: companionHandler: unknown tool name " + name)
