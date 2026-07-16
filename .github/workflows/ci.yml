@@ -92,6 +92,20 @@ jobs:
         # the suite.
         run: go test ./internal/daemon/ -count=1
 
+      # WR-03 (03-REVIEW.md): the watcher-on-MCP-default phase's entire
+      # surface is goroutine lifecycles (serveWatchStart's spawn/teardown,
+      # RunWithRetry's cancel-vs-sleep select, Debouncer.fireWG accounting,
+      # the two-session convergence soak) — and the soak tests' iteration
+      # counts are explicitly sized for CI "under -race", an assumption no
+      # step verified until now. Targeted at the concurrency packages (plus
+      # internal/cli, whose serveWatchStart tests exercise the same
+      # goroutine seams) rather than the full suite, keeping the added wall
+      # time bounded; -p 1 preserves the same no-parallel-package-contention
+      # isolation the internal/daemon step above documents. The goleak gate
+      # catches leaks, not races — the two are complementary.
+      - name: Test concurrency packages under the race detector (-race)
+        run: go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
+
   govulncheck:
     name: govulncheck (DIST-03, blocking)
     runs-on: ubuntu-latest
