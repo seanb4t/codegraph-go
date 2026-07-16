@@ -119,7 +119,7 @@ func TestDefaultToolVisibility(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	s := BuildServer(true, map[string]bool{}, dir)
+	s := BuildServer(true, map[string]bool{}, dir, dir)
 
 	got := listToolNames(t, s)
 	want := []string{"codegraph_explore"}
@@ -150,7 +150,7 @@ func TestAllowlist(t *testing.T) {
 		t.Fatalf("WarnUnknownToolsTo did not mention %q, got %q", "bogus", stderr.String())
 	}
 
-	s := BuildServer(true, allowed, dir)
+	s := BuildServer(true, allowed, dir, dir)
 	got := listToolNames(t, s)
 	want := []string{"codegraph_explore", "codegraph_node", "codegraph_status"}
 	if !equalStrings(got, want) {
@@ -161,7 +161,7 @@ func TestAllowlist(t *testing.T) {
 func TestNoIndexZeroTools(t *testing.T) {
 	dir := t.TempDir()
 
-	s := BuildServer(false, map[string]bool{"node": true, "status": true}, dir)
+	s := BuildServer(false, map[string]bool{"node": true, "status": true}, dir, dir)
 
 	got := listToolNames(t, s)
 	if len(got) != 0 {
@@ -177,7 +177,7 @@ func TestExploreHandlerDelegatesToEngine(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	s := BuildServer(true, map[string]bool{}, dir)
+	s := BuildServer(true, map[string]bool{}, dir, dir)
 
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
@@ -228,7 +228,7 @@ func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
 	outside := copyFixture(t)
 	indexFixture(t, outside)
 
-	s := BuildServer(true, map[string]bool{"status": true}, dir)
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
 
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {

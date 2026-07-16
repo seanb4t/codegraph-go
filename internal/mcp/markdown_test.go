@@ -45,6 +45,8 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // worktreeNoticeText is the fixed, glyph-led prefix of the D-11 compact
@@ -125,6 +127,28 @@ func runGitM(t *testing.T, dir string, args ...string) string {
 	return string(out)
 }
 
+// deriveServeRepoPath replicates internal/cli/serve.go's RunE verbatim —
+// the EXACT repoPath derivation CR-01 fixes: repoPath starts as start and
+// is overwritten with the resolved index root only when
+// query.ResolveCodegraphDir finds one at or above start. This is the
+// literal computation BuildServer's only production caller performs.
+// Before CR-01, every test in this file that exercised the mismatch
+// fixture instead hand-picked the worktree itself as BuildServer's
+// repoPath — a value serve.go can never produce, since it always
+// overwrites `start` with ResolveCodegraphDir's output once an index is
+// found. A test that calls BuildServer with a literal it chose itself
+// cannot prove this feature is reachable through the real entry point;
+// routing every fixture-driven BuildServer call through this helper
+// closes that gap (CR-01's "required test").
+func deriveServeRepoPath(t *testing.T, start string) string {
+	t.Helper()
+	repoPath := start
+	if dir, err := query.ResolveCodegraphDir(start); err == nil {
+		repoPath = dir
+	}
+	return repoPath
+}
+
 // mcpWorktreeMismatchFixture builds a real, indexed main checkout plus a
 // linked worktree nested at .claude/worktrees/probe — D-15's motivating
 // true-positive layout, mirroring internal/query/engine_worktree_test.go's
@@ -132,17 +156,18 @@ func runGitM(t *testing.T, dir string, args ...string) string {
 // helpers are not importable across packages). Returns both absolute
 // paths.
 //
-// ★ Confinement interaction (CR-02): every test in this file that uses
-// this fixture constructs its server with the WORKTREE path as the
-// server's own repoPath/defaultPath, not the main checkout, and issues
-// tool calls with no explicit "path" argument (resolvePath then defaults
-// to defaultPath). confineToRepoRoot rejects any resolved path outside the
-// server's configured repo root, so the server's root must already BE the
-// worktree for openEngine to ever reach query.OpenAt with the worktree as
-// its start — this fixture does not work around confinement, it is
-// deliberately structured to satisfy it. Verified while writing this file:
-// rooting the server at the worktree, with no "path" override, is
-// sufficient; confinement required no change.
+// ★ Confinement interaction (CR-01/CR-02): every test in this file that
+// uses this fixture now constructs its server via
+// BuildServer(true, allowlist, deriveServeRepoPath(t, wt), wt) — repoPath
+// (the confinement root) is the RESOLVED index root (main, found by
+// walking up from wt, since wt has no .codegraph/ of its own), and
+// startPath (the handlers' default path) is wt itself, exactly mirroring
+// serve.go's real derivation. Tool calls issue with no explicit "path"
+// argument, so resolvePath defaults to startPath (wt) and
+// confineToRepoRoot then checks wt against repoPath (main) — this always
+// succeeds structurally, because ResolveCodegraphDir's upward walk
+// guarantees repoPath is wt itself or an ancestor of it (see
+// mcp.BuildServer's doc comment). No confinement weakening was required.
 func mcpWorktreeMismatchFixture(t *testing.T) (worktreeStart, mainRoot string) {
 	t.Helper()
 
@@ -176,7 +201,7 @@ func TestMarkdownOutput(t *testing.T) {
 	indexFixture(t, dir)
 
 	allowlist := map[string]bool{"search": true, "callers": true, "callees": true, "impact": true, "files": true}
-	s := BuildServer(true, allowlist, dir)
+	s := BuildServer(true, allowlist, dir, dir)
 
 	locationTableMarker := "| Name | Kind | Location |"
 
@@ -225,7 +250,7 @@ func TestStatusMarkdownOutput(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	s := BuildServer(true, map[string]bool{"status": true}, dir)
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
 
 	result := callTool(t, s, "codegraph_status", map[string]any{})
 	if result.IsError {
@@ -251,7 +276,7 @@ func TestNoWorktreeNoticeOnCleanTree(t *testing.T) {
 	indexFixture(t, dir)
 
 	allowlist := map[string]bool{"node": true, "search": true, "callers": true, "callees": true, "impact": true, "files": true, "status": true}
-	s := BuildServer(true, allowlist, dir)
+	s := BuildServer(true, allowlist, dir, dir)
 
 	cases := []struct {
 		tool string
@@ -290,7 +315,7 @@ func TestWorktreeNoticeOnMismatch(t *testing.T) {
 	wt, _ := mcpWorktreeMismatchFixture(t)
 
 	allowlist := map[string]bool{"node": true, "search": true, "callers": true, "callees": true, "impact": true, "files": true, "status": true}
-	s := BuildServer(true, allowlist, wt)
+	s := BuildServer(true, allowlist, deriveServeRepoPath(t, wt), wt)
 
 	nonStatus := []struct {
 		tool string
@@ -341,7 +366,7 @@ func TestWorktreeNoticeOnMismatch(t *testing.T) {
 func TestWorktreeNoticeNotAppliedOnError(t *testing.T) {
 	wt, _ := mcpWorktreeMismatchFixture(t)
 
-	s := BuildServer(true, map[string]bool{"callers": true}, wt)
+	s := BuildServer(true, map[string]bool{"callers": true}, deriveServeRepoPath(t, wt), wt)
 
 	result := callTool(t, s, "codegraph_callers", map[string]any{})
 	if !result.IsError {
@@ -364,7 +389,7 @@ func TestWorktreeNoticeNotAppliedOnError(t *testing.T) {
 func TestWorktreeNoticeConsistentAcrossCalls(t *testing.T) {
 	wt, _ := mcpWorktreeMismatchFixture(t)
 
-	s := BuildServer(true, map[string]bool{}, wt)
+	s := BuildServer(true, map[string]bool{}, deriveServeRepoPath(t, wt), wt)
 
 	result1 := callTool(t, s, "codegraph_explore", map[string]any{"query": "main"})
 	result2 := callTool(t, s, "codegraph_explore", map[string]any{"query": "main"})

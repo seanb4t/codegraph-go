@@ -45,19 +45,24 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 }
 
 // openEngine is every handler's single read seam: it resolves req's
-// "path" arg against defaultPath, confines it to the server's repo root
-// (CR-02, confineToRepoRoot — this check runs BEFORE query.OpenAt and
-// must never move or weaken, since a caller-supplied "path" could
-// otherwise redirect detection, not just reads, outside the server's
-// configured root), opens a FRESH query.OpenAt snapshot for this call
-// (D-02/D-08b, RESEARCH Pitfall 2 — never a snapshot cached at server
-// construction), and installs the server-scoped detector (D-13) so this
-// call's worktree detection shares the one cache BuildServer constructed
-// rather than probing git uncached. The caller owns closing the returned
-// io.Closer.
-func openEngine(req mcp.CallToolRequest, defaultPath string, detector *gitmeta.CachingDetector) (*query.Engine, func() error, error) {
+// "path" arg against defaultPath (the CALLER's actual starting
+// directory, CR-01 — serve.go's `start`, distinct from repoPath), confines
+// the resolved path to repoPath, the server's confinement root (CR-02,
+// confineToRepoRoot — this check runs BEFORE query.OpenAt and must never
+// move or weaken, since a caller-supplied "path" could otherwise redirect
+// detection, not just reads, outside the server's configured root; the
+// DEFAULT defaultPath always passes this check because repoPath is
+// ResolveCodegraphDir(defaultPath)'s own return value — defaultPath is
+// always repoPath itself or a descendant of it, by construction — see
+// BuildServer's doc comment), opens a FRESH query.OpenAt snapshot for
+// this call (D-02/D-08b, RESEARCH Pitfall 2 — never a snapshot cached at
+// server construction), and installs the server-scoped detector (D-13)
+// so this call's worktree detection shares the one cache BuildServer
+// constructed rather than probing git uncached. The caller owns closing
+// the returned io.Closer.
+func openEngine(req mcp.CallToolRequest, defaultPath, repoPath string, detector *gitmeta.CachingDetector) (*query.Engine, func() error, error) {
 	path := resolvePath(req, defaultPath)
-	confined, err := confineToRepoRoot(path, defaultPath)
+	confined, err := confineToRepoRoot(path, repoPath)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -85,8 +90,10 @@ func exploreTool() mcp.Tool {
 // returns the markdown result, compact-worktree-notice-prefixed on the
 // success path (WORK-02/D-12; no-op on the mismatch-free case since
 // query.WorktreeNotice returns "" — no re-rendering in internal/mcp,
-// D-08b).
-func exploreHandler(defaultPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
+// D-08b). defaultPath is the caller's start path (CR-01); repoPath is the
+// confinement root — see BuildServer's doc comment for why they must stay
+// distinct.
+func exploreHandler(defaultPath, repoPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		q, err := req.RequireString("query")
 		if err != nil {
@@ -94,7 +101,7 @@ func exploreHandler(defaultPath string, detector *gitmeta.CachingDetector) serve
 		}
 		maxFiles := req.GetInt("max_files", 0)
 
-		eng, close, err := openEngine(req, defaultPath, detector)
+		eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -198,7 +205,10 @@ func companionTool(name string) mcp.Tool {
 // redundant isError check needed. "status" is deliberately excluded:
 // query.RenderStatusMarkdown already embeds its own verbose blockquote
 // warning (D-17), and a second compact prefix would duplicate it.
-func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
+// defaultPath is the caller's start path (CR-01); repoPath is the
+// confinement root — see BuildServer's doc comment for why they must stay
+// distinct.
+func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
 	switch name {
 	case "node":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -214,7 +224,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 				lineHint = &line
 			}
 
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -235,7 +245,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 			kind := req.GetString("kind", "")
 			limit := req.GetInt("limit", 0)
 
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -256,7 +266,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 			}
 			limit := req.GetInt("limit", 0)
 
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -277,7 +287,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 			}
 			limit := req.GetInt("limit", 0)
 
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -298,7 +308,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 			}
 			depth := req.GetInt("depth", 0)
 
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -320,7 +330,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 				Format:  req.GetString("format", ""),
 			}
 
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -335,7 +345,7 @@ func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetecto
 		}
 	case "status":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			eng, close, err := openEngine(req, defaultPath, detector)
+			eng, close, err := openEngine(req, defaultPath, repoPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

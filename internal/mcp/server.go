@@ -75,10 +75,23 @@ func WarnUnknownToolsTo(w io.Writer, unknown []string) {
 // whether ANY tool is registered at all (MCP-03 — zero tools when no
 // .codegraph/ resolves, though MCP init still completes successfully),
 // allowlist gates which of the 7 companion tools register beyond the
-// always-visible codegraph_explore (MCP-01/02), and repoPath is the
-// default repo root every tool handler resolves against when the caller
-// does not supply its own "path" argument.
-func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath string) *server.MCPServer {
+// always-visible codegraph_explore (MCP-01/02).
+//
+// repoPath and startPath are DELIBERATELY DISTINCT (CR-01, the Phase-1
+// CR-02 recurrence this parameter split fixes): repoPath is the
+// confinement root — the RESOLVED index root every handler's
+// confineToRepoRoot check anchors against, rejecting any client-supplied
+// "path" argument that resolves outside it (CR-02/tools.go's trust
+// boundary) — while startPath is the CALLER'S actual starting directory
+// (serve.go's `start`, before ResolveCodegraphDir's upward walk), the
+// value every handler falls back to when the caller omits "path" and the
+// value that must reach query.OpenAt for WorktreeMismatch to have
+// anything to compare. Because repoPath is always startPath itself or an
+// ANCESTOR of it (it is ResolveCodegraphDir(startPath)'s own return
+// value), confining the default startPath to repoPath always succeeds
+// structurally — only an explicit, client-supplied "path" redirecting
+// elsewhere can ever be rejected.
+func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath string) *server.MCPServer {
 	s := server.NewMCPServer("codegraph", version, server.WithToolCapabilities(true))
 	if !hasIndex {
 		return s
@@ -95,10 +108,10 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath string) *ser
 	// this server's entire lifetime, however many tool calls follow.
 	detector := gitmeta.NewCachingDetector()
 
-	s.AddTool(exploreTool(), exploreHandler(repoPath, detector))
+	s.AddTool(exploreTool(), exploreHandler(startPath, repoPath, detector))
 	for _, name := range companionNames {
 		if allowlist[name] {
-			s.AddTool(companionTool(name), companionHandler(name, repoPath, detector))
+			s.AddTool(companionTool(name), companionHandler(name, startPath, repoPath, detector))
 		}
 	}
 	return s

@@ -48,7 +48,7 @@ func TestReconnectReconcile(t *testing.T) {
 		t.Fatal("reconcile Sync: got 0 files reparsed, want the offline-mutated file reparsed")
 	}
 
-	s := BuildServer(true, map[string]bool{}, dir)
+	s := BuildServer(true, map[string]bool{}, dir, dir)
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
 		t.Fatalf("NewInProcessClient: %v", err)

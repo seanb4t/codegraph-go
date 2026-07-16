@@ -111,7 +111,15 @@ func newServeCmd() *cobra.Command {
 			allowlist, unknown := mcp.ParseAllowlist(os.Getenv(codegraphMCPToolsEnv))
 			mcp.WarnUnknownToolsTo(cmd.ErrOrStderr(), unknown)
 
-			s := mcp.BuildServer(hasIndex, allowlist, repoPath)
+			// CR-01: repoPath (the RESOLVED index root) is the confinement
+			// root; start (the caller's actual cwd, captured above BEFORE
+			// repoPath overwrote it for storeDir/daemon.New's purposes) must
+			// ALSO survive to BuildServer as the handlers' default path — a
+			// literal recurrence of Phase-1 CR-02 otherwise, since passing
+			// repoPath for both collapses startPath == repoRoot and every
+			// worktree-mismatch check silently short-circuits to nil on
+			// every production call. See mcp.BuildServer's doc comment.
+			s := mcp.BuildServer(hasIndex, allowlist, repoPath, start)
 			return server.ServeStdio(s)
 		},
 	}
