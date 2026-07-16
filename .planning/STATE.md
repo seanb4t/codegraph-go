@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 03
 current_phase_name: Watcher-on-MCP Default
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-07-16T14:22:24.181Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-07-16T14:35:18.287Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 29
-  completed_plans: 28
+  completed_plans: 29
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 03 (Watcher-on-MCP Default) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-16 — Phase 03 execution started
 
@@ -86,6 +86,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P01 | 4min | 2 tasks | 2 files |
 | Phase 03-watcher-on-mcp-default P02 | 9min | 2 tasks | 3 files |
 | Phase 03 P03 | 9min | 2 tasks | 2 files |
+| Phase 03-watcher-on-mcp-default P04 | 9min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 3]: RunWithRetry/jitter live in internal/daemon (not internal/cli) so they inherit the package's existing goleak TestMain; internal/cli has no goleak harness
 - [Phase ?]: [Phase 3]: WATCH-04 marked complete by 03-02; WATCH-02 intentionally left open — this plan only delivers the policy-gate-before-acquire piece, the off-handshake-path structural guarantee ships in 03-03
 - [Phase ?]: [Phase 3]: serve.go's serveWatchStart seam reuses daemon.RunWithRetry's Probe scope to re-derive the disabled reason string instead of parsing the wrapped error text
+- [Phase ?]: [Phase 3]: Used mcp-go's transport.WithCommandFunc to set the spawned serve --mcp subprocess's real cmd.Dir (D-19/D-20's literal cwd requirement) rather than the plan's -p flag fallback
+- [Phase ?]: [Phase 3]: buildWorktreeFixture indexes the main checkout via the subprocess binary (runBinary), not an in-process execCmd call, applying the D-19 seam distinction to fixture setup as well as the assertion
 
 ### Pending Todos
 
@@ -176,8 +179,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T14:19:55.098Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-07-16T14:35:18.281Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
