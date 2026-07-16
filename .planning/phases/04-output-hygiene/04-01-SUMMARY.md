@@ -66,7 +66,7 @@ coverage:
         status: pass
     human_judgment: false
 
-duration: 14min
+duration: 4min
 completed: 2026-07-16
 status: complete
 ---
@@ -77,7 +77,7 @@ status: complete
 
 ## Performance
 
-- **Duration:** 14 min
+- **Duration:** 4 min
 - **Tasks:** 2
 - **Files modified:** 3 (2 created, 1 modified)
 
