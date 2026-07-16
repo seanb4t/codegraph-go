@@ -206,7 +206,10 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // immediately without starting a watcher. If the watch loop exits without
 // ctx being cancelled (abnormal fsnotify teardown, IN-07), Run tears down
 // through the same join path, releases the lock, and returns
-// ErrWatcherClosed instead of holding the lock as a zombie.
+// ErrWatcherClosed instead of holding the lock as a zombie — though on
+// that path (ctx still live) an in-flight lock-lost flush can extend the
+// join by a bounded requeue chain; see the backstop deb.Stop() comment in
+// the function body (IN-01).
 //
 // Before any of the above, Run enforces watch.WatchDisabledReason as its
 // FIRST action (WATCH-03/D-11): a policy-disabled Daemon returns a
@@ -305,6 +308,19 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// second Stop cancels it so deb.Wait() below doesn't ride out a dead
 	// debounce window. The structural fix is Debouncer.Add's own ctx gate
 	// (internal/watch/debounce.go) — this is the caller-side backstop.
+	//
+	// IN-01 (round 5): both of those defenses are ctx gates, so they only
+	// cover the CANCELLATION teardown. In the loopExited-with-live-ctx
+	// path (ErrWatcherClosed above), ctx is not done: a lock-lost
+	// in-flight flush can requeue PAST this Stop (Add re-arms because ctx
+	// is alive) and deb.Wait() below rides out the new timer — repeatable
+	// up to maxFlushLockRequeues times, so Run's return can lag by up to
+	// that many debounce windows plus sync durations. Bounded and
+	// invariant-safe (the chain terminates via success, non-lock error,
+	// or give-up; the lock is correctly held throughout, and the extra
+	// syncs are legitimate pending work), so this is accepted teardown
+	// latency on an already-abnormal path — cancelling an internal
+	// context here would be the fix if prompt teardown ever matters.
 	deb.Stop()
 	// CR-01: wg.Wait() only joins the tracked watcher goroutine — it does
 	// NOT join a debounce flush that had already started running its
