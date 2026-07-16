@@ -21,6 +21,30 @@ import (
 // the always-visible codegraph_explore.
 const codegraphMCPToolsEnv = "CODEGRAPH_MCP_TOOLS"
 
+// serveServerPaths computes BuildServer's two DELIBERATELY DISTINCT
+// arguments (CR-01) from start, the caller's actual starting directory:
+// repoPath, the confinement root (start itself, overwritten with the
+// RESOLVED index root only when query.ResolveCodegraphDir finds one at or
+// above start), and hasIndex, whether an index was found at all (MCP-03).
+//
+// WR-01 (02-REVIEW-2.md): extracted so a test can pin THIS function's
+// actual output — the derivation newServeCmd's RunE really performs —
+// rather than a hand-built replica living only inside a test file, which
+// proves nothing about whether serve.go itself still passes the caller's
+// start path through to BuildServer. The re-review reintroduced CR-01 at
+// its root cause (BuildServer(hasIndex, allowlist, repoPath, repoPath))
+// and the entire suite, golden corpus included, stayed green — because
+// nothing exercised serve.go's own wiring. See serve_test.go.
+func serveServerPaths(start string) (repoPath string, hasIndex bool, err error) {
+	repoPath = start
+	if dir, dirErr := query.ResolveCodegraphDir(start); dirErr == nil {
+		return dir, true, nil
+	} else if !errors.Is(dirErr, query.ErrNotInitialized) {
+		return "", false, dirErr
+	}
+	return repoPath, false, nil
+}
+
 // newServeCmd builds `codegraph serve --mcp` (MCP-01 command surface,
 // D-08a): runs the stdio MCP server built in 03-07 (internal/mcp).
 // --mcp is required — stdio is the only transport v1 ships (HTTP/SSE is
@@ -48,12 +72,8 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 
-			repoPath := start
-			hasIndex := false
-			if dir, err := query.ResolveCodegraphDir(start); err == nil {
-				hasIndex = true
-				repoPath = dir
-			} else if !errors.Is(err, query.ErrNotInitialized) {
+			repoPath, hasIndex, err := serveServerPaths(start)
+			if err != nil {
 				return err
 			}
 
