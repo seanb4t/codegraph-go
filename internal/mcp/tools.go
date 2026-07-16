@@ -9,6 +9,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -45,11 +46,16 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 
 // openEngine is every handler's single read seam: it resolves req's
 // "path" arg against defaultPath, confines it to the server's repo root
-// (CR-02, confineToRepoRoot), and opens a FRESH query.OpenAt snapshot
-// for this call (D-02/D-08b, RESEARCH Pitfall 2 — never a snapshot
-// cached at server construction). The caller owns closing the returned
+// (CR-02, confineToRepoRoot — this check runs BEFORE query.OpenAt and
+// must never move or weaken, since a caller-supplied "path" could
+// otherwise redirect detection, not just reads, outside the server's
+// configured root), opens a FRESH query.OpenAt snapshot for this call
+// (D-02/D-08b, RESEARCH Pitfall 2 — never a snapshot cached at server
+// construction), and installs the server-scoped detector (D-13) so this
+// call's worktree detection shares the one cache BuildServer constructed
+// rather than probing git uncached. The caller owns closing the returned
 // io.Closer.
-func openEngine(req mcp.CallToolRequest, defaultPath string) (*query.Engine, func() error, error) {
+func openEngine(req mcp.CallToolRequest, defaultPath string, detector *gitmeta.CachingDetector) (*query.Engine, func() error, error) {
 	path := resolvePath(req, defaultPath)
 	confined, err := confineToRepoRoot(path, defaultPath)
 	if err != nil {
@@ -59,6 +65,7 @@ func openEngine(req mcp.CallToolRequest, defaultPath string) (*query.Engine, fun
 	if err != nil {
 		return nil, nil, err
 	}
+	eng.UseDetector(detector)
 	return eng, closer.Close, nil
 }
 
@@ -75,9 +82,11 @@ func exploreTool() mcp.Tool {
 
 // exploreHandler resolves its args, opens a fresh engine snapshot, and
 // delegates to Engine.Explore — the exact CLI explore code path — then
-// returns the markdown result as-is (no re-rendering in internal/mcp,
+// returns the markdown result, compact-worktree-notice-prefixed on the
+// success path (WORK-02/D-12; no-op on the mismatch-free case since
+// query.WorktreeNotice returns "" — no re-rendering in internal/mcp,
 // D-08b).
-func exploreHandler(defaultPath string) server.ToolHandlerFunc {
+func exploreHandler(defaultPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		q, err := req.RequireString("query")
 		if err != nil {
@@ -85,7 +94,7 @@ func exploreHandler(defaultPath string) server.ToolHandlerFunc {
 		}
 		maxFiles := req.GetInt("max_files", 0)
 
-		eng, close, err := openEngine(req, defaultPath)
+		eng, close, err := openEngine(req, defaultPath, detector)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
@@ -95,7 +104,7 @@ func exploreHandler(defaultPath string) server.ToolHandlerFunc {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(out), nil
+		return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 	}
 }
 
@@ -180,7 +189,16 @@ func companionTool(name string) mcp.Tool {
 // file, whose consumer is a language model, not a parser. This closes a
 // Go-vs-TS divergence: TS returns markdown from every MCP tool; our
 // JSON-shaped tools were the anomaly.
-func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
+//
+// Six of the seven branches (every one except "status") additionally
+// prefix the compact worktree notice (query.WorktreeNotice,
+// WORK-02/D-12) onto the SUCCESS return only — every branch's failure
+// paths return through mcp.NewToolResultError BEFORE reaching that
+// point, so "no-op on isError results" holds structurally, with no
+// redundant isError check needed. "status" is deliberately excluded:
+// query.RenderStatusMarkdown already embeds its own verbose blockquote
+// warning (D-17), and a second compact prefix would duplicate it.
+func companionHandler(name, defaultPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
 	switch name {
 	case "node":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -196,7 +214,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				lineHint = &line
 			}
 
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -206,7 +224,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 		}
 	case "search":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -217,7 +235,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			kind := req.GetString("kind", "")
 			limit := req.GetInt("limit", 0)
 
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -228,7 +246,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderSearchMarkdown(term, locs)
-			return mcp.NewToolResultText(out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 		}
 	case "callers":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -238,7 +256,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			}
 			limit := req.GetInt("limit", 0)
 
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -249,7 +267,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderCallersMarkdown(result)
-			return mcp.NewToolResultText(out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 		}
 	case "callees":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -259,7 +277,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			}
 			limit := req.GetInt("limit", 0)
 
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -270,7 +288,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderCalleesMarkdown(result)
-			return mcp.NewToolResultText(out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 		}
 	case "impact":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -280,7 +298,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 			}
 			depth := req.GetInt("depth", 0)
 
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -291,7 +309,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderImpactMarkdown(result)
-			return mcp.NewToolResultText(out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 		}
 	case "files":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -302,7 +320,7 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				Format:  req.GetString("format", ""),
 			}
 
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
@@ -313,16 +331,23 @@ func companionHandler(name, defaultPath string) server.ToolHandlerFunc {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderFilesMarkdown(result)
-			return mcp.NewToolResultText(out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
 		}
 	case "status":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			eng, close, err := openEngine(req, defaultPath)
+			eng, close, err := openEngine(req, defaultPath, detector)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			defer close()
 
+			// codegraph_status is EXCLUDED from the compact notice
+			// (WORK-02/D-12): Engine.Status() already computes
+			// StatusResult.WorktreeMismatch, and RenderStatusMarkdown
+			// embeds it as its own verbose blockquote — mirroring TS's
+			// withWorktreeNotice, which excludes codegraph_status for
+			// exactly this reason (it carries its own verbose form
+			// instead of the compact one).
 			result, err := eng.Status()
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil

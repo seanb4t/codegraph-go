@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 )
 
 // version is this server's reported MCP implementation version. There is
@@ -82,10 +84,21 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath string) *ser
 		return s
 	}
 
-	s.AddTool(exploreTool(), exploreHandler(repoPath))
+	// One gitmeta.CachingDetector per SERVER, not per handler or per call
+	// (D-13, corrected). openEngine builds a FRESH query.Engine on every
+	// single tool call by design (its own doc comment says so), so an
+	// Engine-scoped cache alone would give ZERO cross-call benefit on this
+	// server's long-lived process — the exact surface the cache exists to
+	// help. Detection costs up to four git subprocesses per verdict;
+	// constructing exactly one detector here and closing it over every
+	// handler bounds that cost to once per (startPath, indexRoot) pair for
+	// this server's entire lifetime, however many tool calls follow.
+	detector := gitmeta.NewCachingDetector()
+
+	s.AddTool(exploreTool(), exploreHandler(repoPath, detector))
 	for _, name := range companionNames {
 		if allowlist[name] {
-			s.AddTool(companionTool(name), companionHandler(name, repoPath))
+			s.AddTool(companionTool(name), companionHandler(name, repoPath, detector))
 		}
 	}
 	return s
