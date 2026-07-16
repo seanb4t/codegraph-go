@@ -137,3 +137,7 @@ None - no external service configuration required.
 ---
 *Phase: 03-watcher-on-mcp-default*
 *Completed: 2026-07-16*
+
+## Self-Check: PASSED
+
+All created/modified files (`test/integration/main_test.go`, `test/integration/worktree_notice_test.go`, `.github/workflows/ci.yml`, `03-04-SUMMARY.md`) and all four commit hashes (`94fb61b`, `b630a0d`, `91f07f9`, `91e94b8`) verified present in the working tree and git history.
