@@ -5,15 +5,15 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 02
 current_phase_name: status Content & Git/Worktree Awareness
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-07-16T00:04:18.020Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-07-16T00:17:57.954Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 24
-  completed_plans: 23
+  completed_plans: 24
   percent: 13
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 02 (status Content & Git/Worktree Awareness) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-07-15 — Phase 02 execution started
 
@@ -81,6 +81,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P03 | 48min | 3 tasks | 2 files |
 | Phase 02 P04 | 35min | 3 tasks | 5 files |
 | Phase 02 P05 | 25min | 2 tasks | 2 files |
+| Phase 02 P06 | 25min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 02-status-content-git-worktree-awareness]: Combined Task 2/Task 3 GREEN commits into one: Go's whole-package compilation model means Task 1's RED test file (referencing RenderStatusMarkdown) blocks the package from building until both renderers exist — No independently-buildable intermediate state exists between the two tasks
 - [Phase 02-status-content-git-worktree-awareness]: Status advisory wording (staleness/reindex lines) is this plan's own text, not a byte-for-byte TS port, since the captured TS source did not preserve the exact advisory strings; tests match on substrings (stale/pending/up to date/reindex) — CONTEXT.md's D-09 target structure specifies the advisory's presence and live-signal source, not exact prose
 - [Phase 02-status-content-git-worktree-awareness]: sortedCounts breaks count ties on key ascending rather than TS's Object.entries insertion order — Go's map iteration is deliberately randomized, so a key tiebreak is the only deterministic substitute
+- [Phase ?]: [Phase 02-status-content-git-worktree-awareness]: MCP-side SURF-06/D-17 wiring is strictly additive — the six tools.go call sites swap to sibling Render*Markdown/RenderStatusMarkdown functions, no Marshal*JSON body touched, CLI --json path and golden oracle untouched
+- [Phase ?]: [Phase 02-status-content-git-worktree-awareness]: codegraph_status's compact-notice exclusion required no special-case guard — RenderStatusMarkdown already embeds the verbose blockquote via the live StatusResult.WorktreeMismatch field, so the status handler simply never calls query.WorktreeNotice
 
 ### Pending Todos
 
@@ -164,8 +167,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T00:04:18.015Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-07-16T00:17:57.949Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
