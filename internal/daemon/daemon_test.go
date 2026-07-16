@@ -249,8 +249,15 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 
 	flushStarted := make(chan struct{})
 	releaseFlush := make(chan struct{})
+	// sync.Once guards the close: under heavy parallel-suite load, fsnotify
+	// can deliver the write's events straddling a debounce window boundary,
+	// producing a SECOND overlapping fire whose onSyncStart would otherwise
+	// panic on a double close (observed as a load-induced flake). The
+	// second fire just parks on <-releaseFlush alongside the first; both
+	// proceed when it closes, serialized by syncMu.
+	var flushStartedOnce sync.Once
 	d.onSyncStart = func() {
-		close(flushStarted)
+		flushStartedOnce.Do(func() { close(flushStarted) })
 		<-releaseFlush
 	}
 
