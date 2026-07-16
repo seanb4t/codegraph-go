@@ -277,6 +277,23 @@ func resolveColbymchenryCorpus(t *testing.T) string {
 // package) — used so the CLI==MCP byte-identity harness (Task 3) can
 // index a corpus onto a fresh on-disk location without mutating the
 // original checkout.
+//
+// WR-03 (02-REVIEW-2.md): skips any ".codegraph" directory entirely,
+// rather than copying it verbatim. buildIndexedFixture's whole purpose is
+// building a store the test itself indexes from a KNOWN, empty starting
+// point — but src is often a real developer checkout (e.g. corpus/
+// synthetic-parity/src, or a sibling $WEFT_REPO clone), and a stray
+// `codegraph init` run against it at any point in that machine's history
+// leaves a live Pebble store sitting right there in the source tree.
+// indexer.Run MERGES into an existing store rather than replacing it
+// (internal/cli/index.go's os.RemoveAll owns the wipe, not the indexer
+// itself), so copying that store verbatim and then indexing "into" it
+// would silently resurrect however many stale files/nodes/languages the
+// inherited store happens to contain — proven by the reviewer with a
+// 1-Go-file fixture that reported fileCount=69, nodeCount=762. Skipping
+// .codegraph/ at the copy makes every fixture this function builds
+// pollution-proof BY CONSTRUCTION: there is nothing to inherit, so there
+// is nothing to clear.
 func copyDir(t *testing.T, src, dst string) {
 	t.Helper()
 
@@ -287,6 +304,9 @@ func copyDir(t *testing.T, src, dst string) {
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
+		}
+		if rel == ".codegraph" {
+			return fs.SkipDir
 		}
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
@@ -326,6 +346,57 @@ func buildIndexedFixture(t *testing.T, src string) string {
 		t.Fatalf("index fixture at %s: %v", dst, err)
 	}
 	return dst
+}
+
+// TestBuildIndexedFixtureIgnoresInheritedStore is WR-03's regression pin
+// (02-REVIEW-2.md): a src tree containing an UNRELATED, pre-existing
+// .codegraph/store (exactly the "developer ran `codegraph init` in this
+// checkout at some point" scenario copyDir used to copy verbatim) must
+// not leak into the fixture buildIndexedFixture builds. src here has
+// exactly ONE Go file; before the WR-03 fix, indexer.Run merged into the
+// copied store and the reviewer proved this exact shape reports
+// fileCount=69/nodeCount=762 — this test pins fileCount=1 instead.
+func TestBuildIndexedFixtureIgnoresInheritedStore(t *testing.T) {
+	src := t.TempDir()
+
+	goFile := "package onefile\n\nfunc Hello() string { return \"hi\" }\n"
+	if err := os.WriteFile(filepath.Join(src, "onefile.go"), []byte(goFile), 0o644); err != nil {
+		t.Fatalf("write fixture source file: %v", err)
+	}
+
+	// Plant an UNRELATED, populated store at src/.codegraph/store — the
+	// exact shape a stray `codegraph init` leaves behind. buildIndexedFixture
+	// must never let indexer.Run merge into this.
+	staleSrc := t.TempDir()
+	for i := 0; i < 5; i++ {
+		name := filepath.Join(staleSrc, fmt.Sprintf("stale%d.go", i))
+		if err := os.WriteFile(name, []byte(fmt.Sprintf("package stale\n\nfunc Stale%d() {}\n", i)), 0o644); err != nil {
+			t.Fatalf("write stale source file: %v", err)
+		}
+	}
+	staleStoreDir := filepath.Join(src, ".codegraph", "store")
+	if err := os.MkdirAll(staleStoreDir, 0o755); err != nil {
+		t.Fatalf("mkdir stale store dir: %v", err)
+	}
+	if _, err := indexer.Run(staleSrc, staleStoreDir, indexer.Options{Quiet: true}); err != nil {
+		t.Fatalf("build stale store: %v", err)
+	}
+
+	dst := buildIndexedFixture(t, src)
+
+	eng, closer, err := query.OpenAt(dst)
+	if err != nil {
+		t.Fatalf("OpenAt(%s): %v", dst, err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+
+	got, err := eng.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if got.FileCount != 1 {
+		t.Fatalf("WR-03 REGRESSION: status.FileCount = %d, want 1 — the fixture inherited an unrelated pre-existing .codegraph/store instead of indexing only its own 1-file source tree", got.FileCount)
+	}
 }
 
 // loadGoldenFixture decodes a corpus/weft-go/<name> JSON fixture into T.
