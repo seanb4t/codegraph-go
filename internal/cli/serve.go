@@ -122,13 +122,14 @@ func serveWatchStart(
 		})
 
 		runErr := daemon.RunWithRetry(watchCtx, d, watchRetryInterval, logOnce)
+		var de *watch.DisabledError
 		switch {
 		case runErr == nil, errors.Is(runErr, context.Canceled):
 			// Clean shutdown (RunE returned and cancelled watchCtx) — either
 			// mid-watch (d.Run returns nil on ctx.Done()) or mid-retry-sleep
 			// (RunWithRetry returns ctx.Err()). Neither is an error worth
 			// surfacing.
-		case errors.Is(runErr, watch.ErrWatchDisabled):
+		case errors.As(runErr, &de):
 			// D-12/D-13: verbatim TS disabled message, stderr-only
 			// (model-invisible). Terminal — no retry: policy doesn't change
 			// mid-session (Pitfall 2: --no-watch must still print this).
@@ -136,14 +137,16 @@ func serveWatchStart(
 			// daemon.Run returned — the exact string its own policy gate
 			// saw — never re-derived with a fresh WatchDisabledReason call
 			// that could desynchronize.
-			var de *watch.DisabledError
-			var reason string
-			if errors.As(runErr, &de) {
-				reason = de.Reason
-			}
+			// IN-02 (round 5): the case itself is gated on errors.As, not
+			// errors.Is(watch.ErrWatchDisabled) — symmetric with
+			// cli/daemon.go — so a bare or fmt.Errorf-wrapped sentinel from
+			// some future producer falls through to default (which renders
+			// DisabledError.Error()'s reason-embedding text via %v) instead
+			// of printing a malformed "disabled — ." line with an empty
+			// reason. The malformed shape is unreachable by construction.
 			fmt.Fprintf(stderr, "[CodeGraph MCP] File watcher disabled — %s. "+
 				"The graph will not auto-update; run `codegraph sync` "+
-				"(or install the git sync hooks via `codegraph init`) to refresh.\n", reason)
+				"(or install the git sync hooks via `codegraph init`) to refresh.\n", de.Reason)
 		default:
 			fmt.Fprintf(stderr, "codegraph serve: watcher: %v\n", runErr)
 		}
