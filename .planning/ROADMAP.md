@@ -181,8 +181,19 @@ Plans:
   1. Pebble's internal WAL/INFO log noise no longer prints on any command (explicit `pebble.Options.Logger` routing INFO→discard), while real error diagnostics are preserved and still surface (HYG-01)
   2. No library log output ever reaches MCP stdout — JSON-RPC framing stays clean; all diagnostics go to stderr only (HYG-02)
 
-**Plans**: TBD
-**Notes**: Small and mechanical, but do NOT wholesale-silence — route INFO→discard explicitly so store-corruption errors are never hidden.
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — HYG-01: quietLogger + diagWriter seam injected at the single pebble.Open seam, mutation-proof wiring (TDD)
+- [ ] 04-02-PLAN.md — HYG-02: go/types stdout-confinement archtest over the six serve-reachable packages + detector self-test
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-03-PLAN.md — HYG-01/HYG-02 end-to-end: raw-stdio JSON-RPC frame-purity harness (D-06a) + `sync` stderr noise-absence (D-09)
+
+**Notes**: Small and mechanical, but do NOT wholesale-silence — route INFO→discard explicitly so store-corruption errors are never hidden. HYG-02 is proven two ways (Phase-3 belt-and-braces): a build-time archtest (04-02) and a runtime frame-purity harness (04-03) that deliberately does NOT reuse mcp-go's stdio client, whose tolerant parser silently skips non-frame lines and would make the test unable to fail.
 
 ### Phase 5: Git Sync Hooks
 
@@ -256,7 +267,7 @@ Plans:
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
-| 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
+| 4. Output Hygiene | v1.0 | 0/3 | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |

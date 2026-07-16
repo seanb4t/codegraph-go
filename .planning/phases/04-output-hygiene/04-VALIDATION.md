@@ -40,7 +40,12 @@ created: 2026-07-16
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | | | HYG-01 / HYG-02 | | | | | | ⬜ pending |
+| T1 quietLogger + diagWriter | 04-01 | 1 | HYG-01 | T-04-01 | Infof discarded; Errorf/Fatalf preserved via diagWriter seam (D-02/D-04) | unit | `go test ./internal/graphstore/ -run 'TestQuietLogger' -v` | ❌ Wave 0 (new logger.go/logger_test.go) | ⬜ pending |
+| T2 Open injects quietLogger | 04-01 | 1 | HYG-01 | T-04-02 | Logger wired at single Open seam, mutation-proof; no Infof noise to seam (D-01/D-08) | unit | `go test ./internal/graphstore/ -run 'TestOpenInjectsQuietLogger\|TestQuietLoggerSilencesStoreActivity' -v` | ❌ Wave 0 | ⬜ pending |
+| T1 detector predicates + self-test | 04-02 | 1 | HYG-02 | T-04-03 | os.Stdout/bare fmt.Print*/log.SetOutput flagged via go/types, not regex (D-06b) | unit | `go test ./internal/graphstore/archtest/ -run 'TestStdoutGuardDetectsViolations' -v` | ❌ Wave 0 (new archtest files) | ⬜ pending |
+| T2 six-package stdout archtest | 04-02 | 1 | HYG-02 | T-04-03 | serve-reachable packages free of stdout writes; rename-proof sanity check (D-06b/D-07) | unit (archtest) | `go test ./internal/graphstore/archtest/ -run 'TestNoStdoutNoiseInServeReachablePackages' -v` | ❌ Wave 0 | ⬜ pending |
+| T1 raw-stdio frame purity | 04-03 | 2 | HYG-02 | T-04-04 | every `serve --mcp` stdout line is a JSON-RPC frame; not built on mcp-go client (D-06a) | integration (subprocess) | `go test ./test/integration/ -run 'TestServeMCPStdoutIsPureJSONRPC' -v` | ❌ Wave 0 (new mcp_stdout_purity_test.go) | ⬜ pending |
+| T2 sync stderr noise-absence | 04-03 | 2 | HYG-01 | T-04-05 | driven `sync` stderr carries no Pebble noise shapes; not emptiness (D-09) | integration (subprocess) | `go test ./test/integration/ -run 'TestSyncStderrNoPebbleNoise' -v` | ❌ Wave 0 (new sync_noise_test.go) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
