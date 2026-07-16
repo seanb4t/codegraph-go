@@ -75,9 +75,26 @@ func DetectIndexMismatch(ctx context.Context, startPath, indexRoot string) *Mism
 	// "simplification" — see the fixture comments on newSubmoduleFixture /
 	// newNestedCloneFixture in detect_test.go's sibling fixtures_test.go,
 	// and CONTEXT.md D-02 / TS issues #1031, #1033.
+	// ★ WR-03, deliberate D-02 divergence from TS: TS's own gate 4
+	// (`if (worktreeCommon && indexCommon && worktreeCommon !== indexCommon)
+	// return null;`) falls THROUGH to reporting a mismatch whenever either
+	// CommonDir call fails (empty string) — CommonDir collapses every
+	// failure (timeout, transient fork failure, safe.directory rejection)
+	// into "". Gates 1-3 already proved git works in both directories, so
+	// this is a narrow window, but it is a REAL fail-open: a degraded git
+	// on this one call would silently defeat the submodule/embedded-clone
+	// suppression and produce exactly the false-positive "nags users
+	// constantly" failure mode worktree.go's own doc comment (D-02) commits
+	// to never causing ("degrades to a safe zero value on ANY failure…
+	// report 'no signal' rather than an error"). Go therefore intentionally
+	// diverges here: an unavailable common dir on EITHER side degrades to
+	// "no signal" (no mismatch), matching gates 1-3's own philosophy,
+	// rather than replicating TS's narrow fail-open bug. Only a SHARED,
+	// successfully-resolved common dir is treated as positive evidence of
+	// a genuine borrowed worktree.
 	worktreeCommon := CommonDir(ctx, worktreeRoot)
 	indexCommon := CommonDir(ctx, resolvedIndexRoot)
-	if worktreeCommon != "" && indexCommon != "" && worktreeCommon != indexCommon {
+	if worktreeCommon == "" || indexCommon == "" || worktreeCommon != indexCommon {
 		return nil
 	}
 
