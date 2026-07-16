@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // newDaemonCmd builds the `codegraph daemon` command (D-05, SYNC-04): the
@@ -48,7 +52,36 @@ func newDaemonCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
-			return d.Run(ctx)
+			err = d.Run(ctx)
+			// WR-01 (03-REVIEW.md): daemon.Run's shared policy gate
+			// (WATCH-03/D-11) returns watch.ErrWatchDisabled on a WSL2
+			// /mnt/<drive> repo or with CODEGRAPH_NO_WATCH=1 exported —
+			// before this branch existed, this command exited nonzero with
+			// the raw wrapped sentinel and none of the D-12 guidance
+			// serve.go prints. Mirror serve.go's friendly verbatim message
+			// (internal/cli/serve.go, serveWatchStart's ErrWatchDisabled
+			// branch) and exit cleanly: a policy-disabled watcher is a
+			// deliberate, explained state, not a failure. daemon.Run still
+			// returns the raw sentinel, so programmatic callers keep
+			// errors.Is(err, watch.ErrWatchDisabled) detectability — only
+			// this CLI presentation layer changes.
+			if errors.Is(err, watch.ErrWatchDisabled) {
+				// Recompute the reason the same way serve.go does, on the
+				// ABSOLUTE root (daemon.New absolutized internally too, so
+				// the WSL /mnt path check sees the same shape Run's own
+				// gate saw — a relative --path value would never match
+				// /mnt/...).
+				root := start
+				if abs, absErr := filepath.Abs(start); absErr == nil {
+					root = abs
+				}
+				reason := watch.WatchDisabledReason(root, watch.Probe{})
+				fmt.Fprintf(cmd.ErrOrStderr(), "[CodeGraph MCP] File watcher disabled — %s. "+
+					"The graph will not auto-update; run `codegraph sync` "+
+					"(or install the git sync hooks via `codegraph init`) to refresh.\n", reason)
+				return nil
+			}
+			return err
 		},
 	}
 
