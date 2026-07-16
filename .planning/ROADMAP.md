@@ -37,7 +37,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 - [x] **Phase 1: Behavioral Parity — explore & node** - TS-identical relevance-ranked exploration + full multi-definition disambiguation, validated by a behavioral fixture harness (completed 2026-07-15)
 - [x] **Phase 2: status Content & Git/Worktree Awareness** - Rich `status` content + borrowed-index detection across every read tool (completed 2026-07-16)
 - [x] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch (completed 2026-07-16)
-- [ ] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC
+- [x] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC (completed 2026-07-16)
 - [ ] **Phase 5: Git Sync Hooks** - Marker-fenced, idempotent post-commit/merge/checkout sync hooks as the watcher-disabled fallback
 - [ ] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped)
 - [ ] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped
@@ -267,7 +267,7 @@ Plans:
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
-| 4. Output Hygiene | v1.0 | 3/3 | In Progress|  |
+| 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
