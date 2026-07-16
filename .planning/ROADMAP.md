@@ -35,7 +35,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 **Milestone Goal:** Close the behavioral + surface gaps against TS CodeGraph v1.3.1 so an existing user swaps binaries with zero change in experience, add a human-facing terminal UI (agent/MCP path stays plain), then cut the first signed `v1.0.0`. Phase numbering resets to 1 for this milestone (v0.1 archived).
 
 - [x] **Phase 1: Behavioral Parity — explore & node** - TS-identical relevance-ranked exploration + full multi-definition disambiguation, validated by a behavioral fixture harness (completed 2026-07-15)
-- [ ] **Phase 2: status Content & Git/Worktree Awareness** - Rich `status` content + borrowed-index detection across every read tool
+- [x] **Phase 2: status Content & Git/Worktree Awareness** - Rich `status` content + borrowed-index detection across every read tool (completed 2026-07-16)
 - [ ] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch
 - [ ] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC
 - [ ] **Phase 5: Git Sync Hooks** - Marker-fenced, idempotent post-commit/merge/checkout sync hooks as the watcher-disabled fallback
@@ -112,7 +112,7 @@ Plans:
   5. Worktree detection has passing fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, and symlinked layouts (TEST-02)
   6. The 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) emit markdown like `explore`/`node` already do, so all 7 non-status read tools take the same text-prefix notice; MCP `status` also gains a markdown renderer (D-12's blockquote warning requires it — it emits JSON today); CLI `--json` still emits JSON on every command, and no `Marshal*JSON` helper body changes (SURF-06)
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans complete
 
 Plans:
 **Wave 1**
@@ -129,7 +129,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 02-06-PLAN.md — MCP wiring: six call sites to markdown, one server-scoped detector, the notice on 7 tools; closes the zero-coverage blind spot (wave 3)
-- [ ] 02-07-PLAN.md — CLI wiring: the sectioned `status` layout replaces the terse one-liner; the notice on 7 read commands, human-output only (wave 3)
+- [x] 02-07-PLAN.md — CLI wiring: the sectioned `status` layout replaces the terse one-liner; the notice on 7 read commands, human-output only (wave 3)
 
 **Notes**: New `internal/gitmeta` package (stdlib `os/exec` only — two `git rev-parse` calls, no pure-Go git lib), consumed by `internal/query` so both CLI and MCP get worktree awareness in one commit. Validate the edge-case fixtures before any pretty rendering. SURF-06 was pulled in from Phase 8 (user decision, 2026-07-15): Phase 2 already rewires all 7 MCP read-tool result paths for WORK-02, so changing the output shape in the same pass avoids double-touching them and removes the "prefix text onto a JSON payload" problem. Still plain-text-only — markdown here means structure/wording, NOT color (Phase 6 owns TUI-02).
 
@@ -231,7 +231,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
-| 2. status Content & Git/Worktree Awareness | v1.0 | 6/7 | In Progress|  |
+| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete   | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |

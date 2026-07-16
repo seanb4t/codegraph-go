@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
 current_phase: 02
 current_phase_name: status Content & Git/Worktree Awareness
-status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-07-16T00:17:57.954Z"
+status: verifying
+stopped_at: Completed 02-07-PLAN.md (final plan of Phase 2)
+last_updated: "2026-07-16T00:31:04.472Z"
 last_activity: 2026-07-15
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 24
-  completed_plans: 24
-  percent: 13
+  completed_plans: 25
+  percent: 25
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 02 (status Content & Git/Worktree Awareness) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-15 — Phase 02 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P04 | 35min | 3 tasks | 5 files |
 | Phase 02 P05 | 25min | 2 tasks | 2 files |
 | Phase 02 P06 | 25min | 3 tasks | 3 files |
+| Phase 02 P07 | 25min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 02-status-content-git-worktree-awareness]: sortedCounts breaks count ties on key ascending rather than TS's Object.entries insertion order — Go's map iteration is deliberately randomized, so a key tiebreak is the only deterministic substitute
 - [Phase ?]: [Phase 02-status-content-git-worktree-awareness]: MCP-side SURF-06/D-17 wiring is strictly additive — the six tools.go call sites swap to sibling Render*Markdown/RenderStatusMarkdown functions, no Marshal*JSON body touched, CLI --json path and golden oracle untouched
 - [Phase ?]: [Phase 02-status-content-git-worktree-awareness]: codegraph_status's compact-notice exclusion required no special-case guard — RenderStatusMarkdown already embeds the verbose blockquote via the live StatusResult.WorktreeMismatch field, so the status handler simply never calls query.WorktreeNotice
+- [Phase 02-status-content-git-worktree-awareness]: CLI status/notice wiring completed the phase's reachability contract: status_cli_test.go and notice_test.go drive the real cobra command tree end-to-end (a real git-worktree fixture, not a mocked one), closing the same CR-02-style implemented-but-unreachable risk the phase's other plans already guarded against
 
 ### Pending Todos
 
@@ -167,8 +169,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T00:17:57.949Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-07-16T00:31:04.465Z
+Stopped at: Completed 02-07-PLAN.md (final plan of Phase 2)
 Resume file: None
 
 ## Operator Next Steps
