@@ -61,38 +61,6 @@ func TestDefaultWatchHandshakePrompt(t *testing.T) {
 	}
 }
 
-// newServeClientWithEnv mirrors worktree_notice_test.go's newServeClient
-// but additionally passes env into the spawned subprocess's environment
-// (appended to os.Environ(), same convention as runBinary) — the D-21
-// CODEGRAPH_NO_WATCH=1 off-switch case needs this, newServeClient itself
-// hardcodes a nil env. A package-local sibling rather than a change to
-// newServeClient's signature, since this plan's files_modified is scoped
-// to this file alone.
-func newServeClientWithEnv(t *testing.T, ctx context.Context, cwd string, env []string) *mcpclient.Client {
-	t.Helper()
-
-	c, err := mcpclient.NewStdioMCPClientWithOptions(binPath, env, []string{"serve", "--mcp"},
-		transport.WithCommandFunc(func(cctx context.Context, command string, cmdEnv []string, args []string) (*exec.Cmd, error) {
-			cmd := exec.CommandContext(cctx, command, args...)
-			cmd.Dir = cwd
-			cmd.Env = append(os.Environ(), cmdEnv...)
-			return cmd, nil
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewStdioMCPClientWithOptions(serve --mcp, cwd=%s, env=%v): %v", cwd, env, err)
-	}
-	t.Cleanup(func() { _ = c.Close() })
-
-	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("Initialize (cwd=%s, env=%v): %v", cwd, env, err)
-	}
-	return c
-}
-
 // TestNoWatchEnvDisablesViaStderr proves WATCH-03 end-to-end: with
 // CODEGRAPH_NO_WATCH=1 in the spawned subprocess's environment, serve --mcp
 // still completes Initialize (best-effort/never-block — disabling the
