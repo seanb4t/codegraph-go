@@ -144,7 +144,7 @@ func Open(dir string) (GraphStore, error) {
 		if attempt > 0 {
 			openLockRetrySleep(openLockRetryBackoff)
 		}
-		db, err := pebble.Open(dir, &pebble.Options{})
+		db, err := pebble.Open(dir, &pebble.Options{Logger: quietLogger{}})
 		if err == nil {
 			return &pebbleStore{db: db}, nil
 		}
