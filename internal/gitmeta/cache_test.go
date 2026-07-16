@@ -88,6 +88,40 @@ func TestCachingDetectorRejectsNonexistentStartPath(t *testing.T) {
 	}
 }
 
+// TestCachingDetectorCancelledContextNotCached is BL-01's unit-level pin:
+// a Detect call made with an ALREADY-CANCELLED context must degrade to nil
+// for THAT call (WORK-03: never block/error a read on a failed git probe)
+// but must NOT write that nil into the cache — otherwise the very next
+// call, even with a perfectly healthy context, would read back the stale
+// "clean" verdict forever. startPath/indexRoot here are a REAL positive
+// (linked-worktree) fixture specifically so a wrongly-cached nil is
+// distinguishable from the correct, uncached positive verdict.
+func TestCachingDetectorCancelledContextNotCached(t *testing.T) {
+	startPath, indexRoot := newLinkedWorktreeFixture(t)
+	d := NewCachingDetector()
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if got := d.Detect(cancelledCtx, startPath, indexRoot); got != nil {
+		t.Fatalf("Detect() under a cancelled ctx = %v, want nil (degraded, not an error)", got)
+	}
+
+	d.mu.Lock()
+	_, cached := d.cache[startPath+"\x00"+indexRoot]
+	d.mu.Unlock()
+	if cached {
+		t.Fatal("BL-01 REGRESSION: a verdict computed under a cancelled context was written to the cache")
+	}
+
+	// The next call, with a HEALTHY context, must re-probe and find the
+	// real positive verdict — not inherit a poisoned nil from the call above.
+	got := d.Detect(context.Background(), startPath, indexRoot)
+	if got == nil {
+		t.Fatal("BL-01 REGRESSION: after one cancelled Detect call, a subsequent healthy call on the same detector still returns nil — the cancelled call poisoned the cache")
+	}
+}
+
 // TestCachingDetectorBounded is WR-02's cache-growth pin: once the cache
 // reaches maxCacheEntries, the NEXT Detect call resets it rather than
 // growing further — a bound that survives a client minting an unbounded

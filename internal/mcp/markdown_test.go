@@ -413,3 +413,76 @@ func TestWorktreeNoticeConsistentAcrossCalls(t *testing.T) {
 		t.Fatalf("two calls against the same server produced different worktree notices: %q vs %q — D-13's server-scoped cache should make detection deterministic within one server's lifetime", notice1, notice2)
 	}
 }
+
+// TestCancelledCallDoesNotPoisonNoticeForSubsequentCalls is BL-01's
+// required test (02-REVIEW-2.md): WR-01 threaded the caller's real,
+// cancelable ctx all the way down to gitmeta.DetectIndexMismatch's git
+// subprocesses; WR-02 made the detector server-scoped and long-lived.
+// Together, a SINGLE cancelled tool call collapses the aborted git spawn
+// into gate 1's "" -> nil — a verdict indistinguishable from "checked, no
+// mismatch" — and (pre-fix) CachingDetector cached that nil FOREVER,
+// silently disabling the worktree notice for the rest of the server's
+// life. This reproduces the reviewer's proof through the REAL
+// BuildServer -> CallTool handler path (not a unit test on the cache
+// alone, per 02-REVIEW-2.md's acceptance bar): call 1 issues with an
+// ALREADY-CANCELLED context; call 2 is an ordinary, healthy call against
+// the SAME server and must still see the notice.
+func TestCancelledCallDoesNotPoisonNoticeForSubsequentCalls(t *testing.T) {
+	wt, _ := mcpWorktreeMismatchFixture(t)
+
+	s := BuildServer(true, map[string]bool{}, deriveServeRepoPath(t, wt), wt)
+
+	// Sanity: a fresh server DOES emit the notice, so a later failure to
+	// see it is attributable to call 1's cancellation, not a broken
+	// fixture.
+	sanity := callTool(t, s, "codegraph_explore", map[string]any{"query": "main"})
+	if sanity.IsError || !strings.HasPrefix(resultText(t, sanity), worktreeNoticeText) {
+		t.Fatalf("sanity check: fresh server does not emit the worktree notice: %+v", sanity)
+	}
+
+	// A SECOND, independent server (same fixture) isolates call 1's
+	// cancellation from the sanity check above — each gets its own
+	// detector/cache.
+	s2 := BuildServer(true, map[string]bool{}, deriveServeRepoPath(t, wt), wt)
+
+	c, err := mcpclient.NewInProcessClient(s2)
+	if err != nil {
+		t.Fatalf("NewInProcessClient: %v", err)
+	}
+	defer c.Close()
+
+	// The MCP initialize handshake must succeed on a live context —
+	// only the TOOL call below carries the cancelled one.
+	initClient(t, context.Background(), c)
+
+	cancelledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Call 1: an ALREADY-CANCELLED context. openEngine still succeeds
+	// (query.OpenAt takes no ctx), but eng.WorktreeMismatch(ctx)'s git
+	// subprocess is aborted instantly by exec.CommandContext, so
+	// DetectIndexMismatch degrades to nil for THIS call (WORK-03: never
+	// block or error a read on a failed git probe) — that degradation
+	// itself is correct and expected, and is NOT what this test pins.
+	if _, err := c.CallTool(cancelledCtx, mcp.CallToolRequest{
+		Params: mcp.CallToolParams{
+			Name:      "codegraph_explore",
+			Arguments: map[string]any{"query": "main"},
+		},
+	}); err != nil {
+		t.Fatalf("CallTool (cancelled ctx): %v", err)
+	}
+
+	// Call 2: a normal, healthy call against the SAME server (s2) — same
+	// detector, same cache. Pre-fix, this silently lost the notice
+	// forever because call 1's cancelled-ctx verdict was cached as a
+	// permanent false "no mismatch".
+	result2 := callTool(t, s2, "codegraph_explore", map[string]any{"query": "main"})
+	if result2.IsError {
+		t.Fatalf("codegraph_explore (call 2, healthy) returned an error result: %+v", result2)
+	}
+	text2 := resultText(t, result2)
+	if !strings.HasPrefix(text2, worktreeNoticeText) {
+		t.Fatalf("BL-01 REGRESSION: after ONE cancelled tool call, this server no longer emits the worktree notice on a subsequent healthy call. got: %q", text2)
+	}
+}

@@ -115,6 +115,18 @@ func (e *Engine) UseDetector(d *gitmeta.CachingDetector) {
 // which is nil-receiver-safe (falls through to an uncached
 // gitmeta.DetectIndexMismatch when no detector was injected via
 // UseDetector) — so no nil branch is needed here.
+//
+// BL-01 note: mismatchOnce/mismatchCache latch a verdict computed under a
+// cancelled ctx too — but that is safe HERE, unlike gitmeta.CachingDetector.
+// internal/mcp's openEngine builds a brand-new Engine (and therefore a
+// brand-new mismatchOnce) on every single tool call, so this per-Engine
+// latch never outlives one request; the long-lived poisoning risk lives
+// entirely in the server-scoped CachingDetector this method delegates to,
+// which is why BL-01's fix (never caching a cancelled-ctx verdict) lives in
+// gitmeta.CachingDetector.Detect, not here. The CLI is unaffected for a
+// different reason: cmd.Context() is always context.Background() today
+// (IN-01, uncancellable), so a cancelled ctx never reaches this method on
+// that surface at all.
 func (e *Engine) WorktreeMismatch(ctx context.Context) *gitmeta.Mismatch {
 	e.mismatchOnce.Do(func() {
 		if e.startPath == "" || e.repoRoot == "" {

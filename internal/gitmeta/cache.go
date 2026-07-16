@@ -51,6 +51,14 @@ func NewCachingDetector() *CachingDetector {
 // directly to DetectIndexMismatch, uncached, so every consumer can treat
 // the detector as optional.
 //
+// BL-01: a verdict computed under a CANCELLED ctx is never written to the
+// cache, even though it IS returned for this call (WORK-03: never block or
+// error a read on a failed/aborted git probe). A cancelled git spawn
+// collapses into the same nil DetectIndexMismatch returns for "checked, no
+// mismatch" — caching it would let one cancelled call permanently poison
+// this (startPath, indexRoot) entry for a long-lived server's entire
+// remaining life. See the ctx.Err() check below for the mechanism.
+//
 // WR-02: a startPath that is not an existing, statable directory can never
 // be inside a working tree — DetectIndexMismatch's gate 1 (WorktreeRoot)
 // would immediately return "" for it anyway, so this is a pure
@@ -78,6 +86,24 @@ func (d *CachingDetector) Detect(ctx context.Context, startPath, indexRoot strin
 	d.mu.Unlock()
 
 	v := DetectIndexMismatch(ctx, startPath, indexRoot)
+
+	// BL-01: a verdict computed under a CANCELLED context is not a verdict —
+	// it is "unknown". DetectIndexMismatch has no way to distinguish "the
+	// git spawn was aborted because ctx was cancelled" from "checked, no
+	// mismatch": both collapse to gate 1's WorktreeRoot returning "" and the
+	// whole function returning nil. On a long-lived MCP server (WR-02 made
+	// this cache server-scoped, WR-01 threads the caller's real, cancelable
+	// ctx all the way down), caching that nil would make ONE cancelled tool
+	// call (routine: mcp-go's notifications/cancelled cancels exactly this
+	// ctx on client interrupt/timeout) permanently disable the worktree
+	// notice for this (startPath, indexRoot) pair for the rest of the
+	// server's life — silently defeating this phase's entire deliverable.
+	// Still RETURN v (never error/block this call — WORK-03), just don't
+	// let it reach the cache, so the next healthy call re-probes instead of
+	// inheriting a false "clean" verdict.
+	if ctx.Err() != nil {
+		return v
+	}
 
 	d.mu.Lock()
 	// WR-02: once the cache is full, reset it rather than growing without
