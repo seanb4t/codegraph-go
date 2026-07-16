@@ -127,19 +127,23 @@ func runGitM(t *testing.T, dir string, args ...string) string {
 	return string(out)
 }
 
-// deriveServeRepoPath replicates internal/cli/serve.go's RunE verbatim —
-// the EXACT repoPath derivation CR-01 fixes: repoPath starts as start and
-// is overwritten with the resolved index root only when
-// query.ResolveCodegraphDir finds one at or above start. This is the
-// literal computation BuildServer's only production caller performs.
-// Before CR-01, every test in this file that exercised the mismatch
-// fixture instead hand-picked the worktree itself as BuildServer's
-// repoPath — a value serve.go can never produce, since it always
-// overwrites `start` with ResolveCodegraphDir's output once an index is
-// found. A test that calls BuildServer with a literal it chose itself
-// cannot prove this feature is reachable through the real entry point;
-// routing every fixture-driven BuildServer call through this helper
-// closes that gap (CR-01's "required test").
+// deriveServeRepoPath replicates internal/cli/serveServerPaths's repoPath
+// derivation — repoPath starts as start and is overwritten with the
+// resolved index root only when query.ResolveCodegraphDir finds one at or
+// above start — so this package's fixture-driven BuildServer calls build
+// their servers with the SAME shape serve.go's real caller produces
+// (startPath != repoPath in a worktree), rather than a value serve.go can
+// never produce.
+//
+// ★ WR-01 (02-REVIEW-2.md) correction: routing fixtures through this
+// helper does NOT, by itself, prove serve.go's own wiring is correct — it
+// is still a replica living in this test package, and a test built on a
+// replica cannot observe a regression in the thing it replicates. That
+// proof lives in internal/cli/serve_test.go's
+// TestServeKeepsStartPathDistinctFromConfinementRoot, which calls
+// serveServerPaths directly. This helper's only job is giving THIS
+// package's tests realistic (startPath, repoPath) fixture inputs to
+// exercise BuildServer/openEngine/confineToRepoRoot with.
 func deriveServeRepoPath(t *testing.T, start string) string {
 	t.Helper()
 	repoPath := start

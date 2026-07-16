@@ -265,6 +265,42 @@ func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
 	}
 }
 
+// TestConfinementAnchoredOnRepoRootNotStartPath is WR-02's required test
+// (02-REVIEW-2.md): CR-01 split openEngine's single confinement parameter
+// into two adjacent, same-typed strings (defaultPath/startPath and
+// repoPath). TestOpenEnginePathConfinedToRepoRoot above builds its server
+// with startPath == repoPath (BuildServer(..., dir, dir)) — a degenerate
+// configuration in which the two anchors are indistinguishable, so that
+// test passes identically whichever one confineToRepoRoot actually
+// anchors on. This test runs the SAME confinement assertion in the
+// configuration production actually uses (startPath != repoPath, the
+// linked-worktree shape serve.go produces via serveServerPaths), with a
+// path chosen specifically to distinguish the two anchors: INSIDE repoPath
+// (main) but OUTSIDE startPath (wt).
+func TestConfinementAnchoredOnRepoRootNotStartPath(t *testing.T) {
+	wt, main := mcpWorktreeMismatchFixture(t) // startPath=wt, repoPath=main
+
+	s := BuildServer(true, map[string]bool{"status": true}, deriveServeRepoPath(t, wt), wt)
+
+	// A sibling of wt is INSIDE repoPath (main) but OUTSIDE startPath (wt).
+	// Anchored on repoPath (correct) this resolves; anchored on startPath
+	// it would be rejected — so this call distinguishes the two anchors.
+	sibling := filepath.Join(main, "pkga")
+	result := callTool(t, s, "codegraph_status", map[string]any{"path": sibling})
+	if result.IsError {
+		t.Fatalf("a path inside repoPath (%q) was rejected — confinement is anchored on startPath, not repoPath: %+v", sibling, result)
+	}
+
+	// A genuinely outside, separately-indexed path must still be rejected
+	// — confining on repoPath must not be confused with "accept anything".
+	outside := copyFixture(t)
+	indexFixture(t, outside)
+	result = callTool(t, s, "codegraph_status", map[string]any{"path": outside})
+	if !result.IsError {
+		t.Fatal("a path outside repoPath was accepted — confinement is not enforced")
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
