@@ -152,7 +152,15 @@ func TestServeWatchStartDisabledPrintsVerbatimMessage(t *testing.T) {
 		t.Fatal("serveWatchStart's goroutine did not join within 5s of cancel() — leaked goroutine")
 	}
 
-	if !strings.Contains(stderr.String(), "File watcher disabled — CODEGRAPH_NO_WATCH=1 is set") {
-		t.Fatalf("expected verbatim disabled message on stderr, got: %q", stderr.String())
+	// IN-03 (round 5): pin the FULL verbatim D-12 line — "[CodeGraph MCP] "
+	// banner included — not just a reason substring: byte-identity with the
+	// TS string is the stated contract, so a regression dropping the banner
+	// or mangling the trailing guidance's punctuation must fail HERE, not
+	// slip past a partial match.
+	want := "[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. " +
+		"The graph will not auto-update; run `codegraph sync` " +
+		"(or install the git sync hooks via `codegraph init`) to refresh.\n"
+	if !strings.Contains(stderr.String(), want) {
+		t.Fatalf("expected the full verbatim disabled message on stderr,\nwant substring: %q\ngot: %q", want, stderr.String())
 	}
 }
