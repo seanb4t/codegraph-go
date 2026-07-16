@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 4
+current_phase: 04
 current_phase_name: Output Hygiene
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-16T21:03:47.861Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-07-16T21:12:48.638Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 3 complete, transitioned to Phase 4
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 32
+  completed_plans: 30
   percent: 38
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 03 — Watcher-on-MCP Default
+**Current focus:** Phase 04 — Output Hygiene
 
 ## Current Position
 
-Phase: 4 — Output Hygiene
-Plan: Not started
+Phase: 04 (Output Hygiene) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-16 — Phase 3 complete, transitioned to Phase 4
+Last activity: 2026-07-16 — Phase 04 execution started
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -88,6 +88,11 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P03 | 9min | 2 tasks | 2 files |
 | Phase 03-watcher-on-mcp-default P04 | 9min | 3 tasks | 3 files |
 | Phase 03-watcher-on-mcp-default P05 | 5min | 2 tasks | 1 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 04 P01 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -155,6 +160,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 3]: buildWorktreeFixture indexes the main checkout via the subprocess binary (runBinary), not an in-process execCmd call, applying the D-19 seam distinction to fixture setup as well as the assertion
 - [Phase ?]: [Phase 3]: Both watch_default_test.go tasks landed in one commit — same new file created in a single pass, no independently-buildable intermediate state (03-04 precedent)
 - [Phase ?]: [Phase 3]: newServeClientWithEnv is a new package-local sibling helper, not a signature change to worktree_notice_test.go's newServeClient — this plan's files_modified is scoped to watch_default_test.go alone
+- [Phase ?]: [Phase 4]: D-08 mutation-proof wiring test redirects stdlib log's default output into the same buffer as diagWriter, since Pebble's DefaultLogger writes via log.Output directly and never touches diagWriter — capturing diagWriter alone would vacuously pass whether or not the Open seam is wired
 
 ### Pending Todos
 
@@ -182,9 +188,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T20:06:07.278Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-output-hygiene/04-CONTEXT.md
+Last session: 2026-07-16T21:12:48.630Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

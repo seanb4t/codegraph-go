@@ -56,7 +56,7 @@
 
 ### Output Hygiene (HYG)
 
-- [ ] **HYG-01**: Pebble's internal WAL/INFO log noise no longer prints on any command (explicit `pebble.Options.Logger` routing INFO→discard) while real errors are preserved
+- [x] **HYG-01**: Pebble's internal WAL/INFO log noise no longer prints on any command (explicit `pebble.Options.Logger` routing INFO→discard) while real errors are preserved
 - [ ] **HYG-02**: no library log output ever reaches MCP stdout — JSON-RPC framing stays clean; diagnostics go to stderr only
 
 ### Human TUI / Rendering (TUI)
@@ -154,7 +154,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | WATCH-02 | Phase 3 | Complete |
 | WATCH-03 | Phase 3 | Complete |
 | WATCH-04 | Phase 3 | Complete |
-| HYG-01 | Phase 4 | Pending |
+| HYG-01 | Phase 4 | Complete |
 | HYG-02 | Phase 4 | Pending |
 | HOOK-01 | Phase 5 | Pending |
 | HOOK-02 | Phase 5 | Pending |
