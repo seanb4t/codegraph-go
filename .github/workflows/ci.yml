@@ -60,9 +60,16 @@ jobs:
         run: go build ./...
 
       - name: Test (excluding internal/daemon — isolated below)
+        # IN-08 (03-REVIEW.md): `set -e` does not propagate failures out of
+        # a process substitution — `mapfile -t pkgs < <(go list ... | grep
+        # ...)` succeeds regardless of go list's exit status, so a partial
+        # emission before a failure would silently test a subset of packages
+        # under a green check. Materialize the list first so go list's exit
+        # code is checked by set -e before anything consumes it.
         run: |
           set -euo pipefail
-          mapfile -t pkgs < <(go list ./... | grep -v '/internal/daemon$')
+          pkgs_raw=$(go list ./...)
+          mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
           go test "${pkgs[@]}"
 
       # GOLDEN-01 (02-REVIEW-2.md): the go tool ignores any directory named
