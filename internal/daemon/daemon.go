@@ -40,6 +40,17 @@ const staleSidecarName = ".sync-pending"
 // of the same name — returned by New when repoRoot has no .codegraph/ yet.
 var ErrNotInitialized = errors.New("daemon: not initialized")
 
+// ErrWatcherClosed is returned by Run when the watch loop exits without ctx
+// being cancelled — fsnotify's Events/Errors channels closed abnormally
+// (03-REVIEW.md IN-07). Without this, Run would keep blocking on
+// <-ctx.Done() holding the daemon lockfile with no watcher running: a
+// silent zombie lock-holder every other session's RunWithRetry defers to
+// forever (pid alive, so isStale never clears it) while the graph silently
+// stops auto-updating. It is neither ErrLockLive nor watch.ErrWatchDisabled,
+// so RunWithRetry surfaces it immediately and serve's watcher goroutine
+// logs it to stderr.
+var ErrWatcherClosed = errors.New("daemon: watcher event stream closed unexpectedly")
+
 // flushRetryPath is the sentinel path Run's requeue wrapper feeds back into
 // the Debouncer when a flush's indexer.Sync lost a Pebble LOCK race
 // (03-REVIEW.md CR-01 scenario 2: an in-flight codegraph_explore held the
@@ -54,9 +65,13 @@ const flushRetryPath = "\x00codegraph-flush-lock-retry"
 
 // maxFlushLockRequeues bounds consecutive lock-held flush requeues (CR-01 /
 // Phase-2 BL-01 lesson: bounded retries only, never an unbounded loop). The
-// counter resets on any successful flush, so the budget is per-contention-
-// episode, not per-session. Once exhausted, the sidecar stays set and the
-// next organic watcher event or session reconcile picks the work back up.
+// counter resets on any successful flush AND at exhaustion (the give-up
+// branch, 03-REVIEW.md IN-03), so the budget is genuinely per-contention-
+// episode, not per-session: a fresh episode hours later gets its own five
+// requeues instead of inheriting zero from an old exhausted one. Once
+// exhausted, the sidecar stays set and the next organic watcher event or
+// session reconcile picks the work back up — the give-up branch never
+// requeues, so each episode's chain stays bounded.
 const maxFlushLockRequeues = 5
 
 // Daemon is the long-lived local process (or in-process fallback, D-05)
@@ -164,7 +179,10 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // call — has completed (deb.Wait(), CR-01) — no goroutine outlives Run and
 // no Sync is still writing when the lock is released (SYNC-06, INDX-05). If
 // another live daemon already holds the lock, Run returns ErrLockLive
-// immediately without starting a watcher.
+// immediately without starting a watcher. If the watch loop exits without
+// ctx being cancelled (abnormal fsnotify teardown, IN-07), Run tears down
+// through the same join path, releases the lock, and returns
+// ErrWatcherClosed instead of holding the lock as a zombie.
 //
 // Before any of the above, Run enforces watch.WatchDisabledReason as its
 // FIRST action (WATCH-03/D-11): a policy-disabled Daemon returns a
@@ -215,31 +233,59 @@ func (d *Daemon) Run(ctx context.Context) error {
 			if n := atomic.AddInt32(&lockRequeues, 1); n <= maxFlushLockRequeues {
 				deb.Add(flushRetryPath)
 			} else {
-				log.Printf("daemon: sync lost the store-lock race %d consecutive times; giving up until the next event (graph stays marked stale via %s)", n-1, staleSidecarName)
+				// IN-03: n counts consecutive lock-lost syncs (1 organic +
+				// maxFlushLockRequeues requeued), and resetting here — not
+				// only on success — keeps the budget per-episode as
+				// maxFlushLockRequeues' doc comment promises. The ctx.Err()
+				// gate above means a cancelled shutdown never reaches this
+				// reset (BL-01: nothing recorded under a cancelled ctx).
+				atomic.StoreInt32(&lockRequeues, 0)
+				log.Printf("daemon: sync lost the store-lock race %d consecutive times; giving up until the next event (graph stays marked stale via %s)", n, staleSidecarName)
 			}
 		}
 	})
 
+	// IN-07: loopExited lets Run notice the watch loop returning WITHOUT
+	// ctx being cancelled (fsnotify's channels closed abnormally). Blocking
+	// on <-ctx.Done() alone would leave Run holding the daemon lockfile
+	// with no watcher running — a zombie lock-holder other sessions defer
+	// to forever while the graph silently stales.
+	loopExited := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer close(loopExited)
 		w.Run(ctx, deb)
 	}()
 
-	<-ctx.Done()
+	var runErr error
+	select {
+	case <-ctx.Done():
+	case <-loopExited:
+		if ctx.Err() == nil {
+			runErr = ErrWatcherClosed
+		}
+	}
 	wg.Wait()
+	// IN-04 belt-and-suspenders: watchLoop's own deb.Stop() ran inside
+	// w.Run (joined by wg.Wait() above), but a requeue Add racing
+	// cancellation can re-arm the timer after that Stop; this idempotent
+	// second Stop cancels it so deb.Wait() below doesn't ride out a dead
+	// debounce window. The structural fix is Debouncer.Add's own ctx gate
+	// (internal/watch/debounce.go) — this is the caller-side backstop.
+	deb.Stop()
 	// CR-01: wg.Wait() only joins the tracked watcher goroutine — it does
 	// NOT join a debounce flush that had already started running its
 	// indexer.Sync (on the timer's own untracked goroutine) when ctx was
-	// cancelled. watchLoop's deb.Stop() (called above, inside w.Run) can
+	// cancelled. deb.Stop() (watchLoop's and the backstop above) can
 	// only cancel a timer that hasn't fired yet; deb.Wait() is the
 	// explicit join for one that has, closing the window where Run
 	// released the daemon lock (see the deferred release() above) while a
 	// Sync was still mid-commit against the single coordinated Writer
 	// (INDX-05, D-07, SYNC-06).
 	deb.Wait()
-	return nil
+	return runErr
 }
 
 // RunWithRetry drives d.Run(ctx) in a loop, converging concurrent

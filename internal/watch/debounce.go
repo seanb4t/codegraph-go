@@ -62,8 +62,16 @@ func NewDebouncer(ctx context.Context, window time.Duration, flush func(paths ma
 }
 
 // Add records path as changed and (re)starts the debounce timer so a burst
-// of Adds within window coalesces into one flush.
+// of Adds within window coalesces into one flush. Once ctx is cancelled,
+// Add is a no-op (03-REVIEW.md IN-04): arming a timer post-cancel could
+// only ever produce a no-op fire (fire checks ctx.Err()) but would still
+// make a caller's Wait block up to a full window on it — the daemon's
+// requeue-vs-shutdown TOCTOU. The early return happens before
+// fireWG.Add(1), so Wait's accounting is untouched.
 func (d *Debouncer) Add(path string) {
+	if d.ctx.Err() != nil {
+		return
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.pending[path] = struct{}{}
