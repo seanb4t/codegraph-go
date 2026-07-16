@@ -9,8 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
@@ -37,6 +39,25 @@ const staleSidecarName = ".sync-pending"
 // ErrNotInitialized mirrors the internal/cli and internal/query sentinels
 // of the same name — returned by New when repoRoot has no .codegraph/ yet.
 var ErrNotInitialized = errors.New("daemon: not initialized")
+
+// flushRetryPath is the sentinel path Run's requeue wrapper feeds back into
+// the Debouncer when a flush's indexer.Sync lost a Pebble LOCK race
+// (03-REVIEW.md CR-01 scenario 2: an in-flight codegraph_explore held the
+// store open when the debounce fired). indexer.Sync re-diffs the whole repo
+// regardless of the coalesced path set, so the sentinel's value is
+// irrelevant — it exists only to re-arm the timer, because the Debouncer
+// otherwise only fires on organic watcher events: without the requeue, a
+// failed flush after the edit burst ends would strand the .sync-pending
+// sidecar (staleness observable, content stale) until the next unrelated
+// event or the next session's reconcile.
+const flushRetryPath = "\x00codegraph-flush-lock-retry"
+
+// maxFlushLockRequeues bounds consecutive lock-held flush requeues (CR-01 /
+// Phase-2 BL-01 lesson: bounded retries only, never an unbounded loop). The
+// counter resets on any successful flush, so the budget is per-contention-
+// episode, not per-session. Once exhausted, the sidecar stays set and the
+// next organic watcher event or session reconcile picks the work back up.
+const maxFlushLockRequeues = 5
 
 // Daemon is the long-lived local process (or in-process fallback, D-05)
 // that owns a repo's watcher and drives every debounced flush through
@@ -171,7 +192,33 @@ func (d *Daemon) Run(ctx context.Context) error {
 	}
 	defer w.Close()
 
-	deb := watch.NewDebouncer(ctx, watch.DebounceDuration(), d.flush)
+	// CR-01 scenario 2 (03-REVIEW.md): the flush callback is wrapped so a
+	// Sync that lost a Pebble LOCK race (a concurrent explore/reconcile had
+	// the store open past graphstore.Open's own bounded in-call retries)
+	// re-arms the debouncer instead of being silently terminal. Bounded by
+	// maxFlushLockRequeues (BL-01 lesson: no unbounded loops); the ctx.Err()
+	// gate keeps a cancelled shutdown from scheduling one more timer that
+	// deb.Wait() below would then have to wait out, and — per the same
+	// BL-01 lesson — a cancelled retry exits without recording anything:
+	// flush already leaves the .sync-pending sidecar in place on every
+	// failure path, so no verdict is ever persisted under a cancelled ctx.
+	// deb is captured by the closure before any timer can fire: the callback
+	// only runs after an Add, and Adds only start once w.Run is live below.
+	var deb *watch.Debouncer
+	var lockRequeues int32
+	deb = watch.NewDebouncer(ctx, watch.DebounceDuration(), func(paths map[string]struct{}) {
+		err := d.flush(paths)
+		switch {
+		case err == nil:
+			atomic.StoreInt32(&lockRequeues, 0)
+		case graphstore.IsLockHeld(err) && ctx.Err() == nil:
+			if n := atomic.AddInt32(&lockRequeues, 1); n <= maxFlushLockRequeues {
+				deb.Add(flushRetryPath)
+			} else {
+				log.Printf("daemon: sync lost the store-lock race %d consecutive times; giving up until the next event (graph stays marked stale via %s)", n-1, staleSidecarName)
+			}
+		}
+	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -255,7 +302,11 @@ func jitter(interval time.Duration) time.Duration {
 // cleared only after a successful commit; a failed sync leaves the
 // sidecar in place so the next successful sync (or the no-daemon mtime
 // fallback, D-04a) is the only thing that clears staleness.
-func (d *Daemon) flush(_ map[string]struct{}) {
+//
+// flush returns Sync's error so Run's requeue wrapper (CR-01) can branch on
+// graphstore.IsLockHeld; the error is already logged here, so the wrapper
+// never double-reports it.
+func (d *Daemon) flush(_ map[string]struct{}) error {
 	if d.onSyncStart != nil {
 		d.onSyncStart()
 	}
@@ -277,6 +328,7 @@ func (d *Daemon) flush(_ map[string]struct{}) {
 	if d.onSync != nil {
 		d.onSync(stats, err)
 	}
+	return err
 }
 
 func (d *Daemon) touchPending() error {

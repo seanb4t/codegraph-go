@@ -4,8 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"github.com/cockroachdb/pebble/v2"
 	"google.golang.org/protobuf/proto"
@@ -63,13 +66,73 @@ type pebbleStore struct {
 	closed atomic.Bool
 }
 
-// Open opens (creating if necessary) a pebble/v2-backed GraphStore at dir.
-func Open(dir string) (GraphStore, error) {
-	db, err := pebble.Open(dir, &pebble.Options{})
-	if err != nil {
-		return nil, err
+// openLockRetryAttempts / openLockRetryBackoff bound Open's retry loop on a
+// lock-held failure (03-REVIEW.md CR-01): pebble.Open holds an EXCLUSIVE
+// directory LOCK for the store's whole open lifetime, and with the watcher
+// default-on in every `serve --mcp` session, transient collisions between a
+// debounced flush (indexer.Sync), a per-call query open (query.OpenAt), and
+// another session's startup reconcile are default-path behavior, not edge
+// cases. A short bounded wait (worst case ~400ms of sleeping across 5
+// attempts) rides out a typical incremental sync's open window; a genuinely
+// long-lived holder still surfaces the original lock error to the caller —
+// this is a retry, never an unbounded block (per the never-block philosophy:
+// the MCP handshake must not hang on a lock).
+const (
+	openLockRetryAttempts = 5
+	openLockRetryBackoff  = 100 * time.Millisecond
+)
+
+// IsLockHeld reports whether err is Pebble's "directory LOCK already held"
+// open failure — the CR-01 collision signature callers (the daemon's flush
+// requeue, serve's startup-reconcile downgrade) branch on. Two forms exist:
+//
+//   - Same-process: pebble's vfs tracks in-process locks itself and fails
+//     with the literal message "lock held by current process" before ever
+//     touching the filesystem (vfs/file_lock_unix.go). String-matched — no
+//     sentinel error is exported for it.
+//   - Cross-process: the LOCK file is acquired via a non-blocking
+//     fcntl(F_SETLK); a conflicting holder in another process surfaces as
+//     EAGAIN/EWOULDBLOCK (POSIX also permits EACCES for this case).
+//
+// Lives in graphstore, the sole pebble-aware package (D-04a) — no other
+// package may reach for pebble's error shapes directly.
+func IsLockHeld(err error) bool {
+	if err == nil {
+		return false
 	}
-	return &pebbleStore{db: db}, nil
+	if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EACCES) {
+		return true
+	}
+	return strings.Contains(err.Error(), "lock held by current process")
+}
+
+// Open opens (creating if necessary) a pebble/v2-backed GraphStore at dir.
+//
+// CR-01 (03-REVIEW.md): a lock-held open failure is retried on a short
+// bounded backoff (openLockRetryAttempts × openLockRetryBackoff) before the
+// error is surfaced — every open site in the module (query.OpenAt per tool
+// call, indexer.Sync's write path, the startup reconcile) collides on
+// Pebble's exclusive directory LOCK by design, and a brief wait converts the
+// common transient collision (an in-flight incremental sync or a per-call
+// read snapshot) into success instead of an agent-visible error. Any
+// non-lock error, and a lock still held after the final attempt, returns
+// immediately/unchanged.
+func Open(dir string) (GraphStore, error) {
+	var lastErr error
+	for attempt := 0; attempt < openLockRetryAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(openLockRetryBackoff)
+		}
+		db, err := pebble.Open(dir, &pebble.Options{})
+		if err == nil {
+			return &pebbleStore{db: db}, nil
+		}
+		lastErr = err
+		if !IsLockHeld(err) {
+			break
+		}
+	}
+	return nil, lastErr
 }
 
 // Snapshot returns a consistent, point-in-time Reader (INDX-05): Pebble

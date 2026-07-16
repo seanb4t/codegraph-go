@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/daemon"
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -182,7 +183,22 @@ func newServeCmd() *cobra.Command {
 			if hasIndex {
 				storeDir := filepath.Join(repoPath, codegraphDirName, storeDirName)
 				if _, err := indexer.Sync(repoPath, storeDir, indexer.Options{Quiet: true}); err != nil {
-					return err
+					// CR-01 scenario 3 (03-REVIEW.md): a lock-held failure
+					// here means another codegraph process (a sibling
+					// session's flush or reconcile) is actively syncing the
+					// SAME store right now — which is exactly the "graph
+					// will be fresh" case. Killing this session's MCP server
+					// over it is strictly worse than starting against a
+					// possibly seconds-stale graph the stale banner already
+					// covers (D-04a), so degrade to a stderr warning and
+					// continue. Every non-lock error stays fatal: a corrupt
+					// or unreadable store is not something serving through
+					// papers over.
+					if !graphstore.IsLockHeld(err) {
+						return err
+					}
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"codegraph serve: startup reconcile skipped — the graph store is locked by another codegraph process (likely an in-flight sync; the graph will refresh shortly): %v\n", err)
 				}
 			}
 
