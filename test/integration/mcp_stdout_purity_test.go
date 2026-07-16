@@ -167,8 +167,9 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 			// purity assertion itself. A non-frame byte fails immediately
 			// with the offending bytes quoted (acceptance criteria).
 			var frame struct {
-				JSONRPC string  `json:"jsonrpc"`
-				ID      float64 `json:"id"`
+				JSONRPC string          `json:"jsonrpc"`
+				ID      float64         `json:"id"`
+				Error   json.RawMessage `json:"error"`
 			}
 			if err := json.Unmarshal(ln.raw, &frame); err != nil || frame.JSONRPC == "" {
 				t.Fatalf("non-JSON-RPC byte on stdout: %q", ln.raw)
@@ -177,6 +178,15 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 			case 1:
 				sawInitResponse = true
 			case 2:
+				// WR-02: a JSON-RPC error response (e.g. an allowlist
+				// regression rejecting codegraph_status as unknown before
+				// ever reaching graphstore.Open) would otherwise still
+				// satisfy sawToolResponse here, silently no longer
+				// exercising the second-store-open noise path this test
+				// exists to provoke, while still reporting success.
+				if len(frame.Error) > 0 {
+					t.Fatalf("codegraph_status tools/call returned a JSON-RPC error, the store-open path was not exercised: %s", frame.Error)
+				}
 				sawToolResponse = true
 			}
 		case <-deadline:
