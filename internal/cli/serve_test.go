@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -69,47 +68,67 @@ func TestServeServerPathsNoIndex(t *testing.T) {
 // sleep/timeout race — mirroring daemon.Daemon's onSyncStart precedent
 // (internal/daemon/daemon.go lines 67-75).
 //
-// Reproduces the WATCH-02 regression directly: if daemon.New (or the policy
-// check, acquire, or watch.Open) were ever moved back above serveWatchStart's
-// goroutine boundary — called synchronously before the goroutine spawn,
-// rather than as the first thing the goroutine itself does — the
-// onWatchWorkStart hook would observe `returned` still false (the goroutine's
-// real work would have started before serveWatchStart's return), and the
-// happens-before assertion below would fail this test.
+// Reproduces the WATCH-02 regression directly, without racing the Go
+// scheduler (WR-02, 03-REVIEW.md: the previous version asserted an ordering
+// via an atomic flag the spawned goroutine could legitimately observe
+// unset on GOMAXPROCS>1 — a false-positive flake against fully-correct
+// production code). Instead, the hook's real work BLOCKS on a channel this
+// test only closes AFTER serveWatchStart has returned:
+//
+//   - Correct code: serveWatchStart spawns the goroutine and returns while
+//     the hook (the goroutine's first action) is parked on <-released; the
+//     caller goroutine below then delivers the return value, we close
+//     released, and the hook proceeds to signal workStarted. Deterministic —
+//     no scheduling order can fail it.
+//   - Mutated code (daemon.New / policy check / acquire / watch.Open moved
+//     back above the goroutine boundary, i.e. the hook invoked synchronously
+//     before the return): serveWatchStart deadlocks inside the hook waiting
+//     for a close that only happens after it returns — the bounded select on
+//     retCh below trips and fails the test. Still mutation-proof.
 func TestServeWatchStartDeferred(t *testing.T) {
 	_, main := statusWorktreeMismatchFixture(t)
 
-	var returned int32
+	released := make(chan struct{})
 	workStarted := make(chan struct{}, 1)
 	onWatchWorkStart := func() {
-		// If serveWatchStart has not yet returned by the time this fires,
-		// the goroutine performed real work (daemon.New/policy/acquire/
-		// watch.Open) BEFORE its synchronous return — the exact WATCH-02
-		// regression this test exists to catch.
-		if atomic.LoadInt32(&returned) == 0 {
-			t.Error("serveWatchStart's goroutine started real work BEFORE serveWatchStart returned to its caller — WATCH-02 regression: daemon.New/policy-check/acquire/watch.Open must run strictly after the return, inside the spawned goroutine")
-		}
+		<-released
 		select {
 		case workStarted <- struct{}{}:
 		default:
 		}
 	}
 
+	type startResult struct {
+		cancel func()
+		done   <-chan struct{}
+	}
 	var stderr bytes.Buffer
-	cancel, done := serveWatchStart(main, true, false, false, indexer.Options{Quiet: true}, &stderr, onWatchWorkStart)
-	// The marker is set immediately after the call returns — establishing
-	// the happens-before ordering onWatchWorkStart checks above.
-	atomic.StoreInt32(&returned, 1)
+	retCh := make(chan startResult, 1)
+	go func() {
+		cancel, done := serveWatchStart(main, true, false, false, indexer.Options{Quiet: true}, &stderr, onWatchWorkStart)
+		retCh <- startResult{cancel: cancel, done: done}
+	}()
+
+	var res startResult
+	select {
+	case res = <-retCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("serveWatchStart did not return within 5s — it is blocked inside onWatchWorkStart, meaning the goroutine's real work (daemon.New/policy-check/acquire/watch.Open) ran synchronously BEFORE the return: the exact WATCH-02 regression this test exists to catch")
+	}
+
+	// serveWatchStart has returned; only now is the hook released to do the
+	// goroutine's real work.
+	close(released)
 
 	select {
 	case <-workStarted:
 	case <-time.After(5 * time.Second):
-		t.Fatal("onWatchWorkStart never fired within 5s — serveWatchStart's goroutine did not start real work")
+		t.Fatal("onWatchWorkStart never fired within 5s of release — serveWatchStart's goroutine did not start real work")
 	}
 
-	cancel()
+	res.cancel()
 	select {
-	case <-done:
+	case <-res.done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("serveWatchStart's goroutine did not join within 5s of cancel() — leaked goroutine")
 	}
