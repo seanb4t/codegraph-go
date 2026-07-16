@@ -1,6 +1,6 @@
 ---
 phase: 04-output-hygiene
-reviewed: 2026-07-16T22:04:17Z
+reviewed: 2026-07-16T23:15:00Z
 depth: deep
 files_reviewed: 7
 files_reviewed_list:
@@ -12,251 +12,100 @@ files_reviewed_list:
   - test/integration/mcp_stdout_purity_test.go
   - test/integration/sync_noise_test.go
 findings:
-  critical: 1
-  warning: 3
+  critical: 0
+  warning: 0
   info: 1
-  total: 5
-status: issues_found
+  total: 1
+status: clean
 ---
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-07-16T22:04:17Z
+**Reviewed:** 2026-07-16T23:15:00Z
 **Depth:** deep
 **Files Reviewed:** 7
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-HYG-01 (Pebble Logger injection) is implemented correctly and narrowly: the
-diff against `e9b8986^` shows the *only* production change to
-`pebble_store.go` is `&pebble.Options{}` → `&pebble.Options{Logger:
-quietLogger{}}` at the single `pebble.Open` call site inside `Open`'s
-retry loop. I traced pebble/v2's actual `Open` source
-(`open.go:81-133`) and confirmed the CR-01 lock-held path
-(`LockDirectory` → `open.go:129`) returns its error directly, before any
-`Logger.Errorf`/`Infof` call — so `classifyOpenError`'s `isLockHeldOS`
-matching is untouched by the Logger swap. I also empirically reverted the
-injection in a throwaway worktree and confirmed `TestOpenInjectsQuietLogger`
-and `TestSyncStderrNoPebbleNoise` both genuinely catch the regression (real
-"Found N WALs" / "[JOB ...] WAL ..." noise reappears on stderr) — these two
-tests are correctly mutation-proof, not a replica of the wiring.
+This is the post-fix re-review of iteration 1's 1 Critical + 3 Warnings + 1
+Info. All five findings were re-verified against the current tree, and all
+five are genuinely closed at the root cause — not just cosmetically
+addressed. No new Critical or Warning defects were introduced by the six fix
+commits. One pre-existing Info-level residual risk (structurally identical
+in spirit to the already-accepted IN-01) is newly worth recording.
 
-HYG-02's structural guard (`stdout_confinement_test.go`), however, has a
-confirmed, exploitable blind spot: `packages.Load` is called without
-`NeedDeps` against exactly the six `guardedPackages`, so only those
-packages' *own* source files ever get `pkg.Syntax`/`pkg.TypesInfo`
-populated — none of the ~20 packages they transitively import (all of
-`internal/indexer/*extract`, `internal/schema`, `internal/gitmeta`,
-`internal/parser`, etc.) are inspected at all, despite being genuinely
-reachable during a live `serve --mcp` session. I proved this is not
-theoretical: adding a real `fmt.Println` call to `internal/schema` in a
-throwaway worktree left `TestNoStdoutNoiseInServeReachablePackages`
-green. This is the review's headline finding — see CR-01 below.
+**CR-01 (stdout guard closure gap) — verified closed by mutation test.**
+`closeOverServeReachableImports` (`stdout_confinement_test.go`) now loads
+with `packages.NeedDeps` and recursively walks `pkg.Imports`, filtered to
+module-internal paths and excluding `internal/cli`. I did not just read the
+diff — I reverted `packages.NeedDeps` out of the `Mode` bitmask by hand,
+re-ran `TestStdoutGuardCatchesViolationsInTransitiveDependency`, and
+confirmed it fails exactly as iteration 1's finding predicted
+(`"...but the closure scan did not flag it — got violations: []"`), then
+restored the file and confirmed it passes green again. The new
+`stdout_closure_selftest_test.go` (added by this fix, plants a real
+`fmt.Println` in `internal/schema` via `packages.Config.Overlay`, no file on
+disk touched) is a genuine, working regression lock on this exact gap —
+not a file in the reviewed `files:` scope for this iteration, but directly
+load-bearing for CR-01's closure and inspected for that reason.
 
-The two integration tests are directionally sound (`sync_noise_test.go`'s
-noise-shape assertion is genuinely mutation-proof, verified empirically),
-but `mcp_stdout_purity_test.go` has a real data race in its failure path
-and a coverage gap where a broken tool-allowlist could silently narrow what
-the test actually exercises while still reporting green.
+**WR-01 (stderrBuf data race) — verified closed under `-race`.** The plain
+`bytes.Buffer` was replaced with a mutex-guarded `syncBuffer`. Ran
+`go test -race -count=5 ./test/integration/... -run TestServeMCPStdoutIsPureJSONRPC`
+— clean on every iteration, no race reported on the buffer.
 
-## Critical Issues
+**WR-02 (tools/call error-blindness) — verified by logic trace.** The frame
+struct now decodes `Error json.RawMessage` and the `case 2:` branch fails
+loudly (`t.Fatalf`) before setting `sawToolResponse` if `len(frame.Error) >
+0`. This closes the exact silent-success-on-allowlist-regression path
+iteration 1 flagged.
 
-### CR-01: HYG-02 stdout guard does not scan any transitively-imported package, despite claiming to cover "every package that can execute during a serve --mcp session"
+**WR-03 (diagWriter unsynchronized global) — verified closed for the flagged
+race class.** All reads now go through `getDiagWriter()` (RLock) and all
+test-side writes through `setDiagWriter()` (Lock), replacing the bare var
+reassignment. I wrote a throwaway probe test hammering `setDiagWriter`/
+`getDiagWriter` from 100 concurrent goroutines under `-race` — clean. This
+closes the specific race iteration 1 described (bare var reassignment
+racing a concurrent read), which is the race that actually existed. See the
+Info item below for a narrower, pre-existing residual this fix does not
+(and was never claimed to) close.
 
-**File:** `internal/graphstore/archtest/stdout_confinement_test.go:37-91`
-**Issue:**
+**IN-01 (residual risk of indirect stdout writes) — verified: doc addendum
+landed** in `stdout_confinement_test.go`'s package comment, matching what
+iteration 1 asked for.
 
-`guardedPackages` lists exactly six package paths, and
-`TestNoStdoutNoiseInServeReachablePackages` loads them with:
-
-```go
-cfg := &packages.Config{
-    Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
-        packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
-}
-pkgs, err := packages.Load(cfg, guardedPackages...)
-...
-for _, pkg := range pkgs {          // only the 6 root packages
-    for _, f := range pkg.Syntax {  // ast.Inspect only these files
-```
-
-`golang.org/x/tools/go/packages` only populates `Syntax`/`Types`/
-`TypesInfo` for the packages matching the load *patterns* ("root"
-packages) unless `packages.NeedDeps` is also set
-(`go/packages/packages.go:805-808`, v0.48.0: `needsrc := (...&&
-(rootIndex >= 0 || ld.Mode&NeedDeps != 0))`). `NeedDeps` is not set here,
-and even if it were, the `ast.Inspect` loop only ever ranges over the
-top-level `pkgs` slice (the 6 roots) — it never descends into
-`pkg.Imports`. I verified this empirically with a standalone probe:
-loading `internal/graphstore` this way, its own dependency
-`internal/schema` comes back with `len(imp.Syntax) == 0` and
-`imp.TypesInfo == nil`.
-
-The six guarded packages transitively import (via `go list -f
-'{{.Imports}}'`) at least: `internal/schema`, `internal/gitmeta`,
-`internal/parser`, `internal/parser/cgo`, `internal/indexer/dispatch`,
-`internal/indexer/nodeid`, `internal/indexer/routes`, and all 12
-`internal/indexer/*extract` / `internal/indexer/mainstream/*extract`
-language-extractor packages — every one of which runs during a live
-`serve --mcp` session's startup reconcile or a debounced `indexer.Sync`.
-None of these are inspected by this test.
-
-**Proof (reproduced in a throwaway git worktree, reverted before
-finishing review):**
-
-```go
-// added to internal/schema/stdout_violation_probe.go
-package schema
-import "fmt"
-func printProbeViolation() {
-    fmt.Println("this should be flagged by HYG-02 but is NOT in guardedPackages")
-}
-```
-
-```
-$ go test ./internal/graphstore/archtest/... -run TestNoStdoutNoiseInServeReachablePackages -v
-=== RUN   TestNoStdoutNoiseInServeReachablePackages
---- PASS: TestNoStdoutNoiseInServeReachablePackages (0.24s)
-PASS
-```
-
-A real, unambiguous stdout write in a package that `internal/graphstore`,
-`internal/indexer`, and `internal/query` all import and call directly is
-completely invisible to this guard. The doc comment's claim — "every
-package that can execute during a `serve --mcp` session ... must never
-write to stdout" — is false as implemented; only the 6 named packages'
-own files are covered, not their dependency graph. This is the same
-"vacuously green" failure mode the test's own Pitfall-4 comment warns
-about (checking `len(pkgs)` and per-package `len(pkg.Syntax)==0`), but the
-authors checked for the wrong failure mode — they hardened against
-`packages.Load` silently *not resolving* a requested root package, but
-missed that resolved dependencies are never checked at all.
-
-**Fix:** Either (a) pass `packages.NeedDeps` and walk `pkg.Imports`
-recursively (filtered to `seanb4t/codegraph-go/...` paths, to avoid
-flagging third-party/stdlib deps), or (b) replace `guardedPackages` with a
-single `"github.com/seanb4t/codegraph-go/..."` load plus an explicit
-serve-reachability filter (mirroring `import_graph_test.go`'s existing
-`Tests: false`, whole-module pattern), scoped by excluding `internal/cli`
-and any other package proven unreachable from `serve --mcp`. Whichever
-approach is chosen, add a regression test analogous to
-`stdout_detection_selftest_test.go` that plants a violation in a
-*dependency* of a guarded package (not the guarded package itself) and
-asserts the suite catches it — closing exactly the gap this finding
-demonstrates.
-
-## Warnings
-
-### WR-01: Data race on `stderrBuf` in the MCP stdout-purity test's failure path
-
-**File:** `test/integration/mcp_stdout_purity_test.go:63-64, 137-138, 157`
-**Issue:** `cmd.Stderr = &stderrBuf` (a plain `bytes.Buffer`, not
-synchronized). When `cmd.Stderr` is set to a non-`*os.File` `io.Writer`,
-`os/exec` starts a background goroutine that copies the subprocess's
-stderr pipe into it (`os/exec/exec.go`, `c.goroutine = append(...)`,
-joined only inside `cmd.Wait()`/`awaitGoroutines`). Both failure branches
-read `stderrBuf.String()` — `t.Fatalf(..., stderrBuf.String())` at line
-137 and the deadline branch at line 157 — while that copying goroutine is
-still running (`cmd.Wait()` has not been called; it only runs later, from
-the `t.Cleanup` registered at line 69-72, after `t.Fatalf` has already
-triggered `runtime.Goexit`). This is a genuine unsynchronized concurrent
-read/write on a `bytes.Buffer` and will be flagged by `go test -race` if
-either failure branch is ever exercised while the subprocess is still
-actively writing to stderr.
-**Fix:** Guard `stderrBuf` with a `sync.Mutex` (or use a
-concurrency-safe buffer, e.g. wrap writes/reads under a mutex, or read via
-`cmd.Process.Kill(); cmd.Wait()` *before* formatting the failure message
-so the copy goroutine has already joined):
-```go
-t.Cleanup(func() {
-    _ = cmd.Process.Kill()
-    _ = cmd.Wait()
-})
-...
-case <-deadline:
-    _ = cmd.Process.Kill()
-    _ = cmd.Wait() // join the stderr-copy goroutine before reading stderrBuf
-    t.Fatalf("timed out ...: %s", stderrBuf.String())
-```
-
-### WR-02: `TestServeMCPStdoutIsPureJSONRPC` never checks whether the `tools/call` actually succeeded
-
-**File:** `test/integration/mcp_stdout_purity_test.go:107-159`
-**Issue:** The decoded `frame` struct only carries `jsonrpc` and `id`:
-```go
-var frame struct {
-    JSONRPC string  `json:"jsonrpc"`
-    ID      float64 `json:"id"`
-}
-```
-`sawToolResponse` is set as soon as any frame with `id == 2` arrives,
-whether it is a successful `result` or a JSON-RPC `error` object (e.g.
-"unknown tool", or a parameter-validation failure). The test's own doc
-comment states the point of calling `codegraph_status` is to
-"deliberately exercise a SECOND store-open ... on top of the startup
-reconcile" — but if `CODEGRAPH_MCP_TOOLS` allowlisting regresses (env var
-typo, allowlist logic bug), the server would return an early
-tool-not-found error *before* ever reaching `graphstore.Open`, and this
-test would still report success, silently no longer exercising the
-noise-provoking path it exists to cover — while its comments continue to
-claim it does.
-**Fix:** Decode the full frame (`result`/`error` presence) and assert the
-tool response has no `error` field:
-```go
-var frame struct {
-    JSONRPC string          `json:"jsonrpc"`
-    ID      float64         `json:"id"`
-    Error   json.RawMessage `json:"error"`
-}
-...
-if frame.ID == 2 && len(frame.Error) > 0 {
-    t.Fatalf("codegraph_status tools/call returned a JSON-RPC error, the store-open path was not exercised: %s", frame.Error)
-}
-```
-
-### WR-03: `diagWriter` is a shared, unsynchronized global mutated by tests
-
-**File:** `internal/graphstore/logger.go:65`, `internal/graphstore/logger_test.go:17-24`
-**Issue:** `diagWriter` is a bare package-level `io.Writer` var, and
-`captureDiagWriter` reassigns it directly with no mutex/atomic. Today this
-is safe only because no test in package `graphstore` calls `t.Parallel()`
-and no background goroutine calls `quietLogger.Errorf`/`Fatalf`
-concurrently with a test's capture window. It is a latent footgun:
-adding `t.Parallel()` to any test in this package, or a future scenario
-where a long-lived shared `pebbleStore` (explicitly anticipated in this
-same file's own `mu` doc comment) triggers a background `Errorf` while
-another goroutine's test has redirected `diagWriter` to its own buffer,
-produces a data race on both the `io.Writer` variable itself and the
-`*bytes.Buffer` it points to.
-**Fix:** Either document the "never add `t.Parallel()` in this package"
-invariant explicitly next to `diagWriter`'s declaration, or guard reads/
-writes of `diagWriter` behind an `atomic.Value`/mutex so the seam is
-race-safe if that assumption is ever violated.
+**The `setDiagWriter` "unused" signal is a false lead, not a live defect.**
+`setDiagWriter` (`logger.go:90`) is called from `logger_test.go:22,23`
+(`captureDiagWriter`), in the same package, and is the only production
+write-path for `diagWriter` besides the `os.Stderr` default — i.e. the
+accessor pair is wired exactly as WR-03's fix intended: production code
+reads via `getDiagWriter()`, tests install via `setDiagWriter()`. Confirmed
+via `staticcheck ./internal/graphstore/...` (zero findings) and
+`go vet ./...` (zero findings) — neither flags it. The "unused" report
+traces to a whole-program-reachability-style analysis (gopls's
+unusedfunc-class check, or an equivalent tool run without test-file
+consideration) that doesn't count a symbol reachable only from `_test.go`
+files in its own package as "used." This is a known false-positive class
+for that style of analysis, not a bypassed seam or dead helper — the
+accessor pair is genuinely load-bearing.
 
 ## Info
 
-### IN-01: Stdout-confinement predicates cannot see indirect stdout writes
+### IN-02: `diagWriterMu` only guards the `diagWriter` variable, not concurrent `Write` calls on the writer it points to
 
-**File:** `internal/graphstore/archtest/stdout_confinement_test.go:123-200`
-**Issue:** `isOSStdoutRef`/`isBareFmtPrint`/`isLogSetOutput` only match
-direct, statically-resolvable identifier references. A write via
-`os.NewFile(1, "").Write(...)`, `syscall.Write(1, ...)`, or a value
-captured from `os.Stdout` earlier and threaded through an unrelated
-variable/interface would not be detected by any of the three predicates
-(and is not claimed to be, but is worth calling out given the test's
-confident "Expected GREEN today — D-07's zero-violation baseline"
-framing). This is an inherent limitation of AST/identifier-based static
-analysis, not a fixable defect, but should be listed as a residual risk
-anywhere this guard's guarantee is documented for future readers.
-**Fix:** No code change required; consider a one-line addendum to the
-package doc comment noting this class of bypass is out of scope for the
-static guard and would only be caught by `mcp_stdout_purity_test.go`'s
-runtime check (once CR-01's coverage gap for indirectly-reachable
-packages is also closed).
+**File:** `internal/graphstore/logger.go:56-58, 80-96`
+**Issue:** `writeDiagLine` calls `getDiagWriter()` under `RLock`, but releases the lock *before* calling `fmt.Fprintf` on the returned writer:
+```go
+func writeDiagLine(prefix, format string, args ...any) {
+	fmt.Fprintf(getDiagWriter(), prefix+format+"\n", args...)
+}
+```
+This correctly fixes the race WR-03 described (a bare var reassignment racing a concurrent read of that var — confirmed via a 100-goroutine concurrent `setDiagWriter`/`getDiagWriter` probe under `-race`, clean). It does not, and was never claimed to, protect two concurrent `quietLogger.Errorf`/`Fatalf` calls from racing on the *same* returned writer's internal state. Today this is inert: the production default (`os.Stderr`) is safe for concurrent `Write` calls, and the doc comment correctly states no test in this package currently uses `t.Parallel()` or drives concurrent `Errorf` calls against a captured `*bytes.Buffer` (which is *not* safe for concurrent `Write`). This mirrors IN-01's framing exactly — a documented, currently-inert residual, not a live bug — but is worth recording explicitly now that the mutex exists, so a future reader doesn't mistake `diagWriterMu` for a guarantee it doesn't provide if a long-lived shared `pebbleStore` (already anticipated in `pebble_store.go`'s own `mu` doc comment) ever drives concurrent `Errorf` calls against a test capture buffer.
+**Fix:** No code change required for the current risk level. If/when a test ever needs concurrent `Errorf` calls against a captured buffer (e.g. testing the anticipated long-lived shared store), either capture into a `syncBuffer`-style mutex-guarded writer (the same pattern `mcp_stdout_purity_test.go`'s `WR-01` fix already established) or extend the doc comment on `diagWriterMu` to state explicitly that it does not extend to the writer's own internal state.
 
 ---
 
-_Reviewed: 2026-07-16T22:04:17Z_
+_Reviewed: 2026-07-16T23:15:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
