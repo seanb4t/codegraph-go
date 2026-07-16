@@ -75,6 +75,14 @@ jobs:
       - name: Test golden parity suite (testdata/golden, NOT covered by go list ./...)
         run: go test ./testdata/golden/...
 
+      # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
+      # by `go list ./...` above (it's a normal package, not testdata/), but
+      # an explicit named step guards against a future refactor of that
+      # filtered `go list` line silently dropping it too — the same
+      # rationale the golden-suite step above already documents.
+      - name: Test subprocess integration harness (test/integration)
+        run: go test ./test/integration/...
+
       - name: Test internal/daemon (isolated, -count=1)
         # internal/daemon's TestSoak + flush-lock tests are a documented,
         # PRE-EXISTING flake under full-suite parallel load (STATE.md,
