@@ -232,7 +232,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
-| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete   | 2026-07-16 |
+| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
@@ -246,7 +246,7 @@ Plans:
 
 **Goal:** [Captured for future planning] Contributor-facing local dev tooling — the repo currently has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows (build with the release ldflags, test with the daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, cross-`GOOS` `go list -mod=readonly` pre-tag check) plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites (zig for cross-builds) so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
 **Requirements:** TBD
-**Plans:** 18/17 plans complete
+**Plans:** 7/7 plans complete
 
 Plans:
 

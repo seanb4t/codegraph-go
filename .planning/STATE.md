@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
-current_phase: 02
-current_phase_name: status Content & Git/Worktree Awareness
+current_phase: 3
+current_phase_name: Watcher-on-MCP Default
 status: verifying
 stopped_at: Completed 02-07-PLAN.md (final plan of Phase 2)
-last_updated: "2026-07-16T00:31:04.472Z"
-last_activity: 2026-07-15
-last_activity_desc: Phase 02 execution started
+last_updated: "2026-07-16T13:02:56.798Z"
+last_activity: 2026-07-16
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
   total_phases: 8
   completed_phases: 2
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 02 (status Content & Git/Worktree Awareness) — EXECUTING
-Plan: 7 of 7
+Phase: 3 — Watcher-on-MCP Default
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-15 — Phase 02 execution started
+Last activity: 2026-07-16 — Phase 2 complete, transitioned to Phase 3
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -39,7 +39,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity (v1.0):**
 
-- Total plans completed: 18 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 25 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -48,7 +48,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 18 | - | - |
-| 2 | 0/TBD | - | - |
+| 2 | 7 | - | - |
 | 3 | 0/TBD | - | - |
 | 4 | 0/TBD | - | - |
 | 5 | 0/TBD | - | - |
