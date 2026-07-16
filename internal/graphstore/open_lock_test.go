@@ -49,6 +49,16 @@ func TestOpenSecondOpenInProcessReturnsErrStoreLocked(t *testing.T) {
 // success-after-contention behavior: the holder releasing the LOCK
 // between attempts must convert the collision into a successful Open —
 // the exact transient-flush-window scenario the CR-01 retry exists for.
+//
+// 03-REVIEW.md IN-02: the release is event-synchronized on the retry
+// loop's own attempt boundaries via the openLockRetrySleep seam rather
+// than a wall-clock sleep racing the ~400ms budget under parallel CI
+// load. The closer goroutine releases the holder only after observing
+// attempt 2's backoff sleep begin (attempt 1 has already failed
+// lock-held); any attempt whose sleep starts while the Close is still
+// in progress blocks on the unbuffered channel until the goroutine
+// re-enters its drain loop — i.e. until Close has returned — so some
+// remaining attempt (budget: 5) deterministically finds the LOCK free.
 func TestOpenConvergesWhenHolderCloses(t *testing.T) {
 	dir := t.TempDir()
 
@@ -57,16 +67,23 @@ func TestOpenConvergesWhenHolderCloses(t *testing.T) {
 		t.Fatalf("first Open: %v", err)
 	}
 
+	sleeps := make(chan struct{})
 	closeErr := make(chan error, 1)
+	orig := openLockRetrySleep
+	openLockRetrySleep = func(time.Duration) { sleeps <- struct{}{} }
+	t.Cleanup(func() { openLockRetrySleep = orig })
+
 	go func() {
-		// Release mid-retry: after attempt 1 (t=0) and attempt 2
-		// (t≈100ms) have failed, before the budget (4 sleeps, ~400ms
-		// of waiting) runs out.
-		time.Sleep(150 * time.Millisecond)
+		<-sleeps // attempt 2's sleep began: attempt 1 has failed lock-held
 		closeErr <- holder.Close()
+		for range sleeps {
+			// Drain later attempts' sleep signals (each send happens-after
+			// Close returned above) so Open never blocks on the seam.
+		}
 	}()
 
 	second, err := Open(dir)
+	close(sleeps) // Open has returned; end the drain loop
 	if err != nil {
 		t.Fatalf("second Open did not converge after the holder released: %v", err)
 	}

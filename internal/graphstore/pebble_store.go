@@ -80,6 +80,15 @@ const (
 	openLockRetryBackoff  = 100 * time.Millisecond
 )
 
+// openLockRetrySleep is Open's between-attempts sleep, hoisted behind an
+// unexported package var (03-REVIEW.md IN-02) so open_lock_test.go can
+// event-synchronize the holder's release on the retry loop's own attempt
+// boundaries instead of racing a wall-clock guess under parallel CI load —
+// the same test-only control-seam convention internal/daemon's onSyncStart
+// established. Production behavior is unchanged: the var defaults to
+// time.Sleep and has no exported setter.
+var openLockRetrySleep = time.Sleep
+
 // ErrStoreLocked is the exported sentinel for Pebble's "directory LOCK
 // already held" open failure — the CR-01 collision signature callers (the
 // daemon's flush requeue, serve's startup-reconcile downgrade) branch on
@@ -133,7 +142,7 @@ func Open(dir string) (GraphStore, error) {
 	var lastErr error
 	for attempt := 0; attempt < openLockRetryAttempts; attempt++ {
 		if attempt > 0 {
-			time.Sleep(openLockRetryBackoff)
+			openLockRetrySleep(openLockRetryBackoff)
 		}
 		db, err := pebble.Open(dir, &pebble.Options{})
 		if err == nil {
