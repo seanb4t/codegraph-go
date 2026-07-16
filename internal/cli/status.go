@@ -41,7 +41,7 @@ func newStatusCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			result, err := eng.Status()
+			result, err := eng.Status(cmd.Context())
 			if err != nil {
 				return err
 			}

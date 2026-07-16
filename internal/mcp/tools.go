@@ -111,7 +111,7 @@ func exploreHandler(defaultPath, repoPath string, detector *gitmeta.CachingDetec
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+		return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 	}
 }
 
@@ -234,7 +234,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 		}
 	case "search":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -256,7 +256,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderSearchMarkdown(term, locs)
-			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 		}
 	case "callers":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -277,7 +277,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderCallersMarkdown(result)
-			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 		}
 	case "callees":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -298,7 +298,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderCalleesMarkdown(result)
-			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 		}
 	case "impact":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -319,7 +319,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderImpactMarkdown(result)
-			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 		}
 	case "files":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -341,7 +341,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			out := query.RenderFilesMarkdown(result)
-			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch()) + out), nil
+			return mcp.NewToolResultText(query.WorktreeNotice(eng.WorktreeMismatch(ctx)) + out), nil
 		}
 	case "status":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -358,7 +358,7 @@ func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.Cach
 			// withWorktreeNotice, which excludes codegraph_status for
 			// exactly this reason (it carries its own verbose form
 			// instead of the compact one).
-			result, err := eng.Status()
+			result, err := eng.Status(ctx)
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}

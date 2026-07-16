@@ -54,7 +54,7 @@ func newSearchCmd() *cobra.Command {
 			// the human-output branch, AFTER the --json early return above —
 			// see explore.go's call site for the full rationale (no TS
 			// precedent for this CLI placement).
-			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch()))
+			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			for _, l := range locs {
 				fmt.Fprintf(out, "%s (%s) %s:%d\n", l.Name, l.Kind, l.FilePath, l.StartLine)
 			}

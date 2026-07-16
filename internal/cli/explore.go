@@ -54,7 +54,7 @@ func newExploreCmd() *cobra.Command {
 			// Claude's Discretion (02-CONTEXT.md), chosen to mirror
 			// `status`'s own placement (project context, then the warning,
 			// then the output) across the other 7 read commands.
-			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch()))
+			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 
 			exploreQuery := strings.Join(args, " ")
 			out, err := eng.Explore(exploreQuery, maxFiles)

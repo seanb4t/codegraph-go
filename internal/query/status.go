@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -210,7 +211,12 @@ func dbSizeBytes(storeDir string) (int64, error) {
 // missing Meta record (a store that exists but was never indexed) is
 // tolerated rather than treated as an error: counts fall back to the
 // scanned values and index.state reports "not_indexed".
-func (e *Engine) Status() (StatusResult, error) {
+//
+// ctx (WR-01) is threaded through to WorktreeMismatch, which spawns up to
+// four git subprocesses — see WorktreeMismatch's doc comment for why this
+// must be the caller's real, cancelable context rather than
+// context.Background().
+func (e *Engine) Status(ctx context.Context) (StatusResult, error) {
 	fileIt, err := e.reader.IterateFiles()
 	if err != nil {
 		return StatusResult{}, err
@@ -296,7 +302,7 @@ func (e *Engine) Status() (StatusResult, error) {
 		NodesByKind:      nodesByKind,
 		FilesByLanguage:  filesByLang,
 		Languages:        languages,
-		WorktreeMismatch: e.WorktreeMismatch(),
+		WorktreeMismatch: e.WorktreeMismatch(ctx),
 		Index: IndexHealth{
 			BuiltWithVersion:           version,
 			BuiltWithExtractionVersion: schema.SchemaVersion,

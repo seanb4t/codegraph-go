@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -80,7 +81,7 @@ func TestEngineWorktreeMismatchViaOpenAt(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closer.Close() })
 
-	got := eng.WorktreeMismatch()
+	got := eng.WorktreeMismatch(context.Background())
 	if got == nil {
 		t.Fatal("WorktreeMismatch() = nil, want a mismatch (worktree queries the main checkout's index)")
 	}
@@ -107,13 +108,13 @@ func TestEngineWorktreeMismatchViaOpenAt(t *testing.T) {
 func TestEngineWorktreeMismatchDegradesSafely(t *testing.T) {
 	t.Run("New", func(t *testing.T) {
 		eng := New(nil)
-		if got := eng.WorktreeMismatch(); got != nil {
+		if got := eng.WorktreeMismatch(context.Background()); got != nil {
 			t.Fatalf("WorktreeMismatch() on a New() Engine = %v, want nil", got)
 		}
 	})
 	t.Run("NewWithRoot", func(t *testing.T) {
 		eng := NewWithRoot(nil, "/some/repo/root")
-		if got := eng.WorktreeMismatch(); got != nil {
+		if got := eng.WorktreeMismatch(context.Background()); got != nil {
 			t.Fatalf("WorktreeMismatch() on a NewWithRoot() Engine (no startPath) = %v, want nil", got)
 		}
 	})
@@ -135,7 +136,7 @@ func TestStatusWorktreeMismatchLive(t *testing.T) {
 		t.Fatalf("OpenAt(%s): unexpected error: %v", wt, err)
 	}
 
-	got, err := mismatchEngine.Status()
+	got, err := mismatchEngine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestStatusWorktreeMismatchLive(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closer2.Close() })
 
-	gotClean, err := cleanEngine.Status()
+	gotClean, err := cleanEngine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestStatusWorktreeMismatchJSONShape(t *testing.T) {
 		t.Fatalf("OpenAt(%s): unexpected error: %v", wt, err)
 	}
 
-	got, err := mismatchEngine.Status()
+	got, err := mismatchEngine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -217,7 +218,7 @@ func TestStatusWorktreeMismatchJSONShape(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closer2.Close() })
 
-	gotClean, err := cleanEngine.Status()
+	gotClean, err := cleanEngine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -284,8 +285,8 @@ func TestWorktreeMismatchCachedPerEngine(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closer.Close() })
 
-	m1 := eng.WorktreeMismatch()
-	m2 := eng.WorktreeMismatch()
+	m1 := eng.WorktreeMismatch(context.Background())
+	m2 := eng.WorktreeMismatch(context.Background())
 	if m1 == nil {
 		t.Fatal("WorktreeMismatch() = nil, want a mismatch to exercise the cache")
 	}
@@ -315,7 +316,7 @@ func TestWorktreeMismatchSharedDetector(t *testing.T) {
 		t.Fatalf("OpenAt(%s): unexpected error: %v", wt, err)
 	}
 	eng1.UseDetector(shared)
-	m1 := eng1.WorktreeMismatch()
+	m1 := eng1.WorktreeMismatch(context.Background())
 	if err := closer1.Close(); err != nil {
 		t.Fatalf("closer1.Close(): unexpected error: %v", err)
 	}
@@ -326,7 +327,7 @@ func TestWorktreeMismatchSharedDetector(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = closer2.Close() })
 	eng2.UseDetector(shared)
-	m2 := eng2.WorktreeMismatch()
+	m2 := eng2.WorktreeMismatch(context.Background())
 
 	if m1 == nil || m2 == nil {
 		t.Fatalf("WorktreeMismatch() = (%v, %v), want both non-nil to exercise the shared cache", m1, m2)

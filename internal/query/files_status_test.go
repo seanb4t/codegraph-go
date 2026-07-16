@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -302,7 +303,7 @@ func TestFiles(t *testing.T) {
 func TestStatus(t *testing.T) {
 	engine, _ := filesStatusFixture(t)
 
-	got, err := engine.Status()
+	got, err := engine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -503,7 +504,7 @@ func TestDbSizeBytes(t *testing.T) {
 		engine, _ := filesStatusFixture(t)
 		noRootEngine := New(engine.reader)
 
-		got, err := noRootEngine.Status()
+		got, err := noRootEngine.Status(context.Background())
 		if err != nil {
 			t.Fatalf("Status: unexpected error with no repoRoot configured: %v", err)
 		}

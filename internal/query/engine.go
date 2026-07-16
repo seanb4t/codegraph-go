@@ -100,6 +100,14 @@ func (e *Engine) UseDetector(d *gitmeta.CachingDetector) {
 // mismatchOnce) — Status() and any render path that also calls this method
 // within one request never re-spawn git.
 //
+// ctx (WR-01) is threaded all the way down to the underlying git
+// subprocesses (up to four, gitmeta.DetectIndexMismatch's doc comment) —
+// every MCP handler and CLI command already receives a real, cancelable
+// context (the handler's ctx / cmd.Context()); before WR-01 this method
+// discarded it in favor of context.Background(), so a client that
+// disconnected or timed out still left up to ~20s of uncancellable git
+// subprocess work running with no way to abort it.
+//
 // Returns nil, without ever panicking, when this Engine has no filesystem
 // context to check: startPath == "" or repoRoot == "" (Engines built via
 // New/NewWithRoot — the same degrade-safely shape computeStale already
@@ -107,12 +115,12 @@ func (e *Engine) UseDetector(d *gitmeta.CachingDetector) {
 // which is nil-receiver-safe (falls through to an uncached
 // gitmeta.DetectIndexMismatch when no detector was injected via
 // UseDetector) — so no nil branch is needed here.
-func (e *Engine) WorktreeMismatch() *gitmeta.Mismatch {
+func (e *Engine) WorktreeMismatch(ctx context.Context) *gitmeta.Mismatch {
 	e.mismatchOnce.Do(func() {
 		if e.startPath == "" || e.repoRoot == "" {
 			return
 		}
-		e.mismatchCache = e.detector.Detect(context.Background(), e.startPath, e.repoRoot)
+		e.mismatchCache = e.detector.Detect(ctx, e.startPath, e.repoRoot)
 	})
 	return e.mismatchCache
 }

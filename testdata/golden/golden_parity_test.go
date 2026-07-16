@@ -637,7 +637,7 @@ func TestGoldenParity(t *testing.T) {
 	engine := buildWeftEngine(t, weftDir)
 
 	t.Run("status", func(t *testing.T) {
-		got, err := engine.Status()
+		got, err := engine.Status(context.Background())
 		if err != nil {
 			t.Fatalf("Status: %v", err)
 		}

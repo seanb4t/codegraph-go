@@ -59,7 +59,7 @@ func newFilesCmd() *cobra.Command {
 			// Compact worktree notice (WORK-02, D-12): lives strictly inside
 			// the human-output branch, AFTER the --json early return above —
 			// see explore.go's call site for the full rationale.
-			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch()))
+			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			if result.Format == "tree" {
 				printFileTree(out, result.Tree, "")
 			} else {

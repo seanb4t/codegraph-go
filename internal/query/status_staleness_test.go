@@ -1,6 +1,7 @@
 package query
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +19,7 @@ func TestStalenessSidecarPresent(t *testing.T) {
 		t.Fatalf("write sidecar: %v", err)
 	}
 
-	got, err := engine.Status()
+	got, err := engine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -39,7 +40,7 @@ func TestStalenessMtimeFallback(t *testing.T) {
 		t.Fatalf("chtimes: %v", err)
 	}
 
-	got, err := engine.Status()
+	got, err := engine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestStalenessMtimeFallback(t *testing.T) {
 func TestStalenessFreshNotStale(t *testing.T) {
 	engine, _ := filesStatusFixture(t)
 
-	got, err := engine.Status()
+	got, err := engine.Status(context.Background())
 	if err != nil {
 		t.Fatalf("Status: unexpected error: %v", err)
 	}
