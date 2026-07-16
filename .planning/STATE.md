@@ -5,8 +5,8 @@ milestone_name: — Drop-in Parity & Human UX
 current_phase: 3
 current_phase_name: Watcher-on-MCP Default
 status: verifying
-stopped_at: Completed 02-07-PLAN.md (final plan of Phase 2)
-last_updated: "2026-07-16T13:02:56.798Z"
+stopped_at: Phase 3 context gathered
+last_updated: "2026-07-16T13:17:25.820Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
@@ -169,9 +169,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T00:31:04.465Z
-Stopped at: Completed 02-07-PLAN.md (final plan of Phase 2)
-Resume file: None
+Last session: 2026-07-16T13:17:25.812Z
+Stopped at: Phase 3 context gathered
+Resume file: .planning/phases/03-watcher-on-mcp-default/03-CONTEXT.md
 
 ## Operator Next Steps
 
