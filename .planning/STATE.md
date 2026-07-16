@@ -6,14 +6,14 @@ current_phase: 03
 current_phase_name: Watcher-on-MCP Default
 status: executing
 stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-07-16T14:08:52.335Z"
+last_updated: "2026-07-16T14:22:24.181Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 29
-  completed_plans: 27
+  completed_plans: 28
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 03 (Watcher-on-MCP Default) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-16 — Phase 03 execution started
 
@@ -85,6 +85,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P07 | 25min | 3 tasks | 10 files |
 | Phase 03 P01 | 4min | 2 tasks | 2 files |
 | Phase 03-watcher-on-mcp-default P02 | 9min | 2 tasks | 3 files |
+| Phase 03 P03 | 9min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -147,6 +148,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 03]: Ported TS 1.3.1 watch-policy.js verbatim into internal/watch/policy.go (WATCH-03); fixed a filepath.ToSlash-vs-strings.ReplaceAll backslash-normalization bug found during GREEN (D-13 fs.watch->file watching wording divergence intentional)
 - [Phase ?]: [Phase 3]: RunWithRetry/jitter live in internal/daemon (not internal/cli) so they inherit the package's existing goleak TestMain; internal/cli has no goleak harness
 - [Phase ?]: [Phase 3]: WATCH-04 marked complete by 03-02; WATCH-02 intentionally left open — this plan only delivers the policy-gate-before-acquire piece, the off-handshake-path structural guarantee ships in 03-03
+- [Phase ?]: [Phase 3]: serve.go's serveWatchStart seam reuses daemon.RunWithRetry's Probe scope to re-derive the disabled reason string instead of parsing the wrapped error text
 
 ### Pending Todos
 
@@ -174,7 +176,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T14:08:52.329Z
+Last session: 2026-07-16T14:19:55.098Z
 Stopped at: Completed 03-02-PLAN.md
 Resume file: None
 
