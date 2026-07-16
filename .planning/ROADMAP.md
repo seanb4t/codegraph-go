@@ -36,7 +36,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 
 - [x] **Phase 1: Behavioral Parity — explore & node** - TS-identical relevance-ranked exploration + full multi-definition disambiguation, validated by a behavioral fixture harness (completed 2026-07-15)
 - [x] **Phase 2: status Content & Git/Worktree Awareness** - Rich `status` content + borrowed-index detection across every read tool (completed 2026-07-16)
-- [ ] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch
+- [x] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch (completed 2026-07-16)
 - [ ] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC
 - [ ] **Phase 5: Git Sync Hooks** - Marker-fenced, idempotent post-commit/merge/checkout sync hooks as the watcher-disabled fallback
 - [ ] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped)
@@ -146,7 +146,7 @@ Plans:
   4. Concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean (WATCH-04)
   5. A subprocess integration harness drives the real binary end-to-end — CLI via argv and `serve --mcp` via a real stdio JSON-RPC session — with the CR-01 anchor case (worktree notice reaches a real `serve --mcp` `codegraph_explore` payload; main-checkout control shows none) and CI wired to run it alongside `go test ./testdata/golden/...` (TEST-04)
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -167,7 +167,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 03-05-PLAN.md — Subprocess WATCH cases: default-on handshake-prompt + `CODEGRAPH_NO_WATCH` off-switch via verbatim stderr — TEST-04, WATCH-01/02
+- [x] 03-05-PLAN.md — Subprocess WATCH cases: default-on handshake-prompt + `CODEGRAPH_NO_WATCH` off-switch via verbatim stderr — TEST-04, WATCH-01/02
 
 **Notes**: The default flip is ~2 lines but MUST be bundled with the watch-policy port — a naive flip hangs MCP startup on WSL2. Reuses v0.1's `--watch` plumbing + daemon lockfile. This phase's watcher model is a prerequisite for the Phase 7 daemon picker. **TEST-04** was added here (user decision, 2026-07-16) after Phase 2's three Criticals (CR-01/CR-02/BL-01) all proved to be reachability/composition failures invisible to a green unit + in-process suite: this phase expands the exact `serve --mcp` surface CR-01 broke, so the spawned-binary harness lands where it is first stressed and retroactively guards Phase 2's wiring. Movable to Phase 8 (REL-04 drop-in gate) if bundling with release makes more sense.
 
@@ -255,7 +255,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
-| 3. Watcher-on-MCP Default | v1.0 | 4/5 | In Progress|  |
+| 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete   | 2026-07-16 |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |

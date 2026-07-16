@@ -127,3 +127,7 @@ None - no external service configuration required.
 ---
 *Phase: 03-watcher-on-mcp-default*
 *Completed: 2026-07-16*
+
+## Self-Check: PASSED
+
+All created files (`test/integration/watch_default_test.go`, `.planning/phases/03-watcher-on-mcp-default/03-05-SUMMARY.md`) and both commit hashes (`afe96d2`, `6a89c83`) verified present in the working tree and git history.

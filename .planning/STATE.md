@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
 current_phase: 03
 current_phase_name: Watcher-on-MCP Default
-status: executing
+status: verifying
 stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-07-16T14:35:18.287Z"
+last_updated: "2026-07-16T14:43:30.056Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 29
-  completed_plans: 29
-  percent: 25
+  completed_plans: 30
+  percent: 38
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 03 (Watcher-on-MCP Default) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-16 — Phase 03 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -87,6 +87,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03-watcher-on-mcp-default P02 | 9min | 2 tasks | 3 files |
 | Phase 03 P03 | 9min | 2 tasks | 2 files |
 | Phase 03-watcher-on-mcp-default P04 | 9min | 3 tasks | 3 files |
+| Phase 03-watcher-on-mcp-default P05 | 5min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 3]: serve.go's serveWatchStart seam reuses daemon.RunWithRetry's Probe scope to re-derive the disabled reason string instead of parsing the wrapped error text
 - [Phase ?]: [Phase 3]: Used mcp-go's transport.WithCommandFunc to set the spawned serve --mcp subprocess's real cmd.Dir (D-19/D-20's literal cwd requirement) rather than the plan's -p flag fallback
 - [Phase ?]: [Phase 3]: buildWorktreeFixture indexes the main checkout via the subprocess binary (runBinary), not an in-process execCmd call, applying the D-19 seam distinction to fixture setup as well as the assertion
+- [Phase ?]: [Phase 3]: Both watch_default_test.go tasks landed in one commit — same new file created in a single pass, no independently-buildable intermediate state (03-04 precedent)
+- [Phase ?]: [Phase 3]: newServeClientWithEnv is a new package-local sibling helper, not a signature change to worktree_notice_test.go's newServeClient — this plan's files_modified is scoped to watch_default_test.go alone
 
 ### Pending Todos
 
@@ -179,7 +182,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T14:35:18.281Z
+Last session: 2026-07-16T14:41:56.134Z
 Stopped at: Completed 03-04-PLAN.md
 Resume file: None
 
