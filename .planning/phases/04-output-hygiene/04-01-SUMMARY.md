@@ -127,6 +127,10 @@ None - no external service configuration required.
 - HYG-02 (MCP stdout cleanliness) is out of scope for this plan — tracked separately in this phase's remaining plans
 - No new dependency, no CI change needed (rides existing `go test ./...` coverage)
 
+## Self-Check: PASSED
+
+All claimed files and commit hashes verified present.
+
 ---
 *Phase: 04-output-hygiene*
 *Completed: 2026-07-16*
