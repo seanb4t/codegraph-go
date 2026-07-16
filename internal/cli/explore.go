@@ -41,8 +41,18 @@ func newExploreCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			// Compact worktree notice (WORK-02, D-12): printed immediately
-			// after OpenAt succeeds, before the command's main output, on
+			exploreQuery := strings.Join(args, " ")
+			out, err := eng.Explore(exploreQuery, maxFiles)
+			if err != nil {
+				return err
+			}
+
+			// Compact worktree notice (WORK-02, D-12): printed AFTER the
+			// query succeeds (WR-05 — previously printed before the query
+			// ran, so a failing query left a bare notice on stdout with
+			// nothing to explain it; the other 6 non-status CLI commands —
+			// search/callers/callees/impact/files/query/affected — already
+			// print strictly after their own engine call succeeds), on
 			// stdout (TS's CLI warn() is console.log = stdout, matched here
 			// for parity). query.WorktreeNotice is nil-safe and returns ""
 			// when there is no mismatch, so a clean tree prints nothing.
@@ -53,14 +63,8 @@ func newExploreCmd() *cobra.Command {
 			// bin/codegraph.js). It is deliberate Go-side design, granted as
 			// Claude's Discretion (02-CONTEXT.md), chosen to mirror
 			// `status`'s own placement (project context, then the warning,
-			// then the output) across the other 7 read commands.
+			// then the output) across the other 8 read commands.
 			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
-
-			exploreQuery := strings.Join(args, " ")
-			out, err := eng.Explore(exploreQuery, maxFiles)
-			if err != nil {
-				return err
-			}
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return nil
 		},

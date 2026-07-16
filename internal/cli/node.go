@@ -50,15 +50,17 @@ func newNodeCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			// Compact worktree notice (WORK-02, D-12) — see explore.go's
-			// call site for the full rationale (no TS precedent for this CLI
-			// placement; deliberate Go-side design).
-			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
-
 			out, err := eng.Node(symbol, file, lineHint)
 			if err != nil {
 				return err
 			}
+
+			// Compact worktree notice (WORK-02, D-12) — printed AFTER the
+			// query succeeds (WR-05, see explore.go's call site for the full
+			// rationale: no TS precedent for this CLI placement; deliberate
+			// Go-side design; a failing query must not leave a bare notice
+			// on stdout).
+			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return nil
 		},

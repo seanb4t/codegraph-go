@@ -237,3 +237,36 @@ func TestNoticeSuppressedInJSON(t *testing.T) {
 		})
 	}
 }
+
+// TestNoticeNotEmittedOnQueryFailure is Test 10 (WR-05): explore/node — the
+// two commands whose notice print used to run BEFORE the engine call — must
+// not emit a bare notice to stdout when the underlying query fails, even
+// against a real worktree-mismatch fixture where a SUCCEEDING call would
+// carry it. Before WR-05, a failing query on either command left the
+// notice on stdout with nothing to explain it, since the print ran ahead
+// of (and independent from) the query's own error path.
+func TestNoticeNotEmittedOnQueryFailure(t *testing.T) {
+	wt, _ := statusWorktreeMismatchFixture(t)
+	glyph := noticeGlyph(t)
+
+	cases := []noticeCase{
+		// query.Engine.Node returns an error for an unresolved symbol with
+		// no file hint (internal/query/node.go).
+		{"node", []string{"node", "NoSuchSymbolAtAll", "-p", wt}},
+		// query.Engine.Explore rejects an empty (whitespace-only) query
+		// before ever touching the graph (internal/query/explore.go).
+		{"explore", []string{"explore", " ", "-p", wt}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, _, err := execCmd(tc.args...)
+			if err == nil {
+				t.Fatalf("%s: expected an error (the whole point of this test is a FAILING query), got success with output: %q", tc.name, out)
+			}
+			if containsBareNoticeGlyph(out, glyph) {
+				t.Fatalf("%s: a failing query must not leave the worktree notice on stdout (WR-05), got: %q", tc.name, out)
+			}
+		})
+	}
+}
