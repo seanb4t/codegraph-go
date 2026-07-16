@@ -246,3 +246,7 @@ None — no external service configuration required.
 ---
 *Phase: 02-status-content-git-worktree-awareness*
 *Completed: 2026-07-15*
+
+## Self-Check: PASSED
+
+All 10 referenced source/test files verified present on disk; all 4 commits (a40fd37, 3fd3f38, 4cd4f1e, 4b47881) verified present in git log.
