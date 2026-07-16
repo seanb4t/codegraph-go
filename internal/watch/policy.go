@@ -16,6 +16,25 @@ import (
 // and internal/cli (errors.Is it) can import it without an import cycle.
 var ErrWatchDisabled = errors.New("daemon: watching is disabled by policy")
 
+// DisabledError carries the human-readable disabled reason alongside the
+// ErrWatchDisabled sentinel (03-REVIEW.md IN-05): daemon.Run returns this
+// type so CLI consumers extract the exact reason Run's own policy gate saw
+// via errors.As, instead of re-deriving it with fresh WatchDisabledReason
+// calls that can silently desynchronize (different root normalization,
+// different Probe inputs). errors.Is(err, ErrWatchDisabled) keeps working
+// everywhere via the Is method below.
+type DisabledError struct{ Reason string }
+
+// Error preserves the exact string the previous fmt.Errorf("%w: %s", ...)
+// wrap produced, so any consumer of the rendered message is unaffected.
+func (e *DisabledError) Error() string {
+	return ErrWatchDisabled.Error() + ": " + e.Reason
+}
+
+// Is makes errors.Is(err, ErrWatchDisabled) match a *DisabledError, keeping
+// every existing sentinel check working unchanged.
+func (e *DisabledError) Is(target error) bool { return target == ErrWatchDisabled }
+
 // Probe carries WatchDisabledReason's inputs — env lookup, WSL detection,
 // and the two CLI flags — as explicit values/functions rather than reading
 // process state directly (D-05: the watcher is in-process, so unlike TS

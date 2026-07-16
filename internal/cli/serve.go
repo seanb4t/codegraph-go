@@ -127,7 +127,15 @@ func serveWatchStart(
 			// D-12/D-13: verbatim TS disabled message, stderr-only
 			// (model-invisible). Terminal — no retry: policy doesn't change
 			// mid-session (Pitfall 2: --no-watch must still print this).
-			reason := watch.WatchDisabledReason(repoPath, probe)
+			// IN-05: the reason is extracted from the typed error
+			// daemon.Run returned — the exact string its own policy gate
+			// saw — never re-derived with a fresh WatchDisabledReason call
+			// that could desynchronize.
+			var de *watch.DisabledError
+			var reason string
+			if errors.As(runErr, &de) {
+				reason = de.Reason
+			}
 			fmt.Fprintf(stderr, "[CodeGraph MCP] File watcher disabled — %s. "+
 				"The graph will not auto-update; run `codegraph sync` "+
 				"(or install the git sync hooks via `codegraph init`) to refresh.\n", reason)

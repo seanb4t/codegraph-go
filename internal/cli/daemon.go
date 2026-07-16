@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -54,31 +53,28 @@ func newDaemonCmd() *cobra.Command {
 
 			err = d.Run(ctx)
 			// WR-01 (03-REVIEW.md): daemon.Run's shared policy gate
-			// (WATCH-03/D-11) returns watch.ErrWatchDisabled on a WSL2
-			// /mnt/<drive> repo or with CODEGRAPH_NO_WATCH=1 exported —
-			// before this branch existed, this command exited nonzero with
-			// the raw wrapped sentinel and none of the D-12 guidance
-			// serve.go prints. Mirror serve.go's friendly verbatim message
+			// (WATCH-03/D-11) returns a watch.ErrWatchDisabled-matching
+			// error on a WSL2 /mnt/<drive> repo or with CODEGRAPH_NO_WATCH=1
+			// exported — before this branch existed, this command exited
+			// nonzero with the raw sentinel and none of the D-12 guidance
+			// serve.go prints. Mirror serve.go's friendly message
 			// (internal/cli/serve.go, serveWatchStart's ErrWatchDisabled
 			// branch) and exit cleanly: a policy-disabled watcher is a
-			// deliberate, explained state, not a failure. daemon.Run still
-			// returns the raw sentinel, so programmatic callers keep
-			// errors.Is(err, watch.ErrWatchDisabled) detectability — only
-			// this CLI presentation layer changes.
-			if errors.Is(err, watch.ErrWatchDisabled) {
-				// Recompute the reason the same way serve.go does, on the
-				// ABSOLUTE root (daemon.New absolutized internally too, so
-				// the WSL /mnt path check sees the same shape Run's own
-				// gate saw — a relative --path value would never match
-				// /mnt/...).
-				root := start
-				if abs, absErr := filepath.Abs(start); absErr == nil {
-					root = abs
-				}
-				reason := watch.WatchDisabledReason(root, watch.Probe{})
-				fmt.Fprintf(cmd.ErrOrStderr(), "[CodeGraph MCP] File watcher disabled — %s. "+
+			// deliberate, explained state, not a failure.
+			//
+			// IN-05: the reason is extracted via errors.As from the typed
+			// watch.DisabledError daemon.Run returned — the exact string
+			// its own policy gate saw (already computed on the absolutized
+			// root) — never re-derived here, where a divergent root
+			// normalization could desynchronize it. The "[CodeGraph MCP]"
+			// banner serve.go keeps for verbatim TS parity (D-12) is
+			// deliberately dropped: this is the standalone daemon command,
+			// not the MCP server.
+			var disabled *watch.DisabledError
+			if errors.As(err, &disabled) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "File watcher disabled — %s. "+
 					"The graph will not auto-update; run `codegraph sync` "+
-					"(or install the git sync hooks via `codegraph init`) to refresh.\n", reason)
+					"(or install the git sync hooks via `codegraph init`) to refresh.\n", disabled.Reason)
 				return nil
 			}
 			return err

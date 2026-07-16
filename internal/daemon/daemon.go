@@ -193,7 +193,10 @@ func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, err
 // unchanged) inherit through this one call.
 func (d *Daemon) Run(ctx context.Context) error {
 	if reason := watch.WatchDisabledReason(d.repoRoot, d.probe); reason != "" {
-		return fmt.Errorf("%w: %s", watch.ErrWatchDisabled, reason)
+		// IN-05: the typed error carries the reason so CLI consumers
+		// extract it via errors.As instead of re-deriving it —
+		// errors.Is(err, watch.ErrWatchDisabled) still matches.
+		return &watch.DisabledError{Reason: reason}
 	}
 	if err := acquire(d.codegraphDir); err != nil {
 		return err
