@@ -11,11 +11,37 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer. It
+// exists because os/exec starts a background goroutine to copy a
+// subprocess's stderr pipe into cmd.Stderr whenever that field is set to a
+// non-*os.File io.Writer, and that goroutine is only joined by cmd.Wait()
+// — which neither failure branch below calls before reading the buffer's
+// contents. A plain bytes.Buffer would race under that goroutine's
+// concurrent writes (WR-01); guarding both Write and String with a mutex
+// makes the read/write safe regardless of ordering.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 // TestServeMCPStdoutIsPureJSONRPC is D-06a's mandatory anchor: it spawns the
 // real `serve --mcp` binary itself (plain exec.Command, NOT
@@ -60,8 +86,8 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StdoutPipe: %v", err)
 	}
-	var stderrBuf bytes.Buffer
-	cmd.Stderr = &stderrBuf // diagnostics land here — never asserted for purity
+	stderrBuf := &syncBuffer{}
+	cmd.Stderr = stderrBuf // diagnostics land here — never asserted for purity
 
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("Start: %v", err)
