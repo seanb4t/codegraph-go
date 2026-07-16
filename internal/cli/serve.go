@@ -193,8 +193,12 @@ func newServeCmd() *cobra.Command {
 					// covers (D-04a), so degrade to a stderr warning and
 					// continue. Every non-lock error stays fatal: a corrupt
 					// or unreadable store is not something serving through
-					// papers over.
-					if !graphstore.IsLockHeld(err) {
+					// papers over. errors.Is on the ErrStoreLocked sentinel
+					// (classified inside graphstore.Open, the only seam with
+					// unambiguous provenance — 03-REVIEW-2.md WR-01) means a
+					// permission error anywhere in Sync's chain can never
+					// masquerade as lock contention here.
+					if !errors.Is(err, graphstore.ErrStoreLocked) {
 						return err
 					}
 					fmt.Fprintf(cmd.ErrOrStderr(),

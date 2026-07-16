@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/pebble/v2"
@@ -82,28 +80,41 @@ const (
 	openLockRetryBackoff  = 100 * time.Millisecond
 )
 
-// IsLockHeld reports whether err is Pebble's "directory LOCK already held"
-// open failure — the CR-01 collision signature callers (the daemon's flush
-// requeue, serve's startup-reconcile downgrade) branch on. Two forms exist:
+// ErrStoreLocked is the exported sentinel for Pebble's "directory LOCK
+// already held" open failure — the CR-01 collision signature callers (the
+// daemon's flush requeue, serve's startup-reconcile downgrade) branch on
+// with errors.Is (03-REVIEW-2.md CR-01/WR-01).
 //
-//   - Same-process: pebble's vfs tracks in-process locks itself and fails
-//     with the literal message "lock held by current process" before ever
-//     touching the filesystem (vfs/file_lock_unix.go). String-matched — no
-//     sentinel error is exported for it.
-//   - Cross-process: the LOCK file is acquired via a non-blocking
-//     fcntl(F_SETLK); a conflicting holder in another process surfaces as
-//     EAGAIN/EWOULDBLOCK (POSIX also permits EACCES for this case).
+// Classification happens exactly once, inside Open's retry loop — the only
+// seam where the error's provenance (pebble.Open) is unambiguous — so raw
+// string/errno sniffing never runs against arbitrary error chains: an
+// EACCES propagated up an indexer.Sync chain (unreadable source file,
+// WalkDir failure) structurally cannot match this sentinel. The
+// platform-specific raw matching lives in isLockHeldOS (locked_unix.go /
+// locked_windows.go), build-tagged because pebble's two vfs lock
+// implementations fail in entirely different shapes (fcntl EAGAIN + an
+// in-process map's message on unix; ERROR_SHARING_VIOLATION from
+// CreateFile(share=0) on windows, which has no in-process map at all).
 //
 // Lives in graphstore, the sole pebble-aware package (D-04a) — no other
 // package may reach for pebble's error shapes directly.
-func IsLockHeld(err error) bool {
+var ErrStoreLocked = errors.New("graphstore: store lock held")
+
+// classifyOpenError wraps a pebble.Open failure in ErrStoreLocked when it
+// matches the running platform's lock-held shape (isLockHeldOS) and
+// returns every other error unchanged. Only Open may call this: the
+// classification is valid solely for errors whose provenance is
+// pebble.Open — applied to an arbitrary chain (e.g. indexer.Sync's), the
+// raw errno matching would misroute filesystem errors into the lock
+// degrade/requeue paths (03-REVIEW-2.md WR-01).
+func classifyOpenError(err error) error {
 	if err == nil {
-		return false
+		return nil
 	}
-	if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EACCES) {
-		return true
+	if isLockHeldOS(err) {
+		return fmt.Errorf("%w: %v", ErrStoreLocked, err)
 	}
-	return strings.Contains(err.Error(), "lock held by current process")
+	return err
 }
 
 // Open opens (creating if necessary) a pebble/v2-backed GraphStore at dir.
@@ -115,8 +126,9 @@ func IsLockHeld(err error) bool {
 // Pebble's exclusive directory LOCK by design, and a brief wait converts the
 // common transient collision (an in-flight incremental sync or a per-call
 // read snapshot) into success instead of an agent-visible error. Any
-// non-lock error, and a lock still held after the final attempt, returns
-// immediately/unchanged.
+// non-lock error returns immediately and unchanged; a lock still held after
+// the final attempt surfaces wrapped in ErrStoreLocked (errors.Is-able) —
+// classification happens here, at the pebble.Open seam, and nowhere else.
 func Open(dir string) (GraphStore, error) {
 	var lastErr error
 	for attempt := 0; attempt < openLockRetryAttempts; attempt++ {
@@ -127,8 +139,8 @@ func Open(dir string) (GraphStore, error) {
 		if err == nil {
 			return &pebbleStore{db: db}, nil
 		}
-		lastErr = err
-		if !IsLockHeld(err) {
+		lastErr = classifyOpenError(err)
+		if !errors.Is(lastErr, ErrStoreLocked) {
 			break
 		}
 	}

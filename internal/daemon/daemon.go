@@ -211,7 +211,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		switch {
 		case err == nil:
 			atomic.StoreInt32(&lockRequeues, 0)
-		case graphstore.IsLockHeld(err) && ctx.Err() == nil:
+		case errors.Is(err, graphstore.ErrStoreLocked) && ctx.Err() == nil:
 			if n := atomic.AddInt32(&lockRequeues, 1); n <= maxFlushLockRequeues {
 				deb.Add(flushRetryPath)
 			} else {
@@ -304,8 +304,10 @@ func jitter(interval time.Duration) time.Duration {
 // fallback, D-04a) is the only thing that clears staleness.
 //
 // flush returns Sync's error so Run's requeue wrapper (CR-01) can branch on
-// graphstore.IsLockHeld; the error is already logged here, so the wrapper
-// never double-reports it.
+// graphstore.ErrStoreLocked (via errors.Is — the sentinel is only ever
+// attached inside graphstore.Open, so a non-lock filesystem error in Sync's
+// chain can never trigger a requeue); the error is already logged here, so
+// the wrapper never double-reports it.
 func (d *Daemon) flush(_ map[string]struct{}) error {
 	if d.onSyncStart != nil {
 		d.onSyncStart()
