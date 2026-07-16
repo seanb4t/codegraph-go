@@ -146,12 +146,12 @@ Plans:
   4. Concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean (WATCH-04)
   5. A subprocess integration harness drives the real binary end-to-end — CLI via argv and `serve --mcp` via a real stdio JSON-RPC session — with the CR-01 anchor case (worktree notice reaches a real `serve --mcp` `codegraph_explore` payload; main-checkout control shows none) and CI wired to run it alongside `go test ./testdata/golden/...` (TEST-04)
 
-**Plans**: 5 plans
+**Plans**: 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Watch-policy port: `internal/watch/policy.go` (WatchDisabledReason precedence, DetectWSL, ErrWatchDisabled) — WATCH-03, TDD
+- [x] 03-01-PLAN.md — Watch-policy port: `internal/watch/policy.go` (WatchDisabledReason precedence, DetectWSL, ErrWatchDisabled) — WATCH-03, TDD
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -255,7 +255,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
-| 3. Watcher-on-MCP Default | v1.0 | 0/5 | Not started | - |
+| 3. Watcher-on-MCP Default | v1.0 | 1/5 | In Progress|  |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |

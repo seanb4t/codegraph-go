@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: — Drop-in Parity & Human UX
-current_phase: 3
+current_phase: 03
 current_phase_name: Watcher-on-MCP Default
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-07-16T13:50:28.432Z"
+last_updated: "2026-07-16T13:57:38.880Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 2 complete, transitioned to Phase 3
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 24
-  completed_plans: 25
+  total_plans: 29
+  completed_plans: 26
   percent: 25
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 02 — status Content & Git/Worktree Awareness
+**Current focus:** Phase 03 — Watcher-on-MCP Default
 
 ## Current Position
 
-Phase: 3 — Watcher-on-MCP Default
-Plan: Not started
+Phase: 03 (Watcher-on-MCP Default) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-16 — Phase 2 complete, transitioned to Phase 3
+Last activity: 2026-07-16 — Phase 03 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P05 | 25min | 2 tasks | 2 files |
 | Phase 02 P06 | 25min | 3 tasks | 3 files |
 | Phase 02 P07 | 25min | 3 tasks | 10 files |
+| Phase 03 P01 | 4min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 02-status-content-git-worktree-awareness]: MCP-side SURF-06/D-17 wiring is strictly additive — the six tools.go call sites swap to sibling Render*Markdown/RenderStatusMarkdown functions, no Marshal*JSON body touched, CLI --json path and golden oracle untouched
 - [Phase ?]: [Phase 02-status-content-git-worktree-awareness]: codegraph_status's compact-notice exclusion required no special-case guard — RenderStatusMarkdown already embeds the verbose blockquote via the live StatusResult.WorktreeMismatch field, so the status handler simply never calls query.WorktreeNotice
 - [Phase 02-status-content-git-worktree-awareness]: CLI status/notice wiring completed the phase's reachability contract: status_cli_test.go and notice_test.go drive the real cobra command tree end-to-end (a real git-worktree fixture, not a mocked one), closing the same CR-02-style implemented-but-unreachable risk the phase's other plans already guarded against
+- [Phase 03]: Ported TS 1.3.1 watch-policy.js verbatim into internal/watch/policy.go (WATCH-03); fixed a filepath.ToSlash-vs-strings.ReplaceAll backslash-normalization bug found during GREEN (D-13 fs.watch->file watching wording divergence intentional)
 
 ### Pending Todos
 
@@ -169,7 +171,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T13:17:25.812Z
+Last session: 2026-07-16T13:57:10.942Z
 Stopped at: Phase 3 context gathered
 Resume file: .planning/phases/03-watcher-on-mcp-default/03-CONTEXT.md
 
