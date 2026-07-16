@@ -146,7 +146,29 @@ Plans:
   4. Concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean (WATCH-04)
   5. A subprocess integration harness drives the real binary end-to-end — CLI via argv and `serve --mcp` via a real stdio JSON-RPC session — with the CR-01 anchor case (worktree notice reaches a real `serve --mcp` `codegraph_explore` payload; main-checkout control shows none) and CI wired to run it alongside `go test ./testdata/golden/...` (TEST-04)
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Watch-policy port: `internal/watch/policy.go` (WatchDisabledReason precedence, DetectWSL, ErrWatchDisabled) — WATCH-03, TDD
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — `daemon.Run` policy-gate-first + `RunWithRetry`/jitter convergence + two-session goleak soak — WATCH-02/03/04
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-03-PLAN.md — `serve.go` default-on flip + `--no-watch`/`--watch` flags + off-handshake `serveWatchStart` seam + verbatim disabled message — WATCH-01/02
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 03-04-PLAN.md — `test/integration/` subprocess harness substrate + CR-01 worktree-notice anchor + explicit CI step — TEST-04
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 03-05-PLAN.md — Subprocess WATCH cases: default-on handshake-prompt + `CODEGRAPH_NO_WATCH` off-switch via verbatim stderr — TEST-04, WATCH-01/02
+
 **Notes**: The default flip is ~2 lines but MUST be bundled with the watch-policy port — a naive flip hangs MCP startup on WSL2. Reuses v0.1's `--watch` plumbing + daemon lockfile. This phase's watcher model is a prerequisite for the Phase 7 daemon picker. **TEST-04** was added here (user decision, 2026-07-16) after Phase 2's three Criticals (CR-01/CR-02/BL-01) all proved to be reachability/composition failures invisible to a green unit + in-process suite: this phase expands the exact `serve --mcp` surface CR-01 broke, so the spawned-binary harness lands where it is first stressed and retroactively guards Phase 2's wiring. Movable to Phase 8 (REL-04 drop-in gate) if bundling with release makes more sense.
 
 ### Phase 4: Output Hygiene
@@ -233,7 +255,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
-| 3. Watcher-on-MCP Default | v1.0 | 0/TBD | Not started | - |
+| 3. Watcher-on-MCP Default | v1.0 | 0/5 | Not started | - |
 | 4. Output Hygiene | v1.0 | 0/TBD | Not started | - |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
