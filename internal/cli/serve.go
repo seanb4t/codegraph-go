@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -14,6 +17,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // codegraphMCPToolsEnv is the operator allowlist env var (D-08a, MCP-02):
@@ -45,6 +49,95 @@ func serveServerPaths(start string) (repoPath string, hasIndex bool, err error) 
 	return repoPath, false, nil
 }
 
+// watchRetryInterval is the base cadence (before jitter) serveWatchStart's
+// background goroutine waits between daemon.RunWithRetry's ErrLockLive
+// retries (D-14/WATCH-04) — a slow-enough cadence to avoid needlessly
+// hammering a live lock holder, fast enough that a session converges to
+// sole-writer status well within a typical human interaction window once the
+// holder exits. Jitter is applied inside daemon.RunWithRetry itself.
+const watchRetryInterval = 30 * time.Second
+
+// serveWatchStart is WATCH-02's off-handshake-path seam (D-06/D-08),
+// mirroring serveServerPaths's WR-01 precedent above: extracted so a test
+// can pin THIS function's actual behavior — the watcher startup newServeCmd's
+// RunE genuinely defers — rather than a hand-built replica living only in a
+// test file. It spawns exactly one goroutine and returns (cancel, done)
+// BEFORE that goroutine performs any of daemon.New, the watch-policy check
+// (inside daemon.Run), lock acquisition, or watch.Open's recursive fsnotify
+// walk. Moving any of that work back above this function's goroutine
+// boundary — the literal WATCH-02 regression — is the exact mutation
+// TestServeWatchStartDeferred (serve_test.go) must catch.
+//
+// A no-op (cancel, already-closed done) pair is returned when !hasIndex
+// (MCP-03: no watcher, but RunE's control flow stays uniform — the caller
+// always defers cancel()/<-done unconditionally).
+//
+// onWatchWorkStart, when non-nil, is invoked at the very start of the
+// goroutine's real work, before daemon.New runs — a test-only control seam
+// mirroring daemon.Daemon's onSyncStart convention (internal/daemon/daemon.go
+// lines 67-75), letting a test deterministically observe "the goroutine's
+// real work has started" without a sleep/timeout race. Production callers
+// pass nil.
+func serveWatchStart(
+	repoPath string,
+	hasIndex bool,
+	noWatch bool,
+	forceWatch bool,
+	opts indexer.Options,
+	stderr io.Writer,
+	onWatchWorkStart func(),
+) (cancel func(), done <-chan struct{}) {
+	if !hasIndex {
+		noop := make(chan struct{})
+		close(noop)
+		return func() {}, noop
+	}
+
+	watchCtx, cancelWatch := context.WithCancel(context.Background())
+	watchDone := make(chan struct{})
+
+	go func() {
+		defer close(watchDone)
+
+		if onWatchWorkStart != nil {
+			onWatchWorkStart()
+		}
+
+		probe := watch.Probe{NoWatch: noWatch, ForceWatch: forceWatch}
+
+		d, err := daemon.New(repoPath, opts, daemon.WithProbe(probe))
+		if err != nil {
+			fmt.Fprintf(stderr, "codegraph serve: watcher: %v\n", err)
+			return
+		}
+
+		logOnce := sync.OnceFunc(func() {
+			fmt.Fprintln(stderr, "codegraph serve: a daemon is already running, deferring to it")
+		})
+
+		runErr := daemon.RunWithRetry(watchCtx, d, watchRetryInterval, logOnce)
+		switch {
+		case runErr == nil, errors.Is(runErr, context.Canceled):
+			// Clean shutdown (RunE returned and cancelled watchCtx) — either
+			// mid-watch (d.Run returns nil on ctx.Done()) or mid-retry-sleep
+			// (RunWithRetry returns ctx.Err()). Neither is an error worth
+			// surfacing.
+		case errors.Is(runErr, watch.ErrWatchDisabled):
+			// D-12/D-13: verbatim TS disabled message, stderr-only
+			// (model-invisible). Terminal — no retry: policy doesn't change
+			// mid-session (Pitfall 2: --no-watch must still print this).
+			reason := watch.WatchDisabledReason(repoPath, probe)
+			fmt.Fprintf(stderr, "[CodeGraph MCP] File watcher disabled — %s. "+
+				"The graph will not auto-update; run `codegraph sync` "+
+				"(or install the git sync hooks via `codegraph init`) to refresh.\n", reason)
+		default:
+			fmt.Fprintf(stderr, "codegraph serve: watcher: %v\n", runErr)
+		}
+	}()
+
+	return cancelWatch, watchDone
+}
+
 // newServeCmd builds `codegraph serve --mcp` (MCP-01 command surface,
 // D-08a): runs the stdio MCP server built in 03-07 (internal/mcp).
 // --mcp is required — stdio is the only transport v1 ships (HTTP/SSE is
@@ -56,7 +149,8 @@ func serveServerPaths(start string) (repoPath string, hasIndex bool, err error) 
 func newServeCmd() *cobra.Command {
 	var path string
 	var mcpMode bool
-	var watchMode bool
+	var forceWatch bool
+	var noWatch bool
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -92,41 +186,21 @@ func newServeCmd() *cobra.Command {
 				}
 			}
 
-			// D-05/SYNC-04 in-process watcher fallback: where a separate
-			// `codegraph daemon` process is undesired, --watch runs the same
-			// watch/debounce/Sync loop in-process, under the SAME lockfile
-			// internal/daemon uses. That shared lock makes an in-process
-			// watcher and a standalone daemon mutually exclusive (T-04-08-01)
-			// — if a live daemon already holds it, Run returns ErrLockLive
-			// and serve simply defers to that daemon rather than failing.
-			if watchMode && hasIndex {
-				watchCtx, cancelWatch := context.WithCancel(context.Background())
-				// WR-04: the in-process fallback has no CLI flags of its own
-				// for daemon-side sync customization — Quiet mirrors the
-				// reconcile Sync call above, since this watcher's flushes are
-				// only ever logged (internal/daemon.flush), never printed to
-				// this command's stdout.
-				d, err := daemon.New(repoPath, indexer.Options{Quiet: true})
-				if err != nil {
-					cancelWatch()
-					return err
-				}
-				watchDone := make(chan struct{})
-				go func() {
-					defer close(watchDone)
-					if runErr := d.Run(watchCtx); runErr != nil {
-						if errors.Is(runErr, daemon.ErrLockLive) {
-							fmt.Fprintln(cmd.ErrOrStderr(), "codegraph serve: --watch: a daemon is already running, deferring to it")
-						} else {
-							fmt.Fprintf(cmd.ErrOrStderr(), "codegraph serve: --watch: %v\n", runErr)
-						}
-					}
-				}()
-				defer func() {
-					cancelWatch()
-					<-watchDone
-				}()
-			}
+			// D-01/D-06/D-08: watcher startup is now default-ON whenever an
+			// index exists — no `if watchMode` gate here. serveWatchStart
+			// spawns the background goroutine and returns immediately;
+			// hasIndex is the ONLY gate (MCP-03: no index, no watcher), and
+			// it lives inside serveWatchStart itself so this call site stays
+			// unconditional. WR-04's Quiet mirrors the reconcile Sync call
+			// above.
+			cancelWatchStart, watchStartDone := serveWatchStart(
+				repoPath, hasIndex, noWatch, forceWatch,
+				indexer.Options{Quiet: true}, cmd.ErrOrStderr(), nil,
+			)
+			defer func() {
+				cancelWatchStart()
+				<-watchStartDone
+			}()
 
 			allowlist, unknown := mcp.ParseAllowlist(os.Getenv(codegraphMCPToolsEnv))
 			mcp.WarnUnknownToolsTo(cmd.ErrOrStderr(), unknown)
@@ -146,7 +220,9 @@ func newServeCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().BoolVar(&mcpMode, "mcp", false, "run the stdio MCP server")
-	cmd.Flags().BoolVar(&watchMode, "watch", false, "run an in-process watcher alongside the MCP server, under the same lockfile a standalone `codegraph daemon` uses (mutually exclusive with one)")
+	cmd.Flags().BoolVar(&forceWatch, "watch", false, "Force the file watcher on, overriding the WSL2/slow-filesystem auto-off (the CLI twin of CODEGRAPH_FORCE_WATCH=1)")
+	cmd.Flags().BoolVar(&noWatch, "no-watch", false, "Disable the file watcher (no auto-sync; useful on slow filesystems like WSL2 /mnt drives)")
+	cmd.MarkFlagsMutuallyExclusive("no-watch", "watch")
 
 	return cmd
 }
