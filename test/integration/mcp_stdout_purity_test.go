@@ -144,6 +144,12 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 		raw []byte
 	}
 	lines := make(chan scannedLine)
+	// scanErr is written only by the scanning goroutine below, only before
+	// close(lines) — the Go memory model guarantees a close(ch) happens
+	// before a subsequent receive that returns because ch is closed, so
+	// reading scanErr from the main goroutine's `!ok` branch below is safe
+	// without additional synchronization.
+	var scanErr error
 	go func() {
 		defer close(lines)
 		scanner := bufio.NewScanner(stdout)
@@ -152,6 +158,7 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 			b := append([]byte(nil), scanner.Bytes()...)
 			lines <- scannedLine{raw: b}
 		}
+		scanErr = scanner.Err()
 	}()
 
 	var sawInitResponse, sawToolResponse bool
@@ -160,8 +167,15 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 		select {
 		case ln, ok := <-lines:
 			if !ok {
-				t.Fatalf("stdout closed before both responses were seen (init=%v tool=%v); stderr:\n%s",
-					sawInitResponse, sawToolResponse, stderrBuf.String())
+				// scanErr surfaces WHY the scan loop stopped early — a
+				// nil error means clean EOF (subprocess exited/closed
+				// stdout), but a non-nil error (e.g. bufio.ErrTooLong
+				// from a runaway single line, or a pipe read error)
+				// means the loop exited having silently swallowed
+				// unverified stdout bytes; report it rather than only
+				// saying "closed".
+				t.Fatalf("stdout closed before both responses were seen (init=%v tool=%v); scanner error: %v; stderr:\n%s",
+					sawInitResponse, sawToolResponse, scanErr, stderrBuf.String())
 			}
 			// EVERY line must parse as a JSON-RPC frame — this is the
 			// purity assertion itself. A non-frame byte fails immediately
