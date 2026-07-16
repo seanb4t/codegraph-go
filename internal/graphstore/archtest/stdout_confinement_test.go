@@ -14,6 +14,16 @@
 // and locally shadowed identifiers named "os"/"fmt"/"log". The predicates
 // themselves are proven able to fail by
 // stdout_detection_selftest_test.go's TestStdoutGuardDetectsViolations.
+//
+// Residual risk (IN-01): these predicates only match direct,
+// statically-resolvable identifier references. A write via
+// os.NewFile(1, "").Write(...), syscall.Write(1, ...), or an os.Stdout
+// value captured earlier and threaded through an unrelated variable or
+// interface would NOT be detected by any of the three predicates. This is
+// an inherent limitation of AST/identifier-based static analysis, not a
+// fixable defect of this guard — such indirect writes would only be
+// caught (if at all) by mcp_stdout_purity_test.go's runtime check of the
+// actual `serve --mcp` subprocess's stdout.
 package archtest
 
 import (
