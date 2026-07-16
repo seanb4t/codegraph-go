@@ -181,13 +181,13 @@ Plans:
   1. Pebble's internal WAL/INFO log noise no longer prints on any command (explicit `pebble.Options.Logger` routing INFO→discard), while real error diagnostics are preserved and still surface (HYG-01)
   2. No library log output ever reaches MCP stdout — JSON-RPC framing stays clean; all diagnostics go to stderr only (HYG-02)
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 04-01-PLAN.md — HYG-01: quietLogger + diagWriter seam injected at the single pebble.Open seam, mutation-proof wiring (TDD)
-- [ ] 04-02-PLAN.md — HYG-02: go/types stdout-confinement archtest over the six serve-reachable packages + detector self-test
+- [x] 04-02-PLAN.md — HYG-02: go/types stdout-confinement archtest over the six serve-reachable packages + detector self-test
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -267,7 +267,7 @@ Plans:
 | 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
-| 4. Output Hygiene | v1.0 | 1/3 | In Progress|  |
+| 4. Output Hygiene | v1.0 | 2/3 | In Progress|  |
 | 5. Git Sync Hooks | v1.0 | 0/TBD | Not started | - |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
