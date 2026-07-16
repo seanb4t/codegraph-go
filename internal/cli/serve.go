@@ -71,7 +71,12 @@ const watchRetryInterval = 30 * time.Second
 //
 // A no-op (cancel, already-closed done) pair is returned when !hasIndex
 // (MCP-03: no watcher, but RunE's control flow stays uniform — the caller
-// always defers cancel()/<-done unconditionally).
+// always defers cancel()/<-done unconditionally). hasIndex is a
+// startup-time snapshot (IN-09, deliberate): an index created mid-session
+// (`codegraph init` while serve is running) is served live by per-call
+// query resolution but does NOT retroactively start the watcher —
+// auto-sync begins on the next serve --mcp session, and the D-04a
+// stale/mtime fallback keeps staleness observable meanwhile.
 //
 // onWatchWorkStart, when non-nil, is invoked at the very start of the
 // goroutine's real work, before daemon.New runs — a test-only control seam
