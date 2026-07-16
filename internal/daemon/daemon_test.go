@@ -5,11 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // writeFixtureFile materializes rel under root, creating parent
@@ -292,5 +294,215 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 
 	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
 		t.Fatalf("lockfile still present after flush completed and Run returned (ok=%v err=%v)", ok, lerr)
+	}
+}
+
+// TestRunPolicyDisabled proves Run enforces watch.WatchDisabledReason as
+// its FIRST action, before acquire() (D-11): a Daemon constructed with a
+// disabling Probe returns a watch.ErrWatchDisabled-wrapped error and never
+// touches the lockfile — the disabled policy check happens strictly before
+// lock acquisition, verified here by asserting the lockfile is absent
+// after Run returns (the acceptance criteria's companion grep asserts the
+// same fact structurally, at the source level).
+func TestRunPolicyDisabled(t *testing.T) {
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{NoWatch: true}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	runErr := d.Run(ctx)
+	if !errors.Is(runErr, watch.ErrWatchDisabled) {
+		t.Fatalf("Run = %v, want errors.Is(..., watch.ErrWatchDisabled)", runErr)
+	}
+	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
+		t.Fatalf("lockfile present after a policy-disabled Run (ok=%v err=%v) — acquire() must never be reached", ok, lerr)
+	}
+}
+
+// TestRunHonorsDefaultProbeOnNonWSLHost proves a Daemon constructed via the
+// existing New (default zero Probe) on a non-WSL host proceeds to
+// acquire()/watch.Open exactly as today — no behavior change for the
+// standalone-daemon happy path. Pins IsWSL to false so the assertion holds
+// deterministically even if this test ever runs on a real WSL2 host.
+func TestRunHonorsDefaultProbeOnNonWSLHost(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+}
+
+// TestRunWithRetryReturnsNilOnCleanShutdown proves RunWithRetry returns nil
+// when d.Run returns nil (a clean ctx-cancelled shutdown) — the common
+// case of a single session with no lock contention, where onDeferred must
+// never be called.
+func TestRunWithRetryReturnsNilOnCleanShutdown(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	retryErr := make(chan error, 1)
+	go func() {
+		retryErr <- RunWithRetry(ctx, d, time.Second, func() {
+			t.Error("onDeferred called during a clean, uncontended single-session run")
+		})
+	}()
+
+	waitForLock(t, codegraphDir)
+	cancel()
+
+	select {
+	case err := <-retryErr:
+		if err != nil {
+			t.Fatalf("RunWithRetry = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunWithRetry did not return after ctx cancellation")
+	}
+}
+
+// TestRunWithRetryReturnsImmediatelyOnDisabled proves RunWithRetry returns
+// immediately (no retry) when d.Run returns watch.ErrWatchDisabled, and
+// never calls onDeferred — policy is terminal, it does not change
+// mid-session.
+func TestRunWithRetryReturnsImmediatelyOnDisabled(t *testing.T) {
+	root, _, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{NoWatch: true}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	called := false
+	err = RunWithRetry(context.Background(), d, time.Hour, func() { called = true })
+	if !errors.Is(err, watch.ErrWatchDisabled) {
+		t.Fatalf("RunWithRetry = %v, want errors.Is(..., watch.ErrWatchDisabled)", err)
+	}
+	if called {
+		t.Fatal("onDeferred was called on a policy-disabled error — RunWithRetry must return immediately without retrying")
+	}
+}
+
+// TestRunWithRetryReturnsImmediatelyOnGenuineError proves RunWithRetry
+// returns immediately (no retry) on a genuine, non-ErrLockLive,
+// non-ErrWatchDisabled error, and never calls onDeferred. Removing root
+// out from under the daemon after New (but before Run) forces acquire()'s
+// createLockExclusive to fail on a nonexistent .codegraph/ directory — an
+// error distinct from both sentinels.
+func TestRunWithRetryReturnsImmediatelyOnGenuineError(t *testing.T) {
+	root, _, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatalf("RemoveAll(root): %v", err)
+	}
+
+	called := false
+	err = RunWithRetry(context.Background(), d, time.Hour, func() { called = true })
+	if err == nil {
+		t.Fatal("RunWithRetry = nil, want a genuine error after root was removed out from under the daemon")
+	}
+	if errors.Is(err, ErrLockLive) || errors.Is(err, watch.ErrWatchDisabled) {
+		t.Fatalf("RunWithRetry = %v, want a genuine error distinct from ErrLockLive/ErrWatchDisabled", err)
+	}
+	if called {
+		t.Fatal("onDeferred was called on a genuine non-ErrLockLive error — RunWithRetry must return immediately without retrying")
+	}
+}
+
+// TestRunWithRetryCtxCancelDuringSleep proves two things at once (the
+// behavior block's last two bullets): (1) on ErrLockLive, onDeferred is
+// invoked before the retry sleep; (2) a ctx cancellation during that sleep
+// returns ctx.Err() promptly, well under the full retry interval — not by
+// waiting the interval out. Manually holding the lock (rather than running
+// a second Daemon) makes d.Run deterministically return ErrLockLive on
+// every attempt.
+func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
+	root, codegraphDir, _ := initFixture(t)
+
+	if err := acquire(codegraphDir); err != nil {
+		t.Fatalf("acquire (holding the lock ourselves): %v", err)
+	}
+	defer release(codegraphDir)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var mu sync.Mutex
+	deferredCount := 0
+	onDeferred := func() {
+		mu.Lock()
+		deferredCount++
+		mu.Unlock()
+	}
+
+	// Long enough that a prompt ctx.Err() proves the sleep — not the
+	// interval — elapsed.
+	const interval = 2 * time.Second
+	retryErr := make(chan error, 1)
+	go func() { retryErr <- RunWithRetry(ctx, d, interval, onDeferred) }()
+
+	// Give RunWithRetry time to hit ErrLockLive at least once and enter its
+	// retry sleep before cancelling.
+	time.Sleep(50 * time.Millisecond)
+	start := time.Now()
+	cancel()
+
+	select {
+	case err := <-retryErr:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("RunWithRetry = %v, want context.Canceled", err)
+		}
+		if elapsed := time.Since(start); elapsed >= interval {
+			t.Fatalf("RunWithRetry took %v to return after cancel, want well under the %v interval", elapsed, interval)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("RunWithRetry did not return promptly after ctx cancellation during sleep")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if deferredCount == 0 {
+		t.Fatal("onDeferred was never called — RunWithRetry should have hit ErrLockLive at least once before cancel")
 	}
 }

@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/watch"
@@ -73,6 +75,29 @@ type Daemon struct {
 	// indexer.Sync's typically sub-millisecond duration against a tiny
 	// test fixture. Production callers leave it nil.
 	onSyncStart func()
+
+	// probe carries the flag-derived watch.Probe inputs (D-01..D-04's
+	// NoWatch/ForceWatch) that Run's policy gate (WATCH-03/D-11) checks
+	// before ever touching the lockfile. Env/IsWSL are left nil here so
+	// they default inside watch.WatchDisabledReason to os.Getenv/DetectWSL
+	// — the standalone `codegraph daemon` command (internal/cli/daemon.go,
+	// UNCHANGED by this plan) never sets probe, so real env vars and real
+	// WSL detection still apply for that path. serve --mcp (03-03) sets
+	// probe via WithProbe to carry its own --no-watch/--watch flags.
+	probe watch.Probe
+}
+
+// Option customizes a Daemon constructed via New. The variadic parameter
+// keeps New's existing two-argument call sites (internal/cli/daemon.go)
+// source- and binary-compatible — passing zero Options is a no-op.
+type Option func(*Daemon)
+
+// WithProbe overrides the Daemon's watch.Probe (see the probe field's doc
+// comment). This is the only Option this plan introduces.
+func WithProbe(p watch.Probe) Option {
+	return func(d *Daemon) {
+		d.probe = p
+	}
 }
 
 // New resolves repoRoot's .codegraph/ layout and returns a Daemon ready to
@@ -84,7 +109,7 @@ type Daemon struct {
 // indexer.Sync call this Daemon drives (flush, below) — e.g. Workers to
 // bound the daemon's own extraction pool independently of the CLI's
 // one-shot `codegraph sync`/`index` invocations.
-func New(repoRoot string, opts indexer.Options) (*Daemon, error) {
+func New(repoRoot string, opts indexer.Options, options ...Option) (*Daemon, error) {
 	abs, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return nil, err
@@ -96,12 +121,16 @@ func New(repoRoot string, opts indexer.Options) (*Daemon, error) {
 		}
 		return nil, err
 	}
-	return &Daemon{
+	d := &Daemon{
 		repoRoot:     abs,
 		codegraphDir: codegraphDir,
 		storeDir:     filepath.Join(codegraphDir, storeDirName),
 		opts:         opts,
-	}, nil
+	}
+	for _, opt := range options {
+		opt(d)
+	}
+	return d, nil
 }
 
 // Run acquires the daemon lockfile (single-writer invariant, D-05), opens
@@ -115,7 +144,18 @@ func New(repoRoot string, opts indexer.Options) (*Daemon, error) {
 // no Sync is still writing when the lock is released (SYNC-06, INDX-05). If
 // another live daemon already holds the lock, Run returns ErrLockLive
 // immediately without starting a watcher.
+//
+// Before any of the above, Run enforces watch.WatchDisabledReason as its
+// FIRST action (WATCH-03/D-11): a policy-disabled Daemon returns a
+// watch.ErrWatchDisabled-wrapped error and never calls acquire(), so a
+// disabled watcher never touches the lockfile. This is the single shared
+// enforcement point both the in-process `serve --mcp` watcher (03-03) and
+// the standalone `codegraph daemon` command (internal/cli/daemon.go,
+// unchanged) inherit through this one call.
 func (d *Daemon) Run(ctx context.Context) error {
+	if reason := watch.WatchDisabledReason(d.repoRoot, d.probe); reason != "" {
+		return fmt.Errorf("%w: %s", watch.ErrWatchDisabled, reason)
+	}
 	if err := acquire(d.codegraphDir); err != nil {
 		return err
 	}
@@ -153,6 +193,55 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// (INDX-05, D-07, SYNC-06).
 	deb.Wait()
 	return nil
+}
+
+// RunWithRetry drives d.Run(ctx) in a loop, converging concurrent
+// serve --mcp sessions on a single writer (WATCH-04/D-14): defer-and-retry
+// replaces the prior defer-once behavior, so a session that lost the race
+// for the lock does not give up forever — it retries on a jittered cadence
+// until either it acquires the lock (a surviving session becomes the sole
+// writer once the holder exits) or ctx is cancelled.
+//
+// On ErrLockLive, onDeferred is invoked once per retry (the caller logs the
+// "deferring to it" line and may no-op subsequent calls) and the loop then
+// sleeps jitter(interval), honoring ctx.Done() so a cancellation during the
+// sleep returns ctx.Err() promptly rather than waiting out the interval.
+// Any other outcome — nil (clean shutdown), watch.ErrWatchDisabled, or a
+// genuine non-ErrLockLive error — returns immediately without ever calling
+// onDeferred: policy is terminal (it doesn't change mid-session) and a
+// genuine error is not something retrying can fix.
+//
+// D-16 confirms acquire() (lock.go) self-heals a stale lock on every
+// independent call — a crashed holder is detected and cleared the very
+// next retry's acquire(), not by any new liveness/staleness machinery
+// added here. This loop is therefore nothing more than "call Run again":
+// no poll, no wait-for-pid, no watch-for-exit.
+func RunWithRetry(ctx context.Context, d *Daemon, interval time.Duration, onDeferred func()) error {
+	for {
+		err := d.Run(ctx)
+		if err == nil || !errors.Is(err, ErrLockLive) {
+			return err
+		}
+		onDeferred()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(jitter(interval)):
+		}
+	}
+}
+
+// jitter returns interval plus a bounded pseudo-random positive amount (up
+// to ~20% of interval) so concurrent RunWithRetry loops retrying against
+// the same contended lockfile do not thunder-herd on a synchronized
+// cadence. Not crypto-grade — math/rand is sufficient for a scheduling
+// stagger. Always >= interval (never negative, never less than interval).
+func jitter(interval time.Duration) time.Duration {
+	spread := interval / 5
+	if spread <= 0 {
+		return interval
+	}
+	return interval + time.Duration(rand.Int63n(int64(spread)))
 }
 
 // flush is the debouncer's callback (RESEARCH Pattern 3/7): it runs in the
