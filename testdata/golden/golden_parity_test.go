@@ -54,7 +54,6 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
-	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -170,44 +169,52 @@ func gitHead(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// buildWeftEngine runs the real indexer.Run pipeline against weftDir into
-// a fresh temp store (never mutating the weft checkout itself), then opens
-// an Engine on it via NewWithRoot so Explore/Node's fresh-from-disk source
-// reads are confined to weftDir (mirroring OpenAt's construction, without
-// requiring a .codegraph/ directory inside the pinned checkout).
+// buildWeftEngine runs the real indexer.Run pipeline against a COPY of
+// weftDir (never mutating the pinned checkout itself — buildIndexedFixture
+// copies into a fresh t.TempDir()) and opens the result via OpenAt, so
+// Explore/Node's fresh-from-disk source reads are confined to the copy and
+// Status()'s dbSizeBytes measures the SAME store the test actually built
+// (CR-02 — see buildEngineAt's doc comment for the bug this replaced).
 func buildWeftEngine(t *testing.T, weftDir string) *query.Engine {
 	t.Helper()
 	return buildEngineAt(t, weftDir)
 }
 
 // buildEngineAt is buildWeftEngine's corpus-agnostic sibling (plan 17,
-// TEST-01/D-02): it runs the real indexer.Run pipeline against sourceDir
-// into a fresh temp store (never mutating sourceDir itself) and opens an
-// Engine on it via NewWithRoot, so Explore/Node's fresh-from-disk source
-// reads are confined to sourceDir. Used by the D-02 behavioral parity
-// harness below to build a live Go engine over each of the three golden
-// corpora (synthetic-parity, weft-go, colbymchenry-codegraph).
+// TEST-01/D-02): it copies sourceDir into a fresh t.TempDir() and indexes
+// it on disk at <dst>/.codegraph/store (via buildIndexedFixture — the
+// SAME helper TestExploreCLIMatchesMCP/TestNodeCLIMatchesMCP already use
+// against this same weft-go corpus, so this is not a new cost class), then
+// opens it via OpenAt exactly as production does. Used by the D-02
+// behavioral parity harness below to build a live Go engine over each of
+// the three golden corpora (synthetic-parity, weft-go,
+// colbymchenry-codegraph).
+//
+// ★ CR-02 fix: this USED TO run indexer.Run directly into a bare
+// t.TempDir() and wrap it via NewWithRoot(reader, sourceDir) — an Engine
+// whose repoRoot (sourceDir, e.g. the pinned weft checkout) had NOTHING to
+// do with the store the test actually built (a sibling, unrelated temp
+// dir). Status()'s dbSizeBytes derives its directory from
+// repoRoot+".codegraph/store" purely by convention (status.go), so that
+// assertion measured whatever HAPPENED to exist at
+// <sourceDir>/.codegraph/store — on the reviewer's machine, a stale
+// developer-created ../weft/.codegraph/store from an old `codegraph init`,
+// invisible pollution that made the assertion pass locally while failing
+// on any clean checkout (`dbSizeBytes = 0, want a positive integer`).
+// Opening through OpenAt(dst) makes repoRoot the SAME directory the store
+// was written to, so the assertion is honest by construction — no
+// filesystem pollution required to pass, and none possible to cause a
+// false pass.
 func buildEngineAt(t *testing.T, sourceDir string) *query.Engine {
 	t.Helper()
 
-	storeDir := t.TempDir()
-	if _, err := indexer.Run(sourceDir, storeDir, indexer.Options{Quiet: true}); err != nil {
-		t.Fatalf("indexer.Run(%s): %v", sourceDir, err)
-	}
-
-	store, err := graphstore.Open(storeDir)
+	dst := buildIndexedFixture(t, sourceDir)
+	eng, closer, err := query.OpenAt(dst)
 	if err != nil {
-		t.Fatalf("graphstore.Open: %v", err)
+		t.Fatalf("OpenAt(%s): %v", dst, err)
 	}
-	t.Cleanup(func() { _ = store.Close() })
-
-	reader, err := store.Snapshot()
-	if err != nil {
-		t.Fatalf("store.Snapshot: %v", err)
-	}
-	t.Cleanup(func() { _ = reader.Close() })
-
-	return query.NewWithRoot(reader, sourceDir)
+	t.Cleanup(func() { _ = closer.Close() })
+	return eng
 }
 
 // syntheticParitySrc resolves the committed, in-repo synthetic-parity
@@ -1316,7 +1323,7 @@ func firstNChars(s string, n int) string {
 func callExploreViaMCP(t *testing.T, repoDir, query string) string {
 	t.Helper()
 
-	s := internalmcp.BuildServer(true, map[string]bool{}, repoDir)
+	s := internalmcp.BuildServer(true, map[string]bool{}, repoDir, repoDir)
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
 		t.Fatalf("NewInProcessClient: %v", err)
@@ -1357,7 +1364,7 @@ func callNodeViaMCP(t *testing.T, repoDir, symbol string) string {
 func callNodeViaMCPWithArgs(t *testing.T, repoDir, symbol, file string, line *int) string {
 	t.Helper()
 
-	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir)
+	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir, repoDir)
 	c, err := mcpclient.NewInProcessClient(s)
 	if err != nil {
 		t.Fatalf("NewInProcessClient: %v", err)
