@@ -13,6 +13,23 @@ decision D-06/D-06a. It is the parity oracle that later phases diff against:
 
 This directory does **not** contain a converter. It is capture-only.
 
+## Running this suite (GOLDEN-01)
+
+**`go test ./...` never runs anything in this directory.** The Go tool
+ignores any directory named `testdata` when expanding a `./...` pattern —
+`go list ./...` genuinely returns zero packages under `testdata/golden`, so
+every "full suite green" run of `go test ./...` silently omits
+`TestGoldenParity`, the CLI==MCP byte-identity harness, and the behavioral
+corpora entirely. Run it explicitly:
+
+```sh
+go test ./testdata/golden/...
+```
+
+`.github/workflows/ci.yml`'s `test` job runs this as its own step (separate
+from the `go list ./...`-driven step) specifically so this suite's coverage
+is not silently lost in CI either.
+
 ## Capture provenance
 
 | Field | Value |

@@ -65,6 +65,16 @@ jobs:
           mapfile -t pkgs < <(go list ./... | grep -v '/internal/daemon$')
           go test "${pkgs[@]}"
 
+      # GOLDEN-01 (02-REVIEW-2.md): the go tool ignores any directory named
+      # "testdata" when expanding "./..." — `go list ./...` above therefore
+      # NEVER discovers testdata/golden, and every "full suite green" signal
+      # produced by the step above silently omits the golden parity suite
+      # (TestGoldenParity, the CLI==MCP byte-identity harness, the
+      # behavioral corpora, etc.). This step makes that reachable and
+      # explicit rather than a suite everyone believes runs but never does.
+      - name: Test golden parity suite (testdata/golden, NOT covered by go list ./...)
+        run: go test ./testdata/golden/...
+
       - name: Test internal/daemon (isolated, -count=1)
         # internal/daemon's TestSoak + flush-lock tests are a documented,
         # PRE-EXISTING flake under full-suite parallel load (STATE.md,
