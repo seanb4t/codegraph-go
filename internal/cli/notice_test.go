@@ -114,21 +114,30 @@ type noticeCase struct {
 	args []string
 }
 
-// noticeCommandCases is the shared table of the 7 non-status read commands
+// noticeCommandCases is the shared table of the 9 non-status read commands
 // this plan wires the compact notice into (WORK-02), each with a symbol/
 // query argument the gofixture corpus resolves (Alpha calls helper — see
 // query_cli_test.go's TestCallersCalleesCmd). Reused across Test 7
 // (mismatch presence), Test 8 (clean-tree absence), and Test 9 (--json
 // suppression).
+//
+// WR-04: "query" and "affected" were originally omitted from this table
+// with no documented reason — an undetected blind spot, since both are
+// registered read commands (root.go) that call query.OpenAt and render
+// human output exactly like the other 7, yet carried no notice. Both are
+// now wired in internal/cli/query.go and internal/cli/affected.go and
+// covered here.
 func noticeCommandCases(path string) []noticeCase {
 	return []noticeCase{
 		{"explore", []string{"explore", "Alpha", "-p", path}},
 		{"node", []string{"node", "Alpha", "-p", path}},
+		{"query", []string{"query", "Alpha", "-p", path}},
 		{"search", []string{"search", "Alpha", "-p", path}},
 		{"callers", []string{"callers", "helper", "-p", path}},
 		{"callees", []string{"callees", "Alpha", "-p", path}},
 		{"impact", []string{"impact", "helper", "-p", path}},
 		{"files", []string{"files", "-p", path}},
+		{"affected", []string{"affected", "pkga/pkga.go", "-p", path}},
 	}
 }
 
@@ -206,11 +215,13 @@ func TestNoticeSuppressedInJSON(t *testing.T) {
 	glyph := noticeGlyph(t)
 
 	cases := []noticeCase{
+		{"query", []string{"query", "Alpha", "-p", wt, "--json"}},
 		{"search", []string{"search", "Alpha", "-p", wt, "--json"}},
 		{"callers", []string{"callers", "helper", "-p", wt, "--json"}},
 		{"callees", []string{"callees", "Alpha", "-p", wt, "--json"}},
 		{"impact", []string{"impact", "helper", "-p", wt, "--json"}},
 		{"files", []string{"files", "-p", wt, "--json"}},
+		{"affected", []string{"affected", "pkga/pkga.go", "-p", wt, "--json"}},
 		{"status", []string{"status", "-p", wt, "--json"}},
 	}
 

@@ -72,6 +72,12 @@ func newQueryCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
+			// Compact worktree notice (WORK-02, D-12): lives strictly inside
+			// the human-output branch, AFTER the --json early return above —
+			// see explore.go's call site for the full rationale. WR-04: this
+			// command was previously omitted (all 7 other read commands had
+			// it) with no documented reason — an oversight, now closed.
+			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			for _, n := range nodes {
 				fmt.Fprintf(out, "%s (%s) %s:%d\n", n.Name, n.Kind, n.FilePath, n.StartLine)
 			}

@@ -49,6 +49,12 @@ func newAffectedCmd() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
+			// Compact worktree notice (WORK-02, D-12): lives strictly inside
+			// the human-output branch, AFTER the --json early return above —
+			// see explore.go's call site for the full rationale. WR-04: this
+			// command was previously omitted (all 7 other read commands had
+			// it) with no documented reason — an oversight, now closed.
+			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprintf(out, "%d affected test(s):\n", len(result.AffectedTests))
 			for _, l := range result.AffectedTests {
 				fmt.Fprintf(out, "  %s (%s) %s:%d\n", l.Name, l.Kind, l.FilePath, l.StartLine)
