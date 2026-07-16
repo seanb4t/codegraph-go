@@ -81,6 +81,7 @@
 - [x] **TEST-01**: a behavioral fixture harness diffs `explore`/`node`/`status` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings — on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot
 - [x] **TEST-02**: worktree detection has fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/` layout, and symlinked paths
 - [ ] **TEST-03**: git-hook install→edit→remove is byte-invariant, and interactive TUI components are tested against piped streams (never hang)
+- [ ] **TEST-04**: an integration harness **spawns the release binary as a subprocess** and drives its real transports end-to-end — the CLI via argv and the MCP server via a real stdio JSON-RPC session (`initialize` → `tools/call`) — asserting reachability that in-process/unit tests structurally cannot. Motivated by Phase-2 CR-01, where the MCP worktree notice was dead code in production for the whole phase yet every in-process `BuildServer`→`CallTool` test passed (in-process bypasses `serve.go`'s cwd/argv → path-derivation → handler wiring, the exact seam that broke). Anchor case: from inside a `.claude/worktrees/<name>/` borrowed worktree, a real `codegraph serve --mcp` session's `codegraph_explore` payload carries the `⚠` notice, with a main-checkout control run showing none. Wired into CI **alongside** `go test ./testdata/golden/...` (which `go test ./...` silently skips — the go tool ignores `testdata/`). Mechanizes the session-long "drive the real entry point, don't infer reachability" lesson. *(Mapped to Phase 3 because it first expands the `serve --mcp` surface; movable to Phase 8 to bundle with the REL-04 drop-in gate.)*
 
 ### v1.0.0 Release (REL)
 
@@ -148,6 +149,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | WORK-03 | Phase 2 | Complete |
 | TEST-02 | Phase 2 | Complete |
 | SURF-06 | Phase 2 | Complete |
+| TEST-04 | Phase 3 | Pending |
 | WATCH-01 | Phase 3 | Pending |
 | WATCH-02 | Phase 3 | Pending |
 | WATCH-03 | Phase 3 | Pending |
@@ -179,10 +181,12 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 
 **Coverage:**
 
-- v1.0 requirements: 46 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 6, TEST 3, REL 4)
-- Mapped to phases: 46 / 46 ✓
+- v1.0 requirements: 47 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 6, TEST 4, REL 4)
+- Mapped to phases: 47 / 47 ✓
 - Unmapped: 0
-- Per phase: P1=10, P2=8, P3=4, P4=2, P5=3, P6=3, P7=7, P8=9
+- Per phase: P1=10, P2=8, P3=5, P4=2, P5=3, P6=3, P7=7, P8=9
+
+**TEST-04 note (added 2026-07-16):** the integration-test harness was surfaced during Phase-2 execution — three consecutive Criticals (CR-01/CR-02/BL-01) were reachability/composition failures a 100%-green unit + in-process suite could not see, each caught only by driving the real binary. Filed as a new requirement (user decision) rather than retrofitting the closed Phase 2. Mapped to Phase 3 (first phase to expand the `serve --mcp` surface); can move to Phase 8 with the release gate.
 
 **SURF-06 note (added 2026-07-15, during Phase-2 planning):** SURF-01..05 are Phase 8; SURF-06 is mapped to **Phase 2** by explicit user decision. It landed there because Phase 2 already rewires every MCP read tool's result path for the WORK-02 worktree notice — doing the format change in the same pass avoids touching those 5 handlers twice and dissolves the "text-prefix a JSON payload" question entirely (with all 7 tools on markdown, one uniform notice mechanism works). Discovered while resolving 02-RESEARCH.md Open Question #3.
 

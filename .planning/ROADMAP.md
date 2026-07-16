@@ -137,16 +137,17 @@ Plans:
 
 **Goal**: `serve --mcp` runs live in-process auto-sync by default (matching TS's auto-sync), with a `--no-watch` opt-out and a WSL2/slow-filesystem auto-off policy — restoring the live-sync experience with zero config change and without ever delaying the MCP handshake.
 **Depends on**: Phase 2
-**Requirements**: WATCH-01, WATCH-02, WATCH-03, WATCH-04
+**Requirements**: WATCH-01, WATCH-02, WATCH-03, WATCH-04, TEST-04
 **Success Criteria** (what must be TRUE):
 
   1. `serve --mcp` runs the file watcher by default with `--no-watch` to opt out (flipping the current opt-in `--watch`); `install` already writes the byte-identical `serve --mcp` invocation, so live sync returns with no config change (WATCH-01)
   2. Watcher startup never delays the MCP handshake or first-tool availability — the watcher is started off the handshake path (WATCH-02)
   3. A WSL2 / slow-filesystem watch-policy auto-disables the watcher, honoring env precedence (`CODEGRAPH_NO_WATCH` / force-on), matching TS's escape hatch (WATCH-03)
   4. Concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean (WATCH-04)
+  5. A subprocess integration harness drives the real binary end-to-end — CLI via argv and `serve --mcp` via a real stdio JSON-RPC session — with the CR-01 anchor case (worktree notice reaches a real `serve --mcp` `codegraph_explore` payload; main-checkout control shows none) and CI wired to run it alongside `go test ./testdata/golden/...` (TEST-04)
 
 **Plans**: TBD
-**Notes**: The default flip is ~2 lines but MUST be bundled with the watch-policy port — a naive flip hangs MCP startup on WSL2. Reuses v0.1's `--watch` plumbing + daemon lockfile. This phase's watcher model is a prerequisite for the Phase 7 daemon picker.
+**Notes**: The default flip is ~2 lines but MUST be bundled with the watch-policy port — a naive flip hangs MCP startup on WSL2. Reuses v0.1's `--watch` plumbing + daemon lockfile. This phase's watcher model is a prerequisite for the Phase 7 daemon picker. **TEST-04** was added here (user decision, 2026-07-16) after Phase 2's three Criticals (CR-01/CR-02/BL-01) all proved to be reachability/composition failures invisible to a green unit + in-process suite: this phase expands the exact `serve --mcp` surface CR-01 broke, so the spawned-binary harness lands where it is first stressed and retroactively guards Phase 2's wiring. Movable to Phase 8 (REL-04 drop-in gate) if bundling with release makes more sense.
 
 ### Phase 4: Output Hygiene
 
