@@ -13,13 +13,14 @@ import (
 // captureDiagWriter swaps diagWriter for a fresh bytes.Buffer for the
 // duration of the calling test, restoring the previous value via
 // t.Cleanup — the same test-only-seam capture pattern openLockRetrySleep
-// already established in pebble_store.go.
+// already established in pebble_store.go. Swap/restore go through the
+// setDiagWriter accessor (not a bare assignment) so the seam stays
+// race-safe (WR-03) if t.Parallel() is ever added to this package.
 func captureDiagWriter(t *testing.T) *bytes.Buffer {
 	t.Helper()
-	prev := diagWriter
 	buf := &bytes.Buffer{}
-	diagWriter = buf
-	t.Cleanup(func() { diagWriter = prev })
+	prev := setDiagWriter(buf)
+	t.Cleanup(func() { setDiagWriter(prev) })
 	return buf
 }
 

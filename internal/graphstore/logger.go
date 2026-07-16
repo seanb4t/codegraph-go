@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/cockroachdb/pebble/v2"
 )
@@ -53,13 +54,43 @@ func (quietLogger) Fatalf(format string, args ...any) {
 // diagWriter. Shared by Errorf and Fatalf so their formatting behavior is
 // tested identically without ever invoking Fatalf's os.Exit(1) call.
 func writeDiagLine(prefix, format string, args ...any) {
-	fmt.Fprintf(diagWriter, prefix+format+"\n", args...)
+	fmt.Fprintf(getDiagWriter(), prefix+format+"\n", args...)
 }
 
 // diagWriter is the test-only-seam convention already established by
 // openLockRetrySleep in pebble_store.go: an unexported package-level var,
 // defaulting to the production value (os.Stderr, per the repo-wide
 // diagnostics rule, T-03-07-Leak / internal/mcp/server.go:63-66), with no
-// exported setter. Tests reassign this var (via captureDiagWriter) to
-// capture output; production behavior is unchanged.
-var diagWriter io.Writer = os.Stderr
+// exported setter. Tests reassign this var (via captureDiagWriter, through
+// the setDiagWriter accessor below) to capture output; production behavior
+// is unchanged.
+//
+// diagWriterMu guards diagWriter itself (not the io.Writer's own internal
+// state — a *bytes.Buffer written from only one goroutine at a time is
+// still safe). This is a latent-footgun fix (WR-03): today no test in this
+// package calls t.Parallel() and quietLogger.Errorf/Fatalf never fires
+// concurrently with a capture window, but the mu RWMutex convention
+// pebbleStore already uses elsewhere in this package is applied here too so
+// the seam stays race-safe if either assumption is ever violated.
+var (
+	diagWriterMu sync.RWMutex
+	diagWriter   io.Writer = os.Stderr
+)
+
+// getDiagWriter returns the current diagWriter under a read lock.
+func getDiagWriter() io.Writer {
+	diagWriterMu.RLock()
+	defer diagWriterMu.RUnlock()
+	return diagWriter
+}
+
+// setDiagWriter installs w as the current diagWriter under a write lock and
+// returns the previous value, so callers (captureDiagWriter) can restore it
+// on t.Cleanup.
+func setDiagWriter(w io.Writer) io.Writer {
+	diagWriterMu.Lock()
+	defer diagWriterMu.Unlock()
+	prev := diagWriter
+	diagWriter = w
+	return prev
+}
