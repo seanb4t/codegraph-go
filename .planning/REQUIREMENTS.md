@@ -33,7 +33,7 @@
 - [ ] **WATCH-01**: `serve --mcp` runs the file watcher by default (live in-process auto-sync) with `--no-watch` to opt out, matching TS's default-on behavior (ours is currently opt-in via `--watch`); `install` already writes the byte-identical `serve --mcp` invocation, so this restores live sync with zero config change
 - [ ] **WATCH-02**: watcher startup never delays the MCP handshake or first-tool availability (watcher started off the handshake path)
 - [x] **WATCH-03**: a WSL2 / slow-filesystem watch-policy auto-disables the watcher (env precedence: `CODEGRAPH_NO_WATCH` / force-on), matching TS's escape hatch
-- [ ] **WATCH-04**: concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean
+- [x] **WATCH-04**: concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean
 
 ### Daemon Model (DMON)
 
@@ -153,7 +153,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | WATCH-01 | Phase 3 | Pending |
 | WATCH-02 | Phase 3 | Pending |
 | WATCH-03 | Phase 3 | Complete |
-| WATCH-04 | Phase 3 | Pending |
+| WATCH-04 | Phase 3 | Complete |
 | HYG-01 | Phase 4 | Pending |
 | HYG-02 | Phase 4 | Pending |
 | HOOK-01 | Phase 5 | Pending |
