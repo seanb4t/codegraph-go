@@ -3,9 +3,11 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -294,6 +296,162 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 
 	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
 		t.Fatalf("lockfile still present after flush completed and Run returned (ok=%v err=%v)", ok, lerr)
+	}
+}
+
+// TestDaemonFlushLockRequeueGivesUpPerEpisode pins the WR-01/IN-03
+// give-up arithmetic in Run's requeue wrapper. The syncFn seam injects
+// graphstore.ErrStoreLocked — the exact sentinel the wrapper's errors.Is
+// branch keys on — while "contended", so one organic watcher event must
+// produce EXACTLY 6 sync attempts (1 organic + maxFlushLockRequeues
+// requeues: requeues fire at n=1..5, the give-up branch at n=6) and then
+// stop — the give-up branch never requeues. A second fresh event must get
+// its own 6 attempts (pinning the counter reset AT give-up, not only on
+// success: a broken reset would leave n=6 and give up after a single
+// attempt). Once contention "lifts", a third event's sync must succeed —
+// exhaustion is per-episode, never terminal for the daemon.
+//
+// The seam is used instead of holding a real graphstore.Open handle (the
+// review's first-choice recipe) because a pebble.Open failing on a held
+// LOCK can leak its disk-health ticker goroutine, tripping this package's
+// goleak TestMain gate; real ErrStoreLocked propagation through
+// indexer.Sync is covered by the integration live-sync test. All
+// synchronization is event-driven via the onSync seam.
+func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "10")
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	var locked atomic.Bool
+	locked.Store(true)
+	d.syncFn = func(_, _ string, _ indexer.Options) (indexer.Stats, error) {
+		if locked.Load() {
+			return indexer.Stats{}, fmt.Errorf("%w: injected contention", graphstore.ErrStoreLocked)
+		}
+		return indexer.Stats{}, nil
+	}
+	synced := make(chan error, 32)
+	d.onSync = func(_ indexer.Stats, err error) { synced <- err }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+
+	// awaitEpisode drives one contention episode: write a fresh file (one
+	// organic event) and require exactly `want` consecutive lock-lost sync
+	// attempts, followed by a quiet gap proving the give-up branch did NOT
+	// requeue a further attempt.
+	awaitEpisode := func(rel string, want int) {
+		t.Helper()
+		writeFixtureFile(t, root, rel, "package main\n")
+		for i := 1; i <= want; i++ {
+			select {
+			case err := <-synced:
+				if !errors.Is(err, graphstore.ErrStoreLocked) {
+					t.Fatalf("episode %q attempt %d: sync error = %v, want errors.Is(..., graphstore.ErrStoreLocked)", rel, i, err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatalf("episode %q: timed out waiting for lock-lost sync attempt %d of %d — the requeue chain stopped early (counter not reset at give-up?)", rel, i, want)
+			}
+		}
+		// The give-up branch must not requeue: a further attempt would
+		// arrive one debounce window (~10ms) after the give-up; a 1s quiet
+		// gap is a generous margin and cannot flake in the pass direction —
+		// with no new events, nothing legitimate can fire.
+		select {
+		case err := <-synced:
+			t.Fatalf("episode %q: a %dth sync attempt fired after exhaustion (err=%v) — the give-up branch requeued", rel, want+1, err)
+		case <-time.After(1 * time.Second):
+		}
+	}
+
+	// Episode 1: 1 organic + maxFlushLockRequeues requeued attempts.
+	awaitEpisode("episode1.go", maxFlushLockRequeues+1)
+	// Episode 2: the reset at give-up gives a fresh episode its own budget.
+	awaitEpisode("episode2.go", maxFlushLockRequeues+1)
+
+	// Contention lifts: the next organic event's sync must succeed.
+	locked.Store(false)
+	writeFixtureFile(t, root, "episode3.go", "package main\n")
+	select {
+	case err := <-synced:
+		if err != nil {
+			t.Fatalf("post-contention sync = %v, want success once the lock is free", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for a successful sync after contention lifted")
+	}
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+}
+
+// TestRunReturnsErrWatcherClosedAndReleasesLock pins the IN-07 abnormal
+// teardown path (WR-01 coverage gap): closing the watcher's event stream
+// out from under a running Run — via the onWatchOpen test seam — must make
+// Run tear down through the normal join path, RELEASE the daemon lockfile
+// (no zombie lock-holder), and return ErrWatcherClosed. Driving it through
+// RunWithRetry additionally pins that the error is surfaced immediately:
+// it is neither ErrLockLive nor watch.ErrWatchDisabled, so onDeferred must
+// never be called and no retry may occur.
+func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	watcherCh := make(chan *watch.Watcher, 1)
+	d.onWatchOpen = func(w *watch.Watcher) { watcherCh <- w }
+
+	retryErr := make(chan error, 1)
+	go func() {
+		retryErr <- RunWithRetry(context.Background(), d, time.Hour, func() {
+			t.Error("onDeferred called — RunWithRetry must surface ErrWatcherClosed immediately, not retry it")
+		})
+	}()
+
+	var w *watch.Watcher
+	select {
+	case w = <-watcherCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Run to open its watcher")
+	}
+	waitForLock(t, codegraphDir)
+
+	// Close the event stream out from under the running watch loop —
+	// fsnotify closes Events/Errors, watchLoop returns with ctx still
+	// alive: the exact abnormal teardown ErrWatcherClosed exists for.
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing the watcher out from under Run: %v", err)
+	}
+
+	select {
+	case err := <-retryErr:
+		if !errors.Is(err, ErrWatcherClosed) {
+			t.Fatalf("RunWithRetry = %v, want errors.Is(..., ErrWatcherClosed)", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after its watcher's event stream closed — zombie lock-holder (IN-07 regression)")
+	}
+
+	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
+		t.Fatalf("lockfile still present after ErrWatcherClosed teardown (ok=%v err=%v) — the lock must be released, not held by a dead watcher", ok, lerr)
 	}
 }
 

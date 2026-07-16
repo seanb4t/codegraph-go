@@ -112,6 +112,30 @@ type Daemon struct {
 	// test fixture. Production callers leave it nil.
 	onSyncStart func()
 
+	// syncFn, when non-nil, replaces indexer.Sync inside flush. It is a
+	// test-only control seam (unexported, no exported setter — mirrors
+	// onSync/onSyncStart) letting daemon_test.go inject deterministic
+	// Sync outcomes — specifically graphstore.ErrStoreLocked, to force
+	// the requeue chain to exhaustion (WR-01) — WITHOUT real Pebble lock
+	// contention: a pebble.Open that fails on a held LOCK can leak its
+	// disk-health ticker goroutine (the ticker restarts after the Open
+	// error path's FS Close when an op is still in flight), which trips
+	// this package's goleak TestMain gate. Real ErrStoreLocked
+	// propagation through indexer.Sync stays covered by the integration
+	// live-sync test. Production callers leave it nil.
+	syncFn func(repoRoot, storeDir string, opts indexer.Options) (indexer.Stats, error)
+
+	// onWatchOpen, when non-nil, is invoked with the freshly-opened
+	// watcher right after watch.Open succeeds inside Run, before the watch
+	// loop goroutine starts. It is a test-only control seam (unexported,
+	// no exported setter — mirrors onSyncStart) so daemon_test.go can
+	// capture the watcher handle and close its event stream out from under
+	// a running Run, deterministically driving the abnormal-teardown path
+	// that must return ErrWatcherClosed (03-REVIEW.md IN-07/WR-01) —
+	// fsnotify offers no other way to force its channels closed without
+	// the ctx being cancelled. Production callers leave it nil.
+	onWatchOpen func(*watch.Watcher)
+
 	// probe carries the flag-derived watch.Probe inputs (D-01..D-04's
 	// NoWatch/ForceWatch) that Run's policy gate (WATCH-03/D-11) checks
 	// before ever touching the lockfile. Env/IsWSL are left nil here so
@@ -212,6 +236,10 @@ func (d *Daemon) Run(ctx context.Context) error {
 		return err
 	}
 	defer w.Close()
+
+	if d.onWatchOpen != nil {
+		d.onWatchOpen(w)
+	}
 
 	// CR-01 scenario 2 (03-REVIEW.md): the flush callback is wrapped so a
 	// Sync that lost a Pebble LOCK race (a concurrent explore/reconcile had
@@ -366,8 +394,12 @@ func (d *Daemon) flush(_ map[string]struct{}) error {
 		log.Printf("daemon: touching pending sidecar: %v", err)
 	}
 
+	syncFn := indexer.Sync
+	if d.syncFn != nil {
+		syncFn = d.syncFn
+	}
 	d.syncMu.Lock()
-	stats, err := indexer.Sync(d.repoRoot, d.storeDir, d.opts)
+	stats, err := syncFn(d.repoRoot, d.storeDir, d.opts)
 	d.syncMu.Unlock()
 
 	if err != nil {

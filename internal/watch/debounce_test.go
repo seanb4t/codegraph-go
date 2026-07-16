@@ -132,6 +132,58 @@ func TestDebounceNoFlushAfterCancel(t *testing.T) {
 	})
 }
 
+// TestDebounceAddAfterCancelIsNoOp pins IN-04's structural fix (WR-01
+// coverage gap): Add called AFTER ctx cancellation must be a complete
+// no-op — no path recorded, no timer armed, no fireWG count taken — so a
+// caller's Wait returns immediately instead of riding out a dead debounce
+// window. TestDebounceNoFlushAfterCancel covers fire's own ctx check and
+// Stop; this is the third guarantee: the daemon's requeue-vs-shutdown
+// TOCTOU where a requeue Add lands after cancellation.
+func TestDebounceAddAfterCancelIsNoOp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	flushed := make(chan map[string]struct{}, 1)
+	d := NewDebouncer(ctx, 30*time.Millisecond, func(paths map[string]struct{}) {
+		flushed <- paths
+	})
+
+	cancel()
+	d.Add("x.go")
+
+	// Structural pin (same-package access): the ctx gate must return
+	// before recording the path or arming a timer — deterministic, no
+	// timing involved.
+	d.mu.Lock()
+	timerArmed := d.timer != nil
+	pendingLen := len(d.pending)
+	d.mu.Unlock()
+	if timerArmed {
+		t.Fatal("Add after ctx cancellation armed a timer — IN-04 regression")
+	}
+	if pendingLen != 0 {
+		t.Fatalf("Add after ctx cancellation recorded %d pending path(s), want 0", pendingLen)
+	}
+
+	// Wait must return immediately: the early return happens before
+	// fireWG.Add(1), so there is nothing to join.
+	waitReturned := make(chan struct{})
+	go func() {
+		d.Wait()
+		close(waitReturned)
+	}()
+	select {
+	case <-waitReturned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Wait blocked after a post-cancel Add — the no-op Add touched fireWG accounting")
+	}
+
+	// Behavioral belt: no flush fires within ~2 debounce windows.
+	select {
+	case paths := <-flushed:
+		t.Fatalf("flush fired after a post-cancel Add: %v", paths)
+	case <-time.After(75 * time.Millisecond):
+	}
+}
+
 // TestDebounceWaitJoinsInFlightFire is the CR-01 regression: proves Wait
 // blocks until a fire() that had already started running — one Stop() can
 // no longer cancel, because the timer already fired — has fully completed,
