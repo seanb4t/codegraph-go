@@ -23,9 +23,15 @@ func TestIsLockHeldOSUnix(t *testing.T) {
 		want bool
 	}{
 		{
-			// Cross-process form: fcntl(F_SETLK) conflict. Pebble's vfs
-			// surfaces the errno wrapped; errors.Is must traverse.
-			name: "fcntl EAGAIN wrapped in PathError",
+			// Cross-process form: fcntl(F_SETLK) conflict. NOTE the real
+			// shape the pinned pebble/v2 produces is the "bare EWOULDBLOCK"
+			// case below: unix.FcntlFlock returns the BARE syscall.Errno and
+			// nothing between vfs/file_lock_unix.go and pebble.Open's caller
+			// wraps it (verified against the pinned source; EWOULDBLOCK ==
+			// EAGAIN on every shipped unix target). This PathError-wrapped
+			// case pins that errors.Is traversal WOULD still classify
+			// correctly if a future pebble ever started wrapping the errno.
+			name: "fcntl EAGAIN wrapped in PathError (future-proofing, not the pinned shape)",
 			err:  fmt.Errorf("pebble: open: %w", &fs.PathError{Op: "fcntl", Path: "/repo/.codegraph/store/LOCK", Err: syscall.EAGAIN}),
 			want: true,
 		},
