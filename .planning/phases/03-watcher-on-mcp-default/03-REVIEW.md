@@ -1,156 +1,132 @@
 ---
 phase: 03-watcher-on-mcp-default
-reviewed: 2026-07-16T14:57:32Z
+reviewed: 2026-07-16T19:40:00Z
 depth: deep
-files_reviewed: 11
+files_reviewed: 19
 files_reviewed_list:
   - .github/workflows/ci.yml
+  - internal/cli/daemon.go
   - internal/cli/serve.go
   - internal/cli/serve_test.go
   - internal/daemon/daemon.go
   - internal/daemon/daemon_test.go
   - internal/daemon/soak_test.go
+  - internal/graphstore/locked_unix.go
+  - internal/graphstore/locked_unix_test.go
+  - internal/graphstore/locked_windows.go
+  - internal/graphstore/locked_windows_test.go
+  - internal/graphstore/open_lock_test.go
+  - internal/graphstore/pebble_store.go
   - internal/watch/policy.go
   - internal/watch/policy_test.go
   - test/integration/main_test.go
   - test/integration/watch_default_test.go
+  - test/integration/watch_live_sync_test.go
   - test/integration/worktree_notice_test.go
 findings:
-  critical: 1
-  warning: 4
-  info: 4
-  total: 9
+  critical: 0
+  warning: 0
+  info: 10
+  total: 10
 status: issues_found
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (Round 4 — fresh full-scope pass, Info items in scope per --all)
 
-**Reviewed:** 2026-07-16T14:57:32Z
+**Reviewed:** 2026-07-16T19:40:00Z
 **Depth:** deep
-**Files Reviewed:** 11
+**Files Reviewed:** 19
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the watcher-on-MCP-default phase at deep depth, tracing the full cross-file lifecycle: `serve.go` RunE → `serveWatchStart` goroutine → `daemon.RunWithRetry` → `daemon.Run` → `watch.Open`/`Debouncer` → `indexer.Sync` → `graphstore.Open` (Pebble), plus the lockfile state machine (`lock.go`), the watch-policy port, and the subprocess integration harness.
+Fresh full-scope deep pass over all 19 Phase-3 files after three review rounds and two fix passes, re-tracing every cross-file chain from scratch rather than trusting prior verdicts: the `Open` retry loop → `classifyOpenError` → `isLockHeldOS` seam (both build-tagged arms), the daemon `Run` → `Debouncer` → `flush` → requeue lifecycle (including the fireWG accounting in `internal/watch/debounce.go` and the `deb.Stop()`/`deb.Wait()` teardown ordering), the serve RunE reconcile → downgrade → `serveWatchStart` → `RunWithRetry` chain, the lock.go acquire/release/stale-detection substrate, and the subprocess integration harness.
 
-**What holds up well (verified, not assumed):**
+**Fresh verification results (checked, not assumed):**
 
-- **No CR-01 reintroduction.** `serve.go:216` passes `BuildServer(hasIndex, allowlist, repoPath, start)` with `start` captured before `repoPath` is overwritten; `TestServeKeepsStartPathDistinctFromConfinementRoot` pins the real `serveServerPaths`, and the D-20 integration anchor (`TestWorktreeNoticeReachesServeMCPExplore`) asserts the glyph against the **real subprocess payload** (glyph sourced from `gitmeta.Mismatch.Notice()` itself, with correct U+FE0F disambiguation in `containsBareNoticeGlyph`). The anchor is genuine, not a replica.
-- **No Phase-2 BL-01 recurrence in `RunWithRetry`.** Nothing is cached or recorded under a cancelled ctx: the loop either returns `d.Run`'s result directly or returns `ctx.Err()` from the retry-sleep select. `jitter` is panic-safe (`spread <= 0` guard before `rand.Int63n`).
-- **Lock released on every `Run` exit path**: policy-disabled returns before `acquire()`; `acquire()` failure has nothing to release; post-acquire paths release via defer, in the correct LIFO order (`deb.Wait()` → `w.Close()` → `release()`), and `deb.Wait()` genuinely joins an in-flight flush (pinned by `TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock`).
-- **Watch policy precedence matches the TS contract**: NO_WATCH (flag OR strict `=="1"` env) beats FORCE_WATCH beats WSL2 auto-off; `/mnt/[a-z]` single-letter regex correctly excludes `/mnt/wsl`; unconditional backslash normalization matches TS's `normalizePath`. `DetectWSL` caching is `sync.Once`-guarded (thread-safe); the reset hook is test-only.
-- **Teardown cannot hang `ServeStdio`'s return path**: every branch of the watcher goroutine ends in `close(watchDone)`; `RunWithRetry` unblocks on cancel from every state (mid-sleep via select, mid-watch via `<-ctx.Done()`); worst case the deferred `<-watchStartDone` waits out one in-flight `indexer.Sync`, which is the intended lock-safety property, not a hang.
-- **Watcher failure never kills the MCP server**: all failure branches in `serveWatchStart`'s goroutine write to stderr and return; `log.Printf` in daemon/watch paths goes to stderr, never corrupting stdio JSON-RPC.
-- **No zombie subprocesses in the harness**: `t.Cleanup(c.Close)` is registered before `Initialize`, and `exec.CommandContext` in the `WithCommandFunc` seam kills the child on transport-context cancellation. The stderr reader in `TestNoWatchEnvDisablesViaStderr` is mutex-guarded and started before `Initialize` — the race handling is correct.
+- **Round-3 WR-01 is genuinely fixed:** the `GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/` step exists at `.github/workflows/ci.yml:116-117` (commit 3a4c2f6), so `locked_windows_test.go:18-20`'s claim about the cross-GOOS gate is now true. The windows classifier arm, its tests, and the unix arm all remain exactly as round 3 verified them.
+- **The `ErrStoreLocked` sentinel confinement holds.** `classifyOpenError` has exactly one call site (`pebble_store.go:142`, inside `Open`'s loop); `isLockHeldOS` is called only from `classifyOpenError`; both consumers (`daemon.go:214`, `serve.go:201`) branch via `errors.Is` on the sentinel only. No chain-sniffing API remains anywhere.
+- **No new teardown/lifecycle defects.** Re-derived the debouncer accounting independently: `Add`'s `fireWG.Add(1)` at arm time + `fire`'s deferred `Done` + the `timer.Stop()`-undo in both `Add` and `Stop` are balanced on every path; `Run`'s `<-ctx.Done()` → `wg.Wait()` → `deb.Wait()` joins every Sync before the deferred `release()` runs. The requeue closure's capture of `deb` is safely ordered (assignment happens-before the watcher goroutine's spawn, and timers only arm after Adds from that goroutine).
+- **No sidecar feedback loop:** `.codegraph/` is excluded from the watch set (`indexer.ShouldSkipDir` via `addRecursive`), and both `touchPending`/`clearPending` and pebble's store writes land inside it, so daemon-driven writes can never re-trigger the debouncer.
+- **The integration harness is sound:** `TestMain`'s hard-stop build, `copyFixture`/`buildWorktreeFixture`'s hermetic git usage (skip-on-failure), `newServeClient*`'s `t.Cleanup(c.Close)`-before-`Initialize` ordering, the live-sync test's 500ms-re-touch-vs-100ms-debounce starvation math, and the stderr-reader goroutine's termination on pipe close all check out.
 
-**What does not hold up:** one Critical emergent interaction (the exact Phase-2 failure class (b) the phase context warned about) and four Warnings, detailed below.
+**Adjudicated residuals honored (re-verified as correctly characterized, not re-reported):** the bounded ~400ms `Open` lock-retry window that can surface one tool-call error under a long-lived holder (accepted; the full fix is a shared in-process store handle, out of scope), and the windows any-sharing-violation-classifies-as-lock imprecision (round-3 IN-03, accepted trade-off — the wrap preserves the original error text for diagnosis).
 
-## Critical Issues
-
-### CR-01: Default-on in-process flush collides with every other Pebble open — tool calls fail mid-sync, failed syncs are never retried, and a second session's serve can die at startup
-
-**File:** `internal/cli/serve.go:182-187, 196-199`; `internal/daemon/daemon.go:258-280`; (interacting, unchanged: `internal/query/engine.go:160-190`, `internal/indexer/sync.go:52-56`, `internal/graphstore/pebble_store.go:67-73`)
-
-**Issue:** Every path into the graph store — the daemon flush (`indexer.Sync`), the startup reconcile `Sync` (serve.go:184), and every `codegraph_explore`/query (`query.OpenAt`) — calls `graphstore.Open`, which is `pebble.Open(dir, &pebble.Options{})`: a **read-write open holding Pebble's exclusive directory LOCK for the entire call**, failing immediately (non-blocking flock, plus Pebble's in-process lock tracking) when any other open of the same store is live, in the same process or another.
-
-Before this phase that collision surface was opt-in (`--watch` / standalone `codegraph daemon`). This phase makes the flush **default-on in every `serve --mcp` session**, turning three collisions into default-path behavior:
-
-1. **Same-process, the core agent workflow:** agent edits a file → 2s debounce → `flush` holds the store open for the full `indexer.Sync` duration → the agent's next `codegraph_explore` (which lands exactly then, because the agent just edited and now queries) hits `OpenAt` → `graphstore.Open` fails → the tool call returns an error. Nothing serializes these: `syncMu` (daemon.go:59) only serializes flushes against each other; query opens never touch it.
-2. **Same-process, inverted:** an explore holds the store open when the debounce fires → the flush's `Sync` fails → `daemon: sync: ...` is logged and the `.sync-pending` sidecar stays — but **a failed flush is never retried**. The debouncer only fires on new `Add`s, so if the edit burst is over, the graph stays stale (sidecar set, content old) until an unrelated future event or the next session's reconcile.
-3. **Cross-process, startup:** session B's synchronous reconcile `Sync` (serve.go:184, on the RunE path **before** `ServeStdio`) overlaps session A's in-flight flush (or explore) → `Sync` returns the Pebble lock error → `return err` → **session B's MCP server never starts at all**. The whole WATCH-04 retry-convergence machinery covers only the daemon lockfile; the store open underneath it has no retry.
-
-No test can catch this because no test edits a file during a live serve session (see WR-04). This is precisely the phase-context failure class (b): individually-correct pieces (per-call opens, exclusive Pebble lock, default-on flush) composing into a defect.
-
-**Fix:** Serialize or retry at the store-open seam. Minimum viable, in ascending scope:
-1. **Same-process (scenarios 1 and 2):** give the serve process one shared serialization point between flush and query opens — e.g. thread the daemon's `syncMu` (or a package-level per-storeDir mutex in `graphstore`/`query`) through `OpenAt` so an in-process explore blocks briefly on an in-flight sync instead of erroring, and vice versa.
-2. **Cross-process (scenario 3 and daemon-vs-other-process):** wrap `graphstore.Open` calls on the write/reconcile paths in a bounded retry-with-backoff on Pebble's lock-held error (e.g. 5×100ms), and make serve's startup reconcile failure on a lock error **degrade to a stderr warning instead of `return err`** — a transiently-locked store means another writer is actively syncing, which is exactly the "graph will be fresh" case; killing the server over it is strictly worse than starting with a possibly seconds-stale graph.
-3. **Scenario 2 specifically:** on flush failure with a lock-held error, re-arm the debouncer (e.g. `deb.Add` of a sentinel path or a direct retry after backoff) so a failed sync is not silently terminal until the next organic event.
-
-## Warnings
-
-### WR-01: `daemon.Run`'s new policy gate silently changes `codegraph daemon`'s CLI contract with no CLI-side handling
-
-**File:** `internal/daemon/daemon.go:156-158`; `internal/cli/daemon.go:33-52` (unchanged, now behaviorally different)
-
-**Issue:** `Run` now returns `watch.ErrWatchDisabled` before touching anything when policy disables watching. `internal/cli/daemon.go` propagates it raw. Consequences for the existing `codegraph daemon` command:
-- On a WSL2 `/mnt/<drive>` repo, a command that previously started now exits nonzero with `daemon: watching is disabled by policy: project is on a WSL2 /mnt/ drive, ...` — no D-12 guidance (`codegraph sync` / git hooks), unlike serve.go:130-132 which prints the friendly verbatim message.
-- With `CODEGRAPH_NO_WATCH=1` exported (e.g. set globally by a user for their MCP config), `codegraph daemon` now refuses to start with the same terse error.
-- `codegraph daemon` grew **no** `--watch`/`--no-watch` flags, so the only escape hatch is the undocumented-at-this-surface `CODEGRAPH_FORCE_WATCH=1` env var.
-
-The shared enforcement point is the right design (WATCH-03), but the CLI presentation layer for the standalone command was not updated to match.
-
-**Fix:** In `internal/cli/daemon.go`'s RunE, `errors.Is(err, watch.ErrWatchDisabled)` and print the same D-12/D-13 stderr message serve.go prints (with the `codegraph sync` guidance), then return a clean exit (or at minimum the friendly message plus nonzero). Optionally add the same `--watch`/`--no-watch` flag pair threaded via `WithProbe` for surface symmetry.
-
-### WR-02: `TestServeWatchStartDeferred` asserts an ordering the Go scheduler does not guarantee — false-positive flake built in
-
-**File:** `internal/cli/serve_test.go:79-116`
-
-**Issue:** The test spawns `serveWatchStart` (which starts its goroutine and returns), then sets `atomic.StoreInt32(&returned, 1)` **after** the call returns. The hook fires as the goroutine's first action and does `atomic.LoadInt32(&returned) == 0 → t.Error`. There is **no happens-before edge** between the goroutine's start and the caller's store: on GOMAXPROCS>1, the spawned goroutine can legitimately begin executing `onWatchWorkStart` on another P while the caller is still executing the `return` statement and the store — observing `returned == 0` and failing the test against fully-correct production code. The doc comment claims this is "a deterministic synchronization hook ... without a sleep/timeout race," but the assertion itself is a scheduling race. This is exactly the flake class the CI file quarantines `internal/daemon` for — being newly minted in `internal/cli`.
-
-**Fix:** Make the goroutine's real work *wait* for the caller's release instead of racing it: have the test's `onWatchWorkStart` block on a channel the caller closes immediately after `serveWatchStart` returns, and assert only that `serveWatchStart` returned (i.e. the calling goroutine reached the close) while the hook was still blocked. E.g.:
-
-```go
-released := make(chan struct{})
-onWatchWorkStart := func() { <-released; workStarted <- struct{}{} }
-cancel, done := serveWatchStart(...)
-close(released) // serveWatchStart returned => the mutation (work-before-spawn) would have deadlocked/fired the hook synchronously
-```
-
-A synchronous-mutation `serveWatchStart` would block forever inside the hook before returning (caught by a test timeout), while correct code passes deterministically.
-
-### WR-03: CI never runs the race detector, in the phase whose entire surface is goroutine lifecycles
-
-**File:** `.github/workflows/ci.yml:59-93`
-
-**Issue:** No step passes `-race`. This phase's deliverables are almost entirely concurrency: `serveWatchStart`'s goroutine + teardown, `RunWithRetry`'s cancel-vs-sleep select, `Debouncer.fireWG` accounting, the two-session convergence soak, and the stderr-reader goroutine in the integration harness. The soak test comments explicitly size iteration counts for "the 120s CI timeout **under -race**" — but CI never applies it, so the assumption those comments encode is unverified on every PR. The goleak gate catches leaks, not races; they are complementary, not substitutes.
-
-**Fix:** Add `-race` to at least the isolated daemon step (`go test ./internal/daemon/ -count=1 -race`) and ideally the main filtered step (or a dedicated `-race` job on `internal/daemon`, `internal/watch`, `internal/cli` if full-suite `-race` time is a concern).
-
-### WR-04: No test exercises the feature this phase ships — edit-during-live-session → auto-sync → fresh query
-
-**File:** `test/integration/watch_default_test.go` (gap); `test/integration/worktree_notice_test.go` (gap)
-
-**Issue:** The integration suite proves the default-on watcher *doesn't block the handshake* (`TestDefaultWatchHandshakePrompt`), *prints the disabled message* (`TestNoWatchEnvDisablesViaStderr`), and *doesn't break the worktree notice* — but nothing anywhere (unit, soak, or integration) writes a file while a `serve --mcp` session is live and then asserts a subsequent `codegraph_explore` reflects the change. That is WATCH-01's actual value proposition ("the graph auto-updates"), and it is exactly the scenario where CR-01's flush-vs-query store collision lives. The phase's own history (Phase-2 CR-01: "green suite, dead production path") repeats here in miniature: the wiring around the feature is tested; the feature's end-to-end effect is not.
-
-**Fix:** Add an integration test: spawn `serve --mcp` (default-on) on an indexed fixture with `CODEGRAPH_DEBOUNCE_MS` lowered via env, write a new symbol file into the fixture, poll `codegraph_explore` for the new symbol within a bounded window, and assert no tool-call errors occur during the polling loop (which would also have surfaced CR-01's lock collision).
+**What remains:** zero Critical, zero Warning. Ten Info items — nine are previously-reported items re-verified still present at current line numbers (in scope this round because the orchestrator requested Info-level fixes, --all), plus one new coverage gap (`codegraph daemon`'s disabled branch, added by fix round 1, has no test). Every finding below carries a mechanical fix.
 
 ## Info
 
-### IN-01: `daemon.Run` holds the lock blocked on `<-ctx.Done()` even if the watch loop exits early — silent zombie lock-holder
+### IN-01: `locked_unix_test.go`'s provenance comment is factually wrong — pebble's cross-process fcntl form is a bare errno, not PathError-wrapped
 
-**File:** `internal/daemon/daemon.go:183`; `internal/watch/watcher.go:94-97, 107-110`
+**File:** `internal/graphstore/locked_unix_test.go:26-28`
+**Issue:** (Round-3 IN-01, re-verified present.) The case comment claims *"Pebble's vfs surfaces the errno wrapped; errors.Is must traverse"* and synthesizes `&fs.PathError{Op: "fcntl", ...}`. In the pinned `pebble/v2@v2.1.6`, `unix.FcntlFlock` returns the **bare** `syscall.Errno` and nothing between `vfs/file_lock_unix.go:63-65` and `pebble.Open`'s caller wraps it — the real pinned shape is the suite's "bare EWOULDBLOCK" case (EWOULDBLOCK == EAGAIN on every shipped unix target). Matching is functionally correct either way; only the stated provenance is wrong, and a future maintainer trusting it would draw incorrect conclusions about which pebble internals are load-bearing.
+**Fix:** Reword the comment on the PathError case (and its name at line 28 if desired): the PathError shape tests that `errors.Is` traversal *would* work if pebble ever wrapped the errno; the bare-errno case below is the real shape pebble v2.1.6 produces (verified: `FcntlFlock` returns the errno unwrapped and the chain to `pebble.Open` is verbatim).
 
-**Issue:** `watchLoop` returns if `w.Events`/`w.Errors` close (`!ok` arms), but `Run` blocks on `<-ctx.Done()` *before* `wg.Wait()`. If the fsnotify channels ever close without `Close()` (abnormal fsnotify teardown), `Run` keeps holding the daemon lock with no watcher running, and every other session's `RunWithRetry` defers forever to a watcher that no longer watches. Today this path is practically unreachable (fsnotify only closes channels in `Close`), but the `!ok` arms exist precisely because it isn't impossible.
+### IN-02: `TestOpenConvergesWhenHolderCloses` is time-based (150ms release vs ~400ms budget) rather than event-synchronized
 
-**Fix:** Have the watcher goroutine signal early exit (e.g. close a `loopDone` channel) and make `Run` select on `ctx.Done()` **or** `loopDone`, returning an error in the latter case so `RunWithRetry`/serve can surface or restart it.
+**File:** `internal/graphstore/open_lock_test.go:60-67`; seam: `internal/graphstore/pebble_store.go:134-137`
+**Issue:** (Round-3 IN-02, re-verified present.) The holder releases via `time.Sleep(150 * time.Millisecond)` against `Open`'s retry attempts at t≈0/100/200/300/400ms. The ~250ms scheduling margin is generous, but the test runs inside CI's parallel full-suite step — the same environment where this repo has already documented time-sensitive tests flaking (the isolated `internal/daemon -count=1` step exists for exactly that reason). If the close goroutine alone is delayed past the final attempt under heavy parallel load, the test fails spuriously.
+**Fix:** Event-synchronize via a test seam matching the repo's own convention (`daemon.Daemon.onSyncStart`): hoist `Open`'s `time.Sleep(openLockRetryBackoff)` behind an unexported package-level `var openLockRetrySleep = time.Sleep` (`pebble_store.go:136`), and have the test override it to signal attempt boundaries on a channel — the closer goroutine then releases the holder deterministically after observing the second attempt's sleep begin, instead of after a wall-clock guess. Restore the original in a `t.Cleanup`. (Production behavior unchanged; the var is unexported with no setter.)
 
-### IN-02: serve's disabled branch recomputes `WatchDisabledReason` instead of carrying the reason from the error
+### IN-03: Requeue give-up log undercounts by one, and the counter never resets after exhaustion — contradicting `maxFlushLockRequeues`' own doc comment
 
-**File:** `internal/cli/serve.go:129`; `internal/daemon/daemon.go:156-157`
+**File:** `internal/daemon/daemon.go:215-219` (behavior); `internal/daemon/daemon.go:55-60` (doc comment it contradicts)
+**Issue:** (Round-2 IN-01, re-verified present.) Two defects in one branch: (1) at give-up, `n == maxFlushLockRequeues+1 == 6` — six consecutive lock-lost syncs have occurred (1 original + 5 requeued) — but the log prints `n-1 = 5` "consecutive times"; every post-exhaustion lock-lost flush then logs again with a still-off-by-one, ever-growing count (7→"6", 8→"7", …) that misleadingly spans separate episodes hours apart. (2) The `maxFlushLockRequeues` doc comment (line 58) says the budget is "per-contention-episode", but only `err == nil` resets the counter (line 213): once exhausted, every later lock-lost flush — triggered by organic events in a genuinely fresh contention episode — sees `n > 5` and gets zero requeues until some flush succeeds in between. Impact is bounded (organic events still drive flush attempts; the sidecar keeps staleness observable) but code and comment disagree.
+**Fix:** In the `else` branch: log `n` (or `"giving up after %d requeues"` with `maxFlushLockRequeues`) instead of `n-1`, and add `atomic.StoreInt32(&lockRequeues, 0)` so the budget genuinely resets per episode as documented. This cannot create an unbounded loop: the give-up branch never calls `deb.Add`, so each episode's requeue chain remains bounded at 5 and a new episode only starts from a fresh organic watcher event.
 
-**Issue:** `daemon.Run` already embeds the reason in the wrapped error (`fmt.Errorf("%w: %s", watch.ErrWatchDisabled, reason)`); serve.go re-derives it with a second `WatchDisabledReason(repoPath, probe)` call. Today the two calls are consistent (both operate on the same absolute `repoPath` — `hasIndex` guarantees `repoPath` came from `ResolveCodegraphDir`, which absolutizes, matching `daemon.New`'s `filepath.Abs`), but it is a duplicate derivation that a future change to either side can silently desynchronize (worst case: an empty recomputed reason yielding the malformed message `"File watcher disabled — . The graph..."`).
+### IN-04: Requeue-vs-shutdown TOCTOU can delay `Run`'s return by up to one full debounce window (2s default)
 
-**Fix:** Carry the reason on a typed error (e.g. `watch.DisabledError{Reason string}` satisfying `errors.Is(_, ErrWatchDisabled)`) and extract it in serve.go instead of recomputing.
+**File:** `internal/daemon/daemon.go:214-221` (the `ctx.Err() == nil` gate + `deb.Add`); `internal/watch/debounce.go:66-84` (Add re-arms unconditionally)
+**Issue:** (Round-2 IN-02, re-verified present — `Run` still has no post-`wg.Wait()` `deb.Stop()`, and `Debouncer.Add` has no ctx gate.) The requeue's `ctx.Err() == nil` check and its `deb.Add(flushRetryPath)` are not atomic: cancellation can land between them, after `watchLoop` has already run its `deb.Stop()`. The re-armed timer is then never cancelled, and `Run`'s `deb.Wait()` (line 241) — `fireWG` is incremented at arm time — blocks until it fires, up to a full debounce window later. `fire()`'s own ctx check makes the late fire a no-op (no Sync, no lock violation, no goroutine leak — re-verified), so this is purely added shutdown latency on `codegraph serve` exit / daemon SIGTERM in a narrow race.
+**Fix:** Close it at the seam rather than in the caller: add `if d.ctx.Err() != nil { return }` as `Debouncer.Add`'s first statement (before taking `d.mu`). This makes arming a timer post-cancel structurally impossible for every Add caller (the requeue AND watchLoop's tail events), matches `NewDebouncer`'s existing documented contract ("once ctx is cancelled, no further flush fires"), and has no accounting hazard (the early return skips `fireWG.Add`). A belt-and-suspenders `deb.Stop()` between `wg.Wait()` and `deb.Wait()` in `Run` (daemon.go:241) is also safe/idempotent but is insufficient alone — the Add can land after it — so the Add-side gate is the required part.
 
-### IN-03: CI's process substitution masks a `go list` failure mode
+### IN-05: The watch-disabled reason is re-derived at three independent sites, and `codegraph daemon`'s copy is MCP-branded
 
-**File:** `.github/workflows/ci.yml:63-66`
+**File:** `internal/cli/serve.go:130`, `internal/cli/daemon.go:74-82`, `internal/daemon/daemon.go:177-178`
+**Issue:** (Round-1 IN-02 + round-2 IN-04 merged, re-verified present.) `daemon.Run` already embeds the reason in its wrapped error (`fmt.Errorf("%w: %s", watch.ErrWatchDisabled, reason)`, daemon.go:178), yet both CLI consumers re-derive it with fresh `watch.WatchDisabledReason` calls: serve.go:130 (with the session's probe) and cli/daemon.go:78 (with a zero `watch.Probe{}` on a re-absolutized root). Today all three derivations agree, but any future desynchronization (e.g. `filepath.Abs` failing in cli/daemon.go:75 leaves `root` relative → the WSL `/mnt` check misses → empty reason) produces the malformed message `"File watcher disabled — . The graph..."`. Additionally, `codegraph daemon` prints the `[CodeGraph MCP]` banner prefix (cli/daemon.go:79) on a command that has nothing to do with MCP — defensible as verbatim parity, but currently an accident rather than a decision.
+**Fix:** Introduce a typed error in internal/watch — `type DisabledError struct{ Reason string }` with `Error()` and `Is(target error) bool { return target == ErrWatchDisabled }` — have `daemon.Run` return `&watch.DisabledError{Reason: reason}` (daemon.go:178; `errors.Is(err, watch.ErrWatchDisabled)` keeps working everywhere), and have both CLI sites extract the reason via `errors.As` instead of recomputing. Delete both `WatchDisabledReason` re-derivation calls in the CLI layer. While touching cli/daemon.go, either drop the `[CodeGraph MCP]` prefix for the standalone command or add a one-line comment recording that the verbatim-parity branding is deliberate.
 
-**Issue:** `set -euo pipefail` does not propagate failures out of `<(go list ./... | grep -v ...)` — `mapfile` succeeds regardless. A total `go list` failure is caught indirectly (empty `pkgs` → `go test` in a root with no Go files errors), but a *partial* emission before failure would silently test a subset with a green check.
+### IN-06: `codegraph daemon`'s disabled branch has zero test coverage — the only shipped consumer of round-1 WR-01's fix is unexercised
 
-**Fix:** Materialize the list first with its own failure check: `pkgs_raw=$(go list ./...)` then filter, so `set -e` sees the `go list` exit code.
+**File:** `internal/cli/daemon.go:68-83` (gap); no `internal/cli/daemon_test.go` exists
+**Issue:** New this round. The friendly-disabled-message branch added by fix commit a527a71 (errors.Is on `watch.ErrWatchDisabled` → print D-12 message → return nil) is tested nowhere: `serve_test.go` and the integration suite pin the *serve* path's disabled message at two levels, but nothing executes `newDaemonCmd`'s RunE at all (verified: `newDaemonCmd` is referenced only from root.go and daemon.go). A regression — the branch dropped, the exit code flipped back to nonzero, or the message malformed by IN-05's re-derivation drift — ships silently. Given this phase's own history (round-2's Critical was exactly an untested platform branch rotting invisibly), the shipped CLI surface should not depend on an unexercised branch.
+**Fix:** Add `internal/cli/daemon_test.go` with one test: create an indexed fixture root (reuse the package's existing fixture helper pattern), `t.Setenv("CODEGRAPH_NO_WATCH", "1")`, build `cmd := newDaemonCmd()`, wire `cmd.SetArgs([]string{"--path", root})` and `cmd.SetErr(&stderr)`, run `cmd.ExecuteContext(context.Background())`, and assert: returned error is nil (clean exit for a policy-disabled watcher) and `stderr` contains the verbatim `"File watcher disabled — CODEGRAPH_NO_WATCH=1 is set"` plus the `codegraph sync` guidance. The env-driven disable makes the test hermetic (no flags beyond --path), and Run's policy gate returns before any lockfile/watcher work, so the test is instant. If IN-05's typed-error refactor lands first, this test also pins the extraction path.
 
-### IN-04: `hasIndex` is a startup-time snapshot — an index created mid-session never starts the watcher
+### IN-07: `daemon.Run` holds the lock blocked on `<-ctx.Done()` even if the watch loop exits early — silent zombie lock-holder
 
-**File:** `internal/cli/serve.go:169, 196-199`
+**File:** `internal/daemon/daemon.go:230`; `internal/watch/watcher.go:94-97, 107-111`
+**Issue:** (Round-1 IN-01, re-verified present.) `watchLoop` returns when `w.Events`/`w.Errors` close (`!ok` arms), but `Run` blocks on `<-ctx.Done()` *before* `wg.Wait()`. If fsnotify's channels ever close without `Close()` (abnormal teardown), `Run` keeps holding the daemon lockfile with no watcher running — every other session's `RunWithRetry` then defers forever to a watcher that no longer watches, and the graph silently stops auto-updating with the lock still "live" (pid alive, so `isStale` never clears it). Today the path is practically unreachable (fsnotify only closes its channels in `Close`), but the `!ok` arms exist precisely because it is not impossible.
+**Fix:** Have the watcher goroutine signal loop exit — e.g. `loopExited := make(chan struct{})`, `go func() { defer wg.Done(); defer close(loopExited); w.Run(ctx, deb) }()` — and replace `<-ctx.Done()` with `select { case <-ctx.Done(): case <-loopExited: }`; when the loop exited without ctx being done, proceed through the same `wg.Wait()`/`deb.Wait()` teardown and return a non-nil error (a new sentinel or wrapped description) so `RunWithRetry` surfaces it (it is neither `ErrLockLive` nor `ErrWatchDisabled`, so RunWithRetry correctly returns it immediately) and serve's watcher goroutine logs it to stderr.
 
-**Issue:** With no `.codegraph/` at serve start, `serveWatchStart` returns the no-op pair permanently. If the user runs `codegraph init` mid-session, query paths pick the index up live (per-call `OpenAt` resolution) but the watcher never starts until reconnect — the graph then silently stales as the agent edits. Consistent with MCP-03's current design; flagging because the "picked up live, no restart" story now has a watcher-shaped asymmetry worth a documented decision or a future retry-on-no-index tier in `RunWithRetry`.
+### IN-08: CI's process substitution masks a partial `go list` failure
 
-**Fix:** Document the asymmetry, or treat `ErrNotInitialized` from `daemon.New` as a retryable state on the same jittered cadence.
+**File:** `.github/workflows/ci.yml:62-66`
+**Issue:** (Round-1 IN-03, re-verified present verbatim.) `set -euo pipefail` does not propagate failures out of `<(go list ./... | grep -v ...)` — `mapfile` succeeds regardless of the substitution's exit status. A *total* `go list` failure is caught only indirectly (empty `pkgs` → `go test` with no args errors in a rootdir with no Go files); a *partial* emission before failure would silently test a subset of packages under a green check.
+**Fix:** Materialize the list with its own failure check so `set -e` sees `go list`'s exit code:
+
+```yaml
+      - name: Test (excluding internal/daemon — isolated below)
+        run: |
+          set -euo pipefail
+          pkgs_raw=$(go list ./...)
+          mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
+          go test "${pkgs[@]}"
+```
+
+### IN-09: `hasIndex` is a startup-time snapshot — an index created mid-session never starts the watcher
+
+**File:** `internal/cli/serve.go:170, 216-219`; `internal/cli/serve.go:91-95` (the permanent no-op pair)
+**Issue:** (Round-1 IN-04, re-verified present.) With no `.codegraph/` at serve start, `serveWatchStart` returns the closed-channel no-op pair permanently. If the user runs `codegraph init` mid-session, the query paths pick the index up live (per-call `OpenAt` resolution) but the watcher never starts until reconnect — the graph then silently stales as the agent edits, with no disabled message ever printed (the watcher goroutine never existed). Consistent with MCP-03's design, but the "picked up live, no restart" story now has an undocumented watcher-shaped asymmetry.
+**Fix (documentation, the mechanical minimum):** extend `serveWatchStart`'s doc comment (serve.go:72-74, the `!hasIndex` paragraph) with one sentence recording the decision: an index created mid-session is served live by per-call query resolution but does NOT retroactively start the watcher — auto-sync begins on the next `serve --mcp` session; the D-04a stale/mtime fallback keeps staleness observable meanwhile. (The behavioral alternative — treating `daemon.ErrNotInitialized` as a retryable state on `RunWithRetry`'s jittered cadence — is a design change; do not take it in a mechanical fix pass.)
+
+### IN-10: `checkTargetOverwrite`'s probe race window widened ~400ms by Open's retry — still undocumented at the probe
+
+**File:** `internal/migrate/migrate.go:371-378`; cause: `internal/graphstore/pebble_store.go:132-148`
+**Issue:** (Round-2 IN-03, re-verified: the WR-03 comment at migrate.go:371-375 still says nothing about the retry.) `graphstore.Open`'s bounded lock retry means the migrate probe's read-only health check now waits up to ~400ms against a contended target, marginally widening the pre-existing race in which a lock holder exiting during the probe window lets `checkTargetOverwrite` proceed against a store another live process was just using. Semantics are unchanged (a still-locked target still refuses); only the window is wider, and the fact is on record nowhere near the code.
+**Fix:** Append one sentence to the WR-03 comment block (migrate.go:371-375): `graphstore.Open` retries a lock-held open for ~400ms (5×100ms, 03-REVIEW.md CR-01), so a holder exiting mid-probe can now be missed across a slightly wider window than before — acceptable for this best-effort refusal check; revisit if migrate-vs-live-daemon coordination ever becomes a real workflow.
 
 ---
 
-_Reviewed: 2026-07-16T14:57:32Z_
+_Reviewed: 2026-07-16T19:40:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
