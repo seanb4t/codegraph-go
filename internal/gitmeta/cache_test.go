@@ -2,6 +2,7 @@ package gitmeta
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 )
 
@@ -60,5 +61,54 @@ func TestCachingDetectorNilReceiverSafety(t *testing.T) {
 	got := d.Detect(context.Background(), startPath, indexRoot)
 	if got != nil {
 		t.Fatalf("Detect() on nil receiver = %v, want nil", got)
+	}
+}
+
+// TestCachingDetectorRejectsNonexistentStartPath is WR-02's regression pin:
+// a startPath that does not exist on disk (or is not a directory) never
+// grows the cache — query.OpenAt succeeds for nonexistent paths, so a
+// looping/malicious MCP client minting a fresh "path" argument per call
+// must not mint a fresh, permanently-retained cache entry per call.
+func TestCachingDetectorRejectsNonexistentStartPath(t *testing.T) {
+	_, indexRoot := newNonGitFixture(t)
+	d := NewCachingDetector()
+
+	for i := 0; i < 5; i++ {
+		got := d.Detect(context.Background(), filepath.Join(indexRoot, "does-not-exist"), indexRoot)
+		if got != nil {
+			t.Fatalf("Detect() on a nonexistent startPath = %v, want nil", got)
+		}
+	}
+
+	d.mu.Lock()
+	n := len(d.cache)
+	d.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("cache has %d entries after repeated calls with a nonexistent startPath, want 0", n)
+	}
+}
+
+// TestCachingDetectorBounded is WR-02's cache-growth pin: once the cache
+// reaches maxCacheEntries, the NEXT Detect call resets it rather than
+// growing further — a bound that survives a client minting an unbounded
+// number of distinct, EXISTING startPath directories (the maxCacheEntries
+// doc comment covers the nonexistent-path case, already rejected before
+// this point by TestCachingDetectorRejectsNonexistentStartPath).
+func TestCachingDetectorBounded(t *testing.T) {
+	_, indexRoot := newNonGitFixture(t)
+	d := NewCachingDetector()
+
+	// Fill the cache past its bound with distinct, real, non-git
+	// directories (each a legitimate, distinguishable cache key).
+	for i := 0; i < maxCacheEntries+10; i++ {
+		start := t.TempDir()
+		d.Detect(context.Background(), start, indexRoot)
+	}
+
+	d.mu.Lock()
+	n := len(d.cache)
+	d.mu.Unlock()
+	if n > maxCacheEntries {
+		t.Fatalf("cache has %d entries, want at most maxCacheEntries (%d)", n, maxCacheEntries)
 	}
 }
