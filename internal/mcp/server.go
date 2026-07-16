@@ -108,10 +108,18 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 	// this server's entire lifetime, however many tool calls follow.
 	detector := gitmeta.NewCachingDetector()
 
-	s.AddTool(exploreTool(), exploreHandler(startPath, repoPath, detector))
+	// WR-04 (02-REVIEW-2.md): exploreHandler/companionHandler's parameter
+	// order is (repoPath, startPath), matching THIS function's own
+	// (repoPath, startPath) signature above — before this fix, both calls
+	// below inverted the order relative to BuildServer's own declared
+	// params, a silent-swap footgun on two adjacent same-typed strings
+	// that no test distinguished (see server_test.go's
+	// TestConfinementAnchoredOnRepoRootNotStartPath, WR-02's companion
+	// fix, for the test that now would catch a swap here).
+	s.AddTool(exploreTool(), exploreHandler(repoPath, startPath, detector))
 	for _, name := range companionNames {
 		if allowlist[name] {
-			s.AddTool(companionTool(name), companionHandler(name, startPath, repoPath, detector))
+			s.AddTool(companionTool(name), companionHandler(name, repoPath, startPath, detector))
 		}
 	}
 	return s

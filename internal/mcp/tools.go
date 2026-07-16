@@ -90,10 +90,17 @@ func exploreTool() mcp.Tool {
 // returns the markdown result, compact-worktree-notice-prefixed on the
 // success path (WORK-02/D-12; no-op on the mismatch-free case since
 // query.WorktreeNotice returns "" — no re-rendering in internal/mcp,
-// D-08b). defaultPath is the caller's start path (CR-01); repoPath is the
-// confinement root — see BuildServer's doc comment for why they must stay
-// distinct.
-func exploreHandler(defaultPath, repoPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
+// D-08b). repoPath is the confinement root; defaultPath is the caller's
+// start path (CR-01) — see BuildServer's doc comment for why they must
+// stay distinct.
+//
+// WR-04 (02-REVIEW-2.md): parameter order is (repoPath, defaultPath),
+// matching BuildServer's own (repoPath, startPath) declared order, so its
+// call site below reads the same way its signature does — before this fix
+// BuildServer(hasIndex, allowlist, repoPath, startPath) called
+// exploreHandler(startPath, repoPath, ...), an inverted order on two
+// adjacent same-typed strings that no test distinguished.
+func exploreHandler(repoPath, defaultPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		q, err := req.RequireString("query")
 		if err != nil {
@@ -205,10 +212,13 @@ func companionTool(name string) mcp.Tool {
 // redundant isError check needed. "status" is deliberately excluded:
 // query.RenderStatusMarkdown already embeds its own verbose blockquote
 // warning (D-17), and a second compact prefix would duplicate it.
-// defaultPath is the caller's start path (CR-01); repoPath is the
-// confinement root — see BuildServer's doc comment for why they must stay
-// distinct.
-func companionHandler(name, defaultPath, repoPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
+// repoPath is the confinement root; defaultPath is the caller's start path
+// (CR-01) — see BuildServer's doc comment for why they must stay distinct.
+//
+// WR-04 (02-REVIEW-2.md): parameter order is (name, repoPath, defaultPath),
+// matching BuildServer's own (repoPath, startPath) declared order — see
+// exploreHandler's doc comment for the full rationale.
+func companionHandler(name, repoPath, defaultPath string, detector *gitmeta.CachingDetector) server.ToolHandlerFunc {
 	switch name {
 	case "node":
 		return func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
