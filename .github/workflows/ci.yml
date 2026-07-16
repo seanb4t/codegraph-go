@@ -106,6 +106,16 @@ jobs:
       - name: Test concurrency packages under the race detector (-race)
         run: go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
 
+      # WR-01 (03-REVIEW-3.md): locked_windows.go and locked_windows_test.go
+      # are the only guard against the windows lock-classifier rotting
+      # (round-2's Critical was exactly a windows no-op nobody could see on
+      # ubuntu-only CI). There is no windows runner; `GOOS=windows go vet`
+      # typechecks the windows-tagged source AND test files, which is the
+      # strongest check available without one. Pure-Go package — no CGo, so
+      # cross-GOOS vet works on the linux runner.
+      - name: Typecheck windows lock classifier (GOOS=windows go vet internal/graphstore)
+        run: GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/
+
   govulncheck:
     name: govulncheck (DIST-03, blocking)
     runs-on: ubuntu-latest
