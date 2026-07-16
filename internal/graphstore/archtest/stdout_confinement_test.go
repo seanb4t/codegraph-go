@@ -19,6 +19,7 @@ package archtest
 import (
 	"go/ast"
 	"go/types"
+	"strings"
 	"testing"
 
 	"golang.org/x/tools/go/packages"
@@ -43,33 +44,60 @@ var guardedPackages = []string{
 	"github.com/seanb4t/codegraph-go/internal/query",
 }
 
-// TestNoStdoutNoiseInServeReachablePackages loads the six guardedPackages'
-// type-checked syntax via go/packages and fails if any production file
-// references os.Stdout, calls a bare fmt.Print*, or calls log.SetOutput
-// (D-06b). Expected GREEN today — D-07's zero-violation baseline; if this
-// test ever surfaces a real violation, fixing it (route the offending
-// write to an explicit stderr writer) is in scope, not something to
-// suppress or exclude.
+const modulePathPrefix = "github.com/seanb4t/codegraph-go/"
+
+// excludedInternalPackagePrefixes are module-internal packages that must
+// NEVER be pulled into the closure even if some guardedPackage comes to
+// (directly or transitively) import them. internal/cli is the one
+// documented exclusion (D-06b): it legitimately renders product output via
+// cmd.OutOrStdout() and is never reachable from `serve --mcp` itself.
+var excludedInternalPackagePrefixes = []string{
+	"github.com/seanb4t/codegraph-go/internal/cli",
+}
+
+// isModuleInternalPackage reports whether pkgPath belongs to this module
+// (so it's a candidate for closure scanning) and is not internal/cli or a
+// subpackage of it (the D-06b exclusion). Third-party and stdlib imports
+// (fmt, os, log, golang.org/x/tools/..., etc.) always return false here —
+// the closure walk only ever descends into this module's own packages.
+func isModuleInternalPackage(pkgPath string) bool {
+	if !strings.HasPrefix(pkgPath, modulePathPrefix) {
+		return false
+	}
+	for _, excluded := range excludedInternalPackagePrefixes {
+		if pkgPath == excluded || strings.HasPrefix(pkgPath, excluded+"/") {
+			return false
+		}
+	}
+	return true
+}
+
+// closeOverServeReachableImports loads the six guardedPackages (with
+// packages.NeedDeps, so dependency packages get full Syntax/TypesInfo, not
+// just name/ID metadata) and returns the full transitive, module-internal
+// import closure reachable from them: the six roots themselves plus every
+// package they import, directly or indirectly, that belongs to this module
+// and is not internal/cli.
 //
-// Mode divergence from the two existing archtest precedents
-// (import_graph_test.go, modernc_confinement_test.go): those use
-// Tests: true because an import-graph bypass could be hidden inside some
-// OTHER package's _test.go file, which the import graph must still catch.
-// This guard is scoped to six NAMED packages' own reachability from the
-// real `serve --mcp` binary — a _test.go file printing to stdout during
-// `go test` never touches that binary's stdout, so Tests: false is the
-// correct scope here (RESEARCH Open Question #2). This also avoids false
-// positives on this package's own test helpers: logger_test.go's
-// mutation-proof wiring test calls log.SetOutput intentionally (to
-// redirect stdlib log's default output into a capture buffer for the
-// duration of a test), and indexer's _test.go files use fmt.Println — both
-// are legitimate test-only constructs Tests: false correctly excludes from
-// production-path scanning.
-func TestNoStdoutNoiseInServeReachablePackages(t *testing.T) {
+// This closes CR-01: loading only the six roots without NeedDeps, and then
+// only ever ranging over the root pkgs slice (never descending into
+// pkg.Imports), left every transitively-imported package — internal/schema,
+// internal/gitmeta, internal/parser, every internal/indexer/*extract
+// package, etc. — completely unscanned despite being genuinely reachable
+// during a live `serve --mcp` session.
+//
+// overlay is passed straight through to packages.Config.Overlay; production
+// callers pass nil, stdout_closure_selftest_test.go passes a synthetic
+// in-memory violation to prove the closure walk actually reaches into a
+// dependency (not just the six named roots).
+func closeOverServeReachableImports(t *testing.T, overlay map[string][]byte) map[string]*packages.Package {
+	t.Helper()
+
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
-			packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
-		// Tests: false (deliberate divergence — see doc comment above).
+			packages.NeedImports | packages.NeedDeps | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
+		Overlay: overlay,
+		// Tests: false (deliberate divergence — see package doc comment).
 	}
 	pkgs, err := packages.Load(cfg, guardedPackages...)
 	if err != nil {
@@ -83,31 +111,107 @@ func TestNoStdoutNoiseInServeReachablePackages(t *testing.T) {
 	if len(pkgs) != len(guardedPackages) {
 		t.Fatalf("packages.Load resolved %d packages, want %d (guardedPackages) — a guarded package may have been renamed or moved, silently disabling this test's coverage of it", len(pkgs), len(guardedPackages))
 	}
+
+	reachable := make(map[string]*packages.Package)
+	var walk func(pkg *packages.Package)
+	walk = func(pkg *packages.Package) {
+		if _, seen := reachable[pkg.PkgPath]; seen {
+			return
+		}
+		reachable[pkg.PkgPath] = pkg
+		for path, imp := range pkg.Imports {
+			if !isModuleInternalPackage(path) {
+				continue
+			}
+			walk(imp)
+		}
+	}
 	for _, pkg := range pkgs {
+		walk(pkg)
+	}
+
+	for _, pkg := range reachable {
 		if len(pkg.Syntax) == 0 {
 			t.Fatalf("%s: packages.Load resolved zero syntax files — this guard cannot check a package it never parsed", pkg.PkgPath)
 		}
 	}
 
+	return reachable
+}
+
+// scanForStdoutViolations walks every file in pkgs and returns one message
+// per detected violation (bare os.Stdout reference, bare fmt.Print*, or
+// log.SetOutput call) using the same three predicates
+// stdout_detection_selftest_test.go proves can actually fire.
+func scanForStdoutViolations(pkgs map[string]*packages.Package) []string {
+	var violations []string
 	for _, pkg := range pkgs {
 		for _, f := range pkg.Syntax {
 			ast.Inspect(f, func(n ast.Node) bool {
 				switch expr := n.(type) {
 				case *ast.SelectorExpr:
 					if isOSStdoutRef(expr, pkg.TypesInfo) {
-						t.Errorf("%s: references os.Stdout — diagnostics must use an explicit stderr writer seam, never stdout directly (HYG-02)", pkg.PkgPath)
+						violations = append(violations, pkg.PkgPath+": references os.Stdout — diagnostics must use an explicit stderr writer seam, never stdout directly (HYG-02)")
 					}
 				case *ast.CallExpr:
 					if isBareFmtPrint(expr, pkg.TypesInfo) {
-						t.Errorf("%s: calls a bare fmt.Print*/Printf/Println (no explicit writer) — stdout is reserved for the MCP JSON-RPC transport (HYG-02)", pkg.PkgPath)
+						violations = append(violations, pkg.PkgPath+": calls a bare fmt.Print*/Printf/Println (no explicit writer) — stdout is reserved for the MCP JSON-RPC transport (HYG-02)")
 					}
 					if isLogSetOutput(expr, pkg.TypesInfo) {
-						t.Errorf("%s: calls log.SetOutput — must never redirect stdlib log's default stderr output (HYG-02)", pkg.PkgPath)
+						violations = append(violations, pkg.PkgPath+": calls log.SetOutput — must never redirect stdlib log's default stderr output (HYG-02)")
 					}
 				}
 				return true
 			})
 		}
+	}
+	return violations
+}
+
+// TestNoStdoutNoiseInServeReachablePackages loads the full serve-reachable
+// import closure of the six guardedPackages via go/packages (CR-01: not
+// just their own files — every module-internal package they transitively
+// import, internal/cli excluded) and fails if any production file in that
+// closure references os.Stdout, calls a bare fmt.Print*, or calls
+// log.SetOutput (D-06b). Expected GREEN today — D-07's zero-violation
+// baseline; if this test ever surfaces a real violation, fixing it (route
+// the offending write to an explicit stderr writer) is in scope, not
+// something to suppress or exclude.
+//
+// Mode divergence from the two existing archtest precedents
+// (import_graph_test.go, modernc_confinement_test.go): those use
+// Tests: true because an import-graph bypass could be hidden inside some
+// OTHER package's _test.go file, which the import graph must still catch.
+// This guard is scoped to the six NAMED roots' own reachability from the
+// real `serve --mcp` binary — a _test.go file printing to stdout during
+// `go test` never touches that binary's stdout, so Tests: false is the
+// correct scope here (RESEARCH Open Question #2). This also avoids false
+// positives on this package's own test helpers: logger_test.go's
+// mutation-proof wiring test calls log.SetOutput intentionally (to
+// redirect stdlib log's default output into a capture buffer for the
+// duration of a test), and indexer's _test.go files use fmt.Println — both
+// are legitimate test-only constructs Tests: false correctly excludes from
+// production-path scanning.
+func TestNoStdoutNoiseInServeReachablePackages(t *testing.T) {
+	reachable := closeOverServeReachableImports(t, nil)
+
+	// CR-01 regression guard: the closure must have actually grown beyond
+	// the six named roots, and must include at least one package known
+	// (per the CR-01 review's own reproduction) to be transitively
+	// imported by every guarded package — otherwise the walk above
+	// silently stopped growing the reachable set, and this guard would be
+	// vacuously blind to dependency violations again, for the exact same
+	// reason CR-01 flagged.
+	if len(reachable) <= len(guardedPackages) {
+		t.Fatalf("closure over guardedPackages resolved only %d packages (the six roots) — the transitive-import walk did not grow the reachable set; this guard would be vacuously blind to violations in dependencies (CR-01)", len(reachable))
+	}
+	const mustBeReachable = "github.com/seanb4t/codegraph-go/internal/schema"
+	if _, ok := reachable[mustBeReachable]; !ok {
+		t.Fatalf("%s was not found in the closure — it is transitively imported by every guardedPackage; its absence means the closure walk is broken (CR-01)", mustBeReachable)
+	}
+
+	for _, msg := range scanForStdoutViolations(reachable) {
+		t.Errorf("%s", msg)
 	}
 }
 
