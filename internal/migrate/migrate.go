@@ -373,6 +373,11 @@ func checkTargetOverwrite(target string, force bool) error {
 	// mutate the target — and, for the in-place from==to default, the source
 	// .codegraph/ — during what must be a non-destructive refusal check (D-08).
 	// Only attempt the health-read when a store/ directory already exists.
+	// IN-10: graphstore.Open retries a lock-held open for ~400ms (5×100ms,
+	// 03-REVIEW.md CR-01), so a holder exiting mid-probe can now be missed
+	// across a slightly wider window than before — acceptable for this
+	// best-effort refusal check; revisit if migrate-vs-live-daemon
+	// coordination ever becomes a real workflow.
 	storeDir := filepath.Join(target, "store")
 	if _, statErr := os.Stat(storeDir); statErr == nil {
 		if store, openErr := graphstore.Open(storeDir); openErr == nil {
