@@ -92,12 +92,15 @@ func TestStripMarkerBlock_IndentedMarkerStripped(t *testing.T) {
 		"echo after",
 	}, "\n")
 
-	got := stripMarkerBlock(content)
+	got, ok := stripMarkerBlock(content)
 	want := strings.Join([]string{
 		"#!/bin/sh",
 		"echo before",
 		"echo after",
 	}, "\n")
+	if !ok {
+		t.Fatalf("stripMarkerBlock(indented) ok = false, want true")
+	}
 	if got != want {
 		t.Fatalf("stripMarkerBlock(indented) = %q, want %q", got, want)
 	}
@@ -105,7 +108,10 @@ func TestStripMarkerBlock_IndentedMarkerStripped(t *testing.T) {
 
 func TestStripMarkerBlock_NoMarkerPassthrough(t *testing.T) {
 	content := "#!/bin/sh\necho hi\n"
-	got := stripMarkerBlock(content)
+	got, ok := stripMarkerBlock(content)
+	if !ok {
+		t.Fatalf("stripMarkerBlock(no marker) ok = false, want true")
+	}
 	if got != content {
 		t.Fatalf("stripMarkerBlock(no marker) = %q, want unchanged %q", got, content)
 	}
@@ -113,12 +119,39 @@ func TestStripMarkerBlock_NoMarkerPassthrough(t *testing.T) {
 
 func TestStripMarkerBlock_PreservesSurroundingContent(t *testing.T) {
 	content := "#!/bin/sh\n\necho before\n\n" + markerBlock() + "\n\necho after\n"
-	got := stripMarkerBlock(content)
+	got, ok := stripMarkerBlock(content)
+	if !ok {
+		t.Fatalf("stripMarkerBlock ok = false, want true")
+	}
 	if strings.Contains(got, markerBegin) || strings.Contains(got, markerEnd) {
 		t.Fatalf("stripMarkerBlock left markers in output: %q", got)
 	}
 	if !strings.Contains(got, "echo before") || !strings.Contains(got, "echo after") {
 		t.Fatalf("stripMarkerBlock dropped surrounding content: %q", got)
+	}
+}
+
+// TestStripMarkerBlock_UnterminatedBegin_ReturnsUnchanged is the CR-01
+// regression test: a begin marker with no matching end marker must not be
+// treated as "block extends to EOF" (TS's inherited data-loss bug) —
+// stripMarkerBlock must report ok=false and hand back the content
+// untouched so callers know not to trust the strip.
+func TestStripMarkerBlock_UnterminatedBegin_ReturnsUnchanged(t *testing.T) {
+	content := strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		markerBegin,
+		"... (end marker missing) ...",
+		"echo after",
+		"echo more-user-content",
+	}, "\n")
+
+	got, ok := stripMarkerBlock(content)
+	if ok {
+		t.Fatalf("stripMarkerBlock(unterminated begin) ok = true, want false")
+	}
+	if got != content {
+		t.Fatalf("stripMarkerBlock(unterminated begin) = %q, want unchanged %q", got, content)
 	}
 }
 
@@ -474,6 +507,46 @@ func TestStatus_NonRepo_ReturnsSkipped(t *testing.T) {
 
 	if status.Skipped != "not a git repository" {
 		t.Fatalf("Skipped = %q, want %q", status.Skipped, "not a git repository")
+	}
+}
+
+// TestRemove_UnterminatedMarkerBlock_LeavesFileUntouched is the CR-01
+// end-to-end regression test: a hook file with a begin marker but no
+// matching end marker (a plausible hand-edit) must not have its trailing
+// content silently destroyed by Remove, and must not be reported as
+// removed since nothing was actually stripped.
+func TestRemove_UnterminatedMarkerBlock_LeavesFileUntouched(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		"",
+		markerBegin,
+		"... (block body, end marker line deleted) ...",
+		"echo after",
+		"echo more-user-content",
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Remove(context.Background(), root)
+
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be reported as removed (unterminated marker, strip untrusted): %v", result.Removed)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(hooksDir, "post-commit"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != malformed {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
 	}
 }
 

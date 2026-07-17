@@ -51,25 +51,43 @@ func markerBlock() string {
 // TS sync/git-hooks.js:116-134) so content outside the block — including
 // blank lines — is preserved verbatim. Content with no markers is returned
 // unchanged.
-func stripMarkerBlock(content string) string {
+//
+// The second return value is false when a begin marker is found with no
+// matching end marker anywhere after it (a malformed/hand-edited hook
+// file). TS's own stripMarkerBlock (sync/git-hooks.js:116-134) treats an
+// unterminated begin marker as "block extends to EOF", silently dropping
+// every line after it — a genuine data-loss bug (CR-01). D-02/D-03 lock
+// verbatim TS semantics for well-formed marker blocks, but that guarantee
+// does not extend to a malformed-input data-loss path; this is a
+// deliberate, documented Go-only divergence (same convention as Phase 3's
+// D-13 wording divergence), scoped narrowly to "don't destroy the user's
+// file" — callers must treat ok==false as "do not trust this strip" and
+// leave the file untouched rather than writing the truncated result back.
+func stripMarkerBlock(content string) (string, bool) {
 	lines := strings.Split(content, "\n")
 	var kept []string
 	inBlock := false
+	sawUnterminatedBegin := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == markerBegin {
 			inBlock = true
+			sawUnterminatedBegin = true
 			continue
 		}
 		if trimmed == markerEnd {
 			inBlock = false
+			sawUnterminatedBegin = false
 			continue
 		}
 		if !inBlock {
 			kept = append(kept, line)
 		}
 	}
-	return strings.Join(kept, "\n")
+	if sawUnterminatedBegin {
+		return content, false
+	}
+	return strings.Join(kept, "\n"), true
 }
 
 // isEffectivelyEmpty reports whether every trimmed line in content is
@@ -157,7 +175,16 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 		file := filepath.Join(hooksDir, hook)
 		var content string
 		if existing, err := os.ReadFile(file); err == nil {
-			base := strings.TrimRight(stripMarkerBlock(string(existing)), " \t\n")
+			base := string(existing)
+			// An unterminated begin marker means the strip can't be
+			// trusted (CR-01) — fall back to the raw existing content as
+			// the base rather than risk truncating it, and let the fresh
+			// block get appended after it (a stray dangling marker left
+			// in place beats silently destroying the user's file).
+			if stripped, ok := stripMarkerBlock(base); ok {
+				base = stripped
+			}
+			base = strings.TrimRight(base, " \t\n")
 			if base != "" {
 				content = base + "\n\n" + block + "\n"
 			} else {
@@ -202,7 +229,15 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 		if !strings.Contains(string(original), markerBegin) {
 			continue
 		}
-		stripped := stripMarkerBlock(string(original))
+		stripped, ok := stripMarkerBlock(string(original))
+		if !ok {
+			// Unterminated begin marker (CR-01): don't trust the strip.
+			// Leave the file untouched and don't report it as removed —
+			// treating "no end marker" as "block extends to EOF" would
+			// silently destroy any user content after the dangling
+			// marker.
+			continue
+		}
 		if isEffectivelyEmpty(stripped) {
 			if err := os.Remove(file); err != nil {
 				continue
