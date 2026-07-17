@@ -962,3 +962,72 @@ func TestInstall_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError(t
 		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), sentinel)
 	}
 }
+
+// TestRemove_DanglingEndMarkerOnly_NotReportedRemoved is the WR-05
+// regression test: a hand-edited hook file containing only a dangling end
+// marker (no begin marker anywhere) must not be silently treated as "never
+// installed, nothing to do" — stripMarkerBlock correctly flags this shape
+// as malformed (ok=false), and Remove must honor that the same way Install
+// does, rather than reporting it removed or leaving inconsistent signals
+// between the two subcommands.
+func TestRemove_DanglingEndMarkerOnly_NotReportedRemoved(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	danglingEndOnly := "echo hi\n" + markerEnd + "\necho bye\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(danglingEndOnly), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Remove(context.Background(), root)
+
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Removed (dangling end marker only, malformed): %v", result.Removed)
+		}
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != danglingEndOnly {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), danglingEndOnly)
+	}
+}
+
+// TestRemove_MarkerTextEmbeddedInLine_NotReportedRemoved is the IN-04
+// regression test: marker text embedded inside an unrelated line (e.g. an
+// echoed string) is a raw substring match but not an exact-trimmed-line
+// match, so stripMarkerBlock strips nothing. Remove must not report the
+// hook as Removed or rewrite the file in that case — "reported as removed"
+// must imply "content actually changed."
+func TestRemove_MarkerTextEmbeddedInLine_NotReportedRemoved(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	embedded := "#!/bin/sh\n" + `echo "not a real ` + markerBegin + ` marker"` + "\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(embedded), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Remove(context.Background(), root)
+
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Removed (marker text only embedded, not an exact line match): %v", result.Removed)
+		}
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != embedded {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), embedded)
+	}
+}

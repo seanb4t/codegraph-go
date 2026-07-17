@@ -318,16 +318,31 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 		if err != nil {
 			continue
 		}
-		if !strings.Contains(string(original), markerBegin) {
-			continue
-		}
+		// WR-05/IN-04: run stripMarkerBlock unconditionally instead of a
+		// strings.Contains(markerBegin) pre-check. The pre-check was both
+		// too loose (a dangling-end-only file with no begin marker at all
+		// passes it, so Remove silently no-oped while Install correctly
+		// flagged the same file as malformed — WR-05) and too eager (marker
+		// text embedded inside an unrelated line, e.g. inside an echoed
+		// string, also passes the raw substring check even though
+		// stripMarkerBlock's exact-trimmed-line match strips nothing —
+		// IN-04). Comparing stripped against original below is what
+		// decides whether anything codegraph-owned was actually present.
 		stripped, ok := stripMarkerBlock(string(original))
 		if !ok {
-			// Unterminated begin marker (CR-01): don't trust the strip.
-			// Leave the file untouched and don't report it as removed —
-			// treating "no end marker" as "block extends to EOF" would
-			// silently destroy any user content after the dangling
-			// marker.
+			// Unterminated/dangling begin or end marker (CR-01): don't
+			// trust the strip. Leave the file untouched and don't report
+			// it as removed — treating a malformed marker pairing as
+			// "nothing to do" or "block extends to EOF" would either mask
+			// a real problem (WR-05) or silently destroy user content.
+			continue
+		}
+		if stripped == string(original) {
+			// No exact-trimmed-line marker match was found — the file
+			// never had a codegraph block to remove (IN-04: a raw
+			// substring hit doesn't count). Skip silently, matching the
+			// "never installed" no-op contract; don't report it as
+			// Removed or perform a no-op rewrite.
 			continue
 		}
 		if isEffectivelyEmpty(stripped) {
