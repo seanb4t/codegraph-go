@@ -113,3 +113,53 @@ func TestUninit_UnwritableHooksDir_SurfacesWarning(t *testing.T) {
 		t.Fatalf("expected stderr to contain a warning for the failed hook cleanup, got %q", stderr)
 	}
 }
+
+// TestUninit_MalformedHook_SurfacesWarning is the round-6 WR-01 regression
+// test: uninit's D-06 best-effort hook cleanup must surface a warning for a
+// hand-damaged hook file (begin marker present, end marker deleted) the
+// same way it does for an unwritable hooks dir — not silently remove
+// .codegraph/ and report success while leaving a malformed hook behind
+// with no signal it exists.
+func TestUninit_MalformedHook_SurfacesWarning(t *testing.T) {
+	dir := copyFixture(t)
+	runGit(t, dir, "init")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-m", "init")
+
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: unexpected error: %v", err)
+	}
+
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		"",
+		markerBeginBytes,
+		"... (block body, end marker line deleted) ...",
+		"echo after",
+		"echo more-user-content",
+	}, "\n") + "\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, stderr, err := execCmd("uninit", "--force", dir)
+	if err != nil {
+		t.Fatalf("uninit --force: unexpected error: %v", err)
+	}
+	if !strings.Contains(stderr, "malformed codegraph marker block") {
+		t.Fatalf("expected stderr to warn about the malformed marker block, got %q", stderr)
+	}
+	got, readErr := os.ReadFile(file)
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	if string(got) != malformed {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
+	}
+}

@@ -1093,6 +1093,51 @@ func TestRemove_DanglingEndMarkerOnly_NotReportedRemoved(t *testing.T) {
 	}
 }
 
+// TestRemove_MalformedMarkerBlock_LeavesFileUntouchedAndAccumulatesError is
+// the round-6 WR-01 regression test: Remove's ok==false branch must mirror
+// Install's CR-01 handling of the identical condition — not just leave a
+// malformed hook file untouched (the existing, correct half of the
+// behavior verified by TestRemove_UnterminatedMarkerBlock_LeavesFileUntouched)
+// but also accumulate an actionable error naming the hook in
+// RemoveResult.Errors, so callers don't silently report success against a
+// hand-damaged hook file.
+func TestRemove_MalformedMarkerBlock_LeavesFileUntouchedAndAccumulatesError(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := malformedHookFixture()
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Remove(context.Background(), root)
+
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Removed (malformed marker block): %v", result.Removed)
+		}
+	}
+	foundErr := false
+	for _, e := range result.Errors {
+		if strings.Contains(e.Error(), "post-commit") {
+			foundErr = true
+		}
+	}
+	if !foundErr {
+		t.Fatalf("Errors = %v, want an entry naming post-commit", result.Errors)
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != malformed {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
+	}
+}
+
 // TestRemove_MarkerTextEmbeddedInLine_NotReportedRemoved is the IN-04
 // regression test: marker text embedded inside an unrelated line (e.g. an
 // echoed string) is a raw substring match but not an exact-trimmed-line

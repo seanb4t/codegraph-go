@@ -166,6 +166,48 @@ func TestGithooksRemove_AfterInstall_StripsMarkerFromAllHooks(t *testing.T) {
 	}
 }
 
+// TestGithooksRemove_MalformedMarkerBlock_SurfacesWarning is the round-6
+// WR-01 CLI-level regression test: `githooks remove` against a hand-damaged
+// hook file (begin marker present, end marker deleted) must print a
+// "malformed codegraph marker block" warning on stderr, not silently report
+// "nothing to remove" — mirroring `githooks install`'s existing warning for
+// the identical on-disk condition.
+func TestGithooksRemove_MalformedMarkerBlock_SurfacesWarning(t *testing.T) {
+	dir := initGitRepo(t, t.TempDir())
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		"",
+		markerBeginBytes,
+		"... (block body, end marker line deleted) ...",
+		"echo after",
+		"echo more-user-content",
+	}, "\n") + "\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, stderr, err := execCmd("githooks", "remove", dir)
+	if err != nil {
+		t.Fatalf("githooks remove: unexpected error: %v", err)
+	}
+	if !strings.Contains(stderr, "malformed codegraph marker block") {
+		t.Fatalf("expected stderr to warn about the malformed marker block, got %q", stderr)
+	}
+	got, readErr := os.ReadFile(file)
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	if string(got) != malformed {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
+	}
+}
+
 // TestGithooksInstall_AllHooksUnwritable_ShowsSyncFallbackMessage exercises
 // the CLI's zero-installed-without-Skipped fallback branch (WR-03,
 // internal/cli/githooks.go's "Could not install git hooks..." message) —

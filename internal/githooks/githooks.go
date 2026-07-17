@@ -366,6 +366,12 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 			// it as removed — treating a malformed marker pairing as
 			// "nothing to do" or "block extends to EOF" would either mask
 			// a real problem (WR-05) or silently destroy user content.
+			// Mirror Install's identical-condition handling: accumulate an
+			// actionable error too, so callers (both the standalone
+			// `githooks remove` command and uninit's D-06 best-effort
+			// cleanup) surface a warning instead of reporting a state
+			// indistinguishable from "never installed by codegraph".
+			errs = append(errs, fmt.Errorf("%s: hook file has a malformed codegraph marker block — please fix or remove it manually", hook))
 			continue
 		}
 		if stripped == string(original) {
