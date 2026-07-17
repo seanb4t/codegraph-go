@@ -206,7 +206,7 @@ Plans:
   2. `codegraph githooks remove` strips only codegraph's marker block (preserving user content), and `githooks status` reports install state (HOOK-02)
   3. Hooks are surfaced as the fallback for when the watcher is disabled (WSL2 / `CODEGRAPH_NO_WATCH`), matching TS's narrower trigger — not an always-on feature (HOOK-03)
 
-**Plans**: 3/5 plans executed
+**Plans**: 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -220,7 +220,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 05-04-PLAN.md — `githooks install/remove/status` cobra command tree + root registration + reachability tests (D-11/D-13)
+- [x] 05-04-PLAN.md — `githooks install/remove/status` cobra command tree + root registration + reachability tests (D-11/D-13)
 - [ ] 05-05-PLAN.md — `init` success-path fallback advisory (D-07) + `uninit` best-effort hook cleanup (D-06), mutation-proof
 
 **Notes**: New `internal/githooks` package + `internal/fsatomic` extracted from `internal/agents/shared.go` (atomic-write / marker-fenced splice, shared with the agent installer). Background + silenced sync; `command -v` guard so it no-ops cleanly off-PATH. The formal byte-invariance/pipe-safety harness (TEST-03) lands in Phase 7 alongside the interactive TUI, since that is the first phase where both hooks and the new TUI components coexist.
@@ -284,7 +284,7 @@ Plans:
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
-| 5. Git Sync Hooks | v1.0 | 3/5 | In Progress|  |
+| 5. Git Sync Hooks | v1.0 | 4/5 | In Progress|  |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |

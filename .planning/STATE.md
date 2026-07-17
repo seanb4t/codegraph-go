@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 5
 current_phase_name: Git Sync Hooks
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-07-17T01:34:45.977Z"
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-07-17T01:38:46.556Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 5 execution started
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 37
-  completed_plans: 35
+  completed_plans: 36
   percent: 50
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 5 (Git Sync Hooks) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-16 — Phase 5 execution started
 
-Progress: [██████████] 95%
+Progress: [██████████] 97%
 
 ## Performance Metrics
 
@@ -98,6 +98,7 @@ Progress: [██████████] 95%
 | Phase 05 P01 | 6min | 2 tasks | 3 files |
 | Phase 05 P02 | 3min | 2 tasks | 2 files |
 | Phase 05-git-sync-hooks P03 | 5min | 3 tasks | 2 files |
+| Phase 05 P04 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -171,6 +172,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 5]: D-09 narrowing honored — internal/fsatomic extracts only atomicWriteFile, marker-splice helpers stay in internal/agents untouched
 - [Phase ?]: gitmeta.IsGitRepo/HooksDir are the sole new git-exec seam in Phase 5 — internal/githooks (05-03) consumes them, never shells out to git directly; HooksDir honors core.hooksPath and linked worktrees without realpath (D-04)
 - [Phase ?]: [Phase 5]: internal/githooks ports TS sync/git-hooks.js byte-for-byte (markers, markerBlock, strip-then-append-at-end Install, delete-when-effectively-empty Remove, per-hook Status); discovered and documented a real TS quirk where the from-scratch install seed differs from the round-tripped form by one blank line, stable from the second install onward
+- [Phase ?]: 05-04: install/remove/status RunE bodies never surface Skipped/zero-count outcomes as errors — only targetRoot's own path-resolution failure propagates (D-11 exit-0 contract)
 
 ### Pending Todos
 
@@ -198,8 +200,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-17T01:34:45.970Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-07-17T01:38:46.549Z
+Stopped at: Completed 05-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
