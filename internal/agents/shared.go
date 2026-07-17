@@ -4,8 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
+
+	"github.com/seanb4t/codegraph-go/internal/fsatomic"
 )
 
 // recordFile appends fr to result.Files, or — if err is non-nil — wraps
@@ -317,44 +318,9 @@ func upsertInstructionsEntry(filePath, startMarker, endMarker, content string) (
 // surface than codegraph's own self-contained store directory, since
 // they are arbitrary third-party tool configs this project does not own.
 //
-// os.CreateTemp creates the temp file with mode 0600 on POSIX; if path
-// already exists, its mode is preserved by chmod'ing the temp file to
-// match before the rename (WR-05) — otherwise the very first codegraph
-// write to a config that previously had, say, 0644 permissions would
-// silently tighten it to 0600, a behavior change with no corresponding
-// note anywhere in the tool's output. A new file gets the conventional
-// 0644 default, mirroring what every agent's own config tooling writes.
+// The implementation lives in internal/fsatomic (D-09 extraction), shared
+// with internal/githooks; this is a thin delegation so every existing
+// call site in this package is unaffected.
 func atomicWriteFile(path, content string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, ".codegraph-write-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-
-	if _, err := tmp.WriteString(content); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	mode := os.FileMode(0o644)
-	if info, statErr := os.Stat(path); statErr == nil {
-		mode = info.Mode().Perm()
-	}
-	if err := os.Chmod(tmpPath, mode); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-	return nil
+	return fsatomic.WriteFile(path, content)
 }
