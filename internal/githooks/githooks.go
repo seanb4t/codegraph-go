@@ -169,6 +169,16 @@ type StatusResult struct {
 // changes it. Only the very first-vs-second install transition adds that
 // one blank line; this is TS's real behavior, faithfully reproduced here,
 // not a Go-side bug.
+//
+// Concurrency (WR-02): each individual hook write is atomic and
+// crash-safe via fsatomic.WriteFile, but the surrounding read-modify-write
+// sequence (read existing content, compute the new body, write it back) is
+// not. Install is not safe to call concurrently against the same
+// projectRoot — two overlapping Install/Remove invocations (or Install
+// racing init's advisory path) can race on the same hook file and produce
+// a lost update, with neither caller aware anything raced. Callers that
+// need concurrent-safety must serialize their own calls (e.g. a lockfile
+// around the hooks-dir mutation).
 func Install(ctx context.Context, projectRoot string) InstallResult {
 	hooksDir := gitmeta.HooksDir(ctx, projectRoot)
 	if hooksDir == "" {
@@ -224,6 +234,12 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 // re-chmod'd 0755 (best-effort). Running Remove twice is a no-op on the
 // second run (files already gone or already clean). In a non-repo,
 // returns Skipped "not a git repository".
+//
+// Concurrency (WR-02): same caveat as Install — the read-modify-write
+// sequence around each hook file is not atomic as a whole, only the
+// individual fsatomic.WriteFile call is. Remove is not safe to call
+// concurrently against the same projectRoot, including racing an Install
+// against the same hooks directory.
 func Remove(ctx context.Context, projectRoot string) RemoveResult {
 	hooksDir := gitmeta.HooksDir(ctx, projectRoot)
 	if hooksDir == "" {
