@@ -334,8 +334,10 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 		file := filepath.Join(hooksDir, hook)
 		original, err := os.ReadFile(file)
 		if err != nil {
-			// WR-02: mirror Install's CR-02 distinction. fs.ErrNotExist is
-			// the expected "hook never installed" case — silent, correct.
+			// Read-error accumulation (round-5 fix, distinct from the
+			// Concurrency (WR-02) doc-comment finding above): mirror
+			// Install's CR-02 distinction. fs.ErrNotExist is the expected
+			// "hook never installed" case — silent, correct.
 			// Every other error (permission denied, a transient I/O error,
 			// the file removed out from under us between directory listing
 			// and read) means we can't verify what's on disk; accumulate an
