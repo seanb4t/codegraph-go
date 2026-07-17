@@ -174,3 +174,71 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 	}
 	return InstallResult{Installed: installed, HooksDir: hooksDir}
 }
+
+// Remove strips codegraph's marker block from each of
+// post-commit/post-merge/post-checkout (verbatim port of TS
+// removeGitSyncHook, sync/git-hooks.js:192-216, D-02/D-05). Only files
+// that actually contain the begin marker are touched — a hook never
+// installed by codegraph, or an absent file, is skipped with no error. If
+// the remainder after stripping is effectively empty (isEffectivelyEmpty),
+// the file is deleted entirely via os.Remove; otherwise the trimmed
+// remainder + a trailing newline is written via fsatomic.WriteFile and
+// re-chmod'd 0755 (best-effort). Running Remove twice is a no-op on the
+// second run (files already gone or already clean). In a non-repo,
+// returns Skipped "not a git repository".
+func Remove(ctx context.Context, projectRoot string) RemoveResult {
+	hooksDir := gitmeta.HooksDir(ctx, projectRoot)
+	if hooksDir == "" {
+		return RemoveResult{Skipped: "not a git repository"}
+	}
+
+	var removed []string
+	for _, hook := range defaultSyncHooks {
+		file := filepath.Join(hooksDir, hook)
+		original, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		if !strings.Contains(string(original), markerBegin) {
+			continue
+		}
+		stripped := stripMarkerBlock(string(original))
+		if isEffectivelyEmpty(stripped) {
+			if err := os.Remove(file); err != nil {
+				continue
+			}
+		} else {
+			content := strings.TrimRight(stripped, " \t\n") + "\n"
+			if err := fsatomic.WriteFile(file, content); err != nil {
+				continue
+			}
+			_ = os.Chmod(file, 0o755) // best-effort, TS swallows chmod errors too (Pitfall 4)
+		}
+		removed = append(removed, hook)
+	}
+	return RemoveResult{Removed: removed, HooksDir: hooksDir}
+}
+
+// Status reports per-hook install state for all three sync hooks
+// (extends TS isSyncHookInstalled's aggregate some() with per-hook detail,
+// D-11). A hook is Installed when its file exists and contains the begin
+// marker — this includes hooks installed by TS CodeGraph itself, since the
+// markers are byte-identical (D-03). In a non-repo, returns Skipped
+// "not a git repository".
+func Status(ctx context.Context, projectRoot string) StatusResult {
+	hooksDir := gitmeta.HooksDir(ctx, projectRoot)
+	if hooksDir == "" {
+		return StatusResult{Skipped: "not a git repository"}
+	}
+
+	var hooks []HookStatus
+	for _, hook := range defaultSyncHooks {
+		file := filepath.Join(hooksDir, hook)
+		installed := false
+		if content, err := os.ReadFile(file); err == nil {
+			installed = strings.Contains(string(content), markerBegin)
+		}
+		hooks = append(hooks, HookStatus{Name: hook, Installed: installed})
+	}
+	return StatusResult{Hooks: hooks, HooksDir: hooksDir}
+}
