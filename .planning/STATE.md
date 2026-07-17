@@ -5,8 +5,8 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 5
 current_phase_name: Git Sync Hooks
 status: planning
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-07-16T23:48:46.264Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-07-17T00:47:26.549Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 4 complete, transitioned to Phase 5
 progress:
@@ -192,9 +192,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-16T21:26:48.221Z
-Stopped at: Completed 04-03-PLAN.md
-Resume file: None
+Last session: 2026-07-17T00:47:26.537Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-git-sync-hooks/05-CONTEXT.md
 
 ## Operator Next Steps
 
