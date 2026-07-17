@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -324,6 +325,59 @@ func TestInstall_NonRepo_ReturnsSkippedAndWritesNothing(t *testing.T) {
 	}
 }
 
+// TestInstall_HooksPathIsFile_ReturnsSkippedCouldNotAccess exercises the
+// "could not access the git hooks directory" skip branch (WR-03): pre-seed
+// a regular FILE at the exact path git reports as the hooks directory, so
+// os.MkdirAll(hooksDir, ...) fails because a non-directory already
+// occupies that path.
+func TestInstall_HooksPathIsFile_ReturnsSkippedCouldNotAccess(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.RemoveAll(hooksDir); err != nil {
+		t.Fatalf("RemoveAll(%s): %v", hooksDir, err)
+	}
+	if err := os.WriteFile(hooksDir, []byte("not a directory\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", hooksDir, err)
+	}
+
+	result := Install(context.Background(), root)
+
+	if result.Skipped != "could not access the git hooks directory" {
+		t.Fatalf("Skipped = %q, want %q", result.Skipped, "could not access the git hooks directory")
+	}
+	if len(result.Installed) != 0 {
+		t.Fatalf("Installed = %v, want empty", result.Installed)
+	}
+}
+
+// TestInstall_OneHookPathIsDirectory_PartialSuccessWithErrors exercises
+// the WR-01/WR-03 partial-failure path: pre-seed a directory (not a file)
+// at post-commit's target path so fsatomic.WriteFile fails to rename onto
+// it (can't rename a regular file over a directory), while post-merge and
+// post-checkout — ordinary absent files — succeed normally. Asserts
+// Installed contains only the two that succeeded and Errors has exactly
+// one entry naming the failed hook.
+func TestInstall_OneHookPathIsDirectory_PartialSuccessWithErrors(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(filepath.Join(hooksDir, "post-commit"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(post-commit as dir): %v", err)
+	}
+
+	result := Install(context.Background(), root)
+
+	wantInstalled := []string{"post-merge", "post-checkout"}
+	if strings.Join(result.Installed, ",") != strings.Join(wantInstalled, ",") {
+		t.Fatalf("Installed = %v, want %v", result.Installed, wantInstalled)
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("Errors = %v, want exactly 1 entry", result.Errors)
+	}
+	if !strings.Contains(result.Errors[0].Error(), "post-commit") {
+		t.Errorf("Errors[0] = %v, want it to name post-commit", result.Errors[0])
+	}
+}
+
 func TestRemove_WithUserContent_PreservesRemainderBytes(t *testing.T) {
 	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
 	hooksDir := filepath.Join(root, ".git", "hooks")
@@ -416,6 +470,41 @@ func TestRemove_Twice_SecondRunIsNoOp(t *testing.T) {
 	second := Remove(context.Background(), root)
 	if len(second.Removed) != 0 {
 		t.Fatalf("second Remove() = %v, want empty (already removed)", second.Removed)
+	}
+}
+
+// TestRemove_UnwritableHooksDir_AccumulatesErrors exercises the WR-01/
+// WR-03 partial-failure path on Remove: after installing all three hooks
+// normally, make the hooks directory unwritable so the strip-and-rewrite
+// path's fsatomic.WriteFile/os.Remove calls fail, and assert the failures
+// are accumulated into Errors rather than silently discarded. Skipped
+// under root (permission bits don't apply) and on Windows (no POSIX
+// permission model), matching the existing skip convention in
+// internal/upgrade's permission-based tests.
+func TestRemove_UnwritableHooksDir_AccumulatesErrors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses permission bits")
+	}
+
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	Install(context.Background(), root)
+
+	if err := os.Chmod(hooksDir, 0o500); err != nil {
+		t.Fatalf("Chmod(%s, 0500): %v", hooksDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(hooksDir, 0o755) })
+
+	result := Remove(context.Background(), root)
+
+	if len(result.Removed) != 0 {
+		t.Fatalf("Removed = %v, want empty (writes should have failed)", result.Removed)
+	}
+	if len(result.Errors) == 0 {
+		t.Fatalf("Errors = %v, want at least one accumulated error", result.Errors)
 	}
 }
 

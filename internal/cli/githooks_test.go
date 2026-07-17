@@ -141,6 +141,48 @@ func TestGithooksRemove_AfterInstall_StripsMarkerFromAllHooks(t *testing.T) {
 	}
 }
 
+// TestGithooksInstall_AllHooksUnwritable_ShowsSyncFallbackMessage exercises
+// the CLI's zero-installed-without-Skipped fallback branch (WR-03,
+// internal/cli/githooks.go's "Could not install git hooks..." message) —
+// only reachable when Install returns Skipped=="" but zero hooks written.
+// Pre-seeding a directory at each of the 3 hook target paths makes every
+// individual write fail (fsatomic.WriteFile can't rename a file onto a
+// directory) while the hooks dir itself is still accessible, so Install
+// never sets Skipped.
+func TestGithooksInstall_AllHooksUnwritable_ShowsSyncFallbackMessage(t *testing.T) {
+	dir := initGitRepo(t, t.TempDir())
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	for _, hook := range []string{"post-commit", "post-merge", "post-checkout"} {
+		if err := os.MkdirAll(filepath.Join(hooksDir, hook), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s as dir): %v", hook, err)
+		}
+	}
+
+	out, _, err := execCmd("githooks", "install", dir)
+	if err != nil {
+		t.Fatalf("githooks install: unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "Could not install git hooks. Run `codegraph sync` after changes instead.") {
+		t.Fatalf("expected the sync-fallback message, got %q", out)
+	}
+}
+
+// TestGithooksRemove_NothingInstalled_ShowsNothingToRemoveMessage asserts
+// (WR-03) `githooks remove` against a repo with no codegraph hooks
+// installed prints the "nothing to remove" message rather than the
+// removal-report line.
+func TestGithooksRemove_NothingInstalled_ShowsNothingToRemoveMessage(t *testing.T) {
+	dir := initGitRepo(t, t.TempDir())
+
+	out, _, err := execCmd("githooks", "remove", dir)
+	if err != nil {
+		t.Fatalf("githooks remove: unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "No git sync hooks were installed — nothing to remove.") {
+		t.Fatalf("expected the nothing-to-remove message, got %q", out)
+	}
+}
+
 // TestGithooksInstall_NonGitDirectory_SkipsCleanlyWithExitZero asserts
 // `githooks install` against a non-git directory prints the friendly
 // "not a git repository" skip message and returns a nil error (exit 0),
