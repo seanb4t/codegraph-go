@@ -126,6 +126,24 @@ func isEffectivelyEmpty(content string) bool {
 	return true
 }
 
+// hasMarkerLine reports whether content contains a real codegraph begin
+// marker: some line whose trimmed form is an exact match for markerBegin,
+// the same exact-trimmed-line detection stripMarkerBlock uses (WR-01). A
+// raw strings.Contains(content, markerBegin) check would false-positive on
+// marker text merely embedded inside an unrelated line (e.g. an echoed
+// string containing the marker as a substring) — exactly the class of
+// false positive IN-04 fixed for Remove; Status must use the same
+// detection so it can't report "installed" for a file Remove correctly
+// determines has nothing to remove.
+func hasMarkerLine(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimSpace(line) == markerBegin {
+			return true
+		}
+	}
+	return false
+}
+
 // InstallResult reports the outcome of Install. Installed lists the hooks
 // actually written, in the fixed defaultSyncHooks order. Skipped is set
 // (and Installed left empty) when the target isn't a git repository or the
@@ -383,7 +401,7 @@ func Status(ctx context.Context, projectRoot string) StatusResult {
 		installed := false
 		executable := false
 		if content, err := os.ReadFile(file); err == nil {
-			installed = strings.Contains(string(content), markerBegin)
+			installed = hasMarkerLine(string(content))
 			if info, statErr := os.Stat(file); statErr == nil {
 				executable = info.Mode().Perm()&0o111 != 0
 			}

@@ -629,6 +629,36 @@ func TestStatus_MarkerPresentButNotExecutable_ReportsExecutableFalse(t *testing.
 	}
 }
 
+// TestStatus_MarkerTextEmbeddedInLine_ReportsNotInstalled is the WR-01
+// regression test, mirroring TestRemove_MarkerTextEmbeddedInLine_NotReportedRemoved:
+// marker text merely embedded inside an unrelated line (e.g. an echoed
+// string) is a raw substring match but not an exact-trimmed-line match.
+// Status must not report the hook as Installed in that case — the same
+// "installed" signal Remove already refuses to report for this exact
+// fixture (IN-04), so the two subcommands stay consistent.
+func TestStatus_MarkerTextEmbeddedInLine_ReportsNotInstalled(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	embedded := "#!/bin/sh\n" + `echo "not a real ` + markerBegin + ` marker"` + "\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(embedded), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	status := Status(context.Background(), root)
+
+	for _, h := range status.Hooks {
+		if h.Name != "post-commit" {
+			continue
+		}
+		if h.Installed {
+			t.Fatalf("post-commit Installed = true, want false (marker text only embedded, not an exact line match)")
+		}
+	}
+}
+
 func TestStatus_NonRepo_ReturnsSkipped(t *testing.T) {
 	root := t.TempDir()
 
