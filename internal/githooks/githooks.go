@@ -8,6 +8,7 @@ package githooks
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,21 +109,29 @@ func isEffectivelyEmpty(content string) bool {
 // actually written, in the fixed defaultSyncHooks order. Skipped is set
 // (and Installed left empty) when the target isn't a git repository or the
 // hooks directory couldn't be created — never an error, per D-04's
-// clean-skip contract.
+// clean-skip contract. Errors accumulates one entry per hook that failed
+// its individual write (e.g. unwritable file, read-only mount, disk full)
+// so callers can surface *why* Installed came back short of all three
+// hooks instead of failing silently (WR-01).
 type InstallResult struct {
 	Installed []string
 	HooksDir  string
 	Skipped   string
+	Errors    []error
 }
 
 // RemoveResult reports the outcome of Remove. Removed lists the hooks that
 // had a codegraph block stripped (file deleted or rewritten). Uses the
 // Go-idiomatic field name Removed rather than TS's `{installed: removed}`
 // naming quirk (RESEARCH.md note on removeGitSyncHook's result shape).
+// Errors accumulates one entry per hook that failed its individual
+// delete/write (WR-01) — the loop still continues past a failure, but the
+// failure is no longer silently discarded.
 type RemoveResult struct {
 	Removed  []string
 	HooksDir string
 	Skipped  string
+	Errors   []error
 }
 
 // HookStatus is one hook's install state, as reported by Status.
@@ -171,6 +180,7 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 
 	block := markerBlock()
 	var installed []string
+	var errs []error
 	for _, hook := range defaultSyncHooks {
 		file := filepath.Join(hooksDir, hook)
 		var content string
@@ -194,12 +204,13 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 			content = "#!/bin/sh\n" + block + "\n"
 		}
 		if err := fsatomic.WriteFile(file, content); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", hook, err))
 			continue
 		}
 		_ = os.Chmod(file, 0o755) // best-effort, TS swallows chmod errors too (Pitfall 4)
 		installed = append(installed, hook)
 	}
-	return InstallResult{Installed: installed, HooksDir: hooksDir}
+	return InstallResult{Installed: installed, HooksDir: hooksDir, Errors: errs}
 }
 
 // Remove strips codegraph's marker block from each of
@@ -220,6 +231,7 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 	}
 
 	var removed []string
+	var errs []error
 	for _, hook := range defaultSyncHooks {
 		file := filepath.Join(hooksDir, hook)
 		original, err := os.ReadFile(file)
@@ -240,18 +252,20 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 		}
 		if isEffectivelyEmpty(stripped) {
 			if err := os.Remove(file); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", hook, err))
 				continue
 			}
 		} else {
 			content := strings.TrimRight(stripped, " \t\n") + "\n"
 			if err := fsatomic.WriteFile(file, content); err != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", hook, err))
 				continue
 			}
 			_ = os.Chmod(file, 0o755) // best-effort, TS swallows chmod errors too (Pitfall 4)
 		}
 		removed = append(removed, hook)
 	}
-	return RemoveResult{Removed: removed, HooksDir: hooksDir}
+	return RemoveResult{Removed: removed, HooksDir: hooksDir, Errors: errs}
 }
 
 // Status reports per-hook install state for all three sync hooks

@@ -40,6 +40,7 @@ func newGithooksInstallCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Skipped: %s\n", result.Skipped)
 				return nil
 			}
+			printHookErrors(cmd, result.Errors)
 			if len(result.Installed) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "Could not install git hooks. Run `codegraph sync` after changes instead.")
 				return nil
@@ -68,6 +69,7 @@ func newGithooksRemoveCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Skipped: %s\n", result.Skipped)
 				return nil
 			}
+			printHookErrors(cmd, result.Errors)
 			if len(result.Removed) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No git sync hooks were installed — nothing to remove.")
 				return nil
@@ -80,6 +82,17 @@ func newGithooksRemoveCmd() *cobra.Command {
 				strings.Join(result.Removed, ", "), suffix)
 			return nil
 		},
+	}
+}
+
+// printHookErrors prints one line per per-hook write/delete failure
+// accumulated in InstallResult.Errors/RemoveResult.Errors (WR-01), so a
+// partial success (e.g. one hook unwritable while the other two succeed)
+// is no longer silently indistinguishable from "that hook was never
+// touched." A no-op when errs is empty.
+func printHookErrors(cmd *cobra.Command, errs []error) {
+	for _, e := range errs {
+		fmt.Fprintf(cmd.ErrOrStderr(), "warning: %v\n", e)
 	}
 }
 
