@@ -40,7 +40,18 @@ created: 2026-07-16
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner — one row per PLAN.md task) | | | HOOK-01/02/03 | | | unit/integration | `go test ./...` | ❌ W0 | ⬜ pending |
+| 05-01-T1 fsatomic.WriteFile | 05-01 | 1 | HOOK-01/02 | T-05-04 | Atomic temp+rename; existing-mode preservation, no partial file | unit | `go test ./internal/fsatomic/... -v` | ❌ W0 | ⬜ pending |
+| 05-01-T2 agents rewire | 05-01 | 1 | HOOK-01/02 | T-05-04 | Byte-invariance regression gate stays green | regression | `go test ./internal/agents/... && go build ./...` | ✅ existing | ⬜ pending |
+| 05-02-T1 gitmeta.IsGitRepo | 05-02 | 1 | HOOK-01/02/03 | T-05-02b | 5s timeout, Stdin nil, degrade-to-false | unit | `go test ./internal/gitmeta/... -run TestIsGitRepo -v` | ❌ W0 | ⬜ pending |
+| 05-02-T2 gitmeta.HooksDir | 05-02 | 1 | HOOK-01/02/03 | T-05-02 | --git-path resolution; no hand-joined .git/hooks; degrade-to-"" | unit | `go test ./internal/gitmeta/... -run 'TestHooksDir' -v` | ❌ W0 | ⬜ pending |
+| 05-03-T1 markers/strip primitives | 05-03 | 2 | HOOK-01/02 | T-05-01 | Verbatim constant block, zero interpolation | unit | `go test ./internal/githooks/... -run 'TestMarkerBlock|TestStripMarkerBlock|TestIsEffectivelyEmpty' -v` | ❌ W0 | ⬜ pending |
+| 05-03-T2 Install strip-then-append | 05-03 | 2 | HOOK-01 | T-05-04, T-05-05 | Atomic write, mode 0755, idempotent, no in-place divergence | unit | `go test ./internal/githooks/... -run 'TestInstall' -v` | ❌ W0 | ⬜ pending |
+| 05-03-T3 Remove/Status + TS-block interop | 05-03 | 2 | HOOK-02 | T-05-05 | Delete-when-empty, user-content preserved, TS-block detect/remove | unit | `go test ./internal/githooks/... -run 'TestRemove|TestStatus' -v` | ❌ W0 | ⬜ pending |
+| 05-04-T1 githooks command tree + root wiring | 05-04 | 3 | HOOK-01/02 | T-05-03 | targetRoot filepath.Abs; fixed hook trio | build | `go build ./... && go vet ./internal/cli/...` | ❌ W0 | ⬜ pending |
+| 05-04-T2 CLI reachability tests | 05-04 | 3 | HOOK-01/02 | T-05-03 | Real cobra tree; non-repo skip exit 0 | CLI reachability | `go test ./internal/cli/... -run 'TestGithooks' -v` | ❌ W0 | ⬜ pending |
+| 05-05-T1 init D-07 advisory | 05-05 | 3 | HOOK-03 | T-05-06 | Injectable Probe gate; never blocks init; success-path only | build | `go build ./... && go vet ./internal/cli/...` | ❌ W0 | ⬜ pending |
+| 05-05-T2 uninit D-06 cleanup | 05-05 | 3 | HOOK-03 | T-05-06 | Best-effort, never fails uninit | build | `go build ./... && go vet ./internal/cli/...` | ❌ W0 | ⬜ pending |
+| 05-05-T3 advisory/cleanup reachability | 05-05 | 3 | HOOK-03 | T-05-06 | Mutation-proof: revert wiring turns red; D-12 stderr untouched | CLI reachability | `go test ./internal/cli/... -run 'TestInitAdvisory|TestUninit_RemovesGitHooks' -v` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
