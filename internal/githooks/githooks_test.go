@@ -290,3 +290,199 @@ func TestInstall_NonRepo_ReturnsSkippedAndWritesNothing(t *testing.T) {
 		t.Fatalf(".git directory should not have been created in a non-repo")
 	}
 }
+
+func TestRemove_WithUserContent_PreservesRemainderBytes(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	withUser := "#!/bin/sh\necho hi\n\n" + markerBlock() + "\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(withUser), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Remove(context.Background(), root)
+
+	found := false
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Removed = %v, want post-commit included", result.Removed)
+	}
+	got, err := os.ReadFile(filepath.Join(hooksDir, "post-commit"))
+	if err != nil {
+		t.Fatalf("ReadFile after remove: %v", err)
+	}
+	want := "#!/bin/sh\necho hi\n"
+	if string(got) != want {
+		t.Fatalf("post-commit after remove = %q, want %q", string(got), want)
+	}
+}
+
+func TestRemove_EffectivelyEmptyRemainder_DeletesFile(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	Install(context.Background(), root)
+	file := filepath.Join(root, ".git", "hooks", "post-commit")
+
+	result := Remove(context.Background(), root)
+
+	found := false
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Removed = %v, want post-commit included", result.Removed)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatalf("post-commit should have been deleted (effectively empty), stat err = %v", err)
+	}
+}
+
+func TestRemove_NeverInstalled_UntouchedNoError(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	userOnly := "#!/bin/sh\necho untouched\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(userOnly), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Remove(context.Background(), root)
+
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Removed (never installed): %v", result.Removed)
+		}
+	}
+	got, err := os.ReadFile(filepath.Join(hooksDir, "post-commit"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != userOnly {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), userOnly)
+	}
+}
+
+func TestRemove_Twice_SecondRunIsNoOp(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	Install(context.Background(), root)
+
+	first := Remove(context.Background(), root)
+	if len(first.Removed) == 0 {
+		t.Fatalf("first Remove() = %v, want non-empty Removed", first.Removed)
+	}
+
+	second := Remove(context.Background(), root)
+	if len(second.Removed) != 0 {
+		t.Fatalf("second Remove() = %v, want empty (already removed)", second.Removed)
+	}
+}
+
+// TestRemove_TSInstalledBlock_DetectedAndRemovable pastes the verbatim TS
+// sync/git-hooks.js marker block bytes into a hook file (as if TS
+// CodeGraph, not this Go binary, had installed it) and asserts Status
+// detects it as installed and Remove successfully strips it — the D-12
+// cross-tool compatibility fixture (D-03).
+func TestRemove_TSInstalledBlock_DetectedAndRemovable(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	tsBlock := strings.Join([]string{
+		"# >>> codegraph sync hook >>>",
+		"# Keeps the CodeGraph index fresh while the live file watcher is off",
+		"# (e.g. WSL2 /mnt drives). Runs in the background so it never blocks git.",
+		"# Managed by codegraph; remove with `codegraph uninit` or delete this block.",
+		"if command -v codegraph >/dev/null 2>&1; then",
+		"  ( codegraph sync >/dev/null 2>&1 & ) >/dev/null 2>&1",
+		"fi",
+		"# <<< codegraph sync hook <<<",
+	}, "\n")
+	tsInstalled := "#!/bin/sh\n" + tsBlock + "\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(tsInstalled), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	status := Status(context.Background(), root)
+	found := false
+	for _, h := range status.Hooks {
+		if h.Name == "post-commit" {
+			if !h.Installed {
+				t.Fatalf("Status: post-commit Installed = false, want true (TS-installed block must be detected)")
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Status.Hooks missing post-commit entry: %v", status.Hooks)
+	}
+
+	result := Remove(context.Background(), root)
+	removed := false
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			removed = true
+		}
+	}
+	if !removed {
+		t.Fatalf("Remove did not remove the TS-installed post-commit block: %v", result.Removed)
+	}
+}
+
+func TestStatus_MixedInstalledState_ReportsPerHook(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	installedContent := "#!/bin/sh\n" + markerBlock() + "\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(installedContent), 0o755); err != nil {
+		t.Fatalf("WriteFile post-commit: %v", err)
+	}
+	// post-merge and post-checkout are left absent (not installed).
+
+	status := Status(context.Background(), root)
+
+	if len(status.Hooks) != 3 {
+		t.Fatalf("Status.Hooks len = %d, want 3", len(status.Hooks))
+	}
+	wantOrder := []string{"post-commit", "post-merge", "post-checkout"}
+	wantInstalled := map[string]bool{"post-commit": true, "post-merge": false, "post-checkout": false}
+	for i, h := range status.Hooks {
+		if h.Name != wantOrder[i] {
+			t.Errorf("Status.Hooks[%d].Name = %q, want %q", i, h.Name, wantOrder[i])
+		}
+		if h.Installed != wantInstalled[h.Name] {
+			t.Errorf("Status.Hooks[%s].Installed = %v, want %v", h.Name, h.Installed, wantInstalled[h.Name])
+		}
+	}
+}
+
+func TestStatus_NonRepo_ReturnsSkipped(t *testing.T) {
+	root := t.TempDir()
+
+	status := Status(context.Background(), root)
+
+	if status.Skipped != "not a git repository" {
+		t.Fatalf("Skipped = %q, want %q", status.Skipped, "not a git repository")
+	}
+}
+
+func TestRemove_NonRepo_ReturnsSkipped(t *testing.T) {
+	root := t.TempDir()
+
+	result := Remove(context.Background(), root)
+
+	if result.Skipped != "not a git repository" {
+		t.Fatalf("Skipped = %q, want %q", result.Skipped, "not a git repository")
+	}
+}
