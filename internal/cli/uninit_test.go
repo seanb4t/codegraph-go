@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -67,5 +68,48 @@ func TestUninit_NoHooksInstalled_NoRemovalLine(t *testing.T) {
 	}
 	if !strings.Contains(out, "removed "+filepath.Join(dir, codegraphDirName)) {
 		t.Fatalf("expected the standard .codegraph removal line, got %q", out)
+	}
+}
+
+// TestUninit_UnwritableHooksDir_SurfacesWarning is the WR-01 regression
+// test: uninit's D-06 best-effort hook cleanup must surface
+// RemoveResult.Errors as stderr warnings via printHookErrors, matching the
+// standalone `githooks remove` command, rather than silently discarding a
+// per-hook write/delete failure just because cleanup is non-fatal to
+// uninit overall. Skipped under root (permission bits don't apply) and on
+// Windows (no POSIX permission model), matching the convention in
+// internal/githooks's own TestRemove_UnwritableHooksDir_AccumulatesErrors.
+func TestUninit_UnwritableHooksDir_SurfacesWarning(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses permission bits")
+	}
+
+	dir := copyFixture(t)
+	runGit(t, dir, "init")
+	runGit(t, dir, "add", "-A")
+	runGit(t, dir, "commit", "-m", "init")
+
+	if _, _, err := execCmd("init", dir); err != nil {
+		t.Fatalf("init: unexpected error: %v", err)
+	}
+	if _, _, err := execCmd("githooks", "install", dir); err != nil {
+		t.Fatalf("githooks install: unexpected error: %v", err)
+	}
+
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.Chmod(hooksDir, 0o500); err != nil {
+		t.Fatalf("Chmod(%s, 0500): %v", hooksDir, err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(hooksDir, 0o755) })
+
+	_, stderr, err := execCmd("uninit", "--force", dir)
+	if err != nil {
+		t.Fatalf("uninit --force: unexpected error: %v", err)
+	}
+	if !strings.Contains(stderr, "warning:") {
+		t.Fatalf("expected stderr to contain a warning for the failed hook cleanup, got %q", stderr)
 	}
 }

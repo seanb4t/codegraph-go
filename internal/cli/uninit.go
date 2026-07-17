@@ -58,7 +58,14 @@ func newUninitCmd() *cobra.Command {
 			// degrades to an empty/Skipped result rather than an error on
 			// a non-repo or no-hooks-installed target, so its outcome is
 			// never propagated up RunE — cleanup can never fail uninit.
-			if result := githooks.Remove(cmd.Context(), root); len(result.Removed) > 0 {
+			// Per-hook write/delete failures are still surfaced as
+			// warnings (WR-01), matching the standalone `githooks
+			// remove` command's printHookErrors call, so a failure
+			// here is not silently discarded just because it is
+			// non-fatal to uninit itself.
+			result := githooks.Remove(cmd.Context(), root)
+			printHookErrors(cmd, result.Errors)
+			if len(result.Removed) > 0 {
 				fmt.Fprintf(cmd.OutOrStdout(), "Removed git %s sync hook%s\n",
 					strings.Join(result.Removed, ", "), plural(len(result.Removed)))
 			}
