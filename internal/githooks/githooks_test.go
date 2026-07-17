@@ -688,3 +688,213 @@ func TestRemove_NonRepo_ReturnsSkipped(t *testing.T) {
 		t.Fatalf("Skipped = %q, want %q", result.Skipped, "not a git repository")
 	}
 }
+
+// TestStripMarkerBlock_NestedBegin_ReturnsUnchanged and
+// TestStripMarkerBlock_DanglingEnd_ReturnsUnchanged are the CR-01
+// iteration-2 regression tests: a second begin marker encountered while one
+// is already open, or an end marker with no open begin, must also report
+// ok=false — not just the original unterminated-single-begin case. Without
+// this, a file carrying a dangling begin marker followed later by a
+// well-formed begin/end pair would falsely report ok=true and silently
+// drop everything between the dangling begin and the new end marker (the
+// exact defect this iteration closes; see TestInstall_Install_TwiceOnMalformedFile_UserContentSurvivesBothCalls
+// for the end-to-end reproduction via Install).
+func TestStripMarkerBlock_NestedBegin_ReturnsUnchanged(t *testing.T) {
+	content := strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		markerBegin, // dangling — never closed
+		"... (end marker missing) ...",
+		"echo after",
+		"echo more-user-content",
+		"",
+		markerBegin, // a second, well-formed block appended later
+		"fresh block body",
+		markerEnd,
+	}, "\n")
+
+	got, ok := stripMarkerBlock(content)
+	if ok {
+		t.Fatalf("stripMarkerBlock(nested begin) ok = true, want false")
+	}
+	if got != content {
+		t.Fatalf("stripMarkerBlock(nested begin) = %q, want unchanged %q", got, content)
+	}
+}
+
+func TestStripMarkerBlock_DanglingEnd_ReturnsUnchanged(t *testing.T) {
+	content := strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		markerEnd, // no open begin
+		"echo after",
+	}, "\n")
+
+	got, ok := stripMarkerBlock(content)
+	if ok {
+		t.Fatalf("stripMarkerBlock(dangling end) ok = true, want false")
+	}
+	if got != content {
+		t.Fatalf("stripMarkerBlock(dangling end) = %q, want unchanged %q", got, content)
+	}
+}
+
+// malformedHookFixture returns a hook file body with an unterminated begin
+// marker followed by real user content — the fixture CR-01's emergent
+// defect (iteration-2 review) was reproduced against: a naive recovery
+// strategy that appends a fresh well-formed block after this raw content
+// creates a file shape where a LATER strip can misread the new block's end
+// marker as closing the dangling begin, silently eating everything in
+// between.
+func malformedHookFixture() string {
+	return strings.Join([]string{
+		"#!/bin/sh",
+		"echo before",
+		"",
+		markerBegin,
+		"... (block body, end marker line deleted) ...",
+		"echo after",
+		"echo more-user-content",
+	}, "\n") + "\n"
+}
+
+// TestInstall_MalformedMarkerBlock_SkipsHookAndLeavesFileUntouched is the
+// CR-01 iteration-2 regression test for Install's own first encounter with
+// a malformed hook file: rather than falling back to appending a fresh
+// block after the untrustworthy raw content (the iteration-1 recovery
+// strategy that reintroduced the data-loss hazard one round-trip later),
+// Install must skip the hook entirely, accumulate an error naming it, and
+// leave the file byte-for-byte untouched.
+func TestInstall_MalformedMarkerBlock_SkipsHookAndLeavesFileUntouched(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := malformedHookFixture()
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result := Install(context.Background(), root)
+
+	for _, h := range result.Installed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Installed (malformed marker block): %v", result.Installed)
+		}
+	}
+	foundErr := false
+	for _, e := range result.Errors {
+		if strings.Contains(e.Error(), "post-commit") {
+			foundErr = true
+		}
+	}
+	if !foundErr {
+		t.Fatalf("Errors = %v, want an entry naming post-commit", result.Errors)
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != malformed {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
+	}
+}
+
+// TestInstall_Install_TwiceOnMalformedFile_UserContentSurvivesBothCalls is
+// the exact two-call reproduction from the iteration-2 review's CR-01
+// finding: Install called twice in a row against a hand-damaged hook file
+// must never lose "echo after"/"echo more-user-content" on the second
+// call. The iteration-1 fix protected the FIRST call but, by appending a
+// fresh well-formed block after the still-malformed raw content, created a
+// file shape where the second Install's strip would misread the new
+// block's end marker as closing the old dangling begin — silently
+// deleting everything between them. With the iteration-2 fix, Install
+// never writes into a file it can't trust the strip of, so the file stays
+// identically malformed (and identically unmodified) across any number of
+// repeated Install calls.
+func TestInstall_Install_TwiceOnMalformedFile_UserContentSurvivesBothCalls(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := malformedHookFixture()
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	first := Install(context.Background(), root)
+	afterFirst, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile after first Install: %v", err)
+	}
+	if string(afterFirst) != malformed {
+		t.Fatalf("after first Install, post-commit = %q, want unchanged %q", string(afterFirst), malformed)
+	}
+	for _, h := range first.Installed {
+		if h == "post-commit" {
+			t.Fatalf("first Install: post-commit should not be in Installed: %v", first.Installed)
+		}
+	}
+
+	second := Install(context.Background(), root)
+	afterSecond, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile after second Install: %v", err)
+	}
+	if !strings.Contains(string(afterSecond), "echo after") || !strings.Contains(string(afterSecond), "echo more-user-content") {
+		t.Fatalf("second Install silently dropped user content: %q", string(afterSecond))
+	}
+	if string(afterSecond) != malformed {
+		t.Fatalf("after second Install, post-commit = %q, want unchanged %q", string(afterSecond), malformed)
+	}
+	for _, h := range second.Installed {
+		if h == "post-commit" {
+			t.Fatalf("second Install: post-commit should not be in Installed: %v", second.Installed)
+		}
+	}
+}
+
+// TestInstall_ThenRemoveOnMalformedFile_UserContentSurvives is the
+// Install-then-Remove variant of the same iteration-2 CR-01 reproduction:
+// an Install call that (correctly) skips a malformed hook file must not
+// leave the file in a state where a SUBSEQUENT Remove call misreads it and
+// truncates user content. Since Install now never writes into an
+// untrustworthy file, the file handed to Remove is identical to the
+// original malformed fixture, and Remove's own existing ok==false handling
+// (verified separately by TestRemove_UnterminatedMarkerBlock_LeavesFileUntouched)
+// applies unchanged.
+func TestInstall_ThenRemoveOnMalformedFile_UserContentSurvives(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	malformed := malformedHookFixture()
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(malformed), 0o755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	Install(context.Background(), root)
+	removeResult := Remove(context.Background(), root)
+
+	for _, h := range removeResult.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be reported as removed (malformed marker block): %v", removeResult.Removed)
+		}
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(got), "echo after") || !strings.Contains(string(got), "echo more-user-content") {
+		t.Fatalf("Install->Remove silently dropped user content: %q", string(got))
+	}
+	if string(got) != malformed {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
+	}
+}

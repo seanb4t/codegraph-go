@@ -53,11 +53,19 @@ func markerBlock() string {
 // blank lines — is preserved verbatim. Content with no markers is returned
 // unchanged.
 //
-// The second return value is false when a begin marker is found with no
-// matching end marker anywhere after it (a malformed/hand-edited hook
-// file). TS's own stripMarkerBlock (sync/git-hooks.js:116-134) treats an
-// unterminated begin marker as "block extends to EOF", silently dropping
-// every line after it — a genuine data-loss bug (CR-01). D-02/D-03 lock
+// The second return value is false when the marker pairing in content is
+// malformed: a begin marker with no matching end marker anywhere after it,
+// a second begin marker encountered while one is already open, or an end
+// marker with no open begin. TS's own stripMarkerBlock
+// (sync/git-hooks.js:116-134) treats an unterminated begin marker as
+// "block extends to EOF", silently dropping every line after it — a
+// genuine data-loss bug (CR-01). Rejecting a nested/re-entrant begin (and a
+// dangling end) is required to close a second-order variant of the same
+// bug: without it, a file left with a dangling begin marker followed later
+// by a second, well-formed begin/end pair would have a subsequent strip
+// falsely report ok==true and silently swallow everything between the
+// first dangling begin and the second block's end marker (see Install's
+// doc comment for how such a file shape can arise). D-02/D-03 lock
 // verbatim TS semantics for well-formed marker blocks, but that guarantee
 // does not extend to a malformed-input data-loss path; this is a
 // deliberate, documented Go-only divergence (same convention as Phase 3's
@@ -68,24 +76,35 @@ func stripMarkerBlock(content string) (string, bool) {
 	lines := strings.Split(content, "\n")
 	var kept []string
 	inBlock := false
-	sawUnterminatedBegin := false
+	malformed := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == markerBegin {
+			if inBlock {
+				// A second begin marker while one is already open can
+				// never be validly closed by inspection alone — don't
+				// guess which end belongs to which begin. Bail out
+				// entirely rather than let a later end marker "rescue"
+				// this into a false ok=true.
+				malformed = true
+			}
 			inBlock = true
-			sawUnterminatedBegin = true
 			continue
 		}
 		if trimmed == markerEnd {
+			if !inBlock {
+				// A dangling end with no open begin is also unreliable —
+				// same treatment as the unterminated-begin case.
+				malformed = true
+			}
 			inBlock = false
-			sawUnterminatedBegin = false
 			continue
 		}
 		if !inBlock {
 			kept = append(kept, line)
 		}
 	}
-	if sawUnterminatedBegin {
+	if inBlock || malformed {
 		return content, false
 	}
 	return strings.Join(kept, "\n"), true
@@ -167,6 +186,18 @@ type StatusResult struct {
 // chmod 0755 is best-effort (Pitfall 4, TS swallows chmod errors too). In
 // a non-repo, returns Skipped "not a git repository" and writes nothing.
 //
+// Malformed existing content (CR-01): if stripMarkerBlock reports the
+// existing hook file's marker pairing can't be trusted (unterminated
+// begin, nested begin, or dangling end), Install does NOT write to that
+// file at all — appending a fresh block after the untrustworthy raw
+// content would leave a dangling marker in place that a later
+// Install/Remove call could misinterpret as closed by the new block,
+// silently deleting everything in between. Instead the hook is skipped,
+// an error is accumulated in InstallResult.Errors naming the hook and
+// asking the user to fix or delete the malformed block manually, and the
+// file is left byte-for-byte untouched — matching Remove's existing
+// ok==false handling.
+//
 // Note (verbatim TS quirk, confirmed against sync/git-hooks.js): the very
 // first install of a fresh hook file seeds "#!/bin/sh\n"+block (no
 // blank-line separator), but the moment that file is read back on a
@@ -204,15 +235,21 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 		var content string
 		if existing, err := os.ReadFile(file); err == nil {
 			base := string(existing)
-			// An unterminated begin marker means the strip can't be
-			// trusted (CR-01) — fall back to the raw existing content as
-			// the base rather than risk truncating it, and let the fresh
-			// block get appended after it (a stray dangling marker left
-			// in place beats silently destroying the user's file).
-			if stripped, ok := stripMarkerBlock(base); ok {
-				base = stripped
+			stripped, ok := stripMarkerBlock(base)
+			if !ok {
+				// A malformed marker block means the strip can't be
+				// trusted (CR-01). Appending a fresh block after the raw
+				// content would leave a dangling marker in place that a
+				// LATER strip could misread as closed by the new block's
+				// end marker, silently swallowing everything in between
+				// (the exact bug this guard closes). Skip this hook
+				// entirely and leave the file byte-for-byte untouched —
+				// a skipped hook is recoverable, silently eaten user
+				// content is not.
+				errs = append(errs, fmt.Errorf("%s: hook file has a malformed codegraph marker block — please fix or remove it manually", hook))
+				continue
 			}
-			base = strings.TrimRight(base, " \t\n")
+			base = strings.TrimRight(stripped, " \t\n")
 			if base != "" {
 				content = base + "\n\n" + block + "\n"
 			} else {
