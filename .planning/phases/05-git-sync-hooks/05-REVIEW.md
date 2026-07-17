@@ -19,14 +19,14 @@ files_reviewed_list:
   - internal/gitmeta/githooks.go
   - internal/gitmeta/githooks_test.go
 findings:
-  critical: 1
-  warning: 3
-  info: 3
-  total: 7
+  critical: 0
+  warning: 1
+  info: 1
+  total: 2
 status: issues_found
 ---
 
-# Phase 05: Code Review Report
+# Phase 05: Code Review Report (Iteration 5 — Round-5 Fix Verification / Round-6 Final Clean-Check)
 
 **Reviewed:** 2026-07-16
 **Depth:** deep
@@ -35,316 +35,153 @@ status: issues_found
 
 ## Summary
 
-Phase 5 ports TS CodeGraph's `sync/git-hooks.js` into `internal/githooks`,
-adds `internal/gitmeta.IsGitRepo`/`HooksDir`, extracts `internal/fsatomic`
-from `internal/agents/shared.go`'s prior `atomicWriteFile`, and wires the
-result into a new `codegraph githooks install|remove|status` command tree
-plus best-effort hooks into `init`'s success path and `uninit`'s cleanup
-path. The cross-file wiring checks the phase context asked for all came
-back clean:
+Task: verify the two round-5 commits (`73aa510` — `Status` switched to
+`hasMarkerLine`'s exact-trimmed-line detection; `b7c38ad` — `Remove`
+accumulates non-`fs.ErrNotExist` read errors, mirroring `Install`'s CR-02
+handling) are genuine and internally consistent, then spot-check the whole
+marker-handling surface (`Install`/`Remove`/`Status`/init advisory/uninit
+cleanup) for one remaining class of defect: same detection semantics, same
+error-surfacing, same skip-untouched-on-unparseable convention.
 
-1. **CLI reaches the real package** — `root.go` registers `newGithooksCmd()`
-   and the CLI tests (`githooks_test.go`, `uninit_test.go`,
-   `init_advisory_test.go`) drive `execCmd(...)` against the actual
-   `newRootCmd()` tree, not a stub — reverting the wiring turns them red.
-2. **`init`'s advisory wiring is load-bearing** — `TestInitAdvisory_WatcherDisabled*`
-   force the disabled state via the injectable `watch.Probe` env seam and
-   assert on `init`'s real stdout; they are not asserting a mirrored
-   reimplementation of the logic.
-3. **The `fsatomic` extraction is byte-identical** to the prior
-   `internal/agents/shared.go` `atomicWriteFile` (confirmed via `git show
-   cbc394d`) — no behavior drift from the refactor.
-4. **TS-block interop works** — `TestRemove_TSInstalledBlock_DetectedAndRemovable`
-   pastes verbatim TS marker bytes and asserts Go's `Status`/`Remove`
-   recognize and operate on them.
-5. **Concurrency/crash safety** — writes are individually atomic via
-   `fsatomic.WriteFile` (temp file + rename), but see WR-02/CR-01 below for
-   gaps in the surrounding read-modify-write and strip logic.
-6. **Silent-failure paths** — several exist; see CR-01 and WR-01. Some are
-   faithful (and explicitly TS-parity-locked) ports of upstream's own
-   swallowing behavior; one (CR-01) is a genuine data-loss-capable defect
-   present in both TS and this port, and a "must be fixed before ship"
-   item independent of parity intent.
+**Both round-5 fixes verified genuine**, confirmed by diffing `73aa510` and
+`b7c38ad` directly against the current file content (no drift between the
+committed patch and what's on disk) and by re-running the full package test
+suite (`go test ./internal/githooks/... ./internal/cli/... ./internal/gitmeta/... ./internal/fsatomic/...`
+— all green, `go build ./...` and `go vet` clean):
 
-The one Critical finding below is inherited byte-for-byte from TS's own
-`stripMarkerBlock` (confirmed against the RESEARCH.md transcription) rather
-than a regression introduced by this Go port — flagged anyway per this
-review's scope (data-loss risk is a Critical-tier criterion regardless of
-origin), with the parity context called out so a fix can be scoped
-correctly (Go-only divergence vs. an upstream report).
+- **`73aa510` (WR-01, `Status` exact-trimmed-line detection):** `Status` now
+  calls the same `hasMarkerLine` helper `Remove`'s WR-05/IN-04 fix relies on
+  (`strings.TrimSpace(line) == markerBegin` scanned line-by-line), replacing
+  the old `strings.Contains(content, markerBegin)` raw substring check.
+  Hand-traced `TestStatus_MarkerTextEmbeddedInLine_ReportsNotInstalled`'s
+  fixture (`echo "not a real <begin> marker"`) against the new code: no line
+  trims to an exact match, `hasMarkerLine` returns `false`, `Status` reports
+  `not installed` — no longer contradicting what `Remove` finds for the
+  identical file. `Status`/`Remove`/`stripMarkerBlock` now share one
+  detection primitive; the `init` advisory's "hooks already installed" gate
+  (which reads `Status.Hooks[].Installed`) inherits the fix for free since it
+  only consumes `Status`'s output.
+- **`b7c38ad` (WR-02, `Remove` read-error accumulation):** `Remove`'s
+  `os.ReadFile` error branch is now `if !errors.Is(err, fs.ErrNotExist) { errs
+  = append(...) }` before the `continue`, mirroring `Install`'s existing
+  three-way switch (`err == nil` / `errors.Is(err, fs.ErrNotExist)` /
+  `default`). Hand-traced the new
+  `TestRemove_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError`
+  fixture (chmod 0000 an installed hook, then `Remove`): the file is left
+  untouched (unchanged from before this fix — the safety property was never
+  in question) and now also lands an entry in `RemoveResult.Errors` naming
+  the hook, which both `githooks remove`'s and `uninit`'s D-06 cleanup's
+  shared `printHookErrors` call surfaces as a `stderr` warning. Symmetric
+  with `Install`'s CR-02 fix for the identical error class.
 
-## Critical Issues
-
-### CR-01: Unterminated/malformed marker block silently destroys trailing file content
-
-**File:** `internal/githooks/githooks.go:54-73` (`stripMarkerBlock`), reachable from `Install` (`internal/githooks/githooks.go:145-176`) and `Remove` (`internal/githooks/githooks.go:189-220`)
-
-**Issue:** `stripMarkerBlock` sets `inBlock = true` on the trimmed begin
-marker and only clears it on the trimmed end marker:
-
-```go
-for _, line := range lines {
-    trimmed := strings.TrimSpace(line)
-    if trimmed == markerBegin {
-        inBlock = true
-        continue
-    }
-    if trimmed == markerEnd {
-        inBlock = false
-        continue
-    }
-    if !inBlock {
-        kept = append(kept, line)
-    }
-}
-```
-
-If a hook file contains the begin marker but the matching end marker is
-missing or precedes it (a plausible real-world state: a user hand-edits the
-hook and accidentally deletes/mangles the `# <<< codegraph sync hook <<<`
-line, or a prior write is interrupted outside `fsatomic`'s crash-safe path,
-e.g. via a text editor), every line from the begin marker to EOF is dropped
-— including any of the user's own shell content that happens to sit after
-the block. `Remove` (and `Install`'s re-strip-then-append path) then writes
-the truncated result back to disk via `fsatomic.WriteFile`, permanently
-destroying that content with no warning, no error, and no way to recover it
-(the atomic write means there is no crash window to exploit for recovery —
-the data is just gone).
-
-**Reproduction:** write a hook file with the begin marker present but no
-end marker, with distinguishing content both before and after where the end
-marker should be:
-
-```
-#!/bin/sh
-echo before
-
-# >>> codegraph sync hook >>>
-... (block body, end marker line deleted) ...
-echo after
-echo more-user-content
-```
-
-Running `codegraph githooks remove` (or `install`, which also calls
-`stripMarkerBlock` on the existing file) against this fixture silently
-rewrites the file to `#!/bin/sh\necho before\n`, dropping `echo after` and
-`echo more-user-content` with no error returned from `Remove`/`Install` and
-no message printed by the CLI layer.
-
-**Context:** this is a byte-for-byte faithful port of TS's own
-`stripMarkerBlock` (`sync/git-hooks.js:116-134`, transcribed in
-`05-RESEARCH.md`), which has the identical unbounded-`inBlock` behavior — it
-is not a regression introduced by the Go port, and D-02/D-03 lock verbatim
-TS semantics as a phase requirement. Flagging it as Critical anyway because
-data-loss risk is a Critical-tier finding independent of whether the defect
-originates upstream; the fix should be scoped deliberately (either as a
-documented, intentional Go-only divergence, or filed upstream too) rather
-than silently inherited.
-
-**Fix:** guard against an unterminated block before trusting the strip —
-e.g. bail out (return content unchanged, or return an explicit error) when
-a begin marker is found with no matching end marker after it, rather than
-treating "no end marker" as "block extends to EOF":
-
-```go
-func stripMarkerBlock(content string) string {
-    lines := strings.Split(content, "\n")
-    var kept []string
-    inBlock := false
-    sawUnterminatedBegin := false
-    for _, line := range lines {
-        trimmed := strings.TrimSpace(line)
-        if trimmed == markerBegin {
-            inBlock = true
-            sawUnterminatedBegin = true
-            continue
-        }
-        if trimmed == markerEnd {
-            inBlock = false
-            sawUnterminatedBegin = false
-            continue
-        }
-        if !inBlock {
-            kept = append(kept, line)
-        }
-    }
-    if sawUnterminatedBegin {
-        // No matching end marker — do not trust the strip; leave content
-        // untouched rather than risk destroying everything after a
-        // malformed/partial block.
-        return content
-    }
-    return strings.Join(kept, "\n")
-}
-```
-(Callers of `Install`/`Remove` should then treat this case explicitly —
-e.g. `Remove` skipping the hook rather than reporting it as removed.)
+**One new, non-destructive finding surfaced during the round-6 pass** — a
+signal/consistency gap in the same family as the WR-01/WR-02 findings this
+round closed, on a code path those two fixes did not touch.
 
 ## Warnings
 
-### WR-01: Install/Remove silently swallow per-hook write/delete errors with no diagnostic
+### WR-01: `Remove` still surfaces zero signal for a malformed marker block, unlike `Install`'s identical-condition handling
 
-**File:** `internal/githooks/githooks.go:169-171` (`Install`), `internal/githooks/githooks.go:198-215` (`Remove`)
+**File:** `internal/githooks/githooks.go:362-370`
 
-**Issue:** Both loops discard the underlying error entirely on a per-hook
-write/delete failure:
+**Issue:** `Install`'s CR-01 handling of `stripMarkerBlock` returning
+`ok == false` (unterminated begin, nested begin, or dangling end — a
+malformed marker pairing) both skips the write **and** accumulates an
+actionable error:
 
 ```go
-if err := fsatomic.WriteFile(file, content); err != nil {
+// Install, githooks.go:260-273
+stripped, ok := stripMarkerBlock(base)
+if !ok {
+    errs = append(errs, fmt.Errorf("%s: hook file has a malformed codegraph marker block — please fix or remove it manually", hook))
     continue
 }
 ```
 
+`Remove`'s handling of the identical condition only does the first half —
+it correctly leaves the file untouched and does not report it as `Removed`,
+but it accumulates nothing in `RemoveResult.Errors`:
+
 ```go
-if err := os.Remove(file); err != nil {
-    continue
-}
-...
-if err := fsatomic.WriteFile(file, content); err != nil {
+// Remove, githooks.go:362-370
+stripped, ok := stripMarkerBlock(string(original))
+if !ok {
+    // Unterminated/dangling begin or end marker (CR-01): don't
+    // trust the strip. Leave the file untouched and don't report
+    // it as removed ...
     continue
 }
 ```
 
-If, say, `post-checkout` is unwritable (wrong ownership, read-only mount,
-disk full) while `post-commit`/`post-merge` succeed, `InstallResult.Installed`
-silently comes back with only 2 of 3 hooks and neither `Install` nor the CLI
-(`internal/cli/githooks.go`'s `newGithooksInstallCmd`) has any way to tell
-the user *why* — there's no error, no log line, nothing. TS's own
-`installGitSyncHook` doesn't have this gap: `fs.writeFileSync`'s exception
-is uncaught within the function and propagates out (confirmed in
-`05-RESEARCH.md`'s verbatim transcription), so a write failure in TS is loud
-(throws), not silent. The RESEARCH.md illustrative Go snippet explicitly
-flagged this as "Claude's discretion on result shape" (accumulate vs.
-discard) — the discretion was exercised in the direction that loses the
-most information.
+This is the exact "same detection semantics, same skip-untouched
+convention, but NOT the same error-surfacing" gap the round-6 task asked to
+verify is closed — WR-01 (this round's `73aa510`) and WR-02 (`b7c38ad`) each
+closed one instance of it (detection parity, read-error parity), but the
+malformed-marker case was never symmetrized. Confirmed neither
+`TestRemove_UnterminatedMarkerBlock_LeavesFileUntouched`,
+`TestStripMarkerBlock_NestedBegin_ReturnsUnchanged`/`DanglingEnd_...`, nor
+`TestRemove_DanglingEndMarkerOnly_NotReportedRemoved` assert anything about
+`RemoveResult.Errors` — all three only check `Removed` membership and
+byte-for-byte file content, so this gap is untested as well as unfixed.
 
-**Fix:** at minimum, accumulate the errors so the caller/CLI can report them
-even if the per-hook loop still continues past a failure:
+End-to-end impact, traced through `internal/cli`: a hand-damaged hook file
+(e.g. someone deletes the end-marker line while editing) makes
+`githooks remove <repo>` print only `"No git sync hooks were installed —
+nothing to remove."` — actively misleading, since a codegraph-owned block
+*is* present, just unparseable, and needs manual attention. `codegraph
+uninit`'s D-06 best-effort cleanup hits the same silent path: no `warning:`
+line, `.codegraph/` still gets removed and the command still reports
+success, and the broken hook file is left behind with no signal it exists.
+Contrast with `githooks install <repo>` against the same file, which prints
+a `warning: post-commit: hook file has a malformed codegraph marker block —
+please fix or remove it manually` line — so the two sibling subcommands give
+contradictory levels of visibility into the identical on-disk condition,
+the same "signal/consistency, not data loss" class as the WR-01/WR-02
+findings this round fixed.
+
+**Fix:** Mirror `Install`'s error message in `Remove`'s `ok == false`
+branch:
 
 ```go
-type InstallResult struct {
-    Installed []string
-    HooksDir  string
-    Skipped   string
-    Errors    []error // new: one entry per hook that failed to write
-}
-...
-if err := fsatomic.WriteFile(file, content); err != nil {
-    result.Errors = append(result.Errors, fmt.Errorf("%s: %w", hook, err))
+stripped, ok := stripMarkerBlock(string(original))
+if !ok {
+    errs = append(errs, fmt.Errorf("%s: hook file has a malformed codegraph marker block — please fix or remove it manually", hook))
     continue
 }
 ```
-and have `newGithooksInstallCmd`/`newGithooksRemoveCmd` print a line per
-error (or at least a "N of 3 hooks could not be written" summary) instead of
-only ever describing the hooks that succeeded.
 
-### WR-02: No synchronization across the read-modify-write sequence in Install/Remove
-
-**File:** `internal/githooks/githooks.go:145-176` (`Install`), `internal/githooks/githooks.go:189-220` (`Remove`)
-
-**Issue:** `fsatomic.WriteFile` guarantees an individual write is atomic and
-crash-safe (temp file + rename), but the surrounding operation —
-`os.ReadFile` the current hook, compute a new body from it, then
-`fsatomic.WriteFile` it back — is not atomic as a whole. Two concurrent
-invocations against the same hooks directory (two `codegraph githooks
-install` runs, or an `install` racing a `remove`, or `init`'s advisory path
-racing an explicit `githooks install`) can both read the same "before"
-state, and whichever writes last silently discards the other's update (lost
-update), with neither process aware anything raced. There is no file lock
-or CAS-style guard anywhere in this path.
-
-**Fix:** low-priority given this is a rarely-concurrent CLI operation, but
-worth at least documenting the constraint (e.g. a doc comment on `Install`/
-`Remove` noting they are not safe to call concurrently against the same
-`projectRoot`), or take an `flock`/lockfile around the hooks-dir mutation if
-concurrent invocation is a realistic scenario for this project (e.g. CI
-running `codegraph init` and a user's own tooling running `codegraph
-githooks install` at the same time).
-
-### WR-03: Missing test coverage for install/remove failure and partial-failure paths
-
-**File:** `internal/githooks/githooks_test.go`, `internal/cli/githooks_test.go`
-
-**Issue:** No test in either package exercises:
-- `Install`'s `"could not access the git hooks directory"` skip branch
-  (`internal/githooks/githooks.go:150-152`).
-- The CLI's `"Could not install git hooks. Run \`codegraph sync\` after
-  changes instead."` fallback message (`internal/cli/githooks.go:44`) —
-  only ever reached when `Install` returns zero installed hooks without
-  being `Skipped`.
-- A partial-success `Install`/`Remove` (some hooks succeed, one or more
-  fail) — the exact scenario WR-01 is about.
-- The CLI's `"No git sync hooks were installed — nothing to remove."`
-  message (`internal/cli/githooks.go:72`).
-
-These are all reachable, user-facing code paths (not dead code), and the
-silent-failure behavior in WR-01 means they're also the paths most likely
-to hide a real bug if one is introduced later.
-
-**Fix:** add a fixture where the hooks directory (or one hook file within
-it) is made unwritable (e.g. `os.Chmod(hooksDir, 0o500)` on a POSIX CI
-runner, skipped under `t.Skip` when running as root or on Windows) and
-assert on the partial/failure result shape and CLI message.
+Add a regression test analogous to
+`TestInstall_MalformedMarkerBlock_SkipsHookAndLeavesFileUntouched` but
+driving `Remove` against `malformedHookFixture()` (already defined in this
+test file), asserting the hook is absent from `Removed`, present in
+`Errors`, the file is byte-for-byte unchanged, and — via a
+`internal/cli`-level test mirroring
+`TestUninit_UnwritableHooksDir_SurfacesWarning` — that both the standalone
+`githooks remove` command and `uninit`'s D-06 cleanup path surface the
+warning on `stderr` for a malformed fixture, not just an unwritable
+directory.
 
 ## Info
 
-### IN-01: Duplicate pluralization logic between uninit.go and githooks.go
+### IN-01: `WR-02` label reused for two unrelated findings within the same file
 
-**File:** `internal/cli/githooks.go:75-78`, `internal/cli/uninit.go:91-98`
+**File:** `internal/githooks/githooks.go:232, 337`
 
-**Issue:** `cli/uninit.go` defines a shared `plural(n int) string` helper
-used for the "Removed git ... sync hook(s)" message. `cli/githooks.go`'s
-`newGithooksRemoveCmd` reimplements the identical "s"/"" logic inline
-instead of calling it:
+**Issue:** The package already carries a documented "Concurrency (WR-02)"
+finding on `Install`'s and `Remove`'s doc comments (the non-atomic
+read-modify-write race, first recorded several review iterations ago —
+`fe3f4e1`). `b7c38ad`'s new read-error-accumulation fix reuses the same
+`WR-02` label in its inline comment (`// WR-02: mirror Install's CR-02
+distinction...`) for a completely different finding. Both are genuine and
+both are correctly fixed/documented, but a reader searching this file for
+"WR-02" now finds two unrelated defects sharing one ID, from two different
+review cycles' numbering namespaces — a minor traceability nit, not a
+functional issue.
 
-```go
-suffix := "s"
-if len(result.Removed) == 1 {
-    suffix = ""
-}
-```
-
-**Fix:** replace with `plural(len(result.Removed))` (both are in package
-`cli`, so no import is needed).
-
-### IN-02: Watcher-enabled advisory test depends on ambient environment rather than asserting it
-
-**File:** `internal/cli/init_advisory_test.go:15-25`
-
-**Issue:** `TestInitAdvisory_WatcherEnabled` asserts no advisory prints when
-the watcher runs normally, but never explicitly unsets `CODEGRAPH_NO_WATCH`
-or otherwise controls for `watch.DetectWSL()`/`/mnt` state — it relies on
-the ambient test/CI environment happening not to have the env var set and
-not running on a WSL2 `/mnt` drive. A stray exported `CODEGRAPH_NO_WATCH=1`
-in a developer's shell (or a future WSL2 CI runner) would silently flip
-what this test is actually asserting without the test itself failing loudly
-in an obviously-attributable way.
-
-**Fix:** `t.Setenv("CODEGRAPH_NO_WATCH", "")` (or equivalent) at the top of
-the test to make the "watcher enabled" precondition explicit rather than
-ambient.
-
-### IN-03: `githooks status`/TS's `isSyncHookInstalled` report "installed" based on marker text only, not executability
-
-**File:** `internal/githooks/githooks.go:228-244` (`Status`)
-
-**Issue:** `Status` (and, per the RESEARCH.md transcription, TS's
-`isSyncHookInstalled`) only checks whether the hook file exists and
-contains `markerBegin` — it never checks the file's exec bit. Because
-`fsatomic.WriteFile`'s atomic rename and the subsequent best-effort
-`os.Chmod(file, 0o755)` (`internal/githooks/githooks.go:172,215`) are two
-separate, non-atomic steps, a process crash between them (or any external
-`chmod -x` on the hook afterward) leaves a hook file that `githooks status`
-reports as `installed: true` even though git will never actually execute it
-(no `+x`). This is inherited TS-parity behavior, not a Go-introduced
-regression, but is worth documenting as a known limitation since `status`
-is the primary way a user would sanity-check hook health.
-
-**Fix:** optional — `Status` could additionally check
-`info.Mode().Perm()&0o111 != 0` and report a distinct state (e.g.
-"installed but not executable") rather than folding it into a flat
-boolean. Not required for TS parity; purely a robustness improvement if the
-team wants `status` to be a more trustworthy health check than TS's.
+**Fix:** No code change needed; purely a documentation-hygiene item for a
+future pass — e.g. rename the newer inline comment's tag (it has no
+independent ID of its own in this round's numbering) or cross-reference
+which review iteration minted which `WR-02` when either is next touched.
 
 ---
 
