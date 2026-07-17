@@ -237,11 +237,11 @@ Plans:
   3. `init`/`index`/`sync` show progress feedback (spinner/progress) on a TTY, and plain output otherwise (TUI-05)
   4. The golden/MCP output path stays byte-identical — no ANSI ever reaches the agent surface (archtest green + golden-corpus unchanged)
 
-**Plans**: 3 plans
+**Plans**: 1/3 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — TUI-01: fail-closed ANSI-isolation archtest (six guarded packages, /v2 forbidden paths, self-defeat guard) + `internal/cli/present` seam skeleton (`ChoosePresentation`, lipgloss/v2 dep, x/term promoted) [Wave 1]
+- [x] 06-01-PLAN.md — TUI-01: fail-closed ANSI-isolation archtest (six guarded packages, /v2 forbidden paths, self-defeat guard) + `internal/cli/present` seam skeleton (`ChoosePresentation`, lipgloss/v2 dep, x/term promoted) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -295,7 +295,7 @@ Plans:
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
-| 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
+| 6. Rendering Seam & Pretty status/files | v1.0 | 1/3 | In Progress|  |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 

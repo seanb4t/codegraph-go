@@ -61,7 +61,7 @@
 
 ### Human TUI / Rendering (TUI)
 
-- [ ] **TUI-01**: an import-graph archtest fails the build if `charm.land/lipgloss`/`bubbletea`/`bubbles` are reachable from `internal/query` or `internal/mcp` (the ANSI-isolation guarantee; mirrors the existing graphstore/migrate archtests)
+- [x] **TUI-01**: an import-graph archtest fails the build if `charm.land/lipgloss`/`bubbletea`/`bubbles` are reachable from `internal/query` or `internal/mcp` (the ANSI-isolation guarantee; mirrors the existing graphstore/migrate archtests)
 - [ ] **TUI-02**: `status` and `files` render colorized, sectioned output on a TTY (lipgloss) and byte-identical plain output when piped or non-TTY
 - [ ] **TUI-03**: `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global — matching TS (per decision this session)
 - [ ] **TUI-04**: the `daemon` picker (DMON-01) is a bubbletea UI, and every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs)
@@ -159,7 +159,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | HOOK-01 | Phase 5 | Complete |
 | HOOK-02 | Phase 5 | Complete |
 | HOOK-03 | Phase 5 | Complete |
-| TUI-01 | Phase 6 | Pending |
+| TUI-01 | Phase 6 | Complete |
 | TUI-02 | Phase 6 | Pending |
 | TUI-05 | Phase 6 | Pending |
 | DMON-01 | Phase 7 | Pending |
