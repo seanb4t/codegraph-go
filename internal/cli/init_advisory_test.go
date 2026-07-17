@@ -13,6 +13,12 @@ import (
 // would not turn this one red on its own, but its sibling
 // TestInitAdvisory_WatcherDisabled below does.
 func TestInitAdvisory_WatcherEnabled(t *testing.T) {
+	// Make the "watcher enabled" precondition explicit rather than ambient
+	// (IN-02): a stray exported CODEGRAPH_NO_WATCH in a developer's shell
+	// would otherwise silently flip what this test asserts without it
+	// failing loudly in an attributable way.
+	t.Setenv("CODEGRAPH_NO_WATCH", "")
+
 	dir := copyFixture(t)
 
 	out, _, err := execCmd("init", dir)
