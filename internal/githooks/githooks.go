@@ -135,9 +135,17 @@ type RemoveResult struct {
 }
 
 // HookStatus is one hook's install state, as reported by Status.
+// Installed means the file exists and contains the begin marker (TS-parity
+// text-only check, D-03). Executable additionally reports whether the
+// file's exec bit is set (IN-03) — fsatomic.WriteFile's atomic rename and
+// the subsequent best-effort os.Chmod are two separate, non-atomic steps,
+// so a crash between them (or an external `chmod -x`) can leave a hook
+// that's Installed but not actually runnable by git. Executable is only
+// meaningful when Installed is true.
 type HookStatus struct {
-	Name      string
-	Installed bool
+	Name       string
+	Installed  bool
+	Executable bool
 }
 
 // StatusResult reports per-hook install state for all three sync hooks.
@@ -288,8 +296,10 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 // (extends TS isSyncHookInstalled's aggregate some() with per-hook detail,
 // D-11). A hook is Installed when its file exists and contains the begin
 // marker — this includes hooks installed by TS CodeGraph itself, since the
-// markers are byte-identical (D-03). In a non-repo, returns Skipped
-// "not a git repository".
+// markers are byte-identical (D-03). Executable additionally reports the
+// file's exec bit (IN-03, a Go-only robustness addition beyond TS parity —
+// TS's isSyncHookInstalled never checks executability). In a non-repo,
+// returns Skipped "not a git repository".
 func Status(ctx context.Context, projectRoot string) StatusResult {
 	hooksDir := gitmeta.HooksDir(ctx, projectRoot)
 	if hooksDir == "" {
@@ -300,10 +310,14 @@ func Status(ctx context.Context, projectRoot string) StatusResult {
 	for _, hook := range defaultSyncHooks {
 		file := filepath.Join(hooksDir, hook)
 		installed := false
+		executable := false
 		if content, err := os.ReadFile(file); err == nil {
 			installed = strings.Contains(string(content), markerBegin)
+			if info, statErr := os.Stat(file); statErr == nil {
+				executable = info.Mode().Perm()&0o111 != 0
+			}
 		}
-		hooks = append(hooks, HookStatus{Name: hook, Installed: installed})
+		hooks = append(hooks, HookStatus{Name: hook, Installed: installed, Executable: executable})
 	}
 	return StatusResult{Hooks: hooks, HooksDir: hooksDir}
 }

@@ -111,7 +111,11 @@ func newGithooksStatusCmd() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "hooks dir: %s\n", result.HooksDir)
 			for _, h := range result.Hooks {
 				state := "not installed"
-				if h.Installed {
+				if h.Installed && !h.Executable {
+					// IN-03: the marker text is present but the exec bit
+					// isn't — git will never actually run this hook.
+					state = "installed but not executable"
+				} else if h.Installed {
 					state = "installed"
 				}
 				fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", h.Name, state)

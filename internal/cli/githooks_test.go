@@ -110,6 +110,31 @@ func TestGithooksStatus_AfterInstall_ReportsAllThreeInstalled(t *testing.T) {
 	}
 }
 
+// TestGithooksStatus_MarkerPresentButNotExecutable_ReportsDistinctState
+// (IN-03) asserts `githooks status` distinguishes a hook whose marker text
+// is present but whose exec bit isn't set from a fully healthy install —
+// git will never actually run a non-executable hook, so folding this into
+// a flat "installed" would be misleading.
+func TestGithooksStatus_MarkerPresentButNotExecutable_ReportsDistinctState(t *testing.T) {
+	dir := initGitRepo(t, t.TempDir())
+	hooksDir := filepath.Join(dir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	content := "#!/bin/sh\n" + markerBeginBytes + "\nfi\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "post-commit"), []byte(content), 0o644); err != nil { // no exec bit
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	out, _, err := execCmd("githooks", "status", dir)
+	if err != nil {
+		t.Fatalf("githooks status: unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "post-commit: installed but not executable") {
+		t.Fatalf("expected the not-executable status line, got %q", out)
+	}
+}
+
 // TestGithooksRemove_AfterInstall_StripsMarkerFromAllHooks drives
 // `githooks install` then `githooks remove` through the real command tree,
 // asserting removal is reported and the hook files no longer contain the

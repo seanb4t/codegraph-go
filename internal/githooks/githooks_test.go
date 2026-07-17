@@ -589,6 +589,46 @@ func TestStatus_MixedInstalledState_ReportsPerHook(t *testing.T) {
 	}
 }
 
+// TestStatus_MarkerPresentButNotExecutable_ReportsExecutableFalse is the
+// IN-03 regression test: fsatomic.WriteFile's atomic rename and the
+// subsequent best-effort os.Chmod(0755) are two separate steps, so a hook
+// file can end up with the marker text present but the exec bit unset
+// (e.g. an external `chmod -x`, or a crash between the two steps). Status
+// must report Installed=true (marker present, TS-parity check) but
+// Executable=false (Go-only addition) rather than silently claiming full
+// health.
+func TestStatus_MarkerPresentButNotExecutable_ReportsExecutableFalse(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	installedContent := "#!/bin/sh\n" + markerBlock() + "\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(installedContent), 0o644); err != nil { // no exec bit
+		t.Fatalf("WriteFile post-commit: %v", err)
+	}
+
+	status := Status(context.Background(), root)
+
+	found := false
+	for _, h := range status.Hooks {
+		if h.Name != "post-commit" {
+			continue
+		}
+		found = true
+		if !h.Installed {
+			t.Errorf("post-commit Installed = false, want true (marker text is present)")
+		}
+		if h.Executable {
+			t.Errorf("post-commit Executable = true, want false (no exec bit)")
+		}
+	}
+	if !found {
+		t.Fatalf("Status.Hooks missing post-commit entry: %v", status.Hooks)
+	}
+}
+
 func TestStatus_NonRepo_ReturnsSkipped(t *testing.T) {
 	root := t.TempDir()
 
