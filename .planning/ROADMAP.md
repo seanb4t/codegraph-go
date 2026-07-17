@@ -237,7 +237,11 @@ Plans:
   3. `init`/`index`/`sync` show progress feedback (spinner/progress) on a TTY, and plain output otherwise (TUI-05)
   4. The golden/MCP output path stays byte-identical — no ANSI ever reaches the agent surface (archtest green + golden-corpus unchanged)
 
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — TUI-01: fail-closed ANSI-isolation archtest (six guarded packages, /v2 forbidden paths, self-defeat guard) + `internal/cli/present` seam skeleton (`ChoosePresentation`, lipgloss/v2 dep, x/term promoted) [Wave 1]
+- [ ] 06-02-PLAN.md — TUI-02: `present.RenderStatus`/`RenderFiles` styled renderers + CLI isTTY wiring + byte-identity integration test [Wave 2]
+- [ ] 06-03-PLAN.md — TUI-05: hand-rolled stderr progress writer (ticker, no bubbletea/bubbles) wired into init/index/sync [Wave 2]
 **Notes**: Archtest FIRST (fails the build immediately if styling leaks into query/mcp), THEN add the `internal/cli/present` package + the Charm v2 deps. Charm v2 uses the `charm.land/...` vanity import (not `github.com/charmbracelet/...`); TTY-gating via `golang.org/x/term.IsTerminal`. This establishes the rendering seam the Phase 7 interactive components build on.
 **UI hint**: yes
 
