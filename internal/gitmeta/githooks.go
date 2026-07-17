@@ -3,6 +3,7 @@ package gitmeta
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,4 +25,33 @@ func IsGitRepo(ctx context.Context, dir string) bool {
 		return false
 	}
 	return strings.TrimSpace(string(out)) == "true"
+}
+
+// HooksDir returns the git hooks directory for projectRoot, resolved via
+// `git rev-parse --git-path hooks` — the only correct way to honor
+// core.hooksPath and linked worktrees (which share the main checkout's
+// common hooks dir). A relative result is joined against projectRoot; an
+// absolute result (the case for linked worktrees) is passed through
+// unchanged. Unlike CommonDir, this deliberately does NOT call realpath:
+// D-04 specifies resolve-or-passthrough only, not symlink resolution.
+// Degrades to "" on any error, empty output, or non-repo projectRoot.
+func HooksDir(ctx context.Context, projectRoot string) string {
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-path", "hooks")
+	cmd.Dir = projectRoot
+	cmd.Stdin = nil // git must never be able to block on an interactive prompt
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	trimmed := strings.TrimSpace(string(out))
+	if trimmed == "" {
+		return ""
+	}
+	if filepath.IsAbs(trimmed) {
+		return trimmed
+	}
+	return filepath.Join(projectRoot, trimmed)
 }

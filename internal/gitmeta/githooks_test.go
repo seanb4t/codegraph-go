@@ -65,10 +65,32 @@ func TestHooksDir_LinkedWorktreeResolvesToSharedCommonHooksDir(t *testing.T) {
 	if !filepath.IsAbs(wtHooks) {
 		t.Fatalf("HooksDir(%s) = %q, want absolute path (git returns absolute --git-path for linked worktrees)", startPath, wtHooks)
 	}
-	if wtHooks != mainHooks {
+
+	// HooksDir deliberately does not call realpath (D-04: resolve-relative
+	// or passthrough-absolute only). git itself internally realpath-resolves
+	// the absolute --git-path it returns for a linked worktree, while
+	// mainHooks here is built by joining the caller-supplied indexRoot
+	// (unresolved). On a host where TMPDIR sits behind a symlink (e.g.
+	// macOS /var -> /private/var) the two raw strings can differ only by
+	// that symlink hop, so compare through EvalSymlinks to assert the
+	// functional property (same underlying directory) without smuggling
+	// realpath into HooksDir itself.
+	resolvedMain, err := filepath.EvalSymlinks(mainHooks)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", mainHooks, err)
+	}
+	resolvedWt, err := filepath.EvalSymlinks(wtHooks)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", wtHooks, err)
+	}
+	if resolvedWt != resolvedMain {
 		t.Fatalf("HooksDir(%s) = %q, want the shared common hooks dir %q", startPath, wtHooks, mainHooks)
 	}
-	if !strings.HasPrefix(wtHooks, indexRoot) {
+	resolvedIndexRoot, err := filepath.EvalSymlinks(indexRoot)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", indexRoot, err)
+	}
+	if !strings.HasPrefix(resolvedWt, resolvedIndexRoot) {
 		t.Fatalf("HooksDir(%s) = %q, want it to live under the main checkout %q", startPath, wtHooks, indexRoot)
 	}
 }
