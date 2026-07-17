@@ -86,3 +86,15 @@ All phase behaviors have automated verification.
 | Escalated | 0 |
 
 All 7 mapped tests (6 planned + 1 fix-pass closure regression) re-run fresh (`-count=1`) and green. HYG-01 covered by 04-01 unit tests + 04-03 integration noise-absence; HYG-02 covered by 04-02 archtests (incl. transitive-closure regression) + 04-03 raw-stdio frame purity. Zero manual-only items — the phase's scope is fully objectively verifiable.
+
+---
+
+## Validation Audit 2026-07-17 (re-audit)
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Re-audit confirms the 2026-07-16 validation still holds. All 7 mapped `-run` patterns re-run fresh (`-count=1`), each guarded against the no-tests-ran false-green (all executed real tests): quietLogger 4, Open injects+silences 2, detector self-test 1, 6-pkg archtest 1, CR-01 transitive-closure regression 1, MCP stdout purity 1, sync stderr noise-absence 1 — all pass. `nyquist_compliant: true` unchanged. No auditor spawn (zero gaps).
