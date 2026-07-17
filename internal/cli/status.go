@@ -2,9 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -15,9 +18,10 @@ import (
 // query.RenderStatusText (CodeGraph Status / Project: / the verbose
 // worktree warning when present / Index Statistics: / Nodes by Kind: /
 // Files by Language: / the live staleness/reindex advisory) — replacing
-// the old terse `backend=… files=… stale=…` one-liner. Phase 6 (TUI-02)
-// will colorize this layout with lipgloss/TTY-gating; this plan lays down
-// content, sections, and wording only — plain text.
+// the old terse `backend=… files=… stale=…` one-liner. On a real TTY
+// (and NO_COLOR unset), present.RenderStatus renders the same content
+// lipgloss-styled instead (TUI-02, D-03/D-04/D-05); piped/non-TTY output
+// stays byte-identical to this plain path.
 // --json emits query.MarshalStatusJSON's StatusResult shape.
 // That function body is UNCHANGED by this plan — it is shared with the
 // CLI --json contract and the golden-parity oracle (D-16/D-17).
@@ -52,6 +56,10 @@ func newStatusCmd() *cobra.Command {
 					return err
 				}
 				return writeJSONLine(cmd, data)
+			}
+
+			if present.ChoosePresentation(term.IsTerminal(int(os.Stdout.Fd())), os.Getenv("NO_COLOR")) {
+				return present.RenderStatus(result, start, cmd.OutOrStdout())
 			}
 
 			// RenderStatusText already embeds the verbose worktree warning
