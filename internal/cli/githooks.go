@@ -74,12 +74,8 @@ func newGithooksRemoveCmd() *cobra.Command {
 				fmt.Fprintln(cmd.OutOrStdout(), "No git sync hooks were installed — nothing to remove.")
 				return nil
 			}
-			suffix := "s"
-			if len(result.Removed) == 1 {
-				suffix = ""
-			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Removed git %s sync hook%s\n",
-				strings.Join(result.Removed, ", "), suffix)
+				strings.Join(result.Removed, ", "), plural(len(result.Removed)))
 			return nil
 		},
 	}
