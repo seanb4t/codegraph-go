@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 5
 current_phase_name: Git Sync Hooks
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-07-17T01:16:22.426Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-07-17T01:21:54.081Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
+last_activity_desc: Phase 5 execution started
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 32
-  completed_plans: 32
+  total_plans: 37
+  completed_plans: 33
   percent: 50
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 04 — Output Hygiene
+**Current focus:** Phase 5 — Git Sync Hooks
 
 ## Current Position
 
-Phase: 5 — Git Sync Hooks
-Plan: Not started
+Phase: 5 (Git Sync Hooks) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-16 — Phase 4 complete, transitioned to Phase 5
+Last activity: 2026-07-16 — Phase 5 execution started
 
-Progress: [██████████] 100%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
@@ -95,6 +95,7 @@ Progress: [██████████] 100%
 | Phase 04 P01 | 4min | 2 tasks | 3 files |
 | Phase 04-output-hygiene P02 | 9min | 2 tasks | 2 files |
 | Phase 04-output-hygiene P03 | 8min | 2 tasks | 2 files |
+| Phase 05 P01 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -165,6 +166,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 4]: D-08 mutation-proof wiring test redirects stdlib log's default output into the same buffer as diagWriter, since Pebble's DefaultLogger writes via log.Output directly and never touches diagWriter — capturing diagWriter alone would vacuously pass whether or not the Open seam is wired
 - [Phase 04-output-hygiene]: CODEGRAPH_MCP_TOOLS=status allowlisted on the spawned serve --mcp test process so the D-06a tools/call to codegraph_status actually registers and opens the store — companion tools are allowlist-gated (MCP-02/D-08a); codegraph_explore alone needs no allowlist entry
 - [Phase 04-output-hygiene]: sync (not status) drives D-09's CLI-noise-absence check — exercises strictly more of Pebble's Infof surface (flush + possible compaction) per RESEARCH Open Question #1
+- [Phase ?]: [Phase 5]: D-09 narrowing honored — internal/fsatomic extracts only atomicWriteFile, marker-splice helpers stay in internal/agents untouched
 
 ### Pending Todos
 
@@ -192,9 +194,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-17T00:47:26.537Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-git-sync-hooks/05-CONTEXT.md
+Last session: 2026-07-17T01:21:54.074Z
+Stopped at: Completed 05-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

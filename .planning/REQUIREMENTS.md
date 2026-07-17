@@ -50,8 +50,8 @@
 
 ### Git Sync Hooks (HOOK)
 
-- [ ] **HOOK-01**: `codegraph githooks install` writes marker-fenced `post-commit`/`post-merge`/`post-checkout` hooks that background-run `codegraph sync`, guarded by `command -v codegraph`, idempotent (replace-in-place), preserving any user hook content
-- [ ] **HOOK-02**: `codegraph githooks remove` strips only codegraph's marker block (preserving user content); `githooks status` reports install state
+- [x] **HOOK-01**: `codegraph githooks install` writes marker-fenced `post-commit`/`post-merge`/`post-checkout` hooks that background-run `codegraph sync`, guarded by `command -v codegraph`, idempotent (replace-in-place), preserving any user hook content
+- [x] **HOOK-02**: `codegraph githooks remove` strips only codegraph's marker block (preserving user content); `githooks status` reports install state
 - [ ] **HOOK-03**: hooks are surfaced as the fallback for when the watcher is disabled (WSL2 / `CODEGRAPH_NO_WATCH`), matching TS's narrower trigger — not an always-on feature
 
 ### Output Hygiene (HYG)
@@ -156,8 +156,8 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | WATCH-04 | Phase 3 | Complete |
 | HYG-01 | Phase 4 | Complete |
 | HYG-02 | Phase 4 | Complete |
-| HOOK-01 | Phase 5 | Pending |
-| HOOK-02 | Phase 5 | Pending |
+| HOOK-01 | Phase 5 | Complete |
+| HOOK-02 | Phase 5 | Complete |
 | HOOK-03 | Phase 5 | Pending |
 | TUI-01 | Phase 6 | Pending |
 | TUI-02 | Phase 6 | Pending |
