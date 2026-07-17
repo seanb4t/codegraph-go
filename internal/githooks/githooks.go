@@ -334,6 +334,19 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 		file := filepath.Join(hooksDir, hook)
 		original, err := os.ReadFile(file)
 		if err != nil {
+			// WR-02: mirror Install's CR-02 distinction. fs.ErrNotExist is
+			// the expected "hook never installed" case — silent, correct.
+			// Every other error (permission denied, a transient I/O error,
+			// the file removed out from under us between directory listing
+			// and read) means we can't verify what's on disk; accumulate an
+			// error instead of silently discarding it so callers (both the
+			// standalone `githooks remove` command and uninit's D-06
+			// best-effort cleanup) can surface it via printHookErrors,
+			// rather than reporting a state indistinguishable from "never
+			// installed by codegraph".
+			if !errors.Is(err, fs.ErrNotExist) {
+				errs = append(errs, fmt.Errorf("%s: could not read existing hook file: %w", hook, err))
+			}
 			continue
 		}
 		// WR-05/IN-04: run stripMarkerBlock unconditionally instead of a

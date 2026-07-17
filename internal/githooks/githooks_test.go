@@ -993,6 +993,71 @@ func TestInstall_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError(t
 	}
 }
 
+// TestRemove_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError
+// is the WR-02 regression test, mirroring
+// TestInstall_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError:
+// an installed hook file whose read permission is revoked must not be
+// silently skipped with zero signal. Remove must skip the hook (write
+// nothing, leave content untouched — the existing, correct half of the
+// behavior) but now also accumulate an error naming it in
+// RemoveResult.Errors, mirroring Install's CR-02 handling of the identical
+// read failure. Skipped under root and on Windows, matching the existing
+// skip convention for permission-based tests in this file.
+func TestRemove_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses permission bits")
+	}
+
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	installedContent := "#!/bin/sh\n" + markerBlock() + "\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(installedContent), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.Chmod(file, 0o000); err != nil {
+		t.Fatalf("Chmod(%s, 0000): %v", file, err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(file, 0o644) })
+
+	result := Remove(context.Background(), root)
+
+	for _, h := range result.Removed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Removed (unreadable existing file): %v", result.Removed)
+		}
+	}
+	foundErr := false
+	for _, e := range result.Errors {
+		if strings.Contains(e.Error(), "post-commit") {
+			foundErr = true
+		}
+	}
+	if !foundErr {
+		t.Fatalf("Errors = %v, want an entry naming post-commit", result.Errors)
+	}
+
+	// Restore read permission so the test itself can verify content
+	// survived — the assertion under test is that Remove never destroyed
+	// it, not that the file stays permanently unreadable.
+	if err := os.Chmod(file, 0o644); err != nil {
+		t.Fatalf("Chmod(%s, 0644) for verification: %v", file, err)
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != installedContent {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), installedContent)
+	}
+}
+
 // TestRemove_DanglingEndMarkerOnly_NotReportedRemoved is the WR-05
 // regression test: a hand-edited hook file containing only a dangling end
 // marker (no begin marker anywhere) must not be silently treated as "never
