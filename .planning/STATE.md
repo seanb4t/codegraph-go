@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 5
 current_phase_name: Git Sync Hooks
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-07-17T01:21:54.081Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-07-17T01:25:45.123Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 5 execution started
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 37
-  completed_plans: 33
+  completed_plans: 34
   percent: 50
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 5 (Git Sync Hooks) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-16 — Phase 5 execution started
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -96,6 +96,7 @@ Progress: [█████████░] 89%
 | Phase 04-output-hygiene P02 | 9min | 2 tasks | 2 files |
 | Phase 04-output-hygiene P03 | 8min | 2 tasks | 2 files |
 | Phase 05 P01 | 6min | 2 tasks | 3 files |
+| Phase 05 P02 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase 04-output-hygiene]: CODEGRAPH_MCP_TOOLS=status allowlisted on the spawned serve --mcp test process so the D-06a tools/call to codegraph_status actually registers and opens the store — companion tools are allowlist-gated (MCP-02/D-08a); codegraph_explore alone needs no allowlist entry
 - [Phase 04-output-hygiene]: sync (not status) drives D-09's CLI-noise-absence check — exercises strictly more of Pebble's Infof surface (flush + possible compaction) per RESEARCH Open Question #1
 - [Phase ?]: [Phase 5]: D-09 narrowing honored — internal/fsatomic extracts only atomicWriteFile, marker-splice helpers stay in internal/agents untouched
+- [Phase ?]: gitmeta.IsGitRepo/HooksDir are the sole new git-exec seam in Phase 5 — internal/githooks (05-03) consumes them, never shells out to git directly; HooksDir honors core.hooksPath and linked worktrees without realpath (D-04)
 
 ### Pending Todos
 
@@ -194,8 +196,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-17T01:21:54.074Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-07-17T01:25:45.116Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

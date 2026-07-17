@@ -206,13 +206,13 @@ Plans:
   2. `codegraph githooks remove` strips only codegraph's marker block (preserving user content), and `githooks status` reports install state (HOOK-02)
   3. Hooks are surfaced as the fallback for when the watcher is disabled (WSL2 / `CODEGRAPH_NO_WATCH`), matching TS's narrower trigger — not an always-on feature (HOOK-03)
 
-**Plans**: 1/5 plans executed
+**Plans**: 2/5 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 05-01-PLAN.md — `internal/fsatomic` extraction of `atomicWriteFile` + `internal/agents` rewire, zero behavior change (D-09)
-- [ ] 05-02-PLAN.md — `gitmeta.IsGitRepo`/`HooksDir` (`git rev-parse --git-path hooks`), honoring `core.hooksPath` + linked worktrees (D-04/D-10)
+- [x] 05-02-PLAN.md — `gitmeta.IsGitRepo`/`HooksDir` (`git rev-parse --git-path hooks`), honoring `core.hooksPath` + linked worktrees (D-04/D-10)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -284,7 +284,7 @@ Plans:
 | 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
-| 5. Git Sync Hooks | v1.0 | 1/5 | In Progress|  |
+| 5. Git Sync Hooks | v1.0 | 2/5 | In Progress|  |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 0/TBD | Not started | - |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
