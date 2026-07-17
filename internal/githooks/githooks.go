@@ -8,7 +8,9 @@ package githooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -233,7 +235,9 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 	for _, hook := range defaultSyncHooks {
 		file := filepath.Join(hooksDir, hook)
 		var content string
-		if existing, err := os.ReadFile(file); err == nil {
+		existing, err := os.ReadFile(file)
+		switch {
+		case err == nil:
 			base := string(existing)
 			stripped, ok := stripMarkerBlock(base)
 			if !ok {
@@ -255,8 +259,23 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 			} else {
 				content = "#!/bin/sh\n" + block + "\n"
 			}
-		} else {
+		case errors.Is(err, fs.ErrNotExist):
 			content = "#!/bin/sh\n" + block + "\n"
+		default:
+			// CR-02: any other read error (permission denied, transient
+			// I/O error, file removed out from under us between stat and
+			// read) means we cannot verify what's actually in the file.
+			// os.Rename (inside fsatomic.WriteFile) only needs directory
+			// write permission, not read/write on the target itself, so
+			// treating this the same as "file absent" would silently
+			// destroy an existing, unreadable hook's content and report a
+			// clean success. Skip this hook, accumulate the error, and
+			// leave whatever is on disk untouched — same "recoverable
+			// skip beats silent data loss" contract as the malformed-marker
+			// branch above and Remove's unconditional-continue on read
+			// error.
+			errs = append(errs, fmt.Errorf("%s: could not read existing hook file: %w", hook, err))
+			continue
 		}
 		if err := fsatomic.WriteFile(file, content); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", hook, err))

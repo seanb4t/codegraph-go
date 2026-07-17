@@ -898,3 +898,67 @@ func TestInstall_ThenRemoveOnMalformedFile_UserContentSurvives(t *testing.T) {
 		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), malformed)
 	}
 }
+
+// TestInstall_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError
+// is the CR-02 (iteration-3) regression test: an existing hook file that
+// exists but can't be read (permission bit revoked) must not be silently
+// treated as "file absent" and overwritten with a fresh seed block. Install
+// must skip the hook, accumulate an error naming it, and leave the file's
+// content byte-for-byte untouched — reproducing the review's exact repro
+// (chmod 0000 a hook seeded with sentinel content, then Install). Skipped
+// under root and on Windows, matching the existing skip convention for
+// permission-based tests in this file.
+func TestInstall_UnreadableExistingFile_LeavesFileUntouchedAndAccumulatesError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits don't apply on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("running as root bypasses permission bits")
+	}
+
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	sentinel := "#!/bin/sh\necho SUPER-IMPORTANT-USER-CONTENT\n"
+	file := filepath.Join(hooksDir, "post-commit")
+	if err := os.WriteFile(file, []byte(sentinel), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if err := os.Chmod(file, 0o000); err != nil {
+		t.Fatalf("Chmod(%s, 0000): %v", file, err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(file, 0o644) })
+
+	result := Install(context.Background(), root)
+
+	for _, h := range result.Installed {
+		if h == "post-commit" {
+			t.Fatalf("post-commit should not be in Installed (unreadable existing file): %v", result.Installed)
+		}
+	}
+	foundErr := false
+	for _, e := range result.Errors {
+		if strings.Contains(e.Error(), "post-commit") {
+			foundErr = true
+		}
+	}
+	if !foundErr {
+		t.Fatalf("Errors = %v, want an entry naming post-commit", result.Errors)
+	}
+
+	// Restore read permission so the test itself can verify content
+	// survived — the assertion under test is that Install never destroyed
+	// it, not that the file stays permanently unreadable.
+	if err := os.Chmod(file, 0o644); err != nil {
+		t.Fatalf("Chmod(%s, 0644) for verification: %v", file, err)
+	}
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(got) != sentinel {
+		t.Fatalf("post-commit content changed = %q, want unchanged %q", string(got), sentinel)
+	}
+}
