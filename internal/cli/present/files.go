@@ -17,10 +17,12 @@ import (
 func writeFileTree(b *strings.Builder, nodes []*query.FileTreeNode, indent string) {
 	for _, n := range nodes {
 		if n.IsDir {
-			fmt.Fprintf(b, "%s%s\n", indent, headerStyle.Render(n.Name+"/"))
+			// n.Name is filesystem-derived and may be adversarial — strip
+			// control characters before it reaches the terminal (CR-01).
+			fmt.Fprintf(b, "%s%s\n", indent, headerStyle.Render(sanitizeControl(n.Name)+"/"))
 			writeFileTree(b, n.Children, indent+"  ")
 		} else {
-			fmt.Fprintf(b, "%s%s (%s)\n", indent, n.Name, labelStyle.Render(n.Language))
+			fmt.Fprintf(b, "%s%s (%s)\n", indent, sanitizeControl(n.Name), labelStyle.Render(n.Language))
 		}
 	}
 }
@@ -38,7 +40,9 @@ func RenderFiles(r query.FilesResult, w io.Writer) error {
 		writeFileTree(&b, r.Tree, "")
 	} else {
 		for _, f := range r.Files {
-			fmt.Fprintf(&b, "%s (%s)\n", f.Path, labelStyle.Render(f.Language))
+			// f.Path is filesystem-derived and may be adversarial — strip
+			// control characters before it reaches the terminal (CR-01).
+			fmt.Fprintf(&b, "%s (%s)\n", sanitizeControl(f.Path), labelStyle.Render(f.Language))
 		}
 	}
 	_, err := io.WriteString(w, b.String())
