@@ -97,21 +97,20 @@ func newAgentPickerModel(all []agents.AgentTarget, detection map[agents.TargetID
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
 	l.SetShowHelp(false)
-	l.DisableQuitKeybindings()
 	return agentPickerModel{list: l, delegate: delegate, targets: all}
 }
 
 func (m agentPickerModel) Init() tea.Cmd { return nil }
 
-// Update intercepts enter/quit keys itself — BEFORE forwarding to
-// list.Model.Update — so RunAgentPicker's caller can distinguish "confirm"
-// from "cancel" deterministically, rather than relying on list.Model's own
-// Quit keymap (bound to the same q/esc keys, but with no way for Update to
-// tell confirmed apart from canceled). list.Model's own quit keybindings are
-// disabled (newAgentPickerModel) so q/esc always reach this switch instead
-// of being swallowed by list.Model first. Every other message (including
-// the space toggle) is forwarded to list.Model.Update, which itself
-// dispatches to checkboxDelegate.Update per bubbles/v2/list's own contract.
+// Update intercepts enter/quit keys itself BEFORE ever forwarding a message
+// to list.Model.Update — so RunAgentPicker's caller can distinguish
+// "confirm" from "cancel" deterministically, rather than relying on
+// list.Model's own Quit keymap (bound to the same q/esc keys, but with no
+// way for Update to tell confirmed apart from canceled). Because this
+// switch returns immediately for enter/q/esc/ctrl+c, list.Model never even
+// sees those keys — only the space toggle (and everything else) reaches
+// list.Model.Update, which itself dispatches to checkboxDelegate.Update per
+// bubbles/v2/list's own contract.
 func (m agentPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
