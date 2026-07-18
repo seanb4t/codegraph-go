@@ -39,7 +39,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 - [x] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch (completed 2026-07-16)
 - [x] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC (completed 2026-07-16)
 - [x] **Phase 5: Git Sync Hooks** - Marker-fenced, idempotent post-commit/merge/checkout sync hooks as the watcher-disabled fallback (completed 2026-07-17)
-- [ ] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped)
+- [x] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped) (completed 2026-07-17)
 - [ ] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped
 - [ ] **Phase 8: Surface Reconciliation & Signed v1.0.0 Release** - Flag parity + Charm-dep audit + first signed `v1.0.0`, retiring the "not yet drop-in" caveat
 
@@ -295,7 +295,7 @@ Plans:
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
-| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | In Progress|  |
+| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 
