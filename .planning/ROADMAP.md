@@ -264,13 +264,13 @@ Plans:
   4. `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global (TUI-03)
   5. Every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs), and git-hook install→edit→remove is byte-invariant — both tested against piped streams (TUI-04, TEST-03)
 
-**Plans**: 1/8 plans executed
+**Plans**: 2/8 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 07-01-PLAN.md — TUI foundation: add bubbletea/v2 + bubbles/v2, new internal/cli/tui pkg + InteractiveAllowed dual-TTY gate, archtest stays green (TUI-04)
-- [ ] 07-02-PLAN.md — Charm-free global daemon registry: Record + Register/Deregister/List with self-heal via lock.go isStale (DMON-04)
+- [x] 07-02-PLAN.md — Charm-free global daemon registry: Record + Register/Deregister/List with self-heal via lock.go isStale (DMON-04)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -321,7 +321,7 @@ Plans:
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 1/8 | In Progress|  |
+| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 2/8 | In Progress|  |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 
 ## Backlog

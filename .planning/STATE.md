@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 7
 current_phase_name: Interactive TUI — Daemon Picker & Install Multi-Select
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-07-18T19:19:31.315Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-07-18T19:26:27.974Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 48
-  completed_plans: 41
+  completed_plans: 42
   percent: 75
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 7 (Interactive TUI — Daemon Picker & Install Multi-Select) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 7 execution started
 
-Progress: [█████████░] 85%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -104,6 +104,7 @@ Progress: [█████████░] 85%
 | Phase 06 P02 | 9min | 3 tasks | 8 files |
 | Phase 06 P03 | 4min | 2 tasks | 6 files |
 | Phase 07 P01 | 20min | 2 tasks | 5 files |
+| Phase 07 P02 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: 06-02: x/term promoted direct via go mod tidy -e; files.go WorktreeNotice factored into shared notice var (byte-identical plain branch); integration test pins --path to avoid an os.Getwd()/$PWD symlink-resolution artifact
 - [Phase ?]: [Phase 6] 06-03: hand-rolled stderr Progress spinner (time.Ticker + lipgloss, no bubbles/bubbletea) wired into init/index/sync behind ChoosePresentation gated on os.Stderr's fd; Task 2's reachability tests documented as a structural TDD exception matching 06-02's precedent (non-TTY harness can't exercise the real spinner path)
 - [Phase ?]: [Phase 7] internal/cli/tui/doc.go anchor-blank-imports charm.land/bubbletea/v2 + bubbles/v2 in 07-01 to keep go mod tidy from pruning them before 07-06/07-07 add real Model usage
+- [Phase ?]: [Phase 07-02]: registryDir implemented as a package-level func var (onSync*/onWatchOpen test-seam convention) rather than a threaded parameter
+- [Phase ?]: [Phase 07-02]: Register skips an explicit os.MkdirAll — fsatomic.WriteFile already creates the target directory
 
 ### Pending Todos
 
@@ -211,8 +214,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-18T19:19:31.308Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-07-18T19:26:27.967Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
