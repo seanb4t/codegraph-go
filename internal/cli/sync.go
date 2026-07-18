@@ -42,7 +42,7 @@ func newSyncCmd() *cobra.Command {
 			// via the shared helper (WR-04 06-REVIEW.md, see
 			// progress_cli.go). Stop is deferred so teardown runs even on
 			// indexer.Sync error.
-			defer startProgress(quiet, "syncing")()
+			defer startProgress(cmd.Context(), quiet, "syncing")()
 
 			stats, err := indexer.Sync(root, storeDir, indexer.Options{
 				Workers: workers,

@@ -64,7 +64,7 @@ func newIndexCmd() *cobra.Command {
 			// TUI-05/D-07/D-08: same TTY-gated spinner as init.go, via the
 			// shared helper (WR-04 06-REVIEW.md, see progress_cli.go). Stop
 			// is deferred so teardown runs even on indexer.Run error.
-			defer startProgress(quiet, "indexing")()
+			defer startProgress(cmd.Context(), quiet, "indexing")()
 
 			stats, err := indexer.Run(root, storeDir, indexer.Options{
 				Workers: workers,
