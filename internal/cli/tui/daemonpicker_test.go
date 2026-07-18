@@ -2,6 +2,8 @@ package tui
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -64,6 +66,50 @@ func TestDaemonPickerModel_CurrentRepoFirstOrdering(t *testing.T) {
 	}
 	if m.records[1].RepoRoot != "/repo/a" || m.records[2].RepoRoot != "/repo/b" {
 		t.Fatalf("secondary order not stable by RepoRoot ascending: got %v", m.records)
+	}
+}
+
+// TestSortRecordsCurrentFirst_NormalizesSymlinks pins WR-03 (07-REVIEW.md):
+// the current-repo comparison must resolve symlinks the same way
+// internal/daemon/stop.go's StopMatching does, so a record whose RepoRoot
+// was recorded through a differently-spelled (but same-target) symlink
+// path still sorts first — matching macOS's /tmp -> /private/tmp or any
+// project accessed via two symlink paths.
+func TestSortRecordsCurrentFirst_NormalizesSymlinks(t *testing.T) {
+	real := t.TempDir()
+	linkParent := t.TempDir()
+	link := filepath.Join(linkParent, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink unsupported in this environment: %v", err)
+	}
+
+	// The daemon's own record was written through the symlinked path;
+	// currentRepo is resolved to the real path (or vice versa — either
+	// spelling must match the other).
+	records := []daemon.Record{
+		rec("/other/repo", 9),
+		rec(link, 1),
+	}
+
+	sorted := SortRecordsCurrentFirst(records, real)
+	if sorted[0].RepoRoot != link {
+		t.Fatalf("sorted[0].RepoRoot = %q, want %q (current repo first, via symlink normalization)", sorted[0].RepoRoot, link)
+	}
+}
+
+// TestSortRecordsCurrentFirst_SymlinkEvalErrorDegradesToRawString pins
+// WR-03's fallback: resolveRepoRoot's EvalSymlinks failure (e.g. a
+// recorded RepoRoot that no longer exists on disk) must degrade to plain
+// string comparison rather than panicking or breaking the whole sort.
+func TestSortRecordsCurrentFirst_SymlinkEvalErrorDegradesToRawString(t *testing.T) {
+	records := []daemon.Record{
+		rec("/nonexistent/repo/b", 2),
+		rec("/nonexistent/repo/current", 1),
+	}
+
+	sorted := SortRecordsCurrentFirst(records, "/nonexistent/repo/current")
+	if sorted[0].RepoRoot != "/nonexistent/repo/current" {
+		t.Fatalf("sorted[0].RepoRoot = %q, want the current repo first even when EvalSymlinks errors", sorted[0].RepoRoot)
 	}
 }
 

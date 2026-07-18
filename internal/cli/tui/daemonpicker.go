@@ -53,28 +53,72 @@ func (d daemonDelegate) Render(w io.Writer, m list.Model, index int, item list.I
 	fmt.Fprintf(w, "%s%s (pid %d, up %s)\n", cursor, filepath.Base(di.record.RepoRoot), di.record.PID, age)
 }
 
+// resolveRepoRoot normalizes p via filepath.EvalSymlinks for comparison —
+// duplicated from internal/daemon/stop.go's identically-named, unexported
+// helper (WR-03, 07-REVIEW.md) rather than imported, since it isn't
+// exported and this project's existing cross-package-duplication
+// precedent (e.g. internal/gitmeta/worktree.go's realpath,
+// internal/agents/cursor.go's inline EvalSymlinks) already normalizes
+// symlinked paths this same way per-package rather than sharing one
+// helper. Best-effort: if EvalSymlinks errors (e.g. the path no longer
+// exists on disk), the original string is returned as-is, so a genuine
+// mismatch degrades to plain string comparison instead of breaking
+// ordering.
+func resolveRepoRoot(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return p
+}
+
 // SortRecordsCurrentFirst orders records with the current repo's own
 // record(s) first, then a stable secondary order by (RepoRoot, PID) — the
 // DMON-01/TUI-04 ordering both this Model and daemon.go's plain non-TTY
 // list (D-12) must share, so the two presentations never diverge. Exported
 // so internal/cli's bare `daemon` RunE can reuse the exact same ordering
-// for its plain-list fallback. currentRepo is compared by exact string
-// equality — callers pass an already-absolutized path, matching how
-// daemon.Run itself records RepoRoot (filepath.Abs'd in daemon.New).
+// for its plain-list fallback. currentRepo is compared via resolveRepoRoot
+// (WR-03, 07-REVIEW.md) — the same filepath.EvalSymlinks normalization
+// internal/daemon/stop.go's StopMatching uses to target a daemon — so the
+// "is this my repo" ordering answer never diverges from the "is this my
+// repo" targeting answer just because the two sides of a symlinked path
+// (e.g. macOS's /tmp -> /private/tmp) were spelled differently. Secondary
+// ordering (RepoRoot, PID) intentionally still compares the raw RepoRoot
+// strings, not resolved ones — records within the same actual repo could
+// have been recorded through different symlink spellings, and stable raw
+// string ordering is enough to keep the secondary sort deterministic
+// without adding another resolveRepoRoot call per comparison.
 func SortRecordsCurrentFirst(records []daemon.Record, currentRepo string) []daemon.Record {
-	sorted := make([]daemon.Record, len(records))
-	copy(sorted, records)
-	sort.SliceStable(sorted, func(i, j int) bool {
-		iCur := sorted[i].RepoRoot == currentRepo
-		jCur := sorted[j].RepoRoot == currentRepo
+	resolvedCurrent := resolveRepoRoot(currentRepo)
+	// Pair each record with its resolved RepoRoot up front, rather than
+	// re-resolving inside the comparator — sort.SliceStable's comparator
+	// runs O(n log n) times, and re-resolving per-comparison would
+	// redundantly re-stat the same handful of paths via EvalSymlinks. The
+	// pairing is sorted as one unit (not two parallel slices) specifically
+	// so the resolved-path index never desyncs from its record across the
+	// swaps sort.SliceStable performs.
+	type entry struct {
+		record   daemon.Record
+		resolved string
+	}
+	entries := make([]entry, len(records))
+	for i, r := range records {
+		entries[i] = entry{record: r, resolved: resolveRepoRoot(r.RepoRoot)}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		iCur := entries[i].resolved == resolvedCurrent
+		jCur := entries[j].resolved == resolvedCurrent
 		if iCur != jCur {
 			return iCur
 		}
-		if sorted[i].RepoRoot != sorted[j].RepoRoot {
-			return sorted[i].RepoRoot < sorted[j].RepoRoot
+		if entries[i].record.RepoRoot != entries[j].record.RepoRoot {
+			return entries[i].record.RepoRoot < entries[j].record.RepoRoot
 		}
-		return sorted[i].PID < sorted[j].PID
+		return entries[i].record.PID < entries[j].record.PID
 	})
+	sorted := make([]daemon.Record, len(entries))
+	for i, e := range entries {
+		sorted[i] = e.record
+	}
 	return sorted
 }
 
