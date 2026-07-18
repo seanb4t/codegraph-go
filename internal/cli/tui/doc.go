@@ -10,15 +10,9 @@
 // whole internal/cli prefix), so importing bubbletea/bubbles here can never
 // leak into the serve-reachable surface (internal/daemon, internal/mcp,
 // etc.) by construction.
+//
+// 07-01 anchored bubbles/bubbletea here via blank imports so `go mod tidy`
+// wouldn't prune the requires before a real importer existed; both
+// agentpicker.go (07-06) and daemonpicker.go (07-07) now import them
+// directly, so the anchor is no longer needed.
 package tui
-
-// Anchor imports: 07-01 adds the two interactive dependencies to go.mod
-// ahead of the bubbletea Models that use them for real (07-06's daemon
-// picker, 07-07's install/uninstall multi-select). Without a real importer
-// yet, `go mod tidy` would otherwise prune these requires as unused. Remove
-// this file's blank imports once daemonpicker.go/agentpicker.go land and
-// import these packages directly.
-import (
-	_ "charm.land/bubbles/v2"
-	_ "charm.land/bubbletea/v2"
-)
