@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/githooks"
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
@@ -57,6 +59,19 @@ func newInitCmd() *cobra.Command {
 			}
 			if err := writeGitignoreHint(codegraphDir); err != nil {
 				return err
+			}
+
+			// TUI-05/D-07/D-08: TTY-gated spinner feedback on stderr for the
+			// long-running indexer.Run call — the same ChoosePresentation
+			// gate status/files use (D-03/D-04/D-05), but evaluated against
+			// os.Stderr's fd since progress writes to stderr, never stdout.
+			// --quiet also suppresses the spinner (existing --quiet
+			// contract). Stop is deferred so teardown runs even if
+			// indexer.Run errors.
+			if !quiet && present.ChoosePresentation(term.IsTerminal(int(os.Stderr.Fd())), os.Getenv("NO_COLOR")) {
+				prog := present.NewProgress(os.Stderr)
+				prog.Start("indexing")
+				defer prog.Stop()
 			}
 
 			stats, err := indexer.Run(root, storeDir, indexer.Options{

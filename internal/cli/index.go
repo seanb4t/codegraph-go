@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/present"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
@@ -59,6 +61,15 @@ func newIndexCmd() *cobra.Command {
 			}
 			if err := os.MkdirAll(storeDir, 0o755); err != nil {
 				return err
+			}
+
+			// TUI-05/D-07/D-08: same TTY-gated spinner as init.go — see its
+			// comment for the full rationale (stderr fd, --quiet respected,
+			// Stop deferred so teardown runs even on indexer.Run error).
+			if !quiet && present.ChoosePresentation(term.IsTerminal(int(os.Stderr.Fd())), os.Getenv("NO_COLOR")) {
+				prog := present.NewProgress(os.Stderr)
+				prog.Start("indexing")
+				defer prog.Stop()
 			}
 
 			stats, err := indexer.Run(root, storeDir, indexer.Options{
