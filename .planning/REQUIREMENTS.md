@@ -80,7 +80,7 @@
 
 - [x] **TEST-01**: a behavioral fixture harness diffs `explore`/`node`/`status` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings — on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot
 - [x] **TEST-02**: worktree detection has fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/` layout, and symlinked paths
-- [ ] **TEST-03**: git-hook install→edit→remove is byte-invariant, and interactive TUI components are tested against piped streams (never hang)
+- [x] **TEST-03**: git-hook install→edit→remove is byte-invariant, and interactive TUI components are tested against piped streams (never hang)
 - [x] **TEST-04**: an integration harness **spawns the release binary as a subprocess** and drives its real transports end-to-end — the CLI via argv and the MCP server via a real stdio JSON-RPC session (`initialize` → `tools/call`) — asserting reachability that in-process/unit tests structurally cannot. Motivated by Phase-2 CR-01, where the MCP worktree notice was dead code in production for the whole phase yet every in-process `BuildServer`→`CallTool` test passed (in-process bypasses `serve.go`'s cwd/argv → path-derivation → handler wiring, the exact seam that broke). Anchor case: from inside a `.claude/worktrees/<name>/` borrowed worktree, a real `codegraph serve --mcp` session's `codegraph_explore` payload carries the `⚠` notice, with a main-checkout control run showing none. Wired into CI **alongside** `go test ./testdata/golden/...` (which `go test ./...` silently skips — the go tool ignores `testdata/`). Mechanizes the session-long "drive the real entry point, don't infer reachability" lesson. *(Mapped to Phase 3 because it first expands the `serve --mcp` surface; movable to Phase 8 to bundle with the REL-04 drop-in gate.)*
 
 ### v1.0.0 Release (REL)
@@ -168,7 +168,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | DMON-04 | Phase 7 | Complete |
 | TUI-03 | Phase 7 | Complete |
 | TUI-04 | Phase 7 | Complete |
-| TEST-03 | Phase 7 | Pending |
+| TEST-03 | Phase 7 | Complete |
 | SURF-01 | Phase 8 | Pending |
 | SURF-02 | Phase 8 | Pending |
 | SURF-03 | Phase 8 | Pending |

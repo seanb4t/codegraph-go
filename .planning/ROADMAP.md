@@ -264,7 +264,7 @@ Plans:
   4. `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global (TUI-03)
   5. Every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs), and git-hook install→edit→remove is byte-invariant — both tested against piped streams (TUI-04, TEST-03)
 
-**Plans**: 7/8 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -288,7 +288,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 07-08-PLAN.md — TEST-03: githooks install→edit→remove byte-invariance + piped never-hang integration (TEST-03/TUI-04)
+- [x] 07-08-PLAN.md — TEST-03: githooks install→edit→remove byte-invariance + piped never-hang integration (TEST-03/TUI-04)
 
 **Notes**: bubbletea/bubbles interactive layer. Daemon = explicit start/stop + picker + PPID watchdog + registry — NO auto-spawn (the user chose this explicitly; the in-process watcher from Phase 3 already delivers live MCP sync). TTY-gate before `tea.NewProgram()`; test with piped streams so nothing ever hangs. TEST-03 lives here because it is the first phase where both hooks (Phase 5) and the new bubbletea components coexist, so its byte-invariance + piped-stream assertions can both be satisfied.
 **UI hint**: yes
@@ -321,7 +321,7 @@ Plans:
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 7/8 | In Progress|  |
+| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | In Progress|  |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 
 ## Backlog

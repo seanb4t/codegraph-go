@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
 current_phase: 7
 current_phase_name: Interactive TUI — Daemon Picker & Install Multi-Select
-status: executing
-stopped_at: Completed 07-07-PLAN.md
-last_updated: "2026-07-18T20:37:59.477Z"
+status: verifying
+stopped_at: Completed 07-08-PLAN.md (Phase 7 complete, 8/8 plans)
+last_updated: "2026-07-18T20:46:55.770Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 48
-  completed_plans: 47
-  percent: 75
+  completed_plans: 48
+  percent: 88
 ---
 
 # Project State
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 7 (Interactive TUI — Daemon Picker & Install Multi-Select) — EXECUTING
 Plan: 8 of 8
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-18 — Phase 7 execution started
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -110,6 +110,7 @@ Progress: [██████████] 98%
 | Phase 7 P06 | 13min | 2 tasks | 6 files |
 | Phase 07 P05 | 9min | 2 tasks | 2 files |
 | Phase 07 P07 | 25min | 3 tasks | 5 files |
+| Phase 07 P08 | 15min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: SortRecordsCurrentFirst lives in internal/cli/tui (exported), reused by both the daemon picker Model and daemon.go's plain non-TTY list, so the two presentations can never diverge in ordering (TUI-04)
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: Added a daemonList cli-package func var (daemon.go) so daemon_test.go can seed deterministic multi-record registries without depending on daemon.List's liveness self-heal pruning fabricated pids
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: 07-07 Tasks 2+3 combined into one commit — newDaemonCmd()'s AddCommand wiring directly references newDaemonStopCmd(), no independently-buildable intermediate state, mirroring the 02-status-content plan's own precedent
+- [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: TEST-03's out-of-marker-block user edit is simulated in the surviving base content (before the end-of-file block), not appended after it — appending after would round-trip through an extra blank line from the block's own trailing bytes, unrelated to the byte-invariance guarantee under test
+- [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: piped-never-hang install subtest exercises the real off-TTY auto-fallback (no --target flag), not --target none, since D-17/TUI-04 is specifically about the auto-fallback branch; a throwaway HOME keeps this safe
 
 ### Pending Todos
 
@@ -216,7 +219,8 @@ None active for v1.0. Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTIN
 - **[Phase 1]** RWR relevance (EXPL-02) is the single highest-risk item — golden-corpus contract at stake. Behavioral fixtures (TEST-01) MUST land before/with the algorithm (template-parity ≠ behavior-parity).
 - **[Phase 3]** Watcher default-flip hangs MCP startup on WSL2 without the watch-policy port — bundle them; needs a real WSL2 reproduction to validate.
 - **[Phase 2/8]** `files --filter` semantic collision (ours=language, TS=directory) — resolved by SURF-02 (keep language + add directory flag); the #1 silent-failure risk if mishandled.
-- **[Phase 6/8]** Charm v2 uses the `charm.land/...` vanity import; audit the full transitive closure for CGo (none expected) + govulncheck + SBOM before the v1.0.0 release.
+- **[Phase 6/8]** Charm v2 uses the `charm.land/...` vanity import; audit the full transitive closure for CGo (expected) + govulncheck + SBOM before the v1.0.0 release.
+- [Phase 7/8] GOOS=windows go vet ./internal/daemon/ ./internal/graphstore/ fails (undefined: tree_sitter.Node in internal/indexer/goextract/routes) — CGo tree-sitter grammar bindings excluded under windows/amd64 build constraints; pre-existing, confirmed unrelated to Phase 7's changes, needs resolution alongside Phase 8's Charm v2 CGo/govulncheck/SBOM audit
 
 ## Deferred Items
 
@@ -229,8 +233,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-18T20:37:59.469Z
-Stopped at: Completed 07-07-PLAN.md
+Last session: 2026-07-18T20:46:49.660Z
+Stopped at: Completed 07-08-PLAN.md (Phase 7 complete, 8/8 plans)
 Resume file: None
 
 ## Operator Next Steps
