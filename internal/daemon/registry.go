@@ -70,3 +70,45 @@ func Deregister(pid int) error {
 	}
 	return nil
 }
+
+// List reads every record in the global registry and self-heals on this
+// SAME call (D-05) — no background reaper: each record's pid is checked
+// against lock.go's isStale/isProcessLive (same package, unexported, no
+// second liveness implementation), and any record found stale is removed
+// from disk and excluded, mirroring acquire()'s existing
+// detect-and-clear-on-every-independent-call discipline (Phase 4 D-16),
+// generalized from one lockfile to many. An absent or empty registry dir is
+// not an error — it returns (nil, nil). A file that vanishes between
+// ReadDir and ReadFile (raced by a concurrent Deregister/prune) or a
+// malformed record is skipped, not fatal.
+func List() ([]Record, error) {
+	dir, err := registryDir()
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var live []Record
+	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue // vanished between ReadDir and ReadFile — another scan raced us
+		}
+		var rec Record
+		if err := json.Unmarshal(data, &rec); err != nil {
+			continue // malformed record — treat as unreadable, not live
+		}
+		if isStale(lockInfo{PID: rec.PID, StartedAt: rec.StartedAt}) {
+			_ = os.Remove(path) // self-heal; best-effort, matches release()'s style
+			continue
+		}
+		live = append(live, rec)
+	}
+	return live, nil
+}
