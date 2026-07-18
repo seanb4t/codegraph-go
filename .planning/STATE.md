@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 6
 current_phase_name: Rendering Seam & Pretty status/files
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-07-17T23:50:08.072Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-07-18T00:00:25.487Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 6 execution started
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 40
-  completed_plans: 38
+  completed_plans: 39
   percent: 63
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 6 (Rendering Seam & Pretty status/files) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 6 execution started
 
-Progress: [██████████] 95%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -101,6 +101,7 @@ Progress: [██████████] 95%
 | Phase 05 P04 | 6min | 2 tasks | 3 files |
 | Phase 05 P05 | 12min | 3 tasks | 4 files |
 | Phase 06 P01 | 15min | 3 tasks | 6 files |
+| Phase 06 P02 | 9min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -178,6 +179,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 5]: 05-05 completes Phase 5 — watch.Probe{} bare zero-value is a correct D-07 test seam since nil Probe.Env defaults to os.Getenv, letting CODEGRAPH_NO_WATCH=1 force the advisory deterministically without new CLI plumbing
 - [Phase ?]: [Phase 6] go mod tidy needs -e flag due to a pre-existing, unrelated tree-sitter-swift test-dependency resolution error (confirmed present at HEAD before this plan)
 - [Phase ?]: [Phase 6] golang.org/x/term deliberately left // indirect in 06-01 — tty.go is forbidden from importing it directly per D-03; promotion happens naturally in 06-02
+- [Phase ?]: 06-02: x/term promoted direct via go mod tidy -e; files.go WorktreeNotice factored into shared notice var (byte-identical plain branch); integration test pins --path to avoid an os.Getwd()/$PWD symlink-resolution artifact
 
 ### Pending Todos
 
@@ -205,8 +207,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-17T23:50:08.063Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-07-18T00:00:25.480Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
