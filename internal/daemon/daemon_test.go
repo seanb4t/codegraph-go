@@ -111,6 +111,138 @@ func TestNewPopulatesOpts(t *testing.T) {
 	}
 }
 
+// waitForRegistryRecord polls List() until a record for pid with the given
+// repoRoot appears, or the deadline elapses (D-06 — Register happens right
+// after acquire, so this mirrors waitForLock's polling shape).
+func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		recs, err := List()
+		if err != nil {
+			t.Fatalf("List: %v", err)
+		}
+		for _, r := range recs {
+			if r.PID == pid && r.RepoRoot == repoRoot {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for a registry record with pid=%d repoRoot=%s", pid, repoRoot)
+}
+
+// assertNoRegistryRecord fails the test if List() still reports a record for
+// pid — the D-06 deregister-on-shutdown assertion.
+func assertNoRegistryRecord(t *testing.T, pid int) {
+	t.Helper()
+	recs, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, r := range recs {
+		if r.PID == pid {
+			t.Fatalf("registry record for pid=%d still present after shutdown: %+v", pid, r)
+		}
+	}
+}
+
+// TestRunRegistersRecordAfterAcquire is the plan's primary D-06 gate: while
+// a Run is live, exactly one registry record exists for os.Getpid() naming
+// this Daemon's repoRoot.
+func TestRunRegistersRecordAfterAcquire(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+	withRegistryDir(t)
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+	waitForRegistryRecord(t, os.Getpid(), root)
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+}
+
+// TestRunDeregistersRecordOnCleanShutdown is D-06's other half: after a
+// clean ctx-cancel shutdown, the record Register wrote is gone (defer,
+// mirroring release()'s shape for the lockfile).
+func TestRunDeregistersRecordOnCleanShutdown(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+	withRegistryDir(t)
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+	waitForRegistryRecord(t, os.Getpid(), root)
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+
+	assertNoRegistryRecord(t, os.Getpid())
+}
+
+// TestRunPolicyDisabledRegistersNothing pins D-06's "registration happens
+// only after the lock is held": a policy-disabled Run (watch.DisabledError,
+// returned before acquire) must never touch the registry.
+func TestRunPolicyDisabledRegistersNothing(t *testing.T) {
+	withRegistryDir(t)
+
+	root, _, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{NoWatch: true}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	runErr := d.Run(ctx)
+	if !errors.Is(runErr, watch.ErrWatchDisabled) {
+		t.Fatalf("Run = %v, want errors.Is(..., watch.ErrWatchDisabled)", runErr)
+	}
+
+	recs, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(recs) != 0 {
+		t.Fatalf("registry has %d record(s) after a policy-disabled Run, want 0: %+v", len(recs), recs)
+	}
+}
+
 // TestDaemonSharedWriter proves the daemon holds exactly one writer: an
 // on-disk edit drives a debounced Sync that updates the committed graph
 // while the daemon runs, and a second lock acquire fails while it holds
