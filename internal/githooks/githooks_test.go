@@ -378,6 +378,93 @@ func TestInstall_OneHookPathIsDirectory_PartialSuccessWithErrors(t *testing.T) {
 	}
 }
 
+// TestInstall_EditThenRemove_ByteInvariant is the D-16/TEST-03 regression
+// test: the genuine gap TEST-03's RESEARCH identified — the pre-existing
+// TestRemove_WithUserContent_PreservesRemainderBytes only covers *remove*
+// preserving a hand-written remainder, never the full install -> edit ->
+// remove round trip. This proves that install -> a user hand-edit OUTSIDE
+// the marker block (a new line added to the surviving base content, never
+// touching the codegraph-managed block itself) -> remove returns the hook
+// file byte-identical to the pre-install original PLUS the user's edit,
+// with the marker block fully stripped. Also backstops install->install
+// (fixed point) and remove->remove (clean no-op) against this same
+// fixture, per TEST-03's idempotency edge.
+func TestInstall_EditThenRemove_ByteInvariant(t *testing.T) {
+	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
+	hooksDir := filepath.Join(root, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	file := filepath.Join(hooksDir, "post-commit")
+
+	original := "#!/bin/sh\necho original-user-content\n"
+	if err := os.WriteFile(file, []byte(original), 0o755); err != nil {
+		t.Fatalf("WriteFile pristine original: %v", err)
+	}
+
+	Install(context.Background(), root)
+
+	installed, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile after install: %v", err)
+	}
+	wantInstalled := "#!/bin/sh\necho original-user-content\n\n" + markerBlock() + "\n"
+	if string(installed) != wantInstalled {
+		t.Fatalf("post-commit after install = %q, want %q", string(installed), wantInstalled)
+	}
+
+	// Simulate a user hand-editing the installed hook: a new line added to
+	// their own content, OUTSIDE the marker block — the block itself is
+	// never touched.
+	userEdit := "#!/bin/sh\necho original-user-content\necho user-added-after-install\n\n" + markerBlock() + "\n"
+	if err := os.WriteFile(file, []byte(userEdit), 0o755); err != nil {
+		t.Fatalf("WriteFile user edit: %v", err)
+	}
+
+	Remove(context.Background(), root)
+
+	got, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile after remove: %v", err)
+	}
+	want := "#!/bin/sh\necho original-user-content\necho user-added-after-install\n"
+	if string(got) != want {
+		t.Fatalf("post-commit after install->edit->remove = %q, want byte-identical to pre-install original + user edit %q", string(got), want)
+	}
+
+	// Idempotency backstop: install->install on this now-user-content-only
+	// file is a fixed point (no stale block to reintroduce blank-line
+	// drift), and remove->remove is a clean no-op.
+	Install(context.Background(), root)
+	afterReinstall, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile after re-install: %v", err)
+	}
+	Install(context.Background(), root)
+	afterReinstallAgain, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile after second re-install: %v", err)
+	}
+	if string(afterReinstall) != string(afterReinstallAgain) {
+		t.Fatalf("install->install not a fixed point:\nfirst:  %q\nsecond: %q", afterReinstall, afterReinstallAgain)
+	}
+
+	firstRemove := Remove(context.Background(), root)
+	removedAfterReinstall := false
+	for _, h := range firstRemove.Removed {
+		if h == "post-commit" {
+			removedAfterReinstall = true
+		}
+	}
+	if !removedAfterReinstall {
+		t.Fatalf("Remove after re-install: Removed = %v, want post-commit included", firstRemove.Removed)
+	}
+	secondRemove := Remove(context.Background(), root)
+	if len(secondRemove.Removed) != 0 {
+		t.Fatalf("second Remove() should be a no-op: Removed = %v", secondRemove.Removed)
+	}
+}
+
 func TestRemove_WithUserContent_PreservesRemainderBytes(t *testing.T) {
 	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
 	hooksDir := filepath.Join(root, ".git", "hooks")
