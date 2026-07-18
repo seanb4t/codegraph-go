@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -122,10 +123,25 @@ func writeStatusAdvisories(b *strings.Builder, r query.StatusResult, staleLabel,
 func RenderStatus(r query.StatusResult, projectPath string, w io.Writer) error {
 	var b strings.Builder
 	b.WriteString(headerStyle.Render("CodeGraph Status") + "\n\n")
-	fmt.Fprintf(&b, "%s %s\n", labelStyle.Render("Project:"), projectPath)
+	// projectPath is the CLI's resolved start path (--path flag or
+	// os.Getwd()) and may be adversarial — strip control characters
+	// before it reaches the terminal (CR-01).
+	fmt.Fprintf(&b, "%s %s\n", labelStyle.Render("Project:"), sanitizeControl(projectPath))
 
-	if warning := r.WorktreeMismatch.Warning(); warning != "" {
-		b.WriteString(warning + "\n")
+	// Warning() embeds two git-derived filesystem paths (WorktreeRoot,
+	// IndexRoot) that may be adversarial. Sanitize a copy of the two path
+	// fields — not the formatted Warning() string as a whole — so the
+	// literal newlines that structure the multi-line message survive
+	// (sanitizeControl also strips \n/\t/\r by design; running it over the
+	// whole message would collapse the warning onto one line).
+	if r.WorktreeMismatch != nil {
+		sanitizedMismatch := &gitmeta.Mismatch{
+			WorktreeRoot: sanitizeControl(r.WorktreeMismatch.WorktreeRoot),
+			IndexRoot:    sanitizeControl(r.WorktreeMismatch.IndexRoot),
+		}
+		if warning := sanitizedMismatch.Warning(); warning != "" {
+			b.WriteString(warning + "\n")
+		}
 	}
 
 	b.WriteString("\n" + sectionStyle.Render("Index Statistics:") + "\n")

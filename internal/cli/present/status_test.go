@@ -109,3 +109,43 @@ func TestRenderStatus_WorktreeWarning(t *testing.T) {
 		t.Errorf("expected worktree warning %q in ANSI-stripped output:\n%s", warning, stripped)
 	}
 }
+
+// TestRenderStatus_SanitizesControlChars proves projectPath and the two
+// WorktreeMismatch path fields (both of which embed host filesystem paths)
+// are passed through sanitizeControl before reaching the pretty sink
+// (WR-01) — mirroring sanitize_test.go's ESC/control-byte fixtures. Note
+// RenderStatus's own lipgloss styling legitimately emits many unrelated
+// ESC sequences (headerStyle, labelStyle, sectionStyle), so this test
+// checks for absence of the SPECIFIC injected escape sequences rather than
+// absence of ESC bytes generally. The warning's own literal newlines (from
+// Warning()'s message template, not attacker-controlled) must survive —
+// only the ESC/BEL bytes injected via the path fields are stripped.
+func TestRenderStatus_SanitizesControlChars(t *testing.T) {
+	r := fixtureStatusResult()
+	r.WorktreeMismatch = &gitmeta.Mismatch{
+		WorktreeRoot: "/a/main\x1b[31m",
+		IndexRoot:    "/a/main/.claude/worktrees/probe\x07",
+	}
+	dirtyPath := "/tmp/proj\x1b]0;pwned\x07"
+
+	var buf bytes.Buffer
+	if err := RenderStatus(r, dirtyPath, &buf); err != nil {
+		t.Fatalf("RenderStatus: %v", err)
+	}
+	out := buf.String()
+
+	for _, forbiddenSeq := range []string{"\x1b[31m", "\x1b]0;pwned\x07"} {
+		if strings.Contains(out, forbiddenSeq) {
+			t.Errorf("expected injected escape sequence %q to be stripped from output, got:\n%q", forbiddenSeq, out)
+		}
+	}
+	if !strings.Contains(out, "/a/main") || !strings.Contains(out, "/a/main/.claude/worktrees/probe") {
+		t.Errorf("expected sanitized worktree paths to survive in output, got:\n%q", out)
+	}
+	if !strings.Contains(out, "\n  Index from: /a/main/.claude/worktrees/probe\n") {
+		t.Errorf("expected the warning's own literal newlines to survive sanitization, got:\n%q", out)
+	}
+	if !strings.Contains(out, "/tmp/proj") {
+		t.Errorf("expected sanitized projectPath to survive in output, got:\n%q", out)
+	}
+}
