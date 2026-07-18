@@ -1,36 +1,26 @@
 package cli
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"os"
-	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/agents"
+	"github.com/seanb4t/codegraph-go/internal/cli/tui"
 )
 
-// installStdinIsInteractive reports whether install should present the
-// interactive multi-select (D-03): cmd's configured stdin must be the
-// process's own os.Stdin AND that fd must be a character device (a real
-// TTY), detected via stdlib os.ModeCharDevice only — no new terminal
-// dependency (RESEARCH.md's stdlib-only TTY-detection guidance). A
-// package-level var so install_test.go can force either branch without a
-// real pty, mirroring upgrade.go's upgradeRunFunc injectable-seam pattern.
-var installStdinIsInteractive = func(cmd *cobra.Command) bool {
-	if cmd.InOrStdin() != os.Stdin {
-		return false
-	}
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
-}
+// interactiveAllowed and runAgentPicker are package-level func vars —
+// tui.InteractiveAllowed/tui.RunAgentPicker by default — so
+// install_test.go/uninstall_test.go can force the interactive branch (and
+// stub out the picker itself) without a real pty and without ever
+// constructing a real tea.Program in a test process. Mirrors the
+// project's existing injectable-seam convention (the old
+// installStdinIsInteractive var this replaces, upgrade.go's
+// upgradeRunFunc).
+var interactiveAllowed = tui.InteractiveAllowed
+var runAgentPicker = tui.RunAgentPicker
 
 // parseLocationFlag validates --location against the two values
 // agents.Location supports; any other value is a clear, immediate error
@@ -58,6 +48,7 @@ func newInstallCmd() *cobra.Command {
 	var target string
 	var location string
 	var autoAllow bool
+	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
@@ -85,12 +76,18 @@ func newInstallCmd() *cobra.Command {
 
 			var targets []agents.AgentTarget
 			switch {
+			case yes:
+				// D-15/Pitfall 6: --yes must short-circuit BEFORE the TTY
+				// branch, not merely skip rendering the picker — checked
+				// first in the switch so it always wins regardless of
+				// stdin/stdout's actual state.
+				targets, err = agents.ResolveTargetFlag("auto", loc)
 			case cmd.Flags().Changed("target"):
 				targets, err = agents.ResolveTargetFlag(target, loc)
-			case installStdinIsInteractive(cmd):
-				targets, err = promptAgentMultiSelect(cmd, loc)
+			case interactiveAllowed(cmd):
+				targets, err = runAgentPicker(cmd, loc)
 			default:
-				// D-03: no TTY (or CI) never blocks on a prompt — resolve
+				// D-13: no TTY (or CI) never blocks on a prompt — resolve
 				// straight to auto, same as an explicit --target auto.
 				targets, err = agents.ResolveTargetFlag("auto", loc)
 			}
@@ -108,80 +105,9 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().StringVar(&target, "target", "auto", "which agents to configure: auto|all|none|<comma-separated ids>")
 	cmd.Flags().StringVar(&location, "location", string(agents.LocationGlobal), "config scope: global|local")
 	cmd.Flags().BoolVar(&autoAllow, "auto-allow", false, "also add mcp__codegraph__* to Claude Code's permissions.allow list")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (auto)")
 
 	return cmd
-}
-
-// promptAgentMultiSelect renders a numbered list of every registered
-// target (agents.AllTargets(), deterministically sorted), pre-marks the
-// ones agents.DetectAll(loc) reports as installed, and reads a selection
-// line via cmd.InOrStdin()/cmd.OutOrStdout() — the same testable-I/O idiom
-// confirm() (uninit.go) uses. Empty input (bare Enter) accepts the
-// detected defaults; EOF/unreadable input degrades to the same "auto"
-// resolution the non-interactive path uses, never blocking (D-03).
-func promptAgentMultiSelect(cmd *cobra.Command, loc agents.Location) ([]agents.AgentTarget, error) {
-	all := agents.AllTargets()
-	detection := agents.DetectAll(loc)
-
-	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, "Select agents to configure (comma-separated numbers, \"all\", \"none\", or Enter to accept the detected defaults):")
-	var preselected []int
-	for i, t := range all {
-		mark := " "
-		if detection[t.ID()].Installed {
-			mark = "x"
-			preselected = append(preselected, i)
-		}
-		fmt.Fprintf(out, "  [%s] %d) %s\n", mark, i+1, t.DisplayName())
-	}
-	fmt.Fprint(out, "> ")
-
-	reader := bufio.NewReader(cmd.InOrStdin())
-	line, err := reader.ReadString('\n')
-	if err != nil && line == "" {
-		return agents.ResolveTargetFlag("auto", loc)
-	}
-	line = strings.TrimSpace(line)
-
-	switch {
-	case line == "":
-		return selectByIndices(all, preselected), nil
-	case strings.EqualFold(line, "all"):
-		return all, nil
-	case strings.EqualFold(line, "none"):
-		return nil, nil
-	}
-
-	var indices []int
-	for _, tok := range strings.Split(line, ",") {
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			continue
-		}
-		n, err := strconv.Atoi(tok)
-		if err != nil || n < 1 || n > len(all) {
-			return nil, fmt.Errorf("invalid selection %q", tok)
-		}
-		indices = append(indices, n-1)
-	}
-	return selectByIndices(all, indices), nil
-}
-
-// selectByIndices returns all[i] for each i in indices, de-duplicated and
-// in ascending index order (agents.AllTargets()'s own deterministic order,
-// not input order) — mirrors --target csv's resolution order.
-func selectByIndices(all []agents.AgentTarget, indices []int) []agents.AgentTarget {
-	sort.Ints(indices)
-	out := make([]agents.AgentTarget, 0, len(indices))
-	seen := make(map[int]bool, len(indices))
-	for _, i := range indices {
-		if seen[i] {
-			continue
-		}
-		seen[i] = true
-		out = append(out, all[i])
-	}
-	return out
 }
 
 // installStatus rolls WriteResult's per-file actions up into one word for

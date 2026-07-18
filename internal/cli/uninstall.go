@@ -10,15 +10,18 @@ import (
 
 // newUninstallCmd builds `codegraph uninstall` (AGNT-02, D-02): mirrors
 // install's flag/resolve/report shape, reversing everything install wrote
-// for each selected target. Unlike install, there is no interactive
-// multi-select — a destructive-by-default reversal defaults to "all"
-// without prompting when --target is omitted, since Uninstall never
-// errors on a target that was never configured (D-08); this also keeps
-// the no-TTY/CI path trivially non-blocking (D-03's DoS mitigation
+// for each selected target. On a TTY with no --target, uninstall now
+// presents the SAME bubbles checkbox multi-select install uses (D-14),
+// pre-checked from agents.DetectAll(loc) — off-TTY or -y/--yes (D-15)
+// keeps the historical default of resolving to every registered target
+// (ResolveTargetFlag("all", ...)) without prompting, since Uninstall never
+// errors on a target that was never configured (D-08) and this keeps the
+// no-TTY/CI path trivially non-blocking (D-13's never-hang guarantee
 // applies here too, by construction).
 func newUninstallCmd() *cobra.Command {
 	var target string
 	var location string
+	var yes bool
 
 	cmd := &cobra.Command{
 		Use:   "uninstall",
@@ -38,7 +41,22 @@ func newUninstallCmd() *cobra.Command {
 				return fmt.Errorf("codegraph uninstall: %w", err)
 			}
 
-			targets, err := agents.ResolveTargetFlag(target, loc)
+			var targets []agents.AgentTarget
+			switch {
+			case yes:
+				// D-15/Pitfall 6: --yes must short-circuit BEFORE the TTY
+				// branch, not merely skip rendering the picker.
+				targets, err = agents.ResolveTargetFlag("all", loc)
+			case cmd.Flags().Changed("target"):
+				targets, err = agents.ResolveTargetFlag(target, loc)
+			case interactiveAllowed(cmd):
+				targets, err = runAgentPicker(cmd, loc)
+			default:
+				// D-13: no TTY (or CI) never blocks on a prompt — resolve
+				// to the historical default (every registered target),
+				// same as an explicit --target all.
+				targets, err = agents.ResolveTargetFlag("all", loc)
+			}
 			if err != nil {
 				return fmt.Errorf("codegraph uninstall: %w", err)
 			}
@@ -51,6 +69,7 @@ func newUninstallCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&target, "target", "all", "which agents to reverse: auto|all|none|<comma-separated ids>")
 	cmd.Flags().StringVar(&location, "location", string(agents.LocationGlobal), "config scope: global|local")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (all)")
 
 	return cmd
 }

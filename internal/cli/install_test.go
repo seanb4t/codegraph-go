@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
+
+	"github.com/seanb4t/codegraph-go/internal/agents"
 )
 
 // fakeHome points HOME (and every home-derived env var codegraph's agent
@@ -386,6 +390,131 @@ func TestInstallUninstallRoundTrip_PreservesSiblingEntry(t *testing.T) {
 	other, ok := mcpServersAfter["other-server"].(map[string]any)
 	if !ok || other["command"] != "other-binary" {
 		t.Fatalf("expected other-server entry preserved untouched after uninstall, got: %v", mcpServersAfter)
+	}
+}
+
+// withStubbedPicker forces the interactiveAllowed/runAgentPicker
+// package-level seams for the duration of one test — interactiveAllowed
+// always reports allowed (as if on a real TTY), and picker stands in for
+// tui.RunAgentPicker without ever constructing a real tea.Program. Both
+// seams are restored on cleanup.
+func withStubbedPicker(t *testing.T, picker func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error)) {
+	t.Helper()
+	origAllowed, origPicker := interactiveAllowed, runAgentPicker
+	t.Cleanup(func() {
+		interactiveAllowed = origAllowed
+		runAgentPicker = origPicker
+	})
+	interactiveAllowed = func(*cobra.Command) bool { return true }
+	runAgentPicker = picker
+}
+
+// TestInstall_Yes_ShortCircuitsBeforeInteractiveBranch is the Pitfall-6
+// regression: -y must short-circuit to auto BEFORE the TTY branch, not
+// merely skip rendering the picker. interactiveAllowed is forced to report
+// true (as if on a real TTY) and runAgentPicker is forced to fail the test
+// if ever invoked — if -y didn't check first in the switch, this would
+// exercise the interactive branch instead of resolving straight to auto.
+func TestInstall_Yes_ShortCircuitsBeforeInteractiveBranch(t *testing.T) {
+	home := fakeHome(t)
+	withStubbedPicker(t, func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error) {
+		t.Fatal("runAgentPicker must never be called when -y is set")
+		return nil, nil
+	})
+
+	out, _, err := execCmd("install", "-y", "--location", "global")
+	if err != nil {
+		t.Fatalf("install -y: %v", err)
+	}
+	if !strings.Contains(out, "Claude Code:") {
+		t.Fatalf("expected -y to resolve auto (fallback to Claude in a fresh fake home), got:\n%s", out)
+	}
+
+	claudeConfig := filepath.Join(home, ".claude.json")
+	if _, statErr := os.Stat(claudeConfig); statErr != nil {
+		t.Fatalf("expected %s to be written: %v", claudeConfig, statErr)
+	}
+}
+
+// TestInstall_InteractiveAllowed_CallsRunAgentPicker asserts that, with no
+// -y and no --target, a forced-allowed TTY takes the picker branch and
+// uses ITS resolved targets (not auto's) — proving the switch's wiring
+// order: yes (false here) -> --target (unset) -> interactiveAllowed (true)
+// -> runAgentPicker.
+func TestInstall_InteractiveAllowed_CallsRunAgentPicker(t *testing.T) {
+	home := fakeHome(t)
+	var called bool
+	withStubbedPicker(t, func(cmd *cobra.Command, loc agents.Location) ([]agents.AgentTarget, error) {
+		called = true
+		return agents.ResolveTargetFlag("claude", loc)
+	})
+
+	out, _, err := execCmd("install", "--location", "global")
+	if err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !called {
+		t.Fatal("expected runAgentPicker to be called when interactiveAllowed is true and neither -y nor --target is set")
+	}
+	if !strings.Contains(out, "Claude Code:") {
+		t.Fatalf("expected the picker's resolved targets to be used, got:\n%s", out)
+	}
+
+	claudeConfig := filepath.Join(home, ".claude.json")
+	if _, statErr := os.Stat(claudeConfig); statErr != nil {
+		t.Fatalf("expected %s to be written: %v", claudeConfig, statErr)
+	}
+}
+
+// TestUninstall_Yes_ShortCircuitsBeforeInteractiveBranch mirrors install's
+// Pitfall-6 regression for uninstall: -y must resolve straight to the
+// non-interactive default (every registered target) even with
+// interactiveAllowed forced true, and must never invoke runAgentPicker.
+func TestUninstall_Yes_ShortCircuitsBeforeInteractiveBranch(t *testing.T) {
+	fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude,cursor", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude,cursor: %v", err)
+	}
+
+	withStubbedPicker(t, func(*cobra.Command, agents.Location) ([]agents.AgentTarget, error) {
+		t.Fatal("runAgentPicker must never be called when -y is set")
+		return nil, nil
+	})
+
+	out, _, err := execCmd("uninstall", "-y", "--location", "global")
+	if err != nil {
+		t.Fatalf("uninstall -y: %v", err)
+	}
+	if !strings.Contains(out, "Claude Code: removed") || !strings.Contains(out, "Cursor: removed") {
+		t.Fatalf("expected -y to resolve to the full roster (all), got:\n%s", out)
+	}
+}
+
+// TestUninstall_InteractiveAllowed_CallsRunAgentPicker mirrors install's
+// wiring-order test for uninstall's switch.
+func TestUninstall_InteractiveAllowed_CallsRunAgentPicker(t *testing.T) {
+	fakeHome(t)
+
+	if _, _, err := execCmd("install", "--target", "claude", "--location", "global"); err != nil {
+		t.Fatalf("install --target claude: %v", err)
+	}
+
+	var called bool
+	withStubbedPicker(t, func(cmd *cobra.Command, loc agents.Location) ([]agents.AgentTarget, error) {
+		called = true
+		return agents.ResolveTargetFlag("claude", loc)
+	})
+
+	out, _, err := execCmd("uninstall", "--location", "global")
+	if err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if !called {
+		t.Fatal("expected runAgentPicker to be called when interactiveAllowed is true and neither -y nor --target is set")
+	}
+	if !strings.Contains(out, "Claude Code: removed") {
+		t.Fatalf("expected the picker's resolved targets to be used, got:\n%s", out)
 	}
 }
 
