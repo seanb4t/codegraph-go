@@ -247,6 +247,24 @@ func (d *Daemon) Run(ctx context.Context) error {
 		}
 	}()
 
+	// D-07/D-08: derive a cancellable child ctx so the watchdog can tear
+	// Run down itself on parent death; the watch loop/debouncer below run
+	// against THIS ctx (reassigned), so a watchdog-triggered cancel flows
+	// through the exact same clean-shutdown path as an externally
+	// cancelled ctx — no new shutdown path is introduced. cancel() is
+	// called explicitly before stop() (not left to defer LIFO ordering)
+	// because stop() blocks until the watchdog goroutine has actually
+	// observed ctx.Done() and returned (RESEARCH Pitfall 4); calling
+	// cancel() first guarantees that happens promptly on every teardown
+	// path, including watch.Open failing below before the watch loop ever
+	// starts.
+	ctx, cancel := context.WithCancel(ctx)
+	stop := startWatchdog(ctx, cancel, watchdogInterval)
+	defer func() {
+		cancel()
+		stop()
+	}()
+
 	w, err := watch.Open(d.repoRoot)
 	if err != nil {
 		return err

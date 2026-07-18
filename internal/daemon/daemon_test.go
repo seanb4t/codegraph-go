@@ -256,7 +256,14 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 	origGetppid := getppid
 	defer func() { getppid = origGetppid }()
 	const original = 424242
-	getppid = func() int { return original }
+	// current is read through the SAME getppid closure both before and
+	// after the simulated reparent below — the closure itself is assigned
+	// to the package var exactly once, before Run ever starts, so flipping
+	// current afterward via atomic.StoreInt32 cannot race against
+	// startWatchdog's own read of the getppid var (mirrors
+	// watchdog_test.go's TestWatchdogCancelsOnReparent seam pattern).
+	var current int32 = original
+	getppid = func() int { return int(atomic.LoadInt32(&current)) }
 
 	root, codegraphDir, _ := initFixture(t)
 
@@ -276,14 +283,21 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 
 	// Simulate a reparent: the watchdog's next poll tick observes this and
 	// cancels Run's own derived ctx — no external cancel is ever called.
-	getppid = func() int { return original + 1 }
+	atomic.StoreInt32(&current, original+1)
 
 	select {
 	case err := <-runErr:
 		if err != nil {
 			t.Fatalf("Run: %v, want nil — a watchdog-triggered cancel must drive the same clean shutdown as an external ctx cancel (D-08)", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
+		// 10s (not the file's usual 5s) — watchdogInterval is a fixed 1s
+		// wall-clock ticker inside Run; under heavy full-suite parallel
+		// load (many packages' test binaries compiling/running at once)
+		// the ticker's next fire after the simulated reparent can be
+		// delayed well past 1s, mirroring the load-induced flake class
+		// already documented on TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock
+		// above.
 		t.Fatal("Run did not return after a simulated reparent — watchdog is not wired into Run (D-07/D-08)")
 	}
 
