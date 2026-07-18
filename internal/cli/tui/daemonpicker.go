@@ -181,30 +181,61 @@ func (m daemonPickerModel) resolvedAction() (daemonAction, daemon.Record) {
 
 // dispatchDaemonAction performs the terminal action a completed daemon
 // picker resolved to: stop-one/stop-all signal through the injected
-// stopMatching/stopAll seams; cancel (and the empty-registry case) is a
-// pure no-op. Unexported and called both by RunDaemonPicker and directly
-// by daemonpicker_test.go, so Update's transitions are proven to drive the
-// right dispatch without ever constructing a real tea.Program.
-func dispatchDaemonAction(action daemonAction, target daemon.Record) error {
+// stopMatching/stopAll seams, returning every record actually signaled
+// alongside the error; cancel (and the empty-registry case) is a pure
+// no-op, returning (nil, nil). Unexported and called both by
+// RunDaemonPicker and directly by daemonpicker_test.go, so Update's
+// transitions are proven to drive the right dispatch without ever
+// constructing a real tea.Program. The []daemon.Record return (WR-01,
+// 07-REVIEW.md) lets RunDaemonPicker report the same per-record
+// confirmation the non-interactive `daemon stop` path already gives via
+// printStoppedDaemons — previously this discarded the return, leaving a
+// successful stop-one/stop-all silent.
+func dispatchDaemonAction(action daemonAction, target daemon.Record) ([]daemon.Record, error) {
 	switch action {
 	case daemonActionStopOne:
-		_, err := stopMatching(target.RepoRoot)
-		return err
+		return stopMatching(target.RepoRoot)
 	case daemonActionStopAll:
-		_, err := stopAll()
-		return err
+		return stopAll()
 	default:
-		return nil
+		return nil, nil
+	}
+}
+
+// printDaemonPickerResult prints confirmation lines for the picker's
+// dispatch (WR-01, 07-REVIEW.md), mirroring internal/cli/daemon.go's
+// printStoppedDaemons/newDaemonStopCmd output shape ("stopped pid %d (%s)"
+// per record, a "nothing stopped" notice when the action attempted a stop
+// but nothing matched) — duplicated here rather than imported from
+// internal/cli to avoid an internal/cli/tui -> internal/cli import cycle
+// (internal/cli already imports internal/cli/tui). Never called for
+// daemonActionNone (cancel/quit/empty-registry): those already print
+// nothing, by design, and dispatchDaemonAction returns (nil, nil) for them
+// which would otherwise read as an indistinguishable "attempted, matched
+// nothing" case.
+func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.Record) {
+	if action == daemonActionNone {
+		return
+	}
+	if len(stopped) == 0 {
+		fmt.Fprintln(w, "nothing stopped")
+		return
+	}
+	for _, rec := range stopped {
+		fmt.Fprintf(w, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
 	}
 }
 
 // RunDaemonPicker constructs and runs the daemon picker Program over
 // records (sorted current-repo-first), wiring cmd's own stdin/stdout so
 // both the real CLI and any test harness capture the same I/O every other
-// command uses, then dispatches the resolved action. RunDaemonPicker does
-// NOT re-check tui.InteractiveAllowed itself — the caller (daemon.go) MUST
-// have already gated on it (D-10); calling this off a non-TTY is the
-// caller's bug, not this function's job to detect.
+// command uses, then dispatches the resolved action and prints a
+// confirmation of what was actually stopped (WR-01, 07-REVIEW.md) — giving
+// the interactive path the same on-screen feedback `daemon stop [--all]`
+// already gives non-interactively. RunDaemonPicker does NOT re-check
+// tui.InteractiveAllowed itself — the caller (daemon.go) MUST have already
+// gated on it (D-10); calling this off a non-TTY is the caller's bug, not
+// this function's job to detect.
 func RunDaemonPicker(cmd *cobra.Command, currentRepo string, records []daemon.Record) error {
 	m := newDaemonPickerModel(currentRepo, records)
 
@@ -218,5 +249,7 @@ func RunDaemonPicker(cmd *cobra.Command, currentRepo string, records []daemon.Re
 		return fmt.Errorf("tui: RunDaemonPicker: unexpected final model type %T", final)
 	}
 	action, target := fm.resolvedAction()
-	return dispatchDaemonAction(action, target)
+	stopped, err := dispatchDaemonAction(action, target)
+	printDaemonPickerResult(cmd.OutOrStdout(), action, stopped)
+	return err
 }

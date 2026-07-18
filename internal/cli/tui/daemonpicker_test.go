@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func TestDaemonPickerModel_EnterDispatchesStopOne(t *testing.T) {
 	var calledWith string
 	withStubbedDaemonStop(t, func(repoRoot string) ([]daemon.Record, error) {
 		calledWith = repoRoot
-		return nil, nil
+		return []daemon.Record{rec(repoRoot, 1)}, nil
 	}, func() ([]daemon.Record, error) {
 		t.Fatal("stopAll must not be called for stop-one")
 		return nil, nil
@@ -103,11 +104,18 @@ func TestDaemonPickerModel_EnterDispatchesStopOne(t *testing.T) {
 		t.Fatalf("target.RepoRoot = %q, want /repo/a (current-repo-first index 0)", target.RepoRoot)
 	}
 
-	if err := dispatchDaemonAction(action, target); err != nil {
+	// WR-01 (07-REVIEW.md): dispatchDaemonAction must surface the
+	// signaled records, not just the error, so RunDaemonPicker can print
+	// the same confirmation the non-interactive `daemon stop` path gives.
+	stopped, err := dispatchDaemonAction(action, target)
+	if err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 	if calledWith != "/repo/a" {
 		t.Fatalf("stopMatching called with %q, want /repo/a", calledWith)
+	}
+	if len(stopped) != 1 || stopped[0].RepoRoot != "/repo/a" {
+		t.Fatalf("dispatchDaemonAction stopped = %v, want [/repo/a]", stopped)
 	}
 }
 
@@ -143,7 +151,7 @@ func TestDaemonPickerModel_DownNavigatesThenEnterTargetsFocusedRow(t *testing.T)
 		t.Fatalf("after down+enter: action=%v target=%v, want stop-one on /repo/other", action, target)
 	}
 
-	if err := dispatchDaemonAction(action, target); err != nil {
+	if _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 	if calledWith != "/repo/other" {
@@ -181,7 +189,7 @@ func TestDaemonPickerModel_StopAllDispatches(t *testing.T) {
 		t.Fatalf("action = %v, want daemonActionStopAll", action)
 	}
 
-	if err := dispatchDaemonAction(action, target); err != nil {
+	if _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 	if !stopAllCalled {
@@ -217,7 +225,7 @@ func TestDaemonPickerModel_CancelSignalsNothing(t *testing.T) {
 	if action != daemonActionNone {
 		t.Fatalf("action = %v, want daemonActionNone", action)
 	}
-	if err := dispatchDaemonAction(action, target); err != nil {
+	if _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
 	}
 }
@@ -248,7 +256,56 @@ func TestDaemonPickerModel_EmptyRecordsQuitsWithoutDispatch(t *testing.T) {
 	if action != daemonActionNone {
 		t.Fatalf("action = %v, want daemonActionNone", action)
 	}
-	if err := dispatchDaemonAction(action, target); err != nil {
+	if _, err := dispatchDaemonAction(action, target); err != nil {
 		t.Fatalf("dispatchDaemonAction: %v", err)
+	}
+}
+
+// TestPrintDaemonPickerResult asserts WR-01's (07-REVIEW.md) confirmation
+// output: a "stopped pid %d (%s)" line per signaled record for stop-one/
+// stop-all, a "nothing stopped" notice when the action attempted a stop but
+// nothing matched, and complete silence for daemonActionNone (cancel/quit/
+// empty-registry already print nothing, by design).
+func TestPrintDaemonPickerResult(t *testing.T) {
+	tests := []struct {
+		name    string
+		action  daemonAction
+		stopped []daemon.Record
+		want    string
+	}{
+		{
+			name:    "stop-one with a signaled record",
+			action:  daemonActionStopOne,
+			stopped: []daemon.Record{rec("/repo/a", 42)},
+			want:    "stopped pid 42 (/repo/a)\n",
+		},
+		{
+			name:    "stop-all with multiple signaled records",
+			action:  daemonActionStopAll,
+			stopped: []daemon.Record{rec("/repo/a", 1), rec("/repo/b", 2)},
+			want:    "stopped pid 1 (/repo/a)\nstopped pid 2 (/repo/b)\n",
+		},
+		{
+			name:    "stop-one with nothing matched",
+			action:  daemonActionStopOne,
+			stopped: nil,
+			want:    "nothing stopped\n",
+		},
+		{
+			name:    "cancel prints nothing",
+			action:  daemonActionNone,
+			stopped: nil,
+			want:    "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			printDaemonPickerResult(&buf, tc.action, tc.stopped)
+			if got := buf.String(); got != tc.want {
+				t.Fatalf("printDaemonPickerResult() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
