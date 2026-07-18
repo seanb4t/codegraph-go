@@ -264,7 +264,32 @@ Plans:
   4. `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global (TUI-03)
   5. Every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs), and git-hook install→edit→remove is byte-invariant — both tested against piped streams (TUI-04, TEST-03)
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — TUI foundation: add bubbletea/v2 + bubbles/v2, new internal/cli/tui pkg + InteractiveAllowed dual-TTY gate, archtest stays green (TUI-04)
+- [ ] 07-02-PLAN.md — Charm-free global daemon registry: Record + Register/Deregister/List with self-heal via lock.go isStale (DMON-04)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 07-03-PLAN.md — PPID watchdog (build-tag POSIX reparent / Windows liveness) + x/sys direct + CI windows go vet gate (DMON-03)
+- [ ] 07-04-PLAN.md — Daemon stop signal (POSIX SIGTERM / Windows hard-kill) + StopMatching/StopAll orchestration with per-target corroboration (DMON-02)
+- [ ] 07-06-PLAN.md — install/uninstall bubbles multi-select picker + -y/--yes non-interactive flag (TUI-03/TUI-04)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 07-05-PLAN.md — Wire registry Register/Deregister + watchdog start/join into daemon.Run (DMON-02/03/04)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 07-07-PLAN.md — daemon command tree: bubbletea picker (bare/TTY), plain list (non-TTY), start, stop [--all] (DMON-01/DMON-02/TUI-04)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 07-08-PLAN.md — TEST-03: githooks install→edit→remove byte-invariance + piped never-hang integration (TEST-03/TUI-04)
+
 **Notes**: bubbletea/bubbles interactive layer. Daemon = explicit start/stop + picker + PPID watchdog + registry — NO auto-spawn (the user chose this explicitly; the in-process watcher from Phase 3 already delivers live MCP sync). TTY-gate before `tea.NewProgram()`; test with piped streams so nothing ever hangs. TEST-03 lives here because it is the first phase where both hooks (Phase 5) and the new bubbletea components coexist, so its byte-invariance + piped-stream assertions can both be satisfied.
 **UI hint**: yes
 
@@ -296,7 +321,7 @@ Plans:
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
+| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/8 | Not started | - |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 
 ## Backlog
