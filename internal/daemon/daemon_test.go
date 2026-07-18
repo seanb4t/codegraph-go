@@ -243,6 +243,56 @@ func TestRunPolicyDisabledRegistersNothing(t *testing.T) {
 	}
 }
 
+// TestRunWatchdogCancelsRunOnSimulatedReparent is the primary D-07/D-08
+// integration gate: Run starts startWatchdog (07-03) against its own
+// derived, cancellable ctx, so a simulated reparent — driven through the
+// injectable getppid seam, no forking required — cancels Run itself and
+// drives the SAME clean teardown a caller's ctx cancellation would (lock
+// released, registry record deregistered) with no new shutdown path.
+func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+	withRegistryDir(t)
+
+	origGetppid := getppid
+	defer func() { getppid = origGetppid }()
+	const original = 424242
+	getppid = func() int { return original }
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+	waitForRegistryRecord(t, os.Getpid(), root)
+
+	// Simulate a reparent: the watchdog's next poll tick observes this and
+	// cancels Run's own derived ctx — no external cancel is ever called.
+	getppid = func() int { return original + 1 }
+
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v, want nil — a watchdog-triggered cancel must drive the same clean shutdown as an external ctx cancel (D-08)", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after a simulated reparent — watchdog is not wired into Run (D-07/D-08)")
+	}
+
+	if _, ok, lerr := readLock(codegraphDir); lerr != nil || ok {
+		t.Fatalf("lockfile still present after a watchdog-triggered shutdown (ok=%v err=%v)", ok, lerr)
+	}
+	assertNoRegistryRecord(t, os.Getpid())
+}
+
 // TestDaemonSharedWriter proves the daemon holds exactly one writer: an
 // on-disk edit drives a debounced Sync that updates the committed graph
 // while the daemon runs, and a second lock acquire fails while it holds
