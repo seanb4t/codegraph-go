@@ -123,6 +123,28 @@ jobs:
       - name: Typecheck windows lock classifier (GOOS=windows go vet internal/graphstore)
         run: GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/
 
+      # 07-03 (D-07/D-08): watchdog_windows.go is a second windows-tagged,
+      # compile-only-verified file (same "no windows runner" precedent as
+      # graphstore's locked_windows.go above). UNLIKE graphstore,
+      # internal/daemon transitively imports internal/indexer's tree-sitter
+      # grammar bindings — the project's one justified CGo exception — so a
+      # windows cross-vet here needs a REAL mingw-w64 cross C toolchain:
+      # cgo's sizeof/alignment calculations run the target C compiler even
+      # just to typecheck, which graphstore's cgo-free dependency tree never
+      # required. gcc-mingw-w64-x86-64 is Ubuntu's stock apt package for
+      # exactly this cross target; without CC pointed at it (and
+      # CGO_ENABLED=1), `go vet` here fails with `undefined: tree_sitter.Node`
+      # (the grammar bindings' build constraints exclude all files when Go
+      # auto-disables cgo for an unconfigured cross-target).
+      - name: Install mingw-w64 (windows cross-CGO toolchain for internal/daemon vet)
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Typecheck windows PPID watchdog (GOOS=windows go vet internal/daemon)
+        env:
+          CGO_ENABLED: "1"
+          CC: x86_64-w64-mingw32-gcc
+        run: GOOS=windows GOARCH=amd64 go vet ./internal/daemon/
+
   govulncheck:
     name: govulncheck (DIST-03, blocking)
     runs-on: ubuntu-latest
