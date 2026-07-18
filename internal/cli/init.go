@@ -63,7 +63,7 @@ func newInitCmd() *cobra.Command {
 			// long-running indexer.Run call (WR-04 06-REVIEW.md: shared
 			// helper, see progress_cli.go). Stop is deferred so teardown
 			// runs even if indexer.Run errors.
-			defer startProgress(cmd.Context(), quiet, "indexing")()
+			defer startProgress(quiet, "indexing")()
 
 			stats, err := indexer.Run(root, storeDir, indexer.Options{
 				Workers: workers,
