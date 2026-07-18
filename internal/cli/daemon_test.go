@@ -281,3 +281,24 @@ func TestDaemonStopCmd_AggregatedError_ExitsNonZero(t *testing.T) {
 		t.Fatal("expected daemon stop --all to return a non-nil error when daemonStopAll errors")
 	}
 }
+
+// TestDaemonStopCmd_AllAndPath_MutuallyExclusive pins WR-02 (07-REVIEW.md):
+// before this, `daemon stop --all --path <p>` silently ignored --path (the
+// RunE's `if all { ...; return }` branch never looked at path) with no
+// error. cmd.MarkFlagsMutuallyExclusive must now reject the combination
+// before RunE ever dispatches to daemonStopMatching/daemonStopAll.
+func TestDaemonStopCmd_AllAndPath_MutuallyExclusive(t *testing.T) {
+	fakeHome(t)
+
+	withStubbedDaemonStop(t, func(string) ([]daemon.Record, error) {
+		t.Fatal("daemonStopMatching must not be called when --all/--path conflict")
+		return nil, nil
+	}, func() ([]daemon.Record, error) {
+		t.Fatal("daemonStopAll must not be called when --all/--path conflict")
+		return nil, nil
+	})
+
+	if _, _, err := execCmd("daemon", "stop", "--all", "--path", "/repo"); err == nil {
+		t.Fatal("expected daemon stop --all --path <p> to return a non-nil error (mutually exclusive flags)")
+	}
+}

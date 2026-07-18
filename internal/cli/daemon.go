@@ -231,6 +231,12 @@ func newDaemonStopCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path to stop (default: cwd)")
 	cmd.Flags().BoolVar(&all, "all", false, "stop every running daemon, not just the current repo's")
+	// WR-02 (07-REVIEW.md): before this, `--all --path <p>` silently
+	// dropped --path (the `if all { ...; return }` branch above never
+	// looked at path) with no error and no --help indication the two
+	// flags conflict. cobra surfaces the conflict itself (both in --help
+	// and as a RunE error) rather than one flag winning silently.
+	cmd.MarkFlagsMutuallyExclusive("path", "all")
 
 	return cmd
 }
