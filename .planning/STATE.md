@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 7
 current_phase_name: Interactive TUI — Daemon Picker & Install Multi-Select
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-07-18T19:09:57.633Z"
-last_activity: 2026-07-17
-last_activity_desc: Phase 6 complete, transitioned to Phase 7
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-07-18T19:19:31.315Z"
+last_activity: 2026-07-18
+last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 40
-  completed_plans: 40
+  total_plans: 48
+  completed_plans: 41
   percent: 75
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 6 — Rendering Seam & Pretty status/files
+**Current focus:** Phase 7 — Interactive TUI — Daemon Picker & Install Multi-Select
 
 ## Current Position
 
-Phase: 7 — Interactive TUI — Daemon Picker & Install Multi-Select
-Plan: Not started
+Phase: 7 (Interactive TUI — Daemon Picker & Install Multi-Select) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-07-17 — Phase 6 complete, transitioned to Phase 7
+Last activity: 2026-07-18 — Phase 7 execution started
 
-Progress: [██████████] 100%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -103,6 +103,7 @@ Progress: [██████████] 100%
 | Phase 06 P01 | 15min | 3 tasks | 6 files |
 | Phase 06 P02 | 9min | 3 tasks | 8 files |
 | Phase 06 P03 | 4min | 2 tasks | 6 files |
+| Phase 07 P01 | 20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -182,6 +183,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 6] golang.org/x/term deliberately left // indirect in 06-01 — tty.go is forbidden from importing it directly per D-03; promotion happens naturally in 06-02
 - [Phase ?]: 06-02: x/term promoted direct via go mod tidy -e; files.go WorktreeNotice factored into shared notice var (byte-identical plain branch); integration test pins --path to avoid an os.Getwd()/$PWD symlink-resolution artifact
 - [Phase ?]: [Phase 6] 06-03: hand-rolled stderr Progress spinner (time.Ticker + lipgloss, no bubbles/bubbletea) wired into init/index/sync behind ChoosePresentation gated on os.Stderr's fd; Task 2's reachability tests documented as a structural TDD exception matching 06-02's precedent (non-TTY harness can't exercise the real spinner path)
+- [Phase ?]: [Phase 7] internal/cli/tui/doc.go anchor-blank-imports charm.land/bubbletea/v2 + bubbles/v2 in 07-01 to keep go mod tidy from pruning them before 07-06/07-07 add real Model usage
 
 ### Pending Todos
 
@@ -209,9 +211,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-18T18:22:10.535Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-interactive-tui-daemon-picker-install-multi-select/07-CONTEXT.md
+Last session: 2026-07-18T19:19:31.308Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

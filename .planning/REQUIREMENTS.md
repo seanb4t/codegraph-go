@@ -64,7 +64,7 @@
 - [x] **TUI-01**: an import-graph archtest fails the build if `charm.land/lipgloss`/`bubbletea`/`bubbles` are reachable from `internal/query` or `internal/mcp` (the ANSI-isolation guarantee; mirrors the existing graphstore/migrate archtests)
 - [x] **TUI-02**: `status` and `files` render colorized, sectioned output on a TTY (lipgloss) and byte-identical plain output when piped or non-TTY
 - [ ] **TUI-03**: `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global — matching TS (per decision this session)
-- [ ] **TUI-04**: the `daemon` picker (DMON-01) is a bubbletea UI, and every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs)
+- [x] **TUI-04**: the `daemon` picker (DMON-01) is a bubbletea UI, and every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs)
 - [x] **TUI-05**: `init`/`index`/`sync` show progress feedback (spinner/progress) on a TTY, plain otherwise
 
 ### Surface Reconciliation (SURF)
@@ -167,7 +167,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | DMON-03 | Phase 7 | Pending |
 | DMON-04 | Phase 7 | Pending |
 | TUI-03 | Phase 7 | Pending |
-| TUI-04 | Phase 7 | Pending |
+| TUI-04 | Phase 7 | Complete |
 | TEST-03 | Phase 7 | Pending |
 | SURF-01 | Phase 8 | Pending |
 | SURF-02 | Phase 8 | Pending |
