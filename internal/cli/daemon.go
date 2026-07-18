@@ -3,35 +3,119 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/seanb4t/codegraph-go/internal/cli/tui"
 	"github.com/seanb4t/codegraph-go/internal/daemon"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
-// newDaemonCmd builds the `codegraph daemon` command (D-05, SYNC-04): the
-// long-running shared watch/index server multiple agent sessions share.
-// Mirrors newServeCmd's -p/--path resolution, then blocks on
-// daemon.Run(ctx) — the long-running analog of server.ServeStdio — until
-// Ctrl-C/SIGTERM cancels ctx, at which point Run releases the lockfile and
-// returns cleanly. --workers/--quiet/--verbose (WR-04) mirror `codegraph
-// sync`'s own flags and thread through to every debounced indexer.Sync
-// this daemon drives — the daemon has no summary output of its own (a
-// failed sync is logged, not printed to this command's stdout), so
-// --quiet/--verbose only affect a future daemon-side logging format, not
-// this command's own output.
+// runDaemonPicker is tui.RunDaemonPicker indirected behind a package-level
+// func var — mirroring install.go's interactiveAllowed/runAgentPicker seam
+// (D-10) — so daemon_test.go can force the interactive branch and stub the
+// picker without a real pty or tea.Program. interactiveAllowed itself is
+// install.go's existing package-level var, reused verbatim here since both
+// live in package cli — not redeclared.
+var runDaemonPicker = tui.RunDaemonPicker
+
+// daemonList is daemon.List indirected behind a package-level func var, the
+// same convention, so daemon_test.go can seed the bare RunE's records
+// deterministically without depending on any real OS process's liveness
+// (List's own self-heal would otherwise prune any record whose pid isn't
+// actually alive in the test process).
+var daemonList = daemon.List
+
+// newDaemonCmd builds the `codegraph daemon` command tree (D-01, DMON-01/
+// DMON-02): bare (no args) opens the interactive bubbletea picker over
+// every running daemon on a TTY, current-project first
+// (tui.RunDaemonPicker) — or, off a TTY (D-12), prints the SAME ordering as
+// a plain read-only list and exits 0, never blocking on stdin (TUI-04).
+// `daemon start` is the old foreground server (moved verbatim, unchanged
+// behavior, new name); `daemon stop [--all]` explicitly signals without
+// ever opening a picker. Neither the bare command nor `stop` ever calls
+// daemon.Run — only `daemon start` does (D-03, no silent auto-spawn).
+// Resolves the TS name collision noted in 07-CONTEXT.md D-01 (bare
+// `daemon` is a picker in TS; was a foreground server here before this
+// plan).
 func newDaemonCmd() *cobra.Command {
+	var path string
+
+	cmd := &cobra.Command{
+		Use:   "daemon",
+		Short: "List and manage running codegraph daemons",
+		Long: "With no subcommand: on a TTY, open an interactive picker of every\n" +
+			"running daemon (current project first) to stop one, stop all, or\n" +
+			"cancel; off a TTY, print the same list and exit 0. Use `daemon start`\n" +
+			"to run the shared watch/index server in the foreground, and\n" +
+			"`daemon stop [--all]` to stop it non-interactively.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			start, err := resolveStartPath(path)
+			if err != nil {
+				return err
+			}
+			currentRepo, err := filepath.Abs(start)
+			if err != nil {
+				return err
+			}
+
+			records, err := daemonList()
+			if err != nil {
+				return err
+			}
+
+			if interactiveAllowed(cmd) {
+				return runDaemonPicker(cmd, currentRepo, records)
+			}
+			printDaemonList(cmd, currentRepo, records)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path for current-project-first ordering (default: cwd)")
+	cmd.AddCommand(newDaemonStartCmd(), newDaemonStopCmd())
+
+	return cmd
+}
+
+// printDaemonList renders D-12's non-TTY fallback: tui.SortRecordsCurrentFirst's
+// ordering — the SAME ordering RunDaemonPicker's Model uses (TUI-04) — one
+// line per daemon, or a "no running daemons" notice when records is empty.
+// Never an error; the caller always returns nil after calling this.
+func printDaemonList(cmd *cobra.Command, currentRepo string, records []daemon.Record) {
+	out := cmd.OutOrStdout()
+	if len(records) == 0 {
+		fmt.Fprintln(out, "no running daemons")
+		return
+	}
+	sorted := tui.SortRecordsCurrentFirst(records, currentRepo)
+	fmt.Fprintln(out, "pid\trepo\tstarted")
+	for _, r := range sorted {
+		fmt.Fprintf(out, "%d\t%s\t%s\n", r.PID, r.RepoRoot, r.StartedAt.Format(time.RFC3339))
+	}
+}
+
+// newDaemonStartCmd builds `daemon start` (D-01/D-02): the explicit
+// foreground blocking watch/index server multiple agent sessions share —
+// reuses daemon.New/Run/RunWithRetry + the .codegraph/daemon.lock
+// single-writer lockfile as-is. This is the ENTIRE body of the old bare
+// `daemon` RunE, moved verbatim (same behavior, new name), including the
+// watch.DisabledError friendly-exit branch (03-REVIEW.md IN-06/WR-01).
+func newDaemonStartCmd() *cobra.Command {
 	var path string
 	var quiet, verbose bool
 	var workers int
 
 	cmd := &cobra.Command{
-		Use:   "daemon",
-		Short: "Run the shared watch/index server",
+		Use:   "start",
+		Short: "Run the shared watch/index server in the foreground",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			start, err := resolveStartPath(path)
@@ -87,4 +171,74 @@ func newDaemonCmd() *cobra.Command {
 	cmd.Flags().IntVar(&workers, "workers", 0, "bound the daemon's extraction worker pool (default: number of CPUs)")
 
 	return cmd
+}
+
+// daemonStopMatching/daemonStopAll are daemon.StopMatching/daemon.StopAll
+// indirected behind package-level func vars — the same injectable-seam
+// convention as runDaemonPicker/interactiveAllowed above — so
+// daemon_test.go can assert `daemon stop`'s dispatch without ever
+// delivering a real OS signal.
+var daemonStopMatching = daemon.StopMatching
+var daemonStopAll = daemon.StopAll
+
+// newDaemonStopCmd builds `daemon stop [--all]` (D-02, A2): explicit,
+// non-interactive signaling — it never opens a Program and never calls
+// daemon.Run (D-03, no auto-spawn). `-p`/`--path` defaults to the current
+// repo (mirroring `daemon start`'s own flag); `--all` stops every live
+// daemon instead. Both daemonStopMatching/daemonStopAll (daemon.StopMatching/
+// StopAll, 07-04) re-corroborate every target's liveness immediately before
+// signaling (isStale defense-in-depth) — this command only decides WHICH
+// targets, never how they're validated. An empty/no-match result is a
+// clean "no running daemon(s)" notice, exit 0 — not an error; an aggregated
+// per-target stop error IS surfaced as a non-zero exit.
+func newDaemonStopCmd() *cobra.Command {
+	var path string
+	var all bool
+
+	cmd := &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the current-repo daemon, or every running daemon (--all)",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
+
+			if all {
+				stopped, err := daemonStopAll()
+				printStoppedDaemons(out, stopped)
+				if len(stopped) == 0 {
+					fmt.Fprintln(out, "no running daemons")
+				}
+				return err
+			}
+
+			start, err := resolveStartPath(path)
+			if err != nil {
+				return err
+			}
+			repoRoot, err := filepath.Abs(start)
+			if err != nil {
+				return err
+			}
+
+			stopped, err := daemonStopMatching(repoRoot)
+			printStoppedDaemons(out, stopped)
+			if len(stopped) == 0 {
+				fmt.Fprintf(out, "no running daemon for %s\n", repoRoot)
+			}
+			return err
+		},
+	}
+
+	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path to stop (default: cwd)")
+	cmd.Flags().BoolVar(&all, "all", false, "stop every running daemon, not just the current repo's")
+
+	return cmd
+}
+
+// printStoppedDaemons prints one "stopped pid N (repo)" line per record
+// daemonStopMatching/daemonStopAll actually signaled.
+func printStoppedDaemons(out io.Writer, stopped []daemon.Record) {
+	for _, rec := range stopped {
+		fmt.Fprintf(out, "stopped pid %d (%s)\n", rec.PID, rec.RepoRoot)
+	}
 }
