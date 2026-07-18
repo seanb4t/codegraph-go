@@ -114,10 +114,12 @@ func TestProgress_StopIdempotent(t *testing.T) {
 // TestProgress_NoGoroutineLeak covers Test 1's no-leak half: after Stop
 // returns, the ticker goroutine it launched must have actually exited.
 // Because Stop blocks on doneCh until the goroutine returns, this is
-// provable synchronously: runtime.NumGoroutine() immediately after Stop
-// must not be higher than the pre-Start baseline (allowing a short
-// settle window for the Go scheduler/GC's own unrelated background
-// goroutines).
+// provable synchronously via runtime.NumGoroutine() while Progress is
+// running vs. baseline; the "did the goroutine actually go away" half is
+// covered package-wide by TestMain's goleak.VerifyTestMain gate (WR-02) —
+// Stop's close(stopCh); <-doneCh join guarantees the goroutine has exited
+// by the time Stop returns, so goleak's post-test-run scan passes
+// deterministically instead of via a timing-sensitive poll.
 func TestProgress_NoGoroutineLeak(t *testing.T) {
 	baseline := runtime.NumGoroutine()
 
@@ -132,26 +134,4 @@ func TestProgress_NoGoroutineLeak(t *testing.T) {
 	}
 
 	p.Stop()
-
-	after := stabilizedGoroutineCount(baseline)
-	if after > baseline {
-		t.Errorf("runtime.NumGoroutine() = %d after Stop returned, want <= baseline %d — the ticker goroutine leaked", after, baseline)
-	}
-}
-
-// stabilizedGoroutineCount polls runtime.NumGoroutine() briefly, returning
-// as soon as it settles to at or below want (or after a short timeout) —
-// tolerates the Go runtime's own transient background goroutines without
-// weakening the leak assertion itself.
-func stabilizedGoroutineCount(want int) int {
-	deadline := time.Now().Add(500 * time.Millisecond)
-	last := runtime.NumGoroutine()
-	for time.Now().Before(deadline) {
-		last = runtime.NumGoroutine()
-		if last <= want {
-			return last
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return last
 }
