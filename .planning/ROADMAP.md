@@ -264,7 +264,7 @@ Plans:
   4. `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global (TUI-03)
   5. Every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs), and git-hook install→edit→remove is byte-invariant — both tested against piped streams (TUI-04, TEST-03)
 
-**Plans**: 5/8 plans executed
+**Plans**: 6/8 plans executed
 
 Plans:
 **Wave 1**
@@ -280,7 +280,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 07-05-PLAN.md — Wire registry Register/Deregister + watchdog start/join into daemon.Run (DMON-02/03/04)
+- [x] 07-05-PLAN.md — Wire registry Register/Deregister + watchdog start/join into daemon.Run (DMON-02/03/04)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -321,7 +321,7 @@ Plans:
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 5/8 | In Progress|  |
+| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 6/8 | In Progress|  |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 
 ## Backlog
