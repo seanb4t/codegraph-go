@@ -237,7 +237,7 @@ Plans:
   3. `init`/`index`/`sync` show progress feedback (spinner/progress) on a TTY, and plain output otherwise (TUI-05)
   4. The golden/MCP output path stays byte-identical — no ANSI ever reaches the agent surface (archtest green + golden-corpus unchanged)
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans executed
 Plans:
 **Wave 1**
 
@@ -246,7 +246,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 06-02-PLAN.md — TUI-02: `present.RenderStatus`/`RenderFiles` styled renderers + CLI isTTY wiring + byte-identity integration test [Wave 2]
-- [ ] 06-03-PLAN.md — TUI-05: hand-rolled stderr progress writer (ticker, no bubbletea/bubbles) wired into init/index/sync [Wave 2]
+- [x] 06-03-PLAN.md — TUI-05: hand-rolled stderr progress writer (ticker, no bubbletea/bubbles) wired into init/index/sync [Wave 2]
 
 **Notes**: Archtest FIRST (fails the build immediately if styling leaks into query/mcp), THEN add the `internal/cli/present` package + the Charm v2 deps. Charm v2 uses the `charm.land/...` vanity import (not `github.com/charmbracelet/...`); TTY-gating via `golang.org/x/term.IsTerminal`. This establishes the rendering seam the Phase 7 interactive components build on.
 **UI hint**: yes
@@ -295,7 +295,7 @@ Plans:
 | 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
 | 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
-| 6. Rendering Seam & Pretty status/files | v1.0 | 2/3 | In Progress|  |
+| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | In Progress|  |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 0/TBD | Not started | - |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 0/TBD | Not started | - |
 
