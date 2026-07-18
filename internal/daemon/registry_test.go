@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -86,5 +87,75 @@ func TestRegistrySameRepoRootDistinctFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "222.json")); err != nil {
 		t.Fatalf("expected 222.json to exist: %v", err)
+	}
+}
+
+// writeRawRecord writes raw bytes directly under the registry dir,
+// bypassing Register — lets tests seed a record for a pid Register would
+// never be called with (a dead pid) or malformed content.
+func writeRawRecord(t *testing.T, dir, name string, data []byte) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
+		t.Fatalf("writing raw record %s: %v", name, err)
+	}
+}
+
+// TestRegistryListPrunesStale is the plan's primary acceptance gate for
+// Task 2 (D-05): List() self-heals by pruning a dead-pid record from disk
+// and excluding it from the result, keeps a live-pid record, and skips a
+// malformed record without erroring.
+func TestRegistryListPrunesStale(t *testing.T) {
+	dir := withRegistryDir(t)
+
+	dead := deadPID(t)
+	deadName := fmt.Sprintf("%d.json", dead)
+	deadData, err := json.Marshal(Record{PID: dead, StartedAt: time.Now().UTC(), RepoRoot: "/dead/repo"})
+	if err != nil {
+		t.Fatalf("marshal dead record: %v", err)
+	}
+	writeRawRecord(t, dir, deadName, deadData)
+
+	live := Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: "/live/repo"}
+	if err := Register(live); err != nil {
+		t.Fatalf("Register live: %v", err)
+	}
+
+	writeRawRecord(t, dir, "not-a-pid.json", []byte("not valid json"))
+
+	got, err := List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(got) != 1 || got[0] != live {
+		t.Fatalf("List: got %+v, want exactly the live record %+v", got, live)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, deadName)); !os.IsNotExist(err) {
+		t.Fatalf("expected stale record file removed by List, stat err=%v", err)
+	}
+}
+
+// TestRegistryListMissingDir is the DMON-04 empty edge: a registry dir that
+// has never been created is not an error — List returns (nil, nil).
+func TestRegistryListMissingDir(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	prev := registryDir
+	registryDir = func() (string, error) { return missing, nil }
+	t.Cleanup(func() { registryDir = prev })
+
+	got, err := List()
+	if err != nil || got != nil {
+		t.Fatalf("List on missing dir: got %v, err %v; want nil, nil", got, err)
+	}
+}
+
+// TestRegistryListEmptyDir covers the same empty-edge contract when the
+// registry dir exists but has no records yet.
+func TestRegistryListEmptyDir(t *testing.T) {
+	withRegistryDir(t)
+
+	got, err := List()
+	if err != nil || got != nil {
+		t.Fatalf("List on empty dir: got %v, err %v; want nil, nil", got, err)
 	}
 }
