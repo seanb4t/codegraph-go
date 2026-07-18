@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 7
 current_phase_name: Interactive TUI — Daemon Picker & Install Multi-Select
 status: executing
-stopped_at: Completed 07-05-PLAN.md
-last_updated: "2026-07-18T20:19:30.759Z"
+stopped_at: Completed 07-07-PLAN.md
+last_updated: "2026-07-18T20:37:59.477Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 7 execution started
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 48
-  completed_plans: 46
+  completed_plans: 47
   percent: 75
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 7 (Interactive TUI — Daemon Picker & Install Multi-Select) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 7 execution started
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
@@ -109,6 +109,7 @@ Progress: [██████████] 96%
 | Phase 07 P04 | 12min | 2 tasks | 4 files |
 | Phase 7 P06 | 13min | 2 tasks | 6 files |
 | Phase 07 P05 | 9min | 2 tasks | 2 files |
+| Phase 07 P07 | 25min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -198,6 +199,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: interactiveAllowed/runAgentPicker are cli-package func vars defaulting to tui.InteractiveAllowed/tui.RunAgentPicker, letting tests force the interactive branch and stub the picker without a real pty or tea.Program
 - [Phase ?]: Wired registry Register/Deregister and PPID watchdog start/stop into daemon.Run itself (not per-caller) so daemon start (07-07) and serve --mcp both inherit DMON-02/03/04 from one integration point.
 - [Phase ?]: Joined watchdog cancel()+stop() in a single defer (cancel first) rather than two separate defers, to avoid stop() blocking on a not-yet-cancelled ctx.
+- [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: SortRecordsCurrentFirst lives in internal/cli/tui (exported), reused by both the daemon picker Model and daemon.go's plain non-TTY list, so the two presentations can never diverge in ordering (TUI-04)
+- [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: Added a daemonList cli-package func var (daemon.go) so daemon_test.go can seed deterministic multi-record registries without depending on daemon.List's liveness self-heal pruning fabricated pids
+- [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: 07-07 Tasks 2+3 combined into one commit — newDaemonCmd()'s AddCommand wiring directly references newDaemonStopCmd(), no independently-buildable intermediate state, mirroring the 02-status-content plan's own precedent
 
 ### Pending Todos
 
@@ -225,8 +229,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-18T20:19:30.751Z
-Stopped at: Completed 07-05-PLAN.md
+Last session: 2026-07-18T20:37:59.469Z
+Stopped at: Completed 07-07-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

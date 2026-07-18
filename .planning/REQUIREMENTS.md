@@ -37,7 +37,7 @@
 
 ### Daemon Model (DMON)
 
-- [ ] **DMON-01**: `codegraph daemon` (no args) opens an interactive picker listing running daemons (current project first) to stop one / stop-all / cancel, resolving the TS name-collision (TS `daemon` = picker; ours was a foreground server)
+- [x] **DMON-01**: `codegraph daemon` (no args) opens an interactive picker listing running daemons (current project first) to stop one / stop-all / cancel, resolving the TS name-collision (TS `daemon` = picker; ours was a foreground server)
 - [x] **DMON-02**: explicit `daemon start` / `daemon stop` / `daemon stop --all` manage the shared background daemon lifecycle (no silent auto-spawn — `serve --mcp` watches in-process per WATCH-01, so a separate daemon is only for the explicit shared-writer case)
 - [x] **DMON-03**: a PPID watchdog shuts down any daemon / in-process watcher when its supervising host or agent process dies (POSIX ppid-reparent + Windows liveness poll), preventing leaked daemons
 - [x] **DMON-04**: a global daemon registry (`~/.codegraph/daemons`) lets the picker list/stop daemons across projects, self-healing stale records
@@ -162,7 +162,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | TUI-01 | Phase 6 | Complete |
 | TUI-02 | Phase 6 | Complete |
 | TUI-05 | Phase 6 | Complete |
-| DMON-01 | Phase 7 | Pending |
+| DMON-01 | Phase 7 | Complete |
 | DMON-02 | Phase 7 | Complete |
 | DMON-03 | Phase 7 | Complete |
 | DMON-04 | Phase 7 | Complete |
