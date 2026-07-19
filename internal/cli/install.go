@@ -102,8 +102,8 @@ func newInstallCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&target, "target", "auto", "which agents to configure: auto|all|none|<comma-separated ids>")
-	cmd.Flags().StringVar(&location, "location", string(agents.LocationGlobal), "config scope: global|local")
+	cmd.Flags().StringVarP(&target, "target", "t", "auto", "which agents to configure: auto|all|none|<comma-separated ids>")
+	cmd.Flags().StringVarP(&location, "location", "l", string(agents.LocationGlobal), "config scope: global|local")
 	cmd.Flags().BoolVar(&autoAllow, "auto-allow", false, "also add mcp__codegraph__* to Claude Code's permissions.allow list")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (auto)")
 

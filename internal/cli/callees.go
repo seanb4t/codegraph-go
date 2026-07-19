@@ -60,8 +60,8 @@ func newCalleesCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
-	cmd.Flags().IntVar(&limit, "limit", 0, "cap on results returned")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON output")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "cap on results returned")
+	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 
 	return cmd
 }

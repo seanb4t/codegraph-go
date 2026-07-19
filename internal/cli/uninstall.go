@@ -67,8 +67,8 @@ func newUninstallCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&target, "target", "all", "which agents to reverse: auto|all|none|<comma-separated ids>")
-	cmd.Flags().StringVar(&location, "location", string(agents.LocationGlobal), "config scope: global|local")
+	cmd.Flags().StringVarP(&target, "target", "t", "all", "which agents to reverse: auto|all|none|<comma-separated ids>")
+	cmd.Flags().StringVarP(&location, "location", "l", string(agents.LocationGlobal), "config scope: global|local")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "skip the interactive picker; use the non-interactive default set (all)")
 
 	return cmd

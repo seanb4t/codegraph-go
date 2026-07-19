@@ -72,7 +72,7 @@ func newStatusCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON output")
+	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 
 	return cmd
 }
