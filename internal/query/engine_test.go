@@ -155,15 +155,25 @@ func TestOpenAt(t *testing.T) {
 }
 
 func TestClampDepth(t *testing.T) {
+	// Literal 2 (not the defaultDepth symbol) on the default-value cases:
+	// SURF-01/D-02 moves the shared engine's zero-value impact depth
+	// default from 5 to 2 (CLI+MCP move together). Hardcoding the
+	// expectation here — rather than referencing defaultDepth itself —
+	// is what makes this a genuine RED test against the pre-change
+	// constant, not a tautology that passes regardless of the constant's
+	// value.
 	cases := []struct {
 		name string
 		in   int
 		want int
 	}{
-		{"non-positive uses default", 0, defaultDepth},
-		{"negative uses default", -5, defaultDepth},
+		{"non-positive uses default", 0, 2},
+		{"negative uses default", -5, 2},
+		{"explicit small depth preserved", 1, 1},
 		{"in-range passes through", 10, 10},
-		{"above ceiling clamps to MaxDepth", MaxDepth + 100, MaxDepth},
+		{"at ceiling passes through", MaxDepth, MaxDepth},
+		{"above ceiling clamps to MaxDepth", MaxDepth + 1, MaxDepth},
+		{"well above ceiling clamps to MaxDepth", MaxDepth + 100, MaxDepth},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
