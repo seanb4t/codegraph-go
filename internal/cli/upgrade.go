@@ -25,6 +25,7 @@ var upgradeRunFunc = upgrade.Run
 // in internal/upgrade, not here.
 func newUpgradeCmd() *cobra.Command {
 	var check bool
+	var force bool
 
 	cmd := &cobra.Command{
 		Use:   "upgrade [version]",
@@ -49,12 +50,14 @@ func newUpgradeCmd() *cobra.Command {
 			return upgradeRunFunc(version.Info().Version, target, upgrade.Options{
 				Check:   check,
 				Version: pinned,
+				Force:   force,
 				Out:     cmd.OutOrStdout(),
 			})
 		},
 	}
 
 	cmd.Flags().BoolVar(&check, "check", false, "report whether a newer release is available, without downloading")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "reinstall even if already on the latest version")
 
 	return cmd
 }

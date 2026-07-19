@@ -54,6 +54,14 @@ type Options struct {
 	// resolved latest."
 	Version string
 
+	// Force, when true, bypasses the same-version no-op guard and forces a
+	// full download → verify → swap reinstall even when the resolved
+	// target already matches currentVersion. It does NOT affect
+	// verification in any way — verify() remains an unconditional,
+	// fail-closed step before every swap regardless of Force
+	// (T-08-03-01).
+	Force bool
+
 	// Out receives human-readable status lines (the --check report, the
 	// final "upgraded to vX" line). Defaults to io.Discard if nil.
 	Out io.Writer
@@ -99,6 +107,11 @@ func Run(currentVersion, targetPath string, opts Options) error {
 	target := opts.Version
 	if target == "" {
 		target = latest
+	}
+
+	if target == currentVersion && !opts.Force {
+		fmt.Fprintf(out, "codegraph is already on %s\n", currentVersion)
+		return nil
 	}
 
 	// D-13: refuse a non-writable target BEFORE downloading anything — no
