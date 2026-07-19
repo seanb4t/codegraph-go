@@ -174,6 +174,31 @@ func TestDaemonBareCmd_InteractiveAllowed_CallsRunDaemonPicker(t *testing.T) {
 	}
 }
 
+// TestDaemonBareCmd_InteractiveAllowed_EmptyRegistry_NoPicker pins G-07-1
+// (07-UAT test 1): with interactiveAllowed forced true (as if on a real
+// TTY) but an EMPTY registry, the bare `daemon` RunE must NOT open the
+// bubbletea picker — it must fall through to the plain "no running daemons"
+// notice. Opening a Program for the empty set (which immediately tea.Quits)
+// leaked the terminal's DECRQM capability-probe responses
+// (\e[?2026;2$y \e[?2027;0$y) to stdout on a real TTY, garbage the piped
+// (non-TTY) tests never saw because the terminal never replies off a TTY.
+func TestDaemonBareCmd_InteractiveAllowed_EmptyRegistry_NoPicker(t *testing.T) {
+	fakeHome(t)
+	withStubbedDaemonList(t, nil)
+	withStubbedDaemonPicker(t, func(*cobra.Command, string, []daemon.Record) error {
+		t.Fatal("runDaemonPicker must NOT be called for an empty registry — nothing to pick; opening a Program leaks terminal capability-probe responses on a TTY (G-07-1)")
+		return nil
+	})
+
+	out, _, err := execCmd("daemon")
+	if err != nil {
+		t.Fatalf("daemon: %v", err)
+	}
+	if !strings.Contains(out, "no running daemons") {
+		t.Fatalf("expected 'no running daemons', got:\n%s", out)
+	}
+}
+
 // TestDaemonStopCmd_All_EmptyRegistry_CleanNoOp pins DMON-02's empty edge:
 // `daemon stop --all` against an empty registry is a clean no-op notice,
 // exit 0 — not an error. Uses the real daemon.StopAll (empty registry is

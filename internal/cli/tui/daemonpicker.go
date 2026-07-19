@@ -281,6 +281,19 @@ func printDaemonPickerResult(w io.Writer, action daemonAction, stopped []daemon.
 // gated on it (D-10); calling this off a non-TTY is the caller's bug, not
 // this function's job to detect.
 func RunDaemonPicker(cmd *cobra.Command, currentRepo string, records []daemon.Record) error {
+	// Defense-in-depth (07-UAT test 1 / G-07-1): never construct a Program
+	// for an empty record set. The caller (daemon.go) already gates on
+	// len(records) > 0, but opening a Program just to immediately tea.Quit
+	// on the empty set leaks the terminal's DECRQM capability-probe
+	// responses (\e[?2026;2$y \e[?2027;0$y) to stdout — the probes are sent
+	// at Program start but the event loop exits before consuming the
+	// replies. Nothing to pick => the plain notice, no Program, so this
+	// function can never be the source of that leak regardless of caller.
+	if len(records) == 0 {
+		fmt.Fprintln(cmd.OutOrStdout(), "no running daemons")
+		return nil
+	}
+
 	m := newDaemonPickerModel(currentRepo, records)
 
 	p := tea.NewProgram(m, tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout()))

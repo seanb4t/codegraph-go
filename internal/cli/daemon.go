@@ -71,7 +71,15 @@ func newDaemonCmd() *cobra.Command {
 				return err
 			}
 
-			if interactiveAllowed(cmd) {
+			// Only open the interactive picker when there is actually
+			// something to pick. An empty registry has nothing to select, so
+			// it must NOT construct a bubbletea Program even on a TTY: doing
+			// so emits terminal capability probes (DECRQM 2026/2027) whose
+			// responses leak to stdout when the Program quits immediately on
+			// the empty set (07-UAT test 1 / G-07-1). Fall through to the
+			// plain "no running daemons" notice instead — identical output on
+			// TTY and non-TTY for the empty case.
+			if interactiveAllowed(cmd) && len(records) > 0 {
 				return runDaemonPicker(cmd, currentRepo, records)
 			}
 			printDaemonList(cmd, currentRepo, records)
