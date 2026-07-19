@@ -823,4 +823,20 @@ func TestZeroMatchJSONShapesAreEmptyArraysNotNull(t *testing.T) {
 		}
 		assertJSONArrayNotNull(t, data, "affectedTests")
 	})
+
+	// WR-02: a nil files argument (never exercised by the CLI, which
+	// always builds a non-nil slice, but a legitimate call shape for any
+	// other caller of the exported Engine.Affected, e.g. a future MCP
+	// tool) must still marshal "files" as [], not null.
+	t.Run("Affected nil files argument", func(t *testing.T) {
+		got, err := engine.Affected(nil, 2)
+		if err != nil {
+			t.Fatalf("Affected(nil): unexpected error: %v", err)
+		}
+		data, err := MarshalAffectedJSON(got)
+		if err != nil {
+			t.Fatalf("MarshalAffectedJSON: unexpected error: %v", err)
+		}
+		assertJSONArrayNotNull(t, data, "files")
+	})
 }

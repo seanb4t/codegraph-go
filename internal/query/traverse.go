@@ -494,6 +494,18 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 	}
 	depth = clampAffectedDepth(depth)
 
+	// WR-02: normalize a nil files argument to an empty slice so
+	// AffectedResult.Files never marshals as JSON null — mirrors the
+	// existing `tests := []Location{}` convention this function (and
+	// Callees/Callers) already applies to their own array fields. The
+	// current CLI caller (collectAffectedFiles) always builds a non-nil
+	// slice, masking this for today's only caller, but any other caller
+	// of the exported Engine.Affected (a future MCP tool) that passes nil
+	// must not observe a null array.
+	if files == nil {
+		files = []string{}
+	}
+
 	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return AffectedResult{}, err
