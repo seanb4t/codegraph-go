@@ -21,6 +21,12 @@ import (
 var stopMatching = daemon.StopMatching
 var stopAll = daemon.StopAll
 
+// helpFooterLines is the rendered height of the help footer View() appends
+// below the list (a leading blank line + the key-hint line). Update reserves
+// this many rows when sizing the list so list + footer fit the window
+// exactly instead of overflowing and flickering (07-UAT test 1).
+const helpFooterLines = 2
+
 // daemonItem adapts a daemon.Record into bubbles/v2/list's Item interface.
 type daemonItem struct {
 	record daemon.Record
@@ -184,7 +190,17 @@ func (m daemonPickerModel) Init() tea.Cmd {
 func (m daemonPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height)
+		// Reserve rows for the help footer View() appends below the list so
+		// the list + footer fit the window exactly (07-UAT test 1). Sizing
+		// the list to the full window height overflows by the footer's lines,
+		// which — combined with alt-screen off — scrolled the frame and
+		// flickered; the list must own only (height - footer) rows. Floor at
+		// 1 so a tiny window never sizes the list to a non-positive height.
+		listHeight := msg.Height - helpFooterLines
+		if listHeight < 1 {
+			listHeight = 1
+		}
+		m.list.SetSize(msg.Width, listHeight)
 		return m, nil
 	case tea.KeyPressMsg:
 		if len(m.records) == 0 {
@@ -213,7 +229,17 @@ func (m daemonPickerModel) View() tea.View {
 		return tea.NewView("no running daemons\n")
 	}
 	help := "\nenter: stop selected  a: stop all  q/esc: cancel\n"
-	return tea.NewView(m.list.View() + help)
+	v := tea.NewView(m.list.View() + help)
+	// bubbletea v2 makes alt-screen a per-View field (there is no
+	// WithAltScreen Program option). Render the picker in the alternate
+	// screen buffer (07-UAT test 1): without it bubbletea renders inline
+	// below the prompt, and a full-height list that doesn't fit the remaining
+	// space scrolls the main buffer every frame — heavy flicker, title/rows
+	// pushed out of view (only the footer visible). The alt-screen is a
+	// dedicated, frame-diffed full-window canvas, auto-restored on quit, so
+	// the picker leaves the scrollback untouched.
+	v.AltScreen = true
+	return v
 }
 
 // resolvedAction returns the terminal action + target record

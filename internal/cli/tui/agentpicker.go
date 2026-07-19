@@ -114,7 +114,14 @@ func (m agentPickerModel) Init() tea.Cmd { return nil }
 func (m agentPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height)
+		// Reserve rows for the help footer View() appends (07-UAT test 1) —
+		// see daemonpicker.go's identical handling and helpFooterLines. Floor
+		// at 1 so a tiny window never sizes the list non-positive.
+		listHeight := msg.Height - helpFooterLines
+		if listHeight < 1 {
+			listHeight = 1
+		}
+		m.list.SetSize(msg.Width, listHeight)
 		return m, nil
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -133,7 +140,12 @@ func (m agentPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m agentPickerModel) View() tea.View {
 	help := "\nspace: toggle  enter: confirm  q/esc: cancel\n"
-	return tea.NewView(m.list.View() + help)
+	v := tea.NewView(m.list.View() + help)
+	// Alt-screen (bubbletea v2 per-View field) — see daemonpicker.go's
+	// View() for the full rationale (07-UAT test 1): prevents the inline
+	// full-height render from scrolling/flickering the main buffer.
+	v.AltScreen = true
+	return v
 }
 
 // resolvedTargets maps the model's final checked-index set through
