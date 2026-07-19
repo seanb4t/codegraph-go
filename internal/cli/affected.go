@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -39,7 +40,10 @@ func newAffectedCmd() *cobra.Command {
 		Short: "List test symbols impacted by changes to the given files",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			files := collectAffectedFiles(cmd, args, stdinFlag)
+			files, err := collectAffectedFiles(cmd, args, stdinFlag)
+			if err != nil {
+				return err
+			}
 
 			if len(files) == 0 {
 				// SURF-04: zero input (no positional args, no/empty stdin) is
@@ -99,12 +103,25 @@ func newAffectedCmd() *cobra.Command {
 				// SURF-04/T-08-05-01/T-08-05-04: plain, unstyled, one path
 				// per line — no present.RenderFiles, no WorktreeNotice. Safe
 				// to pipe straight into another command.
+				//
+				// WR-03: a FilePath containing an embedded \n or \r is
+				// skipped rather than emitted verbatim — POSIX filesystems
+				// permit any byte except NUL and '/' in a filename,
+				// including a literal newline, and this output's whole
+				// contract is one-path-per-line machine-readable text safe
+				// to pipe into another command
+				// (`for line in $(codegraph affected --quiet); do ...`). A
+				// path with an embedded newline would otherwise inject an
+				// attacker-controlled extra "line" into that stream.
 				seen := make(map[string]bool, len(result.AffectedTests))
 				for _, l := range result.AffectedTests {
 					if seen[l.FilePath] {
 						continue
 					}
 					seen[l.FilePath] = true
+					if strings.ContainsAny(l.FilePath, "\n\r") {
+						continue
+					}
 					fmt.Fprintf(out, "%s\n", l.FilePath)
 				}
 				return nil
@@ -139,6 +156,15 @@ func newAffectedCmd() *cobra.Command {
 	return cmd
 }
 
+// affectedStdinMaxLineBytes bounds a single --stdin line (WR-06): a file
+// path legitimately never needs to exceed this — 4096 is the common
+// PATH_MAX — so a single pathological/malicious "line" far longer than
+// any real path is treated as malformed input (an explicit error) rather
+// than tripping bufio.Scanner's much smaller default 64KB
+// bufio.MaxScanTokenSize ceiling and silently truncating every line after
+// it.
+const affectedStdinMaxLineBytes = 4096
+
 // collectAffectedFiles assembles the file list from positional args plus,
 // when stdinFlag is set, newline-delimited paths read from cmd.InOrStdin()
 // via bufio.NewScanner — never hangs on a piped/closed/empty stream since
@@ -147,33 +173,66 @@ func newAffectedCmd() *cobra.Command {
 // lines are skipped. Positional args and stdin paths are unioned,
 // deduplicated, and order-preserved; stdin lines are used purely as
 // index-lookup keys (T-08-05-01) — never shell-exec'd or path-joined here.
-func collectAffectedFiles(cmd *cobra.Command, args []string, stdinFlag bool) []string {
+//
+// CR-01: the combined file count is capped at query.MaxAffectedFiles —
+// checked as each stdin line is added — so a hostile or merely oversized
+// input source (`yes | codegraph affected --stdin`, a compromised git
+// hook, an attacker-influenced CI diff) cannot grow the seen/files sets
+// (and, downstream, Engine.Affected's fileSet) without limit before the
+// engine's own bounded BFS ever runs. This rejects outright with a clear
+// error, matching validateMaxFiles/validateLimit's "reject absurd input,
+// don't silently truncate" convention elsewhere in this package.
+//
+// WR-06: scanner.Buffer raises the per-line token ceiling to
+// affectedStdinMaxLineBytes (well above any real path, well below
+// unbounded) so a legitimately long-but-valid path is never mistaken for
+// "too long" — and a genuine bufio.ErrTooLong (which, unlike ordinary
+// EOF, indicates malformed input) is surfaced as an explicit error
+// instead of silently stopping the scan and dropping every line after it.
+func collectAffectedFiles(cmd *cobra.Command, args []string, stdinFlag bool) ([]string, error) {
 	seen := make(map[string]bool, len(args))
 	files := make([]string, 0, len(args))
 
-	add := func(f string) {
+	add := func(f string) error {
 		if f == "" || seen[f] {
-			return
+			return nil
+		}
+		if len(files)+1 > query.MaxAffectedFiles {
+			return fmt.Errorf("affected: input exceeds maximum %d files", query.MaxAffectedFiles)
 		}
 		seen[f] = true
 		files = append(files, f)
+		return nil
 	}
 
 	for _, a := range args {
-		add(a)
+		if err := add(a); err != nil {
+			return nil, err
+		}
 	}
 
 	if stdinFlag {
 		scanner := bufio.NewScanner(cmd.InOrStdin())
+		scanner.Buffer(make([]byte, 0, 64*1024), affectedStdinMaxLineBytes)
 		for scanner.Scan() {
-			add(strings.TrimSpace(scanner.Text()))
+			if err := add(strings.TrimSpace(scanner.Text())); err != nil {
+				return nil, err
+			}
 		}
-		// Scanner errors (rare: only I/O errors on the underlying reader,
-		// not "no more input") are deliberately swallowed here — a
-		// git-hook pipeline should degrade to "no files from stdin"
-		// rather than fail the whole command; the empty-input path above
-		// still resolves the same "no files provided" advisory.
+		if err := scanner.Err(); err != nil {
+			// WR-06: bufio.ErrTooLong specifically indicates a malformed
+			// (pathologically long) line — surface it rather than
+			// swallowing it. Other scanner errors (rare: genuine I/O
+			// errors on the underlying reader, not "no more input") are
+			// still deliberately swallowed — a git-hook pipeline should
+			// degrade to "no files from stdin" rather than fail the
+			// whole command; the empty-input path above still resolves
+			// the same "no files provided" advisory.
+			if errors.Is(err, bufio.ErrTooLong) {
+				return nil, fmt.Errorf("affected: --stdin line exceeds maximum %d bytes: %w", affectedStdinMaxLineBytes, err)
+			}
+		}
 	}
 
-	return files
+	return files, nil
 }

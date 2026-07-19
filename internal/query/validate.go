@@ -28,6 +28,17 @@ const (
 	// MaxFiles bounds explore's per-call file-read fan-out.
 	MaxFiles = 1000
 
+	// MaxAffectedFiles bounds how many changed-file paths `affected
+	// --stdin` (an explicitly untrusted input surface, SURF-04/
+	// T-08-05-01) may ingest before Engine.Affected ever runs its bounded
+	// graph scan (CR-01, T-03-02-DoS). Deliberately its own constant
+	// rather than reusing MaxFiles — MaxFiles bounds Explore's per-call
+	// file-READ fan-out (an expensive per-file verbatim-source read);
+	// affected's stdin path is a cheap string-dedup/BFS-seed operation
+	// that can tolerate a much larger ceiling before becoming a DoS
+	// concern, so the two must not be silently coupled.
+	MaxAffectedFiles = 10000
+
 	// defaultDepth is applied when a caller passes a non-positive depth
 	// (clampDepth's "0 means default" convention, matching the CLI flags'
 	// zero-value default). SURF-01/D-02: matches TS CodeGraph 1.3.1's
@@ -126,6 +137,22 @@ func validateMaxFiles(n int) error {
 func validateDepth(n int) error {
 	if n < 0 {
 		return fmt.Errorf("query: depth %d must be non-negative", n)
+	}
+	return nil
+}
+
+// ValidateAffectedFiles rejects a files slice longer than MaxAffectedFiles
+// with a clear error (CR-01), mirroring validateLimit/validateMaxFiles's
+// "reject outright rather than silently truncate" posture — a caller (or
+// an untrusted/compromised MCP client, or a hostile CI diff) that tries to
+// grow `affected --stdin`'s input past this ceiling gets an explicit
+// error instead of an ever-growing, unbounded seen/files/fileSet
+// allocation. Exported so internal/cli/affected.go's collectAffectedFiles
+// can enforce the cap as it reads stdin, before Engine.Affected is ever
+// called.
+func ValidateAffectedFiles(n int) error {
+	if n > MaxAffectedFiles {
+		return fmt.Errorf("query: %d files exceeds maximum %d", n, MaxAffectedFiles)
 	}
 	return nil
 }
