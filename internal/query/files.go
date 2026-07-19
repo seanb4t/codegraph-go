@@ -21,6 +21,15 @@ type FilesOptions struct {
 	// Empty applies no language filter.
 	Filter string
 
+	// Dir narrows results to files whose path starts with this prefix —
+	// a plain strings.HasPrefix check (or "./"+Dir), matching TS 1.3.1's
+	// files --filter <dir> exactly (bin/codegraph.js:1348-1354). This is
+	// deliberately NOT a glob despite its CLI flag's <dir> placeholder
+	// text — see dirPrefixMatches. Empty applies no directory filter.
+	// Orthogonal to and composes (AND) with Filter (the language filter,
+	// CONTEXT D-03 add-alongside): a file must satisfy both to appear.
+	Dir string
+
 	// Depth caps directory nesting: a file whose path has Depth or more
 	// "/" separators is excluded (Depth=1 means root-level files only,
 	// Depth=2 allows one level of nesting, and so on). 0 (the zero
@@ -83,14 +92,31 @@ func validateFilesDepth(n int) error {
 	return nil
 }
 
+// dirPrefixMatches reports whether path satisfies the --dir prefix filter
+// (SURF-02): a plain string-prefix match against path directly or against
+// path with a "./" prefix — matching TS 1.3.1's files --filter <dir>
+// exactly (bin/codegraph.js:1348-1354). Deliberately strings.HasPrefix
+// only, NOT filepath.Match/doublestar/regexp — TS's own implementation is
+// a prefix check, not a glob, despite the CLI flag's <dir> placeholder
+// text (T-08-02-02: also the deliberate anti-ReDoS choice, O(n) with no
+// backtracking). An empty dir applies no filter.
+func dirPrefixMatches(path, dir string) bool {
+	if dir == "" {
+		return true
+	}
+	return strings.HasPrefix(path, dir) || strings.HasPrefix(path, "./"+dir)
+}
+
 // Files browses the indexed file structure from the graph (QRY-07): it
 // reads e.reader.IterateFiles() only — never os.ReadDir or any other live
 // filesystem walk — so the result reflects the frozen point-in-time graph
 // even if the working tree has since changed underneath it. pattern
 // narrows by glob match on the full path, filter narrows by exact
-// Language match, depth bounds directory nesting, and format selects the
-// flat-list vs. nested-tree projection. The returned set is additionally
-// capped at MaxLimit entries (T-03-05-DoS, "cap the returned set").
+// Language match, dir narrows by path prefix (SURF-02, orthogonal to and
+// composed with filter), depth bounds directory nesting, and format
+// selects the flat-list vs. nested-tree projection. The returned set is
+// additionally capped at MaxLimit entries (T-03-05-DoS, "cap the returned
+// set").
 func (e *Engine) Files(opts FilesOptions) (FilesResult, error) {
 	if err := validateFilesDepth(opts.Depth); err != nil {
 		return FilesResult{}, err
@@ -120,6 +146,9 @@ func (e *Engine) Files(opts FilesOptions) (FilesResult, error) {
 		p := filepath.ToSlash(f.Path)
 
 		if opts.Filter != "" && f.Language != opts.Filter {
+			continue
+		}
+		if !dirPrefixMatches(p, opts.Dir) {
 			continue
 		}
 		if opts.Pattern != "" {
