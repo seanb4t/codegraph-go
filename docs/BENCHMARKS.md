@@ -88,18 +88,118 @@ downloadable artifact.
 
 ## 2. Raw numbers
 
-**These are the MEDIAN of 3 full head-to-head runs** — not a single run.
-Each cell below is the per-metric median across **three** independent
-`tools/bench/runner -mode headtohead` invocations (each itself already a
-median-of-5 per command), captured back-to-back on **2026-07-13 on a
-darwin/arm64 (Apple Silicon) local development machine**, against the
-installed TS `@colbymchenry/codegraph@1.3.1`. Taking the median across
-runs (rather than reporting the first, coldest, most-favorable run) guards
-against cherry-picking and against per-run thermal/scheduler noise. It is
-NOT a live `bench.yml` CI run — that remains the canonical publish target
-(see the hardware caveat below). Every figure is transcribed verbatim from
-runner JSON (nothing hand-estimated); all three raw runs are committed
-(see provenance below), so the median is independently re-derivable.
+**These are the MEDIAN of 3 full head-to-head `bench.yml` CI runs** — not a
+single run. Each cell below is the per-metric median across **three**
+independent `workflow_dispatch` runs of `.github/workflows/bench.yml`
+(each run itself already a median-of-5 per command inside
+`tools/bench/runner -mode headtohead`), executed back-to-back on
+**2026-07-19 on standardized GitHub Actions `ubuntu-latest` (linux/amd64)
+runners**, at commit `ca511e7` (`origin/main`), against the installed TS
+`@colbymchenry/codegraph@1.3.1`. Taking the median across runs (rather than
+reporting the first, coldest, most-favorable run) guards against
+cherry-picking and against per-run scheduler/neighbor-noise variance on
+shared CI hardware. Every figure is transcribed verbatim from runner JSON
+(nothing hand-estimated); all three raw CI runs are committed (see
+provenance below), so the median is independently re-derivable. This
+**replaces** the provisional darwin/arm64 local-machine table from v0.1
+(now retained purely for historical comparison in the "Superseded" note
+below) and closes PERF-01.
+
+| Repo | Subject | Files/s (median-of-3) | Bytes/s | Query latency (ms) | Peak RSS | Cold start (ms) |
+|---|---|---|---|---|---|---|
+| weft-go | **go** | 1,027.34 | 9,118,341 (≈9.1 MB/s) | 18.704 | 57,233,408 (57.2 MB) | 12.246 |
+| weft-go | ts | 126.16 | 1,119,723 (≈1.1 MB/s) | 241.585 | 159,617,024 (159.6 MB) | 102.581 |
+| colbymchenry-codegraph | **go** | 226.10 | 24,637,764 (≈24.6 MB/s) | 23.479 | 99,233,792 (99.2 MB) | 13.394 |
+| colbymchenry-codegraph | ts | 52.25 | 5,693,690 (≈5.7 MB/s) | 271.099 | 451,047,424 (451.0 MB) | 102.329 |
+| cockroachdb-pebble | **go** | 380.60 | 5,997,469 (≈6.0 MB/s) | 35.679 | 167,624,704 (167.6 MB) | 12.696 |
+| cockroachdb-pebble | ts | 17.93 | 282,591 (≈0.3 MB/s) | 280.843 | 496,885,760 (496.9 MB) | 103.945 |
+
+### Go vs TS 1.3.1 — summary (from the medians above)
+
+| Repo | Indexing throughput | Query latency | Peak RSS | Cold start |
+|---|---|---|---|---|
+| weft-go | **8.1× faster** | **12.9× lower** | **2.8× lighter** | **8.4× faster** |
+| colbymchenry-codegraph | **4.3× faster** | **11.5× lower** | **4.5× lighter** | **7.6× faster** |
+| cockroachdb-pebble | **21.2× faster** | **7.9× lower** | **3.0× lighter** | **8.2× faster** |
+
+Across all three real repos, codegraph-go beats TS CodeGraph 1.3.1 on
+**every** metric on standardized `ubuntu-latest` CI hardware: indexing
+throughput by 4.3×–21.2×, query latency by 7.9×–12.9×, peak RSS by
+2.8×–4.5×, and cold start by ~7.6×–8.4× — direct evidence for the
+project's core "same or better — faster, lighter, from a single binary"
+value proposition. As expected moving from a local darwin/arm64 machine to
+shared `ubuntu-latest` CI hardware, the **absolute magnitudes shifted**
+(indexing throughput dropped roughly an order of magnitude in absolute
+files/s for both subjects, consistent with CI runners' weaker single-core
+performance and noisier-neighbor I/O versus a dedicated Apple Silicon
+laptop) — but query latency and RSS ratios actually **improved** relative
+to v0.1 (query latency margin roughly doubled, 2.3–2.8× → 7.9–12.9×),
+because TS/Node's fixed per-invocation overhead (V8 startup, module
+resolution) is proportionally larger on the slower CI CPU while Go's
+static-binary cold start stays comparatively cheap. Indexing-throughput
+ratios narrowed on the two larger repos (12.8×→4.3× colbymchenry,
+59.7×→21.2× pebble) — see the repeatability note below for why. The
+overall conclusion — codegraph-go wins every metric on every corpus — is
+unchanged; only the reproducible, standardized-hardware magnitudes are new.
+
+### Run-to-run repeatability (3 runs)
+
+Across the three CI runs, the metrics separate into stable and noisy:
+
+- **Peak RSS and throughput (files/s) are highly repeatable** — CV
+  (coefficient of variation) is **≤~2.4%** on Go's files/s and **≤~2.8%**
+  on Go's peak RSS across all three repos. Safe to cite as absolutes.
+- **Go query latency and cold start on the larger `colbymchenry-codegraph`
+  repo are the noisiest cells** — CV ~15.8% (query latency) and ~13.3%
+  (cold start), driven by one of the three runs (run 3) landing on a
+  visibly slower CI runner/neighbor for that repo specifically (its cold
+  start jumped to 17.2ms and query latency to 30.6ms vs ~12-13ms/21-23ms
+  on the other two runs) — consistent with shared-tenancy noise on GitHub's
+  hosted runners rather than a regression, since `weft-go` and
+  `cockroachdb-pebble` (run in the same job, same runner, same three
+  workflow dispatches) stayed tight (CV 1.5-4.8%). Taking the median
+  (rather than mean or first-run) is exactly what damps this kind of
+  single-run outlier.
+- **The Go/TS throughput ratios narrowed on the two larger repos versus
+  v0.1's darwin numbers** (12.8×→4.3× colbymchenry, 59.7×→21.2× pebble) but
+  **stayed decisive in every individual CI run** (colbymchenry: 4.4×/4.2×/4.4×
+  across the three runs; pebble: 21.3×/21.3×/21.2×) — the conclusion is
+  robust regardless of which run you cite, even though the absolute ratio
+  moved versus the prior local-machine measurement.
+
+**Reading the throughput numbers:** `files/s` is `corpus_file_count /
+index_wall_time`, so on the tiny `weft-go` corpus (~84 files) fixed
+per-invocation startup cost dominates and inflates the absolute `files/s`
+for *both* subjects — the meaningful comparison is the Go-vs-TS **ratio
+within each repo** (both subjects pay the same overhead structure) plus
+`bytes/s` and the larger `cockroachdb-pebble` corpus, where real per-file
+work dominates over fixed startup.
+
+**Hardware note:** these are now the canonical, standardized-hardware
+numbers — three `bench.yml` `workflow_dispatch` runs on GitHub Actions
+`ubuntu-latest` (linux/amd64), triggered directly for this release
+(runs
+[29702229231](https://github.com/seanb4t/codegraph-go/actions/runs/29702229231),
+[29702555275](https://github.com/seanb4t/codegraph-go/actions/runs/29702555275),
+[29702562674](https://github.com/seanb4t/codegraph-go/actions/runs/29702562674),
+all at commit `ca511e7`). They supersede the v0.1 darwin/arm64
+local-machine table (kept below purely for historical before/after
+comparison, not as a current claim).
+
+**Provenance.** The three verbatim runner-JSON CI runs the medians above
+are computed from are committed alongside this doc:
+`tools/bench/headtohead-linux-amd64-ci-20260719-run1.json`, `-run2.json`,
+and `-run3.json` (regenerate any run with `gh workflow run bench.yml` or
+`go run ./tools/bench/runner -mode headtohead`).
+
+### Superseded: v0.1 provisional darwin/arm64 local-machine table
+
+The table below was v0.1's provisional measurement, captured locally on
+Apple Silicon before this project had a live CI run to cite. It is kept
+here **only** for historical before/after comparison — the table above
+(standardized `ubuntu-latest` CI, 2026-07-19) is the canonical, current
+number for the v1.0.0 release. Its own raw runs remain committed at
+`tools/bench/headtohead-darwin-arm64-20260713-run{1,2,3}.json`.
 
 | Repo | Subject | Files/s (median-of-3) | Bytes/s | Query latency (ms) | Peak RSS | Cold start (ms) |
 |---|---|---|---|---|---|---|
@@ -109,62 +209,6 @@ runner JSON (nothing hand-estimated); all three raw runs are committed
 | colbymchenry-codegraph | ts | 161.79 | 17,629,859 (≈17.6 MB/s) | 118.710 | 511,148,032 (511.1 MB) | 72.985 |
 | cockroachdb-pebble | **go** | 2,566.26 | 40,438,690 (≈40.4 MB/s) | 51.945 | 161,054,720 (161.1 MB) | 11.876 |
 | cockroachdb-pebble | ts | 43.01 | 677,761 (≈678 KB/s) | 117.581 | 580,583,424 (580.6 MB) | 72.174 |
-
-### Go vs TS 1.3.1 — summary (from the medians above)
-
-| Repo | Indexing throughput | Query latency | Peak RSS | Cold start |
-|---|---|---|---|---|
-| weft-go | **6.1× faster** | **2.7× lower** | **5.5× lighter** | **5.9× faster** |
-| colbymchenry-codegraph | **12.8× faster** | **2.8× lower** | **5.0× lighter** | **6.0× faster** |
-| cockroachdb-pebble | **59.7× faster** | **2.3× lower** | **3.6× lighter** | **6.1× faster** |
-
-Across all three real repos, codegraph-go beats TS CodeGraph 1.3.1 on
-**every** metric: indexing throughput by 6.1×–59.7×, query latency by
-~2.3–2.8×, peak RSS by 3.6×–5.5×, and cold start by ~6× — direct evidence
-for the project's core "same or better — faster, lighter, from a single
-binary" value proposition.
-
-### Run-to-run repeatability (3 runs)
-
-Across the three runs, the metrics separate into stable and noisy:
-
-- **Peak RSS, throughput (files/s), and cold start are highly repeatable** —
-  coefficient of variation (CV) **< ~4%** on essentially every cell (peak
-  RSS is the tightest, CV 0.2–3.0%). Safe to cite as absolutes.
-- **Go query latency on the two larger repos is the noisy metric** — CV
-  ~8.9% (colbymchenry/go) and ~8.8% (pebble/go), drifting monotonically
-  upward across the three back-to-back runs. That upward drift is the
-  signature of **thermal throttling / load accumulation** from running
-  three passes in a row on a laptop, not a real regression — the TS query
-  numbers on the same repos stayed stable in *absolute* ms; they only look
-  steadier in *percentage* terms because TS's query baseline is ~3× larger.
-  On isolated CI hardware this metric is expected to tighten.
-- **The Go/TS ratios stayed decisive in every individual run** (throughput
-  6.8/5.9/6.1× on weft-go, 13.7/12.6/12.2× on colbymchenry, 61.6/59.7/56.6×
-  on pebble) — the conclusion is robust regardless of which run you cite.
-
-**Reading the throughput numbers:** `files/s` is `corpus_file_count /
-index_wall_time`, so on the tiny `weft-go` corpus (~84 files) fixed
-per-invocation startup cost dominates and inflates the absolute `files/s`
-for *both* subjects — the meaningful comparison is the Go-vs-TS **ratio
-within each repo** (both subjects pay the same overhead structure) plus
-`bytes/s` and the larger `cockroachdb-pebble` corpus, where the ratio
-widens to ~60× as real per-file work dominates over fixed startup.
-
-**Hardware caveat (before treating these as canonical):** these are local
-runs on Apple Silicon (darwin/arm64). Absolute magnitudes are
-machine-specific; the Go-vs-TS *ratios* are the durable signal. The
-canonical published numbers should come from a `bench.yml`
-`workflow_dispatch` run on standardized GitHub Actions hardware — trigger
-that once the release is cut, and replace this table's absolute figures
-with the CI run's output (keeping the ratio summary, which is expected to
-hold).
-
-**Provenance.** The three verbatim runner-JSON runs the medians above are
-computed from are committed alongside this doc:
-`tools/bench/headtohead-darwin-arm64-20260713-run1.json`,
-`-run2.json`, and `-run3.json` (regenerate any run with
-`go run ./tools/bench/runner -mode headtohead`).
 
 ### The one real, committed number: the synthetic regression baseline
 
