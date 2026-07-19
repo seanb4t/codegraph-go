@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 8
 current_phase_name: Surface Reconciliation & Signed v1.0.0 Release
 status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-07-19T19:46:05.753Z"
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-07-19T19:54:00.727Z"
 last_activity: 2026-07-19
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 57
-  completed_plans: 51
+  completed_plans: 52
   percent: 88
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 8 (Surface Reconciliation & Signed v1.0.0 Release) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-07-19 — Phase 8 execution started
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 91%
 
 ## Performance Metrics
 
@@ -114,6 +114,7 @@ Progress: [█████████░] 89%
 | Phase 08 P01 | 20min | 3 tasks | 3 files |
 | Phase 8 P2 | 6min | 2 tasks | 3 files |
 | Phase 08 P03 | 12min | 2 tasks | 9 files |
+| Phase 08 P04 | 6min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -212,6 +213,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 8]: SURF-01 golden corpus required no regen — testdata/golden/corpus/{weft-go,colbymchenry-codegraph}/impact.json already encoded depth:2 (TS 1.3.1 oracle default), confirming Go's no-flag impact now matches rather than diverges
 - [Phase ?]: SURF-02/03: files --dir added alongside language --filter (D-03 add-alongside); dirPrefixMatches uses strings.HasPrefix only, no glob/regex/doublestar
 - [Phase ?]: SURF-03: every TS-free short letter adopted per D-04 collision policy; no existing Go binding (-p/-q/-v/-y) remapped; upgrade --force gates only the same-version no-op guard, verify() ordering unchanged
+- [Phase ?]: [Phase 8]: SURF-04 Affected's clampAffectedDepth is a standalone mirror of clampDepth (not a shared clampDepthWithDefault helper); affected.go call site passes 0, deferring full --depth/--stdin/--filter/--quiet flag wiring to 08-05
 
 ### Pending Todos
 
@@ -240,8 +242,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-19T19:46:05.744Z
-Stopped at: Completed 08-03-PLAN.md
+Last session: 2026-07-19T19:54:00.718Z
+Stopped at: Completed 08-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

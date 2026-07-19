@@ -146,6 +146,10 @@ None — no external service configuration required.
 - No blockers. `go build ./...` and `go test ./internal/query/... -count=1` both green; no regressions in `Impact`/`Callers`/`Callees`.
 - The plan's backstop truth (Affected output-ordering determinism) is intentionally left for human confirmation during a later `validate-phase` pass, per the plan's own `<verification>` section — not a gap introduced by this execution.
 
+## Self-Check: PASSED
+
+All created/modified files verified present on disk; all task and docs commit hashes (`f602e6a`, `872d168`, `da5adc4`, `e315715`) verified present in git history.
+
 ---
 *Phase: 08-surface-reconciliation-signed-v1-0-0-release*
 *Completed: 2026-07-19*
