@@ -197,8 +197,8 @@ func collectAffectedFiles(cmd *cobra.Command, args []string, stdinFlag bool) ([]
 		if f == "" || seen[f] {
 			return nil
 		}
-		if len(files)+1 > query.MaxAffectedFiles {
-			return fmt.Errorf("affected: input exceeds maximum %d files", query.MaxAffectedFiles)
+		if err := query.ValidateAffectedFiles(len(files) + 1); err != nil {
+			return fmt.Errorf("affected: %w", err)
 		}
 		seen[f] = true
 		files = append(files, f)

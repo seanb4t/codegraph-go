@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // setupIndexedFixtureWithTest is setupIndexedFixture (query_cli_test.go)
@@ -197,6 +200,31 @@ func TestAffectedStdinLineTooLong(t *testing.T) {
 			t.Fatalf("affected --stdin: unexpected error for %d-byte line (cap %d): %v", affectedStdinMaxLineBytes-1, affectedStdinMaxLineBytes, err)
 		}
 	})
+}
+
+// TestAffectedStdinTooManyFiles pins WR-01 (iteration-2 re-review):
+// collectAffectedFiles must actually reject input past
+// query.MaxAffectedFiles via query.ValidateAffectedFiles (the single
+// source of truth for the bound), not merely accept it silently. Prior to
+// this fix the >MaxAffectedFiles rejection path had no test coverage at
+// all.
+func TestAffectedStdinTooManyFiles(t *testing.T) {
+	dir := setupIndexedFixtureWithTest(t)
+
+	var b strings.Builder
+	for i := 0; i < query.MaxAffectedFiles+1; i++ {
+		b.WriteString("nonexistent/file")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString(".go\n")
+	}
+
+	_, _, err := execCmdTimeout(t, 10*time.Second, b.String(), "affected", "--stdin", "--quiet", "-p", dir)
+	if err == nil {
+		t.Fatalf("affected --stdin: expected error for %d distinct files (max %d), got nil", query.MaxAffectedFiles+1, query.MaxAffectedFiles)
+	}
+	if !strings.Contains(err.Error(), "exceeds maximum") {
+		t.Fatalf("affected --stdin: expected 'exceeds maximum' error, got %v", err)
+	}
 }
 
 func TestAffectedFilter(t *testing.T) {
