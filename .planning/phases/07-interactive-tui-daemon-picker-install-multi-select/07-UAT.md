@@ -1,46 +1,39 @@
 ---
-status: testing
+status: complete
 phase: 07-interactive-tui-daemon-picker-install-multi-select
 source: [07-VERIFICATION.md]
 started: 2026-07-18T00:00:00Z
-updated: 2026-07-18T00:00:00Z
+updated: 2026-07-19T00:00:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: Bubbletea daemon picker visual rendering on a real TTY
-expected: |
-  `codegraph daemon` (with ≥1 running daemon) opens a legible single-select
-  list — current repo's daemon(s) shown first — and stop-one / stop-all /
-  cancel all work and render correctly (colors, layout, selection highlight).
-awaiting: user response
+[testing complete]
 
 ## Tests
 
 ### 1. Bubbletea daemon picker visual rendering on a real TTY
 expected: `codegraph daemon` with ≥1 running daemon opens a legible single-select list, current repo's daemon(s) first; stop-one/stop-all/cancel work and render correctly. (Off-TTY / piped is already automated: plain list, exit 0, never hangs.)
-result: issue
-reported: "escape issues in the UI — `codegraph daemon` with no running daemons on a real TTY printed `no running daemons` followed by leaked terminal control sequences `^[[?2026;2$y^[[?2027;0$y`"
-severity: minor
-root_cause: "daemon.go bare RunE opened a bubbletea Program (RunDaemonPicker) whenever stdout was a TTY, even with an empty registry. daemonPickerModel.Init() returns tea.Quit immediately for the empty set, so the Program started — emitting DECRQM capability probes (\\e[?2026$p synchronized-output, \\e[?2027$p grapheme) — then quit before its event loop consumed the terminal's replies, leaking `;2$y`/`;0$y` to stdout. Automated tests run piped (non-TTY) so the terminal never replied and the leak was invisible."
-fixed_by: inline (this session)
+result: pass
+note: "Passed after two rendering bugs found during this UAT were fixed and re-verified: G-07-1 (empty-registry escape-sequence leak — fixed 3e43b25) and G-07-2 (picker flicker + blank list, missing bubbletea-v2 alt-screen — fixed ad6e9cb). Final re-test: alt-screen picker renders 'Running daemons' + the current-repo record, no flicker; enter stopped pid 74320 with a 'stopped pid …' confirmation line (WR-01) and the alt-screen restored cleanly."
 
 ### 2. Install/uninstall checkbox multi-select visual rendering on a real TTY
 expected: `codegraph install` (no `--target`, no `-y`) shows a checkbox list pre-checked for already-installed agents; space toggles, enter confirms, q/esc cancels — legible glyphs, correct pre-check state. Same for `codegraph uninstall`. (Off-TTY / `-y` auto path is already automated.)
-result: [pending]
+result: pass
+note: "Alt-screen checkbox picker (post G-07-2 fix) renders 'Select agents to configure' + all 8 agents pre-checked [x] (detected installed), '>' cursor, no flicker."
 
 ### 3. Windows daemon stop termination + PPID watchdog on a real Windows host
 expected: On Windows, `daemon start` then `daemon stop` from another shell terminates the daemon (hard-kill via TerminateProcess) and clears its registry record; the PPID watchdog shuts a daemon/watcher down when its supervising process dies. (No Windows CI runner exists; cross-compile + `GOOS=windows go vet` via mingw-w64 pass, but real termination/liveness semantics need a Windows host.)
-result: [pending]
+result: skipped
+reason: "Windows platform gap — tester is on macOS, no Windows host available. Windows-tagged code is cross-compiled + go-vet-typechecked via mingw-w64 in CI; only real runtime termination/liveness semantics remain unverified. Accepted platform gap, tracked for a future Windows verification pass."
 
 ## Summary
 
 total: 3
-passed: 0
-issues: 1
-pending: 2
-skipped: 0
+passed: 2
+issues: 0
+pending: 0
+skipped: 1
 blocked: 0
 
 ## Gaps
