@@ -5,8 +5,8 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 7
 current_phase_name: Interactive TUI — Daemon Picker & Install Multi-Select
 status: verifying
-stopped_at: Phase 7 executed + verified (7/7 automated; 3 human-UAT items pending)
-last_updated: "2026-07-18T20:57:02.380Z"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-07-19T17:21:52.260Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 7 execution started
 progress:
@@ -233,9 +233,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-18T20:57:02.372Z
-Stopped at: Phase 7 executed + verified (7/7 automated; 3 human-UAT items pending)
-Resume file: .planning/phases/07-interactive-tui-daemon-picker-install-multi-select/07-UAT.md
+Last session: 2026-07-19T17:21:52.250Z
+Stopped at: Phase 8 context gathered
+Resume file: .planning/phases/08-surface-reconciliation-signed-v1-0-0-release/08-CONTEXT.md
 
 ## Operator Next Steps
 
