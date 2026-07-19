@@ -130,6 +130,134 @@ func TestUpgradeRun_ValidPathVerifiesBeforeSwap(t *testing.T) {
 	}
 }
 
+// TestUpgradeRun_SameVersionNoOpWithoutForce asserts the same-version guard
+// (T-08-03-01): when the resolved target equals currentVersion and Force is
+// false, Run prints an advisory and returns nil WITHOUT calling
+// download/verify/swap.
+func TestUpgradeRun_SameVersionNoOpWithoutForce(t *testing.T) {
+	var downloadCalled, verifyCalled, swapCalled bool
+
+	var out bytes.Buffer
+	opts := Options{
+		Out: &out,
+		resolveLatest: func(repoSlug string) (string, error) {
+			return "v1.0.0", nil
+		},
+		download: func(v string) ([]byte, []byte, error) {
+			downloadCalled = true
+			return nil, nil, nil
+		},
+		verify: func(binary, bundleJSON []byte) error {
+			verifyCalled = true
+			return nil
+		},
+		swap: func(targetPath string, newBinary []byte) error {
+			swapCalled = true
+			return nil
+		},
+	}
+
+	if err := Run("v1.0.0", "/does/not/matter", opts); err != nil {
+		t.Fatalf("Run(same-version, no force): %v", err)
+	}
+	if downloadCalled || verifyCalled || swapCalled {
+		t.Fatalf("Run(same-version, no force) invoked download=%v verify=%v swap=%v, want all false", downloadCalled, verifyCalled, swapCalled)
+	}
+	if !strings.Contains(out.String(), "v1.0.0") {
+		t.Errorf("Run(same-version, no force) output = %q, want it to mention v1.0.0", out.String())
+	}
+}
+
+// TestUpgradeRun_ForceReinstallsSameVersion asserts Force=true bypasses the
+// same-version no-op guard and proceeds through download → verify → swap
+// even when target == currentVersion.
+func TestUpgradeRun_ForceReinstallsSameVersion(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "codegraph")
+	if err := os.WriteFile(target, []byte("original-binary"), 0o755); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+
+	var order []string
+	opts := Options{
+		Force: true,
+		resolveLatest: func(repoSlug string) (string, error) {
+			return "v1.0.0", nil
+		},
+		download: func(v string) ([]byte, []byte, error) {
+			order = append(order, "download")
+			return []byte("new-binary"), []byte("bundle"), nil
+		},
+		verify: func(binary, bundleJSON []byte) error {
+			order = append(order, "verify")
+			return nil
+		},
+		swap: func(targetPath string, newBinary []byte) error {
+			order = append(order, "swap")
+			return nil
+		},
+	}
+
+	if err := Run("v1.0.0", target, opts); err != nil {
+		t.Fatalf("Run(same-version, force): %v", err)
+	}
+
+	want := []string{"download", "verify", "swap"}
+	if len(order) != len(want) {
+		t.Fatalf("call order = %v, want %v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("call order = %v, want %v", order, want)
+		}
+	}
+}
+
+// TestUpgradeRun_ForceStillVerifiesBeforeSwap asserts T-08-03-01's flagship
+// claim: Force=true does NOT weaken verification — a failing fake verify
+// still aborts before swap is ever invoked, even on a forced same-version
+// reinstall.
+func TestUpgradeRun_ForceStillVerifiesBeforeSwap(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "codegraph")
+	if err := os.WriteFile(target, []byte("original-binary"), 0o755); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+
+	swapCalled := false
+	opts := Options{
+		Force: true,
+		resolveLatest: func(repoSlug string) (string, error) {
+			return "v1.0.0", nil
+		},
+		download: func(v string) ([]byte, []byte, error) {
+			return []byte("tampered-bytes"), []byte("bundle"), nil
+		},
+		verify: func(binary, bundleJSON []byte) error {
+			return errors.New("digest mismatch")
+		},
+		swap: func(targetPath string, newBinary []byte) error {
+			swapCalled = true
+			return nil
+		},
+	}
+
+	if err := Run("v1.0.0", target, opts); err == nil {
+		t.Fatal("Run(force, failing verify): expected an error, got nil")
+	}
+	if swapCalled {
+		t.Fatal("Run(force, failing verify): swap was invoked despite a verification failure (T-08-03-01 violation)")
+	}
+
+	got, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read target: %v", readErr)
+	}
+	if string(got) != "original-binary" {
+		t.Errorf("target changed despite verification failure: %q", got)
+	}
+}
+
 // TestUpgradeRun_RefusesNonWritableTargetBeforeDownloading asserts D-13: a
 // non-writable target aborts before the download seam is ever invoked (no
 // wasted download for an upgrade that can't be installed anyway).
