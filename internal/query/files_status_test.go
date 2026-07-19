@@ -175,6 +175,98 @@ func TestFiles(t *testing.T) {
 		}
 	})
 
+	t.Run("dir narrows by path prefix", func(t *testing.T) {
+		engine, _ := filesStatusFixture(t)
+
+		unfiltered, err := engine.Files(FilesOptions{})
+		if err != nil {
+			t.Fatalf("Files: unexpected error: %v", err)
+		}
+
+		narrowed, err := engine.Files(FilesOptions{Dir: "pkga/"})
+		if err != nil {
+			t.Fatalf("Files with dir=pkga/: unexpected error: %v", err)
+		}
+		if len(narrowed.Files) == 0 {
+			t.Fatal("Files with dir=pkga/: got zero entries, want at least pkga/pkga.go and pkga/embed.go")
+		}
+		if len(narrowed.Files) >= len(unfiltered.Files) {
+			t.Fatalf("Files with dir=pkga/: got %d entries, want fewer than unfiltered %d", len(narrowed.Files), len(unfiltered.Files))
+		}
+		for _, f := range narrowed.Files {
+			if !strings.HasPrefix(f.Path, "pkga/") {
+				t.Fatalf("Files with dir=pkga/: got non-matching path %q", f.Path)
+			}
+		}
+
+		excluded, err := engine.Files(FilesOptions{Dir: "cmd/"})
+		if err != nil {
+			t.Fatalf("Files with dir=cmd/: unexpected error: %v", err)
+		}
+		if len(excluded.Files) != 0 {
+			t.Fatalf("Files with dir=cmd/ (no matches in fixture): got %d entries, want 0", len(excluded.Files))
+		}
+	})
+
+	t.Run("dir with zero matches returns empty result, not an error", func(t *testing.T) {
+		engine, _ := filesStatusFixture(t)
+
+		got, err := engine.Files(FilesOptions{Dir: "does-not-exist/"})
+		if err != nil {
+			t.Fatalf("Files with dir=does-not-exist/: unexpected error: %v", err)
+		}
+		if len(got.Files) != 0 {
+			t.Fatalf("Files with dir=does-not-exist/: got %d entries, want 0", len(got.Files))
+		}
+	})
+
+	t.Run("dir composes with the language filter (AND)", func(t *testing.T) {
+		engine, _ := filesStatusFixture(t)
+
+		got, err := engine.Files(FilesOptions{Dir: "pkga/", Filter: "go"})
+		if err != nil {
+			t.Fatalf("Files with dir=pkga/ filter=go: unexpected error: %v", err)
+		}
+		if len(got.Files) == 0 {
+			t.Fatal("Files with dir=pkga/ filter=go: got zero entries, want pkga's Go files")
+		}
+		for _, f := range got.Files {
+			if !strings.HasPrefix(f.Path, "pkga/") || f.Language != "go" {
+				t.Fatalf("Files with dir=pkga/ filter=go: got entry Path=%q Language=%q that fails one predicate", f.Path, f.Language)
+			}
+		}
+
+		none, err := engine.Files(FilesOptions{Dir: "pkga/", Filter: "nonexistent-language"})
+		if err != nil {
+			t.Fatalf("Files with dir=pkga/ filter=nonexistent-language: unexpected error: %v", err)
+		}
+		if len(none.Files) != 0 {
+			t.Fatalf("Files with dir=pkga/ filter=nonexistent-language: got %d entries, want 0 (must satisfy both predicates)", len(none.Files))
+		}
+	})
+
+	t.Run("dirPrefixMatches: plain prefix semantics, not a glob", func(t *testing.T) {
+		cases := []struct {
+			name string
+			path string
+			dir  string
+			want bool
+		}{
+			{"empty dir is a no-op", "internal/query/files.go", "", true},
+			{"direct prefix match", "internal/query/files.go", "internal/", true},
+			{"./-prefixed path matches an un-prefixed dir", "./internal/query/files.go", "internal/query", true},
+			{"non-matching prefix is excluded", "internal/query/files.go", "cmd/", false},
+			{"dir is not treated as a glob", "internal/query/files.go", "internal/q*", false},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				if got := dirPrefixMatches(tc.path, tc.dir); got != tc.want {
+					t.Fatalf("dirPrefixMatches(%q, %q) = %v, want %v", tc.path, tc.dir, got, tc.want)
+				}
+			})
+		}
+	})
+
 	t.Run("depth limits directory nesting", func(t *testing.T) {
 		engine, _ := filesStatusFixture(t)
 
