@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 7
-current_phase_name: Interactive TUI — Daemon Picker & Install Multi-Select
+current_phase: 8
+current_phase_name: Surface Reconciliation & Signed v1.0.0 Release
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-07-19T19:29:41.198Z"
-last_activity: 2026-07-18
-last_activity_desc: Phase 7 execution started
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-07-19T19:36:37.183Z"
+last_activity: 2026-07-19
+last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 48
-  completed_plans: 48
-  percent: 88
+  total_plans: 57
+  completed_plans: 49
+  percent: 86
 ---
 
 # Project State
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 7 — Interactive TUI — Daemon Picker & Install Multi-Select
+**Current focus:** Phase 8 — Surface Reconciliation & Signed v1.0.0 Release
 
 ## Current Position
 
-Phase: 7 (Interactive TUI — Daemon Picker & Install Multi-Select) — EXECUTING
-Plan: 8 of 8
+Phase: 8 (Surface Reconciliation & Signed v1.0.0 Release) — EXECUTING
+Plan: 2 of 9
 Status: Ready to execute
-Last activity: 2026-07-18 — Phase 7 execution started
+Last activity: 2026-07-19 — Phase 8 execution started
 
-Progress: [██████████] 100%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
@@ -111,6 +111,7 @@ Progress: [██████████] 100%
 | Phase 07 P05 | 9min | 2 tasks | 2 files |
 | Phase 07 P07 | 25min | 3 tasks | 5 files |
 | Phase 07 P08 | 15min | 2 tasks | 2 files |
+| Phase 08 P01 | 20min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: 07-07 Tasks 2+3 combined into one commit — newDaemonCmd()'s AddCommand wiring directly references newDaemonStopCmd(), no independently-buildable intermediate state, mirroring the 02-status-content plan's own precedent
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: TEST-03's out-of-marker-block user edit is simulated in the surviving base content (before the end-of-file block), not appended after it — appending after would round-trip through an extra blank line from the block's own trailing bytes, unrelated to the byte-invariance guarantee under test
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: piped-never-hang install subtest exercises the real off-TTY auto-fallback (no --target flag), not --target none, since D-17/TUI-04 is specifically about the auto-fallback branch; a throwaway HOME keeps this safe
+- [Phase ?]: [Phase 8]: TestClampDepth's default-value cases hardcoded a literal 2 (not the defaultDepth symbol) so the RED phase genuinely fails against the pre-change constant — a symbol-referencing assertion would pass regardless of the constant's value
+- [Phase ?]: [Phase 8]: SURF-01 golden corpus required no regen — testdata/golden/corpus/{weft-go,colbymchenry-codegraph}/impact.json already encoded depth:2 (TS 1.3.1 oracle default), confirming Go's no-flag impact now matches rather than diverges
 
 ### Pending Todos
 
@@ -233,9 +236,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-19T17:21:52.250Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-surface-reconciliation-signed-v1-0-0-release/08-CONTEXT.md
+Last session: 2026-07-19T19:36:37.174Z
+Stopped at: Completed 08-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
