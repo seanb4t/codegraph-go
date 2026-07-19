@@ -70,7 +70,7 @@
 ### Surface Reconciliation (SURF)
 
 - [x] **SURF-01**: `impact` default depth changes to 2 (from 5), matching TS
-- [ ] **SURF-02**: `files` gains a directory filter matching TS's `--filter` semantics as a NEW flag, while our existing language `--filter` is retained (documented intentional divergence — per decision this session: keep ours + add TS's)
+- [x] **SURF-02**: `files` gains a directory filter matching TS's `--filter` semantics as a NEW flag, while our existing language `--filter` is retained (documented intentional divergence — per decision this session: keep ours + add TS's)
 - [x] **SURF-03**: missing short-flag aliases (`-l`, `-k`, `-j`, `-d`, etc.) are added across commands to match TS
 - [ ] **SURF-04**: `affected` gains `--stdin`, `--depth`, `--filter <glob>`, and `--quiet` for git-hook/CI scripting, matching TS
 - [ ] **SURF-05**: a systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` retained as a documented Go-only extension; `migrate` documented as an accepted divergence
@@ -170,7 +170,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | TUI-04 | Phase 7 | Complete |
 | TEST-03 | Phase 7 | Complete |
 | SURF-01 | Phase 8 | Complete |
-| SURF-02 | Phase 8 | Pending |
+| SURF-02 | Phase 8 | Complete |
 | SURF-03 | Phase 8 | Complete |
 | SURF-04 | Phase 8 | Pending |
 | SURF-05 | Phase 8 | Pending |

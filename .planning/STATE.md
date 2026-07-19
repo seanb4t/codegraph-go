@@ -5,16 +5,16 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 8
 current_phase_name: Surface Reconciliation & Signed v1.0.0 Release
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-07-19T19:36:37.183Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-07-19T19:41:47.017Z"
 last_activity: 2026-07-19
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
   completed_phases: 7
   total_plans: 57
-  completed_plans: 49
-  percent: 86
+  completed_plans: 50
+  percent: 88
 ---
 
 # Project State
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 8 (Surface Reconciliation & Signed v1.0.0 Release) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-07-19 — Phase 8 execution started
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -112,6 +112,7 @@ Progress: [█████████░] 86%
 | Phase 07 P07 | 25min | 3 tasks | 5 files |
 | Phase 07 P08 | 15min | 2 tasks | 2 files |
 | Phase 08 P01 | 20min | 3 tasks | 3 files |
+| Phase 8 P2 | 6min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 07-interactive-tui-daemon-picker-install-multi-select]: piped-never-hang install subtest exercises the real off-TTY auto-fallback (no --target flag), not --target none, since D-17/TUI-04 is specifically about the auto-fallback branch; a throwaway HOME keeps this safe
 - [Phase ?]: [Phase 8]: TestClampDepth's default-value cases hardcoded a literal 2 (not the defaultDepth symbol) so the RED phase genuinely fails against the pre-change constant — a symbol-referencing assertion would pass regardless of the constant's value
 - [Phase ?]: [Phase 8]: SURF-01 golden corpus required no regen — testdata/golden/corpus/{weft-go,colbymchenry-codegraph}/impact.json already encoded depth:2 (TS 1.3.1 oracle default), confirming Go's no-flag impact now matches rather than diverges
+- [Phase ?]: SURF-02/03: files --dir added alongside language --filter (D-03 add-alongside); dirPrefixMatches uses strings.HasPrefix only, no glob/regex/doublestar
 
 ### Pending Todos
 
@@ -236,8 +238,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-19T19:36:37.174Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-07-19T19:41:47.008Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
