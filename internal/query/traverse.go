@@ -476,13 +476,24 @@ func isTestSymbol(n *schema.Node) bool {
 }
 
 // Affected derives impacted test files/symbols for a set of changed
-// files at query time (D-07): no persisted test-coverage edge kind —
-// walk the D-04 reverse-adjacency map from every symbol defined in the
-// changed files, keeping reverse-caller targets that pass the
-// isTestSymbol heuristic. There is no golden oracle for this command
-// (D-07a); parity is structural, proved in traverse_test.go against a
-// seeded test->symbol calls edge.
-func (e *Engine) Affected(files []string) (AffectedResult, error) {
+// files via a depth-bounded BFS over the D-04 reverse-adjacency map,
+// bounded by clampAffectedDepth(depth) (SURF-04/D-05, CONTEXT D-05,
+// RESEARCH Pitfall 2) — NOT the single-hop lookup this used to be.
+// Mirrors Impact's frontier/next-frontier loop shape (traverse.go
+// above), but with TS 1.3.1's test-files-as-leaves pruning rule instead
+// of Impact's "expand everything": a dependent that passes isTestSymbol
+// is recorded as an affected test AND is a leaf — it is never queued
+// for further expansion, so its own dependents can never surface at any
+// depth. A non-test dependent is queued for the next hop and is never
+// itself recorded as an affected test. There is no golden oracle for
+// this command (D-07a); parity is structural, proved in
+// traverse_test.go against seeded call chains.
+func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
+	if err := validateDepth(depth); err != nil {
+		return AffectedResult{}, err
+	}
+	depth = clampAffectedDepth(depth)
+
 	rev, err := BuildReverseAdjacency(e.reader)
 	if err != nil {
 		return AffectedResult{}, err
@@ -499,39 +510,48 @@ func (e *Engine) Affected(files []string) (AffectedResult, error) {
 	}
 	defer it.Close()
 
-	var seedIDs []string
+	visited := make(map[string]bool)
+	var frontier []string
 	for it.Next() {
 		n := it.Node()
 		if fileSet[n.FilePath] {
-			seedIDs = append(seedIDs, n.Id)
+			frontier = append(frontier, n.Id)
+			visited[n.Id] = true
 		}
 	}
 	if err := it.Err(); err != nil {
 		return AffectedResult{}, err
 	}
 
-	visited := make(map[string]bool)
 	tests := []Location{}
-	for _, id := range seedIDs {
-		for _, edge := range rev[id] {
-			if visited[edge.Source] {
-				continue
-			}
-			target, err := e.reader.GetNode(edge.Source)
-			if err != nil {
-				// WR-04: skip a dangling edge rather than aborting —
-				// same convention as Callees/Callers/Impact above.
-				if errors.Is(err, graphstore.ErrNotFound) {
+	for d := 0; d < depth && len(frontier) > 0; d++ {
+		var next []string
+		for _, id := range frontier {
+			for _, edge := range rev[id] {
+				if visited[edge.Source] {
 					continue
 				}
-				return AffectedResult{}, err
+				dep, err := e.reader.GetNode(edge.Source)
+				if err != nil {
+					// WR-04: skip a dangling edge rather than aborting —
+					// same convention as Callees/Callers/Impact above.
+					if errors.Is(err, graphstore.ErrNotFound) {
+						continue
+					}
+					return AffectedResult{}, err
+				}
+				visited[edge.Source] = true
+				if isTestSymbol(dep) {
+					// TS test-files-as-leaves semantics: record, but do
+					// NOT queue for expansion — a test dependent's own
+					// dependents are never pulled into the BFS.
+					tests = append(tests, nodeLocation(dep))
+					continue
+				}
+				next = append(next, dep.Id)
 			}
-			if !isTestSymbol(target) {
-				continue
-			}
-			visited[edge.Source] = true
-			tests = append(tests, nodeLocation(target))
 		}
+		frontier = next
 	}
 
 	return AffectedResult{Files: files, AffectedTests: tests}, nil

@@ -35,7 +35,11 @@ func newAffectedCmd() *cobra.Command {
 			}
 			defer closer.Close()
 
-			result, err := eng.Affected(args)
+			// SURF-04/08-04: engine's Affected now takes a depth-bounded
+			// BFS parameter; 0 uses defaultAffectedDepth (5). Full
+			// --depth flag wiring lands in 08-05 — this is the minimal
+			// call-site fix to keep internal/cli compiling.
+			result, err := eng.Affected(args, 0)
 			if err != nil {
 				return err
 			}

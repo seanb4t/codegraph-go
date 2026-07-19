@@ -810,7 +810,7 @@ func TestZeroMatchJSONShapesAreEmptyArraysNotNull(t *testing.T) {
 	})
 
 	t.Run("Affected zero-match", func(t *testing.T) {
-		got, err := engine.Affected([]string{"nonexistent-file-with-no-callers.go"})
+		got, err := engine.Affected([]string{"nonexistent-file-with-no-callers.go"}, 2)
 		if err != nil {
 			t.Fatalf("Affected: unexpected error: %v", err)
 		}
