@@ -152,3 +152,9 @@ None - no external service configuration required.
 ---
 *Phase: 08-surface-reconciliation-signed-v1-0-0-release*
 *Completed: 2026-07-19*
+
+## Self-Check: PASSED
+- FOUND: internal/cli/present/archtest/charm_cgo_test.go
+- FOUND: .planning/phases/08-surface-reconciliation-signed-v1-0-0-release/08-07-SUMMARY.md
+- FOUND: commit 3c1fa0a
+- FOUND: commit d32b4b2
