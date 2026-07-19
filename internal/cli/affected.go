@@ -213,7 +213,11 @@ func collectAffectedFiles(cmd *cobra.Command, args []string, stdinFlag bool) ([]
 
 	if stdinFlag {
 		scanner := bufio.NewScanner(cmd.InOrStdin())
-		scanner.Buffer(make([]byte, 0, 64*1024), affectedStdinMaxLineBytes)
+		// Initial buffer capacity must not exceed affectedStdinMaxLineBytes:
+		// bufio.Scanner.Buffer's effective ceiling is max(maxArg, cap(buf)),
+		// so a larger initial cap (e.g. the old 64*1024) silently defeats
+		// the intended 4096-byte cap.
+		scanner.Buffer(make([]byte, 0, affectedStdinMaxLineBytes), affectedStdinMaxLineBytes)
 		for scanner.Scan() {
 			if err := add(strings.TrimSpace(scanner.Text())); err != nil {
 				return nil, err

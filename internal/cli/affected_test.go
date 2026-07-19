@@ -160,6 +160,45 @@ func TestAffectedStdinCRLFAndBlankLines(t *testing.T) {
 	}
 }
 
+// TestAffectedStdinLineTooLong pins CR-01 (iteration-2 re-review): the
+// scanner.Buffer initial-capacity argument must not exceed
+// affectedStdinMaxLineBytes, or bufio.Scanner's documented
+// max(maxArg, cap(buf)) ceiling silently raises the real limit past the
+// intended one. A line one byte over the cap must produce the documented
+// "--stdin line exceeds maximum %d bytes" error rather than being silently
+// accepted.
+func TestAffectedStdinLineTooLong(t *testing.T) {
+	dir := setupIndexedFixtureWithTest(t)
+
+	t.Run("line exceeding the cap by one byte errors", func(t *testing.T) {
+		tooLong := strings.Repeat("a", affectedStdinMaxLineBytes+1) + "\n"
+		_, _, err := execCmdTimeout(t, 5*time.Second, tooLong, "affected", "--stdin", "--quiet", "-p", dir)
+		if err == nil {
+			t.Fatalf("affected --stdin: expected error for %d-byte line (max %d), got nil", affectedStdinMaxLineBytes+1, affectedStdinMaxLineBytes)
+		}
+		if !strings.Contains(err.Error(), "exceeds maximum") {
+			t.Fatalf("affected --stdin: expected 'exceeds maximum' error, got %v", err)
+		}
+	})
+
+	t.Run("line just under the cap succeeds", func(t *testing.T) {
+		// bufio.Scanner's documented contract is "token size must be less
+		// than max" (strictly), so the largest line guaranteed to succeed
+		// is affectedStdinMaxLineBytes-1, not affectedStdinMaxLineBytes
+		// itself. Pad a real path out to exactly that length with
+		// trailing filler that still resolves to no matched file
+		// (harmless — we're only asserting no ErrTooLong here).
+		underCap := "pkga/pkga.go" + strings.Repeat(" ", affectedStdinMaxLineBytes-1-len("pkga/pkga.go")-1) + "x\n"
+		if len(underCap)-1 != affectedStdinMaxLineBytes-1 {
+			t.Fatalf("test setup bug: line is %d bytes, want %d", len(underCap)-1, affectedStdinMaxLineBytes-1)
+		}
+		_, _, err := execCmdTimeout(t, 5*time.Second, underCap, "affected", "--stdin", "--quiet", "-p", dir)
+		if err != nil {
+			t.Fatalf("affected --stdin: unexpected error for %d-byte line (cap %d): %v", affectedStdinMaxLineBytes-1, affectedStdinMaxLineBytes, err)
+		}
+	})
+}
+
 func TestAffectedFilter(t *testing.T) {
 	dir := setupIndexedFixtureWithTest(t)
 
