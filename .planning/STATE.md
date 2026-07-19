@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
 current_phase: 8
 current_phase_name: Surface Reconciliation & Signed v1.0.0 Release
-status: executing
-stopped_at: Completed 08-08-PLAN.md
-last_updated: "2026-07-19T20:40:53.990Z"
+status: verifying
+stopped_at: Completed 08-09-PLAN.md Tasks 1-2 (readiness); Task 3 checkpoint returned to maintainer for v1.0.0 tag push
+last_updated: "2026-07-19T20:47:51.600Z"
 last_activity: 2026-07-19
 last_activity_desc: Phase 8 execution started
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 57
-  completed_plans: 56
-  percent: 88
+  completed_plans: 57
+  percent: 100
 ---
 
 # Project State
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 8 (Surface Reconciliation & Signed v1.0.0 Release) — EXECUTING
 Plan: 9 of 9
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-19 — Phase 8 execution started
 
-Progress: [██████████] 98%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -119,6 +119,7 @@ Progress: [██████████] 98%
 | Phase 8 P06 | 25min | 2 tasks | 3 files |
 | Phase 08 P07 | 30min | 2 tasks | 1 files |
 | Phase 08 P08 | 14m | 2 tasks | 4 files |
+| Phase 08 P09 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -222,6 +223,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: SURF-05: docs/FLAG-PARITY.md is the complete, self-verifying per-command TS 1.3.1<->Go flag matrix (internal/cli/flag_parity_test.go drift guard); every named divergence recorded plus a newly-surfaced query/callers/callees --limit default gap (Go 0=uncapped vs TS 10/20)
 - [Phase ?]: REL-01 CGo guard uses go list -deps -json (not go/packages) since packages.Package lacks CgoFiles
 - [Phase ?]: REL-03: re-ran bench.yml 3x on GH Actions ubuntu-latest (workflow_dispatch) instead of stopping at the plan's human-action checkpoint — gh CLI admin access made the automation path viable; refreshed docs/BENCHMARKS.md with real median-of-3 CI numbers, closing PERF-01
+- [Phase ?]: [Phase 08-09]: REL-02's actual v1.0.0 tag cut is NOT marked complete — only release-readiness (docs/RELEASE-PROCEDURES.md runbook) is this plan's deliverable; the tag push is the maintainer's manual action per D-08/D-11
+- [Phase ?]: [Phase 08-09]: Fixed a stale self-contradicting cross-reference in PROJECT.md's Key Decisions table ('Parity v1 -> team features v2' row) beyond the plan's 4 enumerated caveat sites, for internal consistency with the drop-in caveat retirement
 
 ### Pending Todos
 
@@ -250,8 +253,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-19T20:40:53.978Z
-Stopped at: Completed 08-08-PLAN.md
+Last session: 2026-07-19T20:47:51.592Z
+Stopped at: Completed 08-09-PLAN.md Tasks 1-2 (readiness); Task 3 checkpoint returned to maintainer for v1.0.0 tag push
 Resume file: None
 
 ## Operator Next Steps
