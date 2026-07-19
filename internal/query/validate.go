@@ -43,6 +43,15 @@ const (
 	// enough that "unlimited by default" would be a DoS footgun, unlike
 	// Files' "0 means unlimited" browse-only convention).
 	defaultMaxFiles = 5
+
+	// defaultAffectedDepth is applied when a caller passes a non-positive
+	// depth to Affected (clampAffectedDepth's "0 means default"
+	// convention). SURF-04/D-05: deliberately distinct from defaultDepth
+	// — TS CodeGraph 1.3.1's `affected` command defaults to depth 5,
+	// while `impact` defaults to depth 2 (defaultDepth, SURF-01). A naive
+	// reuse of clampDepth/defaultDepth for affected would silently apply
+	// impact's smaller default. Shares MaxDepth as its ceiling.
+	defaultAffectedDepth = 5
 )
 
 // clampDepth returns min(n, MaxDepth), treating n<=0 as defaultDepth
@@ -51,6 +60,21 @@ const (
 func clampDepth(n int) int {
 	if n <= 0 {
 		n = defaultDepth
+	}
+	if n > MaxDepth {
+		return MaxDepth
+	}
+	return n
+}
+
+// clampAffectedDepth mirrors clampDepth's shape but with
+// defaultAffectedDepth (5) instead of defaultDepth (2) — SURF-04/D-05
+// deliberately does NOT reuse clampDepth, so affected's TS-parity
+// default cannot be silently overwritten by impact's smaller one.
+// Shares MaxDepth as its ceiling.
+func clampAffectedDepth(n int) int {
+	if n <= 0 {
+		n = defaultAffectedDepth
 	}
 	if n > MaxDepth {
 		return MaxDepth
