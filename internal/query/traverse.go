@@ -228,6 +228,29 @@ func nodeLocation(n *schema.Node) Location {
 	}
 }
 
+// sortLocations orders locs by FilePath, then Name, then StartLine
+// (WR-05, 08-REVIEW.md) — mirrors files.go's sortFileTree discipline
+// ("--json output must be reproducible", D-06). Impact/Callers/Affected's
+// result order previously depended entirely on the underlying
+// graphstore.Reader's IterateNodes/IterateEdges enumeration order plus
+// Go's frontier-processing order — a guarantee that lives outside this
+// package and is not asserted by any test here. This final sort makes
+// determinism a property of this package's own code, not an unverified
+// upstream iteration-order contract. sort.SliceStable (not sort.Slice)
+// is used so ties on the full (FilePath, Name, StartLine) key still
+// resolve deterministically across repeated calls.
+func sortLocations(locs []Location) {
+	sort.SliceStable(locs, func(i, j int) bool {
+		if locs[i].FilePath != locs[j].FilePath {
+			return locs[i].FilePath < locs[j].FilePath
+		}
+		if locs[i].Name != locs[j].Name {
+			return locs[i].Name < locs[j].Name
+		}
+		return locs[i].StartLine < locs[j].StartLine
+	})
+}
+
 // CalleesResult mirrors the golden callees.json shape: {"symbol",
 // "callees": [locations]}.
 type CalleesResult struct {
@@ -368,6 +391,11 @@ func (e *Engine) Callers(symbol string, limit int) (CallersResult, error) {
 		}
 	}
 
+	// WR-05: sort BEFORE applying limit/MaxLimit caps, so the capped
+	// subset itself is a deterministic "first N in sorted order" rather
+	// than depending on the underlying reverse-adjacency map's
+	// enumeration order.
+	sortLocations(locs)
 	if limit > 0 && limit < len(locs) {
 		locs = locs[:limit]
 	}
@@ -454,6 +482,11 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 		}
 		frontier = next
 	}
+
+	// WR-05: sort for deterministic output — NodeCount/EdgeCount are
+	// unaffected (computed from len(affected)/the edgeCount counter
+	// above, not from order).
+	sortLocations(affected)
 
 	return ImpactResult{
 		Symbol:    symbol,
@@ -596,6 +629,9 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 		}
 		frontier = next
 	}
+
+	// WR-05: sort for deterministic output, mirroring Impact/Callers above.
+	sortLocations(tests)
 
 	return AffectedResult{Files: files, AffectedTests: tests}, nil
 }

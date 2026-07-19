@@ -491,8 +491,19 @@ func TestImpact(t *testing.T) {
 		if got.EdgeCount != 2 {
 			t.Fatalf("EdgeCount: got %d, want 2", got.EdgeCount)
 		}
-		if len(got.Affected) != 3 || got.Affected[0].Name != "helper" {
-			t.Fatalf("Affected: got %+v, want helper first", got.Affected)
+		// WR-05: Affected is now sorted deterministically by
+		// (FilePath, Name, StartLine) rather than left in BFS-visitation
+		// order — Alpha/helper both live in pkga/pkga.go (Alpha < helper
+		// alphabetically), Run lives in pkgb/pkgb.go (sorts after
+		// pkga/pkga.go).
+		wantNames := []string{"Alpha", "helper", "Run"}
+		if len(got.Affected) != len(wantNames) {
+			t.Fatalf("Affected: got %+v, want %d entries", got.Affected, len(wantNames))
+		}
+		for i, name := range wantNames {
+			if got.Affected[i].Name != name {
+				t.Fatalf("Affected[%d].Name: got %q, want %q (sorted order): %+v", i, got.Affected[i].Name, name, got.Affected)
+			}
 		}
 	})
 
@@ -536,6 +547,87 @@ func TestImpact(t *testing.T) {
 	t.Run("negative depth is rejected, not silently defaulted", func(t *testing.T) {
 		if _, err := engine.Impact("helper", -1); err == nil {
 			t.Fatal("Impact with depth=-1: expected error, got nil")
+		}
+	})
+}
+
+// TestImpactCallersAffectedDeterministicAcrossRepeatedCalls pins WR-05
+// (08-REVIEW.md): repeated calls against the same unchanged graph must
+// return byte-identical JSON every time — Impact.Affected, Callers.Callers,
+// and Affected.AffectedTests are no longer left to depend on the
+// underlying graphstore.Reader's enumeration order.
+func TestImpactCallersAffectedDeterministicAcrossRepeatedCalls(t *testing.T) {
+	engine := traverseFixture(t)
+
+	t.Run("Impact", func(t *testing.T) {
+		first, err := engine.Impact("helper", 2)
+		if err != nil {
+			t.Fatalf("Impact: unexpected error: %v", err)
+		}
+		firstJSON, err := MarshalImpactJSON(first)
+		if err != nil {
+			t.Fatalf("MarshalImpactJSON: unexpected error: %v", err)
+		}
+		for i := 0; i < 5; i++ {
+			got, err := engine.Impact("helper", 2)
+			if err != nil {
+				t.Fatalf("Impact (repeat %d): unexpected error: %v", i, err)
+			}
+			gotJSON, err := MarshalImpactJSON(got)
+			if err != nil {
+				t.Fatalf("MarshalImpactJSON (repeat %d): unexpected error: %v", i, err)
+			}
+			if string(gotJSON) != string(firstJSON) {
+				t.Fatalf("Impact (repeat %d): got %s, want identical to first call's %s", i, gotJSON, firstJSON)
+			}
+		}
+	})
+
+	t.Run("Callers", func(t *testing.T) {
+		first, err := engine.Callers("Alpha", 0)
+		if err != nil {
+			t.Fatalf("Callers: unexpected error: %v", err)
+		}
+		firstJSON, err := MarshalCallersJSON(first)
+		if err != nil {
+			t.Fatalf("MarshalCallersJSON: unexpected error: %v", err)
+		}
+		for i := 0; i < 5; i++ {
+			got, err := engine.Callers("Alpha", 0)
+			if err != nil {
+				t.Fatalf("Callers (repeat %d): unexpected error: %v", i, err)
+			}
+			gotJSON, err := MarshalCallersJSON(got)
+			if err != nil {
+				t.Fatalf("MarshalCallersJSON (repeat %d): unexpected error: %v", i, err)
+			}
+			if string(gotJSON) != string(firstJSON) {
+				t.Fatalf("Callers (repeat %d): got %s, want identical to first call's %s", i, gotJSON, firstJSON)
+			}
+		}
+	})
+
+	t.Run("Affected", func(t *testing.T) {
+		first, err := engine.Affected([]string{"pkga/target.go"}, 2)
+		if err != nil {
+			t.Fatalf("Affected: unexpected error: %v", err)
+		}
+		firstJSON, err := MarshalAffectedJSON(first)
+		if err != nil {
+			t.Fatalf("MarshalAffectedJSON: unexpected error: %v", err)
+		}
+		for i := 0; i < 5; i++ {
+			got, err := engine.Affected([]string{"pkga/target.go"}, 2)
+			if err != nil {
+				t.Fatalf("Affected (repeat %d): unexpected error: %v", i, err)
+			}
+			gotJSON, err := MarshalAffectedJSON(got)
+			if err != nil {
+				t.Fatalf("MarshalAffectedJSON (repeat %d): unexpected error: %v", i, err)
+			}
+			if string(gotJSON) != string(firstJSON) {
+				t.Fatalf("Affected (repeat %d): got %s, want identical to first call's %s", i, gotJSON, firstJSON)
+			}
 		}
 	})
 }
