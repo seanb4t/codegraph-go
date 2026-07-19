@@ -100,11 +100,26 @@ func validateFilesDepth(n int) error {
 // a prefix check, not a glob, despite the CLI flag's <dir> placeholder
 // text (T-08-02-02: also the deliberate anti-ReDoS choice, O(n) with no
 // backtracking). An empty dir applies no filter.
+//
+// WR-01: the match must land on a path-separator boundary — either path
+// (or "./"+path) equals dir exactly, or is followed by "/" right after
+// dir. A bare strings.HasPrefix(path, dir) would let "--dir pkga" match
+// the unrelated sibling directory "pkgab/" purely because "pkga" is a
+// literal string-prefix of "pkgab" — the classic prefix-match-without-
+// boundary bug. This still keeps the "not a glob" contract (D-03): dir's
+// own trailing "/" is trimmed once before the boundary check, but no
+// wildcard/backtracking semantics are introduced.
 func dirPrefixMatches(path, dir string) bool {
 	if dir == "" {
 		return true
 	}
-	return strings.HasPrefix(path, dir) || strings.HasPrefix(path, "./"+dir)
+	trimmed := strings.TrimSuffix(dir, "/")
+	for _, d := range []string{trimmed, "./" + trimmed} {
+		if path == d || strings.HasPrefix(path, d+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // Files browses the indexed file structure from the graph (QRY-07): it

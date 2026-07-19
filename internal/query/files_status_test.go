@@ -257,6 +257,14 @@ func TestFiles(t *testing.T) {
 			{"./-prefixed path matches an un-prefixed dir", "./internal/query/files.go", "internal/query", true},
 			{"non-matching prefix is excluded", "internal/query/files.go", "cmd/", false},
 			{"dir is not treated as a glob", "internal/query/files.go", "internal/q*", false},
+				// WR-01 regression: a sibling directory whose name is a
+				// literal string-prefix of dir (or vice versa) must NOT
+				// match -- the missing path-separator boundary check was
+				// the actual defect, distinct from the "not a glob" design.
+				{"WR-01: sibling directory sharing a string prefix is excluded", "pkgab/bar.go", "pkga", false},
+				{"WR-01: the same sibling collision without a trailing slash on dir", "pkgab/bar.go", "pkga/", false},
+				{"WR-01: the real directory still matches", "pkga/foo.go", "pkga", true},
+				{"WR-01: an exact-path match (no trailing separator) is a boundary match", "pkga", "pkga", true},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
