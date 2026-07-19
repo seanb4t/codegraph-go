@@ -540,15 +540,44 @@ func TestImpact(t *testing.T) {
 	})
 }
 
+// TestClampAffectedDepth pins SURF-04/D-05: affected has its OWN
+// default (5), deliberately distinct from impact's clampDepth default
+// (2, see TestClampDepth in engine_test.go) — a naive reuse of
+// clampDepth would silently apply impact's smaller default to affected.
+// Both share the same MaxDepth=50 ceiling.
+func TestClampAffectedDepth(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"non-positive uses affected's own default (5, not impact's 2)", 0, 5},
+		{"negative uses affected's own default", -5, 5},
+		{"explicit small depth preserved", 1, 1},
+		{"in-range passes through", 10, 10},
+		{"at ceiling passes through", MaxDepth, MaxDepth},
+		{"above ceiling clamps to MaxDepth", MaxDepth + 1, MaxDepth},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := clampAffectedDepth(tc.in); got != tc.want {
+				t.Fatalf("clampAffectedDepth(%d) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestAffected pins the D-07 query-time derivation: no persisted
 // test-coverage edge, just reverse `calls` edges from a changed file's
 // symbols filtered by the _test.go/Test*/Benchmark* heuristic. There is
 // no golden oracle for this command (D-07a) — assert structural
-// correctness against the seeded TestTarget -> Target call.
+// correctness against the seeded TestTarget -> Target call. SURF-04:
+// Affected now takes an explicit depth (a single hop is enough to reach
+// TestTarget in this fixture's topology).
 func TestAffected(t *testing.T) {
 	engine := traverseFixture(t)
 
-	got, err := engine.Affected([]string{"pkga/target.go"})
+	got, err := engine.Affected([]string{"pkga/target.go"}, 1)
 	if err != nil {
 		t.Fatalf("Affected: unexpected error: %v", err)
 	}
@@ -574,6 +603,150 @@ func TestAffected(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("AffectedTests: got %+v, want TestTarget present", got.AffectedTests)
+	}
+}
+
+// TestAffectedNegativeDepthRejected mirrors Impact's WR-02 negative-depth
+// rejection contract for Affected.
+func TestAffectedNegativeDepthRejected(t *testing.T) {
+	engine := traverseFixture(t)
+	if _, err := engine.Affected([]string{"pkga/target.go"}, -1); err == nil {
+		t.Fatal("Affected with depth=-1: expected error, got nil")
+	}
+}
+
+// TestAffectedEmptyFilesReturnsEmptyResultNoError pins the empty-input
+// contract: an empty files slice seeds no BFS frontier at all — no
+// error, just an empty AffectedTests.
+func TestAffectedEmptyFilesReturnsEmptyResultNoError(t *testing.T) {
+	engine := traverseFixture(t)
+
+	got, err := engine.Affected(nil, 2)
+	if err != nil {
+		t.Fatalf("Affected with empty files: unexpected error: %v", err)
+	}
+	if len(got.AffectedTests) != 0 {
+		t.Fatalf("Affected with empty files: got %+v, want no affected tests", got.AffectedTests)
+	}
+}
+
+// affectedDepthFixtureNodesEdges builds a three-hop reverse chain —
+// Target (the changed file's symbol) <- NonTestCaller <- TestSomething
+// <- TestGrand — to prove Affected's depth-bounded BFS and TS
+// test-files-as-leaves pruning (SURF-04/D-05, RESEARCH Pitfall 2):
+// TestSomething is reachable only at depth>=2 (through the non-test
+// intermediary), and — because a test dependent is a LEAF — its own
+// dependent TestGrand must never surface at any depth.
+func affectedDepthFixtureNodesEdges() (map[string]*schema.Node, []*schema.Edge) {
+	nodes := map[string]*schema.Node{
+		"target":        {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target", FilePath: "changed.go"},
+		"nonTestCaller": {Id: "nonTestCaller", Kind: "function", Name: "NonTestCaller", QualifiedName: "NonTestCaller", FilePath: "other.go"},
+		"testSomething": {Id: "testSomething", Kind: "function", Name: "TestSomething", QualifiedName: "TestSomething", FilePath: "other_test.go"},
+		"testGrand":     {Id: "testGrand", Kind: "function", Name: "TestGrand", QualifiedName: "TestGrand", FilePath: "other_test.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "nonTestCaller", Target: "target", Kind: goextract.RefKindCalls},
+		{Source: "testSomething", Target: "nonTestCaller", Kind: goextract.RefKindCalls},
+		{Source: "testGrand", Target: "testSomething", Kind: goextract.RefKindCalls},
+	}
+	return nodes, edges
+}
+
+// TestAffectedDepthBFSWithTestLeafPruning is this plan's core behavioral
+// proof (SURF-04): depth genuinely bounds BFS expansion, and a test
+// dependent is a leaf — recorded but never expanded.
+func TestAffectedDepthBFSWithTestLeafPruning(t *testing.T) {
+	t.Run("depth=1 finds only the direct non-test dependent, no test yet", func(t *testing.T) {
+		nodes, edges := affectedDepthFixtureNodesEdges()
+		e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+		got, err := e.Affected([]string{"changed.go"}, 1)
+		if err != nil {
+			t.Fatalf("Affected: unexpected error: %v", err)
+		}
+		if len(got.AffectedTests) != 0 {
+			t.Fatalf("AffectedTests at depth=1: got %+v, want none (TestSomething is 2 hops away)", got.AffectedTests)
+		}
+	})
+
+	t.Run("depth=2 finds the test reached through the non-test intermediary", func(t *testing.T) {
+		nodes, edges := affectedDepthFixtureNodesEdges()
+		e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+		got, err := e.Affected([]string{"changed.go"}, 2)
+		if err != nil {
+			t.Fatalf("Affected: unexpected error: %v", err)
+		}
+		var found bool
+		for _, loc := range got.AffectedTests {
+			if loc.Name == "TestSomething" {
+				found = true
+			}
+			if loc.Name == "NonTestCaller" {
+				t.Fatalf("AffectedTests unexpectedly includes non-test dependent %q", loc.Name)
+			}
+		}
+		if !found {
+			t.Fatalf("AffectedTests at depth=2: got %+v, want TestSomething present", got.AffectedTests)
+		}
+	})
+
+	t.Run("a test dependent is a leaf — its own dependents are never pulled in, even at a much larger depth", func(t *testing.T) {
+		nodes, edges := affectedDepthFixtureNodesEdges()
+		e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+		got, err := e.Affected([]string{"changed.go"}, 10)
+		if err != nil {
+			t.Fatalf("Affected: unexpected error: %v", err)
+		}
+		for _, loc := range got.AffectedTests {
+			if loc.Name == "TestGrand" {
+				t.Fatalf("AffectedTests unexpectedly includes %q — TestSomething (a test leaf) must not be expanded", loc.Name)
+			}
+		}
+	})
+
+	t.Run("depth=0 uses defaultAffectedDepth (5), reaching the test two hops away", func(t *testing.T) {
+		nodes, edges := affectedDepthFixtureNodesEdges()
+		e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+		got, err := e.Affected([]string{"changed.go"}, 0)
+		if err != nil {
+			t.Fatalf("Affected: unexpected error: %v", err)
+		}
+		var found bool
+		for _, loc := range got.AffectedTests {
+			if loc.Name == "TestSomething" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("AffectedTests at depth=0 (default 5): got %+v, want TestSomething present", got.AffectedTests)
+		}
+	})
+}
+
+// TestAffectedSkipsDanglingEdgeInsteadOfFailing mirrors
+// TestImpactSkipsDanglingEdgeInsteadOfFailing for Affected's BFS (WR-04):
+// a dangling reverse-edge source encountered mid-traversal must be
+// skipped, not abort the whole call.
+func TestAffectedSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"target":   {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target", FilePath: "changed.go"},
+		"testLive": {Id: "testLive", Kind: "function", Name: "TestLive", QualifiedName: "TestLive", FilePath: "other_test.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "testLive", Target: "target", Kind: goextract.RefKindCalls},
+		{Source: "missing", Target: "target", Kind: goextract.RefKindCalls}, // dangling
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Affected([]string{"changed.go"}, 2)
+	if err != nil {
+		t.Fatalf("Affected: unexpected error from a dangling edge, want graceful skip: %v", err)
+	}
+	if len(got.AffectedTests) != 1 || got.AffectedTests[0].Name != "TestLive" {
+		t.Fatalf("Affected: got %+v, want exactly [TestLive] (dangling edge skipped)", got.AffectedTests)
 	}
 }
 
