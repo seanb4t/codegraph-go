@@ -306,7 +306,7 @@ Plans:
   4. A real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing v0.1's pending DIST-02, and head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01 (REL-02/03)
   5. The "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired (REL-04)
 
-**Plans**: 6/9 plans executed
+**Plans**: 7/9 plans executed
 
 Plans:
 **Wave 1** *(surface reconciliation — parallel, disjoint files)*
@@ -329,7 +329,7 @@ Plans:
 
 **Wave 5** *(REL block — SURF green per D-01)*
 
-- [ ] 08-07-PLAN.md — REL-01: Charm closure CGo guard test + govulncheck/SBOM/double-build re-run (TDD)
+- [x] 08-07-PLAN.md — REL-01: Charm closure CGo guard test + govulncheck/SBOM/double-build re-run (TDD)
 - [ ] 08-08-PLAN.md — REL-03: head-to-head bench re-run + docs/BENCHMARKS.md refresh (human-gated)
 
 **Wave 6** *(final — signed tag is the last action)*
@@ -351,7 +351,7 @@ Plans:
 | 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | In Progress|  |
-| 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 6/9 | In Progress|  |
+| 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 7/9 | In Progress|  |
 
 ## Backlog
 
