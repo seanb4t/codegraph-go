@@ -726,6 +726,32 @@ func TestAffectedDepthBFSWithTestLeafPruning(t *testing.T) {
 	})
 }
 
+// TestIsTestSymbol pins WR-07 (08-REVIEW.md): only the _test.go-suffix
+// check counts a node as a test symbol — the previous Name-based
+// Test*/Benchmark* fallback is gone, so a production function merely
+// NAMED like a test function (but not declared in a _test.go file) is no
+// longer misclassified.
+func TestIsTestSymbol(t *testing.T) {
+	cases := []struct {
+		name     string
+		node     *schema.Node
+		wantTest bool
+	}{
+		{"real test function in a _test.go file", &schema.Node{Name: "TestFoo", FilePath: "pkg/foo_test.go"}, true},
+		{"real benchmark in a _test.go file", &schema.Node{Name: "BenchmarkFoo", FilePath: "pkg/foo_test.go"}, true},
+		{"non-test-named function in a _test.go file still counts (whole file is test scope)", &schema.Node{Name: "helper", FilePath: "pkg/foo_test.go"}, true},
+		{"WR-07: production function named like a test, NOT in a _test.go file", &schema.Node{Name: "TestConnectionPool", FilePath: "pkg/pool.go"}, false},
+		{"WR-07: production function named like a benchmark, NOT in a _test.go file", &schema.Node{Name: "BenchmarkSuiteResults", FilePath: "pkg/results.go"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isTestSymbol(tc.node); got != tc.wantTest {
+				t.Fatalf("isTestSymbol(%+v) = %v, want %v", tc.node, got, tc.wantTest)
+			}
+		})
+	}
+}
+
 // TestAffectedSkipsDanglingEdgeInsteadOfFailing mirrors
 // TestImpactSkipsDanglingEdgeInsteadOfFailing for Affected's BFS (WR-04):
 // a dangling reverse-edge source encountered mid-traversal must be

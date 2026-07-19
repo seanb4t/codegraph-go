@@ -465,14 +465,19 @@ func (e *Engine) Impact(symbol string, depth int) (ImpactResult, error) {
 }
 
 // isTestSymbol is D-07's test-file heuristic: a node counts as a test
-// symbol if its file ends _test.go, or its own name matches Test*/
-// Benchmark* naming (covering table-driven subtests and benchmarks
-// declared with an otherwise-unconventional file name).
+// symbol if its file ends _test.go.
+//
+// WR-07 (08-REVIEW.md): the previous name-based fallback (any node whose
+// Name started with Test*/Benchmark*, regardless of file) is dropped — a
+// production helper merely named e.g. TestConnectionPool or
+// BenchmarkSuiteResults is not a runnable Go test/benchmark function and
+// was being misclassified as one, inflating affected's output with false
+// positives. The _test.go-suffix check alone already covers Go's own
+// test-function-naming convention: a TestXxx function not in a _test.go
+// file cannot be run by `go test` in the first place, so the fallback
+// added false positives without ever covering a real gap.
 func isTestSymbol(n *schema.Node) bool {
-	if strings.HasSuffix(n.FilePath, "_test.go") {
-		return true
-	}
-	return strings.HasPrefix(n.Name, "Test") || strings.HasPrefix(n.Name, "Benchmark")
+	return strings.HasSuffix(n.FilePath, "_test.go")
 }
 
 // Affected derives impacted test files/symbols for a set of changed
