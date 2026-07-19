@@ -73,7 +73,7 @@
 - [x] **SURF-02**: `files` gains a directory filter matching TS's `--filter` semantics as a NEW flag, while our existing language `--filter` is retained (documented intentional divergence — per decision this session: keep ours + add TS's)
 - [x] **SURF-03**: missing short-flag aliases (`-l`, `-k`, `-j`, `-d`, etc.) are added across commands to match TS
 - [x] **SURF-04**: `affected` gains `--stdin`, `--depth`, `--filter <glob>`, and `--quiet` for git-hook/CI scripting, matching TS
-- [ ] **SURF-05**: a systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` retained as a documented Go-only extension; `migrate` documented as an accepted divergence
+- [x] **SURF-05**: a systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` retained as a documented Go-only extension; `migrate` documented as an accepted divergence
 - [x] **SURF-06**: the 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) return human/agent-readable markdown instead of raw `json.Marshal` output, matching TS (which returns markdown from every MCP tool) and the 2 already-markdown Go tools (`explore`/`node`) — closing a silent Go-vs-TS MCP surface divergence. The CLI `--json` flag keeps emitting JSON (a genuinely different consumer: jq/scripts/CI), and **no `Marshal*JSON` helper body is modified** — every one is shared with the CLI path, so the change is additive (sibling `Render*` funcs + the six `tools.go` call sites only). Measured on this repo's own index: `files` drops 28,505 → 17,471 bytes (**-38.7%**), the saving being ~11KB of JSON keys repeated once per record across 308 records. (Corrected 2026-07-15 during execution: the -41% / ~16,835 B figure cited at planning time was an estimate from a hand-built table; 17,471 B is the real renderer's measured output — plan 02-03.) (MCP `codegraph_status` is a 6th JSON tool and also gains a markdown renderer, but under WORK-02/STAT — D-12's blockquote warning requires it. See CONTEXT D-17.)
 
 ### Behavioral Parity Test Harness (TEST)
@@ -173,7 +173,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | SURF-02 | Phase 8 | Complete |
 | SURF-03 | Phase 8 | Complete |
 | SURF-04 | Phase 8 | Complete |
-| SURF-05 | Phase 8 | Pending |
+| SURF-05 | Phase 8 | Complete |
 | REL-01 | Phase 8 | Pending |
 | REL-02 | Phase 8 | Pending |
 | REL-03 | Phase 8 | Pending |
