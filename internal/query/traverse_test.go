@@ -177,6 +177,42 @@ func TestCalleesSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
 	}
 }
 
+// TestCalleesSortedDeterministically pins WR-02 (08-REVIEW.md iteration
+// 2): Callees must apply sortLocations like its Callers/Impact/Affected
+// siblings rather than returning IterateEdges's raw enumeration order.
+// The fake reader preserves edge insertion order verbatim (no store to
+// impose its own order), so edges are added Zeta-then-Alpha-then-Mu
+// deliberately out of sorted order — if sortLocations were not applied,
+// Callees would return them in that same insertion order.
+func TestCalleesSortedDeterministically(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"origin": {Id: "origin", Kind: "function", Name: "Origin", QualifiedName: "Origin"},
+		"zeta":   {Id: "zeta", Kind: "function", Name: "Zeta", QualifiedName: "Zeta", FilePath: "pkg/pkg.go"},
+		"alpha":  {Id: "alpha", Kind: "function", Name: "Alpha", QualifiedName: "Alpha", FilePath: "pkg/pkg.go"},
+		"mu":     {Id: "mu", Kind: "function", Name: "Mu", QualifiedName: "Mu", FilePath: "pkg/pkg.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "origin", Target: "zeta", Kind: goextract.RefKindCalls},
+		{Source: "origin", Target: "alpha", Kind: goextract.RefKindCalls},
+		{Source: "origin", Target: "mu", Kind: goextract.RefKindCalls},
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Callees("Origin", 0)
+	if err != nil {
+		t.Fatalf("Callees: unexpected error: %v", err)
+	}
+	wantNames := []string{"Alpha", "Mu", "Zeta"}
+	if len(got.Callees) != len(wantNames) {
+		t.Fatalf("Callees: got %+v, want %d entries", got.Callees, len(wantNames))
+	}
+	for i, name := range wantNames {
+		if got.Callees[i].Name != name {
+			t.Fatalf("Callees[%d].Name: got %q, want %q (sorted order): %+v", i, got.Callees[i].Name, name, got.Callees)
+		}
+	}
+}
+
 // TestCallersSkipsDanglingEdgeInsteadOfFailing mirrors
 // TestCalleesSkipsDanglingEdgeInsteadOfFailing for Callers (WR-04).
 func TestCallersSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
@@ -554,10 +590,35 @@ func TestImpact(t *testing.T) {
 // TestImpactCallersAffectedDeterministicAcrossRepeatedCalls pins WR-05
 // (08-REVIEW.md): repeated calls against the same unchanged graph must
 // return byte-identical JSON every time — Impact.Affected, Callers.Callers,
-// and Affected.AffectedTests are no longer left to depend on the
-// underlying graphstore.Reader's enumeration order.
+// Affected.AffectedTests, and (WR-02, iteration 2) Callees.Callees are no
+// longer left to depend on the underlying graphstore.Reader's enumeration
+// order.
 func TestImpactCallersAffectedDeterministicAcrossRepeatedCalls(t *testing.T) {
 	engine := traverseFixture(t)
+
+	t.Run("Callees", func(t *testing.T) {
+		first, err := engine.Callees("Alpha", 0)
+		if err != nil {
+			t.Fatalf("Callees: unexpected error: %v", err)
+		}
+		firstJSON, err := MarshalCalleesJSON(first)
+		if err != nil {
+			t.Fatalf("MarshalCalleesJSON: unexpected error: %v", err)
+		}
+		for i := 0; i < 5; i++ {
+			got, err := engine.Callees("Alpha", 0)
+			if err != nil {
+				t.Fatalf("Callees (repeat %d): unexpected error: %v", i, err)
+			}
+			gotJSON, err := MarshalCalleesJSON(got)
+			if err != nil {
+				t.Fatalf("MarshalCalleesJSON (repeat %d): unexpected error: %v", i, err)
+			}
+			if string(gotJSON) != string(firstJSON) {
+				t.Fatalf("Callees (repeat %d): got %s, want identical to first call's %s", i, gotJSON, firstJSON)
+			}
+		}
+	})
 
 	t.Run("Impact", func(t *testing.T) {
 		first, err := engine.Impact("helper", 2)

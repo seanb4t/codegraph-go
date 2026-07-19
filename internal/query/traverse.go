@@ -324,6 +324,11 @@ func (e *Engine) Callees(symbol string, limit int) (CalleesResult, error) {
 		return CalleesResult{}, err
 	}
 
+	// WR-05/WR-02: sort BEFORE applying limit/MaxLimit caps — mirrors
+	// Callers/Impact/Affected's deterministic (FilePath, Name, StartLine)
+	// ordering rather than leaving Callees at the mercy of
+	// IterateEdges's raw Pebble key-range scan order.
+	sortLocations(locs)
 	if limit > 0 && limit < len(locs) {
 		locs = locs[:limit]
 	}
