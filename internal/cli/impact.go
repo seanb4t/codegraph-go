@@ -62,8 +62,8 @@ func newImpactCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
-	cmd.Flags().IntVar(&depth, "depth", 0, "BFS depth (default 5, max 50)")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON output")
+	cmd.Flags().IntVarP(&depth, "depth", "d", 0, "BFS depth (default 2, max 50)")
+	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")
 
 	return cmd
 }
