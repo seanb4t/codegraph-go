@@ -30,8 +30,12 @@ const (
 
 	// defaultDepth is applied when a caller passes a non-positive depth
 	// (clampDepth's "0 means default" convention, matching the CLI flags'
-	// zero-value default).
-	defaultDepth = 5
+	// zero-value default). SURF-01/D-02: matches TS CodeGraph 1.3.1's
+	// impact default of 2 — changed here in the shared engine (not a
+	// per-surface CLI/MCP default) so codegraph impact and the
+	// codegraph_impact MCP tool inherit depth-2 together. MaxDepth's
+	// clamp ceiling is unchanged.
+	defaultDepth = 2
 
 	// defaultMaxFiles is applied when a caller passes a non-positive
 	// max-files (clampMaxFiles's "0 means default" convention, mirroring
