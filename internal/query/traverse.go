@@ -488,6 +488,16 @@ func isTestSymbol(n *schema.Node) bool {
 // itself recorded as an affected test. There is no golden oracle for
 // this command (D-07a); parity is structural, proved in
 // traverse_test.go against seeded call chains.
+//
+// RES-02 (WR-04 — 08-REVIEW.md): each frontier node's dispatch siblings
+// (the same dispatchSiblingIDs composition Callers/Impact already apply
+// — every OTHER concrete implementation's same-named method, reached
+// through a shared "implements" edge) are ALSO expanded at every hop, so
+// a changed file's dispatch-reachable test dependents are not silently
+// excluded from affectedTests just because Affected historically only
+// composed the direct reverse-adjacency map. When no implements edges
+// exist in the graph (the common case), dispatch siblings are always
+// empty and this composition is a no-op.
 func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 	if err := validateDepth(depth); err != nil {
 		return AffectedResult{}, err
@@ -510,6 +520,14 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 	if err != nil {
 		return AffectedResult{}, err
 	}
+	implementsIdx, err := BuildImplementsIndex(e.reader)
+	if err != nil {
+		return AffectedResult{}, err
+	}
+	containsByType, methodOwner, err := buildContainsIndex(e.reader)
+	if err != nil {
+		return AffectedResult{}, err
+	}
 
 	fileSet := make(map[string]bool, len(files))
 	for _, f := range files {
@@ -523,11 +541,11 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 	defer it.Close()
 
 	visited := make(map[string]bool)
-	var frontier []string
+	var frontier []*schema.Node
 	for it.Next() {
 		n := it.Node()
 		if fileSet[n.FilePath] {
-			frontier = append(frontier, n.Id)
+			frontier = append(frontier, n)
 			visited[n.Id] = true
 		}
 	}
@@ -537,30 +555,38 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 
 	tests := []Location{}
 	for d := 0; d < depth && len(frontier) > 0; d++ {
-		var next []string
-		for _, id := range frontier {
-			for _, edge := range rev[id] {
-				if visited[edge.Source] {
-					continue
-				}
-				dep, err := e.reader.GetNode(edge.Source)
-				if err != nil {
-					// WR-04: skip a dangling edge rather than aborting —
-					// same convention as Callees/Callers/Impact above.
-					if errors.Is(err, graphstore.ErrNotFound) {
+		var next []*schema.Node
+		for _, n := range frontier {
+			siblings, err := dispatchSiblingIDs(e.reader, n, methodOwner, containsByType, implementsIdx)
+			if err != nil {
+				return AffectedResult{}, err
+			}
+			targetIDs := append([]string{n.Id}, siblings...)
+
+			for _, tid := range targetIDs {
+				for _, edge := range rev[tid] {
+					if visited[edge.Source] {
 						continue
 					}
-					return AffectedResult{}, err
+					dep, err := e.reader.GetNode(edge.Source)
+					if err != nil {
+						// WR-04: skip a dangling edge rather than aborting —
+						// same convention as Callees/Callers/Impact above.
+						if errors.Is(err, graphstore.ErrNotFound) {
+							continue
+						}
+						return AffectedResult{}, err
+					}
+					visited[edge.Source] = true
+					if isTestSymbol(dep) {
+						// TS test-files-as-leaves semantics: record, but do
+						// NOT queue for expansion — a test dependent's own
+						// dependents are never pulled into the BFS.
+						tests = append(tests, nodeLocation(dep))
+						continue
+					}
+					next = append(next, dep)
 				}
-				visited[edge.Source] = true
-				if isTestSymbol(dep) {
-					// TS test-files-as-leaves semantics: record, but do
-					// NOT queue for expansion — a test dependent's own
-					// dependents are never pulled into the BFS.
-					tests = append(tests, nodeLocation(dep))
-					continue
-				}
-				next = append(next, dep.Id)
 			}
 		}
 		frontier = next

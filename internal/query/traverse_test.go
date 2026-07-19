@@ -750,6 +750,69 @@ func TestAffectedSkipsDanglingEdgeInsteadOfFailing(t *testing.T) {
 	}
 }
 
+// TestAffected_DispatchTraversal proves WR-04 (08-REVIEW.md): a changed
+// file containing struct A's Handle method must surface a test that only
+// calls sibling implementer B's same-named Handle method — reachable
+// solely through the shared "implements" edge dispatch composition
+// Callers/Impact already apply (RES-02), which Affected's reverse BFS was
+// previously missing entirely.
+func TestAffected_DispatchTraversal(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"iface:I":         {Id: "iface:I", Kind: "interface", Name: "I", QualifiedName: "I", FilePath: "iface.go"},
+		"struct:A":        {Id: "struct:A", Kind: "struct", Name: "A", QualifiedName: "A", FilePath: "a.go"},
+		"struct:B":        {Id: "struct:B", Kind: "struct", Name: "B", QualifiedName: "B", FilePath: "b.go"},
+		"method:a-handle": {Id: "method:a-handle", Kind: "method", Name: "Handle", QualifiedName: "A.Handle", FilePath: "a.go"},
+		"method:b-handle": {Id: "method:b-handle", Kind: "method", Name: "Handle", QualifiedName: "B.Handle", FilePath: "b.go"},
+		"func:testcaller": {Id: "func:testcaller", Kind: "function", Name: "TestCallsBHandle", QualifiedName: "TestCallsBHandle", FilePath: "b_test.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "struct:A", Target: "iface:I", Kind: goextract.EdgeKindImplements, Provenance: "heuristic"},
+		{Source: "struct:B", Target: "iface:I", Kind: goextract.EdgeKindImplements, Provenance: "heuristic"},
+		{Source: "struct:A", Target: "method:a-handle", Kind: "contains", Provenance: "ast"},
+		{Source: "struct:B", Target: "method:b-handle", Kind: "contains", Provenance: "ast"},
+		{Source: "func:testcaller", Target: "method:b-handle", Kind: goextract.RefKindCalls, Provenance: "ast"},
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Affected([]string{"a.go"}, 1)
+	if err != nil {
+		t.Fatalf("Affected: unexpected error: %v", err)
+	}
+
+	var found bool
+	for _, loc := range got.AffectedTests {
+		if loc.Name == "TestCallsBHandle" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Affected([a.go]).AffectedTests = %+v, want TestCallsBHandle present (dispatch traversal through interface I)", got.AffectedTests)
+	}
+}
+
+// TestAffected_DispatchTraversal_NoImplementsEdgesUnaffected mirrors
+// TestCallers_DispatchTraversal_NoImplementsEdgesUnaffected for Affected:
+// the dispatch composition must be a strict no-op when the graph has no
+// "implements" edges at all.
+func TestAffected_DispatchTraversal_NoImplementsEdgesUnaffected(t *testing.T) {
+	nodes := map[string]*schema.Node{
+		"target":   {Id: "target", Kind: "function", Name: "Target", QualifiedName: "Target", FilePath: "changed.go"},
+		"testLive": {Id: "testLive", Kind: "function", Name: "TestLive", QualifiedName: "TestLive", FilePath: "other_test.go"},
+	}
+	edges := []*schema.Edge{
+		{Source: "testLive", Target: "target", Kind: goextract.RefKindCalls},
+	}
+	e := New(&traverseFakeReader{nodes: nodes, edges: edges})
+
+	got, err := e.Affected([]string{"changed.go"}, 2)
+	if err != nil {
+		t.Fatalf("Affected: unexpected error: %v", err)
+	}
+	if len(got.AffectedTests) != 1 || got.AffectedTests[0].Name != "TestLive" {
+		t.Fatalf("Affected: got %+v, want exactly [TestLive] (no implements edges, no composition)", got.AffectedTests)
+	}
+}
+
 // assertJSONArrayNotNull fails t if data's top-level object key marshaled
 // as JSON null — WR-01: a zero-match array field must marshal as [], not
 // null, so a JSON consumer that assumes an array field is always an array
