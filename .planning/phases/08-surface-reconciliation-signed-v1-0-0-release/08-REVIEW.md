@@ -1,369 +1,150 @@
 ---
 phase: 08-surface-reconciliation-signed-v1-0-0-release
-reviewed: 2026-07-19T00:00:00Z
+reviewed: 2026-07-19T21:41:39Z
 depth: deep
-files_reviewed: 24
+files_reviewed: 8
 files_reviewed_list:
   - internal/query/validate.go
   - internal/query/files.go
   - internal/query/traverse.go
-  - internal/query/engine_test.go
   - internal/query/files_status_test.go
   - internal/query/traverse_test.go
-  - internal/cli/impact.go
-  - internal/cli/files.go
   - internal/cli/affected.go
   - internal/cli/affected_test.go
-  - internal/cli/callers.go
-  - internal/cli/callees.go
-  - internal/cli/query.go
-  - internal/cli/status.go
-  - internal/cli/install.go
-  - internal/cli/uninstall.go
-  - internal/cli/upgrade.go
-  - internal/cli/flag_parity_test.go
-  - internal/cli/present/archtest/charm_cgo_test.go
   - internal/upgrade/upgrade.go
-  - internal/upgrade/upgrade_test.go
-  - docs/FLAG-PARITY.md
-  - docs/RELEASE-PROCEDURES.md
-  - docs/BENCHMARKS.md
 findings:
   critical: 1
-  warning: 7
-  info: 1
-  total: 9
+  warning: 2
+  info: 0
+  total: 3
 status: issues_found
 ---
 
-# Phase 08: Code Review Report
+# Phase 8: Code Review Report (iteration 2 — re-review)
 
-**Reviewed:** 2026-07-19
+**Reviewed:** 2026-07-19T21:41:39Z
 **Depth:** deep
-**Files Reviewed:** 24
+**Files Reviewed:** 8
 **Status:** issues_found
 
-## Summary
+## Narrative Findings (AI reviewer)
 
-Reviewed the Phase 8 surface-reconciliation changes at deep depth: the two
-distinct depth-clamp defaults (`clampDepth`/`defaultDepth=2` for `impact`
-vs `clampAffectedDepth`/`defaultAffectedDepth=5` for `affected`), the new
-depth-bounded `Affected` BFS with test-leaf pruning, `files --dir`'s
-prefix-match filter, the `affected --stdin` untrusted-input path, and the
-`upgrade --force` same-version guard's interaction with signature
-verification.
+### Summary
 
-**Things verified as correct, not flagged:**
-- `clampDepth`/`clampAffectedDepth` are NOT cross-wired — `Impact` calls
-  `clampDepth` (default 2), `Affected` calls `clampAffectedDepth` (default
-  5); both share `MaxDepth=50` as documented, and both reject negative
-  depths via `validateDepth` before clamping (`internal/query/traverse.go:395-399,491-495`).
-- `upgrade --force`'s same-version bypass is genuinely narrow: `Run` only
-  skips the `target == currentVersion` early-return; `verify()` still runs
-  unconditionally before `swap()` in every code path, and
-  `upgrade_test.go`'s `TestUpgradeRun_ForceStillVerifiesBeforeSwap`
-  directly proves a failing verify aborts before swap even with
-  `Force: true` (`internal/upgrade/upgrade.go:82-153`). No weakening found.
-- `affected --stdin` does not hang on empty/closed stdin —
-  `bufio.Scanner.Scan()` returns `false` cleanly on EOF, and
-  `TestAffectedStdinNeverHangs`/`TestAffectedEmptyStdinNoArgs` exercise this
-  with a real timeout guard.
+This is iteration 2 of the `--auto` fix loop, re-verifying the 6 fix commits
+(`9019fe4`, `ea2b889`, `d887e38`, `43c25ae`, `8a6ac3b`, `d3f077c`) applied
+against iteration-1's findings. Verification method: read every changed
+file in full, re-read each fix's own diff (`git show`), cross-checked
+against `internal/query/traverse_test.go`/`internal/cli/affected_test.go`,
+ran `go build`, `go vet`, `staticcheck`, the package test suites
+(`internal/query`, `internal/cli`, `internal/upgrade`), and the golden
+parity suite (`testdata/golden/...`) — all green, consistent with the
+re-review context's stated baseline.
 
-**Genuine defects found**, detailed below: an unbounded-input DoS gap in
-`affected --stdin` that the codebase's own `MaxLimit`/`MaxFiles` validation
-convention does not cover; a classic prefix-match boundary bug in
-`dirPrefixMatches`; a JSON-null inconsistency on `AffectedResult.Files`
-that the codebase's own WR-01 convention was supposed to close everywhere;
-an unescaped-path injection risk in `affected --quiet`'s machine-readable
-output; and a cross-file behavioral inconsistency where `Affected`'s
-reverse BFS does not apply the same interface-dispatch composition that
-`Callers`/`Impact` both apply.
+**Verified correct, no regression:**
+- **WR-01** (`dirPrefixMatches`, `ea2b889`): now requires a path-separator
+  boundary (exact match or `dir+"/"` prefix) on both the plain and
+  `./`-prefixed forms; still a pure prefix check (no glob semantics
+  introduced, D-03 preserved). `files_status_test.go`'s new `pkgab/bar.go`
+  vs. `pkga` cases directly pin the fixed boundary.
+- **WR-02** (`AffectedResult.Files` nil→`[]string{}`, `d887e38`): mirrors
+  the existing `Callees`/`Callers`/`Affected.AffectedTests` empty-slice
+  convention exactly; `TestZeroMatchJSONShapesAreEmptyArraysNotNull`'s new
+  "Affected nil files argument" subtest proves it. No double-normalization.
+- **WR-04** (dispatch-sibling composition in `Affected`'s BFS, `43c25ae`):
+  mirrors `Impact`'s existing frontier/`dispatchSiblingIDs` composition
+  exactly (test-leaf pruning is unaffected — a leaf test dependent is
+  never added to `next`, so `dispatchSiblingIDs` is never invoked on it);
+  `TestAffected_DispatchTraversal` /
+  `TestAffected_DispatchTraversal_NoImplementsEdgesUnaffected` cover both
+  the positive and no-op cases. Golden corpus (`TestGoldenBehavioralRealCorpora`)
+  still passes.
+- **WR-07** (`isTestSymbol` tightened to `_test.go`-suffix only, `8a6ac3b`):
+  confirmed the only caller sites are `traverse.go`'s `Affected` and
+  `explore.go`'s caller-classification (`explore.go:84`) — both intend
+  "is this node declared in a test file," so dropping the
+  `Test*`/`Benchmark*` name fallback is applied consistently, not just in
+  one call site. `TestIsTestSymbol`'s new cases cover the previously
+  misclassified production-function names.
+- **WR-05** (`sortLocations`, `d3f077c`) for **Callers** and **Impact**:
+  `(FilePath, Name, StartLine)` via `sort.SliceStable`, applied before
+  `limit`/`MaxLimit` capping (so the capped subset is itself deterministic).
+  This is a defensible, documented ordering (mirrors `sortFileTree`'s
+  existing "reproducible JSON output" convention, D-06) — not an arbitrary
+  break. `TestImpact`'s updated `Affected[0]=="Alpha"` (not `"helper"`)
+  assertion correctly reflects the new order (`"Alpha" < "helper"`
+  lexicographically), and the new
+  `TestImpactCallersAffectedDeterministicAcrossRepeatedCalls` proves
+  byte-identical JSON across 5 repeated calls. Golden parity's
+  `impact`/`callers` subtests compare via set/count, not exact array order,
+  so this doesn't regress them (confirmed by running the suite).
 
-## Critical Issues
+**New issues found in this iteration** (see below): one fix (WR-06) does
+not actually do what its own doc comment and commit message claim, and two
+of the six commits leave the codebase in a state that's internally
+inconsistent or has dead code / a coverage gap. None of these was caught
+by the green test suite, `go vet`, or `staticcheck` — all require reading
+the fix's actual runtime semantics, not just its stated intent.
 
-### CR-01: `affected --stdin` has no cap on the number of ingested lines — unbounded-memory DoS
+### Critical Issues
 
-**File:** `internal/cli/affected.go:150-179` (compounded by `internal/query/traverse.go:491-558`)
+#### CR-01: WR-06's `scanner.Buffer` call does not enforce `affectedStdinMaxLineBytes` — the real per-line ceiling is silently 64 KiB, not 4096 bytes
 
-**Issue:** Every other numeric input surface in this package is explicitly
-bounded against exactly this class of attack — `internal/query/validate.go`
-documents `MaxDepth`, `MaxLimit`, and `MaxFiles` as existing specifically
-"so a caller — human or an untrusted/compromised MCP client — cannot force
-an unbounded traversal or allocation just by passing a large number" (V5
-Input Validation, T-03-02-DoS). `affected --stdin` is explicitly documented
-as ingesting an **untrusted** path list (SURF-04/T-08-05-01), yet
-`collectAffectedFiles` (internal/cli/affected.go:150) reads every line from
-`cmd.InOrStdin()` via `bufio.NewScanner` with **no upper bound on line
-count**, deduplicating into an ever-growing `seen` map and `files` slice.
-`Engine.Affected` (internal/query/traverse.go:491) then builds
-`fileSet := make(map[string]bool, len(files))` from that same
-unbounded-size slice with no `validateMaxFiles`-style rejection.
+**File:** `internal/cli/affected.go:216`
 
-A hostile or merely oversized input source (a compromised git hook, a CI
-step piping an attacker-influenced diff, or simply `yes | codegraph
-affected --stdin`) can grow `files`/`seen`/`fileSet` without limit before
-`Affected` ever runs its bounded graph scan, exhausting memory in a
-long-running process (this matters most for the future MCP server, which
-this exact package is designed to be reused by, per
-`BuildReverseAdjacency`'s doc comment on `internal/query/traverse.go:29-31`).
-
-**Fix:** Cap the number of lines/files accepted, mirroring
-`validateMaxFiles`'s posture (reject outright with a clear error rather
-than silently truncate):
+**Issue:** The fix's intent (per its own doc comment on `affectedStdinMaxLineBytes`, lines 159-166, and the `WR-06` doc comment on `collectAffectedFiles`, lines 186-191) is: a `--stdin` line longer than 4096 bytes (`affectedStdinMaxLineBytes`) is malformed input and must surface `bufio.ErrTooLong` as an explicit error. The actual call is:
 
 ```go
-// in internal/query/validate.go
-const MaxAffectedFiles = 10000 // or reuse MaxFiles
+scanner.Buffer(make([]byte, 0, 64*1024), affectedStdinMaxLineBytes)
+```
 
-func validateAffectedFiles(n int) error {
-	if n > MaxAffectedFiles {
-		return fmt.Errorf("query: %d files exceeds maximum %d", n, MaxAffectedFiles)
-	}
-	return nil
+Per `bufio.Scanner.Buffer`'s documented contract: *"The maximum token size must be less than the larger of max and cap(buf)."* Here `cap(buf) == 65536` and `max == 4096` — the **larger** of the two is `65536`, so the actual enforced ceiling is 64 KiB, not the intended 4096 bytes. A line between 4097 and 65536 bytes is silently accepted with no error, exactly the "silently truncating/dropping" failure mode WR-06 was supposed to close. I confirmed this behavior directly:
+
+```go
+// reproduction: a 10000-byte line, with max=4096 passed to scanner.Buffer
+scanner.Buffer(make([]byte, 0, 64*1024), 4096)
+// scanner.Scan() succeeds, scanner.Err() == nil — no ErrTooLong surfaced
+```
+Output: `scanned line length: 10000` / `no error — 10000-byte line was accepted despite max=4096`.
+
+This is not merely a documentation mismatch — it is the actual security/robustness property WR-06 was meant to add (bounding a single `--stdin` line to a sane, PATH_MAX-scale ceiling and surfacing an explicit error on anything past it), and it doesn't hold. Also note the *pre-fix* code had no `scanner.Buffer` call at all, meaning the default `bufio.MaxScanTokenSize` (64 KiB) applied — so despite the added code and the extensive doc comments, the actual per-line ceiling is completely unchanged by this commit. No test in the suite exercises a line between 4097 and 65536 bytes, which is why this passed CI.
+
+**Fix:** Make the initial buffer's capacity no larger than the intended ceiling, so `max` is actually the binding constraint:
+
+```go
+scanner.Buffer(make([]byte, 0, affectedStdinMaxLineBytes), affectedStdinMaxLineBytes)
+```
+
+(or pass `nil`/a zero-cap buffer as the first argument — `cap(nil) == 0 < affectedStdinMaxLineBytes`, so `max` still wins). Add a regression test asserting a stdin line of, say, `affectedStdinMaxLineBytes+1` bytes produces the documented `"affected: --stdin line exceeds maximum %d bytes"` error, and a line of exactly `affectedStdinMaxLineBytes` bytes succeeds.
+
+### Warnings
+
+#### WR-01: `ValidateAffectedFiles` is dead code — CR-01's cap enforcement is duplicated inline instead of calling it, and has no test coverage
+
+**File:** `internal/query/validate.go:153` / `internal/cli/affected.go:200-202`
+
+**Issue:** Commit `9019fe4` (CR-01) added an exported `query.ValidateAffectedFiles(n int) error`, whose doc comment states: *"Exported so internal/cli/affected.go's collectAffectedFiles can enforce the cap as it reads stdin, before Engine.Affected is ever called."* It is never called anywhere — `collectAffectedFiles`'s `add` closure reimplements the identical check inline instead:
+
+```go
+if len(files)+1 > query.MaxAffectedFiles {
+    return fmt.Errorf("affected: input exceeds maximum %d files", query.MaxAffectedFiles)
 }
 ```
 
-```go
-// in internal/cli/affected.go's collectAffectedFiles, or Engine.Affected
-if stdinFlag {
-	scanner := bufio.NewScanner(cmd.InOrStdin())
-	for scanner.Scan() {
-		if len(files) >= query.MaxAffectedFiles {
-			break // or return an explicit error
-		}
-		add(strings.TrimSpace(scanner.Text()))
-	}
-}
-```
+Confirmed via `grep -rn "ValidateAffectedFiles"` — the only occurrences are the function's own definition and doc comment in `validate.go`; no call site exists in the codebase, and no test calls it either. This is currently harmless in behavior (both implementations enforce the same `n > MaxAffectedFiles` boundary correctly, verified: allows exactly 10000 unique files, rejects the 10001st), but it's a genuine defect in the *fix itself*: an exported, documented, "this is why it exists" API that its own commit message describes as the enforcement path is quietly unused, leaving two independent sources of truth for the same validation rule that can silently diverge on a future edit to either one. There is also no test anywhere (`internal/cli` or `internal/query`) that exercises the actual >10000-file rejection path end-to-end — the CR-01 fix's headline behavior is untested.
 
-## Warnings
+**Fix:** Either (a) have `collectAffectedFiles`'s `add` closure call `query.ValidateAffectedFiles(len(files) + 1)` instead of re-deriving the same comparison inline, so there is one source of truth, or (b) if the CLI-local inline check is intentionally kept lightweight, delete the unused exported `ValidateAffectedFiles` (and its doc comment's false claim) rather than leaving a misleading, uncalled API. Either way, add a test that feeds `query.MaxAffectedFiles+1` distinct lines via `--stdin` and asserts the `"input exceeds maximum %d files"` error is returned.
 
-### WR-01: `dirPrefixMatches` has no path-separator boundary check — `--dir foo` also matches sibling directory `foobar/`
+#### WR-02: `Callees` was left out of the WR-05 determinism fix — it has a different, unproven ordering contract than its three sibling functions
 
-**File:** `internal/query/files.go:103-108`
+**File:** `internal/query/traverse.go` (`Callees`, ~lines 290-334; `sortLocations`, line 242)
 
-**Issue:** `dirPrefixMatches` is a plain `strings.HasPrefix(path, dir)`
-check with no requirement that the match land on a path-separator
-boundary. Given two sibling directories `pkga/` and `pkgab/` (or any pair
-where one directory name is a literal string-prefix of another),
-`--dir pkga` matches BOTH `pkga/foo.go` and `pkgab/bar.go` — the classic
-prefix-match-without-boundary bug. The existing test table
-(`internal/query/files_status_test.go:248-268`, `"dirPrefixMatches: plain
-prefix semantics, not a glob"`) only exercises dir values that already end
-in `/` (`"internal/"`, `"internal/query"` against a path that has a `/`
-right after), so it never exercises the sibling-collision case. This is
-distinct from — and not excused by — the intentionally-locked "prefix
-match, not a glob" design (D-03): the gap is the missing separator
-boundary, not the choice of prefix-vs-glob semantics.
+**Issue:** Commit `d3f077c` (WR-05) added `sortLocations` (canonical `(FilePath, Name, StartLine)` order) and applied it to `Callers` (line 398), `Impact` (line 489), and `Affected` (line 634) — each with a matching new regression test in `TestImpactCallersAffectedDeterministicAcrossRepeatedCalls`. `Callees` has the exact same structural shape (`locs := []Location{}`, append-only, then `limit`/`MaxLimit` capping) and the same rationale the commit gives for the other three applies verbatim — its order currently comes from `IterateEdges(node.Id)`'s raw Pebble key-range scan order (confirmed via `internal/graphstore/pebble_store.go:285`), not from any ordering this package asserts or tests. In production this happens to be stable across repeated calls against the same store snapshot (Pebble's sorted-key iteration), but it is a *different* order than the `(FilePath, Name, StartLine)` contract the other three now guarantee — an inconsistency in the very "reproducible, package-owned ordering" convention this fix was meant to establish uniformly, and `Callees` has no analogous determinism test (`TestImpactCallersAffectedDeterministicAcrossRepeatedCalls` does not cover it).
 
-**Fix:** Require the match to land on a path boundary (either an exact
-segment match or followed by `/`), while still keeping the "not a glob"
-contract:
-
-```go
-func dirPrefixMatches(path, dir string) bool {
-	if dir == "" {
-		return true
-	}
-	for _, p := range []string{path, "./" + path} {
-		if p == dir || strings.HasPrefix(p, strings.TrimSuffix(dir, "/")+"/") {
-			return true
-		}
-	}
-	return false
-}
-```
-
-(If this diverges from TS 1.3.1's own `bin/codegraph.js:1348-1354` behavior,
-confirm TS has the identical bug before deciding whether to fix or
-document-and-accept — but the current Go behavior should not be assumed
-correct-by-parity without checking.)
-
-### WR-02: `AffectedResult.Files` has no `omitempty`/empty-slice normalization — a nil `files` argument marshals as JSON `null`
-
-**File:** `internal/query/traverse.go:258-261, 491-558`
-
-**Issue:** `AffectedResult.Files []string \`json:"files"\`` carries no
-`omitempty`, and `Engine.Affected` returns it as a direct pass-through of
-the caller-supplied `files` parameter (`AffectedResult{Files: files, ...}`
-at line 557) with no defensive normalization. When a caller passes `nil`
-(exactly what `internal/query/traverse_test.go`'s
-`TestAffectedEmptyFilesReturnsEmptyResultNoError` does at line 624, though
-that test does not check JSON marshaling), `MarshalAffectedJSON` produces
-`{"files":null,"affectedTests":[]}`.
-
-This is precisely the class of bug the codebase already fixed for
-`Callees`/`Callers`/`AffectedTests` — see `WR-01` in
-`internal/query/traverse.go`'s doc comments and
-`TestZeroMatchJSONShapesAreEmptyArraysNotNull`
-(`internal/query/traverse_test.go:773-826`) — but that regression test
-suite never exercises `Files` itself. The current CLI path
-(`internal/cli/affected.go`'s `collectAffectedFiles`) happens to always
-build a non-nil `make([]string, 0, len(args))`, masking the bug for
-today's only caller, but any other caller of the exported `Engine.Affected`
-(e.g. a future MCP tool) that passes `nil` would produce a `null` array a
-downstream JSON consumer must not observe, per this codebase's own stated
-convention.
-
-**Fix:** Normalize defensively inside `Affected`, matching `tests :=
-[]Location{}`'s existing pattern:
-
-```go
-func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
-	...
-	if files == nil {
-		files = []string{}
-	}
-	...
-	return AffectedResult{Files: files, AffectedTests: tests}, nil
-}
-```
-
-### WR-03: `affected --quiet` writes raw, unescaped file paths — a path containing embedded control characters can inject extra lines into machine-readable output
-
-**File:** `internal/cli/affected.go:98-110`
-
-**Issue:** The `--quiet` branch is explicitly documented as a
-git-hook/CI-pipeline-safe, one-path-per-line machine-readable contract
-("Safe to pipe straight into another command"). It writes
-`fmt.Fprintf(out, "%s\n", l.FilePath)` for each affected test's `FilePath`
-— sourced from the indexed graph's file paths, not directly from the
-`--stdin` input, but ultimately derived from real filenames in whatever
-repository was indexed. POSIX filesystems permit any byte except `NUL`
-and `/` in a filename, including embedded newlines. A file whose path
-contains an embedded `\n` (achievable on Linux, and something an
-adversarial repository under CI could plant) would inject an extra,
-attacker-controlled "line" into `--quiet`'s otherwise-trusted
-one-path-per-line output, corrupting any downstream consumer that
-naively does `for line in $(codegraph affected --quiet); do rm "$line"; done`
-or similar — a real risk given the explicit CI-pipeline use case this flag
-was built for (`git diff --name-only | codegraph affected --stdin --quiet`
-piped onward).
-
-**Fix:** Either reject/skip paths containing control characters before
-emitting `--quiet` output, or use a NUL-delimited output mode (mirroring
-`git diff -z`/`xargs -0`) for safe consumption:
-
-```go
-if quiet {
-	for _, l := range result.AffectedTests {
-		if strings.ContainsAny(l.FilePath, "\n\r") {
-			continue // or return an error — a graph-indexed path should never contain these
-		}
-		...
-	}
-}
-```
-
-### WR-04: `Affected`'s reverse BFS omits the RES-02 interface-dispatch composition that `Callers`/`Impact` both apply
-
-**File:** `internal/query/traverse.go:491-558` vs `323-378` (`Callers`) and `395-465` (`Impact`)
-
-**Issue:** `Callers` and `Impact` both explicitly compose
-`dispatchSiblingIDs`/`BuildImplementsIndex`/`buildContainsIndex` so that a
-call dispatched dynamically through a shared interface is included in
-their blast-radius/caller results (RES-02, documented at length in both
-functions' doc comments). `Affected` performs the same
-shape of reverse-adjacency BFS (`BuildReverseAdjacency` + frontier
-expansion) but never builds or consults the implements/contains indices at
-all — a test that depends on a method only reachable through dynamic
-dispatch from a sibling implementation of an interface will be silently
-missing from `affected`'s results, understating the actual test blast
-radius for exactly the polymorphic code shapes RES-02 was built to handle
-elsewhere in this same file. Nothing in `Affected`'s doc comment
-(`traverse.go:478-490`) documents this as an intentional simplification —
-it reads as an oversight given how deliberately RES-02 is called out on
-its two siblings.
-
-**Fix:** Compose the same `dispatchSiblingIDs` expansion into `Affected`'s
-frontier loop that `Impact` already uses (lines 427-431), so a changed
-file's dispatch-reachable dependents are not silently excluded from
-`affectedTests`.
-
-### WR-05: Traversal results (`Impact.Affected`, `Callers.Callers`, `Affected.AffectedTests`) are never independently sorted before being returned
-
-**File:** `internal/query/traverse.go` (all three), contrast with `internal/query/files.go:226-242` (`sortFileTree`)
-
-**Issue:** `files.go`'s `sortFileTree` explicitly sorts its output "so the
-tree projection is deterministic across calls (matching this package's
-general '--json output must be reproducible' convention, D-06)". None of
-`Impact`, `Callers`, or `Affected` apply an equivalent final sort to their
-result slices — each result's order is entirely a function of the
-underlying `graphstore.Reader`'s `IterateNodes`/`IterateEdges` enumeration
-order (via `BuildReverseAdjacency`'s scan-order-preserving append) plus
-Go's frontier-processing order. This is very likely stable in practice if
-the Pebble-backed reader iterates in sorted-key order, but that guarantee
-lives entirely outside this package (not verified in any file in this
-review's scope) and is not asserted by any test here. Per the reviewer
-brief's explicit ask to check for "output-ordering non-determinism": this
-is a real, if currently probably-benign, gap relative to the project's own
-stated determinism convention.
-
-**Fix:** Add an explicit final sort (e.g. by `FilePath`, then `Name`) to
-`ImpactResult.Affected`, `CallersResult.Callers`, and
-`AffectedResult.AffectedTests` before returning, so determinism does not
-depend on an unverified upstream iteration-order contract.
-
-### WR-06: `bufio.Scanner`'s default 64KB per-line limit silently truncates the *entire remaining* stdin stream with no error surfaced
-
-**File:** `internal/cli/affected.go:166-176`
-
-**Issue:** `collectAffectedFiles` uses `bufio.NewScanner(cmd.InOrStdin())`
-with its default token-size ceiling (`bufio.MaxScanTokenSize`, 64KB). If a
-single line exceeds that (a pathological or maliciously long single
-"path" on `--stdin`), `Scan()` returns `false` with `Err() ==
-bufio.ErrTooLong`, and the loop simply stops — but the comment at lines
-171-176 documents this as deliberately swallowed ("a git-hook pipeline
-should degrade to 'no files from stdin' rather than fail the whole
-command"). The actual effect is stronger than that comment implies: it is
-not "no files from stdin" but "only the files read *before* the oversized
-line," with everything after silently dropped and no indication to the
-caller that truncation occurred.
-
-**Fix:** At minimum, call `scanner.Buffer(...)` with a bounded-but-larger
-max token size appropriate for a file path (e.g. 4096 bytes, the common
-`PATH_MAX`), so a legitimately long-but-valid path is not treated as
-"too long," and consider surfacing (rather than silently swallowing) the
-`bufio.ErrTooLong` case specifically, since it indicates malformed input
-rather than ordinary EOF.
-
-### WR-07: `isTestSymbol`'s naming heuristic can misclassify production code as a test symbol
-
-**File:** `internal/query/traverse.go:471-476`
-
-**Issue:** `isTestSymbol` treats any node whose `Name` starts with `Test`
-or `Benchmark` as a test symbol, regardless of file location or function
-signature. A production helper function named e.g. `TestConnectionPool`,
-`TestModeEnabled`, or `BenchmarkSuiteResults` (none of which are Go test
-functions) would be misclassified as an "affected test" by both `Affected`
-and — via the same helper — nowhere else, but specifically inflates
-`affected`'s output with false positives. This is a known
-heuristic-not-ground-truth tradeoff (D-07 documents it as query-time
-derivation, not a persisted test-coverage edge), so this is recorded as a
-lower-confidence quality note rather than a hard defect, but worth
-tightening given `affected`'s primary use case is automated CI/git-hook
-consumption where false positives directly waste CI time.
-
-**Fix (optional):** Tighten the heuristic to also require the node's
-`Kind` be `function` and either its file end in `_test.go` (already
-checked) or, for the name-based fallback, only apply it when
-`_test.go`-ness is unknown/unavailable — or drop the name-based fallback
-entirely, since the `_test.go`-suffix check alone already covers Go's own
-test-function-naming convention (a `TestXxx` function not in a `_test.go`
-file is not runnable by `go test` in the first place).
-
-## Info
-
-### IN-01: `downloadReleaseAsset` has no `context.Context` for early cancellation
-
-**File:** `internal/upgrade/upgrade.go:221-224`
-
-**Issue:** `downloadHTTPClient.Get(url)` is called with a `//nolint:gosec,noctx` suppression; the `noctx` half of that suppression waives go-vet's request that HTTP calls carry a cancelable context. The package-level `downloadHTTPClient`'s 5-minute `Timeout` does bound the call, but a user hitting Ctrl+C mid-download (or a future caller wanting to cancel on `SIGINT`) has no way to short-circuit before that ceiling.
-
-**Fix:** Thread a `context.Context` through `Run`/`Options`/`downloadReleaseAsset` and use `http.NewRequestWithContext`, so `codegraph upgrade` can be interrupted immediately rather than only after up to 5 minutes.
+**Fix:** Add `sortLocations(locs)` to `Callees` immediately before its `limit`/`MaxLimit` capping (mirroring `Callers`'s placement), and add a `Callees` subtest to `TestImpactCallersAffectedDeterministicAcrossRepeatedCalls` (or a sibling test) asserting byte-identical JSON across repeated calls, matching the other three.
 
 ---
 
-_Reviewed: 2026-07-19_
+_Reviewed: 2026-07-19T21:41:39Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
