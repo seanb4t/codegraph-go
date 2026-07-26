@@ -162,7 +162,7 @@ func companionTool(name string) mcp.Tool {
 		return mcp.NewTool("codegraph_impact",
 			mcp.WithDescription("Depth-bounded reverse blast radius of a symbol"),
 			mcp.WithString("symbol", mcp.Required(), mcp.Description("Symbol name")),
-			mcp.WithNumber("depth", mcp.Description("BFS depth (default 5, max 50)")),
+			mcp.WithNumber("depth", mcp.Description("BFS depth (default 2, max 50)")),
 			mcp.WithString("path", mcp.Description("Repo path (default: server cwd)")),
 		)
 	case "files":
