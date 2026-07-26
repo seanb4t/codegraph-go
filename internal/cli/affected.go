@@ -156,13 +156,16 @@ func newAffectedCmd() *cobra.Command {
 	return cmd
 }
 
-// affectedStdinMaxLineBytes bounds a single --stdin line (WR-06): a file
-// path legitimately never needs to exceed this — 4096 is the common
-// PATH_MAX — so a single pathological/malicious "line" far longer than
-// any real path is treated as malformed input (an explicit error) rather
-// than tripping bufio.Scanner's much smaller default 64KB
-// bufio.MaxScanTokenSize ceiling and silently truncating every line after
-// it.
+// affectedStdinMaxLineBytes is the longest --stdin line accepted, in bytes
+// (WR-06): a file path legitimately never needs to exceed this — 4096 is
+// the common PATH_MAX — so a single pathological/malicious "line" far
+// longer than any real path is treated as malformed input (an explicit
+// error).
+//
+// This deliberately *lowers* the ceiling: bufio.Scanner's default is
+// bufio.MaxScanTokenSize (64KB), 16x larger than any real path needs.
+// Without an explicit cap, an oversized line would trip that far-off
+// default and silently truncate every line after it.
 const affectedStdinMaxLineBytes = 4096
 
 // collectAffectedFiles assembles the file list from positional args plus,
@@ -183,12 +186,13 @@ const affectedStdinMaxLineBytes = 4096
 // error, matching validateMaxFiles/validateLimit's "reject absurd input,
 // don't silently truncate" convention elsewhere in this package.
 //
-// WR-06: scanner.Buffer raises the per-line token ceiling to
-// affectedStdinMaxLineBytes (well above any real path, well below
-// unbounded) so a legitimately long-but-valid path is never mistaken for
-// "too long" — and a genuine bufio.ErrTooLong (which, unlike ordinary
-// EOF, indicates malformed input) is surfaced as an explicit error
-// instead of silently stopping the scan and dropping every line after it.
+// WR-06: scanner.Buffer *lowers* the per-line token ceiling from
+// bufio.Scanner's 64KB default to affectedStdinMaxLineBytes (well above
+// any real path, well below unbounded), so an oversized line is reported
+// rather than silently truncating the rest of the stream. A genuine
+// bufio.ErrTooLong (which, unlike ordinary EOF, indicates malformed
+// input) is surfaced as an explicit error instead of silently stopping
+// the scan and dropping every line after it.
 func collectAffectedFiles(cmd *cobra.Command, args []string, stdinFlag bool) ([]string, error) {
 	seen := make(map[string]bool, len(args))
 	files := make([]string, 0, len(args))
@@ -213,11 +217,19 @@ func collectAffectedFiles(cmd *cobra.Command, args []string, stdinFlag bool) ([]
 
 	if stdinFlag {
 		scanner := bufio.NewScanner(cmd.InOrStdin())
-		// Initial buffer capacity must not exceed affectedStdinMaxLineBytes:
-		// bufio.Scanner.Buffer's effective ceiling is max(maxArg, cap(buf)),
-		// so a larger initial cap (e.g. the old 64*1024) silently defeats
-		// the intended 4096-byte cap.
-		scanner.Buffer(make([]byte, 0, affectedStdinMaxLineBytes), affectedStdinMaxLineBytes)
+		// Both arguments must agree: bufio.Scanner.Buffer's effective
+		// ceiling is max(maxArg, cap(buf)), so a larger initial capacity
+		// (e.g. the old 64*1024) silently defeats the intended cap — the
+		// guard reads as present while never firing (CR-01).
+		//
+		// The ceiling is affectedStdinMaxLineBytes+1, not the constant
+		// itself, because bufio.ScanLines must buffer the trailing \n to
+		// find the line break even though it strips it from the returned
+		// token. Budgeting only affectedStdinMaxLineBytes would reject a
+		// line of exactly that length, making the limit off by one
+		// against both this constant's name and the error message below.
+		const stdinScanBufBytes = affectedStdinMaxLineBytes + 1
+		scanner.Buffer(make([]byte, 0, stdinScanBufBytes), stdinScanBufBytes)
 		for scanner.Scan() {
 			if err := add(strings.TrimSpace(scanner.Text())); err != nil {
 				return nil, err

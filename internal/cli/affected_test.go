@@ -163,13 +163,17 @@ func TestAffectedStdinCRLFAndBlankLines(t *testing.T) {
 	}
 }
 
-// TestAffectedStdinLineTooLong pins CR-01 (iteration-2 re-review): the
-// scanner.Buffer initial-capacity argument must not exceed
-// affectedStdinMaxLineBytes, or bufio.Scanner's documented
-// max(maxArg, cap(buf)) ceiling silently raises the real limit past the
-// intended one. A line one byte over the cap must produce the documented
-// "--stdin line exceeds maximum %d bytes" error rather than being silently
-// accepted.
+// TestAffectedStdinLineTooLong pins CR-01 (iteration-2 re-review) and
+// IN-03 (iteration-3 re-review) by asserting both sides of the boundary.
+//
+// CR-01: scanner.Buffer's two arguments must agree, or bufio.Scanner's
+// documented max(maxArg, cap(buf)) ceiling silently raises the real limit
+// past the intended one — a guard that reads as present but never fires.
+// A line one byte over the cap must produce the documented "--stdin line
+// exceeds maximum %d bytes" error rather than being silently accepted.
+//
+// IN-03: a line of exactly affectedStdinMaxLineBytes must be accepted, so
+// the reported maximum is the real one.
 func TestAffectedStdinLineTooLong(t *testing.T) {
 	dir := setupIndexedFixtureWithTest(t)
 
@@ -184,20 +188,26 @@ func TestAffectedStdinLineTooLong(t *testing.T) {
 		}
 	})
 
-	t.Run("line just under the cap succeeds", func(t *testing.T) {
-		// bufio.Scanner's documented contract is "token size must be less
-		// than max" (strictly), so the largest line guaranteed to succeed
-		// is affectedStdinMaxLineBytes-1, not affectedStdinMaxLineBytes
-		// itself. Pad a real path out to exactly that length with
-		// trailing filler that still resolves to no matched file
-		// (harmless — we're only asserting no ErrTooLong here).
-		underCap := "pkga/pkga.go" + strings.Repeat(" ", affectedStdinMaxLineBytes-1-len("pkga/pkga.go")-1) + "x\n"
-		if len(underCap)-1 != affectedStdinMaxLineBytes-1 {
-			t.Fatalf("test setup bug: line is %d bytes, want %d", len(underCap)-1, affectedStdinMaxLineBytes-1)
+	t.Run("line at exactly the cap succeeds", func(t *testing.T) {
+		// IN-03: a line of exactly affectedStdinMaxLineBytes must be
+		// accepted, so the constant's name and the "exceeds maximum %d
+		// bytes" message both state the true limit. This is the boundary
+		// the scanner buffer's +1 delimiter budget exists to make
+		// reachable: bufio.ScanLines has to buffer the trailing \n to
+		// find the line break even though it strips it from the token,
+		// so budgeting only affectedStdinMaxLineBytes would reject a
+		// full-length line and leave the limit off by one.
+		//
+		// Pad a real path out to exactly that length with trailing filler
+		// that still resolves to no matched file (harmless — we're only
+		// asserting the absence of ErrTooLong here).
+		atCap := "pkga/pkga.go" + strings.Repeat(" ", affectedStdinMaxLineBytes-len("pkga/pkga.go")-1) + "x\n"
+		if len(atCap)-1 != affectedStdinMaxLineBytes {
+			t.Fatalf("test setup bug: line is %d bytes, want %d", len(atCap)-1, affectedStdinMaxLineBytes)
 		}
-		_, _, err := execCmdTimeout(t, 5*time.Second, underCap, "affected", "--stdin", "--quiet", "-p", dir)
+		_, _, err := execCmdTimeout(t, 5*time.Second, atCap, "affected", "--stdin", "--quiet", "-p", dir)
 		if err != nil {
-			t.Fatalf("affected --stdin: unexpected error for %d-byte line (cap %d): %v", affectedStdinMaxLineBytes-1, affectedStdinMaxLineBytes, err)
+			t.Fatalf("affected --stdin: unexpected error for %d-byte line (cap %d): %v", affectedStdinMaxLineBytes, affectedStdinMaxLineBytes, err)
 		}
 	})
 }

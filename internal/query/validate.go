@@ -150,9 +150,15 @@ func validateDepth(n int) error {
 // allocation. Exported so internal/cli/affected.go's collectAffectedFiles
 // can enforce the cap as it reads stdin, before Engine.Affected is ever
 // called.
+//
+// Unlike its unexported siblings above, this message carries no "query: "
+// prefix: those are internal-only, whereas this one is exported precisely
+// so the CLI can surface it verbatim under its own "affected: " prefix.
+// Prefixing here would render as "affected: query: N files exceeds
+// maximum M", leaking an internal package name into user-facing output.
 func ValidateAffectedFiles(n int) error {
 	if n > MaxAffectedFiles {
-		return fmt.Errorf("query: %d files exceeds maximum %d", n, MaxAffectedFiles)
+		return fmt.Errorf("%d files exceeds maximum %d", n, MaxAffectedFiles)
 	}
 	return nil
 }
