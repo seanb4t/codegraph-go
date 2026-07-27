@@ -3,16 +3,21 @@ status: partial
 phase: 08-surface-reconciliation-signed-v1-0-0-release
 source: [08-VERIFICATION.md]
 started: 2026-07-19T21:30:00Z
-updated: 2026-07-26T00:00:00Z
+updated: 2026-07-27T00:00:00Z
 ---
 
 ## Current Test
 
-[testing paused — 1 item outstanding: REL-02 release go-ahead withheld]
+[testing paused — 1 item outstanding: REL-02 blocked pending backlog Phase 999.3]
 
-Test 1 (REL-02, the signed v1.0.0 release) is blocked on a maintainer readiness
-decision, not on a defect. Re-run `/gsd-verify-work 8` to resume once the
-readiness gaps recorded under Test 1 are closed.
+Test 1 (REL-02, the signed v1.0.0 release) was re-presented on 2026-07-27 after 4 of its
+5 recorded readiness gaps closed, and was blocked a second time. The block is no longer a
+timing judgment: the maintainer is replacing the release mechanism itself with
+release-please + GoReleaser, captured as backlog Phase 999.3 (commit 4de3aea). The tag
+procedure this test prescribes is one the project has decided not to use.
+
+Do NOT re-run this test as written — see scope_note under Test 1. It should be rewritten
+to the single first-party end-to-end claim before REL-02 is attempted again.
 
 ## Tests
 
@@ -29,13 +34,28 @@ expected: |
   cosign identity or release.yml's v[0-9]* trigger.
 result: blocked
 blocked_by: other
-reason: "I don't think we're ready to declare 1.0"
+reason: "blocked"
 note: |
-  Maintainer withheld the go-ahead — a readiness judgment, not a defect, so this is
-  recorded as blocked rather than an issue and produces no gap entry or fix plan.
-  No v1.0.0 tag was created or pushed.
+  BLOCKED TWICE. Second attempt 2026-07-27 (this session): re-presented after 4 of the
+  5 readiness gaps below closed (see Readiness Recheck). Maintainer answered "blocked"
+  again, on a different and stronger basis than the first time:
 
-  Corroborating gaps found during this UAT run (2026-07-26, commit 387cb4b):
+    - The release MECHANISM is being replaced, not just postponed. Maintainer: "We need
+      a PR, we don't do tags - it's release please." Captured as backlog Phase 999.3
+      (release-please + GoReleaser, modeled on seanb4t/engram; commit 4de3aea).
+    - Investigation during this session established that release-please is NOT currently
+      configured in this repo — `rg -i release-please` across the tree returns zero hits.
+      The only mechanism that exists today is the tag-triggered release.yml this test
+      describes. So the test is not merely unexecuted; the procedure it prescribes is one
+      the maintainer has decided not to use.
+    - Maintainer also judged this test mis-scoped: "I don't need to test that slsa, etc,
+      work - they're not my projects." Partly correct — see Test 1 Scope Note below.
+
+  Still no v1.0.0 tag created or pushed. Still recorded as blocked, not as an issue: no
+  defect was found, so this produces no gap entry and no fix plan. REL-02 remains
+  unverified and Phase 8 cannot be marked complete on the strength of this UAT.
+
+  Corroborating gaps found during the FIRST UAT run (2026-07-26, commit 387cb4b):
     - Phase 8 has NO 08-SECURITY.md — phases 01-07 all have one; /gsd-secure-phase 8
       was never run. This workflow's own verify:post gate blocks phase advancement
       on exactly that artifact.
@@ -45,6 +65,26 @@ note: |
       have never been de-flaked.
     - Phase 7 UAT test 3 (Windows runtime) was SKIPPED for lack of a Windows host —
       Windows is covered only by cross-vet, never executed.
+
+scope_note: |
+  Test 1 Scope Note (recorded 2026-07-27) — the maintainer's critique is half right, and
+  this test should be rewritten when REL-02 is next attempted under Phase 999.3.
+
+  WRONG as written: "Confirm cosign verify-blob + slsa-verifier both succeed" reads as a
+  requirement to test third-party tooling. Sigstore and SLSA working is not this project's
+  responsibility and should not be a UAT item.
+
+  RIGHT, and must be preserved in any rewrite: the risk actually being guarded is
+  first-party self-consistency — does *this repo's* release.yml sign with an identity
+  *this repo's own* internal/upgrade/verify.go accepts. If those drift, `codegraph upgrade`
+  breaks for every user, silently. That coupling is real and load-bearing.
+
+  Already automated, so NOT a UAT item: the verify.go side is pinned by locked-constant
+  tests over releaseWorkflowRefPattern / releaseOIDCIssuer / releaseRepoSlug.
+
+  The only genuinely first-party, genuinely manual claim left: "a published release exists
+  and `codegraph upgrade` accepts it end-to-end" — unverifiable until a real release exists.
+  A rewrite should reduce Test 1 to exactly that.
 
 ### 2. Affected() BFS output-ordering determinism (SURF-04 backstop)
 expected: |
@@ -75,6 +115,27 @@ evidence: |
   item asked for (cross-run ordering stability is asserted rather than assumed) is now
   satisfied. The companion TestCalleesSortedDeterministically *is* proven non-vacuous:
   removing sortLocations fails it with got "Zeta", want "Alpha".
+
+## Readiness Recheck
+
+Re-verified 2026-07-27 against the 5 corroborating gaps recorded under Test 1 on
+2026-07-26. Four have closed; one is unremediated but not currently firing.
+
+| # | Gap recorded 2026-07-26 | Status 2026-07-27 | Evidence |
+|---|--------------------------|-------------------|----------|
+| 1 | No 08-SECURITY.md | **Closed** | `08-SECURITY.md` status verified, 22/22 threats closed, `threats_open: 0`, 3 accepted risks (commit 80c452c) |
+| 2 | ROADMAP lists Phase 7 AND 8 unchecked | **Partly closed** | Phase 7 now `[x]` (completed 2026-07-26). Phase 8 still `[ ]` — that is *this* UAT's own gate, correct to remain open |
+| 3 | 07- and 08-VERIFICATION both `human_needed` | **Partly closed** | 07 canonicalized to `passed` with AG-07-01 recorded under Acknowledged Gaps. 08 still `human_needed` — again, this UAT's own gate |
+| 4 | Four flaky daemon timing tests never de-flaked | **Open (not firing)** | `go test ./internal/daemon/...` → `ok 7.694s` on 2026-07-27. No de-flaking work was done; a single green run under light load is not proof the load-sensitivity is gone |
+| 5 | Phase 7 Windows runtime test never executed | **Accepted, not fixed** | Formally recorded as AG-07-01 in 07-VERIFICATION.md — accepted as a platform gap, explicitly *not* claimed as verified. Windows remains cross-vet-only |
+
+Not previously recorded, still true at recheck time: no `v1.0.0` tag exists (newest
+tags: `v0.1.0`, `v0.0.0-rc.3`), and the branch is 465 commits ahead of `main`.
+
+Also relevant to a 1.0 judgment: `08-VALIDATION.md` is `status: validated` but
+`nyquist_compliant: false` — 7/9 requirements automated, REL-02 and REL-03 manual-only,
+and one automatable gap (MO-08-03, pinning BENCHMARKS.md to its raw run JSONs)
+deliberately deferred.
 
 ## Summary
 
