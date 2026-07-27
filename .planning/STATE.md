@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 8
+current_phase: 08
 current_phase_name: Surface Reconciliation & Signed v1.0.0 Release
 status: verifying
 stopped_at: Completed 08-09-PLAN.md Tasks 1-2 (readiness); Task 3 checkpoint returned to maintainer for v1.0.0 tag push
-last_updated: "2026-07-19T20:47:51.600Z"
-last_activity: 2026-07-19
-last_activity_desc: Phase 8 execution started
+last_updated: "2026-07-27T03:46:03.692Z"
+last_activity: 2026-07-26
+last_activity_desc: Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08 still awaiting maintainer v1.0.0 tag
 progress:
   total_phases: 8
   completed_phases: 8
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 8 (Surface Reconciliation & Signed v1.0.0 Release) — EXECUTING
+Phase: 08 — Surface Reconciliation & Signed v1.0.0 Release
 Plan: 9 of 9
-Status: Phase complete — ready for verification
-Last activity: 2026-07-19 — Phase 8 execution started
+Status: Phase built and verified — blocked on maintainer pushing the signed v1.0.0 tag (REL-02)
+Last activity: 2026-07-26 — Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08 unchanged
 
 Progress: [██████████] 100%
 
@@ -39,7 +39,7 @@ Progress: [██████████] 100%
 
 **Velocity (v1.0):**
 
-- Total plans completed: 41 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 49 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -53,7 +53,7 @@ Progress: [██████████] 100%
 | 4 | 3 | - | - |
 | 5 | 5 | - | - |
 | 6 | 3 | - | - |
-| 7 | 0/TBD | - | - |
+| 07 | 8 | - | - |
 | 8 | 0/TBD | - | - |
 
 **Recent Trend:** — (no v1.0 plans executed yet)

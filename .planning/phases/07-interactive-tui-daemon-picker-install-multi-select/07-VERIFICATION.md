@@ -1,17 +1,20 @@
 ---
 phase: 07-interactive-tui-daemon-picker-install-multi-select
 verified: 2026-07-18T00:00:00Z
-status: human_needed
+status: passed
 score: 7/7 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Visual rendering of the bubbletea daemon picker on a real TTY (colors, layout, selection highlight, current-project-first ordering)"
     expected: "codegraph daemon (with ≥1 running daemon) opens a legible checkbox-free single-select list, current repo's daemon(s) shown first, stop-one/stop-all/cancel all work and render correctly"
     why_human: "ANSI/terminal visual output and interactive keypress UX are not byte-assertable; Model.Update transitions are unit-proven via synthetic tea.Msg but the actual rendered frame on a real pty has not been eyeballed"
+
   - test: "Visual rendering of the install/uninstall checkbox multi-select on a real TTY"
     expected: "codegraph install (no --target, no -y) shows a checkbox list pre-checked for already-installed agents; space toggles, enter confirms, q/esc cancels — legible glyphs, correct pre-check state"
     why_human: "Same as above — checkbox glyphs and pre-check marks are visual; only the underlying state machine is unit-tested"
+
   - test: "Windows daemon stop real termination semantics (hard-kill via TerminateProcess) and Windows PPID-liveness watchdog behavior on a real Windows host"
     expected: "`daemon start` then `daemon stop` from another shell terminates the daemon process and its registry record is cleared; a daemon whose supervising process is killed exits on its own within ~1-2s"
     why_human: "No Windows CI runner exists for this project (documented precedent: compile-only `GOOS=windows go vet`, cross-verified locally in this verification via a real mingw-w64 CGo cross-toolchain) — real Windows process-termination and OpenProcess/WaitForSingleObject behavior needs a Windows host to observe"
@@ -21,7 +24,7 @@ human_verification:
 
 **Phase Goal:** The `daemon` command becomes an interactive picker (resolving the TS name collision) backed by explicit start/stop lifecycle and a PPID watchdog, `install`/`uninstall` present a multi-select, and every interactive surface auto-falls back to non-interactive behavior when piped — never hanging.
 **Verified:** 2026-07-18
-**Status:** human_needed
+**Status:** passed — canonicalized 2026-07-26 from `human_needed` after human UAT; one accepted platform gap (see Acknowledged Gaps: AG-07-01)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
@@ -129,7 +132,44 @@ None. Scanned all phase-touched files (`daemon.go`, `install.go`, `uninstall.go`
 
 No gaps. All 7 must-have truths, all artifacts (3 levels: exists, substantive, wired), and all key links verified directly against the codebase — not inferred from SUMMARY.md claims. `go build`, `go vet`, `go test ./...`, the daemon package under `-race`, the archtest, the piped-never-hang integration test, and a Windows cross-compile (reproduced locally with `CGO_ENABLED=1` + a real mingw-w64 toolchain, matching CI) all pass. The only open items are the three human-verification items above (visual TUI rendering + Windows runtime semantics), which are inherent to this phase's content (interactive terminal UI + a platform with no CI runner) rather than defects — status is `human_needed`, not `gaps_found`.
 
+## Acknowledged Gaps
+
+Recorded 2026-07-26 during `/gsd-verify-work 7`, when `status` was canonicalized
+`human_needed` → `passed`. Human-verification items 1 and 2 were observed and
+passed on a real TTY (see `07-UAT.md` tests 1-2, including the two rendering bugs
+they caught: G-07-1 and G-07-2). Item 3 was **never observed** — it is accepted
+here as a platform gap, not claimed as verified.
+
+### AG-07-01 — Windows `daemon stop` termination and PPID-watchdog runtime semantics are unobserved
+
+- **Maps to:** `07-UAT.md` test 3 (`result: skipped`); Human Verification Required item 3.
+- **Unverified claim:** on Windows, `daemon stop` hard-kills the target process
+  (`TerminateProcess`) and clears its registry record; and a daemon whose
+  supervising process dies exits on its own within ~1-2s via the PPID watchdog.
+
+- **Why unverified:** the project has no Windows CI runner, and the tester is on
+  macOS with no Windows host available. This is a platform-access gap, not a
+  suspected defect — nothing observed suggests the Windows path is broken.
+
+- **What *is* verified:** the Windows-tagged code compiles and type-checks under a
+  real mingw-w64 CGo cross-toolchain (`CGO_ENABLED=1`, `GOOS=windows go vet`
+  exit 0), reproduced locally during verification and matching CI. Every
+  platform-independent path (registry read/write/self-heal, corroborated stop
+  targeting, piped-never-hang, the picker state machines) is covered by passing
+  automated tests on macOS/Linux.
+
+- **Residual risk:** low-to-moderate and confined to Windows. A regression here
+  would surface as `daemon stop` reporting success while the process survives, or
+  an orphaned daemon outliving its parent — both operationally visible, neither
+  silently corrupting state.
+
+- **Accepted by:** repository maintainer, 2026-07-26.
+- **To close:** run `07-UAT.md` test 3 on a real Windows host and flip it from
+  `skipped` to `pass`, or stand up a Windows CI runner and automate it. Until
+  then, treat Windows daemon lifecycle as compile-verified only.
+
 ---
 
 *Verified: 2026-07-18*
 *Verifier: Claude (gsd-verifier)*
+*Gap acknowledged and status canonicalized to `passed`: 2026-07-26 (`/gsd-verify-work 7`) — see Acknowledged Gaps above.*
