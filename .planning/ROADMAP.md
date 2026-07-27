@@ -42,6 +42,8 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 - [x] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped) (completed 2026-07-17)
 - [x] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped (completed 2026-07-26)
 - [ ] **Phase 8: Surface Reconciliation & Signed v1.0.0 Release** - Flag parity + Charm-dep audit + first signed `v1.0.0`, retiring the "not yet drop-in" caveat
+- [ ] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the actual signed `v1.0.0` (promoted from backlog 999.3 on 2026-07-27)
+- [ ] **Phase 10: Local Build Tooling & CONTRIBUTING** - `Taskfile.yml` wrapping the build/test/lint/release-check workflows + contributor-facing CGo toolchain docs (promoted from backlog 999.1 on 2026-07-27)
 
 ## Phase Details
 
@@ -338,9 +340,50 @@ Plans:
 
 **Notes**: Mechanical flag/default reconciliation first, then the Charm-dep supply-chain audit and the first real signed `v1.0.0` tag. REL-04 re-runs the Phase-1 TEST-01 behavioral harness + the SURF-05 flag audit green as the drop-in gate — it consumes the harness, it doesn't rebuild it. D-01 locks SURF-green-before-REL; the signed tag (REL-02, maintainer-manual) is the final action of v1.0.
 
+**⚠ REL-02 rescope pending (2026-07-27)**: REL-02's maintainer-manual tag procedure was blocked twice in UAT and the release mechanism is being replaced by Phase 9. REL-02 should move from Phase 8 to Phase 9 so Phase 8 can close on SURF-01..05 + REL-01/03/04. Not yet applied — see `08-UAT.md` Test 1 `scope_note`.
+
+### Phase 9: release-please + GoReleaser
+
+**Goal**: Replace the hand-rolled, maintainer-manual tagging step with automated release management — release-please owns version bumps, `CHANGELOG.md`, and tag creation from Conventional Commits; GoReleaser owns building and uploading artifacts. Modeled on `seanb4t/engram`, but explicitly not a copy-paste (see the locked-contract constraint below).
+**Depends on**: Phase 8
+**Requirements**: TBD (expected to absorb REL-02 from Phase 8)
+**Success Criteria** (what must be TRUE):
+
+  1. `release-please-config.json` (`release-type: go`) + `.release-please-manifest.json` exist; merging a release PR cuts the tag without a human running `git tag`
+  2. The cosign OIDC cert SAN still matches `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` — i.e. `codegraph upgrade` keeps working for every already-shipped binary
+  3. GoReleaser uploads artifacts into the release-please-created release idempotently (`replace_existing_artifacts: true`, no `changelog:` block)
+  4. Per-binary cosign signing + SLSA provenance + the native 2-OS CGo matrix are all preserved (none of which engram's config covers)
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-discuss-phase 9)
+
+**Notes**: The blocking constraint is a LOCKED contract, not a preference. codegraph-go's `release.yml` triggers only on tag push `v[0-9]*` because `verify.go` anchors the cosign SAN to `...release.yml@refs/tags/v[0-9]*`. engram triggers on `push: branches: [main]` and does release-please + ship in one job — copying that would sign with `@refs/heads/main` and make `codegraph upgrade` reject every binary for every existing user, silently. Compounding it: tags pushed with the default `GITHUB_TOKEN` do not trigger other workflows, which is exactly why engram collapses into one run. Preferred resolution: keep the tag-triggered `release.yml` and its SAN untouched, and have release-please create the tag via a **GitHub App token** (App tokens do trigger downstream workflows). Alternative — collapse into one workflow and change `releaseWorkflowRefPattern` in lockstep — breaks `upgrade` for anyone on an older binary and needs a migration story first. Also open: whether GoReleaser can express per-binary cosign + the SLSA handoff at all, or whether those stay hand-written jobs alongside it.
+
+### Phase 10: Local Build Tooling & CONTRIBUTING
+
+**Goal**: Contributor-facing local dev tooling — the repo has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites, so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
+**Depends on**: Phase 9
+**Requirements**: TBD
+**Success Criteria** (what must be TRUE):
+
+  1. `Taskfile.yml` wraps: build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag check
+  2. `CONTRIBUTING.md` documents the CGo toolchain prerequisites (zig for cross-builds, mingw-w64 for windows vet)
+  3. A clean checkout can build, test, and lint via task targets alone
+
+**Plans**: 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-discuss-phase 10)
+
+**Notes**: Sequenced after Phase 9 deliberately — both touch build/release invocation, so the task wrappers (`goreleaser check`, cross-`GOOS` `go list`, `govulncheck`, `actionlint`) should be written once against the final release setup rather than twice. Fit caveat: this phase sits outside the stated v1.0 milestone goal ("Drop-in Parity & Human UX"); consider moving it to a v1.1 milestone if v1.0 should ship without it.
+
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
+**Execution Order:** Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -352,18 +395,10 @@ Plans:
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | In Progress|  |
+| 9. release-please + GoReleaser | v1.0 | 0/0 | Not started |  |
+| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 0/0 | Not started |  |
 
 ## Backlog
-
-### Phase 999.1: local build/contribution and taskfile.yml setup (BACKLOG)
-
-**Goal:** [Captured for future planning] Contributor-facing local dev tooling — the repo currently has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows (build with the release ldflags, test with the daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, cross-`GOOS` `go list -mod=readonly` pre-tag check) plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites (zig for cross-builds) so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
-**Requirements:** TBD
-**Plans:** 5/5 plans complete
-
-Plans:
-
-- [ ] TBD (promote with /gsd-review-backlog when ready)
 
 ### Phase 999.2: tmux e2e/UAT test harness and suite (BACKLOG)
 
@@ -374,32 +409,3 @@ Plans:
 Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
-
-### Phase 999.3: release-please + GoReleaser, modeled on seanb4t/engram (BACKLOG)
-
-**Goal:** [Captured for future planning] Replace the hand-rolled, maintainer-manual tagging step (Phase 8 REL-02) with automated release management: **release-please** owns version bumps, `CHANGELOG.md`, and tag creation from Conventional Commits; **GoReleaser** owns building and uploading artifacts. Reference implementation is `seanb4t/engram` — but this is explicitly **not** a copy-paste, because codegraph-go's release path has a locked cryptographic contract engram doesn't have.
-
-**What engram does (the model to follow):**
-
-- `release-please-config.json` (`release-type: go`, `bump-minor-pre-major: true`, `extra-files` for anything carrying a duplicated version string) + `.release-please-manifest.json` pinning the current version.
-- One `.github/workflows/release.yaml` that triggers on `push: branches: [main]` — **not** on tags — plus a `workflow_dispatch` recovery input to re-ship artifacts for an existing tag (every ship step is gated on "a release was just created", so a plain re-run would otherwise skip everything and falsely report success).
-- Release writes are performed by a **GitHub App token** (`actions/create-github-app-token`), which is also the named bypass actor on the protect-main ruleset. `GITHUB_TOKEN` is left with only `packages: write`.
-- A single `target` resolver step collapses both entry points (merged release PR / manual re-ship) into one `ship` + `tag` output, so downstream steps carry one condition instead of an `||` each.
-- Checkout happens **at the tag**, not at the triggering `main` HEAD, so artifacts match the released commit exactly.
-- `.goreleaser.yaml` has **no `changelog:` block** (release-please owns the changelog and the Release body) and uses `release.replace_existing_artifacts: true` so GoReleaser only uploads into the already-created, tag-keyed Release, idempotently. No `before.hooks: [go mod tidy]` — the tag is the source of truth; tidiness is a CI assertion, not a release-time mutation.
-
-**The blocking constraint that makes this non-trivial here (must be solved, not skipped):**
-
-- codegraph-go's `.github/workflows/release.yml` triggers **only** on tag pushes matching `v[0-9]*`, and that is a LOCKED contract: `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` anchors the cosign OIDC cert SAN to `^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^\s]*$`. Adopting engram's push-to-main trigger wholesale would sign with `@refs/heads/main` in the SAN and make `codegraph upgrade` **reject every binary for every existing user**.
-- Compounding it: a tag pushed with the default `GITHUB_TOKEN` does not trigger other workflows. engram avoids this by doing release-please *and* shipping in one workflow run — a structure that is exactly what codegraph-go cannot copy, since it would move the SAN off `refs/tags`.
-- Two candidate resolutions to evaluate at planning time: **(a)** keep the tag-triggered `release.yml` and its SAN untouched, and have release-please create the tag using a **GitHub App token** (App tokens *do* trigger downstream workflows, unlike `GITHUB_TOKEN`) — preserves the locked contract and every already-shipped client; or **(b)** collapse into one workflow and change `releaseWorkflowRefPattern` in lockstep — breaks `upgrade` for anyone on an older binary, so it needs a migration story before it can be considered.
-
-**Other gaps between engram's config and this repo's needs** (engram's `.goreleaser.yaml` does not cover these; the existing hand-rolled `release.yml` already does):
-
-- codegraph-go is **CGo** (tree-sitter), engram is `CGO_ENABLED=0`. Needs the native 2-OS matrix: darwin builds natively on `macos-latest` (a Linux-hosted CGo cross-link to darwin risks silently breaking libresolv DNS in a binary that makes real HTTPS calls), with only `linux/arm64` + both windows targets cross-compiled via zig.
-- codegraph-go ships **windows**; engram ships linux + darwin only.
-- codegraph-go signs **per binary** with cosign, because `internal/upgrade`'s `defaultVerify` hashes the downloaded binary itself (`sha256.Sum256(binary)`), not a checksums file. engram signs nothing.
-- codegraph-go publishes **SLSA provenance**; engram does not.
-- Verify `goreleaser` can even express per-binary cosign signing + the SLSA generator handoff, or whether those stay as hand-written jobs alongside GoReleaser rather than inside it.
-
-Also folds in: the Conventional-Commits discipline release-please depends on, and retiring the manual runbook steps in `docs/RELEASE-PROCEDURES.md` §2/§4 (tag conventions, cutting the tag) that this would automate.
