@@ -374,3 +374,32 @@ Plans:
 Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.3: release-please + GoReleaser, modeled on seanb4t/engram (BACKLOG)
+
+**Goal:** [Captured for future planning] Replace the hand-rolled, maintainer-manual tagging step (Phase 8 REL-02) with automated release management: **release-please** owns version bumps, `CHANGELOG.md`, and tag creation from Conventional Commits; **GoReleaser** owns building and uploading artifacts. Reference implementation is `seanb4t/engram` — but this is explicitly **not** a copy-paste, because codegraph-go's release path has a locked cryptographic contract engram doesn't have.
+
+**What engram does (the model to follow):**
+
+- `release-please-config.json` (`release-type: go`, `bump-minor-pre-major: true`, `extra-files` for anything carrying a duplicated version string) + `.release-please-manifest.json` pinning the current version.
+- One `.github/workflows/release.yaml` that triggers on `push: branches: [main]` — **not** on tags — plus a `workflow_dispatch` recovery input to re-ship artifacts for an existing tag (every ship step is gated on "a release was just created", so a plain re-run would otherwise skip everything and falsely report success).
+- Release writes are performed by a **GitHub App token** (`actions/create-github-app-token`), which is also the named bypass actor on the protect-main ruleset. `GITHUB_TOKEN` is left with only `packages: write`.
+- A single `target` resolver step collapses both entry points (merged release PR / manual re-ship) into one `ship` + `tag` output, so downstream steps carry one condition instead of an `||` each.
+- Checkout happens **at the tag**, not at the triggering `main` HEAD, so artifacts match the released commit exactly.
+- `.goreleaser.yaml` has **no `changelog:` block** (release-please owns the changelog and the Release body) and uses `release.replace_existing_artifacts: true` so GoReleaser only uploads into the already-created, tag-keyed Release, idempotently. No `before.hooks: [go mod tidy]` — the tag is the source of truth; tidiness is a CI assertion, not a release-time mutation.
+
+**The blocking constraint that makes this non-trivial here (must be solved, not skipped):**
+
+- codegraph-go's `.github/workflows/release.yml` triggers **only** on tag pushes matching `v[0-9]*`, and that is a LOCKED contract: `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` anchors the cosign OIDC cert SAN to `^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^\s]*$`. Adopting engram's push-to-main trigger wholesale would sign with `@refs/heads/main` in the SAN and make `codegraph upgrade` **reject every binary for every existing user**.
+- Compounding it: a tag pushed with the default `GITHUB_TOKEN` does not trigger other workflows. engram avoids this by doing release-please *and* shipping in one workflow run — a structure that is exactly what codegraph-go cannot copy, since it would move the SAN off `refs/tags`.
+- Two candidate resolutions to evaluate at planning time: **(a)** keep the tag-triggered `release.yml` and its SAN untouched, and have release-please create the tag using a **GitHub App token** (App tokens *do* trigger downstream workflows, unlike `GITHUB_TOKEN`) — preserves the locked contract and every already-shipped client; or **(b)** collapse into one workflow and change `releaseWorkflowRefPattern` in lockstep — breaks `upgrade` for anyone on an older binary, so it needs a migration story before it can be considered.
+
+**Other gaps between engram's config and this repo's needs** (engram's `.goreleaser.yaml` does not cover these; the existing hand-rolled `release.yml` already does):
+
+- codegraph-go is **CGo** (tree-sitter), engram is `CGO_ENABLED=0`. Needs the native 2-OS matrix: darwin builds natively on `macos-latest` (a Linux-hosted CGo cross-link to darwin risks silently breaking libresolv DNS in a binary that makes real HTTPS calls), with only `linux/arm64` + both windows targets cross-compiled via zig.
+- codegraph-go ships **windows**; engram ships linux + darwin only.
+- codegraph-go signs **per binary** with cosign, because `internal/upgrade`'s `defaultVerify` hashes the downloaded binary itself (`sha256.Sum256(binary)`), not a checksums file. engram signs nothing.
+- codegraph-go publishes **SLSA provenance**; engram does not.
+- Verify `goreleaser` can even express per-binary cosign signing + the SLSA generator handoff, or whether those stay as hand-written jobs alongside GoReleaser rather than inside it.
+
+Also folds in: the Conventional-Commits discipline release-please depends on, and retiring the manual runbook steps in `docs/RELEASE-PROCEDURES.md` §2/§4 (tag conventions, cutting the tag) that this would automate.
