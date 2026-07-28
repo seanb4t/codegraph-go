@@ -299,13 +299,13 @@ Plans:
 
 **Goal**: Every TS flag name and default is present or a documented divergence, then the new Charm dependency closure is audited and the first real signed `v1.0.0` is cut — retiring v0.1's "not yet drop-in" caveat and closing its pending DIST-02/PERF-01.
 **Depends on**: Phase 7
-**Requirements**: SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, REL-01, REL-02, REL-03, REL-04
+**Requirements**: SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, REL-01, REL-03, REL-04
 **Success Criteria** (what must be TRUE):
 
   1. `impact` default depth is 2, `files` gains a directory filter alongside the retained language `--filter`, missing short-flag aliases (`-l`/`-k`/`-j`/`-d`, etc.) are added across commands, and `affected` gains `--stdin`/`--depth`/`--filter <glob>`/`--quiet` for git-hook/CI scripting (SURF-01/02/03/04)
   2. A systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` is retained as a documented Go-only extension and `migrate` is documented as an accepted divergence (SURF-05)
   3. The new Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerated, reproducible double-build still passes (REL-01)
-  4. A real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing v0.1's pending DIST-02, and head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01 (REL-02/03)
+  4. Head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01 (REL-03)
   5. The "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired (REL-04)
 
 **Plans**: 9/9 plans executed
@@ -338,15 +338,13 @@ Plans:
 
 - [x] 08-09-PLAN.md — REL-04 + REL-02: drop-in gate + PROJECT.md caveat retirement + release runbook + maintainer-manual v1.0.0 tag
 
-**Notes**: Mechanical flag/default reconciliation first, then the Charm-dep supply-chain audit and the first real signed `v1.0.0` tag. REL-04 re-runs the Phase-1 TEST-01 behavioral harness + the SURF-05 flag audit green as the drop-in gate — it consumes the harness, it doesn't rebuild it. D-01 locks SURF-green-before-REL; the signed tag (REL-02, maintainer-manual) is the final action of v1.0.
-
-**⚠ REL-02 rescope pending (2026-07-27)**: REL-02's maintainer-manual tag procedure was blocked twice in UAT and the release mechanism is being replaced by Phase 9. REL-02 should move from Phase 8 to Phase 9 so Phase 8 can close on SURF-01..05 + REL-01/03/04. Not yet applied — see `08-UAT.md` Test 1 `scope_note`.
+**Notes**: Mechanical flag/default reconciliation first, then the Charm-dep supply-chain audit. REL-04 re-runs the Phase-1 TEST-01 behavioral harness + the SURF-05 flag audit green as the drop-in gate — it consumes the harness, it doesn't rebuild it. D-01 locks SURF-green-before-REL; release automation — and REL-02 with it — now belongs to Phase 9.
 
 ### Phase 9: release-please + GoReleaser
 
 **Goal**: Replace the hand-rolled, maintainer-manual tagging step with automated release management — release-please owns version bumps, `CHANGELOG.md`, and tag creation from Conventional Commits; GoReleaser owns building and uploading artifacts. Modeled on `seanb4t/engram`, but explicitly not a copy-paste (see the locked-contract constraint below).
 **Depends on**: Phase 8
-**Requirements**: TBD (expected to absorb REL-02 from Phase 8)
+**Requirements**: REL-02
 **Success Criteria** (what must be TRUE):
 
   1. `release-please-config.json` (`release-type: go`) + `.release-please-manifest.json` exist; merging a release PR cuts the tag without a human running `git tag`
