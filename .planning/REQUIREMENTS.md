@@ -86,7 +86,7 @@
 ### v1.0.0 Release (REL)
 
 - [x] **REL-01**: the new Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerated, reproducible double-build still passes
-- [ ] **REL-02**: a real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing v0.1's pending DIST-02
+- [ ] **REL-02**: releases are cut by release-please from Conventional Commits — version bump, `CHANGELOG.md`, and tag creation all happen without a human running `git tag` — and the resulting signed artifacts still satisfy `internal/upgrade/verify.go`'s cosign identity (`releaseWorkflowRefPattern`, SAN anchored to `release.yml@refs/tags/v[0-9]*`), so `codegraph upgrade` keeps working for already-shipped binaries
 - [x] **REL-03**: head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01
 - [x] **REL-04**: the "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired
 
@@ -175,7 +175,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | SURF-04 | Phase 8 | Complete |
 | SURF-05 | Phase 8 | Complete |
 | REL-01 | Phase 8 | Complete |
-| REL-02 | Phase 8 | Pending |
+| REL-02 | Phase 9 | Pending |
 | REL-03 | Phase 8 | Complete |
 | REL-04 | Phase 8 | Complete |
 
