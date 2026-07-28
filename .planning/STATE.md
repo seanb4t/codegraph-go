@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 Phase: 08 — Surface Reconciliation & Signed v1.0.0 Release
 Plan: 9 of 9
 Status: Phase built and verified; REL-02 reassigned to Phase 9; awaiting a `/gsd-verify-work 8` close
-Last activity: 2026-07-26 — Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08 unchanged
+Last activity: 2026-07-28 — Completed quick task 260728-rfx: Rewrite REL-02 as a testable property and reassign from Phase 8 to Phase 9
 
 Progress: [██████████] 100%
 
@@ -241,6 +241,12 @@ None active for v1.0. Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTIN
 - **[Phase 2/8]** `files --filter` semantic collision (ours=language, TS=directory) — resolved by SURF-02 (keep language + add directory flag); the #1 silent-failure risk if mishandled.
 - **[Phase 6/8]** Charm v2 uses the `charm.land/...` vanity import; audit the full transitive closure for CGo (expected) + govulncheck + SBOM before the v1.0.0 release.
 - [Phase 7/8] GOOS=windows go vet ./internal/daemon/ ./internal/graphstore/ fails (undefined: tree_sitter.Node in internal/indexer/goextract/routes) — CGo tree-sitter grammar bindings excluded under windows/amd64 build constraints; pre-existing, confirmed unrelated to Phase 7's changes, needs resolution alongside Phase 8's Charm v2 CGo/govulncheck/SBOM audit
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260728-rfx | Rewrite REL-02 as a testable property and reassign from Phase 8 to Phase 9 | 2026-07-28 | 55107a9 | [260728-rfx-rewrite-rel-02-as-a-testable-property-an](./quick/260728-rfx-rewrite-rel-02-as-a-testable-property-an/) |
 
 ## Deferred Items
 
