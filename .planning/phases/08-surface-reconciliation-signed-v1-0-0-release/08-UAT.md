@@ -86,6 +86,16 @@ scope_note: |
   and `codegraph upgrade` accepts it end-to-end" — unverifiable until a real release exists.
   A rewrite should reduce Test 1 to exactly that.
 
+ownership_note: |
+  Ownership moved to Phase 9 (recorded 2026-07-28). REL-02 was rewritten as a
+  release-automation property — release-please owns the version bump, `CHANGELOG.md`,
+  and tag creation, with the resulting signed artifacts still satisfying
+  `internal/upgrade/verify.go`'s cosign identity — and reassigned from Phase 8 to Phase 9.
+  This test exercises a requirement Phase 8 no longer owns: it is not a Phase 8 obligation
+  and must not be re-run as written. `result: blocked` and the history above are preserved
+  verbatim; see `.planning/REQUIREMENTS.md`'s rewritten REL-02 and `.planning/ROADMAP.md`
+  Phase 9 for the current ownership and scope.
+
 ### 2. Affected() BFS output-ordering determinism (SURF-04 backstop)
 expected: |
   `codegraph affected` (and the engine Engine.Affected) returns results in a stable,

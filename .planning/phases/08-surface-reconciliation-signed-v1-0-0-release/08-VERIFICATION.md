@@ -12,7 +12,7 @@ requirements_coverage:
   SURF-04: satisfied
   SURF-05: satisfied
   REL-01: satisfied
-  REL-02: human_needed (backstop, maintainer-manual by design)
+  REL-02: out_of_scope (moved to Phase 9)
   REL-03: satisfied
   REL-04: satisfied
 behavior_unverified_items:
@@ -24,9 +24,6 @@ human_verification:
   - test: "Confirm Affected() output ordering is stable across repeated runs (see behavior_unverified_items above)"
     expected: "Identical path ordering every run for the same input/index"
     why_human: "Backstop truth from 08-04-PLAN.md must_haves; no automated test exercises it"
-  - test: "Perform the maintainer-manual pre-tag 6-target `go list -mod=readonly ./...` gate, squash-merge the integration branch to main, `git tag v1.0.0 && git push origin v1.0.0`, then verify with `cosign verify-blob` and `slsa-verifier verify-artifact` per docs/RELEASE-PROCEDURES.md"
-    expected: "release.yml publishes signed per-binary artifacts + SLSA provenance + SBOM for v1.0.0; cosign/slsa verification succeeds; `codegraph upgrade` recognizes it as the new latest"
-    why_human: "REL-02's tag push is an intentional, executor-prohibited maintainer action (CONTEXT D-08/D-11) — this is the sole remaining action of Phase 8 and of the v1.0 milestone"
 ---
 
 # Phase 8: Surface Reconciliation & Signed v1.0.0 Release Verification Report
@@ -50,10 +47,10 @@ human_verification:
 | 5 | A systematic per-command flag audit (`docs/FLAG-PARITY.md`) confirms every TS flag + default is present or documented divergence; `search`/`migrate` recorded as Go-only/accepted divergence; self-verifying via a drift test (SURF-05) | ✓ VERIFIED | `docs/FLAG-PARITY.md` (297 lines, one `##` section per `newRootCmd()` command incl. flag-less ones); `search`/`migrate` sections explicitly labeled "Go-only, no TS command"; `go test ./internal/cli/... -run FlagParity` (`TestFlagParityDocCoversRegisteredFlags`) passes |
 | 6 | The Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerates, reproducible double-build still passes (REL-01) | ✓ VERIFIED | `internal/cli/present/archtest/charm_cgo_test.go` `TestCharmCgoClosure`: "10 packages, 0 with CgoFiles" (non-vacuous); 08-07-SUMMARY records govulncheck clean, `goreleaser check` + syft SBOM emission, and a hash-matched local double-build reproduction; `go test ./internal/cli/present/archtest/... -run CharmCgo` passes here |
 | 7 | Head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing PERF-01 (REL-03) | ✓ VERIFIED | `docs/BENCHMARKS.md` (300 lines) contains a refreshed CI (ubuntu-latest, commit `ca511e7`, 3 real `gh run` IDs) median-of-3 table superseding the old darwin/arm64 provisional numbers; methodology (median-of-3, same corpora, pinned TS 1.3.1) unchanged per prohibition |
-| 8 | A real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing DIST-02 (REL-02) | ⬜ human_needed (backstop, by design) | `git tag -l` shows no `v1.0.0`; `git describe` = `v0.1.0-452-gf6278ef`; REQUIREMENTS.md line 89/178 still shows REL-02 `[ ]`/`Pending`. This is the **intentional, executor-prohibited maintainer-manual checkpoint** (CONTEXT D-08/D-11, 08-09-PLAN.md Task 3) — release *readiness* (runbook, gates, caveat retirement) is done; the tag push itself is deliberately not automated |
+| 8 | A real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing DIST-02 (REL-02) | OUT OF SCOPE (moved to Phase 9) | REL-02 was rewritten as a release-automation property and reassigned to Phase 9 (2026-07-28); its testable content (per-binary cosign + SLSA + SBOM) was already proven under v0.1's DIST-02 on release v0.0.0-rc.3 |
 | 9 | The drop-in parity claim is validated (behavioral harness + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired (REL-04) | ✓ VERIFIED | `go test ./testdata/golden/... -count=1` green; `go test ./internal/cli/... -run FlagParity` green; `rg -n "not yet drop-in|drop-in parity" .planning/PROJECT.md` shows both remaining hits are now **positive** ("✓ Complete... drop-in gate green... cut the first signed v1.0.0"), zero "not yet" occurrences |
 
-**Score:** 8/9 primary truths verified (9 total incl. the 4b backstop sub-item = 8/10); 1 present-but-behavior-unverified (4b); 1 intentionally deferred to a human/maintainer action by phase design (8, REL-02).
+**Score:** 8/9 primary truths verified (9 total incl. the 4b backstop sub-item = 8/10); 1 present-but-behavior-unverified (4b); 1 out of scope, moved to Phase 9 (8, REL-02).
 
 ### Required Artifacts
 
@@ -93,7 +90,7 @@ human_verification:
 | Affected engine BFS + CLI scripting surface | `go test ./internal/query/... -run TestAffected` and `go test ./internal/cli/... -run Affected` | both PASS | ✓ PASS |
 | Full workspace suite (regression check) | `go test ./... -count=1` | All packages PASS except `internal/daemon` (2 flaky timing tests, both PASS on immediate re-run in isolation; package untouched by any Phase-8 plan) | ✓ PASS (flake noted, not a Phase-8 regression) |
 | Caveat retirement / drop-in gate wiring | `rg "not yet drop-in" .planning/PROJECT.md` | 0 hits | ✓ PASS |
-| v1.0.0 tag existence (REL-02) | `git tag -l`, `git describe --tags` | no `v1.0.0` tag; `v0.1.0-452-gf6278ef` | expected — maintainer-manual, not yet performed |
+| v1.0.0 tag existence (REL-02) | `git tag -l`, `git describe --tags` | no `v1.0.0` tag; `v0.1.0-452-gf6278ef` | OUT OF SCOPE (moved to Phase 9) — REL-02 reassigned as a release-automation property; its testable content already proven under v0.1's DIST-02 |
 
 ### Probe Execution
 
@@ -109,7 +106,7 @@ No `scripts/*/tests/probe-*.sh` probes declared by this phase's PLAN/SUMMARY fil
 | SURF-04 | 08-04/05 | `affected` scripting flags + depth-bounded BFS | ✓ SATISFIED (BFS ordering backstop unverified — see truth 4b) | `Affected(files,depth)`, CLI flags, tests green |
 | SURF-05 | 08-06 | Flag audit doc + drift test | ✓ SATISFIED | `docs/FLAG-PARITY.md` + `flag_parity_test.go` |
 | REL-01 | 08-07 | Charm closure audit | ✓ SATISFIED | `charm_cgo_test.go` + recorded govulncheck/SBOM/double-build evidence |
-| REL-02 | 08-09 (Task 3) | Signed v1.0.0 cut | ⬜ NEEDS HUMAN (by design) | Runbook + gates ready; tag push is maintainer-manual, not yet performed |
+| REL-02 | 08-09 (Task 3) | Signed v1.0.0 cut | OUT OF SCOPE (moved to Phase 9) | Rewritten as a release-automation property and reassigned to Phase 9; testable content already proven under v0.1's DIST-02 on release v0.0.0-rc.3 |
 | REL-03 | 08-08 | Benchmarks re-run + published | ✓ SATISFIED | `docs/BENCHMARKS.md` refreshed with real CI numbers |
 | REL-04 | 08-09 (Tasks 1-2) | Drop-in validation + caveat retirement | ✓ SATISFIED | Both gate halves green; caveat retired at every site |
 
@@ -127,17 +124,15 @@ None. Scanned all files touched by this phase's 9 plans (`internal/query/{valida
 **Expected:** Byte-identical path ordering on every run — no Go map-iteration-order leakage into the returned slice.
 **Why human:** 08-04-PLAN.md's own frontmatter marks this must-have `verification: backstop` and its SUMMARY explicitly defers it "for human confirmation during a later `validate-phase` pass." No test added in this phase asserts cross-run stability; the code is present and BFS-correct (verified above) but this specific invariant is unexercised.
 
-#### 2. Signed v1.0.0 release cut (REL-02, the phase's terminal maintainer action)
+#### 2. ~~Signed v1.0.0 release cut (REL-02)~~ — OUT OF SCOPE (moved to Phase 9)
 
-**Test:** Follow `docs/RELEASE-PROCEDURES.md`: run the pre-tag 6-target `GOOS=<os> GOARCH=<arch> go list -mod=readonly ./...` gate for all of linux/windows/darwin × amd64/arm64; squash-merge `gsd/v1.0-drop-in-parity-human-ux` to `main`; `git tag v1.0.0 && git push origin v1.0.0`; then run `cosign verify-blob` (full anchored `^...$` identity regexp) and `slsa-verifier verify-artifact` against the published release.
-**Expected:** `release.yml`'s `v[0-9]*`-triggered build/assemble/provenance jobs publish a signed, SBOM'd, SLSA-attested `v1.0.0` release; cosign/slsa verification succeeds; `codegraph upgrade` recognizes `v1.0.0` as latest.
-**Why human:** This is an intentional, executor-prohibited action (CONTEXT D-08/D-11; 08-09-PLAN.md Task 3 `type: checkpoint:human-action`) — the tag push is the maintainer's sole manual step, deliberately never automated, and is confirmed by this verification to not yet have occurred (`git tag -l` empty, `REQUIREMENTS.md` still shows REL-02 Pending).
+REL-02 was rewritten as a release-automation property (release-please owns version bump/`CHANGELOG.md`/tag creation, with the resulting signed artifacts still satisfying `internal/upgrade/verify.go`'s cosign identity) and reassigned from Phase 8 to Phase 9 on 2026-07-28. This is no longer a Phase 8 human-verification obligation — it is neither passed nor failed here; it is out of scope for this phase. Its previously-testable content (per-binary cosign + SLSA provenance + SBOM) was already proven under v0.1's DIST-02 on release `v0.0.0-rc.3`. See `.planning/REQUIREMENTS.md`'s rewritten REL-02 and `.planning/ROADMAP.md` Phase 9.
 
 ### Gaps Summary
 
-No blocking gaps. All 9 requirement IDs (SURF-01..05, REL-01, REL-03, REL-04, plus REL-02's readiness half) are satisfied in the codebase with passing automated evidence (build green, `go test ./...` green apart from a pre-existing/unrelated `internal/daemon` flake that passes on isolated re-run, golden/behavioral harness green, flag-parity drift test green, CGo-closure guard green). The two open items are both **expected, not defects**:
+No blocking gaps. All 8 requirement IDs Phase 8 now owns (SURF-01..05, REL-01, REL-03, REL-04) are satisfied in the codebase with passing automated evidence (build green, `go test ./...` green apart from a pre-existing/unrelated `internal/daemon` flake that passes on isolated re-run, golden/behavioral harness green, flag-parity drift test green, CGo-closure guard green). The one remaining open item is **expected, not a defect**:
 
-1. **REL-02's actual tag push** is the phase's designed terminal maintainer-manual checkpoint — release readiness (runbook, all gates, caveat retirement) is complete; only the human `git tag v1.0.0 && git push` action remains, exactly as CONTEXT D-08/D-11 and 08-09-PLAN.md Task 3 specify. This is not a code gap.
+1. **REL-02 is out of scope for Phase 8** (moved to Phase 9, 2026-07-28) — it was rewritten as a release-automation property that Phase 9's release-please + GoReleaser work now owns; its previously-testable content (per-binary cosign + SLSA + SBOM) was already proven under v0.1's DIST-02 on `v0.0.0-rc.3`. This is not a code gap.
 2. **Affected() BFS ordering determinism** is a backstop must-have the plan itself scoped out of automated coverage, deferred to human/validate-phase confirmation — the BFS logic itself (depth-bounding, test-leaf pruning, dangling-edge skip, negative-depth rejection) is fully tested and green.
 
 Both items route to human verification per the escalation-gate pattern rather than being silently marked passed or falsely marked failed.

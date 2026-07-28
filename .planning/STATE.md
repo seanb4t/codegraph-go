@@ -8,7 +8,7 @@ status: verifying
 stopped_at: Completed 08-09-PLAN.md Tasks 1-2 (readiness); Task 3 checkpoint returned to maintainer for v1.0.0 tag push
 last_updated: "2026-07-27T03:46:03.692Z"
 last_activity: 2026-07-26
-last_activity_desc: Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08 still awaiting maintainer v1.0.0 tag
+last_activity_desc: Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08's REL-02 rewritten as a release-automation property and reassigned to Phase 9
 progress:
   total_phases: 8
   completed_phases: 8
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 08 — Surface Reconciliation & Signed v1.0.0 Release
 Plan: 9 of 9
-Status: Phase built and verified — blocked on maintainer pushing the signed v1.0.0 tag (REL-02)
+Status: Phase built and verified; REL-02 reassigned to Phase 9; awaiting a `/gsd-verify-work 8` close
 Last activity: 2026-07-26 — Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08 unchanged
 
 Progress: [██████████] 100%
@@ -248,7 +248,7 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| Release | DIST-02 — real signed `v*` tag | Scoped into REL-02 (Phase 8) | v0.1 close |
+| Release | DIST-02 — real signed `v*` tag | Scoped into REL-02 (Phase 9) | v0.1 close |
 | Perf | PERF-01 — published head-to-head numbers | Scoped into REL-03 (Phase 8) | v0.1 close |
 
 ## Session Continuity
