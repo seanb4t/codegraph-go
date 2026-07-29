@@ -23,8 +23,39 @@ permissions:
   contents: read
 
 jobs:
+  # Ports docs/RELEASE-PROCEDURES.md §1's manual pre-tag sweep into a
+  # blocking automated gate: release-please can never open/merge a release
+  # PR (and therefore never cut a tag) from a `main` state that fails
+  # cross-platform module resolution. This is the exact check that would
+  # have caught the v0.1 rc.1 linux-only go.sum failure. Runs on every push
+  # to main (not just "about to release") per 09-RESEARCH.md Open Question
+  # 2 — release-please exposes no pre-check hook to gate more narrowly, and
+  # the cost (six `go list` invocations) is low.
+  pretag-gate:
+    name: pre-tag 6-target go list sanity sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: 6-target go list -mod=readonly sweep
+        run: |
+          set -euo pipefail
+          for pair in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${pair%/*}" GOARCH="${pair#*/}" go list -mod=readonly ./... > /dev/null || {
+              echo "::error::go list -mod=readonly ./... failed for GOOS=${pair%/*} GOARCH=${pair#*/}"
+              exit 1
+            }
+          done
+
   release-please:
     name: release-please
+    needs: pretag-gate
     runs-on: ubuntu-latest
     # Job-level permissions below govern the default GITHUB_TOKEN ONLY. This
     # is a DIFFERENT scope from the GitHub App's own installation
