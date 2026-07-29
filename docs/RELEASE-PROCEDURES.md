@@ -28,6 +28,14 @@ All 6 lines must print `OK`. A single `FAIL` means a platform-specific
 your dev machine's own `GOOS`/`GOARCH`) cannot see — do not tag until every
 target is green.
 
+> **Now also automated.** This exact sweep runs automatically as the
+> `pretag-gate` job in `.github/workflows/release-please.yml` on every push
+> to `main`, gating the `release-please` job behind it via `needs:`. The
+> manual command block above is retained for pre-merge use on an
+> integration branch (§3) before you ever push to `main` — but the
+> enforcement point is now CI, not this document. No human needs to
+> remember to run this by hand anymore.
+
 ## 2. Tag conventions
 
 `release.yml` triggers on pushes matching `v[0-9]*`. Three distinct shapes:
@@ -47,7 +55,10 @@ fires the full signed build/assemble/provenance pipeline.
 
 1. Land all phase work on the integration branch
    (`gsd/v1.0-drop-in-parity-human-ux` for this milestone).
-2. Run the pre-tag gate (§1) on the integration branch's tip.
+2. The pre-tag gate (§1) now also runs automatically on every push to
+   `main` as release-please.yml's `pretag-gate` job (see the note added to
+   §1 above) — release-please can never open or merge a release PR from a
+   `main` state that fails it.
 3. **Fast-forward** the integration branch onto `main`, preserving its full
    history — do **not** squash.
 4. The tag is created by release-please when its release PR merges (§4) —
@@ -206,6 +217,14 @@ Both commands must succeed for at least one platform's artifacts before
 considering the release verified. A signature from any other issuer, any
 other workflow file, or any non-tag trigger will fail (a) — as it should.
 
+> **Mandatory, not optional, for the first automated cut.** Running these
+> two commands is not optional for the first release-please-automated
+> release and for the disposable live proof (§9) that precedes it — it is
+> the only evidence that the cosign identity survived the App-token
+> rewiring, and it is the direct evidence REL-02's second half is verified
+> against. Do not skip it because the pipeline "should" still be signing
+> correctly; prove it.
+
 ## 7. Rollback / cleanup
 
 A release-please cut leaves **three** artifacts behind, and rolling back
@@ -255,6 +274,10 @@ the same name risks a confusing mismatch between what a user already
 verified and what the tag now points to. Prereleases (`-rc.N`) are safer to
 delete/retag since they are explicitly transient by convention.
 
+This same three-step procedure (delete release+tag, revert the release
+commit, check the `autorelease` label) is what tears down the disposable
+live-proof release described in §9.
+
 ## 8. Commit-signing fallback (automated pipeline commits only)
 
 Local commit signing (e.g. 1Password's git-signing integration) has been
@@ -272,3 +295,134 @@ git -c commit.gpgsign=false commit -m "..."
 
 Do not reach for this fallback as a first resort, and never use it on a
 commit the user themselves is making interactively.
+
+## 9. GitHub App prerequisite (D-02)
+
+**Why an App, not the default token, is required:** a tag pushed with the
+workflow's default `GITHUB_TOKEN` does not start other workflow runs — so
+`release.yml` would simply never fire on release-please's tag. A GitHub
+App installation token does trigger downstream workflow runs. This is not
+optional plumbing; it is the single mechanism that makes §4's automated
+flow work at all.
+
+This is a one-time, maintainer-manual setup procedure. Follow it once per
+repo (or once per organization if the App is installed org-wide):
+
+1. **Create the App** under the account's Developer settings
+   (`Settings → Developer settings → GitHub Apps → New GitHub App`). Any
+   name is fine; it needs no webhook, no user-facing UI, and no public
+   listing.
+2. **Grant it exactly three installation permissions:**
+   - **Contents: Read and write** — needed to push the version-bump commit
+     and create the tag.
+   - **Pull requests: Read and write** — needed to open/update the
+     `chore(main): release X.Y.Z` PR.
+   - **Issues: Read and write** — needed because release-please labels its
+     PR `autorelease: pending` / `autorelease: tagged`, and GitHub governs
+     PR labels under the Issues API scope in its App permission model, not
+     under Pull requests.
+3. **Install the App** on `seanb4t/codegraph-go`.
+4. **Generate a private key** for the App and store the **full PEM** as the
+   repository secret `APP_PRIVATE_KEY`. Store the App's numeric **App ID**
+   as the repository secret `APP_ID`.
+
+**These are two different permission systems — do not conflate them.** The
+App's *installation* permissions (step 2 above, set in the App's own
+settings) authorize everything release-please does with the minted App
+token. The `permissions:` block inside `.github/workflows/release-please.yml`
+governs only the default `GITHUB_TOKEN` and is a separate, unrelated scope.
+Configuring one correctly while under-scoping the other does not fail at
+config time — it produces a runtime authorization failure (a 403) the first
+time release-please actually tries to label a PR or push a commit, not
+before.
+
+**Deprecated-input note:** `actions/create-github-app-token`'s *current*
+required input is `client-id` (the App's Client ID string). The `app-id`
+input (the numeric App ID) still works but is deprecated-but-accepted. This
+runbook's secret names (`APP_ID`, `APP_PRIVATE_KEY`) wire to the `app-id`
+input today. Migrating to `client-id` later means **re-seeding the secret
+with the App's Client ID**, not reusing the numeric App ID value — the two
+are not interchangeable strings.
+
+**Pre-flight commands:**
+
+```sh
+# Confirm the repo's Actions settings don't have anything unusual blocking
+# App-token-authored workflow runs
+gh api repos/seanb4t/codegraph-go/actions/permissions
+
+# Confirm both secrets landed (lists names only, never values)
+gh secret list
+```
+
+**Branch protection note:** the repo has no rulesets today, so this does
+not currently apply. If branch protection is ever added to `main`, the App
+**must** be added to the bypass-actor list, or release-please will be
+unable to push its version-bump commit past the protection rule.
+
+**The disposable live proof.** Because "does an App-token-authored tag
+push really fire `release.yml` in this repo's actual Actions
+configuration" cannot be proven statically, this pipeline is run once
+end-to-end against a disposable, prerelease-shaped tag on a scratch branch
+— never against the real `v1.0.0` as the first live test — before the real
+`v1.0.0` is ever cut. §6's post-release verification and §7's rollback
+procedure both apply to that disposable release exactly as they would to a
+real one; §7 is what tears it down afterward.
+
+## 10. Recorded divergences (Phase 9)
+
+Three places where what shipped diverges from what an earlier decision
+document said, each recorded with its source and reason rather than left
+to drift silently.
+
+**(a) Roadmap Phase 9 criterion 3 / D-05.** The criterion as originally
+written assumed a `goreleaser release` upload model with a
+`replace_existing_artifacts: true` setting and no `changelog:` block. This
+repo has never run `goreleaser release` — `.goreleaser.yaml`'s `archives:`
+and `checksum:` blocks are documented-inert, and signing, SBOM generation,
+and publishing all live in `release.yml`'s hand-written `assemble` job
+instead, because GoReleaser OSS cannot express per-binary cosign (the
+`codegraph upgrade` verifier hashes the binary itself, not a checksums
+file), the native darwin/linux two-OS matrix that keeps darwin off a zig
+cross-link, or the SLSA generic-generator handoff. The criterion's
+*intent* — idempotent artifact replacement — is satisfied instead by §4's
+`gh release upload --clobber` step. Recorded as an accepted divergence in
+`.planning/ROADMAP.md` (§ below), not dropped.
+
+**(b) D-08 lint file location.** D-08 names `ci.yml` as the destination for
+the PR-title conventional-commit lint. What shipped is a dedicated
+`.github/workflows/pr-title.yml` instead, because `ci.yml`'s shared
+`pull_request` trigger uses GitHub's default event types, which exclude
+`edited` — a contributor fixing only a bad title would get no re-run
+there. Widening `ci.yml`'s trigger to include `edited` would also re-run
+its heavy reproducibility and perf-regression jobs on every title or
+description edit, not just code changes. The lint's substance (a blocking
+gate, hand-written `grep -E`, title bound via `env:`) is unchanged — only
+its file location diverged.
+
+**(c) D-03 (`workflow_dispatch` fallback) is deliberately not
+implemented.** The App-token path (D-02, §9) is this phase's primary and
+only implemented tag-trigger mechanism. D-03's dispatch-based fallback was
+never built, and that is intentional: leaving it out keeps `release.yml`'s
+header comment claim — that it triggers *only* on tag pushes — true by
+construction, and `internal/upgrade/release_workflow_shape_test.go`'s
+`TestReleaseWorkflowTriggerIsTagPushOnly` mechanically enforces that the
+file's `on:` block has exactly one trigger. This cannot be skipped by
+accident later without that test going red. If a future maintainer needs
+Path B because the App becomes unavailable, the full recipe is:
+
+1. Add `workflow_dispatch` **alongside** — never instead of —
+   `release.yml`'s existing `push.tags` trigger.
+2. Dispatch it **at the tag ref**
+   (`gh workflow run release.yml --ref "$TAG"`), never at a branch — a
+   branch-ref dispatch produces `@refs/heads/main` in the cosign SAN, which
+   is unverifiable by `internal/upgrade/verify.go` and would ship silently
+   broken binaries.
+3. Add a guard step that hard-fails when `github.ref` does not start with
+   `refs/tags/v`.
+4. Add a test proving that guard actually fires on a rejecting input — a
+   guard that is merely present but never exercised is not a guard (the
+   Phase 8 `CR-01`/`WR-02` lesson).
+5. Update `release.yml`'s header comment in the **same commit**, so it no
+   longer claims a tag-push-only trigger once a second trigger type
+   exists.
