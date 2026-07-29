@@ -352,8 +352,26 @@ Plans:
 
   1. `release-please-config.json` (`release-type: go`) + `.release-please-manifest.json` exist; merging a release PR cuts the tag without a human running `git tag`
   2. The cosign OIDC cert SAN still matches `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` — i.e. `codegraph upgrade` keeps working for every already-shipped binary
-  3. GoReleaser uploads artifacts into the release-please-created release idempotently (`replace_existing_artifacts: true`, no `changelog:` block)
+  3. Artifacts are uploaded into the release-please-created GitHub Release idempotently via `release.yml`'s publish step (`gh release upload --clobber`), with `goreleaser build --single-target` retained and no migration to `goreleaser release`
   4. Per-binary cosign signing + SLSA provenance + the native 2-OS CGo matrix are all preserved (none of which engram's config covers)
+
+> **Success criterion 3 amended 2026-07-28.** The original wording ("GoReleaser
+> uploads artifacts into the release-please-created release idempotently,
+> `replace_existing_artifacts: true`, no `changelog:` block") was modeled on
+> `seanb4t/engram`'s `goreleaser release` pipeline and does not transfer to
+> this repo: codegraph-go has never run `goreleaser release`, and
+> `.goreleaser.yaml`'s `archives:`/`checksum:` blocks are already documented
+> in-file as dead configuration. GoReleaser OSS cannot express this repo's
+> per-binary cosign signing (the upgrade verifier hashes the binary itself,
+> not a checksums file), its native 2-OS CGo matrix, or its SLSA
+> generic-generator handoff — reproducing them would require GoReleaser
+> Pro's `release --split`/`--merge`. The criterion's idempotency *intent* is
+> met instead by `release.yml`'s D-04 create-if-absent-else-upload-clobber
+> publish step. Recorded as an accepted divergence (D-05,
+> `09-CONTEXT.md`) rather than applied silently, because this phase is
+> verified goal-backward and closing it against the original wording would
+> have claimed a GoReleaser upload path that does not exist. See
+> `docs/RELEASE-PROCEDURES.md` §10(a) for the full account.
 
 **Plans**: 3/8 plans executed
 

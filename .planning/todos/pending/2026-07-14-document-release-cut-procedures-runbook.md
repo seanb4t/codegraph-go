@@ -3,11 +3,36 @@ created: 2026-07-14T17:43:30.073Z
 title: Document release procedures (maintainer runbook)
 area: docs
 resolves_phase: 8
+status: resolved
+resolved_at: 2026-07-28T00:00:00.000Z
+resolved_by_phase: 9
 files:
   - docs/RELEASE.md
   - .github/workflows/release.yml
   - internal/upgrade/verify.go
 ---
+
+## Resolution (2026-07-28, Phase 9)
+
+Phase 8 shipped `docs/RELEASE-PROCEDURES.md`'s original 8 sections; Phase 9
+(`09-04-PLAN.md`) rewrote the three sections this phase's release-please
+automation invalidated and added two new ones, closing this todo in full:
+
+- **§3 Branch/tag model** — rewritten for the fast-forward merge model.
+- **§4 Cutting a release** — rewritten for the release-PR-merge trigger,
+  replacing the maintainer-manual `git tag` as the normal path.
+- **§7 Rollback / cleanup** — broadened to cover all three artifacts a
+  release-please cut leaves behind.
+- **§9 GitHub App prerequisite (D-02)** — new section covering App
+  creation, installation permissions, secrets, and the pre-flight checks
+  this todo's original "non-obvious, easy-to-forget steps" problem
+  statement was asking for.
+- **§10 Recorded divergences (Phase 9)** — new section recording every
+  divergence this phase accepted.
+
+§1, §2, §5, §6, §8 (all originally requested by this todo) survive from
+Phase 8 substantively unchanged, with additive automation notes on §1 and
+§6.
 
 ## Problem
 
