@@ -355,11 +355,38 @@ Plans:
   3. GoReleaser uploads artifacts into the release-please-created release idempotently (`replace_existing_artifacts: true`, no `changelog:` block)
   4. Per-binary cosign signing + SLSA provenance + the native 2-OS CGo matrix are all preserved (none of which engram's config covers)
 
-**Plans**: 0 plans
+**Plans**: 8 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-discuss-phase 9)
+**Wave 1** *(tracer — the mechanical spine, proven end to end before anything else)*
+
+- [ ] 09-01-PLAN.md — TRACER: release-please config/manifest/App-token workflow + 6-target pre-tag gate + non-vacuous LOCKED-SAN drift guards
+
+**Wave 2** *(expansion — disjoint files, parallel)*
+
+- [ ] 09-02-PLAN.md — D-04: create-if-absent-else-upload-clobber in release.yml + 5-case stubbed-`gh` test
+- [ ] 09-03-PLAN.md — D-08: PR-title conventional-commit gate (pr-title.yml) + actionlint job in ci.yml
+
+**Wave 3**
+
+- [ ] 09-04-PLAN.md — docs/RELEASE-PROCEDURES.md §3/§4/§7 rewrite + §9 App prerequisite + §10 recorded divergences + ROADMAP criterion-3 amendment
+
+**Wave 4** *(blocking human prerequisite)*
+
+- [ ] 09-05-PLAN.md — checkpoint: create + install the GitHub App, store APP_ID / APP_PRIVATE_KEY
+
+**Wave 5**
+
+- [ ] 09-06-PLAN.md — D-09 merge-shape gate + fast-forward `main` + observe release-please's first live release PR
+
+**Wave 6**
+
+- [ ] 09-07-PLAN.md — disposable live proof: real prerelease cut, cosign/SLSA/production-identity verification, full teardown
+
+**Wave 7**
+
+- [ ] 09-08-PLAN.md — D-06 version gate + the real signed `v1.0.0` + a genuine v0.1.0 binary upgrading to it
 
 **Notes**: The blocking constraint is a LOCKED contract, not a preference. codegraph-go's `release.yml` triggers only on tag push `v[0-9]*` because `verify.go` anchors the cosign SAN to `...release.yml@refs/tags/v[0-9]*`. engram triggers on `push: branches: [main]` and does release-please + ship in one job — copying that would sign with `@refs/heads/main` and make `codegraph upgrade` reject every binary for every existing user, silently. Compounding it: tags pushed with the default `GITHUB_TOKEN` do not trigger other workflows, which is exactly why engram collapses into one run. Preferred resolution: keep the tag-triggered `release.yml` and its SAN untouched, and have release-please create the tag via a **GitHub App token** (App tokens do trigger downstream workflows). Alternative — collapse into one workflow and change `releaseWorkflowRefPattern` in lockstep — breaks `upgrade` for anyone on an older binary and needs a migration story first. Also open: whether GoReleaser can express per-binary cosign + the SLSA handoff at all, or whether those stay hand-written jobs alongside it.
 
