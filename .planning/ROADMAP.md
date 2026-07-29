@@ -355,13 +355,13 @@ Plans:
   3. GoReleaser uploads artifacts into the release-please-created release idempotently (`replace_existing_artifacts: true`, no `changelog:` block)
   4. Per-binary cosign signing + SLSA provenance + the native 2-OS CGo matrix are all preserved (none of which engram's config covers)
 
-**Plans**: 8 plans
+**Plans**: 1/8 plans executed
 
 Plans:
 
 **Wave 1** *(tracer — the mechanical spine, proven end to end before anything else)*
 
-- [ ] 09-01-PLAN.md — TRACER: release-please config/manifest/App-token workflow + 6-target pre-tag gate + non-vacuous LOCKED-SAN drift guards
+- [x] 09-01-PLAN.md — TRACER: release-please config/manifest/App-token workflow + 6-target pre-tag gate + non-vacuous LOCKED-SAN drift guards
 
 **Wave 2** *(expansion — disjoint files, parallel)*
 
@@ -423,7 +423,7 @@ Plans:
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 0/0 | Not started |  |
+| 9. release-please + GoReleaser | v1.0 | 1/8 | In Progress|  |
 | 10. Local Build Tooling & CONTRIBUTING | v1.0 | 0/0 | Not started |  |
 
 ## Backlog

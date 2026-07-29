@@ -131,10 +131,18 @@ status: complete
 - **Verification:** Re-ran the mutate/observe/restore cycle; failure output now reads `release.yml's top-level name: = "release-renamed", want "release" (reconstructed SAN: "https://github.com/seanb4t/codegraph-go/.github/workflows/release.yml@refs/tags/v1.2.3")`.
 - **Committed in:** `7f60822` (Task 1 commit)
 
+**2. [Rule 1 - Bug] `requirements mark-complete` prematurely marked REL-02 fully Complete**
+- **Found during:** State-updates step (post-task, pre-final-commit)
+- **Issue:** Every plan in this phase (09-01 through 09-08) carries `requirements: [REL-02]` in its frontmatter — REL-02 is the phase's single, spanning requirement (per this plan's own Multi-Source Coverage Audit: `09-01, 09-07 | COVERED`, with the actual App-token tag cut and live signed-artifact proof landing in later plans). Running `gsd_run query requirements.mark-complete REL-02` per the standard state-updates protocol flipped REL-02 to `[x]` Complete and "Complete" in the traceability table after only 1 of 8 plans — inaccurate, and risks a downstream ship-gate or audit treating REL-02 as fully proven when the App still isn't provisioned and no real tag has been cut.
+- **Fix:** Reverted `.planning/REQUIREMENTS.md`'s REL-02 checkbox to `[ ]` and its traceability-table status to `In Progress (09-01/08 plans complete)`, with an inline note on the checkbox line naming which plans still remain. REL-02 should only flip to `[x]` Complete when the plan that actually closes it (09-07 or 09-08, per the phase's coverage table) runs `requirements mark-complete`.
+- **Files modified:** `.planning/REQUIREMENTS.md`
+- **Verification:** `grep -n 'REL-02' .planning/REQUIREMENTS.md` shows `[ ]` and `In Progress`.
+- **Committed in:** this plan's final metadata commit
+
 ---
 
-**Total deviations:** 1 auto-fixed (1 bug fix, found and corrected before the task commit — not a separate follow-up commit)
-**Impact on plan:** No scope creep; the fix was required to actually satisfy the plan's own acceptance criterion.
+**Total deviations:** 2 auto-fixed (1 bug fix in the test's own assertion, 1 bug fix correcting a premature multi-plan requirement-completion write)
+**Impact on plan:** No scope creep; both fixes were required for the plan's own artifacts (the test, and the requirement tracking) to be accurate.
 
 ## Non-Vacuity: Observed Break-Observe-Restore Output (mandatory, recorded verbatim)
 
@@ -221,6 +229,10 @@ None for this plan. The GitHub App creation/installation (`APP_ID`/`APP_PRIVATE_
 - The release-please spine is proven correct in isolation: config/manifest resolve the real baseline, the pretag-gate blocks on a real failure mode, and both new guards are demonstrated non-vacuous.
 - `release.yml`'s `Publish GitHub release` step (D-04's create-vs-upload branch) is untouched — that is plan 09-02's single highest-risk edit, ready to proceed.
 - No blockers for 09-02/09-03. 09-05's GitHub App setup remains the phase's one hard external dependency before a real (App-token-authored) run of `.github/workflows/release-please.yml` can be exercised in CI.
+
+## Self-Check: PASSED
+
+All 4 created files confirmed present on disk; all 3 commit hashes (`7f60822`, `ce403dc`, `cb4cab9`) confirmed present in `git log --oneline --all`.
 
 ---
 *Phase: 09-release-please-and-goreleaser*

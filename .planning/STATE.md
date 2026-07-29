@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
 current_phase: 09
-current_phase_name: release-please + GoReleaser
+current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-07-29T01:48:33.253Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-07-29T02:05:04.466Z"
 last_activity: 2026-07-28
-last_activity_desc: Phase 8 complete, transitioned to Phase 09
+last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 65
-  completed_plans: 57
+  completed_plans: 58
   percent: 80
 ---
 
@@ -24,16 +24,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 9 — release-please + GoReleaser
+**Current focus:** Phase 09 — release-please-and-goreleaser
 
 ## Current Position
 
-Phase: 09 — release-please + GoReleaser
-Plan: Not started
+Phase: 09 (release-please-and-goreleaser) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-07-28 — Phase 8 complete, transitioned to Phase 09
+Last activity: 2026-07-28 — Phase 09 execution started
 
-Progress: [████████░░] 80% (8 of 10 phases)
+Progress: [█████████░] 89% (8 of 10 phases)
 
 ## Performance Metrics
 
@@ -120,6 +120,7 @@ Progress: [████████░░] 80% (8 of 10 phases)
 | Phase 08 P07 | 30min | 2 tasks | 1 files |
 | Phase 08 P08 | 14m | 2 tasks | 4 files |
 | Phase 08 P09 | 20min | 2 tasks | 2 files |
+| Phase 09 P01 | 40min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -225,6 +226,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: REL-03: re-ran bench.yml 3x on GH Actions ubuntu-latest (workflow_dispatch) instead of stopping at the plan's human-action checkpoint — gh CLI admin access made the automation path viable; refreshed docs/BENCHMARKS.md with real median-of-3 CI numbers, closing PERF-01
 - [Phase ?]: [Phase 08-09]: REL-02's actual v1.0.0 tag cut is NOT marked complete — only release-readiness (docs/RELEASE-PROCEDURES.md runbook) is this plan's deliverable; the tag push is the maintainer's manual action per D-08/D-11
 - [Phase ?]: [Phase 08-09]: Fixed a stale self-contradicting cross-reference in PROJECT.md's Key Decisions table ('Parity v1 -> team features v2' row) beyond the plan's 4 enumerated caveat sites, for internal consistency with the drop-in caveat retirement
+- [Phase ?]: 09-01: Re-resolved release-please-action/create-github-app-token SHAs live via gh api, confirming RESEARCH.md's cached release-please-action SHA was a phantom commit
+- [Phase ?]: 09-01: Dry-run spine proof executed against the real pushed feature branch (--target-branch) since the GitHub App (09-05) is not yet provisioned; resolved baseline 0.1.0, candidate 0.2.0 as expected
 
 ### Pending Todos
 
@@ -259,9 +262,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-29T00:56:14.985Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-release-please-and-goreleaser/09-CONTEXT.md
+Last session: 2026-07-29T02:05:04.456Z
+Stopped at: Completed 09-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
