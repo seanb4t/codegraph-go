@@ -198,27 +198,33 @@ upgrade` rejects every future release, **silently**, for every existing user.
   — **Reversibility:** reversible — a single CI job; removable with no artifact impact.
   `[auto] Commit-message gate → Selected: PR-title conventional-commit check in ci.yml (recommended)`
 
-### Gray area 7 — The v1.0 merge model (⚠ interacts with locked D-08 from Phase 8)
+### Gray area 7 — The v1.0 merge model (⚠ documented model vs. actual practice)
 
-- **D-09:** **Honor Phase 8's D-08 squash-merge model unchanged.** The v1.0
-  integration branch (`gsd/v1.0-drop-in-parity-human-ux`, ~465 commits ahead of
-  `main`, ~216 of them planning-only `docs(NN):` commits) squash-merges to `main`
-  as one Conventional Commit, and release-please parses that single message.
-  **Consequence, stated plainly:** `v1.0.0`'s `CHANGELOG.md` entry will be one
-  line, not a per-feature list. Accept it — hand-author the richer v1.0.0 release
-  notes as a **one-time** exception (the release-please-created release body can
-  be edited), and note that every release *after* v1.0.0 gets a real
-  per-PR changelog automatically, because from then on each PR to `main` is one
-  conventional squash commit. That is the steady state Phase 9 is actually buying.
-  **⚠ Flagged alternative, not taken:** a `--no-ff` merge would give release-please
-  all 465 commits and produce a genuinely rich `v1.0.0` changelog (release-please
-  hides `docs:`/`chore:`/`ci:` from the changelog by default, so the 216 planning
-  commits would not be noise). It was rejected only because it contradicts a
-  locked prior decision. **If the maintainer prefers the rich changelog, this is
-  the one decision here worth overriding — say so before planning.**
-  — **Reversibility:** one-way — merge shape is fixed the moment the merge lands
-  on `main`; the changelog for `v1.0.0` cannot be regenerated from a squashed history.
-  `[auto] Merge model → Selected: honor Phase-8 D-08 squash-merge; --no-ff flagged as maintainer override (recommended)`
+- **D-09:** **Fast-forward the v1.0 integration branch onto `main`, preserving
+  full history — do NOT squash.** Verified against the repo, not inferred:
+  - `main` contains **zero merge commits** (`git log --merges main` is empty) —
+    the v0.1 milestone landed by fast-forward.
+  - `main` **is an ancestor of HEAD** today, so
+    `gsd/v1.0-drop-in-parity-human-ux` is fast-forwardable as-is.
+  - The branch is **477 commits ahead**, of which **160 are `feat`/`fix`/`perf`**
+    and ~217 are planning-only `docs(...)` commits.
+  Under fast-forward, release-please sees all 477 commits and generates a
+  genuinely rich `v1.0.0` changelog from those 160 entries, while its default
+  `changelog-sections` hide `docs:`/`chore:`/`ci:`/`test:` — so the planning
+  commits are filtered out automatically, not manually.
+  **⚠ Conflict recorded, not silently resolved:** Phase-8's `08-CONTEXT.md` D-08
+  says "squash-merge to `main`". That wording contradicts what the repo actually
+  did for v0.1 (fast-forward — also recorded in engram `8sa948y0g4`,
+  "fast-forward merge not squash"). D-08's *substance* — integration branch →
+  `main` → tag on `main` — is honored here in full; only its merge-mechanic
+  wording is superseded, and only because the evidence on disk contradicts it.
+  A squash would collapse all 477 commits into one message and reduce `v1.0.0`'s
+  changelog to a single line, discarding the input release-please exists to
+  consume. **If the maintainer intended a true squash, say so before planning —
+  this is the one decision here worth overriding.**
+  — **Reversibility:** one-way — merge shape is fixed the moment it lands on
+  `main`; a squashed history cannot be un-squashed to regenerate the changelog.
+  `[auto] Merge model → Selected: fast-forward preserving history (matches actual v0.1 practice + main has zero merge commits); Phase-8 D-08 squash wording superseded on evidence (recommended)`
 
 ### Gray area 8 — Prerelease / rc story
 

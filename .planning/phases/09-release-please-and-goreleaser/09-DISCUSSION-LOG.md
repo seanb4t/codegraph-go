@@ -87,15 +87,16 @@
 
 ---
 
-## v1.0 merge model ⚠ (interacts with a locked Phase-8 decision)
+## v1.0 merge model ⚠ (documented model vs. actual practice)
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Honor Phase-8 D-08 squash-merge | One conventional commit reaches `main`; `v1.0.0`'s changelog is one line, hand-authored release notes as a one-time exception. Every release after v1.0.0 gets a real per-PR changelog. | ✓ |
-| `--no-ff` merge commit | release-please sees all ~465 commits and generates a rich `v1.0.0` changelog (it hides `docs:`/`chore:`/`ci:` by default, so the ~216 planning commits would not be noise) — but contradicts a locked prior decision. | flagged |
+| Fast-forward, preserving full history | Matches what the repo actually did for v0.1. release-please sees all 477 commits and builds a rich `v1.0.0` changelog from the 160 `feat`/`fix`/`perf` entries; its default `changelog-sections` hide the ~217 `docs:` planning commits automatically. | ✓ |
+| Squash-merge (Phase-8 D-08's literal wording) | Collapses 477 commits into one message; `v1.0.0`'s changelog becomes one line, discarding the input release-please exists to consume. | |
+| `--no-ff` merge commit | Also preserves history, but introduces the first merge commit `main` has ever had — no benefit over fast-forward here since `main` is already an ancestor of HEAD. | |
 
-**Selected:** honor Phase-8 D-08 (D-09).
-**Notes:** Chosen to avoid overriding a locked decision unilaterally, not because it produces the better changelog. **This is the one decision in this phase worth a maintainer override** — if the rich `v1.0.0` changelog matters more than the locked merge model, say so before planning. Rated one-way: merge shape is fixed the moment it lands on `main`, and a squashed history cannot be un-squashed to regenerate the changelog.
+**Selected:** fast-forward (D-09).
+**Notes:** ⚠ **Correction made during discussion.** The recommendation was initially written as "honor Phase-8 D-08's squash-merge", then corrected after checking the repo. Evidence: `git log --merges main` is **empty** (zero merge commits ever), `main` **is an ancestor of HEAD** (fast-forwardable today), the branch is **477 commits ahead** with **160 `feat`/`fix`/`perf`**. Engram `8sa948y0g4` independently records "fast-forward merge not squash" for the v0.1 milestone. D-08's *substance* (integration branch → `main` → tag on `main`) is honored in full; only its merge-mechanic wording is superseded, on evidence. Rated one-way: merge shape is fixed the moment it lands on `main`. **If a true squash was actually intended, override before planning.**
 
 ---
 
