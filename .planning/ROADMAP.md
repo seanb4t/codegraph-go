@@ -421,7 +421,7 @@ Plans:
 
 **Wave 7**
 
-- [ ] 09-08-PLAN.md — D-06 version gate + the real signed `v1.0.0` + a genuine v0.1.0 binary upgrading to it
+- [ ] 09-08-PLAN.md — publish gate + the first release cut end-to-end by release-please + a genuine v0.1.0 binary upgrading to it
 
 **Notes**: The blocking constraint is a LOCKED contract, not a preference. codegraph-go's `release.yml` triggers only on tag push `v[0-9]*` because `verify.go` anchors the cosign SAN to `...release.yml@refs/tags/v[0-9]*`. engram triggers on `push: branches: [main]` and does release-please + ship in one job — copying that would sign with `@refs/heads/main` and make `codegraph upgrade` reject every binary for every existing user, silently. Compounding it: tags pushed with the default `GITHUB_TOKEN` do not trigger other workflows, which is exactly why engram collapses into one run. Preferred resolution: keep the tag-triggered `release.yml` and its SAN untouched, and have release-please create the tag via a **GitHub App token** (App tokens do trigger downstream workflows). Alternative — collapse into one workflow and change `releaseWorkflowRefPattern` in lockstep — breaks `upgrade` for anyone on an older binary and needs a migration story first. Also open: whether GoReleaser can express per-binary cosign + the SLSA handoff at all, or whether those stay hand-written jobs alongside it.
 
