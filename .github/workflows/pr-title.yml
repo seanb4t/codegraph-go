@@ -1,0 +1,50 @@
+# PR-title Conventional-Commits gate (D-08, REL-02).
+#
+# Deliberately a separate workflow from ci.yml, not a job inside it — see
+# .planning/phases/09-release-please-and-goreleaser/09-03-PLAN.md's
+# <recorded_divergence> block for the full rationale. In short: under this
+# repo's squash-merge model, the PR TITLE is the commit message
+# release-please parses to derive the version bump and CHANGELOG.md entry.
+# ci.yml's shared `pull_request:` trigger uses GitHub's default event types,
+# which exclude `edited` — a contributor who fixes only a bad title would
+# get no re-run there, leaving the gate stale exactly when it matters
+# (RESEARCH Pitfall 1). Widening ci.yml's trigger to include `edited` would
+# re-run its heavy test / govulncheck / reproducibility / perf-regression
+# jobs on every title OR description edit. This file's own narrow trigger
+# includes `edited` without that cost.
+#
+# A non-conformant PR title silently degrades or omits release-please's
+# changelog entry for the merged commit — this gate is the input-quality
+# guarantee release-please's entire output depends on.
+#
+# Security: the PR title is fully attacker-controlled text from any fork PR
+# author. It reaches the shell ONLY through the TITLE env var below, never
+# interpolated into the run: command text — the same env-indirection
+# convention release.yml uses for $TAG/$REPO (release.yml lines 136-144).
+# This workflow adds no third-party Action reference at all — the check is
+# a hand-written, auditable grep -E, matching this repo's preference for
+# exact-contract CI shell over opaque actions.
+
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title matches Conventional Commits
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          if ! grep -qE '^(feat|fix|perf|refactor|docs|chore|ci|test|build|revert)(\([a-z0-9_-]+\))?!?: .+' <<< "$TITLE"; then
+            echo "::error::PR title is not Conventional-Commits-shaped: $TITLE"
+            exit 1
+          fi
