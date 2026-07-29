@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-07-29T02:21:45.417Z"
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-07-29T02:32:04.818Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 65
-  completed_plans: 60
+  completed_plans: 61
   percent: 80
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 09 (release-please-and-goreleaser) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-07-28 — Phase 09 execution started
 
-Progress: [█████████░] 92% (8 of 10 phases)
+Progress: [█████████░] 94% (8 of 10 phases)
 
 ## Performance Metrics
 
@@ -123,6 +123,7 @@ Progress: [█████████░] 92% (8 of 10 phases)
 | Phase 09 P01 | 40min | 2 tasks | 4 files |
 | Phase 09 P02 | 20min | 2 tasks | 2 files |
 | Phase 09-release-please-and-goreleaser P03 | 15min | 3 tasks | 3 files |
+| Phase 09-release-please-and-goreleaser P04 | 30min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -234,6 +235,8 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: D-08's 'add to ci.yml' implemented as a dedicated pr-title.yml instead (RESEARCH Pitfall 1) — recorded divergence, not silent drift
 - [Phase ?]: Reused 09-02's stubbed-shell-execution test idiom (simplified: no PATH stub, title supplied via env var) for the PR-title lint rather than inventing a third testing shape
 - [Phase ?]: actionlint installed via go install at pinned v1.7.12 (re-resolved live, unchanged) rather than a fourth-party pinned Action
+- [Phase ?]: [Phase 09-release-please-and-goreleaser]: 09-04 rewrote docs/RELEASE-PROCEDURES.md §3/§4/§7 for the release-please-automated flow, added §9 (GitHub App prerequisite) and §10 (recorded divergences), and amended ROADMAP.md Phase 9 criterion 3 in place with a dated D-05 rationale (Phase-8-amendment style) — a pure docs plan, zero source/workflow diff
+- [Phase ?]: [Phase 09-release-please-and-goreleaser]: §3 supersedes Phase-8 08-CONTEXT.md D-08's squash-merge wording on repo evidence (main has zero merge commits, is fast-forwardable today) while honoring D-08's substance (integration branch -> main -> tag on main) in full
 
 ### Pending Todos
 
@@ -268,8 +271,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-29T02:21:45.406Z
-Stopped at: Completed 09-03-PLAN.md
+Last session: 2026-07-29T02:32:04.807Z
+Stopped at: Completed 09-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
