@@ -4,15 +4,15 @@ milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please + GoReleaser
-status: planning
+status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-07-29T00:56:15.009Z"
+last_updated: "2026-07-29T01:48:33.253Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 8 complete, transitioned to Phase 09
 progress:
   total_phases: 10
   completed_phases: 8
-  total_plans: 57
+  total_plans: 65
   completed_plans: 57
   percent: 80
 ---
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 09 — release-please + GoReleaser
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-07-28 — Phase 8 complete, transitioned to Phase 09
 
 Progress: [████████░░] 80% (8 of 10 phases)
