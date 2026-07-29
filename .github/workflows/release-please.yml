@@ -1,0 +1,60 @@
+# release-please: version bump, CHANGELOG.md, and tag/GitHub-Release creation
+# from Conventional Commits on every push to main.
+#
+# This file exists SOLELY to produce the App-authored tag push that
+# release.yml's LOCKED trigger (`on: push: tags: v[0-9]*`) consumes. It
+# MUST NOT build, sign, or publish anything itself — see
+# .planning/phases/09-release-please-and-goreleaser/09-CONTEXT.md D-01/D-02.
+#
+# The GitHub App token (not the default GITHUB_TOKEN) is load-bearing: refs
+# pushed with the default GITHUB_TOKEN do NOT trigger other workflow runs,
+# so a default-token-authored tag would never fire release.yml and
+# `codegraph upgrade` would have nothing to verify. App-token-authored refs
+# DO trigger downstream workflows — this is exactly what makes release.yml
+# fire on release-please's tag push with its trigger/SAN unchanged.
+
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    # Job-level permissions below govern the default GITHUB_TOKEN ONLY. This
+    # is a DIFFERENT scope from the GitHub App's own installation
+    # permissions (configured at App-creation time in the GitHub UI, see
+    # docs/RELEASE-PROCEDURES.md's App prerequisite section) — conflating
+    # the two is a documented pitfall (09-RESEARCH.md Pitfall 2).
+    permissions:
+      contents: write # tag creation + GitHub Release creation (release-please)
+      pull-requests: write # opening/updating the "chore: release X.Y.Z" PR
+      issues: write # release-please labels its PRs autorelease:pending /
+      # autorelease:tagged, and PR labels are governed by the
+      # Issues API scope in GitHub's permission model
+    steps:
+      - name: Mint GitHub App installation token
+        id: app-token
+        # actions/create-github-app-token's current required input is
+        # client-id (App's Client ID); app-id (the numeric App ID) is kept
+        # only as a deprecated back-compat alias. Both work; app-id is used
+        # here to match D-02's documented secret names (APP_ID,
+        # APP_PRIVATE_KEY) — migrating to client-id later requires
+        # re-seeding the secret with the App's Client ID, not its App ID.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
