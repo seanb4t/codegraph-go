@@ -413,7 +413,7 @@ Plans:
 
 **Wave 5**
 
-- [ ] 09-06-PLAN.md — D-09 merge-shape gate + fast-forward `main` + observe release-please's first live release PR
+- [ ] 09-06-PLAN.md — D-09 merge-shape gate + fast-forward `main` + observe release-please's first live release PR — **BLOCKED**: fast-forward succeeded (main is now the full v1.0 history), but release-please's App-token step fails with a 401 JWT-decode error (APP_PRIVATE_KEY secret content issue, not scope); see `09-06-SUMMARY.md`
 
 **Wave 6**
 

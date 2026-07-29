@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: Completed 09-05-PLAN.md (GitHub App checkpoint)
-last_updated: "2026-07-29T18:04:54.782Z"
+stopped_at: "Blocked at 09-06 Task 2: release-please App-token 401 auth failure (run 30490414604) — main fast-forwarded successfully, release PR not yet open"
+last_updated: "2026-07-29T21:00:46.165Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 65
-  completed_plans: 62
+  completed_plans: 63
   percent: 80
 ---
 
@@ -30,10 +30,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 09 (release-please-and-goreleaser) — EXECUTING
 Plan: 6 of 8
-Status: Ready to execute
-Last activity: 2026-07-28 — Phase 09 execution started
+Status: BLOCKED — release-please App-token 401 auth failure; main fast-forwarded successfully, awaiting maintainer fix to APP_PRIVATE_KEY secret (see 09-06-SUMMARY.md)
+Last activity: 2026-07-29 — Plan 09-06 partially executed, blocked on Task 2
 
-Progress: [██████████] 95% (8 of 10 phases)
+Progress: [██████████] 97% (8 of 10 phases)
 
 ## Performance Metrics
 
@@ -125,6 +125,7 @@ Progress: [██████████] 95% (8 of 10 phases)
 | Phase 09-release-please-and-goreleaser P03 | 15min | 3 tasks | 3 files |
 | Phase 09-release-please-and-goreleaser P04 | 30min | 3 tasks | 3 files |
 | Phase 09 P05 | 15min | 1 tasks | 1 files |
+| Phase 09 P06 | 20min | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -239,6 +240,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 09-release-please-and-goreleaser]: 09-04 rewrote docs/RELEASE-PROCEDURES.md §3/§4/§7 for the release-please-automated flow, added §9 (GitHub App prerequisite) and §10 (recorded divergences), and amended ROADMAP.md Phase 9 criterion 3 in place with a dated D-05 rationale (Phase-8-amendment style) — a pure docs plan, zero source/workflow diff
 - [Phase ?]: [Phase 09-release-please-and-goreleaser]: §3 supersedes Phase-8 08-CONTEXT.md D-08's squash-merge wording on repo evidence (main has zero merge commits, is fast-forwardable today) while honoring D-08's substance (integration branch -> main -> tag on main) in full
 - [Phase ?]: 09-05: reused pre-existing shared GitHub App fzy-release-please (permissions verified exactly Contents/PRs/Issues write + mandatory metadata:read); T-09-05-02 blast-radius consequence recorded; PR create-and-approve setting confirmed enabled on live re-check
+- [Phase ?]: [Phase 09-06]: main fast-forwarded to v1.0 history (502 commits, zero merge commits) per D-09/maintainer-confirmed decision; release-please's App-token minting step failed with a 401 JWT-decode error, isolated to APP_PRIVATE_KEY secret content, not App scope/repo settings — blocker recorded for maintainer
 
 ### Pending Todos
 
@@ -255,6 +257,7 @@ None active for v1.0. Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTIN
 - **[Phase 2/8]** `files --filter` semantic collision (ours=language, TS=directory) — resolved by SURF-02 (keep language + add directory flag); the #1 silent-failure risk if mishandled.
 - **[Phase 6/8]** Charm v2 uses the `charm.land/...` vanity import; audit the full transitive closure for CGo (expected) + govulncheck + SBOM before the v1.0.0 release.
 - [Phase 7/8] GOOS=windows go vet ./internal/daemon/ ./internal/graphstore/ fails (undefined: tree_sitter.Node in internal/indexer/goextract/routes) — CGo tree-sitter grammar bindings excluded under windows/amd64 build constraints; pre-existing, confirmed unrelated to Phase 7's changes, needs resolution alongside Phase 8's Charm v2 CGo/govulncheck/SBOM audit
+- Phase 09 Plan 06: release-please's App-token minting step fails with a 401 'JSON web token could not be decoded' error (run 30490414604). Isolated to the APP_PRIVATE_KEY secret content — App permissions/repo settings all re-verified correct. Maintainer must regenerate/re-store the App's private key before 09-07/09-08 can proceed.
 
 ### Quick Tasks Completed
 
@@ -273,9 +276,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-29T18:04:54.772Z
-Stopped at: Completed 09-05-PLAN.md (GitHub App checkpoint)
-Resume file: None
+Last session: 2026-07-29T21:00:46.073Z
+Stopped at: Blocked at 09-06 Task 2: release-please App-token 401 auth failure (run 30490414604) — main fast-forwarded successfully, release PR not yet open
+Resume file: .planning/phases/09-release-please-and-goreleaser/09-06-SUMMARY.md
 
 ## Operator Next Steps
 
