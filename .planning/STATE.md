@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 08
-current_phase_name: Surface Reconciliation & Signed v1.0.0 Release
-status: verifying
-stopped_at: Completed 08-09-PLAN.md Tasks 1-2 (readiness); Task 3 checkpoint returned to maintainer for v1.0.0 tag push
-last_updated: "2026-07-27T03:46:03.692Z"
-last_activity: 2026-07-26
-last_activity_desc: Phase 07 closed via UAT (Windows gap AG-07-01 accepted); Phase 08's REL-02 rewritten as a release-automation property and reassigned to Phase 9
+current_phase: 09
+current_phase_name: release-please + GoReleaser
+status: planning
+stopped_at: Phase 8 closed via /gsd-verify-work 8 (REL-02 out of scope, moved to Phase 9). Phase 9 not yet discussed or planned.
+last_updated: "2026-07-29T00:18:00.683Z"
+last_activity: 2026-07-28
+last_activity_desc: Phase 8 complete, transitioned to Phase 09
 progress:
-  total_phases: 8
+  total_phases: 10
   completed_phases: 8
   total_plans: 57
   completed_plans: 57
-  percent: 100
+  percent: 80
 ---
 
 # Project State
@@ -24,22 +24,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 8 — Surface Reconciliation & Signed v1.0.0 Release
+**Current focus:** Phase 9 — release-please + GoReleaser
 
 ## Current Position
 
-Phase: 08 — Surface Reconciliation & Signed v1.0.0 Release
-Plan: 9 of 9
-Status: Phase built and verified; REL-02 reassigned to Phase 9; awaiting a `/gsd-verify-work 8` close
-Last activity: 2026-07-28 — Completed quick task 260728-rfx: Rewrite REL-02 as a testable property and reassign from Phase 8 to Phase 9
+Phase: 09 — release-please + GoReleaser
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-28 — Phase 8 complete, transitioned to Phase 09
 
-Progress: [██████████] 100%
+Progress: [████████░░] 80% (8 of 10 phases)
 
 ## Performance Metrics
 
 **Velocity (v1.0):**
 
-- Total plans completed: 49 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 58 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -54,7 +54,7 @@ Progress: [██████████] 100%
 | 5 | 5 | - | - |
 | 6 | 3 | - | - |
 | 07 | 8 | - | - |
-| 8 | 0/TBD | - | - |
+| 8 | 9 | - | - |
 
 **Recent Trend:** — (no v1.0 plans executed yet)
 
