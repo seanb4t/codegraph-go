@@ -373,7 +373,7 @@ Plans:
 > have claimed a GoReleaser upload path that does not exist. See
 > `docs/RELEASE-PROCEDURES.md` §10(a) for the full account.
 
-**Plans**: 4/8 plans executed
+**Plans**: 5/8 plans executed
 
 Plans:
 
@@ -392,7 +392,7 @@ Plans:
 
 **Wave 4** *(blocking human prerequisite)*
 
-- [ ] 09-05-PLAN.md — checkpoint: create + install the GitHub App, store APP_ID / APP_PRIVATE_KEY
+- [x] 09-05-PLAN.md — checkpoint: create + install the GitHub App, store APP_ID / APP_PRIVATE_KEY
 
 **Wave 5**
 
@@ -441,7 +441,7 @@ Plans:
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 4/8 | In Progress|  |
+| 9. release-please + GoReleaser | v1.0 | 5/8 | In Progress|  |
 | 10. Local Build Tooling & CONTRIBUTING | v1.0 | 0/0 | Not started |  |
 
 ## Backlog

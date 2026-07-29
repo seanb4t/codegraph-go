@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: Phase 9 waves 1-3 executed (4/8 plans); blocked at 09-05 human-action checkpoint (GitHub App + APP_ID/APP_PRIVATE_KEY secrets)
-last_updated: "2026-07-29T02:33:46.419Z"
+stopped_at: Completed 09-05-PLAN.md (GitHub App checkpoint)
+last_updated: "2026-07-29T18:04:54.782Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 65
-  completed_plans: 61
+  completed_plans: 62
   percent: 80
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 09 (release-please-and-goreleaser) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 Status: Ready to execute
 Last activity: 2026-07-28 — Phase 09 execution started
 
-Progress: [█████████░] 94% (8 of 10 phases)
+Progress: [██████████] 95% (8 of 10 phases)
 
 ## Performance Metrics
 
@@ -124,6 +124,7 @@ Progress: [█████████░] 94% (8 of 10 phases)
 | Phase 09 P02 | 20min | 2 tasks | 2 files |
 | Phase 09-release-please-and-goreleaser P03 | 15min | 3 tasks | 3 files |
 | Phase 09-release-please-and-goreleaser P04 | 30min | 3 tasks | 3 files |
+| Phase 09 P05 | 15min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -237,6 +238,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: actionlint installed via go install at pinned v1.7.12 (re-resolved live, unchanged) rather than a fourth-party pinned Action
 - [Phase ?]: [Phase 09-release-please-and-goreleaser]: 09-04 rewrote docs/RELEASE-PROCEDURES.md §3/§4/§7 for the release-please-automated flow, added §9 (GitHub App prerequisite) and §10 (recorded divergences), and amended ROADMAP.md Phase 9 criterion 3 in place with a dated D-05 rationale (Phase-8-amendment style) — a pure docs plan, zero source/workflow diff
 - [Phase ?]: [Phase 09-release-please-and-goreleaser]: §3 supersedes Phase-8 08-CONTEXT.md D-08's squash-merge wording on repo evidence (main has zero merge commits, is fast-forwardable today) while honoring D-08's substance (integration branch -> main -> tag on main) in full
+- [Phase ?]: 09-05: reused pre-existing shared GitHub App fzy-release-please (permissions verified exactly Contents/PRs/Issues write + mandatory metadata:read); T-09-05-02 blast-radius consequence recorded; PR create-and-approve setting confirmed enabled on live re-check
 
 ### Pending Todos
 
@@ -271,9 +273,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-29T02:33:46.399Z
-Stopped at: Phase 9 waves 1-3 executed (4/8 plans); blocked at 09-05 human-action checkpoint (GitHub App + APP_ID/APP_PRIVATE_KEY secrets)
-Resume file: .planning/phases/09-release-please-and-goreleaser/09-05-PLAN.md
+Last session: 2026-07-29T18:04:54.772Z
+Stopped at: Completed 09-05-PLAN.md (GitHub App checkpoint)
+Resume file: None
 
 ## Operator Next Steps
 
