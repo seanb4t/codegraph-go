@@ -321,7 +321,17 @@ repo (or once per organization if the App is installed org-wide):
      PR `autorelease: pending` / `autorelease: tagged`, and GitHub governs
      PR labels under the Issues API scope in its App permission model, not
      under Pull requests.
-3. **Install the App** on `seanb4t/codegraph-go`.
+3. **Install the App** on `seanb4t/codegraph-go`. A single-purpose,
+   per-repo App is the ideal — but reusing an existing release-automation
+   App already installed on other repositories is acceptable practice as
+   long as its installation permissions are still exactly the three above.
+   Reusing a shared App does change the blast radius of a key leak (every
+   repository the App is installed on, not just this one), so record which
+   shape was used (new vs. reused) when this step is actually performed —
+   the `repository_selection` field on the App's own settings page (or via
+   an authenticated `/apps/<slug>/installation`-style call) is the only way
+   to confirm single-repo vs. all-repos scope; the unauthenticated
+   `/apps/<slug>` endpoint does not expose it.
 4. **Generate a private key** for the App and store the **full PEM** as the
    repository secret `APP_PRIVATE_KEY`. Store the App's numeric **App ID**
    as the repository secret `APP_ID`.
@@ -351,9 +361,24 @@ are not interchangeable strings.
 # App-token-authored workflow runs
 gh api repos/seanb4t/codegraph-go/actions/permissions
 
+# Confirm the repo's PR-creation workflow permission (see note below)
+gh api repos/seanb4t/codegraph-go/actions/permissions/workflow
+
 # Confirm both secrets landed (lists names only, never values)
 gh secret list
 ```
+
+**"Allow GitHub Actions to create and approve pull requests" note:** this
+repository-level Actions setting (`can_approve_pull_request_reviews` in the
+API above) governs whether the default `GITHUB_TOKEN` may open/approve
+pull requests. `release-please-action`'s own README calls it out as a
+common blocker — but D-02's whole design point is that release-please
+authors its PR with the **App's** installation token, a distinct actor
+from `GITHUB_TOKEN`, so this setting is not load-bearing for this
+pipeline. Confirm its value here for the record (and prefer it enabled, as
+the safer default for this repo generally), but a disabled value does not
+by itself block release-please — only an under-scoped App installation
+(step 2 above) does that.
 
 **Branch protection note:** the repo has no rulesets today, so this does
 not currently apply. If branch protection is ever added to `main`, the App
