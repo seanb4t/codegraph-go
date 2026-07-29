@@ -5,8 +5,8 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please + GoReleaser
 status: planning
-stopped_at: Phase 8 closed via /gsd-verify-work 8 (REL-02 out of scope, moved to Phase 9). Phase 9 not yet discussed or planned.
-last_updated: "2026-07-29T00:18:00.683Z"
+stopped_at: Phase 9 context gathered
+last_updated: "2026-07-29T00:56:15.009Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 8 complete, transitioned to Phase 09
 progress:
@@ -259,9 +259,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-19T20:47:51.592Z
-Stopped at: Completed 08-09-PLAN.md Tasks 1-2 (readiness); Task 3 checkpoint returned to maintainer for v1.0.0 tag push
-Resume file: None
+Last session: 2026-07-29T00:56:14.985Z
+Stopped at: Phase 9 context gathered
+Resume file: .planning/phases/09-release-please-and-goreleaser/09-CONTEXT.md
 
 ## Operator Next Steps
 
