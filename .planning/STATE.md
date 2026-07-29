@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-07-29T02:05:04.466Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-07-29T02:14:02.941Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 09 execution started
 progress:
   total_phases: 10
   completed_phases: 8
   total_plans: 65
-  completed_plans: 58
+  completed_plans: 59
   percent: 80
 ---
 
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 09 (release-please-and-goreleaser) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-07-28 — Phase 09 execution started
 
-Progress: [█████████░] 89% (8 of 10 phases)
+Progress: [█████████░] 91% (8 of 10 phases)
 
 ## Performance Metrics
 
@@ -121,6 +121,7 @@ Progress: [█████████░] 89% (8 of 10 phases)
 | Phase 08 P08 | 14m | 2 tasks | 4 files |
 | Phase 08 P09 | 20min | 2 tasks | 2 files |
 | Phase 09 P01 | 40min | 2 tasks | 4 files |
+| Phase 09 P02 | 20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 08-09]: Fixed a stale self-contradicting cross-reference in PROJECT.md's Key Decisions table ('Parity v1 -> team features v2' row) beyond the plan's 4 enumerated caveat sites, for internal consistency with the drop-in caveat retirement
 - [Phase ?]: 09-01: Re-resolved release-please-action/create-github-app-token SHAs live via gh api, confirming RESEARCH.md's cached release-please-action SHA was a phantom commit
 - [Phase ?]: 09-01: Dry-run spine proof executed against the real pushed feature branch (--target-branch) since the GitHub App (09-05) is not yet provisioned; resolved baseline 0.1.0, candidate 0.2.0 as expected
+- [Phase ?]: [Phase 09-02]: Chose Go os/exec stubbed-gh-on-PATH testing shape over a standalone bats/shell harness — no in-repo precedent for either; matches internal/upgrade's existing Go-test-centric convention
 
 ### Pending Todos
 
@@ -262,8 +264,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-29T02:05:04.456Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-07-29T02:14:02.931Z
+Stopped at: Completed 09-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
