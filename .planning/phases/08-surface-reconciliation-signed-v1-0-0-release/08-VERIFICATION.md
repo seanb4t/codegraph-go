@@ -1,9 +1,9 @@
 ---
 phase: 08-surface-reconciliation-signed-v1-0-0-release
 verified: 2026-07-19T21:00:00Z
-status: human_needed
-score: 8/10 must-haves verified
-behavior_unverified: 1
+status: passed
+score: 9/9 in-scope must-haves verified (1 of the original 10 moved to Phase 9 with REL-02, 2026-07-28)
+behavior_unverified: 0
 overrides_applied: 0
 requirements_coverage:
   SURF-01: satisfied
@@ -15,22 +15,28 @@ requirements_coverage:
   REL-02: out_of_scope (moved to Phase 9)
   REL-03: satisfied
   REL-04: satisfied
-behavior_unverified_items:
-  - truth: "Affected() BFS output ordering is deterministic across runs for identical input (frontier + reverse-adjacency map iteration)"
-    test: "Run Engine.Affected(files, depth) N times against the same fixture/index and diff the ordered AffectedTests slice across runs (or run traverse_test.go's Affected suite with -count=20/-race)"
-    expected: "Byte-identical ordering of the returned affected-test list across every run, with no map-iteration-order leakage into the result slice"
-    why_human: "This is a runtime, cross-run determinism property of Go map iteration inside the BFS frontier — grep/static review of traverse.go cannot prove it; the plan's own frontmatter marks it verification: backstop and its SUMMARY explicitly defers it to human confirmation, and no test asserting cross-run stability was added in this phase"
-human_verification:
-  - test: "Confirm Affected() output ordering is stable across repeated runs (see behavior_unverified_items above)"
-    expected: "Identical path ordering every run for the same input/index"
-    why_human: "Backstop truth from 08-04-PLAN.md must_haves; no automated test exercises it"
+# Both arrays emptied 2026-07-28: the Affected() ordering item was RESOLVED (see
+# "Human Verification Required" #1 in the body for the full evidence + caveat), and the
+# REL-02 item moved OUT OF SCOPE to Phase 9. Kept empty rather than deleted so the keys
+# stay present for tooling; the body carries the audit trail.
+behavior_unverified_items: []
+human_verification: []
+resolved_2026_07_28:
+  - item: "Affected() BFS output-ordering determinism"
+    disposition: resolved
+    evidence: "TestImpactCallersAffectedDeterministicAcrossRepeatedCalls (internal/query/traverse_test.go:596), green at 387cb4b; sortLocations landed d3f077c/4feb6ff"
+  - item: "Signed v1.0.0 release cut (REL-02)"
+    disposition: out_of_scope
+    evidence: "Rewritten as a release-automation property, reassigned to Phase 9. Never executed; no v1.0.0 tag exists."
 ---
 
 # Phase 8: Surface Reconciliation & Signed v1.0.0 Release Verification Report
 
-**Phase Goal:** Every TS flag name and default is present or a documented divergence, then the new Charm dependency closure is audited and the first real signed `v1.0.0` is cut — retiring v0.1's "not yet drop-in" caveat and closing its pending DIST-02/PERF-01.
+**Phase Goal:** Every TS flag name and default is present or a documented divergence, then the new Charm dependency closure is audited and the "drop-in parity" claim is validated — retiring v0.1's "not yet drop-in" caveat and closing its pending PERF-01.
+
+> **Goal amended 2026-07-28**, after this report was written on 2026-07-19. The goal verified against on 2026-07-19 also promised "the first real signed `v1.0.0` is cut" and the closure of v0.1's pending DIST-02; both moved to Phase 9 with REL-02 (rewritten from a project event into a release-automation property). The release clause was **never satisfied and is not claimed to be** — no `v1.0.0` tag exists. It was removed from scope, not achieved. The REL-02 items below are marked OUT OF SCOPE for exactly this reason.
 **Verified:** 2026-07-19
-**Status:** human_needed
+**Status:** passed — canonicalized 2026-07-28 from `human_needed` (see Status Amendment at the end of this report)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
@@ -43,14 +49,14 @@ human_verification:
 | 2 | `files` gains a directory-path prefix filter `--dir`, retaining the existing language `--filter` (SURF-02) | ✓ VERIFIED | `internal/cli/files.go:90` `StringVar(&dir, "dir", ...)`; `internal/query/files.go` `FilesOptions.Dir` + `dirPrefixMatches` (strings.HasPrefix, no glob dep); `files -j` registered; `go test ./internal/query/... -run TestFiles` passes |
 | 3 | Missing short-flag aliases added across commands, matching TS letters where free, existing Go bindings preserved (SURF-03) | ✓ VERIFIED | `status -j`, `query -l/-k/-j`, `callers/callees -l/-j`, `install/uninstall -t/-l`, `upgrade -f/--force` all confirmed present via source read; `go build ./...` green (no cobra shorthand collisions) |
 | 4 | `affected` gains `--stdin`/`--depth`/`--filter <glob>`/`--quiet` for git-hook/CI scripting, and the engine BFS is depth-bounded with TS test-leaf pruning (SURF-04) | ✓ VERIFIED | `internal/cli/affected.go`: `Args: cobra.ArbitraryArgs`, `--stdin`, `-d/--depth`, `-f/--filter`, `-q/--quiet` all registered; `internal/query/traverse.go` `Affected(files, depth)` BFS with `isTestSymbol` leaf-pruning; `defaultAffectedDepth=5` distinct from `defaultDepth=2`; `go test ./internal/query/... -run TestAffected` and `go test ./internal/cli/... -run Affected` both pass |
-| 4b | Affected() BFS output ordering is deterministic across runs (backstop truth, 08-04 must_haves) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Code is present and wired (BFS + leaf-pruning verified above), but no test in `traverse_test.go` asserts cross-run ordering stability; plan frontmatter marks this `verification: backstop` and 08-04-SUMMARY explicitly defers it to human confirmation — routed to Human Verification, not silently passed |
+| 4b | Affected() BFS output ordering is deterministic across runs (backstop truth, 08-04 must_haves) | ✓ VERIFIED (2026-07-28) | Was PRESENT_BEHAVIOR_UNVERIFIED on 2026-07-19. Closed 2026-07-28: `TestImpactCallersAffectedDeterministicAcrossRepeatedCalls` (`traverse_test.go:596`) asserts byte-identical `MarshalAffectedJSON` across 6 calls; green at 387cb4b. Backstop-assertion caveat recorded in the Human Verification section |
 | 5 | A systematic per-command flag audit (`docs/FLAG-PARITY.md`) confirms every TS flag + default is present or documented divergence; `search`/`migrate` recorded as Go-only/accepted divergence; self-verifying via a drift test (SURF-05) | ✓ VERIFIED | `docs/FLAG-PARITY.md` (297 lines, one `##` section per `newRootCmd()` command incl. flag-less ones); `search`/`migrate` sections explicitly labeled "Go-only, no TS command"; `go test ./internal/cli/... -run FlagParity` (`TestFlagParityDocCoversRegisteredFlags`) passes |
 | 6 | The Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerates, reproducible double-build still passes (REL-01) | ✓ VERIFIED | `internal/cli/present/archtest/charm_cgo_test.go` `TestCharmCgoClosure`: "10 packages, 0 with CgoFiles" (non-vacuous); 08-07-SUMMARY records govulncheck clean, `goreleaser check` + syft SBOM emission, and a hash-matched local double-build reproduction; `go test ./internal/cli/present/archtest/... -run CharmCgo` passes here |
 | 7 | Head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing PERF-01 (REL-03) | ✓ VERIFIED | `docs/BENCHMARKS.md` (300 lines) contains a refreshed CI (ubuntu-latest, commit `ca511e7`, 3 real `gh run` IDs) median-of-3 table superseding the old darwin/arm64 provisional numbers; methodology (median-of-3, same corpora, pinned TS 1.3.1) unchanged per prohibition |
 | 8 | A real signed `v1.0.0` release is cut (per-binary cosign keyless + SLSA provenance + SBOM), closing DIST-02 (REL-02) | OUT OF SCOPE (moved to Phase 9) | REL-02 was rewritten as a release-automation property and reassigned to Phase 9 (2026-07-28); its testable content (per-binary cosign + SLSA + SBOM) was already proven under v0.1's DIST-02 on release v0.0.0-rc.3 |
 | 9 | The drop-in parity claim is validated (behavioral harness + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired (REL-04) | ✓ VERIFIED | `go test ./testdata/golden/... -count=1` green; `go test ./internal/cli/... -run FlagParity` green; `rg -n "not yet drop-in|drop-in parity" .planning/PROJECT.md` shows both remaining hits are now **positive** ("✓ Complete... drop-in gate green... cut the first signed v1.0.0"), zero "not yet" occurrences |
 
-**Score:** 8/9 primary truths verified (9 total incl. the 4b backstop sub-item = 8/10); 1 present-but-behavior-unverified (4b); 1 out of scope, moved to Phase 9 (8, REL-02).
+**Score:** 9/9 in-scope truths verified (8 primary + the 4b backstop sub-item, all green as of 2026-07-28); 0 behavior-unverified; 1 out of scope, moved to Phase 9 (truth 8, REL-02) and therefore excluded from the denominator rather than counted as a miss.
 
 ### Required Artifacts
 
@@ -124,6 +130,10 @@ None. Scanned all files touched by this phase's 9 plans (`internal/query/{valida
 **Expected:** Byte-identical path ordering on every run — no Go map-iteration-order leakage into the returned slice.
 **Why human:** 08-04-PLAN.md's own frontmatter marks this must-have `verification: backstop` and its SUMMARY explicitly defers it "for human confirmation during a later `validate-phase` pass." No test added in this phase asserts cross-run stability; the code is present and BFS-correct (verified above) but this specific invariant is unexercised.
 
+**RESOLVED 2026-07-28 — `/gsd-verify-work 8`, UAT Test 2 (`08-UAT.md`).** The "no test asserts cross-run stability" clause above was accurate when written on 2026-07-19 but was overtaken by the code-review fix loop, which landed after this report. `internal/query/traverse.go` now applies `sortLocations` to all four traversals — Impact/Callers/Affected (WR-05, d3f077c) and Callees (WR-02, 4feb6ff), the latter sorting *before* the limit/MaxLimit truncation so the cap selects a stable prefix rather than an arbitrary one. `TestImpactCallersAffectedDeterministicAcrossRepeatedCalls` (`internal/query/traverse_test.go:596`) calls `engine.Affected([]string{"pkga/target.go"}, 2)` six times and requires byte-identical `MarshalAffectedJSON` output across every call; verified green 2026-07-26 at commit 387cb4b.
+
+**Recorded caveat (not a blocker):** this is a backstop assertion, not proof the sort is load-bearing — it would also pass if the underlying Pebble scan order were already stable. What the must-have asked for (cross-run ordering *asserted* rather than *assumed*) is satisfied. The companion `TestCalleesSortedDeterministically` **is** proven non-vacuous: removing `sortLocations` fails it with got "Zeta", want "Alpha".
+
 #### 2. ~~Signed v1.0.0 release cut (REL-02)~~ — OUT OF SCOPE (moved to Phase 9)
 
 REL-02 was rewritten as a release-automation property (release-please owns version bump/`CHANGELOG.md`/tag creation, with the resulting signed artifacts still satisfying `internal/upgrade/verify.go`'s cosign identity) and reassigned from Phase 8 to Phase 9 on 2026-07-28. This is no longer a Phase 8 human-verification obligation — it is neither passed nor failed here; it is out of scope for this phase. Its previously-testable content (per-binary cosign + SLSA provenance + SBOM) was already proven under v0.1's DIST-02 on release `v0.0.0-rc.3`. See `.planning/REQUIREMENTS.md`'s rewritten REL-02 and `.planning/ROADMAP.md` Phase 9.
@@ -133,11 +143,26 @@ REL-02 was rewritten as a release-automation property (release-please owns versi
 No blocking gaps. All 8 requirement IDs Phase 8 now owns (SURF-01..05, REL-01, REL-03, REL-04) are satisfied in the codebase with passing automated evidence (build green, `go test ./...` green apart from a pre-existing/unrelated `internal/daemon` flake that passes on isolated re-run, golden/behavioral harness green, flag-parity drift test green, CGo-closure guard green). The one remaining open item is **expected, not a defect**:
 
 1. **REL-02 is out of scope for Phase 8** (moved to Phase 9, 2026-07-28) — it was rewritten as a release-automation property that Phase 9's release-please + GoReleaser work now owns; its previously-testable content (per-binary cosign + SLSA + SBOM) was already proven under v0.1's DIST-02 on `v0.0.0-rc.3`. This is not a code gap.
-2. **Affected() BFS ordering determinism** is a backstop must-have the plan itself scoped out of automated coverage, deferred to human/validate-phase confirmation — the BFS logic itself (depth-bounding, test-leaf pruning, dangling-edge skip, negative-depth rejection) is fully tested and green.
+2. ~~**Affected() BFS ordering determinism**~~ — **RESOLVED 2026-07-28.** Closed by `TestImpactCallersAffectedDeterministicAcrossRepeatedCalls` (added by the code-review fix loop after this report was written) and confirmed via UAT Test 2. See the Human Verification section above for the evidence and its recorded caveat.
 
-Both items route to human verification per the escalation-gate pattern rather than being silently marked passed or falsely marked failed.
+Both items were routed to human verification per the escalation-gate pattern rather than being silently marked passed or falsely marked failed. Item 1 was removed from scope; item 2 was resolved with evidence.
 
 ---
 
 _Verified: 2026-07-19_
 _Verifier: Claude (gsd-verifier)_
+
+## Status Amendment — 2026-07-28
+
+`status` canonicalized `human_needed` → `passed` during `/gsd-verify-work 8`.
+
+**Basis.** Phase 8 owns 8 requirements (SURF-01..05, REL-01, REL-03, REL-04); all are `satisfied`. Both items that held this report at `human_needed` are now closed, by different and independently-recorded means:
+
+| Item | Disposition | How |
+|------|-------------|-----|
+| Signed `v1.0.0` release (REL-02) | **OUT OF SCOPE** | Rewritten as a release-automation property and reassigned to Phase 9 on 2026-07-28. Never executed; no `v1.0.0` tag exists. Removed from scope — **not** achieved, and not claimed to be. |
+| Affected() BFS ordering determinism | **RESOLVED** | Automated test landed post-report (d3f077c / 4feb6ff), verified green at 387cb4b, confirmed by UAT Test 2. |
+
+**What this status does NOT assert.** It does not assert that a v1.0.0 release was cut, that a tag exists, or that REL-02 was met. REL-02 remains `Pending` under Phase 9 in `.planning/REQUIREMENTS.md`. The phase goal was amended the same day (see the amendment note near the top of this report) precisely so this status is measured against what Phase 8 actually owns.
+
+_Amended by: `/gsd-verify-work 8`, 2026-07-28_

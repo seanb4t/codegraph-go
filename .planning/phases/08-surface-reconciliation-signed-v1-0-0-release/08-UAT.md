@@ -1,23 +1,20 @@
 ---
-status: partial
+status: complete
 phase: 08-surface-reconciliation-signed-v1-0-0-release
 source: [08-VERIFICATION.md]
 started: 2026-07-19T21:30:00Z
-updated: 2026-07-27T00:00:00Z
+updated: 2026-07-28T00:00:00Z
 ---
 
 ## Current Test
 
-[testing paused — 1 item outstanding: REL-02 blocked pending backlog Phase 999.3]
+[testing complete]
 
-Test 1 (REL-02, the signed v1.0.0 release) was re-presented on 2026-07-27 after 4 of its
-5 recorded readiness gaps closed, and was blocked a second time. The block is no longer a
-timing judgment: the maintainer is replacing the release mechanism itself with
-release-please + GoReleaser, captured as backlog Phase 999.3 (commit 4de3aea). The tag
-procedure this test prescribes is one the project has decided not to use.
-
-Do NOT re-run this test as written — see scope_note under Test 1. It should be rewritten
-to the single first-party end-to-end claim before REL-02 is attempted again.
+Closed 2026-07-28. One in-scope human-verification item (Test 2) — passed.
+Test 1 is recorded `out_of_scope`: REL-02 moved to Phase 9, so it is no longer a
+Phase 8 obligation. It was NEVER EXECUTED and is not claimed as passed — no
+`v1.0.0` tag exists. Its full two-block history and scope_note are preserved
+verbatim above as the record of why it blocked twice.
 
 ## Tests
 
@@ -32,9 +29,9 @@ expected: |
   signed release and that cosign verify-blob (identity regexp in verify.go) +
   slsa-verifier verify-artifact both succeed. Do NOT alter verify.go's LOCKED
   cosign identity or release.yml's v[0-9]* trigger.
-result: blocked
-blocked_by: other
-reason: "blocked"
+result: out_of_scope
+former_result: blocked
+reason: "Requirement moved to Phase 9 on 2026-07-28 — not a Phase 8 obligation. Never executed; no release was cut."
 note: |
   BLOCKED TWICE. Second attempt 2026-07-27 (this session): re-presented after 4 of the
   5 readiness gaps below closed (see Readiness Recheck). Maintainer answered "blocked"
@@ -92,9 +89,13 @@ ownership_note: |
   and tag creation, with the resulting signed artifacts still satisfying
   `internal/upgrade/verify.go`'s cosign identity — and reassigned from Phase 8 to Phase 9.
   This test exercises a requirement Phase 8 no longer owns: it is not a Phase 8 obligation
-  and must not be re-run as written. `result: blocked` and the history above are preserved
-  verbatim; see `.planning/REQUIREMENTS.md`'s rewritten REL-02 and `.planning/ROADMAP.md`
-  Phase 9 for the current ownership and scope.
+  and must not be re-run as written. On UAT close (2026-07-28) `result` moved
+  `blocked` → `out_of_scope` with `former_result: blocked` retained — "blocked" would have
+  implied Phase 8 was still waiting on it, which is no longer true. This is a SCOPE change,
+  not a pass: the test was never executed and no `v1.0.0` tag exists. The note and
+  scope_note above are preserved verbatim as the record of the two blocks. See
+  `.planning/REQUIREMENTS.md`'s rewritten REL-02 and `.planning/ROADMAP.md` Phase 9 for
+  current ownership.
 
 ### 2. Affected() BFS output-ordering determinism (SURF-04 backstop)
 expected: |
@@ -150,10 +151,12 @@ deliberately deferred.
 ## Summary
 
 total: 2
+in_scope_total: 1
 passed: 1
 issues: 0
 pending: 0
 skipped: 0
-blocked: 1
+blocked: 0
+out_of_scope: 1
 
 ## Gaps

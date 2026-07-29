@@ -297,7 +297,10 @@ Plans:
 
 ### Phase 8: Surface Reconciliation & Signed v1.0.0 Release
 
-**Goal**: Every TS flag name and default is present or a documented divergence, then the new Charm dependency closure is audited and the first real signed `v1.0.0` is cut — retiring v0.1's "not yet drop-in" caveat and closing its pending DIST-02/PERF-01.
+**Goal**: Every TS flag name and default is present or a documented divergence, then the new Charm dependency closure is audited and the "drop-in parity" claim is validated — retiring v0.1's "not yet drop-in" caveat and closing its pending PERF-01.
+
+> **Goal amended 2026-07-28.** The original goal also promised "the first real signed `v1.0.0` is cut" and the closure of v0.1's pending DIST-02. Both moved to Phase 9 together with REL-02, which was rewritten from a project event into a release-automation property (see `.planning/REQUIREMENTS.md`). The amendment is recorded rather than applied silently because this phase is verified goal-backward — closing it against the original wording would have claimed a release that was never cut. PERF-01 remains here, closed by REL-03.
+
 **Depends on**: Phase 7
 **Requirements**: SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, REL-01, REL-03, REL-04
 **Success Criteria** (what must be TRUE):
