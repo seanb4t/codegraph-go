@@ -125,17 +125,30 @@ The release-PR merge is the trigger, not a hand-run `git tag`:
    --clobber`, leaving release-please's changelog body and prerelease flag
    untouched (see the `assemble` job's `Publish GitHub release` step).
 
-**Forcing a specific version:** the bump comes from accumulated
-Conventional Commits, but can be forced for a one-off cut with a one-shot
-`Release-As:` footer on an empty commit, e.g.:
+**The version is computed, not chosen.** The bump comes from accumulated
+Conventional Commits and that is the intended, default behaviour: while the
+project is on a `0.x` baseline, a `feat:` bumps the minor, and reaching `1.0.0`
+happens when the commits say so — not because a milestone is named "v1.0".
+
+> **Project directive (2026-07-29):** do **not** manufacture a version.
+> No `Release-As:` footer, no `release-as` config key, and no breaking-change
+> marker authored for the purpose of producing a bump. If you believe a release
+> needs a version the tool would not compute, that is a conversation to have
+> before the cut, not a footer to add during it. See `09-CONTEXT.md` D-06R.
+
+**The override exists, for completeness.** A one-shot `Release-As:` footer on an
+empty commit forces a specific version for a single cut:
 
 ```sh
-git commit --allow-empty -m "chore: release 1.0.0" -m "Release-As: 1.0.0"
+git commit --allow-empty -m "chore: release X.Y.Z" -m "Release-As: X.Y.Z"
 ```
 
-Never move this into `release-please-config.json`'s `release-as` field
-instead — a config-level setting is sticky and pins every subsequent
-release to that version until removed.
+Two constraints if it is ever used. It must begin a line to parse as a footer —
+mentioning `Release-As:` mid-sentence in a commit body does nothing (two commits
+in this repo do exactly that while documenting this section, harmlessly). And it
+must never move into `release-please-config.json`'s `release-as` field: a
+config-level setting is sticky and pins every subsequent release to that version
+until removed.
 
 **Expected silent no-op:** if there are no release-worthy commits since the
 last release, release-please opens **no PR at all**. This is expected, not

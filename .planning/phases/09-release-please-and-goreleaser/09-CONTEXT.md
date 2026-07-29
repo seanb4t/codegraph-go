@@ -149,7 +149,42 @@ upgrade` rejects every future release, **silently**, for every existing user.
   8 audited and that `verify.go` depends on.
   `[auto] GoReleaser role → Selected: build-only preserved; criterion 3 recorded as accepted divergence (recommended)`
 
-### Gray area 4 — How `v1.0.0` specifically gets cut
+### Gray area 4 — What version the first automated cut produces
+
+> **⚠ D-06 REVERSED 2026-07-29 by maintainer directive.** The original decision
+> (preserved verbatim below) forced `v1.0.0` via a one-shot `Release-As:` footer.
+> The maintainer rejected it: *"We are **not** going to jump to 1.0, stop pushing
+> it. We'll follow things as release-please and conventional commits requires."*
+> This is consistent with — and was foreshadowed by — the 2026-07-28
+> recategorization that rewrote REL-02 from an *event* ("a signed `v1.0.0` tag
+> exists") into a *property* ("releases are cut by release-please from
+> Conventional Commits… and still satisfy the cosign identity"). **REL-02 does
+> not name a version, and never did.** The forced version was reintroduced during
+> this phase's discuss step and is now removed. D-06 is superseded by D-06R.
+
+- **D-06R (supersedes D-06):** **Seed `.release-please-manifest.json` with the
+  real current version `0.1.0` and let release-please compute every subsequent
+  version from Conventional Commits. Force nothing.** No `Release-As:` footer, no
+  `release-as` key in `release-please-config.json`, no breaking-change marker
+  authored to manufacture a major bump. The manifest seed stays at `0.1.0`
+  because `v0.1.0` is the real last release — that is a truthful baseline, not a
+  version target.
+  **Expected first cut: `0.2.0`** — for a `0.x` baseline release-please bumps the
+  minor on `feat:`, and reaching `1.0.0` would require exactly the kind of
+  override this decision forbids. Maintainer confirmed `0.2.0` is correct
+  (2026-07-29). Verified empirically by `release-please release-pr --dry-run`
+  against the real branch history, not asserted.
+  **Guard against silent reintroduction:** no commit reaching `main` may carry a
+  line beginning `Release-As:`. Two commit *bodies* on this branch mention the
+  footer in prose while documenting the runbook (`7f60822`, `62916bc`); neither
+  starts a line with the keyword, so neither parses as a footer — confirmed by
+  `git log main..HEAD --format='%B' | rg "^Release-As:"` returning nothing.
+  — **Reversibility:** reversible — a future release *may* legitimately reach
+  `1.0.0` when Conventional Commits say so. What is forbidden is manufacturing it.
+  `[maintainer 2026-07-29] version derivation → Selected: no forcing; release-please computes it (0.2.0 next)`
+
+<details>
+<summary>Superseded original D-06 (kept for audit; do not act on)</summary>
 
 - **D-06:** **Seed `.release-please-manifest.json` with the real current version
   `0.1.0`, then force the first automated cut with an explicit
@@ -169,6 +204,8 @@ upgrade` rejects every future release, **silently**, for every existing user.
   upgrade` resolves as "latest"; a wrong version number can only be superseded,
   never withdrawn.
   `[auto] v1.0.0 derivation → Selected: manifest seeded 0.1.0 + one-shot Release-As: 1.0.0 footer (recommended)`
+
+</details>
 
 ### Gray area 5 — Version source of truth
 
@@ -402,10 +439,15 @@ upgrade` rejects every future release, **silently**, for every existing user.
   `milestone-v0.1`, `v0.0.0-rc.3`, `v0.1.0`. `.release-please-manifest.json` seeds
   from **`0.1.0`** (D-06). `milestone-v*` is deliberately non-matching so it never
   fires `release.yml` — keep it that way.
-- The `Release-As: 1.0.0` footer goes on an **empty** commit
-  (`git commit --allow-empty -m "chore: release 1.0.0" -m "Release-As: 1.0.0"`)
-  and is a **one-shot**. Do not put `release-as` in the config file — it would
-  pin every subsequent release to 1.0.0.
+- ~~The `Release-As: 1.0.0` footer goes on an **empty** commit and is a
+  **one-shot**.~~ **Struck 2026-07-29 (D-06R).** No `Release-As:` footer is
+  authored by this phase. release-please computes the version from Conventional
+  Commits; the next cut is **`0.2.0`**, confirmed by a live `release-pr
+  --dry-run` against the real branch (`title: chore(...): release 0.2.0`, baseline
+  resolved from the real `v0.1.0`). The mechanism remains documented in
+  `docs/RELEASE-PROCEDURES.md` §4 as a tool that *exists*, explicitly not as a
+  step this phase performs. `release-as` must still never go in the config file —
+  it is sticky and would pin every subsequent release.
 - **Do not** add `--generate-notes` to the upload path. release-please's changelog
   IS the release body; auto-generated notes would overwrite it (D-04).
 - Adding `workflow_dispatch` to `release.yml` (D-03, fallback only) is SAN-safe
@@ -417,7 +459,8 @@ upgrade` rejects every future release, **silently**, for every existing user.
   `rc.1` failed on a **linux-only** `go.sum` hash invisible from darwin. Now that
   no human runs it manually, it should become an automated gate before the tag is
   created — otherwise D-09's lesson is silently dropped.
-- **`v1.0.0` is what `codegraph upgrade` will resolve as "latest"** for every
+- **Whatever version this phase publishes (`0.2.0`) becomes what `codegraph
+  upgrade` resolves as "latest"** for every
   existing user the moment it publishes. Post-release verification (§6:
   `cosign verify-blob` + `slsa-verifier verify-artifact`) is not optional for the
   first automated cut — it is the only proof the SAN survived the rewiring, and it

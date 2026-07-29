@@ -42,7 +42,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 - [x] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped) (completed 2026-07-17)
 - [x] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped (completed 2026-07-26)
 - [x] **Phase 8: Surface Reconciliation & Signed v1.0.0 Release** - Flag parity + Charm-dep audit + benchmarks, retiring the "not yet drop-in" caveat. The signed `v1.0.0` itself moved to Phase 9 with REL-02 on 2026-07-28; the phase title is kept because its directory slug and every committed artifact path depend on it (completed 2026-07-28)
-- [ ] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the actual signed `v1.0.0` (promoted from backlog 999.3 on 2026-07-27)
+- [ ] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the first signed release cut entirely by release-please from Conventional Commits (promoted from backlog 999.3 on 2026-07-27; version target removed 2026-07-29 — see below)
 - [ ] **Phase 10: Local Build Tooling & CONTRIBUTING** - `Taskfile.yml` wrapping the build/test/lint/release-check workflows + contributor-facing CGo toolchain docs (promoted from backlog 999.1 on 2026-07-27)
 
 ## Phase Details
@@ -372,6 +372,23 @@ Plans:
 > verified goal-backward and closing it against the original wording would
 > have claimed a GoReleaser upload path that does not exist. See
 > `docs/RELEASE-PROCEDURES.md` §10(a) for the full account.
+
+> **Version target removed 2026-07-29 (maintainer directive).** The phase-list
+> entry for this phase previously read "produces the actual signed `v1.0.0`", and
+> `09-CONTEXT.md` D-06 locked a one-shot `Release-As: 1.0.0` footer to force it.
+> The maintainer rejected forcing a version: *"We are **not** going to jump to
+> 1.0 … We'll follow things as release-please and conventional commits
+> requires."* This restores consistency with the 2026-07-28 recategorization that
+> rewrote **REL-02 from an event into a property** — REL-02 names no version, and
+> the version target had crept back in during this phase's discuss step, not from
+> the requirement. D-06 is superseded by **D-06R**: the manifest stays seeded at
+> the truthful `0.1.0` baseline and release-please computes every version from
+> Conventional Commits, with nothing forced. The first automated cut is
+> **`0.2.0`**, confirmed empirically by `release-please release-pr --dry-run`
+> against the real branch history (`title: chore(...): release 0.2.0`) rather
+> than asserted. No success criterion changes — none of the four named a version.
+> The milestone label "v1.0 — Drop-in Parity & Human UX" is a planning milestone
+> name and is unaffected; it was never a git tag.
 
 **Plans**: 5/8 plans executed
 
