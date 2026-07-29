@@ -264,6 +264,13 @@ jobs:
           echo "hashes=$(base64 -w0 < "codegraph_${TAG}_checksums.txt")" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub release
+        # release-please (D-02) creates the tag AND the GitHub Release
+        # object in one API call before this job ever runs, so the Release
+        # is always present when the tag ref is (release-please path). The
+        # create branch below exists only for a hand-pushed rc tag (D-10),
+        # where no Release exists yet. Deciding on gh release view's exit
+        # status (never an ||-chained fallback) keeps a transient API
+        # failure from being silently treated as "release absent" (D-04).
         working-directory: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -275,13 +282,34 @@ jobs:
           case "$TAG" in
           *-*) PRERELEASE_FLAG="--prerelease" ;;
           esac
-          # shellcheck disable=SC2086
-          gh release create "$TAG" \
-            --repo "$REPO" \
-            --title "$TAG" \
-            --generate-notes \
-            $PRERELEASE_FLAG \
-            codegraph_*
+
+          # Asset-presence guard: an unmatched glob would otherwise be
+          # passed to gh as the literal word "codegraph_*", silently
+          # publishing nothing instead of failing loudly.
+          set -- codegraph_*
+          if [ ! -e "$1" ]; then
+            echo "::error::no release assets found matching codegraph_* in $(pwd)"
+            exit 1
+          fi
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            # release-please already created this release (D-04): the body
+            # and the prerelease flag belong to release-please and must
+            # NOT be regenerated or re-set here. --clobber replaces any
+            # same-named assets from a prior run, which is what makes this
+            # step idempotent across assemble re-runs (roadmap criterion
+            # 3's replace_existing_artifacts intent for this pipeline).
+            gh release upload "$TAG" --repo "$REPO" --clobber codegraph_*
+          else
+            # manual rc tag path (D-10) — unchanged from before this plan.
+            # shellcheck disable=SC2086
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "$TAG" \
+              --generate-notes \
+              $PRERELEASE_FLAG \
+              codegraph_*
+          fi
 
   # SLSA3 provenance via the GENERIC generator (not the Go builder,
   # which would rebuild the binary under its own fixed config and
