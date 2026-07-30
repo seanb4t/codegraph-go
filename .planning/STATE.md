@@ -7,8 +7,8 @@ current_phase_name: release-please-and-goreleaser
 status: executing
 stopped_at: "Completed 09-06-PLAN.md (reconciled after maintainer resolved App-token blocker) — release PR #2 open, awaiting 09-07"
 last_updated: "2026-07-30T00:56:08.850Z"
-last_activity: 2026-07-29
-last_activity_desc: Plan 09-06 partially executed, blocked on Task 2
+last_activity: 2026-07-30
+last_activity_desc: Plan 09-06 complete — main fast-forwarded, release PR #2 open (0.2.0), App-token blocker resolved
 progress:
   total_phases: 10
   completed_phases: 8
@@ -29,11 +29,11 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 09 (release-please-and-goreleaser) — EXECUTING
-Plan: 7 of 8
+Plan: 6 of 8 complete — next up 09-07
 Status: IN PROGRESS — 09-06 complete (main fast-forwarded, release-please App-token path proven via open release PR #2 "chore(main): release 0.2.0"); 09-07/09-08 not yet started (see 09-06-SUMMARY.md)
 Last activity: 2026-07-30 — Plan 09-06 reconciled to complete after maintainer resolved the App-token blocker (wrong GitHub App's key, corrected)
 
-Progress: [██████████] 97% (8 of 10 phases)
+Progress: [████████░░] 80% (8 of 10 phases)
 
 ## Performance Metrics
 
