@@ -390,7 +390,7 @@ Plans:
 > The milestone label "v1.0 — Drop-in Parity & Human UX" is a planning milestone
 > name and is unaffected; it was never a git tag.
 
-**Plans**: 5/8 plans executed
+**Plans**: 6/8 plans executed
 
 Plans:
 
@@ -413,7 +413,7 @@ Plans:
 
 **Wave 5**
 
-- [ ] 09-06-PLAN.md — D-09 merge-shape gate + fast-forward `main` + observe release-please's first live release PR — **BLOCKED**: fast-forward succeeded (main is now the full v1.0 history), but release-please's App-token step fails with a 401 JWT-decode error (APP_PRIVATE_KEY secret content issue, not scope); see `09-06-SUMMARY.md`
+- [x] 09-06-PLAN.md — D-09 merge-shape gate + fast-forward `main` + observe release-please's first live release PR — **COMPLETE**: fast-forward succeeded (main is now the full v1.0 history); release-please's App-token step initially failed with a 401 JWT-decode error (root cause: APP_PRIVATE_KEY held the wrong GitHub App's key), resolved by the maintainer — attempt 3 succeeded and opened release PR #2 (`chore(main): release 0.2.0`, open/unmerged); see `09-06-SUMMARY.md`
 
 **Wave 6**
 
@@ -458,7 +458,7 @@ Plans:
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 5/8 | In Progress|  |
+| 9. release-please + GoReleaser | v1.0 | 6/8 | In Progress|  |
 | 10. Local Build Tooling & CONTRIBUTING | v1.0 | 0/0 | Not started |  |
 
 ## Backlog

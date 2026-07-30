@@ -5,10 +5,10 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: "Blocked at 09-06 Task 2: release-please App-token 401 auth failure (run 30490414604) — main fast-forwarded successfully, release PR not yet open"
-last_updated: "2026-07-29T21:00:46.165Z"
-last_activity: 2026-07-28
-last_activity_desc: Phase 09 execution started
+stopped_at: "Completed 09-06-PLAN.md (reconciled after maintainer resolved App-token blocker) — release PR #2 open, awaiting 09-07"
+last_updated: "2026-07-30T00:56:08.850Z"
+last_activity: 2026-07-29
+last_activity_desc: Plan 09-06 partially executed, blocked on Task 2
 progress:
   total_phases: 10
   completed_phases: 8
@@ -29,9 +29,9 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 09 (release-please-and-goreleaser) — EXECUTING
-Plan: 6 of 8
-Status: BLOCKED — release-please App-token 401 auth failure; main fast-forwarded successfully, awaiting maintainer fix to APP_PRIVATE_KEY secret (see 09-06-SUMMARY.md)
-Last activity: 2026-07-29 — Plan 09-06 partially executed, blocked on Task 2
+Plan: 7 of 8
+Status: IN PROGRESS — 09-06 complete (main fast-forwarded, release-please App-token path proven via open release PR #2 "chore(main): release 0.2.0"); 09-07/09-08 not yet started (see 09-06-SUMMARY.md)
+Last activity: 2026-07-30 — Plan 09-06 reconciled to complete after maintainer resolved the App-token blocker (wrong GitHub App's key, corrected)
 
 Progress: [██████████] 97% (8 of 10 phases)
 
@@ -241,6 +241,7 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: [Phase 09-release-please-and-goreleaser]: §3 supersedes Phase-8 08-CONTEXT.md D-08's squash-merge wording on repo evidence (main has zero merge commits, is fast-forwardable today) while honoring D-08's substance (integration branch -> main -> tag on main) in full
 - [Phase ?]: 09-05: reused pre-existing shared GitHub App fzy-release-please (permissions verified exactly Contents/PRs/Issues write + mandatory metadata:read); T-09-05-02 blast-radius consequence recorded; PR create-and-approve setting confirmed enabled on live re-check
 - [Phase ?]: [Phase 09-06]: main fast-forwarded to v1.0 history (502 commits, zero merge commits) per D-09/maintainer-confirmed decision; release-please's App-token minting step failed with a 401 JWT-decode error, isolated to APP_PRIVATE_KEY secret content, not App scope/repo settings — blocker recorded for maintainer
+- [Phase ?]: [Phase 09-06 resolution] Root cause of the App-token 401 was APP_PRIVATE_KEY holding a different GitHub App's key (fzymgc-renovate, not fzy-release-please), not malformed PEM content; diagnosed via a local JWT identity check against GET /app. Maintainer corrected the secret; release-please.yml attempt 3 succeeded, opening release PR #2 (chore(main): release 0.2.0, unmerged) and closing the App-token proof RESEARCH Open Question 1 (including its Issues-scope PR-labeling permission).
 
 ### Pending Todos
 
@@ -257,7 +258,6 @@ None active for v1.0. Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTIN
 - **[Phase 2/8]** `files --filter` semantic collision (ours=language, TS=directory) — resolved by SURF-02 (keep language + add directory flag); the #1 silent-failure risk if mishandled.
 - **[Phase 6/8]** Charm v2 uses the `charm.land/...` vanity import; audit the full transitive closure for CGo (expected) + govulncheck + SBOM before the v1.0.0 release.
 - [Phase 7/8] GOOS=windows go vet ./internal/daemon/ ./internal/graphstore/ fails (undefined: tree_sitter.Node in internal/indexer/goextract/routes) — CGo tree-sitter grammar bindings excluded under windows/amd64 build constraints; pre-existing, confirmed unrelated to Phase 7's changes, needs resolution alongside Phase 8's Charm v2 CGo/govulncheck/SBOM audit
-- Phase 09 Plan 06: release-please's App-token minting step fails with a 401 'JSON web token could not be decoded' error (run 30490414604). Isolated to the APP_PRIVATE_KEY secret content — App permissions/repo settings all re-verified correct. Maintainer must regenerate/re-store the App's private key before 09-07/09-08 can proceed.
 
 ### Quick Tasks Completed
 
@@ -276,9 +276,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-29T21:00:46.073Z
-Stopped at: Blocked at 09-06 Task 2: release-please App-token 401 auth failure (run 30490414604) — main fast-forwarded successfully, release PR not yet open
-Resume file: .planning/phases/09-release-please-and-goreleaser/09-06-SUMMARY.md
+Last session: 2026-07-30T00:56:08.838Z
+Stopped at: Completed 09-06-PLAN.md (reconciled after maintainer resolved App-token blocker) — release PR #2 open, awaiting 09-07
+Resume file: None
 
 ## Operator Next Steps
 
