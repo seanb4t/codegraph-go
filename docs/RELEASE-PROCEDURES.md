@@ -407,6 +407,33 @@ end-to-end against a disposable, prerelease-shaped tag on a scratch branch
 procedure both apply to that disposable release exactly as they would to a
 real one; §7 is what tears it down afterward.
 
+**Troubleshooting: 401 `A JSON web token could not be decoded`.** This
+error, surfaced from the "Mint GitHub App installation token" step, means
+the JWT `create-github-app-token` signed with `APP_PRIVATE_KEY` was
+rejected — it does **not** by itself distinguish "malformed key" from
+"valid key belonging to the wrong App." A key that is well-formed PEM
+(parseable, correct bit length, real newlines, no CRLF) still fails
+identically if it was copied from a *different* App's key file — an easy
+mistake if the maintainer has more than one App's `.pem` in the same
+downloads folder. Re-pasting the same wrong key produces the same 401 on
+retry, which can look like a stuck/unfixable failure.
+
+To tell the two apart without guessing, run a local identity check against
+the candidate key before re-storing the secret:
+
+```sh
+# Sign a short-lived JWT with the candidate PEM (any small script/library
+# that implements RS256 App-JWT signing works) and call:
+curl -s -H "Authorization: Bearer <jwt>" -H "Accept: application/vnd.github+json" \
+  https://api.github.com/app
+```
+
+A key belonging to the wrong App returns `401`. The correct key returns
+`200` with the App's own `slug`/`id`/`owner` — confirm those match the App
+this runbook installed in step 3. This is the cheapest way to separate
+"bad key material" from "wrong App," and is faster than iterating on
+re-pasting/regenerating keys against the same (wrong) App.
+
 ## 10. Recorded divergences (Phase 9)
 
 Three places where what shipped diverges from what an earlier decision
