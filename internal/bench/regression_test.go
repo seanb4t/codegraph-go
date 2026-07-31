@@ -113,6 +113,134 @@ func TestCheckRegression(t *testing.T) {
 			wantErr: true,
 			errHint: "baseline",
 		},
+		{
+			// Regression test for the perf-gate-throughput-regress debug
+			// session: a baseline recorded on one GOOS/GOARCH must never be
+			// silently compared against a current run on a different one -
+			// this harness's own headtohead data shows 6.7x-148x throughput
+			// deltas between darwin/arm64 and linux/amd64 on identical code,
+			// so a cross-platform comparison is not noise, it's invalid.
+			// FilesPerSec/PeakRSSBytes are set identically on both sides so
+			// this case fails ONLY on the platform check, isolating it from
+			// the numeric-tolerance checks above.
+			name: "GOOS/GOARCH mismatch between baseline and current fails even when metrics are identical",
+			baseline: Metrics{
+				GOOS:         "darwin",
+				GOARCH:       "arm64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "platform",
+		},
+		{
+			// Boundary neighbor: GOARCH agrees, only GOOS differs. The
+			// debug session's own blind-spot note flagged that the
+			// fully-mismatched pair above does not prove the check reads
+			// BOTH fields — a guard comparing only GOARCH would pass that
+			// case and this one would catch it. darwin/arm64 vs
+			// linux/arm64 is also the exact pair the same-platform control
+			// measured ~3x apart on one physical machine.
+			name: "GOOS differs while GOARCH matches fails",
+			baseline: Metrics{
+				GOOS:         "darwin",
+				GOARCH:       "arm64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "arm64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "platform",
+		},
+		{
+			// The mirror boundary neighbor: GOOS agrees, only GOARCH
+			// differs. Catches a guard that compares only GOOS.
+			name: "GOARCH differs while GOOS matches fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "arm64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "platform",
+		},
+		{
+			// The "no more" side of the guard: a genuinely matching
+			// platform pair must still pass. Without this, a guard that
+			// rejected EVERY comparison would satisfy all the failure
+			// cases above and permanently red the gate.
+			name: "matching GOOS/GOARCH on both sides passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  98.0,
+				PeakRSSBytes: 510_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
+		{
+			// Unattributed on BOTH sides matches and is allowed: callers
+			// that construct Metrics without platform fields (the eight
+			// cases above, and any pre-attribution baseline) must not be
+			// broken by the guard. Asserted explicitly rather than left
+			// as an incidental property of the other cases.
+			name: "unattributed platform on both sides passes",
+			current: Metrics{
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
+		{
+			// Half-attributed is a mismatch, deliberately. A baseline
+			// with no recorded platform cannot be validated against an
+			// attributed run — "unknown" is not a wildcard. Failing loud
+			// here is the whole point of this fix: the alternative is
+			// gating on a number whose provenance nobody can check.
+			name: "attributed current against unattributed baseline fails",
+			baseline: Metrics{
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "platform",
+		},
 	}
 
 	for _, tt := range tests {
