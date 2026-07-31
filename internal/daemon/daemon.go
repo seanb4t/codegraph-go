@@ -238,7 +238,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	// lock-contended Run never registers, matching "disabled watcher never
 	// touches the lockfile" above. Best-effort, exactly like release():
 	// logged, not fatal, and Deregistered via defer in the same shape.
-	if err := Register(Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: d.repoRoot}); err != nil {
+	if err := Register(Record{PID: os.Getpid(), StartedAt: selfStartedAt(), RepoRoot: d.repoRoot}); err != nil {
 		log.Printf("daemon: registering: %v", err)
 	}
 	defer func() {

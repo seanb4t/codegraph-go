@@ -317,6 +317,49 @@ func TestIsStaleStillDetectsPIDReuseOnAgedProcess(t *testing.T) {
 	}
 }
 
+// TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck guards the product
+// half of the same defect the fixture guard above covers: acquire() must
+// record the start time of the process it names, not the wall-clock instant
+// at which it happened to run.
+//
+// isStale corroborates a live pid's recorded StartedAt against the OS-reported
+// actual process start time. Stamping time.Now() for os.Getpid() therefore
+// writes a lockfile that is already stale the moment it lands, for any process
+// that calls acquire more than procStartTimeSlack after its own start — which
+// is every real daemon, since acquire happens after flag parsing, config load,
+// and an indexer warm-up. The lock then fails to exclude anyone: the next
+// acquirer reads it, correctly concludes "stale", removes it, and takes the
+// lock while the first holder is still writing. That defeats the single-writer
+// invariant (INDX-05 / T-04-07-01) the lockfile exists to enforce.
+//
+// The second acquire() below is the assertion that matters — a self-stale lock
+// is not merely cosmetic bookkeeping, it is a lock that does not lock.
+func TestAcquireWritesLockThatOutlivesItsOwnStalenessCheck(t *testing.T) {
+	requireAgedProcess(t)
+
+	dir := t.TempDir()
+	if err := acquire(dir); err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+
+	info, ok, err := readLock(dir)
+	if err != nil {
+		t.Fatalf("readLock: %v", err)
+	}
+	if !ok {
+		t.Fatal("readLock: acquire left no lockfile")
+	}
+	if isStale(info) {
+		actual, _ := processStartTime(info.PID)
+		t.Fatalf("acquire wrote a lock that is already stale the instant it was written: recorded StartedAt=%v, OS-reported start of pid %d=%v, delta %v exceeds procStartTimeSlack %v — acquire must record the process's actual start time, not time.Now()",
+			info.StartedAt, info.PID, actual, info.StartedAt.Sub(actual).Round(time.Millisecond), procStartTimeSlack)
+	}
+
+	if err := acquire(dir); !errors.Is(err, ErrLockLive) {
+		t.Fatalf("second acquire() against a lock this same live process holds = %v, want ErrLockLive — the single-writer invariant is defeated", err)
+	}
+}
+
 // TestStartTimesCorroborate proves the WR-02 slack-window comparison: times
 // within procStartTimeSlack of each other (in either direction) corroborate,
 // times further apart do not.

@@ -179,6 +179,53 @@ func TestRunRegistersRecordAfterAcquire(t *testing.T) {
 	}
 }
 
+// TestRunRegistersRecordThatSurvivesPruningOnAgedProcess is the deterministic
+// counterpart of the D-06 gate above, covering Run()'s Register() call the way
+// the lockfile guard in lock_test.go covers acquire()'s.
+//
+// Run stamps the registry record it writes for itself, and List() re-derives
+// staleness on every read to self-heal records left by crashed daemons.
+// Stamping time.Now() rather than this process's actual start time makes the
+// record fail that check the moment the daemon is older than
+// procStartTimeSlack, so a LIVE daemon's own record is pruned out from under
+// it — `codegraph daemon stop` then reports nothing to stop while the daemon
+// keeps running and keeps holding the writer.
+//
+// TestRunRegistersRecordAfterAcquire exercises the same path but only catches
+// this once the test binary happens to be old enough, which is what let the
+// defect reach CI as an intermittent failure. Forcing the aged condition makes
+// it fail every time instead of some of the time.
+func TestRunRegistersRecordThatSurvivesPruningOnAgedProcess(t *testing.T) {
+	requireAgedProcess(t)
+
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+	withRegistryDir(t)
+
+	root, codegraphDir, _ := initFixture(t)
+
+	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- d.Run(ctx) }()
+
+	waitForLock(t, codegraphDir)
+	waitForRegistryRecord(t, os.Getpid(), root)
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return after cancel")
+	}
+}
+
 // TestRunDeregistersRecordOnCleanShutdown is D-06's other half: after a
 // clean ctx-cancel shutdown, the record Register wrote is gone (defer,
 // mirroring release()'s shape for the lockfile).

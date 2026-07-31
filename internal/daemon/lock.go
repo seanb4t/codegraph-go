@@ -91,15 +91,20 @@ func isStale(info lockInfo) bool {
 	return false
 }
 
-// procStartTimeSlack is the tolerance for comparing info.StartedAt (our own
-// time.Now().UTC() wall-clock reading at acquire time) against the OS's
-// derived process-start wall-clock time (itself computed from a
-// boot-relative monotonic tick count plus a whole-second boot time) —
-// generous enough to absorb second-level rounding and scheduling jitter
-// between the two independent clock sources without masking a genuine
-// PID-reuse (which, in practice, is separated from the original process's
-// start by at least the time it took the original process to crash and the
-// OS to recycle the pid — far larger than this slack).
+// procStartTimeSlack is the tolerance for comparing info.StartedAt against
+// the OS's derived process-start wall-clock time (itself computed from a
+// boot-relative tick count plus a whole-second boot time) — generous enough
+// to absorb second-level rounding and scheduling jitter between the two
+// clock sources without masking a genuine PID-reuse.
+//
+// Both sides of that comparison derive from processStartTime for the same pid
+// (selfStartedAt at write time, isStale at read time), so for a record still
+// owned by the process that wrote it the delta is zero and the truncation
+// inside that derivation cancels out. The slack's real job is the PID-reuse
+// case, where the recorded value is the ORIGINAL process's start time and the
+// actual is the RECYCLED process's — separated by however long it took the
+// original to die and the OS to come back around to that pid, far larger than
+// this window.
 const procStartTimeSlack = 5 * time.Second
 
 // startTimesCorroborate reports whether recorded and actual plausibly refer
@@ -110,6 +115,35 @@ func startTimesCorroborate(recorded, actual time.Time) bool {
 		delta = -delta
 	}
 	return delta <= procStartTimeSlack
+}
+
+// selfStartedAt returns the StartedAt this process must record in any
+// lockfile or registry record naming its own pid: its actual start time as
+// the OS reports it, which is exactly the value isStale later corroborates
+// that record against.
+//
+// time.Now() is NOT interchangeable here, and using it was a real defect.
+// startTimesCorroborate compares the recorded value against the OS's record
+// of when the pid actually started, so time.Now() encodes "when we got around
+// to taking the lock" rather than "when this process began". Those diverge by
+// the whole daemon startup path — flag parsing, config load, indexer warm-up —
+// and once the gap exceeds procStartTimeSlack the process's own lock or record
+// fails its own staleness check the instant it is written: the next acquirer
+// reads it, correctly concludes "stale", removes it, and takes the lock while
+// the first holder is still writing, defeating the single-writer invariant
+// (INDX-05 / T-04-07-01). Registry records fail the same way through List()'s
+// self-heal pruning, so `daemon stop` reports nothing to stop while a daemon
+// is still running.
+//
+// Falls back to time.Now().UTC() wherever the OS data is unavailable (every
+// non-Linux target today — procstart_other.go). That is exactly the previous
+// behaviour and is harmless there, because isStale skips corroboration on that
+// same condition and never reaches the comparison.
+func selfStartedAt() time.Time {
+	if actual, ok := processStartTime(os.Getpid()); ok {
+		return actual
+	}
+	return time.Now().UTC()
 }
 
 // isProcessLive checks pid liveness via os.FindProcess + Signal(0)
@@ -149,7 +183,7 @@ func isProcessLive(pid int) bool {
 // this fix; this closes the specific "nothing exists yet" TOCTOU the
 // finding describes).
 func acquire(codegraphDir string) error {
-	data, err := json.Marshal(lockInfo{PID: os.Getpid(), StartedAt: time.Now().UTC()})
+	data, err := json.Marshal(lockInfo{PID: os.Getpid(), StartedAt: selfStartedAt()})
 	if err != nil {
 		return err
 	}
