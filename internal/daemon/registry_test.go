@@ -115,7 +115,7 @@ func TestRegistryListPrunesStale(t *testing.T) {
 	}
 	writeRawRecord(t, dir, deadName, deadData)
 
-	live := Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: "/live/repo"}
+	live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/live/repo"}
 	if err := Register(live); err != nil {
 		t.Fatalf("Register live: %v", err)
 	}

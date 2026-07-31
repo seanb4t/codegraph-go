@@ -96,7 +96,7 @@ func TestStopAll(t *testing.T) {
 		dir := withRegistryDir(t)
 		called := captureStopSignal(t)
 
-		live := Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: "/live/repo"}
+		live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/live/repo"}
 		if err := Register(live); err != nil {
 			t.Fatalf("Register live: %v", err)
 		}
@@ -134,7 +134,7 @@ func TestStopAll(t *testing.T) {
 		dir := withRegistryDir(t)
 		called := captureStopSignal(t)
 
-		live := Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: "/live/repo"}
+		live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/live/repo"}
 		data, err := json.Marshal(live)
 		if err != nil {
 			t.Fatalf("marshal live record: %v", err)
@@ -163,7 +163,7 @@ func TestStopMatching(t *testing.T) {
 		withRegistryDir(t)
 		called := captureStopSignal(t)
 
-		match := Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: "/repo/a"}
+		match := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/repo/a"}
 		if err := Register(match); err != nil {
 			t.Fatalf("Register match: %v", err)
 		}
@@ -189,7 +189,7 @@ func TestStopMatching(t *testing.T) {
 		withRegistryDir(t)
 		captureStopSignal(t)
 
-		live := Record{PID: os.Getpid(), StartedAt: time.Now().UTC(), RepoRoot: "/repo/a"}
+		live := Record{PID: os.Getpid(), StartedAt: startedAtFor(os.Getpid()), RepoRoot: "/repo/a"}
 		if err := Register(live); err != nil {
 			t.Fatalf("Register: %v", err)
 		}
