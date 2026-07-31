@@ -417,7 +417,7 @@ Plans:
 
 **Wave 6**
 
-- [ ] 09-07-PLAN.md — disposable live proof: real prerelease cut, cosign/SLSA/production-identity verification, full teardown
+- [~] 09-07-PLAN.md — disposable live proof: real prerelease cut, cosign/SLSA/production-identity verification, full teardown — **SKIPPED 2026-07-31 by maintainer decision**: its Task-1 gate was approved, then the premise was re-examined and the plan judged not to earn its cost. 3 of its 4 target facts were already established elsewhere — the cosign SAN one *structurally* (`releaseWorkflowRefPattern` has no actor component, and v0.1.0 already verified through it), the publish-branch one by 09-02's extracted-shell test, the App-scope one by PR #2 existing. The 4th (an App-authored tag push fires `release.yml`) stays unproven, but fails harmlessly: no workflow run means nothing signed and nothing published. Running it would have permanently double-signed the `v0.2.0` tag name in the public Sigstore log and reused a tag name. Controls added instead: ruleset `protect-main` (6 required checks, squash-only, linear history) gating the merge that creates the tag, and both Task-1 gates hardened to `blocking-human` (`ba5a548`). Consequence accepted knowingly: **09-08 is now the pipeline's first live run.** See `09-07-SUMMARY.md`
 
 **Wave 7**
 
