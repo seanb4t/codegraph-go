@@ -4,7 +4,118 @@
 baseline `tools/bench/runner -mode regression` gates every CI run
 against (via `internal/bench.CheckRegression`).
 
-## How it was produced (real, not fabricated)
+## Status: the committed baseline is NOT valid for the CI gate
+
+The currently-committed baseline was recorded on `darwin/arm64`. The
+blocking gate runs on `ubuntu-latest` (`linux/amd64`). Those are not
+comparable, and `internal/bench.CheckRegression` now says so out loud
+instead of producing a number:
+
+```
+bench: platform mismatch: baseline was measured on darwin/arm64 but this
+run is linux/amd64; indexing throughput from this harness is not
+comparable across platforms, so this comparison would be meaningless.
+```
+
+Until a `linux/amd64` baseline is recorded and committed (see
+**Re-blessing** below), the gate fails on every run — deliberately. It
+previously *passed* this comparison silently, and the ~10.6% "throughput
+regression" it reported for weeks was entirely an artifact of the
+platform mismatch: a same-platform control across the same commit range
+measured **+0.73%**, i.e. no code regression at all. See
+`.planning/debug/perf-gate-throughput-regress.md`.
+
+Note that the third bullet under "How the current baseline was produced"
+below has warned about exactly this since the baseline was captured. It
+was prose. Prose does not fail a build.
+
+## Why the platform matters this much
+
+This harness's throughput is dominated by hardware and OS class, not by
+the code under test. Same code, synthetic corpus, one physical Apple
+Silicon machine:
+
+| environment | files/s |
+|---|---:|
+| darwin/arm64 native | 12,816 |
+| linux/arm64 container, same machine | ~38,558 |
+| GitHub-hosted linux/amd64 runner | ~11,400 |
+
+A ~3x spread between two OSes on identical hardware, with the CI runner
+slower than both. On real corpora the head-to-head captures in this
+directory measure darwin/arm64 vs linux/amd64 CI **6.7x-148x** apart.
+
+The practical consequence: passing the `GOOS`/`GOARCH` guard is
+necessary but **not sufficient**. A baseline reblessed on a maintainer's
+own Linux box would satisfy the guard and still be a meaningless
+yardstick for the CI runner. The baseline has to be recorded on the
+runner class where it is spent.
+
+## Measurement procedure
+
+Two nested levels of repetition, both deliberate:
+
+- **median-of-5 per command** (`medianRuns`, D-05, not a flag) — each
+  measured command runs 5 times inside one session, and each metric takes
+  its own median.
+- **median-of-3 sessions** (`-trials`, default 3) — the whole
+  materialize + init + measure cycle repeats 3 times and each metric
+  takes its own median across sessions, each session with a fresh corpus
+  and a fresh `init`.
+
+The outer level exists because the inner one does not touch
+session-to-session variance. Three CI observations of the same corpus,
+each already internally median-of-5, spread 2.4% (11374.57 / 11642.18 /
+11361.67 files/s) against a 10.0% budget — enough to oscillate the
+verdict, and enough for a single-session `-rebless` to commit a tail draw
+as the new normal. The trial count travels with the number as
+`median_of_trials`.
+
+## Re-blessing (intentional, human-invoked only)
+
+`baseline.json` is **only ever** overwritten by `-rebless` — never as a
+side effect of a normal gating run (`internal/bench.CheckRegression`
+itself never mutates the baseline).
+
+**The supported path is the `rebless` job in
+`.github/workflows/bench.yml`**, because that is what runs on the same
+runner class as the gate:
+
+1. Actions → **bench** → *Run workflow*, with `job: rebless`
+   (and `trials: 3`, or higher for a more careful capture).
+2. The job records a candidate on `ubuntu-latest`, then takes a **second,
+   independent measurement** and gates it against that candidate. If the
+   candidate is not reproducible within the PERF-02 bands minutes later
+   on the same machine, the job fails — that candidate was a tail draw,
+   not a baseline.
+3. Read the delta table in the job summary. It shows the committed value,
+   the candidate, the percentage change, and flags any platform or corpus
+   change explicitly.
+4. Download the `baseline-candidate` artifact and commit it as
+   `tools/bench/baseline.json` **in its own PR**, isolated from any
+   unrelated change, per CONTEXT.md D-05.
+
+The workflow holds no write permission and cannot commit the baseline
+itself. A human reads the number before it lands, on purpose.
+
+### Running it locally
+
+Useful for investigation; **not** a source of a committable baseline
+unless your machine is the gate's runner class, which it almost
+certainly is not:
+
+```sh
+go run ./tools/bench/runner -mode regression -rebless \
+  -baseline /tmp/candidate.json \
+  -seed 42 -count 120000 -trials 3
+```
+
+Point `-baseline` somewhere outside the repo. `-trials 1` is available
+for quick iteration and produces a single-sample number; it is recorded
+as `median_of_trials: 1` so nothing downstream can mistake it for a
+gate-quality measurement.
+
+## How the current (darwin) baseline was produced
 
 ```sh
 go run ./tools/bench/runner -mode regression \
@@ -20,27 +131,16 @@ go run ./tools/bench/runner -mode regression \
   baseline already reflects the same corpus size the CI gate (Plan
   08-08) runs — like-for-like, no scale mismatch to account for.
 - **Host:** darwin/arm64 (`goos`/`goarch` fields in `baseline.json`).
-  Re-bless on the actual CI runner hardware once it's provisioned if its
-  performance characteristics diverge meaningfully from this capture
-  machine — `internal/bench.CheckRegression`'s tolerance bands
-  (`DefaultThroughputTolerance` 10%, `DefaultRSSTolerance` 15%) assume a
-  consistent measurement host across baseline and gate runs.
+  The original note here read: *"Re-bless on the actual CI runner
+  hardware once it's provisioned if its performance characteristics
+  diverge meaningfully from this capture machine —
+  `internal/bench.CheckRegression`'s tolerance bands assume a consistent
+  measurement host across baseline and gate runs."* That assumption was
+  correct and was never enforced; the gate shipped and compared across
+  hosts anyway. It is now a hard check, not an assumption.
+- **Trials:** single session. This capture predates `-trials`, so
+  `median_of_trials` is absent and decodes as 0.
 - **Peak RSS at capture:** `842350592` bytes (~803 MiB) for the full
   120k-file corpus — comfortably under the runner's default
   `-ceiling-bytes` (4 GiB), which is itself a documented starting point
   to retune once real CI hardware numbers exist.
-
-## Re-blessing (intentional, human-invoked only)
-
-`baseline.json` is **only ever** overwritten by `-rebless` — never as a
-side effect of a normal gating run (`internal/bench.CheckRegression`
-itself never mutates the baseline). To intentionally accept a new
-normal (e.g. after a real, expected performance change):
-
-```sh
-go run ./tools/bench/runner -mode regression \
-  -seed 42 -count 120000 -rebless -baseline tools/bench/baseline.json
-```
-
-Review the resulting `baseline.json` diff in its own PR, isolated from
-any unrelated code change, per CONTEXT.md D-05.

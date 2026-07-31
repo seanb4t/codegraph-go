@@ -1,10 +1,28 @@
-# On-demand/scheduled head-to-head publish (PERF-01).
+# On-demand/scheduled benchmark workflow. Two dispatchable jobs, neither of
+# which ever blocks a merge:
 #
-# This workflow NEVER blocks a merge — it only publishes raw numbers. It is
-# deliberately NOT triggered on pull_request/push (see ci.yml for the
-# blocking perf-regression gate, which runs the offline synthetic corpus
-# instead). Docs/BENCHMARKS.md (Plan 08-09) is refreshed from this
-# workflow's output.
+#   - headtohead: publishes raw Go-vs-TS numbers (PERF-01).
+#   - rebless:    records a CANDIDATE tools/bench/baseline.json for the
+#                 blocking perf gate, on the same runner class that gate
+#                 executes on. It never writes to the repository — it
+#                 publishes the number for a human to review and commit.
+#
+# This workflow is deliberately NOT triggered on pull_request/push (see
+# ci.yml for the blocking perf-regression gate, which runs the offline
+# synthetic corpus instead). Docs/BENCHMARKS.md (Plan 08-09) is refreshed
+# from the headtohead job's output.
+#
+# Why the rebless job has to exist here rather than on a developer machine
+# (perf-gate-throughput-regress): throughput from this harness is dominated
+# by hardware class, not just GOOS/GOARCH. Measured on one physical Apple
+# Silicon machine, synthetic corpus, identical code — darwin/arm64 native
+# 12,816 files/s, linux/arm64 container 38,558 files/s, GitHub-hosted
+# linux/amd64 runner ~11,400 files/s. A ~3x spread between two OSes on the
+# same hardware, with the CI runner slower than both. So a baseline
+# reblessed on a maintainer's Linux box satisfies internal/bench's
+# GOOS/GOARCH guard and is still a meaningless yardstick for the gate. The
+# baseline has to be recorded on ubuntu-latest because that is where it is
+# spent.
 #
 # RSS scope note (08-RESEARCH.md Pattern 1): peak RSS is measured at the OS
 # level via bench.PeakRSSBytes(cmd.ProcessState), which is only meaningfully
@@ -16,10 +34,29 @@
 name: bench
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        default: headtohead
+        options:
+          - headtohead
+          - rebless
+          - both
+      trials:
+        description: "rebless only: independent measurement sessions to median over"
+        type: choice
+        default: "3"
+        options:
+          - "3"
+          - "5"
+          - "7"
   schedule:
     # Weekly, Monday 06:00 UTC. Scheduled runs are advisory/publishing only
-    # — they never gate a PR or push (see ci.yml for the blocking gate).
+    # — they never gate a PR or push (see ci.yml for the blocking gate), and
+    # they never run the rebless job: recording a baseline is an act of
+    # judgement, not something a cron should decide to do.
     - cron: "0 6 * * 1"
 
 permissions:
@@ -29,6 +66,7 @@ jobs:
   headtohead:
     name: head-to-head publish (PERF-01, non-blocking)
     runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || inputs.job == 'headtohead' || inputs.job == 'both'
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -81,3 +119,115 @@ jobs:
           name: headtohead-results
           path: headtohead-results.json
           if-no-files-found: error
+
+  rebless:
+    name: record candidate perf baseline (PERF-02, manual only)
+    runs-on: ubuntu-latest
+    # workflow_dispatch only — never on the weekly schedule. Also note this
+    # job takes `contents: read` from the workflow-level permissions block
+    # and asks for nothing more: it deliberately has no write token, so it
+    # CANNOT push a baseline even if a future edit tried to. The candidate
+    # reaches the repository through a human reading the number below and
+    # committing the artifact by hand.
+    if: github.event_name == 'workflow_dispatch' && (inputs.job == 'rebless' || inputs.job == 'both')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Record candidate baseline on this runner
+        # -rebless is the ONLY writer of baseline.json by design (D-05) and
+        # stays so here: this step invokes it, it does not reimplement it.
+        # What it writes is the checkout's WORKING COPY, which is thrown
+        # away with the runner — publishing it below is a separate act.
+        #
+        # -seed/-count are passed explicitly rather than relied on as
+        # defaults so this command reads as the documented reproduction of
+        # tools/bench/BASELINE.md, and so a future default change cannot
+        # silently record a candidate against a different corpus than the
+        # gate measures.
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline tools/bench/baseline.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS"
+
+      - name: Publish candidate to job summary
+        # The human-review surface. A maintainer reads the delta here
+        # BEFORE anything lands, which is precisely what nobody could do
+        # when a darwin/arm64 baseline was silently gating a linux runner.
+        run: |
+          set -euo pipefail
+          git show HEAD:tools/bench/baseline.json > /tmp/baseline-committed.json
+          {
+            echo "## Candidate perf baseline (PERF-02)"
+            echo ""
+            echo "Recorded on \`${RUNNER_OS}\` / \`$(uname -m)\`, runner image \`${ImageOS:-unknown}\`."
+            echo ""
+            echo "**Nothing has been committed.** Download the \`baseline-candidate\`"
+            echo "artifact and commit it as \`tools/bench/baseline.json\` in its own PR,"
+            echo "isolated from unrelated changes, per CONTEXT.md D-05."
+            echo ""
+            echo "| metric | committed | candidate | change |"
+            echo "|---|---:|---:|---|"
+            jq -r -s '
+              def pct($a; $b): if ($a // 0) == 0 then "n/a"
+                               else ((($b - $a) / $a) * 100 | . * 100 | round / 100 | tostring) + "%" end;
+              .[0] as $old | .[1] as $new |
+              [
+                ["platform", ($old.goos + "/" + $old.goarch), ($new.goos + "/" + $new.goarch),
+                  (if ($old.goos == $new.goos and $old.goarch == $new.goarch) then "unchanged" else "**CHANGED**" end)],
+                ["corpus", $old.repo, $new.repo,
+                  (if $old.repo == $new.repo then "unchanged" else "**CHANGED**" end)],
+                ["median_of_trials", ($old.median_of_trials // 0 | tostring), ($new.median_of_trials // 0 | tostring), ""],
+                ["files_per_sec", ($old.files_per_sec | tostring), ($new.files_per_sec | tostring), pct($old.files_per_sec; $new.files_per_sec)],
+                ["peak_rss_bytes", ($old.peak_rss_bytes | tostring), ($new.peak_rss_bytes | tostring), pct($old.peak_rss_bytes; $new.peak_rss_bytes)],
+                ["query_latency_median_ms", ($old.query_latency_median_ms | tostring), ($new.query_latency_median_ms | tostring), pct($old.query_latency_median_ms; $new.query_latency_median_ms)],
+                ["cold_start_ms", ($old.cold_start_ms | tostring), ($new.cold_start_ms | tostring), pct($old.cold_start_ms; $new.cold_start_ms)]
+              ] | .[] | "| " + join(" | ") + " |"
+            ' /tmp/baseline-committed.json tools/bench/baseline.json
+            echo ""
+            echo "<details><summary>Candidate baseline.json</summary>"
+            echo ""
+            echo '```json'
+            cat tools/bench/baseline.json
+            echo '```'
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload candidate baseline artifact
+        # Uploaded BEFORE the reproducibility check below, and with
+        # if-no-files-found: error, so a maintainer always gets the exact
+        # bytes to review even when the check that follows fails them.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: baseline-candidate
+          path: tools/bench/baseline.json
+          if-no-files-found: error
+
+      - name: Verify the candidate survives the gate on this runner class
+        # A baseline nobody ever ran the gate against is what produced this
+        # job in the first place. Take a SECOND, independent measurement on
+        # the same runner and gate it against the candidate: if the
+        # candidate is not reproducible within the PERF-02 tolerance bands
+        # minutes after being recorded on the same machine, it is a tail
+        # draw, not a baseline, and must not be committed. Failing this
+        # step fails the job on purpose.
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression \
+            -baseline tools/bench/baseline.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -ceiling-bytes 4294967296

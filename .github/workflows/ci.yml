@@ -270,9 +270,28 @@ jobs:
         # throughput/query-latency/cold-start against the committed
         # tools/bench/baseline.json (PERF-02 tolerance bands) plus the
         # absolute peak-RSS ceiling (INDX-06). Non-zero exit fails the job.
+        #
+        # -trials 3 is the runner's own default; it is stated here so the
+        # measurement procedure is visible at the call site rather than
+        # only in a Go constant. It medians over three independent
+        # measurement sessions because one session — even after the inner
+        # median-of-5 — is a single draw from a distribution wide enough to
+        # flip this verdict: three CI observations of the same corpus
+        # spread 2.4% against a 10.0% budget
+        # (perf-gate-throughput-regress). Cost: this job runs roughly 3x
+        # longer than the single-session version it replaces. It is a
+        # parallel job and blocks nothing else.
+        #
+        # The baseline this gates against MUST have been recorded on this
+        # same ubuntu-latest runner class — bench.yml's `rebless` job is
+        # the supported way to produce one. internal/bench.CheckRegression
+        # now refuses a GOOS/GOARCH mismatch outright, so a baseline from
+        # elsewhere fails loudly here instead of reporting a fictitious
+        # regression.
         run: |
           go run ./tools/bench/runner -mode regression \
             -baseline tools/bench/baseline.json \
+            -trials 3 \
             -ceiling-bytes 4294967296
 
   # actionlint: this phase's guarantees now live in FOUR workflow files
