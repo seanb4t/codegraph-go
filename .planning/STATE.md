@@ -5,10 +5,10 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: "Completed 09-06-PLAN.md (reconciled after maintainer resolved App-token blocker) — release PR #2 open, awaiting 09-07"
-last_updated: "2026-07-30T00:56:08.850Z"
+stopped_at: "Phase 9 at 6/8. UAT done (scoped, 33/33, 0 issues). DECISION PENDING: run 09-07 (disposable live proof) or skip to 09-08 (real cut). Do NOT run secure-phase/validate-phase/verifier until 09-08 lands."
+last_updated: "2026-07-31T03:41:41.044Z"
 last_activity: 2026-07-30
-last_activity_desc: Plan 09-06 complete — main fast-forwarded, release PR #2 open (0.2.0), App-token blocker resolved
+last_activity_desc: Plan 09-06 reconciled to complete after maintainer resolved the App-token blocker (wrong GitHub App's key, corrected)
 progress:
   total_phases: 10
   completed_phases: 8
@@ -276,9 +276,9 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-30T00:56:08.838Z
-Stopped at: Completed 09-06-PLAN.md (reconciled after maintainer resolved App-token blocker) — release PR #2 open, awaiting 09-07
-Resume file: None
+Last session: 2026-07-31T03:41:41.022Z
+Stopped at: Phase 9 at 6/8. UAT done (scoped, 33/33, 0 issues). DECISION PENDING: run 09-07 (disposable live proof) or skip to 09-08 (real cut). Do NOT run secure-phase/validate-phase/verifier until 09-08 lands.
+Resume file: .planning/phases/09-release-please-and-goreleaser/09-07-PLAN.md
 
 ## Operator Next Steps
 
