@@ -5,10 +5,10 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: "Phase 9 at 6/8. 09-07 PAUSED at its Task-1 blocking-human gate by maintainer decision: fix red CI on main BEFORE running the disposable live release proof. Three pre-existing failures on main@a1c298f (NOT introduced by release PR #2): [RESOLVED 2026-07-31 via quick task 260731-0a0, commit a0cfceb] govulncheck GO-2026-6061 (grpc bumped v1.82.0 -> v1.82.1; govulncheck ./... now exits 0, advisory absent), [OPEN] 9 daemon-lock tests failing on Linux CI only (pass on macOS — Phase-8 gap #5), [OPEN] perf gate throughput -11.2% vs 10.0% budget. release.yml has NO test/vuln gate (build->assemble->provenance, tag-push triggered), so red CI cannot stop a release. release PR #2 (chore(main): release 0.2.0) left OPEN and unmerged. Do NOT run secure-phase/validate-phase/verifier until 09-08 lands."
+stopped_at: "Phase 9 at 6/8. 09-07 PAUSED at its Task-1 blocking-human gate by maintainer decision: fix red CI on main BEFORE running the disposable live release proof. Three pre-existing failures on main@a1c298f (NOT introduced by release PR #2): [RESOLVED 2026-07-31 via quick task 260731-0a0, commit a0cfceb] govulncheck GO-2026-6061 (grpc bumped v1.82.0 -> v1.82.1; govulncheck job GREEN on main@3738acc run 30604258476), [OPEN — FLAKE CONFIRMED] internal/daemon tests failing on Linux CI only; failure SET VARIES run-to-run (9 tests on a1c298f, only TestStopAll + TestStopMatching on 3738acc) which is positive evidence of a flake, not a deterministic Linux incompatibility — a single green run will NOT prove it fixed, and the grpc bump is not implicated (internal/daemon is not on the grpc reachability chain), [LIKELY NOT REAL] perf gate went GREEN on 3738acc with no perf-related change, corroborating the runner-generation-drift hypothesis for the earlier -11.2% vs 10.0% reading (marginal 1.2pp over); do not "fix" the baseline. Main fast-forwarded a1c298f -> 3738acc (clean FF, 0 merge commits, D-09); release-please updated PR #2 changelog with the fix under Bug Fixes. release.yml has NO test/vuln gate (build->assemble->provenance, tag-push triggered), so red CI cannot stop a release. release PR #2 (chore(main): release 0.2.0) left OPEN and unmerged. Do NOT run secure-phase/validate-phase/verifier until 09-08 lands."
 last_updated: "2026-07-31T04:19:24.202Z"
 last_activity: 2026-07-31
-last_activity_desc: Quick task 260731-0a0 — grpc v1.82.1 clears govulncheck GO-2026-6061 (red-CI fix 1 of 3)
+last_activity_desc: grpc v1.82.1 landed on main — govulncheck + perf gate green, internal/daemon flake sole remaining red
 progress:
   total_phases: 10
   completed_phases: 8
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 09 (release-please-and-goreleaser) — PAUSED at 09-07 blocking gate
 Plan: 6 of 8 complete (09-01..09-06); 09-07 awaiting green CI, 09-08 blocked behind it
-Status: Blocked — red CI on main must be fixed before the disposable live release proof (1 of 3 failures fixed; daemon-lock Linux flakes + perf gate still open)
-Last activity: 2026-07-31 — Completed quick task 260731-0a0: grpc bumped to v1.82.1, govulncheck GO-2026-6061 cleared (red-CI fix 1 of 3)
+Status: Blocked — red CI on main: 2 of 3 failures now GREEN on main@3738acc (govulncheck fixed; perf gate passed unchanged = likely runner drift). Sole remaining failure is the internal/daemon Linux-only flake, whose failure set varies run-to-run.
+Last activity: 2026-07-31 — Landed grpc v1.82.1 on main (ff a1c298f→3738acc); govulncheck + perf gate green, internal/daemon flake still red
 
 Progress: [████████░░] 80% (8 of 10 phases)
 
