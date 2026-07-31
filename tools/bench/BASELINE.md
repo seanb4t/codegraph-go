@@ -4,12 +4,24 @@
 baseline `tools/bench/runner -mode regression` gates every CI run
 against (via `internal/bench.CheckRegression`).
 
-## Status: the committed baseline is NOT valid for the CI gate
+## Status: valid — recorded on the gate's own runner class
 
-The currently-committed baseline was recorded on `darwin/arm64`. The
-blocking gate runs on `ubuntu-latest` (`linux/amd64`). Those are not
-comparable, and `internal/bench.CheckRegression` now says so out loud
-instead of producing a number:
+The committed baseline was recorded on `ubuntu-latest` (`linux/amd64`) by
+`bench.yml`'s `rebless` job (run 30653247679, `trials: 7`) — the same runner
+class the blocking gate spends it on. The gate is green: `main@d4672cf`
+measured 11453.30 files/s against an 11279.59 baseline (+1.54%).
+
+It was not always so. The baseline this replaced was recorded on
+`darwin/arm64` while the gate ran on `ubuntu-latest`, and
+`internal/bench.CheckRegression` compared the two without complaint. That
+produced a stable, reproducible, entirely fictitious ~10.6% "throughput
+regression" which survived three rounds of triage — twice being written off
+as runner noise — before a same-platform control across the same commit
+range measured **+0.73%**. There was never a code regression. See
+`.planning/debug/perf-gate-throughput-regress.md`.
+
+`CheckRegression` now refuses a `GOOS`/`GOARCH` mismatch outright rather
+than producing a number that cannot mean anything:
 
 ```
 bench: platform mismatch: baseline was measured on darwin/arm64 but this
@@ -17,17 +29,14 @@ run is linux/amd64; indexing throughput from this harness is not
 comparable across platforms, so this comparison would be meaningless.
 ```
 
-Until a `linux/amd64` baseline is recorded and committed (see
-**Re-blessing** below), the gate fails on every run — deliberately. It
-previously *passed* this comparison silently, and the ~10.6% "throughput
-regression" it reported for weeks was entirely an artifact of the
-platform mismatch: a same-platform control across the same commit range
-measured **+0.73%**, i.e. no code regression at all. See
-`.planning/debug/perf-gate-throughput-regress.md`.
+One consequence, by design: **the gate can no longer be run on a developer
+macOS machine.** It refuses rather than misleads. To measure locally, run
+the gate in CI or use `bench.yml`'s `rebless` job.
 
 Note that the third bullet under "How the current baseline was produced"
-below has warned about exactly this since the baseline was captured. It
-was prose. Prose does not fail a build.
+below had warned about exactly this since the baseline was captured. It was
+prose. Prose does not fail a build — which is why the requirement is now
+executable rather than documented.
 
 ## Why the platform matters this much
 
