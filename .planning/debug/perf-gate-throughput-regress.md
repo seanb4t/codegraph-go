@@ -1,5 +1,9 @@
 ---
-status: awaiting_human_verify
+status: resolved
+resolved_causes: "AND-gate, both required — (1) data: baseline.json recorded on darwin/arm64 while the gate runs ubuntu-latest, replaced by a runner-matched baseline in d4672cf; (2) code: CheckRegression never compared GOOS/GOARCH, guarded in 0c4d550"
+resolved_verification: "main@d4672cf CI success overall, zero non-passing jobs; perf gate median 11453.30 files/s vs 11279.59 baseline (+1.54%) — observed in ci run 30655789025, not inferred"
+refuted_premise: "There was never a code regression. Same-platform control e7aa091 38558.08 vs dcf8580 38837.64 files/s = +0.73%. The bisect asked for by 2026-07-31-bisect-indexer-throughput-regression.md must NOT be run; that todo is resolved REFUTED."
+known_gap_not_fixed: "CheckRegression still never compares Metrics.Repo (corpus identity) — a rebless with a different -count reproduces this bug class in a field the new guard does not watch"
 trigger: "The CI perf regression gate (PERF-02, INDX-06) has failed on main for multiple commits, reporting ~10.6% indexer throughput below tools/bench/baseline.json. A pending todo asserts this is a real, stable code regression and asks for a bisect from e7aa091 to a1c298f. Corrected premise gathered before starting: baseline.json records darwin/arm64 but the gate runs on ubuntu-latest (linux/amd64), and internal/bench.CheckRegression never validates GOOS/GOARCH."
 created: 2026-07-31
 updated: 2026-07-31
@@ -138,18 +142,26 @@ test: TDD - write a failing test proving CheckRegression accepts a GOOS/GOARCH
   fix (refuse the mismatch with a clear error) and confirm GREEN.
 expecting: red test demonstrates the defect independent of the platform-control
   finding; green test after fix proves it's closed.
-next_action: ALL FOUR APPROVED PARTS DELIVERED (see Resolution). The one
-  remaining action is NOT this session's to take: dispatch bench.yml's new
-  `rebless` job on ubuntu-latest and commit the resulting candidate baseline
-  in its own PR. Tracked by
-  `.planning/todos/pending/2026-07-31-rebless-perf-baseline-on-ubuntu-latest.md`.
-  Until that lands the CI gate is RED by design — it now refuses the
-  darwin-vs-linux comparison instead of reporting a fictitious regression.
-  This session did NOT archive itself to resolved/ for exactly that reason:
-  the diagnosis is settled but the end state is not reached. Archive after
-  the rebless PR turns the gate green.
-  baseline.json was NOT touched in this session (verified: `git status
-  --porcelain tools/bench/baseline.json` empty at every commit).
+next_action: NONE — session closed 2026-07-31. All four approved parts landed,
+  and the human-only step that was blocking closure has since been taken:
+  bench.yml's `rebless` job was dispatched on ubuntu-latest (run 30653247679,
+  trials 7) and its candidate committed verbatim from the artifact as d4672cf.
+  main@d4672cf CI is `success` overall with ZERO non-passing jobs; the perf
+  gate measured 11453.30 / 11604.55 / 11426.43 files/s, median 11453.30,
+  +1.54% above the new 11279.59 baseline (ci run 30655789025). The end state
+  the earlier checkpoint was waiting on is reached, so status moves to
+  `resolved`.
+  Two things carried out of this session rather than closed inside it:
+  (1) `known_gap_not_fixed` in the frontmatter — CheckRegression still never
+      compares Metrics.Repo;
+  (2) the baseline landed as its own isolated COMMIT fast-forwarded to main
+      rather than its own PR, since this repo has no PR path for main
+      (938+ commits, zero merges, D-09). Deviation stated in the rebless
+      todo's Resolution section, not buried.
+  Constraint held throughout: baseline.json was NOT hand-edited at any point.
+  Its only change (d4672cf) is a verbatim copy of a `-rebless` artifact
+  produced on the gate's own runner class — `-rebless` remains its sole
+  writer (D-05).
 
 reasoning_checkpoint:
   hypothesis: "The -10.6% gate failure has two independent contributing

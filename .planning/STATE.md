@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 09 (release-please-and-goreleaser) — PAUSED at 09-07 blocking gate
-Plan: 6 of 8 complete (09-01..09-06); 09-07 awaiting green CI, 09-08 blocked behind it
-Status: Blocked — red CI on main@dcf8580, but down to ONE failure from three. govulncheck FIXED; internal/daemon FIXED (was a real single-writer-invariant bug, not a flake) and verified on linux/amd64. Sole remaining failure is the perf regression gate, now established as a REAL ~10.6% throughput regression (three measurements, tight cluster) rather than runner drift — needs a bisect, not a re-baseline.
-Last activity: 2026-07-31 — Landed daemon single-writer fix on main (ff 3738acc→dcf8580); test job GREEN on linux/amd64, perf gate confirmed a real regression not noise
+Phase: 09 (release-please-and-goreleaser) — 09-07 UNBLOCKED, awaiting maintainer
+Plan: 6 of 8 complete (09-01..09-06); 09-07 ready to run, 09-08 behind it
+Status: CI GREEN on main@d4672cf — all three original failures now closed. govulncheck FIXED (grpc v1.82.1); internal/daemon FIXED (a real single-writer-invariant bug, not a flake) and verified on linux/amd64; perf gate FIXED — and the "REAL ~10.6% regression" recorded here previously was itself WRONG. There was never a code regression. baseline.json had been recorded on darwin/arm64 while the gate runs ubuntu-latest, and CheckRegression never compared GOOS/GOARCH, so the gate reported the distance between two machines as a code regression. A same-platform control (e7aa091 38558.08 vs dcf8580 38837.64 files/s, same container, only the commit varied) measured +0.73%. Fixed by a platform guard, a dispatchable ubuntu-latest rebless job, median-of-N (-trials 3), and a runner-matched baseline (d4672cf). The bisect todo is resolved REFUTED — do not run it. Remaining blocker on 09-07/09-08 is now only that both are autonomous:false: they cut a real signed release and need the maintainer present.
+Last activity: 2026-07-31 — /gsd-debug perf-gate-throughput-regress: refuted the regression, fixed the gate, reblessed on ubuntu-latest (run 30653247679), CI now fully GREEN on main@d4672cf (run 30655789025, perf gate median 11453.30 vs 11279.59 baseline, +1.54%)
 
 Progress: [████████░░] 80% (8 of 10 phases)
 
