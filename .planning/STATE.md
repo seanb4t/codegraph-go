@@ -5,10 +5,10 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 09
 current_phase_name: release-please-and-goreleaser
 status: executing
-stopped_at: "Phase 9 at 6/8. UAT done (scoped, 33/33, 0 issues). DECISION PENDING: run 09-07 (disposable live proof) or skip to 09-08 (real cut). Do NOT run secure-phase/validate-phase/verifier until 09-08 lands."
-last_updated: "2026-07-31T03:41:41.044Z"
-last_activity: 2026-07-30
-last_activity_desc: Plan 09-06 reconciled to complete after maintainer resolved the App-token blocker (wrong GitHub App's key, corrected)
+stopped_at: "Phase 9 at 6/8. 09-07 PAUSED at its Task-1 blocking-human gate by maintainer decision: fix red CI on main BEFORE running the disposable live release proof. Three pre-existing failures on main@a1c298f (NOT introduced by release PR #2): govulncheck GO-2026-6061 (grpc v1.82.0 -> fixed in v1.82.1), 9 daemon-lock tests failing on Linux CI only (pass on macOS — Phase-8 gap #5), perf gate throughput -11.2% vs 10.0% budget. release.yml has NO test/vuln gate (build->assemble->provenance, tag-push triggered), so red CI cannot stop a release. release PR #2 (chore(main): release 0.2.0) left OPEN and unmerged. Do NOT run secure-phase/validate-phase/verifier until 09-08 lands."
+last_updated: "2026-07-31T03:50:00.000Z"
+last_activity: 2026-07-31
+last_activity_desc: 09-07 paused at blocking gate — red CI triaged, fix-first chosen
 progress:
   total_phases: 10
   completed_phases: 8
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 09 (release-please-and-goreleaser) — EXECUTING
-Plan: 6 of 8 complete — next up 09-07
-Status: IN PROGRESS — 09-06 complete (main fast-forwarded, release-please App-token path proven via open release PR #2 "chore(main): release 0.2.0"); 09-07/09-08 not yet started (see 09-06-SUMMARY.md)
-Last activity: 2026-07-30 — Plan 09-06 reconciled to complete after maintainer resolved the App-token blocker (wrong GitHub App's key, corrected)
+Phase: 09 (release-please-and-goreleaser) — PAUSED at 09-07 blocking gate
+Plan: 6 of 8 complete (09-01..09-06); 09-07 awaiting green CI, 09-08 blocked behind it
+Status: Blocked — red CI on main must be fixed before the disposable live release proof
+Last activity: 2026-07-31 — 09-07 paused at blocking gate; red CI triaged
 
 Progress: [████████░░] 80% (8 of 10 phases)
 
