@@ -11,6 +11,22 @@ type Metrics struct {
 	GOOS    string `json:"goos"`
 	GOARCH  string `json:"goarch"`
 
+	// MedianOfTrials records how many INDEPENDENT measurement sessions
+	// these numbers are the median of — where a session is a full
+	// corpus-materialize + init + measure cycle, not a repeat of the
+	// measured command inside one session (that inner repetition is
+	// D-05's fixed median-of-5 and is not represented here).
+	//
+	// This is provenance, deliberately not a gate. Unlike GOOS/GOARCH, a
+	// differing trial count is not a category error: median-of-3 and
+	// median-of-5 estimate the same population median, just with
+	// different precision, so refusing to compare them would be enforcing
+	// a rule that isn't a validity rule. It is recorded and printed so
+	// that a human reviewing a candidate baseline can see the procedure
+	// that produced it — the thing nobody could see when a darwin
+	// baseline was gating a linux runner.
+	MedianOfTrials int `json:"median_of_trials"`
+
 	FilesPerSec          float64 `json:"files_per_sec"`
 	BytesPerSec          float64 `json:"bytes_per_sec"`
 	QueryLatencyMedianMS float64 `json:"query_latency_median_ms"`

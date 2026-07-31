@@ -21,7 +21,12 @@
 //     mode to overwrite -baseline instead of gating against it.
 //
 // Every measured command is run 5 times (medianRuns) and each metric's
-// own median is reported, per CONTEXT.md D-05. Peak RSS is ALWAYS read
+// own median is reported, per CONTEXT.md D-05. Regression mode adds a
+// second, outer level of repetition on top of that: -trials N (default
+// defaultTrials) repeats the whole materialize+init+measure session N
+// times and medians each metric across sessions, because median-of-5
+// inside one session does not touch session-to-session variance — see
+// defaultTrials. Peak RSS is ALWAYS read
 // from the completed child process via bench.PeakRSSBytes — never via
 // this process's own in-process memory statistics, which cannot be
 // compared fairly against the TS Node process. Only fixed, pinned repo
@@ -52,6 +57,33 @@ import (
 // "median-of-5"). Not exposed as a flag: CONTEXT.md fixed this as a
 // starting point, not an operator knob.
 const medianRuns = 5
+
+// defaultTrials is how many INDEPENDENT measurement sessions regression
+// mode runs before taking each metric's median (-trials). A session is a
+// full corpus-materialize + init + measure cycle; medianRuns above is the
+// separate, inner repetition of each measured command WITHIN one session.
+//
+// Why this exists at all: medianRuns only collapses jitter inside a
+// single session. It does not touch session-to-session variance, and the
+// perf-gate-throughput-regress debug session measured that variance
+// directly — three back-to-back sessions in one fixed container, after
+// median-of-5, still spread 1.2%-3.0% (38504/38558/38970 and
+// 37738/38837/38894 files/s). CI's own three observations spread 2.4%
+// (11374.57/11642.18/11361.67). So a one-session number, however
+// internally medianed, is a single draw from a distribution that is
+// wide enough to flip a verdict near the threshold — and, on the
+// -rebless path, wide enough to bake a tail value in as the new normal.
+//
+// Why 3 specifically:
+//   - It is the repo's already-ratified convention for its other perf
+//     mechanism (PERF-01 head-to-head is median-of-3); one number for
+//     both, rather than inventing a second.
+//   - It is the smallest N with a true median, so a single outlier
+//     session in either direction is rejected rather than averaged in.
+//   - Against a 10% budget and a measured ~1-3% session spread, rejecting
+//     one outlier is sufficient; N=5 would cost ~1.7x the CI time for a
+//     marginal precision gain at this variance level.
+const defaultTrials = 3
 
 // defaultCeilingBytes is the starting INDX-06 absolute peak-RSS budget
 // for the synthetic regression corpus. It is a documented starting
@@ -101,6 +133,7 @@ type config struct {
 	scratchDir   string
 	seed         int64
 	count        int
+	trials       int
 }
 
 func run(args []string) error {
@@ -147,6 +180,7 @@ func parseFlags(args []string) (config, error) {
 	fs.StringVar(&cfg.scratchDir, "scratch-dir", "", "regression mode only: directory to materialize the synthetic corpus into (default: a fresh temp dir, cleaned up on exit)")
 	fs.Int64Var(&cfg.seed, "seed", 42, "regression mode only: gencorpus RNG seed (same seed -> byte-identical corpus)")
 	fs.IntVar(&cfg.count, "count", regressionFileCount, "regression mode only: number of synthetic files to generate")
+	fs.IntVar(&cfg.trials, "trials", defaultTrials, "regression mode only: number of independent measurement sessions to take each metric's median over; 1 means single-sample (not recommended for gating or -rebless)")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -154,6 +188,9 @@ func parseFlags(args []string) (config, error) {
 	if cfg.mode == "" {
 		fs.Usage()
 		return config{}, fmt.Errorf("-mode is required")
+	}
+	if cfg.trials < 1 {
+		return config{}, fmt.Errorf("-trials must be >= 1, got %d", cfg.trials)
 	}
 	return cfg, nil
 }
@@ -372,10 +409,16 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 	}
 
 	return bench.Metrics{
-		Subject:              subjectName,
-		Repo:                 entry.Name,
-		GOOS:                 runtime.GOOS,
-		GOARCH:               runtime.GOARCH,
+		Subject: subjectName,
+		Repo:    entry.Name,
+		GOOS:    runtime.GOOS,
+		GOARCH:  runtime.GOARCH,
+		// headtohead measures each (repo, subject) pair in exactly one
+		// session — it publishes raw numbers and never gates, so the
+		// multi-session median regression mode needs is not applied here.
+		// Recorded as 1 rather than left at 0 so published JSON states
+		// its own provenance instead of implying "unknown".
+		MedianOfTrials:       1,
 		FilesPerSec:          filesPerSec,
 		BytesPerSec:          bytesPerSec,
 		QueryLatencyMedianMS: queryResult.durationMS,
@@ -454,59 +497,26 @@ func runRegression(cfg config) error {
 		scratchDir = dir
 	}
 
-	corpusDir := filepath.Join(scratchDir, "corpus")
-	if err := generateSyntheticCorpus(cfg.seed, cfg.count, corpusDir); err != nil {
-		return fmt.Errorf("generate synthetic corpus: %w", err)
+	// Each trial is a fully independent measurement session: its own
+	// freshly-materialized corpus, its own init, its own median-of-5
+	// command runs. Sharing a corpus across trials would leave trials
+	// 2..N running against a warm page cache and a store directory the
+	// previous trial already touched, which biases the median toward the
+	// warm case rather than sampling the distribution the gate actually
+	// lives in. See defaultTrials for why this level of independence is
+	// the one that matters.
+	trials := make([]bench.Metrics, 0, cfg.trials)
+	for i := 0; i < cfg.trials; i++ {
+		m, err := measureRegressionTrial(cfg, scratchDir, i)
+		if err != nil {
+			return fmt.Errorf("trial %d/%d: %w", i+1, cfg.trials, err)
+		}
+		fmt.Fprintf(os.Stderr, "runner: trial %d/%d: %.2f files/s, peak RSS %d bytes\n",
+			i+1, cfg.trials, m.FilesPerSec, m.PeakRSSBytes)
+		trials = append(trials, m)
 	}
 
-	fileCount, byteCount, err := countTree(corpusDir)
-	if err != nil {
-		return fmt.Errorf("count corpus size: %w", err)
-	}
-
-	if _, err := runOnce(cfg.goBinary, []string{"init", corpusDir}, corpusDir); err != nil {
-		return fmt.Errorf("warmup init: %w", err)
-	}
-
-	indexResult, err := medianOfN(medianRuns, func() (measuredRun, error) {
-		return runOnce(cfg.goBinary, []string{"index", corpusDir, "--force", "--quiet"}, corpusDir)
-	})
-	if err != nil {
-		return fmt.Errorf("measure index --force: %w", err)
-	}
-
-	queryResult, err := medianOfN(medianRuns, func() (measuredRun, error) {
-		return runOnce(cfg.goBinary, []string{"query", regressionQueryTerm, "-p", corpusDir}, corpusDir)
-	})
-	if err != nil {
-		return fmt.Errorf("measure query: %w", err)
-	}
-
-	coldStart, err := medianOfN(medianRuns, func() (measuredRun, error) {
-		return runOnce(cfg.goBinary, []string{"--version"}, corpusDir)
-	})
-	if err != nil {
-		return fmt.Errorf("measure cold start: %w", err)
-	}
-
-	seconds := indexResult.durationMS / 1000.0
-	var filesPerSec, bytesPerSec float64
-	if seconds > 0 {
-		filesPerSec = float64(fileCount) / seconds
-		bytesPerSec = float64(byteCount) / seconds
-	}
-
-	current := bench.Metrics{
-		Subject:              "go",
-		Repo:                 fmt.Sprintf("synthetic-seed%d-count%d", cfg.seed, cfg.count),
-		GOOS:                 runtime.GOOS,
-		GOARCH:               runtime.GOARCH,
-		FilesPerSec:          filesPerSec,
-		BytesPerSec:          bytesPerSec,
-		QueryLatencyMedianMS: queryResult.durationMS,
-		PeakRSSBytes:         indexResult.peakRSS,
-		ColdStartMS:          coldStart.durationMS,
-	}
+	current := medianMetrics(trials)
 
 	if cfg.rebless {
 		return writeBaseline(cfg.baselinePath, current)
@@ -525,6 +535,117 @@ func runRegression(cfg config) error {
 	fmt.Fprintln(os.Stdout, "regression gate passed")
 	printMetrics(os.Stdout, current)
 	return nil
+}
+
+// measureRegressionTrial runs ONE independent measurement session and
+// returns its Metrics (MedianOfTrials left unset — that is the aggregate's
+// property, not a single trial's). trialIdx only names the scratch
+// subdirectory so concurrent trials never share corpus state.
+//
+// The trial's corpus is removed on the way out: a 120k-file corpus is
+// ~18MB but ~120k inodes, and holding cfg.trials of them simultaneously
+// buys nothing once the trial's numbers are recorded.
+func measureRegressionTrial(cfg config, scratchDir string, trialIdx int) (bench.Metrics, error) {
+	corpusDir := filepath.Join(scratchDir, fmt.Sprintf("corpus-trial%d", trialIdx))
+	if err := generateSyntheticCorpus(cfg.seed, cfg.count, corpusDir); err != nil {
+		return bench.Metrics{}, fmt.Errorf("generate synthetic corpus: %w", err)
+	}
+	defer os.RemoveAll(corpusDir)
+
+	fileCount, byteCount, err := countTree(corpusDir)
+	if err != nil {
+		return bench.Metrics{}, fmt.Errorf("count corpus size: %w", err)
+	}
+
+	if _, err := runOnce(cfg.goBinary, []string{"init", corpusDir}, corpusDir); err != nil {
+		return bench.Metrics{}, fmt.Errorf("warmup init: %w", err)
+	}
+
+	indexResult, err := medianOfN(medianRuns, func() (measuredRun, error) {
+		return runOnce(cfg.goBinary, []string{"index", corpusDir, "--force", "--quiet"}, corpusDir)
+	})
+	if err != nil {
+		return bench.Metrics{}, fmt.Errorf("measure index --force: %w", err)
+	}
+
+	queryResult, err := medianOfN(medianRuns, func() (measuredRun, error) {
+		return runOnce(cfg.goBinary, []string{"query", regressionQueryTerm, "-p", corpusDir}, corpusDir)
+	})
+	if err != nil {
+		return bench.Metrics{}, fmt.Errorf("measure query: %w", err)
+	}
+
+	coldStart, err := medianOfN(medianRuns, func() (measuredRun, error) {
+		return runOnce(cfg.goBinary, []string{"--version"}, corpusDir)
+	})
+	if err != nil {
+		return bench.Metrics{}, fmt.Errorf("measure cold start: %w", err)
+	}
+
+	seconds := indexResult.durationMS / 1000.0
+	var filesPerSec, bytesPerSec float64
+	if seconds > 0 {
+		filesPerSec = float64(fileCount) / seconds
+		bytesPerSec = float64(byteCount) / seconds
+	}
+
+	return bench.Metrics{
+		Subject:              "go",
+		Repo:                 fmt.Sprintf("synthetic-seed%d-count%d", cfg.seed, cfg.count),
+		GOOS:                 runtime.GOOS,
+		GOARCH:               runtime.GOARCH,
+		FilesPerSec:          filesPerSec,
+		BytesPerSec:          bytesPerSec,
+		QueryLatencyMedianMS: queryResult.durationMS,
+		PeakRSSBytes:         indexResult.peakRSS,
+		ColdStartMS:          coldStart.durationMS,
+	}, nil
+}
+
+// medianMetrics reduces per-trial Metrics to one aggregate, taking EACH
+// numeric metric's own median over its own sorted sample — the same
+// discipline medianOfN applies within a trial (D-05: not "the trial whose
+// throughput happened to be the median"). Identity fields (Subject, Repo,
+// GOOS, GOARCH) are identical across trials by construction and are
+// carried from the first.
+//
+// MedianOfTrials is set to the sample size so the number's provenance
+// travels with it into baseline.json and into the gate's own output.
+func medianMetrics(trials []bench.Metrics) bench.Metrics {
+	if len(trials) == 0 {
+		return bench.Metrics{}
+	}
+
+	filesPerSec := make([]float64, 0, len(trials))
+	bytesPerSec := make([]float64, 0, len(trials))
+	queryMS := make([]float64, 0, len(trials))
+	coldStartMS := make([]float64, 0, len(trials))
+	peakRSS := make([]int64, 0, len(trials))
+	for _, t := range trials {
+		filesPerSec = append(filesPerSec, t.FilesPerSec)
+		bytesPerSec = append(bytesPerSec, t.BytesPerSec)
+		queryMS = append(queryMS, t.QueryLatencyMedianMS)
+		coldStartMS = append(coldStartMS, t.ColdStartMS)
+		peakRSS = append(peakRSS, t.PeakRSSBytes)
+	}
+	sort.Float64s(filesPerSec)
+	sort.Float64s(bytesPerSec)
+	sort.Float64s(queryMS)
+	sort.Float64s(coldStartMS)
+	sort.Slice(peakRSS, func(i, j int) bool { return peakRSS[i] < peakRSS[j] })
+
+	return bench.Metrics{
+		Subject:              trials[0].Subject,
+		Repo:                 trials[0].Repo,
+		GOOS:                 trials[0].GOOS,
+		GOARCH:               trials[0].GOARCH,
+		MedianOfTrials:       len(trials),
+		FilesPerSec:          medianFloat64(filesPerSec),
+		BytesPerSec:          medianFloat64(bytesPerSec),
+		QueryLatencyMedianMS: medianFloat64(queryMS),
+		PeakRSSBytes:         medianInt64(peakRSS),
+		ColdStartMS:          medianFloat64(coldStartMS),
+	}
 }
 
 func printMetrics(w io.Writer, m bench.Metrics) {

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/bench"
 )
 
 // --- medianFloat64 / medianInt64 (WR-03, Phase 8 re-review) ---
@@ -93,6 +95,99 @@ func TestMedianOfN_ComputesIndependentMedians(t *testing.T) {
 	}
 	if got.peakRSS != 40 {
 		t.Fatalf("median peakRSS = %v, want 40", got.peakRSS)
+	}
+}
+
+// --- medianMetrics (perf-gate-throughput-regress) ---
+//
+// The outer, session-level median. medianOfN collapses jitter INSIDE one
+// measurement session; this collapses variance BETWEEN sessions, which is
+// the variance that actually flipped the CI verdict (2.4% spread across
+// three runs against a 10% budget) and the variance a -rebless would
+// otherwise bake into the committed baseline.
+
+func TestMedianMetrics_TakesEachMetricsOwnMedian(t *testing.T) {
+	// As with medianOfN, each metric's median is deliberately sourced
+	// from a DIFFERENT trial, so an implementation that picked "the
+	// trial whose throughput was the median" and copied its other
+	// fields wholesale would fail here (D-05).
+	trials := []bench.Metrics{
+		{FilesPerSec: 100, BytesPerSec: 30, QueryLatencyMedianMS: 5, PeakRSSBytes: 900, ColdStartMS: 3},
+		{FilesPerSec: 10, BytesPerSec: 20, QueryLatencyMedianMS: 50, PeakRSSBytes: 100, ColdStartMS: 2},
+		{FilesPerSec: 20, BytesPerSec: 10, QueryLatencyMedianMS: 40, PeakRSSBytes: 500, ColdStartMS: 1},
+	}
+	got := medianMetrics(trials)
+
+	if got.FilesPerSec != 20 {
+		t.Errorf("FilesPerSec = %v, want 20", got.FilesPerSec)
+	}
+	if got.BytesPerSec != 20 {
+		t.Errorf("BytesPerSec = %v, want 20", got.BytesPerSec)
+	}
+	if got.QueryLatencyMedianMS != 40 {
+		t.Errorf("QueryLatencyMedianMS = %v, want 40", got.QueryLatencyMedianMS)
+	}
+	if got.PeakRSSBytes != 500 {
+		t.Errorf("PeakRSSBytes = %v, want 500", got.PeakRSSBytes)
+	}
+	if got.ColdStartMS != 2 {
+		t.Errorf("ColdStartMS = %v, want 2", got.ColdStartMS)
+	}
+}
+
+func TestMedianMetrics_RejectsASingleOutlierTrial(t *testing.T) {
+	// The exact failure this change exists to prevent: two sessions agree,
+	// one is a tail draw. The mean would drag toward the outlier and, on
+	// the -rebless path, commit it as the new normal; the median must
+	// discard it entirely.
+	trials := []bench.Metrics{
+		{FilesPerSec: 11400},
+		{FilesPerSec: 11450},
+		{FilesPerSec: 6000}, // pathological tail session
+	}
+	got := medianMetrics(trials)
+	if got.FilesPerSec != 11400 {
+		t.Fatalf("FilesPerSec = %v, want 11400 (the outlier must not move the result)", got.FilesPerSec)
+	}
+}
+
+func TestMedianMetrics_RecordsTrialCountAndCarriesIdentityFields(t *testing.T) {
+	trials := []bench.Metrics{
+		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 3},
+		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 1},
+		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 2},
+	}
+	got := medianMetrics(trials)
+
+	if got.MedianOfTrials != 3 {
+		t.Errorf("MedianOfTrials = %d, want 3", got.MedianOfTrials)
+	}
+	// GOOS/GOARCH must survive aggregation: internal/bench.CheckRegression
+	// now refuses to compare a baseline against a run on a different
+	// platform, so dropping them here would make every reblessed baseline
+	// unattributed and permanently unusable.
+	if got.GOOS != "linux" || got.GOARCH != "amd64" {
+		t.Errorf("platform = %s/%s, want linux/amd64", got.GOOS, got.GOARCH)
+	}
+	if got.Subject != "go" || got.Repo != "synthetic-seed42-count120000" {
+		t.Errorf("identity = %s/%s, want go/synthetic-seed42-count120000", got.Subject, got.Repo)
+	}
+}
+
+func TestMedianMetrics_Empty(t *testing.T) {
+	got := medianMetrics(nil)
+	if got != (bench.Metrics{}) {
+		t.Fatalf("medianMetrics(nil) = %+v, want zero Metrics", got)
+	}
+}
+
+func TestMedianMetrics_SingleTrialIsRecordedAsSuch(t *testing.T) {
+	got := medianMetrics([]bench.Metrics{{FilesPerSec: 42}})
+	if got.FilesPerSec != 42 {
+		t.Errorf("FilesPerSec = %v, want 42", got.FilesPerSec)
+	}
+	if got.MedianOfTrials != 1 {
+		t.Errorf("MedianOfTrials = %d, want 1 — a single-sample number must say so", got.MedianOfTrials)
 	}
 }
 
@@ -207,6 +302,42 @@ func TestParseFlags_Defaults(t *testing.T) {
 	}
 	if cfg.rebless {
 		t.Error("rebless should default to false")
+	}
+	// The safe procedure must be the DEFAULT one. If -trials defaulted to
+	// 1, every caller that forgot the flag — including the CI gate and the
+	// rebless workflow — would silently fall back to the single-sample
+	// measurement this change exists to eliminate.
+	if cfg.trials != defaultTrials {
+		t.Errorf("trials = %d, want %d", cfg.trials, defaultTrials)
+	}
+}
+
+func TestParseFlags_RejectsNonPositiveTrials(t *testing.T) {
+	if _, err := parseFlags([]string{"-mode", "regression", "-trials", "0"}); err == nil {
+		t.Error("parseFlags with -trials 0 should error")
+	}
+	if _, err := parseFlags([]string{"-mode", "regression", "-trials", "-1"}); err == nil {
+		t.Error("parseFlags with -trials -1 should error")
+	}
+}
+
+func TestParseFlags_TrialsOverrideApplies(t *testing.T) {
+	cfg, err := parseFlags([]string{"-mode", "regression", "-trials", "1"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.trials != 1 {
+		t.Errorf("trials = %d, want 1", cfg.trials)
+	}
+}
+
+func TestDefaultTrialsIsAtLeastThree(t *testing.T) {
+	// Guards the choice, not just the plumbing: N=2 has no true median
+	// (medianFloat64 averages the pair, so an outlier still moves the
+	// result), and N=1 is the single-sample case. Anything below 3 silently
+	// reopens the defect.
+	if defaultTrials < 3 {
+		t.Fatalf("defaultTrials = %d, want >= 3 — below 3 an outlier session still moves the result", defaultTrials)
 	}
 }
 
