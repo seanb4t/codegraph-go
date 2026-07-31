@@ -15,7 +15,10 @@ const DefaultThroughputTolerance = 0.10
 const DefaultRSSTolerance = 0.15
 
 // CheckRegression compares a candidate run's Metrics (current) against a
-// committed baseline and fails the gate (PERF-02) when either:
+// committed baseline and fails the gate (PERF-02) when any of:
+//   - baseline and current were measured on different platforms
+//     (GOOS/GOARCH), which makes every numeric comparison below
+//     meaningless — see the platform-mismatch check for why, or
 //   - indexing throughput regresses beyond DefaultThroughputTolerance, or
 //   - peak RSS grows beyond DefaultRSSTolerance relative to the baseline, or
 //   - peak RSS exceeds ceilingBytes, an absolute bounded-memory budget
@@ -31,6 +34,28 @@ const DefaultRSSTolerance = 0.15
 // never a side effect of running this check. That separation is D-05's
 // point: an accidental auto-rewrite here would silently defeat the gate.
 func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
+	// Platform validity precedes numeric validity: comparing across
+	// GOOS/GOARCH is not a tolerance question, it is a category error.
+	// This harness's own head-to-head data (tools/bench/headtohead-*.json)
+	// measures 6.7x-148x throughput deltas between darwin/arm64 and
+	// linux/amd64 on IDENTICAL code, so a cross-platform delta carries no
+	// information about the code at all. Refusing loudly is strictly better
+	// than gating on a number that cannot mean anything — the alternative
+	// (what this function did before) silently reported a stable,
+	// reproducible, entirely fictitious "regression". An unset GOOS/GOARCH
+	// on BOTH sides still matches and is allowed, so callers that construct
+	// Metrics without platform attribution (unit tests, pre-attribution
+	// baselines) are unaffected.
+	if baseline.GOOS != current.GOOS || baseline.GOARCH != current.GOARCH {
+		return fmt.Errorf(
+			"bench: platform mismatch: baseline was measured on %s but this run is %s; "+
+				"indexing throughput from this harness is not comparable across platforms, "+
+				"so this comparison would be meaningless. Record a baseline on this platform "+
+				"(runner -mode regression -rebless) instead of comparing across them",
+			platformString(baseline), platformString(current),
+		)
+	}
+
 	if baseline.FilesPerSec <= 0 {
 		return fmt.Errorf("bench: invalid baseline: FilesPerSec must be positive, got %.4f", baseline.FilesPerSec)
 	}
@@ -62,4 +87,20 @@ func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
 	}
 
 	return nil
+}
+
+// platformString renders m's GOOS/GOARCH as "goos/goarch" for error
+// messages, degrading to "unknown" for an unattributed component rather
+// than emitting a confusing bare slash. Never used for comparison — the
+// mismatch check compares the raw fields directly, so an empty GOOS is
+// never conflated with a populated one.
+func platformString(m Metrics) string {
+	goos, goarch := m.GOOS, m.GOARCH
+	if goos == "" {
+		goos = "unknown"
+	}
+	if goarch == "" {
+		goarch = "unknown"
+	}
+	return goos + "/" + goarch
 }
