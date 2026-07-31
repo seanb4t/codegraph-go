@@ -247,7 +247,12 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 
 [From .planning/todos/pending/ — ideas captured during sessions]
 
-None active for v1.0. Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTING.md) tracked in ROADMAP.md Backlog.
+| Created | Severity | Area | Title |
+|---------|----------|------|-------|
+| 2026-07-31 | major | perf | Bisect the ~10.6% indexer throughput regression — real and stable (3 measurements, two REDs within 0.1%), NOT runner noise; cause predates a1c298f; **do not re-baseline** |
+| 2026-07-14 | — | docs | Document release procedures (maintainer runbook) — largely addressed by 09-04's docs/RELEASE-PROCEDURES.md §3/§4/§7 rewrite; verify before closing |
+
+Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTING.md) tracked in ROADMAP.md Backlog and promoted to Phase 10.
 
 ### Blockers/Concerns
 
