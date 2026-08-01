@@ -1,0 +1,123 @@
+# Adapted from open-gsd/gsd-core (.github/workflows/pr-template-format.yml).
+# Their policy lives in scripts/pr-template-policy.cjs; ours is
+# scripts/pr_template_policy.py — this repo carries no Node toolchain, and a
+# .cjs file would have been migration debt from the day it landed.
+#
+# pull_request_target for the fork-token reason documented in
+# close-draft-prs.yml. The checkout below is of the BASE branch (no ref:), so
+# the policy that runs is the one on main, never the one in the PR — a fork
+# cannot weaken its own gate by editing the script.
+name: PR Template Format
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  check-template-format:
+    name: Pull request template format
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check out policy from the base branch
+        # No `ref:` — this deliberately checks out the base, not the PR head.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Collect changed files
+        id: changed_files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          {
+            echo "files<<PRFILES_EOF"
+            gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json files --jq '.files[].path'
+            echo "PRFILES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate template policy
+        id: policy
+        env:
+          # Untrusted input reaches Python via the environment only.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          CHANGED_FILES: ${{ steps.changed_files.outputs.files }}
+        run: python3 scripts/pr_template_policy.py
+
+      - name: Comment on a malformed PR
+        if: steps.policy.outputs.action == 'warn' || steps.policy.outputs.action == 'close'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          POLICY: ${{ steps.policy.outputs.result }}
+          ACTION: ${{ steps.policy.outputs.action }}
+        with:
+          script: |
+            const marker = '<!-- codegraph-pr-template-policy -->';
+            const pr = context.payload.pull_request;
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const policy = JSON.parse(process.env.POLICY);
+            const trusted = process.env.ACTION === 'warn';
+
+            const body = [
+              marker,
+              trusted ? '## Please use a typed PR template' : '## PR template required',
+              '',
+              trusted
+                ? 'This PR stays open because you are a collaborator, but the body does not follow a typed template.'
+                : 'This PR does not follow one of the typed pull request templates.',
+              '',
+              'Pick the one that fits:',
+              '',
+              `- [Fix](${repoUrl}/blob/main/.github/PULL_REQUEST_TEMPLATE/fix.md) — something behaved incorrectly`,
+              `- [Enhancement](${repoUrl}/blob/main/.github/PULL_REQUEST_TEMPLATE/enhancement.md) — existing behavior, improved`,
+              `- [Feature](${repoUrl}/blob/main/.github/PULL_REQUEST_TEMPLATE/feature.md) — something new`,
+              '',
+              'CI/tooling, docs, planning, and dependency-manifest PRs are detected automatically and exempt. For anything else that genuinely does not fit, put a reason in the body:',
+              '',
+              '```',
+              '<!-- pr-template-exempt: why a typed template does not apply -->',
+              '```',
+              '',
+              'This checks format only. Issue references are handled separately by the issue-link check.',
+              '',
+              `Detected: ${policy.reason}`,
+            ].join('\n');
+
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: pr.number, per_page: 100,
+              });
+              const existing = comments.find(c => c.body && c.body.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  comment_id: existing.id, body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: pr.number, body,
+                });
+              }
+            } catch (err) {
+              core.warning(`Could not post the template-policy comment (${err.status || err.message}). Guidance follows:\n${body}`);
+            }
+
+            // Courtesy comment above; verdict below. A comment failure must not
+            // suppress the gate.
+            if (trusted) {
+              core.warning(policy.reason);
+            } else {
+              core.setFailed(policy.reason);
+            }

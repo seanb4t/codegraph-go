@@ -1,0 +1,110 @@
+# Adapted from open-gsd/gsd-core (.github/workflows/require-issue-link.yml).
+#
+# pull_request_target (not pull_request): a fork PR under `pull_request` gets a
+# read-only GITHUB_TOKEN regardless of the `permissions:` block, so createComment
+# 403s, the unhandled rejection kills the step, and the setFailed on the last
+# line never runs — the contributor sees an API stack trace instead of guidance.
+# Safe here: NO checkout, and the PR body is read only via an env var, never
+# interpolated into a shell. No head code executes.
+#
+# DIVERGENCE from gsd-core: their version requires an issue on every PR. Our
+# CONTRIBUTING.md exempts trivially mechanical changes (typo, dead link), so an
+# explicit opt-out marker is honoured here. Without it this workflow would
+# contradict the contributing guide, and one of the two would have to be wrong.
+name: Require Issue Link
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+
+jobs:
+  check-issue-link:
+    name: Issue link required
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check PR body for an issue reference or an explicit exemption
+        id: check
+        env:
+          # Bound to an env var — never interpolated into the shell directly.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          if printf '%s' "$PR_BODY" | grep -qiE '(closes|fixes|resolves)[[:space:]]+#[0-9]+'; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$PR_BODY" | grep -qiE '<!--[[:space:]]*pr-issue-exempt:[[:space:]]*[^[:space:]>-]'; then
+            # Exemption must carry a non-empty reason — a bare marker does not count.
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "exempt=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Note the exemption
+        if: steps.check.outputs.exempt == 'true'
+        run: echo "::notice::PR claims a mechanical-change exemption from the issue-link requirement."
+
+      - name: Comment and fail if no issue link
+        if: steps.check.outputs.found == 'false'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const marker = '<!-- codegraph-require-issue-link -->';
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const prNumber = context.payload.pull_request.number;
+            const body = [
+              marker,
+              '## Missing issue link',
+              '',
+              'This PR does not reference an issue. Add a closing keyword to the PR body:',
+              '',
+              '```',
+              'Closes #123',
+              '```',
+              '',
+              `If no issue exists yet, [open one first](${repoUrl}/issues/new/choose) — it is where parity decisions and prior context surface before code gets written.`,
+              '',
+              '### Genuinely mechanical change?',
+              '',
+              'Typo, dead link, broken reference — say so explicitly and this check passes:',
+              '',
+              '```',
+              '<!-- pr-issue-exempt: fixes a broken link in README -->',
+              '```',
+              '',
+              'The reason must be non-empty. This re-evaluates on the next PR update.',
+            ].join('\n');
+            // The comment is a COURTESY; the setFailed below is the GATE. A
+            // failure posting it must never suppress the verdict — this catch is
+            // defence in depth so a future permission change degrades the
+            // diagnostic, not the gate.
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                per_page: 100,
+              });
+              const existing = comments.find(c => c.body && c.body.includes(marker));
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  comment_id: existing.id, body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: prNumber, body,
+                });
+              }
+            } catch (err) {
+              core.warning(`Could not post the missing-issue-link comment (${err.status || err.message}). Guidance follows:\n${body}`);
+            }
+            core.setFailed('PR body must contain a closing issue reference (e.g. "Closes #123"), or an explicit <!-- pr-issue-exempt: reason -->.');

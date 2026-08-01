@@ -1,0 +1,121 @@
+# Adapted from open-gsd/gsd-core (.github/workflows/auto-close-unsolicited-prs.yml).
+#
+# Enforces CONTRIBUTING.md's approval gate: a PR that adds or changes behavior
+# must trace to an issue a maintainer has approved, marked with
+# `approved-feature` or `approved-enhancement`. Without this the gate is a
+# sentence in a document that nothing checks.
+#
+# Deliberately narrow. It fires only on `feat:` and `perf:` titles from
+# non-collaborators. `fix:` never needs approval — a bug is a bug, and making
+# people ask permission to fix one is how projects lose contributors. Docs, CI,
+# chores and refactors are likewise untouched.
+#
+# pull_request_target for the fork-token reason documented in
+# close-draft-prs.yml. No checkout; no PR code executes.
+name: Auto-close unsolicited PRs
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  check-approval:
+    name: Approved issue required
+    if: >-
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Require an approved issue for behavior-adding PRs
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        with:
+          script: |
+            const title = process.env.PR_TITLE || '';
+            const body = process.env.PR_BODY || '';
+            const pr = context.payload.pull_request;
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+
+            // Only feat: and perf: need approval. Everything else passes.
+            if (!/^(feat|perf)(\([a-z0-9_-]+\))?!?:/i.test(title)) {
+              core.info(`Title type does not require approval: ${title}`);
+              return;
+            }
+
+            const refs = [...body.matchAll(/(?:closes|fixes|resolves)\s+#(\d+)/gi)].map(m => Number(m[1]));
+            if (refs.length === 0) {
+              // The issue-link workflow already fails this case with better
+              // guidance. Do not also close the PR — one missing link should not
+              // produce two different punishments.
+              core.warning('No linked issue; deferring to the issue-link check.');
+              return;
+            }
+
+            const APPROVED = ['approved-feature', 'approved-enhancement'];
+            let approvedVia = null;
+            for (const number of refs) {
+              try {
+                const { data: issue } = await github.rest.issues.get({
+                  owner: context.repo.owner, repo: context.repo.repo, issue_number: number,
+                });
+                const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name));
+                const hit = APPROVED.find(a => labels.includes(a));
+                if (hit) { approvedVia = { number, label: hit }; break; }
+              } catch (err) {
+                core.warning(`Could not read issue #${number}: ${err.status || err.message}`);
+              }
+            }
+
+            if (approvedVia) {
+              core.info(`Approved via #${approvedVia.number} (${approvedVia.label}).`);
+              return;
+            }
+
+            const marker = '<!-- codegraph-unsolicited-pr -->';
+            const commentBody = [
+              marker,
+              '## This change needs an approved issue first',
+              '',
+              `This PR adds or changes behavior (\`${title.split(':')[0]}:\`), and the issue${refs.length > 1 ? 's it references are' : ' it references is'} not marked approved.`,
+              '',
+              'That is a process step, not a judgement on the idea. This project ports observable behavior from another implementation, so changes that look like clear improvements are sometimes deliberate parity decisions recorded in `docs/FLAG-PARITY.md` or `.planning/`. Agreeing on the issue first is how that surfaces before you spend time on code.',
+              '',
+              '### What happens next',
+              '',
+              `1. Discuss it on ${refs.map(n => '#' + n).join(', ')}`,
+              '2. A maintainer adds `approved-feature` or `approved-enhancement`',
+              '3. Reopen this PR — the work is not wasted, and nothing here is deleted',
+              '',
+              `Bug fixes (\`fix:\`) never need this. See [CONTRIBUTING.md](${repoUrl}/blob/main/CONTRIBUTING.md).`,
+            ].join('\n');
+
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: pr.number, per_page: 100,
+              });
+              if (!comments.some(c => c.body && c.body.includes(marker))) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: pr.number, body: commentBody,
+                });
+              }
+            } catch (err) {
+              core.warning(`Could not post the unsolicited-PR comment (${err.status || err.message}).`);
+            }
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner, repo: context.repo.repo,
+              pull_number: pr.number, state: 'closed',
+            });
+            core.setFailed(`Closed: no approved issue for behavior-adding PR #${pr.number}.`);
