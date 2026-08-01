@@ -36,17 +36,18 @@ CodeGraph v1.3.1 is also the reference implementation benchmarked against in
 `docs/BENCHMARKS.md`. Those comparisons measure two different implementations
 of the same idea; they are not a claim that the original is poorly built.
 
-> **Maintainer action required before publishing:** copy the upstream project's
-> exact copyright line from its `LICENSE` file into the block below. It has been
-> left as a placeholder deliberately rather than guessed, because reproducing
-> someone else's copyright notice inaccurately is worse than omitting it.
+The upstream copyright notice, reproduced verbatim from that project's `LICENSE`
+(retrieved 2026-08-01 via `gh api repos/colbymchenry/codegraph/license`):
 
 ```
-CodeGraph
-Copyright (c) <YEAR> <COPYRIGHT HOLDER — copy verbatim from upstream LICENSE>
+MIT License
 
-Licensed under the MIT License.
+Copyright (c) 2026 Colby Mchenry
 ```
+
+> Do not "correct" the capitalization of that name. It is transcribed exactly as
+> the copyright holder wrote it in their own `LICENSE`, which is the only form
+> that discharges the attribution. The plausible-looking correction is wrong.
 
 ## Third-party dependencies
 
