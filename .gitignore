@@ -33,3 +33,7 @@ graphify-out/
 # (rebuilt by testdata/golden/capture.sh; never committed — same "local to
 # each machine" convention as .codegraph/'s own nested .gitignore).
 testdata/golden/corpus/*/src/.codegraph/
+
+# Python bytecode (scripts/pr_template_policy.py)
+__pycache__/
+*.pyc
