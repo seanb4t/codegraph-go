@@ -90,6 +90,10 @@
 - [x] **REL-03**: head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01
 - [x] **REL-04**: the "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired
 
+### Local Dev Tooling (DEV)
+
+- [ ] **DEV-01**: every CI-enforced command is invocable locally through one entry point, with exactly one definition — a root `Taskfile.yml` owns the command bodies (build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag sweep), the CI workflows invoke `task <target>` rather than re-declaring those bodies, and `CONTRIBUTING.md` points contributors at the targets. A clean checkout can build, test, and lint via task targets alone.
+
 ## Future Requirements
 
 Deferred to later releases. Tracked, not in this roadmap.
@@ -178,17 +182,20 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | REL-02 | Phase 9 | Satisfied 2026-08-01 (8/8 plans; 09-07 skipped by maintainer decision, 09-08 complete) |
 | REL-03 | Phase 8 | Complete |
 | REL-04 | Phase 8 | Complete |
+| DEV-01 | Phase 10 | Pending |
 
 **Coverage:**
 
-- v1.0 requirements: 47 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 6, TEST 4, REL 4)
-- Mapped to phases: 47 / 47 ✓
+- v1.0 requirements: 48 total (EXPL 5, NODE 4, STAT 3, WATCH 4, DMON 4, WORK 3, HOOK 3, HYG 2, TUI 5, SURF 6, TEST 4, REL 4, DEV 1)
+- Mapped to phases: 48 / 48 ✓
 - Unmapped: 0
-- Per phase: P1=10, P2=8, P3=5, P4=2, P5=3, P6=3, P7=7, P8=9
+- Per phase: P1=10, P2=8, P3=5, P4=2, P5=3, P6=3, P7=7, P8=8, P9=1, P10=1
 
 **TEST-04 note (added 2026-07-16):** the integration-test harness was surfaced during Phase-2 execution — three consecutive Criticals (CR-01/CR-02/BL-01) were reachability/composition failures a 100%-green unit + in-process suite could not see, each caught only by driving the real binary. Filed as a new requirement (user decision) rather than retrofitting the closed Phase 2. Mapped to Phase 3 (first phase to expand the `serve --mcp` surface); can move to Phase 8 with the release gate.
 
 **SURF-06 note (added 2026-07-15, during Phase-2 planning):** SURF-01..05 are Phase 8; SURF-06 is mapped to **Phase 2** by explicit user decision. It landed there because Phase 2 already rewires every MCP read tool's result path for the WORK-02 worktree notice — doing the format change in the same pass avoids touching those 5 handlers twice and dissolves the "text-prefix a JSON payload" question entirely (with all 7 tools on markdown, one uniform notice mechanism works). Discovered while resolving 02-RESEARCH.md Open Question #3.
+
+**DEV-01 note (added 2026-08-01, during Phase-10 planning):** Phase 10 shipped into the roadmap with `Requirements: TBD` — the only v1.0 phase without a requirement ID — which left `nyquist_validation` and `security_enforcement` with nothing to key off. Minted per `10-CONTEXT.md` D-16, maintainer-ratified with the wording above. Note that ROADMAP criterion 2 (CGo toolchain prose in `CONTRIBUTING.md`) was **already satisfied** before the phase began, by the OSS-readiness work outside any phase plan (D-00); DEV-01 therefore covers the `Taskfile.yml` single-definition property and the CONTRIBUTING *pointer*, not a CONTRIBUTING rewrite. The same edit corrected a stale per-phase tally: `P8=9` predated REL-02's move from Phase 8 to Phase 9.
 
 **Mapping notes:**
 
@@ -198,4 +205,4 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 
 ---
 *Requirements defined: 2026-07-14*
-*Last updated: 2026-07-14 — traceability populated during roadmap creation (45/45 mapped, 8 phases)*
+*Last updated: 2026-08-01 — DEV-01 minted during Phase-10 planning (48/48 mapped, 10 phases)*

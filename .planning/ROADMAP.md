@@ -429,7 +429,7 @@ Plans:
 
 **Goal**: Contributor-facing local dev tooling — the repo has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites, so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
 **Depends on**: Phase 9
-**Requirements**: TBD
+**Requirements**: DEV-01
 **Success Criteria** (what must be TRUE):
 
   1. `Taskfile.yml` wraps: build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag check
