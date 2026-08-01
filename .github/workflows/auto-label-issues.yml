@@ -1,0 +1,34 @@
+# Adapted from open-gsd/gsd-core (.github/workflows/auto-label-issues.yml).
+#
+# Applies `needs-triage` to every new issue so the triage queue is a label query
+# rather than "everything open that nobody has looked at". The issue templates
+# apply a *type* label (bug/feature/enhancement/chore); this adds the *state*
+# one, which only a maintainer removes.
+name: Auto-label new issues
+
+on:
+  issues:
+    types: [opened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+
+jobs:
+  add-triage-label:
+    name: Add needs-triage
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ["needs-triage"]
+            })

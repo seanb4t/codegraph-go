@@ -35,14 +35,20 @@ not a rejection of the idea.
 
 A change lands only when all of these hold:
 
-1. It references an approved issue. "Approved" means a maintainer has responded
-   agreeing it should be built — not merely that the issue is open.
+1. It references an approved issue. "Approved" is a label, not a vibe:
+   **`approved-feature`** for features, **`approved-enhancement`** for
+   enhancements. An open issue is not an approved one. Bug fixes and mechanical
+   changes do not need a label.
 2. All six required checks pass: `test`, `actionlint`,
    `govulncheck (DIST-03, blocking)`, `perf regression gate (PERF-02, INDX-06)`,
    `pr-title`, `reproducibility (double-build hash-diff, DIST-04)`.
 3. Review conversations are resolved.
 4. A maintainer merges it. `main` is protected; merges are **squash-only** and
    linear history is enforced.
+
+Only items 2–4 are machine-enforced. Item 1 is a maintainer reading the PR —
+worth knowing, so that a PR passing CI is not mistaken for a PR that is
+approved.
 
 For anything touching the release pipeline, signing identity, or the graph
 schema, expect a slower conversation. Those have compatibility obligations to
@@ -84,18 +90,24 @@ Scopes are lowercase, digits, `_` and `-` only. `feat` bumps the minor version;
 Choose deliberately: `feat:` on an internal refactor advertises a feature that
 users cannot see.
 
-Every PR gets a default template automatically. Three more specific ones live in
-`.github/PULL_REQUEST_TEMPLATE/` — GitHub does **not** offer these in the UI, so
-append the one you want to the PR URL:
+Every PR opens with a default template whose only job is to send you to a typed
+one — GitHub does not offer them in its UI, so the default carries the links:
 
 ```
-?template=feature.md      ?template=enhancement.md      ?template=fix.md
+?template=PULL_REQUEST_TEMPLATE/fix.md
+?template=PULL_REQUEST_TEMPLATE/enhancement.md
+?template=PULL_REQUEST_TEMPLATE/feature.md
 ```
+
+Switch **before** writing; selecting a template replaces the body.
 
 They are worth the extra step. Each asks for the evidence review will want
 anyway — `fix.md` in particular asks for the regression test's failing output,
 which is the only thing distinguishing a test that catches the bug from one that
 cannot fail.
+
+CI/tooling, dependency, and doc-only PRs are exempt; note
+`<!-- pr-template-exempt: <reason> -->` in the body.
 
 ### Never do these
 

@@ -1,42 +1,70 @@
-<!--
-This is the DEFAULT template, applied to every PR.
+## ⚠️ Wrong template — please pick the one for your PR type
 
-There are more specific ones. Append to this page's URL to switch:
+This is the default template. It is not the one to submit with.
 
-  ?template=feature.md       new capability            -> feat:
-  ?template=enhancement.md   existing thing, better    -> feat: / perf:
-  ?template=fix.md           something was wrong       -> fix:
+| PR type | When | Template |
+|---|---|---|
+| **Fix** | Correcting a bug, crash, or behavior that contradicts the docs | [Use fix template](?template=PULL_REQUEST_TEMPLATE/fix.md) |
+| **Enhancement** | Improving something that already works — better output, edge cases, performance | [Use enhancement template](?template=PULL_REQUEST_TEMPLATE/enhancement.md) |
+| **Feature** | Adding something that does not exist today | [Use feature template](?template=PULL_REQUEST_TEMPLATE/feature.md) |
 
-Use them where they fit — they ask for the evidence review will want anyway.
--->
+Selecting one replaces this body. Anything you have already typed here will be
+lost, so switch before writing.
 
-Resolves #
+---
 
-## What changed
+### Not sure which?
 
-<!-- And why. The diff shows what; this should explain why it was worth doing. -->
+- **Corrects broken behavior** → Fix
+- **Improves existing behavior**, no new commands or concepts → Enhancement
+- **Adds something that does not exist** → Feature
+- **Still unsure** → open a [Discussion](https://github.com/seanb4t/codegraph-go/discussions) first
 
-## Checklist
+A change that alters output an agent already consumes is an Enhancement even if
+it feels like a fix — output shapes are a compatibility surface here.
 
-- [ ] References an issue above — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md);
-      trivially mechanical fixes (typo, dead link) may skip this, say so if that's the case
-- [ ] PR title is Conventional Commits and the type is honest about user-visible
-      impact — it becomes a permanent public changelog entry
-- [ ] `CGO_ENABLED=1 go test ./...` passes locally
-- [ ] `CGO_ENABLED=1 go vet ./...` is clean
-- [ ] Behavior changes have tests; bug fixes have a test observed failing first
-- [ ] Docs updated if a documented surface changed
+---
 
-## Not touched
+### Issues are approved before PRs
 
-- [ ] `internal/upgrade/verify.go`, or `release.yml`'s name / trigger / cosign step
-      — shipped binaries hard-code that identity
-- [ ] `tools/bench/baseline.json` — written only by `-rebless` on the CI runner class
-- [ ] `.release-please-manifest.json`, or any version-forcing footer or config key
-      — the version is computed, never chosen
+Link an issue, and for anything beyond a mechanical fix let it be approved first:
 
-<!--
-If you did need to touch one of those, that's not automatically wrong — but say
-why here, and expect a slower review. Each one has a compatibility obligation to
-binaries or releases already in the wild.
--->
+- **Features** — the issue should carry `approved-feature`
+- **Enhancements** — the issue should carry `approved-enhancement`
+
+This is not ceremony. This project ports observable behavior from another
+implementation, and changes that look like obvious improvements are sometimes
+deliberate parity decisions recorded in `docs/FLAG-PARITY.md` or `.planning/`.
+The issue is where that surfaces before you have written the code.
+
+Trivially mechanical fixes — typo, dead link, broken reference — can skip this.
+Say so in the PR.
+
+---
+
+### Exempt PRs
+
+CI/tooling, dependency bumps, and doc-only changes do not need a typed template.
+Say which applies and carry on:
+
+```
+<!-- pr-template-exempt: docs-only -->
+```
+
+---
+
+> **These gates are automated.** Draft PRs are closed, a missing issue link
+> fails a check, a body that is not a typed template fails a check, and a
+> `feat:`/`perf:` PR without an approved issue is closed. Collaborators get a
+> warning where outsiders get a failure, and `fix:` never needs approval.
+>
+> Also enforced, by CI and branch rules: a Conventional-Commits PR title, six
+> required checks, resolved review threads, and squash-only merges into a linear
+> `main`.
+>
+> One documented gap rather than an implied guarantee: GitHub does not fire
+> `pull_request_target` for fork branches named like a Git SHA, so the
+> draft-close can be evaded that way. Such a PR still cannot merge — it fails
+> every other gate.
+
+See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md) for the full process.
