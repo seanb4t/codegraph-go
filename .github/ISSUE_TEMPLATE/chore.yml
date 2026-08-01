@@ -1,0 +1,65 @@
+name: Chore
+description: Maintenance, dependencies, tooling, CI, or documentation
+title: "chore: "
+labels: ["chore"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Housekeeping that does not change what the tool does for users.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of chore?
+      options:
+        - Dependency update
+        - CI / workflow
+        - Build tooling
+        - Documentation
+        - Test infrastructure
+        - Repository housekeeping
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What needs doing?
+      description: Be specific enough that someone else could pick it up.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now?
+      description: >
+        Chores compete with everything else, so the trigger matters — a CVE, a
+        deprecation with a date, a broken link, a workflow that fails
+        intermittently. "Tidiness" is a valid answer, just a lower-priority one.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: risk
+    attributes:
+      label: Does this touch anything load-bearing?
+      description: >
+        Tick anything that applies. These are not disqualifying — they change
+        how carefully the change is reviewed, and none may be modified casually.
+      options:
+        - label: The release pipeline (`release.yml`, `.goreleaser.yaml`, signing)
+        - label: The upgrade identity (`internal/upgrade/verify.go`)
+        - label: The perf baseline (`tools/bench/baseline.json`)
+        - label: The graph schema or migration path
+        - label: None of these
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true

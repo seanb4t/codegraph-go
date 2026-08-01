@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/seanb4t/codegraph-go/security/advisories/new
+    about: >
+      Report privately. Do not open a public issue — see SECURITY.md for what is
+      in scope and what this project explicitly does not defend against.
+  - name: Question or usage help
+    url: https://github.com/seanb4t/codegraph-go/discussions
+    about: >
+      Not sure whether it is a bug? Ask here first. Check the language
+      capability matrix too — support varies sharply per language.
