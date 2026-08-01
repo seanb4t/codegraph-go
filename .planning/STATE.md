@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 09
-current_phase_name: release-please-and-goreleaser
-status: executing
-stopped_at: "Phase 9 at 6/8. 09-07 PAUSED at its Task-1 blocking-human gate by maintainer decision: fix red CI on main BEFORE running the disposable live release proof. Three pre-existing failures on main@a1c298f (NOT introduced by release PR #2): [RESOLVED 2026-07-31 via quick task 260731-0a0, commit a0cfceb] govulncheck GO-2026-6061 (grpc bumped v1.82.0 -> v1.82.1; govulncheck job GREEN on main@3738acc run 30604258476), [RESOLVED 2026-07-31 via /gsd-debug daemon-stale-linux-flake, commits b51fefc + 326aba7] internal/daemon Linux failures were NOT merely a flake — a REAL PRODUCT BUG: acquire() and Run()'s Register() stamped StartedAt: time.Now() for os.Getpid() while isStale corroborates against the OS process-start time, so any process acting >~3s after its own start wrote a self-invalidating lock, DEFEATING the single-writer invariant INDX-05/T-04-07-01 on Linux in production. Fixed by selfStartedAt(); procStartTimeSlack and startTimesCorroborate deliberately unchanged. VERIFIED GREEN on linux/amd64 (test job, ci run 30646401249). Effective corroboration window is ~3.05s not the nominal 5s (/proc derivation truncates twice), [RESOLVED 2026-07-31 via /gsd-debug perf-gate-throughput-regress, commits 0c4d550 1e07032 ebdc95d e35bf7e 88b4368 b59acda d4672cf 1050602 3ffdb5c] perf gate: THERE WAS NEVER A CODE REGRESSION. The prior entry here — 'a stable ~10.6% regression, NOT runner noise' — was itself wrong, and was the THIRD wrong conclusion about this one failure (the first two called it runner drift). Its reasoning correctly ruled out noise but did not distinguish a code regression from a fixed measurement-frame offset; both reproduce stably. The control nobody had run — same platform, different commit — gives e7aa091 38558.08 vs dcf8580 38837.64 files/s, +0.73%. Root cause was an AND-gate: baseline.json was recorded on darwin/arm64 while the gate runs ubuntu-latest, AND CheckRegression never compared GOOS/GOARCH, so it silently gated on the distance between two machines. Fixed by a platform guard, a dispatchable ubuntu-latest rebless job (contents:read, cannot self-commit), median-of-N (-trials 3), and a runner-matched baseline copied verbatim from the -rebless artifact. CI now GREEN on main@3ffdb5c (run 30655789025, perf gate median 11453.30 vs 11279.59 baseline, +1.54%). Two independent 7-trial rebless sessions agreed to 0.65%, so the budget is now ~15x measurement uncertainty. The bisect todo is resolved REFUTED — do not run it. STILL OPEN: CheckRegression never compares Metrics.Repo (corpus identity), so a rebless with a different -count reproduces this bug class in an unwatched field. Gate note: the gate can no longer be run on developer macOS by design. Main fast-forwarded a1c298f -> 3738acc (clean FF, 0 merge commits, D-09); release-please updated PR #2 changelog with the fix under Bug Fixes. release.yml has NO test/vuln gate (build->assemble->provenance, tag-push triggered), so red CI cannot stop a release. release PR #2 (chore(main): release 0.2.0) left OPEN and unmerged. Do NOT run secure-phase/validate-phase/verifier until 09-08 lands. [SUPERSEDED 2026-08-01 — everything above this marker describes a 6/8 phase and is now HISTORY, not current state. 09-07 was SKIPPED by maintainer decision and 09-08 COMPLETED: v0.2.0 is published and PR #2 is merged. Phase 09 is 8/8 with all summaries present. Full-phase UAT is COMPLETE (09-UAT.md, 42/42 pass, 0 issues) — tests 34-42 added to cover 09-07/09-08, which the earlier scoped UAT explicitly excluded. The trailing 'do NOT run secure-phase/validate-phase/verifier' instruction was scoped to the phase being partially executed and no longer applies at 8/8; the ORDER still does — verifier, then validate, then secure. CURRENT BLOCKER: no 09-VERIFICATION.md exists, so `phase uat-passed --require-verification` fails with 'policy: verification required but no passing *-VERIFICATION.md found' and the phase cannot transition. Next action: /gsd-execute-phase 09 to regenerate execution verification.]"
-last_updated: "2026-07-31T22:07:51.385Z"
+current_phase: 10
+current_phase_name: Local Build Tooling & CONTRIBUTING
+status: planning
+stopped_at: "Phase 09 CLOSED 2026-08-01 — 8/8 plans (09-07 SKIPPED, 09-08 COMPLETE), UAT 42/42, 09-VERIFICATION.md passed 4/4. Next: Phase 10 unplanned (ROADMAP flags it as arguably v1.1 scope — confirm before planning). See Session Continuity for the outstanding non-blocking items."
+last_updated: "2026-08-01T18:08:31.210Z"
 last_activity: 2026-08-01
-last_activity_desc: "full-phase UAT complete — 09-UAT.md extended from its 09-01..09-06 scope to all 8 plans, 42/42 pass, 0 issues; phase still BLOCKED on a missing 09-VERIFICATION.md"
+last_activity_desc: Phase 09 complete, transitioned to Phase 10
 progress:
   total_phases: 10
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 65
-  completed_plans: 63
-  percent: 80
+  completed_plans: 65
+  percent: 90
 ---
 
 # Project State
@@ -24,24 +24,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 09 — release-please-and-goreleaser
+**Current focus:** Phase 10 — Local Build Tooling & CONTRIBUTING (unplanned; ROADMAP flags it as arguably v1.1 scope)
 
 ## Current Position
 
-Phase: 09 (release-please-and-goreleaser) — ALL 8 PLANS RESOLVED; REL-02 SATISFIED
-Plan: 09-01..09-06 COMPLETE; 09-07 SKIPPED by maintainer decision (09-07-SUMMARY.md); 09-08 COMPLETE (09-08-SUMMARY.md)
-Status: main@90c32b8, CI green, and `main` is now PROTECTED by ruleset `protect-main` (id 20157557, active): PR required, squash-only, linear history, no force-push, no deletion, 6 required checks (test, actionlint, govulncheck (DIST-03, blocking), perf regression gate (PERF-02, INDX-06), pr-title, reproducibility (DIST-04)). Bypass is RepositoryRole 5 (admin) mode=always, so it does not constrain the maintainer. Direct pushes to main have stopped; PR #3 was the first change to land through review. All three original blockers are closed — govulncheck (grpc v1.82.1), internal/daemon (a real single-writer-invariant bug, not a flake), and the perf gate, where the previously-recorded "REAL ~10.6% regression" was ITSELF WRONG: there was never a code regression, baseline.json had been recorded on darwin/arm64 while the gate runs ubuntu-latest and CheckRegression never compared GOOS/GOARCH. Same-platform control measured +0.73%. Bisect todo resolved REFUTED — do not run it. 09-07's disposable live proof was SKIPPED: 3 of its 4 target facts were already established (the cosign SAN one structurally — releaseWorkflowRefPattern has no actor component), and running it would have permanently double-signed the v0.2.0 tag name in the public Sigstore log. CONSEQUENCE ACCEPTED KNOWINGLY: 09-08 is now the pipeline's FIRST live run. Both remaining Task-1 gates were hardened from gate="blocking" to gate="blocking-human" (ba5a548) because workflow.auto_advance=true would otherwise have auto-selected 09-08's first option — publish permanently — with no human input.
+Phase: 10 — Local Build Tooling & CONTRIBUTING
+Plan: Not started
+Status: Ready to plan
 **2026-08-01 — v0.2.0 PUBLISHED AND VERIFIED; REPO IS PUBLIC.** The release was cut entirely by release-please (tag + Release authored by `fzy-release-please[bot]`, no human `git tag`); all 11 `release.yml` jobs green (run 30675077940, event=push ref=v0.2.0); the publish step provably took the UPLOAD branch (D-04) because the Release predated the run by 45s. Task-3 verification all five: 20 assets, `cosign` Verified OK, **`TestVerifyReleaseE2E` RAN (not skipped) and PASSED** — its first execution against a real artifact ever — SLSA PASSED at builder `@v2.1.0` commit cce95f3, and a genuinely shipped v0.1.0 binary self-upgraded to v0.2.0. The installed binary is byte-identical (`a64c1549…`) to the SLSA-attested subject, the cosign-verified blob, and the artifact the E2E test passed against: what a user receives is what was attested. NOTE the upgrade first returned 404 — `internal/upgrade` sends no Authorization header and the repo was private, so REL-02's second half was UNPROVABLE, NOT UNMET; the phase was held open rather than closed on 4-of-5 green, and it passed first try once public. This also empirically confirms the structural argument used to skip 09-07: a binary hard-coding the PRE-rewiring SAN constants verified an App-triggered signature, so `releaseWorkflowRefPattern` really is actor-independent.
 **OSS readiness complete** — community health 100%: LICENSE (MIT, detected — an appended paragraph had made it NOASSERTION), NOTICE with the upstream copyright transcribed verbatim (`Copyright (c) 2026 Colby Mchenry`, lowercase h, not guessed), README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, 4 issue forms + 3 typed PR templates behind a router default, 6 topics. Five gsd-core workflows lifted so the stated gates are enforced rather than described: close-draft-prs, require-issue-link, pr-template-format (policy in Python, not .cjs), auto-close-unsolicited-prs, auto-label-issues. Labels `feature`/`chore` referenced by issue templates did not exist — GitHub silently drops unknown labels, so two templates were labelling nothing. Issue #9 tracks tier-2 workflows + the remaining Python migration.
-Last activity: 2026-08-01 — Phase 9 closed: v0.2.0 published and fully verified, REL-02 satisfied on both halves, repo made public, OSS community set complete
+Last activity: 2026-08-01 — Phase 09 complete, transitioned to Phase 10
 
-Progress: [████████░░] 80% (8 of 10 phases)
+Progress: [█████████░] 90% (9 of 10 phases)
 
 ## Performance Metrics
 
 **Velocity (v1.0):**
 
-- Total plans completed: 58 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 66 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -57,8 +57,9 @@ Progress: [████████░░] 80% (8 of 10 phases)
 | 6 | 3 | - | - |
 | 07 | 8 | - | - |
 | 8 | 9 | - | - |
+| 09 | 8 | - | - |
 
-**Recent Trend:** — (no v1.0 plans executed yet)
+**Recent Trend:** 9 of 10 v1.0 phases complete; Phase 09 closed 2026-08-01 with v0.2.0 published and REL-02 satisfied on both halves. (Note: the "Total plans completed" line above counts SUMMARY files (66) while the frontmatter `completed_plans` counts PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.)
 
 *Updated after each plan completion*
 | Phase 01-behavioral-parity-explore-node P01 | 55min | 3 tasks | 30 files |
@@ -284,11 +285,11 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-31T03:41:41.022Z
-Stopped at: Phase 9 at 6/8. UAT done (scoped, 33/33, 0 issues). DECISION PENDING: run 09-07 (disposable live proof) or skip to 09-08 (real cut). Do NOT run secure-phase/validate-phase/verifier until 09-08 lands.
-Resume file: .planning/phases/09-release-please-and-goreleaser/09-07-PLAN.md
+Last session: 2026-08-01
+Stopped at: Phase 09 CLOSED 2026-08-01 — 8/8 plans (09-07 SKIPPED by maintainer decision, 09-08 COMPLETE), full-phase UAT 42/42 pass 0 issues, 09-VERIFICATION.md status=passed 4/4 must-haves, ROADMAP + STATE reconciled. `phase uat-passed 09 --require-verification` returns passed=true, blockers=[]. Next: Phase 10 (Local Build Tooling & CONTRIBUTING) is unplanned — ROADMAP flags it as arguably v1.1 scope, so confirm scope before planning. Outstanding, none blocking Phase 09: 09-REVIEW.md WR-02 (the provenance-over-checksums wording is still uncorrected in release.yml:327, docs/RELEASE.md:26-28, docs/RELEASE-PROCEDURES.md:120-122 — the verification COMMANDS were fixed in PRs #6/#7 but the descriptive claim that produced them was not), WR-03 (fixed heredoc delimiter PRFILES_EOF over fork-controlled paths in require-issue-link.yml + pr-template-format.yml), WR-01 (CheckRegression still never compares Metrics.Repo), issue #13 (daemon -race data race), and TestRunWatchdogCancelsRunOnSimulatedReparent failing 3/3 under full-suite load while passing 3/3 in isolation.
+Resume file: (none — phase complete)
 
 ## Operator Next Steps
 
-- Review the roadmap draft (.planning/ROADMAP.md).
-- Plan the first phase with `/gsd-plan-phase 1`.
+- Confirm Phase 10 scope — ROADMAP flags it as arguably v1.1 work, and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile.
+- Then either `/gsd-plan-phase 10` or `/gsd-complete-milestone` to close v1.0.
