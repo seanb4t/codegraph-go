@@ -218,13 +218,22 @@ cosign verify-blob \
     '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
   codegraph_<tag>_<goos>_<goarch>
 
-# b) SLSA provenance
+# b) SLSA provenance — attested over each BINARY, in one shared bundle
 slsa-verifier verify-artifact \
-  --provenance-path codegraph_<tag>_checksums.txt.intoto.jsonl \
+  --provenance-path multiple.intoto.jsonl \
   --source-uri github.com/seanb4t/codegraph-go \
   --source-tag <tag> \
-  codegraph_<tag>_checksums.txt
+  codegraph_<tag>_<goos>_<goarch>
 ```
+
+> **Corrected 2026-08-01.** (b) previously named
+> `codegraph_<tag>_checksums.txt.intoto.jsonl` and passed the checksums file as
+> the artifact. No such file is published, and the checksums file is not an
+> attested subject — the six platform binaries are, sharing one
+> `multiple.intoto.jsonl`. The old command returns
+> `FAILED: artifact hash does not match provenance subject` against a valid
+> release. Found while verifying `v0.2.0`; `docs/RELEASE.md` §1(b) carried the
+> same error and is corrected too.
 
 Both commands must succeed for at least one platform's artifacts before
 considering the release verified. A signature from any other issuer, any

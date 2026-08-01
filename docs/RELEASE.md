@@ -67,18 +67,33 @@ then:
 
 ```sh
 slsa-verifier verify-artifact \
-  --provenance-path codegraph_<tag>_checksums.txt.intoto.jsonl \
+  --provenance-path multiple.intoto.jsonl \
   --source-uri github.com/seanb4t/codegraph-go \
   --source-tag <tag> \
-  codegraph_<tag>_checksums.txt
+  codegraph_<tag>_<goos>_<goarch>
 ```
 
-Provenance is generated once, over the release's `checksums.txt` (not over
-each binary individually) — `slsa-verifier` recomputes the checksums file's
-digest and checks it against the attested subject. If you want to verify an
-individual binary transitively through provenance, first confirm its
-`sha256sum` appears as a line in the checksums file, then verify the
-checksums file itself as shown above.
+Provenance is attested over **each platform binary directly**, and all six
+subjects share a single bundle published as `multiple.intoto.jsonl`. Verify the
+binary you actually intend to run — pass that binary as the final argument.
+
+A successful run names the builder and the source commit:
+
+```
+Verified build using builder "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0" at commit <sha>
+PASSED: SLSA verification passed
+```
+
+> **Corrected 2026-08-01.** This section previously instructed verifying
+> `codegraph_<tag>_checksums.txt` against a provenance file named
+> `codegraph_<tag>_checksums.txt.intoto.jsonl`, and stated that provenance was
+> generated over the checksums file rather than over each binary. Both were
+> wrong: no such file is published, and the checksums file is not an attested
+> subject. Following the old instructions produced
+> `FAILED: artifact hash does not match provenance subject` on a release whose
+> provenance is entirely valid — found while verifying `v0.2.0`. Attesting the
+> binaries directly is the stronger arrangement; only the documentation was
+> wrong.
 
 ### c) Inspect the SBOM
 
