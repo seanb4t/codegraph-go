@@ -5,8 +5,8 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 10
 current_phase_name: Local Build Tooling & CONTRIBUTING
 status: planning
-stopped_at: "Phase 09 FULLY CLOSED 2026-08-01 — all five gates green (UAT 42/42, review 0 Critical, VERIFICATION passed 4/4, VALIDATION validated + nyquist_compliant, SECURITY secured + threats_open:0). Milestone v1.0 at 9/10. Next: Phase 10 is UNPLANNED and needs a scope decision first — ROADMAP flags it as arguably v1.1 and CONTRIBUTING is already written, so remaining scope may be just the Taskfile; alternative is /gsd-complete-milestone. See Session Continuity for open issues #13-#17 and the goreleaser-check required-checks carry-over."
-last_updated: "2026-08-01T18:08:31.210Z"
+stopped_at: Phase 10 context gathered — scope locked to Taskfile + CONTRIBUTING pointer (criterion 2 pre-satisfied). CI calls task everywhere; two root tool modfiles; Namespace runners with mandatory perf re-bless ordering.
+last_updated: "2026-08-01T22:23:50.073Z"
 last_activity: 2026-08-01
 last_activity_desc: Phase 09 complete, transitioned to Phase 10
 progress:
@@ -285,12 +285,12 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-08-01
-Stopped at: Phase 09 FULLY CLOSED 2026-08-01 — all five gates green. UAT 42/42 (0 issues) · code review 0 Critical/3 Warning · 09-VERIFICATION.md `passed` 4/4 must-haves · 09-VALIDATION.md `validated` + `nyquist_compliant: true` · 09-SECURITY.md `secured` + `threats_open: 0` (52 threats — 38 closed, 5 accepted, 8 moot, 1 eliminated). `phase uat-passed 09 --require-verification` → passed=true, blockers=[]. `verify phase-completeness 09` → complete=true, 8 plans / 8 summaries, 0 errors. Milestone v1.0 at 9/10 phases; working tree clean.
+Last session: 2026-08-01T22:23:50.051Z
+Stopped at: Phase 10 context gathered — scope locked to Taskfile + CONTRIBUTING pointer (criterion 2 pre-satisfied). CI calls task everywhere; two root tool modfiles; Namespace runners with mandatory perf re-bless ordering.
   NEXT: Phase 10 (Local Build Tooling & CONTRIBUTING) is UNPLANNED and needs a SCOPE DECISION before planning — ROADMAP flags it as arguably v1.1 work and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile. Alternative: `/gsd-complete-milestone` to close v1.0 at 9 phases.
   OPEN ISSUES (none blocking Phase 09): #13 daemon `-race` on the `getppid` test seam · #14 provenance-over-checksums wording still uncorrected in release.yml:327 + docs/RELEASE.md:26-28 + docs/RELEASE-PROCEDURES.md:120-122 (the verification COMMANDS were fixed in PRs #6/#7; the descriptive claim that produced them was not) · #15 fixed `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 CheckRegression still never compares `Metrics.Repo` · #17 TestRunWatchdogCancelsRunOnSimulatedReparent fails 3/3 under full-suite load, passes 3/3 isolated.
   CARRY-OVER: the new `goreleaser-check` CI job (05b26ed) runs on PRs but is NOT in main's required-status-check set (ruleset 20157557, currently 6 checks) — add it only after it has run at least once, or pending PRs may block on a never-reported check. Also advisory from the security audit: the four `pull_request_target` workflows have no threat-register entry, having landed after Phase 09's register was authored.
-Resume file: (none — phase complete)
+Resume file: .planning/phases/10-local-build-contribution-and-taskfile-yml-setup/10-CONTEXT.md
 
 ## Operator Next Steps
 
