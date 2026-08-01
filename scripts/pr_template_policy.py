@@ -39,6 +39,7 @@ EXEMPT_PREFIXES = (
 EXEMPT_EXACT = {
     "go.mod",
     "go.sum",
+    ".gitignore",
     "README.md",
     "CONTRIBUTING.md",
     "CODE_OF_CONDUCT.md",

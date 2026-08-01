@@ -22,7 +22,9 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  issues: write
+  issues: write # the sticky guidance comment (issues.createComment works on PRs)
+  pull-requests: read # `gh pr view --json files` for the path-based exemption
+  contents: read
 
 jobs:
   check-issue-link:
@@ -30,15 +32,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # Path-based auto-exemption, mirroring scripts/pr_template_policy.py's
+      # EXEMPT_PREFIXES / EXEMPT_EXACT. Kept in shell so this job still performs
+      # NO checkout — that is a security property of this workflow under
+      # pull_request_target, not an accident. `gh pr view` needs no working tree.
+      - name: Collect changed files
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          {
+            echo "list<<PRFILES_EOF"
+            gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json files --jq '.files[].path'
+            echo "PRFILES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check PR body for an issue reference or an explicit exemption
         id: check
         env:
-          # Bound to an env var — never interpolated into the shell directly.
+          # Bound to env vars — never interpolated into the shell directly.
           PR_BODY: ${{ github.event.pull_request.body }}
+          CHANGED_FILES: ${{ steps.files.outputs.list }}
         run: |
           set -euo pipefail
+
+          # Does every changed path fall in a housekeeping area? GSD planning
+          # artifacts live in .planning/ and have no GitHub issue by design, so
+          # without this the gate fires on roughly half this repo's PRs — and a
+          # gate that fires on routine work teaches people to bypass it
+          # reflexively, which is what the exemption marker exists to prevent.
+          all_exempt=true
+          any_file=false
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            any_file=true
+            case "$f" in
+              .planning/*|docs/*|.github/*) ;;
+              go.mod|go.sum|.gitignore|README.md|CONTRIBUTING.md|CODE_OF_CONDUCT.md|SECURITY.md|NOTICE|LICENSE|CHANGELOG.md) ;;
+              *) all_exempt=false; break ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
           if printf '%s' "$PR_BODY" | grep -qiE '(closes|fixes|resolves)[[:space:]]+#[0-9]+'; then
             echo "found=true" >> "$GITHUB_OUTPUT"
+          elif [ "$any_file" = true ] && [ "$all_exempt" = true ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "path_exempt=true" >> "$GITHUB_OUTPUT"
           elif printf '%s' "$PR_BODY" | grep -qiE '<!--[[:space:]]*pr-issue-exempt:[[:space:]]*[^[:space:]>-]'; then
             # Exemption must carry a non-empty reason — a bare marker does not count.
             echo "found=true" >> "$GITHUB_OUTPUT"
@@ -50,6 +91,10 @@ jobs:
       - name: Note the exemption
         if: steps.check.outputs.exempt == 'true'
         run: echo "::notice::PR claims a mechanical-change exemption from the issue-link requirement."
+
+      - name: Note the path-based exemption
+        if: steps.check.outputs.path_exempt == 'true'
+        run: echo "::notice::All changed paths are housekeeping (.planning/, docs/, .github/, or a root manifest) — issue link not required."
 
       - name: Comment and fail if no issue link
         if: steps.check.outputs.found == 'false'
