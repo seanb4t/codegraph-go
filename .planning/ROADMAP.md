@@ -439,13 +439,26 @@ Plans:
 **Plans**: 7 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 10-01-PLAN.md — Tracer: tool modfiles, install-task composite action, and one CI job running a task target end-to-end on Namespace
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 10-02-PLAN.md — ci.yml's test job onto task targets, contributor wrappers, and new `go vet ./...` coverage
 - [ ] 10-03-PLAN.md — release.yml runner migration, with the SLSA and native-darwin exceptions decided and test-enforced
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 10-04-PLAN.md — Runner identity in the perf baseline, bench.yml onto Namespace, and a reviewed Namespace baseline committed
 - [ ] 10-05-PLAN.md — `check:cross` replaces release-please.yml's inline pre-tag sweep, guarded against .goreleaser.yaml drift
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 10-06-PLAN.md — Runner-aware regression refusal; perf and reproducibility gates onto Namespace via task targets
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 10-07-PLAN.md — CONTRIBUTING pointer, the single-definition invariant guard, and a clean-checkout proof
 
 **Notes**: Sequenced after Phase 9 deliberately — both touch build/release invocation, so the task wrappers (`goreleaser check`, cross-`GOOS` `go list`, `govulncheck`, `actionlint`) should be written once against the final release setup rather than twice. Fit caveat: this phase sits outside the stated v1.0 milestone goal ("Drop-in Parity & Human UX"); consider moving it to a v1.1 milestone if v1.0 should ship without it.
