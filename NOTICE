@@ -1,0 +1,59 @@
+# NOTICE
+
+## Attribution
+
+`codegraph-go` is an independent, ground-up Go reimplementation of **CodeGraph**:
+
+    https://github.com/colbymchenry/codegraph
+
+CodeGraph is a TypeScript project distributed under the MIT License. This port
+reimplements its behavior in Go; it does not vendor, copy, or link its source.
+
+The debt is nonetheless substantial and specific. This project deliberately
+reproduces CodeGraph's observable behavior so that it can be a drop-in
+replacement:
+
+- the CLI command surface and flag semantics (audited in `docs/FLAG-PARITY.md`)
+- the MCP tool names, arguments, and output shapes
+- the `explore` ranking heuristics and the `node` disambiguation rules, ported
+  against frozen goldens captured from CodeGraph v1.3.1 and diffed under a
+  normalized-equivalence oracle
+- the `.codegraph/` project layout and the git sync hook contract
+
+Behavioral divergences that were found and kept are documented rather than
+hidden — see `docs/FLAG-PARITY.md` and `docs/LANGUAGE-CAPABILITY-MATRIX.md`.
+
+CodeGraph v1.3.1 is also the reference implementation benchmarked against in
+`docs/BENCHMARKS.md`. Those comparisons measure two different implementations
+of the same idea; they are not a claim that the original is poorly built.
+
+> **Maintainer action required before publishing:** copy the upstream project's
+> exact copyright line from its `LICENSE` file into the block below. It has been
+> left as a placeholder deliberately rather than guessed, because reproducing
+> someone else's copyright notice inaccurately is worse than omitting it.
+
+```
+CodeGraph
+Copyright (c) <YEAR> <COPYRIGHT HOLDER — copy verbatim from upstream LICENSE>
+
+Licensed under the MIT License.
+```
+
+## Third-party dependencies
+
+Build-time and runtime dependencies are enumerated in `go.mod`, and a complete
+SBOM (SPDX) is published as a release asset for every platform binary. To
+inspect the exact dependency set compiled into a given release:
+
+    gh release download <tag> -p 'codegraph_<tag>_<goos>_<goarch>.spdx.json'
+
+Notable components:
+
+- **tree-sitter** and its per-language grammars (MIT) — parsing. This is the
+  project's one CGo dependency; the rationale is recorded in
+  `PARSER-DECISION.md`.
+- **CockroachDB Pebble** (BSD-3-Clause) — the embedded graph store.
+- **mark3labs/mcp-go** (MIT) — MCP server transport and tool registration.
+- **spf13/cobra** (Apache-2.0) — CLI framework.
+
+Each dependency retains its own license; nothing here supersedes them.
