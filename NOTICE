@@ -1,5 +1,14 @@
 # NOTICE
 
+> **Do not move any of this into `LICENSE`.** That file must stay verbatim MIT
+> text. GitHub's license detection (`licensee`) matches the whole file, so even
+> an appended attribution paragraph downgrades the repository from `MIT` to
+> `NOASSERTION` / "Other" — losing the license badge, license-based search, and
+> a machine-readable SPDX identifier for downstream consumers. This was
+> observed, not assumed: an earlier revision of `LICENSE` carried a trailing
+> attribution block and the GitHub API reported `NOASSERTION`. Attribution
+> lives here; `README.md` links here.
+
 ## Attribution
 
 `codegraph-go` is an independent, ground-up Go reimplementation of **CodeGraph**:
