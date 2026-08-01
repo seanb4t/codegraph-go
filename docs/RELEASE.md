@@ -67,15 +67,21 @@ then:
 
 ```sh
 slsa-verifier verify-artifact \
-  --provenance-path multiple.intoto.jsonl \
+  --provenance-path codegraph_<tag>.intoto.jsonl \
   --source-uri github.com/seanb4t/codegraph-go \
   --source-tag <tag> \
   codegraph_<tag>_<goos>_<goarch>
 ```
 
 Provenance is attested over **each platform binary directly**, and all six
-subjects share a single bundle published as `multiple.intoto.jsonl`. Verify the
-binary you actually intend to run — pass that binary as the final argument.
+subjects share a single bundle. Verify the binary you actually intend to run —
+pass that binary as the final argument.
+
+> **Bundle filename.** Releases **after v0.2.0** publish
+> `codegraph_<tag>.intoto.jsonl`. **v0.2.0 and earlier** published the SLSA
+> generator's default name, `multiple.intoto.jsonl` — substitute that if you are
+> verifying one of those. Both are the same artifact in every other respect;
+> only the filename changed. Check the release's asset list if unsure.
 
 A successful run names the builder and the source commit:
 

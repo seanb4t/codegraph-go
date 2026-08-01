@@ -219,8 +219,9 @@ cosign verify-blob \
   codegraph_<tag>_<goos>_<goarch>
 
 # b) SLSA provenance — attested over each BINARY, in one shared bundle
+#    (v0.2.0 and earlier: the bundle is named multiple.intoto.jsonl)
 slsa-verifier verify-artifact \
-  --provenance-path multiple.intoto.jsonl \
+  --provenance-path codegraph_<tag>.intoto.jsonl \
   --source-uri github.com/seanb4t/codegraph-go \
   --source-tag <tag> \
   codegraph_<tag>_<goos>_<goarch>

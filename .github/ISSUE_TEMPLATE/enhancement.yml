@@ -1,0 +1,78 @@
+name: Enhancement
+description: An existing capability should work better
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when something already works, but not well enough — slow,
+        noisy, awkward, or right in the common case and wrong in yours.
+
+        If it produces a *wrong* result, that is a bug report. If it does not
+        exist at all, that is a feature request.
+
+  - type: input
+    id: target
+    attributes:
+      label: What exists today?
+      description: The command, MCP tool, or behavior you want improved.
+      placeholder: "`codegraph explore` ranking / `codegraph_impact` output shape"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: How does it behave now?
+      description: Show it. Paste the actual command and output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired
+    attributes:
+      label: How should it behave?
+      description: >
+        Be concrete about the difference. If this is about ranking or output
+        shape, showing the result you wanted next to the one you got is worth
+        several paragraphs.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of improvement?
+      options:
+        - Correctness in an edge case
+        - Performance
+        - Output clarity or formatting
+        - Ergonomics (flags, defaults, discoverability)
+        - Agent/MCP usability
+        - Error messages or diagnostics
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: compat
+    attributes:
+      label: Would this change existing behavior?
+      description: >
+        Say so plainly if it would. This project holds behavioral parity with
+        TypeScript CodeGraph v1.3.1 as a goal, and output shapes are consumed by
+        agents — a "better" format can break someone's pipeline. Divergences can
+        still be accepted, but they get documented rather than made silently.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I checked whether this is a documented divergence in docs/FLAG-PARITY.md
+          required: true

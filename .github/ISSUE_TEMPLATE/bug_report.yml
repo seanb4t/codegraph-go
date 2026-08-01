@@ -1,0 +1,102 @@
+name: Bug report
+description: Something behaves incorrectly
+title: "fix: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not report security vulnerabilities here.** Use a
+        [private advisory](https://github.com/seanb4t/codegraph-go/security/advisories/new)
+        instead — see [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: The actual behavior. Paste real output rather than describing it.
+      placeholder: |
+        $ codegraph explore "token parsing"
+        Error: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-expected
+    attributes:
+      label: What you expected instead
+      description: >
+        Be specific. "It should work" is not actionable; "it should list the
+        three callers of ParseToken, as `codegraph callers` does" is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: >
+        Exact commands, starting from a clean state. If it depends on the
+        repository being indexed, say what kind of repository — language mix and
+        rough size — since extraction differs sharply per language.
+      value: |
+        1. `cd <repo>`
+        2. `codegraph init`
+        3. `codegraph ...`
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `codegraph version`.
+      placeholder: codegraph version v0.2.0 (commit ..., built ...)
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and architecture. Include the distribution on Linux.
+      placeholder: macOS 15.2 arm64 / Ubuntu 24.04 amd64 / Windows 11 amd64
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: How did you install it?
+      options:
+        - Downloaded a release binary
+        - Built from source
+        - Upgraded via `codegraph upgrade`
+        - Migrated from TypeScript CodeGraph
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: language
+    attributes:
+      label: Languages in the affected repository
+      description: >
+        Support varies by language — see
+        [the capability matrix](../blob/main/docs/LANGUAGE-CAPABILITY-MATRIX.md).
+        A gap listed there as `partial` is known, not a bug, though it may still
+        be worth an enhancement request.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I checked the capability matrix and this is not a documented limitation
+          required: true
+        - label: This is not a security vulnerability
+          required: true

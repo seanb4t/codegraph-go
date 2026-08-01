@@ -1,0 +1,85 @@
+name: Feature request
+description: A new capability that does not exist today
+title: "feat: "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for something **new**. If an existing capability should work
+        better, use *Enhancement* instead — the distinction drives how the
+        change is versioned.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >
+        Describe the situation you are in, not the solution you have in mind.
+        The most useful reports here start with "I was trying to ..." and end
+        somewhere frustrating.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What should it do?
+      description: >
+        Sketch the behavior. If it is a command, show the invocation and the
+        output you would want back.
+      placeholder: |
+        $ codegraph <command> ...
+        <what it prints>
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface does this affect?
+      multiple: true
+      options:
+        - CLI
+        - MCP (agent-facing tools)
+        - Indexing / extraction
+        - Query / ranking
+        - Sync / watcher / git hooks
+        - Release, signing, or supply chain
+        - Migration from TypeScript CodeGraph
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: parity
+    attributes:
+      label: Does TypeScript CodeGraph do this?
+      description: >
+        This project ports
+        [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph).
+        If the original has this behavior, say so and name the command — parity
+        gaps are prioritized differently from net-new ideas. If you do not know,
+        say that; it is a fine answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What have you tried instead?
+      description: >
+        Existing commands, external tools, or manual workarounds. If a
+        workaround exists and is merely awkward, that is useful to know.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate
+          required: true
+        - label: I understand this is pre-1.0 and the surface may change before this lands
+          required: true
