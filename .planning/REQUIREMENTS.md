@@ -86,7 +86,7 @@
 ### v1.0.0 Release (REL)
 
 - [x] **REL-01**: the new Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerated, reproducible double-build still passes
-- [ ] **REL-02**: releases are cut by release-please from Conventional Commits — version bump, `CHANGELOG.md`, and tag creation all happen without a human running `git tag` — and the resulting signed artifacts still satisfy `internal/upgrade/verify.go`'s cosign identity (`releaseWorkflowRefPattern`, SAN anchored to `release.yml@refs/tags/v[0-9]*`), so `codegraph upgrade` keeps working for already-shipped binaries (spans plans 09-01..09-08; 09-01 landed the spine and non-vacuous drift guard — the live App-token tag cut and signed-artifact proof are still pending)
+- [x] **REL-02**: releases are cut by release-please from Conventional Commits — version bump, `CHANGELOG.md`, and tag creation all happen without a human running `git tag` — and the resulting signed artifacts still satisfy `internal/upgrade/verify.go`'s cosign identity (`releaseWorkflowRefPattern`, SAN anchored to `release.yml@refs/tags/v[0-9]*`), so `codegraph upgrade` keeps working for already-shipped binaries (spans plans 09-01..09-08) — **SATISFIED 2026-08-01, both halves.** `v0.2.0` was cut end-to-end by release-please: tag and Release authored by `fzy-release-please[bot]`, no human ran `git tag`, version computed (0.1.0 → 0.2.0) not forced. The signed-artifact half is proven against a genuinely shipped prior binary on two platforms — darwin/arm64 (`773223fd…` → `a64c1549…`) and linux/amd64 (`6f05e630…` → `3cba14af…`) — each self-upgrading through the unchanged `releaseWorkflowRefPattern`, with the installed sha equal to both the SLSA-attested subject and the checksums entry, `cosign verify-blob` → `Verified OK`, and `TestVerifyReleaseE2E` running (not skipping) against the production identity. Verified in `09-VERIFICATION.md` (4/4 must-haves) and `09-UAT.md` (42/42).
 - [x] **REL-03**: head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01
 - [x] **REL-04**: the "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired
 
@@ -175,7 +175,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | SURF-04 | Phase 8 | Complete |
 | SURF-05 | Phase 8 | Complete |
 | REL-01 | Phase 8 | Complete |
-| REL-02 | Phase 9 | In Progress (09-01/08 plans complete) |
+| REL-02 | Phase 9 | Satisfied 2026-08-01 (8/8 plans; 09-07 skipped by maintainer decision, 09-08 complete) |
 | REL-03 | Phase 8 | Complete |
 | REL-04 | Phase 8 | Complete |
 
