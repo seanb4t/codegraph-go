@@ -84,12 +84,18 @@ Scopes are lowercase, digits, `_` and `-` only. `feat` bumps the minor version;
 Choose deliberately: `feat:` on an internal refactor advertises a feature that
 users cannot see.
 
-PR templates live in `.github/PULL_REQUEST_TEMPLATE/`. GitHub does not apply
-these automatically — append the one you want to the PR URL:
+Every PR gets a default template automatically. Three more specific ones live in
+`.github/PULL_REQUEST_TEMPLATE/` — GitHub does **not** offer these in the UI, so
+append the one you want to the PR URL:
 
 ```
 ?template=feature.md      ?template=enhancement.md      ?template=fix.md
 ```
+
+They are worth the extra step. Each asks for the evidence review will want
+anyway — `fix.md` in particular asks for the regression test's failing output,
+which is the only thing distinguishing a test that catches the bug from one that
+cannot fail.
 
 ### Never do these
 
