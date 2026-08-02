@@ -289,7 +289,221 @@ func mustWorkflowStepRunBlock(t *testing.T, src, stepName string) string {
 	return v
 }
 
+// releaseMatrixEntry is one `- runner: ...` item under the `build` job's
+// `strategy.matrix.include:` list.
+type releaseMatrixEntry struct {
+	Runner   string
+	Goos     string
+	Goarch   string
+	NeedsZig bool
+}
+
+// parseReleaseBuildMatrix returns every `- runner: ...` entry (plus its
+// goos/goarch/needs_zig siblings) in the build job's matrix include: list.
+// Each entry starts at a `- runner:` line; goos:/goarch:/needs_zig: lines
+// that follow, up to the next `- runner:` line or the job's `steps:` key,
+// belong to that entry.
+func parseReleaseBuildMatrix(src string) ([]releaseMatrixEntry, error) {
+	lines := strings.Split(src, "\n")
+	entryRe := regexp.MustCompile(`^\s*-\s*runner:\s*(\S+)\s*$`)
+	fieldRe := regexp.MustCompile(`^\s*(goos|goarch|needs_zig):\s*(\S+)\s*$`)
+	stepsRe := regexp.MustCompile(`^\s*steps:\s*$`)
+
+	var entries []releaseMatrixEntry
+	var cur *releaseMatrixEntry
+	for _, line := range lines {
+		if stepsRe.MatchString(line) && cur != nil {
+			// The matrix include: list ends where the job's steps: key
+			// begins — stop before misreading an unrelated goos:/goarch:
+			// pair from later in the file.
+			break
+		}
+		if m := entryRe.FindStringSubmatch(line); m != nil {
+			if cur != nil {
+				entries = append(entries, *cur)
+			}
+			cur = &releaseMatrixEntry{Runner: strings.Trim(m[1], `"'`)}
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		if m := fieldRe.FindStringSubmatch(line); m != nil {
+			val := strings.Trim(m[2], `"'`)
+			switch m[1] {
+			case "goos":
+				cur.Goos = val
+			case "goarch":
+				cur.Goarch = val
+			case "needs_zig":
+				cur.NeedsZig = val == "true"
+			}
+		}
+	}
+	if cur != nil {
+		entries = append(entries, *cur)
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("parseReleaseBuildMatrix: no matrix include: entries found (no '- runner: ...' lines)")
+	}
+	return entries, nil
+}
+
+func mustReleaseBuildMatrix(t *testing.T, src string) []releaseMatrixEntry {
+	t.Helper()
+	v, err := parseReleaseBuildMatrix(src)
+	if err != nil {
+		t.Fatalf("mustReleaseBuildMatrix: %v", err)
+	}
+	return v
+}
+
+// macOSClassRunnerPatterns is a small allow-set of runner-label FAMILIES
+// (not one literal string) that count as "a real macOS host" for D-08's
+// purposes: GitHub-hosted macos-* labels, and Namespace's
+// namespace-profile-macos-* profiles. A later, deliberate move to a
+// different native macOS profile within either family stays green; a move
+// to any linux profile (namespace-profile-linux-* or ubuntu-*) still goes
+// red — see TestDarwinLegsBuildNatively.
+var macOSClassRunnerPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`^macos-`),
+	regexp.MustCompile(`^namespace-profile-macos-`),
+}
+
+func isMacOSClassRunner(label string) bool {
+	for _, re := range macOSClassRunnerPatterns {
+		if re.MatchString(label) {
+			return true
+		}
+	}
+	return false
+}
+
+// provenanceJobShape is the subset of the `provenance:` job's YAML this
+// package cares about: which reusable workflow it calls, and whether it
+// declares a runs-on: of its own (it must not — D-07).
+type provenanceJobShape struct {
+	Uses      string
+	HasRunsOn bool
+}
+
+// parseReleaseProvenanceJob locates the top-level `provenance:` job and
+// returns its `uses:` reusable-workflow reference plus whether it declares
+// its own `runs-on:` key anywhere in its body.
+func parseReleaseProvenanceJob(src string) (provenanceJobShape, error) {
+	lines := strings.Split(src, "\n")
+	jobRe := regexp.MustCompile(`^  provenance:\s*$`)
+	jobIdx := -1
+	for i, line := range lines {
+		if jobRe.MatchString(line) {
+			jobIdx = i
+			break
+		}
+	}
+	if jobIdx == -1 {
+		return provenanceJobShape{}, fmt.Errorf("parseReleaseProvenanceJob: no top-level 'provenance:' job found")
+	}
+
+	otherJobRe := regexp.MustCompile(`^  [A-Za-z0-9_-]+:\s*$`)
+	jobEnd := len(lines)
+	for i := jobIdx + 1; i < len(lines); i++ {
+		if otherJobRe.MatchString(lines[i]) {
+			jobEnd = i
+			break
+		}
+	}
+
+	usesRe := regexp.MustCompile(`^\s*uses:\s*(\S+)\s*$`)
+	runsOnRe := regexp.MustCompile(`^\s*runs-on:`)
+
+	var shape provenanceJobShape
+	for i := jobIdx + 1; i < jobEnd; i++ {
+		line := lines[i]
+		if m := usesRe.FindStringSubmatch(line); m != nil && shape.Uses == "" {
+			shape.Uses = strings.Trim(m[1], `"'`)
+		}
+		if runsOnRe.MatchString(line) {
+			shape.HasRunsOn = true
+		}
+	}
+	if shape.Uses == "" {
+		return provenanceJobShape{}, fmt.Errorf("parseReleaseProvenanceJob: provenance job has no uses: key")
+	}
+	return shape, nil
+}
+
+func mustReleaseProvenanceJob(t *testing.T, src string) provenanceJobShape {
+	t.Helper()
+	v, err := parseReleaseProvenanceJob(src)
+	if err != nil {
+		t.Fatalf("mustReleaseProvenanceJob: %v", err)
+	}
+	return v
+}
+
+// slsaGeneratorTaggedRe matches the SLSA generic generator's reusable-
+// workflow reference ONLY when pinned by a full vX.Y.Z semver tag —
+// slsa-verifier rejects both a SHA pin and a short tag (@v2) for this
+// specific reusable workflow.
+var slsaGeneratorTaggedRe = regexp.MustCompile(`^slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v\d+\.\d+\.\d+`)
+
 // --- tests ------------------------------------------------------------
+
+// TestDarwinLegsBuildNatively is the D-08 mitigation for T-10-03-02: every
+// darwin entry in release.yml's build matrix must build NATIVELY (never
+// cross-linked via zig) on a real macOS-class runner. Demonstrated red
+// (see 10-03-SUMMARY.md) by setting a darwin entry's needs_zig to true, and
+// separately by pointing its runner at a linux profile label.
+func TestDarwinLegsBuildNatively(t *testing.T) {
+	data, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	src := string(data)
+
+	entries := mustReleaseBuildMatrix(t, src)
+
+	var darwinEntries []releaseMatrixEntry
+	for _, e := range entries {
+		if e.Goos == "darwin" {
+			darwinEntries = append(darwinEntries, e)
+		}
+	}
+	if len(darwinEntries) == 0 {
+		t.Fatalf("TestDarwinLegsBuildNatively: no goos: darwin entries found in release.yml's build matrix")
+	}
+
+	for _, e := range darwinEntries {
+		if e.NeedsZig {
+			t.Errorf("darwin/%s: needs_zig = true, want false — a darwin leg must never cross-link via zig (D-08, libresolv/DNS-resolver risk)", e.Goarch)
+		}
+		if !isMacOSClassRunner(e.Runner) {
+			t.Errorf("darwin/%s: runner = %q is not a recognized macOS-class runner label — a darwin leg must build on a real macOS host, never a linux profile", e.Goarch, e.Runner)
+		}
+	}
+}
+
+// TestProvenanceJobUsesTaggedSLSAGenerator is the D-07 mitigation for
+// T-10-03-04: the provenance job must reference the SLSA generic generator
+// by a full vX.Y.Z tag (never a SHA — slsa-verifier requires the tag form)
+// and must declare no runs-on: of its own, since a reusable-workflow caller
+// cannot override the callee's runner.
+func TestProvenanceJobUsesTaggedSLSAGenerator(t *testing.T) {
+	data, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	src := string(data)
+
+	shape := mustReleaseProvenanceJob(t, src)
+
+	if !slsaGeneratorTaggedRe.MatchString(shape.Uses) {
+		t.Errorf("provenance job uses: %q, want the SLSA generic generator referenced by a full vX.Y.Z tag", shape.Uses)
+	}
+	if shape.HasRunsOn {
+		t.Errorf("provenance job declares its own runs-on: — a reusable-workflow caller cannot override the callee's runner (D-07); this job must have none")
+	}
+}
 
 // TestReleaseWorkflowFileMatchesPattern is the T-09-01-01 spoofing guard:
 // it reads the real, on-disk release.yml, reconstructs the SAN a tag push
@@ -412,6 +626,20 @@ func TestWorkflowSourceHelpersFailLoudly(t *testing.T) {
 			fn: func() error {
 				src := "jobs:\n  build:\n    steps:\n      - name: Checkout\n        run: |\n          echo hi\n"
 				_, err := parseWorkflowStepRunBlock(src, "Does Not Exist")
+				return err
+			},
+		},
+		{
+			name: "parseReleaseBuildMatrix: no matrix include: entries found",
+			fn: func() error {
+				_, err := parseReleaseBuildMatrix("")
+				return err
+			},
+		},
+		{
+			name: "parseReleaseProvenanceJob: no provenance: job found",
+			fn: func() error {
+				_, err := parseReleaseProvenanceJob("name: example\njobs:\n  build:\n    runs-on: ubuntu-latest\n")
 				return err
 			},
 		},
