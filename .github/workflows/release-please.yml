@@ -33,6 +33,11 @@ jobs:
   # the cost (six `go list` invocations) is low.
   pretag-gate:
     name: pre-tag 6-target go list sanity sweep
+    # Deliberately OUTSIDE D-06's Namespace-runner migration scope (D-06
+    # names exactly ci.yml/bench.yml/release.yml) — stays on GitHub-hosted
+    # ubuntu-latest. It separately gains the task bootstrap below per D-15,
+    # which is an unrelated decision that happens to intersect this job; do
+    # not read the inconsistency with ci.yml's runner class as an oversight.
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -43,15 +48,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: 6-target go list -mod=readonly sweep
-        run: |
-          set -euo pipefail
-          for pair in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
-            GOOS="${pair%/*}" GOARCH="${pair#*/}" go list -mod=readonly ./... > /dev/null || {
-              echo "::error::go list -mod=readonly ./... failed for GOOS=${pair%/*} GOARCH=${pair#*/}"
-              exit 1
-            }
-          done
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run check:cross sweep
+        run: task check:cross
 
   release-please:
     name: release-please
