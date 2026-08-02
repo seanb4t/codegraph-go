@@ -579,6 +579,115 @@ func TestResolveRegressionScratchDir_FallsBackToDiskWhenTmpfsRootIsAFile(t *test
 	}
 }
 
+// --- -scratch-fs pin (10-04-PLAN control-measurement capability) ---
+//
+// Reproducing a specific measurement frame on demand (e.g. a same-day
+// disk-scratch control run alongside a tmpfs-preferring default) is a
+// legitimate, recurring need for this harness, not a one-off debugging
+// hack — this repo's own perf-gate history is a comparison against a
+// stale, different-methodology measurement producing a fictitious
+// regression. resolveScratchDirForClass is the first-class way to pin
+// the class explicitly instead of auto-detecting.
+
+func TestResolveScratchDirForClass_AutoBehavesLikeResolveRegressionScratchDir(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass(scratchFSAuto, fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(auto): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q (auto should prefer tmpfs when available)", fsClass, scratchFSTmpfs)
+	}
+}
+
+func TestResolveScratchDirForClass_EmptyStringBehavesAsAuto(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass("", fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(\"\"): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q (empty string should default to auto)", fsClass, scratchFSTmpfs)
+	}
+}
+
+func TestResolveScratchDirForClass_PinsDiskEvenWhenTmpfsIsAvailable(t *testing.T) {
+	// This is the capability the control measurement needs: force disk
+	// scratch on a runner where tmpfs IS present, so a same-day
+	// disk-backed control can be measured without touching the
+	// tmpfs-preferring default (47eff33) or reverting anything.
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass(scratchFSDisk, fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(disk): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSDisk {
+		t.Errorf("fsClass = %q, want %q", fsClass, scratchFSDisk)
+	}
+	if strings.HasPrefix(dir, fakeTmpfsRoot) {
+		t.Errorf("dir %q must NOT be created under the tmpfs root %q when disk is pinned", dir, fakeTmpfsRoot)
+	}
+}
+
+func TestResolveScratchDirForClass_PinsTmpfsAndSucceedsWhenAvailable(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass(scratchFSTmpfs, fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(tmpfs): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q", fsClass, scratchFSTmpfs)
+	}
+	if !strings.HasPrefix(dir, fakeTmpfsRoot) {
+		t.Errorf("dir %q should be created under the tmpfs root %q", dir, fakeTmpfsRoot)
+	}
+}
+
+func TestResolveScratchDirForClass_PinnedTmpfsErrorsLoudWhenUnavailable(t *testing.T) {
+	// An operator who explicitly asked for -scratch-fs=tmpfs must get a
+	// loud error when it's unavailable, NOT a silent fallback to disk —
+	// a silent fallback here would produce a disk measurement the
+	// caller believes is tmpfs, exactly the kind of mislabeled frame
+	// this whole field exists to prevent (D-11: fail loud, never
+	// silently skip).
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	_, _, err := resolveScratchDirForClass(scratchFSTmpfs, missingRoot)
+	if err == nil {
+		t.Fatal("resolveScratchDirForClass(tmpfs, missing root) should error, got nil")
+	}
+}
+
+func TestResolveScratchDirForClass_RejectsUnknownClass(t *testing.T) {
+	_, _, err := resolveScratchDirForClass("bogus", t.TempDir())
+	if err == nil {
+		t.Fatal("resolveScratchDirForClass(bogus) should error, got nil")
+	}
+}
+
+func TestParseFlags_ScratchFSDefaultsToAuto(t *testing.T) {
+	cfg, err := parseFlags([]string{"-mode", "regression"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.scratchFS != scratchFSAuto {
+		t.Errorf("scratchFS = %q, want %q", cfg.scratchFS, scratchFSAuto)
+	}
+}
+
+func TestParseFlags_ScratchFSOverrideApplies(t *testing.T) {
+	cfg, err := parseFlags([]string{"-mode", "regression", "-scratch-fs", "disk"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.scratchFS != "disk" {
+		t.Errorf("scratchFS = %q, want disk", cfg.scratchFS)
+	}
+}
+
 func TestMedianMetrics_CarriesScratchFS(t *testing.T) {
 	trials := []bench.Metrics{
 		{ScratchFS: scratchFSTmpfs, FilesPerSec: 1},
