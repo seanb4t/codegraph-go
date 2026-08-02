@@ -194,25 +194,33 @@ tasks:
 
   diag:cpu:
     desc: >-
-      CPU-topology diagnostic (10-04-PLAN, Rule 2 deviation — NOT a gate;
-      never called by ci.yml, and the only caller in bench.yml is its
-      non-gating, manually-dispatched cpu-diag job). Reports nproc, a Go
-      process's own runtime.NumCPU()/GOMAXPROCS(0), the cgroup CPU quota (v2
-      cpu.max, falling back to the v1 cfs_quota/cfs_period pair), and
-      /proc/cpuinfo's reported model/core count. Exists to check whether
-      a runner exposes more host-visible CPUs than its cgroup quota
-      grants — if so, tools/bench/runner's unbounded (--workers defaults
-      to runtime.NumCPU()) `codegraph index` invocation oversubscribes
-      the quota, and the resulting scheduler contention is a plausible
-      explanation for bench throughput variance that shows up with
-      stable peak RSS. Linux-only by nature (cgroup paths); the
-      precondition below fails loud with a pointer to the dispatchable
-      workflow rather than printing confusing "file not found" output on
-      a contributor's non-Linux machine.
+      CPU/memory/storage topology diagnostic (10-04-PLAN, Rule 2 deviation
+      — NOT a gate; never called by ci.yml, and the only callers in
+      bench.yml are its non-gating, manually-dispatched cpu-diag-* jobs).
+      Reports CPU (nproc, a Go process's own
+      runtime.NumCPU()/GOMAXPROCS(0), the cgroup CPU quota, /proc/cpuinfo
+      model/family/stepping/count, cpufreq scaling info), memory (free -b
+      or /proc/meminfo MemTotal), and storage (df -T for the workspace
+      and TMPDIR, block-device rotational flags, and a real
+      sequential-write+read-back throughput probe against TMPDIR — the
+      exact directory tools/bench/runner materializes its corpus into,
+      since os.MkdirTemp("", ...) resolves there). Exists to A/B two
+      competing explanations for bench throughput variance that showed up
+      with rock-stable peak RSS (0.56%) but a much wider wall-clock spread
+      (4.36% session medians, ~30% full 14-trial range): (1) CPU-count
+      oversubscription — refuted in an earlier pass, NumCPU already
+      matches nproc/cgroup on Namespace — and (2) I/O-bound variance from
+      unequal or noisier storage/memory between runner classes, which same
+      work + stable memory + different wall-clock is the classic signature
+      of. Linux-only by nature (cgroup/proc paths); the precondition below
+      fails loud with a pointer to the dispatchable workflow rather than
+      printing confusing "file not found" output on a contributor's
+      non-Linux machine.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
-        msg: "diag:cpu reads Linux cgroup paths (/sys/fs/cgroup/...) and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch it instead: Actions -> bench -> Run workflow -> job: cpu-diag."
+        msg: "diag:cpu reads Linux cgroup/proc paths and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch it instead: Actions -> bench -> Run workflow -> job: cpu-diag (both cpu-diag-github and cpu-diag-namespace run side by side)."
     cmds:
+      - echo "=== CPU ==="
       - echo "--- nproc ---"
       - nproc
       - echo "--- go process view (runtime.NumCPU / runtime.GOMAXPROCS(0)) ---"
@@ -230,15 +238,86 @@ tasks:
         else
           echo "no cgroup CPU quota file found at either the v2 or v1 path"
         fi
-      - echo "--- /proc/cpuinfo model/count ---"
+      - echo "--- /proc/cpuinfo model/family/stepping/count ---"
       - |
         set -euo pipefail
         if [ -f /proc/cpuinfo ]; then
-          grep -m1 "model name" /proc/cpuinfo || echo "no 'model name' line in /proc/cpuinfo"
+          grep -m1 "model name"  /proc/cpuinfo || echo "no 'model name' line in /proc/cpuinfo"
+          grep -m1 "cpu family"  /proc/cpuinfo || echo "no 'cpu family' line in /proc/cpuinfo"
+          grep -m1 "stepping"    /proc/cpuinfo || echo "no 'stepping' line in /proc/cpuinfo"
           echo "processor count: $(grep -c '^processor' /proc/cpuinfo)"
         else
           echo "/proc/cpuinfo not present"
         fi
+      - echo "--- cpufreq scaling (cpu0) ---"
+      - |
+        set -euo pipefail
+        CPUFREQ_DIR=/sys/devices/system/cpu/cpu0/cpufreq
+        if [ -d "$CPUFREQ_DIR" ]; then
+          for f in scaling_governor scaling_cur_freq scaling_min_freq scaling_max_freq; do
+            if [ -f "$CPUFREQ_DIR/$f" ]; then
+              echo "${f}: $(cat "$CPUFREQ_DIR/$f")"
+            else
+              echo "${f}: not present"
+            fi
+          done
+        else
+          echo "no cpufreq sysfs directory at $CPUFREQ_DIR (common inside a VM/container without frequency-scaling passthrough — itself a data point)"
+        fi
+      - echo "=== Memory ==="
+      - |
+        set -euo pipefail
+        if command -v free >/dev/null 2>&1; then
+          free -b
+        else
+          echo "free not found; falling back to /proc/meminfo"
+          grep MemTotal /proc/meminfo
+        fi
+      - echo "=== Storage ==="
+      - echo "--- df -T (workspace and TMPDIR) ---"
+      - |
+        set -euo pipefail
+        echo "workspace ($(pwd)):"
+        df -T .
+        echo "TMPDIR (${TMPDIR:-/tmp}), the directory tools/bench/runner materializes its corpus into:"
+        df -T "${TMPDIR:-/tmp}"
+      - echo "--- block device rotational flags (0=SSD/NVMe, 1=spinning) ---"
+      - |
+        set -euo pipefail
+        shopt -s nullglob 2>/dev/null || true
+        found=0
+        for f in /sys/block/*/queue/rotational; do
+          found=1
+          dev=$(basename "$(dirname "$(dirname "$f")")")
+          val=$(cat "$f" 2>/dev/null || echo "unreadable")
+          echo "${dev}: rotational=${val}"
+        done
+        if [ "$found" -eq 0 ]; then
+          echo "no /sys/block/*/queue/rotational entries found"
+        fi
+      - echo "--- sequential write+read-back probe against TMPDIR (2GiB) ---"
+      - |
+        set -euo pipefail
+        SCRATCH_DIR="${TMPDIR:-/tmp}"
+        SCRATCH_FILE="${SCRATCH_DIR%/}/codegraph-diag-ddtest.bin"
+        trap 'rm -f "$SCRATCH_FILE"' EXIT
+        echo "write:"
+        if dd if=/dev/zero of="$SCRATCH_FILE" bs=1M count=2048 conv=fdatasync oflag=direct 2>write.log; then
+          echo "(oflag=direct supported)"
+        else
+          echo "(oflag=direct NOT supported on this filesystem — falling back to buffered write)"
+          dd if=/dev/zero of="$SCRATCH_FILE" bs=1M count=2048 conv=fdatasync 2>write.log
+        fi
+        cat write.log
+        echo "read-back:"
+        if dd if="$SCRATCH_FILE" of=/dev/null bs=1M iflag=direct 2>read.log; then
+          echo "(iflag=direct supported)"
+        else
+          echo "(iflag=direct NOT supported on this filesystem — falling back to buffered read)"
+          dd if="$SCRATCH_FILE" of=/dev/null bs=1M 2>read.log
+        fi
+        cat read.log
+        rm -f write.log read.log
 
   # --- Contributor-only coarse wrappers (D-02) --------------------------
   #
