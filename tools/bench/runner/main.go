@@ -135,6 +135,7 @@ type config struct {
 	count        int
 	trials       int
 	runner       string
+	scratchFS    string
 }
 
 func run(args []string) error {
@@ -183,6 +184,7 @@ func parseFlags(args []string) (config, error) {
 	fs.IntVar(&cfg.count, "count", regressionFileCount, "regression mode only: number of synthetic files to generate")
 	fs.IntVar(&cfg.trials, "trials", defaultTrials, "regression mode only: number of independent measurement sessions to take each metric's median over; 1 means single-sample (not recommended for gating or -rebless)")
 	fs.StringVar(&cfg.runner, "runner", os.Getenv("CODEGRAPH_BENCH_RUNNER"), "runner identity label recorded alongside goos/goarch (e.g. a Namespace runs-on profile such as namespace-profile-linux-amd64-4x8); defaults to $CODEGRAPH_BENCH_RUNNER, and an explicit flag wins over the env var. Empty is fine outside CI — measurement never requires it")
+	fs.StringVar(&cfg.scratchFS, "scratch-fs", scratchFSAuto, "regression mode only: pin the scratch directory's filesystem class instead of auto-detecting — \"tmpfs\" (require /dev/shm, error loud if unavailable), \"disk\" (force disk-backed temp storage, skip tmpfs even when available — e.g. for a same-day control measurement against the tmpfs-preferring default), or \"auto\" (default: prefer tmpfs, fall back to disk). Ignored when -scratch-dir is set explicitly.")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -492,10 +494,13 @@ func pinnedAt(dir string) string {
 // scratchFSTmpfs and scratchFSDisk are internal/bench.Metrics.ScratchFS's
 // two possible values (10-04-PLAN). Not an enum type: Metrics is a plain
 // json-tagged struct with no methods (mirrors GOOS/GOARCH/Runner's own
-// plain-string discipline).
+// plain-string discipline). scratchFSAuto is -scratch-fs's default: prefer
+// tmpfs, fall back to disk (never itself recorded into Metrics.ScratchFS —
+// resolution always settles on one of the two values above).
 const (
 	scratchFSTmpfs = "tmpfs"
 	scratchFSDisk  = "disk"
+	scratchFSAuto  = "auto"
 )
 
 // tmpfsScratchRoot is the tmpfs mount this repo's Linux CI runners expose
@@ -548,10 +553,50 @@ func resolveRegressionScratchDir(tmpfsRoot string) (dir string, fsClass string, 
 	return d, scratchFSDisk, nil
 }
 
-// defaultRegressionScratchDir is resolveRegressionScratchDir bound to the
-// production tmpfs root. The only production call site.
-func defaultRegressionScratchDir() (dir string, fsClass string, err error) {
-	return resolveRegressionScratchDir(tmpfsScratchRoot)
+// resolveScratchDirForClass resolves regression mode's scratch directory
+// honoring an explicit -scratch-fs pin ("tmpfs" or "disk") when class is
+// one of those two values, falling back to resolveRegressionScratchDir's
+// auto-detection (prefer tmpfs, degrade to disk) when class is "" or
+// scratchFSAuto. tmpfsRoot is a parameter for the same testability reason
+// resolveRegressionScratchDir's is; the production call site
+// (runRegression) always passes tmpfsScratchRoot.
+//
+// Pinning the class explicitly is a first-class, documented capability —
+// not a debugging hack. Reproducing a specific measurement frame on
+// demand (e.g. a same-day disk-scratch CONTROL run alongside the
+// tmpfs-preferring default, to check whether a stale historical baseline
+// is even still comparable) is a legitimate, recurring need: this repo's
+// own perf-gate history is a comparison against a stale, different-
+// methodology measurement producing a fictitious regression that took
+// three rounds of triage to catch (tools/bench/BASELINE.md). "-scratch-fs
+// tmpfs" errors LOUD when tmpfs is unavailable rather than silently
+// falling back to disk (D-11: fail loud, never silently skip) — an
+// operator who explicitly asked for tmpfs and silently got disk would be
+// looking at a mislabeled frame, exactly the failure class ScratchFS
+// exists to prevent.
+func resolveScratchDirForClass(class, tmpfsRoot string) (dir string, fsClass string, err error) {
+	switch class {
+	case "", scratchFSAuto:
+		return resolveRegressionScratchDir(tmpfsRoot)
+	case scratchFSTmpfs:
+		info, statErr := os.Stat(tmpfsRoot)
+		if statErr != nil || !info.IsDir() {
+			return "", "", fmt.Errorf("-scratch-fs=tmpfs requested but tmpfs root %s is not usable: %v", tmpfsRoot, statErr)
+		}
+		d, mkErr := os.MkdirTemp(tmpfsRoot, "codegraph-bench-regression-")
+		if mkErr != nil {
+			return "", "", fmt.Errorf("-scratch-fs=tmpfs: create scratch dir under %s: %w", tmpfsRoot, mkErr)
+		}
+		return d, scratchFSTmpfs, nil
+	case scratchFSDisk:
+		d, mkErr := os.MkdirTemp("", "codegraph-bench-regression-")
+		if mkErr != nil {
+			return "", "", mkErr
+		}
+		return d, scratchFSDisk, nil
+	default:
+		return "", "", fmt.Errorf("unknown -scratch-fs %q (want %q, %q, or %q)", class, scratchFSAuto, scratchFSTmpfs, scratchFSDisk)
+	}
 }
 
 func runRegression(cfg config) error {
@@ -563,7 +608,7 @@ func runRegression(cfg config) error {
 	// path it resolves itself is characterized.
 	var scratchFS string
 	if scratchDir == "" {
-		dir, fsClass, err := defaultRegressionScratchDir()
+		dir, fsClass, err := resolveScratchDirForClass(cfg.scratchFS, tmpfsScratchRoot)
 		if err != nil {
 			return fmt.Errorf("create scratch dir: %w", err)
 		}
