@@ -241,6 +241,262 @@ func TestCheckRegression(t *testing.T) {
 			wantErr: true,
 			errHint: "platform",
 		},
+		{
+			// Plan 10-06's own reason for existing: namespace-profile-*
+			// runner labels ARE linux/amd64, so the platform guard above
+			// lets a runner-class change straight through. Same GOOS/GOARCH
+			// on both sides, different runner -> refused, naming both
+			// runner values.
+			name: "runner mismatch between baseline and current fails even when GOOS/GOARCH match",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "namespace-profile-linux-amd64-4x8",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "runner",
+		},
+		{
+			// The "no more" side of the runner guard: matching runners on
+			// both sides must still pass, and the numeric comparison must
+			// still proceed normally for that pair.
+			name: "matching runner on both sides passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  98.0,
+				PeakRSSBytes: 510_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
+		{
+			// An empty runner is "never recorded", not a wildcard: a
+			// baseline that predates runner recording must not silently
+			// validate against an attributed current run.
+			name: "empty baseline runner against non-empty current runner fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "runner",
+		},
+		{
+			// The mirror case: a measurement that itself never recorded
+			// its own runner must not silently validate against an
+			// attributed baseline either.
+			name: "non-empty baseline runner against empty current runner fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "runner",
+		},
+		{
+			// Unattributed runner on BOTH sides matches and is allowed —
+			// mirrors the GOOS/GOARCH precedent above. Every case in this
+			// file that doesn't set Runner exercises this path already;
+			// asserted explicitly here too.
+			name: "unattributed runner on both sides passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
+		{
+			// The refusal must fire BEFORE any numeric comparison: pair a
+			// runner mismatch with throughput/RSS numbers that would
+			// otherwise pass comfortably, and assert the error names the
+			// runner, not a tolerance percentage.
+			name: "runner mismatch refused before numeric comparison even when metrics would pass",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "namespace-profile-linux-amd64-4x8",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0, // identical - would pass every numeric check
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "runner",
+		},
+		{
+			// scratch_fs is the second frame descriptor this plan wires in
+			// (10-04-PLAN's explicit handoff): same runner, same
+			// GOOS/GOARCH, different scratch filesystem class -> refused,
+			// naming both scratch_fs values.
+			name: "scratch_fs mismatch between baseline and current fails even when runner and GOOS/GOARCH match",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "scratch",
+		},
+		{
+			name: "matching scratch_fs on both sides passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "tmpfs",
+				FilesPerSec:  98.0,
+				PeakRSSBytes: 510_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
+		{
+			// Empty scratch_fs is "never recorded", not a wildcard —
+			// same treatment as an empty runner.
+			name: "empty baseline scratch_fs against non-empty current scratch_fs fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "scratch",
+		},
+		{
+			name: "non-empty baseline scratch_fs against empty current scratch_fs fails",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				ScratchFS:    "disk",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "scratch",
+		},
+		{
+			name: "unattributed scratch_fs on both sides passes",
+			baseline: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			current: Metrics{
+				GOOS:         "linux",
+				GOARCH:       "amd64",
+				Runner:       "ubuntu-latest",
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
