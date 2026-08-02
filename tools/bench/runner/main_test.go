@@ -668,13 +668,22 @@ func TestResolveScratchDirForClass_RejectsUnknownClass(t *testing.T) {
 	}
 }
 
-func TestParseFlags_ScratchFSDefaultsToAuto(t *testing.T) {
+func TestParseFlags_ScratchFSDefaultsToDisk(t *testing.T) {
+	// 10-04-PLAN's own measured control: same-day, same-methodology
+	// comparison across all four (runner x scratch-fs) combinations
+	// found disk beat tmpfs on BOTH runner classes (ubuntu+disk 0.35%
+	// session disagreement / 28.6x headroom vs ubuntu+tmpfs 5.75%/1.74x;
+	// Namespace+disk 4.36%/2.30x vs Namespace+tmpfs 12.46%/0.80x). "auto"
+	// (prefer tmpfs) is measurably the wrong default for this workload —
+	// disk is. The tmpfs-preferring code path (resolveRegressionScratchDir,
+	// -scratch-fs tmpfs/auto) stays available as a first-class option; only
+	// the default changed.
 	cfg, err := parseFlags([]string{"-mode", "regression"})
 	if err != nil {
 		t.Fatalf("parseFlags: %v", err)
 	}
-	if cfg.scratchFS != scratchFSAuto {
-		t.Errorf("scratchFS = %q, want %q", cfg.scratchFS, scratchFSAuto)
+	if cfg.scratchFS != scratchFSDisk {
+		t.Errorf("scratchFS = %q, want %q", cfg.scratchFS, scratchFSDisk)
 	}
 }
 
