@@ -436,7 +436,7 @@ Plans:
   2. `CONTRIBUTING.md` documents the CGo toolchain prerequisites (zig for cross-builds, mingw-w64 for windows vet)
   3. A clean checkout can build, test, and lint via task targets alone
 
-**Plans**: 2/7 plans executed
+**Plans**: 3/7 plans executed
 
 Plans:
 **Wave 1**
@@ -446,7 +446,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 10-02-PLAN.md — ci.yml's test job onto task targets, contributor wrappers, and new `go vet ./...` coverage
-- [ ] 10-03-PLAN.md — release.yml runner migration, with the SLSA and native-darwin exceptions decided and test-enforced
+- [x] 10-03-PLAN.md — release.yml runner migration, with the SLSA and native-darwin exceptions decided and test-enforced
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -478,7 +478,7 @@ Plans:
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
 | 9. release-please + GoReleaser | v1.0 | 8/8 | Complete    | 2026-08-01 |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 2/7 | In Progress|  |
+| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 3/7 | In Progress|  |
 
 ## Backlog
 
