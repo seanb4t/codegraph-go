@@ -207,6 +207,10 @@ None during execution — the plan's `user_setup` block (Namespace GitHub integr
 - **Blocker/concern carried forward:** neither of this plan's two rewired jobs has been observed running on a real pushed CI event. The next action against this branch (a push or PR) should be watched for both jobs actually scheduling on `namespace-profile-linux-amd64-2x4` and completing successfully — if the Namespace integration turns out not to serve the label despite the pre-verified dashboard state, both jobs will queue indefinitely per Task 1's own `<precondition>` warning, and that failure mode is silent by construction (no error, just a queue).
 - `.github/actionlint.yaml` now exists at repo root-adjacent `.github/` and will need its `self-hosted-runner.labels` list extended if a future plan introduces a new Namespace runner-profile label beyond the two already declared.
 
+## Self-Check: PASSED
+
+All 8 created/modified deliverable files confirmed present on disk; all 3 task commits (`286f4aa`, `c53f011`, `8665c00`) plus this summary's own commit (`dcddafb`) confirmed in `git log`.
+
 ---
 *Phase: 10-local-build-contribution-and-taskfile-yml-setup*
 *Completed: 2026-08-01*

@@ -92,7 +92,7 @@
 
 ### Local Dev Tooling (DEV)
 
-- [ ] **DEV-01**: every CI-enforced command is invocable locally through one entry point, with exactly one definition — a root `Taskfile.yml` owns the command bodies (build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag sweep), the CI workflows invoke `task <target>` rather than re-declaring those bodies, and `CONTRIBUTING.md` points contributors at the targets. A clean checkout can build, test, and lint via task targets alone.
+- [x] **DEV-01**: every CI-enforced command is invocable locally through one entry point, with exactly one definition — a root `Taskfile.yml` owns the command bodies (build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag sweep), the CI workflows invoke `task <target>` rather than re-declaring those bodies, and `CONTRIBUTING.md` points contributors at the targets. A clean checkout can build, test, and lint via task targets alone.
 
 ## Future Requirements
 
@@ -182,7 +182,7 @@ Each requirement maps to exactly one phase. Phase numbering is scoped to milesto
 | REL-02 | Phase 9 | Satisfied 2026-08-01 (8/8 plans; 09-07 skipped by maintainer decision, 09-08 complete) |
 | REL-03 | Phase 8 | Complete |
 | REL-04 | Phase 8 | Complete |
-| DEV-01 | Phase 10 | Pending |
+| DEV-01 | Phase 10 | Complete |
 
 **Coverage:**
 
