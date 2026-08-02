@@ -517,6 +517,112 @@ func TestResolveTSBinary_EmptyWhenNotFound(t *testing.T) {
 	}
 }
 
+// --- Regression scratch-dir filesystem class (10-04-PLAN) ---
+//
+// PERF-02's synthetic corpus is ~18MB of raw content but ~770MB of
+// actual on-disk footprint once small-file block overhead is accounted
+// for (120k files at ~4KB/block minimum each), which makes this
+// workload IOPS/metadata-bound rather than bandwidth-bound — exactly
+// where overlayfs's layer-stack lookups and copy-up-on-write cost more
+// AND vary more under co-tenancy than tmpfs or a real block device
+// (measured: 4.36% Namespace session-to-session throughput variance
+// against a rock-stable 0.56% peak-RSS variance). Preferring tmpfs for
+// the regression scratch dir removes storage from the measurement path
+// entirely; recording which filesystem class was actually used closes
+// the same kind of blind spot Runner closes for runner class.
+
+func TestResolveRegressionScratchDir_PrefersTmpfsWhenAvailable(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveRegressionScratchDir(fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveRegressionScratchDir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q", fsClass, scratchFSTmpfs)
+	}
+	if !strings.HasPrefix(dir, fakeTmpfsRoot) {
+		t.Errorf("dir %q should be created under the fake tmpfs root %q", dir, fakeTmpfsRoot)
+	}
+	if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+		t.Errorf("resolveRegressionScratchDir did not actually create a directory at %q: %v", dir, statErr)
+	}
+}
+
+func TestResolveRegressionScratchDir_FallsBackToDiskWhenTmpfsRootMissing(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	dir, fsClass, err := resolveRegressionScratchDir(missingRoot)
+	if err != nil {
+		t.Fatalf("resolveRegressionScratchDir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSDisk {
+		t.Errorf("fsClass = %q, want %q (missing tmpfs root must fall back, not error)", fsClass, scratchFSDisk)
+	}
+	if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+		t.Errorf("resolveRegressionScratchDir did not actually create a directory at %q: %v", dir, statErr)
+	}
+}
+
+func TestResolveRegressionScratchDir_FallsBackToDiskWhenTmpfsRootIsAFile(t *testing.T) {
+	// A path that exists but is a FILE, not a directory — os.Stat
+	// succeeds, but treating it as a tmpfs mount root would be wrong.
+	notADir := filepath.Join(t.TempDir(), "not-a-directory")
+	mustWriteFile(t, notADir, "not a tmpfs mount")
+	dir, fsClass, err := resolveRegressionScratchDir(notADir)
+	if err != nil {
+		t.Fatalf("resolveRegressionScratchDir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSDisk {
+		t.Errorf("fsClass = %q, want %q (a file, not a directory, must fall back)", fsClass, scratchFSDisk)
+	}
+}
+
+func TestMedianMetrics_CarriesScratchFS(t *testing.T) {
+	trials := []bench.Metrics{
+		{ScratchFS: scratchFSTmpfs, FilesPerSec: 1},
+		{ScratchFS: scratchFSTmpfs, FilesPerSec: 2},
+		{ScratchFS: scratchFSTmpfs, FilesPerSec: 3},
+	}
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
+	if got.ScratchFS != scratchFSTmpfs {
+		t.Errorf("ScratchFS = %q, want %q", got.ScratchFS, scratchFSTmpfs)
+	}
+}
+
+func TestMetricsScratchFS_MarshalsToScratchFSKey(t *testing.T) {
+	m := bench.Metrics{ScratchFS: "tmpfs"}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"scratch_fs":"tmpfs"`) {
+		t.Errorf("marshalled JSON missing scratch_fs key: %s", data)
+	}
+}
+
+func TestReadBaseline_LegacyFileWithoutScratchFSKeyYieldsEmptyString(t *testing.T) {
+	// The currently committed tools/bench/baseline.json (and every
+	// baseline recorded before this field existed) has no "scratch_fs"
+	// key. Unmarshalling it must succeed and yield ScratchFS == "".
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline.json")
+	legacy := `{"subject":"go","repo":"synthetic-seed42-count120000","goos":"linux","goarch":"amd64","runner":"namespace-profile-linux-amd64-4x8","median_of_trials":7,"files_per_sec":19733.69,"bytes_per_sec":2989114.49,"query_latency_median_ms":194.498,"peak_rss_bytes":872935424,"cold_start_ms":13.147}`
+	mustWriteFile(t, path, legacy)
+
+	got, err := readBaseline(path)
+	if err != nil {
+		t.Fatalf("readBaseline(legacy, no scratch_fs key): %v", err)
+	}
+	if got.ScratchFS != "" {
+		t.Errorf("ScratchFS = %q, want empty string for a legacy baseline with no scratch_fs key", got.ScratchFS)
+	}
+}
+
 func mustWriteFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
