@@ -192,6 +192,53 @@ tasks:
     cmds:
       - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"
 
+  diag:cpu:
+    desc: >-
+      CPU-topology diagnostic (10-04-PLAN, Rule 2 deviation — NOT a gate,
+      never called by ci.yml or bench.yml). Reports nproc, a Go process's
+      own runtime.NumCPU()/GOMAXPROCS(0), the cgroup CPU quota (v2
+      cpu.max, falling back to the v1 cfs_quota/cfs_period pair), and
+      /proc/cpuinfo's reported model/core count. Exists to check whether
+      a runner exposes more host-visible CPUs than its cgroup quota
+      grants — if so, tools/bench/runner's unbounded (--workers defaults
+      to runtime.NumCPU()) `codegraph index` invocation oversubscribes
+      the quota, and the resulting scheduler contention is a plausible
+      explanation for bench throughput variance that shows up with
+      stable peak RSS. Linux-only by nature (cgroup paths); the
+      precondition below fails loud with a pointer to the dispatchable
+      workflow rather than printing confusing "file not found" output on
+      a contributor's non-Linux machine.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "diag:cpu reads Linux cgroup paths (/sys/fs/cgroup/...) and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch the bench-cpu-diag workflow instead (Actions -> bench-cpu-diag -> Run workflow)."
+    cmds:
+      - echo "--- nproc ---"
+      - nproc
+      - echo "--- go process view (runtime.NumCPU / runtime.GOMAXPROCS(0)) ---"
+      - go run ./tools/bench/cpudiag
+      - echo "--- cgroup CPU quota ---"
+      - |
+        set -euo pipefail
+        if [ -f /sys/fs/cgroup/cpu.max ]; then
+          echo "cgroup v2 cpu.max:"
+          cat /sys/fs/cgroup/cpu.max
+        elif [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
+          echo "cgroup v1 cpu.cfs_quota_us / cpu.cfs_period_us:"
+          cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us
+          cat /sys/fs/cgroup/cpu/cpu.cfs_period_us
+        else
+          echo "no cgroup CPU quota file found at either the v2 or v1 path"
+        fi
+      - echo "--- /proc/cpuinfo model/count ---"
+      - |
+        set -euo pipefail
+        if [ -f /proc/cpuinfo ]; then
+          grep -m1 "model name" /proc/cpuinfo || echo "no 'model name' line in /proc/cpuinfo"
+          echo "processor count: $(grep -c '^processor' /proc/cpuinfo)"
+        else
+          echo "/proc/cpuinfo not present"
+        fi
+
   # --- Contributor-only coarse wrappers (D-02) --------------------------
   #
   # CI NEVER calls these two targets — ci.yml calls the fine-grained
