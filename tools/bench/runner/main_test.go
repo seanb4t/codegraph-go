@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/bench"
@@ -116,7 +118,10 @@ func TestMedianMetrics_TakesEachMetricsOwnMedian(t *testing.T) {
 		{FilesPerSec: 10, BytesPerSec: 20, QueryLatencyMedianMS: 50, PeakRSSBytes: 100, ColdStartMS: 2},
 		{FilesPerSec: 20, BytesPerSec: 10, QueryLatencyMedianMS: 40, PeakRSSBytes: 500, ColdStartMS: 1},
 	}
-	got := medianMetrics(trials)
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 
 	if got.FilesPerSec != 20 {
 		t.Errorf("FilesPerSec = %v, want 20", got.FilesPerSec)
@@ -145,7 +150,10 @@ func TestMedianMetrics_RejectsASingleOutlierTrial(t *testing.T) {
 		{FilesPerSec: 11450},
 		{FilesPerSec: 6000}, // pathological tail session
 	}
-	got := medianMetrics(trials)
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 	if got.FilesPerSec != 11400 {
 		t.Fatalf("FilesPerSec = %v, want 11400 (the outlier must not move the result)", got.FilesPerSec)
 	}
@@ -157,7 +165,10 @@ func TestMedianMetrics_RecordsTrialCountAndCarriesIdentityFields(t *testing.T) {
 		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 1},
 		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 2},
 	}
-	got := medianMetrics(trials)
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 
 	if got.MedianOfTrials != 3 {
 		t.Errorf("MedianOfTrials = %d, want 3", got.MedianOfTrials)
@@ -175,19 +186,145 @@ func TestMedianMetrics_RecordsTrialCountAndCarriesIdentityFields(t *testing.T) {
 }
 
 func TestMedianMetrics_Empty(t *testing.T) {
-	got := medianMetrics(nil)
+	got, err := medianMetrics(nil)
+	if err != nil {
+		t.Fatalf("medianMetrics(nil): %v", err)
+	}
 	if got != (bench.Metrics{}) {
 		t.Fatalf("medianMetrics(nil) = %+v, want zero Metrics", got)
 	}
 }
 
 func TestMedianMetrics_SingleTrialIsRecordedAsSuch(t *testing.T) {
-	got := medianMetrics([]bench.Metrics{{FilesPerSec: 42}})
+	got, err := medianMetrics([]bench.Metrics{{FilesPerSec: 42}})
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 	if got.FilesPerSec != 42 {
 		t.Errorf("FilesPerSec = %v, want 42", got.FilesPerSec)
 	}
 	if got.MedianOfTrials != 1 {
 		t.Errorf("MedianOfTrials = %d, want 1 — a single-sample number must say so", got.MedianOfTrials)
+	}
+}
+
+// --- Runner identity (10-04-PLAN, D-09) ---
+//
+// baseline.json records only goos/goarch, and CheckRegression compares
+// exactly those two fields — but namespace-profile-linux-amd64-4x8 IS
+// linux/amd64, so moving bench.yml to a new runner class is structurally
+// invisible to the existing platform guard. Runner closes that blind spot
+// (comparison itself lands in a later plan, deliberately).
+
+func TestParseFlags_RunnerFromEnv(t *testing.T) {
+	t.Setenv("CODEGRAPH_BENCH_RUNNER", "namespace-profile-linux-amd64-4x8")
+	cfg, err := parseFlags([]string{"-mode", "regression"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.runner != "namespace-profile-linux-amd64-4x8" {
+		t.Errorf("runner = %q, want env value namespace-profile-linux-amd64-4x8", cfg.runner)
+	}
+}
+
+func TestParseFlags_RunnerFlagOverridesEnv(t *testing.T) {
+	t.Setenv("CODEGRAPH_BENCH_RUNNER", "env-value")
+	cfg, err := parseFlags([]string{"-mode", "regression", "-runner", "flag-value"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.runner != "flag-value" {
+		t.Errorf("runner = %q, want flag-value (explicit flag must win over env)", cfg.runner)
+	}
+}
+
+func TestParseFlags_RunnerEmptyWhenNeitherSet(t *testing.T) {
+	t.Setenv("CODEGRAPH_BENCH_RUNNER", "")
+	cfg, err := parseFlags([]string{"-mode", "regression"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.runner != "" {
+		t.Errorf("runner = %q, want empty — measurement must not require this field", cfg.runner)
+	}
+}
+
+func TestMedianMetrics_CarriesRunnerWhenIdentical(t *testing.T) {
+	trials := []bench.Metrics{
+		{Runner: "namespace-profile-linux-amd64-4x8", FilesPerSec: 1},
+		{Runner: "namespace-profile-linux-amd64-4x8", FilesPerSec: 2},
+		{Runner: "namespace-profile-linux-amd64-4x8", FilesPerSec: 3},
+	}
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
+	if got.Runner != "namespace-profile-linux-amd64-4x8" {
+		t.Errorf("Runner = %q, want namespace-profile-linux-amd64-4x8", got.Runner)
+	}
+}
+
+func TestMedianMetrics_RejectsMixedRunner(t *testing.T) {
+	// A mixed-runner aggregate is a category error of exactly the kind
+	// internal/bench.CheckRegression already refuses for GOOS/GOARCH —
+	// silently picking the first value would let a mid-migration run
+	// (some trials on ubuntu-latest, some on Namespace) masquerade as a
+	// single, coherent measurement.
+	trials := []bench.Metrics{
+		{Runner: "namespace-profile-linux-amd64-4x8"},
+		{Runner: "ubuntu-latest"},
+	}
+	_, err := medianMetrics(trials)
+	if err == nil {
+		t.Fatal("medianMetrics with mixed runner values across trials should error, got nil")
+	}
+	if !strings.Contains(err.Error(), "namespace-profile-linux-amd64-4x8") || !strings.Contains(err.Error(), "ubuntu-latest") {
+		t.Errorf("error %q should name both runner values", err)
+	}
+}
+
+func TestMetricsRunner_MarshalsToRunnerKey(t *testing.T) {
+	m := bench.Metrics{Runner: "namespace-profile-linux-amd64-4x8"}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"runner":"namespace-profile-linux-amd64-4x8"`) {
+		t.Errorf("marshalled JSON missing runner key: %s", data)
+	}
+}
+
+func TestMetricsRunner_RoundTrips(t *testing.T) {
+	m := bench.Metrics{Runner: "namespace-profile-linux-amd64-4x8"}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got bench.Metrics
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Runner != m.Runner {
+		t.Errorf("round-tripped Runner = %q, want %q", got.Runner, m.Runner)
+	}
+}
+
+func TestReadBaseline_LegacyFileWithoutRunnerKeyYieldsEmptyString(t *testing.T) {
+	// The currently committed tools/bench/baseline.json has no "runner"
+	// key. Unmarshalling it must succeed and yield Runner == "" — an
+	// empty value means "recorded before this field existed", not an
+	// error.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline.json")
+	legacy := `{"subject":"go","repo":"synthetic-seed42-count120000","goos":"linux","goarch":"amd64","median_of_trials":7,"files_per_sec":11279.591291175333,"bytes_per_sec":1708549.4453683186,"query_latency_median_ms":280.943,"peak_rss_bytes":907202560,"cold_start_ms":13.285}`
+	mustWriteFile(t, path, legacy)
+
+	got, err := readBaseline(path)
+	if err != nil {
+		t.Fatalf("readBaseline(legacy, no runner key): %v", err)
+	}
+	if got.Runner != "" {
+		t.Errorf("Runner = %q, want empty string for a legacy baseline with no runner key", got.Runner)
 	}
 }
 
