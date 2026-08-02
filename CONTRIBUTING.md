@@ -72,6 +72,29 @@ your own platform, you do not need them.
 
 Workflow changes should pass `actionlint` locally before you push.
 
+Every command CI runs is defined exactly once, as a `task` target — see
+`Taskfile.yml` for the full list and each target's `desc:`.
+
+- `task` with no arguments lists everything available.
+- `task build`, `task test`, and `task lint` are the three you need day to
+  day. `task test` covers every host-only leg — unit, golden parity,
+  subprocess integration, isolated daemon, and race — and needs nothing
+  beyond the C toolchain above.
+- The cross-toolchain checks are deliberately separate targets, not part of
+  `task test`: `task vet:daemon-windows` needs `mingw-w64`, and
+  `task check:reproducibility:arm64` needs `zig`. Both fail with an install
+  instruction rather than skipping, so a green run means the same thing here
+  and in CI.
+- `task check:cross` is the same pre-tag sweep `release-please.yml`'s
+  `pretag-gate` job runs before a tag can be created.
+- CI calls these same fine-grained targets directly — a contributor and CI
+  run identical command bodies, never a divergent local approximation.
+- `task`, `goreleaser`, and `actionlint` build on demand from `go.tool.mod`
+  and `go.tool-lint.mod` — there is nothing to install first, only Go and
+  whatever toolchain the target itself needs. Version bumps for those two
+  files are manual: neither Dependabot nor Renovate is configured for this
+  repository at all, so nothing updates them automatically.
+
 ## Pull requests
 
 **The PR title must be Conventional-Commits-shaped.** This is enforced by CI,
