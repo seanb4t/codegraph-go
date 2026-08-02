@@ -3,10 +3,12 @@
   "repo": "synthetic-seed42-count120000",
   "goos": "linux",
   "goarch": "amd64",
+  "runner": "ubuntu-latest",
+  "scratch_fs": "disk",
   "median_of_trials": 7,
-  "files_per_sec": 11279.591291175333,
-  "bytes_per_sec": 1708549.4453683186,
-  "query_latency_median_ms": 280.943,
-  "peak_rss_bytes": 907202560,
-  "cold_start_ms": 13.285
+  "files_per_sec": 17090.87527197409,
+  "bytes_per_sec": 2588799.9585264884,
+  "query_latency_median_ms": 258.199,
+  "peak_rss_bytes": 845950976,
+  "cold_start_ms": 12.708
 }
