@@ -184,7 +184,7 @@ func parseFlags(args []string) (config, error) {
 	fs.IntVar(&cfg.count, "count", regressionFileCount, "regression mode only: number of synthetic files to generate")
 	fs.IntVar(&cfg.trials, "trials", defaultTrials, "regression mode only: number of independent measurement sessions to take each metric's median over; 1 means single-sample (not recommended for gating or -rebless)")
 	fs.StringVar(&cfg.runner, "runner", os.Getenv("CODEGRAPH_BENCH_RUNNER"), "runner identity label recorded alongside goos/goarch (e.g. a Namespace runs-on profile such as namespace-profile-linux-amd64-4x8); defaults to $CODEGRAPH_BENCH_RUNNER, and an explicit flag wins over the env var. Empty is fine outside CI — measurement never requires it")
-	fs.StringVar(&cfg.scratchFS, "scratch-fs", scratchFSAuto, "regression mode only: pin the scratch directory's filesystem class instead of auto-detecting — \"tmpfs\" (require /dev/shm, error loud if unavailable), \"disk\" (force disk-backed temp storage, skip tmpfs even when available — e.g. for a same-day control measurement against the tmpfs-preferring default), or \"auto\" (default: prefer tmpfs, fall back to disk). Ignored when -scratch-dir is set explicitly.")
+	fs.StringVar(&cfg.scratchFS, "scratch-fs", scratchFSDisk, "regression mode only: pin the scratch directory's filesystem class — \"disk\" (default: force disk-backed temp storage; the 10-04-PLAN control measurement found this beats tmpfs on every runner class tested), \"tmpfs\" (require /dev/shm, error loud if unavailable), or \"auto\" (prefer tmpfs, fall back to disk — kept for the deferred Namespace cache-volume follow-up, NOT the default). Ignored when -scratch-dir is set explicitly.")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -494,9 +494,12 @@ func pinnedAt(dir string) string {
 // scratchFSTmpfs and scratchFSDisk are internal/bench.Metrics.ScratchFS's
 // two possible values (10-04-PLAN). Not an enum type: Metrics is a plain
 // json-tagged struct with no methods (mirrors GOOS/GOARCH/Runner's own
-// plain-string discipline). scratchFSAuto is -scratch-fs's default: prefer
-// tmpfs, fall back to disk (never itself recorded into Metrics.ScratchFS —
-// resolution always settles on one of the two values above).
+// plain-string discipline). scratchFSAuto ("prefer tmpfs, fall back to
+// disk") is a selectable -scratch-fs value but NOT the default — see
+// resolveRegressionScratchDir's doc comment for why tmpfs was tried and
+// measured worse. scratchFSAuto is never itself recorded into
+// Metrics.ScratchFS; resolution always settles on one of the two values
+// above.
 const (
 	scratchFSTmpfs = "tmpfs"
 	scratchFSDisk  = "disk"
@@ -513,30 +516,42 @@ const (
 // host).
 const tmpfsScratchRoot = "/dev/shm"
 
-// resolveRegressionScratchDir resolves regression mode's scratch
-// directory when -scratch-dir isn't set, preferring tmpfsRoot (RAM-backed)
-// over disk. tmpfsRoot is a parameter — rather than resolveRegressionScratchDir
-// hardcoding tmpfsScratchRoot itself — specifically so tests can substitute
-// a t.TempDir() standing in for "tmpfs" and exercise the preference logic
-// without depending on a real tmpfs mount existing in the test
-// environment; the production call site (defaultRegressionScratchDir)
-// always passes tmpfsScratchRoot.
+// resolveRegressionScratchDir implements the "auto" -scratch-fs behavior:
+// prefer tmpfsRoot (RAM-backed) over disk when tmpfsRoot exists. NOT the
+// production default (see -scratch-fs's own flag default, scratchFSDisk) —
+// kept as a selectable option (-scratch-fs auto or -scratch-fs tmpfs) for
+// the deferred Namespace cache-volume follow-up. tmpfsRoot is a
+// parameter — rather than this function hardcoding tmpfsScratchRoot
+// itself — specifically so tests can substitute a t.TempDir() standing in
+// for "tmpfs" and exercise the preference logic without depending on a
+// real tmpfs mount existing in the test environment.
 //
-// Why prefer tmpfs at all: PERF-02's synthetic corpus is ~18MB of raw
-// content but ~773MB of actual on-disk footprint (120k files at ~4KB/
-// block minimum each dominates), making this workload IOPS/metadata-bound
-// rather than bandwidth-bound — exactly where overlayfs's layer-stack
-// lookups and copy-up-on-write cost more AND vary more under co-tenancy
-// than a real block device or tmpfs does (measured: 4.36% Namespace
-// session-to-session throughput variance against a rock-stable 0.56%
-// peak-RSS variance — same work, same memory, different wall-clock is the
-// textbook signature of storage-latency jitter, not CPU or memory
-// pressure). Returns the scratch dir path and which filesystem class it
-// landed on, so the caller can record that frame descriptor in the
-// measured Metrics (see internal/bench.Metrics.ScratchFS) — the storage
-// frame isn't the only thing that can silently change what "no
-// regression" means; the runner class already gets this same treatment
-// via Metrics.Runner.
+// HISTORY, load-bearing for anyone tempted to re-default to tmpfs: an
+// earlier pass of 10-04-PLAN hypothesized tmpfs would help, because
+// PERF-02's synthetic corpus is ~18MB of raw content but ~773MB of actual
+// on-disk footprint (120k files at ~4KB/block minimum each dominates),
+// making this workload IOPS/metadata-bound rather than bandwidth-bound —
+// exactly where overlayfs's layer-stack lookups and copy-up-on-write were
+// expected to cost more and vary more under co-tenancy than a real block
+// device. That hypothesis was WRONG, refuted by a direct same-day,
+// same-methodology control across all four (runner x scratch-fs)
+// combinations:
+//
+//	ubuntu-latest   + disk:  0.35% session-to-session disagreement, 28.6x headroom (10% tolerance)
+//	ubuntu-latest   + tmpfs: 5.75%  / 1.74x  — WORSE than disk
+//	Namespace       + disk:  4.36%  / 2.30x
+//	Namespace       + tmpfs: 12.46% / 0.80x — WORSE than disk, and worse than every other combination
+//
+// tmpfs made variance WORSE on both runner classes tested, not better.
+// Disk-backed scratch is the measured-correct default; tmpfs remains
+// selectable, not because it helps this workload, but because it is the
+// tool needed to test whether a Namespace CACHE VOLUME (untested,
+// deferred follow-up) behaves differently than tmpfs did. Returns the
+// scratch dir path and which filesystem class it landed on, so the
+// caller can record that frame descriptor in the measured Metrics (see
+// internal/bench.Metrics.ScratchFS) — the storage frame isn't the only
+// thing that can silently change what "no regression" means; the runner
+// class already gets this same treatment via Metrics.Runner.
 func resolveRegressionScratchDir(tmpfsRoot string) (dir string, fsClass string, err error) {
 	if info, statErr := os.Stat(tmpfsRoot); statErr == nil && info.IsDir() {
 		if d, mkErr := os.MkdirTemp(tmpfsRoot, "codegraph-bench-regression-"); mkErr == nil {
@@ -555,25 +570,30 @@ func resolveRegressionScratchDir(tmpfsRoot string) (dir string, fsClass string, 
 
 // resolveScratchDirForClass resolves regression mode's scratch directory
 // honoring an explicit -scratch-fs pin ("tmpfs" or "disk") when class is
-// one of those two values, falling back to resolveRegressionScratchDir's
-// auto-detection (prefer tmpfs, degrade to disk) when class is "" or
-// scratchFSAuto. tmpfsRoot is a parameter for the same testability reason
+// one of those two values, or resolveRegressionScratchDir's tmpfs-preferring
+// auto-detection when class is scratchFSAuto (NOT the -scratch-fs flag
+// default — see that flag's own doc string and resolveRegressionScratchDir's
+// HISTORY comment for why disk, not tmpfs, is the measured-correct
+// default). An empty class string also means "auto" — parseFlags never
+// actually produces "" here since -scratch-fs always has a default, but
+// resolveScratchDirForClass treats it the same as scratchFSAuto rather
+// than erroring, since "unset" and "explicitly auto" are the same request.
+// tmpfsRoot is a parameter for the same testability reason
 // resolveRegressionScratchDir's is; the production call site
 // (runRegression) always passes tmpfsScratchRoot.
 //
 // Pinning the class explicitly is a first-class, documented capability —
 // not a debugging hack. Reproducing a specific measurement frame on
-// demand (e.g. a same-day disk-scratch CONTROL run alongside the
-// tmpfs-preferring default, to check whether a stale historical baseline
-// is even still comparable) is a legitimate, recurring need: this repo's
-// own perf-gate history is a comparison against a stale, different-
-// methodology measurement producing a fictitious regression that took
-// three rounds of triage to catch (tools/bench/BASELINE.md). "-scratch-fs
-// tmpfs" errors LOUD when tmpfs is unavailable rather than silently
-// falling back to disk (D-11: fail loud, never silently skip) — an
-// operator who explicitly asked for tmpfs and silently got disk would be
-// looking at a mislabeled frame, exactly the failure class ScratchFS
-// exists to prevent.
+// demand (e.g. the same-day disk-scratch CONTROL run that led to disk
+// becoming the default, or the deferred Namespace cache-volume follow-up)
+// is a legitimate, recurring need: this repo's own perf-gate history is a
+// comparison against a stale, different-methodology measurement producing
+// a fictitious regression that took three rounds of triage to catch
+// (tools/bench/BASELINE.md). "-scratch-fs tmpfs" errors LOUD when tmpfs
+// is unavailable rather than silently falling back to disk (D-11: fail
+// loud, never silently skip) — an operator who explicitly asked for
+// tmpfs and silently got disk would be looking at a mislabeled frame,
+// exactly the failure class ScratchFS exists to prevent.
 func resolveScratchDirForClass(class, tmpfsRoot string) (dir string, fsClass string, err error) {
 	switch class {
 	case "", scratchFSAuto:
