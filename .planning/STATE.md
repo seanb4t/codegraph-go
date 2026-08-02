@@ -5,15 +5,15 @@ milestone_name: Drop-in Parity & Human UX
 current_phase: 10
 current_phase_name: Local Build Tooling & CONTRIBUTING
 status: executing
-stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-08-02T13:24:17.358Z"
+stopped_at: Completed 10-04-PLAN.md
+last_updated: "2026-08-02T18:00:53.699Z"
 last_activity: 2026-08-01
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 10
   completed_phases: 9
   total_plans: 72
-  completed_plans: 69
+  completed_plans: 70
   percent: 90
 ---
 
@@ -29,13 +29,13 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 ## Current Position
 
 Phase: 10 (Local Build Tooling & CONTRIBUTING) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 **2026-08-01 — v0.2.0 PUBLISHED AND VERIFIED; REPO IS PUBLIC.** The release was cut entirely by release-please (tag + Release authored by `fzy-release-please[bot]`, no human `git tag`); all 11 `release.yml` jobs green (run 30675077940, event=push ref=v0.2.0); the publish step provably took the UPLOAD branch (D-04) because the Release predated the run by 45s. Task-3 verification all five: 20 assets, `cosign` Verified OK, **`TestVerifyReleaseE2E` RAN (not skipped) and PASSED** — its first execution against a real artifact ever — SLSA PASSED at builder `@v2.1.0` commit cce95f3, and a genuinely shipped v0.1.0 binary self-upgraded to v0.2.0. The installed binary is byte-identical (`a64c1549…`) to the SLSA-attested subject, the cosign-verified blob, and the artifact the E2E test passed against: what a user receives is what was attested. NOTE the upgrade first returned 404 — `internal/upgrade` sends no Authorization header and the repo was private, so REL-02's second half was UNPROVABLE, NOT UNMET; the phase was held open rather than closed on 4-of-5 green, and it passed first try once public. This also empirically confirms the structural argument used to skip 09-07: a binary hard-coding the PRE-rewiring SAN constants verified an App-triggered signature, so `releaseWorkflowRefPattern` really is actor-independent.
 **OSS readiness complete** — community health 100%: LICENSE (MIT, detected — an appended paragraph had made it NOASSERTION), NOTICE with the upstream copyright transcribed verbatim (`Copyright (c) 2026 Colby Mchenry`, lowercase h, not guessed), README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, 4 issue forms + 3 typed PR templates behind a router default, 6 topics. Five gsd-core workflows lifted so the stated gates are enforced rather than described: close-draft-prs, require-issue-link, pr-template-format (policy in Python, not .cjs), auto-close-unsolicited-prs, auto-label-issues. Labels `feature`/`chore` referenced by issue templates did not exist — GitHub silently drops unknown labels, so two templates were labelling nothing. Issue #9 tracks tier-2 workflows + the remaining Python migration.
 Last activity: 2026-08-01 — Phase 10 execution started
 
-Progress: [██████████] 96% (9 of 10 phases)
+Progress: [██████████] 97% (9 of 10 phases)
 
 ## Performance Metrics
 
@@ -133,6 +133,7 @@ Progress: [██████████] 96% (9 of 10 phases)
 | Phase 10 P02 | unknown | 3 tasks | 5 files |
 | Phase 10 P03 | unknown | 2 tasks | 3 files |
 | Phase 10 P05 | 41min | 3 tasks | 4 files |
+| Phase 10 P04 | ~16h (checkpoint-investigation dominated) | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -257,6 +258,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: check:cross ports release-please.yml's sweep verbatim into Taskfile.yml (D-15); pretag-gate calls it, staying on ubuntu-latest outside D-06's Namespace scope
 - [Phase ?]: TestCheckCrossMatchesGoreleaserTargets uses a real YAML decoder (go.yaml.in/yaml/v3) against .goreleaser.yaml to avoid a vacuous match on its inline flow-sequence goos/goarch syntax
 - [Phase ?]: Install Task step duration measured locally only (2.8s-20.2s across cache states, all under 60s threshold); real ubuntu-latest CI timing and a real pretag-gate pushed run remain unverified since release-please.yml triggers only on push to main
+- [Phase ?]: 10-04: Namespace migration for perf gate NOT adopted — same-day control found ubuntu-latest+disk most stable (0.35%/28.6x) vs every alternative (Namespace+disk 4.36%/2.30x, ubuntu+tmpfs 5.75%/1.74x, Namespace+tmpfs 12.46%/0.80x); rebless reverted to ubuntu-latest, headtohead stays on Namespace
+- [Phase ?]: 10-04: DefaultThroughputTolerance left unchanged (10%) — 28.6x headroom on ubuntu-latest+disk needs no widening; adopt-and-widen path abandoned
+- [Phase ?]: 10-04: discovered the immediately-prior baseline was 51.5% stale (gate would have passed a 37.8% regression green); reblessed fresh on ubuntu-latest+disk; cause of the jump explicitly NOT asserted (code speedup vs GitHub fleet hardware, unmeasured)
 
 ### Pending Todos
 
@@ -280,6 +284,7 @@ Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTING.md) tracked in ROADM
 - [Phase 7/8] GOOS=windows go vet ./internal/daemon/ ./internal/graphstore/ fails (undefined: tree_sitter.Node in internal/indexer/goextract/routes) — CGo tree-sitter grammar bindings excluded under windows/amd64 build constraints; pre-existing, confirmed unrelated to Phase 7's changes, needs resolution alongside Phase 8's Charm v2 CGo/govulncheck/SBOM audit
 - [Phase 10-01] Neither rewired ci.yml job (goreleaser-check, actionlint) has been observed running on a real pushed CI event yet — both were verified locally only (task check:goreleaser / task lint:actions exit 0, go list ./... unaffected, required-check names set-equal to ruleset 20157557). Watch the next push/PR for both jobs actually scheduling on namespace-profile-linux-amd64-2x4 and completing; a missing runner provider queues indefinitely with no error (Task 1's own precondition warning).
 - 10-03: namespace-profile-macos-6x14-tahoe (release.yml's darwin build leg) has never been exercised in this repo — release.yml triggers only on v[0-9]* tag push, not pull_request, so no PR proves it. Must be watched on the next real release tag push: job schedules (not queues indefinitely), both darwin binaries build, and ideally a codegraph upgrade smoke test on real macOS. See 10-03-SUMMARY.md Known Unknowns.
+- 10-06's plan text assumes 'a Namespace-recorded baseline is committed' and plans to move ci.yml's perf gate to Namespace — 10-04's investigation overturned this premise (ubuntu-latest+disk measured most stable). 10-06 needs re-scoping (drop or re-confirm the Namespace-gate-move must_have) before execution; the runner-aware CheckRegression wiring it adds is still valid and needed.
 
 ### Quick Tasks Completed
 
@@ -299,8 +304,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-08-02T13:23:50.791Z
-Stopped at: Completed 10-05-PLAN.md
+Last session: 2026-08-02T18:00:53.684Z
+Stopped at: Completed 10-04-PLAN.md
   NEXT: Phase 10 (Local Build Tooling & CONTRIBUTING) is UNPLANNED and needs a SCOPE DECISION before planning — ROADMAP flags it as arguably v1.1 work and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile. Alternative: `/gsd-complete-milestone` to close v1.0 at 9 phases.
   OPEN ISSUES (none blocking Phase 09): #13 daemon `-race` on the `getppid` test seam · #14 provenance-over-checksums wording still uncorrected in release.yml:327 + docs/RELEASE.md:26-28 + docs/RELEASE-PROCEDURES.md:120-122 (the verification COMMANDS were fixed in PRs #6/#7; the descriptive claim that produced them was not) · #15 fixed `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 CheckRegression still never compares `Metrics.Repo` · #17 TestRunWatchdogCancelsRunOnSimulatedReparent fails 3/3 under full-suite load, passes 3/3 isolated.
   CARRY-OVER: the new `goreleaser-check` CI job (05b26ed) runs on PRs but is NOT in main's required-status-check set (ruleset 20157557, currently 6 checks) — add it only after it has run at least once, or pending PRs may block on a never-reported check. Also advisory from the security audit: the four `pull_request_target` workflows have no threat-register entry, having landed after Phase 09's register was authored.
