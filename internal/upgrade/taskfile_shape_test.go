@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	yaml "go.yaml.in/yaml/v3"
 )
 
 // --- fixture paths ---------------------------------------------------------
@@ -23,10 +25,12 @@ const workflowsDir = "../../.github/workflows"
 // tool modfiles must exist as distinct files with a non-empty rationale
 // header.
 const (
-	rootGoModPath   = "../../go.mod"
-	toolModfilePath = "../../go.tool.mod"
-	lintModfilePath = "../../go.tool-lint.mod"
-	taskfilePath    = "../../Taskfile.yml"
+	rootGoModPath    = "../../go.mod"
+	toolModfilePath  = "../../go.tool.mod"
+	lintModfilePath  = "../../go.tool-lint.mod"
+	taskfilePath     = "../../Taskfile.yml"
+	goreleaserPath   = "../../.goreleaser.yaml"
+	checkCrossTaskID = "check:cross"
 )
 
 // requiredCheckNames is the literal fixture of GitHub ruleset 20157557's
@@ -347,6 +351,112 @@ func mustParseTaskCallList(t *testing.T, block string) []string {
 	return v
 }
 
+// goreleaserBuildEntry mirrors the shape of one .goreleaser.yaml `builds:`
+// list entry, capturing only the two fields TestCheckCrossMatchesGoreleaserTargets
+// needs. goos/goarch are declared in INLINE flow-sequence form in this
+// repo's .goreleaser.yaml (`goos: [linux]`, not block-sequence form) — a
+// real YAML decoder handles both; a raw-text sequence-marker regex would
+// silently match neither and produce a vacuously empty pair set (this
+// project's own house rule against exactly that failure class).
+type goreleaserBuildEntry struct {
+	GOOS   []string `yaml:"goos"`
+	GOARCH []string `yaml:"goarch"`
+}
+
+type goreleaserConfig struct {
+	Builds []goreleaserBuildEntry `yaml:"builds"`
+}
+
+// parseGoreleaserCrossPairs decodes .goreleaser.yaml source src with a real
+// YAML decoder and returns every GOOS/GOARCH pair named across its builds:
+// entries, as "goos/goarch" strings. Returns a non-nil error if src fails
+// to parse as YAML, declares zero builds: entries, or declares builds:
+// entries none of which name both a goos and a goarch — never a usable
+// zero value on any of those misses (the CR-01 defect class every parser
+// in this file guards against).
+func parseGoreleaserCrossPairs(src string) ([]string, error) {
+	var cfg goreleaserConfig
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserCrossPairs: %w", err)
+	}
+	if len(cfg.Builds) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserCrossPairs: no builds: entries found")
+	}
+	var pairs []string
+	for _, b := range cfg.Builds {
+		for _, goos := range b.GOOS {
+			for _, goarch := range b.GOARCH {
+				pairs = append(pairs, goos+"/"+goarch)
+			}
+		}
+	}
+	if len(pairs) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserCrossPairs: builds: entries present but none declare both goos: and goarch:")
+	}
+	return pairs, nil
+}
+
+func mustParseGoreleaserCrossPairs(t *testing.T, src string) []string {
+	t.Helper()
+	v, err := parseGoreleaserCrossPairs(src)
+	if err != nil {
+		t.Fatalf("mustParseGoreleaserCrossPairs: %v", err)
+	}
+	return v
+}
+
+// checkCrossForLineRe matches the `for pair in ...; do` line inside
+// check:cross's command body — the single source of truth for which
+// GOOS/GOARCH pairs the sweep covers.
+var checkCrossForLineRe = regexp.MustCompile(`for pair in (.+); do`)
+
+// parseCheckCrossPairs reads Taskfile.yml source src, locates its
+// check:cross task block, and returns the GOOS/GOARCH pairs named on that
+// block's `for pair in ...; do` line, in the order they appear. Returns a
+// non-nil error if src has no check:cross task at all (naming it), or the
+// task exists but its command text has no `for pair in ...; do` line, or
+// that line names zero pairs — never a usable zero value on any of those
+// misses.
+func parseCheckCrossPairs(src string) ([]string, error) {
+	blocks, err := parseTaskBlocks(src)
+	if err != nil {
+		return nil, fmt.Errorf("parseCheckCrossPairs: %w", err)
+	}
+	block, ok := blocks[checkCrossTaskID]
+	if !ok {
+		return nil, fmt.Errorf("parseCheckCrossPairs: no %q task found in Taskfile.yml", checkCrossTaskID)
+	}
+	m := checkCrossForLineRe.FindStringSubmatch(block)
+	if m == nil {
+		return nil, fmt.Errorf("parseCheckCrossPairs: %q task has no 'for pair in ...; do' line", checkCrossTaskID)
+	}
+	pairs := strings.Fields(m[1])
+	if len(pairs) == 0 {
+		return nil, fmt.Errorf("parseCheckCrossPairs: %q task's 'for pair in' line names zero pairs", checkCrossTaskID)
+	}
+	return pairs, nil
+}
+
+func mustParseCheckCrossPairs(t *testing.T, src string) []string {
+	t.Helper()
+	v, err := parseCheckCrossPairs(src)
+	if err != nil {
+		t.Fatalf("mustParseCheckCrossPairs: %v", err)
+	}
+	return v
+}
+
+// sortedPairSet returns pairs as a single comma-joined, sorted string —
+// per this project's own house rule (~/.claude/rules/grepping.md) against
+// exit-status/count-based comparison for exact multi-value equality:
+// comparing one sorted string in one assertion carries "no more" and "no
+// fewer" simultaneously, so both an omission and an addition fail.
+func sortedPairSet(pairs []string) string {
+	sorted := append([]string(nil), pairs...)
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
+}
+
 // --- tests -------------------------------------------------------------
 
 // TestRequiredCheckNamesPreserved is the T-10-01-05 information-disclosure
@@ -614,5 +724,123 @@ func TestTaskfileWrapperIsSerial_MissingWrapperIsError(t *testing.T) {
 	blocks := mustParseTaskBlocks(t, src)
 	if _, ok := blocks["test"]; ok {
 		t.Fatalf("parseTaskBlocks(%q): expected no %q key in the returned map, got one", src, "test")
+	}
+}
+
+// TestCheckCrossMatchesGoreleaserTargets is the D-15/T-10-05-03 divergence
+// guard: the set of GOOS/GOARCH pairs Taskfile.yml's check:cross target
+// sweeps must be set-equal to the set of {goos, goarch} pairs across
+// .goreleaser.yaml's builds: entries. Compared as one sorted-string
+// equality so both a pair present in one and absent from the other fails,
+// in either direction, with the offending pair(s) named in the failure
+// message — adding a release target to .goreleaser.yaml without adding it
+// to the pre-tag sweep (or vice versa) now fails this test.
+func TestCheckCrossMatchesGoreleaserTargets(t *testing.T) {
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	taskPairs := mustParseCheckCrossPairs(t, string(taskfileData))
+
+	goreleaserData, err := os.ReadFile(goreleaserPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserPath, err)
+	}
+	grPairs := mustParseGoreleaserCrossPairs(t, string(goreleaserData))
+
+	gotSorted := sortedPairSet(taskPairs)
+	wantSorted := sortedPairSet(grPairs)
+	if gotSorted != wantSorted {
+		t.Fatalf("check:cross pairs %v are not set-equal to .goreleaser.yaml builds: pairs %v — got sorted set %q, want %q (a pair present in one and absent from the other, in either direction, is a coverage divergence between the pre-tag sweep and the release build matrix)", taskPairs, grPairs, gotSorted, wantSorted)
+	}
+}
+
+// TestCheckCrossMatchesGoreleaserTargets_EmptyBuildsIsError is the edge
+// case named by the plan's own acceptance criteria: a .goreleaser.yaml
+// with zero builds: entries must produce a non-nil error from
+// parseGoreleaserCrossPairs, never an empty-set match against an equally
+// empty (or absent) sweep — an empty-vs-empty comparison would pass
+// vacuously without asserting anything.
+func TestCheckCrossMatchesGoreleaserTargets_EmptyBuildsIsError(t *testing.T) {
+	src := "version: 2\nproject_name: codegraph\nbuilds: []\n"
+	if _, err := parseGoreleaserCrossPairs(src); err == nil {
+		t.Fatalf("parseGoreleaserCrossPairs(%q): expected a non-nil error for zero builds: entries, got nil", src)
+	}
+}
+
+// TestCheckCrossMatchesGoreleaserTargets_MissingCheckCrossIsError is the
+// edge case named by the plan's own acceptance criteria: a Taskfile.yml
+// with no check:cross target must produce a non-nil error from
+// parseCheckCrossPairs naming the missing target, never a silently-empty
+// pair slice.
+func TestCheckCrossMatchesGoreleaserTargets_MissingCheckCrossIsError(t *testing.T) {
+	src := "version: \"3\"\ntasks:\n  build:\n    cmds:\n      - go build ./...\n"
+	_, err := parseCheckCrossPairs(src)
+	if err == nil {
+		t.Fatalf("parseCheckCrossPairs(%q): expected a non-nil error for a Taskfile with no check:cross task, got nil", src)
+	}
+	if !strings.Contains(err.Error(), checkCrossTaskID) {
+		t.Fatalf("parseCheckCrossPairs(%q) error does not name the missing task %q: %v", src, checkCrossTaskID, err)
+	}
+}
+
+// TestParseGoreleaserCrossPairs_InlineFlowSequence proves the parser is
+// reading .goreleaser.yaml's ACTUAL syntax, not a syntax this repo doesn't
+// use: goos/goarch are declared in inline flow-sequence form (`goos:
+// [linux]`), not block-sequence form, in the real file. A parser that
+// silently yields an empty set here would make the whole
+// TestCheckCrossMatchesGoreleaserTargets comparison vacuous — this repo
+// has already shipped one mutation test that no-opped for exactly this
+// reason (Task 3's own read_first note).
+func TestParseGoreleaserCrossPairs_InlineFlowSequence(t *testing.T) {
+	src := "builds:\n  - id: example\n    goos: [linux]\n    goarch: [amd64]\n"
+	pairs := mustParseGoreleaserCrossPairs(t, src)
+	if len(pairs) == 0 {
+		t.Fatalf("parseGoreleaserCrossPairs(%q): expected a non-empty pair set for inline flow-sequence goos/goarch, got empty", src)
+	}
+	want := "linux/amd64"
+	found := false
+	for _, p := range pairs {
+		if p == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("parseGoreleaserCrossPairs(%q) = %v, want to contain %q", src, pairs, want)
+	}
+}
+
+// TestCheckCrossParsersFailLoudly extends TestTaskfileShapeHelpersFailLoudly
+// coverage to this test's two new parsers: every pure parse core must
+// return a non-nil error — never a usable zero value — when fed empty
+// input.
+func TestCheckCrossParsersFailLoudly(t *testing.T) {
+	cases := []struct {
+		name string
+		fn   func() error
+	}{
+		{
+			name: "parseGoreleaserCrossPairs: empty input",
+			fn: func() error {
+				_, err := parseGoreleaserCrossPairs("")
+				return err
+			},
+		},
+		{
+			name: "parseCheckCrossPairs: empty input",
+			fn: func() error {
+				_, err := parseCheckCrossPairs("")
+				return err
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.fn(); err == nil {
+				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
+			}
+		})
 	}
 }
