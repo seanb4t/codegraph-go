@@ -12,7 +12,7 @@
 # synthetic corpus instead). Docs/BENCHMARKS.md (Plan 08-09) is refreshed
 # from the headtohead job's output.
 #
-# Why the rebless job has to exist here rather than on a developer machine
+# Why the rebless job has to run on the SAME runner class as the gate
 # (perf-gate-throughput-regress): throughput from this harness is dominated
 # by hardware class, not just GOOS/GOARCH. Measured on one physical Apple
 # Silicon machine, synthetic corpus, identical code — darwin/arm64 native
@@ -20,27 +20,35 @@
 # linux/amd64 runner ~11,400 files/s. A ~3x spread between two OSes on the
 # same hardware, with the CI runner slower than both. So a baseline
 # reblessed on a maintainer's Linux box satisfies internal/bench's
-# GOOS/GOARCH guard and is still a meaningless yardstick for the gate. The
-# baseline has to be recorded on the SAME RUNNER CLASS the gate spends it
-# on, because that is where it is spent.
+# GOOS/GOARCH guard and is still a meaningless yardstick for the gate.
 #
-# Both jobs run on the SAME Namespace profile (namespace-profile-linux-
-# amd64-4x8) so the headtohead publish and the rebless candidate stay
-# comparable to each other — a mixed pair would make the head-to-head and
-# the baseline incomparable. Both jobs set CODEGRAPH_BENCH_RUNNER to that
-# profile label, so every Metrics this workflow measures self-describes
-# the runner it was measured on (internal/bench.Metrics.Runner) — the
-# GOOS/GOARCH guard alone cannot tell namespace-profile-linux-amd64-4x8
-# apart from any other linux/amd64 host, which is exactly the blind spot
-# that field exists to close.
+# rebless runs on ubuntu-latest, matching ci.yml's perf-regression gate
+# (10-04-PLAN RESOLUTION): a full same-day, same-methodology investigation
+# considered moving both rebless and the gate to a Namespace profile, and
+# found every alternative configuration measured WORSE session-to-session
+# stability than the incumbent ubuntu-latest + disk-backed scratch pairing
+# (0.35% disagreement, 28.6x headroom against the 10% tolerance — tighter
+# than the historical reference, not stale). See
+# tools/bench/BASELINE.md's "Staleness and the ubuntu-latest+disk control"
+# section for the full investigation: a CPU-count A/B (refuted "more
+# CPU"), a tmpfs experiment (refuted "I/O-bound variance" — tmpfs made
+# BOTH runner classes worse), and this same-day control (confirmed the
+# incumbent frame, not a stale one). tools/bench/runner's -scratch-fs/
+# ScratchFS machinery added during that investigation stays (it is what
+# made the control cheap to run), even though the runner class itself
+# did not move.
 #
-# TRANSITIONAL NOTE (10-04-PLAN, D-09): this workflow moves to Namespace
-# BEFORE ci.yml's perf-regression gate does — deliberately, per the one
-# safe ordering: rebless -> commit baseline -> move the gate. Until the
-# gate itself moves (plan 10-06), ci.yml's perf-regression job still runs
-# on GitHub-hosted infrastructure and gates against whatever baseline is
-# committed. See tools/bench/BASELINE.md for the current baseline's
-# provenance and this window's expected effect on that gate.
+# headtohead stays on the Namespace profile (namespace-profile-linux-
+# amd64-4x8) DESPITE rebless moving back to ubuntu-latest — a deliberate,
+# asymmetric choice, not an oversight. headtohead is non-gating and
+# publishes a comparison between binaries measured on the SAME job/runner
+# instance as each other (Go vs TS, both in this one job) — it never
+# needs to match rebless's runner class, only itself. Namespace measures
+# noticeably faster (this investigation's control found Namespace+disk
+# roughly 20.8% faster than ubuntu-latest+disk on the synthetic corpus),
+# so leaving this non-blocking, non-gated, purely-informational job on
+# the faster profile costs nothing and saves real wall-clock time on
+# every dispatch.
 #
 # RSS scope note (08-RESEARCH.md Pattern 1): peak RSS is measured at the OS
 # level via bench.PeakRSSBytes(cmd.ProcessState), which is only meaningfully
@@ -162,7 +170,7 @@ jobs:
   # gate invocation and never touches this flag.
   rebless:
     name: record candidate perf baseline (PERF-02, manual only)
-    runs-on: namespace-profile-linux-amd64-4x8
+    runs-on: ubuntu-latest
     # workflow_dispatch only — never on the weekly schedule. Also note this
     # job takes `contents: read` from the workflow-level permissions block
     # and asks for nothing more: it deliberately has no write token, so it
@@ -171,7 +179,7 @@ jobs:
     # committing the artifact by hand.
     if: github.event_name == 'workflow_dispatch' && (inputs.job == 'rebless' || inputs.job == 'both')
     env:
-      CODEGRAPH_BENCH_RUNNER: namespace-profile-linux-amd64-4x8
+      CODEGRAPH_BENCH_RUNNER: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -180,12 +188,7 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: false
-
-      - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
-        with:
-          cache: go
+          cache: true
 
       - name: Record candidate baseline on this runner
         # -rebless is the ONLY writer of baseline.json by design (D-05) and
