@@ -21,13 +21,31 @@
 # same hardware, with the CI runner slower than both. So a baseline
 # reblessed on a maintainer's Linux box satisfies internal/bench's
 # GOOS/GOARCH guard and is still a meaningless yardstick for the gate. The
-# baseline has to be recorded on ubuntu-latest because that is where it is
-# spent.
+# baseline has to be recorded on the SAME RUNNER CLASS the gate spends it
+# on, because that is where it is spent.
+#
+# Both jobs run on the SAME Namespace profile (namespace-profile-linux-
+# amd64-4x8) so the headtohead publish and the rebless candidate stay
+# comparable to each other — a mixed pair would make the head-to-head and
+# the baseline incomparable. Both jobs set CODEGRAPH_BENCH_RUNNER to that
+# profile label, so every Metrics this workflow measures self-describes
+# the runner it was measured on (internal/bench.Metrics.Runner) — the
+# GOOS/GOARCH guard alone cannot tell namespace-profile-linux-amd64-4x8
+# apart from any other linux/amd64 host, which is exactly the blind spot
+# that field exists to close.
+#
+# TRANSITIONAL NOTE (10-04-PLAN, D-09): this workflow moves to Namespace
+# BEFORE ci.yml's perf-regression gate does — deliberately, per the one
+# safe ordering: rebless -> commit baseline -> move the gate. Until the
+# gate itself moves (plan 10-06), ci.yml's perf-regression job still runs
+# on GitHub-hosted infrastructure and gates against whatever baseline is
+# committed. See tools/bench/BASELINE.md for the current baseline's
+# provenance and this window's expected effect on that gate.
 #
 # RSS scope note (08-RESEARCH.md Pattern 1): peak RSS is measured at the OS
 # level via bench.PeakRSSBytes(cmd.ProcessState), which is only meaningfully
-# comparable on Linux/macOS — this workflow runs on ubuntu-latest only,
-# consistent with that scoping. Windows RSS measurement is out of scope.
+# comparable on Linux/macOS — this workflow runs on Linux only, consistent
+# with that scoping. Windows RSS measurement is out of scope.
 #
 # Security note: every third-party Action is pinned to a full commit SHA.
 
@@ -65,8 +83,10 @@ permissions:
 jobs:
   headtohead:
     name: head-to-head publish (PERF-01, non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-4x8
     if: github.event_name == 'schedule' || inputs.job == 'headtohead' || inputs.job == 'both'
+    env:
+      CODEGRAPH_BENCH_RUNNER: namespace-profile-linux-amd64-4x8
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -75,7 +95,12 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
 
       - name: Set up Node (for the installed TS reference binary)
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -120,9 +145,21 @@ jobs:
           path: headtohead-results.json
           if-no-files-found: error
 
+  # D-13 / D-01 EXCEPTION, documented here on purpose: this job's three
+  # `go run ./tools/bench/runner` invocations (this file only) are NOT
+  # wrapped in Taskfile.yml targets, unlike every other CI step in this
+  # repo. `-rebless` is the ONLY flag that overwrites baseline.json, and a
+  # wrong-platform baseline has already produced a stable, entirely
+  # fictitious 10.6% "regression" that survived three rounds of triage
+  # before anyone ran the control (tools/bench/BASELINE.md). Keeping all
+  # three `go run` bodies inline — rather than behind a `task bench:*`
+  # target a contributor could tab-complete into — keeps `-rebless`
+  # reachable only through this manually-dispatched, no-write-token job.
+  # D-14's `task bench:regression` (added separately) wraps the read-only
+  # gate invocation and never touches this flag.
   rebless:
     name: record candidate perf baseline (PERF-02, manual only)
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-4x8
     # workflow_dispatch only — never on the weekly schedule. Also note this
     # job takes `contents: read` from the workflow-level permissions block
     # and asks for nothing more: it deliberately has no write token, so it
@@ -130,6 +167,8 @@ jobs:
     # reaches the repository through a human reading the number below and
     # committing the artifact by hand.
     if: github.event_name == 'workflow_dispatch' && (inputs.job == 'rebless' || inputs.job == 'both')
+    env:
+      CODEGRAPH_BENCH_RUNNER: namespace-profile-linux-amd64-4x8
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -138,7 +177,12 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
 
       - name: Record candidate baseline on this runner
         # -rebless is the ONLY writer of baseline.json by design (D-05) and
@@ -151,6 +195,11 @@ jobs:
         # tools/bench/BASELINE.md, and so a future default change cannot
         # silently record a candidate against a different corpus than the
         # gate measures.
+        #
+        # -runner is passed explicitly (in addition to the job-level
+        # CODEGRAPH_BENCH_RUNNER env this step already inherits) so the
+        # written candidate carries the field on its own terms rather than
+        # relying on env inheritance alone.
         env:
           TRIALS: ${{ inputs.trials }}
         run: |
@@ -158,7 +207,8 @@ jobs:
           go run ./tools/bench/runner -mode regression -rebless \
             -baseline tools/bench/baseline.json \
             -seed 42 -count 120000 \
-            -trials "$TRIALS"
+            -trials "$TRIALS" \
+            -runner "$CODEGRAPH_BENCH_RUNNER"
 
       - name: Publish candidate to job summary
         # The human-review surface. A maintainer reads the delta here
@@ -170,7 +220,7 @@ jobs:
           {
             echo "## Candidate perf baseline (PERF-02)"
             echo ""
-            echo "Recorded on \`${RUNNER_OS}\` / \`$(uname -m)\`, runner image \`${ImageOS:-unknown}\`."
+            echo "Recorded on \`${RUNNER_OS}\` / \`$(uname -m)\`, runner image \`${ImageOS:-unknown}\`, runner label \`${CODEGRAPH_BENCH_RUNNER}\`."
             echo ""
             echo "**Nothing has been committed.** Download the \`baseline-candidate\`"
             echo "artifact and commit it as \`tools/bench/baseline.json\` in its own PR,"
@@ -187,6 +237,8 @@ jobs:
                   (if ($old.goos == $new.goos and $old.goarch == $new.goarch) then "unchanged" else "**CHANGED**" end)],
                 ["corpus", $old.repo, $new.repo,
                   (if $old.repo == $new.repo then "unchanged" else "**CHANGED**" end)],
+                ["runner", ($old.runner // "unattributed"), ($new.runner // "unattributed"),
+                  (if (($old.runner // "") == ($new.runner // "")) then "unchanged" else "**CHANGED**" end)],
                 ["median_of_trials", ($old.median_of_trials // 0 | tostring), ($new.median_of_trials // 0 | tostring), ""],
                 ["files_per_sec", ($old.files_per_sec | tostring), ($new.files_per_sec | tostring), pct($old.files_per_sec; $new.files_per_sec)],
                 ["peak_rss_bytes", ($old.peak_rss_bytes | tostring), ($new.peak_rss_bytes | tostring), pct($old.peak_rss_bytes; $new.peak_rss_bytes)],
