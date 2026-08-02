@@ -63,8 +63,9 @@ on:
           - rebless
           - both
           - cpu-diag
+          - scratch-fs-compare
       trials:
-        description: "rebless only: independent measurement sessions to median over"
+        description: "rebless / scratch-fs-compare: independent measurement sessions to median over"
         type: choice
         default: "3"
         options:
@@ -394,5 +395,101 @@ jobs:
             cat diag-cpu-output.txt
             echo ""
             cat diag-storage-fit-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Post-tmpfs-fix A/B re-measurement (10-04-PLAN, Rule 2 deviation).
+  # READ-ONLY with respect to the committed baseline: -rebless here writes
+  # to a THROWAWAY /tmp path, never tools/bench/baseline.json. D-13 stays
+  # intact — this is an inline `go run ... -rebless -baseline /tmp/...`
+  # invocation (the same documented D-01 exception bench.yml's rebless job
+  # already uses), never a Taskfile target, so -rebless never sits behind
+  # tab-completion. Exists to answer, with real numbers, whether pointing
+  # the regression scratch dir at tmpfs (commit 47eff33) actually
+  # collapsed the 4.36% Namespace session-to-session throughput variance
+  # measured before the fix — on BOTH runner classes, so the comparison
+  # stays apples-to-apples per D-09.
+  scratch-fs-compare-github:
+    name: "Post-tmpfs-fix re-measurement (10-04-PLAN, non-blocking, read-only) — ubuntu-latest"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'scratch-fs-compare'
+    env:
+      RUNNER_LABEL: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Re-measure at -trials 7 against a throwaway baseline path
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline /tmp/scratch-fs-compare.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -runner "$RUNNER_LABEL" \
+            2>&1 | tee scratch-fs-compare-output.txt
+          echo "--- candidate ---" >> scratch-fs-compare-output.txt
+          cat /tmp/scratch-fs-compare.json >> scratch-fs-compare-output.txt
+
+      - name: Publish to job summary
+        run: |
+          {
+            echo "## Post-tmpfs-fix re-measurement (10-04-PLAN) — ${RUNNER_LABEL}"
+            echo ""
+            echo '```'
+            cat scratch-fs-compare-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  scratch-fs-compare-namespace:
+    name: "Post-tmpfs-fix re-measurement (10-04-PLAN, non-blocking, read-only) — namespace-profile-linux-amd64-4x8"
+    runs-on: namespace-profile-linux-amd64-4x8
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'scratch-fs-compare'
+    env:
+      RUNNER_LABEL: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Re-measure at -trials 7 against a throwaway baseline path
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline /tmp/scratch-fs-compare.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -runner "$RUNNER_LABEL" \
+            2>&1 | tee scratch-fs-compare-output.txt
+          echo "--- candidate ---" >> scratch-fs-compare-output.txt
+          cat /tmp/scratch-fs-compare.json >> scratch-fs-compare-output.txt
+
+      - name: Publish to job summary
+        run: |
+          {
+            echo "## Post-tmpfs-fix re-measurement (10-04-PLAN) — ${RUNNER_LABEL}"
+            echo ""
+            echo '```'
+            cat scratch-fs-compare-output.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
