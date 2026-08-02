@@ -436,7 +436,7 @@ Plans:
   2. `CONTRIBUTING.md` documents the CGo toolchain prerequisites (zig for cross-builds, mingw-w64 for windows vet)
   3. A clean checkout can build, test, and lint via task targets alone
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -455,7 +455,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 10-06-PLAN.md — Runner-aware regression refusal; perf and reproducibility gates onto Namespace via task targets
+- [x] 10-06-PLAN.md — Runner-aware regression refusal; perf and reproducibility gates onto Namespace via task targets
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -478,7 +478,7 @@ Plans:
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
 | 9. release-please + GoReleaser | v1.0 | 8/8 | Complete    | 2026-08-01 |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 5/7 | In Progress|  |
+| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 6/7 | In Progress|  |
 
 ## Backlog
 
