@@ -83,6 +83,84 @@ var taskWrapperExpectedLegs = []string{
 	"test:unit",
 }
 
+// inScopeJob names one job, by its YAML map key (not its `name:` display
+// string), whose steps' run: bodies TestWorkflowRunBodiesInvokeTask holds to
+// the single-definition property (D-01/D-02): every step's run: body must
+// be exactly `task <target>` once comments and blank lines are stripped,
+// unless the step is named in runBodyExceptions.
+type inScopeJob struct {
+	Workflow string // filename under workflowsDir, e.g. "ci.yml"
+	JobID    string // job's YAML map key, e.g. "test"
+}
+
+// inScopeJobs is the literal D-01/D-02 fixture: every job this guard binds,
+// by (workflow file, job ID). bench.yml and release.yml are deliberately
+// NOT here — both carry their own documented D-01 exceptions decided in
+// earlier plans of this phase (bench.yml's rebless/headtohead/diagnostic
+// jobs' inline `go run ./tools/bench/runner` invocations, commented in-file
+// above the rebless job; release.yml's native build matrix, D-08).
+// Including either file here would fail this test for reasons the project
+// already decided, not for a real regression. govulncheck is also excluded
+// — it runs via `uses: golang/govulncheck-action`, an action with no run:
+// body at all, so it has nothing for this guard to check.
+var inScopeJobs = []inScopeJob{
+	{Workflow: "ci.yml", JobID: "test"},
+	{Workflow: "ci.yml", JobID: "actionlint"},
+	{Workflow: "ci.yml", JobID: "goreleaser-check"},
+	{Workflow: "ci.yml", JobID: "reproducibility"},
+	{Workflow: "ci.yml", JobID: "perf-regression"},
+	{Workflow: "release-please.yml", JobID: "pretag-gate"},
+}
+
+// runBodyException is one literal, reasoned carve-out from the
+// single-definition property — a step whose run: body is legitimately not
+// a `task <target>` call. T-10-07-01: every entry MUST carry a non-empty
+// reason, and an entry naming a step that no longer exists in its
+// (workflow, job) fails TestWorkflowRunBodiesInvokeTask — a stale exception
+// silently widening the allowlist is exactly the failure mode this fixture
+// shape closes.
+type runBodyException struct {
+	Workflow string
+	Job      string
+	Step     string
+	Reason   string
+}
+
+// runBodyExceptions is the literal, exhaustive exception list for the
+// in-scope jobs above. Two entries, both in ci.yml:
+//   - "Install mingw-w64" (job test) installs an apt package
+//     (gcc-mingw-w64-x86-64), not a contributor-invokable command — there
+//     is no task target for "apt-get install a cross-toolchain".
+//   - "Compute determinism inputs" (job reproducibility) writes to the CI
+//     step-output file ($GITHUB_OUTPUT) via `id: repro`; it has no meaning
+//     outside a runner and produces no artifact a contributor would ever
+//     invoke directly.
+var runBodyExceptions = []runBodyException{
+	{
+		Workflow: "ci.yml",
+		Job:      "test",
+		Step:     "Install mingw-w64 (windows cross-CGO toolchain for internal/daemon vet)",
+		Reason:   "installs an apt package (gcc-mingw-w64-x86-64), not a contributor-invokable command",
+	},
+	{
+		Workflow: "ci.yml",
+		Job:      "reproducibility",
+		Step:     "Compute determinism inputs",
+		Reason:   "writes to the CI step-output file ($GITHUB_OUTPUT) via id: repro; has no meaning outside a runner",
+	},
+}
+
+// taskCallLineRe matches a run: body, once comments/blanks are stripped,
+// that is EXACTLY a single `task <target>` invocation — the shape D-01
+// mandates for every rewired step.
+var taskCallLineRe = regexp.MustCompile(`^task\s+[A-Za-z0-9:_-]+$`)
+
+// forbiddenGoInvocationRe matches a direct go build/test/vet/run/install
+// invocation as a whole word — the specific command shapes D-01 moved into
+// Taskfile.yml targets and forbids from reappearing inline in a rewired
+// job's run: body.
+var forbiddenGoInvocationRe = regexp.MustCompile(`\bgo (build|test|vet|run|install)\b`)
+
 // --- parseX/mustX helper pairs ---------------------------------------------
 //
 // Following the convention established in release_workflow_shape_test.go
@@ -842,5 +920,258 @@ func TestCheckCrossParsersFailLoudly(t *testing.T) {
 				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
 			}
 		})
+	}
+}
+
+// --- TestWorkflowRunBodiesInvokeTask: workflow step decoding -----------
+
+// workflowRunStep is the subset of a GitHub Actions workflow step this
+// guard needs: its display name and its run: body (empty for a `uses:`
+// step, which this guard does not constrain — D-01 only binds run: bodies).
+type workflowRunStep struct {
+	Name string `yaml:"name"`
+	Run  string `yaml:"run"`
+}
+
+type workflowJobYAML struct {
+	Steps []workflowRunStep `yaml:"steps"`
+}
+
+type workflowFileYAML struct {
+	Jobs map[string]workflowJobYAML `yaml:"jobs"`
+}
+
+// parseWorkflowJobSteps decodes workflow YAML source src with a real YAML
+// decoder and returns the ordered steps of the job keyed jobID. Returns a
+// non-nil error if src fails to parse as YAML, declares no jobs: at all,
+// names no job matching jobID, or that job declares zero steps — never a
+// usable empty slice on any of those misses (the CR-01 defect class every
+// parser in this file guards against).
+func parseWorkflowJobSteps(src, jobID string) ([]workflowRunStep, error) {
+	var wf workflowFileYAML
+	if err := yaml.Unmarshal([]byte(src), &wf); err != nil {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: %w", err)
+	}
+	if len(wf.Jobs) == 0 {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: no jobs: found in workflow source")
+	}
+	job, ok := wf.Jobs[jobID]
+	if !ok {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: no job %q found in workflow source", jobID)
+	}
+	if len(job.Steps) == 0 {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: job %q declares zero steps", jobID)
+	}
+	return job.Steps, nil
+}
+
+// stripRunBodyNoise removes blank lines and full-line shell comments from a
+// step's run: body, returning the remaining lines rejoined with "\n". Only
+// a line whose first non-whitespace character is `#` is treated as a
+// comment — a `#` inside a quoted string or a `${var#pattern}` shell
+// expansion is NOT stripped. The risk here runs the opposite direction from
+// this guard's own house rule about comments masquerading as invocations:
+// over-stripping would silently eat a real command line rather than a
+// comment, which is exactly as dangerous to a guard's correctness.
+func stripRunBodyNoise(body string) string {
+	var kept []string
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		kept = append(kept, trimmed)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// runBodyExceptionKey builds the composite lookup key runBodyExceptions and
+// TestWorkflowRunBodiesInvokeTask's scan loop both use to match a step to
+// its exception entry.
+func runBodyExceptionKey(workflow, job, step string) string {
+	return workflow + "\x00" + job + "\x00" + step
+}
+
+// checkStepInvokesTask validates one step from an in-scope job: a step with
+// no run: body (a `uses:` step) is unconstrained; an excepted step (present
+// in exceptions) is unconstrained; every other step's run: body must equal
+// a single `task <target>` line once stripRunBodyNoise runs. Returns a
+// non-nil error naming workflow, job, and step on violation — with the
+// specific offending `go <verb>` invocation named when one is present,
+// since that is the actionable fact a contributor reading the failure
+// needs to remove.
+func checkStepInvokesTask(workflow, job string, step workflowRunStep, exceptions map[string]string) error {
+	if step.Run == "" {
+		return nil
+	}
+	if _, excepted := exceptions[runBodyExceptionKey(workflow, job, step.Name)]; excepted {
+		return nil
+	}
+	stripped := stripRunBodyNoise(step.Run)
+	if taskCallLineRe.MatchString(stripped) {
+		return nil
+	}
+	if verb := forbiddenGoInvocationRe.FindString(stripped); verb != "" {
+		return fmt.Errorf("%s job %q step %q invokes %q directly instead of a task target — single-definition property violated (D-01)", workflow, job, step.Name, verb)
+	}
+	return fmt.Errorf("%s job %q step %q's run: body is not a single 'task <target>' call after stripping comments/blanks (D-01): %q", workflow, job, step.Name, stripped)
+}
+
+// validateRunBodyExceptions asserts every entry in exceptions carries a
+// non-empty reason. Returns a non-nil error naming the first offending
+// entry — never a silent skip (T-10-07-01: a reasonless exception is
+// indistinguishable from an accidental allowlist widening).
+func validateRunBodyExceptions(exceptions []runBodyException) error {
+	for i, exc := range exceptions {
+		if strings.TrimSpace(exc.Reason) == "" {
+			return fmt.Errorf("validateRunBodyExceptions: exceptions[%d] (%s/%s/%q) has an empty reason", i, exc.Workflow, exc.Job, exc.Step)
+		}
+	}
+	return nil
+}
+
+// --- TestWorkflowRunBodiesInvokeTask ------------------------------------
+
+// TestWorkflowRunBodiesInvokeTask is the D-01/D-02 single-definition guard:
+// across inScopeJobs, every step's run: body must be exactly `task
+// <target>` once comments/blanks are stripped, unless the step is named in
+// runBodyExceptions (every entry of which must carry a non-empty reason and
+// must actually match a real step — see the two checks below). This is
+// what makes DEV-01 durable rather than a one-time cleanup: without it, the
+// next contributor adds an inline `go test` to a workflow and the
+// single-definition property dies silently.
+func TestWorkflowRunBodiesInvokeTask(t *testing.T) {
+	if err := validateRunBodyExceptions(runBodyExceptions); err != nil {
+		t.Fatalf("runBodyExceptions: %v", err)
+	}
+	if len(inScopeJobs) == 0 {
+		t.Fatalf("inScopeJobs fixture is empty — this guard would vacuously pass over zero jobs")
+	}
+
+	exceptionSet := make(map[string]string, len(runBodyExceptions))
+	for _, exc := range runBodyExceptions {
+		exceptionSet[runBodyExceptionKey(exc.Workflow, exc.Job, exc.Step)] = exc.Reason
+	}
+	matched := make(map[string]bool, len(runBodyExceptions))
+
+	for _, ij := range inScopeJobs {
+		path := filepath.Join(workflowsDir, ij.Workflow)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		steps, err := parseWorkflowJobSteps(string(data), ij.JobID)
+		if err != nil {
+			t.Fatalf("%s job %q: %v", ij.Workflow, ij.JobID, err)
+		}
+		for _, step := range steps {
+			key := runBodyExceptionKey(ij.Workflow, ij.JobID, step.Name)
+			if _, excepted := exceptionSet[key]; excepted {
+				matched[key] = true
+			}
+			if err := checkStepInvokesTask(ij.Workflow, ij.JobID, step, exceptionSet); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	for _, exc := range runBodyExceptions {
+		key := runBodyExceptionKey(exc.Workflow, exc.Job, exc.Step)
+		if !matched[key] {
+			t.Errorf("exception %s/%s/%q was never matched against a real step in an in-scope job — a stale exception silently widens the allowlist (T-10-07-01); fix the step name or remove the entry", exc.Workflow, exc.Job, exc.Step)
+		}
+	}
+}
+
+// TestRunBodyExceptionsHaveReasons_EmptyReasonIsError proves
+// validateRunBodyExceptions actually catches what it claims to: a blank
+// reason must produce a non-nil error, never a silent pass.
+func TestRunBodyExceptionsHaveReasons_EmptyReasonIsError(t *testing.T) {
+	bad := []runBodyException{{Workflow: "ci.yml", Job: "test", Step: "some step", Reason: "  "}}
+	if err := validateRunBodyExceptions(bad); err == nil {
+		t.Fatalf("validateRunBodyExceptions: expected a non-nil error for an exception with a blank reason, got nil")
+	}
+}
+
+// TestParseWorkflowJobSteps_MissingJobIsError is the edge case: a job ID
+// absent from the workflow's jobs: map must produce a non-nil error naming
+// it, never a silently-empty step slice.
+func TestParseWorkflowJobSteps_MissingJobIsError(t *testing.T) {
+	src := "jobs:\n  build:\n    steps:\n      - name: X\n        run: task build\n"
+	_, err := parseWorkflowJobSteps(src, "does-not-exist")
+	if err == nil {
+		t.Fatalf("parseWorkflowJobSteps(%q): expected a non-nil error for a missing job, got nil", "does-not-exist")
+	}
+	if !strings.Contains(err.Error(), "does-not-exist") {
+		t.Fatalf("parseWorkflowJobSteps error does not name the missing job: %v", err)
+	}
+}
+
+// TestParseWorkflowJobSteps_NoJobsIsError is the edge case named directly
+// in this task's <behavior>: a workflow with zero jobs: at all must return
+// a non-nil error, never a vacuous pass over an empty job set.
+func TestParseWorkflowJobSteps_NoJobsIsError(t *testing.T) {
+	src := "name: empty\non:\n  push:\n"
+	if _, err := parseWorkflowJobSteps(src, "test"); err == nil {
+		t.Fatalf("parseWorkflowJobSteps(%q, %q): expected a non-nil error for a workflow with no jobs: at all, got nil", src, "test")
+	}
+}
+
+// TestParseWorkflowJobSteps_ZeroStepsIsError is the edge case: a job that
+// exists but declares zero steps must produce a non-nil error, never an
+// empty-but-valid step slice.
+func TestParseWorkflowJobSteps_ZeroStepsIsError(t *testing.T) {
+	src := "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+	if _, err := parseWorkflowJobSteps(src, "build"); err == nil {
+		t.Fatalf("parseWorkflowJobSteps(%q, %q): expected a non-nil error for a job with zero steps, got nil", src, "build")
+	}
+}
+
+// TestCheckStepInvokesTask_ForbiddenGoInvocationNamesVerb proves the
+// forbidden-invocation branch actually names the offending verb, not just a
+// generic shape mismatch — the failure message a contributor reads should
+// point at exactly what to remove.
+func TestCheckStepInvokesTask_ForbiddenGoInvocationNamesVerb(t *testing.T) {
+	step := workflowRunStep{Name: "inline build", Run: "set -euo pipefail\ngo build ./...\n"}
+	err := checkStepInvokesTask("ci.yml", "test", step, map[string]string{})
+	if err == nil {
+		t.Fatalf("checkStepInvokesTask: expected a non-nil error for an inline go build invocation, got nil")
+	}
+	if !strings.Contains(err.Error(), "go build") {
+		t.Fatalf("checkStepInvokesTask error does not name the offending invocation: %v", err)
+	}
+}
+
+// TestCheckStepInvokesTask_ExceptedStepPasses proves an excepted step is
+// unconstrained regardless of its run: body's shape.
+func TestCheckStepInvokesTask_ExceptedStepPasses(t *testing.T) {
+	step := workflowRunStep{Name: "apt install", Run: "sudo apt-get install -y gcc-mingw-w64-x86-64"}
+	exceptions := map[string]string{runBodyExceptionKey("ci.yml", "test", "apt install"): "installs a system package"}
+	if err := checkStepInvokesTask("ci.yml", "test", step, exceptions); err != nil {
+		t.Fatalf("checkStepInvokesTask: expected a nil error for an excepted step, got %v", err)
+	}
+}
+
+// TestCheckStepInvokesTask_UsesStepPasses proves a `uses:` step (empty
+// run: body) is unconstrained — this guard only binds run: bodies.
+func TestCheckStepInvokesTask_UsesStepPasses(t *testing.T) {
+	step := workflowRunStep{Name: "Checkout", Run: ""}
+	if err := checkStepInvokesTask("ci.yml", "test", step, map[string]string{}); err != nil {
+		t.Fatalf("checkStepInvokesTask: expected a nil error for a uses: step (empty run: body), got %v", err)
+	}
+}
+
+// TestStripRunBodyNoise_KeepsHashInsideCommand proves stripRunBodyNoise
+// does not over-strip: a `#` that is not the first non-whitespace character
+// on a line (e.g. inside `${var#prefix}`) must be preserved, never treated
+// as a comment marker.
+func TestStripRunBodyNoise_KeepsHashInsideCommand(t *testing.T) {
+	body := "# a real comment\ntask build\nVAR=${x#prefix}\n"
+	got := stripRunBodyNoise(body)
+	if strings.Contains(got, "a real comment") {
+		t.Fatalf("stripRunBodyNoise(%q) = %q, still contains the comment line", body, got)
+	}
+	if !strings.Contains(got, `${x#prefix}`) {
+		t.Fatalf("stripRunBodyNoise(%q) = %q, over-stripped a non-comment line containing '#'", body, got)
 	}
 }
