@@ -330,6 +330,11 @@ jobs:
           set -euo pipefail
           task diag:cpu | tee diag-cpu-output.txt
 
+      - name: Run tmpfs sizing diagnostic
+        run: |
+          set -euo pipefail
+          task diag:storage-fit | tee diag-storage-fit-output.txt
+
       - name: Publish diagnostic to job summary
         run: |
           {
@@ -339,6 +344,8 @@ jobs:
             echo ""
             echo '```'
             cat diag-cpu-output.txt
+            echo ""
+            cat diag-storage-fit-output.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -371,6 +378,11 @@ jobs:
           set -euo pipefail
           task diag:cpu | tee diag-cpu-output.txt
 
+      - name: Run tmpfs sizing diagnostic
+        run: |
+          set -euo pipefail
+          task diag:storage-fit | tee diag-storage-fit-output.txt
+
       - name: Publish diagnostic to job summary
         run: |
           {
@@ -380,5 +392,7 @@ jobs:
             echo ""
             echo '```'
             cat diag-cpu-output.txt
+            echo ""
+            cat diag-storage-fit-output.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -319,6 +319,56 @@ tasks:
         cat read.log
         rm -f write.log read.log
 
+  diag:storage-fit:
+    desc: >-
+      tmpfs sizing diagnostic (10-04-PLAN, Rule 2 deviation — NOT a gate;
+      never called by ci.yml, and the only callers in bench.yml are its
+      non-gating, manually-dispatched cpu-diag-* jobs). Reports the
+      candidate tmpfs mount's available capacity (df -h /dev/shm) and
+      then materializes ONE real PERF-02/INDX-06 synthetic corpus
+      (tools/bench/gencorpus, seed 42, count 120000 — the exact
+      seed/count tools/bench/runner's regression mode uses) and runs a
+      real `codegraph init` + `codegraph index --force --quiet` against
+      it, reporting `du -sh` on both the corpus and the resulting
+      .codegraph/ Pebble store. Exists to answer, with real numbers
+      rather than estimates, whether pointing the regression scratch
+      directory at tmpfs (candidate fix for I/O-bound throughput
+      variance — see diag:cpu's doc comment) is even viable before
+      wiring it in: a tmpfs mount that can't hold the corpus + store
+      would make the fix worse than the problem. Everything this target
+      creates lives under a temp directory removed on exit; it never
+      writes to the real tmpfs default tools/bench/runner would use in
+      production, only measures what WOULD fit there.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "diag:storage-fit reads Linux-only paths (/dev/shm) and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch it instead: Actions -> bench -> Run workflow -> job: cpu-diag."
+    cmds:
+      - echo "--- /dev/shm availability and size ---"
+      - |
+        set -euo pipefail
+        if [ -d /dev/shm ]; then
+          df -h /dev/shm
+        else
+          echo "/dev/shm does not exist on this host"
+        fi
+      - echo "--- materializing one real PERF-02 corpus (seed 42, count 120000) ---"
+      - |
+        set -euo pipefail
+        WORKDIR=$(mktemp -d)
+        trap 'rm -rf "$WORKDIR"' EXIT
+        go build -o "$WORKDIR/gencorpus" ./tools/bench/gencorpus
+        go build -o "$WORKDIR/codegraph" ./cmd/codegraph
+        CORPUS_DIR="$WORKDIR/corpus"
+        "$WORKDIR/gencorpus" -seed 42 -out "$CORPUS_DIR" -count 120000
+        echo "corpus size:"
+        du -sh "$CORPUS_DIR"
+        "$WORKDIR/codegraph" init "$CORPUS_DIR"
+        "$WORKDIR/codegraph" index "$CORPUS_DIR" --force --quiet
+        echo ".codegraph store size:"
+        du -sh "$CORPUS_DIR/.codegraph"
+        echo "total (corpus + store):"
+        du -sh "$WORKDIR"
+
   # --- Contributor-only coarse wrappers (D-02) --------------------------
   #
   # CI NEVER calls these two targets — ci.yml calls the fine-grained
