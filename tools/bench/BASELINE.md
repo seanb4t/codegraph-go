@@ -241,9 +241,56 @@ the gate side, since the gate was never migrated). `headtohead`
 (PERF-01, non-gating, publish-only) deliberately **stays** on Namespace —
 it never needs to match `rebless`'s runner class, and Namespace measures
 meaningfully faster on this corpus, so leaving a non-gated job there
-costs nothing. `DefaultThroughputTolerance` was **not** changed: at
-28.6x headroom, the existing 10% budget is well justified and the
-adopt-and-widen path considered mid-investigation was abandoned entirely.
+costs nothing. `DefaultThroughputTolerance` was **not** changed: the existing 10% budget
+is justified and the adopt-and-widen path considered mid-investigation was
+abandoned entirely. But see "Which headroom number applies to the gate"
+below before sizing any future tolerance off the 28.6x figure — it
+describes within-dispatch session agreement, which is NOT the variance the
+gate experiences.
+
+### Which headroom number applies to the gate
+
+Two different quantities get called "headroom" in this document, and only
+one of them describes how the gate is actually used.
+
+**Within-dispatch session agreement** — two 7-trial sessions run
+back-to-back inside a single CI job. Measured 0.35% (control run) and
+0.62% (rebless run) on `ubuntu-latest` + disk, i.e. 28.6x and 16.1x
+against the 10% tolerance. This is what most of the comparisons in this
+document report, because it is what a single dispatch can measure about
+itself.
+
+**Across-dispatch variance** — the spread between separate CI dispatches
+hours apart. All four `ubuntu-latest` + disk session medians recorded in
+this investigation:
+
+| dispatch | session medians (files/s) |
+|---|---|
+| disk-scratch control | `16330.41`, `16387.47` |
+| rebless (committed)  | `17090.88`, `16984.54` |
+
+Full spread `16330.41` -> `17090.88` = **4.66%**, i.e. roughly **2.15x**
+headroom against the 10% tolerance.
+
+**The gate experiences the second number, not the first.** `CheckRegression`
+takes ONE fresh measurement in a NEW CI dispatch and compares it against
+this committed baseline; it never observes within-dispatch session
+agreement. Sizing a tolerance off 28.6x would assume ~13x more margin than
+the gate actually has.
+
+2.15x is still workable — a >10% regression trips it while ~4.7% of
+observed drift does not — and it is far better than Namespace's
+sub-1.0x. **The runner decision is unaffected:** Namespace + tmpfs
+disagreed by 12.46% within a single dispatch, before across-dispatch
+variance is even counted.
+
+**The ~4.7% across-dispatch component is NOT explained.** Two candidates,
+neither verified: genuine drift between dispatches on the same runner
+class, or a difference in how the read-only control job and the `-rebless`
+job measure (phase structure, corpus regeneration, binary build). If a
+future change depends on this number, establish which it is first rather
+than inheriting the assumption — treating the two jobs as comparable is
+itself an unverified premise.
 The `-scratch-fs`/`ScratchFS`/`resolveScratchDirForClass` machinery all
 stays — first-class capabilities, not reverted, because they are what
 made every control and comparison in this investigation cheap to run,
@@ -384,7 +431,10 @@ reformatting, no rounding, no key reordering).
   against this candidate) passed: verify-phase median `16984.54`, a
   0.62% session-to-session disagreement — 16.1x headroom against the
   10% tolerance, consistent with the 28.6x control measurement that
-  motivated staying on this runner/scratch-fs pairing.
+  motivated staying on this runner/scratch-fs pairing. **Both figures are
+  within-dispatch.** Against the control dispatch's sessions the spread is
+  4.66% (~2.15x), which is the number the gate actually experiences — see
+  "Which headroom number applies to the gate" above.
 - **Peak RSS at capture:** `845950976` bytes (~807 MiB) — consistent
   with every other measurement in this investigation (peak RSS stayed
   in a ~840-880 MiB band throughout, never the variable quantity).
