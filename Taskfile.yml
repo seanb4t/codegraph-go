@@ -16,6 +16,128 @@ tasks:
     cmds:
       - task --list
 
+  build:
+    desc: Build every package (compile check only, no binary retained).
+    cmds:
+      - go build ./...
+
+  build:release:
+    desc: >-
+      Local convenience build producing ./codegraph with release-shaped
+      ldflags (version metadata, -trimpath). This is NOT a release artifact —
+      goreleaser (task check:goreleaser / .goreleaser.yaml / release.yml)
+      builds, signs, and SBOMs what actually ships. Use this only to
+      sanity-check a version-stamped local binary.
+    cmds:
+      - |
+        set -euo pipefail
+        VERSION=$(git describe --tags --always --dirty)
+        COMMIT=$(git rev-parse HEAD)
+        # TZ=UTC + git's own date formatter avoids GNU-vs-BSD `date -d`
+        # incompatibility between Linux CI and macOS/BSD contributor
+        # machines — no shell `date` binary is invoked at all.
+        DATE=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ)
+        go build -trimpath -ldflags "-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=${VERSION} -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}" -o ./codegraph ./cmd/codegraph
+
+  test:unit:
+    desc: >-
+      go test over every package except internal/daemon (isolated separately
+      — see task test:daemon).
+    cmds:
+      - |
+        set -euo pipefail
+        # IN-08 (03-REVIEW.md): `set -e` does not propagate a failure out of
+        # a process substitution — `mapfile -t pkgs < <(go list ... | grep
+        # ...)` would succeed regardless of go list's own exit status, so a
+        # partial emission before a failure could silently test a subset of
+        # packages under a green check. Materialize the list first so go
+        # list's exit code is checked by set -e before anything consumes it.
+        pkgs_raw=$(go list ./...)
+        mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
+        go test "${pkgs[@]}"
+
+  test:golden:
+    desc: >-
+      Golden parity suite (testdata/golden) — NOT covered by go list ./...
+      (GOLDEN-01: the go tool ignores any directory named "testdata" when
+      expanding ./...), so this is its own explicit target.
+    cmds:
+      - go test ./testdata/golden/...
+
+  test:integration:
+    desc: >-
+      Subprocess integration harness (test/integration) — already reached by
+      go list ./... (it's a normal package, not testdata/), but this explicit
+      target guards against a future refactor of test:unit's filtered go list
+      line silently dropping it too.
+    cmds:
+      - go test ./test/integration/...
+
+  test:daemon:
+    desc: >-
+      internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
+      are a documented, PRE-EXISTING flake under full-suite parallel load
+      (STATE.md, 08-CONTEXT.md "Flake note") — isolating them here is the
+      documented handling; the tests are NOT removed or skipped, just run
+      without contention from the rest of the suite.
+    cmds:
+      - go test ./internal/daemon/ -count=1
+
+  test:race:
+    desc: >-
+      Concurrency packages under the race detector. -p 1 preserves the same
+      no-parallel-package-contention isolation test:daemon relies on — do not
+      run this concurrently with test:daemon (see the test wrapper's comment).
+    cmds:
+      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
+
+  vet:
+    desc: >-
+      go vet ./... — NEW enforcement as of this target (DEV-01): plain
+      `go vet ./...` has never run in CI before; only two package-scoped
+      GOOS=windows vets did (see vet:windows / vet:daemon-windows). Findings
+      surfaced on first run are fixed, not suppressed.
+    cmds:
+      - go vet ./...
+
+  vet:windows:
+    desc: >-
+      Typecheck the windows lock classifier (GOOS=windows go vet
+      internal/graphstore) — WR-01: the only guard against the windows
+      lock-classifier rotting with no windows runner in CI. No precondition:
+      internal/graphstore is CGo-free, so the cross-GOOS vet works on any
+      host.
+    cmds:
+      - GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/
+
+  vet:daemon-windows:
+    desc: >-
+      Typecheck the windows PPID watchdog (GOOS=windows go vet
+      internal/daemon) — needs a REAL mingw-w64 cross C toolchain, unlike
+      vet:windows: internal/daemon transitively imports the tree-sitter CGo
+      grammar bindings, and cgo runs the target C compiler even to
+      typecheck.
+    preconditions:
+      - sh: command -v x86_64-w64-mingw32-gcc
+        msg: >-
+          mingw-w64 not found. Install with:
+          apt-get install gcc-mingw-w64-x86-64 (Debian/Ubuntu; see your
+          platform's equivalent). See CONTRIBUTING.md's Building section.
+    env:
+      CGO_ENABLED: "1"
+      CC: x86_64-w64-mingw32-gcc
+    cmds:
+      - GOOS=windows GOARCH=amd64 go vet ./internal/daemon/
+
+  vuln:
+    desc: >-
+      govulncheck over the main module (call-graph-aware vulnerability scan).
+      This does NOT replace ci.yml's blocking "govulncheck (DIST-03,
+      blocking)" gate, which runs golang/govulncheck-action unchanged — this
+      target exists so the same check is reachable locally before pushing.
+    cmds:
+      - "{{.GO_TOOL}} govulncheck ./..."
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:

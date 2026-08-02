@@ -7,6 +7,13 @@
 // the release SBOM, neither of which should be widened by a build-tooling
 // choice.
 //
+// golang.org/x/vuln/cmd/govulncheck (task vuln) also lives here — measured
+// live to add only 2 net-new modules (golang.org/x/telemetry,
+// golang.org/x/vuln itself), no MVS conflict with task/goreleaser. This is a
+// LOCAL convenience target only: ci.yml's blocking "govulncheck (DIST-03,
+// blocking)" gate runs golang/govulncheck-action, unchanged by this file —
+// see Taskfile.yml's vuln target desc.
+//
 // A second modfile, go.tool-lint.mod, exists alongside this one because
 // co-locating actionlint in this same module does not compile: MVS resolves
 // one version per module across the whole graph, and actionlint's expected
@@ -29,6 +36,7 @@ go 1.26.5
 tool (
 	github.com/go-task/task/v3/cmd/task
 	github.com/goreleaser/goreleaser/v2
+	golang.org/x/vuln/cmd/govulncheck
 )
 
 require (
@@ -373,10 +381,12 @@ require (
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/telemetry v0.0.0-20260708182218-49f421fb7959 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/vuln v1.6.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/api v0.287.0 // indirect
 	google.golang.org/genproto v0.0.0-20260630182238-925bb5da69e7 // indirect
