@@ -94,12 +94,15 @@ error. Measurement never requires it; it is only meaningful in CI, where
 `bench.yml` sets `CODEGRAPH_BENCH_RUNNER` to its job's own `runs-on`
 label.
 
-**`runner` does not yet participate in `CheckRegression`'s comparison.**
-Only `goos`/`goarch` gate a run today. Wiring `runner` into the gate is
-a deliberately separate, later change — it only makes sense once a
-`runner`-labelled baseline exists to compare against, and doing it
-before that baseline is committed would compare a runner-labelled
-current run against an unlabelled baseline for no benefit.
+**`runner` now participates in `CheckRegression`'s comparison** (plan
+10-06): a `runner` mismatch is refused as a category error, the same
+treatment as `goos`/`goarch`, and fires before any numeric tolerance
+check. An empty `runner` on either side is refused too — it means "never
+recorded", not a wildcard — so a baseline predating this field (any
+`baseline.json` committed before plan 10-04) must be re-blessed via
+`bench.yml`'s `rebless` job before it can gate a `runner`-attributed run.
+Both sides empty still passes, so unit tests and any other caller that
+never attributes `Metrics.Runner` remain unaffected.
 
 ## The `scratch_fs` field
 
@@ -114,14 +117,12 @@ new location. An empty `scratch_fs` means "recorded before this field
 existed," or that an operator supplied an explicit `-scratch-dir` this
 runner didn't characterize — not an error.
 
-**`scratch_fs` does NOT yet participate in `CheckRegression`'s
-comparison**, matching `runner`'s own precedent: `internal/bench/regression.go`
-is untouched by this plan. Wiring a `scratch_fs` mismatch into the gate
-as a category error (same treatment as the `GOOS`/`GOARCH` refusal, not
-a tolerance question) is explicitly left as a handoff to whichever plan
-next touches `CheckRegression` (plan 10-06, which already owns wiring
-`runner` into the comparison) — this file documents the requirement so
-it isn't lost, not to duplicate 10-06's work here.
+**`scratch_fs` now participates in `CheckRegression`'s comparison too**
+(plan 10-06, same commit that wired `runner` in) — same category-error
+treatment, same empty-means-never-recorded handling, same
+before-any-numeric-check ordering. A baseline predating this field must
+be re-blessed via `bench.yml`'s `rebless` job before it can gate a
+`scratch_fs`-attributed run.
 
 **The scratch filesystem class defaults to `disk`** (`-scratch-fs disk`,
 `tools/bench/runner`'s flag default). It is pinnable via `-scratch-fs`
