@@ -169,6 +169,24 @@ tasks:
     cmds:
       - "{{.GO_TOOL}} goreleaser check"
 
+  check:cross:
+    desc: >-
+      6-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
+      gate release-please.yml's pretag-gate job runs before a tag can be
+      created. Run this locally before pushing to main to catch a
+      platform-specific go.sum/build-constraint failure your own GOOS/GOARCH
+      can't see (the exact failure class that reached the v0.1 rc.1 release
+      candidate).
+    cmds:
+      - |
+        set -euo pipefail
+        for pair in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}" GOARCH="${pair#*/}" go list -mod=readonly ./... > /dev/null || {
+            echo "::error::go list -mod=readonly ./... failed for GOOS=${pair%/*} GOARCH=${pair#*/}"
+            exit 1
+          }
+        done
+
   lint:actions:
     desc: Lint GitHub Actions workflows (workflow static analysis).
     cmds:
