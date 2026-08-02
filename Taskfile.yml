@@ -1,0 +1,22 @@
+# Single local-build/CI-invocation definition site (D-01, D-02). CI workflow
+# `run:` steps call `task <target>` — they no longer own command bodies
+# themselves. See go.tool.mod / go.tool-lint.mod for why the tools this
+# Taskfile shells out to are pinned via isolated -modfile builds rather than
+# `go install` or a marketplace action.
+version: "3"
+
+vars:
+  GO_TOOL: GOWORK=off go tool -modfile=go.tool.mod
+  GO_TOOL_LINT: GOWORK=off go tool -modfile=go.tool-lint.mod
+
+tasks:
+  default:
+    desc: List available targets (does not build, test, or lint anything).
+    silent: true
+    cmds:
+      - task --list
+
+  check:goreleaser:
+    desc: Validate .goreleaser.yaml (DIST-01).
+    cmds:
+      - "{{.GO_TOOL}} goreleaser check"

@@ -1,0 +1,14 @@
+# actionlint configuration (docs/config.md).
+#
+# self-hosted-runner.labels tells actionlint's runner-label check about the
+# Namespace Cloud runner-profile labels this repo uses (D-06, Phase 10) —
+# actionlint's built-in label list only knows GitHub-hosted runner names, so
+# without this the "runner-label" check reports every namespace-profile-*
+# runs-on: value as unknown. This is a real, non-vacuous config addition
+# (Rule 3, discovered running actionlint against ci.yml's Task-1 change),
+# not a silenced warning: these labels genuinely exist and are served by the
+# Namespace GitHub integration installed on this repository.
+self-hosted-runner:
+  labels:
+    - namespace-profile-linux-amd64-2x4
+    - namespace-profile-linux-amd64-4x8

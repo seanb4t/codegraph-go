@@ -1,0 +1,29 @@
+# Bootstraps the pinned `task` binary from go.tool.mod and puts it on PATH.
+#
+# Every build tool this repo runs in CI is built from the checksum-verified
+# Go module proxy against a pinned -modfile (D-04) — never fetched from a
+# GitHub Releases download or a vendor install script. `arduino/setup-task`
+# and `taskfile.dev/install.sh` were both observed to fail on CDN outages in
+# holomush/holomush production (incidents holomush-06vz, holomush-ar31b);
+# this composite action exists specifically so a future "simplification"
+# back to one of those paths has to remove this comment first.
+name: Install Task
+description: Build the pinned task binary from go.tool.mod and add it to PATH.
+runs:
+  using: composite
+  steps:
+    - name: Build Task from go.tool.mod
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/.local/bin"
+        # GOWORK=off: go.work enables workspace mode, which is incompatible
+        # with -modfile.
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "$HOME/.local/bin/task" \
+          github.com/go-task/task/v3/cmd/task
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Verify Task
+      shell: bash
+      run: task --version
