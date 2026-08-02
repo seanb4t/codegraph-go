@@ -20,3 +20,8 @@ tasks:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
       - "{{.GO_TOOL}} goreleaser check"
+
+  lint:actions:
+    desc: Lint GitHub Actions workflows (workflow static analysis).
+    cmds:
+      - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"

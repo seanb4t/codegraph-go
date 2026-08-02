@@ -300,12 +300,14 @@ jobs:
   # not optional, given this repo's own documented "guard present but never
   # fires" failure mode (Phase-8 CR-01/WR-02). actionlint catches schema
   # errors, untyped expressions, and injection-shaped run: blocks before
-  # merge. Installed via `go install` at a pinned version rather than a
-  # fourth-party Action — no new pinned Action in the supply chain, no new
-  # go.mod entry, matching this repo's pure-Go CI tooling preference.
+  # merge. Built from go.tool-lint.mod at a pinned version via the shared
+  # install-task/Taskfile bootstrap (Phase 10, D-03/D-04) rather than a
+  # fourth-party Action or a bare `go install @pin` — see go.tool-lint.mod's
+  # own header for why actionlint is isolated from go.tool.mod's task/
+  # goreleaser tool directives.
   actionlint:
     name: actionlint (workflow static analysis)
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-2x4
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -314,13 +316,18 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      - name: Install and run actionlint
-        run: |
-          set -euo pipefail
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "$(go env GOPATH)/bin/actionlint" .github/workflows/*.yml
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run actionlint
+        run: task lint:actions
 
   goreleaser-check:
     name: goreleaser check (config validation, DIST-01)
