@@ -64,8 +64,9 @@ on:
           - both
           - cpu-diag
           - scratch-fs-compare
+          - disk-control-github
       trials:
-        description: "rebless / scratch-fs-compare: independent measurement sessions to median over"
+        description: "rebless / scratch-fs-compare / disk-control-github: independent measurement sessions to median over"
         type: choice
         default: "3"
         options:
@@ -491,5 +492,68 @@ jobs:
             echo ""
             echo '```'
             cat scratch-fs-compare-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Disk-scratch CONTROL measurement on ubuntu-latest (10-04-PLAN, Rule 2
+  # deviation). READ-ONLY with respect to the committed baseline:
+  # -rebless here writes to a throwaway /tmp path, never
+  # tools/bench/baseline.json. Same D-01 exception, D-13 unaffected.
+  #
+  # Exists to close a gap in this plan's own reasoning: the only
+  # historical "ubuntu-latest + disk" number on record (0.65% session
+  # disagreement, ~15x headroom) was measured weeks ago in Phase 9, under
+  # a different methodology, on a fleet that may itself have drifted.
+  # Comparing today's tmpfs numbers against that stale reference would be
+  # exactly the missing-control mistake that produced this repo's
+  # original fictitious 10.6% "regression" (tools/bench/BASELINE.md) —
+  # so this job re-measures the PRE-tmpfs configuration (disk-backed
+  # scratch) TODAY, on the same runner class, using the SAME methodology
+  # as every other measurement this pass. -scratch-fs disk (added in
+  # d680f71) forces this WITHOUT reverting 47eff33's tmpfs-preferring
+  # default — the default stays live and untouched; this job just pins
+  # the older behavior explicitly for a same-day comparison.
+  disk-control-github:
+    name: "Disk-scratch control re-measurement (10-04-PLAN, non-blocking, read-only) — ubuntu-latest"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'disk-control-github'
+    env:
+      RUNNER_LABEL: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Re-measure at -trials 7 with disk-backed scratch, against a throwaway baseline path
+        # -scratch-fs disk pins the pre-tmpfs configuration explicitly
+        # (d680f71) — the flag itself is what makes this "least invasive":
+        # no revert of 47eff33 required, and the tmpfs-preferring default
+        # stays exactly as it is for every other invocation in this file.
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline /tmp/disk-control.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -runner "$RUNNER_LABEL" \
+            -scratch-fs disk \
+            2>&1 | tee disk-control-output.txt
+          echo "--- candidate ---" >> disk-control-output.txt
+          cat /tmp/disk-control.json >> disk-control-output.txt
+
+      - name: Publish to job summary
+        run: |
+          {
+            echo "## Disk-scratch control re-measurement (10-04-PLAN) — ${RUNNER_LABEL}"
+            echo ""
+            echo '```'
+            cat disk-control-output.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
