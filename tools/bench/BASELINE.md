@@ -60,6 +60,37 @@ own Linux box would satisfy the guard and still be a meaningless
 yardstick for the CI runner. The baseline has to be recorded on the
 runner class where it is spent.
 
+## The `runner` field
+
+`baseline.json` carries a `runner` key alongside `goos`/`goarch`: a
+free-form string recording the CI runner identity a `Metrics` was
+measured on (e.g. a Namespace `runs-on` profile label such as
+`namespace-profile-linux-amd64-4x8`), populated from the
+`CODEGRAPH_BENCH_RUNNER` environment variable or the `-runner` flag
+(flag wins if both are set).
+
+This exists because `goos`/`goarch` alone do not identify the
+measurement environment. `namespace-profile-linux-amd64-4x8` **is**
+`linux/amd64` — so a runner-class migration (GitHub-hosted
+`ubuntu-latest` to a Namespace profile, say) can change everything about
+the hardware a benchmark runs on while holding `goos`/`goarch` constant,
+and `CheckRegression`'s platform guard would accept the comparison
+without complaint. `runner` closes that blind spot by recording, in the
+baseline itself, the exact identifier a human triaging a suspicious
+delta would want to compare.
+
+An empty `runner` means "recorded before this field existed" — not an
+error. Measurement never requires it; it is only meaningful in CI, where
+`bench.yml` sets `CODEGRAPH_BENCH_RUNNER` to its job's own `runs-on`
+label.
+
+**`runner` does not yet participate in `CheckRegression`'s comparison.**
+Only `goos`/`goarch` gate a run today. Wiring `runner` into the gate is
+a deliberately separate, later change — it only makes sense once a
+`runner`-labelled baseline exists to compare against, and doing it
+before that baseline is committed would compare a runner-labelled
+current run against an unlabelled baseline for no benefit.
+
 ## Measurement procedure
 
 Two nested levels of repetition, both deliberate:

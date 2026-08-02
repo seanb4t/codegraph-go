@@ -11,6 +11,22 @@ type Metrics struct {
 	GOOS    string `json:"goos"`
 	GOARCH  string `json:"goarch"`
 
+	// Runner records the CI runner identity this Metrics was measured on
+	// (e.g. a Namespace runs-on profile label such as
+	// "namespace-profile-linux-amd64-4x8"), captured verbatim from the
+	// workflow that ran it. It sits alongside GOOS/GOARCH because a
+	// runner-class change (e.g. GitHub-hosted ubuntu-latest ->
+	// Namespace) can hold GOOS/GOARCH constant while still changing the
+	// measurement environment — namespace-profile-linux-amd64-4x8 IS
+	// linux/amd64, so the GOOS/GOARCH guard alone is structurally blind
+	// to that migration. Empty means "recorded before this field
+	// existed" (e.g. any baseline.json predating this change), not an
+	// error — measurement must not require it, since it is only
+	// meaningful in CI. Runner does NOT yet participate in
+	// CheckRegression's comparison; that lands separately, once a
+	// Runner-labelled baseline exists to compare against.
+	Runner string `json:"runner"`
+
 	// MedianOfTrials records how many INDEPENDENT measurement sessions
 	// these numbers are the median of — where a session is a full
 	// corpus-materialize + init + measure cycle, not a repeat of the

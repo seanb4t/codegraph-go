@@ -134,6 +134,7 @@ type config struct {
 	seed         int64
 	count        int
 	trials       int
+	runner       string
 }
 
 func run(args []string) error {
@@ -181,6 +182,7 @@ func parseFlags(args []string) (config, error) {
 	fs.Int64Var(&cfg.seed, "seed", 42, "regression mode only: gencorpus RNG seed (same seed -> byte-identical corpus)")
 	fs.IntVar(&cfg.count, "count", regressionFileCount, "regression mode only: number of synthetic files to generate")
 	fs.IntVar(&cfg.trials, "trials", defaultTrials, "regression mode only: number of independent measurement sessions to take each metric's median over; 1 means single-sample (not recommended for gating or -rebless)")
+	fs.StringVar(&cfg.runner, "runner", os.Getenv("CODEGRAPH_BENCH_RUNNER"), "runner identity label recorded alongside goos/goarch (e.g. a Namespace runs-on profile such as namespace-profile-linux-amd64-4x8); defaults to $CODEGRAPH_BENCH_RUNNER, and an explicit flag wins over the env var. Empty is fine outside CI — measurement never requires it")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -321,7 +323,7 @@ func runHeadToHead(cfg config) error {
 			{"go", cfg.goBinary},
 			{"ts", cfg.tsBinary},
 		} {
-			m, err := measureSubject(subject.name, subject.binary, entry, srcDir, scratchRoot)
+			m, err := measureSubject(subject.name, subject.binary, entry, srcDir, scratchRoot, cfg.runner)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "runner: %s/%s: %v\n", entry.Name, subject.name, err)
 				continue
@@ -342,7 +344,7 @@ func runHeadToHead(cfg config) error {
 // SQLite store never collide, and so neither binary's .codegraph/ is
 // ever written into the resolved source checkout itself (which, for a
 // sibling-checkout entry, is a real directory the operator owns).
-func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, scratchRoot string) (bench.Metrics, error) {
+func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, scratchRoot, runner string) (bench.Metrics, error) {
 	if binary == "" {
 		return bench.Metrics{}, fmt.Errorf("no binary configured for subject %q", subjectName)
 	}
@@ -413,6 +415,7 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 		Repo:    entry.Name,
 		GOOS:    runtime.GOOS,
 		GOARCH:  runtime.GOARCH,
+		Runner:  runner,
 		// headtohead measures each (repo, subject) pair in exactly one
 		// session — it publishes raw numbers and never gates, so the
 		// multi-session median regression mode needs is not applied here.
@@ -516,7 +519,10 @@ func runRegression(cfg config) error {
 		trials = append(trials, m)
 	}
 
-	current := medianMetrics(trials)
+	current, err := medianMetrics(trials)
+	if err != nil {
+		return fmt.Errorf("aggregate trials: %w", err)
+	}
 
 	if cfg.rebless {
 		return writeBaseline(cfg.baselinePath, current)
@@ -594,6 +600,7 @@ func measureRegressionTrial(cfg config, scratchDir string, trialIdx int) (bench.
 		Repo:                 fmt.Sprintf("synthetic-seed%d-count%d", cfg.seed, cfg.count),
 		GOOS:                 runtime.GOOS,
 		GOARCH:               runtime.GOARCH,
+		Runner:               cfg.runner,
 		FilesPerSec:          filesPerSec,
 		BytesPerSec:          bytesPerSec,
 		QueryLatencyMedianMS: queryResult.durationMS,
@@ -606,14 +613,31 @@ func measureRegressionTrial(cfg config, scratchDir string, trialIdx int) (bench.
 // numeric metric's own median over its own sorted sample — the same
 // discipline medianOfN applies within a trial (D-05: not "the trial whose
 // throughput happened to be the median"). Identity fields (Subject, Repo,
-// GOOS, GOARCH) are identical across trials by construction and are
-// carried from the first.
+// GOOS, GOARCH, Runner) are identical across trials by construction and
+// are carried from the first.
+//
+// Runner is checked for consistency across trials before being carried:
+// a mixed-runner trial set (e.g. some trials measured on ubuntu-latest,
+// others on a Namespace profile mid-migration) is a category error of
+// exactly the kind internal/bench.CheckRegression already refuses for a
+// GOOS/GOARCH mismatch — silently picking the first value would let that
+// masquerade as one coherent measurement, so it is refused with both
+// values named instead.
 //
 // MedianOfTrials is set to the sample size so the number's provenance
 // travels with it into baseline.json and into the gate's own output.
-func medianMetrics(trials []bench.Metrics) bench.Metrics {
+func medianMetrics(trials []bench.Metrics) (bench.Metrics, error) {
 	if len(trials) == 0 {
-		return bench.Metrics{}
+		return bench.Metrics{}, nil
+	}
+
+	for _, t := range trials[1:] {
+		if t.Runner != trials[0].Runner {
+			return bench.Metrics{}, fmt.Errorf(
+				"medianMetrics: mixed runner identities across trials: %q vs %q — a mixed-runner trial set cannot be aggregated into one measurement",
+				trials[0].Runner, t.Runner,
+			)
+		}
 	}
 
 	filesPerSec := make([]float64, 0, len(trials))
@@ -639,13 +663,14 @@ func medianMetrics(trials []bench.Metrics) bench.Metrics {
 		Repo:                 trials[0].Repo,
 		GOOS:                 trials[0].GOOS,
 		GOARCH:               trials[0].GOARCH,
+		Runner:               trials[0].Runner,
 		MedianOfTrials:       len(trials),
 		FilesPerSec:          medianFloat64(filesPerSec),
 		BytesPerSec:          medianFloat64(bytesPerSec),
 		QueryLatencyMedianMS: medianFloat64(queryMS),
 		PeakRSSBytes:         medianInt64(peakRSS),
 		ColdStartMS:          medianFloat64(coldStartMS),
-	}
+	}, nil
 }
 
 func printMetrics(w io.Writer, m bench.Metrics) {
