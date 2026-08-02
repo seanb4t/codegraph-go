@@ -62,6 +62,7 @@ on:
           - headtohead
           - rebless
           - both
+          - cpu-diag
       trials:
         description: "rebless only: independent measurement sessions to median over"
         type: choice
@@ -283,3 +284,64 @@ jobs:
             -seed 42 -count 120000 \
             -trials "$TRIALS" \
             -ceiling-bytes 4294967296
+
+  # CPU-topology diagnostic (10-04-PLAN, Rule 2 deviation). NOT a gate and
+  # NOT part of the rebless/headtohead flow — it never touches
+  # baseline.json. Folded into this already-registered workflow rather
+  # than a new standalone file so it can be dispatched from a feature
+  # branch: GitHub only allows workflow_dispatch against workflow files
+  # already present on the default branch, and a brand-new workflow file
+  # doesn't qualify until it has been merged there.
+  #
+  # Exists to answer one question before pinning a worker count in
+  # tools/bench/runner: does this Namespace profile expose more
+  # host-visible CPUs (runtime.NumCPU()) than its cgroup CPU quota
+  # actually grants? tools/bench/runner never passes --workers to
+  # `codegraph index`, so the extraction pool defaults to
+  # runtime.NumCPU() (internal/indexer/extract.go, pipeline.go, sync.go)
+  # — if that number exceeds the real quota, Go oversubscribes the
+  # container and the resulting scheduler contention is indistinguishable,
+  # from the bench numbers alone, from genuine session-to-session
+  # throughput noise.
+  cpu-diag:
+    name: CPU topology diagnostic (10-04-PLAN, non-blocking)
+    runs-on: namespace-profile-linux-amd64-4x8
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'cpu-diag'
+    env:
+      RUNNER_LABEL: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run CPU-topology diagnostic
+        # task diag:cpu is the single definition (D-01/D-02) — this step
+        # invokes it, it does not duplicate its command bodies.
+        run: |
+          set -euo pipefail
+          task diag:cpu | tee diag-cpu-output.txt
+
+      - name: Publish diagnostic to job summary
+        run: |
+          {
+            echo "## CPU-topology diagnostic (10-04-PLAN)"
+            echo ""
+            echo "Dispatched runs-on label: \`${RUNNER_LABEL}\`."
+            echo ""
+            echo '```'
+            cat diag-cpu-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

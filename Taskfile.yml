@@ -194,9 +194,10 @@ tasks:
 
   diag:cpu:
     desc: >-
-      CPU-topology diagnostic (10-04-PLAN, Rule 2 deviation — NOT a gate,
-      never called by ci.yml or bench.yml). Reports nproc, a Go process's
-      own runtime.NumCPU()/GOMAXPROCS(0), the cgroup CPU quota (v2
+      CPU-topology diagnostic (10-04-PLAN, Rule 2 deviation — NOT a gate;
+      never called by ci.yml, and the only caller in bench.yml is its
+      non-gating, manually-dispatched cpu-diag job). Reports nproc, a Go
+      process's own runtime.NumCPU()/GOMAXPROCS(0), the cgroup CPU quota (v2
       cpu.max, falling back to the v1 cfs_quota/cfs_period pair), and
       /proc/cpuinfo's reported model/core count. Exists to check whether
       a runner exposes more host-visible CPUs than its cgroup quota
@@ -210,7 +211,7 @@ tasks:
       a contributor's non-Linux machine.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
-        msg: "diag:cpu reads Linux cgroup paths (/sys/fs/cgroup/...) and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch the bench-cpu-diag workflow instead (Actions -> bench-cpu-diag -> Run workflow)."
+        msg: "diag:cpu reads Linux cgroup paths (/sys/fs/cgroup/...) and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch it instead: Actions -> bench -> Run workflow -> job: cpu-diag."
     cmds:
       - echo "--- nproc ---"
       - nproc
