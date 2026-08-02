@@ -42,7 +42,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 - [x] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped) (completed 2026-07-17)
 - [x] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped (completed 2026-07-26)
 - [x] **Phase 8: Surface Reconciliation & Signed v1.0.0 Release** - Flag parity + Charm-dep audit + benchmarks, retiring the "not yet drop-in" caveat. The signed `v1.0.0` itself moved to Phase 9 with REL-02 on 2026-07-28; the phase title is kept because its directory slug and every committed artifact path depend on it (completed 2026-07-28)
-- [ ] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the first signed release cut entirely by release-please from Conventional Commits (promoted from backlog 999.3 on 2026-07-27; version target removed 2026-07-29 — see below)
+- [x] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the first signed release cut entirely by release-please from Conventional Commits (promoted from backlog 999.3 on 2026-07-27; version target removed 2026-07-29 — see below) (completed 2026-08-01)
 - [ ] **Phase 10: Local Build Tooling & CONTRIBUTING** - `Taskfile.yml` wrapping the build/test/lint/release-check workflows + contributor-facing CGo toolchain docs (promoted from backlog 999.1 on 2026-07-27)
 
 ## Phase Details
@@ -429,18 +429,37 @@ Plans:
 
 **Goal**: Contributor-facing local dev tooling — the repo has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites, so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
 **Depends on**: Phase 9
-**Requirements**: TBD
+**Requirements**: DEV-01
 **Success Criteria** (what must be TRUE):
 
   1. `Taskfile.yml` wraps: build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag check
   2. `CONTRIBUTING.md` documents the CGo toolchain prerequisites (zig for cross-builds, mingw-w64 for windows vet)
   3. A clean checkout can build, test, and lint via task targets alone
 
-**Plans**: 0 plans
+**Plans**: 3/7 plans executed
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (run /gsd-discuss-phase 10)
+- [x] 10-01-PLAN.md — Tracer: tool modfiles, install-task composite action, and one CI job running a task target end-to-end on Namespace
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 10-02-PLAN.md — ci.yml's test job onto task targets, contributor wrappers, and new `go vet ./...` coverage
+- [x] 10-03-PLAN.md — release.yml runner migration, with the SLSA and native-darwin exceptions decided and test-enforced
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 10-04-PLAN.md — Runner identity in the perf baseline, bench.yml onto Namespace, and a reviewed Namespace baseline committed
+- [ ] 10-05-PLAN.md — `check:cross` replaces release-please.yml's inline pre-tag sweep, guarded against .goreleaser.yaml drift
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 10-06-PLAN.md — Runner-aware regression refusal; perf and reproducibility gates onto Namespace via task targets
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 10-07-PLAN.md — CONTRIBUTING pointer, the single-definition invariant guard, and a clean-checkout proof
 
 **Notes**: Sequenced after Phase 9 deliberately — both touch build/release invocation, so the task wrappers (`goreleaser check`, cross-`GOOS` `go list`, `govulncheck`, `actionlint`) should be written once against the final release setup rather than twice. Fit caveat: this phase sits outside the stated v1.0 milestone goal ("Drop-in Parity & Human UX"); consider moving it to a v1.1 milestone if v1.0 should ship without it.
 
@@ -458,8 +477,8 @@ Plans:
 | 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 6/8 | In Progress|  |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 0/0 | Not started |  |
+| 9. release-please + GoReleaser | v1.0 | 8/8 | Complete    | 2026-08-01 |
+| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 3/7 | In Progress|  |
 
 ## Backlog
 

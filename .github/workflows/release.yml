@@ -16,13 +16,18 @@
 #     verify.go MUST change in lockstep.
 #
 #   - Native 2-OS runner matrix (RESEARCH.md Finding 2): darwin targets
-#     build NATIVELY on macos-latest (Xcode clang, no zig, no osxcross)
+#     build NATIVELY on a macOS runner (Xcode clang, no zig, no osxcross)
 #     because a Linux-hosted CGo cross-link to darwin risks silently
 #     breaking libresolv-based DNS resolution in the resulting binary —
 #     a real, multi-source-corroborated risk for a binary
 #     (`codegraph upgrade`) that makes real HTTPS calls on every
 #     platform, including macOS. Only linux/arm64 and both windows
-#     targets cross-compile via zig, from ubuntu-latest.
+#     targets cross-compile via zig. As of the 10-03 maintainer
+#     checkpoint, the darwin legs run on namespace-profile-macos-6x14-tahoe
+#     (a native Apple-Silicon macOS profile, per the maintainer) and the
+#     linux/windows legs run on namespace-profile-linux-amd64-4x8 — see
+#     the `build` matrix below and 10-03-SUMMARY.md for what is and is
+#     not verified about that runner change.
 #
 #   - Per-binary signing (RESEARCH.md Finding 1, see the `assemble` job):
 #     internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY
@@ -65,36 +70,43 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ubuntu-latest builds linux + windows: native gcc for
-          # linux/amd64 (no cross-toolchain needed); zig cc for the
+          # namespace-profile-linux-amd64-4x8 builds linux + windows: native
+          # gcc for linux/amd64 (no cross-toolchain needed); zig cc for the
           # linux/arm64 and windows cross targets (CC/CXX for these are
           # already set per-build-id inside .goreleaser.yaml itself —
           # this job only needs to ensure the `zig` binary is on PATH).
-          - runner: ubuntu-latest
+          - runner: namespace-profile-linux-amd64-4x8
             goos: linux
             goarch: amd64
             needs_zig: false
-          - runner: ubuntu-latest
+          - runner: namespace-profile-linux-amd64-4x8
             goos: linux
             goarch: arm64
             needs_zig: true
-          - runner: ubuntu-latest
+          - runner: namespace-profile-linux-amd64-4x8
             goos: windows
             goarch: amd64
             needs_zig: true
-          - runner: ubuntu-latest
+          - runner: namespace-profile-linux-amd64-4x8
             goos: windows
             goarch: arm64
             needs_zig: true
-          # macos-latest builds BOTH darwin arches NATIVELY (Xcode's own
-          # clang, arch-only cross for darwin/amd64) — no zig, no
-          # osxcross, no manually-sourced SDK: this is the darwin-DNS-
-          # resolver mitigation (Finding 2 / Pitfall 2).
-          - runner: macos-latest
+          # namespace-profile-macos-6x14-tahoe builds BOTH darwin arches
+          # NATIVELY (Xcode's own clang, arch-only cross for darwin/amd64) —
+          # no zig, no osxcross, no manually-sourced SDK: this is the
+          # darwin-DNS-resolver mitigation (Finding 2 / Pitfall 2), preserved
+          # here because this is still a native Apple-Silicon macOS host, not
+          # a cross-build. Moved from macos-latest to this Namespace profile
+          # per the 10-03 maintainer checkpoint decision (10-03-SUMMARY.md);
+          # the profile's nativeness is maintainer-attested from the
+          # Namespace dashboard, not yet machine-observed in a real workflow
+          # run — see that summary's Known Unknowns before assuming this leg
+          # is fully proven.
+          - runner: namespace-profile-macos-6x14-tahoe
             goos: darwin
             goarch: amd64
             needs_zig: false
-          - runner: macos-latest
+          - runner: namespace-profile-macos-6x14-tahoe
             goos: darwin
             goarch: arm64
             needs_zig: false
@@ -110,7 +122,12 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
 
       - name: Install zig (linux/arm64 + windows cross targets only)
         if: matrix.needs_zig
@@ -203,7 +220,7 @@ jobs:
   assemble:
     name: sign, SBOM, and publish release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-2x4
     permissions:
       contents: write # gh release create + asset uploads
       id-token: write # cosign keyless OIDC signing (Finding 1) — this
@@ -329,6 +346,12 @@ jobs:
   # requirement, this reusable workflow MUST be referenced by a full
   # @vX.Y.Z semver tag — a SHA pin is explicitly rejected/unsupported
   # and a short tag (@v2) is rejected by slsa-verifier.
+  #
+  # This job does NOT run on Namespace: a reusable workflow declares its
+  # own `runs-on` internally, and a caller cannot override it (D-07,
+  # structural, not a trade-off). It is the documented sole exception to
+  # every other job in this file moving to a Namespace runner class —
+  # left as-is deliberately, not an oversight.
   provenance:
     name: SLSA provenance
     needs: assemble

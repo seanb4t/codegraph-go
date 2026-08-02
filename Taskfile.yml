@@ -1,0 +1,208 @@
+# Single local-build/CI-invocation definition site (D-01, D-02). CI workflow
+# `run:` steps call `task <target>` — they no longer own command bodies
+# themselves. See go.tool.mod / go.tool-lint.mod for why the tools this
+# Taskfile shells out to are pinned via isolated -modfile builds rather than
+# `go install` or a marketplace action.
+version: "3"
+
+vars:
+  GO_TOOL: GOWORK=off go tool -modfile=go.tool.mod
+  GO_TOOL_LINT: GOWORK=off go tool -modfile=go.tool-lint.mod
+
+tasks:
+  default:
+    desc: List available targets (does not build, test, or lint anything).
+    silent: true
+    cmds:
+      - task --list
+
+  build:
+    desc: Build every package (compile check only, no binary retained).
+    cmds:
+      - go build ./...
+
+  build:release:
+    desc: >-
+      Local convenience build producing ./codegraph with release-shaped
+      ldflags (version metadata, -trimpath). This is NOT a release artifact —
+      goreleaser (task check:goreleaser / .goreleaser.yaml / release.yml)
+      builds, signs, and SBOMs what actually ships. Use this only to
+      sanity-check a version-stamped local binary.
+    cmds:
+      - |
+        set -euo pipefail
+        VERSION=$(git describe --tags --always --dirty)
+        COMMIT=$(git rev-parse HEAD)
+        # TZ=UTC + git's own date formatter avoids GNU-vs-BSD `date -d`
+        # incompatibility between Linux CI and macOS/BSD contributor
+        # machines — no shell `date` binary is invoked at all.
+        DATE=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ)
+        go build -trimpath -ldflags "-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=${VERSION} -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}" -o ./codegraph ./cmd/codegraph
+
+  test:unit:
+    desc: >-
+      go test over every package except internal/daemon (isolated separately
+      — see task test:daemon).
+    cmds:
+      - |
+        set -euo pipefail
+        # IN-08 (03-REVIEW.md): `set -e` does not propagate a failure out of
+        # a process substitution — `mapfile -t pkgs < <(go list ... | grep
+        # ...)` would succeed regardless of go list's own exit status, so a
+        # partial emission before a failure could silently test a subset of
+        # packages under a green check. Materialize the list first so go
+        # list's exit code is checked by set -e before anything consumes it.
+        pkgs_raw=$(go list ./...)
+        mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
+        go test "${pkgs[@]}"
+
+  test:golden:
+    desc: >-
+      Golden parity suite (testdata/golden) — NOT covered by go list ./...
+      (GOLDEN-01: the go tool ignores any directory named "testdata" when
+      expanding ./...), so this is its own explicit target.
+    cmds:
+      - go test ./testdata/golden/...
+
+  test:integration:
+    desc: >-
+      Subprocess integration harness (test/integration) — already reached by
+      go list ./... (it's a normal package, not testdata/), but this explicit
+      target guards against a future refactor of test:unit's filtered go list
+      line silently dropping it too.
+    cmds:
+      - go test ./test/integration/...
+
+  test:daemon:
+    desc: >-
+      internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
+      are a documented, PRE-EXISTING flake under full-suite parallel load
+      (STATE.md, 08-CONTEXT.md "Flake note") — isolating them here is the
+      documented handling; the tests are NOT removed or skipped, just run
+      without contention from the rest of the suite.
+    cmds:
+      - go test ./internal/daemon/ -count=1
+
+  test:race:
+    desc: >-
+      Concurrency packages under the race detector. -p 1 preserves the same
+      no-parallel-package-contention isolation test:daemon relies on — do not
+      run this concurrently with test:daemon (see the test wrapper's comment).
+    cmds:
+      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
+
+  vet:
+    desc: >-
+      go vet ./... — NEW enforcement as of this target (DEV-01): plain
+      `go vet ./...` has never run in CI before; only two package-scoped
+      GOOS=windows vets did (see vet:windows / vet:daemon-windows). Findings
+      surfaced on first run are fixed, not suppressed.
+    cmds:
+      - go vet ./...
+
+  vet:windows:
+    desc: >-
+      Typecheck the windows lock classifier (GOOS=windows go vet
+      internal/graphstore) — WR-01: the only guard against the windows
+      lock-classifier rotting with no windows runner in CI. No precondition:
+      internal/graphstore is CGo-free, so the cross-GOOS vet works on any
+      host.
+    cmds:
+      - GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/
+
+  vet:daemon-windows:
+    desc: >-
+      Typecheck the windows PPID watchdog (GOOS=windows go vet
+      internal/daemon) — needs a REAL mingw-w64 cross C toolchain, unlike
+      vet:windows: internal/daemon transitively imports the tree-sitter CGo
+      grammar bindings, and cgo runs the target C compiler even to
+      typecheck.
+    preconditions:
+      - sh: command -v x86_64-w64-mingw32-gcc
+        msg: "mingw-w64 not found. Install with: apt-get install gcc-mingw-w64-x86-64 (Debian/Ubuntu; see your platform's equivalent). See CONTRIBUTING.md's Building section."
+    env:
+      CGO_ENABLED: "1"
+      CC: x86_64-w64-mingw32-gcc
+    cmds:
+      - GOOS=windows GOARCH=amd64 go vet ./internal/daemon/
+
+  vuln:
+    desc: >-
+      govulncheck over the main module (call-graph-aware vulnerability scan).
+      This does NOT replace ci.yml's blocking "govulncheck (DIST-03,
+      blocking)" gate, which runs golang/govulncheck-action unchanged — this
+      target exists so the same check is reachable locally before pushing.
+    cmds:
+      - "{{.GO_TOOL}} govulncheck ./..."
+
+  check:darwin-toolchain:
+    desc: >-
+      Prove a native darwin host can CGo-build both release arches — the D-08
+      canary. release.yml builds both darwin targets on a native macOS runner
+      with Xcode's own clang (no zig, no osxcross) because a Linux-hosted CGo
+      cross-link to darwin risks silently breaking libresolv-based DNS
+      resolution in a binary that makes real HTTPS calls (`codegraph
+      upgrade`). release.yml fires only on a `v*` tag push, so without this
+      target nothing exercises that toolchain until a release is already
+      being cut. Reports the SDK version deliberately: a newer SDK can
+      produce a binary that builds, signs, and attests cleanly yet refuses to
+      launch on an older macOS — the one failure here that is silent rather
+      than loud.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "check:darwin-toolchain must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
+      - sh: command -v clang
+        msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
+    cmds:
+      - sw_vers
+      - uname -m
+      - clang --version
+      - xcrun --sdk macosx --show-sdk-version
+      # Both arches, mirroring release.yml's matrix: arm64 is native, amd64 is
+      # an arch-only cross on the same host and SDK (Go passes clang the right
+      # -arch for GOARCH). -o /dev/null because only the link is being proven.
+      - CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/codegraph
+      - CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/codegraph
+
+  check:goreleaser:
+    desc: Validate .goreleaser.yaml (DIST-01).
+    cmds:
+      - "{{.GO_TOOL}} goreleaser check"
+
+  lint:actions:
+    desc: Lint GitHub Actions workflows (workflow static analysis).
+    cmds:
+      - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"
+
+  # --- Contributor-only coarse wrappers (D-02) --------------------------
+  #
+  # CI NEVER calls these two targets — ci.yml calls the fine-grained
+  # targets above directly, one per named step. A wrapper that forgets a
+  # leg costs a contributor convenience, but cannot weaken CI coverage,
+  # because CI never reads this list. Do not "simplify" ci.yml onto these
+  # wrappers — that would reintroduce exactly the silent-drop risk D-02
+  # designed out. See TestTaskfileWrapperIsSerial (internal/upgrade) for
+  # the set-equality guard that keeps the `test` wrapper's leg list honest.
+
+  test:
+    desc: >-
+      Contributor wrapper: the five host-only legs (test:unit, test:golden,
+      test:integration, test:daemon, test:race), run SERIALLY via a list of
+      sub-task commands (never deps:, which go-task runs concurrently).
+      test:daemon and test:race both pass -p 1 specifically to avoid
+      cross-test contention; running the two concurrently with each other
+      would reintroduce exactly the flakiness those flags exist to prevent.
+      Cross-toolchain targets (vet:windows, vet:daemon-windows) are
+      separate by design — not part of this wrapper.
+    cmds:
+      - task: test:unit
+      - task: test:golden
+      - task: test:integration
+      - task: test:daemon
+      - task: test:race
+
+  lint:
+    desc: "Contributor wrapper: vet and lint:actions, run serially."
+    cmds:
+      - task: vet
+      - task: lint:actions

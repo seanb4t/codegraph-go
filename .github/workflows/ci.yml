@@ -45,7 +45,7 @@ permissions:
 jobs:
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-4x8
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -54,10 +54,25 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
 
       - name: Build
-        run: go build ./...
+        run: task build
+
+      # DEV-01 (Phase 10): NEW enforcement, not a rewiring — plain
+      # `go vet ./...` was never in CI before this step; only the two
+      # package-scoped GOOS=windows vets below existed. Findings surfaced
+      # on this gate's first run are fixed, not suppressed.
+      - name: Vet (go vet ./...)
+        run: task vet
 
       - name: Test (excluding internal/daemon — isolated below)
         # IN-08 (03-REVIEW.md): `set -e` does not propagate failures out of
@@ -66,11 +81,7 @@ jobs:
         # emission before a failure would silently test a subset of packages
         # under a green check. Materialize the list first so go list's exit
         # code is checked by set -e before anything consumes it.
-        run: |
-          set -euo pipefail
-          pkgs_raw=$(go list ./...)
-          mapfile -t pkgs < <(printf '%s\n' "$pkgs_raw" | grep -v '/internal/daemon$')
-          go test "${pkgs[@]}"
+        run: task test:unit
 
       # GOLDEN-01 (02-REVIEW-2.md): the go tool ignores any directory named
       # "testdata" when expanding "./..." — `go list ./...` above therefore
@@ -80,7 +91,7 @@ jobs:
       # behavioral corpora, etc.). This step makes that reachable and
       # explicit rather than a suite everyone believes runs but never does.
       - name: Test golden parity suite (testdata/golden, NOT covered by go list ./...)
-        run: go test ./testdata/golden/...
+        run: task test:golden
 
       # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
       # by `go list ./...` above (it's a normal package, not testdata/), but
@@ -88,7 +99,7 @@ jobs:
       # filtered `go list` line silently dropping it too — the same
       # rationale the golden-suite step above already documents.
       - name: Test subprocess integration harness (test/integration)
-        run: go test ./test/integration/...
+        run: task test:integration
 
       - name: Test internal/daemon (isolated, -count=1)
         # internal/daemon's TestSoak + flush-lock tests are a documented,
@@ -97,7 +108,7 @@ jobs:
         # -count=1 step is the documented handling — the tests are NOT
         # removed or skipped, just run without contention from the rest of
         # the suite.
-        run: go test ./internal/daemon/ -count=1
+        run: task test:daemon
 
       # WR-03 (03-REVIEW.md): the watcher-on-MCP-default phase's entire
       # surface is goroutine lifecycles (serveWatchStart's spawn/teardown,
@@ -111,7 +122,7 @@ jobs:
       # isolation the internal/daemon step above documents. The goleak gate
       # catches leaks, not races — the two are complementary.
       - name: Test concurrency packages under the race detector (-race)
-        run: go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
+        run: task test:race
 
       # WR-01 (03-REVIEW-3.md): locked_windows.go and locked_windows_test.go
       # are the only guard against the windows lock-classifier rotting
@@ -121,7 +132,7 @@ jobs:
       # strongest check available without one. Pure-Go package — no CGo, so
       # cross-GOOS vet works on the linux runner.
       - name: Typecheck windows lock classifier (GOOS=windows go vet internal/graphstore)
-        run: GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/
+        run: task vet:windows
 
       # 07-03 (D-07/D-08): watchdog_windows.go is a second windows-tagged,
       # compile-only-verified file (same "no windows runner" precedent as
@@ -140,10 +151,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
 
       - name: Typecheck windows PPID watchdog (GOOS=windows go vet internal/daemon)
-        env:
-          CGO_ENABLED: "1"
-          CC: x86_64-w64-mingw32-gcc
-        run: GOOS=windows GOARCH=amd64 go vet ./internal/daemon/
+        run: task vet:daemon-windows
 
   govulncheck:
     name: govulncheck (DIST-03, blocking)
@@ -300,12 +308,14 @@ jobs:
   # not optional, given this repo's own documented "guard present but never
   # fires" failure mode (Phase-8 CR-01/WR-02). actionlint catches schema
   # errors, untyped expressions, and injection-shaped run: blocks before
-  # merge. Installed via `go install` at a pinned version rather than a
-  # fourth-party Action — no new pinned Action in the supply chain, no new
-  # go.mod entry, matching this repo's pure-Go CI tooling preference.
+  # merge. Built from go.tool-lint.mod at a pinned version via the shared
+  # install-task/Taskfile bootstrap (Phase 10, D-03/D-04) rather than a
+  # fourth-party Action or a bare `go install @pin` — see go.tool-lint.mod's
+  # own header for why actionlint is isolated from go.tool.mod's task/
+  # goreleaser tool directives.
   actionlint:
     name: actionlint (workflow static analysis)
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-2x4
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -314,10 +324,39 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
-      - name: Install and run actionlint
-        run: |
-          set -euo pipefail
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "$(go env GOPATH)/bin/actionlint" .github/workflows/*.yml
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run actionlint
+        run: task lint:actions
+
+  goreleaser-check:
+    name: goreleaser check (config validation, DIST-01)
+    runs-on: namespace-profile-linux-amd64-2x4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run goreleaser check
+        run: task check:goreleaser

@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 09
-current_phase_name: release-please-and-goreleaser
+current_phase: 10
+current_phase_name: Local Build Tooling & CONTRIBUTING
 status: executing
-stopped_at: "Phase 9 at 6/8. 09-07 PAUSED at its Task-1 blocking-human gate by maintainer decision: fix red CI on main BEFORE running the disposable live release proof. Three pre-existing failures on main@a1c298f (NOT introduced by release PR #2): [RESOLVED 2026-07-31 via quick task 260731-0a0, commit a0cfceb] govulncheck GO-2026-6061 (grpc bumped v1.82.0 -> v1.82.1; govulncheck job GREEN on main@3738acc run 30604258476), [RESOLVED 2026-07-31 via /gsd-debug daemon-stale-linux-flake, commits b51fefc + 326aba7] internal/daemon Linux failures were NOT merely a flake — a REAL PRODUCT BUG: acquire() and Run()'s Register() stamped StartedAt: time.Now() for os.Getpid() while isStale corroborates against the OS process-start time, so any process acting >~3s after its own start wrote a self-invalidating lock, DEFEATING the single-writer invariant INDX-05/T-04-07-01 on Linux in production. Fixed by selfStartedAt(); procStartTimeSlack and startTimesCorroborate deliberately unchanged. VERIFIED GREEN on linux/amd64 (test job, ci run 30646401249). Effective corroboration window is ~3.05s not the nominal 5s (/proc derivation truncates twice), [RESOLVED 2026-07-31 via /gsd-debug perf-gate-throughput-regress, commits 0c4d550 1e07032 ebdc95d e35bf7e 88b4368 b59acda d4672cf 1050602 3ffdb5c] perf gate: THERE WAS NEVER A CODE REGRESSION. The prior entry here — 'a stable ~10.6% regression, NOT runner noise' — was itself wrong, and was the THIRD wrong conclusion about this one failure (the first two called it runner drift). Its reasoning correctly ruled out noise but did not distinguish a code regression from a fixed measurement-frame offset; both reproduce stably. The control nobody had run — same platform, different commit — gives e7aa091 38558.08 vs dcf8580 38837.64 files/s, +0.73%. Root cause was an AND-gate: baseline.json was recorded on darwin/arm64 while the gate runs ubuntu-latest, AND CheckRegression never compared GOOS/GOARCH, so it silently gated on the distance between two machines. Fixed by a platform guard, a dispatchable ubuntu-latest rebless job (contents:read, cannot self-commit), median-of-N (-trials 3), and a runner-matched baseline copied verbatim from the -rebless artifact. CI now GREEN on main@3ffdb5c (run 30655789025, perf gate median 11453.30 vs 11279.59 baseline, +1.54%). Two independent 7-trial rebless sessions agreed to 0.65%, so the budget is now ~15x measurement uncertainty. The bisect todo is resolved REFUTED — do not run it. STILL OPEN: CheckRegression never compares Metrics.Repo (corpus identity), so a rebless with a different -count reproduces this bug class in an unwatched field. Gate note: the gate can no longer be run on developer macOS by design. Main fast-forwarded a1c298f -> 3738acc (clean FF, 0 merge commits, D-09); release-please updated PR #2 changelog with the fix under Bug Fixes. release.yml has NO test/vuln gate (build->assemble->provenance, tag-push triggered), so red CI cannot stop a release. release PR #2 (chore(main): release 0.2.0) left OPEN and unmerged. Do NOT run secure-phase/validate-phase/verifier until 09-08 lands."
-last_updated: "2026-07-31T22:07:51.385Z"
-last_activity: 2026-07-31
-last_activity_desc: perf blocker closed (no regression existed) — CI green on main; gates hardened to blocking-human; executing 09-07
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-08-02T01:33:02.904Z"
+last_activity: 2026-08-01
+last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 10
-  completed_phases: 8
-  total_plans: 65
-  completed_plans: 63
-  percent: 80
+  completed_phases: 9
+  total_plans: 72
+  completed_plans: 68
+  percent: 90
 ---
 
 # Project State
@@ -24,24 +24,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-14)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
-**Current focus:** Phase 09 — release-please-and-goreleaser
+**Current focus:** Phase 10 — Local Build Tooling & CONTRIBUTING
 
 ## Current Position
 
-Phase: 09 (release-please-and-goreleaser) — ALL 8 PLANS RESOLVED; REL-02 SATISFIED
-Plan: 09-01..09-06 COMPLETE; 09-07 SKIPPED by maintainer decision (09-07-SUMMARY.md); 09-08 COMPLETE (09-08-SUMMARY.md)
-Status: main@90c32b8, CI green, and `main` is now PROTECTED by ruleset `protect-main` (id 20157557, active): PR required, squash-only, linear history, no force-push, no deletion, 6 required checks (test, actionlint, govulncheck (DIST-03, blocking), perf regression gate (PERF-02, INDX-06), pr-title, reproducibility (DIST-04)). Bypass is RepositoryRole 5 (admin) mode=always, so it does not constrain the maintainer. Direct pushes to main have stopped; PR #3 was the first change to land through review. All three original blockers are closed — govulncheck (grpc v1.82.1), internal/daemon (a real single-writer-invariant bug, not a flake), and the perf gate, where the previously-recorded "REAL ~10.6% regression" was ITSELF WRONG: there was never a code regression, baseline.json had been recorded on darwin/arm64 while the gate runs ubuntu-latest and CheckRegression never compared GOOS/GOARCH. Same-platform control measured +0.73%. Bisect todo resolved REFUTED — do not run it. 09-07's disposable live proof was SKIPPED: 3 of its 4 target facts were already established (the cosign SAN one structurally — releaseWorkflowRefPattern has no actor component), and running it would have permanently double-signed the v0.2.0 tag name in the public Sigstore log. CONSEQUENCE ACCEPTED KNOWINGLY: 09-08 is now the pipeline's FIRST live run. Both remaining Task-1 gates were hardened from gate="blocking" to gate="blocking-human" (ba5a548) because workflow.auto_advance=true would otherwise have auto-selected 09-08's first option — publish permanently — with no human input.
+Phase: 10 (Local Build Tooling & CONTRIBUTING) — EXECUTING
+Plan: 4 of 7
+Status: Ready to execute
 **2026-08-01 — v0.2.0 PUBLISHED AND VERIFIED; REPO IS PUBLIC.** The release was cut entirely by release-please (tag + Release authored by `fzy-release-please[bot]`, no human `git tag`); all 11 `release.yml` jobs green (run 30675077940, event=push ref=v0.2.0); the publish step provably took the UPLOAD branch (D-04) because the Release predated the run by 45s. Task-3 verification all five: 20 assets, `cosign` Verified OK, **`TestVerifyReleaseE2E` RAN (not skipped) and PASSED** — its first execution against a real artifact ever — SLSA PASSED at builder `@v2.1.0` commit cce95f3, and a genuinely shipped v0.1.0 binary self-upgraded to v0.2.0. The installed binary is byte-identical (`a64c1549…`) to the SLSA-attested subject, the cosign-verified blob, and the artifact the E2E test passed against: what a user receives is what was attested. NOTE the upgrade first returned 404 — `internal/upgrade` sends no Authorization header and the repo was private, so REL-02's second half was UNPROVABLE, NOT UNMET; the phase was held open rather than closed on 4-of-5 green, and it passed first try once public. This also empirically confirms the structural argument used to skip 09-07: a binary hard-coding the PRE-rewiring SAN constants verified an App-triggered signature, so `releaseWorkflowRefPattern` really is actor-independent.
 **OSS readiness complete** — community health 100%: LICENSE (MIT, detected — an appended paragraph had made it NOASSERTION), NOTICE with the upstream copyright transcribed verbatim (`Copyright (c) 2026 Colby Mchenry`, lowercase h, not guessed), README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, 4 issue forms + 3 typed PR templates behind a router default, 6 topics. Five gsd-core workflows lifted so the stated gates are enforced rather than described: close-draft-prs, require-issue-link, pr-template-format (policy in Python, not .cjs), auto-close-unsolicited-prs, auto-label-issues. Labels `feature`/`chore` referenced by issue templates did not exist — GitHub silently drops unknown labels, so two templates were labelling nothing. Issue #9 tracks tier-2 workflows + the remaining Python migration.
-Last activity: 2026-08-01 — Phase 9 closed: v0.2.0 published and fully verified, REL-02 satisfied on both halves, repo made public, OSS community set complete
+Last activity: 2026-08-01 — Phase 10 execution started
 
-Progress: [████████░░] 80% (8 of 10 phases)
+Progress: [█████████░] 94% (9 of 10 phases)
 
 ## Performance Metrics
 
 **Velocity (v1.0):**
 
-- Total plans completed: 58 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 66 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -57,8 +57,9 @@ Progress: [████████░░] 80% (8 of 10 phases)
 | 6 | 3 | - | - |
 | 07 | 8 | - | - |
 | 8 | 9 | - | - |
+| 09 | 8 | - | - |
 
-**Recent Trend:** — (no v1.0 plans executed yet)
+**Recent Trend:** 9 of 10 v1.0 phases complete; Phase 09 closed 2026-08-01 with v0.2.0 published and REL-02 satisfied on both halves. (Note: the "Total plans completed" line above counts SUMMARY files (66) while the frontmatter `completed_plans` counts PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.)
 
 *Updated after each plan completion*
 | Phase 01-behavioral-parity-explore-node P01 | 55min | 3 tasks | 30 files |
@@ -128,6 +129,9 @@ Progress: [████████░░] 80% (8 of 10 phases)
 | Phase 09-release-please-and-goreleaser P04 | 30min | 3 tasks | 3 files |
 | Phase 09 P05 | 15min | 1 tasks | 1 files |
 | Phase 09 P06 | 20min | 2 tasks | 0 files |
+| Phase 10 P01 | 45min | 3 tasks | 8 files |
+| Phase 10 P02 | unknown | 3 tasks | 5 files |
+| Phase 10 P03 | unknown | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -244,6 +248,11 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: 09-05: reused pre-existing shared GitHub App fzy-release-please (permissions verified exactly Contents/PRs/Issues write + mandatory metadata:read); T-09-05-02 blast-radius consequence recorded; PR create-and-approve setting confirmed enabled on live re-check
 - [Phase ?]: [Phase 09-06]: main fast-forwarded to v1.0 history (502 commits, zero merge commits) per D-09/maintainer-confirmed decision; release-please's App-token minting step failed with a 401 JWT-decode error, isolated to APP_PRIVATE_KEY secret content, not App scope/repo settings — blocker recorded for maintainer
 - [Phase ?]: [Phase 09-06 resolution] Root cause of the App-token 401 was APP_PRIVATE_KEY holding a different GitHub App's key (fzymgc-renovate, not fzy-release-please), not malformed PEM content; diagnosed via a local JWT identity check against GET /app. Maintainer corrected the secret; release-please.yml attempt 3 succeeded, opening release PR #2 (chore(main): release 0.2.0, unmerged) and closing the App-token proof RESEARCH Open Question 1 (including its Issues-scope PR-labeling permission).
+- [Phase ?]: [Phase 10-01]: Tracer proven — go.tool.mod/go.tool-lint.mod isolated tool modfiles, install-task composite action, Taskfile.yml, and Namespace runners wired end-to-end through ci.yml's goreleaser-check (non-required) and actionlint (required-check) jobs; D-03 MVS-conflict split re-demonstrated live, not just cited
+- [Phase ?]: [Phase 10-01]: Added .github/actionlint.yaml (Rule 3, not in plan's files_modified) declaring namespace-profile-linux-amd64-{2x4,4x8} as self-hosted-runner labels — without it actionlint's built-in runner-label list flags every namespace-profile-* runs-on: as unknown, which would fail the actionlint required-check job against its own diff
+- [Phase ?]: [Phase 10-01]: goreleaser pinned v2.17.1 in go.tool.mod (matches ci.yml's pre-existing pin); release.yml's v2.17.0 mismatch left untouched as a pre-existing, deliberately out-of-scope discrepancy (A1)
+- [Phase ?]: [Phase 10-02]: govulncheck resolved to go.tool.mod on first-attempt measurement (+2 net-new modules, no MVS conflict) -- no second/third modfile needed; ci.yml's test job rewired onto task <target> + Namespace with a new go vet ./... gate (DEV-01 new coverage, zero pre-existing findings)
+- [Phase ?]: 10-03: darwin release.yml leg moved to namespace-profile-macos-6x14-tahoe per maintainer checkpoint decision — unproven in real CI (release.yml is tag-push-only, no PR exercises it)
 
 ### Pending Todos
 
@@ -265,6 +274,8 @@ Backlog item 999.1 (local build/Taskfile.yml + CONTRIBUTING.md) tracked in ROADM
 - **[Phase 2/8]** `files --filter` semantic collision (ours=language, TS=directory) — resolved by SURF-02 (keep language + add directory flag); the #1 silent-failure risk if mishandled.
 - **[Phase 6/8]** Charm v2 uses the `charm.land/...` vanity import; audit the full transitive closure for CGo (expected) + govulncheck + SBOM before the v1.0.0 release.
 - [Phase 7/8] GOOS=windows go vet ./internal/daemon/ ./internal/graphstore/ fails (undefined: tree_sitter.Node in internal/indexer/goextract/routes) — CGo tree-sitter grammar bindings excluded under windows/amd64 build constraints; pre-existing, confirmed unrelated to Phase 7's changes, needs resolution alongside Phase 8's Charm v2 CGo/govulncheck/SBOM audit
+- [Phase 10-01] Neither rewired ci.yml job (goreleaser-check, actionlint) has been observed running on a real pushed CI event yet — both were verified locally only (task check:goreleaser / task lint:actions exit 0, go list ./... unaffected, required-check names set-equal to ruleset 20157557). Watch the next push/PR for both jobs actually scheduling on namespace-profile-linux-amd64-2x4 and completing; a missing runner provider queues indefinitely with no error (Task 1's own precondition warning).
+- 10-03: namespace-profile-macos-6x14-tahoe (release.yml's darwin build leg) has never been exercised in this repo — release.yml triggers only on v[0-9]* tag push, not pull_request, so no PR proves it. Must be watched on the next real release tag push: job schedules (not queues indefinitely), both darwin binaries build, and ideally a codegraph upgrade smoke test on real macOS. See 10-03-SUMMARY.md Known Unknowns.
 
 ### Quick Tasks Completed
 
@@ -284,11 +295,14 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-07-31T03:41:41.022Z
-Stopped at: Phase 9 at 6/8. UAT done (scoped, 33/33, 0 issues). DECISION PENDING: run 09-07 (disposable live proof) or skip to 09-08 (real cut). Do NOT run secure-phase/validate-phase/verifier until 09-08 lands.
-Resume file: .planning/phases/09-release-please-and-goreleaser/09-07-PLAN.md
+Last session: 2026-08-02T01:33:02.890Z
+Stopped at: Completed 10-03-PLAN.md
+  NEXT: Phase 10 (Local Build Tooling & CONTRIBUTING) is UNPLANNED and needs a SCOPE DECISION before planning — ROADMAP flags it as arguably v1.1 work and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile. Alternative: `/gsd-complete-milestone` to close v1.0 at 9 phases.
+  OPEN ISSUES (none blocking Phase 09): #13 daemon `-race` on the `getppid` test seam · #14 provenance-over-checksums wording still uncorrected in release.yml:327 + docs/RELEASE.md:26-28 + docs/RELEASE-PROCEDURES.md:120-122 (the verification COMMANDS were fixed in PRs #6/#7; the descriptive claim that produced them was not) · #15 fixed `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 CheckRegression still never compares `Metrics.Repo` · #17 TestRunWatchdogCancelsRunOnSimulatedReparent fails 3/3 under full-suite load, passes 3/3 isolated.
+  CARRY-OVER: the new `goreleaser-check` CI job (05b26ed) runs on PRs but is NOT in main's required-status-check set (ruleset 20157557, currently 6 checks) — add it only after it has run at least once, or pending PRs may block on a never-reported check. Also advisory from the security audit: the four `pull_request_target` workflows have no threat-register entry, having landed after Phase 09's register was authored.
+Resume file: None
 
 ## Operator Next Steps
 
-- Review the roadmap draft (.planning/ROADMAP.md).
-- Plan the first phase with `/gsd-plan-phase 1`.
+- Confirm Phase 10 scope — ROADMAP flags it as arguably v1.1 work, and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile.
+- Then either `/gsd-plan-phase 10` or `/gsd-complete-milestone` to close v1.0.
