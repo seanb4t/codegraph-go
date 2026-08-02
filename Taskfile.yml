@@ -135,6 +135,35 @@ tasks:
     cmds:
       - "{{.GO_TOOL}} govulncheck ./..."
 
+  check:darwin-toolchain:
+    desc: >-
+      Prove a native darwin host can CGo-build both release arches — the D-08
+      canary. release.yml builds both darwin targets on a native macOS runner
+      with Xcode's own clang (no zig, no osxcross) because a Linux-hosted CGo
+      cross-link to darwin risks silently breaking libresolv-based DNS
+      resolution in a binary that makes real HTTPS calls (`codegraph
+      upgrade`). release.yml fires only on a `v*` tag push, so without this
+      target nothing exercises that toolchain until a release is already
+      being cut. Reports the SDK version deliberately: a newer SDK can
+      produce a binary that builds, signs, and attests cleanly yet refuses to
+      launch on an older macOS — the one failure here that is silent rather
+      than loud.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "check:darwin-toolchain must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
+      - sh: command -v clang
+        msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
+    cmds:
+      - sw_vers
+      - uname -m
+      - clang --version
+      - xcrun --sdk macosx --show-sdk-version
+      # Both arches, mirroring release.yml's matrix: arm64 is native, amd64 is
+      # an arch-only cross on the same host and SDK (Go passes clang the right
+      # -arch for GOARCH). -o /dev/null because only the link is being proven.
+      - CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/codegraph
+      - CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/codegraph
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:

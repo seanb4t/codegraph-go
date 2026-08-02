@@ -1,0 +1,62 @@
+# Darwin toolchain canary (D-08).
+#
+# release.yml builds both darwin arches on a NATIVE macOS runner using
+# Xcode's own clang — no zig, no osxcross — because a Linux-hosted CGo
+# cross-link to darwin risks silently breaking libresolv-based DNS
+# resolution in a binary that makes real HTTPS calls (`codegraph upgrade`).
+#
+# That leg is the one build in this repo where the HOST OS is a correctness
+# input rather than a performance choice, and it is also the least
+# observable: release.yml fires only on a `v*` tag push, so without this
+# workflow the darwin toolchain is first exercised during a release that is
+# already underway. Worse, its bad outcomes are quiet — a wrong host still
+# produces a binary that builds, signs, and passes SLSA attestation.
+#
+# Two triggers, deliberately:
+#   - workflow_dispatch: run it on demand before cutting a release.
+#   - pull_request, PATH-SCOPED: re-prove the toolchain automatically
+#     whenever something that can affect the darwin build changes. The path
+#     filter is what keeps a macOS runner off every unrelated PR.
+#
+# This job is intentionally NOT in main's required-status-check set. It is a
+# canary, not a gate: it should tell you the darwin host is broken, not block
+# unrelated work while someone figures out why.
+name: darwin-toolchain-canary
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/darwin-toolchain-canary.yml"
+      - ".goreleaser.yaml"
+      - "Taskfile.yml"
+      - "go.mod"
+      - "go.sum"
+
+permissions:
+  contents: read
+
+jobs:
+  darwin-toolchain:
+    name: darwin toolchain canary (D-08)
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # No nscloud-cache-action here, unlike the linux jobs: a canary should
+      # have the smallest possible failure surface, so that a red run means
+      # "the darwin toolchain is broken" and not "the cache action does not
+      # support macOS runners".
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Prove the darwin toolchain
+        run: task check:darwin-toolchain
