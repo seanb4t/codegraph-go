@@ -216,6 +216,15 @@ None - no external service configuration required.
 - Phase 10 is now fully closed: `Taskfile.yml`'s complete target set is in place, `ci.yml`/`release-please.yml` are rewired through it with an enforced non-vacuous single-definition guard, `CONTRIBUTING.md` points contributors at it, and a real clean-checkout run proves the ROADMAP's build/test/lint promise.
 - No blockers for subsequent milestone work. This was the final plan of Phase 10 — the phase's own SUMMARY/verification rollup can now proceed against all seven plan summaries.
 
+## Self-Check: PASSED
+
+- FOUND: `CONTRIBUTING.md`
+- FOUND: `internal/upgrade/taskfile_shape_test.go`
+- FOUND: `.planning/phases/10-local-build-contribution-and-taskfile-yml-setup/10-07-SUMMARY.md`
+- FOUND commit: `5ee053f` (Task 1)
+- FOUND commit: `3c716ff` (Task 2)
+- FOUND commit: `83aff93` (this SUMMARY)
+
 ---
 *Phase: 10-local-build-contribution-and-taskfile-yml-setup*
 *Completed: 2026-08-02*

@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
 current_phase: 10
 current_phase_name: Local Build Tooling & CONTRIBUTING
-status: executing
-stopped_at: Completed 10-06-PLAN.md
-last_updated: "2026-08-02T18:44:08.880Z"
+status: verifying
+stopped_at: Completed 10-07-PLAN.md (final plan of Phase 10)
+last_updated: "2026-08-02T19:16:15.932Z"
 last_activity: 2026-08-01
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 10
-  completed_phases: 9
+  completed_phases: 10
   total_plans: 72
-  completed_plans: 71
-  percent: 90
+  completed_plans: 72
+  percent: 100
 ---
 
 # Project State
@@ -30,12 +30,12 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 Phase: 10 (Local Build Tooling & CONTRIBUTING) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 **2026-08-01 — v0.2.0 PUBLISHED AND VERIFIED; REPO IS PUBLIC.** The release was cut entirely by release-please (tag + Release authored by `fzy-release-please[bot]`, no human `git tag`); all 11 `release.yml` jobs green (run 30675077940, event=push ref=v0.2.0); the publish step provably took the UPLOAD branch (D-04) because the Release predated the run by 45s. Task-3 verification all five: 20 assets, `cosign` Verified OK, **`TestVerifyReleaseE2E` RAN (not skipped) and PASSED** — its first execution against a real artifact ever — SLSA PASSED at builder `@v2.1.0` commit cce95f3, and a genuinely shipped v0.1.0 binary self-upgraded to v0.2.0. The installed binary is byte-identical (`a64c1549…`) to the SLSA-attested subject, the cosign-verified blob, and the artifact the E2E test passed against: what a user receives is what was attested. NOTE the upgrade first returned 404 — `internal/upgrade` sends no Authorization header and the repo was private, so REL-02's second half was UNPROVABLE, NOT UNMET; the phase was held open rather than closed on 4-of-5 green, and it passed first try once public. This also empirically confirms the structural argument used to skip 09-07: a binary hard-coding the PRE-rewiring SAN constants verified an App-triggered signature, so `releaseWorkflowRefPattern` really is actor-independent.
 **OSS readiness complete** — community health 100%: LICENSE (MIT, detected — an appended paragraph had made it NOASSERTION), NOTICE with the upstream copyright transcribed verbatim (`Copyright (c) 2026 Colby Mchenry`, lowercase h, not guessed), README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, 4 issue forms + 3 typed PR templates behind a router default, 6 topics. Five gsd-core workflows lifted so the stated gates are enforced rather than described: close-draft-prs, require-issue-link, pr-template-format (policy in Python, not .cjs), auto-close-unsolicited-prs, auto-label-issues. Labels `feature`/`chore` referenced by issue templates did not exist — GitHub silently drops unknown labels, so two templates were labelling nothing. Issue #9 tracks tier-2 workflows + the remaining Python migration.
 Last activity: 2026-08-01 — Phase 10 execution started
 
-Progress: [██████████] 99% (9 of 10 phases)
+Progress: [██████████] 100% (9 of 10 phases)
 
 ## Performance Metrics
 
@@ -135,6 +135,7 @@ Progress: [██████████] 99% (9 of 10 phases)
 | Phase 10 P05 | 41min | 3 tasks | 4 files |
 | Phase 10 P04 | ~16h (checkpoint-investigation dominated) | 3 tasks | 8 files |
 | Phase 10 P06 | ~24min | 3 tasks | 5 files |
+| Phase 10 P07 | 55min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -264,6 +265,9 @@ Full decision log in PROJECT.md Key Decisions. Decisions shaping v1.0:
 - [Phase ?]: 10-04: discovered the immediately-prior baseline was 51.5% stale (gate would have passed a 37.8% regression green); reblessed fresh on ubuntu-latest+disk; cause of the jump explicitly NOT asserted (code speedup vs GitHub fleet hardware, unmeasured)
 - [Phase ?]: 10-06: internal/bench.CheckRegression now refuses a runner OR scratch_fs mismatch as a category error (same treatment as GOOS/GOARCH, fires before any numeric check, empty-vs-non-empty refused, both-empty passes) — closes both halves of 10-04's handoff in one pass
 - [Phase ?]: 10-06: perf-regression job stays on ubuntu-latest — the plan's Namespace-migration premise was disproved by 10-04's own investigation; only the reproducibility job (self-comparing, no baseline-frame risk) moved to Namespace, behind new task check:reproducibility(:arm64) targets
+- [Phase ?]: ROADMAP criterion 2 recorded pre-satisfied on evidence (D-00); CONTRIBUTING.md Building prose untouched, only a pointer paragraph added
+- [Phase ?]: TestWorkflowRunBodiesInvokeTask scopes to ci.yml (test/actionlint/goreleaser-check/reproducibility/perf-regression) + release-please.yml (pretag-gate); bench.yml/release.yml excluded, both already carry documented D-01 exceptions from earlier plans
+- [Phase ?]: task build is compile-check-only by design (no binary); clean-checkout proof supplemented with task build:release to prove the compile pipeline is not a no-op
 
 ### Pending Todos
 
@@ -307,8 +311,8 @@ Carried forward from v0.1 close — now scoped into v1.0 Phase 8:
 
 ## Session Continuity
 
-Last session: 2026-08-02T18:44:08.867Z
-Stopped at: Completed 10-06-PLAN.md
+Last session: 2026-08-02T19:16:15.918Z
+Stopped at: Completed 10-07-PLAN.md (final plan of Phase 10)
   NEXT: Phase 10 (Local Build Tooling & CONTRIBUTING) is UNPLANNED and needs a SCOPE DECISION before planning — ROADMAP flags it as arguably v1.1 work and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile. Alternative: `/gsd-complete-milestone` to close v1.0 at 9 phases.
   OPEN ISSUES (none blocking Phase 09): #13 daemon `-race` on the `getppid` test seam · #14 provenance-over-checksums wording still uncorrected in release.yml:327 + docs/RELEASE.md:26-28 + docs/RELEASE-PROCEDURES.md:120-122 (the verification COMMANDS were fixed in PRs #6/#7; the descriptive claim that produced them was not) · #15 fixed `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 CheckRegression still never compares `Metrics.Repo` · #17 TestRunWatchdogCancelsRunOnSimulatedReparent fails 3/3 under full-suite load, passes 3/3 isolated.
   CARRY-OVER: the new `goreleaser-check` CI job (05b26ed) runs on PRs but is NOT in main's required-status-check set (ruleset 20157557, currently 6 checks) — add it only after it has run at least once, or pending PRs may block on a never-reported check. Also advisory from the security audit: the four `pull_request_target` workflows have no threat-register entry, having landed after Phase 09's register was authored.
