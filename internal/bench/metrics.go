@@ -27,6 +27,26 @@ type Metrics struct {
 	// Runner-labelled baseline exists to compare against.
 	Runner string `json:"runner"`
 
+	// ScratchFS records which filesystem class the regression corpus +
+	// Pebble store were materialized on for THIS measurement: "tmpfs" or
+	// "disk" (see tools/bench/runner's scratchFSTmpfs/scratchFSDisk).
+	// Same philosophy as Runner: the storage frame is exactly as
+	// load-bearing to a throughput comparison as the runner class is —
+	// PERF-02's synthetic corpus is ~18MB of raw content but ~770MB of
+	// actual on-disk footprint once small-file block overhead is
+	// accounted for (120k files at ~4KB/block minimum each), and at that
+	// file count the workload is IOPS/metadata-bound, not
+	// bandwidth-bound. Comparing a tmpfs-recorded baseline against a
+	// disk-recorded gate run (or vice versa) would be exactly the kind
+	// of measurement-frame mismatch that produced the original
+	// fictitious 10.6% "regression" — a different location for the same
+	// failure class. Empty means "recorded before this field existed"
+	// or "the caller supplied an explicit -scratch-dir and its
+	// filesystem class wasn't characterized" — not an error. ScratchFS
+	// does NOT yet participate in CheckRegression's comparison; wiring
+	// that in, like Runner's, is a deliberately separate, later change.
+	ScratchFS string `json:"scratch_fs"`
+
 	// MedianOfTrials records how many INDEPENDENT measurement sessions
 	// these numbers are the median of — where a session is a full
 	// corpus-materialize + init + measure cycle, not a repeat of the

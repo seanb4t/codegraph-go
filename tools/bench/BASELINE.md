@@ -91,6 +91,79 @@ a deliberately separate, later change — it only makes sense once a
 before that baseline is committed would compare a runner-labelled
 current run against an unlabelled baseline for no benefit.
 
+## The `scratch_fs` field, and why the regression scratch dir now prefers tmpfs
+
+After the `runner` field closed the runner-class blind spot, a Namespace
+A/B investigation (10-04-PLAN) found the runner class itself wasn't the
+whole story: `namespace-profile-linux-amd64-4x8` and `ubuntu-latest`
+report **identical CPU** (`runtime.NumCPU() == 4` on both — measured, not
+assumed) but wildly different storage: a 2GiB sequential-write probe
+measured 905 MB/s on Namespace vs 153 MB/s on `ubuntu-latest` (read-back:
+1.7 GB/s vs 411 MB/s), and Namespace's workspace root is `overlay` where
+`ubuntu-latest`'s is `ext4`.
+
+The corpus itself is small — `tools/bench/gencorpus` writes ~18MB of raw
+content for 120,000 files — but `du -sh` on the materialized corpus +
+`.codegraph/` Pebble store measures **~773MB on disk**, because 120,000
+files each consume at least one filesystem block (~4KB) regardless of
+their tiny individual size. At that file count the workload is
+**IOPS/metadata-bound, not bandwidth-bound** — exactly the shape where
+overlayfs's layer-stack lookups and copy-up-on-write cost more, and vary
+more under co-tenancy, than a real block device. This matches the
+observed signature precisely: peak RSS was rock-stable (0.56%
+session-to-session) while throughput swung 4.36%+ — same work, same
+memory, different wall-clock is the textbook sign of storage-latency
+jitter, not CPU or memory pressure.
+
+**Fix: `tools/bench/runner`'s regression mode now prefers tmpfs
+(`/dev/shm`) for its scratch directory** when `-scratch-dir` isn't set
+explicitly (`resolveRegressionScratchDir` / `defaultRegressionScratchDir`,
+`tools/bench/runner/main.go`), falling back to the previous
+`os.TempDir()` behavior when no tmpfs mount exists (e.g. local macOS
+development, which has no `/dev/shm`). This removes storage from the
+regression measurement path entirely rather than widening a tolerance
+band to paper over storage-latency variance the code doesn't have to
+pay for.
+
+**Sizing, measured before wiring the fix in (not assumed):** both CI
+runner classes were dispatched with a real seed-42/count-120000 corpus
+materialize + `codegraph init` + `index --force`:
+
+| runner | `/dev/shm` available | corpus + store on disk |
+|---|---:|---:|
+| `ubuntu-latest` | 7.9 GiB | 773 MB (~9.8% of tmpfs) |
+| `namespace-profile-linux-amd64-4x8` | 4.0 GiB | 773 MB (~18.9% of tmpfs) |
+
+Comfortable headroom on both — this is not a close call.
+
+**`baseline.json` carries a `scratch_fs` key** (`"tmpfs"` or `"disk"`)
+recording which filesystem class the measured trials actually landed on.
+This exists for exactly the same reason `runner` does: changing the
+scratch filesystem is itself a measurement-frame change, indistinguishable
+in kind from changing `GOOS` or the runner class. A baseline recorded on
+tmpfs compared against a gate run still measuring on overlayfs (or vice
+versa) would silently rebuild the original fictitious-regression failure
+in a new location. An empty `scratch_fs` means "recorded before this
+field existed," or that an operator supplied an explicit `-scratch-dir`
+this runner didn't characterize — not an error.
+
+**`scratch_fs` does NOT yet participate in `CheckRegression`'s
+comparison**, matching `runner`'s own precedent: `internal/bench/regression.go`
+is untouched by this plan. Wiring a `scratch_fs` mismatch into the gate
+as a category error (same treatment as the `GOOS`/`GOARCH` refusal, not
+a tolerance question) is explicitly left as a handoff to whichever plan
+next touches `CheckRegression` (plan 10-06, which already owns wiring
+`runner` into the comparison) — this file documents the requirement so
+it isn't lost, not to duplicate 10-06's work here.
+
+**Consequence for `ci.yml`'s perf gate today:** the committed baseline
+is currently recorded on `ubuntu-latest` disk (no `scratch_fs` key), and
+`ci.yml`'s gate still runs on `ubuntu-latest`. That pairing is
+self-consistent and untouched by this section — D-09's ordering still
+governs: rebless (now tmpfs-aware) → commit baseline → only then move
+the gate. Re-blessing on tmpfs and committing that baseline is a
+deliberate, separate act from this documentation change.
+
 ## Measurement procedure
 
 Two nested levels of repetition, both deliberate:
