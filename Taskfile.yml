@@ -369,6 +369,45 @@ tasks:
         echo "total (corpus + store):"
         du -sh "$WORKDIR"
 
+
+  bench:regression:
+    desc: >-
+      Local invocation of the PERF-02/INDX-06 regression gate (D-14) —
+      wraps ci.yml's perf-regression job's invocation verbatim. This gate
+      is deliberately unrunnable as a REAL check on a developer machine:
+      internal/bench.CheckRegression refuses any comparison whose
+      GOOS/GOARCH, runner, or scratch_fs identity doesn't match the
+      committed tools/bench/baseline.json, and a developer machine is
+      essentially never that exact combination. When that refusal fires,
+      this target explains why in prose (tools/bench/BASELINE.md has the
+      full rationale) and still exits non-zero — it never remaps or
+      swallows the underlying exit status; the explanation is additive
+      output only. No -rebless flag is reachable from this or any other
+      task target (D-13) — baseline.json is written only by bench.yml's
+      manually-dispatched rebless job.
+    cmds:
+      - |
+        set -euo pipefail
+        if OUTPUT=$(go run ./tools/bench/runner -mode regression \
+          -baseline tools/bench/baseline.json \
+          -trials 3 \
+          -ceiling-bytes 4294967296 2>&1); then
+          STATUS=0
+        else
+          STATUS=$?
+        fi
+        echo "$OUTPUT"
+        if [ "$STATUS" -ne 0 ] && printf '%s' "$OUTPUT" | grep -qE 'platform mismatch|runner mismatch|scratch filesystem mismatch'; then
+          echo ""
+          echo "This gate refused the comparison above as a category error: it compares"
+          echo "against tools/bench/baseline.json, which is bound to a specific runner class"
+          echo "and scratch filesystem class, and it is deliberately not runnable as a real"
+          echo "gate on a developer machine. See tools/bench/BASELINE.md for the full"
+          echo "rationale and how to re-bless the baseline (bench.yml's rebless job only —"
+          echo "no local -rebless target exists, see CONTRIBUTING.md)."
+        fi
+        exit "$STATUS"
+
   # --- Contributor-only coarse wrappers (D-02) --------------------------
   #
   # CI NEVER calls these two targets — ci.yml calls the fine-grained

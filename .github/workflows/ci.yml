@@ -261,6 +261,16 @@ jobs:
   perf-regression:
     name: perf regression gate (PERF-02, INDX-06)
     runs-on: ubuntu-latest
+    # CODEGRAPH_BENCH_RUNNER labels THIS job's own measurement so
+    # internal/bench.CheckRegression's runner check (Phase 10, plan 10-06)
+    # has something to compare against the committed baseline's "runner":
+    # "ubuntu-latest" — without this, the current run's Runner field would
+    # be empty, which the check refuses just as hard as a genuine mismatch
+    # (an unrecorded identity is not a wildcard). scratch_fs needs no
+    # equivalent here: tools/bench/runner's -scratch-fs flag defaults to
+    # "disk", matching the baseline, with no env var required.
+    env:
+      CODEGRAPH_BENCH_RUNNER: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -270,6 +280,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
 
       - name: Perf-regression gate (offline synthetic 120k-file corpus)
         # tools/bench/runner -mode regression builds+runs gencorpus's
@@ -293,14 +306,13 @@ jobs:
         # The baseline this gates against MUST have been recorded on this
         # same ubuntu-latest runner class — bench.yml's `rebless` job is
         # the supported way to produce one. internal/bench.CheckRegression
-        # now refuses a GOOS/GOARCH mismatch outright, so a baseline from
-        # elsewhere fails loudly here instead of reporting a fictitious
-        # regression.
-        run: |
-          go run ./tools/bench/runner -mode regression \
-            -baseline tools/bench/baseline.json \
-            -trials 3 \
-            -ceiling-bytes 4294967296
+        # now refuses a GOOS/GOARCH, runner, OR scratch_fs mismatch
+        # outright (Phase 10, plan 10-06), so a baseline from elsewhere
+        # fails loudly here instead of reporting a fictitious regression —
+        # exactly the failure class a same-day, four-configuration
+        # investigation (tools/bench/BASELINE.md) confirmed this runner
+        # class is the right one to stay on, not migrate off.
+        run: task bench:regression
 
   # actionlint: this phase's guarantees now live in FOUR workflow files
   # (ci.yml, release.yml, release-please.yml, pr-title.yml) — a static
