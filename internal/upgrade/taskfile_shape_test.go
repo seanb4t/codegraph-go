@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -25,6 +26,7 @@ const (
 	rootGoModPath   = "../../go.mod"
 	toolModfilePath = "../../go.tool.mod"
 	lintModfilePath = "../../go.tool-lint.mod"
+	taskfilePath    = "../../Taskfile.yml"
 )
 
 // requiredCheckNames is the literal fixture of GitHub ruleset 20157557's
@@ -51,6 +53,30 @@ var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
+}
+
+// forbiddenTaskfileGateKeys are the two go-task fields that silently SKIP
+// a task instead of failing it: status: (up-to-date short-circuit) and
+// platforms: (host-OS restriction). D-11 rejects both by name — only
+// preconditions: with a non-empty msg: is the sanctioned cross-toolchain
+// gating mechanism (GOLDEN-01 silent-skip failure class).
+var forbiddenTaskfileGateKeys = []string{"status", "platforms"}
+
+// crossToolchainTokens are command-line tokens that mark a task as
+// requiring a non-host toolchain — any task whose command text references
+// one of these MUST carry a preconditions: entry with a non-empty msg:.
+var crossToolchainTokens = []string{"x86_64-w64-mingw32-gcc", "zig"}
+
+// taskWrapperExpectedLegs is the literal D-10 fixture for the `test`
+// wrapper's five host-only legs, compared as a sorted set against the
+// wrapper's actual cmds: list in TestTaskfileWrapperIsSerial — so both a
+// missing leg and an extra one fail the guard.
+var taskWrapperExpectedLegs = []string{
+	"test:daemon",
+	"test:golden",
+	"test:integration",
+	"test:race",
+	"test:unit",
 }
 
 // --- parseX/mustX helper pairs ---------------------------------------------
@@ -187,6 +213,136 @@ func mustToolModfileHeaderComment(t *testing.T, src string) string {
 	v, err := parseToolModfileHeaderComment(src)
 	if err != nil {
 		t.Fatalf("mustToolModfileHeaderComment: %v", err)
+	}
+	return v
+}
+
+// taskNameLineRe matches a top-level task-name key line under the
+// `tasks:` section of Taskfile.yml: exactly two leading spaces, an
+// identifier (letters, digits, colons, hyphens, underscores — covers
+// namespaced names like test:unit), and a trailing colon with nothing
+// else on the line.
+var taskNameLineRe = regexp.MustCompile(`^  ([A-Za-z0-9:_-]+):\s*$`)
+
+// parseTaskBlocks splits Taskfile.yml source src into per-task line
+// blocks keyed by task name — everything from a top-level task-name line
+// (see taskNameLineRe) up to, but not including, the next one. Returns a
+// non-nil error if zero top-level task blocks are found under `tasks:` —
+// the DESIRED failure mode for an empty, malformed, or task-less file,
+// never a silently-empty map (the same CR-01 defect class every parser in
+// this file guards against).
+func parseTaskBlocks(src string) (map[string]string, error) {
+	lines := strings.Split(src, "\n")
+	blocks := make(map[string]string)
+
+	inTasks := false
+	curName := ""
+	var curLines []string
+	flush := func() {
+		if curName != "" {
+			blocks[curName] = strings.Join(curLines, "\n")
+		}
+	}
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "tasks:") {
+			inTasks = true
+			continue
+		}
+		if !inTasks {
+			continue
+		}
+		if m := taskNameLineRe.FindStringSubmatch(line); m != nil {
+			flush()
+			curName = m[1]
+			curLines = nil
+			continue
+		}
+		if curName != "" {
+			curLines = append(curLines, line)
+		}
+	}
+	flush()
+
+	if len(blocks) == 0 {
+		return nil, fmt.Errorf("parseTaskBlocks: no top-level task block found under tasks:")
+	}
+	return blocks, nil
+}
+
+func mustParseTaskBlocks(t *testing.T, src string) map[string]string {
+	t.Helper()
+	v, err := parseTaskBlocks(src)
+	if err != nil {
+		t.Fatalf("mustParseTaskBlocks: %v", err)
+	}
+	return v
+}
+
+// blockDeclaresKey reports whether block contains a line declaring the
+// given YAML key at any indentation depth (leading whitespace, the
+// literal key name, then a colon) — used for status:/platforms:/deps:
+// detection regardless of nesting depth within the task.
+func blockDeclaresKey(block, key string) bool {
+	re := regexp.MustCompile(`(?m)^\s*` + regexp.QuoteMeta(key) + `:\s*`)
+	return re.MatchString(block)
+}
+
+// blockReferencesToken reports whether block's text contains token as a
+// whole word (not merely a substring of a longer identifier).
+func blockReferencesToken(block, token string) bool {
+	re := regexp.MustCompile(`\b` + regexp.QuoteMeta(token) + `\b`)
+	return re.MatchString(block)
+}
+
+// parsePreconditionMessages returns every non-empty inline msg: value
+// found inside block, in block order. Returns a non-nil error if block
+// declares no preconditions: key at all, or declares one with zero
+// non-empty msg: values — the DESIRED failure state for "this task needs
+// an actionable message and does not have one," never a silently-empty
+// slice.
+func parsePreconditionMessages(block string) ([]string, error) {
+	if !blockDeclaresKey(block, "preconditions") {
+		return nil, fmt.Errorf("parsePreconditionMessages: no preconditions: key found")
+	}
+	msgRe := regexp.MustCompile(`(?m)^\s*msg:\s*(.+)$`)
+	var msgs []string
+	for _, m := range msgRe.FindAllStringSubmatch(block, -1) {
+		v := strings.TrimSpace(m[1])
+		v = strings.Trim(v, `"'`)
+		v = strings.TrimSpace(v)
+		if v != "" {
+			msgs = append(msgs, v)
+		}
+	}
+	if len(msgs) == 0 {
+		return nil, fmt.Errorf("parsePreconditionMessages: preconditions: key present but no non-empty inline msg: value found")
+	}
+	return msgs, nil
+}
+
+// parseTaskCallList returns, in block order, every sub-task name named by
+// a `- task: <name>` cmds: entry within block. Returns a non-nil error if
+// block names zero sub-tasks this way — the DESIRED failure state for a
+// wrapper task whose cmds: list was emptied or converted to raw shell
+// commands, never a silently-empty slice.
+func parseTaskCallList(block string) ([]string, error) {
+	callRe := regexp.MustCompile(`(?m)^\s*-\s+task:\s*(\S+)\s*$`)
+	var calls []string
+	for _, m := range callRe.FindAllStringSubmatch(block, -1) {
+		calls = append(calls, m[1])
+	}
+	if len(calls) == 0 {
+		return nil, fmt.Errorf("parseTaskCallList: no '- task: <name>' cmds entries found")
+	}
+	return calls, nil
+}
+
+func mustParseTaskCallList(t *testing.T, block string) []string {
+	t.Helper()
+	v, err := parseTaskCallList(block)
+	if err != nil {
+		t.Fatalf("mustParseTaskCallList: %v", err)
 	}
 	return v
 }
@@ -356,5 +512,107 @@ func TestTaskfileShapeHelpersFailLoudly(t *testing.T) {
 				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
 			}
 		})
+	}
+}
+
+// TestTaskfileGatesFailLoud is the D-11 repudiation guard: it reads the
+// real, on-disk Taskfile.yml and asserts (1) no task declares status: or
+// platforms: — both silently skip a task on a non-matching condition
+// instead of failing it, the exact GOLDEN-01 failure class this repo has
+// a documented Critical-severity history with — and (2) every task whose
+// command text references a cross-toolchain binary (mingw-w64's
+// x86_64-w64-mingw32-gcc, zig) declares at least one preconditions: entry
+// with a non-empty msg:, so a missing toolchain fails loud with an
+// actionable instruction rather than skipping silently.
+func TestTaskfileGatesFailLoud(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(data))
+
+	for name, block := range blocks {
+		for _, key := range forbiddenTaskfileGateKeys {
+			if blockDeclaresKey(block, key) {
+				t.Errorf("task %q declares a %q key — both status: and platforms: silently skip a task instead of failing it (D-11, GOLDEN-01 failure class); use preconditions: with msg: instead", name, key)
+			}
+		}
+
+		var referenced []string
+		for _, token := range crossToolchainTokens {
+			if blockReferencesToken(block, token) {
+				referenced = append(referenced, token)
+			}
+		}
+		if len(referenced) == 0 {
+			continue
+		}
+		if _, msgErr := parsePreconditionMessages(block); msgErr != nil {
+			t.Errorf("task %q references cross-toolchain token(s) %v but has no preconditions: entry with a non-empty msg: (%v) — a missing toolchain would fail without an actionable message, or worse, silently skip", name, referenced, msgErr)
+		}
+	}
+}
+
+// TestTaskfileGatesFailLoud_EmptyFileIsError is the edge case: a Taskfile
+// source with no `tasks:` section at all (or an empty one) must produce a
+// non-nil error from parseTaskBlocks, never a vacuous pass over zero
+// tasks.
+func TestTaskfileGatesFailLoud_EmptyFileIsError(t *testing.T) {
+	cases := []string{
+		"",
+		"version: \"3\"\n",
+		"version: \"3\"\ntasks:\n",
+	}
+	for _, src := range cases {
+		if _, err := parseTaskBlocks(src); err == nil {
+			t.Fatalf("parseTaskBlocks(%q): expected a non-nil error for a task-less Taskfile source, got nil", src)
+		}
+	}
+}
+
+// TestTaskfileWrapperIsSerial is the D-10 wrapper guard: the `test`
+// wrapper task must declare no deps: key (go-task runs deps: entries
+// concurrently, which would reintroduce exactly the cross-test contention
+// test:daemon's and test:race's -p 1 flags exist to prevent) and its
+// cmds: list must name exactly the five host-only legs, compared as a
+// sorted set against the literal D-10 fixture so both a missing leg and
+// an extra one fail this test.
+func TestTaskfileWrapperIsSerial(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(data))
+
+	block, ok := blocks["test"]
+	if !ok {
+		t.Fatalf("Taskfile.yml declares no top-level %q task", "test")
+	}
+
+	if blockDeclaresKey(block, "deps") {
+		t.Fatalf("task %q declares a deps: key — go-task runs deps: entries concurrently, which would reintroduce the cross-test contention test:daemon/test:race's -p 1 flags exist to prevent; use a serial cmds: list of '- task: <name>' entries instead", "test")
+	}
+
+	actual := mustParseTaskCallList(t, block)
+	gotSorted := append([]string(nil), actual...)
+	sort.Strings(gotSorted)
+	wantSorted := append([]string(nil), taskWrapperExpectedLegs...)
+	sort.Strings(wantSorted)
+
+	if !reflect.DeepEqual(gotSorted, wantSorted) {
+		t.Fatalf("task %q's cmds: leg set = %v, want (sorted-set-equal to) %v — a missing or extra leg changes the coverage of a contributor's `task test` run", "test", gotSorted, wantSorted)
+	}
+}
+
+// TestTaskfileWrapperIsSerial_MissingWrapperIsError is the edge case: a
+// Taskfile source that parses (has at least one top-level task) but has
+// no `test` task at all must be distinguishable from "test wrapper exists
+// but its leg list is wrong" — parseTaskBlocks must not synthesize a
+// zero-value block for an absent key.
+func TestTaskfileWrapperIsSerial_MissingWrapperIsError(t *testing.T) {
+	src := "version: \"3\"\ntasks:\n  build:\n    cmds:\n      - go build ./...\n"
+	blocks := mustParseTaskBlocks(t, src)
+	if _, ok := blocks["test"]; ok {
+		t.Fatalf("parseTaskBlocks(%q): expected no %q key in the returned map, got one", src, "test")
 	}
 }

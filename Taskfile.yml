@@ -119,10 +119,7 @@ tasks:
       typecheck.
     preconditions:
       - sh: command -v x86_64-w64-mingw32-gcc
-        msg: >-
-          mingw-w64 not found. Install with:
-          apt-get install gcc-mingw-w64-x86-64 (Debian/Ubuntu; see your
-          platform's equivalent). See CONTRIBUTING.md's Building section.
+        msg: "mingw-w64 not found. Install with: apt-get install gcc-mingw-w64-x86-64 (Debian/Ubuntu; see your platform's equivalent). See CONTRIBUTING.md's Building section."
     env:
       CGO_ENABLED: "1"
       CC: x86_64-w64-mingw32-gcc
@@ -147,3 +144,36 @@ tasks:
     desc: Lint GitHub Actions workflows (workflow static analysis).
     cmds:
       - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"
+
+  # --- Contributor-only coarse wrappers (D-02) --------------------------
+  #
+  # CI NEVER calls these two targets — ci.yml calls the fine-grained
+  # targets above directly, one per named step. A wrapper that forgets a
+  # leg costs a contributor convenience, but cannot weaken CI coverage,
+  # because CI never reads this list. Do not "simplify" ci.yml onto these
+  # wrappers — that would reintroduce exactly the silent-drop risk D-02
+  # designed out. See TestTaskfileWrapperIsSerial (internal/upgrade) for
+  # the set-equality guard that keeps the `test` wrapper's leg list honest.
+
+  test:
+    desc: >-
+      Contributor wrapper: the five host-only legs (test:unit, test:golden,
+      test:integration, test:daemon, test:race), run SERIALLY via a list of
+      sub-task commands (never deps:, which go-task runs concurrently).
+      test:daemon and test:race both pass -p 1 specifically to avoid
+      cross-test contention; running the two concurrently with each other
+      would reintroduce exactly the flakiness those flags exist to prevent.
+      Cross-toolchain targets (vet:windows, vet:daemon-windows) are
+      separate by design — not part of this wrapper.
+    cmds:
+      - task: test:unit
+      - task: test:golden
+      - task: test:integration
+      - task: test:daemon
+      - task: test:race
+
+  lint:
+    desc: "Contributor wrapper: vet and lint:actions, run serially."
+    cmds:
+      - task: vet
+      - task: lint:actions
