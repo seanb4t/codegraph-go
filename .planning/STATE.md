@@ -145,7 +145,7 @@ PROJECT.md → Key Decisions. This section restarts for the next milestone.
 Standing decisions that outlive v1.0:
 
 - Versions follow release-please + Conventional Commits; no version is ever forced (D-06R, maintainer directive 2026-07-29). There is deliberately no `v1.0.0` tag.
-- Milestone tags carry a `milestone-` prefix (`milestone-v0.1`, `milestone-v1.0`) so they fall outside `release.yml`'s `push: tags: "v[0-9]*"` trigger and cannot fire the release pipeline.
+- **release-please is the sole tag authority** (D-06R). No hand-created tags of any kind — including milestone markers. `milestone-v0.1` exists only because it predates release-please. If a planning tag is ever reintroduced, it must not match `release.yml`'s `push: tags: "v[0-9]*"` trigger.
 - The agent/MCP output path stays plain and parseable; all Charm styling is confined to the human path by a fail-closed ANSI-isolation archtest, not by convention.
 - CGo tree-sitter is the single documented CGo exception (DIST-05 / PARSER-DECISION.md).
 - `Taskfile.yml` is the single definition of every CI job body; `TestWorkflowRunBodiesInvokeTask` enforces it.
@@ -203,7 +203,7 @@ Last session: 2026-08-03
 Stopped at: v1.0 milestone closed and archived (verified closeout — all 10 phases `verification_status: passed`, 48/48 requirements)
   NEXT: no active milestone. Run `/gsd-new-milestone` to scope the next one.
   CARRY-OVER: see Blockers/Concerns above — the residual darwin release-path check at the next real tag push, the GoReleaser pin mismatch (ci v2.17.1 vs release v2.17.0), and open issues #13–#17.
-  NOTE: the branch `gsd/v1.0-drop-in-parity-human-ux` still needs to reach `main`; the planning tag is `milestone-v1.0` (deliberately not `v1.0`, which would fire `release.yml`).
+  NOTE: the branch `gsd/v1.0-drop-in-parity-human-ux` still needs to reach `main` via PR #21. No milestone tag was created — release-please owns tagging.
 Resume file: None
 
 ## Operator Next Steps

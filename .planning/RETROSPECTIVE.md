@@ -25,7 +25,7 @@ Drop-in behavioral parity with TS CodeGraph v1.3.x, plus the human-facing surfac
 - **Frame descriptors are part of a measurement.** `CheckRegression` now refuses GOOS/GOARCH, runner, *and* scratch_fs mismatch as category errors before any numeric comparison — unrecorded identity is not a wildcard.
 - **Single-definition CI.** Job bodies live in `Taskfile.yml`; `TestWorkflowRunBodiesInvokeTask` enforces it and was proven RED at the base commit.
 - **Canaries for tag-only workflows.** `release.yml` only runs during a real release, and its bad outcomes are quiet, so a permanent path-scoped canary machine-proves the macOS runner class continuously.
-- **Milestone tags carry a `milestone-` prefix** so they fall outside `release.yml`'s `v[0-9]*` trigger.
+- **release-please is the sole tag authority.** No hand-created tags, including milestone markers — the v1.0 close deliberately created none, unlike v0.1 (which predates release-please). Corollary if ever revisited: a planning tag must not match `release.yml`'s `v[0-9]*` trigger, or it fires the whole release pipeline.
 - **An accept whose stated reason is false is not closed.** Phase 10's security audit re-grounded T-10-02-02 on the clauses that actually verified rather than letting a falsified justification stand.
 
 ### Key Lessons
