@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Drop-in Parity & Human UX
-current_phase: 999.2
-current_phase_name: tmux e2e/UAT test harness and suite (BACKLOG)
-status: planning
+status: Awaiting next milestone
 stopped_at: Completed 10-07-PLAN.md (final plan of Phase 10)
-last_updated: "2026-08-03T14:25:26.811Z"
+last_updated: "2026-08-03T15:36:28.745Z"
 last_activity: 2026-08-03
-last_activity_desc: Phase 10 complete, transitioned to Phase 999.2
+last_activity_desc: Milestone v1.0 completed and archived
 progress:
   total_phases: 10
   completed_phases: 10
   total_plans: 72
   completed_plans: 72
   percent: 100
+current_phase: 999.2
+current_phase_name: tmux e2e/UAT test harness and suite (BACKLOG)
 ---
 
 # Project State
@@ -28,14 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-14)
 
 ## Current Position
 
-Phase: 999.2 — tmux e2e/UAT test harness and suite (BACKLOG)
-Plan: Not started
-Status: Ready to plan
-**2026-08-01 — v0.2.0 PUBLISHED AND VERIFIED; REPO IS PUBLIC.** The release was cut entirely by release-please (tag + Release authored by `fzy-release-please[bot]`, no human `git tag`); all 11 `release.yml` jobs green (run 30675077940, event=push ref=v0.2.0); the publish step provably took the UPLOAD branch (D-04) because the Release predated the run by 45s. Task-3 verification all five: 20 assets, `cosign` Verified OK, **`TestVerifyReleaseE2E` RAN (not skipped) and PASSED** — its first execution against a real artifact ever — SLSA PASSED at builder `@v2.1.0` commit cce95f3, and a genuinely shipped v0.1.0 binary self-upgraded to v0.2.0. The installed binary is byte-identical (`a64c1549…`) to the SLSA-attested subject, the cosign-verified blob, and the artifact the E2E test passed against: what a user receives is what was attested. NOTE the upgrade first returned 404 — `internal/upgrade` sends no Authorization header and the repo was private, so REL-02's second half was UNPROVABLE, NOT UNMET; the phase was held open rather than closed on 4-of-5 green, and it passed first try once public. This also empirically confirms the structural argument used to skip 09-07: a binary hard-coding the PRE-rewiring SAN constants verified an App-triggered signature, so `releaseWorkflowRefPattern` really is actor-independent.
-**OSS readiness complete** — community health 100%: LICENSE (MIT, detected — an appended paragraph had made it NOASSERTION), NOTICE with the upstream copyright transcribed verbatim (`Copyright (c) 2026 Colby Mchenry`, lowercase h, not guessed), README, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, 4 issue forms + 3 typed PR templates behind a router default, 6 topics. Five gsd-core workflows lifted so the stated gates are enforced rather than described: close-draft-prs, require-issue-link, pr-template-format (policy in Python, not .cjs), auto-close-unsolicited-prs, auto-label-issues. Labels `feature`/`chore` referenced by issue templates did not exist — GitHub silently drops unknown labels, so two templates were labelling nothing. Issue #9 tracks tier-2 workflows + the remaining Python migration.
-Last activity: 2026-08-03 — Phase 10 complete, transitioned to Phase 999.2
-
-Progress: [██████████] 100% (9 of 10 phases)
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -321,5 +317,4 @@ Resume file: None
 
 ## Operator Next Steps
 
-- Confirm Phase 10 scope — ROADMAP flags it as arguably v1.1 work, and CONTRIBUTING is already written, so the remaining scope may be just the Taskfile.
-- Then either `/gsd-plan-phase 10` or `/gsd-complete-milestone` to close v1.0.
+- Start the next milestone with /gsd-new-milestone
