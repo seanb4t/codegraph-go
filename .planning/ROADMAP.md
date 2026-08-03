@@ -491,3 +491,23 @@ Plans:
 Plans:
 
 - [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.3: Vulnerability scanning for the tool modfiles (BACKLOG)
+
+**Goal:** [Captured for future planning] Close the supply-chain gap surfaced by the Phase 10 security audit (recorded in `10-SECURITY.md` → "Advisory — Unregistered Surface"; also code-review finding WR-07). Phase 10 introduced `go.tool.mod` and `go.tool-lint.mod` — roughly **400 modules** including goreleaser plus the AWS/GCP/Azure SDKs, k8s client libraries, cosign and sigstore, plus actionlint's dependency tree. These are built from source and **executed as credentialed CI tooling**: `goreleaser` signs and publishes releases, and `task` drives every CI job body. But `ci.yml:156-171`'s blocking `govulncheck` job scans the **root `go.mod` only**. `Taskfile.yml`'s `vuln` target is the only thing that ever points govulncheck at `go.tool.mod`, is documented as local-only (`go.tool.mod:10-15`), and is invoked by **no** CI job; `go.tool-lint.mod` has no vulnerability-scanning path at all. Threat T-10-01-01 covers *how* these modules are fetched (checksummed module proxy, no `curl | sh`), but nothing covers a **known-vulnerable dependency being executed** inside the credentialed release pipeline. Scope: (a) mint a registered threat for this trust boundary rather than leaving it advisory; (b) add a CI scanning path that covers both tool modfiles — note `govulncheck` is call-graph-aware, so scanning a modfile whose only entry points are third-party `main` packages needs its invocation shape thought through (`-mode=binary` over the built tool, or per-tool package targets, rather than a naive `./...`); (c) decide blocking vs advisory — the root-`go.mod` job is blocking, and a tool-modfile job that is merely advisory should say so out loud rather than look like a gate. Guard against this repo's recurring failure mode: whatever lands must be demonstrated RED against a known-vulnerable pin before it is trusted.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.4: CheckRegression current-metrics positivity guard (BACKLOG)
+
+**Goal:** [Captured for future planning] Close the degenerate-input bypass in `internal/bench.CheckRegression`, surfaced and **reproduced** during the Phase 10 security audit (recorded in `10-SECURITY.md` → "Advisory — Unregistered Surface"; also code-review finding WR-06). Calling `CheckRegression(baseline, current, ceiling=1)` with `current.PeakRSSBytes = 0` and an otherwise-matching frame returns `nil` — **both** the relative RSS regression check and the absolute INDX-06 memory ceiling silently pass. The function already validates that the *baseline* metrics are positive; it never validates the *current* ones, so a zero or negative current reading reads as "no regression" instead of "unusable measurement". This is unreachable through today's only caller because `internal/bench.PeakRSSBytes` returns an error rather than a zero on failure, but `CheckRegression` is exported, its doc comment claims it "never misleads", and the phase-10 audit already showed how easily a frame-descriptor blind spot becomes a live gate failure. Scope: add a positivity/sanity check on `current` mirroring the existing baseline check, refusing rather than passing on a non-positive throughput or RSS reading, with an error naming which field was degenerate. This belongs to the repo's documented class of **gates that cannot fire** (the retracted 10.6% perf claim, the inverted `rg -qv` gate, the 51.5%-stale baseline) — so the fix must be demonstrated RED with a degenerate-input test, not merely added.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
