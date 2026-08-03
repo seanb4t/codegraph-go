@@ -134,6 +134,8 @@ type config struct {
 	seed         int64
 	count        int
 	trials       int
+	runner       string
+	scratchFS    string
 }
 
 func run(args []string) error {
@@ -181,6 +183,8 @@ func parseFlags(args []string) (config, error) {
 	fs.Int64Var(&cfg.seed, "seed", 42, "regression mode only: gencorpus RNG seed (same seed -> byte-identical corpus)")
 	fs.IntVar(&cfg.count, "count", regressionFileCount, "regression mode only: number of synthetic files to generate")
 	fs.IntVar(&cfg.trials, "trials", defaultTrials, "regression mode only: number of independent measurement sessions to take each metric's median over; 1 means single-sample (not recommended for gating or -rebless)")
+	fs.StringVar(&cfg.runner, "runner", os.Getenv("CODEGRAPH_BENCH_RUNNER"), "runner identity label recorded alongside goos/goarch (e.g. a Namespace runs-on profile such as namespace-profile-linux-amd64-4x8); defaults to $CODEGRAPH_BENCH_RUNNER, and an explicit flag wins over the env var. Empty is fine outside CI — measurement never requires it")
+	fs.StringVar(&cfg.scratchFS, "scratch-fs", scratchFSDisk, "regression mode only: pin the scratch directory's filesystem class — \"disk\" (default: force disk-backed temp storage; the 10-04-PLAN control measurement found this beats tmpfs on every runner class tested), \"tmpfs\" (require /dev/shm, error loud if unavailable), or \"auto\" (prefer tmpfs, fall back to disk — kept for the deferred Namespace cache-volume follow-up, NOT the default). Ignored when -scratch-dir is set explicitly.")
 
 	if err := fs.Parse(args); err != nil {
 		return config{}, err
@@ -321,7 +325,7 @@ func runHeadToHead(cfg config) error {
 			{"go", cfg.goBinary},
 			{"ts", cfg.tsBinary},
 		} {
-			m, err := measureSubject(subject.name, subject.binary, entry, srcDir, scratchRoot)
+			m, err := measureSubject(subject.name, subject.binary, entry, srcDir, scratchRoot, cfg.runner)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "runner: %s/%s: %v\n", entry.Name, subject.name, err)
 				continue
@@ -342,7 +346,7 @@ func runHeadToHead(cfg config) error {
 // SQLite store never collide, and so neither binary's .codegraph/ is
 // ever written into the resolved source checkout itself (which, for a
 // sibling-checkout entry, is a real directory the operator owns).
-func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, scratchRoot string) (bench.Metrics, error) {
+func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, scratchRoot, runner string) (bench.Metrics, error) {
 	if binary == "" {
 		return bench.Metrics{}, fmt.Errorf("no binary configured for subject %q", subjectName)
 	}
@@ -413,6 +417,7 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 		Repo:    entry.Name,
 		GOOS:    runtime.GOOS,
 		GOARCH:  runtime.GOARCH,
+		Runner:  runner,
 		// headtohead measures each (repo, subject) pair in exactly one
 		// session — it publishes raw numbers and never gates, so the
 		// multi-session median regression mode needs is not applied here.
@@ -486,15 +491,150 @@ func pinnedAt(dir string) string {
 // regression mode (PERF-02 + INDX-06)
 // ---------------------------------------------------------------------
 
+// scratchFSTmpfs and scratchFSDisk are internal/bench.Metrics.ScratchFS's
+// two possible values (10-04-PLAN). Not an enum type: Metrics is a plain
+// json-tagged struct with no methods (mirrors GOOS/GOARCH/Runner's own
+// plain-string discipline). scratchFSAuto ("prefer tmpfs, fall back to
+// disk") is a selectable -scratch-fs value but NOT the default — see
+// resolveRegressionScratchDir's doc comment for why tmpfs was tried and
+// measured worse. scratchFSAuto is never itself recorded into
+// Metrics.ScratchFS; resolution always settles on one of the two values
+// above.
+const (
+	scratchFSTmpfs = "tmpfs"
+	scratchFSDisk  = "disk"
+	scratchFSAuto  = "auto"
+)
+
+// tmpfsScratchRoot is the tmpfs mount this repo's Linux CI runners expose
+// (measured: 4.0GiB free on namespace-profile-linux-amd64-4x8, 7.9GiB
+// free on ubuntu-latest — both comfortably hold the ~773MB the regression
+// corpus + Pebble store actually occupy on disk once small-file block
+// overhead is accounted for). Not checked on non-Linux hosts (macOS has
+// no /dev/shm) — resolveRegressionScratchDir degrades to disk there,
+// which is unaffected by this change (D-04: never gated on a specific
+// host).
+const tmpfsScratchRoot = "/dev/shm"
+
+// resolveRegressionScratchDir implements the "auto" -scratch-fs behavior:
+// prefer tmpfsRoot (RAM-backed) over disk when tmpfsRoot exists. NOT the
+// production default (see -scratch-fs's own flag default, scratchFSDisk) —
+// kept as a selectable option (-scratch-fs auto or -scratch-fs tmpfs) for
+// the deferred Namespace cache-volume follow-up. tmpfsRoot is a
+// parameter — rather than this function hardcoding tmpfsScratchRoot
+// itself — specifically so tests can substitute a t.TempDir() standing in
+// for "tmpfs" and exercise the preference logic without depending on a
+// real tmpfs mount existing in the test environment.
+//
+// HISTORY, load-bearing for anyone tempted to re-default to tmpfs: an
+// earlier pass of 10-04-PLAN hypothesized tmpfs would help, because
+// PERF-02's synthetic corpus is ~18MB of raw content but ~773MB of actual
+// on-disk footprint (120k files at ~4KB/block minimum each dominates),
+// making this workload IOPS/metadata-bound rather than bandwidth-bound —
+// exactly where overlayfs's layer-stack lookups and copy-up-on-write were
+// expected to cost more and vary more under co-tenancy than a real block
+// device. That hypothesis was WRONG, refuted by a direct same-day,
+// same-methodology control across all four (runner x scratch-fs)
+// combinations:
+//
+//	ubuntu-latest   + disk:  0.35% session-to-session disagreement, 28.6x headroom (10% tolerance)
+//	ubuntu-latest   + tmpfs: 5.75%  / 1.74x  — WORSE than disk
+//	Namespace       + disk:  4.36%  / 2.30x
+//	Namespace       + tmpfs: 12.46% / 0.80x — WORSE than disk, and worse than every other combination
+//
+// tmpfs made variance WORSE on both runner classes tested, not better.
+// Disk-backed scratch is the measured-correct default; tmpfs remains
+// selectable, not because it helps this workload, but because it is the
+// tool needed to test whether a Namespace CACHE VOLUME (untested,
+// deferred follow-up) behaves differently than tmpfs did. Returns the
+// scratch dir path and which filesystem class it landed on, so the
+// caller can record that frame descriptor in the measured Metrics (see
+// internal/bench.Metrics.ScratchFS) — the storage frame isn't the only
+// thing that can silently change what "no regression" means; the runner
+// class already gets this same treatment via Metrics.Runner.
+func resolveRegressionScratchDir(tmpfsRoot string) (dir string, fsClass string, err error) {
+	if info, statErr := os.Stat(tmpfsRoot); statErr == nil && info.IsDir() {
+		if d, mkErr := os.MkdirTemp(tmpfsRoot, "codegraph-bench-regression-"); mkErr == nil {
+			return d, scratchFSTmpfs, nil
+		}
+		// Fall through to disk on any tmpfs MkdirTemp failure (e.g.
+		// permissions, tmpfs full) rather than hard-failing the whole
+		// run over a storage-frame optimization.
+	}
+	d, mkErr := os.MkdirTemp("", "codegraph-bench-regression-")
+	if mkErr != nil {
+		return "", "", mkErr
+	}
+	return d, scratchFSDisk, nil
+}
+
+// resolveScratchDirForClass resolves regression mode's scratch directory
+// honoring an explicit -scratch-fs pin ("tmpfs" or "disk") when class is
+// one of those two values, or resolveRegressionScratchDir's tmpfs-preferring
+// auto-detection when class is scratchFSAuto (NOT the -scratch-fs flag
+// default — see that flag's own doc string and resolveRegressionScratchDir's
+// HISTORY comment for why disk, not tmpfs, is the measured-correct
+// default). An empty class string also means "auto" — parseFlags never
+// actually produces "" here since -scratch-fs always has a default, but
+// resolveScratchDirForClass treats it the same as scratchFSAuto rather
+// than erroring, since "unset" and "explicitly auto" are the same request.
+// tmpfsRoot is a parameter for the same testability reason
+// resolveRegressionScratchDir's is; the production call site
+// (runRegression) always passes tmpfsScratchRoot.
+//
+// Pinning the class explicitly is a first-class, documented capability —
+// not a debugging hack. Reproducing a specific measurement frame on
+// demand (e.g. the same-day disk-scratch CONTROL run that led to disk
+// becoming the default, or the deferred Namespace cache-volume follow-up)
+// is a legitimate, recurring need: this repo's own perf-gate history is a
+// comparison against a stale, different-methodology measurement producing
+// a fictitious regression that took three rounds of triage to catch
+// (tools/bench/BASELINE.md). "-scratch-fs tmpfs" errors LOUD when tmpfs
+// is unavailable rather than silently falling back to disk (D-11: fail
+// loud, never silently skip) — an operator who explicitly asked for
+// tmpfs and silently got disk would be looking at a mislabeled frame,
+// exactly the failure class ScratchFS exists to prevent.
+func resolveScratchDirForClass(class, tmpfsRoot string) (dir string, fsClass string, err error) {
+	switch class {
+	case "", scratchFSAuto:
+		return resolveRegressionScratchDir(tmpfsRoot)
+	case scratchFSTmpfs:
+		info, statErr := os.Stat(tmpfsRoot)
+		if statErr != nil || !info.IsDir() {
+			return "", "", fmt.Errorf("-scratch-fs=tmpfs requested but tmpfs root %s is not usable: %v", tmpfsRoot, statErr)
+		}
+		d, mkErr := os.MkdirTemp(tmpfsRoot, "codegraph-bench-regression-")
+		if mkErr != nil {
+			return "", "", fmt.Errorf("-scratch-fs=tmpfs: create scratch dir under %s: %w", tmpfsRoot, mkErr)
+		}
+		return d, scratchFSTmpfs, nil
+	case scratchFSDisk:
+		d, mkErr := os.MkdirTemp("", "codegraph-bench-regression-")
+		if mkErr != nil {
+			return "", "", mkErr
+		}
+		return d, scratchFSDisk, nil
+	default:
+		return "", "", fmt.Errorf("unknown -scratch-fs %q (want %q, %q, or %q)", class, scratchFSAuto, scratchFSTmpfs, scratchFSDisk)
+	}
+}
+
 func runRegression(cfg config) error {
 	scratchDir := cfg.scratchDir
+	// scratchFS records which filesystem class trials in THIS run were
+	// measured on. Left "" when the caller supplied an explicit
+	// -scratch-dir: they made the choice, and this runner doesn't probe
+	// an arbitrary caller-supplied path's filesystem type — only the
+	// path it resolves itself is characterized.
+	var scratchFS string
 	if scratchDir == "" {
-		dir, err := os.MkdirTemp("", "codegraph-bench-regression-")
+		dir, fsClass, err := resolveScratchDirForClass(cfg.scratchFS, tmpfsScratchRoot)
 		if err != nil {
 			return fmt.Errorf("create scratch dir: %w", err)
 		}
 		defer os.RemoveAll(dir)
 		scratchDir = dir
+		scratchFS = fsClass
 	}
 
 	// Each trial is a fully independent measurement session: its own
@@ -511,12 +651,16 @@ func runRegression(cfg config) error {
 		if err != nil {
 			return fmt.Errorf("trial %d/%d: %w", i+1, cfg.trials, err)
 		}
+		m.ScratchFS = scratchFS
 		fmt.Fprintf(os.Stderr, "runner: trial %d/%d: %.2f files/s, peak RSS %d bytes\n",
 			i+1, cfg.trials, m.FilesPerSec, m.PeakRSSBytes)
 		trials = append(trials, m)
 	}
 
-	current := medianMetrics(trials)
+	current, err := medianMetrics(trials)
+	if err != nil {
+		return fmt.Errorf("aggregate trials: %w", err)
+	}
 
 	if cfg.rebless {
 		return writeBaseline(cfg.baselinePath, current)
@@ -594,6 +738,7 @@ func measureRegressionTrial(cfg config, scratchDir string, trialIdx int) (bench.
 		Repo:                 fmt.Sprintf("synthetic-seed%d-count%d", cfg.seed, cfg.count),
 		GOOS:                 runtime.GOOS,
 		GOARCH:               runtime.GOARCH,
+		Runner:               cfg.runner,
 		FilesPerSec:          filesPerSec,
 		BytesPerSec:          bytesPerSec,
 		QueryLatencyMedianMS: queryResult.durationMS,
@@ -606,14 +751,31 @@ func measureRegressionTrial(cfg config, scratchDir string, trialIdx int) (bench.
 // numeric metric's own median over its own sorted sample — the same
 // discipline medianOfN applies within a trial (D-05: not "the trial whose
 // throughput happened to be the median"). Identity fields (Subject, Repo,
-// GOOS, GOARCH) are identical across trials by construction and are
-// carried from the first.
+// GOOS, GOARCH, Runner) are identical across trials by construction and
+// are carried from the first.
+//
+// Runner is checked for consistency across trials before being carried:
+// a mixed-runner trial set (e.g. some trials measured on ubuntu-latest,
+// others on a Namespace profile mid-migration) is a category error of
+// exactly the kind internal/bench.CheckRegression already refuses for a
+// GOOS/GOARCH mismatch — silently picking the first value would let that
+// masquerade as one coherent measurement, so it is refused with both
+// values named instead.
 //
 // MedianOfTrials is set to the sample size so the number's provenance
 // travels with it into baseline.json and into the gate's own output.
-func medianMetrics(trials []bench.Metrics) bench.Metrics {
+func medianMetrics(trials []bench.Metrics) (bench.Metrics, error) {
 	if len(trials) == 0 {
-		return bench.Metrics{}
+		return bench.Metrics{}, nil
+	}
+
+	for _, t := range trials[1:] {
+		if t.Runner != trials[0].Runner {
+			return bench.Metrics{}, fmt.Errorf(
+				"medianMetrics: mixed runner identities across trials: %q vs %q — a mixed-runner trial set cannot be aggregated into one measurement",
+				trials[0].Runner, t.Runner,
+			)
+		}
 	}
 
 	filesPerSec := make([]float64, 0, len(trials))
@@ -634,18 +796,25 @@ func medianMetrics(trials []bench.Metrics) bench.Metrics {
 	sort.Float64s(coldStartMS)
 	sort.Slice(peakRSS, func(i, j int) bool { return peakRSS[i] < peakRSS[j] })
 
+	// ScratchFS gets no separate mixed-trial guard (unlike Runner):
+	// runRegression resolves the scratch filesystem class ONCE per run
+	// and assigns that same value to every trial, so it cannot diverge
+	// across trials[i] by construction — a mismatch guard here would be
+	// dead code, not a real category-error check.
 	return bench.Metrics{
 		Subject:              trials[0].Subject,
 		Repo:                 trials[0].Repo,
 		GOOS:                 trials[0].GOOS,
 		GOARCH:               trials[0].GOARCH,
+		Runner:               trials[0].Runner,
+		ScratchFS:            trials[0].ScratchFS,
 		MedianOfTrials:       len(trials),
 		FilesPerSec:          medianFloat64(filesPerSec),
 		BytesPerSec:          medianFloat64(bytesPerSec),
 		QueryLatencyMedianMS: medianFloat64(queryMS),
 		PeakRSSBytes:         medianInt64(peakRSS),
 		ColdStartMS:          medianFloat64(coldStartMS),
-	}
+	}, nil
 }
 
 func printMetrics(w io.Writer, m bench.Metrics) {

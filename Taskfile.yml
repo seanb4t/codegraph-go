@@ -164,15 +164,400 @@ tasks:
       - CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/codegraph
       - CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/codegraph
 
+  check:darwin-release-build:
+    desc: >-
+      Prove GoReleaser itself can drive the darwin release build on a native
+      darwin host (D-08). check:darwin-toolchain proves the *toolchain* with a
+      plain `go build`; this target proves the *composition* release.yml
+      actually runs — `goreleaser build --single-target` for both darwin
+      arches, so .goreleaser.yaml's CGO_ENABLED=1 env, -trimpath, version
+      ldflags and mod_timestamp are exercised on the macOS host instead of
+      inferred from a linux run. It exists because release.yml fires only on a
+      `v*` tag push, which means its first darwin GoReleaser invocation
+      otherwise happens during a release that is already underway, on the one
+      leg where the host OS is a correctness input rather than a speed choice.
+      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      GoReleaser hard-fails ("git tag ... was not made against commit ...")
+      without one. The resolved version string is the only thing --snapshot
+      changes, and the version string is not the property this target verifies.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
+      - sh: command -v clang
+        msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Build GoReleaser NATIVELY, with no GOOS/GOARCH in the environment,
+        # and invoke that binary per-arch below. This ordering is load-bearing,
+        # not stylistic: `go tool -modfile=go.tool.mod goreleaser` builds the
+        # TOOL for whatever GOOS/GOARCH is set, so the obvious one-liner
+        # (`GOARCH=amd64 {{.GO_TOOL}} goreleaser build ...`) yields an x86_64
+        # GoReleaser running under Rosetta, whose child `xcrun` then resolves
+        # as x86_64 and cannot load the arm64-only libxcrun.dylib from
+        # CommandLineTools. That fails as a confusing `# runtime/cgo`
+        # architecture error that reads like a broken toolchain but is really
+        # a cross-built tool. release.yml does not hit this because
+        # goreleaser-action installs a native prebuilt binary — which is
+        # exactly the shape reproduced here.
+        GORELEASER_BIN="$(mktemp -d)/goreleaser"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")"' EXIT
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        for arch in arm64 amd64; do
+          echo "==> goreleaser build --single-target darwin/${arch}"
+          GOOS=darwin GOARCH="${arch}" "${GORELEASER_BIN}" build \
+            --single-target --snapshot --clean
+
+          # Locate the built binary exactly as release.yml's rename step does:
+          # dist/artifacts.json first (GoReleaser's own documented stable
+          # lookup — dist/ subdirectory names are not guaranteed stable across
+          # versions), with find(1) as the same defensive fallback.
+          BIN=""
+          if [ -f dist/artifacts.json ] && command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg a "${arch}" \
+              '[.[] | select(.type=="Binary" and .goos=="darwin" and .goarch==$a)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::goreleaser produced no darwin/${arch} binary under dist/"
+            exit 1
+          fi
+
+          # Assert the object is actually Mach-O of the requested arch. A
+          # wrong-host build is the quiet failure this whole canary exists for:
+          # it still produces something that builds, signs, and attests.
+          DESC=$(file -b "${BIN}")
+          echo "    ${BIN}: ${DESC}"
+          case "${arch}:${DESC}" in
+            arm64:*Mach-O*arm64*) ;;
+            amd64:*Mach-O*x86_64*) ;;
+            *) echo "::error::darwin/${arch} produced the wrong object: ${DESC}"; exit 1 ;;
+          esac
+        done
+
+        rm -rf dist
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
       - "{{.GO_TOOL}} goreleaser check"
 
+  check:cross:
+    desc: >-
+      6-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
+      gate release-please.yml's pretag-gate job runs before a tag can be
+      created. Run this locally before pushing to main to catch a
+      platform-specific go.sum/build-constraint failure your own GOOS/GOARCH
+      can't see (the exact failure class that reached the v0.1 rc.1 release
+      candidate).
+    cmds:
+      - |
+        set -euo pipefail
+        for pair in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}" GOARCH="${pair#*/}" go list -mod=readonly ./... > /dev/null || {
+            echo "::error::go list -mod=readonly ./... failed for GOOS=${pair%/*} GOARCH=${pair#*/}"
+            exit 1
+          }
+        done
+
   lint:actions:
     desc: Lint GitHub Actions workflows (workflow static analysis).
     cmds:
       - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"
+
+  diag:cpu:
+    desc: >-
+      CPU/memory/storage topology diagnostic (10-04-PLAN, Rule 2 deviation
+      — NOT a gate; never called by ci.yml, and the only callers in
+      bench.yml are its non-gating, manually-dispatched cpu-diag-* jobs).
+      Reports CPU (nproc, a Go process's own
+      runtime.NumCPU()/GOMAXPROCS(0), the cgroup CPU quota, /proc/cpuinfo
+      model/family/stepping/count, cpufreq scaling info), memory (free -b
+      or /proc/meminfo MemTotal), and storage (df -T for the workspace
+      and TMPDIR, block-device rotational flags, and a real
+      sequential-write+read-back throughput probe against TMPDIR — the
+      exact directory tools/bench/runner materializes its corpus into,
+      since os.MkdirTemp("", ...) resolves there). Exists to A/B two
+      competing explanations for bench throughput variance that showed up
+      with rock-stable peak RSS (0.56%) but a much wider wall-clock spread
+      (4.36% session medians, ~30% full 14-trial range): (1) CPU-count
+      oversubscription — refuted in an earlier pass, NumCPU already
+      matches nproc/cgroup on Namespace — and (2) I/O-bound variance from
+      unequal or noisier storage/memory between runner classes, which same
+      work + stable memory + different wall-clock is the classic signature
+      of. Linux-only by nature (cgroup/proc paths); the precondition below
+      fails loud with a pointer to the dispatchable workflow rather than
+      printing confusing "file not found" output on a contributor's
+      non-Linux machine.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "diag:cpu reads Linux cgroup/proc paths and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch it instead: Actions -> bench -> Run workflow -> job: cpu-diag (both cpu-diag-github and cpu-diag-namespace run side by side)."
+    cmds:
+      - echo "=== CPU ==="
+      - echo "--- nproc ---"
+      - nproc
+      - echo "--- go process view (runtime.NumCPU / runtime.GOMAXPROCS(0)) ---"
+      - go run ./tools/bench/cpudiag
+      - echo "--- cgroup CPU quota ---"
+      - |
+        set -euo pipefail
+        if [ -f /sys/fs/cgroup/cpu.max ]; then
+          echo "cgroup v2 cpu.max:"
+          cat /sys/fs/cgroup/cpu.max
+        elif [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ]; then
+          echo "cgroup v1 cpu.cfs_quota_us / cpu.cfs_period_us:"
+          cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us
+          cat /sys/fs/cgroup/cpu/cpu.cfs_period_us
+        else
+          echo "no cgroup CPU quota file found at either the v2 or v1 path"
+        fi
+      - echo "--- /proc/cpuinfo model/family/stepping/count ---"
+      - |
+        set -euo pipefail
+        if [ -f /proc/cpuinfo ]; then
+          grep -m1 "model name"  /proc/cpuinfo || echo "no 'model name' line in /proc/cpuinfo"
+          grep -m1 "cpu family"  /proc/cpuinfo || echo "no 'cpu family' line in /proc/cpuinfo"
+          grep -m1 "stepping"    /proc/cpuinfo || echo "no 'stepping' line in /proc/cpuinfo"
+          echo "processor count: $(grep -c '^processor' /proc/cpuinfo)"
+        else
+          echo "/proc/cpuinfo not present"
+        fi
+      - echo "--- cpufreq scaling (cpu0) ---"
+      - |
+        set -euo pipefail
+        CPUFREQ_DIR=/sys/devices/system/cpu/cpu0/cpufreq
+        if [ -d "$CPUFREQ_DIR" ]; then
+          for f in scaling_governor scaling_cur_freq scaling_min_freq scaling_max_freq; do
+            if [ -f "$CPUFREQ_DIR/$f" ]; then
+              echo "${f}: $(cat "$CPUFREQ_DIR/$f")"
+            else
+              echo "${f}: not present"
+            fi
+          done
+        else
+          echo "no cpufreq sysfs directory at $CPUFREQ_DIR (common inside a VM/container without frequency-scaling passthrough — itself a data point)"
+        fi
+      - echo "=== Memory ==="
+      - |
+        set -euo pipefail
+        if command -v free >/dev/null 2>&1; then
+          free -b
+        else
+          echo "free not found; falling back to /proc/meminfo"
+          grep MemTotal /proc/meminfo
+        fi
+      - echo "=== Storage ==="
+      - echo "--- df -T (workspace and TMPDIR) ---"
+      - |
+        set -euo pipefail
+        echo "workspace ($(pwd)):"
+        df -T .
+        echo "TMPDIR (${TMPDIR:-/tmp}), the directory tools/bench/runner materializes its corpus into:"
+        df -T "${TMPDIR:-/tmp}"
+      - echo "--- block device rotational flags (0=SSD/NVMe, 1=spinning) ---"
+      - |
+        set -euo pipefail
+        shopt -s nullglob 2>/dev/null || true
+        found=0
+        for f in /sys/block/*/queue/rotational; do
+          found=1
+          dev=$(basename "$(dirname "$(dirname "$f")")")
+          val=$(cat "$f" 2>/dev/null || echo "unreadable")
+          echo "${dev}: rotational=${val}"
+        done
+        if [ "$found" -eq 0 ]; then
+          echo "no /sys/block/*/queue/rotational entries found"
+        fi
+      - echo "--- sequential write+read-back probe against TMPDIR (2GiB) ---"
+      - |
+        set -euo pipefail
+        SCRATCH_DIR="${TMPDIR:-/tmp}"
+        SCRATCH_FILE="${SCRATCH_DIR%/}/codegraph-diag-ddtest.bin"
+        trap 'rm -f "$SCRATCH_FILE"' EXIT
+        echo "write:"
+        if dd if=/dev/zero of="$SCRATCH_FILE" bs=1M count=2048 conv=fdatasync oflag=direct 2>write.log; then
+          echo "(oflag=direct supported)"
+        else
+          echo "(oflag=direct NOT supported on this filesystem — falling back to buffered write)"
+          dd if=/dev/zero of="$SCRATCH_FILE" bs=1M count=2048 conv=fdatasync 2>write.log
+        fi
+        cat write.log
+        echo "read-back:"
+        if dd if="$SCRATCH_FILE" of=/dev/null bs=1M iflag=direct 2>read.log; then
+          echo "(iflag=direct supported)"
+        else
+          echo "(iflag=direct NOT supported on this filesystem — falling back to buffered read)"
+          dd if="$SCRATCH_FILE" of=/dev/null bs=1M 2>read.log
+        fi
+        cat read.log
+        rm -f write.log read.log
+
+  diag:storage-fit:
+    desc: >-
+      tmpfs sizing diagnostic (10-04-PLAN, Rule 2 deviation — NOT a gate;
+      never called by ci.yml, and the only callers in bench.yml are its
+      non-gating, manually-dispatched cpu-diag-* jobs). Reports the
+      candidate tmpfs mount's available capacity (df -h /dev/shm) and
+      then materializes ONE real PERF-02/INDX-06 synthetic corpus
+      (tools/bench/gencorpus, seed 42, count 120000 — the exact
+      seed/count tools/bench/runner's regression mode uses) and runs a
+      real `codegraph init` + `codegraph index --force --quiet` against
+      it, reporting `du -sh` on both the corpus and the resulting
+      .codegraph/ Pebble store. Exists to answer, with real numbers
+      rather than estimates, whether pointing the regression scratch
+      directory at tmpfs (candidate fix for I/O-bound throughput
+      variance — see diag:cpu's doc comment) is even viable before
+      wiring it in: a tmpfs mount that can't hold the corpus + store
+      would make the fix worse than the problem. Everything this target
+      creates lives under a temp directory removed on exit; it never
+      writes to the real tmpfs default tools/bench/runner would use in
+      production, only measures what WOULD fit there.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "diag:storage-fit reads Linux-only paths (/dev/shm) and is meant to run on the CI runner under investigation, not a contributor machine. Dispatch it instead: Actions -> bench -> Run workflow -> job: cpu-diag."
+    cmds:
+      - echo "--- /dev/shm availability and size ---"
+      - |
+        set -euo pipefail
+        if [ -d /dev/shm ]; then
+          df -h /dev/shm
+        else
+          echo "/dev/shm does not exist on this host"
+        fi
+      - echo "--- materializing one real PERF-02 corpus (seed 42, count 120000) ---"
+      - |
+        set -euo pipefail
+        WORKDIR=$(mktemp -d)
+        trap 'rm -rf "$WORKDIR"' EXIT
+        go build -o "$WORKDIR/gencorpus" ./tools/bench/gencorpus
+        go build -o "$WORKDIR/codegraph" ./cmd/codegraph
+        CORPUS_DIR="$WORKDIR/corpus"
+        "$WORKDIR/gencorpus" -seed 42 -out "$CORPUS_DIR" -count 120000
+        echo "corpus size:"
+        du -sh "$CORPUS_DIR"
+        "$WORKDIR/codegraph" init "$CORPUS_DIR"
+        "$WORKDIR/codegraph" index "$CORPUS_DIR" --force --quiet
+        echo ".codegraph store size:"
+        du -sh "$CORPUS_DIR/.codegraph"
+        echo "total (corpus + store):"
+        du -sh "$WORKDIR"
+
+  check:reproducibility:
+    desc: >-
+      linux/amd64 double-build hash-diff (DIST-04, BLOCKING leg) — ports
+      ci.yml's reproducibility job's canonical double build character-for-
+      character. Reads SOURCE_DATE_EPOCH/COMMIT from the environment (what
+      ci.yml's own "Compute determinism inputs" step exports via env:);
+      when either is unset, defaults locally to the same two commands that
+      step runs (git log -1 --format=%ct / git rev-parse HEAD) so this
+      target is runnable on a contributor checkout without inventing
+      different inputs. Uses GNU date -d (matching ci.yml's own script
+      verbatim, D-15-style byte-fidelity) — a Linux host, or GNU coreutils
+      on PATH as `date`, is required; BSD/macOS date does not accept -d.
+    cmds:
+      - |
+        set -euo pipefail
+        SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
+        COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
+        DATE=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
+        LDFLAGS="-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=ci-repro -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}"
+        build() {
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "$LDFLAGS" -o "$1" ./cmd/codegraph
+        }
+        build /tmp/codegraph_build1
+        build /tmp/codegraph_build2
+        H1=$(sha256sum /tmp/codegraph_build1 | cut -d' ' -f1)
+        H2=$(sha256sum /tmp/codegraph_build2 | cut -d' ' -f1)
+        echo "build1=$H1"
+        echo "build2=$H2"
+        if [ "$H1" != "$H2" ]; then
+          echo "::error::REPRODUCIBILITY GATE FAILED: linux/amd64 build is non-deterministic ($H1 != $H2)"
+          exit 1
+        fi
+        echo "linux/amd64 double-build matched: $H1"
+
+  check:reproducibility:arm64:
+    desc: >-
+      linux/arm64 cross-target double-build hash-diff (DIST-04, REPORTED
+      ONLY — non-blocking per D-03). Ports ci.yml's cross-target leg
+      character-for-character, including its ::warning:: (not ::error::)
+      branch and non-failing exit — a mismatch here is reported, never
+      gated. Same SOURCE_DATE_EPOCH/COMMIT local-defaulting as
+      check:reproducibility. This leg is non-blocking in CI, which makes a
+      silent local skip especially dangerous ("I ran it and it was fine"
+      would actually mean "it never ran") — the zig precondition below
+      exists specifically to fail loud instead.
+    preconditions:
+      - sh: command -v zig
+        msg: "zig not found on PATH — check:reproducibility:arm64 cross-compiles via zig cc (aarch64-linux-gnu). Install per CONTRIBUTING.md's Building section (https://ziglang.org/download/), or run `task check:reproducibility` (the blocking linux/amd64 leg) alone if you don't need the cross-target report."
+    cmds:
+      - |
+        set -euo pipefail
+        SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct)}"
+        COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
+        DATE=$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)
+        LDFLAGS="-s -w -buildid= -X github.com/seanb4t/codegraph-go/internal/version.Version=ci-repro -X github.com/seanb4t/codegraph-go/internal/version.Commit=${COMMIT} -X github.com/seanb4t/codegraph-go/internal/version.Date=${DATE}"
+        build() {
+          CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
+            CC="zig cc -target aarch64-linux-gnu" \
+            CXX="zig c++ -target aarch64-linux-gnu" \
+            go build -trimpath -ldflags "$LDFLAGS" -o "$1" ./cmd/codegraph
+        }
+        build /tmp/codegraph_arm1
+        build /tmp/codegraph_arm2
+        H1=$(sha256sum /tmp/codegraph_arm1 | cut -d' ' -f1)
+        H2=$(sha256sum /tmp/codegraph_arm2 | cut -d' ' -f1)
+        echo "build1=$H1"
+        echo "build2=$H2"
+        if [ "$H1" != "$H2" ]; then
+          echo "::warning::linux/arm64 cross-target double-build did NOT match (reported only, non-blocking per D-03)"
+        else
+          echo "linux/arm64 cross-target double-build matched (reported only, non-blocking per D-03)"
+        fi
+
+  bench:regression:
+    desc: >-
+      Local invocation of the PERF-02/INDX-06 regression gate (D-14) —
+      wraps ci.yml's perf-regression job's invocation verbatim. This gate
+      is deliberately unrunnable as a REAL check on a developer machine:
+      internal/bench.CheckRegression refuses any comparison whose
+      GOOS/GOARCH, runner, or scratch_fs identity doesn't match the
+      committed tools/bench/baseline.json, and a developer machine is
+      essentially never that exact combination. When that refusal fires,
+      this target explains why in prose (tools/bench/BASELINE.md has the
+      full rationale) and still exits non-zero — it never remaps or
+      swallows the underlying exit status; the explanation is additive
+      output only. No -rebless flag is reachable from this or any other
+      task target (D-13) — baseline.json is written only by bench.yml's
+      manually-dispatched rebless job.
+    cmds:
+      - |
+        set -euo pipefail
+        if OUTPUT=$(go run ./tools/bench/runner -mode regression \
+          -baseline tools/bench/baseline.json \
+          -trials 3 \
+          -ceiling-bytes 4294967296 2>&1); then
+          STATUS=0
+        else
+          STATUS=$?
+        fi
+        echo "$OUTPUT"
+        if [ "$STATUS" -ne 0 ] && printf '%s' "$OUTPUT" | grep -qE 'platform mismatch|runner mismatch|scratch filesystem mismatch'; then
+          echo ""
+          echo "This gate refused the comparison above as a category error: it compares"
+          echo "against tools/bench/baseline.json, which is bound to a specific runner class"
+          echo "and scratch filesystem class, and it is deliberately not runnable as a real"
+          echo "gate on a developer machine. See tools/bench/BASELINE.md for the full"
+          echo "rationale and how to re-bless the baseline (bench.yml's rebless job only —"
+          echo "no local -rebless target exists, see CONTRIBUTING.md)."
+        fi
+        exit "$STATUS"
 
   # --- Contributor-only coarse wrappers (D-02) --------------------------
   #

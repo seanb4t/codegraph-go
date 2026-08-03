@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	yaml "go.yaml.in/yaml/v3"
 )
 
 // --- fixture paths ---------------------------------------------------------
@@ -23,10 +25,12 @@ const workflowsDir = "../../.github/workflows"
 // tool modfiles must exist as distinct files with a non-empty rationale
 // header.
 const (
-	rootGoModPath   = "../../go.mod"
-	toolModfilePath = "../../go.tool.mod"
-	lintModfilePath = "../../go.tool-lint.mod"
-	taskfilePath    = "../../Taskfile.yml"
+	rootGoModPath    = "../../go.mod"
+	toolModfilePath  = "../../go.tool.mod"
+	lintModfilePath  = "../../go.tool-lint.mod"
+	taskfilePath     = "../../Taskfile.yml"
+	goreleaserPath   = "../../.goreleaser.yaml"
+	checkCrossTaskID = "check:cross"
 )
 
 // requiredCheckNames is the literal fixture of GitHub ruleset 20157557's
@@ -78,6 +82,84 @@ var taskWrapperExpectedLegs = []string{
 	"test:race",
 	"test:unit",
 }
+
+// inScopeJob names one job, by its YAML map key (not its `name:` display
+// string), whose steps' run: bodies TestWorkflowRunBodiesInvokeTask holds to
+// the single-definition property (D-01/D-02): every step's run: body must
+// be exactly `task <target>` once comments and blank lines are stripped,
+// unless the step is named in runBodyExceptions.
+type inScopeJob struct {
+	Workflow string // filename under workflowsDir, e.g. "ci.yml"
+	JobID    string // job's YAML map key, e.g. "test"
+}
+
+// inScopeJobs is the literal D-01/D-02 fixture: every job this guard binds,
+// by (workflow file, job ID). bench.yml and release.yml are deliberately
+// NOT here — both carry their own documented D-01 exceptions decided in
+// earlier plans of this phase (bench.yml's rebless/headtohead/diagnostic
+// jobs' inline `go run ./tools/bench/runner` invocations, commented in-file
+// above the rebless job; release.yml's native build matrix, D-08).
+// Including either file here would fail this test for reasons the project
+// already decided, not for a real regression. govulncheck is also excluded
+// — it runs via `uses: golang/govulncheck-action`, an action with no run:
+// body at all, so it has nothing for this guard to check.
+var inScopeJobs = []inScopeJob{
+	{Workflow: "ci.yml", JobID: "test"},
+	{Workflow: "ci.yml", JobID: "actionlint"},
+	{Workflow: "ci.yml", JobID: "goreleaser-check"},
+	{Workflow: "ci.yml", JobID: "reproducibility"},
+	{Workflow: "ci.yml", JobID: "perf-regression"},
+	{Workflow: "release-please.yml", JobID: "pretag-gate"},
+}
+
+// runBodyException is one literal, reasoned carve-out from the
+// single-definition property — a step whose run: body is legitimately not
+// a `task <target>` call. T-10-07-01: every entry MUST carry a non-empty
+// reason, and an entry naming a step that no longer exists in its
+// (workflow, job) fails TestWorkflowRunBodiesInvokeTask — a stale exception
+// silently widening the allowlist is exactly the failure mode this fixture
+// shape closes.
+type runBodyException struct {
+	Workflow string
+	Job      string
+	Step     string
+	Reason   string
+}
+
+// runBodyExceptions is the literal, exhaustive exception list for the
+// in-scope jobs above. Two entries, both in ci.yml:
+//   - "Install mingw-w64" (job test) installs an apt package
+//     (gcc-mingw-w64-x86-64), not a contributor-invokable command — there
+//     is no task target for "apt-get install a cross-toolchain".
+//   - "Compute determinism inputs" (job reproducibility) writes to the CI
+//     step-output file ($GITHUB_OUTPUT) via `id: repro`; it has no meaning
+//     outside a runner and produces no artifact a contributor would ever
+//     invoke directly.
+var runBodyExceptions = []runBodyException{
+	{
+		Workflow: "ci.yml",
+		Job:      "test",
+		Step:     "Install mingw-w64 (windows cross-CGO toolchain for internal/daemon vet)",
+		Reason:   "installs an apt package (gcc-mingw-w64-x86-64), not a contributor-invokable command",
+	},
+	{
+		Workflow: "ci.yml",
+		Job:      "reproducibility",
+		Step:     "Compute determinism inputs",
+		Reason:   "writes to the CI step-output file ($GITHUB_OUTPUT) via id: repro; has no meaning outside a runner",
+	},
+}
+
+// taskCallLineRe matches a run: body, once comments/blanks are stripped,
+// that is EXACTLY a single `task <target>` invocation — the shape D-01
+// mandates for every rewired step.
+var taskCallLineRe = regexp.MustCompile(`^task\s+[A-Za-z0-9:_-]+$`)
+
+// forbiddenGoInvocationRe matches a direct go build/test/vet/run/install
+// invocation as a whole word — the specific command shapes D-01 moved into
+// Taskfile.yml targets and forbids from reappearing inline in a rewired
+// job's run: body.
+var forbiddenGoInvocationRe = regexp.MustCompile(`\bgo (build|test|vet|run|install)\b`)
 
 // --- parseX/mustX helper pairs ---------------------------------------------
 //
@@ -347,6 +429,112 @@ func mustParseTaskCallList(t *testing.T, block string) []string {
 	return v
 }
 
+// goreleaserBuildEntry mirrors the shape of one .goreleaser.yaml `builds:`
+// list entry, capturing only the two fields TestCheckCrossMatchesGoreleaserTargets
+// needs. goos/goarch are declared in INLINE flow-sequence form in this
+// repo's .goreleaser.yaml (`goos: [linux]`, not block-sequence form) — a
+// real YAML decoder handles both; a raw-text sequence-marker regex would
+// silently match neither and produce a vacuously empty pair set (this
+// project's own house rule against exactly that failure class).
+type goreleaserBuildEntry struct {
+	GOOS   []string `yaml:"goos"`
+	GOARCH []string `yaml:"goarch"`
+}
+
+type goreleaserConfig struct {
+	Builds []goreleaserBuildEntry `yaml:"builds"`
+}
+
+// parseGoreleaserCrossPairs decodes .goreleaser.yaml source src with a real
+// YAML decoder and returns every GOOS/GOARCH pair named across its builds:
+// entries, as "goos/goarch" strings. Returns a non-nil error if src fails
+// to parse as YAML, declares zero builds: entries, or declares builds:
+// entries none of which name both a goos and a goarch — never a usable
+// zero value on any of those misses (the CR-01 defect class every parser
+// in this file guards against).
+func parseGoreleaserCrossPairs(src string) ([]string, error) {
+	var cfg goreleaserConfig
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserCrossPairs: %w", err)
+	}
+	if len(cfg.Builds) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserCrossPairs: no builds: entries found")
+	}
+	var pairs []string
+	for _, b := range cfg.Builds {
+		for _, goos := range b.GOOS {
+			for _, goarch := range b.GOARCH {
+				pairs = append(pairs, goos+"/"+goarch)
+			}
+		}
+	}
+	if len(pairs) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserCrossPairs: builds: entries present but none declare both goos: and goarch:")
+	}
+	return pairs, nil
+}
+
+func mustParseGoreleaserCrossPairs(t *testing.T, src string) []string {
+	t.Helper()
+	v, err := parseGoreleaserCrossPairs(src)
+	if err != nil {
+		t.Fatalf("mustParseGoreleaserCrossPairs: %v", err)
+	}
+	return v
+}
+
+// checkCrossForLineRe matches the `for pair in ...; do` line inside
+// check:cross's command body — the single source of truth for which
+// GOOS/GOARCH pairs the sweep covers.
+var checkCrossForLineRe = regexp.MustCompile(`for pair in (.+); do`)
+
+// parseCheckCrossPairs reads Taskfile.yml source src, locates its
+// check:cross task block, and returns the GOOS/GOARCH pairs named on that
+// block's `for pair in ...; do` line, in the order they appear. Returns a
+// non-nil error if src has no check:cross task at all (naming it), or the
+// task exists but its command text has no `for pair in ...; do` line, or
+// that line names zero pairs — never a usable zero value on any of those
+// misses.
+func parseCheckCrossPairs(src string) ([]string, error) {
+	blocks, err := parseTaskBlocks(src)
+	if err != nil {
+		return nil, fmt.Errorf("parseCheckCrossPairs: %w", err)
+	}
+	block, ok := blocks[checkCrossTaskID]
+	if !ok {
+		return nil, fmt.Errorf("parseCheckCrossPairs: no %q task found in Taskfile.yml", checkCrossTaskID)
+	}
+	m := checkCrossForLineRe.FindStringSubmatch(block)
+	if m == nil {
+		return nil, fmt.Errorf("parseCheckCrossPairs: %q task has no 'for pair in ...; do' line", checkCrossTaskID)
+	}
+	pairs := strings.Fields(m[1])
+	if len(pairs) == 0 {
+		return nil, fmt.Errorf("parseCheckCrossPairs: %q task's 'for pair in' line names zero pairs", checkCrossTaskID)
+	}
+	return pairs, nil
+}
+
+func mustParseCheckCrossPairs(t *testing.T, src string) []string {
+	t.Helper()
+	v, err := parseCheckCrossPairs(src)
+	if err != nil {
+		t.Fatalf("mustParseCheckCrossPairs: %v", err)
+	}
+	return v
+}
+
+// sortedPairSet returns pairs as a single comma-joined, sorted string —
+// per this project's own house rule (~/.claude/rules/grepping.md) against
+// exit-status/count-based comparison for exact multi-value equality:
+// comparing one sorted string in one assertion carries "no more" and "no
+// fewer" simultaneously, so both an omission and an addition fail.
+func sortedPairSet(pairs []string) string {
+	sorted := append([]string(nil), pairs...)
+	sort.Strings(sorted)
+	return strings.Join(sorted, ",")
+}
+
 // --- tests -------------------------------------------------------------
 
 // TestRequiredCheckNamesPreserved is the T-10-01-05 information-disclosure
@@ -614,5 +802,523 @@ func TestTaskfileWrapperIsSerial_MissingWrapperIsError(t *testing.T) {
 	blocks := mustParseTaskBlocks(t, src)
 	if _, ok := blocks["test"]; ok {
 		t.Fatalf("parseTaskBlocks(%q): expected no %q key in the returned map, got one", src, "test")
+	}
+}
+
+// TestCheckCrossMatchesGoreleaserTargets is the D-15/T-10-05-03 divergence
+// guard: the set of GOOS/GOARCH pairs Taskfile.yml's check:cross target
+// sweeps must be set-equal to the set of {goos, goarch} pairs across
+// .goreleaser.yaml's builds: entries. Compared as one sorted-string
+// equality so both a pair present in one and absent from the other fails,
+// in either direction, with the offending pair(s) named in the failure
+// message — adding a release target to .goreleaser.yaml without adding it
+// to the pre-tag sweep (or vice versa) now fails this test.
+func TestCheckCrossMatchesGoreleaserTargets(t *testing.T) {
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	taskPairs := mustParseCheckCrossPairs(t, string(taskfileData))
+
+	goreleaserData, err := os.ReadFile(goreleaserPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserPath, err)
+	}
+	grPairs := mustParseGoreleaserCrossPairs(t, string(goreleaserData))
+
+	gotSorted := sortedPairSet(taskPairs)
+	wantSorted := sortedPairSet(grPairs)
+	if gotSorted != wantSorted {
+		t.Fatalf("check:cross pairs %v are not set-equal to .goreleaser.yaml builds: pairs %v — got sorted set %q, want %q (a pair present in one and absent from the other, in either direction, is a coverage divergence between the pre-tag sweep and the release build matrix)", taskPairs, grPairs, gotSorted, wantSorted)
+	}
+}
+
+// TestCheckCrossMatchesGoreleaserTargets_EmptyBuildsIsError is the edge
+// case named by the plan's own acceptance criteria: a .goreleaser.yaml
+// with zero builds: entries must produce a non-nil error from
+// parseGoreleaserCrossPairs, never an empty-set match against an equally
+// empty (or absent) sweep — an empty-vs-empty comparison would pass
+// vacuously without asserting anything.
+func TestCheckCrossMatchesGoreleaserTargets_EmptyBuildsIsError(t *testing.T) {
+	src := "version: 2\nproject_name: codegraph\nbuilds: []\n"
+	if _, err := parseGoreleaserCrossPairs(src); err == nil {
+		t.Fatalf("parseGoreleaserCrossPairs(%q): expected a non-nil error for zero builds: entries, got nil", src)
+	}
+}
+
+// TestCheckCrossMatchesGoreleaserTargets_MissingCheckCrossIsError is the
+// edge case named by the plan's own acceptance criteria: a Taskfile.yml
+// with no check:cross target must produce a non-nil error from
+// parseCheckCrossPairs naming the missing target, never a silently-empty
+// pair slice.
+func TestCheckCrossMatchesGoreleaserTargets_MissingCheckCrossIsError(t *testing.T) {
+	src := "version: \"3\"\ntasks:\n  build:\n    cmds:\n      - go build ./...\n"
+	_, err := parseCheckCrossPairs(src)
+	if err == nil {
+		t.Fatalf("parseCheckCrossPairs(%q): expected a non-nil error for a Taskfile with no check:cross task, got nil", src)
+	}
+	if !strings.Contains(err.Error(), checkCrossTaskID) {
+		t.Fatalf("parseCheckCrossPairs(%q) error does not name the missing task %q: %v", src, checkCrossTaskID, err)
+	}
+}
+
+// TestParseGoreleaserCrossPairs_InlineFlowSequence proves the parser is
+// reading .goreleaser.yaml's ACTUAL syntax, not a syntax this repo doesn't
+// use: goos/goarch are declared in inline flow-sequence form (`goos:
+// [linux]`), not block-sequence form, in the real file. A parser that
+// silently yields an empty set here would make the whole
+// TestCheckCrossMatchesGoreleaserTargets comparison vacuous — this repo
+// has already shipped one mutation test that no-opped for exactly this
+// reason (Task 3's own read_first note).
+func TestParseGoreleaserCrossPairs_InlineFlowSequence(t *testing.T) {
+	src := "builds:\n  - id: example\n    goos: [linux]\n    goarch: [amd64]\n"
+	pairs := mustParseGoreleaserCrossPairs(t, src)
+	if len(pairs) == 0 {
+		t.Fatalf("parseGoreleaserCrossPairs(%q): expected a non-empty pair set for inline flow-sequence goos/goarch, got empty", src)
+	}
+	want := "linux/amd64"
+	found := false
+	for _, p := range pairs {
+		if p == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("parseGoreleaserCrossPairs(%q) = %v, want to contain %q", src, pairs, want)
+	}
+}
+
+// TestCheckCrossParsersFailLoudly extends TestTaskfileShapeHelpersFailLoudly
+// coverage to this test's two new parsers: every pure parse core must
+// return a non-nil error — never a usable zero value — when fed empty
+// input.
+func TestCheckCrossParsersFailLoudly(t *testing.T) {
+	cases := []struct {
+		name string
+		fn   func() error
+	}{
+		{
+			name: "parseGoreleaserCrossPairs: empty input",
+			fn: func() error {
+				_, err := parseGoreleaserCrossPairs("")
+				return err
+			},
+		},
+		{
+			name: "parseCheckCrossPairs: empty input",
+			fn: func() error {
+				_, err := parseCheckCrossPairs("")
+				return err
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.fn(); err == nil {
+				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
+			}
+		})
+	}
+}
+
+// --- TestWorkflowRunBodiesInvokeTask: workflow step decoding -----------
+
+// workflowRunStep is the subset of a GitHub Actions workflow step this
+// guard needs: its display name and its run: body (empty for a `uses:`
+// step, which this guard does not constrain — D-01 only binds run: bodies).
+type workflowRunStep struct {
+	Name string `yaml:"name"`
+	Run  string `yaml:"run"`
+}
+
+type workflowJobYAML struct {
+	Steps []workflowRunStep `yaml:"steps"`
+}
+
+type workflowFileYAML struct {
+	Jobs map[string]workflowJobYAML `yaml:"jobs"`
+}
+
+// parseWorkflowJobSteps decodes workflow YAML source src with a real YAML
+// decoder and returns the ordered steps of the job keyed jobID. Returns a
+// non-nil error if src fails to parse as YAML, declares no jobs: at all,
+// names no job matching jobID, or that job declares zero steps — never a
+// usable empty slice on any of those misses (the CR-01 defect class every
+// parser in this file guards against).
+func parseWorkflowJobSteps(src, jobID string) ([]workflowRunStep, error) {
+	var wf workflowFileYAML
+	if err := yaml.Unmarshal([]byte(src), &wf); err != nil {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: %w", err)
+	}
+	if len(wf.Jobs) == 0 {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: no jobs: found in workflow source")
+	}
+	job, ok := wf.Jobs[jobID]
+	if !ok {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: no job %q found in workflow source", jobID)
+	}
+	if len(job.Steps) == 0 {
+		return nil, fmt.Errorf("parseWorkflowJobSteps: job %q declares zero steps", jobID)
+	}
+	return job.Steps, nil
+}
+
+// stripRunBodyNoise removes blank lines and full-line shell comments from a
+// step's run: body, returning the remaining lines rejoined with "\n". Only
+// a line whose first non-whitespace character is `#` is treated as a
+// comment — a `#` inside a quoted string or a `${var#pattern}` shell
+// expansion is NOT stripped. The risk here runs the opposite direction from
+// this guard's own house rule about comments masquerading as invocations:
+// over-stripping would silently eat a real command line rather than a
+// comment, which is exactly as dangerous to a guard's correctness.
+func stripRunBodyNoise(body string) string {
+	var kept []string
+	for _, line := range strings.Split(body, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		kept = append(kept, trimmed)
+	}
+	return strings.Join(kept, "\n")
+}
+
+// runBodyExceptionKey builds the composite lookup key runBodyExceptions and
+// TestWorkflowRunBodiesInvokeTask's scan loop both use to match a step to
+// its exception entry.
+func runBodyExceptionKey(workflow, job, step string) string {
+	return workflow + "\x00" + job + "\x00" + step
+}
+
+// checkStepInvokesTask validates one step from an in-scope job: a step with
+// no run: body (a `uses:` step) is unconstrained; an excepted step (present
+// in exceptions) is unconstrained; every other step's run: body must equal
+// a single `task <target>` line once stripRunBodyNoise runs. Returns a
+// non-nil error naming workflow, job, and step on violation — with the
+// specific offending `go <verb>` invocation named when one is present,
+// since that is the actionable fact a contributor reading the failure
+// needs to remove.
+func checkStepInvokesTask(workflow, job string, step workflowRunStep, exceptions map[string]string) error {
+	if step.Run == "" {
+		return nil
+	}
+	if _, excepted := exceptions[runBodyExceptionKey(workflow, job, step.Name)]; excepted {
+		return nil
+	}
+	stripped := stripRunBodyNoise(step.Run)
+	if taskCallLineRe.MatchString(stripped) {
+		return nil
+	}
+	if verb := forbiddenGoInvocationRe.FindString(stripped); verb != "" {
+		return fmt.Errorf("%s job %q step %q invokes %q directly instead of a task target — single-definition property violated (D-01)", workflow, job, step.Name, verb)
+	}
+	return fmt.Errorf("%s job %q step %q's run: body is not a single 'task <target>' call after stripping comments/blanks (D-01): %q", workflow, job, step.Name, stripped)
+}
+
+// validateRunBodyExceptions asserts every entry in exceptions carries a
+// non-empty reason. Returns a non-nil error naming the first offending
+// entry — never a silent skip (T-10-07-01: a reasonless exception is
+// indistinguishable from an accidental allowlist widening).
+func validateRunBodyExceptions(exceptions []runBodyException) error {
+	for i, exc := range exceptions {
+		if strings.TrimSpace(exc.Reason) == "" {
+			return fmt.Errorf("validateRunBodyExceptions: exceptions[%d] (%s/%s/%q) has an empty reason", i, exc.Workflow, exc.Job, exc.Step)
+		}
+	}
+	return nil
+}
+
+// --- TestWorkflowRunBodiesInvokeTask ------------------------------------
+
+// TestWorkflowRunBodiesInvokeTask is the D-01/D-02 single-definition guard:
+// across inScopeJobs, every step's run: body must be exactly `task
+// <target>` once comments/blanks are stripped, unless the step is named in
+// runBodyExceptions (every entry of which must carry a non-empty reason and
+// must actually match a real step — see the two checks below). This is
+// what makes DEV-01 durable rather than a one-time cleanup: without it, the
+// next contributor adds an inline `go test` to a workflow and the
+// single-definition property dies silently.
+func TestWorkflowRunBodiesInvokeTask(t *testing.T) {
+	if err := validateRunBodyExceptions(runBodyExceptions); err != nil {
+		t.Fatalf("runBodyExceptions: %v", err)
+	}
+	if len(inScopeJobs) == 0 {
+		t.Fatalf("inScopeJobs fixture is empty — this guard would vacuously pass over zero jobs")
+	}
+
+	exceptionSet := make(map[string]string, len(runBodyExceptions))
+	for _, exc := range runBodyExceptions {
+		exceptionSet[runBodyExceptionKey(exc.Workflow, exc.Job, exc.Step)] = exc.Reason
+	}
+	matched := make(map[string]bool, len(runBodyExceptions))
+
+	for _, ij := range inScopeJobs {
+		path := filepath.Join(workflowsDir, ij.Workflow)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		steps, err := parseWorkflowJobSteps(string(data), ij.JobID)
+		if err != nil {
+			t.Fatalf("%s job %q: %v", ij.Workflow, ij.JobID, err)
+		}
+		for _, step := range steps {
+			key := runBodyExceptionKey(ij.Workflow, ij.JobID, step.Name)
+			if _, excepted := exceptionSet[key]; excepted {
+				matched[key] = true
+			}
+			if err := checkStepInvokesTask(ij.Workflow, ij.JobID, step, exceptionSet); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+
+	for _, exc := range runBodyExceptions {
+		key := runBodyExceptionKey(exc.Workflow, exc.Job, exc.Step)
+		if !matched[key] {
+			t.Errorf("exception %s/%s/%q was never matched against a real step in an in-scope job — a stale exception silently widens the allowlist (T-10-07-01); fix the step name or remove the entry", exc.Workflow, exc.Job, exc.Step)
+		}
+	}
+}
+
+// TestRunBodyExceptionsHaveReasons_EmptyReasonIsError proves
+// validateRunBodyExceptions actually catches what it claims to: a blank
+// reason must produce a non-nil error, never a silent pass.
+func TestRunBodyExceptionsHaveReasons_EmptyReasonIsError(t *testing.T) {
+	bad := []runBodyException{{Workflow: "ci.yml", Job: "test", Step: "some step", Reason: "  "}}
+	if err := validateRunBodyExceptions(bad); err == nil {
+		t.Fatalf("validateRunBodyExceptions: expected a non-nil error for an exception with a blank reason, got nil")
+	}
+}
+
+// TestParseWorkflowJobSteps_MissingJobIsError is the edge case: a job ID
+// absent from the workflow's jobs: map must produce a non-nil error naming
+// it, never a silently-empty step slice.
+func TestParseWorkflowJobSteps_MissingJobIsError(t *testing.T) {
+	src := "jobs:\n  build:\n    steps:\n      - name: X\n        run: task build\n"
+	_, err := parseWorkflowJobSteps(src, "does-not-exist")
+	if err == nil {
+		t.Fatalf("parseWorkflowJobSteps(%q): expected a non-nil error for a missing job, got nil", "does-not-exist")
+	}
+	if !strings.Contains(err.Error(), "does-not-exist") {
+		t.Fatalf("parseWorkflowJobSteps error does not name the missing job: %v", err)
+	}
+}
+
+// TestParseWorkflowJobSteps_NoJobsIsError is the edge case named directly
+// in this task's <behavior>: a workflow with zero jobs: at all must return
+// a non-nil error, never a vacuous pass over an empty job set.
+func TestParseWorkflowJobSteps_NoJobsIsError(t *testing.T) {
+	src := "name: empty\non:\n  push:\n"
+	if _, err := parseWorkflowJobSteps(src, "test"); err == nil {
+		t.Fatalf("parseWorkflowJobSteps(%q, %q): expected a non-nil error for a workflow with no jobs: at all, got nil", src, "test")
+	}
+}
+
+// TestParseWorkflowJobSteps_ZeroStepsIsError is the edge case: a job that
+// exists but declares zero steps must produce a non-nil error, never an
+// empty-but-valid step slice.
+func TestParseWorkflowJobSteps_ZeroStepsIsError(t *testing.T) {
+	src := "jobs:\n  build:\n    runs-on: ubuntu-latest\n"
+	if _, err := parseWorkflowJobSteps(src, "build"); err == nil {
+		t.Fatalf("parseWorkflowJobSteps(%q, %q): expected a non-nil error for a job with zero steps, got nil", src, "build")
+	}
+}
+
+// TestCheckStepInvokesTask_ForbiddenGoInvocationNamesVerb proves the
+// forbidden-invocation branch actually names the offending verb, not just a
+// generic shape mismatch — the failure message a contributor reads should
+// point at exactly what to remove.
+func TestCheckStepInvokesTask_ForbiddenGoInvocationNamesVerb(t *testing.T) {
+	step := workflowRunStep{Name: "inline build", Run: "set -euo pipefail\ngo build ./...\n"}
+	err := checkStepInvokesTask("ci.yml", "test", step, map[string]string{})
+	if err == nil {
+		t.Fatalf("checkStepInvokesTask: expected a non-nil error for an inline go build invocation, got nil")
+	}
+	if !strings.Contains(err.Error(), "go build") {
+		t.Fatalf("checkStepInvokesTask error does not name the offending invocation: %v", err)
+	}
+}
+
+// TestCheckStepInvokesTask_ExceptedStepPasses proves an excepted step is
+// unconstrained regardless of its run: body's shape.
+func TestCheckStepInvokesTask_ExceptedStepPasses(t *testing.T) {
+	step := workflowRunStep{Name: "apt install", Run: "sudo apt-get install -y gcc-mingw-w64-x86-64"}
+	exceptions := map[string]string{runBodyExceptionKey("ci.yml", "test", "apt install"): "installs a system package"}
+	if err := checkStepInvokesTask("ci.yml", "test", step, exceptions); err != nil {
+		t.Fatalf("checkStepInvokesTask: expected a nil error for an excepted step, got %v", err)
+	}
+}
+
+// TestCheckStepInvokesTask_UsesStepPasses proves a `uses:` step (empty
+// run: body) is unconstrained — this guard only binds run: bodies.
+func TestCheckStepInvokesTask_UsesStepPasses(t *testing.T) {
+	step := workflowRunStep{Name: "Checkout", Run: ""}
+	if err := checkStepInvokesTask("ci.yml", "test", step, map[string]string{}); err != nil {
+		t.Fatalf("checkStepInvokesTask: expected a nil error for a uses: step (empty run: body), got %v", err)
+	}
+}
+
+// TestStripRunBodyNoise_KeepsHashInsideCommand proves stripRunBodyNoise
+// does not over-strip: a `#` that is not the first non-whitespace character
+// on a line (e.g. inside `${var#prefix}`) must be preserved, never treated
+// as a comment marker.
+func TestStripRunBodyNoise_KeepsHashInsideCommand(t *testing.T) {
+	body := "# a real comment\ntask build\nVAR=${x#prefix}\n"
+	got := stripRunBodyNoise(body)
+	if strings.Contains(got, "a real comment") {
+		t.Fatalf("stripRunBodyNoise(%q) = %q, still contains the comment line", body, got)
+	}
+	if !strings.Contains(got, `${x#prefix}`) {
+		t.Fatalf("stripRunBodyNoise(%q) = %q, over-stripped a non-comment line containing '#'", body, got)
+	}
+}
+
+// --- CONTRIBUTING.md task target references (DEV-01) ---------------------
+
+// contributingPath is the on-disk path to CONTRIBUTING.md relative to this
+// package.
+const contributingPath = "../../CONTRIBUTING.md"
+
+// parseContributingTaskTargets extracts every `task <target>` reference from
+// CONTRIBUTING.md source src, matching only backtick-enclosed patterns (to
+// avoid false positives from prose like "the task system").
+// Returns a non-nil error if zero targets are found — a CONTRIBUTING.md that
+// stops naming any task target silently violates DEV-01, so empty must FAIL,
+// never pass vacuously.
+func parseContributingTaskTargets(src string) ([]string, error) {
+	// Match backtick-enclosed `task <target>` patterns.
+	// The regex captures the target name after the word "task " within backticks.
+	re := regexp.MustCompile("`task\\s+([A-Za-z0-9:_-]+)`")
+	matches := re.FindAllStringSubmatch(src, -1)
+
+	targetSet := make(map[string]bool)
+	for _, m := range matches {
+		target := m[1]
+		targetSet[target] = true
+	}
+
+	// Extract unique targets in sorted order for deterministic output.
+	var targets []string
+	for t := range targetSet {
+		targets = append(targets, t)
+	}
+	sort.Strings(targets)
+
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("parseContributingTaskTargets: no backtick-enclosed `task <target>` patterns found")
+	}
+	return targets, nil
+}
+
+func mustParseContributingTaskTargets(t *testing.T, src string) []string {
+	t.Helper()
+	v, err := parseContributingTaskTargets(src)
+	if err != nil {
+		t.Fatalf("mustParseContributingTaskTargets: %v", err)
+	}
+	return v
+}
+
+// contains reports whether slice contains s as an element.
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// TestContributingReferencesRealTaskTargets is the DEV-01 documentation-drift
+// guard: it reads CONTRIBUTING.md and asserts every `task <target>` reference
+// names a real, top-level task in Taskfile.yml. A pointer to a non-existent
+// target silently rotts — this test fails the build on any such drift, naming
+// the offending target and explaining the DEV-01 consequence.
+func TestContributingReferencesRealTaskTargets(t *testing.T) {
+	contributingData, err := os.ReadFile(contributingPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", contributingPath, err)
+	}
+	targets := mustParseContributingTaskTargets(t, string(contributingData))
+
+	if len(targets) == 0 {
+		t.Fatalf("parseContributingTaskTargets returned an empty list; non-empty set should have been enforced by the parser")
+	}
+
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(taskfileData))
+
+	var missing []string
+	for _, target := range targets {
+		if _, ok := blocks[target]; !ok {
+			missing = append(missing, target)
+		}
+	}
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		t.Fatalf("CONTRIBUTING.md names task target(s) that do not exist in Taskfile.yml: %v — documentation drift violates DEV-01 (CONTRIBUTING.md points contributors at the targets). Update CONTRIBUTING.md to remove or correct the reference.", missing)
+	}
+}
+
+// TestContributingReferencesRealTaskTargets_UnknownTargetIsError is the
+// non-vacuity companion: it feeds parseContributingTaskTargets a synthetic
+// input naming a target that does not exist in the real Taskfile.yml and
+// verifies the main test would catch it. This proves the guard can actually
+// FIRE on a real regression.
+func TestContributingReferencesRealTaskTargets_UnknownTargetIsError(t *testing.T) {
+	// Synthetic CONTRIBUTING.md source mentioning a real target and a fake one.
+	syntheticContributing := `## Building
+
+You need a C toolchain. Every command is a task target.
+
+- ` + "`task build`" + ` — build everything
+- ` + "`task fake-nonexistent-target-xyz`" + ` — this target does not exist
+
+See Taskfile.yml for the complete list.
+`
+
+	// Read the real Taskfile.yml to get its actual target set.
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(taskfileData))
+
+	// Parse the synthetic CONTRIBUTING — this should succeed because it finds
+	// at least one target (build, fake-nonexistent-target-xyz).
+	targets, err := parseContributingTaskTargets(syntheticContributing)
+	if err != nil {
+		t.Fatalf("parseContributingTaskTargets(%q): expected success on synthetic input with multiple targets, got %v", syntheticContributing, err)
+	}
+
+	if len(targets) == 0 {
+		t.Fatalf("parseContributingTaskTargets returned empty list for synthetic input with targets; expected at least two targets")
+	}
+
+	// Now verify that a check against the real Taskfile would CATCH the unknown
+	// target. This proves that TestContributingReferencesRealTaskTargets, when
+	// run on the real files, would fail if CONTRIBUTING.md named an unknown
+	// target.
+	var missing []string
+	for _, target := range targets {
+		if _, ok := blocks[target]; !ok {
+			missing = append(missing, target)
+		}
+	}
+
+	// We expect fake-nonexistent-target-xyz to be in the missing set.
+	if len(missing) == 0 {
+		t.Fatalf("TestContributingReferencesRealTaskTargets_UnknownTargetIsError: synthetic input named a fake target, but the guard found no missing targets — the guard cannot fire, so it would be vacuous")
+	}
+
+	if !contains(missing, "fake-nonexistent-target-xyz") {
+		t.Fatalf("TestContributingReferencesRealTaskTargets_UnknownTargetIsError: expected 'fake-nonexistent-target-xyz' in missing targets, got %v", missing)
 	}
 }

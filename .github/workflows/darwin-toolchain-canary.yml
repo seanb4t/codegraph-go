@@ -60,3 +60,14 @@ jobs:
 
       - name: Prove the darwin toolchain
         run: task check:darwin-toolchain
+
+      # Deliberately a SECOND step rather than a replacement for the one above.
+      # The plain `go build` there is the narrowest possible toolchain signal;
+      # this one adds GoReleaser, .goreleaser.yaml, and go.tool.mod to the
+      # failure surface on purpose, because that composition is what release.yml
+      # actually runs and nothing else exercises it on this runner class. Kept
+      # separate so a red run says WHICH layer broke — "the darwin toolchain is
+      # gone" and "GoReleaser cannot drive it" are different pages of the
+      # runbook, and collapsing them into one step would lose that.
+      - name: Prove GoReleaser can drive the darwin release build
+        run: task check:darwin-release-build

@@ -2,13 +2,15 @@
 
 ## Overview
 
-CodeGraph Go is a ground-up Go rewrite of TypeScript CodeGraph — a drop-in, TS-v1.3.x-parity replacement in a single static binary. **v0.1 (Initial Release) shipped 2026-07-14**: the core capabilities (indexing, query, MCP server, sync, migration) work from a signed/attested/SBOM'd release that beats TS 1.3.1 on every measured benchmark — but the CLI/agent surface still diverges *behaviorally* from TS. **v1.0 (Drop-in Parity & Human UX)** closes those gaps so an existing user can swap binaries with zero change in experience: TS-identical `explore`/`node`/`status` behavior, watcher-on-MCP by default, git/worktree awareness, output hygiene, a human-facing Charm TUI (agent path stays plain), systematic flag reconciliation — then the first real signed `v1.0.0`. Work is risk-front-loaded: the load-bearing shared-engine behavioral algorithms land first (Phase 1), the human TUI is added last behind a build-enforced rendering seam so the agent/MCP path never sees ANSI.
+CodeGraph Go is a ground-up Go rewrite of TypeScript CodeGraph — a drop-in, TS-v1.3.x-parity replacement in a single static binary. **v0.1 (Initial Release) shipped 2026-07-14**: the core capabilities (indexing, query, MCP server, sync, migration) work from a signed/attested/SBOM'd release that beats TS 1.3.1 on every measured benchmark — but the CLI/agent surface still diverged *behaviorally* from TS. **v1.0 (Drop-in Parity & Human UX) shipped 2026-08-03**: those gaps are closed. An existing user can now swap binaries with zero change in experience — TS-identical `explore`/`node`/`status` behavior, watcher-on-MCP by default, git/worktree awareness, output hygiene, a human-facing Charm TUI behind a build-enforced rendering seam (the agent/MCP path never sees ANSI), systematic flag reconciliation, fully automated signed releases via release-please + GoReleaser, and contributor-facing local build tooling. Work was risk-front-loaded: the load-bearing shared-engine behavioral algorithms landed first, the human TUI last.
+
+**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line is `v0.2.0`, computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestones carry **no git tag** — release-please is the sole tag authority since Phase 9, and the milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
 
 ## Milestones
 
 - ✅ **v0.1 — Initial Release** — Phases 1–8 (shipped 2026-07-14) — core capabilities + signed release; not yet a drop-in parity replacement
-- 🚧 **v1.0 — Drop-in Parity & Human UX** — Phases 1–8 (in progress) — behavioral + surface parity with TS 1.3.1, human TUI, first signed `v1.0.0`
-- 📋 **Later** — Team Scale (central server, CI-distributed indexes), annotations (embeddings/communities/export), local Svelte web UI (SEED-001)
+- ✅ **v1.0 — Drop-in Parity & Human UX** — Phases 1–10 (shipped 2026-08-03) — behavioral + surface parity with TS 1.3.1, human TUI, automated signed releases, local build tooling
+- 📋 **Next** — unscoped; run `/gsd-new-milestone`. Candidates: the four Backlog items below, Team Scale (central server, CI-distributed indexes), annotations (embeddings/communities/export), local Svelte web UI (SEED-001), homebrew install path (SEED-002)
 
 ## Phases
 
@@ -30,461 +32,82 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 
 </details>
 
-### 🚧 v1.0 — Drop-in Parity & Human UX (In Progress)
-
-**Milestone Goal:** Close the behavioral + surface gaps against TS CodeGraph v1.3.1 so an existing user swaps binaries with zero change in experience, add a human-facing terminal UI (agent/MCP path stays plain), then cut the first signed `v1.0.0`. Phase numbering resets to 1 for this milestone (v0.1 archived).
-
-- [x] **Phase 1: Behavioral Parity — explore & node** - TS-identical relevance-ranked exploration + full multi-definition disambiguation, validated by a behavioral fixture harness (completed 2026-07-15)
-- [x] **Phase 2: status Content & Git/Worktree Awareness** - Rich `status` content + borrowed-index detection across every read tool (completed 2026-07-16)
-- [x] **Phase 3: Watcher-on-MCP Default** - `serve --mcp` runs live auto-sync by default with a WSL2/slow-FS escape hatch (completed 2026-07-16)
-- [x] **Phase 4: Output Hygiene** - Silence Pebble WAL noise; keep MCP stdout clean JSON-RPC (completed 2026-07-16)
-- [x] **Phase 5: Git Sync Hooks** - Marker-fenced, idempotent post-commit/merge/checkout sync hooks as the watcher-disabled fallback (completed 2026-07-17)
-- [x] **Phase 6: Rendering Seam & Pretty status/files** - Build-enforced ANSI isolation + lipgloss-styled `status`/`files` (plain when piped) (completed 2026-07-17)
-- [x] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped (completed 2026-07-26)
-- [x] **Phase 8: Surface Reconciliation & Signed v1.0.0 Release** - Flag parity + Charm-dep audit + benchmarks, retiring the "not yet drop-in" caveat. The signed `v1.0.0` itself moved to Phase 9 with REL-02 on 2026-07-28; the phase title is kept because its directory slug and every committed artifact path depend on it (completed 2026-07-28)
-- [x] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the first signed release cut entirely by release-please from Conventional Commits (promoted from backlog 999.3 on 2026-07-27; version target removed 2026-07-29 — see below) (completed 2026-08-01)
-- [ ] **Phase 10: Local Build Tooling & CONTRIBUTING** - `Taskfile.yml` wrapping the build/test/lint/release-check workflows + contributor-facing CGo toolchain docs (promoted from backlog 999.1 on 2026-07-27)
-
-## Phase Details
-
-### Phase 1: Behavioral Parity — explore & node
-
-**Goal**: Agents and users get TS-identical `explore` and `node` results — graph-relevance-ranked exploration and full multi-definition disambiguation — proven equivalent on both the CLI and the `codegraph_explore` MCP surface by a behavioral fixture harness that lands with the algorithm.
-**Depends on**: Nothing (first phase of v1.0)
-**Requirements**: EXPL-01, EXPL-02, EXPL-03, EXPL-04, EXPL-05, NODE-01, NODE-02, NODE-03, NODE-04, TEST-01
-**Success Criteria** (what must be TRUE):
-
-  1. `explore` accepts a multi-word `<query...>` (tokenized CamelCase/snake_case/acronym/dot-notation/plain, stopword-filtered) and ranks results by graph relevance (Random-Walk-with-Restart, α=0.25, ~25 iters, 9 edge kinds) with a file-level relevance gate, so structurally-connected symbols outrank lexical name-matches and weakly-connected `Test*` funcs no longer top results (EXPL-01/02/03)
-  2. `explore` emits a per-root "⚠️ no covering tests" warning when a symbol has direct callers but no covering test files, matching TS (EXPL-04)
-  3. `node` enumerates ALL exact-name definitions of an overloaded symbol (generated-files-last) with the "N definitions named X — returning M in full" header, full bodies to TS's budget (≤16 defs / 12,000 chars), and an overflow list of the rest; optional file/line narrowing never empties the set (NODE-01/02/03)
-  4. `explore` and `node` output is byte-identical across the CLI command and the MCP tool (shared engine), and single-definition `node` stays byte-comparable to TS (EXPL-05/NODE-04)
-  5. A behavioral fixture harness diffs `explore`/`node` against TS 1.3.1 for ambiguous names, multi-word queries, relevance ordering, and coverage warnings on BOTH the CLI and MCP surfaces — closing v0.1's single-symbol golden blind spot (TEST-01)
-
-**Plans**: 17/17 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 01-01-PLAN.md — Behavioral fixture harness + TS 1.3.1 golden capture (CLI + MCP, synthetic corpus)
-- [x] 01-02-PLAN.md — F1: 6 new edge-kind constants (additive string, no schema bump)
-- [x] 01-03-PLAN.md — Query tokenizers (H1 extractSymbolsFromQuery + H2 extractSearchTerms/STOP_WORDS)
-- [x] 01-04-PLAN.md — node multi-def enumeration + budget/overflow + never-empty narrowing (NODE-01/02/03/04)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 01-05-PLAN.md — Go edge-kind extraction: resolve.go Pass-2 (extends/overrides) + Pass-1 (references/instantiates/type_of/returns)
-- [x] 01-06-PLAN.md — RWR core: computeGraphRelevance + 9-kind RankEdges (deterministic, α=0.25, 25 iters)
-- [x] 01-07-PLAN.md — Hybrid gather channels 1-3 + merge (H3–H6) + shared isTestFile
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 01-08-PLAN.md — Java + C# extractor edge-kind emission
-- [x] 01-09-PLAN.md — Python + TS/JS extractor edge-kind emission
-- [x] 01-10-PLAN.md — Gather re-rankers: test-dampen + core-dir + multi-term (H7–H9)
-- [x] 01-11-PLAN.md — Subgraph expansion: type-hierarchy + BFS bounds + glue-node (H10–H12)
-- [x] 01-12-PLAN.md — Named-symbol seeding + per-overload disambiguation tiers (H13)
-- [x] 01-13-PLAN.md — Per-file score tiers + hard exclusion + buried-rescue (H14–H16)
-
-**Wave 4** *(blocked on Wave 3 completion)*
-
-- [x] 01-14-PLAN.md — 5-way relevance gate + central-file + 5-tier sort (H17–H19, EXPL-03 core)
-- [x] 01-15-PLAN.md — F4: force re-index repo + golden corpora (9-kind graph)
-
-**Wave 5** *(blocked on Wave 4 completion)*
-
-- [x] 01-16-PLAN.md — Explore orchestration + EXPL-04 warning + skeletonization/adaptive budget (H20/H21) + CLI variadic
-
-**Wave 6** *(blocked on Wave 5 completion)*
-
-- [x] 01-17-PLAN.md — F5 golden regen + behavioral parity harness (Go vs TS, CLI==MCP)
-
-**Notes**: Highest-risk, load-bearing work. EXPL-02's RWR relevance algorithm is the single hardest item — it lives in the shared `internal/query.Engine` (CLI + MCP improve in the same commit) and puts the golden-corpus contract at stake. Fixtures MUST exist before/with the algorithm change (template-parity ≠ behavior-parity). No styling anywhere in this phase — plain-text output only (the archtest lands in Phase 6 but the constraint holds from day one).
-
-### Phase 2: status Content & Git/Worktree Awareness
-
-**Goal**: `status` reports the full TS-parity content (DB size, nodes-by-kind, files-by-language, live staleness), and every read tool — CLI and MCP — detects a borrowed worktree index and warns, closing the silent "worktree queries the main branch's graph" correctness bug. Every MCP read tool settles on one markdown output shape, so the worktree notice rides a single uniform mechanism.
-**Depends on**: Phase 1
-**Requirements**: STAT-01, STAT-02, STAT-03, WORK-01, WORK-02, WORK-03, TEST-02, SURF-06
-**Success Criteria** (what must be TRUE):
-
-  1. `status` reports Pebble on-disk DB size, nodes-by-kind and files-by-language breakdowns, and a live pending-changes / reindex-recommended signal instead of the Phase-3 inert placeholders (STAT-01/02/03)
-  2. A query run from a git worktree whose resolved index belongs to a DIFFERENT working tree is detected (`git rev-parse --show-toplevel` vs `--git-common-dir`), computing the now-live `worktreeMismatch` (WORK-01)
-  3. `status` prints a verbose borrowed-index warning, and every other read tool (CLI + MCP) prefixes a compact single-line notice via a shared `withWorktreeNotice` wrapper (WORK-02)
-  4. Worktree detection is best-effort and never blocks queries — no false positive on submodules, nested clones, monorepo subdirs, non-git trees, or symlinked paths (EvalSymlinks both sides) (WORK-03)
-  5. Worktree detection has passing fixtures for linked-worktree, submodule, nested-clone, monorepo-subdir, `.claude/worktrees/`, and symlinked layouts (TEST-02)
-  6. The 5 JSON-shaped MCP read tools (`callers`/`callees`/`impact`/`search`/`files`) emit markdown like `explore`/`node` already do, so all 7 non-status read tools take the same text-prefix notice; MCP `status` also gains a markdown renderer (D-12's blockquote warning requires it — it emits JSON today); CLI `--json` still emits JSON on every command, and no `Marshal*JSON` helper body changes (SURF-06)
-
-**Plans**: 7/7 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 02-01-PLAN.md — `internal/gitmeta`: the 4-gate detection cascade, verbatim TS notice/warning strings, `CachingDetector`, and the six real-`git` fixture layouts (wave 1)
-- [x] 02-02-PLAN.md — `StatusResult` gains `dbSizeBytes` + `filesByLanguage`; the golden `dbSizeBytes` strip is reversed Go-side as a documented divergence (wave 1)
-- [x] 02-03-PLAN.md — the 5 SURF-06 markdown renderers, added as siblings of the untouched `Marshal*JSON` helpers (wave 1)
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 02-04-PLAN.md — `OpenAt` retains `startPath`; `worktreeMismatch` goes live in TS's `{worktreeRoot, indexRoot}` shape; the two notice helpers (wave 2)
-- [x] 02-05-PLAN.md — the two status renderers TS ships: CLI padded columns (D-09) and MCP bolded-key bullets (D-17), plus the hand-rolled comma grouper (wave 2)
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 02-06-PLAN.md — MCP wiring: six call sites to markdown, one server-scoped detector, the notice on 7 tools; closes the zero-coverage blind spot (wave 3)
-- [x] 02-07-PLAN.md — CLI wiring: the sectioned `status` layout replaces the terse one-liner; the notice on 7 read commands, human-output only (wave 3)
-
-**Notes**: New `internal/gitmeta` package (stdlib `os/exec` only — two `git rev-parse` calls, no pure-Go git lib), consumed by `internal/query` so both CLI and MCP get worktree awareness in one commit. Validate the edge-case fixtures before any pretty rendering. SURF-06 was pulled in from Phase 8 (user decision, 2026-07-15): Phase 2 already rewires all 7 MCP read-tool result paths for WORK-02, so changing the output shape in the same pass avoids double-touching them and removes the "prefix text onto a JSON payload" problem. Still plain-text-only — markdown here means structure/wording, NOT color (Phase 6 owns TUI-02).
-
-### Phase 3: Watcher-on-MCP Default
-
-**Goal**: `serve --mcp` runs live in-process auto-sync by default (matching TS's auto-sync), with a `--no-watch` opt-out and a WSL2/slow-filesystem auto-off policy — restoring the live-sync experience with zero config change and without ever delaying the MCP handshake.
-**Depends on**: Phase 2
-**Requirements**: WATCH-01, WATCH-02, WATCH-03, WATCH-04, TEST-04
-**Success Criteria** (what must be TRUE):
-
-  1. `serve --mcp` runs the file watcher by default with `--no-watch` to opt out (flipping the current opt-in `--watch`); `install` already writes the byte-identical `serve --mcp` invocation, so live sync returns with no config change (WATCH-01)
-  2. Watcher startup never delays the MCP handshake or first-tool availability — the watcher is started off the handshake path (WATCH-02)
-  3. A WSL2 / slow-filesystem watch-policy auto-disables the watcher, honoring env precedence (`CODEGRAPH_NO_WATCH` / force-on), matching TS's escape hatch (WATCH-03)
-  4. Concurrent `serve --mcp` sessions on one repo converge to a single writer (no double-watching), goleak-clean (WATCH-04)
-  5. A subprocess integration harness drives the real binary end-to-end — CLI via argv and `serve --mcp` via a real stdio JSON-RPC session — with the CR-01 anchor case (worktree notice reaches a real `serve --mcp` `codegraph_explore` payload; main-checkout control shows none) and CI wired to run it alongside `go test ./testdata/golden/...` (TEST-04)
-
-**Plans**: 5/5 plans complete
-
-Plans:
-**Wave 1**
-
-- [x] 03-01-PLAN.md — Watch-policy port: `internal/watch/policy.go` (WatchDisabledReason precedence, DetectWSL, ErrWatchDisabled) — WATCH-03, TDD
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 03-02-PLAN.md — `daemon.Run` policy-gate-first + `RunWithRetry`/jitter convergence + two-session goleak soak — WATCH-02/03/04
-
-**Wave 3** *(blocked on Wave 2)*
-
-- [x] 03-03-PLAN.md — `serve.go` default-on flip + `--no-watch`/`--watch` flags + off-handshake `serveWatchStart` seam + verbatim disabled message — WATCH-01/02
-
-**Wave 4** *(blocked on Wave 3)*
-
-- [x] 03-04-PLAN.md — `test/integration/` subprocess harness substrate + CR-01 worktree-notice anchor + explicit CI step — TEST-04
-
-**Wave 5** *(blocked on Wave 4)*
-
-- [x] 03-05-PLAN.md — Subprocess WATCH cases: default-on handshake-prompt + `CODEGRAPH_NO_WATCH` off-switch via verbatim stderr — TEST-04, WATCH-01/02
-
-**Notes**: The default flip is ~2 lines but MUST be bundled with the watch-policy port — a naive flip hangs MCP startup on WSL2. Reuses v0.1's `--watch` plumbing + daemon lockfile. This phase's watcher model is a prerequisite for the Phase 7 daemon picker. **TEST-04** was added here (user decision, 2026-07-16) after Phase 2's three Criticals (CR-01/CR-02/BL-01) all proved to be reachability/composition failures invisible to a green unit + in-process suite: this phase expands the exact `serve --mcp` surface CR-01 broke, so the spawned-binary harness lands where it is first stressed and retroactively guards Phase 2's wiring. Movable to Phase 8 (REL-04 drop-in gate) if bundling with release makes more sense.
-
-### Phase 4: Output Hygiene
-
-**Goal**: No library log noise ever pollutes command output or the MCP transport — Pebble's WAL/INFO chatter is routed away while real errors survive, and MCP stdout stays clean JSON-RPC.
-**Depends on**: Phase 3
-**Requirements**: HYG-01, HYG-02
-**Success Criteria** (what must be TRUE):
-
-  1. Pebble's internal WAL/INFO log noise no longer prints on any command (explicit `pebble.Options.Logger` routing INFO→discard), while real error diagnostics are preserved and still surface (HYG-01)
-  2. No library log output ever reaches MCP stdout — JSON-RPC framing stays clean; all diagnostics go to stderr only (HYG-02)
-
-**Plans**: 3/3 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 04-01-PLAN.md — HYG-01: quietLogger + diagWriter seam injected at the single pebble.Open seam, mutation-proof wiring (TDD)
-- [x] 04-02-PLAN.md — HYG-02: go/types stdout-confinement archtest over the six serve-reachable packages + detector self-test
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 04-03-PLAN.md — HYG-01/HYG-02 end-to-end: raw-stdio JSON-RPC frame-purity harness (D-06a) + `sync` stderr noise-absence (D-09)
-
-**Notes**: Small and mechanical, but do NOT wholesale-silence — route INFO→discard explicitly so store-corruption errors are never hidden. HYG-02 is proven two ways (Phase-3 belt-and-braces): a build-time archtest (04-02) and a runtime frame-purity harness (04-03) that deliberately does NOT reuse mcp-go's stdio client, whose tolerant parser silently skips non-frame lines and would make the test unable to fail.
-
-### Phase 5: Git Sync Hooks
-
-**Goal**: Users can install marker-fenced git sync hooks that keep the index fresh when the watcher is disabled (WSL2 / `CODEGRAPH_NO_WATCH`), byte-invariantly and without ever blocking a commit.
-**Depends on**: Phase 3
-**Requirements**: HOOK-01, HOOK-02, HOOK-03
-**Success Criteria** (what must be TRUE):
-
-  1. `codegraph githooks install` writes marker-fenced `post-commit`/`post-merge`/`post-checkout` hooks that background-run `codegraph sync`, guarded by `command -v codegraph`, idempotent (replace-in-place), preserving any existing user hook content (HOOK-01)
-  2. `codegraph githooks remove` strips only codegraph's marker block (preserving user content), and `githooks status` reports install state (HOOK-02)
-  3. Hooks are surfaced as the fallback for when the watcher is disabled (WSL2 / `CODEGRAPH_NO_WATCH`), matching TS's narrower trigger — not an always-on feature (HOOK-03)
-
-**Plans**: 5/5 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 05-01-PLAN.md — `internal/fsatomic` extraction of `atomicWriteFile` + `internal/agents` rewire, zero behavior change (D-09)
-- [x] 05-02-PLAN.md — `gitmeta.IsGitRepo`/`HooksDir` (`git rev-parse --git-path hooks`), honoring `core.hooksPath` + linked worktrees (D-04/D-10)
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 05-03-PLAN.md — `internal/githooks` verbatim TS port: markers/block + strip/effectively-empty + Install/Remove/Status (D-01/02/03/05)
-
-**Wave 3** *(blocked on Wave 2)*
-
-- [x] 05-04-PLAN.md — `githooks install/remove/status` cobra command tree + root registration + reachability tests (D-11/D-13)
-- [x] 05-05-PLAN.md — `init` success-path fallback advisory (D-07) + `uninit` best-effort hook cleanup (D-06), mutation-proof
-
-**Notes**: New `internal/githooks` package + `internal/fsatomic` extracted from `internal/agents/shared.go` (atomic-write / marker-fenced splice, shared with the agent installer). Background + silenced sync; `command -v` guard so it no-ops cleanly off-PATH. The formal byte-invariance/pipe-safety harness (TEST-03) lands in Phase 7 alongside the interactive TUI, since that is the first phase where both hooks and the new TUI components coexist.
-
-### Phase 6: Rendering Seam & Pretty status/files
-
-**Goal**: A build-enforced rendering seam permanently isolates all Charm styling from the agent/MCP path, and `status`/`files` render colorized, sectioned output on a TTY while staying byte-identical plain when piped.
-**Depends on**: Phase 4
-**Requirements**: TUI-01, TUI-02, TUI-05
-**Success Criteria** (what must be TRUE):
-
-  1. An import-graph archtest fails the build if `charm.land/lipgloss`/`bubbletea`/`bubbles` are reachable from `internal/query` or `internal/mcp` — the ANSI-isolation guarantee, mirroring the existing graphstore/migrate archtests (TUI-01)
-  2. `status` and `files` render colorized, sectioned output on a TTY (lipgloss) and byte-identical plain output when piped or non-TTY (TUI-02)
-  3. `init`/`index`/`sync` show progress feedback (spinner/progress) on a TTY, and plain output otherwise (TUI-05)
-  4. The golden/MCP output path stays byte-identical — no ANSI ever reaches the agent surface (archtest green + golden-corpus unchanged)
-
-**Plans**: 3/3 plans executed
-Plans:
-**Wave 1**
-
-- [x] 06-01-PLAN.md — TUI-01: fail-closed ANSI-isolation archtest (six guarded packages, /v2 forbidden paths, self-defeat guard) + `internal/cli/present` seam skeleton (`ChoosePresentation`, lipgloss/v2 dep, x/term promoted) [Wave 1]
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 06-02-PLAN.md — TUI-02: `present.RenderStatus`/`RenderFiles` styled renderers + CLI isTTY wiring + byte-identity integration test [Wave 2]
-- [x] 06-03-PLAN.md — TUI-05: hand-rolled stderr progress writer (ticker, no bubbletea/bubbles) wired into init/index/sync [Wave 2]
-
-**Notes**: Archtest FIRST (fails the build immediately if styling leaks into query/mcp), THEN add the `internal/cli/present` package + the Charm v2 deps. Charm v2 uses the `charm.land/...` vanity import (not `github.com/charmbracelet/...`); TTY-gating via `golang.org/x/term.IsTerminal`. This establishes the rendering seam the Phase 7 interactive components build on.
-**UI hint**: yes
-
-### Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select
-
-**Goal**: The `daemon` command becomes an interactive picker (resolving the TS name collision) backed by explicit start/stop lifecycle and a PPID watchdog, `install`/`uninstall` present a multi-select, and every interactive surface auto-falls back to non-interactive behavior when piped — never hanging.
-**Depends on**: Phase 3 (watcher model), Phase 6 (rendering seam / TTY-gate)
-**Requirements**: DMON-01, DMON-02, DMON-03, DMON-04, TUI-03, TUI-04, TEST-03
-**Success Criteria** (what must be TRUE):
-
-  1. `codegraph daemon` (no args) opens an interactive bubbletea picker listing running daemons (current project first) to stop one / stop-all / cancel, resolving the TS name collision (DMON-01, TUI-04)
-  2. Explicit `daemon start` / `daemon stop` / `daemon stop --all` manage the shared background daemon lifecycle with no silent auto-spawn (`serve --mcp` already watches in-process per WATCH-01) (DMON-02)
-  3. A PPID watchdog shuts down any daemon / in-process watcher when its supervising host or agent process dies (POSIX ppid-reparent + Windows liveness poll), and a global `~/.codegraph/daemons` registry lets the picker list/stop daemons across projects, self-healing stale records (DMON-03/04)
-  4. `install`/`uninstall` present an interactive multi-select agent picker by default (bubbles), with `-y`/`--yes` for non-interactive auto/global (TUI-03)
-  5. Every interactive component auto-falls back to non-interactive behavior when stdin/stdout is not a TTY (never hangs), and git-hook install→edit→remove is byte-invariant — both tested against piped streams (TUI-04, TEST-03)
-
-**Plans**: 8/8 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 07-01-PLAN.md — TUI foundation: add bubbletea/v2 + bubbles/v2, new internal/cli/tui pkg + InteractiveAllowed dual-TTY gate, archtest stays green (TUI-04)
-- [x] 07-02-PLAN.md — Charm-free global daemon registry: Record + Register/Deregister/List with self-heal via lock.go isStale (DMON-04)
-
-**Wave 2** *(blocked on Wave 1)*
-
-- [x] 07-03-PLAN.md — PPID watchdog (build-tag POSIX reparent / Windows liveness) + x/sys direct + CI windows go vet gate (DMON-03)
-- [x] 07-04-PLAN.md — Daemon stop signal (POSIX SIGTERM / Windows hard-kill) + StopMatching/StopAll orchestration with per-target corroboration (DMON-02)
-- [x] 07-06-PLAN.md — install/uninstall bubbles multi-select picker + -y/--yes non-interactive flag (TUI-03/TUI-04)
-
-**Wave 3** *(blocked on Wave 2)*
-
-- [x] 07-05-PLAN.md — Wire registry Register/Deregister + watchdog start/join into daemon.Run (DMON-02/03/04)
-
-**Wave 4** *(blocked on Wave 3)*
-
-- [x] 07-07-PLAN.md — daemon command tree: bubbletea picker (bare/TTY), plain list (non-TTY), start, stop [--all] (DMON-01/DMON-02/TUI-04)
-
-**Wave 5** *(blocked on Wave 4)*
-
-- [x] 07-08-PLAN.md — TEST-03: githooks install→edit→remove byte-invariance + piped never-hang integration (TEST-03/TUI-04)
-
-**Notes**: bubbletea/bubbles interactive layer. Daemon = explicit start/stop + picker + PPID watchdog + registry — NO auto-spawn (the user chose this explicitly; the in-process watcher from Phase 3 already delivers live MCP sync). TTY-gate before `tea.NewProgram()`; test with piped streams so nothing ever hangs. TEST-03 lives here because it is the first phase where both hooks (Phase 5) and the new bubbletea components coexist, so its byte-invariance + piped-stream assertions can both be satisfied.
-**UI hint**: yes
-
-### Phase 8: Surface Reconciliation & Signed v1.0.0 Release
-
-**Goal**: Every TS flag name and default is present or a documented divergence, then the new Charm dependency closure is audited and the "drop-in parity" claim is validated — retiring v0.1's "not yet drop-in" caveat and closing its pending PERF-01.
-
-> **Goal amended 2026-07-28.** The original goal also promised "the first real signed `v1.0.0` is cut" and the closure of v0.1's pending DIST-02. Both moved to Phase 9 together with REL-02, which was rewritten from a project event into a release-automation property (see `.planning/REQUIREMENTS.md`). The amendment is recorded rather than applied silently because this phase is verified goal-backward — closing it against the original wording would have claimed a release that was never cut. PERF-01 remains here, closed by REL-03.
-
-**Depends on**: Phase 7
-**Requirements**: SURF-01, SURF-02, SURF-03, SURF-04, SURF-05, REL-01, REL-03, REL-04
-**Success Criteria** (what must be TRUE):
-
-  1. `impact` default depth is 2, `files` gains a directory filter alongside the retained language `--filter`, missing short-flag aliases (`-l`/`-k`/`-j`/`-d`, etc.) are added across commands, and `affected` gains `--stdin`/`--depth`/`--filter <glob>`/`--quiet` for git-hook/CI scripting (SURF-01/02/03/04)
-  2. A systematic per-command flag audit confirms every TS flag name + default is present or a documented divergence; `search` is retained as a documented Go-only extension and `migrate` is documented as an accepted divergence (SURF-05)
-  3. The new Charm/TUI dependency closure is audited — no new CGo, `govulncheck` clean, SBOM regenerated, reproducible double-build still passes (REL-01)
-  4. Head-to-head benchmarks vs TS 1.3.1 are re-run and published, closing v0.1's pending PERF-01 (REL-03)
-  5. The "drop-in parity" claim is validated against the real TS CLI (behavioral fixtures + flag audit green) and PROJECT.md's "not yet drop-in" caveat is retired (REL-04)
-
-**Plans**: 9/9 plans executed
-
-Plans:
-**Wave 1** *(surface reconciliation — parallel, disjoint files)*
-
-- [x] 08-01-PLAN.md — SURF-01: impact engine depth default 5→2 + impact -d/-j shorts + golden guard (TDD)
-- [x] 08-02-PLAN.md — SURF-02: files --dir prefix filter (engine + CLI) + files -j short (TDD)
-- [x] 08-03-PLAN.md — SURF-03: remaining short aliases (status/query/callers/callees/install/uninstall) + upgrade --force (verify-safe)
-
-**Wave 2** *(blocked on 08-01 — validate.go)*
-
-- [x] 08-04-PLAN.md — SURF-04 engine: Affected depth-bounded BFS + defaultAffectedDepth=5 + test-leaf pruning (TDD)
-
-**Wave 3** *(blocked on 08-04 — Affected signature)*
-
-- [x] 08-05-PLAN.md — SURF-04 CLI: affected --stdin/--depth/--filter/--quiet + Args relax + never-hang stdin (TDD)
-
-**Wave 4** *(blocked on all SURF — final flag surface)*
-
-- [x] 08-06-PLAN.md — SURF-05: docs/FLAG-PARITY.md matrix + cobra-tree-walk drift test
-
-**Wave 5** *(REL block — SURF green per D-01)*
-
-- [x] 08-07-PLAN.md — REL-01: Charm closure CGo guard test + govulncheck/SBOM/double-build re-run (TDD)
-- [x] 08-08-PLAN.md — REL-03: head-to-head bench re-run + docs/BENCHMARKS.md refresh (human-gated)
-
-**Wave 6** *(final — signed tag is the last action)*
-
-- [x] 08-09-PLAN.md — REL-04 + REL-02: drop-in gate + PROJECT.md caveat retirement + release runbook + maintainer-manual v1.0.0 tag
-
-**Notes**: Mechanical flag/default reconciliation first, then the Charm-dep supply-chain audit. REL-04 re-runs the Phase-1 TEST-01 behavioral harness + the SURF-05 flag audit green as the drop-in gate — it consumes the harness, it doesn't rebuild it. D-01 locks SURF-green-before-REL; release automation — and REL-02 with it — now belongs to Phase 9.
-
-### Phase 9: release-please + GoReleaser
-
-**Goal**: Replace the hand-rolled, maintainer-manual tagging step with automated release management — release-please owns version bumps, `CHANGELOG.md`, and tag creation from Conventional Commits; GoReleaser owns building and uploading artifacts. Modeled on `seanb4t/engram`, but explicitly not a copy-paste (see the locked-contract constraint below).
-**Depends on**: Phase 8
-**Requirements**: REL-02
-**Success Criteria** (what must be TRUE):
-
-  1. `release-please-config.json` (`release-type: go`) + `.release-please-manifest.json` exist; merging a release PR cuts the tag without a human running `git tag`
-  2. The cosign OIDC cert SAN still matches `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` — i.e. `codegraph upgrade` keeps working for every already-shipped binary
-  3. Artifacts are uploaded into the release-please-created GitHub Release idempotently via `release.yml`'s publish step (`gh release upload --clobber`), with `goreleaser build --single-target` retained and no migration to `goreleaser release`
-  4. Per-binary cosign signing + SLSA provenance + the native 2-OS CGo matrix are all preserved (none of which engram's config covers)
-
-> **Success criterion 3 amended 2026-07-28.** The original wording ("GoReleaser
-> uploads artifacts into the release-please-created release idempotently,
-> `replace_existing_artifacts: true`, no `changelog:` block") was modeled on
-> `seanb4t/engram`'s `goreleaser release` pipeline and does not transfer to
-> this repo: codegraph-go has never run `goreleaser release`, and
-> `.goreleaser.yaml`'s `archives:`/`checksum:` blocks are already documented
-> in-file as dead configuration. GoReleaser OSS cannot express this repo's
-> per-binary cosign signing (the upgrade verifier hashes the binary itself,
-> not a checksums file), its native 2-OS CGo matrix, or its SLSA
-> generic-generator handoff — reproducing them would require GoReleaser
-> Pro's `release --split`/`--merge`. The criterion's idempotency *intent* is
-> met instead by `release.yml`'s D-04 create-if-absent-else-upload-clobber
-> publish step. Recorded as an accepted divergence (D-05,
-> `09-CONTEXT.md`) rather than applied silently, because this phase is
-> verified goal-backward and closing it against the original wording would
-> have claimed a GoReleaser upload path that does not exist. See
-> `docs/RELEASE-PROCEDURES.md` §10(a) for the full account.
-
-> **Version target removed 2026-07-29 (maintainer directive).** The phase-list
-> entry for this phase previously read "produces the actual signed `v1.0.0`", and
-> `09-CONTEXT.md` D-06 locked a one-shot `Release-As: 1.0.0` footer to force it.
-> The maintainer rejected forcing a version: *"We are **not** going to jump to
-> 1.0 … We'll follow things as release-please and conventional commits
-> requires."* This restores consistency with the 2026-07-28 recategorization that
-> rewrote **REL-02 from an event into a property** — REL-02 names no version, and
-> the version target had crept back in during this phase's discuss step, not from
-> the requirement. D-06 is superseded by **D-06R**: the manifest stays seeded at
-> the truthful `0.1.0` baseline and release-please computes every version from
-> Conventional Commits, with nothing forced. The first automated cut is
-> **`0.2.0`**, confirmed empirically by `release-please release-pr --dry-run`
-> against the real branch history (`title: chore(...): release 0.2.0`) rather
-> than asserted. No success criterion changes — none of the four named a version.
-> The milestone label "v1.0 — Drop-in Parity & Human UX" is a planning milestone
-> name and is unaffected; it was never a git tag.
-
-**Plans**: 6/8 plans executed
-
-Plans:
-
-**Wave 1** *(tracer — the mechanical spine, proven end to end before anything else)*
-
-- [x] 09-01-PLAN.md — TRACER: release-please config/manifest/App-token workflow + 6-target pre-tag gate + non-vacuous LOCKED-SAN drift guards
-
-**Wave 2** *(expansion — disjoint files, parallel)*
-
-- [x] 09-02-PLAN.md — D-04: create-if-absent-else-upload-clobber in release.yml + 5-case stubbed-`gh` test
-- [x] 09-03-PLAN.md — D-08: PR-title conventional-commit gate (pr-title.yml) + actionlint job in ci.yml
-
-**Wave 3**
-
-- [x] 09-04-PLAN.md — docs/RELEASE-PROCEDURES.md §3/§4/§7 rewrite + §9 App prerequisite + §10 recorded divergences + ROADMAP criterion-3 amendment
-
-**Wave 4** *(blocking human prerequisite)*
-
-- [x] 09-05-PLAN.md — checkpoint: create + install the GitHub App, store APP_ID / APP_PRIVATE_KEY
-
-**Wave 5**
-
-- [x] 09-06-PLAN.md — D-09 merge-shape gate + fast-forward `main` + observe release-please's first live release PR — **COMPLETE**: fast-forward succeeded (main is now the full v1.0 history); release-please's App-token step initially failed with a 401 JWT-decode error (root cause: APP_PRIVATE_KEY held the wrong GitHub App's key), resolved by the maintainer — attempt 3 succeeded and opened release PR #2 (`chore(main): release 0.2.0`, open/unmerged); see `09-06-SUMMARY.md`
-
-**Wave 6**
-
-- [~] 09-07-PLAN.md — disposable live proof: real prerelease cut, cosign/SLSA/production-identity verification, full teardown — **SKIPPED 2026-07-31 by maintainer decision**: its Task-1 gate was approved, then the premise was re-examined and the plan judged not to earn its cost. 3 of its 4 target facts were already established elsewhere — the cosign SAN one *structurally* (`releaseWorkflowRefPattern` has no actor component, and v0.1.0 already verified through it), the publish-branch one by 09-02's extracted-shell test, the App-scope one by PR #2 existing. The 4th (an App-authored tag push fires `release.yml`) stays unproven, but fails harmlessly: no workflow run means nothing signed and nothing published. Running it would have permanently double-signed the `v0.2.0` tag name in the public Sigstore log and reused a tag name. Controls added instead: ruleset `protect-main` (6 required checks, squash-only, linear history) gating the merge that creates the tag, and both Task-1 gates hardened to `blocking-human` (`ba5a548`). Consequence accepted knowingly: **09-08 is now the pipeline's first live run.** See `09-07-SUMMARY.md`
-
-**Wave 7**
-
-- [x] 09-08-PLAN.md — publish gate + the first release cut end-to-end by release-please + a genuine v0.1.0 binary upgrading to it — **COMPLETE 2026-08-01**: `v0.2.0` published, signed, SBOM'd and SLSA-attested, tag and Release created by `fzy-release-please[bot]` with no human running `git tag`. All 11 `release.yml` jobs green (run `30675077940`, `event=push ref=v0.2.0`); the publish step provably took the UPLOAD branch (D-04) since the Release predated the run by 45s. **REL-02 satisfied on both halves** — a genuinely shipped `v0.1.0` binary (built 2026-07-14, sha `773223fd…`) ran its own `codegraph upgrade` and swapped itself for `v0.2.0`, and the installed binary is byte-identical (`a64c1549…`) to the SLSA-attested subject, the cosign-verified blob, and the artifact `TestVerifyReleaseE2E` passed against. That test RAN rather than skipped — its first execution against a real artifact ever. The upgrade initially 404'd because `internal/upgrade` sends no `Authorization` header and the repo was private: REL-02's second half was *unprovable, not unmet*, so the phase was held open rather than closed on 4-of-5 green; it passed first try once the repo went public. Also confirms empirically the structural argument used to skip 09-07 — a binary hard-coding the pre-rewiring SAN constants verified an App-triggered signature. See `09-08-SUMMARY.md`
-
-**Notes**: The blocking constraint is a LOCKED contract, not a preference. codegraph-go's `release.yml` triggers only on tag push `v[0-9]*` because `verify.go` anchors the cosign SAN to `...release.yml@refs/tags/v[0-9]*`. engram triggers on `push: branches: [main]` and does release-please + ship in one job — copying that would sign with `@refs/heads/main` and make `codegraph upgrade` reject every binary for every existing user, silently. Compounding it: tags pushed with the default `GITHUB_TOKEN` do not trigger other workflows, which is exactly why engram collapses into one run. Preferred resolution: keep the tag-triggered `release.yml` and its SAN untouched, and have release-please create the tag via a **GitHub App token** (App tokens do trigger downstream workflows). Alternative — collapse into one workflow and change `releaseWorkflowRefPattern` in lockstep — breaks `upgrade` for anyone on an older binary and needs a migration story first. Also open: whether GoReleaser can express per-binary cosign + the SLSA handoff at all, or whether those stay hand-written jobs alongside it.
-
-### Phase 10: Local Build Tooling & CONTRIBUTING
-
-**Goal**: Contributor-facing local dev tooling — the repo has no `Makefile`/`Taskfile`/`scripts/`. Add a `Taskfile.yml` (go-task) wrapping the common local workflows plus a `CONTRIBUTING.md` documenting the CGo toolchain prerequisites, so a new contributor can build/test/lint from a clean checkout without reverse-engineering the CI workflows.
-**Depends on**: Phase 9
-**Requirements**: DEV-01
-**Success Criteria** (what must be TRUE):
-
-  1. `Taskfile.yml` wraps: build with release ldflags, test with daemon-flake isolation, `-race`, `go vet`, `govulncheck`, `actionlint`, `goreleaser check`, the bench runner modes, and the cross-`GOOS` `go list -mod=readonly` pre-tag check
-  2. `CONTRIBUTING.md` documents the CGo toolchain prerequisites (zig for cross-builds, mingw-w64 for windows vet)
-  3. A clean checkout can build, test, and lint via task targets alone
-
-**Plans**: 3/7 plans executed
-
-Plans:
-**Wave 1**
-
-- [x] 10-01-PLAN.md — Tracer: tool modfiles, install-task composite action, and one CI job running a task target end-to-end on Namespace
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 10-02-PLAN.md — ci.yml's test job onto task targets, contributor wrappers, and new `go vet ./...` coverage
-- [x] 10-03-PLAN.md — release.yml runner migration, with the SLSA and native-darwin exceptions decided and test-enforced
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [ ] 10-04-PLAN.md — Runner identity in the perf baseline, bench.yml onto Namespace, and a reviewed Namespace baseline committed
-- [ ] 10-05-PLAN.md — `check:cross` replaces release-please.yml's inline pre-tag sweep, guarded against .goreleaser.yaml drift
-
-**Wave 4** *(blocked on Wave 3 completion)*
-
-- [ ] 10-06-PLAN.md — Runner-aware regression refusal; perf and reproducibility gates onto Namespace via task targets
-
-**Wave 5** *(blocked on Wave 4 completion)*
-
-- [ ] 10-07-PLAN.md — CONTRIBUTING pointer, the single-definition invariant guard, and a clean-checkout proof
-
-**Notes**: Sequenced after Phase 9 deliberately — both touch build/release invocation, so the task wrappers (`goreleaser check`, cross-`GOOS` `go list`, `govulncheck`, `actionlint`) should be written once against the final release setup rather than twice. Fit caveat: this phase sits outside the stated v1.0 milestone goal ("Drop-in Parity & Human UX"); consider moving it to a v1.1 milestone if v1.0 should ship without it.
+<details>
+<summary>✅ v1.0 — Drop-in Parity & Human UX (Phases 1–10) — SHIPPED 2026-08-03</summary>
+
+Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-ROADMAP.md); phase artifacts in [`milestones/v1.0-phases/`](milestones/v1.0-phases/); requirements in [`milestones/v1.0-REQUIREMENTS.md`](milestones/v1.0-REQUIREMENTS.md).
+
+- [x] Phase 1: Behavioral Parity — explore & node (17/17 plans) — completed 2026-07-15
+- [x] Phase 2: status Content & Git/Worktree Awareness (7/7 plans) — completed 2026-07-16
+- [x] Phase 3: Watcher-on-MCP Default (5/5 plans) — completed 2026-07-16
+- [x] Phase 4: Output Hygiene (3/3 plans) — completed 2026-07-16
+- [x] Phase 5: Git Sync Hooks (5/5 plans) — completed 2026-07-17
+- [x] Phase 6: Rendering Seam & Pretty status/files (3/3 plans) — completed 2026-07-17
+- [x] Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select (8/8 plans) — completed 2026-07-26
+- [x] Phase 8: Surface Reconciliation & Signed v1.0.0 Release (9/9 plans) — completed 2026-07-28
+- [x] Phase 9: release-please + GoReleaser (8/8 plans) — completed 2026-08-01 (promoted from backlog 999.3 on 2026-07-27)
+- [x] Phase 10: Local Build Tooling & CONTRIBUTING (7/7 plans) — completed 2026-08-03 (promoted from backlog 999.1 on 2026-07-27)
+
+**Delivered:** drop-in behavioral parity with TS CodeGraph v1.3.x, plus the human-facing surface v0.1 lacked. All 10 phases independently verified (`verification_status: passed`), 48/48 requirements satisfied, 72 plans, 594 commits over 20 days (755 files, +98,761/−1,942 lines). The "not yet drop-in" caveat is retired. Release cutting is fully automated — `v0.2.0` was tagged, changelogged, built, signed, SBOM'd and SLSA-attested with no human running `git tag`, and a genuinely shipped prior binary self-upgraded to it byte-identically to the attested subject.
+
+**Carried forward:** four backlog items (999.2–999.5, below) and the residual darwin release-path check — `release.yml`'s goreleaser/cosign/SLSA steps first execute on the macOS runner class during a real tag push, though a permanent canary already machine-proves that runner's availability and native toolchain.
+
+</details>
 
 ## Progress
 
-**Execution Order:** Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
-
 | Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 1. Behavioral Parity — explore & node | v1.0 | 18/17 | Complete    | 2026-07-15 |
-| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete    | 2026-07-16 |
-| 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete    | 2026-07-16 |
-| 4. Output Hygiene | v1.0 | 3/3 | Complete    | 2026-07-16 |
-| 5. Git Sync Hooks | v1.0 | 5/5 | Complete    | 2026-07-17 |
-| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete    | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
-| 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 8/8 | Complete    | 2026-08-01 |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 3/7 | In Progress|  |
+| ----- | --------- | -------------- | ------ | --------- |
+| 1. Behavioral Parity — explore & node | v1.0 | 17/17 | Complete | 2026-07-15 |
+| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete | 2026-07-16 |
+| 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete | 2026-07-16 |
+| 4. Output Hygiene | v1.0 | 3/3 | Complete | 2026-07-16 |
+| 5. Git Sync Hooks | v1.0 | 5/5 | Complete | 2026-07-17 |
+| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete | 2026-07-17 |
+| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete | 2026-07-26 |
+| 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete | 2026-07-28 |
+| 9. release-please + GoReleaser | v1.0 | 8/8 | Complete | 2026-08-01 |
+| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 7/7 | Complete | 2026-08-03 |
+| 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
+| 999.3. Vulnerability scanning for tool modfiles | Backlog | 0/0 | Not started | - |
+| 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
+| 999.5. macOS Gatekeeper signing/notarization | Backlog | 0/0 | Not started | - |
 
 ## Backlog
 
 ### Phase 999.2: tmux e2e/UAT test harness and suite (BACKLOG)
 
 **Goal:** [Captured for future planning] A real-PTY end-to-end test harness that drives the interactive TUI through **tmux** (send-keys + capture-pane) so the terminal actually replies to escape queries and actually scrolls — the exact conditions the current piped/non-TTY suite can never reproduce. Motivation: v1.0 Phase 7's human UAT caught two user-visible TUI bugs that BOTH the full piped automated suite AND a deep multi-agent code review missed, because they only manifest on a live TTY — G-07-1 (bare `daemon` on a TTY with an empty registry leaked the terminal's DECRQM capability-probe responses `^[[?2026;2$y^[[?2027;0$y`) and G-07-2 (both bubbletea pickers rendered inline without alt-screen → heavy flicker + blank list). bubbletea Models are unit-testable via synthetic `tea.Msg` (state transitions) but that path never renders. Scope a suite that spawns the release binary inside a tmux pane and asserts on `capture-pane` output: (a) bare `daemon` empty-registry prints ONLY `no running daemons` with no leaked escape sequences; (b) the daemon picker enters the alternate screen, renders `Running daemons` + a seeded record, and restores the main buffer on quit (no residual escapes in scrollback); (c) the install/uninstall checkbox picker renders `[x]`/`[ ]` glyphs, `space` toggles, `q`/`esc` cancels with zero config writes; (d) no flicker proxy (stable capture across N frames). Reuse the `tmux` skill's send-keys/capture-pane idioms; gate the suite behind a build tag / CI job that has tmux available (skip cleanly where it isn't). This is the missing rung between the piped never-hang/byte-identity integration tests (necessary, TTY-blind) and manual human UAT (thorough, unautomated).
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.3: Vulnerability scanning for the tool modfiles (BACKLOG)
+
+**Goal:** [Captured for future planning] Close the supply-chain gap surfaced by the Phase 10 security audit (recorded in `10-SECURITY.md` → "Advisory — Unregistered Surface"; also code-review finding WR-07). Phase 10 introduced `go.tool.mod` and `go.tool-lint.mod` — roughly **400 modules** including goreleaser plus the AWS/GCP/Azure SDKs, k8s client libraries, cosign and sigstore, plus actionlint's dependency tree. These are built from source and **executed as credentialed CI tooling**: `goreleaser` signs and publishes releases, and `task` drives every CI job body. But `ci.yml:156-171`'s blocking `govulncheck` job scans the **root `go.mod` only**. `Taskfile.yml`'s `vuln` target is the only thing that ever points govulncheck at `go.tool.mod`, is documented as local-only (`go.tool.mod:10-15`), and is invoked by **no** CI job; `go.tool-lint.mod` has no vulnerability-scanning path at all. Threat T-10-01-01 covers *how* these modules are fetched (checksummed module proxy, no `curl | sh`), but nothing covers a **known-vulnerable dependency being executed** inside the credentialed release pipeline. Scope: (a) mint a registered threat for this trust boundary rather than leaving it advisory; (b) add a CI scanning path that covers both tool modfiles — note `govulncheck` is call-graph-aware, so scanning a modfile whose only entry points are third-party `main` packages needs its invocation shape thought through (`-mode=binary` over the built tool, or per-tool package targets, rather than a naive `./...`); (c) decide blocking vs advisory — the root-`go.mod` job is blocking, and a tool-modfile job that is merely advisory should say so out loud rather than look like a gate. Guard against this repo's recurring failure mode: whatever lands must be demonstrated RED against a known-vulnerable pin before it is trusted.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.4: CheckRegression current-metrics positivity guard (BACKLOG)
+
+**Goal:** [Captured for future planning] Close the degenerate-input bypass in `internal/bench.CheckRegression`, surfaced and **reproduced** during the Phase 10 security audit (recorded in `10-SECURITY.md` → "Advisory — Unregistered Surface"; also code-review finding WR-06). Calling `CheckRegression(baseline, current, ceiling=1)` with `current.PeakRSSBytes = 0` and an otherwise-matching frame returns `nil` — **both** the relative RSS regression check and the absolute INDX-06 memory ceiling silently pass. The function already validates that the *baseline* metrics are positive; it never validates the *current* ones, so a zero or negative current reading reads as "no regression" instead of "unusable measurement". This is unreachable through today's only caller because `internal/bench.PeakRSSBytes` returns an error rather than a zero on failure, but `CheckRegression` is exported, its doc comment claims it "never misleads", and the phase-10 audit already showed how easily a frame-descriptor blind spot becomes a live gate failure. Scope: add a positivity/sanity check on `current` mirroring the existing baseline check, refusing rather than passing on a non-positive throughput or RSS reading, with an error naming which field was degenerate. This belongs to the repo's documented class of **gates that cannot fire** (the retracted 10.6% perf claim, the inverted `rg -qv` gate, the 51.5%-stale baseline) — so the fix must be demonstrated RED with a degenerate-input test, not merely added.
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (promote with /gsd-review-backlog when ready)
+
+### Phase 999.5: macOS Gatekeeper signing and notarization for darwin release binaries (BACKLOG)
+
+**Goal:** [Captured for future planning] Decide whether to Apple-code-sign and notarize the darwin release binaries, and implement it if so. Surfaced during `/gsd-verify-work 10` while verifying the release pipeline's darwin legs. **The cosign signing this repo already does is a different mechanism entirely and does nothing for Gatekeeper:** cosign keyless (Sigstore) produces a *detached* `.sigstore.json` sidecar verified by `internal/upgrade` in-process, whereas Gatekeeper requires an *embedded* `LC_CODE_SIGNATURE` in the Mach-O, issued under an Apple-anchored identity. **Measured**, not assumed, on binaries built from `.goreleaser.yaml` at HEAD: `codesign -dvv` reports darwin/arm64 as `adhoc, linker-signed` with `TeamIdentifier=not set` (the Go linker emits this automatically because the Apple Silicon kernel refuses to exec a wholly unsigned binary — it satisfies the kernel, not Gatekeeper), darwin/amd64 as `code object is not signed at all`, and `spctl -a -vv -t exec` returns **`rejected`** for both. **Impact is genuinely scoped and should be confirmed before spending money:** Gatekeeper only engages on files carrying the `com.apple.quarantine` xattr, which browsers set and programmatic downloaders do not — a binary fetched by the real `codegraph upgrade` path was verified to carry only `com.apple.provenance`, no quarantine, so `codegraph upgrade` and `curl`-based installs are unaffected today. The affected population is users who download a release asset from the **GitHub Releases page in a browser**, who hit "Apple could not verify this app is free of malware" and must right-click→Open or `xattr -d com.apple.quarantine`. Scope if pursued: (a) paid Apple Developer Program membership plus a *Developer ID Application* certificate, and a decision on where that cert and the App Store Connect API key live as CI secrets; (b) `codesign` with hardened runtime — GoReleaser v2 has a native `notarize:` block for darwin that covers the cert + notary submission flow; (c) resolve the stapling wrinkle: a bare Mach-O **can be notarized but cannot be stapled** (stapling requires a container — `.zip`/`.dmg`/`.pkg`), so bare binaries fall back to an online Gatekeeper check that fails on an offline machine — which likely means shipping a `.zip` or `.dmg` for the browser-download path while keeping the raw per-platform binary the `codegraph upgrade` contract depends on (D-02/Finding 1: assets are raw binaries, never archives, because `internal/upgrade` downloads and swaps the binary directly). Note (c) is the real design decision here, not the signing itself. Per this repo's recurring lesson, whatever lands must be demonstrated against `spctl` actually returning `accepted` on a quarantined download, not merely wired up.
 **Requirements:** TBD
 **Plans:** 0 plans
 

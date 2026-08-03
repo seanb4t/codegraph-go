@@ -31,10 +31,12 @@ target is green.
 > **Now also automated.** This exact sweep runs automatically as the
 > `pretag-gate` job in `.github/workflows/release-please.yml` on every push
 > to `main`, gating the `release-please` job behind it via `needs:`. The
-> manual command block above is retained for pre-merge use on an
-> integration branch (§3) before you ever push to `main` — but the
-> enforcement point is now CI, not this document. No human needs to
-> remember to run this by hand anymore.
+> job invokes it as `task check:cross` (D-15) — the sweep's one definition
+> lives in `Taskfile.yml`, not inlined in the workflow. Run `task
+> check:cross` locally for the same check the manual command block above
+> performs, before you ever push to `main` — but the enforcement point is
+> now CI, not this document. No human needs to remember to run this by hand
+> anymore.
 
 ## 2. Tag conventions
 

@@ -56,6 +56,52 @@ func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
 		)
 	}
 
+	// Runner identity is a category error, not a tolerance question, for
+	// the same reason GOOS/GOARCH is: namespace-profile-linux-amd64-4x8
+	// IS linux/amd64, so the platform guard above is structurally blind to
+	// a runner-class change that holds GOOS/GOARCH constant while changing
+	// everything about the actual measurement environment (a stable,
+	// reproducible, entirely fictitious ~10.6% "regression" survived three
+	// rounds of triage before this was understood — see
+	// tools/bench/BASELINE.md). An empty Runner means "never recorded",
+	// not a wildcard: it is refused against a non-empty value on either
+	// side, exactly like the platform guard's unattributed-vs-attributed
+	// case. Both empty still matches, so callers that construct Metrics
+	// without runner attribution (unit tests, pre-attribution baselines)
+	// are unaffected.
+	if baseline.Runner != current.Runner {
+		return fmt.Errorf(
+			"bench: runner mismatch: baseline was measured on runner %s but this run is %s; "+
+				"a runner-class change can hold GOOS/GOARCH constant while changing the actual "+
+				"measurement environment, so this comparison would be meaningless. An empty "+
+				"runner value means it predates runner recording, which is not a wildcard match "+
+				"against a recorded one — re-bless the baseline on this runner class "+
+				"(bench.yml's rebless job) instead of comparing across them",
+			runnerString(baseline.Runner), runnerString(current.Runner),
+		)
+	}
+
+	// ScratchFS gets the identical treatment, for the identical reason:
+	// the regression corpus is IOPS/metadata-bound at 120k files, and
+	// 10-04-PLAN measured that switching scratch filesystem class alone
+	// (tmpfs vs disk) moves session-to-session variance by more than the
+	// runner class does. A scratch_fs mismatch is a measurement-frame
+	// change of the same kind as GOOS/GOARCH or Runner, not a tolerance
+	// question, and an empty value means "never recorded" rather than a
+	// wildcard, mirroring Runner's own empty-side handling exactly.
+	if baseline.ScratchFS != current.ScratchFS {
+		return fmt.Errorf(
+			"bench: scratch filesystem mismatch: baseline was measured on scratch_fs %s but "+
+				"this run is %s; the scratch filesystem class is as load-bearing to a throughput "+
+				"comparison as the runner class or GOOS/GOARCH are (tools/bench/BASELINE.md), so "+
+				"this comparison would be meaningless. An empty scratch_fs value means it "+
+				"predates scratch_fs recording, which is not a wildcard match against a recorded "+
+				"one — re-bless the baseline on this scratch_fs class instead of comparing across "+
+				"them",
+			scratchFSString(baseline.ScratchFS), scratchFSString(current.ScratchFS),
+		)
+	}
+
 	if baseline.FilesPerSec <= 0 {
 		return fmt.Errorf("bench: invalid baseline: FilesPerSec must be positive, got %.4f", baseline.FilesPerSec)
 	}
@@ -103,4 +149,23 @@ func platformString(m Metrics) string {
 		goarch = "unknown"
 	}
 	return goos + "/" + goarch
+}
+
+// runnerString renders a Runner value for error messages, degrading an
+// empty value to "(not recorded)" rather than an empty pair of quotes.
+// Never used for comparison — the mismatch check compares the raw field
+// directly, so an empty Runner is never conflated with a populated one.
+func runnerString(runner string) string {
+	if runner == "" {
+		return "(not recorded)"
+	}
+	return runner
+}
+
+// scratchFSString is runnerString's twin for ScratchFS, same rationale.
+func scratchFSString(scratchFS string) string {
+	if scratchFS == "" {
+		return "(not recorded)"
+	}
+	return scratchFS
 }

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/bench"
@@ -116,7 +118,10 @@ func TestMedianMetrics_TakesEachMetricsOwnMedian(t *testing.T) {
 		{FilesPerSec: 10, BytesPerSec: 20, QueryLatencyMedianMS: 50, PeakRSSBytes: 100, ColdStartMS: 2},
 		{FilesPerSec: 20, BytesPerSec: 10, QueryLatencyMedianMS: 40, PeakRSSBytes: 500, ColdStartMS: 1},
 	}
-	got := medianMetrics(trials)
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 
 	if got.FilesPerSec != 20 {
 		t.Errorf("FilesPerSec = %v, want 20", got.FilesPerSec)
@@ -145,7 +150,10 @@ func TestMedianMetrics_RejectsASingleOutlierTrial(t *testing.T) {
 		{FilesPerSec: 11450},
 		{FilesPerSec: 6000}, // pathological tail session
 	}
-	got := medianMetrics(trials)
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 	if got.FilesPerSec != 11400 {
 		t.Fatalf("FilesPerSec = %v, want 11400 (the outlier must not move the result)", got.FilesPerSec)
 	}
@@ -157,7 +165,10 @@ func TestMedianMetrics_RecordsTrialCountAndCarriesIdentityFields(t *testing.T) {
 		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 1},
 		{Subject: "go", Repo: "synthetic-seed42-count120000", GOOS: "linux", GOARCH: "amd64", FilesPerSec: 2},
 	}
-	got := medianMetrics(trials)
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 
 	if got.MedianOfTrials != 3 {
 		t.Errorf("MedianOfTrials = %d, want 3", got.MedianOfTrials)
@@ -175,19 +186,145 @@ func TestMedianMetrics_RecordsTrialCountAndCarriesIdentityFields(t *testing.T) {
 }
 
 func TestMedianMetrics_Empty(t *testing.T) {
-	got := medianMetrics(nil)
+	got, err := medianMetrics(nil)
+	if err != nil {
+		t.Fatalf("medianMetrics(nil): %v", err)
+	}
 	if got != (bench.Metrics{}) {
 		t.Fatalf("medianMetrics(nil) = %+v, want zero Metrics", got)
 	}
 }
 
 func TestMedianMetrics_SingleTrialIsRecordedAsSuch(t *testing.T) {
-	got := medianMetrics([]bench.Metrics{{FilesPerSec: 42}})
+	got, err := medianMetrics([]bench.Metrics{{FilesPerSec: 42}})
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
 	if got.FilesPerSec != 42 {
 		t.Errorf("FilesPerSec = %v, want 42", got.FilesPerSec)
 	}
 	if got.MedianOfTrials != 1 {
 		t.Errorf("MedianOfTrials = %d, want 1 — a single-sample number must say so", got.MedianOfTrials)
+	}
+}
+
+// --- Runner identity (10-04-PLAN, D-09) ---
+//
+// baseline.json records only goos/goarch, and CheckRegression compares
+// exactly those two fields — but namespace-profile-linux-amd64-4x8 IS
+// linux/amd64, so moving bench.yml to a new runner class is structurally
+// invisible to the existing platform guard. Runner closes that blind spot
+// (comparison itself lands in a later plan, deliberately).
+
+func TestParseFlags_RunnerFromEnv(t *testing.T) {
+	t.Setenv("CODEGRAPH_BENCH_RUNNER", "namespace-profile-linux-amd64-4x8")
+	cfg, err := parseFlags([]string{"-mode", "regression"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.runner != "namespace-profile-linux-amd64-4x8" {
+		t.Errorf("runner = %q, want env value namespace-profile-linux-amd64-4x8", cfg.runner)
+	}
+}
+
+func TestParseFlags_RunnerFlagOverridesEnv(t *testing.T) {
+	t.Setenv("CODEGRAPH_BENCH_RUNNER", "env-value")
+	cfg, err := parseFlags([]string{"-mode", "regression", "-runner", "flag-value"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.runner != "flag-value" {
+		t.Errorf("runner = %q, want flag-value (explicit flag must win over env)", cfg.runner)
+	}
+}
+
+func TestParseFlags_RunnerEmptyWhenNeitherSet(t *testing.T) {
+	t.Setenv("CODEGRAPH_BENCH_RUNNER", "")
+	cfg, err := parseFlags([]string{"-mode", "regression"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.runner != "" {
+		t.Errorf("runner = %q, want empty — measurement must not require this field", cfg.runner)
+	}
+}
+
+func TestMedianMetrics_CarriesRunnerWhenIdentical(t *testing.T) {
+	trials := []bench.Metrics{
+		{Runner: "namespace-profile-linux-amd64-4x8", FilesPerSec: 1},
+		{Runner: "namespace-profile-linux-amd64-4x8", FilesPerSec: 2},
+		{Runner: "namespace-profile-linux-amd64-4x8", FilesPerSec: 3},
+	}
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
+	if got.Runner != "namespace-profile-linux-amd64-4x8" {
+		t.Errorf("Runner = %q, want namespace-profile-linux-amd64-4x8", got.Runner)
+	}
+}
+
+func TestMedianMetrics_RejectsMixedRunner(t *testing.T) {
+	// A mixed-runner aggregate is a category error of exactly the kind
+	// internal/bench.CheckRegression already refuses for GOOS/GOARCH —
+	// silently picking the first value would let a mid-migration run
+	// (some trials on ubuntu-latest, some on Namespace) masquerade as a
+	// single, coherent measurement.
+	trials := []bench.Metrics{
+		{Runner: "namespace-profile-linux-amd64-4x8"},
+		{Runner: "ubuntu-latest"},
+	}
+	_, err := medianMetrics(trials)
+	if err == nil {
+		t.Fatal("medianMetrics with mixed runner values across trials should error, got nil")
+	}
+	if !strings.Contains(err.Error(), "namespace-profile-linux-amd64-4x8") || !strings.Contains(err.Error(), "ubuntu-latest") {
+		t.Errorf("error %q should name both runner values", err)
+	}
+}
+
+func TestMetricsRunner_MarshalsToRunnerKey(t *testing.T) {
+	m := bench.Metrics{Runner: "namespace-profile-linux-amd64-4x8"}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"runner":"namespace-profile-linux-amd64-4x8"`) {
+		t.Errorf("marshalled JSON missing runner key: %s", data)
+	}
+}
+
+func TestMetricsRunner_RoundTrips(t *testing.T) {
+	m := bench.Metrics{Runner: "namespace-profile-linux-amd64-4x8"}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got bench.Metrics
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Runner != m.Runner {
+		t.Errorf("round-tripped Runner = %q, want %q", got.Runner, m.Runner)
+	}
+}
+
+func TestReadBaseline_LegacyFileWithoutRunnerKeyYieldsEmptyString(t *testing.T) {
+	// The currently committed tools/bench/baseline.json has no "runner"
+	// key. Unmarshalling it must succeed and yield Runner == "" — an
+	// empty value means "recorded before this field existed", not an
+	// error.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline.json")
+	legacy := `{"subject":"go","repo":"synthetic-seed42-count120000","goos":"linux","goarch":"amd64","median_of_trials":7,"files_per_sec":11279.591291175333,"bytes_per_sec":1708549.4453683186,"query_latency_median_ms":280.943,"peak_rss_bytes":907202560,"cold_start_ms":13.285}`
+	mustWriteFile(t, path, legacy)
+
+	got, err := readBaseline(path)
+	if err != nil {
+		t.Fatalf("readBaseline(legacy, no runner key): %v", err)
+	}
+	if got.Runner != "" {
+		t.Errorf("Runner = %q, want empty string for a legacy baseline with no runner key", got.Runner)
 	}
 }
 
@@ -377,6 +514,230 @@ func TestResolveTSBinary_EmptyWhenNotFound(t *testing.T) {
 	got := resolveTSBinary()
 	if got != "" && got != macOSHomebrewTSBinary {
 		t.Errorf("resolveTSBinary() = %q, want empty or the Homebrew fallback", got)
+	}
+}
+
+// --- Regression scratch-dir filesystem class (10-04-PLAN) ---
+//
+// PERF-02's synthetic corpus is ~18MB of raw content but ~770MB of
+// actual on-disk footprint once small-file block overhead is accounted
+// for (120k files at ~4KB/block minimum each), which makes this
+// workload IOPS/metadata-bound rather than bandwidth-bound — exactly
+// where overlayfs's layer-stack lookups and copy-up-on-write cost more
+// AND vary more under co-tenancy than tmpfs or a real block device
+// (measured: 4.36% Namespace session-to-session throughput variance
+// against a rock-stable 0.56% peak-RSS variance). Preferring tmpfs for
+// the regression scratch dir removes storage from the measurement path
+// entirely; recording which filesystem class was actually used closes
+// the same kind of blind spot Runner closes for runner class.
+
+func TestResolveRegressionScratchDir_PrefersTmpfsWhenAvailable(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveRegressionScratchDir(fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveRegressionScratchDir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q", fsClass, scratchFSTmpfs)
+	}
+	if !strings.HasPrefix(dir, fakeTmpfsRoot) {
+		t.Errorf("dir %q should be created under the fake tmpfs root %q", dir, fakeTmpfsRoot)
+	}
+	if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+		t.Errorf("resolveRegressionScratchDir did not actually create a directory at %q: %v", dir, statErr)
+	}
+}
+
+func TestResolveRegressionScratchDir_FallsBackToDiskWhenTmpfsRootMissing(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	dir, fsClass, err := resolveRegressionScratchDir(missingRoot)
+	if err != nil {
+		t.Fatalf("resolveRegressionScratchDir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSDisk {
+		t.Errorf("fsClass = %q, want %q (missing tmpfs root must fall back, not error)", fsClass, scratchFSDisk)
+	}
+	if info, statErr := os.Stat(dir); statErr != nil || !info.IsDir() {
+		t.Errorf("resolveRegressionScratchDir did not actually create a directory at %q: %v", dir, statErr)
+	}
+}
+
+func TestResolveRegressionScratchDir_FallsBackToDiskWhenTmpfsRootIsAFile(t *testing.T) {
+	// A path that exists but is a FILE, not a directory — os.Stat
+	// succeeds, but treating it as a tmpfs mount root would be wrong.
+	notADir := filepath.Join(t.TempDir(), "not-a-directory")
+	mustWriteFile(t, notADir, "not a tmpfs mount")
+	dir, fsClass, err := resolveRegressionScratchDir(notADir)
+	if err != nil {
+		t.Fatalf("resolveRegressionScratchDir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSDisk {
+		t.Errorf("fsClass = %q, want %q (a file, not a directory, must fall back)", fsClass, scratchFSDisk)
+	}
+}
+
+// --- -scratch-fs pin (10-04-PLAN control-measurement capability) ---
+//
+// Reproducing a specific measurement frame on demand (e.g. a same-day
+// disk-scratch control run alongside a tmpfs-preferring default) is a
+// legitimate, recurring need for this harness, not a one-off debugging
+// hack — this repo's own perf-gate history is a comparison against a
+// stale, different-methodology measurement producing a fictitious
+// regression. resolveScratchDirForClass is the first-class way to pin
+// the class explicitly instead of auto-detecting.
+
+func TestResolveScratchDirForClass_AutoBehavesLikeResolveRegressionScratchDir(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass(scratchFSAuto, fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(auto): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q (auto should prefer tmpfs when available)", fsClass, scratchFSTmpfs)
+	}
+}
+
+func TestResolveScratchDirForClass_EmptyStringBehavesAsAuto(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass("", fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(\"\"): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q (empty string should default to auto)", fsClass, scratchFSTmpfs)
+	}
+}
+
+func TestResolveScratchDirForClass_PinsDiskEvenWhenTmpfsIsAvailable(t *testing.T) {
+	// This is the capability the control measurement needs: force disk
+	// scratch on a runner where tmpfs IS present, so a same-day
+	// disk-backed control can be measured without touching the
+	// tmpfs-preferring default (47eff33) or reverting anything.
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass(scratchFSDisk, fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(disk): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSDisk {
+		t.Errorf("fsClass = %q, want %q", fsClass, scratchFSDisk)
+	}
+	if strings.HasPrefix(dir, fakeTmpfsRoot) {
+		t.Errorf("dir %q must NOT be created under the tmpfs root %q when disk is pinned", dir, fakeTmpfsRoot)
+	}
+}
+
+func TestResolveScratchDirForClass_PinsTmpfsAndSucceedsWhenAvailable(t *testing.T) {
+	fakeTmpfsRoot := t.TempDir()
+	dir, fsClass, err := resolveScratchDirForClass(scratchFSTmpfs, fakeTmpfsRoot)
+	if err != nil {
+		t.Fatalf("resolveScratchDirForClass(tmpfs): %v", err)
+	}
+	defer os.RemoveAll(dir)
+	if fsClass != scratchFSTmpfs {
+		t.Errorf("fsClass = %q, want %q", fsClass, scratchFSTmpfs)
+	}
+	if !strings.HasPrefix(dir, fakeTmpfsRoot) {
+		t.Errorf("dir %q should be created under the tmpfs root %q", dir, fakeTmpfsRoot)
+	}
+}
+
+func TestResolveScratchDirForClass_PinnedTmpfsErrorsLoudWhenUnavailable(t *testing.T) {
+	// An operator who explicitly asked for -scratch-fs=tmpfs must get a
+	// loud error when it's unavailable, NOT a silent fallback to disk —
+	// a silent fallback here would produce a disk measurement the
+	// caller believes is tmpfs, exactly the kind of mislabeled frame
+	// this whole field exists to prevent (D-11: fail loud, never
+	// silently skip).
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	_, _, err := resolveScratchDirForClass(scratchFSTmpfs, missingRoot)
+	if err == nil {
+		t.Fatal("resolveScratchDirForClass(tmpfs, missing root) should error, got nil")
+	}
+}
+
+func TestResolveScratchDirForClass_RejectsUnknownClass(t *testing.T) {
+	_, _, err := resolveScratchDirForClass("bogus", t.TempDir())
+	if err == nil {
+		t.Fatal("resolveScratchDirForClass(bogus) should error, got nil")
+	}
+}
+
+func TestParseFlags_ScratchFSDefaultsToDisk(t *testing.T) {
+	// 10-04-PLAN's own measured control: same-day, same-methodology
+	// comparison across all four (runner x scratch-fs) combinations
+	// found disk beat tmpfs on BOTH runner classes (ubuntu+disk 0.35%
+	// session disagreement / 28.6x headroom vs ubuntu+tmpfs 5.75%/1.74x;
+	// Namespace+disk 4.36%/2.30x vs Namespace+tmpfs 12.46%/0.80x). "auto"
+	// (prefer tmpfs) is measurably the wrong default for this workload —
+	// disk is. The tmpfs-preferring code path (resolveRegressionScratchDir,
+	// -scratch-fs tmpfs/auto) stays available as a first-class option; only
+	// the default changed.
+	cfg, err := parseFlags([]string{"-mode", "regression"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.scratchFS != scratchFSDisk {
+		t.Errorf("scratchFS = %q, want %q", cfg.scratchFS, scratchFSDisk)
+	}
+}
+
+func TestParseFlags_ScratchFSOverrideApplies(t *testing.T) {
+	cfg, err := parseFlags([]string{"-mode", "regression", "-scratch-fs", "disk"})
+	if err != nil {
+		t.Fatalf("parseFlags: %v", err)
+	}
+	if cfg.scratchFS != "disk" {
+		t.Errorf("scratchFS = %q, want disk", cfg.scratchFS)
+	}
+}
+
+func TestMedianMetrics_CarriesScratchFS(t *testing.T) {
+	trials := []bench.Metrics{
+		{ScratchFS: scratchFSTmpfs, FilesPerSec: 1},
+		{ScratchFS: scratchFSTmpfs, FilesPerSec: 2},
+		{ScratchFS: scratchFSTmpfs, FilesPerSec: 3},
+	}
+	got, err := medianMetrics(trials)
+	if err != nil {
+		t.Fatalf("medianMetrics: %v", err)
+	}
+	if got.ScratchFS != scratchFSTmpfs {
+		t.Errorf("ScratchFS = %q, want %q", got.ScratchFS, scratchFSTmpfs)
+	}
+}
+
+func TestMetricsScratchFS_MarshalsToScratchFSKey(t *testing.T) {
+	m := bench.Metrics{ScratchFS: "tmpfs"}
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"scratch_fs":"tmpfs"`) {
+		t.Errorf("marshalled JSON missing scratch_fs key: %s", data)
+	}
+}
+
+func TestReadBaseline_LegacyFileWithoutScratchFSKeyYieldsEmptyString(t *testing.T) {
+	// The currently committed tools/bench/baseline.json (and every
+	// baseline recorded before this field existed) has no "scratch_fs"
+	// key. Unmarshalling it must succeed and yield ScratchFS == "".
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline.json")
+	legacy := `{"subject":"go","repo":"synthetic-seed42-count120000","goos":"linux","goarch":"amd64","runner":"namespace-profile-linux-amd64-4x8","median_of_trials":7,"files_per_sec":19733.69,"bytes_per_sec":2989114.49,"query_latency_median_ms":194.498,"peak_rss_bytes":872935424,"cold_start_ms":13.147}`
+	mustWriteFile(t, path, legacy)
+
+	got, err := readBaseline(path)
+	if err != nil {
+		t.Fatalf("readBaseline(legacy, no scratch_fs key): %v", err)
+	}
+	if got.ScratchFS != "" {
+		t.Errorf("ScratchFS = %q, want empty string for a legacy baseline with no scratch_fs key", got.ScratchFS)
 	}
 }
 

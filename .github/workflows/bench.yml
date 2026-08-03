@@ -12,7 +12,7 @@
 # synthetic corpus instead). Docs/BENCHMARKS.md (Plan 08-09) is refreshed
 # from the headtohead job's output.
 #
-# Why the rebless job has to exist here rather than on a developer machine
+# Why the rebless job has to run on the SAME runner class as the gate
 # (perf-gate-throughput-regress): throughput from this harness is dominated
 # by hardware class, not just GOOS/GOARCH. Measured on one physical Apple
 # Silicon machine, synthetic corpus, identical code — darwin/arm64 native
@@ -20,14 +20,40 @@
 # linux/amd64 runner ~11,400 files/s. A ~3x spread between two OSes on the
 # same hardware, with the CI runner slower than both. So a baseline
 # reblessed on a maintainer's Linux box satisfies internal/bench's
-# GOOS/GOARCH guard and is still a meaningless yardstick for the gate. The
-# baseline has to be recorded on ubuntu-latest because that is where it is
-# spent.
+# GOOS/GOARCH guard and is still a meaningless yardstick for the gate.
+#
+# rebless runs on ubuntu-latest, matching ci.yml's perf-regression gate
+# (10-04-PLAN RESOLUTION): a full same-day, same-methodology investigation
+# considered moving both rebless and the gate to a Namespace profile, and
+# found every alternative configuration measured WORSE session-to-session
+# stability than the incumbent ubuntu-latest + disk-backed scratch pairing
+# (0.35% disagreement, 28.6x headroom against the 10% tolerance — tighter
+# than the historical reference, not stale). See
+# tools/bench/BASELINE.md's "Staleness and the ubuntu-latest+disk control"
+# section for the full investigation: a CPU-count A/B (refuted "more
+# CPU"), a tmpfs experiment (refuted "I/O-bound variance" — tmpfs made
+# BOTH runner classes worse), and this same-day control (confirmed the
+# incumbent frame, not a stale one). tools/bench/runner's -scratch-fs/
+# ScratchFS machinery added during that investigation stays (it is what
+# made the control cheap to run), even though the runner class itself
+# did not move.
+#
+# headtohead stays on the Namespace profile (namespace-profile-linux-
+# amd64-4x8) DESPITE rebless moving back to ubuntu-latest — a deliberate,
+# asymmetric choice, not an oversight. headtohead is non-gating and
+# publishes a comparison between binaries measured on the SAME job/runner
+# instance as each other (Go vs TS, both in this one job) — it never
+# needs to match rebless's runner class, only itself. Namespace measures
+# noticeably faster (this investigation's control found Namespace+disk
+# roughly 20.8% faster than ubuntu-latest+disk on the synthetic corpus),
+# so leaving this non-blocking, non-gated, purely-informational job on
+# the faster profile costs nothing and saves real wall-clock time on
+# every dispatch.
 #
 # RSS scope note (08-RESEARCH.md Pattern 1): peak RSS is measured at the OS
 # level via bench.PeakRSSBytes(cmd.ProcessState), which is only meaningfully
-# comparable on Linux/macOS — this workflow runs on ubuntu-latest only,
-# consistent with that scoping. Windows RSS measurement is out of scope.
+# comparable on Linux/macOS — this workflow runs on Linux only, consistent
+# with that scoping. Windows RSS measurement is out of scope.
 #
 # Security note: every third-party Action is pinned to a full commit SHA.
 
@@ -44,8 +70,11 @@ on:
           - headtohead
           - rebless
           - both
+          - cpu-diag
+          - scratch-fs-compare
+          - disk-control-github
       trials:
-        description: "rebless only: independent measurement sessions to median over"
+        description: "rebless / scratch-fs-compare / disk-control-github: independent measurement sessions to median over"
         type: choice
         default: "3"
         options:
@@ -65,8 +94,10 @@ permissions:
 jobs:
   headtohead:
     name: head-to-head publish (PERF-01, non-blocking)
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-linux-amd64-4x8
     if: github.event_name == 'schedule' || inputs.job == 'headtohead' || inputs.job == 'both'
+    env:
+      CODEGRAPH_BENCH_RUNNER: namespace-profile-linux-amd64-4x8
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -75,7 +106,12 @@ jobs:
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
 
       - name: Set up Node (for the installed TS reference binary)
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -120,6 +156,18 @@ jobs:
           path: headtohead-results.json
           if-no-files-found: error
 
+  # D-13 / D-01 EXCEPTION, documented here on purpose: this job's three
+  # `go run ./tools/bench/runner` invocations (this file only) are NOT
+  # wrapped in Taskfile.yml targets, unlike every other CI step in this
+  # repo. `-rebless` is the ONLY flag that overwrites baseline.json, and a
+  # wrong-platform baseline has already produced a stable, entirely
+  # fictitious 10.6% "regression" that survived three rounds of triage
+  # before anyone ran the control (tools/bench/BASELINE.md). Keeping all
+  # three `go run` bodies inline — rather than behind a `task bench:*`
+  # target a contributor could tab-complete into — keeps `-rebless`
+  # reachable only through this manually-dispatched, no-write-token job.
+  # D-14's `task bench:regression` (added separately) wraps the read-only
+  # gate invocation and never touches this flag.
   rebless:
     name: record candidate perf baseline (PERF-02, manual only)
     runs-on: ubuntu-latest
@@ -130,6 +178,8 @@ jobs:
     # reaches the repository through a human reading the number below and
     # committing the artifact by hand.
     if: github.event_name == 'workflow_dispatch' && (inputs.job == 'rebless' || inputs.job == 'both')
+    env:
+      CODEGRAPH_BENCH_RUNNER: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -151,6 +201,11 @@ jobs:
         # tools/bench/BASELINE.md, and so a future default change cannot
         # silently record a candidate against a different corpus than the
         # gate measures.
+        #
+        # -runner is passed explicitly (in addition to the job-level
+        # CODEGRAPH_BENCH_RUNNER env this step already inherits) so the
+        # written candidate carries the field on its own terms rather than
+        # relying on env inheritance alone.
         env:
           TRIALS: ${{ inputs.trials }}
         run: |
@@ -158,7 +213,8 @@ jobs:
           go run ./tools/bench/runner -mode regression -rebless \
             -baseline tools/bench/baseline.json \
             -seed 42 -count 120000 \
-            -trials "$TRIALS"
+            -trials "$TRIALS" \
+            -runner "$CODEGRAPH_BENCH_RUNNER"
 
       - name: Publish candidate to job summary
         # The human-review surface. A maintainer reads the delta here
@@ -170,7 +226,7 @@ jobs:
           {
             echo "## Candidate perf baseline (PERF-02)"
             echo ""
-            echo "Recorded on \`${RUNNER_OS}\` / \`$(uname -m)\`, runner image \`${ImageOS:-unknown}\`."
+            echo "Recorded on \`${RUNNER_OS}\` / \`$(uname -m)\`, runner image \`${ImageOS:-unknown}\`, runner label \`${CODEGRAPH_BENCH_RUNNER}\`."
             echo ""
             echo "**Nothing has been committed.** Download the \`baseline-candidate\`"
             echo "artifact and commit it as \`tools/bench/baseline.json\` in its own PR,"
@@ -187,6 +243,8 @@ jobs:
                   (if ($old.goos == $new.goos and $old.goarch == $new.goarch) then "unchanged" else "**CHANGED**" end)],
                 ["corpus", $old.repo, $new.repo,
                   (if $old.repo == $new.repo then "unchanged" else "**CHANGED**" end)],
+                ["runner", ($old.runner // "unattributed"), ($new.runner // "unattributed"),
+                  (if (($old.runner // "") == ($new.runner // "")) then "unchanged" else "**CHANGED**" end)],
                 ["median_of_trials", ($old.median_of_trials // 0 | tostring), ($new.median_of_trials // 0 | tostring), ""],
                 ["files_per_sec", ($old.files_per_sec | tostring), ($new.files_per_sec | tostring), pct($old.files_per_sec; $new.files_per_sec)],
                 ["peak_rss_bytes", ($old.peak_rss_bytes | tostring), ($new.peak_rss_bytes | tostring), pct($old.peak_rss_bytes; $new.peak_rss_bytes)],
@@ -231,3 +289,274 @@ jobs:
             -seed 42 -count 120000 \
             -trials "$TRIALS" \
             -ceiling-bytes 4294967296
+
+  # CPU/memory/storage topology diagnostic (10-04-PLAN, Rule 2 deviation).
+  # NOT a gate and NOT part of the rebless/headtohead flow — neither job
+  # below ever touches baseline.json. Folded into this already-registered
+  # workflow rather than a new standalone file so it can be dispatched from
+  # a feature branch: GitHub only allows workflow_dispatch against
+  # workflow files already present on the default branch, and a brand-new
+  # workflow file doesn't qualify until it has been merged there.
+  #
+  # TWO jobs, one per runner class, both gated by the same `job: cpu-diag`
+  # dispatch input so a single dispatch produces a side-by-side A/B: an
+  # initial pass (this plan, prior commit) refuted the "Namespace
+  # oversubscribes host CPUs" hypothesis — runtime.NumCPU() already
+  # matched nproc and an unlimited cgroup quota there. What's still
+  # unexplained is a same-work/same-memory/different-wall-clock signature
+  # (peak RSS stable at 0.56% session-to-session, throughput swinging
+  # 4.36%+), which is the classic signature of I/O-bound variance, not
+  # CPU contention. These two jobs exist to compare CPU generation, RAM,
+  # and real storage throughput between ubuntu-latest and
+  # namespace-profile-linux-amd64-4x8 rather than assume either.
+  cpu-diag-github:
+    name: "CPU/mem/storage topology diagnostic (10-04-PLAN, non-blocking) — ubuntu-latest"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'cpu-diag'
+    env:
+      RUNNER_LABEL: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run CPU/memory/storage topology diagnostic
+        # task diag:cpu is the single definition (D-01/D-02) — this step
+        # invokes it, it does not duplicate its command bodies.
+        run: |
+          set -euo pipefail
+          task diag:cpu | tee diag-cpu-output.txt
+
+      - name: Run tmpfs sizing diagnostic
+        run: |
+          set -euo pipefail
+          task diag:storage-fit | tee diag-storage-fit-output.txt
+
+      - name: Publish diagnostic to job summary
+        run: |
+          {
+            echo "## CPU/memory/storage topology diagnostic (10-04-PLAN)"
+            echo ""
+            echo "Dispatched runs-on label: \`${RUNNER_LABEL}\`."
+            echo ""
+            echo '```'
+            cat diag-cpu-output.txt
+            echo ""
+            cat diag-storage-fit-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  cpu-diag-namespace:
+    name: "CPU/mem/storage topology diagnostic (10-04-PLAN, non-blocking) — namespace-profile-linux-amd64-4x8"
+    runs-on: namespace-profile-linux-amd64-4x8
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'cpu-diag'
+    env:
+      RUNNER_LABEL: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run CPU/memory/storage topology diagnostic
+        run: |
+          set -euo pipefail
+          task diag:cpu | tee diag-cpu-output.txt
+
+      - name: Run tmpfs sizing diagnostic
+        run: |
+          set -euo pipefail
+          task diag:storage-fit | tee diag-storage-fit-output.txt
+
+      - name: Publish diagnostic to job summary
+        run: |
+          {
+            echo "## CPU/memory/storage topology diagnostic (10-04-PLAN)"
+            echo ""
+            echo "Dispatched runs-on label: \`${RUNNER_LABEL}\`."
+            echo ""
+            echo '```'
+            cat diag-cpu-output.txt
+            echo ""
+            cat diag-storage-fit-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Post-tmpfs-fix A/B re-measurement (10-04-PLAN, Rule 2 deviation).
+  # READ-ONLY with respect to the committed baseline: -rebless here writes
+  # to a THROWAWAY /tmp path, never tools/bench/baseline.json. D-13 stays
+  # intact — this is an inline `go run ... -rebless -baseline /tmp/...`
+  # invocation (the same documented D-01 exception bench.yml's rebless job
+  # already uses), never a Taskfile target, so -rebless never sits behind
+  # tab-completion. Exists to answer, with real numbers, whether pointing
+  # the regression scratch dir at tmpfs (commit 47eff33) actually
+  # collapsed the 4.36% Namespace session-to-session throughput variance
+  # measured before the fix — on BOTH runner classes, so the comparison
+  # stays apples-to-apples per D-09.
+  scratch-fs-compare-github:
+    name: "Post-tmpfs-fix re-measurement (10-04-PLAN, non-blocking, read-only) — ubuntu-latest"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'scratch-fs-compare'
+    env:
+      RUNNER_LABEL: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Re-measure at -trials 7 against a throwaway baseline path
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline /tmp/scratch-fs-compare.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -runner "$RUNNER_LABEL" \
+            2>&1 | tee scratch-fs-compare-output.txt
+          echo "--- candidate ---" >> scratch-fs-compare-output.txt
+          cat /tmp/scratch-fs-compare.json >> scratch-fs-compare-output.txt
+
+      - name: Publish to job summary
+        run: |
+          {
+            echo "## Post-tmpfs-fix re-measurement (10-04-PLAN) — ${RUNNER_LABEL}"
+            echo ""
+            echo '```'
+            cat scratch-fs-compare-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  scratch-fs-compare-namespace:
+    name: "Post-tmpfs-fix re-measurement (10-04-PLAN, non-blocking, read-only) — namespace-profile-linux-amd64-4x8"
+    runs-on: namespace-profile-linux-amd64-4x8
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'scratch-fs-compare'
+    env:
+      RUNNER_LABEL: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Re-measure at -trials 7 against a throwaway baseline path
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline /tmp/scratch-fs-compare.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -runner "$RUNNER_LABEL" \
+            2>&1 | tee scratch-fs-compare-output.txt
+          echo "--- candidate ---" >> scratch-fs-compare-output.txt
+          cat /tmp/scratch-fs-compare.json >> scratch-fs-compare-output.txt
+
+      - name: Publish to job summary
+        run: |
+          {
+            echo "## Post-tmpfs-fix re-measurement (10-04-PLAN) — ${RUNNER_LABEL}"
+            echo ""
+            echo '```'
+            cat scratch-fs-compare-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Disk-scratch CONTROL measurement on ubuntu-latest (10-04-PLAN, Rule 2
+  # deviation). READ-ONLY with respect to the committed baseline:
+  # -rebless here writes to a throwaway /tmp path, never
+  # tools/bench/baseline.json. Same D-01 exception, D-13 unaffected.
+  #
+  # Exists to close a gap in this plan's own reasoning: the only
+  # historical "ubuntu-latest + disk" number on record (0.65% session
+  # disagreement, ~15x headroom) was measured weeks ago in Phase 9, under
+  # a different methodology, on a fleet that may itself have drifted.
+  # Comparing today's tmpfs numbers against that stale reference would be
+  # exactly the missing-control mistake that produced this repo's
+  # original fictitious 10.6% "regression" (tools/bench/BASELINE.md) —
+  # so this job re-measures the PRE-tmpfs configuration (disk-backed
+  # scratch) TODAY, on the same runner class, using the SAME methodology
+  # as every other measurement this pass. -scratch-fs disk (added in
+  # d680f71) forces this WITHOUT reverting 47eff33's tmpfs-preferring
+  # default — the default stays live and untouched; this job just pins
+  # the older behavior explicitly for a same-day comparison.
+  disk-control-github:
+    name: "Disk-scratch control re-measurement (10-04-PLAN, non-blocking, read-only) — ubuntu-latest"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && inputs.job == 'disk-control-github'
+    env:
+      RUNNER_LABEL: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Re-measure at -trials 7 with disk-backed scratch, against a throwaway baseline path
+        # -scratch-fs disk pins the pre-tmpfs configuration explicitly
+        # (d680f71) — the flag itself is what makes this "least invasive":
+        # no revert of 47eff33 required, and the tmpfs-preferring default
+        # stays exactly as it is for every other invocation in this file.
+        env:
+          TRIALS: ${{ inputs.trials }}
+        run: |
+          set -euo pipefail
+          go run ./tools/bench/runner -mode regression -rebless \
+            -baseline /tmp/disk-control.json \
+            -seed 42 -count 120000 \
+            -trials "$TRIALS" \
+            -runner "$RUNNER_LABEL" \
+            -scratch-fs disk \
+            2>&1 | tee disk-control-output.txt
+          echo "--- candidate ---" >> disk-control-output.txt
+          cat /tmp/disk-control.json >> disk-control-output.txt
+
+      - name: Publish to job summary
+        run: |
+          {
+            echo "## Disk-scratch control re-measurement (10-04-PLAN) — ${RUNNER_LABEL}"
+            echo ""
+            echo '```'
+            cat disk-control-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
