@@ -164,6 +164,85 @@ tasks:
       - CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/codegraph
       - CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -o /dev/null ./cmd/codegraph
 
+  check:darwin-release-build:
+    desc: >-
+      Prove GoReleaser itself can drive the darwin release build on a native
+      darwin host (D-08). check:darwin-toolchain proves the *toolchain* with a
+      plain `go build`; this target proves the *composition* release.yml
+      actually runs — `goreleaser build --single-target` for both darwin
+      arches, so .goreleaser.yaml's CGO_ENABLED=1 env, -trimpath, version
+      ldflags and mod_timestamp are exercised on the macOS host instead of
+      inferred from a linux run. It exists because release.yml fires only on a
+      `v*` tag push, which means its first darwin GoReleaser invocation
+      otherwise happens during a release that is already underway, on the one
+      leg where the host OS is a correctness input rather than a speed choice.
+      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      GoReleaser hard-fails ("git tag ... was not made against commit ...")
+      without one. The resolved version string is the only thing --snapshot
+      changes, and the version string is not the property this target verifies.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
+      - sh: command -v clang
+        msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Build GoReleaser NATIVELY, with no GOOS/GOARCH in the environment,
+        # and invoke that binary per-arch below. This ordering is load-bearing,
+        # not stylistic: `go tool -modfile=go.tool.mod goreleaser` builds the
+        # TOOL for whatever GOOS/GOARCH is set, so the obvious one-liner
+        # (`GOARCH=amd64 {{.GO_TOOL}} goreleaser build ...`) yields an x86_64
+        # GoReleaser running under Rosetta, whose child `xcrun` then resolves
+        # as x86_64 and cannot load the arm64-only libxcrun.dylib from
+        # CommandLineTools. That fails as a confusing `# runtime/cgo`
+        # architecture error that reads like a broken toolchain but is really
+        # a cross-built tool. release.yml does not hit this because
+        # goreleaser-action installs a native prebuilt binary — which is
+        # exactly the shape reproduced here.
+        GORELEASER_BIN="$(mktemp -d)/goreleaser"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")"' EXIT
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        for arch in arm64 amd64; do
+          echo "==> goreleaser build --single-target darwin/${arch}"
+          GOOS=darwin GOARCH="${arch}" "${GORELEASER_BIN}" build \
+            --single-target --snapshot --clean
+
+          # Locate the built binary exactly as release.yml's rename step does:
+          # dist/artifacts.json first (GoReleaser's own documented stable
+          # lookup — dist/ subdirectory names are not guaranteed stable across
+          # versions), with find(1) as the same defensive fallback.
+          BIN=""
+          if [ -f dist/artifacts.json ] && command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg a "${arch}" \
+              '[.[] | select(.type=="Binary" and .goos=="darwin" and .goarch==$a)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::goreleaser produced no darwin/${arch} binary under dist/"
+            exit 1
+          fi
+
+          # Assert the object is actually Mach-O of the requested arch. A
+          # wrong-host build is the quiet failure this whole canary exists for:
+          # it still produces something that builds, signs, and attests.
+          DESC=$(file -b "${BIN}")
+          echo "    ${BIN}: ${DESC}"
+          case "${arch}:${DESC}" in
+            arm64:*Mach-O*arm64*) ;;
+            amd64:*Mach-O*x86_64*) ;;
+            *) echo "::error::darwin/${arch} produced the wrong object: ${DESC}"; exit 1 ;;
+          esac
+        done
+
+        rm -rf dist
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
