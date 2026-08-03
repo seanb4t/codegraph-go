@@ -1175,3 +1175,150 @@ func TestStripRunBodyNoise_KeepsHashInsideCommand(t *testing.T) {
 		t.Fatalf("stripRunBodyNoise(%q) = %q, over-stripped a non-comment line containing '#'", body, got)
 	}
 }
+
+// --- CONTRIBUTING.md task target references (DEV-01) ---------------------
+
+// contributingPath is the on-disk path to CONTRIBUTING.md relative to this
+// package.
+const contributingPath = "../../CONTRIBUTING.md"
+
+// parseContributingTaskTargets extracts every `task <target>` reference from
+// CONTRIBUTING.md source src, matching only backtick-enclosed patterns (to
+// avoid false positives from prose like "the task system").
+// Returns a non-nil error if zero targets are found — a CONTRIBUTING.md that
+// stops naming any task target silently violates DEV-01, so empty must FAIL,
+// never pass vacuously.
+func parseContributingTaskTargets(src string) ([]string, error) {
+	// Match backtick-enclosed `task <target>` patterns.
+	// The regex captures the target name after the word "task " within backticks.
+	re := regexp.MustCompile("`task\\s+([A-Za-z0-9:_-]+)`")
+	matches := re.FindAllStringSubmatch(src, -1)
+
+	targetSet := make(map[string]bool)
+	for _, m := range matches {
+		target := m[1]
+		targetSet[target] = true
+	}
+
+	// Extract unique targets in sorted order for deterministic output.
+	var targets []string
+	for t := range targetSet {
+		targets = append(targets, t)
+	}
+	sort.Strings(targets)
+
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("parseContributingTaskTargets: no backtick-enclosed `task <target>` patterns found")
+	}
+	return targets, nil
+}
+
+func mustParseContributingTaskTargets(t *testing.T, src string) []string {
+	t.Helper()
+	v, err := parseContributingTaskTargets(src)
+	if err != nil {
+		t.Fatalf("mustParseContributingTaskTargets: %v", err)
+	}
+	return v
+}
+
+// contains reports whether slice contains s as an element.
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// TestContributingReferencesRealTaskTargets is the DEV-01 documentation-drift
+// guard: it reads CONTRIBUTING.md and asserts every `task <target>` reference
+// names a real, top-level task in Taskfile.yml. A pointer to a non-existent
+// target silently rotts — this test fails the build on any such drift, naming
+// the offending target and explaining the DEV-01 consequence.
+func TestContributingReferencesRealTaskTargets(t *testing.T) {
+	contributingData, err := os.ReadFile(contributingPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", contributingPath, err)
+	}
+	targets := mustParseContributingTaskTargets(t, string(contributingData))
+
+	if len(targets) == 0 {
+		t.Fatalf("parseContributingTaskTargets returned an empty list; non-empty set should have been enforced by the parser")
+	}
+
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(taskfileData))
+
+	var missing []string
+	for _, target := range targets {
+		if _, ok := blocks[target]; !ok {
+			missing = append(missing, target)
+		}
+	}
+	sort.Strings(missing)
+
+	if len(missing) > 0 {
+		t.Fatalf("CONTRIBUTING.md names task target(s) that do not exist in Taskfile.yml: %v — documentation drift violates DEV-01 (CONTRIBUTING.md points contributors at the targets). Update CONTRIBUTING.md to remove or correct the reference.", missing)
+	}
+}
+
+// TestContributingReferencesRealTaskTargets_UnknownTargetIsError is the
+// non-vacuity companion: it feeds parseContributingTaskTargets a synthetic
+// input naming a target that does not exist in the real Taskfile.yml and
+// verifies the main test would catch it. This proves the guard can actually
+// FIRE on a real regression.
+func TestContributingReferencesRealTaskTargets_UnknownTargetIsError(t *testing.T) {
+	// Synthetic CONTRIBUTING.md source mentioning a real target and a fake one.
+	syntheticContributing := `## Building
+
+You need a C toolchain. Every command is a task target.
+
+- ` + "`task build`" + ` — build everything
+- ` + "`task fake-nonexistent-target-xyz`" + ` — this target does not exist
+
+See Taskfile.yml for the complete list.
+`
+
+	// Read the real Taskfile.yml to get its actual target set.
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(taskfileData))
+
+	// Parse the synthetic CONTRIBUTING — this should succeed because it finds
+	// at least one target (build, fake-nonexistent-target-xyz).
+	targets, err := parseContributingTaskTargets(syntheticContributing)
+	if err != nil {
+		t.Fatalf("parseContributingTaskTargets(%q): expected success on synthetic input with multiple targets, got %v", syntheticContributing, err)
+	}
+
+	if len(targets) == 0 {
+		t.Fatalf("parseContributingTaskTargets returned empty list for synthetic input with targets; expected at least two targets")
+	}
+
+	// Now verify that a check against the real Taskfile would CATCH the unknown
+	// target. This proves that TestContributingReferencesRealTaskTargets, when
+	// run on the real files, would fail if CONTRIBUTING.md named an unknown
+	// target.
+	var missing []string
+	for _, target := range targets {
+		if _, ok := blocks[target]; !ok {
+			missing = append(missing, target)
+		}
+	}
+
+	// We expect fake-nonexistent-target-xyz to be in the missing set.
+	if len(missing) == 0 {
+		t.Fatalf("TestContributingReferencesRealTaskTargets_UnknownTargetIsError: synthetic input named a fake target, but the guard found no missing targets — the guard cannot fire, so it would be vacuous")
+	}
+
+	if !contains(missing, "fake-nonexistent-target-xyz") {
+		t.Fatalf("TestContributingReferencesRealTaskTargets_UnknownTargetIsError: expected 'fake-nonexistent-target-xyz' in missing targets, got %v", missing)
+	}
+}
