@@ -14,7 +14,9 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 
 The shipped artifact line is `v0.2.0` (signed, SBOM'd, SLSA-attested, cut entirely by release-please). **There is deliberately no `v1.0.0` git tag** — see the amendment below. "v1.0" is a planning-milestone name only, and carries **no git tag at all**: since Phase 9, release-please is the sole tag authority (D-06R), so the milestone record lives in `MILESTONES.md` and `milestones/v1.0-*` rather than in a hand-created tag.
 
-**Next milestone goals (candidates, not yet scoped):** the four backlog items carried forward — tmux-driven TTY e2e harness (999.2), vulnerability scanning for the tool modfiles (999.3), `CheckRegression` current-metrics positivity guard (999.4), macOS Gatekeeper signing/notarization (999.5) — plus the deferred Team Scale work and SEED-001 (Svelte web UI) / SEED-002 (homebrew path). Run `/gsd-new-milestone` to scope.
+**Next milestone: v0.3.0 — MCP Protocol Currency (scoped 2026-08-03, see below).** Carried-forward items NOT taken into it and still parked in `ROADMAP.md` → Backlog: tmux-driven TTY e2e harness (999.2), `CheckRegression` current-metrics positivity guard (999.4), macOS Gatekeeper signing/notarization (999.5) — plus the deferred Team Scale work and SEED-001 (Svelte web UI) / SEED-002 (homebrew path).
+
+**Milestone-label convention changed at this boundary.** v0.1 and v1.0 were planning labels decoupled from the shipped artifact line, which shipped `v0.2.0` under a milestone called "v1.0" and required a standing paragraph to explain. From v0.3.0 onward the milestone label tracks the **actual release line** (maintainer directive, 2026-08-03). This is still a planning label carrying **no git tag** — release-please remains the sole tag authority (D-06R) and computes the real version from Conventional Commits, so the label is a prediction: it holds if the milestone lands `feat:` commits, and a fixes-only outcome would cut `v0.2.1` instead.
 
 <details>
 <summary>v1.0 milestone goal as originally stated</summary>
@@ -34,6 +36,25 @@ The shipped artifact line is `v0.2.0` (signed, SBOM'd, SLSA-attested, cut entire
 - **First signed `v1.0.0` release** — closes v0.1's still-pending DIST-02 (real `v*` tag) and PERF-01 (published numbers); audits the new Charm deps via govulncheck/SBOM.
 
 </details>
+
+## Current Milestone: v0.3.0 MCP Protocol Currency
+
+**Goal:** Assess what the MCP `2026-07-28` specification changes for codegraph-go's agent surface, decide the SDK question it forces, and either adopt the new spec or defer it on an explicit dated decision — with the verification depth to prove the agent surface works against real clients rather than against our own SDK.
+
+**Target features:**
+- **MCP `2026-07-28` impact assessment** (backlog 999.6) — what actually reaches a stdio, tools-only server; an empirical protocol-revision audit across the 8-agent roster; and an explicit read-out of the **Team Scale** implications, since the stateless protocol core changes the architecture assumption milestone-2 was designed against
+- **SDK decision** — `mark3labs/mcp-go v0.56.0` vs `modelcontextprotocol/go-sdk`, discharging the standing re-evaluation commitment recorded in `.claude/CLAUDE.md`'s Alternatives Considered table. A recorded decision is the deliverable, either way
+- **Real-client MCP verification** — a harness that does not use the SDK under test as its own oracle. Must land *before* any SDK swap
+- **Adopt or dated-defer** — on adopt, replace the `mcp.LATEST_PROTOCOL_VERSION` pin with an explicit asserted version so wire behavior cannot move silently on a dependency bump; on defer, a dated decision naming the 12-month deprecation window
+- **Tool-modfile vulnerability scanning** (backlog 999.3) — closes the ~400-module credentialed-CI-tooling gap, landing the milestone's new dependency closure already covered
+- **Daemon test-seam fixes** — issues #13 (`getppid` race) and #17 (watchdog flakes under full-suite load), on the substrate this milestone modifies
+- **GoReleaser pin reconciliation** — `ci.yml` v2.17.1 vs `release.yml` v2.17.0
+
+**Key context:**
+- An **explicit dated defer is an acceptable outcome** for adoption — the spec guarantees a 12-month minimum deprecation window. What is not acceptable is leaving the choice implicit
+- **Verification precedes migration.** mcp-go's own client silently skips malformed lines and cannot fail a purity test (established in v1.0 Phase 4), so validating a new SDK with that SDK's client is circular
+- The **8-agent roster failure mode is quiet** — a client that has moved to the new spec and mis-negotiates surfaces as tools silently not advertised, with no red check anywhere
+- Standing repo rule applies throughout: a gate is not trusted until demonstrated RED against a confirmed-applied mutation
 
 ## Requirements
 
@@ -70,12 +91,11 @@ The shipped artifact line is `v0.2.0` (signed, SBOM'd, SLSA-attested, cut entire
 
 ### Active
 
-**No active milestone.** v1.0 shipped 2026-08-03; the next milestone is unscoped. Run `/gsd-new-milestone` to define it.
+**Active milestone: v0.3.0 — MCP Protocol Currency** (scoped 2026-08-03). Requirements are defined in `REQUIREMENTS.md`; phases in `ROADMAP.md`. Taken into this milestone from the backlog: **999.6** (MCP `2026-07-28` impact assessment — the milestone's spine) and **999.3** (tool-modfile vulnerability scanning, pulled in because an SDK migration *is* a dependency-closure change).
 
-Carried forward as backlog (see `ROADMAP.md` → Backlog, preserved across the milestone close):
+Remaining backlog, deliberately NOT in v0.3.0 (see `ROADMAP.md` → Backlog, preserved across the milestone close):
 
-- [ ] 999.2 — tmux-driven real-PTY e2e/UAT harness for the interactive TUI (the missing rung between piped TTY-blind integration tests and manual human UAT; motivated by two TTY-only bugs Phase 7 UAT caught)
-- [ ] 999.3 — vulnerability scanning for `go.tool.mod` / `go.tool-lint.mod` (~400 modules executed as credentialed CI tooling; the blocking `govulncheck` job scans root `go.mod` only)
+- [ ] 999.2 — tmux-driven real-PTY e2e/UAT harness for the interactive TUI (the missing rung between piped TTY-blind integration tests and manual human UAT; motivated by two TTY-only bugs Phase 7 UAT caught). *Deferred from v0.3.0: the failure shape rhymes with this milestone's real-client MCP verification work, but it is a different surface and a different harness.*
 - [ ] 999.4 — `CheckRegression` current-metrics positivity guard (degenerate `current.PeakRSSBytes = 0` silently passes both the relative and absolute checks)
 - [ ] 999.5 — macOS Gatekeeper signing + notarization for darwin binaries (cosign is a different mechanism and does nothing for Gatekeeper; measured `spctl` = `rejected` on both darwin arches — scoped to browser downloads only, since `codegraph upgrade` carries no quarantine xattr)
 
@@ -145,4 +165,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-03 after v1.0 milestone — Drop-in Parity & Human UX shipped (10/10 phases verified, 48/48 requirements); archived to `milestones/v1.0-*`*
+*Last updated: 2026-08-03 — v0.3.0 (MCP Protocol Currency) milestone scoped; milestone labels now track the shipped release line rather than a decoupled planning version*
