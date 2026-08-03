@@ -1,11 +1,12 @@
 ---
 phase: 10-local-build-contribution-and-taskfile-yml-setup
 verified: 2026-08-02T21:30:00Z
-status: human_needed
+status: passed
 score: 3/3 roadmap success criteria verified (all DEV-01 sub-must-haves also verified)
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Push a real v[0-9]* tag and watch release.yml's `build` job end-to-end for the two darwin matrix legs (goos=darwin, goarch=arm64/amd64), specifically the goreleaser invocation, cosign signing, and SLSA attestation steps that run on top of the plain `go build` the canary already proves."
     expected: "The `build` job's goreleaser step produces both signed darwin binaries with release ldflags, the `assemble`/`provenance` steps attest them correctly, and (ideally) a `codegraph upgrade` smoke test succeeds against the resulting macOS binary on a real Mac."
     why_human: "`darwin-toolchain-canary.yml` (added by this phase, 10-03) already machine-proves the two riskiest components of D-08 on the SAME `namespace-profile-macos-6x14-tahoe` label release.yml uses: (1) Namespace serves the label rather than queuing it indefinitely, and (2) the host is a genuine native Apple Silicon toolchain, not a substituted cross-build. Verified directly this session: `gh run list --workflow=darwin-toolchain-canary.yml` shows three successful runs, including one at the CURRENT HEAD (a61ccf1, 2026-08-02T19:17:11Z); that run's log shows `Apple clang version 21.0.0`, `Target: arm64-apple-darwin25.6.0` (native arm64, not zig), and both `CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build ./cmd/codegraph` and `GOARCH=amd64 go build ./cmd/codegraph` completing successfully. What remains genuinely unexercised is narrower than 'the darwin leg': the canary runs a plain `go build -o /dev/null`, not goreleaser — so release.yml's actual darwin build path (goreleaser with release ldflags, cosign signing, SLSA attestation) has never run on this runner class, no `codegraph upgrade` smoke test has been performed against a resulting binary, and `release.yml`'s `on: push: tags:` trigger means the assembled job as a whole still first runs during a real release. This residual gap still warrants a human check at the next tag push, even though runner-availability and native-toolchain risk are already discharged."

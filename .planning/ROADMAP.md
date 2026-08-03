@@ -43,7 +43,7 @@ Full phase details archived in [`milestones/v0.1-ROADMAP.md`](milestones/v0.1-RO
 - [x] **Phase 7: Interactive TUI — Daemon Picker & Install Multi-Select** - bubbletea daemon picker, explicit lifecycle, install multi-select; never hangs when piped (completed 2026-07-26)
 - [x] **Phase 8: Surface Reconciliation & Signed v1.0.0 Release** - Flag parity + Charm-dep audit + benchmarks, retiring the "not yet drop-in" caveat. The signed `v1.0.0` itself moved to Phase 9 with REL-02 on 2026-07-28; the phase title is kept because its directory slug and every committed artifact path depend on it (completed 2026-07-28)
 - [x] **Phase 9: release-please + GoReleaser** - Automated version/changelog/tag management replacing the maintainer-manual tag; produces the first signed release cut entirely by release-please from Conventional Commits (promoted from backlog 999.3 on 2026-07-27; version target removed 2026-07-29 — see below) (completed 2026-08-01)
-- [ ] **Phase 10: Local Build Tooling & CONTRIBUTING** - `Taskfile.yml` wrapping the build/test/lint/release-check workflows + contributor-facing CGo toolchain docs (promoted from backlog 999.1 on 2026-07-27)
+- [x] **Phase 10: Local Build Tooling & CONTRIBUTING** - `Taskfile.yml` wrapping the build/test/lint/release-check workflows + contributor-facing CGo toolchain docs (promoted from backlog 999.1 on 2026-07-27) (completed 2026-08-03)
 
 ## Phase Details
 
@@ -478,7 +478,7 @@ Plans:
 | 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete    | 2026-07-26 |
 | 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete    | 2026-07-28 |
 | 9. release-please + GoReleaser | v1.0 | 8/8 | Complete    | 2026-08-01 |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 7/7 | In Progress|  |
+| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 7/7 | Complete    | 2026-08-03 |
 
 ## Backlog
 
