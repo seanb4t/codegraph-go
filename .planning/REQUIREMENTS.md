@@ -79,40 +79,50 @@ Acknowledged, deliberately not in v0.3.0.
 
 ## Traceability
 
-Populated during roadmap creation.
+Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 for this milestone, matching the repo's convention (v0.1 was Phases 1–8, v1.0 was Phases 1–10).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SPEC-01 | TBD | Pending |
-| SPEC-02 | TBD | Pending |
-| SPEC-03 | TBD | Pending |
-| SPEC-04 | TBD | Pending |
-| SPEC-05 | TBD | Pending |
-| SPEC-06 | TBD | Pending |
-| SPEC-07 | TBD | Pending |
-| SPEC-08 | TBD | Pending |
-| SPEC-09 | TBD | Pending |
-| SDK-01 | TBD | Pending |
-| SDK-02 | TBD | Pending |
-| SDK-03 | TBD | Pending |
-| SDK-04 | TBD | Pending |
-| SDK-05 | TBD | Pending |
-| VRFY-01 | TBD | Pending |
-| VRFY-02 | TBD | Pending |
-| VRFY-03 | TBD | Pending |
-| VRFY-04 | TBD | Pending |
-| VRFY-05 | TBD | Pending |
-| VULN-01 | TBD | Pending |
-| VULN-02 | TBD | Pending |
-| VULN-03 | TBD | Pending |
-| MAINT-01 | TBD | Pending |
-| MAINT-02 | TBD | Pending |
-| MAINT-03 | TBD | Pending |
+| SPEC-01 | Phase 3 | Pending |
+| SPEC-02 | Phase 3 | Pending |
+| SPEC-03 | Phase 3 | Pending |
+| SPEC-04 | Phase 3 | Pending |
+| SPEC-05 | Phase 3 | Pending |
+| SPEC-06 | Phase 3 | Pending |
+| SPEC-07 | Phase 3 | Pending |
+| SPEC-08 | Phase 3 | Pending |
+| SPEC-09 | Phase 5 | Pending |
+| SDK-01 | Phase 2 | Pending |
+| SDK-02 | Phase 1 | Pending |
+| SDK-03 | Phase 2 | Pending |
+| SDK-04 | Phase 2 | Pending |
+| SDK-05 | Phase 2 | Pending |
+| VRFY-01 | Phase 1 | Pending |
+| VRFY-02 | Phase 1 | Pending |
+| VRFY-03 | Phase 1 | Pending |
+| VRFY-04 | Phase 1 | Pending |
+| VRFY-05 | Phase 1 | Pending |
+| VULN-01 | Phase 4 | Pending |
+| VULN-02 | Phase 4 | Pending |
+| VULN-03 | Phase 4 | Pending |
+| MAINT-01 | Phase 4 | Pending |
+| MAINT-02 | Phase 4 | Pending |
+| MAINT-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v0.3.0 requirements: 25 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 25 ⚠️ (expected before roadmap creation)
+- Mapped to phases: 25 ✓
+- Unmapped: 0 — no orphans, no duplicates; every requirement maps to exactly one phase
+
+**Per-phase distribution:**
+
+| Phase | Requirements | Count |
+|-------|--------------|-------|
+| Phase 1 — Protocol Scoping & the SDK-Independent Wire Oracle | VRFY-01, VRFY-02, VRFY-03, VRFY-04, VRFY-05, SDK-02 | 6 |
+| Phase 2 — SDK Migration (official go-sdk) | SDK-01, SDK-03, SDK-04, SDK-05 | 4 |
+| Phase 3 — `2026-07-28` Spec Compliance | SPEC-01, SPEC-02, SPEC-03, SPEC-04, SPEC-05, SPEC-06, SPEC-07, SPEC-08 | 8 |
+| Phase 4 — Supply-Chain Coverage & Daemon Substrate Fixes | VULN-01, VULN-02, VULN-03, MAINT-01, MAINT-02, MAINT-03 | 6 |
+| Phase 5 — Live Tool-Catalog Change Notification | SPEC-09 | 1 |
 
 **REQ-ID prefix note (2026-08-03):** `SPEC`, `SDK`, `VRFY`, `VULN`, and `MAINT` were chosen specifically to avoid collision with the prefixes already used by v0.1 (`AGNT ARCH CLI COMM DIST EMBED INDX LANG MCP MIGR PERF QRY RES SYNC VIZ`) and v1.0 (`DEV DMON EXPL HOOK HYG NODE REL STAT SURF TEST TUI WATCH WORK`). In particular **`MCP-01`–`MCP-04` are already taken by v0.1** — the v0.3.0 research artifacts reference "the existing MCP-03 gap", which is a v0.1 requirement ID, not a new one. This repo has already lost time to exactly this class of collision (a decision gate failed on a `D-08a` citation colliding with a v0.1 decision ID left in `serve.go` comments).
 
@@ -120,4 +130,4 @@ Populated during roadmap creation.
 
 ---
 *Requirements defined: 2026-08-03*
-*Last updated: 2026-08-03 after initial definition (research-informed, maintainer pre-decided the SDK adoption)*
+*Last updated: 2026-08-03 after roadmap creation — traceability populated, 25/25 mapped across 5 phases*

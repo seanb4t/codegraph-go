@@ -4,13 +4,16 @@
 
 CodeGraph Go is a ground-up Go rewrite of TypeScript CodeGraph — a drop-in, TS-v1.3.x-parity replacement in a single static binary. **v0.1 (Initial Release) shipped 2026-07-14**: the core capabilities (indexing, query, MCP server, sync, migration) work from a signed/attested/SBOM'd release that beats TS 1.3.1 on every measured benchmark — but the CLI/agent surface still diverged *behaviorally* from TS. **v1.0 (Drop-in Parity & Human UX) shipped 2026-08-03**: those gaps are closed. An existing user can now swap binaries with zero change in experience — TS-identical `explore`/`node`/`status` behavior, watcher-on-MCP by default, git/worktree awareness, output hygiene, a human-facing Charm TUI behind a build-enforced rendering seam (the agent/MCP path never sees ANSI), systematic flag reconciliation, fully automated signed releases via release-please + GoReleaser, and contributor-facing local build tooling. Work was risk-front-loaded: the load-bearing shared-engine behavioral algorithms landed first, the human TUI last.
 
-**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line is `v0.2.0`, computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestones carry **no git tag** — release-please is the sole tag authority since Phase 9, and the milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
+**v0.3.0 (MCP Protocol Currency) is in progress.** MCP published spec revision `2026-07-28` six days after v1.0 shipped, which makes codegraph-go's server a **Legacy** implementation in that spec's own terminology. This milestone brings the agent surface current on the official `modelcontextprotocol/go-sdk` — the maintainer's pre-decision, since `mark3labs/mcp-go` has no `2026-07-28` support and no announced timeline — without breaking any of the 8 agent clients `codegraph install` already configures. Work is ordered around one non-negotiable: the wire-level verification oracle is built and proven against the **current** server before any SDK code moves, because this project already established (v1.0 Phase 4) that an SDK's own client silently skips malformed stdout lines and therefore cannot fail a purity test.
+
+**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line is `v0.2.0`, computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). From v0.3.0 onward the milestone label tracks the actual release line, but it is still a planning label carrying **no git tag** — release-please remains the sole tag authority and computes the real version from Conventional Commits, so `v0.3.0` is a prediction that holds if this milestone lands `feat:` commits. Milestones carry no git tag; the milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
 
 ## Milestones
 
 - ✅ **v0.1 — Initial Release** — Phases 1–8 (shipped 2026-07-14) — core capabilities + signed release; not yet a drop-in parity replacement
 - ✅ **v1.0 — Drop-in Parity & Human UX** — Phases 1–10 (shipped 2026-08-03) — behavioral + surface parity with TS 1.3.1, human TUI, automated signed releases, local build tooling
-- 📋 **Next** — unscoped; run `/gsd-new-milestone`. Candidates: the five Backlog items below, Team Scale (central server, CI-distributed indexes), annotations (embeddings/communities/export), local Svelte web UI (SEED-001), homebrew install path (SEED-002)
+- 🚧 **v0.3.0 — MCP Protocol Currency** — Phases 1–5 (in progress) — official Go SDK adoption, `2026-07-28` spec compliance without breaking Legacy clients, a wire-level verification oracle, tool-modfile vulnerability coverage
+- 📋 **Later** — unscoped. Candidates: the Backlog items below (999.2 tmux TTY harness, 999.4 CheckRegression guard, 999.5 macOS Gatekeeper), Team Scale (central server, CI-distributed indexes), MRTR/elicitation (MRTR-01), annotations (embeddings/communities/export), local Svelte web UI (SEED-001), homebrew install path (SEED-002)
 
 ## Phases
 
@@ -54,20 +57,109 @@ Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-RO
 
 </details>
 
+### 🚧 v0.3.0 — MCP Protocol Currency (In Progress)
+
+**Milestone Goal:** Bring codegraph-go's stdio MCP server current with spec revision `2026-07-28` on `modelcontextprotocol/go-sdk@v1.7.0` — without breaking any of the 8 agent clients `codegraph install` already configures — and prove it with a harness that asserts on raw wire bytes and never uses the SDK under test as its own oracle. Phase numbering restarts at 1 for this milestone (v0.1 and v1.0 archived), matching this repo's established convention.
+
+**Ordering is load-bearing, not stylistic:**
+
+- The verification oracle (Phase 1) must pass against the **current, pre-migration** server before any SDK change lands (VRFY-04). A harness written after the swap, validated with the new SDK's own client, would describe the new behavior rather than test it — the exact failure mode v1.0 Phase 4 established.
+- The SDK question is **already decided** (adopt `modelcontextprotocol/go-sdk@v1.7.0`, maintainer pre-decision 2026-08-03). There is no decision-gate phase and no defer branch; the impact-assessment work that remains genuinely useful — SEP-by-SEP stdio applicability scoping, the dated 8-agent roster audit, the Team Scale read-out — is folded into Phase 1.
+- Vulnerability scanning (Phase 4) runs **after** the migration so it audits the final dependency closure, not one that is about to change.
+- SPEC-09 (`tools.listChanged` + `subscriptions/listen`) is deliberately **last**. It is a long-lived-stream mechanism materially larger than every other SPEC item, and the research is explicit that it is not needed for correctness once `ttlMs: 0` ships. A correctness-complete server exists at the end of Phase 3, so SPEC-09 slipping cannot block the milestone's core value.
+
+- [ ] **Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle** - A raw-stdio regression oracle proven green against today's server, plus the dated scoping the rest of the milestone is measured against
+- [ ] **Phase 2: SDK Migration — official go-sdk on the existing surface** - `internal/mcp` moves to `modelcontextprotocol/go-sdk@v1.7.0` with byte-identical tool output and mark3labs gone from `go.mod`
+- [ ] **Phase 3: `2026-07-28` Spec Compliance** - `server/discover`, per-request `_meta` validation, honest cache control and per-call index detection — with every Legacy client still working
+- [ ] **Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes** - The ~400-module credentialed CI tooling closure actually gets scanned, and the two known daemon test-seam races stop masking real regressions
+- [ ] **Phase 5: Live Tool-Catalog Change Notification** - Opt-in `subscriptions/listen` clients learn about catalog changes as they happen
+
+## Phase Details
+
+### Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle
+
+**Goal**: Before any SDK code moves, the project owns a verification oracle that reads the actual bytes on stdio and can genuinely fail — plus a dated, evidence-backed scoping of what `2026-07-28` obliges a stdio, tools-only server to do. This phase also carries the non-requirement deliverables folded in from backlog 999.6: a SEP-by-SEP applicability table marking each SEP N/A-for-stdio or applicable-with-reason, and the Team Scale strategic read-out recorded as a decision (the stateless protocol core removes the sticky-routing/shared-session-store infrastructure a future central server would otherwise have needed).
+**Depends on**: Nothing (first phase of v0.3.0)
+**Requirements**: VRFY-01, VRFY-02, VRFY-03, VRFY-04, VRFY-05, SDK-02
+**Success Criteria** (what must be TRUE):
+
+  1. The harness runs against the current, unmodified `mark3labs`-backed `serve --mcp` and passes — asserting on raw stdio wire bytes rather than SDK-typed Go objects, and never using the SDK under test as its own oracle (VRFY-01, VRFY-04)
+  2. `serve --mcp` writes the negotiated protocol version to stderr on every connection, with no flag or environment variable needed to turn it on — the only available mitigation for a spec-sanctioned silent version mismatch (VRFY-03)
+  3. The server's declared protocol version reads from a repo-owned literal, and CI fails if any `LATEST_PROTOCOL_VERSION`-style SDK-owned constant reference remains anywhere in the tree, so a dependency bump can never move wire behavior silently (VRFY-02)
+  4. `internal/cli/serve.go` bootstraps and serves entirely through the narrow `internal/mcp.Server` seam and imports no MCP SDK package — the one production-code SDK leak, closed while it is still cheap (SDK-02)
+  5. A dated record states which protocol revision each of the 8 roster agent clients (Claude Code, Cursor, Codex CLI, opencode, Gemini CLI, Hermes, Antigravity, Kiro) negotiates, measured against the real clients rather than read from their docs (VRFY-05)
+
+**Plans**: TBD
+
+### Phase 2: SDK Migration — official go-sdk on the existing surface
+
+**Goal**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0` with the agent-facing surface unchanged — same tools, same output bytes, same behavior — and `mark3labs/mcp-go` is gone. Five-era protocol negotiation (`2026-07-28` down to `2024-11-05`) arrives inherited from the dependency rather than as code this project writes.
+**Depends on**: Phase 1 (the oracle must exist and be proven against the pre-migration server first — VRFY-04)
+**Requirements**: SDK-01, SDK-03, SDK-04, SDK-05
+**Success Criteria** (what must be TRUE):
+
+  1. Every existing MCP tool produces byte-identical output to the pre-migration server for every case the current golden corpus covers, with the server running on `modelcontextprotocol/go-sdk@v1.7.0` (SDK-01)
+  2. Phase 1's harness, unmodified, still passes against the migrated server — it was never regenerated, relaxed, or re-baselined as part of the swap (SDK-01)
+  3. `mark3labs/mcp-go` is absent from `go.mod`, and the resulting dependency closure has been re-audited through the existing `govulncheck` and SBOM paths (SDK-03)
+  4. A handler that returns a plain Go `error` produces a known, asserted wire shape — the mark3labs protocol-error vs. official-SDK `IsError: true` tool-result difference is covered by an explicit test, not inferred from the unchanged Go type signature (SDK-04)
+  5. Tool input schemas keep their constraint semantics (notably enum constraints that struct-tag reflection drops), or each loss is written down as a deliberate divergence rather than discovered later by a client (SDK-05)
+
+**Plans**: TBD
+
+### Phase 3: `2026-07-28` Spec Compliance
+
+**Goal**: The server answers the `2026-07-28` wire contract correctly for a stdio, tools-only implementation — discovery, per-request `_meta` validation, result metadata, honest cache control, and per-call index detection — while every client still speaking an older revision continues to work. At the end of this phase the server is correctness-complete for the milestone's core value.
+**Depends on**: Phase 2
+**Requirements**: SPEC-01, SPEC-02, SPEC-03, SPEC-04, SPEC-05, SPEC-06, SPEC-07, SPEC-08
+**Success Criteria** (what must be TRUE):
+
+  1. A client can call `server/discover` and get the server's capabilities without first calling any tool, and the response's `instructions` field carries codegraph usage guidance so an agent gets orientation without spending a tool call (SPEC-01, SPEC-07)
+  2. Per-request `_meta` is validated rather than assumed: a malformed or missing required field answers `-32602`, and an unsupported protocol version answers `UnsupportedProtocolVersionError` (`-32022`) instead of failing silently or proceeding on assumptions (SPEC-02)
+  3. Every tool result carries `resultType: "complete"` and `io.modelcontextprotocol/serverInfo` in `_meta`, so a client debugging a negotiation problem can see which server version answered (SPEC-03, SPEC-08)
+  4. `tools/list` and `server/discover` carry `ttlMs: 0` and `cacheScope: "private"`, and a user who runs `codegraph init` while an MCP server is already running sees the tools appear — `hasIndex` is re-checked per call rather than snapshotted at server construction, so the cache promise is actually true (SPEC-04, SPEC-05)
+  5. A client speaking `2025-11-25` or any earlier revision completes a session and calls tools against the upgraded server, asserted by test rather than assumed from the SDK's documentation — the single highest-consequence mistake available in this milestone is dropping Legacy support, which hard-fails every roster client with no client-side fallback (SPEC-06)
+
+**Plans**: TBD
+
+### Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes
+
+**Goal**: The ~400 third-party modules executed as credentialed CI tooling are actually scanned by a job proven able to fail, and the two known daemon test-seam defects stop producing flaky noise that masks real regressions on the substrate this milestone modifies.
+**Depends on**: Phase 2 (so the scan audits the post-migration dependency closure, not one about to change). Independent of Phase 3.
+**Requirements**: VULN-01, VULN-02, VULN-03, MAINT-01, MAINT-02, MAINT-03
+**Success Criteria** (what must be TRUE):
+
+  1. `govulncheck` covers `go.tool.mod` and `go.tool-lint.mod` via `-mode=binary` over binaries built from those manifests, replacing the `task vuln` target that was reproduced live to be a no-op duplicate of the main-module CI scan (VULN-01)
+  2. The scanning job has been demonstrated RED against a deliberately known-vulnerable pin before being trusted, and the workflow states its blocking-versus-advisory stance out loud so an advisory job cannot be mistaken for a gate (VULN-02, VULN-03)
+  3. The daemon `-race` failure on the `getppid` test seam (issue #13) is fixed, with the race demonstrated before the fix rather than assumed from a green run (MAINT-01)
+  4. `TestRunWatchdogCancelsRunOnSimulatedReparent` (issue #17) passes under full-suite load, fixed at the cause rather than by isolating the test away from the load that exposes it (MAINT-02)
+  5. `ci.yml` and `release.yml` name the same GoReleaser version (MAINT-03)
+
+**Plans**: TBD
+
+### Phase 5: Live Tool-Catalog Change Notification
+
+**Goal**: A client that opts into `subscriptions/listen` is told when codegraph's tool catalog changes, instead of learning about it only on its next poll. Deliberately sequenced last: this is a long-lived-stream mechanism materially larger than the rest of the SPEC work and explicitly not required for correctness once `ttlMs: 0` shipped in Phase 3, so slipping it cannot block the milestone.
+**Depends on**: Phase 3 (a correctness-complete server must already exist)
+**Requirements**: SPEC-09
+**Success Criteria** (what must be TRUE):
+
+  1. The server advertises `tools.listChanged: true` in its capabilities (SPEC-09)
+  2. A client that opts into `subscriptions/listen` receives `notifications/tools/list_changed` when the tool catalog actually changes — for example when `codegraph init` creates an index under an already-running server (SPEC-09)
+  3. A client that does not opt in observes no change in session behavior from Phase 3's server (SPEC-09)
+
+**Plans**: TBD
+
 ## Progress
+
+**Execution Order:** Phases 1 → 2 → 3 → 4 → 5. Phase 4 depends only on Phase 2 and may run alongside Phase 3.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
-| 1. Behavioral Parity — explore & node | v1.0 | 17/17 | Complete | 2026-07-15 |
-| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete | 2026-07-16 |
-| 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete | 2026-07-16 |
-| 4. Output Hygiene | v1.0 | 3/3 | Complete | 2026-07-16 |
-| 5. Git Sync Hooks | v1.0 | 5/5 | Complete | 2026-07-17 |
-| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete | 2026-07-26 |
-| 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 8/8 | Complete | 2026-08-01 |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 7/7 | Complete | 2026-08-03 |
+| 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 0/0 | Not started | - |
+| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 0/0 | Not started | - |
+| 3. `2026-07-28` Spec Compliance | v0.3.0 | 0/0 | Not started | - |
+| 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 0/0 | Not started | - |
+| 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.3. Vulnerability scanning for tool modfiles | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
