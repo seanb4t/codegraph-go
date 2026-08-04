@@ -5,8 +5,8 @@ milestone_name: MCP Protocol Currency
 current_phase: 1
 current_phase_name: Protocol Scoping & the SDK-Independent Wire Oracle
 status: planning
-stopped_at: v0.3.0 roadmap created — 5 phases, 25/25 requirements mapped, no orphans
-last_updated: "2026-08-04T00:34:56.285Z"
+stopped_at: Phase 1 context gathered
+last_updated: "2026-08-04T23:52:51.431Z"
 last_activity: 2026-08-03
 last_activity_desc: v0.3.0 roadmap created; 25/25 requirements mapped across 5 phases
 progress:
@@ -233,12 +233,12 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-03
-Stopped at: v0.3.0 roadmap created — 5 phases, 25/25 requirements mapped, no orphans
+Last session: 2026-08-04T23:52:51.423Z
+Stopped at: Phase 1 context gathered
   NEXT: `/gsd-plan-phase 1` (Protocol Scoping & the SDK-Independent Wire Oracle)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   NOTE: no milestone tag will be created — release-please owns tagging (D-06R).
-Resume file: None
+Resume file: .planning/phases/01-protocol-scoping-the-sdk-independent-wire-oracle/01-CONTEXT.md
 
 ## Operator Next Steps
 
