@@ -2,9 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: MCP Protocol Currency
+current_phase: 1
+current_phase_name: Protocol Scoping & the SDK-Independent Wire Oracle
 status: planning
-last_updated: "2026-08-03T19:30:00.000Z"
+stopped_at: v0.3.0 roadmap created — 5 phases, 25/25 requirements mapped, no orphans
+last_updated: "2026-08-04T00:34:56.285Z"
 last_activity: 2026-08-03
+last_activity_desc: v0.3.0 roadmap created; 25/25 requirements mapped across 5 phases
 progress:
   total_phases: 5
   completed_phases: 0
@@ -24,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-08-03)
 
 ## Current Position
 
-Phase: 1 of 5 (Protocol Scoping & the SDK-Independent Wire Oracle)
+Phase: 1 of 4 (Protocol Scoping & the SDK-Independent Wire Oracle)
 Plan: — (no plans yet)
 Status: Ready to plan
 Last activity: 2026-08-03 — v0.3.0 roadmap created; 25/25 requirements mapped across 5 phases
