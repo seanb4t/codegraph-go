@@ -16,6 +16,8 @@ import (
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
+
+	codegraphmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 )
 
 // TestDefaultWatchHandshakePrompt proves WATCH-01/WATCH-02 end-to-end: a
@@ -116,7 +118,9 @@ func TestNoWatchEnvDisablesViaStderr(t *testing.T) {
 	}()
 
 	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	// codegraphmcp.ProtocolVersion is the repo-owned literal — a
+	// dependency bump must not move this value silently (VRFY-02).
+	req.Params.ProtocolVersion = codegraphmcp.ProtocolVersion
 	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}
 	if _, err := c.Initialize(ctx, req); err != nil {
 		t.Fatalf("Initialize (CODEGRAPH_NO_WATCH=1): %v (disabling the watcher must never fail serve)", err)
