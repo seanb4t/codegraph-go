@@ -109,6 +109,97 @@ const (
 	handshakeExploreClientVersion = "0.0.0"
 )
 
+// legacyEraPrefix names the deliberate, frozen six-scenario Legacy
+// multi-era handshake baseline (01-05-PLAN Task 1 checkpoint: six-era) —
+// the four protocol revisions today's server recognizes, plus one
+// unsupported revision, plus one omitted-version request. Every scenario
+// name below begins with this prefix so oracle_test.go's
+// TestLegacyEraBaselineIsDocumented can select the set structurally
+// rather than by an enumerated name list.
+const legacyEraPrefix = "legacy-"
+
+// legacyEraVersions is the hand-authored, frozen four-revision matrix
+// (D-06): exactly the four strings mark3labs v0.56.0's own
+// ValidProtocolVersions declares
+// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/mcp/types.go:166-171],
+// transcribed here as package-local literals — never read from any SDK
+// constant (the plan 03 archtest forbids that; VRFY-01 forbids using the
+// SDK under test as the source of its own expected values). Each of these
+// four negotiates to itself
+// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1196-1210].
+var legacyEraVersions = []string{
+	"2025-11-25",
+	"2025-06-18",
+	"2025-03-26",
+	"2024-11-05",
+}
+
+// legacyUnsupportedVersion is the revision Phase 3 will implement
+// (2026-07-28) — the most informative unsupported-version probe
+// available, per plan 05's Task 1 checkpoint rationale. Today's server
+// silently coerces it to its own latest rather than rejecting it
+// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1196-1210,
+// 01-RESEARCH.md Pitfall 1] — no error-code anchor exists for this
+// scenario (anchors.go) because no error fires on this path in the
+// pre-migration server.
+const legacyUnsupportedVersion = "2026-07-28"
+
+// legacyOmittedVersionCoercion is what mark3labs v0.56.0 negotiates when a
+// client's initialize params carry NO protocolVersion key at all: the
+// server's own backwards-compat default, applied BEFORE the
+// ValidProtocolVersions check runs
+// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1196-1198].
+// A THIRD, structurally distinct coercion path from the
+// unsupported-version case above — not the server's own latest, and not
+// the value the client (didn't) offer.
+const legacyOmittedVersionCoercion = "2025-03-26"
+
+// initializeRequestWithVersion returns an initialize request offering the
+// given protocolVersion literal — the four-supported-plus-one-unsupported
+// era scenarios' request, sharing every other field with
+// initializeRequest's tracer-matching shape (capabilities, clientInfo)
+// deliberately, so the ONLY variable between era scenarios is the offered
+// version.
+func initializeRequestWithVersion(id int, version string) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": version,
+			"capabilities":    map[string]any{},
+			"clientInfo": map[string]any{
+				"name":    handshakeExploreClientName,
+				"version": handshakeExploreClientVersion,
+			},
+		},
+	}
+}
+
+// initializeRequestOmittingVersion returns an initialize request whose
+// params carry NO "protocolVersion" key at all — a structurally distinct
+// wire shape from initializeRequestWithVersion(id, "") (an EMPTY-STRING
+// literal), even though mark3labs v0.56.0's
+// InitializeParams.ProtocolVersion is a plain string field where both
+// unmarshal to the same Go value
+// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/mcp/types.go:521-527] —
+// the omission is captured here as the actual absent-key wire shape a
+// real legacy client would send, not simulated via an empty string.
+func initializeRequestOmittingVersion(id int) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "initialize",
+		"params": map[string]any{
+			"capabilities": map[string]any{},
+			"clientInfo": map[string]any{
+				"name":    handshakeExploreClientName,
+				"version": handshakeExploreClientVersion,
+			},
+		},
+	}
+}
+
 // Concurrency ordering constraint (discovered this session, verified by hand
 // against the real binary via repeated captures): mark3labs v0.56.0's stdio
 // transport (server/stdio.go processMessage) dispatches every "tools/call"
@@ -136,10 +227,12 @@ const (
 //
 // Scenarios returns the oracle's full scripted scenario list. Phase 1
 // scripts exactly one scenario, handshake-explore, proving the oracle
-// architecture end-to-end; plan 04 (this plan) adds the 16 scenarios below
-// bringing the suite to exactly 17 — the D-05 full coverage bar approved at
-// plan 04's Task 1 blocking checkpoint (full-bar, no additional scenarios);
-// plan 05 expands further — this same file, same function, no
+// architecture end-to-end; plan 04 adds the 16 scenarios that bring the
+// suite to exactly 17 — the D-05 full coverage bar approved at plan 04's
+// Task 1 blocking checkpoint (full-bar, no additional scenarios); plan 05
+// (this plan) adds the six-era Legacy handshake baseline below, bringing
+// the suite to exactly 23 — the six-era selection approved at plan 05's
+// own Task 1 blocking checkpoint — this same file, same function, no
 // phase-conditional branch (must_haves).
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -425,6 +518,102 @@ func Scenarios() []Scenario {
 			// NoInitialize rather than reading this field as a real tool
 			// count).
 			ExpectTools: 0,
+		},
+
+		// --- six-era Legacy handshake baseline (01-05-PLAN Task 1
+		// checkpoint: six-era) — what today's pre-migration
+		// mark3labs-backed server answers at each protocol revision it
+		// recognizes, plus the revision Phase 3 will implement
+		// (unsupported today), plus a request that omits protocolVersion
+		// entirely. This is the phase's second and last one-way capture:
+		// once Phase 2 removes mark3labs/mcp-go from go.mod, none of
+		// these six handshakes can ever be replayed again. Every
+		// scenario here sends exactly one initialize followed by one
+		// tools/list, so the frozen transcript records both the
+		// negotiated version and whether the session stayed usable at
+		// that revision. ---
+
+		{
+			Name:                 legacyEraPrefix + "2025-11-25",
+			Index:                true,
+			EraScenario:          true,
+			EraOfferedVersion:    legacyEraVersions[0],
+			EraNegotiatedVersion: legacyEraVersions[0],
+			Requests: []map[string]any{
+				initializeRequestWithVersion(1, legacyEraVersions[0]),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1,
+		},
+		{
+			Name:                 legacyEraPrefix + "2025-06-18",
+			Index:                true,
+			EraScenario:          true,
+			EraOfferedVersion:    legacyEraVersions[1],
+			EraNegotiatedVersion: legacyEraVersions[1],
+			Requests: []map[string]any{
+				initializeRequestWithVersion(1, legacyEraVersions[1]),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1,
+		},
+		{
+			Name:                 legacyEraPrefix + "2025-03-26",
+			Index:                true,
+			EraScenario:          true,
+			EraOfferedVersion:    legacyEraVersions[2],
+			EraNegotiatedVersion: legacyEraVersions[2],
+			Requests: []map[string]any{
+				initializeRequestWithVersion(1, legacyEraVersions[2]),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1,
+		},
+		{
+			Name:                 legacyEraPrefix + "2024-11-05",
+			Index:                true,
+			EraScenario:          true,
+			EraOfferedVersion:    legacyEraVersions[3],
+			EraNegotiatedVersion: legacyEraVersions[3],
+			Requests: []map[string]any{
+				initializeRequestWithVersion(1, legacyEraVersions[3]),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1,
+		},
+		{
+			// Silent coercion, not rejection (RESEARCH Pitfall 1): today's
+			// server has no version-rejection path. This is a SUCCESSFUL
+			// initialize result negotiating the server's own latest —
+			// never a JSON-RPC error. No error-code anchor exists for
+			// this scenario (anchors.go).
+			Name:                 legacyEraPrefix + "unsupported-2026-07-28",
+			Index:                true,
+			EraScenario:          true,
+			EraOfferedVersion:    legacyUnsupportedVersion,
+			EraNegotiatedVersion: legacyEraVersions[0], // server's own latest
+			Requests: []map[string]any{
+				initializeRequestWithVersion(1, legacyUnsupportedVersion),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1,
+		},
+		{
+			// A distinct, third coercion path (RESEARCH Pitfall 1, D-06's
+			// discretionary sixth scenario): an initialize whose params
+			// carry NO protocolVersion key negotiates the server's older
+			// backwards-compat default, not its latest. Also a SUCCESS,
+			// not an error.
+			Name:                 legacyEraPrefix + "omitted-version",
+			Index:                true,
+			EraScenario:          true,
+			EraOfferedVersion:    "",
+			EraNegotiatedVersion: legacyOmittedVersionCoercion,
+			Requests: []map[string]any{
+				initializeRequestOmittingVersion(1),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1,
 		},
 	}
 }

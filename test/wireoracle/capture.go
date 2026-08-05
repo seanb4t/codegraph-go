@@ -54,6 +54,31 @@ type Scenario struct {
 	// hook) and the D-02 protocolVersion spec anchor (there is no
 	// initialize result.protocolVersion field to assert against).
 	NoInitialize bool
+	// EraScenario, when true, marks this as one of the six-era Legacy
+	// handshake baseline scenarios (01-05-PLAN Task 1 checkpoint:
+	// six-era). Every OTHER scenario in this package offers the same
+	// literal protocol version as internal/mcp.ProtocolVersion
+	// (handshakeExploreProtocolVersion), so oracle_test.go's default D-02
+	// spec-anchor comparison hardcodes that one shared literal; an era
+	// scenario deliberately offers a DIFFERENT revision, so it carries its
+	// own expected offered/negotiated pair instead via
+	// EraOfferedVersion/EraNegotiatedVersion.
+	EraScenario bool
+	// EraOfferedVersion is the literal protocolVersion this era
+	// scenario's initialize request offers — "" for legacy-omitted-version,
+	// whose params carry no protocolVersion key at all (a plain Go string
+	// field defaults to "" whether the key is omitted or sent empty; this
+	// package always sends the true omitted-key wire shape, never an
+	// empty-string literal — see initializeRequestOmittingVersion).
+	EraOfferedVersion string
+	// EraNegotiatedVersion is what mark3labs v0.56.0 is expected to
+	// negotiate for EraOfferedVersion: itself, for the four supported
+	// revisions; the server's own latest, for the unsupported revision
+	// (silent coercion); or the server's older backwards-compat default,
+	// for the omitted-version case. Three structurally distinct outcomes,
+	// never assumed equal to EraOfferedVersion except for the four
+	// supported revisions (RESEARCH Pitfall 1).
+	EraNegotiatedVersion string
 }
 
 // Transcript is one capture's raw output.

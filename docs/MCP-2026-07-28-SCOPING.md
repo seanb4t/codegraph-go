@@ -113,9 +113,49 @@ owned literal that watches the current SDK's behavior, not one that
 controls it — and this document is where a reader asking "what revision
 does codegraph declare, and who decides it" should land.
 
+## Measured pre-migration behavior
+
+**Measured:** 2026-08-05, against `mark3labs/mcp-go v0.56.0` (the pinned
+dependency in `go.mod` at measurement time). Source: the six frozen
+transcripts under `testdata/wireoracle/transcripts/legacy-*.golden`,
+captured by `test/wireoracle/scenarios.go`'s six-era Legacy handshake
+baseline (`01-05-PLAN.md` Task 1 checkpoint selection: six-era) and
+verified positively by `TestLegacyEraBaselineIsDocumented`
+(`test/wireoracle/oracle_test.go`).
+
+Today's server does not reject an unrecognized `protocolVersion` — it
+**silently coerces** it, and does the same (via a distinct code path) when
+`protocolVersion` is omitted entirely:
+
+| Client offers | Server negotiates | Golden transcript | Behavior |
+|---|---|---|---|
+| `2025-11-25` | `2025-11-25` | `legacy-2025-11-25.golden` | supported, echoed back |
+| `2025-06-18` | `2025-06-18` | `legacy-2025-06-18.golden` | supported, echoed back |
+| `2025-03-26` | `2025-03-26` | `legacy-2025-03-26.golden` | supported, echoed back |
+| `2024-11-05` | `2024-11-05` | `legacy-2024-11-05.golden` | supported, echoed back |
+| `2026-07-28` (unsupported) | `2025-11-25` | `legacy-unsupported-2026-07-28.golden` | **silent coercion to server's own latest — a SUCCESSFUL `initialize` result, no `error` object** |
+| *(omitted)* | `2025-03-26` | `legacy-omitted-version.golden` | **silent coercion to the server's older backwards-compat default — also a SUCCESS, a structurally distinct branch from the unsupported-version case above** |
+
+Both silent-coercion rows are frozen and documented as such per RESEARCH
+Pitfall 1: a green oracle on either of these two scenarios is evidence of
+today's Legacy tolerance, never evidence that the server validates
+versions.
+
+**Contrast with Phase 3's obligation:** the *Error code allocation policy*
+row in the SEP-by-SEP table above records that `UnsupportedProtocolVersion`
+moves to `-32022` under the `2026-07-28` revision. Phase 1 (this
+measurement) stays on the Legacy `mark3labs` backend, which emits neither
+`-32004` nor `-32022` for an unsupported version — it emits no error at
+all. Phase 3, once it lands Modern `_meta` validation on the migrated SDK,
+must reject an unsupported version explicitly with `-32022`; this table's
+silent-coercion baseline is what Phase 3's SPEC-02/SPEC-06 tests compare
+against to prove that transition actually happened, rather than assuming
+it from the SDK's own documentation.
+
 ## Sources
 
 - [CITED: `modelcontextprotocol.io/specification/2026-07-28/changelog`, fetched 2026-08-04] — every "what it does" cell above
 - `github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1197-1210` [VERIFIED, module cache] — the asserted-pin section
 - `.planning/REQUIREMENTS.md` § Out of Scope — Streamable HTTP, authorization work, and Legacy-support exclusions this table agrees with
 - `.planning/phases/01-protocol-scoping-the-sdk-independent-wire-oracle/01-RESEARCH.md` § "SEP-by-SEP Applicability Table" and § "PITFALLS Pitfall 1" — the researched source of this table's content
+- `testdata/wireoracle/transcripts/legacy-*.golden` [VERIFIED, six frozen transcripts, measured 2026-08-05] — the source of the "Measured pre-migration behavior" table above

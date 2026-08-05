@@ -21,6 +21,24 @@ import (
 // guess.
 const codegraphSessionLinePrefix = "codegraph: mcp-session"
 
+// sanitizedRequestedVersion mirrors internal/mcp.sanitizeClientField's
+// documented empty-string behavior
+// (internal/mcp/session_line.go: "an empty or all-stripped result becomes
+// the literal \"<unknown>\"") -- a deliberate, documented duplicate of the
+// published contract, like codegraphSessionLinePrefix above, since
+// sanitizeClientField itself is unexported. Only the empty-string case
+// matters here: legacy-omitted-version is the one era scenario whose
+// EraOfferedVersion is "" (its initialize params carry no protocolVersion
+// key at all), so its session line reports requested=<unknown>, not
+// requested= -- every other era scenario's offered version is already
+// free of spaces and control characters, so this is a no-op for them.
+func sanitizedRequestedVersion(offered string) string {
+	if offered == "" {
+		return "<unknown>"
+	}
+	return offered
+}
+
 func fixtureDir(t *testing.T) string {
 	t.Helper()
 	abs, err := filepath.Abs(filepath.Join("..", "..", "testdata", "wireoracle", "fixture"))
@@ -81,9 +99,19 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 				// initialize result.protocolVersion field to anchor
 				// against (edge-call-before-initialize, 01-04-PLAN Task 2).
 				assertNoSessionLine(t, sc, tr.Stderr)
+			} else if sc.EraScenario {
+				// The six-era Legacy baseline (01-05-PLAN Task 1
+				// checkpoint: six-era) deliberately offers a protocol
+				// revision OTHER than internal/mcp.ProtocolVersion for
+				// five of its six scenarios -- the independent D-02 spec
+				// anchor compares against each scenario's own recorded
+				// offered/negotiated pair instead of the single fixed
+				// literal every other scenario shares.
+				assertSessionLine(t, sc, tr.Stderr, sanitizedRequestedVersion(sc.EraOfferedVersion), sc.EraNegotiatedVersion)
+				assertProtocolVersionAnchor(t, tr.Stdout, sc.EraNegotiatedVersion)
 			} else {
-				assertSessionLine(t, sc, tr.Stderr)
-				assertProtocolVersionAnchor(t, tr.Stdout)
+				assertSessionLine(t, sc, tr.Stderr, internalmcp.ProtocolVersion, internalmcp.ProtocolVersion)
+				assertProtocolVersionAnchor(t, tr.Stdout, internalmcp.ProtocolVersion)
 			}
 
 			_ = ledger // exercised directly by TestNormalizeRuleLedgerIsHonest below
@@ -121,10 +149,12 @@ func assertBytesEqualLineByLine(t *testing.T, scenario string, got, want []byte)
 
 // assertSessionLine checks the D-13/D-14 stderr contract: exactly one line
 // beginning with the published prefix, parsing into the four keys in
-// fixed order, with requested/negotiated pinned to internal/mcp.ProtocolVersion
-// and client/tools matching what this scenario's own script and
-// ExpectTools declare.
-func assertSessionLine(t *testing.T, sc Scenario, stderr string) {
+// fixed order, with requested/negotiated compared against wantRequested/
+// wantNegotiated (internal/mcp.ProtocolVersion for every scenario except
+// the six-era Legacy baseline, whose own EraOfferedVersion/
+// EraNegotiatedVersion the caller passes instead) and client/tools
+// matching what this scenario's own script and ExpectTools declare.
+func assertSessionLine(t *testing.T, sc Scenario, stderr string, wantRequested, wantNegotiated string) {
 	t.Helper()
 
 	var sessionLines []string
@@ -157,11 +187,11 @@ func assertSessionLine(t *testing.T, sc Scenario, stderr string) {
 		values[parts[0]] = parts[1]
 	}
 
-	if values["requested"] != internalmcp.ProtocolVersion {
-		t.Fatalf("scenario %q: session line requested=%q, want %q (internal/mcp.ProtocolVersion)", sc.Name, values["requested"], internalmcp.ProtocolVersion)
+	if values["requested"] != wantRequested {
+		t.Fatalf("scenario %q: session line requested=%q, want %q", sc.Name, values["requested"], wantRequested)
 	}
-	if values["negotiated"] != internalmcp.ProtocolVersion {
-		t.Fatalf("scenario %q: session line negotiated=%q, want %q (internal/mcp.ProtocolVersion)", sc.Name, values["negotiated"], internalmcp.ProtocolVersion)
+	if values["negotiated"] != wantNegotiated {
+		t.Fatalf("scenario %q: session line negotiated=%q, want %q", sc.Name, values["negotiated"], wantNegotiated)
 	}
 	wantClient := handshakeExploreClientName + "/" + handshakeExploreClientVersion
 	if values["client"] != wantClient {
@@ -189,10 +219,11 @@ func assertNoSessionLine(t *testing.T, sc Scenario, stderr string) {
 
 // assertProtocolVersionAnchor is D-02's hand-authored spec anchor,
 // independent of the capture: the initialize response's
-// result.protocolVersion must equal internal/mcp.ProtocolVersion, decoded
-// from the RAW captured line by field name only — never through an SDK
-// type.
-func assertProtocolVersionAnchor(t *testing.T, stdout []byte) {
+// result.protocolVersion must equal want (internal/mcp.ProtocolVersion for
+// every scenario except the six-era Legacy baseline, whose own
+// EraNegotiatedVersion the caller passes instead), decoded from the RAW
+// captured line by field name only — never through an SDK type.
+func assertProtocolVersionAnchor(t *testing.T, stdout []byte, want string) {
 	t.Helper()
 	for _, line := range bytes.Split(stdout, []byte("\n")) {
 		if len(bytes.TrimSpace(line)) == 0 {
@@ -215,8 +246,8 @@ func assertProtocolVersionAnchor(t *testing.T, stdout []byte) {
 		if err := json.Unmarshal(frame.Result, &res); err != nil {
 			t.Fatalf("decode initialize result.protocolVersion: %v; raw line: %q", err, line)
 		}
-		if res.ProtocolVersion != internalmcp.ProtocolVersion {
-			t.Fatalf("initialize response protocolVersion = %q, want %q (internal/mcp.ProtocolVersion): %q", res.ProtocolVersion, internalmcp.ProtocolVersion, line)
+		if res.ProtocolVersion != want {
+			t.Fatalf("initialize response protocolVersion = %q, want %q: %q", res.ProtocolVersion, want, line)
 		}
 		return
 	}
@@ -373,7 +404,7 @@ func TestSpecAnchorsHold(t *testing.T) {
 
 			if sc.Name == "handshake-explore" {
 				t.Run("protocolVersion", func(t *testing.T) {
-					assertProtocolVersionAnchor(t, tr.Stdout)
+					assertProtocolVersionAnchor(t, tr.Stdout, internalmcp.ProtocolVersion)
 				})
 			}
 
@@ -595,4 +626,90 @@ func TestEveryRegisteredToolHasASuccessfulCallScenario(t *testing.T) {
 		sort.Strings(names)
 		t.Fatalf("no scenario provides a successful tools/call for: %v", names)
 	}
+}
+
+// legacyEraExpectedCount is the size of the multi-era Legacy baseline
+// approved at 01-05-PLAN's Task 1 blocking checkpoint (selection:
+// six-era) -- the four protocol revisions today's server recognizes, plus
+// one unsupported revision, plus one omitted-version request. This brings
+// the suite from 17 to 23 scenarios total; plan 07 independently sets its
+// own ExpectedScenarioCount to that resulting total (D-07) -- this
+// constant is NOT that one, and does not create it.
+const legacyEraExpectedCount = 6
+
+// TestLegacyEraBaselineIsDocumented is a positive assertion over the
+// already-frozen six-era baseline (VRFY-04, D-06): it reads golden files
+// from disk, never re-captures, proving the frozen evidence itself is
+// complete and internally consistent rather than re-verifying wire
+// behavior TestFrozenTranscriptsMatch already covers byte-for-byte.
+func TestLegacyEraBaselineIsDocumented(t *testing.T) {
+	var eraScenarios []Scenario
+	for _, sc := range Scenarios() {
+		if strings.HasPrefix(sc.Name, legacyEraPrefix) {
+			eraScenarios = append(eraScenarios, sc)
+		}
+	}
+
+	if len(eraScenarios) != legacyEraExpectedCount {
+		t.Fatalf("era scenario count (name prefix %q) = %d, want exactly %d (01-05-PLAN Task 1 six-era selection)", legacyEraPrefix, len(eraScenarios), legacyEraExpectedCount)
+	}
+
+	for _, sc := range eraScenarios {
+		t.Run(sc.Name, func(t *testing.T) {
+			goldenPath := TranscriptPath(sc.Name)
+			raw, err := os.ReadFile(goldenPath)
+			if err != nil {
+				t.Fatalf("scenario %q: frozen transcript missing at %s: %v", sc.Name, goldenPath, err)
+			}
+			if len(bytes.TrimSpace(raw)) == 0 {
+				t.Fatalf("scenario %q: frozen transcript at %s is empty", sc.Name, goldenPath)
+			}
+
+			if sc.EraOfferedVersion == "" || sc.EraOfferedVersion != sc.EraNegotiatedVersion {
+				// The unsupported and omitted-version scenarios negotiate
+				// a DIFFERENT value than offered by design (silent
+				// coercion, RESEARCH Pitfall 1) -- only the four
+				// supported revisions assert offered==negotiated here.
+				return
+			}
+
+			negotiated := decodeFrozenInitializeProtocolVersion(t, sc.Name, raw)
+			if negotiated != sc.EraOfferedVersion {
+				t.Fatalf("scenario %q: frozen transcript negotiated protocolVersion = %q, want %q (offered == negotiated for a supported revision)", sc.Name, negotiated, sc.EraOfferedVersion)
+			}
+		})
+	}
+}
+
+// decodeFrozenInitializeProtocolVersion decodes only the initialize
+// response's (id=1) result.protocolVersion field out of a frozen golden
+// file's raw bytes, field-by-field -- never through an SDK type, and
+// never by re-capturing.
+func decodeFrozenInitializeProtocolVersion(t *testing.T, scenario string, raw []byte) string {
+	t.Helper()
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != 1 || len(frame.Result) == 0 {
+			continue
+		}
+		var res struct {
+			ProtocolVersion string `json:"protocolVersion"`
+		}
+		if err := json.Unmarshal(frame.Result, &res); err != nil {
+			t.Fatalf("scenario %q: decode frozen initialize result.protocolVersion: %v", scenario, err)
+		}
+		return res.ProtocolVersion
+	}
+	t.Fatalf("scenario %q: no initialize response (id=1, non-empty result) found in frozen transcript", scenario)
+	return ""
 }
