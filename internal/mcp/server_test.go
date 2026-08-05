@@ -78,7 +78,11 @@ func initClient(t *testing.T, ctx context.Context, c *mcpclient.Client) {
 	t.Helper()
 
 	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	// ProtocolVersion is the repo-owned literal (this package's own
+	// protocol_version.go), referenced unqualified since this file is
+	// package mcp itself — a dependency bump must not move this value
+	// silently (VRFY-02).
+	req.Params.ProtocolVersion = ProtocolVersion
 	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-mcp-test", Version: "0.0.0"}
 
 	if _, err := c.Initialize(ctx, req); err != nil {

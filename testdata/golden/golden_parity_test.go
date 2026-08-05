@@ -1474,7 +1474,9 @@ func initMCPClient(t *testing.T, ctx context.Context, c *mcpclient.Client) {
 	t.Helper()
 
 	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	// internalmcp.ProtocolVersion is the repo-owned literal — a dependency
+	// bump must not move this value silently (VRFY-02).
+	req.Params.ProtocolVersion = internalmcp.ProtocolVersion
 	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-golden-parity-test", Version: "0.0.0"}
 	if _, err := c.Initialize(ctx, req); err != nil {
 		t.Fatalf("client Initialize: %v", err)

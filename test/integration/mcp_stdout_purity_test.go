@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/seanb4t/codegraph-go/internal/mcp"
 )
 
 // syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer. It
@@ -117,7 +117,11 @@ func TestServeMCPStdoutIsPureJSONRPC(t *testing.T) {
 		"id":      1,
 		"method":  "initialize",
 		"params": map[string]any{
-			"protocolVersion": mcp.LATEST_PROTOCOL_VERSION,
+			// mcp.ProtocolVersion is the repo-owned literal (this is the
+			// only SDK-mcp reference this file had; the import above is
+			// now internal/mcp, not the SDK's mcp package) — a dependency
+			// bump must not move this value silently (VRFY-02).
+			"protocolVersion": mcp.ProtocolVersion,
 			"capabilities":    map[string]any{},
 			"clientInfo": map[string]any{
 				"name":    "codegraph-purity-test",
