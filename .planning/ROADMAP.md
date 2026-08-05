@@ -85,7 +85,7 @@ Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-RO
 
   1. The harness runs against the current, unmodified `mark3labs`-backed `serve --mcp` and passes — asserting on raw stdio wire bytes rather than SDK-typed Go objects, and never using the SDK under test as its own oracle (VRFY-01, VRFY-04)
   2. `serve --mcp` writes the negotiated protocol version to stderr on every connection, with no flag or environment variable needed to turn it on — the only available mitigation for a spec-sanctioned silent version mismatch (VRFY-03)
-  3. The server's declared protocol version reads from a repo-owned literal, and CI fails if any `LATEST_PROTOCOL_VERSION`-style SDK-owned constant reference remains anywhere in the tree, so a dependency bump can never move wire behavior silently (VRFY-02)
+  3. The server's declared protocol version is asserted against a repo-owned literal, and CI fails if any `LATEST_PROTOCOL_VERSION`-style SDK-owned constant reference remains anywhere in the tree, so a dependency bump can never move wire behavior silently (VRFY-02)
   4. `internal/cli/serve.go` bootstraps and serves entirely through the narrow `internal/mcp.Server` seam and imports no MCP SDK package — the one production-code SDK leak, closed while it is still cheap (SDK-02)
   5. A dated record states which protocol revision each of the 8 roster agent clients (Claude Code, Cursor, Codex CLI, opencode, Gemini CLI, Hermes, Antigravity, Kiro) negotiates, measured against the real clients rather than read from their docs (VRFY-05)
 
