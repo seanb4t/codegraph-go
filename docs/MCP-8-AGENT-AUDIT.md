@@ -93,6 +93,26 @@ Phase 3 should treat surviving a redundant process spawn (already true
 today, since the server has no problem being started twice) as a baseline
 it must not regress, rather than as new work `server/discover` creates.
 
+## Reproducing this audit
+
+Each restored config's `command` points at
+`/Volumes/Code/github.com/seanb4t/codegraph-go/bin/codegraph` — the
+developer's real, pre-audit local install location. That path is **not**
+populated by this repository's checked-in build tooling: `/bin/` is
+gitignored (`.gitignore`), `task build` is a compile-check only
+(`go build ./...`, no output binary retained), and `task build:release`
+writes `./codegraph` at the repo root, not `bin/codegraph`. It is a
+developer-managed local install path outside this repo's build graph.
+
+Consequence for anyone re-running this audit or spot-checking a restored
+config: a connection attempt against a freshly cloned checkout will fail
+with "binary not found" until `go build -o bin/codegraph ./cmd/codegraph` is
+run by hand. That failure is expected and orthogonal to config
+restoration — it does **not** indicate a failed restore or a broken audit;
+the configs were verified byte-identical to their pre-audit values (see the
+`Config restore` column above) regardless of whether `bin/codegraph`
+currently exists on disk.
+
 ## UNMEASURED rows: blocking reasons on this machine
 
 Five of the eight roster rows are UNMEASURED, all for the same underlying
