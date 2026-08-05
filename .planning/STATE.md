@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: MCP Protocol Currency
-current_phase: 1
-current_phase_name: Protocol Scoping & the SDK-Independent Wire Oracle
+current_phase: 01
+current_phase_name: protocol-scoping-the-sdk-independent-wire-oracle
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-08-05T00:53:19.310Z"
-last_activity: 2026-08-03
-last_activity_desc: v0.3.0 roadmap created; 25/25 requirements mapped across 5 phases
+last_updated: "2026-08-05T19:15:01.394Z"
+last_activity: 2026-08-05
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 5
   completed_phases: 0
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-03)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** v0.3.0 — MCP Protocol Currency. Bring the stdio MCP server current with spec revision `2026-07-28` on `modelcontextprotocol/go-sdk@v1.7.0` without breaking any of the 8 installed agent clients, proven by a harness that asserts on raw wire bytes and never uses the SDK under test as its own oracle.
+**Current focus:** Phase 01 — protocol-scoping-the-sdk-independent-wire-oracle
 
 ## Current Position
 
-Phase: 1 of 4 (Protocol Scoping & the SDK-Independent Wire Oracle)
-Plan: — (no plans yet)
-Status: Ready to execute
-Last activity: 2026-08-03 — v0.3.0 roadmap created; 25/25 requirements mapped across 5 phases
+Phase: 01 (protocol-scoping-the-sdk-independent-wire-oracle) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 01
+Last activity: 2026-08-05 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
