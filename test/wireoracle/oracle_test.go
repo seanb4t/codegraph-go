@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -74,8 +75,16 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 			}
 
 			assertBytesEqualLineByLine(t, sc.Name, normalized, want)
-			assertSessionLine(t, sc, tr.Stderr)
-			assertProtocolVersionAnchor(t, tr.Stdout)
+			if sc.NoInitialize {
+				// No initialize means the VRFY-03 AddAfterInitialize hook
+				// never fires (no session line to expect) and there is no
+				// initialize result.protocolVersion field to anchor
+				// against (edge-call-before-initialize, 01-04-PLAN Task 2).
+				assertNoSessionLine(t, sc, tr.Stderr)
+			} else {
+				assertSessionLine(t, sc, tr.Stderr)
+				assertProtocolVersionAnchor(t, tr.Stdout)
+			}
 
 			_ = ledger // exercised directly by TestNormalizeRuleLedgerIsHonest below
 		})
@@ -161,6 +170,20 @@ func assertSessionLine(t *testing.T, sc Scenario, stderr string) {
 	wantTools := strconv.Itoa(sc.ExpectTools)
 	if values["tools"] != wantTools {
 		t.Fatalf("scenario %q: session line tools=%q, want %q", sc.Name, values["tools"], wantTools)
+	}
+}
+
+// assertNoSessionLine checks the NoInitialize counterpart of
+// assertSessionLine: a scenario that never sends "initialize" must never
+// produce the VRFY-03 stderr session line at all, since its
+// AddAfterInitialize hook has nothing to hook (edge-call-before-initialize,
+// RESEARCH Pitfall 2).
+func assertNoSessionLine(t *testing.T, sc Scenario, stderr string) {
+	t.Helper()
+	for _, l := range strings.Split(stderr, "\n") {
+		if strings.HasPrefix(l, codegraphSessionLinePrefix) {
+			t.Fatalf("scenario %q: NoInitialize=true but stderr contains a session line: %q", sc.Name, l)
+		}
 	}
 }
 
@@ -289,5 +312,287 @@ func TestCaptureIsDeterministic(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ledgers[0], ledgers[1]) {
 		t.Fatalf("ledger differs between two runs: %v vs %v", ledgers[0], ledgers[1])
+	}
+}
+
+// assertFramingInvariant is D-02's framing invariant, applied to every
+// scenario (not just the three named Anchors()): every non-empty stdout
+// line parses as a JSON object carrying a "jsonrpc" field equal to "2.0",
+// and every request id sc.Requests sent has exactly one response line
+// bearing that id.
+func assertFramingInvariant(t *testing.T, sc Scenario, stdout []byte) {
+	t.Helper()
+
+	wantIDs := requestIDs(sc.Requests)
+	seen := make(map[float64]int, len(wantIDs))
+
+	for _, line := range bytes.Split(stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			JSONRPC string `json:"jsonrpc"`
+			ID      any    `json:"id"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			t.Fatalf("scenario %q: stdout line is not valid JSON: %v: %q", sc.Name, err, line)
+		}
+		if frame.JSONRPC != "2.0" {
+			t.Fatalf("scenario %q: stdout line jsonrpc = %q, want \"2.0\": %q", sc.Name, frame.JSONRPC, line)
+		}
+		if id, ok := idAsFloat64(frame.ID); ok {
+			seen[id]++
+		}
+	}
+
+	for id := range wantIDs {
+		if seen[id] != 1 {
+			t.Fatalf("scenario %q: request id %v has %d response lines, want exactly 1", sc.Name, id, seen[id])
+		}
+	}
+}
+
+// TestSpecAnchorsHold is D-02's central assertion: every hand-authored
+// anchor fails independently of the frozen transcripts, checked against
+// freshly captured stdout (never the golden file — that would be
+// circular), plus the framing invariant applied uniformly across every
+// scenario in Scenarios(). Each scenario is captured exactly once here
+// (not once per matching anchor) so this test's own subprocess-spawn cost
+// stays at 17, not 17-plus-anchor-count.
+func TestSpecAnchorsHold(t *testing.T) {
+	anchorsByScenario := make(map[string][]Anchor)
+	for _, a := range Anchors() {
+		anchorsByScenario[a.Scenario] = append(anchorsByScenario[a.Scenario], a)
+	}
+
+	for _, sc := range Scenarios() {
+		t.Run(sc.Name, func(t *testing.T) {
+			tr, _ := mustCaptureScenario(t, sc.Name)
+
+			assertFramingInvariant(t, sc, tr.Stdout)
+
+			if sc.Name == "handshake-explore" {
+				t.Run("protocolVersion", func(t *testing.T) {
+					assertProtocolVersionAnchor(t, tr.Stdout)
+				})
+			}
+
+			for _, a := range anchorsByScenario[sc.Name] {
+				t.Run(a.Name, func(t *testing.T) {
+					a.Assert(t, tr.Stdout)
+				})
+			}
+		})
+	}
+}
+
+// TestToolsListOrderIsDeterministic proves toolslist-repeat's two
+// consecutive tools/list calls (ids 2 and 3) return byte-identical
+// result.tools arrays — not merely "both non-empty".
+func TestToolsListOrderIsDeterministic(t *testing.T) {
+	tr, _ := mustCaptureScenario(t, "toolslist-repeat")
+
+	var toolsArrays [][]byte
+	for _, line := range bytes.Split(tr.Stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || (idf != 2 && idf != 3) {
+			continue
+		}
+		var res struct {
+			Tools json.RawMessage `json:"tools"`
+		}
+		if err := json.Unmarshal(frame.Result, &res); err != nil {
+			t.Fatalf("decode tools/list result.tools (id=%v): %v; raw line: %q", idf, err, line)
+		}
+		toolsArrays = append(toolsArrays, res.Tools)
+	}
+
+	if len(toolsArrays) != 2 {
+		t.Fatalf("toolslist-repeat: found %d tools/list responses (ids 2,3), want 2", len(toolsArrays))
+	}
+	if !bytes.Equal(toolsArrays[0], toolsArrays[1]) {
+		t.Fatalf("toolslist-repeat: result.tools differs between the two consecutive tools/list calls:\nfirst:  %s\nsecond: %s", toolsArrays[0], toolsArrays[1])
+	}
+}
+
+// toolNamesFromCapture captures scenarioName and decodes only
+// result.tools[].name out of the response bearing wantID, sorted.
+func toolNamesFromCapture(t *testing.T, scenarioName string, wantID float64) []string {
+	t.Helper()
+	tr, _ := mustCaptureScenario(t, scenarioName)
+
+	for _, line := range bytes.Split(tr.Stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != wantID {
+			continue
+		}
+		var res struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		}
+		if err := json.Unmarshal(frame.Result, &res); err != nil {
+			t.Fatalf("scenario %q: decode tools/list result.tools[].name: %v; raw line: %q", scenarioName, err, line)
+		}
+		names := make([]string, len(res.Tools))
+		for i, tool := range res.Tools {
+			names[i] = tool.Name
+		}
+		sort.Strings(names)
+		return names
+	}
+	t.Fatalf("scenario %q: no tools/list response (id=%v) found in captured stdout", scenarioName, wantID)
+	return nil
+}
+
+// equalStrings mirrors internal/mcp/server_test.go's helper of the same
+// name exactly (PITFALLS Trap D's positive pattern to preserve): a
+// positional comparison over two already-sorted slices, never a
+// length-greater-than-zero check.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestToolsListExactSets proves each tools/list variant advertises exactly
+// its expected set — exact-set for the non-empty cases, exact-zero for
+// toolslist-no-index — never a non-empty/length-greater-than check
+// (PITFALLS Trap D).
+func TestToolsListExactSets(t *testing.T) {
+	cases := []struct {
+		scenario string
+		want     []string
+	}{
+		{"toolslist-default", []string{"codegraph_explore"}},
+		{"toolslist-allowlist", []string{"codegraph_explore", "codegraph_node", "codegraph_status"}},
+		{"toolslist-no-index", []string{}},
+	}
+	for _, c := range cases {
+		t.Run(c.scenario, func(t *testing.T) {
+			got := toolNamesFromCapture(t, c.scenario, 2)
+			if !equalStrings(got, c.want) {
+				t.Fatalf("scenario %q: tools/list advertised %v, want exactly %v", c.scenario, got, c.want)
+			}
+		})
+	}
+}
+
+// findToolCallRequest scans sc's static Requests (not captured output) for
+// its one tools/call request (every scenario in Scenarios() carries at most
+// one, per the concurrency ordering constraint documented above
+// Scenarios()) and returns its request id and target tool name.
+func findToolCallRequest(sc Scenario) (id float64, name string, ok bool) {
+	for _, req := range sc.Requests {
+		method, _ := req["method"].(string)
+		if method != "tools/call" {
+			continue
+		}
+		params, _ := req["params"].(map[string]any)
+		toolName, _ := params["name"].(string)
+		reqID, idOK := idAsFloat64(req["id"])
+		if !idOK {
+			continue
+		}
+		return reqID, toolName, true
+	}
+	return 0, "", false
+}
+
+// isSuccessfulToolCall decodes only result.isError out of stdout's response
+// bearing wantID, returning true when that response exists, is not an
+// error-level JSON-RPC response, and decodes to isError=false.
+func isSuccessfulToolCall(stdout []byte, wantID float64) bool {
+	for _, line := range bytes.Split(stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != wantID || len(frame.Result) == 0 {
+			continue
+		}
+		var res struct {
+			IsError bool `json:"isError"`
+		}
+		if err := json.Unmarshal(frame.Result, &res); err != nil {
+			return false
+		}
+		return !res.IsError
+	}
+	return false
+}
+
+// TestEveryRegisteredToolHasASuccessfulCallScenario derives the full
+// registered tool-name set from toolslist-repeat's capture (all seven
+// companionNames allowlisted, per internal/mcp/server.go:35, plus
+// codegraph_explore — 8 names) and requires that for EACH of those 8 names
+// there exists a scenario whose Requests contains a tools/call naming it
+// AND whose captured response for that call decodes to result.isError
+// false. This is the structural replacement for "handshake-explore already
+// covers codegraph_explore" prose-delegation: a scenario that silently
+// degrades into an error result cannot pass as coverage.
+func TestEveryRegisteredToolHasASuccessfulCallScenario(t *testing.T) {
+	registered := toolNamesFromCapture(t, "toolslist-repeat", 2)
+	if len(registered) != 8 {
+		t.Fatalf("toolslist-repeat: registered %d tools, want 8: %v", len(registered), registered)
+	}
+
+	remaining := make(map[string]bool, len(registered))
+	for _, name := range registered {
+		remaining[name] = true
+	}
+
+	for _, sc := range Scenarios() {
+		reqID, toolName, ok := findToolCallRequest(sc)
+		if !ok || !remaining[toolName] {
+			continue
+		}
+
+		tr, _ := mustCaptureScenario(t, sc.Name)
+		if isSuccessfulToolCall(tr.Stdout, reqID) {
+			delete(remaining, toolName)
+		}
+	}
+
+	if len(remaining) > 0 {
+		names := make([]string, 0, len(remaining))
+		for name := range remaining {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		t.Fatalf("no scenario provides a successful tools/call for: %v", names)
 	}
 }
