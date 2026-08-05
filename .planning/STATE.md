@@ -5,8 +5,8 @@ milestone_name: MCP Protocol Currency
 current_phase: 2
 current_phase_name: SDK Migration — official go-sdk on the existing surface
 status: planning
-stopped_at: Phase 1 complete, ready to plan Phase 2
-last_updated: "2026-08-05T22:11:11.501Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-08-05T22:37:01.931Z"
 last_activity: 2026-08-05
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
 progress:
@@ -240,16 +240,17 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-05T22:11:00Z
-Stopped at: Phase 1 complete, ready to plan Phase 2
+Last session: 2026-08-05T22:37:01.922Z
+Stopped at: Phase 2 context gathered
   NEXT: `/gsd-discuss-phase 2` (SDK Migration — official go-sdk on the existing surface)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:
+
     - The two ONE-WAY captures are done. Once `mark3labs/mcp-go` leaves `go.mod` the all-8-tool coverage and the multi-era Legacy baseline can never be recaptured — any further extension of the frozen set must happen BEFORE the swap.
     - Known frozen-set gap (from `01-07`'s MUTATION-PROOF.md, carried in `01-UAT.md` → Gaps): no scenario exercises a handler's own required-argument validation failure. All four captured error shapes are protocol-level, so mutating `exploreHandler`'s missing-query error shape turns nothing red. Extendable today, impossible after the swap. Input to Phase 2's SDK-04 audit.
     - VRFY-02's "reads from" property is Phase 2's to deliver if the official go-sdk exposes an injection point.
   NOTE: no milestone tag will be created — release-please owns tagging (D-06R).
-Resume file: None
+Resume file: .planning/phases/02-sdk-migration-official-go-sdk-on-the-existing-surface/02-CONTEXT.md
 
 ## Operator Next Steps
 
