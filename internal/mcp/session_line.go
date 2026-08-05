@@ -14,6 +14,12 @@ import (
 // this is a published diagnostic users will be asked to paste.
 const sessionLinePrefix = "codegraph: mcp-session"
 
+// clientFieldMaxBytes is the single documented boundary sanitizeClientField
+// truncates every client-supplied field to, on a UTF-8 rune boundary. Named
+// so the limit is one number referenced from both the truncation call and
+// this doc comment, rather than a magic 256 repeated at each call site.
+const clientFieldMaxBytes = 256
+
 // formatSessionLine renders VRFY-03's always-on stderr line in the fixed
 // key order requested, negotiated, client, tools (D-14), terminated by a
 // trailing newline. All four client-supplied values (requested, negotiated,
@@ -41,9 +47,9 @@ func formatSessionLine(requested, negotiated, clientName, clientVersion string, 
 //
 // In order: invalid UTF-8 byte sequences are replaced with U+FFFD; every
 // remaining control character (including CR and LF) and every space is
-// replaced with '_'; the result is truncated to at most 256 bytes on a
-// rune boundary; and an empty or all-stripped result becomes the literal
-// "<unknown>".
+// replaced with '_'; the result is truncated to at most clientFieldMaxBytes
+// bytes on a rune boundary; and an empty or all-stripped result becomes the
+// literal "<unknown>".
 func sanitizeClientField(s string) string {
 	if s == "" {
 		return "<unknown>"
@@ -58,8 +64,8 @@ func sanitizeClientField(s string) string {
 		return r
 	}, valid)
 
-	if len(sanitized) > 256 {
-		sanitized = truncateOnRuneBoundary(sanitized, 256)
+	if len(sanitized) > clientFieldMaxBytes {
+		sanitized = truncateOnRuneBoundary(sanitized, clientFieldMaxBytes)
 	}
 
 	if sanitized == "" {
