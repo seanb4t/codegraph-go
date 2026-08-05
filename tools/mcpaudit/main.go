@@ -5,12 +5,15 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 )
 
 func main() {
@@ -45,6 +48,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
+	// A real agent client can terminate this shim process directly rather
+	// than closing its stdin (observed live against Claude Code during
+	// the Task 2 audit) — without catching the signal here, an
+	// unhandled SIGTERM/SIGINT kills the process before Run's
+	// post-exit appendObservation ever runs, silently dropping the
+	// partial-observation guarantee. NotifyContext intercepts exactly
+	// once; a second signal falls through to default (immediate) behavior.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
 	cfg := Config{
 		RealBin:  *real,
 		RealArgs: realArgs,
@@ -52,6 +65,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		In:       stdin,
 		Out:      stdout,
 		ErrOut:   stderr,
+		Ctx:      ctx,
 	}
 
 	if err := Run(cfg); err != nil {

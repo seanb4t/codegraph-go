@@ -30,6 +30,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -396,6 +397,21 @@ type Config struct {
 	In     io.Reader
 	Out    io.Writer
 	ErrOut io.Writer
+
+	// Ctx, when canceled, tells Run to kill the child process immediately
+	// so the already-unconditional post-exit appendObservation still
+	// runs. Defaults to context.Background() when nil. main.go wires this
+	// to a signal.NotifyContext(SIGTERM, SIGINT): a real agent client
+	// observed in practice (Claude Code, live during this audit) can
+	// terminate the shim process itself directly — rather than closing
+	// its stdin, which is the only exit path the original design
+	// accounted for — and an unhandled SIGTERM kills a Go process before
+	// any deferred/post-Wait code runs, silently dropping the "append a
+	// partial Observation if the exchange never completes" guarantee
+	// (Rule 1 fix, discovered running the real Task 2 audit: without this,
+	// a signal-killed shim left only the process-start record behind,
+	// indistinguishable from "never spawned").
+	Ctx context.Context
 }
 
 // Run proxies stdio between the caller (an agent client, or a test) and a
@@ -445,6 +461,11 @@ func Run(cfg Config) error {
 		return fmt.Errorf("mcpaudit: Run: start %s: %w", cfg.RealBin, err)
 	}
 
+	ctx := cfg.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
@@ -465,13 +486,55 @@ func Run(cfg Config) error {
 		})
 	}()
 
-	waitErr := cmd.Wait()
-	wg.Wait()
+	// cmd.Wait is run on its own goroutine so a caught termination signal
+	// (ctx.Done) can react to it without blocking on it.
+	cmdDone := make(chan error, 1)
+	go func() { cmdDone <- cmd.Wait() }()
+
+	var waitErr error
+	var signaled bool
+	select {
+	case waitErr = <-cmdDone:
+		// The child exited on its own — the ordinary path. This is
+		// normally CAUSED BY the caller (in) closing its stdin, which is
+		// what makes forwardLines(in, childIn, ...) above close childIn
+		// and return, in turn making the real server see EOF and exit —
+		// so by the time we get here that goroutine has typically
+		// already finished, and wg.Wait() below returns promptly.
+	case <-ctx.Done():
+		// The shim itself received a termination signal (main.go wires
+		// this to SIGTERM/SIGINT — observed live against Claude Code
+		// during the Task 2 audit, which kills the MCP server process
+		// directly rather than closing its stdin). Kill the child so
+		// cmd.Wait unblocks.
+		signaled = true
+		_ = cmd.Process.Kill()
+		waitErr = <-cmdDone
+	}
+
+	// Do NOT wg.Wait() on the signaled path: the caller->child forwarding
+	// goroutine reads from cfg.In, which is owned by the REAL external
+	// process that just signaled us — it may never close that pipe, so
+	// blocking on it here would hang the shim indefinitely instead of
+	// exiting promptly with whatever partial observation was captured.
+	// The process is about to exit regardless, which reclaims the
+	// goroutine; obs.snapshot() below is mutex-guarded so reading it
+	// concurrently with that goroutine's last in-flight observe call (if
+	// any) is safe.
+	if !signaled {
+		wg.Wait()
+	}
 
 	// Appended whether the exchange completed or not — an incomplete
 	// measurement must read as incomplete, never as silently absent.
 	if err := appendObservation(cfg.LogPath, obs.snapshot()); err != nil {
 		return err
+	}
+
+	if signaled {
+		// We killed the child ourselves in response to our own caught
+		// signal — an intentional shutdown, not a failure to propagate.
+		return nil
 	}
 
 	if waitErr != nil {

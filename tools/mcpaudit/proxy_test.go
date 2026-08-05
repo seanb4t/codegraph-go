@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // shimBinPath is the absolute path to the real mcpaudit binary, built
@@ -257,6 +259,59 @@ func TestProxyPreservesCRLFAndUnterminatedFinalFrame(t *testing.T) {
 	}
 	if !bytes.Equal(out.Bytes(), input) {
 		t.Fatalf("output bytes = %q, want %q (CRLF and unterminated final frame preserved byte-exact)", out.Bytes(), input)
+	}
+}
+
+// TestRunAppendsObservationWhenCanceledBeforeStdinCloses is a regression
+// test for a real bug found running the Task 2 audit against live Claude
+// Code: it terminates the mcpaudit process directly rather than closing
+// its stdin. Without Config.Ctx wired to a caught signal, Run would block
+// forever in wg.Wait() on the caller->child forwarding goroutine — which
+// reads from a pipe the (now-gone) external caller never closes — so the
+// post-exit appendObservation call was never reached, leaving only the
+// process-start record behind. cfg.Ctx cancellation is the deterministic,
+// signal-free way to exercise that same "the caller is gone but never
+// closed our stdin" condition in a test.
+func TestRunAppendsObservationWhenCanceledBeforeStdinCloses(t *testing.T) {
+	catPath, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skip("cat not found on PATH")
+	}
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	logPath := filepath.Join(t.TempDir(), "obs.jsonl")
+
+	cfg := Config{
+		RealBin: catPath,
+		LogPath: logPath,
+		In:      pr,
+		Out:     io.Discard,
+		ErrOut:  io.Discard,
+		Ctx:     ctx,
+	}
+
+	runDone := make(chan error, 1)
+	go func() { runDone <- Run(cfg) }()
+
+	// Give Run a moment to start the child and block reading from `in`
+	// (deliberately never closed here), then cancel — simulating a
+	// caught termination signal.
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("Run returned an error after cfg.Ctx was canceled: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("Run did not return within 5s of ctx cancellation — still blocked on the caller's stdin, which never closes (the exact bug this test guards against)")
+	}
+
+	lines := readLogLines(t, logPath)
+	if len(lines) != 2 {
+		t.Fatalf("log has %d lines, want 2 (process-start record + one observation) even though Run was interrupted mid-exchange", len(lines))
 	}
 }
 
