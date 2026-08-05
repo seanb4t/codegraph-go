@@ -76,12 +76,26 @@ a ledger, a sign-off step" as a proposal that must justify itself, not a default
   takes that literally. A `2026-07-28` client gets `2026-07-28`; older clients
   get their era.
 
-- **D-05:** **`legacy-unsupported-2026-07-28.golden` is an expected, explained
-  divergence.** It currently freezes `"protocolVersion":"2025-11-25"` because
-  mark3labs did not recognize `2026-07-28` and coerced it down. go-sdk v1.7.0
-  recognizes it. The transcript moves to `2026-07-28`, and the scenario is no
-  longer "unsupported version" — it should be renamed to reflect what it now
-  measures. This is the single most predictable diff in the phase.
+- **D-05 — CORRECTED 2026-08-05 by `02-RESEARCH.md` Q1/Q4. The original
+  prediction was wrong; do not plan against it.** D-05 originally claimed
+  `legacy-unsupported-2026-07-28.golden` would move `2025-11-25` → `2026-07-28`
+  and called it "the single most predictable diff in the phase." **It does not
+  move.** go-sdk recognizes `2026-07-28` as a version, but `negotiatedVersion()`
+  caps every classic-`initialize` offer *strictly below* it — the `initialize`
+  method is itself deprecated at that revision — so the offer falls through to
+  the same fallback as an unrecognized version and answers `2025-11-25`, the
+  same value mark3labs produced for a different reason. Proven by source
+  enumeration plus a probe server built against the real SDK and driven over
+  raw stdio.
+  - **The transcript that actually moves is `legacy-omitted-version.golden`**
+    (`2025-03-26` → `2025-11-25`), which no prior document predicted.
+  - Renaming `legacy-unsupported-2026-07-28` is still appropriate (go-sdk
+    *does* recognize the version), but **a plan task asserting its
+    `protocolVersion` value changes will fail against the real SDK.**
+  - Lesson worth keeping: the Context7 evidence said the version was
+    *supported*; the source said the *code path answering this request* can
+    never return it. D-06's insistence on source-level proof earned its keep on
+    first use.
 
 - **D-06:** **VRFY-02's stricter "reads from" property is expected to remain
   undeliverable, and that must be *proven*, not assumed.** Phase 1 shipped
@@ -119,6 +133,40 @@ a ledger, a sign-off step" as a proposal that must justify itself, not a default
   `"integer"` fidelity, not enums. If the reflection path happens to make the
   `format` enum expressible, adding it is an improvement to note — not a
   requirement of this phase.
+
+### Inherited wire changes (added 2026-08-05 after `02-RESEARCH.md`)
+
+These three arrive as consequences of the dependency swap, not as things Phase 2
+chose to build. All were found by research; none were anticipated in the
+original discussion.
+
+- **D-09:** **`cacheScope` is corrected to `"private"` in this phase;
+  `ttlMs: 0` is inherited as-is.** Every `tools/list` response gains
+  `"ttlMs":0,"cacheScope":"public"` the moment the SDK lands, unconditionally
+  and regardless of protocol era. `ttlMs: 0` is already the correct target.
+  `"public"` is not: STATE.md's v0.3.0 decision log locks `ttlMs: 0` +
+  `cacheScope: "private"` as "two halves of one correctness property, not
+  independent options," and codegraph's tool catalog depends on whether a local
+  `.codegraph/` index resolves — a client honoring `"public"` could serve one
+  repo's catalog for another. The SDK emits the field either way, so setting it
+  correctly is about one line. **Phase 3 still owns SPEC-04's remaining half**
+  (the per-call `hasIndex` re-check); this decision does not pull that forward.
+
+- **D-10:** **The `additionalProperties: false` tightening is accepted.**
+  Struct-tag inference adds it to every tool's `inputSchema`; no tool has it
+  today, so unknown arguments flip from silently ignored to rejected. Accepted
+  as an improvement — a client sending a misspelled argument currently gets
+  silent wrong-default behavior and would now get a clear error. Record it in
+  the diff review as an explained semantic divergence, not a cosmetic one.
+
+- **D-11:** **The zero-tools capability drop must be actively countered, not
+  documented.** With `hasIndex=false` (MCP-03's no-index path), go-sdk's
+  `capabilities()` omits the `"tools"` key from the `initialize` response
+  entirely, where mark3labs advertised `"tools":{"listChanged":true}`
+  unconditionally via `WithToolCapabilities(true)`. This is the milestone's
+  named failure mode — tools silently not advertised, no red check — reappearing
+  as a migration side effect. Counter it by setting `ServerOptions.Capabilities`
+  explicitly. This is a regression fix, not a divergence to explain away.
 
 ### Claude's Discretion
 
