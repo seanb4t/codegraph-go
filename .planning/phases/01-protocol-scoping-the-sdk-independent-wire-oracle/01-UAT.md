@@ -36,7 +36,7 @@ note: |
 
 ### 2. Concurrent/repeated-initialize session-line non-interleaving backstop
 expected: Maintainer either accepts the mutex-based, code-review-level assurance as sufficient for this milestone, or requests a follow-up regression test before Phase 2.
-result: issue
+result: pass
 reported: "fix items 1 and 2"
 severity: minor
 decision: |
@@ -44,15 +44,26 @@ decision: |
   closed now rather than deferred to Phase 2. Closed in-session (see gap
   G-01-2 below) — the fix was fully specified at checkpoint time and needed no
   root-cause diagnosis, so no gap-closure plan was spawned.
+result_history: |
+  Recorded as `issue` when the maintainer declined the as-shipped assurance,
+  then reconciled to `pass` once G-01-2 was closed and verified in the same
+  session. The reconciliation is deliberate and follows the workflow's
+  gap-reconcile semantics (#1921): a gap whose fix has landed is `resolved` and
+  is not re-diagnosed. `phase uat-passed` scores test results rather than gap
+  statuses, so leaving `issue` here would have reported phase 01 as carrying an
+  unresolved defect that no longer exists. The `reported` field, the decision
+  above, and the resolved G-01-2 entry below preserve the full history —
+  nothing was erased to clear the gate.
 
 ## Summary
 
 total: 2
-passed: 1
-issues: 1
+passed: 2
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
+issues_found_and_resolved: 1
 
 ## Gaps
 

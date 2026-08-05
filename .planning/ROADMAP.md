@@ -68,7 +68,7 @@ Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-RO
 - Vulnerability scanning (Phase 4) runs **after** the migration so it audits the final dependency closure, not one that is about to change.
 - SPEC-09 (`tools.listChanged` + `subscriptions/listen`) is deliberately **last**. It is a long-lived-stream mechanism materially larger than every other SPEC item, and the research is explicit that it is not needed for correctness once `ttlMs: 0` ships. A correctness-complete server exists at the end of Phase 3, so SPEC-09 slipping cannot block the milestone's core value.
 
-- [ ] **Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle** - A raw-stdio regression oracle proven green against today's server, plus the dated scoping the rest of the milestone is measured against
+- [x] **Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle** - A raw-stdio regression oracle proven green against today's server, plus the dated scoping the rest of the milestone is measured against (completed 2026-08-05)
 - [ ] **Phase 2: SDK Migration — official go-sdk on the existing surface** - `internal/mcp` moves to `modelcontextprotocol/go-sdk@v1.7.0` with byte-identical tool output and mark3labs gone from `go.mod`
 - [ ] **Phase 3: `2026-07-28` Spec Compliance** - `server/discover`, per-request `_meta` validation, honest cache control and per-call index detection — with every Legacy client still working
 - [ ] **Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes** - The ~400-module credentialed CI tooling closure actually gets scanned, and the two known daemon test-seam races stop masking real regressions
@@ -175,7 +175,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
-| 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | In Progress|  |
+| 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
 | 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 0/0 | Not started | - |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 0/0 | Not started | - |
 | 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 0/0 | Not started | - |

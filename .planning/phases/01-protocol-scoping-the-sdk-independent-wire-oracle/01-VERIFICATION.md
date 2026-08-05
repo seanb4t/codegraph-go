@@ -1,8 +1,8 @@
 ---
 phase: 01-protocol-scoping-the-sdk-independent-wire-oracle
 verified: 2026-08-05T21:48:13Z
-status: human_needed
-score: 5/5 must-haves verified (roadmap success criteria); 2 items require human decision
+status: passed
+score: 5/5 must-haves verified (roadmap success criteria); both human-decision items resolved at UAT 2026-08-05
 behavior_unverified: 0
 overrides_applied: 0
 behavior_unverified_items:

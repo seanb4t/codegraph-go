@@ -24,18 +24,18 @@
 ### SDK Migration (SDK)
 
 - [ ] **SDK-01**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0`, with all existing tools producing byte-identical output to the pre-migration server for every case the current golden corpus covers
-- [ ] **SDK-02**: `internal/cli/serve.go` no longer imports an MCP SDK package directly — the process bootstrap goes through a narrow `internal/mcp.Server` interface, closing the one production-code SDK leak
+- [x] **SDK-02**: `internal/cli/serve.go` no longer imports an MCP SDK package directly — the process bootstrap goes through a narrow `internal/mcp.Server` interface, closing the one production-code SDK leak
 - [ ] **SDK-03**: `mark3labs/mcp-go` is removed from `go.mod`, and the resulting dependency closure is re-audited through the existing `govulncheck` and SBOM paths
 - [ ] **SDK-04**: Error-to-JSON-RPC mapping is explicitly audited and asserted — a handler returning a plain `error` becomes a *protocol* error under mark3labs but a tool-visible `IsError: true` *result* under the official SDK, a wire-behavior change invisible in the Go type signature
 - [ ] **SDK-05**: Tool input schemas are explicitly audited for constraints lost in translation (notably enum constraints dropped by struct-tag reflection), with any loss either fixed or recorded as a deliberate divergence
 
 ### Verification (VRFY)
 
-- [ ] **VRFY-01**: A verification harness asserts on **raw stdio wire bytes**, not SDK-typed Go objects, and does not use the SDK under test as its own oracle
-- [ ] **VRFY-02**: The server's declared protocol version is asserted against a **repo-owned literal**, not an SDK-owned constant, with a CI guard proving no stray `LATEST_PROTOCOL_VERSION`-style references remain — a dependency bump must never move wire behavior silently
-- [ ] **VRFY-03**: The server logs the negotiated protocol version to stderr on every connection, always on — the only available mitigation for a spec-sanctioned silent version mismatch
-- [ ] **VRFY-04**: The harness passes against the **current, pre-migration** server before any SDK change lands, establishing it as a genuine regression oracle rather than a description of the new code's behavior
-- [ ] **VRFY-05**: A dated audit records which protocol revision each of the 8 roster agent clients negotiates, re-run immediately before the migration lands rather than relied on from earlier research
+- [x] **VRFY-01**: A verification harness asserts on **raw stdio wire bytes**, not SDK-typed Go objects, and does not use the SDK under test as its own oracle
+- [x] **VRFY-02**: The server's declared protocol version is asserted against a **repo-owned literal**, not an SDK-owned constant, with a CI guard proving no stray `LATEST_PROTOCOL_VERSION`-style references remain — a dependency bump must never move wire behavior silently
+- [x] **VRFY-03**: The server logs the negotiated protocol version to stderr on every connection, always on — the only available mitigation for a spec-sanctioned silent version mismatch
+- [x] **VRFY-04**: The harness passes against the **current, pre-migration** server before any SDK change lands, establishing it as a genuine regression oracle rather than a description of the new code's behavior
+- [x] **VRFY-05**: A dated audit records which protocol revision each of the 8 roster agent clients negotiates, re-run immediately before the migration lands rather than relied on from earlier research
 
 ### Supply Chain (VULN)
 
@@ -93,15 +93,15 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | SPEC-08 | Phase 3 | Pending |
 | SPEC-09 | Phase 5 | Pending |
 | SDK-01 | Phase 2 | Pending |
-| SDK-02 | Phase 1 | Pending |
+| SDK-02 | Phase 1 | Complete |
 | SDK-03 | Phase 2 | Pending |
 | SDK-04 | Phase 2 | Pending |
 | SDK-05 | Phase 2 | Pending |
-| VRFY-01 | Phase 1 | Pending |
-| VRFY-02 | Phase 1 | Pending |
-| VRFY-03 | Phase 1 | Pending |
-| VRFY-04 | Phase 1 | Pending |
-| VRFY-05 | Phase 1 | Pending |
+| VRFY-01 | Phase 1 | Complete |
+| VRFY-02 | Phase 1 | Complete |
+| VRFY-03 | Phase 1 | Complete |
+| VRFY-04 | Phase 1 | Complete |
+| VRFY-05 | Phase 1 | Complete |
 | VULN-01 | Phase 4 | Pending |
 | VULN-02 | Phase 4 | Pending |
 | VULN-03 | Phase 4 | Pending |
@@ -110,6 +110,7 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | MAINT-03 | Phase 4 | Pending |
 
 **Coverage:**
+
 - v0.3.0 requirements: 25 total
 - Mapped to phases: 25 ✓
 - Unmapped: 0 — no orphans, no duplicates; every requirement maps to exactly one phase

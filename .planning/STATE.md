@@ -2,36 +2,36 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: MCP Protocol Currency
-current_phase: 01
-current_phase_name: protocol-scoping-the-sdk-independent-wire-oracle
-status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-05T19:15:01.394Z"
+current_phase: 2
+current_phase_name: SDK Migration — official go-sdk on the existing surface
+status: planning
+stopped_at: Phase 1 complete, ready to plan Phase 2
+last_updated: "2026-08-05T22:11:11.501Z"
 last_activity: 2026-08-05
-last_activity_desc: Phase 01 execution started
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_plans: 7
+  percent: 20
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-03)
+See: .planning/PROJECT.md (updated 2026-08-05)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 01 — protocol-scoping-the-sdk-independent-wire-oracle
+**Current focus:** Phase 2 — SDK Migration — official go-sdk on the existing surface
 
 ## Current Position
 
-Phase: 01 (protocol-scoping-the-sdk-independent-wire-oracle) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 01
-Last activity: 2026-08-05 — Phase 01 execution started
+Phase: 2 — SDK Migration — official go-sdk on the existing surface
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-05 — Phase 01 complete, transitioned to Phase 2
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -39,7 +39,7 @@ Progress: [░░░░░░░░░░] 0%
 
 **Velocity (v0.3.0):**
 
-- Total plans completed: 0
+- Total plans completed: 7
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -47,7 +47,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | - | - | - |
+| 01 | 7 | - | - |
 | 2 | - | - | - |
 | 3 | - | - | - |
 | 4 | - | - | - |
@@ -165,6 +165,13 @@ Decisions already made for v0.3.0, before any phase executes:
 - **Legacy `initialize` support is NOT dropped.** Per the spec's own compatibility matrix, a Modern-only server hard-fails every still-Legacy client with no client-side fallback, and zero of the 8 roster clients have confirmed `2026-07-28` support. This is the single highest-consequence mistake available in this milestone.
 - **SPEC-09 is sequenced last, alone.** It is a long-lived-stream mechanism materially larger than the rest of the SPEC work and explicitly not required for correctness once `ttlMs: 0` ships, so it is isolated in Phase 5 where slipping it cannot block the milestone's core value.
 
+Decisions made during Phase 1 (completed 2026-08-05):
+
+- **VRFY-02 ships as an asserted pin, not an injection point.** `mark3labs/mcp-go` v0.56.0 decides the negotiated revision in the unexported `(*MCPServer).protocolVersion` and exposes no `WithProtocolVersion` option, so no caller can inject a repo-owned literal while it is the backend. ROADMAP criterion 3 was restated from "reads from" to "asserted against" to match REQUIREMENTS.md and the shipped mechanism; the stricter "reads from" property is carried to Phase 2. Recorded in `internal/mcp/protocol_version.go:9-22` so it cannot be mistaken for an injection point later.
+- **The unsupported-version scenario is frozen as an observed success, not an assumed error.** `mark3labs` v0.56.0 silently coerces an unrecognized `protocolVersion` to its own latest, and `UnsupportedProtocolVersionError` is client-side only. Freezing an error response there would have encoded a validation the server does not perform. The compensating control is VRFY-03's session line, which reports requested and negotiated separately.
+- **The session line panics on a nil writer; `io.Discard` is the only opt-out.** "Always on" is a construction property, not a calling convention — a future caller passing nil would otherwise silently disable the milestone's sole mismatch mitigation.
+- **A gate is not trusted until demonstrated RED** was applied literally: four one-time mutations against the real binary, plus the UAT-added session-line concurrency test, each observed red before being trusted.
+
 Standing decisions that outlive v1.0:
 
 - Versions follow release-please + Conventional Commits; no version is ever forced (D-06R, maintainer directive 2026-07-29). There is deliberately no `v1.0.0` tag.
@@ -233,12 +240,16 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-04T23:52:51.423Z
-Stopped at: Phase 1 context gathered
-  NEXT: `/gsd-plan-phase 1` (Protocol Scoping & the SDK-Independent Wire Oracle)
+Last session: 2026-08-05T22:11:00Z
+Stopped at: Phase 1 complete, ready to plan Phase 2
+  NEXT: `/gsd-discuss-phase 2` (SDK Migration — official go-sdk on the existing surface)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
+  PHASE 1 CARRY-INS FOR PHASE 2:
+    - The two ONE-WAY captures are done. Once `mark3labs/mcp-go` leaves `go.mod` the all-8-tool coverage and the multi-era Legacy baseline can never be recaptured — any further extension of the frozen set must happen BEFORE the swap.
+    - Known frozen-set gap (from `01-07`'s MUTATION-PROOF.md, carried in `01-UAT.md` → Gaps): no scenario exercises a handler's own required-argument validation failure. All four captured error shapes are protocol-level, so mutating `exploreHandler`'s missing-query error shape turns nothing red. Extendable today, impossible after the swap. Input to Phase 2's SDK-04 audit.
+    - VRFY-02's "reads from" property is Phase 2's to deliver if the official go-sdk exposes an injection point.
   NOTE: no milestone tag will be created — release-please owns tagging (D-06R).
-Resume file: .planning/phases/01-protocol-scoping-the-sdk-independent-wire-oracle/01-CONTEXT.md
+Resume file: None
 
 ## Operator Next Steps
 
