@@ -101,6 +101,14 @@ jobs:
       - name: Test subprocess integration harness (test/integration)
         run: task test:integration
 
+      # VRFY-01/VRFY-04 (v0.3.0 Phase 1): the wire-level regression oracle
+      # spawns the real binary over real stdio and byte-compares normalized
+      # transcripts against testdata/wireoracle/transcripts/*.golden — a
+      # required PR leg from the moment it lands, never relaxed or
+      # re-baselined during the Phase 2 SDK swap.
+      - name: Test wire oracle (test/wireoracle)
+        run: task test:wireoracle
+
       - name: Test internal/daemon (isolated, -count=1)
         # internal/daemon's TestSoak + flush-lock tests are a documented,
         # PRE-EXISTING flake under full-suite parallel load (STATE.md,

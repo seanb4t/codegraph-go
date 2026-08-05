@@ -73,6 +73,17 @@ tasks:
     cmds:
       - go test ./test/integration/...
 
+  test:wireoracle:
+    desc: >-
+      Wire-level regression oracle (test/wireoracle) — spawns the real
+      binary over real stdio and byte-compares normalized transcripts
+      against testdata/wireoracle/transcripts/*.golden. Pre-migration wire
+      regression baseline (VRFY-01/VRFY-04): must never be relaxed or
+      re-baselined during the SDK swap in Phase 2. Measured 2026-08-05:
+      ~5.8s wall-clock on the frozen single-scenario tree.
+    cmds:
+      - go test ./test/wireoracle/...
+
   test:daemon:
     desc: >-
       internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
@@ -571,18 +582,20 @@ tasks:
 
   test:
     desc: >-
-      Contributor wrapper: the five host-only legs (test:unit, test:golden,
-      test:integration, test:daemon, test:race), run SERIALLY via a list of
-      sub-task commands (never deps:, which go-task runs concurrently).
-      test:daemon and test:race both pass -p 1 specifically to avoid
-      cross-test contention; running the two concurrently with each other
-      would reintroduce exactly the flakiness those flags exist to prevent.
-      Cross-toolchain targets (vet:windows, vet:daemon-windows) are
-      separate by design — not part of this wrapper.
+      Contributor wrapper: the six host-only legs (test:unit, test:golden,
+      test:integration, test:wireoracle, test:daemon, test:race), run
+      SERIALLY via a list of sub-task commands (never deps:, which go-task
+      runs concurrently). test:daemon and test:race both pass -p 1
+      specifically to avoid cross-test contention; running the two
+      concurrently with each other would reintroduce exactly the flakiness
+      those flags exist to prevent. Cross-toolchain targets (vet:windows,
+      vet:daemon-windows) are separate by design — not part of this
+      wrapper.
     cmds:
       - task: test:unit
       - task: test:golden
       - task: test:integration
+      - task: test:wireoracle
       - task: test:daemon
       - task: test:race
 
