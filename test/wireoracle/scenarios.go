@@ -2,6 +2,91 @@ package wireoracle
 
 import "path/filepath"
 
+// fixtureFuncAlpha and fixtureFuncBeta name real exported functions defined
+// in testdata/wireoracle/fixture/pkga/pkga.go: Alpha calls Beta
+// (intra-package) and pkgb.Helper (cross-package) — real call/callee/caller
+// edges the tool-coverage scenarios below query against, rather than
+// inventing identifiers that would freeze an error result as the scenario's
+// one-way pre-migration baseline (01-04-PLAN Task 2, D-05/VRFY-04).
+const (
+	fixtureFuncAlpha = "Alpha"
+	fixtureFuncBeta  = "Beta"
+)
+
+// Allowlist env strings this plan's scenarios drive CODEGRAPH_MCP_TOOLS
+// with (internal/mcp/server.go's companionNames, D-08a/MCP-02).
+const (
+	envAllowlistNodeStatus    = "CODEGRAPH_MCP_TOOLS=node,status"
+	envAllowlistAllCompanions = "CODEGRAPH_MCP_TOOLS=node,search,callers,callees,impact,files,status"
+	envAllowlistNodeOnly      = "CODEGRAPH_MCP_TOOLS=node"
+)
+
+// outsideRepoRootPath is a portable, host-independent literal — never a
+// filepath.Join(t.TempDir(), "..", "elsewhere") sibling of the capture
+// directory. confineToRepoRoot (internal/mcp/tools.go:42) embeds the
+// rejected path verbatim via %q in its error, so whatever value is sent
+// here lands byte-for-byte in the frozen transcript; this value is
+// identical on every machine, cannot exist as a real directory, and shares
+// no path prefix with the fixture directory, so it can never accidentally
+// resolve inside repoPath (01-04-PLAN Task 2, review concern "the
+// outside-path scenario can leak an unnormalized host path").
+const outsideRepoRootPath = "/codegraph-wire-oracle-outside-root"
+
+// unimplementedMethod is a JSON-RPC method name the server has never
+// implemented and never will collide with a real MCP method — used by
+// error-unknown-method to exercise request_handler.go's default case
+// (mcp.METHOD_NOT_FOUND, -32601).
+const unimplementedMethod = "wireoracle/unimplemented-method"
+
+// initializeRequest returns the standard hand-authored initialize request
+// every new scenario below opens with (except edge-call-before-initialize,
+// which sends no initialize at all) — the same protocolVersion,
+// capabilities, and clientInfo literals as the tracer's handshake-explore
+// scenario, id parameterized so each scenario's own request-id sequence
+// stays sequential and readable. handshake-explore itself is left
+// hand-inlined and untouched (must_haves: "keeping the tracer's
+// handshake-explore unchanged").
+func initializeRequest(id int) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": handshakeExploreProtocolVersion,
+			"capabilities":    map[string]any{},
+			"clientInfo": map[string]any{
+				"name":    handshakeExploreClientName,
+				"version": handshakeExploreClientVersion,
+			},
+		},
+	}
+}
+
+// toolsListRequest returns a bare "tools/list" request with the given id.
+func toolsListRequest(id int) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "tools/list",
+	}
+}
+
+// toolCallRequest returns a "tools/call" request naming a tool and its
+// arguments. arguments is typed any (not map[string]any) so malformed-shape
+// scenarios can pass a non-object value (e.g. a bare string) — the exact
+// shape a real malformed client request would carry on the wire.
+func toolCallRequest(id int, name string, arguments any) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      name,
+			"arguments": arguments,
+		},
+	}
+}
+
 // handshakeExploreProtocolVersion is a package-local, hand-authored
 // literal (D-06) — never an SDK constant — matching what mark3labs
 // v0.56.0's server negotiates today (its own LATEST_PROTOCOL_VERSION).
@@ -24,10 +109,38 @@ const (
 	handshakeExploreClientVersion = "0.0.0"
 )
 
+// Concurrency ordering constraint (discovered this session, verified by hand
+// against the real binary via repeated captures): mark3labs v0.56.0's stdio
+// transport (server/stdio.go processMessage) dispatches every "tools/call"
+// message onto a worker-pool queue and returns immediately WITHOUT waiting
+// for it — every OTHER method (initialize, tools/list, and any unrecognized
+// method) is handled synchronously inline before the next stdin line is even
+// read. Two consequences that matter for byte-reproducible capture:
+//  1. A synchronous request queued AFTER an async tools/call can complete
+//     and be WRITTEN TO STDOUT BEFORE that earlier tools/call's response —
+//     observed directly: a scenario sending tools/call, tools/call,
+//     unknown-method in that order printed the unknown-method response
+//     first, and the two tools/call responses in a racy, run-to-run-varying
+//     relative order (confirmed non-deterministic across 5 repeated runs of
+//     an otherwise-identical request script).
+//  2. Two tools/call requests in the SAME scenario race each other in the
+//     worker pool with no ordering guarantee between them.
+//
+// Every scenario below therefore carries AT MOST ONE tools/call request,
+// and when present it is always the LAST request in Requests — exactly
+// mirroring handshake-explore's own proven shape (initialize, tools/list,
+// tools/call). This is a load-bearing invariant for any future scenario
+// added to this list (plan 05, plan 07): violating it reintroduces
+// intermittent CI flakes in TestFrozenTranscriptsMatch's byte comparison,
+// not a real regression in the server under test.
+//
 // Scenarios returns the oracle's full scripted scenario list. Phase 1
 // scripts exactly one scenario, handshake-explore, proving the oracle
-// architecture end-to-end; plans 03/04/05 expand this list — this same
-// file, same function, no phase-conditional branch (must_haves).
+// architecture end-to-end; plan 04 (this plan) adds the 16 scenarios below
+// bringing the suite to exactly 17 — the D-05 full coverage bar approved at
+// plan 04's Task 1 blocking checkpoint (full-bar, no additional scenarios);
+// plan 05 expands further — this same file, same function, no
+// phase-conditional branch (must_haves).
 func Scenarios() []Scenario {
 	return []Scenario{
 		{
@@ -65,6 +178,253 @@ func Scenarios() []Scenario {
 				},
 			},
 			ExpectTools: 1,
+		},
+
+		// --- tools/list variants (D-05's three, plus a determinism probe) ---
+
+		{
+			Name:  "toolslist-default",
+			Index: true,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1, // explore-only default (MCP-01)
+		},
+		{
+			Name:  "toolslist-allowlist",
+			Index: true,
+			Env:   []string{envAllowlistNodeStatus},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolsListRequest(2),
+			},
+			ExpectTools: 3, // explore + node + status
+		},
+		{
+			// Index: false — fixture copied but never indexed (MCP-03: no
+			// .codegraph/ means zero tools). initialize still succeeds;
+			// only tools/list is affected.
+			Name:  "toolslist-no-index",
+			Index: false,
+			Env:   []string{envAllowlistNodeStatus},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolsListRequest(2),
+			},
+			ExpectTools: 0,
+		},
+		{
+			// Two consecutive tools/list requests (ids 2 and 3) in one
+			// session — the deterministic-ordering probe the 2026-07-28
+			// changelog's minor change #3 makes relevant
+			// (TestToolsListOrderIsDeterministic). Both are "tools/list",
+			// not "tools/call", so both are handled synchronously in
+			// request order — no worker-pool race (see the concurrency
+			// ordering constraint documented above Scenarios()).
+			Name:  "toolslist-repeat",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolsListRequest(2),
+				toolsListRequest(3),
+			},
+			ExpectTools: 8, // explore + all 7 companions
+		},
+
+		// --- one tools/call per remaining tool (codegraph_explore is
+		// covered by handshake-explore above; TestEveryRegisteredTool-
+		// HasASuccessfulCallScenario asserts that coverage structurally
+		// rather than inheriting it by prose) ---
+
+		{
+			Name:  "call-node",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_node", map[string]any{"symbol": fixtureFuncAlpha}),
+			},
+			ExpectTools: 8,
+		},
+		{
+			Name:  "call-search",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_search", map[string]any{"query": fixtureFuncAlpha}),
+			},
+			ExpectTools: 8,
+		},
+		{
+			// Beta is called by Alpha (pkga.go) — a non-empty callers
+			// result.
+			Name:  "call-callers",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_callers", map[string]any{"symbol": fixtureFuncBeta}),
+			},
+			ExpectTools: 8,
+		},
+		{
+			// Alpha calls Beta (intra-package) and Helper (cross-package)
+			// — a non-empty, two-entry callees result.
+			Name:  "call-callees",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_callees", map[string]any{"symbol": fixtureFuncAlpha}),
+			},
+			ExpectTools: 8,
+		},
+		{
+			Name:  "call-impact",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_impact", map[string]any{"symbol": fixtureFuncBeta}),
+			},
+			ExpectTools: 8,
+		},
+		{
+			// pattern/filter/depth/format are all optional — an empty
+			// arguments object is a real, successful call, not a degraded
+			// one.
+			Name:  "call-files",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_files", map[string]any{}),
+			},
+			ExpectTools: 8,
+		},
+		{
+			// codegraph_status takes no required arguments.
+			Name:  "call-status",
+			Index: true,
+			Env:   []string{envAllowlistAllCompanions},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_status", map[string]any{}),
+			},
+			ExpectTools: 8,
+		},
+
+		// --- four error shapes ---
+
+		{
+			Name:  "error-unknown-method",
+			Index: true,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				{
+					"jsonrpc": "2.0",
+					"id":      2,
+					"method":  unimplementedMethod,
+				},
+			},
+			ExpectTools: 1,
+		},
+		{
+			// codegraph_bogus_tool is never registered under any allowlist
+			// — handleToolCall's "tool not found" path
+			// (server.go:1936-1942), mcp.INVALID_PARAMS (-32602). No
+			// hand-authored anchor exists for this scenario (only
+			// error-unknown-method and error-malformed-args are anchored,
+			// per Task 3) — it is captured-and-frozen only.
+			Name:  "error-unknown-tool",
+			Index: true,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_bogus_tool", map[string]any{}),
+			},
+			ExpectTools: 1,
+		},
+		{
+			// error-malformed-args exercises a genuinely malformed
+			// tools/call request and freezes whatever mark3labs v0.56.0
+			// actually returns for it — NOT a "wrong-type argument value on
+			// a registered tool". That shape (verified by hand against the
+			// built binary this session: e.g. codegraph_search with
+			// {"query":123}, or a non-object "arguments" value sent
+			// against a real registered tool name) never reaches a
+			// JSON-RPC-level error at all — every companion/explore
+			// handler converts its own RequireString/RequireInt failure
+			// into mcp.NewToolResultError, a SUCCESSFUL JSON-RPC response
+			// with result.isError=true, because BuildServer never enables
+			// WithInputSchemaValidation (server.go:1990's opt-in-only
+			// schema validator; confirmed nil here). The ONLY
+			// request_handler.go path that returns mcp.INVALID_PARAMS for
+			// tools/call is "tool '%s' not found" (handleToolCall,
+			// server.go:1936-1942) — the SAME underlying mechanism
+			// error-unknown-tool exercises. This scenario reaches that
+			// path via a distinct, still genuinely malformed shape:
+			// params.name omitted (empty string) AND params.arguments sent
+			// as a bare JSON string instead of an object — a structurally
+			// malformed tools/call request that resolves to "tool '' not
+			// found" => mcp.INVALID_PARAMS (-32602), matching Task 3's
+			// hand-authored anchor. Deviation from this plan's original
+			// "wrong JSON type argument on a registered tool" framing
+			// (Rule 1 — the assumed code path does not exist in mark3labs
+			// v0.56.0 as this server configures it; fixed to the real path
+			// that actually produces the required -32602, verified
+			// empirically this session and documented in
+			// 01-04-SUMMARY.md).
+			Name:  "error-malformed-args",
+			Index: true,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "", "not-an-object"),
+			},
+			ExpectTools: 1,
+		},
+		{
+			// codegraph_node with a "path" argument resolving outside the
+			// index root — exercises confineToRepoRoot
+			// (internal/mcp/tools.go:24-45), the CR-02 trust boundary.
+			Name:  "error-confinement-reject",
+			Index: true,
+			Env:   []string{envAllowlistNodeOnly},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolCallRequest(2, "codegraph_node", map[string]any{"path": outsideRepoRootPath}),
+			},
+			ExpectTools: 2, // explore + node
+		},
+
+		// --- one statelessness edge (counted separately from the four
+		// error shapes above, never as a fifth error: RESEARCH Pitfall 2 —
+		// mark3labs never gates tools/list/tools/call on Initialized(), so
+		// this is a currently-passing behavior being locked in, not an
+		// error) ---
+
+		{
+			// A tools/call sent as the very first message, with NO prior
+			// initialize. Today's server tolerates this — an accidental
+			// but real asset for Phase 3's statelessness work (RESEARCH
+			// Pitfall 2, verified by hand against the built binary this
+			// session: the explore call succeeds with no initialize
+			// handshake at all). Do not add server code for this — only
+			// the scenario (01-04-PLAN Task 2).
+			Name:         "edge-call-before-initialize",
+			Index:        true,
+			NoInitialize: true,
+			Requests: []map[string]any{
+				toolCallRequest(1, "codegraph_explore", map[string]any{"query": fixtureFuncAlpha}),
+			},
+			// No initialize means the VRFY-03 AddAfterInitialize hook
+			// never fires — no session line is ever emitted for this
+			// scenario (oracle_test.go gates the assertion on
+			// NoInitialize rather than reading this field as a real tool
+			// count).
+			ExpectTools: 0,
 		},
 	}
 }

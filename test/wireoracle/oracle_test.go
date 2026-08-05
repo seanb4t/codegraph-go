@@ -74,8 +74,16 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 			}
 
 			assertBytesEqualLineByLine(t, sc.Name, normalized, want)
-			assertSessionLine(t, sc, tr.Stderr)
-			assertProtocolVersionAnchor(t, tr.Stdout)
+			if sc.NoInitialize {
+				// No initialize means the VRFY-03 AddAfterInitialize hook
+				// never fires (no session line to expect) and there is no
+				// initialize result.protocolVersion field to anchor
+				// against (edge-call-before-initialize, 01-04-PLAN Task 2).
+				assertNoSessionLine(t, sc, tr.Stderr)
+			} else {
+				assertSessionLine(t, sc, tr.Stderr)
+				assertProtocolVersionAnchor(t, tr.Stdout)
+			}
 
 			_ = ledger // exercised directly by TestNormalizeRuleLedgerIsHonest below
 		})
@@ -161,6 +169,20 @@ func assertSessionLine(t *testing.T, sc Scenario, stderr string) {
 	wantTools := strconv.Itoa(sc.ExpectTools)
 	if values["tools"] != wantTools {
 		t.Fatalf("scenario %q: session line tools=%q, want %q", sc.Name, values["tools"], wantTools)
+	}
+}
+
+// assertNoSessionLine checks the NoInitialize counterpart of
+// assertSessionLine: a scenario that never sends "initialize" must never
+// produce the VRFY-03 stderr session line at all, since its
+// AddAfterInitialize hook has nothing to hook (edge-call-before-initialize,
+// RESEARCH Pitfall 2).
+func assertNoSessionLine(t *testing.T, sc Scenario, stderr string) {
+	t.Helper()
+	for _, l := range strings.Split(stderr, "\n") {
+		if strings.HasPrefix(l, codegraphSessionLinePrefix) {
+			t.Fatalf("scenario %q: NoInitialize=true but stderr contains a session line: %q", sc.Name, l)
+		}
 	}
 }
 

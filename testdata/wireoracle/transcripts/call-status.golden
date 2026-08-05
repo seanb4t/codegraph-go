@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
+{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"**CodeGraph Status**\n\n**Files indexed:** 3\n**Total nodes:** 9\n**Total edges:** 11\n**Database size:** 0.01 MB\n**Backend:** pebble\n\n**Nodes by Kind:**\n- function: 4\n- file: 3\n- package: 2\n\n**Languages:**\n- go: 3\n\nIndex is up to date.\n"}]}}

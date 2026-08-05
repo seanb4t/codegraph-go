@@ -42,6 +42,18 @@ type Scenario struct {
 	// ExpectTools is the tool count this scenario's session is expected
 	// to advertise via VRFY-03's stderr session line.
 	ExpectTools int
+	// NoInitialize, when true, means this scenario's session never sends an
+	// "initialize" request at all — request id 1 is some other method
+	// entirely (used by edge-call-before-initialize, the statelessness
+	// edge, RESEARCH Pitfall 2: mark3labs v0.56.0 never gates
+	// tools/list/tools/call on Initialized()). Two invariants that only
+	// make sense downstream of a real initialize handshake are skipped for
+	// a NoInitialize scenario — via this field, not a scenario-name
+	// special case (01-04-PLAN Task 2): the VRFY-03 stderr session line
+	// (its AddAfterInitialize hook never fires with no initialize call to
+	// hook) and the D-02 protocolVersion spec anchor (there is no
+	// initialize result.protocolVersion field to assert against).
+	NoInitialize bool
 }
 
 // Transcript is one capture's raw output.
