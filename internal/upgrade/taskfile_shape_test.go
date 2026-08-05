@@ -81,6 +81,7 @@ var taskWrapperExpectedLegs = []string{
 	"test:integration",
 	"test:race",
 	"test:unit",
+	"test:wireoracle",
 }
 
 // inScopeJob names one job, by its YAML map key (not its `name:` display
