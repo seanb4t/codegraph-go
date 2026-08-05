@@ -100,7 +100,15 @@ tasks:
       no-parallel-package-contention isolation test:daemon relies on — do not
       run this concurrently with test:daemon (see the test wrapper's comment).
     cmds:
-      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
+      # internal/mcp added during phase-01 UAT (01-UAT.md test 2): the
+      # session-line hook in server.go writes to a shared caller-supplied
+      # io.Writer from AddAfterInitialize, which fires once per initialize
+      # across concurrent sessions — a genuine concurrency seam that had
+      # neither a test nor race-detector coverage. The seam's own regression
+      # test (TestSessionLineSurvivesConcurrentAndRepeatedInitialize) fails
+      # deterministically without -race; this entry is the fallback net for
+      # the races it cannot model.
+      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/... ./internal/mcp/...
 
   vet:
     desc: >-
