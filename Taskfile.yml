@@ -282,6 +282,37 @@ tasks:
     cmds:
       - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"
 
+  check:transcript-freeze:
+    desc: >-
+      D-03 anti-regeneration guard, BLOCKING (v0.3.0 Phase 1): fails when a
+      pull request's merge-base diff changes a frozen wire-oracle transcript
+      together with internal/mcp/*.go or the MCP dependency line in go.mod.
+      Phase 2 is frozen with no exceptions; Phase 3 legitimately regenerates
+      transcripts, but only as its own separate, reviewable pull request —
+      never in the same change that could have caused the diff. Requires
+      TRANSCRIPT_FREEZE_BASE (a ref name, e.g. origin/main) so the diff is
+      computed against the merge-base rather than a per-commit comparison —
+      pull-request granularity is what survives this repository's
+      squash-merge model.
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "${TRANSCRIPT_FREEZE_BASE:-}" ]; then
+          echo "::error::TRANSCRIPT_FREEZE_BASE is not set — check:transcript-freeze needs a base ref to compute the merge-base diff against (e.g. TRANSCRIPT_FREEZE_BASE=origin/main task check:transcript-freeze)."
+          exit 1
+        fi
+        git rev-parse --verify "${TRANSCRIPT_FREEZE_BASE}" >/dev/null
+        mb=$(git merge-base "${TRANSCRIPT_FREEZE_BASE}" HEAD)
+        CHANGED_LIST=$(mktemp)
+        GOMOD_DIFF=$(mktemp)
+        trap 'rm -f "$CHANGED_LIST" "$GOMOD_DIFF"' EXIT
+        # --name-status with rename/copy detection (-M -C), NOT --name-only:
+        # both sides of a renamed transcript or a renamed transcripts
+        # directory must reach the classifier.
+        git diff --name-status -M -C "$mb" HEAD > "$CHANGED_LIST"
+        git diff "$mb" HEAD -- go.mod > "$GOMOD_DIFF"
+        go run ./tools/transcriptfreeze -changed-list "$CHANGED_LIST" -gomod-diff "$GOMOD_DIFF"
+
   diag:cpu:
     desc: >-
       CPU/memory/storage topology diagnostic (10-04-PLAN, Rule 2 deviation

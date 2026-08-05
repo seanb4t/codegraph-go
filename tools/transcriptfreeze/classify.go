@@ -206,8 +206,3 @@ func buildReason(transcripts, serverChanges []string, depTouched bool) string {
 	sb.WriteString("This trigger set is a deliberate floor, not a proof of innocence: transcript bytes also legitimately depend on internal/query and internal/indexer (and the tree-sitter grammars), which this guard does not watch — a clean pass means this PR did not commit the one shape the guard can detect mechanically, not that this regeneration was safe.")
 	return sb.String()
 }
-
-// main is a placeholder entrypoint so this package (package main) satisfies
-// `go build ./...` before Task 2 adds the real CLI driver in main.go, which
-// replaces this stub entirely.
-func main() {}

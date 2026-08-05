@@ -110,6 +110,7 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "goreleaser-check"},
 	{Workflow: "ci.yml", JobID: "reproducibility"},
 	{Workflow: "ci.yml", JobID: "perf-regression"},
+	{Workflow: "ci.yml", JobID: "transcript-freeze"},
 	{Workflow: "release-please.yml", JobID: "pretag-gate"},
 }
 
