@@ -69,7 +69,7 @@ Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-RO
 - SPEC-09 (`tools.listChanged` + `subscriptions/listen`) is deliberately **last**. It is a long-lived-stream mechanism materially larger than every other SPEC item, and the research is explicit that it is not needed for correctness once `ttlMs: 0` ships. A correctness-complete server exists at the end of Phase 3, so SPEC-09 slipping cannot block the milestone's core value.
 
 - [x] **Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle** - A raw-stdio regression oracle proven green against today's server, plus the dated scoping the rest of the milestone is measured against (completed 2026-08-05)
-- [ ] **Phase 2: SDK Migration — official go-sdk on the existing surface** - `internal/mcp` moves to `modelcontextprotocol/go-sdk@v1.7.0` with byte-identical tool output and mark3labs gone from `go.mod`
+- [ ] **Phase 2: SDK Migration — official go-sdk on the existing surface** - `internal/mcp` moves to `modelcontextprotocol/go-sdk@v1.7.0` with semantically unchanged tool output and mark3labs gone from `go.mod`
 - [ ] **Phase 3: `2026-07-28` Spec Compliance** - `server/discover`, per-request `_meta` validation, honest cache control and per-call index detection — with every Legacy client still working
 - [ ] **Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes** - The ~400-module credentialed CI tooling closure actually gets scanned, and the two known daemon test-seam races stop masking real regressions
 - [ ] **Phase 5: Live Tool-Catalog Change Notification** - Opt-in `subscriptions/listen` clients learn about catalog changes as they happen
@@ -113,13 +113,13 @@ Plans:
 
 ### Phase 2: SDK Migration — official go-sdk on the existing surface
 
-**Goal**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0` with the agent-facing surface unchanged — same tools, same output bytes, same behavior — and `mark3labs/mcp-go` is gone. Five-era protocol negotiation (`2026-07-28` down to `2024-11-05`) arrives inherited from the dependency rather than as code this project writes.
+**Goal**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0` with the agent-facing surface unchanged — same tools, same behavior, no semantic change on the wire — and `mark3labs/mcp-go` is gone. Five-era protocol negotiation (`2026-07-28` down to `2024-11-05`) arrives inherited from the dependency rather than as code this project writes.
 **Depends on**: Phase 1 (the oracle must exist and be proven against the pre-migration server first — VRFY-04)
 **Requirements**: SDK-01, SDK-03, SDK-04, SDK-05
 **Success Criteria** (what must be TRUE):
 
-  1. Every existing MCP tool produces byte-identical output to the pre-migration server for every case the current golden corpus covers, with the server running on `modelcontextprotocol/go-sdk@v1.7.0` (SDK-01)
-  2. Phase 1's harness, unmodified, still passes against the migrated server — it was never regenerated, relaxed, or re-baselined as part of the swap (SDK-01)
+  1. Every existing MCP tool is semantically unchanged from the pre-migration server across the wire-oracle corpus, with the server running on `modelcontextprotocol/go-sdk@v1.7.0`; the full transcript diff is read line by line and every changed line has a recorded cause (SDK-01)
+  2. Phase 1's harness *code* is unmodified and still runs against the migrated server. Where a transcript legitimately moves, the new bytes land through that review pass with the cause named — never regenerated wholesale, and never relaxed to make the suite pass (SDK-01)
   3. `mark3labs/mcp-go` is absent from `go.mod`, and the resulting dependency closure has been re-audited through the existing `govulncheck` and SBOM paths (SDK-03)
   4. A handler that returns a plain Go `error` produces a known, asserted wire shape — the mark3labs protocol-error vs. official-SDK `IsError: true` tool-result difference is covered by an explicit test, not inferred from the unchanged Go type signature (SDK-04)
   5. Tool input schemas keep their constraint semantics (notably enum constraints that struct-tag reflection drops), or each loss is written down as a deliberate divergence rather than discovered later by a client (SDK-05)
