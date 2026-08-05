@@ -209,3 +209,10 @@ None - no external service configuration required.
 ---
 *Phase: 01-protocol-scoping-the-sdk-independent-wire-oracle*
 *Completed: 2026-08-05*
+
+## Self-Check: PASSED
+
+All files created/modified this plan verified present on disk (`test/wireoracle/normalize_test.go`,
+`test/wireoracle/MUTATION-PROOF.md`, `test/wireoracle/COVERAGE-BASELINE.md`,
+`test/wireoracle/scenarios.go`, `test/wireoracle/oracle_test.go`); commits `f0bbbf8` and `1659c71`
+verified present in `git log --oneline --all`.
