@@ -234,6 +234,24 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // the suite to exactly 23 — the six-era selection approved at plan 05's
 // own Task 1 blocking checkpoint — this same file, same function, no
 // phase-conditional branch (must_haves).
+// ExpectedScenarioCount is the exact size Scenarios() must return (D-07),
+// declared immediately beside Scenarios() itself so the single source of
+// truth for "how many scenarios exist" lives next to the function that
+// produces them. Changing this value is a deliberate act that must land in
+// the same commit as a matching change to Scenarios() and to the frozen
+// transcripts directory — TestScenarioCountIsExact (oracle_test.go)
+// compares len(Scenarios()) against this constant with EXACT equality,
+// never a lower bound, because a lower bound cannot detect a scenario
+// silently disappearing. TestTranscriptSetMatchesScenarioSet separately
+// enforces the transcripts-directory half via two-way set equality. Value:
+// 1 tracer scenario (plan 01) + 16 scenarios (plan 04's full D-05 coverage
+// bar, the "full-bar" blocking-checkpoint selection: 4 tools/list variants,
+// 7 tools/call, 4 error shapes, 1 statelessness edge) + 6 scenarios (plan
+// 05's "six-era" blocking-checkpoint selection: the multi-era Legacy
+// handshake baseline) = 23. A shrinking count is the failure mode this
+// constant exists to catch.
+const ExpectedScenarioCount = 23
+
 func Scenarios() []Scenario {
 	return []Scenario{
 		{

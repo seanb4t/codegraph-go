@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -66,6 +67,44 @@ func mustCaptureScenario(t *testing.T, name string) (Transcript, Scenario) {
 	return tr, sc
 }
 
+// statFrozenTranscript is readFrozenTranscript's pure logic core, split out
+// so TestEmptyTranscriptNeverMatches can assert this check FAILS (on a
+// deliberately zero-byte fixture) without that expected failure
+// propagating into go test's own pass/fail exit code — a nested t.Run
+// whose body calls t.Fatalf always marks its ancestor tests failed too,
+// regardless of what the caller does with t.Run's returned bool, so the
+// "prove this guard fires" demonstration must go through a plain error
+// return instead. Stats goldenPath and fails BEFORE attempting any byte
+// comparison if it is missing OR zero bytes (D-07): a zero-byte frozen
+// transcript trivially equaling a zero-byte capture is the single easiest
+// way for a byte-exact comparator to become vacuous.
+func statFrozenTranscript(goldenPath string) ([]byte, error) {
+	info, err := os.Stat(goldenPath)
+	if err != nil {
+		return nil, fmt.Errorf("frozen transcript missing at %s: %w", goldenPath, err)
+	}
+	if info.Size() == 0 {
+		return nil, fmt.Errorf("frozen transcript at %s is zero bytes — an empty frozen transcript can never be a valid comparison target (D-07)", goldenPath)
+	}
+	want, err := os.ReadFile(goldenPath)
+	if err != nil {
+		return nil, fmt.Errorf("read frozen transcript %s: %w", goldenPath, err)
+	}
+	return want, nil
+}
+
+// readFrozenTranscript is statFrozenTranscript's *testing.T-failing
+// wrapper, used by every production assertion path (TestFrozenTranscriptsMatch,
+// TestEmptyTranscriptNeverMatches's real-transcript case).
+func readFrozenTranscript(t *testing.T, goldenPath string) []byte {
+	t.Helper()
+	want, err := statFrozenTranscript(goldenPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return want
+}
+
 // TestFrozenTranscriptsMatch is the oracle's central assertion (VRFY-01,
 // VRFY-04): for every scenario, capture against the real binary, normalize,
 // and require byte equality with the frozen transcript. Before the golden
@@ -82,11 +121,7 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 
 			normalized, ledger := NormalizeWithLedger(tr.Stdout, Substitutions{RepoDir: tr.RepoDir})
 
-			goldenPath := TranscriptPath(sc.Name)
-			want, err := os.ReadFile(goldenPath)
-			if err != nil {
-				t.Fatalf("scenario %q: frozen transcript missing at %s: %v", sc.Name, goldenPath, err)
-			}
+			want := readFrozenTranscript(t, TranscriptPath(sc.Name))
 
 			if len(normalized) == 0 {
 				t.Fatalf("scenario %q: normalized transcript is empty — an empty transcript is never a match", sc.Name)
@@ -114,17 +149,129 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 				assertProtocolVersionAnchor(t, tr.Stdout, internalmcp.ProtocolVersion)
 			}
 
-			_ = ledger // exercised directly by TestNormalizeRuleLedgerIsHonest below
+			_ = ledger // exercised directly by TestEveryDeclaredFiringRuleActuallyFires below
 		})
 	}
 }
 
-// assertBytesEqualLineByLine fails naming the scenario and quoting the
-// first differing line from each side with %q — never a summarized diff.
-func assertBytesEqualLineByLine(t *testing.T, scenario string, got, want []byte) {
-	t.Helper()
+// TestScenarioCountIsExact is D-07's central non-shrinkage guard:
+// len(Scenarios()) must equal the package constant ExpectedScenarioCount
+// with EXACT equality, never a lower bound — a lower bound cannot detect a
+// scenario silently disappearing.
+func TestScenarioCountIsExact(t *testing.T) {
+	got := len(Scenarios())
+	if got != ExpectedScenarioCount {
+		t.Fatalf("len(Scenarios()) = %d, want exactly %d (ExpectedScenarioCount) — either a scenario silently disappeared or one was added without updating the constant beside Scenarios()", got, ExpectedScenarioCount)
+	}
+}
+
+// TestTranscriptSetMatchesScenarioSet is D-07's two-way set-equality guard:
+// the scenario-name set and the frozen-transcript basename set under
+// testdata/wireoracle/transcripts/ must be identical in BOTH directions — a
+// scenario without a transcript fails, and an orphaned transcript without a
+// scenario also fails, each named explicitly. Reads the directory with
+// os.ReadDir rather than reconstructing filenames from scenario names, so a
+// transcript that exists under an unexpected name is visible rather than
+// invisible.
+func TestTranscriptSetMatchesScenarioSet(t *testing.T) {
+	scenarios := Scenarios()
+	scenarioNames := make(map[string]bool, len(scenarios))
+	for _, sc := range scenarios {
+		scenarioNames[sc.Name] = true
+	}
+
+	dir := filepath.Dir(TranscriptPath("placeholder"))
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read transcripts dir %s: %v", dir, err)
+	}
+	transcriptNames := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".golden") {
+			continue
+		}
+		transcriptNames[strings.TrimSuffix(name, ".golden")] = true
+	}
+
+	var missingTranscripts, orphanedTranscripts []string
+	for name := range scenarioNames {
+		if !transcriptNames[name] {
+			missingTranscripts = append(missingTranscripts, name)
+		}
+	}
+	for name := range transcriptNames {
+		if !scenarioNames[name] {
+			orphanedTranscripts = append(orphanedTranscripts, name)
+		}
+	}
+	sort.Strings(missingTranscripts)
+	sort.Strings(orphanedTranscripts)
+
+	if len(missingTranscripts) > 0 || len(orphanedTranscripts) > 0 {
+		t.Fatalf("scenario/transcript set mismatch: missing transcripts (scenario has no .golden file) = %v; orphaned transcripts (.golden file has no scenario) = %v", missingTranscripts, orphanedTranscripts)
+	}
+}
+
+// TestEmptyTranscriptNeverMatches is D-07's central empty-transcript guard
+// (VRFY-04 empty edge): an empty or zero-byte frozen transcript must never
+// compare equal to a captured transcript, in either direction, and a
+// frozen file that exists but is zero bytes must fail loudly naming the
+// file rather than being silently treated as a trivially satisfied
+// comparison.
+func TestEmptyTranscriptNeverMatches(t *testing.T) {
+	t.Run("captured transcript vs zero-length expected value", func(t *testing.T) {
+		tr, sc := mustCaptureScenario(t, "handshake-explore")
+		normalized, _ := NormalizeWithLedger(tr.Stdout, Substitutions{RepoDir: tr.RepoDir})
+		if len(normalized) == 0 {
+			t.Fatalf("scenario %q: normalized capture unexpectedly empty (should never happen)", sc.Name)
+		}
+		err := compareBytesLineByLine(normalized, []byte{})
+		if err == nil {
+			t.Fatal("compareBytesLineByLine(realCapture, empty) unexpectedly reported equal — an empty expected value must never compare equal to a real capture")
+		}
+		t.Logf("guard fired as expected: %v", err)
+	})
+
+	t.Run("zero-length capture vs a real frozen transcript", func(t *testing.T) {
+		want := readFrozenTranscript(t, TranscriptPath("handshake-explore"))
+		err := compareBytesLineByLine([]byte{}, want)
+		if err == nil {
+			t.Fatal("compareBytesLineByLine(empty, realFrozenTranscript) unexpectedly reported equal — a zero-length capture must never compare equal to a real frozen transcript")
+		}
+		t.Logf("guard fired as expected: %v", err)
+	})
+
+	t.Run("frozen file exists but is zero bytes fails loudly naming the file", func(t *testing.T) {
+		dir := t.TempDir()
+		zeroPath := filepath.Join(dir, "zero-byte.golden")
+		if err := os.WriteFile(zeroPath, []byte{}, 0o644); err != nil {
+			t.Fatalf("write zero-byte fixture: %v", err)
+		}
+		_, err := statFrozenTranscript(zeroPath)
+		if err == nil {
+			t.Fatalf("statFrozenTranscript(%s) unexpectedly succeeded against a zero-byte file — must fail loudly naming the path", zeroPath)
+		}
+		if !strings.Contains(err.Error(), zeroPath) {
+			t.Fatalf("statFrozenTranscript error does not name the path %s: %v", zeroPath, err)
+		}
+		t.Logf("guard fired as expected, naming the path: %v", err)
+	})
+}
+
+// compareBytesLineByLine is assertBytesEqualLineByLine's pure logic core,
+// split out for the same reason statFrozenTranscript is: it lets
+// TestEmptyTranscriptNeverMatches assert this comparison FAILS on a
+// deliberately empty input without that expected failure propagating into
+// go test's own pass/fail exit code. Returns nil if got and want are
+// byte-equal; otherwise an error naming the first differing line (or the
+// length mismatch) with %q — never a summarized diff.
+func compareBytesLineByLine(got, want []byte) error {
 	if bytes.Equal(got, want) {
-		return
+		return nil
 	}
 	gotLines := bytes.Split(got, []byte("\n"))
 	wantLines := bytes.Split(want, []byte("\n"))
@@ -141,10 +288,19 @@ func assertBytesEqualLineByLine(t *testing.T, scenario string, got, want []byte)
 			w = wantLines[i]
 		}
 		if !bytes.Equal(g, w) {
-			t.Fatalf("scenario %q: normalized transcript differs at line %d:\n got: %q\nwant: %q", scenario, i+1, g, w)
+			return fmt.Errorf("normalized transcript differs at line %d:\n got: %q\nwant: %q", i+1, g, w)
 		}
 	}
-	t.Fatalf("scenario %q: normalized transcript differs in length (got %d bytes, want %d bytes) but no differing line was found", scenario, len(got), len(want))
+	return fmt.Errorf("normalized transcript differs in length (got %d bytes, want %d bytes) but no differing line was found", len(got), len(want))
+}
+
+// assertBytesEqualLineByLine is compareBytesLineByLine's *testing.T-failing
+// wrapper, fails naming the scenario and quoting the first differing line.
+func assertBytesEqualLineByLine(t *testing.T, scenario string, got, want []byte) {
+	t.Helper()
+	if err := compareBytesLineByLine(got, want); err != nil {
+		t.Fatalf("scenario %q: %v", scenario, err)
+	}
 }
 
 // assertSessionLine checks the D-13/D-14 stderr contract: exactly one line
@@ -296,19 +452,34 @@ func TestTracerExploreCallSucceeds(t *testing.T) {
 	t.Fatal("no tools/call response (id=3, non-empty result) found in captured stdout")
 }
 
-// TestNormalizeRuleLedgerIsHonest is D-04/D-07's ledger-honesty check: a
-// rule declared ExpectFires: true must have actually fired at least once
-// against the tracer capture; a rule declared ExpectFires: false must
-// carry a non-empty Why.
-func TestNormalizeRuleLedgerIsHonest(t *testing.T) {
-	tr, _ := mustCaptureScenario(t, "handshake-explore")
-	_, ledger := NormalizeWithLedger(tr.Stdout, Substitutions{RepoDir: tr.RepoDir})
+// TestEveryDeclaredFiringRuleActuallyFires is D-04/D-07's ledger-honesty
+// guard: run a REAL capture across every scenario in Scenarios() (not a
+// hand-constructed case — only a real capture can catch a rule that
+// silently stopped matching, e.g. because the SDK changed key order or
+// spacing around an anchor), accumulate the per-rule hit ledger
+// NormalizeWithLedger returns, and require that every rule declared
+// ExpectFires: true has a total hit count of at least one across the whole
+// suite, and every rule declared ExpectFires: false carries a non-empty
+// Why. Generalized from a single-scenario check (plan 01's tracer,
+// formerly TestNormalizeRuleLedgerIsHonest) to the full scenario set so
+// "representative" means the entire frozen baseline, not one hand-picked
+// sample.
+func TestEveryDeclaredFiringRuleActuallyFires(t *testing.T) {
+	scenarios := Scenarios()
+	totals := make(map[string]int, len(Rules))
+	for _, sc := range scenarios {
+		tr, _ := mustCaptureScenario(t, sc.Name)
+		_, ledger := NormalizeWithLedger(tr.Stdout, Substitutions{RepoDir: tr.RepoDir})
+		for name, hits := range ledger {
+			totals[name] += hits
+		}
+	}
 
 	for _, rule := range Rules {
-		hits := ledger[rule.Name]
+		hits := totals[rule.Name]
 		if rule.ExpectFires {
 			if hits < 1 {
-				t.Errorf("rule %q: ExpectFires=true but the ledger recorded %d hits against the tracer capture — rule stopped firing", rule.Name, hits)
+				t.Errorf("rule %q: ExpectFires=true but the accumulated ledger recorded %d hits across all %d scenarios — rule stopped firing", rule.Name, hits, len(scenarios))
 			}
 			continue
 		}
