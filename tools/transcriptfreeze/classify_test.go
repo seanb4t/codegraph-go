@@ -289,3 +289,34 @@ func TestGuardPatternsMatchRealTree(t *testing.T) {
 		t.Fatalf("internal/mcp/server.go does not satisfy isServerChangePath — the guard's serverDirPrefix (%q) may be stale", serverDirPrefix)
 	}
 }
+
+// TestClassifyReproducesTheWiredGuardsDemonstratedRedGreenPair encodes,
+// as a permanent regression case, the wired `task check:transcript-freeze`
+// demonstration recorded in this plan's summary: a disposable detached
+// worktree at this package's own commit received two edits in one commit —
+// a trailing newline appended to
+// testdata/wireoracle/transcripts/handshake-explore.golden and a comment
+// line appended to internal/mcp/server.go — confirmed landed via
+// `git diff --name-status -M -C`, and the real, wired `task
+// check:transcript-freeze` (not just Classify called directly) exited
+// non-zero naming both paths. The same two-file changed list, run back
+// through Classify here with no filesystem or git involved, must keep
+// proving the guard actually fires — a guard whose test suite exercises
+// only synthetic paths that happen to satisfy its own predicates is exactly
+// the T-06-02 repudiation risk ("a guard that cannot fire certifies a
+// property nobody enforced") this test closes for the real files the
+// worktree demonstration touched.
+func TestClassifyReproducesTheWiredGuardsDemonstratedRedGreenPair(t *testing.T) {
+	crossChange := []string{
+		"testdata/wireoracle/transcripts/handshake-explore.golden",
+		"internal/mcp/server.go",
+	}
+	if v := Classify(crossChange, ""); !v.Violation {
+		t.Fatalf("Classify(%v, \"\"): Violation = false, want true — this is the exact file pair the wired task check:transcript-freeze run observed RED against a confirmed-applied worktree commit", crossChange)
+	}
+
+	transcriptOnly := []string{"testdata/wireoracle/transcripts/handshake-explore.golden"}
+	if v := Classify(transcriptOnly, ""); v.Violation {
+		t.Fatalf("Classify(%v, \"\"): Violation = true, want false — this is the single-sided file the wired task check:transcript-freeze run observed GREEN against the same confirmed-applied worktree commit", transcriptOnly)
+	}
+}
