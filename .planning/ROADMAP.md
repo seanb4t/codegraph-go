@@ -192,7 +192,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Tracer: the tool-modfile scan end-to-end — `task vuln` replaced with a four-binary `-mode=binary` scan, a blocking ci.yml job stating its stance, and a permanent red-proof binary asserting exit 3 (VULN-01, VULN-02, VULN-03)
+- [x] 04-01-PLAN.md — Tracer: the tool-modfile scan end-to-end — `task vuln` replaced with a four-binary `-mode=binary` scan, a blocking ci.yml job stating its stance, and a permanent red-proof binary asserting exit 3 (VULN-01, VULN-02, VULN-03)
 - [x] 04-02-PLAN.md — The daemon flake at its shared cause: measured baseline rate, one deadline-budget knob plus a Run-join helper closing the Goexit-orphans-goroutine window, re-measured to zero (MAINT-01, MAINT-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*

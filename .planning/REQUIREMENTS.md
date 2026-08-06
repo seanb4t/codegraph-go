@@ -39,9 +39,9 @@
 
 ### Supply Chain (VULN)
 
-- [ ] **VULN-01**: `govulncheck` covers `go.tool.mod` and `go.tool-lint.mod` — approximately 400 third-party modules executed as credentialed CI tooling — via `-mode=binary` over binaries built from those manifests, replacing the current `task vuln` target which was reproduced to be a no-op duplicate of the main-module CI scan
-- [ ] **VULN-02**: The scanning job is demonstrated RED against a deliberately known-vulnerable pin before it is trusted
-- [ ] **VULN-03**: The job's blocking-versus-advisory stance is stated explicitly in the workflow, so an advisory job cannot be mistaken for a gate
+- [x] **VULN-01**: `govulncheck` covers `go.tool.mod` and `go.tool-lint.mod` — approximately 400 third-party modules executed as credentialed CI tooling — via `-mode=binary` over binaries built from those manifests, replacing the current `task vuln` target which was reproduced to be a no-op duplicate of the main-module CI scan
+- [x] **VULN-02**: The scanning job is demonstrated RED against a deliberately known-vulnerable pin before it is trusted
+- [x] **VULN-03**: The job's blocking-versus-advisory stance is stated explicitly in the workflow, so an advisory job cannot be mistaken for a gate
 
 ### Maintenance (MAINT)
 
@@ -102,9 +102,9 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | VRFY-03 | Phase 1 | Complete |
 | VRFY-04 | Phase 1 | Complete |
 | VRFY-05 | Phase 1 | Complete |
-| VULN-01 | Phase 4 | Pending |
-| VULN-02 | Phase 4 | Pending |
-| VULN-03 | Phase 4 | Pending |
+| VULN-01 | Phase 4 | Complete |
+| VULN-02 | Phase 4 | Complete |
+| VULN-03 | Phase 4 | Complete |
 | MAINT-01 | Phase 4 | Complete |
 | MAINT-02 | Phase 4 | Complete |
 | MAINT-03 | Phase 4 | Pending |

@@ -87,16 +87,52 @@ Same rule here.
 
 ### Supply-chain scanning (VULN-01, VULN-02, VULN-03)
 
-- **D-04: The new tool-modfile scan is BLOCKING, and says so.** These ~400 modules
-  execute as credentialed CI tooling — repository write access and secrets — which
-  is exactly the surface worth failing a build over. VULN-02 requires the job be
-  demonstrated RED against a deliberately known-vulnerable pin before it is
-  trusted, so it ships as a proven gate rather than an assumed one.
-  - **Deliberate inconsistency, stated rather than hidden:** the D-03 transcript
-    guard went **advisory** in Phase 3 while this goes **blocking**. Both stances
-    coexist on purpose — they guard different things at different stakes — and
-    VULN-03 exists precisely to make each one legible. Neither should be quietly
-    aligned to the other.
+- **D-04 — SUPERSEDED 2026-08-06 at 04-01's checkpoint. The scan ships ADVISORY,
+  not blocking.** Read the replacement below; the original text is kept only so
+  the reversal is legible.
+
+  **Original (no longer in force):** the scan is BLOCKING and says so, because
+  these modules execute as credentialed CI tooling — repository write access and
+  secrets — which is exactly the surface worth failing a build over.
+
+  **What changed:** implementing it surfaced a fact the decision was made without.
+  `goreleaser`'s own binary carries a **real, permanently-unfixed,
+  symbol-reachable** match for `GO-2026-5932` — 110 vulnerable symbols in
+  `golang.org/x/crypto/openpgp`, arriving through `goreleaser/cmd → pipe/ko →
+  google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp`, confirmed with
+  `go list -deps` and specifically checked against `-mode=binary`'s known
+  false-positive class. `goreleaser` never imports `openpgp` directly; the `ko`
+  pipe is compiled into every `goreleaser` binary regardless of config, and the
+  upstream package is unmaintained (`Fixed in: N/A`).
+
+  Shipped as originally specified, the gate would have been **permanently red
+  from its first run** on real in-scope tooling this repo already builds — and it
+  would have collapsed VULN-02's own signal, since "the gate can fire" stops
+  being informative once `task vuln` always exits 3.
+
+  **Maintainer decision at the checkpoint: ship advisory.** Detection and the full
+  report stay intact; the job never fails the build. Chosen over a narrow
+  `GO-2026-5932` allowlist (which would have kept the gate blocking for anything
+  new) and over dropping `goreleaser` from scope (which would have excluded ~322
+  of the 357 measured modules). The tradeoff was stated at the checkpoint and
+  accepted: an advisory scan over credentialed tooling reports rather than
+  prevents.
+
+  **Consequences that follow, and must be honored:**
+  - The stance stated in all three places (tool output, `Taskfile.yml` `desc:`,
+    CI step `name:`) is **ADVISORY**, per VULN-03. Nothing may read as blocking.
+  - **VULN-02's "demonstrated RED" now means the detection fires and reports**,
+    not that the build fails — the same distinction Phase 3's advisory transcript
+    guard drew. The self-test asserts the report, not an exit code that fails CI.
+  - This now **matches** the D-03 transcript guard's stance rather than
+    deliberately differing from it. The earlier note about two coexisting stances
+    no longer applies.
+  - `ci.yml`'s existing blocking `govulncheck (DIST-03, blocking)` gate over the
+    main module is **unaffected and stays blocking**. Advisory applies only to the
+    new tool-modfile scan.
+  - `GO-2026-5932` is a real, accepted, unmitigated exposure in release tooling.
+    It should be recorded as such — the advisory report is now the only thing
+    surfacing it.
 
 - **D-05: `task vuln` is confirmed a no-op duplicate and must be replaced, not
   supplemented.** Measured, not assumed: `Taskfile.yml:148-155` runs

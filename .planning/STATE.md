@@ -5,8 +5,8 @@ milestone_name: MCP Protocol Currency
 current_phase: 4
 current_phase_name: Supply-Chain Coverage & Daemon Substrate Fixes
 status: Ready to discuss phase 4
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-08-06T19:29:52.747Z"
+stopped_at: "Completed 04-01-PLAN.md (Taskfile.yml vuln/vuln:selftest targets, ci.yml tool-vuln job, testdata/vulnredpoc)"
+last_updated: "2026-08-06T19:47:40.885Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 3 complete, transitioned to Phase 4
 progress:
@@ -159,6 +159,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 03 P04 | 6min | 2 tasks | 5 files |
 | Phase 03 P05 | 40min | 3 tasks | 27 files |
 | Phase 04 P02 | 119min | 3 tasks | 6 files |
+| Phase 04 P01 | 45min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -208,6 +209,7 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: Phase 3's reviewed-diff pass ran a consolidated fourth time in 03-05: 24 of 27 transcripts re-frozen, three additive causes named with counts, zero unattributed lines, oracle re-proved non-vacuous via Mutation 1 with a byte-clean revert
 - [Phase ?]: MAINT-01 (getppid -race) closed structurally via t.Cleanup-registered join-before-restore, proven by 0 races across 3 post-fix full-suite -race runs plus a disproof/reproof toggle test
 - [Phase ?]: MAINT-02 plain-timeout tail not reduced to a literal zero on this session's machine due to a discovered confound: multiple concurrent sibling Claude Code agents plus a live desktop GUI competing for CPU (confirmed via ps aux); GOMAXPROCS=4 (CI-runner-class approximation) is 8/8 clean, isolated runs always clean
+- [Phase ?]: 04-01: Tool-modfile vuln scan ships ADVISORY not blocking (D-04 superseded) — goreleaser's binary carries a real, permanently-unfixed, symbol-reachable GO-2026-5932 match (openpgp via cosign/rekor's PGP verifier); blocking would have been permanently red from first run
 
 ### Pending Todos
 
@@ -269,8 +271,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T19:29:52.738Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-08-06T19:47:40.874Z
+Stopped at: Completed 04-01-PLAN.md (Taskfile.yml vuln/vuln:selftest targets, ci.yml tool-vuln job, testdata/vulnredpoc)
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:
