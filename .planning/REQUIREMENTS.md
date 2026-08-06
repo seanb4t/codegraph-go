@@ -15,7 +15,7 @@
 - [x] **SPEC-02**: The server validates per-request `_meta` (protocol version, client identity, client capabilities), answering `-32602` on malformed or missing required fields and `UnsupportedProtocolVersionError` (`-32022`, SEP-2575) on an unsupported version, rather than failing silently or proceeding on assumptions
 - [x] **SPEC-03**: Every tool result carries `resultType: "complete"`
 - [x] **SPEC-04**: `tools/list` and `server/discover` responses carry `ttlMs: 0` and `cacheScope: "private"`, so no client caches a catalog this server cannot promise is still accurate
-- [ ] **SPEC-05**: A user who runs `codegraph init` while an MCP server is already running sees the tools appear — `hasIndex` is re-checked per call rather than snapshotted once at server construction
+- [x] **SPEC-05**: A user who runs `codegraph init` while an MCP server is already running sees the tools appear — `hasIndex` is re-checked per call rather than snapshotted once at server construction
 - [ ] **SPEC-06**: An agent client speaking any prior protocol revision (`2025-11-25` and earlier) continues to work against the upgraded server, asserted by test rather than assumed from the SDK's documentation
 - [ ] **SPEC-07**: `server/discover`'s `instructions` field carries codegraph usage guidance, so an agent gets orientation without spending a tool call
 - [x] **SPEC-08**: Tool results carry `io.modelcontextprotocol/serverInfo` in `_meta`, so a client debugging a negotiation problem can see which server version answered
@@ -87,7 +87,7 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | SPEC-02 | Phase 3 | Complete |
 | SPEC-03 | Phase 3 | Complete |
 | SPEC-04 | Phase 3 | Complete |
-| SPEC-05 | Phase 3 | Pending |
+| SPEC-05 | Phase 3 | Complete |
 | SPEC-06 | Phase 3 | Pending |
 | SPEC-07 | Phase 3 | Pending |
 | SPEC-08 | Phase 3 | Complete |
