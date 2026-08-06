@@ -5,7 +5,7 @@ milestone_name: MCP Protocol Currency
 current_phase: 2
 current_phase_name: SDK Migration — official go-sdk on the existing surface
 status: planning
-stopped_at: Completed 02-01-PLAN.md (SDK migration tracer + test suite migration)
+stopped_at: Wave 1 complete — 02-01-PLAN.md and 02-02-PLAN.md merged
 last_updated: "2026-08-06T01:08:04.774Z"
 last_activity: 2026-08-05
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
@@ -149,6 +149,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 10 P06 | ~24min | 3 tasks | 5 files |
 | Phase 10 P07 | 55min | 3 tasks | 3 files |
 | Phase 02 P01 | ~2h | 3 tasks | 12 files |
+| Phase 02 P02 | 20min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,7 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: 02-01: go-sdk's StdioTransport{} lacks a customization hook, so a real client-disconnect race (stdin closes before an in-flight response is written) required a custom IOTransport wrapper (stdinLingerReader/pendingWriter) in goSDKServer.ServeStdio().
 - [Phase ?]: 02-01: go-sdk defaults to the 2026-07-28 SEP-2575 server/discover handshake, never classic initialize, when both client and server are go-sdk v1.7.0 defaults — VRFY-03's session-line middleware only fires for classic initialize (in scope for this phase); internal/mcp's own tests now drive a raw jsonrpc handshake (sendRawInitialize) to exercise it.
 - [Phase ?]: 02-01: added a narrow, function-scoped HYG-02 archtest allowlist (internal/graphstore/archtest) for internal/mcp's now-necessary direct os.Stdout reference in ServeStdio() — the one legitimate transport-target write, not a diagnostic leak; proven scoped via a new self-test.
+- [Phase ?]: 02-02: reused mcpSDKModulePrefixes by index for the SDK-01 swap exemption rather than retyping module paths
 
 ### Pending Todos
 
@@ -246,8 +248,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 ## Session Continuity
 
 Last session: 2026-08-06T01:07:49.558Z
-Stopped at: Completed 02-01-PLAN.md (SDK migration tracer + test suite migration)
-  NEXT: `/gsd-discuss-phase 2` (SDK Migration — official go-sdk on the existing surface)
+Stopped at: Phase 2 Wave 1 complete — 02-01-PLAN.md and 02-02-PLAN.md merged onto the milestone branch
+  NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:
 

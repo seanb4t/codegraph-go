@@ -130,7 +130,7 @@ Plans:
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Tracer: the whole stdio path on go-sdk — backend swap behind the `Server` seam, all 8 tools on struct-tag schemas, explicit tools capability, `cacheScope: private`, session line via receiving middleware
-- [ ] 02-02-PLAN.md — Unblock the blocking anti-regeneration gate: one self-expiring exemption for the SDK-01 swap diff shape, demonstrated red both ways
+- [x] 02-02-PLAN.md — Unblock the blocking anti-regeneration gate: one self-expiring exemption for the SDK-01 swap diff shape, demonstrated red both ways
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
