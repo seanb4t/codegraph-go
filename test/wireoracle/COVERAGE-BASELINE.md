@@ -1,27 +1,45 @@
-# Wire Oracle Coverage Baseline — End of Phase 1
+# Wire Oracle Coverage Baseline
 
-**Date:** 2026-08-05
-**Phase:** 01-protocol-scoping-the-sdk-independent-wire-oracle
-**Scenario count:** 23 (`test/wireoracle.ExpectedScenarioCount`)
+**Originally captured:** 2026-08-05 (Phase 1, `01-protocol-scoping-the-sdk-independent-wire-oracle`)
+**Last updated:** 2026-08-06 (Phase 3 plan 05, `03-2026-07-28-spec-compliance`)
+**Scenario count:** 27 (`test/wireoracle.ExpectedScenarioCount`)
 
-This is the human-readable index of the complete, frozen pre-migration scenario set the wire oracle
-(`test/wireoracle`) captured against the real, unmodified `mark3labs/mcp-go@v0.56.0`-backed
-`codegraph` binary across plans 01, 04, and 05 of this phase. It is **not** a second source of
+This is the human-readable index of the complete, frozen scenario set the wire oracle
+(`test/wireoracle`) captures against the real `codegraph` binary. It is **not** a second source of
 truth — the structural guarantees it describes already live in code, enforced on every `go test
 ./test/wireoracle/...` run by four tests:
 
-- `TestScenarioCountIsExact` — the count below is exactly 23, enforced with equality, never a lower
+- `TestScenarioCountIsExact` — the count below is exactly 27, enforced with equality, never a lower
   bound.
 - `TestTranscriptSetMatchesScenarioSet` — every scenario named below has exactly one
   `testdata/wireoracle/transcripts/<name>.golden` file, and no orphaned file exists.
-- `TestEveryRegisteredToolHasASuccessfulCallScenario` (plan 04) — every one of the 8 registered MCP
-  tools has a scenario proving a successful `tools/call`.
-- `TestLegacyEraBaselineIsDocumented` (plan 05) — the six-era Legacy handshake baseline below is
+- `TestEveryRegisteredToolHasASuccessfulCallScenario` (plan 01-04) — every one of the 8 registered
+  MCP tools has a scenario proving a successful `tools/call`.
+- `TestLegacyEraBaselineIsDocumented` (plan 01-05) — the six-era Legacy handshake baseline below is
   exactly 6 scenarios, and the four supported revisions negotiate to themselves.
 
 This file exists so a human (or a later phase's planner) can see the complete set at a glance
 without reading `scenarios.go`; if this file and the code ever disagree, the code — and the four
 tests above — are authoritative.
+
+## History: how this corpus grew across phases
+
+- **Phase 1** (`01-protocol-scoping-the-sdk-independent-wire-oracle`) captured the original 23
+  scenarios below against the real, unmodified `mark3labs/mcp-go@v0.56.0`-backed binary — the
+  one-way pre-migration baseline. That exact capture (against mark3labs specifically) is closed:
+  once Phase 2 removed `mark3labs/mcp-go` from `go.mod`, none of those 23 handshakes could ever be
+  re-*captured* against that pre-migration wire behavior again.
+- **Phase 2** (`02-sdk-migration-official-go-sdk-on-the-existing-surface`) re-*froze* (not
+  re-captured against mark3labs — captured fresh against the new go-sdk-backed binary) all 23 of
+  those transcripts through one reviewed-diff pass (02-05), attributing every changed line to one of
+  nine named causes. The scenario **set** did not change size in Phase 2; only the bytes each
+  scenario's `.golden` file held.
+- **Phase 3** (`03-2026-07-28-spec-compliance`) legitimately *extended* the scenario set for the
+  first time since Phase 1 — sanctioned explicitly by Phase 1's own D-03 ("transcripts *must*
+  legitimately change there," 03-CONTEXT.md D-06) — adding 4 new scenarios across four plans
+  (03-01, 03-03, 03-04, 03-05) and one new request appended to an existing scenario
+  (`legacy-2024-11-05`, plan 03-05), bringing the total from 23 to 27. Every addition went through
+  the same one-reviewed-diff-pass mechanism (D-06) each time the corpus's frozen bytes moved.
 
 ## The complete scenario set, grouped by coverage category
 
@@ -29,7 +47,7 @@ tests above — are authoritative.
 
 | Scenario | Covers |
 |---|---|
-| `handshake-explore` | End-to-end: `initialize` → `tools/list` → `tools/call codegraph_explore` with a real query. The oracle architecture's own proof of life (plan 01). |
+| `handshake-explore` | End-to-end: `initialize` → `tools/list` → `tools/call codegraph_explore` with a real query. The oracle architecture's own proof of life (plan 01-01). |
 
 ### `tools/list` variants (4)
 
@@ -68,43 +86,68 @@ tests above — are authoritative.
 
 | Scenario | Covers |
 |---|---|
-| `edge-call-before-initialize` | `tools/call` sent with no prior `initialize` — today's server tolerates this (RESEARCH Pitfall 2), locked in as a currently-passing behavior, not an error. |
+| `edge-call-before-initialize` | `tools/call` sent with no prior `initialize` — post-migration, go-sdk enforces MCP's session-ordering requirement and REJECTS this (`{"code":0,...}`, tracked as upstream go-sdk#976, not anchored — 02-05 cause #9). Pre-migration this scenario proved the opposite (a permissive mark3labs acceptance); the scenario's name and request shape are unchanged across that flip, only the recorded outcome. |
 
 ### Six-era Legacy handshake baseline (6)
 
-The multi-era baseline approved at plan 05's Task 1 blocking checkpoint (`six-era` selection): the
-four protocol revisions today's server recognizes, plus the revision Phase 3 will implement
-(unsupported today), plus a request omitting `protocolVersion` entirely.
+The multi-era baseline approved at plan 01-05's Task 1 blocking checkpoint (`six-era` selection): the
+four protocol revisions the server recognizes, plus the revision Phase 3 implements
+(unsupported before Phase 3), plus a request omitting `protocolVersion` entirely.
 
 | Scenario | Offered | Negotiated | Result |
 |---|---|---|---|
 | `legacy-2025-11-25` | `2025-11-25` | `2025-11-25` | supported, echoed back |
 | `legacy-2025-06-18` | `2025-06-18` | `2025-06-18` | supported, echoed back |
 | `legacy-2025-03-26` | `2025-03-26` | `2025-03-26` | supported, echoed back |
-| `legacy-2024-11-05` | `2024-11-05` | `2024-11-05` | supported, echoed back |
+| `legacy-2024-11-05` | `2024-11-05` | `2024-11-05` | supported, echoed back — **plus a trailing `tools/call codegraph_explore` (plan 03-05, SPEC-06)**: proves the OLDEST Legacy era, not just negotiation, completes a session AND successfully calls a tool. Paired with `handshake-explore`'s equivalent proof at `2025-11-25`, the NEWEST Legacy era, as the two-endpoint judgment call 03-RESEARCH.md's "SPEC-06 recommendation" flagged LOW confidence. |
 | `legacy-unsupported-2026-07-28` | `2026-07-28` | `2025-11-25` | silent coercion to the server's own latest — SUCCESS, no `error` object |
 | `legacy-omitted-version` | *(no key)* | `2025-03-26` | silent coercion to the server's older backwards-compat default — SUCCESS, distinct from the row above |
+
+### Modern (2026-07-28) discover + tool-call tracer (1) — plan 03-01
+
+| Scenario | Covers |
+|---|---|
+| `modern-discover-explore` | A sessionless `server/discover` (SEP-2575 `_meta`-carried protocol version, never `params.protocolVersion`) followed by a sessionless `tools/call codegraph_explore`, both Modern. Proves SPEC-01 (discover answers with capabilities, no tool call first), SPEC-03/SPEC-08 (`resultType:"complete"` and `_meta.io.modelcontextprotocol/serverInfo` on both a discover result and a tool result), and SPEC-04's discover half (`cacheScope:"private"`, `ttlMs:0`, independently anchored by `assertDiscoverCacheControl`). SPEC-07's `instructions` field (plan 03-05) also lands on this scenario's discover result. |
+
+### Modern `_meta` validation failures (2) — plan 03-03
+
+| Scenario | Covers |
+|---|---|
+| `modern-meta-invalid-params` | A well-formed Modern `_meta` missing `io.modelcontextprotocol/clientCapabilities` — `-32602` invalid-params (SPEC-02, hand-authored anchor at response id 1, a `NoInitialize` sessionless scenario). |
+| `modern-meta-unsupported-version` | A well-formed Modern `_meta` offering a supported-shape-but-unrecognized protocol version that sorts lexically after `"2026-07-28"` (`"2099-01-01"`, load-bearing for avoiding go-sdk's lexical-comparison reclassification trap) — `-32022` unsupported-protocol-version (SPEC-02, hand-authored anchor). |
+
+### Dynamic tool catalog (1) — plan 03-04
+
+| Scenario | Covers |
+|---|---|
+| `index-appears-mid-session` | A server started with NO index present advertises zero tools on its first `tools/list`; a REAL `codegraph init` subprocess then runs against the server's own working directory mid-session (via `InitAfterRequest`, a response-observed wait, never a sleep); the SAME live connection's second `tools/list` advertises the full catalog — no restart, no reconnect. Proves SPEC-05's per-request re-check (`internal/mcp/server.go`'s `recheckCatalog`). |
 
 ## Total
 
 1 (tracer) + 4 (tools/list) + 7 (tools/call) + 4 (error shapes) + 1 (statelessness edge)
-+ 6 (six-era Legacy baseline) = **23**, matching `ExpectedScenarioCount`.
++ 6 (six-era Legacy baseline) + 1 (Modern discover tracer) + 2 (Modern `_meta` failures)
++ 1 (dynamic tool catalog) = **27**, matching `ExpectedScenarioCount`.
 
-## This set cannot be extended after Phase 2 removes `mark3labs/mcp-go`
+## The original 23 mark3labs captures cannot be re-captured against that backend again
 
-Every scenario above was captured against the real, unmodified `mark3labs/mcp-go@v0.56.0`-backed
-binary — the one-way pre-migration baseline this milestone's wire oracle exists to freeze. Once
-Phase 2 removes `mark3labs/mcp-go` from `go.mod`, none of these 23 handshakes can ever be
-re-captured against that exact pre-migration wire behavior again. This set is closed: Phase 2 and
-Phase 3 read it as a fixed comparison target (via `TestFrozenTranscriptsMatch`'s byte-for-byte
-guard), they do not add new frozen `.golden` transcripts to it. New wire-behavior coverage after the
-SDK swap belongs in a new, post-migration comparison mechanism — not in
-`testdata/wireoracle/transcripts/`.
+The 23 scenarios in the Tracer/`tools/list`/`tools/call`/Error-shapes/Statelessness/Six-era-Legacy
+categories above were originally captured against the real, unmodified
+`mark3labs/mcp-go@v0.56.0`-backed binary in Phase 1 — the one-way pre-migration baseline. Once Phase
+2 removed `mark3labs/mcp-go` from `go.mod`, none of those 23 handshakes could ever be re-captured
+against that exact pre-migration wire behavior again — Phase 2 (02-05) re-froze their `.golden`
+bytes against the new go-sdk-backed binary instead, through one reviewed-diff pass. This constraint
+applied to Phase 2 specifically (a byte-identity comparison across a backend swap); it does not mean
+the scenario **set** itself is closed — Phase 3 (03-01, 03-03, 03-04, 03-05) legitimately added the
+4 new scenarios and 1 new request documented above, each through the same reviewed-diff mechanism
+(D-06) the corpus uses for every frozen-byte change, pre- or post-migration.
 
-## Instruction for whoever plans Phase 2
+## Instruction for whoever next extends this corpus
 
-Phase 2's first plan should declare an explicit dependency on this file and on the four tests named
-above (`TestScenarioCountIsExact`, `TestTranscriptSetMatchesScenarioSet`,
-`TestEveryRegisteredToolHasASuccessfulCallScenario`, `TestLegacyEraBaselineIsDocumented`) — not on
-"Phase 1 complete". A Phase 1 plan cannot create a Phase 2 dependency itself, which is why this
-instruction is recorded here rather than implemented as a structural gate.
+Any future plan that adds a scenario, adds a request to an existing scenario, or otherwise moves a
+frozen `.golden` file's bytes must: (1) bump `ExpectedScenarioCount` in the same commit as the
+scenario addition, per its own doc comment's rule; (2) run the oracle's capture CLI against a freshly
+rebuilt binary — never hand-write a `.golden` file; (3) route every byte movement through one
+reviewed-diff pass per scenario/plan (D-06's mechanism: capture before and after, read the diff, name
+every changed line's cause in the commit message — no ledger file, no sign-off step); and (4) update
+this file's category tables and Total line in the same change, so this index does not silently fall
+out of date with the constant (`ExpectedScenarioCount`) and the code that guard it.
