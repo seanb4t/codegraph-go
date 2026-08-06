@@ -124,7 +124,7 @@ Plans:
   4. A handler that returns a plain Go `error` produces a known, asserted wire shape — the mark3labs protocol-error vs. official-SDK `IsError: true` tool-result difference is covered by an explicit test, not inferred from the unchanged Go type signature (SDK-04)
   5. Tool input schemas keep their constraint semantics (notably enum constraints that struct-tag reflection drops), or each loss is written down as a deliberate divergence rather than discovered later by a client (SDK-05)
 
-**Plans**: 1/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -134,7 +134,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-03-PLAN.md — SDK-04: the error-to-wire mapping asserted rather than inferred, demonstrated RED against a protocol-error mutation
+- [x] 02-03-PLAN.md — SDK-04: the error-to-wire mapping asserted rather than inferred, demonstrated RED against a protocol-error mutation
 - [ ] 02-04-PLAN.md — SDK-03: mark3labs out of `go.mod` — the last four client sites, both archtest self-tests re-pointed at go-sdk, closure re-audited
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -191,7 +191,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
-| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 1/5 | In Progress|  |
+| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 3/5 | In Progress|  |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 0/0 | Not started | - |
 | 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 0/0 | Not started | - |
 | 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
