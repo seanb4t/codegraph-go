@@ -87,6 +87,67 @@ func toolCallRequest(id int, name string, arguments any) map[string]any {
 	}
 }
 
+// modernProtocolVersion is a package-local, hand-authored literal
+// (D-06/VRFY-01) holding the `2026-07-28` revision — never read from an
+// SDK constant, mirroring handshakeExploreProtocolVersion below and
+// legacyEraVersions further down this file.
+const modernProtocolVersion = "2026-07-28"
+
+// modernMetaParams returns the SEP-2575 per-request `_meta` object a
+// Modern (2026-07-28) client attaches to a sessionless request: exactly
+// the three `io.modelcontextprotocol/*` keys the working probe recipe
+// uses (03-CONTEXT.md D-01), all hand-authored literals in this file,
+// never imported from the SDK under test.
+//
+// Load-bearing finding (03-CONTEXT.md D-01): SEP-2575 signals the
+// protocol version through `_meta`, never through
+// `params.protocolVersion` — a discover request carrying
+// `params.protocolVersion` is rejected -32601 in a way that looks
+// exactly like "the server does not implement discover", a wrong
+// conclusion that already survived two messages once in this project's
+// history. Every request built via discoverRequest/modernToolCallRequest
+// below carries the version in `_meta` only.
+func modernMetaParams() map[string]any {
+	return map[string]any{
+		"io.modelcontextprotocol/protocolVersion": modernProtocolVersion,
+		"io.modelcontextprotocol/clientInfo": map[string]any{
+			"name":    handshakeExploreClientName,
+			"version": handshakeExploreClientVersion,
+		},
+		"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+	}
+}
+
+// discoverRequest returns a "server/discover" request whose params carry
+// only `_meta` — SEP-2575 sessionless dispatch, no prior "initialize".
+func discoverRequest(id int) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "server/discover",
+		"params": map[string]any{
+			"_meta": modernMetaParams(),
+		},
+	}
+}
+
+// modernToolCallRequest returns a "tools/call" request carrying the same
+// Modern per-request `_meta` as discoverRequest, alongside name/arguments
+// — SEP-2575 sessionless dispatch again, not a session-ordering
+// violation (see modern-discover-explore's own doc comment below).
+func modernToolCallRequest(id int, name string, arguments any) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      name,
+			"arguments": arguments,
+			"_meta":     modernMetaParams(),
+		},
+	}
+}
+
 // handshakeExploreProtocolVersion is a package-local, hand-authored
 // literal (D-06) — never an SDK constant — matching what mark3labs
 // v0.56.0's server negotiates today (its own LATEST_PROTOCOL_VERSION).
@@ -260,9 +321,11 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // bar, the "full-bar" blocking-checkpoint selection: 4 tools/list variants,
 // 7 tools/call, 4 error shapes, 1 statelessness edge) + 6 scenarios (plan
 // 05's "six-era" blocking-checkpoint selection: the multi-era Legacy
-// handshake baseline) = 23. A shrinking count is the failure mode this
-// constant exists to catch.
-const ExpectedScenarioCount = 23
+// handshake baseline) + 1 scenario (phase 3 plan 01's tracer,
+// modern-discover-explore: the Modern 2026-07-28 server/discover +
+// sessionless tools/call proof) = 24. A shrinking count is the failure
+// mode this constant exists to catch.
+const ExpectedScenarioCount = 24
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -663,6 +726,40 @@ func Scenarios() []Scenario {
 				toolsListRequest(2),
 			},
 			ExpectTools: 1,
+		},
+
+		// --- Modern (2026-07-28) tracer: server/discover then a
+		// sessionless tools/call, both proved in one capture (phase 3
+		// plan 01's tracer) ---
+
+		{
+			// One capture, two proofs, deliberately kept as a single
+			// scenario rather than two: the discover response carries
+			// SPEC-01's capabilities-without-a-tool-call, SPEC-03's
+			// resultType, SPEC-04's cacheScope/ttlMs, and SPEC-08's
+			// serverInfo in _meta; the following tools/call proves
+			// SPEC-03 and SPEC-08 for a TOOL result, which no
+			// pre-existing transcript covers because both fields are
+			// per-request Modern-gated and every pre-existing scenario
+			// negotiates a Legacy era.
+			//
+			// NoInitialize: true here means something different from
+			// edge-call-before-initialize: a Modern _meta-bearing
+			// request is spec-sanctioned sessionless dispatch (SEP-2575),
+			// not a session-ordering violation — the server never
+			// rejects it, unlike edge-call-before-initialize's classic
+			// tools/call with no _meta at all.
+			Name:         "modern-discover-explore",
+			Index:        true,
+			NoInitialize: true,
+			Requests: []map[string]any{
+				discoverRequest(1),
+				modernToolCallRequest(2, "codegraph_explore", map[string]any{"query": handshakeExploreQuery}),
+			},
+			// ExpectTools is unread for a NoInitialize scenario — it
+			// asserts the absence of a session line instead
+			// (assertNoSessionLine), never a real tool count.
+			ExpectTools: 0,
 		},
 	}
 }
