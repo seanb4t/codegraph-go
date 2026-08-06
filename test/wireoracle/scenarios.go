@@ -398,9 +398,12 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // sessionless tools/call proof) + 2 scenarios (phase 3 plan 03's SPEC-02
 // proof: modern-meta-invalid-params and modern-meta-unsupported-version,
 // freezing the -32602 and -32022 halves of per-request `_meta` validation)
-// = 26. A shrinking count is the failure mode this constant exists to
-// catch.
-const ExpectedScenarioCount = 26
+// + 1 scenario (phase 3 plan 04's SPEC-05 proof: index-appears-mid-session,
+// a real `codegraph init` run mid-session against the same connected
+// server, driving an empty tools/list to a one-tool tools/list on the same
+// connection) = 27. A shrinking count is the failure mode this constant
+// exists to catch.
+const ExpectedScenarioCount = 27
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -868,6 +871,56 @@ func Scenarios() []Scenario {
 			NoInitialize: true,
 			Requests: []map[string]any{
 				discoverRequestWithMeta(1, modernMetaWithVersion(modernUnsupportedVersion)),
+			},
+			ExpectTools: 0,
+		},
+
+		// --- SPEC-05 proof (phase 3 plan 04): the live tool catalog. A
+		// real `codegraph init` runs mid-session, against the SAME
+		// already-running server process, and the transcript proves the
+		// tool set follows it in both request order — no restart, no
+		// reconnect. ---
+
+		{
+			// Index: false — the fixture is copied but never indexed
+			// before the server starts (mirroring toolslist-no-index
+			// above), so the id-2 tools/list proves the pre-index empty
+			// catalog. InitAfterRequest: 2 then runs `codegraph init`
+			// against this exact server's working directory once (and
+			// only once) the id-2 response has actually been observed on
+			// stdout — never a sleep, never a fixed delay — before the
+			// id-3 request is even written to stdin. The id-3 tools/list,
+			// answered by the SAME connected server process, proves the
+			// re-check (internal/mcp/server.go's recheckCatalog,
+			// 03-04-PLAN.md Task 1) reacted to a REAL index appearing on
+			// disk, not to a test-only hook: the plan's own discretion
+			// item (03-CONTEXT.md "Whether the index-appears scenario
+			// drives real codegraph init in a fixture or simulates the
+			// transition") is resolved in favor of the real form, because
+			// a simulated transition would only prove the mechanism
+			// reacts to whatever the simulation calls, not to the
+			// filesystem state SPEC-05 actually promises to track.
+			//
+			// It carries no tools/call, so the at-most-one-and-last
+			// worker-pool ordering constraint documented above Scenarios()
+			// is trivially satisfied — all three requests (initialize,
+			// tools/list, tools/list) are handled synchronously in
+			// request order.
+			//
+			// ExpectTools: 0 is deliberate, not a placeholder: the VRFY-03
+			// session line is written during the id-1 initialize, BEFORE
+			// codegraph init has run (InitAfterRequest fires after id-2,
+			// not id-1) — so 0 is the honest, correct expectation, and
+			// asserting it pins tools=N's now-point-in-time meaning
+			// (T-03-17) rather than letting a stale expectation quietly
+			// paper over what changed.
+			Name:             "index-appears-mid-session",
+			Index:            false,
+			InitAfterRequest: 2,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolsListRequest(2),
+				toolsListRequest(3),
 			},
 			ExpectTools: 0,
 		},

@@ -79,6 +79,25 @@ type Scenario struct {
 	// never assumed equal to EraOfferedVersion except for the four
 	// supported revisions (RESEARCH Pitfall 1).
 	EraNegotiatedVersion string
+	// InitAfterRequest is the 1-based index into Requests after whose
+	// RESPONSE HAS BEEN OBSERVED the harness runs `binPath init workDir`
+	// against the already-running server's working directory — SPEC-05's
+	// index-appears-mid-session proof (03-04-PLAN.md Task 2). Zero (the
+	// field's Go zero value) means "never run init mid-session," so every
+	// scenario that predates this field is completely unaffected.
+	//
+	// "Response has been observed" is load-bearing, not a nicety: writing
+	// every request up front and running init partway through would be
+	// non-deterministic — the later requests would already sit in the
+	// subprocess's stdin pipe, and a pre-init tools/list could be
+	// serviced by the server before or after init completes depending on
+	// scheduling, flipping the frozen bytes run to run. Capture instead
+	// blocks, after writing the InitAfterRequest'th request, until THAT
+	// request's own response id has been read from stdout (bounded by
+	// Capture's existing runCtx deadline) before running init and before
+	// writing any further request. Determinism comes from observing the
+	// response, never from a sleep.
+	InitAfterRequest int
 }
 
 // Transcript is one capture's raw output.
@@ -119,11 +138,19 @@ func (s *syncBuffer) String() string {
 
 // Capture copies fixtureSrc into workDir, optionally runs `binPath init
 // workDir` (sc.Index), spawns `binPath serve --mcp` with cmd.Dir=workDir,
-// writes sc.Requests to its stdin (one JSON-marshaled line per request,
-// then closes stdin so the server sees EOF and exits on its own in the
-// common case), and collects every stdout line until one response per
-// request id has been seen, the scanner reaches EOF, or a 30-second
-// deadline fires.
+// writes sc.Requests to its stdin one at a time (one JSON-marshaled line
+// per request, then closes stdin so the server sees EOF and exits on its
+// own in the common case), and collects every stdout line until one
+// response per request id has been seen, the scanner reaches EOF, or a
+// 30-second deadline fires.
+//
+// When sc.InitAfterRequest is non-zero, Capture additionally blocks after
+// writing that request until its own response has been observed on
+// stdout, then runs `binPath init workDir` to completion against the
+// already-running server's working directory before writing any further
+// request — see Scenario.InitAfterRequest's doc comment for why this
+// ordering (not a sleep) is what makes the resulting transcript
+// deterministic.
 //
 // Capture takes no *testing.T and therefore owns its own lifecycle
 // explicitly: it never relies on t.Cleanup, because its second caller
@@ -173,22 +200,12 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 		_ = cmd.Wait()
 	}()
 
-	for _, req := range sc.Requests {
-		b, marshalErr := json.Marshal(req)
-		if marshalErr != nil {
-			_ = cmd.Process.Kill()
-			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: marshal request: %w", sc.Name, marshalErr)
-		}
-		if _, writeErr := stdin.Write(append(b, '\n')); writeErr != nil {
-			_ = cmd.Process.Kill()
-			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: write request: %w", sc.Name, writeErr)
-		}
-	}
-	if closeErr := stdin.Close(); closeErr != nil {
-		_ = cmd.Process.Kill()
-		return Transcript{}, fmt.Errorf("wireoracle: scenario %q: close stdin: %w", sc.Name, closeErr)
-	}
-
+	// The scanner goroutine and the response-draining bookkeeping start
+	// BEFORE the request-write loop (moved here from after it) precisely
+	// so InitAfterRequest can block mid-write-loop on a specific
+	// response's arrival — see drainUntil below and Scenario.
+	// InitAfterRequest's doc comment for why this ordering is load-bearing
+	// for determinism, not merely a refactor for its own sake.
 	wantIDs := requestIDs(sc.Requests)
 	seen := make(map[float64]bool, len(wantIDs))
 
@@ -204,24 +221,83 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	}()
 
 	var out bytes.Buffer
-	for len(seen) < len(wantIDs) {
-		select {
-		case ln, ok := <-lines:
-			if !ok {
+
+	// drainUntil reads from lines, appending every line to out and
+	// recording every response id it sees into seen, until the
+	// condition wantID describes is satisfied: a specific id (wantID
+	// non-nil, InitAfterRequest's wait) or the full wantIDs set (wantID
+	// nil, the scenario's normal completion condition — byte-identical
+	// to Capture's pre-restructuring final loop). It kills the
+	// subprocess and returns a named error on stdout closing early or
+	// on runCtx's deadline firing; a deadline while waiting for a
+	// specific id names both the scenario and the request id it was
+	// waiting on, never a silent continue.
+	drainUntil := func(wantID *float64) error {
+		for {
+			if wantID != nil {
+				if seen[*wantID] {
+					return nil
+				}
+			} else if len(seen) >= len(wantIDs) {
+				return nil
+			}
+			select {
+			case ln, ok := <-lines:
+				if !ok {
+					_ = cmd.Process.Kill()
+					return fmt.Errorf("wireoracle: scenario %q: stdout closed after %d/%d responses; stderr:\n%s",
+						sc.Name, len(seen), len(wantIDs), stderrBuf.String())
+				}
+				out.Write(ln.raw)
+				out.WriteByte('\n')
+				if id, ok := responseID(ln.raw); ok {
+					seen[id] = true
+				}
+			case <-runCtx.Done():
 				_ = cmd.Process.Kill()
-				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: stdout closed after %d/%d responses; stderr:\n%s",
+				if wantID != nil {
+					return fmt.Errorf("wireoracle: scenario %q: capture deadline exceeded waiting for the response to InitAfterRequest's request id %v; %d/%d responses observed; stderr:\n%s",
+						sc.Name, *wantID, len(seen), len(wantIDs), stderrBuf.String())
+				}
+				return fmt.Errorf("wireoracle: scenario %q: capture deadline exceeded after %d/%d responses; stderr:\n%s",
 					sc.Name, len(seen), len(wantIDs), stderrBuf.String())
 			}
-			out.Write(ln.raw)
-			out.WriteByte('\n')
-			if id, ok := responseID(ln.raw); ok {
-				seen[id] = true
-			}
-		case <-runCtx.Done():
-			_ = cmd.Process.Kill()
-			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: capture deadline exceeded after %d/%d responses; stderr:\n%s",
-				sc.Name, len(seen), len(wantIDs), stderrBuf.String())
 		}
+	}
+
+	for i, req := range sc.Requests {
+		b, marshalErr := json.Marshal(req)
+		if marshalErr != nil {
+			_ = cmd.Process.Kill()
+			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: marshal request: %w", sc.Name, marshalErr)
+		}
+		if _, writeErr := stdin.Write(append(b, '\n')); writeErr != nil {
+			_ = cmd.Process.Kill()
+			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: write request: %w", sc.Name, writeErr)
+		}
+
+		if sc.InitAfterRequest != 0 && i+1 == sc.InitAfterRequest {
+			reqID, ok := idAsFloat64(req["id"])
+			if !ok {
+				_ = cmd.Process.Kill()
+				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: InitAfterRequest=%d names a request with no usable id", sc.Name, sc.InitAfterRequest)
+			}
+			if err := drainUntil(&reqID); err != nil {
+				return Transcript{}, err
+			}
+			if initOut, initErr := exec.CommandContext(runCtx, binPath, "init", workDir).CombinedOutput(); initErr != nil {
+				_ = cmd.Process.Kill()
+				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: mid-session init %s: %w: %s", sc.Name, workDir, initErr, initOut)
+			}
+		}
+	}
+	if closeErr := stdin.Close(); closeErr != nil {
+		_ = cmd.Process.Kill()
+		return Transcript{}, fmt.Errorf("wireoracle: scenario %q: close stdin: %w", sc.Name, closeErr)
+	}
+
+	if err := drainUntil(nil); err != nil {
+		return Transcript{}, err
 	}
 
 	return Transcript{
