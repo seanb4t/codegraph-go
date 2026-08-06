@@ -71,7 +71,7 @@ Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-RO
 - [x] **Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle** - A raw-stdio regression oracle proven green against today's server, plus the dated scoping the rest of the milestone is measured against (completed 2026-08-05)
 - [x] **Phase 2: SDK Migration — official go-sdk on the existing surface** - `internal/mcp` moves to `modelcontextprotocol/go-sdk@v1.7.0` with semantically unchanged tool output and mark3labs gone from `go.mod` (completed 2026-08-06)
 - [x] **Phase 3: `2026-07-28` Spec Compliance** - `server/discover`, per-request `_meta` validation, honest cache control and per-call index detection — with every Legacy client still working (completed 2026-08-06)
-- [ ] **Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes** - The ~400-module credentialed CI tooling closure actually gets scanned, and the two known daemon test-seam races stop masking real regressions
+- [x] **Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes** - The ~400-module credentialed CI tooling closure actually gets scanned, and the two known daemon test-seam races stop masking real regressions (completed 2026-08-06)
 - [ ] **Phase 5: Live Tool-Catalog Change Notification** - Opt-in `subscriptions/listen` clients learn about catalog changes as they happen
 
 ## Phase Details
@@ -221,7 +221,7 @@ Plans:
 | 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
 | 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
-| 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 3/3 | In Progress|  |
+| 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 3/3 | Complete    | 2026-08-06 |
 | 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
