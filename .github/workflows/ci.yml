@@ -358,7 +358,7 @@ jobs:
       # Base ref reaches the shell only through this step-level env: entry,
       # never interpolated into the run: body — matching this workflow's
       # existing env-indirection discipline (T-06-01).
-      - name: Anti-regeneration guard (D-03, blocking)
+      - name: Anti-regeneration guard (D-03, advisory since 03-02)
         env:
           TRANSCRIPT_FREEZE_BASE: origin/${{ github.event.pull_request.base.ref }}
         run: task check:transcript-freeze
