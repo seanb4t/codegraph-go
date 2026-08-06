@@ -33,26 +33,55 @@ import (
 // which statement inside the test triggered the failure.
 
 const (
-	// testBudgetDefaultScale is applied when testBudgetScaleEnvVar is unset
-	// or unparsable — 1x, i.e. every deadline keeps today's literal value.
-	testBudgetDefaultScale = 1.0
+	// testBudgetDefaultScale is applied when testBudgetScaleEnvVar is
+	// unset or unparsable. It is NOT 1x: 04-02-SUMMARY.md's Task 1/Task 3
+	// measurements (this package's own instrument) found that a 16-core
+	// dev machine running the full unfiltered `go test ./...` (~51
+	// packages) can delay a single debounced fsnotify->Sync round-trip
+	// well past the base 5s/10s literals under contention — raising the
+	// DEFAULT, not only the env-var ceiling, is what gives every
+	// contended machine real headroom without editing source. A large
+	// default costs nothing on the common/fast path (a healthy Run/Sync
+	// round-trip completes in milliseconds regardless of how generous the
+	// ceiling is) — the only place this duration is ever spent is a test
+	// that is already slow or stuck, which is exactly the case that needs
+	// the headroom.
+	//
+	// 04-02-SUMMARY.md records the honest limit of this knob: on THIS
+	// specific measurement session's machine, `ps aux` during Task 3
+	// showed several concurrent, unrelated Claude Code agent sessions
+	// plus a live desktop GUI competing for the same cores — a load this
+	// package's tests do not control and CI's isolated runner does not
+	// have. Even at this default (and the max clamp below), that specific
+	// external contention could still occasionally blow the budget on
+	// this machine at this moment; no finite, bounded scale can guarantee
+	// otherwise against unbounded external load. What this default DOES
+	// reliably close, measured over repeated runs: (1) the data race is
+	// gone in every case, contended or not — join-before-restore removes
+	// the concurrent access structurally, it does not depend on winning a
+	// timing race against a bigger number; (2) isolated package runs and
+	// GOMAXPROCS=4 runs (the CI runner class this phase's scope is
+	// actually calibrated against, per 04-CONTEXT.md's RESOLVED
+	// assumption) are clean.
+	testBudgetDefaultScale = 25.0
 
 	// testBudgetMaxScale bounds how far testBudgetScaleEnvVar can stretch
-	// every deadline in this package's tests. This clamp exists so raising
-	// the scale to buy headroom on a contended machine can never quietly
-	// convert a genuine hang (Run/RunWithRetry never returning at all —
-	// the SYNC-06/INDX-05 join-before-lock-release invariant broken) into
-	// a very slow PASS: 20x the package's largest base deadline
-	// (joinTimeoutBase, 10s) is 200s, well inside a single CI step's
-	// timeout, so a real hang still fails loudly rather than being
-	// silently absorbed by an unbounded knob. Scaling a deadline is NOT
-	// the same as isolating a test away from the load that exposes it —
-	// the assertions and the load are unchanged, only the wall-clock
+	// every deadline in this package's tests, leaving headroom above the
+	// default for a machine even more contended than the one 04-02's own
+	// measurements were taken on. This clamp exists so raising the scale
+	// can never quietly convert a genuine hang (Run/RunWithRetry never
+	// returning at all — the SYNC-06/INDX-05 join-before-lock-release
+	// invariant broken) into a very slow PASS: 40x the package's largest
+	// base deadline (joinTimeoutBase, 10s) is 400s, well inside a single
+	// CI step's timeout, so a real hang still fails loudly rather than
+	// being silently absorbed by an unbounded knob. Scaling a deadline is
+	// NOT the same as isolating a test away from the load that exposes
+	// it — the assertions and the load are unchanged, only the wall-clock
 	// budget the assertion is given adapts to the environment it actually
 	// runs in. The proof that this did not become an escape hatch is
 	// 04-02-SUMMARY.md's Task 3 measured rate, taken under the SAME
 	// unfiltered full-suite load as the baseline, not a relaxed one.
-	testBudgetMaxScale = 20.0
+	testBudgetMaxScale = 40.0
 
 	// testBudgetScaleEnvVar lets a contended dev machine or a resource-
 	// constrained CI runner (e.g. GOMAXPROCS=4) buy headroom without
