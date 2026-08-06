@@ -7,6 +7,26 @@
 // itself, insert the violation immediately after the package clause, and
 // preserve every original declaration untouched so the rest of the module
 // still type-checks during the overlaid load.
+//
+// Phase 2 (02-04, SDK-03) re-points the planted identifier from
+// mark3labs/mcp-go's mcp.LATEST_PROTOCOL_VERSION to go-sdk's
+// mcp.MetaKeyProtocolVersion, once mark3labs leaves go.mod entirely — the
+// mark3labs overlay would otherwise stop resolving for an unrelated reason
+// (the import itself no longer type-checks), proving nothing about the
+// guard. A genuinely better finding fell out of choosing the replacement:
+// go-sdk exposes NO exported protocol-version *value* constant at all —
+// latestProtocolVersion, protocolVersion20260728, and their siblings are
+// all unexported (02-RESEARCH.md Q1), so Go's own visibility rules make the
+// VRFY-02 violation this guard was written to catch structurally
+// unreachable under this SDK; internal/mcp/protocol_version.go's own doc
+// comment already records this as "not merely discouraged, but impossible".
+// MetaKeyProtocolVersion is a `_meta` key NAME, not a version value — it is
+// planted here only because it is the one exported identifier that still
+// matches protocolVersionNamePattern's `(?i)protocol.?version` heuristic
+// and resolves to a *types.Const, keeping this self-test capable of
+// exercising the guard's detection path against a real SDK identifier
+// (Pitfall 4 in 02-RESEARCH.md records this as a known future false-positive
+// candidate for the guard itself, not a self-test concern).
 package archtest
 
 import (
@@ -44,8 +64,9 @@ func protocolVersionGoPath(t *testing.T) string {
 
 // TestProtocolVersionGuardCatchesOverlaidViolation plants a package-level
 // var in internal/mcp/protocol_version.go (via Overlay only — the real file
-// on disk is never touched) that imports mark3labs/mcp-go/mcp and reads its
-// LATEST_PROTOCOL_VERSION constant, then asserts scanForProtocolVersionRefs
+// on disk is never touched) that imports
+// github.com/modelcontextprotocol/go-sdk/mcp and reads its
+// MetaKeyProtocolVersion constant, then asserts scanForProtocolVersionRefs
 // flags it. The overlay inserts a syntactically USED reference (a
 // package-level var initializer), not a bare import — an unused import
 // would fail the load for an unrelated reason (Go rejects unused imports at
@@ -72,9 +93,9 @@ func TestProtocolVersionGuardCatchesOverlaidViolation(t *testing.T) {
 	// site that references it still type-check correctly during this
 	// overlaid load.
 	violated := content[:insertAt] +
-		"\nimport \"github.com/mark3labs/mcp-go/mcp\"\n" +
+		"\nimport \"github.com/modelcontextprotocol/go-sdk/mcp\"\n" +
 		content[insertAt:] +
-		"\nvar protocolVersionGuardSelfTestProbe = mcp.LATEST_PROTOCOL_VERSION\n"
+		"\nvar protocolVersionGuardSelfTestProbe = mcp.MetaKeyProtocolVersion\n"
 
 	pkgs := loadWholeModule(t, map[string][]byte{path: []byte(violated)})
 
@@ -98,13 +119,13 @@ func TestProtocolVersionGuardCatchesOverlaidViolation(t *testing.T) {
 	violations := scanForProtocolVersionRefs(pkgs)
 	matched := false
 	for _, msg := range violations {
-		if strings.Contains(msg, "VRFY-02") && strings.Contains(msg, "LATEST_PROTOCOL_VERSION") && strings.Contains(msg, targetPkgPath) {
+		if strings.Contains(msg, "VRFY-02") && strings.Contains(msg, "MetaKeyProtocolVersion") && strings.Contains(msg, targetPkgPath) {
 			matched = true
 			break
 		}
 	}
 	if !matched {
-		t.Fatalf("planted a reference to mcp.LATEST_PROTOCOL_VERSION in %s (an in-memory overlay only — "+
+		t.Fatalf("planted a reference to mcp.MetaKeyProtocolVersion in %s (an in-memory overlay only — "+
 			"the real file on disk is untouched) but scanForProtocolVersionRefs did not flag it — got "+
 			"violations: %v", targetPkgPath, violations)
 	}

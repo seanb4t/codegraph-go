@@ -1,13 +1,25 @@
 // mcp_sdk_selftest_test.go is SDK-02's non-vacuity proof (T-03-03): it
 // plants a real, syntactically-used direct import of the forbidden MCP SDK
-// server package into internal/cli/serve.go via packages.Config.Overlay
-// (no file on disk is ever touched) and asserts the same predicate
+// package into internal/cli/serve.go via packages.Config.Overlay (no file
+// on disk is ever touched) and asserts the same predicate
 // TestInternalCLIImportsNoMCPSDK uses reports a violation. Modelled on
 // internal/graphstore/archtest/stdout_closure_selftest_test.go's overlay
 // technique: resolve the target file's real on-disk path via packages.Load
 // itself, insert the violation immediately after the package clause, and
 // preserve every original declaration untouched so the rest of the file
 // still type-checks during the overlaid load.
+//
+// Phase 2 (02-04, SDK-03) re-points the planted import from
+// mark3labs/mcp-go/server to go-sdk's own
+// github.com/modelcontextprotocol/go-sdk/mcp, once mark3labs leaves go.mod
+// entirely — the mark3labs overlay would otherwise stop resolving for an
+// unrelated reason (the import itself no longer type-checks anywhere in the
+// module), proving nothing about the guard. This closes a real gap
+// 02-PATTERNS.md flagged: before this change, the self-test only ever
+// proved forbiddenMCPSDKPrefixes could catch the SDK being REMOVED
+// (mark3labs, forward-declared but never the one actually in the tree by
+// the time this self-test's sibling ran); it never proved the list catches
+// the SDK actually being ADOPTED.
 package archtest
 
 import (
@@ -44,14 +56,15 @@ func serveGoPath(t *testing.T) string {
 }
 
 // TestInternalCLIImportsNoMCPSDK_PlantedImportIsError plants BOTH a direct
-// import of github.com/mark3labs/mcp-go/server AND a package-level
+// import of github.com/modelcontextprotocol/go-sdk/mcp AND a package-level
 // declaration that references it (var mcpSDKConfinementSelfTestProbe =
-// mcpsdkserver.ServeStdio) into internal/cli/serve.go, in-memory only, and
-// asserts the direct-import check flags it. A bare unused import fails the
-// load for an unrelated reason — Go rejects unused imports at type-check
-// time — and a self-test that "passes" because compilation broke would
-// prove nothing about this guard; the referencing declaration is what
-// makes this a genuine planted-defect proof.
+// sdkmcp.NewServer) into internal/cli/serve.go, in-memory only, and asserts
+// the direct-import check flags it. A bare unused import fails the load
+// for an unrelated reason — Go rejects unused imports at type-check time —
+// and a self-test that "passes" because compilation broke would prove
+// nothing about this guard; the referencing declaration (a genuine,
+// exported, non-invoked function value from the package actually in the
+// tree) is what makes this a genuine planted-defect proof.
 func TestInternalCLIImportsNoMCPSDK_PlantedImportIsError(t *testing.T) {
 	path := serveGoPath(t)
 
@@ -69,9 +82,9 @@ func TestInternalCLIImportsNoMCPSDK_PlantedImportIsError(t *testing.T) {
 	insertAt := idx + len(marker)
 
 	violated := content[:insertAt] +
-		"\nimport mcpsdkserver \"github.com/mark3labs/mcp-go/server\"\n" +
+		"\nimport sdkmcp \"github.com/modelcontextprotocol/go-sdk/mcp\"\n" +
 		content[insertAt:] +
-		"\nvar mcpSDKConfinementSelfTestProbe = mcpsdkserver.ServeStdio\n"
+		"\nvar mcpSDKConfinementSelfTestProbe = sdkmcp.NewServer\n"
 
 	cfg := &packages.Config{
 		Mode:    packages.NeedName | packages.NeedImports | packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
@@ -100,8 +113,8 @@ func TestInternalCLIImportsNoMCPSDK_PlantedImportIsError(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("planted a direct import of github.com/mark3labs/mcp-go/server into %s (an in-memory "+
-			"overlay only — the real file on disk is untouched) but it was not detected as a forbidden "+
-			"import; resolved imports: %v", path, pkg.Imports)
+		t.Fatalf("planted a direct import of github.com/modelcontextprotocol/go-sdk/mcp into %s (an "+
+			"in-memory overlay only — the real file on disk is untouched) but it was not detected as a "+
+			"forbidden import; resolved imports: %v", path, pkg.Imports)
 	}
 }

@@ -16,7 +16,7 @@
 // What this guard catches: any external, non-module-owned identifier whose
 // name matches the case-insensitive pattern "protocol.?version" AND resolves
 // to a *types.Const (a Go constant declaration) — e.g. mark3labs/mcp-go's
-// mcp.LATEST_PROTOCOL_VERSION.
+// former mcp.LATEST_PROTOCOL_VERSION.
 //
 // What this guard CANNOT catch, by construction (documented rather than
 // overstated — the earlier claim of zero-maintenance survival across
@@ -27,6 +27,19 @@
 // import-path list is the fallback that still would, and Phase 2 must
 // either confirm the replacement SDK's constant matches this pattern or add
 // its spelling to a complementary check deliberately.
+//
+// Phase 2 (02-04, SDK-03) found two more false-positive candidates worth
+// recording rather than discovering by surprise: github.com/
+// modelcontextprotocol/go-sdk's mcp package exports both
+// MetaKeyProtocolVersion (a `_meta` key NAME, "io.modelcontextprotocol/
+// protocolVersion") and CodeUnsupportedProtocolVersion (a JSON-RPC error
+// CODE, -32022) — both are external *types.Const values whose names match
+// this guard's name heuristic even though neither is a protocol-version
+// VALUE pin, the actual thing VRFY-02 exists to protect. Referencing either
+// directly (e.g. Phase 3's SPEC-02/SPEC-08 work on the 2026-07-28 `_meta`
+// obligations) will read as a VRFY-02 violation under this guard; that is
+// the reviewed exception this doc comment already provides an escape hatch
+// for, not a bug in the guard.
 //
 // The guard is a go/packages + go/types AST walk, never a text search over
 // source — this repository has already shipped an inverted text-search gate
@@ -313,7 +326,7 @@ func selUsing(obj types.Object) (*ast.SelectorExpr, *types.Info) {
 // types.Object of a specific kind/package and asserts isExternalProtocolVersionConstant's
 // verdict.
 func TestIsExternalProtocolVersionConstantMatrix(t *testing.T) {
-	const modernSDKPath = "github.com/mark3labs/mcp-go/mcp"
+	const modernSDKPath = "github.com/modelcontextprotocol/go-sdk/mcp"
 	const lookalikeModulePath = modulePathPrefix + "-fork"
 	const thisModulePath = modulePathPrefix + "/internal/mcp"
 	const unrelatedSDKPath = "example.com/sdk"
