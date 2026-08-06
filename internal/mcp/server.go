@@ -462,6 +462,25 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 				if listRes, ok := res.(*mcp.ListToolsResult); ok {
 					listRes.CacheScope = "private"
 				}
+			case "server/discover":
+				// D-03: this closes SPEC-04's remaining discover half
+				// — the identical defect D-09 fixed for tools/list
+				// above, in the one response path Phase 2 never
+				// touched. DiscoverResult embeds the same Cacheable
+				// struct ListToolsResult does, and Server.discover
+				// calls the same setDefaultCacheableValues, which is
+				// why the correction shape transfers verbatim.
+				// codegraph's catalog depends on a local .codegraph/
+				// index resolving, so a client honoring "public" could
+				// serve one repository's catalog for another — the
+				// reason ttlMs: 0 and cacheScope: "private" are locked
+				// in STATE.md as two halves of one correctness
+				// property rather than independent options. TTLMs is
+				// left untouched — it is already zero and already
+				// correct.
+				if discoverRes, ok := res.(*mcp.DiscoverResult); ok {
+					discoverRes.CacheScope = "private"
+				}
 			}
 			return res, err
 		}
