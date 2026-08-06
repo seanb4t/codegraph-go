@@ -240,7 +240,7 @@ func requireAgedProcess(t *testing.T) time.Time {
 		t.Skip("processStartTime unavailable on this platform — isStale is liveness-only, the corroboration branch is unreachable")
 	}
 	const margin = time.Second
-	deadline := time.Now().Add(procStartTimeSlack + 2*margin)
+	deadline := time.Now().Add(testBudget(procStartTimeSlack + 2*margin))
 	for time.Since(actual) <= procStartTimeSlack+margin {
 		if time.Now().After(deadline) {
 			t.Fatalf("requireAgedProcess: binary never reached age %v (start=%v)", procStartTimeSlack+margin, actual)

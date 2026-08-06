@@ -62,7 +62,9 @@ func TestSoak(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		runErr <- d.Run(ctx)
+		close(runErr)
 	}()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 
@@ -73,7 +75,7 @@ func TestSoak(t *testing.T) {
 
 		select {
 		case <-synced:
-		case <-time.After(5 * time.Second):
+		case <-time.After(testBudget(5 * time.Second)):
 			t.Fatalf("timed out waiting for sync #%d of the soak", i)
 		}
 	}
@@ -170,7 +172,9 @@ func TestConvergenceTwoSessions(t *testing.T) {
 		runErrA <- RunWithRetry(ctxA, dA, retryInterval, func() {
 			t.Error("session A (the first to start) should never observe ErrLockLive")
 		})
+		close(runErrA)
 	}()
+	joinDaemonRun(t, cancelA, runErrA)
 
 	waitForLock(t, codegraphDir)
 
@@ -179,12 +183,14 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		runErrB <- RunWithRetry(ctxB, dB, retryInterval, onDeferredB)
+		close(runErrB)
 	}()
+	joinDaemonRun(t, cancelB, runErrB)
 
 	// Session B must observe ErrLockLive (via onDeferred) while A holds
 	// the lock — proof it is retrying, not silently giving up (today's
 	// defer-once bug) nor somehow acquiring alongside A.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testBudget(2 * time.Second))
 	for time.Now().Before(deadline) && atomic.LoadInt32(&deferredBCount) == 0 {
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -197,13 +203,13 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	writeFixtureFile(t, root, "convA.go", "package main\n\nfunc convA() {}\n")
 	select {
 	case <-syncedA:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("timed out waiting for session A's sync while it held the lock")
 	}
 	select {
 	case <-syncedB:
 		t.Fatal("session B synced while session A held the lock — at most one writer always violated")
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(testBudget(200 * time.Millisecond)):
 	}
 
 	// A exits; invariant (b) — exactly one writer eventually — requires B
@@ -214,7 +220,7 @@ func TestConvergenceTwoSessions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("session A RunWithRetry: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("session A did not shut down")
 	}
 
@@ -228,7 +234,7 @@ func TestConvergenceTwoSessions(t *testing.T) {
 	writeFixtureFile(t, root, "convB.go", "package main\n\nfunc convB() {}\n")
 	select {
 	case <-syncedB:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("session B did not converge and become the sole writer after session A exited")
 	}
 
@@ -245,7 +251,7 @@ func TestConvergenceTwoSessions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("session B RunWithRetry: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("session B did not shut down")
 	}
 	wg.Wait()

@@ -53,7 +53,7 @@ func initFixture(t *testing.T) (root, codegraphDir, storeDir string) {
 // deadline elapses.
 func waitForLock(t *testing.T, codegraphDir string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testBudget(5 * time.Second))
 	for time.Now().Before(deadline) {
 		if _, ok, err := readLock(codegraphDir); err == nil && ok {
 			return
@@ -116,7 +116,7 @@ func TestNewPopulatesOpts(t *testing.T) {
 // after acquire, so this mirrors waitForLock's polling shape).
 func waitForRegistryRecord(t *testing.T, pid int, repoRoot string) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testBudget(5 * time.Second))
 	for time.Now().Before(deadline) {
 		recs, err := List()
 		if err != nil {
@@ -163,7 +163,8 @@ func TestRunRegistersRecordAfterAcquire(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
@@ -174,7 +175,7 @@ func TestRunRegistersRecordAfterAcquire(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after cancel")
 	}
 }
@@ -210,7 +211,8 @@ func TestRunRegistersRecordThatSurvivesPruningOnAgedProcess(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
@@ -221,7 +223,7 @@ func TestRunRegistersRecordThatSurvivesPruningOnAgedProcess(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after cancel")
 	}
 }
@@ -242,7 +244,8 @@ func TestRunDeregistersRecordOnCleanShutdown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
@@ -253,7 +256,7 @@ func TestRunDeregistersRecordOnCleanShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after cancel")
 	}
 
@@ -273,7 +276,7 @@ func TestRunPolicyDisabledRegistersNothing(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testBudget(2*time.Second))
 	defer cancel()
 
 	runErr := d.Run(ctx)
@@ -301,7 +304,7 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 	withRegistryDir(t)
 
 	origGetppid := getppid
-	defer func() { getppid = origGetppid }()
+	t.Cleanup(func() { getppid = origGetppid })
 	const original = 424242
 	// current is read through the SAME getppid closure both before and
 	// after the simulated reparent below — the closure itself is assigned
@@ -323,7 +326,8 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 	defer cancel()
 
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 	waitForRegistryRecord(t, os.Getpid(), root)
@@ -337,7 +341,7 @@ func TestRunWatchdogCancelsRunOnSimulatedReparent(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v, want nil — a watchdog-triggered cancel must drive the same clean shutdown as an external ctx cancel (D-08)", err)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(testBudget(10 * time.Second)):
 		// 10s (not the file's usual 5s) — watchdogInterval is a fixed 1s
 		// wall-clock ticker inside Run; under heavy full-suite parallel
 		// load (many packages' test binaries compiling/running at once)
@@ -380,7 +384,8 @@ func TestDaemonSharedWriter(t *testing.T) {
 	defer cancel()
 
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 
@@ -397,7 +402,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 		if stats.FilesReparsed == 0 {
 			t.Fatal("daemon-driven Sync ran but reparsed 0 files after adding extra.go")
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("timed out waiting for the daemon-driven sync triggered by the file edit")
 	}
 
@@ -411,7 +416,7 @@ func TestDaemonSharedWriter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after cancel")
 	}
 }
@@ -433,7 +438,8 @@ func TestDaemonCleanShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 
@@ -444,7 +450,7 @@ func TestDaemonCleanShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return within 5s of ctx cancellation — a spawned goroutine did not join (D-07)")
 	}
 
@@ -457,7 +463,8 @@ func TestDaemonCleanShutdown(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	runErr2 := make(chan error, 1)
-	go func() { runErr2 <- d.Run(ctx2) }()
+	go func() { runErr2 <- d.Run(ctx2); close(runErr2) }()
+	joinDaemonRun(t, cancel2, runErr2)
 	waitForLock(t, codegraphDir)
 	cancel2()
 	select {
@@ -465,7 +472,7 @@ func TestDaemonCleanShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("second Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("second Run did not return within 5s of ctx cancellation")
 	}
 }
@@ -506,7 +513,8 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 
@@ -514,7 +522,7 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 
 	select {
 	case <-flushStarted:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("timed out waiting for the debounced flush to start")
 	}
 
@@ -526,7 +534,7 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 	select {
 	case err := <-runErr:
 		t.Fatalf("Run returned (err=%v) while a debounced flush was still in flight — CR-01 regression", err)
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(testBudget(200 * time.Millisecond)):
 		// correct: Run must still be blocked.
 	}
 	if _, ok, lerr := readLock(codegraphDir); lerr != nil || !ok {
@@ -540,7 +548,7 @@ func TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after the in-flight flush completed")
 	}
 
@@ -590,7 +598,8 @@ func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 
@@ -607,7 +616,7 @@ func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
 				if !errors.Is(err, graphstore.ErrStoreLocked) {
 					t.Fatalf("episode %q attempt %d: sync error = %v, want errors.Is(..., graphstore.ErrStoreLocked)", rel, i, err)
 				}
-			case <-time.After(10 * time.Second):
+			case <-time.After(testBudget(10 * time.Second)):
 				t.Fatalf("episode %q: timed out waiting for lock-lost sync attempt %d of %d — the requeue chain stopped early (counter not reset at give-up?)", rel, i, want)
 			}
 		}
@@ -618,7 +627,7 @@ func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
 		select {
 		case err := <-synced:
 			t.Fatalf("episode %q: a %dth sync attempt fired after exhaustion (err=%v) — the give-up branch requeued", rel, want+1, err)
-		case <-time.After(1 * time.Second):
+		case <-time.After(testBudget(1 * time.Second)):
 		}
 	}
 
@@ -635,7 +644,7 @@ func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("post-contention sync = %v, want success once the lock is free", err)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(testBudget(10 * time.Second)):
 		t.Fatal("timed out waiting for a successful sync after contention lifted")
 	}
 
@@ -645,7 +654,7 @@ func TestDaemonFlushLockRequeueGivesUpPerEpisode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(10 * time.Second):
+	case <-time.After(testBudget(10 * time.Second)):
 		t.Fatal("Run did not return after cancel")
 	}
 }
@@ -669,17 +678,28 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 	watcherCh := make(chan *watch.Watcher, 1)
 	d.onWatchOpen = func(w *watch.Watcher) { watcherCh <- w }
 
+	// A real, cancellable ctx (rather than a bare context.Background())
+	// gives joinDaemonRun's t.Cleanup an actual escape hatch: the expected
+	// path is RunWithRetry returning on its own via ErrWatcherClosed below,
+	// but if that path ever fails to fire under contention, cancel() is
+	// what lets the join actually unblock the spawned goroutine instead of
+	// waiting on a context that can never become Done.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	retryErr := make(chan error, 1)
 	go func() {
-		retryErr <- RunWithRetry(context.Background(), d, time.Hour, func() {
+		retryErr <- RunWithRetry(ctx, d, time.Hour, func() {
 			t.Error("onDeferred called — RunWithRetry must surface ErrWatcherClosed immediately, not retry it")
 		})
+		close(retryErr)
 	}()
+	joinDaemonRun(t, cancel, retryErr)
 
 	var w *watch.Watcher
 	select {
 	case w = <-watcherCh:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("timed out waiting for Run to open its watcher")
 	}
 	waitForLock(t, codegraphDir)
@@ -696,7 +716,7 @@ func TestRunReturnsErrWatcherClosedAndReleasesLock(t *testing.T) {
 		if !errors.Is(err, ErrWatcherClosed) {
 			t.Fatalf("RunWithRetry = %v, want errors.Is(..., ErrWatcherClosed)", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after its watcher's event stream closed — zombie lock-holder (IN-07 regression)")
 	}
 
@@ -720,7 +740,7 @@ func TestRunPolicyDisabled(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testBudget(2*time.Second))
 	defer cancel()
 
 	runErr := d.Run(ctx)
@@ -749,7 +769,8 @@ func TestRunHonorsDefaultProbeOnNonWSLHost(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
-	go func() { runErr <- d.Run(ctx) }()
+	go func() { runErr <- d.Run(ctx); close(runErr) }()
+	joinDaemonRun(t, cancel, runErr)
 
 	waitForLock(t, codegraphDir)
 
@@ -759,7 +780,7 @@ func TestRunHonorsDefaultProbeOnNonWSLHost(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("Run did not return after cancel")
 	}
 }
@@ -785,7 +806,9 @@ func TestRunWithRetryReturnsNilOnCleanShutdown(t *testing.T) {
 		retryErr <- RunWithRetry(ctx, d, time.Second, func() {
 			t.Error("onDeferred called during a clean, uncontended single-session run")
 		})
+		close(retryErr)
 	}()
+	joinDaemonRun(t, cancel, retryErr)
 
 	waitForLock(t, codegraphDir)
 	cancel()
@@ -795,7 +818,7 @@ func TestRunWithRetryReturnsNilOnCleanShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RunWithRetry = %v, want nil", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testBudget(5 * time.Second)):
 		t.Fatal("RunWithRetry did not return after ctx cancellation")
 	}
 }
@@ -885,10 +908,18 @@ func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
 	}
 
 	// Long enough that a prompt ctx.Err() proves the sleep — not the
-	// interval — elapsed.
+	// interval — elapsed. interval is RunWithRetry's own retry cadence (an
+	// input to the SUT under test, not a test-side wait budget), so it is
+	// deliberately left unscaled — the property under test is "returns
+	// well under interval", which testBudget scaling interval itself would
+	// undermine.
 	const interval = 2 * time.Second
 	retryErr := make(chan error, 1)
-	go func() { retryErr <- RunWithRetry(ctx, d, interval, onDeferred) }()
+	go func() {
+		retryErr <- RunWithRetry(ctx, d, interval, onDeferred)
+		close(retryErr)
+	}()
+	joinDaemonRun(t, cancel, retryErr)
 
 	// Give RunWithRetry time to hit ErrLockLive at least once and enter its
 	// retry sleep before cancelling.
@@ -904,7 +935,7 @@ func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
 		if elapsed := time.Since(start); elapsed >= interval {
 			t.Fatalf("RunWithRetry took %v to return after cancel, want well under the %v interval", elapsed, interval)
 		}
-	case <-time.After(1 * time.Second):
+	case <-time.After(testBudget(1 * time.Second)):
 		t.Fatal("RunWithRetry did not return promptly after ctx cancellation during sleep")
 	}
 
