@@ -6,7 +6,7 @@ current_phase: 4
 current_phase_name: Supply-Chain Coverage & Daemon Substrate Fixes
 status: Ready to discuss phase 4
 stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-08-06T20:02:25.987Z"
+last_updated: "2026-08-06T20:41:59.737Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 3 complete, transitioned to Phase 4
 progress:
@@ -238,6 +238,9 @@ Carried forward:
 - **Advisory, unregistered surfaces** from the Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
 - **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing.
 - state.advance-plan failed: 'Cannot parse Current Plan or Total Plans in Phase from STATE.md' — Current Position still reads 'Plan: Not started' from the phase-planning step; likely needs orchestrator-side initialization to 'Plan: 1 of 5' before advance-plan can parse it. Not hand-edited per planning-artifacts rule (tool-owned file).
+- Daemon extreme-load tail (ACCEPTED, not a gap). Phase 4 fixed the structural cause of the rotating daemon flake set — orphaned goroutines surviving t.Fatalf's runtime.Goexit() — proven by zero DATA RACE under full-suite -race and 6/6 clean at GOMAXPROCS=4. Under pathological workstation load (~22 concurrent agent processes, load avg 6.3) one plain-timeout failure still appears. 52/52 real ci.yml runs back to 2026-07-13 show no daemon failure on the actual runner class, so CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06). Not scheduled for further work.
+- Daemon test feedback-latency tradeoff. Phase 4 raised the daemon test time budget to absorb contention: the package now runs ~65s clean at GOMAXPROCS=4 (was ~30s), and a failure under extreme load takes ~250s to surface instead of ~10s. Tolerance bought at the cost of feedback speed. Acceptable at CI concurrency; revisit if the daemon suite becomes a CI bottleneck.
+- GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling. goreleaser's binary reaches golang.org/x/crypto/openpgp (110 vulnerable symbols) via pipe/ko then google/ko then sigstore/cosign/oci then sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The new advisory tool-vuln job is now the only thing surfacing it — reported, not resolved. This is why D-04 was superseded from blocking to advisory.
 
 ### Quick Tasks Completed
 
