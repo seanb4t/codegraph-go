@@ -40,3 +40,6 @@ testdata/golden/corpus/*/src/.codegraph/
 # Python bytecode (scripts/pr_template_policy.py)
 __pycache__/
 *.pyc
+
+# GSD run-scoped dispatch-isolation sentinel (ephemeral session state)
+.gsd/

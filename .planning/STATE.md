@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: MCP Protocol Currency
-current_phase: 5
-current_phase_name: Live Tool-Catalog Change Notification
-status: planning
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-06T21:36:47.163Z"
+current_phase_name: v0.3.0 shipped 2026-08-06; no active milestone
+status: completed
+stopped_at: v0.3.0 milestone complete and archived
+last_updated: "2026-08-06T21:58:57.637Z"
 last_activity: 2026-08-06
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
+last_activity_desc: v0.3.0 shipped — audit passed, archived, no git tag (D-06R)
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 21
   completed_plans: 21
   percent: 100
+current_phase: "—"
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-05)
 
 ## Current Position
 
-Phase: 5 — Live Tool-Catalog Change Notification
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-06 — Phase 4 complete, transitioned to Phase 5
+Phase: — (v0.3.0 shipped 2026-08-06; no active milestone)
+Plan: n/a
+Status: Milestone v0.3.0 complete and archived — run /gsd-new-milestone to start the next
+Last activity: 2026-08-06 — Phase 5 complete, transitioned to Phase 999.2
 
 Progress: [██████████] 100%
 
@@ -39,7 +39,7 @@ Progress: [██████████] 100%
 
 **Velocity (v0.3.0):**
 
-- Total plans completed: 20
+- Total plans completed: 21
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -51,7 +51,7 @@ Progress: [██████████] 100%
 | 2 | 5 | - | - |
 | 3 | 5 | - | - |
 | 4 | 3 | - | - |
-| 5 | - | - | - |
+| 5 | 1 | - | - |
 
 **Recent Trend:** Milestone just scoped; no execution data yet.
 
