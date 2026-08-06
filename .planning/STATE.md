@@ -5,8 +5,8 @@ milestone_name: MCP Protocol Currency
 current_phase: 2
 current_phase_name: SDK Migration — official go-sdk on the existing surface
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-08-06T01:23:22.383Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-08-06T01:37:05.251Z"
 last_activity: 2026-08-05
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
 progress:
@@ -151,6 +151,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 02 P01 | ~2h | 3 tasks | 12 files |
 | Phase 02 P02 | 20min | 2 tasks | 4 files |
 | Phase 02 P03 | 35min | 2 tasks | 1 files |
+| Phase 02 P04 | ~1h | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -188,6 +189,8 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: 02-01: added a narrow, function-scoped HYG-02 archtest allowlist (internal/graphstore/archtest) for internal/mcp's now-necessary direct os.Stdout reference in ServeStdio() — the one legitimate transport-target write, not a diagnostic leak; proven scoped via a new self-test.
 - [Phase ?]: 02-02: reused mcpSDKModulePrefixes by index for the SDK-01 swap exemption rather than retyping module paths
 - [Phase ?]: SDK-04 closed: internal/mcp/error_mapping_test.go pins the error-to-wire mapping for handler-returned errors, schema-rejected missing arguments, undeclared arguments, and engine-level failures, demonstrated RED via a jsonrpc.Error mutation on codegraph_status's error path
+- [Phase ?]: 02-04: testdata/golden's t.Errorf/t.Fatalf count dropped 114->112 because go-sdk's Client.Connect atomically merges connect+handshake (mark3labs needed two separate fallible steps); no test assertion weakened, only setup-error-check plumbing shrank
+- [Phase ?]: 02-04: go mod tidy requires -e to proceed past a pre-existing, unrelated alex-pinkus/tree-sitter-swift test-dependency resolution quirk (reproduced against the untouched pre-task go.mod); result confirmed stable across two consecutive -e runs
 
 ### Pending Todos
 
@@ -249,8 +252,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T01:23:22.372Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-08-06T01:37:05.243Z
+Stopped at: Completed 02-04-PLAN.md
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

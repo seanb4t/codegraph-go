@@ -135,7 +135,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 02-03-PLAN.md — SDK-04: the error-to-wire mapping asserted rather than inferred, demonstrated RED against a protocol-error mutation
-- [ ] 02-04-PLAN.md — SDK-03: mark3labs out of `go.mod` — the last four client sites, both archtest self-tests re-pointed at go-sdk, closure re-audited
+- [x] 02-04-PLAN.md — SDK-03: mark3labs out of `go.mod` — the last four client sites, both archtest self-tests re-pointed at go-sdk, closure re-audited
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
