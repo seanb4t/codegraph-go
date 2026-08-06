@@ -21,6 +21,22 @@ const (
 	codeInvalidParams  = -32602
 )
 
+// codeUnsupportedProtocolVersion is a third spec-pinned JSON-RPC error code
+// (D-02's pattern, extended by phase 3 plan 03): a property of SEP-2575 and
+// the MCP spec itself, not of whichever SDK happens to be serving the wire —
+// an anchor asserting against this constant fails independently of the
+// captured bulk if a migration ever moved something the spec pins.
+//
+// Verified against github.com/modelcontextprotocol/go-sdk@v1.7.0/mcp/server.go:1872-1877
+// (03-RESEARCH.md "Code Examples", case 2's empirically captured response).
+// Hand-authored here, never imported from the SDK under test — the SDK's
+// own equivalently-named exported error-code constant matches
+// internal/mcp/archtest's VRFY-02 `(?i)protocol.?version` name heuristic
+// (which has no code-level allowlist), so referencing it directly would
+// trip that guard in addition to breaking VRFY-01 (never use the SDK under
+// test as the source of its own expected values).
+const codeUnsupportedProtocolVersion = -32022
+
 // Anchor is one hand-authored, spec-pinned assertion, run against a named
 // scenario's freshly captured stdout independently of the frozen transcript
 // (an anchor read from the golden file would be circular — TestSpecAnchorsHold
@@ -55,29 +71,52 @@ type Anchor struct {
 // plain (non -test) package — and TestSpecAnchorsHold calls it directly for
 // handshake-explore rather than through this Anchors() slice.
 //
-// No anchor exists for the "unsupported protocol version" scenario (plan
-// 05's D-06 multi-era baseline): today's mark3labs v0.56.0 server silently
-// coerces an unrecognized client protocolVersion to its own
-// LATEST_PROTOCOL_VERSION rather than returning an error
-// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1197-1210,
-// 01-RESEARCH.md Pitfall 1] — asserting an error code there would assert a
-// behavior that never fires. That scenario must be captured-and-frozen as a
-// SUCCESS instead; do not "fix" this omission by adding one.
+// No anchor exists for the six-era Legacy baseline's
+// "legacy-unsupported-2026-07-28" scenario (plan 05's D-06 multi-era
+// baseline), and this omission is STILL correct today, unlike the
+// paragraph this one replaces: that scenario is a classic `initialize`
+// (no `_meta` at all) driven against a client offering "2026-07-28" as
+// `params.protocolVersion`, and today's go-sdk@v1.7.0 server silently
+// coerces that unrecognized value to its own latest supported revision
+// rather than returning an error
+// [VERIFIED: 01-RESEARCH.md Pitfall 1, reconfirmed unchanged post-migration
+// by 02-RESEARCH.md] — asserting an error code there would assert a
+// behavior that never fires on that scenario's own wire shape. It remains
+// captured-and-frozen as a SUCCESS; do not "fix" this omission by adding an
+// anchor to it.
+//
+// This is a DIFFERENT scenario, and a DIFFERENT outcome, from
+// modern-meta-unsupported-version below (phase 3 plan 03): that scenario
+// sends a well-formed Modern `_meta` object whose
+// io.modelcontextprotocol/protocolVersion is modernUnsupportedVersion
+// ("2099-01-01", chosen because it sorts lexically AFTER "2026-07-28" — see
+// its doc comment in scenarios.go), which DOES return an error
+// (`-32022`) under go-sdk@v1.7.0, and IS anchored, below. A prior version
+// of this comment described no unsupported-version anchor existing at all
+// — that was true only for mark3labs v0.56.0's classic-initialize path and
+// is now retracted for the Modern `_meta` path; do not re-merge the two
+// scenarios' outcomes into one paragraph, they are structurally distinct
+// (see modernUnsupportedVersion's own doc comment for the full trace of
+// why offering a lexically-SMALLER version instead would land back on
+// legacy-unsupported-2026-07-28's silent-coercion territory by a totally
+// different mechanism — a `-32601` availability-gate rejection, not a
+// version-negotiation coercion — and must still never gain an anchor
+// either).
 //
 // The framing invariant (every stdout line is jsonrpc:"2.0", every request
 // id has exactly one response line) is also checked outside this slice, in
 // TestSpecAnchorsHold, across every scenario in Scenarios() — it is not
 // "the one field a scenario's own captured line carries," it is a
-// cross-cutting structural check that applies uniformly to all 17
-// scenarios.
+// cross-cutting structural check that applies uniformly to every scenario.
 //
-// A fourth anchor, modern-discover-explore's discover cache-control check
-// (SPEC-04), exists alongside the frozen transcript for a reason distinct
-// from redundancy: the transcript proves the captured bytes did not
-// change, while the anchor proves the specific spec-pinned property still
-// holds against a FRESH capture, so a wholesale transcript regeneration
-// (which replaces the golden file's bytes wholesale, D-06) cannot launder
-// a regression in this property past the byte-comparison test.
+// modern-discover-explore's discover cache-control check (SPEC-04) exists
+// alongside the frozen transcript for a reason distinct from redundancy:
+// the transcript proves the captured bytes did not change, while the
+// anchor proves the specific spec-pinned property still holds against a
+// FRESH capture, so a wholesale transcript regeneration (which replaces
+// the golden file's bytes wholesale, D-06) cannot launder a regression in
+// this property past the byte-comparison test. The same reasoning applies
+// to the two `_meta`-failure anchors below.
 func Anchors() []Anchor {
 	return []Anchor{
 		{
@@ -85,7 +124,7 @@ func Anchors() []Anchor {
 			Name:     "error.code == method-not-found (-32601)",
 			Assert: func(t *testing.T, stdout []byte) {
 				t.Helper()
-				assertErrorCode(t, "error-unknown-method", stdout, codeMethodNotFound)
+				assertErrorCode(t, "error-unknown-method", stdout, 2, codeMethodNotFound)
 			},
 		},
 		{
@@ -93,7 +132,7 @@ func Anchors() []Anchor {
 			Name:     "error.code == invalid-params (-32602)",
 			Assert: func(t *testing.T, stdout []byte) {
 				t.Helper()
-				assertErrorCode(t, "error-malformed-args", stdout, codeInvalidParams)
+				assertErrorCode(t, "error-malformed-args", stdout, 2, codeInvalidParams)
 			},
 		},
 		{
@@ -102,6 +141,22 @@ func Anchors() []Anchor {
 			Assert: func(t *testing.T, stdout []byte) {
 				t.Helper()
 				assertDiscoverCacheControl(t, "modern-discover-explore", stdout)
+			},
+		},
+		{
+			Scenario: "modern-meta-invalid-params",
+			Name:     "error.code == invalid-params (-32602), SPEC-02",
+			Assert: func(t *testing.T, stdout []byte) {
+				t.Helper()
+				assertErrorCode(t, "modern-meta-invalid-params", stdout, 1, codeInvalidParams)
+			},
+		},
+		{
+			Scenario: "modern-meta-unsupported-version",
+			Name:     "error.code == unsupported-protocol-version (-32022), SPEC-02",
+			Assert: func(t *testing.T, stdout []byte) {
+				t.Helper()
+				assertErrorCode(t, "modern-meta-unsupported-version", stdout, 1, codeUnsupportedProtocolVersion)
 			},
 		},
 	}
@@ -155,11 +210,17 @@ func assertDiscoverCacheControl(t *testing.T, scenario string, stdout []byte) {
 	t.Fatalf("scenario %q: no id=1 result found in captured stdout — a missing response must never read as a pass", scenario)
 }
 
-// assertErrorCode decodes only response id=2's top-level error.code field
-// (the second request in every anchored error scenario, after the id=1
-// initialize) and fails naming the scenario and quoting the observed value
-// if it does not equal want.
-func assertErrorCode(t *testing.T, scenario string, stdout []byte, want int) {
+// assertErrorCode decodes only the top-level error.code field of the
+// response bearing wantID, and fails naming the scenario and quoting the
+// observed value if it does not equal want. wantID is explicit rather than
+// hardcoded because it varies by scenario shape: every pre-existing
+// anchored error scenario opens with an id=1 initialize and carries its
+// error at id=2, but modern-meta-invalid-params and
+// modern-meta-unsupported-version are NoInitialize sessionless scenarios
+// (SEP-2575) whose single request — and therefore their error response —
+// is id=1. Fails if no response bearing wantID is found at all — a missing
+// response must never read as a pass.
+func assertErrorCode(t *testing.T, scenario string, stdout []byte, wantID float64, want int) {
 	t.Helper()
 
 	for _, line := range bytes.Split(stdout, []byte("\n")) {
@@ -176,7 +237,7 @@ func assertErrorCode(t *testing.T, scenario string, stdout []byte, want int) {
 			continue
 		}
 		idf, ok := idAsFloat64(frame.ID)
-		if !ok || idf != 2 || frame.Error == nil {
+		if !ok || idf != wantID || frame.Error == nil {
 			continue
 		}
 		if frame.Error.Code != want {
@@ -184,5 +245,5 @@ func assertErrorCode(t *testing.T, scenario string, stdout []byte, want int) {
 		}
 		return
 	}
-	t.Fatalf("scenario %q: no error response (id=2) found in captured stdout", scenario)
+	t.Fatalf("scenario %q: no error response (id=%v) found in captured stdout — a missing response must never read as a pass", scenario, wantID)
 }
