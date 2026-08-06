@@ -10,6 +10,14 @@
 // violation — regenerating transcripts in their own pull request is the
 // sanctioned Phase 3 path. See Classify's doc comment and buildReason for
 // the "floor, not a proof of innocence" disclosure this narrowness requires.
+//
+// One shape of the rule's collision is exempted rather than forbidden:
+// 02-CONTEXT.md's D-01/D-02/D-03 supersede D-03's original "Phase 2 =
+// frozen, no exceptions" clause with a single self-expiring waiver for
+// SDK-01's one-time mark3labs-to-go-sdk transition. See sdkSwapExemption
+// and buildSwapExemptionNotice for that narrow exception; every other
+// regeneration, including Phase 3's, still belongs in its own separate,
+// reviewable pull request.
 package main
 
 import (

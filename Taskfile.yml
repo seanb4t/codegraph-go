@@ -295,13 +295,14 @@ tasks:
       D-03 anti-regeneration guard, BLOCKING (v0.3.0 Phase 1): fails when a
       pull request's merge-base diff changes a frozen wire-oracle transcript
       together with internal/mcp/*.go or the MCP dependency line in go.mod.
-      Phase 2 is frozen with no exceptions; Phase 3 legitimately regenerates
-      transcripts, but only as its own separate, reviewable pull request —
-      never in the same change that could have caused the diff. Requires
-      TRANSCRIPT_FREEZE_BASE (a ref name, e.g. origin/main) so the diff is
-      computed against the merge-base rather than a per-commit comparison —
-      pull-request granularity is what survives this repository's
-      squash-merge model.
+      SDK-01's swap carries a single self-expiring exemption keyed to the
+      mark3labs-to-go-sdk go.mod transition (02-CONTEXT.md D-01/D-02/D-03);
+      every other regeneration, including Phase 3's, still belongs in its
+      own separate, reviewable pull request — never in the same change that
+      could have caused the diff. Requires TRANSCRIPT_FREEZE_BASE (a ref
+      name, e.g. origin/main) so the diff is computed against the
+      merge-base rather than a per-commit comparison — pull-request
+      granularity is what survives this repository's squash-merge model.
     cmds:
       - |
         set -euo pipefail
