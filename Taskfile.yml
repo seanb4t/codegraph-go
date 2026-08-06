@@ -221,6 +221,48 @@ tasks:
           esac
         done
 
+  vuln:selftest:
+    desc: >-
+      Non-vacuity proof for `vuln` (VULN-02): builds the permanent red-proof
+      program (testdata/vulnredpoc — see its own doc comment) from
+      go.tool.mod and asserts the underlying govulncheck -mode=binary scan
+      exits EXACTLY 3 and names GO-2026-5932. Unlike `vuln` itself, THIS
+      target is allowed to fail the build: a failure here means govulncheck's
+      own exit-3/advisory-ID classification broke — a detection-mechanism
+      regression, not a new vulnerability finding — which is exactly the
+      failure `vuln`'s advisory stance cannot surface on its own (an
+      advisory job that silently stops detecting is worse than a blocking
+      one). testdata/vulnredpoc is excluded from `go list ./...`
+      (GOLDEN-01) and built only here, by explicit path against
+      go.tool.mod — it never enters the main module's package graph and
+      adds no requirement to the root go.mod.
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/vulnredpoc" ./testdata/vulnredpoc
+
+        set +e
+        out=$({{.GO_TOOL}} govulncheck -mode=binary "${scratch}/vulnredpoc" 2>&1)
+        status=$?
+        set -e
+
+        echo "${out}"
+
+        if [ "${status}" -ne 3 ]; then
+          echo "::error::vuln:selftest FAILED — govulncheck -mode=binary exited ${status} (want 3) scanning the deliberately-vulnerable testdata/vulnredpoc binary; the tool-modfile vulnerability gate's detection mechanism could not be proven able to fire"
+          exit 1
+        fi
+
+        if ! printf '%s' "${out}" | grep -q "GO-2026-5932"; then
+          echo "::error::vuln:selftest FAILED — scan exited 3 but its output does not name GO-2026-5932; a different advisory firing is not accepted as proof this specific detection path works"
+          exit 1
+        fi
+
+        echo "vuln:selftest: PASS — govulncheck -mode=binary exited 3 and named GO-2026-5932 against testdata/vulnredpoc"
+
   check:darwin-toolchain:
     desc: >-
       Prove a native darwin host can CGo-build both release arches — the D-08
