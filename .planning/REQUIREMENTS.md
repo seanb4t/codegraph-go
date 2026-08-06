@@ -27,7 +27,7 @@
 - [x] **SDK-02**: `internal/cli/serve.go` no longer imports an MCP SDK package directly — the process bootstrap goes through a narrow `internal/mcp.Server` interface, closing the one production-code SDK leak
 - [x] **SDK-03**: `mark3labs/mcp-go` is removed from `go.mod`, and the resulting dependency closure is re-audited through the existing `govulncheck` and SBOM paths
 - [x] **SDK-04**: Error-to-JSON-RPC mapping is explicitly audited and asserted — a handler returning a plain `error` becomes a *protocol* error under mark3labs but a tool-visible `IsError: true` *result* under the official SDK, a wire-behavior change invisible in the Go type signature
-- [ ] **SDK-05**: Tool input schemas are explicitly audited for constraints lost in translation (notably enum constraints dropped by struct-tag reflection), with any loss either fixed or recorded as a deliberate divergence
+- [x] **SDK-05**: Tool input schemas are explicitly audited for constraints lost in translation (notably enum constraints dropped by struct-tag reflection), with any loss either fixed or recorded as a deliberate divergence
 
 ### Verification (VRFY)
 
@@ -96,7 +96,7 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | SDK-02 | Phase 1 | Complete |
 | SDK-03 | Phase 2 | Complete |
 | SDK-04 | Phase 2 | Complete |
-| SDK-05 | Phase 2 | Pending |
+| SDK-05 | Phase 2 | Complete |
 | VRFY-01 | Phase 1 | Complete |
 | VRFY-02 | Phase 1 | Complete |
 | VRFY-03 | Phase 1 | Complete |
