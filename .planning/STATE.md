@@ -5,15 +5,15 @@ milestone_name: MCP Protocol Currency
 current_phase: 2
 current_phase_name: SDK Migration — official go-sdk on the existing surface
 status: planning
-stopped_at: Phase 2 planned — 5 plans, 3 waves, checker passed
-last_updated: "2026-08-06T00:07:35.064Z"
+stopped_at: Completed 02-01-PLAN.md (SDK migration tracer + test suite migration)
+last_updated: "2026-08-06T01:08:04.774Z"
 last_activity: 2026-08-05
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 12
-  completed_plans: 7
+  completed_plans: 8
   percent: 20
 ---
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-08-05 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
@@ -148,6 +148,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 10 P05 | 41min | 3 tasks | 4 files |
 | Phase 10 P06 | ~24min | 3 tasks | 5 files |
 | Phase 10 P07 | 55min | 3 tasks | 3 files |
+| Phase 02 P01 | ~2h | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -180,6 +181,9 @@ Standing decisions that outlive v1.0:
 - CGo tree-sitter is the single documented CGo exception (DIST-05 / PARSER-DECISION.md).
 - `Taskfile.yml` is the single definition of every CI job body; `TestWorkflowRunBodiesInvokeTask` enforces it.
 - A gate is not trusted until it has been demonstrated RED against a confirmed-applied mutation.
+- [Phase ?]: 02-01: go-sdk's StdioTransport{} lacks a customization hook, so a real client-disconnect race (stdin closes before an in-flight response is written) required a custom IOTransport wrapper (stdinLingerReader/pendingWriter) in goSDKServer.ServeStdio().
+- [Phase ?]: 02-01: go-sdk defaults to the 2026-07-28 SEP-2575 server/discover handshake, never classic initialize, when both client and server are go-sdk v1.7.0 defaults — VRFY-03's session-line middleware only fires for classic initialize (in scope for this phase); internal/mcp's own tests now drive a raw jsonrpc handshake (sendRawInitialize) to exercise it.
+- [Phase ?]: 02-01: added a narrow, function-scoped HYG-02 archtest allowlist (internal/graphstore/archtest) for internal/mcp's now-necessary direct os.Stdout reference in ServeStdio() — the one legitimate transport-target write, not a diagnostic leak; proven scoped via a new self-test.
 
 ### Pending Todos
 
@@ -204,6 +208,7 @@ Carried forward:
 - **Open GitHub issues:** #13 daemon `-race` on the `getppid` test seam (→ MAINT-01, Phase 4) · #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity) · #17 `TestRunWatchdogCancelsRunOnSimulatedReparent` fails under full-suite load, passes isolated (→ MAINT-02, Phase 4).
 - **Advisory, unregistered surfaces** from the Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
 - **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing.
+- state.advance-plan failed: 'Cannot parse Current Plan or Total Plans in Phase from STATE.md' — Current Position still reads 'Plan: Not started' from the phase-planning step; likely needs orchestrator-side initialization to 'Plan: 1 of 5' before advance-plan can parse it. Not hand-edited per planning-artifacts rule (tool-owned file).
 
 ### Quick Tasks Completed
 
@@ -240,8 +245,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T00:07:35.054Z
-Stopped at: Phase 2 planned — 5 plans, 3 waves, checker passed
+Last session: 2026-08-06T01:07:49.558Z
+Stopped at: Completed 02-01-PLAN.md (SDK migration tracer + test suite migration)
   NEXT: `/gsd-discuss-phase 2` (SDK Migration — official go-sdk on the existing surface)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:
@@ -250,7 +255,7 @@ Stopped at: Phase 2 planned — 5 plans, 3 waves, checker passed
     - Known frozen-set gap (from `01-07`'s MUTATION-PROOF.md, carried in `01-UAT.md` → Gaps): no scenario exercises a handler's own required-argument validation failure. All four captured error shapes are protocol-level, so mutating `exploreHandler`'s missing-query error shape turns nothing red. Extendable today, impossible after the swap. Input to Phase 2's SDK-04 audit.
     - VRFY-02's "reads from" property is Phase 2's to deliver if the official go-sdk exposes an injection point.
   NOTE: no milestone tag will be created — release-please owns tagging (D-06R).
-Resume file: .planning/phases/02-sdk-migration-official-go-sdk-on-the-existing-surface/02-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 

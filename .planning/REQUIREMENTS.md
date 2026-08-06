@@ -23,7 +23,7 @@
 
 ### SDK Migration (SDK)
 
-- [ ] **SDK-01**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0`, with all existing tools semantically unchanged from the pre-migration server across the wire-oracle corpus — every transcript diff read line by line, every changed line explained, none regenerated wholesale
+- [x] **SDK-01**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0`, with all existing tools semantically unchanged from the pre-migration server across the wire-oracle corpus — every transcript diff read line by line, every changed line explained, none regenerated wholesale
 - [x] **SDK-02**: `internal/cli/serve.go` no longer imports an MCP SDK package directly — the process bootstrap goes through a narrow `internal/mcp.Server` interface, closing the one production-code SDK leak
 - [ ] **SDK-03**: `mark3labs/mcp-go` is removed from `go.mod`, and the resulting dependency closure is re-audited through the existing `govulncheck` and SBOM paths
 - [ ] **SDK-04**: Error-to-JSON-RPC mapping is explicitly audited and asserted — a handler returning a plain `error` becomes a *protocol* error under mark3labs but a tool-visible `IsError: true` *result* under the official SDK, a wire-behavior change invisible in the Go type signature
@@ -92,7 +92,7 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | SPEC-07 | Phase 3 | Pending |
 | SPEC-08 | Phase 3 | Pending |
 | SPEC-09 | Phase 5 | Pending |
-| SDK-01 | Phase 2 | Pending |
+| SDK-01 | Phase 2 | Complete |
 | SDK-02 | Phase 1 | Complete |
 | SDK-03 | Phase 2 | Pending |
 | SDK-04 | Phase 2 | Pending |
