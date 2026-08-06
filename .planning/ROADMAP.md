@@ -124,7 +124,7 @@ Plans:
   4. A handler that returns a plain Go `error` produces a known, asserted wire shape — the mark3labs protocol-error vs. official-SDK `IsError: true` tool-result difference is covered by an explicit test, not inferred from the unchanged Go type signature (SDK-04)
   5. Tool input schemas keep their constraint semantics (notably enum constraints that struct-tag reflection drops), or each loss is written down as a deliberate divergence rather than discovered later by a client (SDK-05)
 
-**Plans**: 5 plans
+**Plans**: 0/5 plans executed
 
 Plans:
 **Wave 1**
@@ -191,7 +191,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
-| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 0/5 | Planned      | - |
+| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 0/5 | Planned    |  |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 0/0 | Not started | - |
 | 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 0/0 | Not started | - |
 | 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
