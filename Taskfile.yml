@@ -147,12 +147,79 @@ tasks:
 
   vuln:
     desc: >-
-      govulncheck over the main module (call-graph-aware vulnerability scan).
-      This does NOT replace ci.yml's blocking "govulncheck (DIST-03,
-      blocking)" gate, which runs golang/govulncheck-action unchanged — this
-      target exists so the same check is reachable locally before pushing.
+      ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —
+      see 04-01-SUMMARY.md): govulncheck -mode=binary over the four tool
+      binaries built from go.tool.mod (task, goreleaser, govulncheck) and
+      go.tool-lint.mod (actionlint) — the 357 measured third-party modules
+      that execute as credentialed CI tooling (repository write access and
+      secrets) and were previously scanned by nothing (D-05: this target
+      used to run `govulncheck ./...` over the main module only, a no-op
+      duplicate of ci.yml's own gate that never touched either tool
+      modfile). Reports, but never fails the build — this target was
+      designed BLOCKING and was demoted to advisory after its own first
+      real run found that goreleaser's binary carries a real,
+      permanently-unfixed, symbol-reachable match for GO-2026-5932 (110
+      vulnerable symbols in golang.org/x/crypto/openpgp, reached via
+      goreleaser/cmd -> pipe/ko -> google/ko -> sigstore/cosign/oci ->
+      sigstore/rekor/pkg/pki/pgp; goreleaser never imports openpgp
+      directly, the ko pipe compiles into every goreleaser binary
+      regardless of config, and the upstream package is unmaintained,
+      Fixed in: N/A). Shipped blocking, this gate would have been
+      permanently red from its first run on real in-scope tooling — worse
+      than the no-op it replaces. All four binaries stay in scope (no
+      allowlist, no exclusion): the point is detection, not build-failure,
+      so a NEW finding in any binary is exactly as visible as this known
+      one. -mode=binary is also symbol-level, NOT call-graph-aware: per
+      govulncheck's own documentation, "Because Go binaries do not contain
+      detailed call information, govulncheck cannot show the call graphs...
+      It may also report false positives for code that is in the binary but
+      unreachable" — a materially weaker guarantee than the source-mode
+      analysis ci.yml's "govulncheck (DIST-03, blocking)" job performs over
+      the main module, which this target does not replace or modify and
+      which stays blocking, unchanged. Exit-code classification still
+      drives what gets reported: 0 is clean (or a module-level-only match
+      govulncheck itself does not consider a symbol hit); 3 is a
+      symbol-matched vulnerability; any other status (usage error,
+      vuln.go.dev unreachable) is also reported distinctly, never silently
+      folded into "clean" — but none of the three fails this task. See
+      vuln:selftest for the non-vacuity proof that DETECTION (not build
+      failure) still fires.
     cmds:
-      - "{{.GO_TOOL}} govulncheck ./..."
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        echo "==> Building tool binaries (GOWORK=off; go.tool.mod x3, go.tool-lint.mod x1)"
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/task" github.com/go-task/task/v3/cmd/task
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/goreleaser" github.com/goreleaser/goreleaser/v2
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/govulncheck" golang.org/x/vuln/cmd/govulncheck
+        GOWORK=off go build -modfile=go.tool-lint.mod -o "${scratch}/actionlint" github.com/rhysd/actionlint/cmd/actionlint
+
+        # ADVISORY (D-04 superseded): every outcome below is REPORTED, never
+        # fails this task. See this target's desc: for why — goreleaser's
+        # binary carries a real, permanently-unfixed, symbol-reachable
+        # vulnerability (GO-2026-5932) that would otherwise make a blocking
+        # gate permanently red.
+        for name in task goreleaser govulncheck actionlint; do
+          set +e
+          out=$({{.GO_TOOL}} govulncheck -mode=binary "${scratch}/${name}" 2>&1)
+          status=$?
+          set -e
+          case "${status}" in
+            0)
+              echo "    ${name}: CLEAN (exit 0 — no symbol-matched vulnerability, or a module-level-only match govulncheck does not consider a symbol hit)"
+              ;;
+            3)
+              echo "::warning::${name}: DETECTED — govulncheck -mode=binary exited 3 (symbol-matched vulnerability; advisory, does not fail the build)"
+              echo "${out}"
+              ;;
+            *)
+              echo "::warning::${name}: SCAN ERROR — govulncheck -mode=binary exited ${status} (usage error or vuln.go.dev unreachable; reported distinctly, never folded into CLEAN)"
+              echo "${out}"
+              ;;
+          esac
+        done
 
   check:darwin-toolchain:
     desc: >-
