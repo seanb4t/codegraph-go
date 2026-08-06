@@ -124,7 +124,22 @@ Plans:
   4. A handler that returns a plain Go `error` produces a known, asserted wire shape — the mark3labs protocol-error vs. official-SDK `IsError: true` tool-result difference is covered by an explicit test, not inferred from the unchanged Go type signature (SDK-04)
   5. Tool input schemas keep their constraint semantics (notably enum constraints that struct-tag reflection drops), or each loss is written down as a deliberate divergence rather than discovered later by a client (SDK-05)
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Tracer: the whole stdio path on go-sdk — backend swap behind the `Server` seam, all 8 tools on struct-tag schemas, explicit tools capability, `cacheScope: private`, session line via receiving middleware
+- [ ] 02-02-PLAN.md — Unblock the blocking anti-regeneration gate: one self-expiring exemption for the SDK-01 swap diff shape, demonstrated red both ways
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-03-PLAN.md — SDK-04: the error-to-wire mapping asserted rather than inferred, demonstrated RED against a protocol-error mutation
+- [ ] 02-04-PLAN.md — SDK-03: mark3labs out of `go.mod` — the last four client sites, both archtest self-tests re-pointed at go-sdk, closure re-audited
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-05-PLAN.md — Re-freeze the 23 transcripts through one reviewed diff pass; SDK-05 schema audit; oracle non-vacuity re-proved on the new backend
 
 ### Phase 3: `2026-07-28` Spec Compliance
 
@@ -176,7 +191,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
-| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 0/0 | Not started | - |
+| 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 0/5 | Planned      | - |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 0/0 | Not started | - |
 | 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 0/0 | Not started | - |
 | 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
