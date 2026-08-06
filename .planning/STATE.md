@@ -5,16 +5,16 @@ milestone_name: MCP Protocol Currency
 current_phase: 5
 current_phase_name: Live Tool-Catalog Change Notification
 status: planning
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-08-06T20:42:15.926Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-08-06T21:36:47.163Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 4 complete, transitioned to Phase 5
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 20
-  completed_plans: 20
-  percent: 80
+  completed_phases: 5
+  total_plans: 21
+  completed_plans: 21
+  percent: 100
 ---
 
 # Project State
@@ -161,6 +161,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 04 P02 | 119min | 3 tasks | 6 files |
 | Phase 04 P01 | 45min | 3 tasks | 3 files |
 | Phase 04 P03 | 40min | 2 tasks | 2 files |
+| Phase 05 P01 | 50min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -213,6 +214,8 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: 04-01: Tool-modfile vuln scan ships ADVISORY not blocking (D-04 superseded) — goreleaser's binary carries a real, permanently-unfixed, symbol-reachable GO-2026-5932 match (openpgp via cosign/rekor's PGP verifier); blocking would have been permanently red from first run
 - [Phase ?]: MAINT-03: aligned release.yml's GoReleaser pin upward to v2.17.1 (matching go.tool.mod), confirmed by git history that neither pin was deliberately moved away from the other
 - [Phase ?]: VULN-03: stance test re-derived from a divergence assertion to an agreement assertion after D-04's mid-phase supersession — tool-vuln and transcript-freeze are now both deliberately ADVISORY, not deliberately different
+- [Phase ?]: NoInitialize with Modern _meta on every request is required for the SPEC-09 proof scenario — a classic initialize would route the session onto go-sdk's Legacy no-opt-in notification channel and make the proof vacuous
+- [Phase ?]: Registered 4 anchors (not the plan's stated 5) matching the plan's own action-text description exactly; documented as a plan-text inconsistency, not an omission
 
 ### Pending Todos
 
@@ -277,8 +280,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T20:02:25.976Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-08-06T21:36:47.136Z
+Stopped at: Completed 05-01-PLAN.md
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

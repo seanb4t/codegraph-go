@@ -210,12 +210,12 @@ Plans:
   2. A client that opts into `subscriptions/listen` receives `notifications/tools/list_changed` when the tool catalog actually changes — for example when `codegraph init` creates an index under an already-running server (SPEC-09)
   3. A client that does not opt in observes no change in session behavior from Phase 3's server (SPEC-09)
 
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Prove on the wire that an opted-in Modern `subscriptions/listen` stream receives `notifications/tools/list_changed` after a real mid-session `codegraph init`; assert the acknowledgment echo (D-02's only live/dead discriminator) by set equality; demonstrate both gates RED
+- [x] 05-01-PLAN.md — Prove on the wire that an opted-in Modern `subscriptions/listen` stream receives `notifications/tools/list_changed` after a real mid-session `codegraph init`; assert the acknowledgment echo (D-02's only live/dead discriminator) by set equality; demonstrate both gates RED
 
 ## Progress
 
@@ -227,7 +227,7 @@ Plans:
 | 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
 | 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 3/3 | Complete    | 2026-08-06 |
-| 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
+| 5. Live Tool-Catalog Change Notification | v0.3.0 | 1/1 | In Progress|  |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
 | 999.5. macOS Gatekeeper signing/notarization | Backlog | 0/0 | Not started | - |

@@ -19,7 +19,7 @@
 - [x] **SPEC-06**: An agent client speaking any prior protocol revision (`2025-11-25` and earlier) continues to work against the upgraded server, asserted by test rather than assumed from the SDK's documentation
 - [x] **SPEC-07**: `server/discover`'s `instructions` field carries codegraph usage guidance, so an agent gets orientation without spending a tool call
 - [x] **SPEC-08**: Tool results carry `io.modelcontextprotocol/serverInfo` in `_meta`, so a client debugging a negotiation problem can see which server version answered
-- [ ] **SPEC-09**: A client that opts into `subscriptions/listen` is notified via `notifications/tools/list_changed` when the tool catalog changes, with `tools.listChanged: true` advertised
+- [x] **SPEC-09**: A client that opts into `subscriptions/listen` is notified via `notifications/tools/list_changed` when the tool catalog changes, with `tools.listChanged: true` advertised
 
 ### SDK Migration (SDK)
 
@@ -91,7 +91,7 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | SPEC-06 | Phase 3 | Complete |
 | SPEC-07 | Phase 3 | Complete |
 | SPEC-08 | Phase 3 | Complete |
-| SPEC-09 | Phase 5 | Pending |
+| SPEC-09 | Phase 5 | Complete |
 | SDK-01 | Phase 2 | Complete |
 | SDK-02 | Phase 1 | Complete |
 | SDK-03 | Phase 2 | Complete |
