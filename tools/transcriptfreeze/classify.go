@@ -15,9 +15,15 @@
 // 02-CONTEXT.md's D-01/D-02/D-03 supersede D-03's original "Phase 2 =
 // frozen, no exceptions" clause with a single self-expiring waiver for
 // SDK-01's one-time mark3labs-to-go-sdk transition. See sdkSwapExemption
-// and buildSwapExemptionNotice for that narrow exception; every other
-// regeneration, including Phase 3's, still belongs in its own separate,
-// reviewable pull request.
+// and buildSwapExemptionNotice for that narrow exception.
+//
+// As of 03-02: a detected collision is advisory, not blocking. The guard's
+// own "split into two pull requests" remedy is structurally unavailable in
+// this repository (03-CONTEXT.md D-06 — a server-change-only PR fails the
+// required wire-oracle leg, and a transcripts-only PR has no mergeable
+// base), so main.go's run() reports Verdict.Reason in full but no longer
+// fails the build on it. This does not change Classify's predicate or
+// Verdict.Violation's meaning — see buildReason for what did change.
 package main
 
 import (
@@ -231,18 +237,26 @@ func Classify(changed []string, goModDiff string) Verdict {
 	return v
 }
 
-// buildReason names both offending sides of a D-03 violation in full, tells
-// the author to split the pull request, and states — per this phase's
-// scoping doc (docs/MCP-2026-07-28-SCOPING.md, "The wire-oracle
-// anti-regeneration trigger set is a floor, not a proof of innocence") —
-// that this trigger set is a deliberate floor, not proof the regeneration
-// was safe: transcript bytes also legitimately depend on internal/query and
+// buildReason names both offending sides of a D-03 collision in full,
+// names the control that now applies (advisory since 03-02 — see this
+// file's package doc comment), and states — per this phase's scoping doc
+// (docs/MCP-2026-07-28-SCOPING.md, "The wire-oracle anti-regeneration
+// trigger set is a floor, not a proof of innocence") — that this trigger
+// set is a deliberate floor, not proof the regeneration was safe:
+// transcript bytes also legitimately depend on internal/query and
 // internal/indexer, which this guard does not watch. Do NOT widen the
 // trigger set to compensate — CONTEXT.md D-03 locks it on purpose; the
 // disclosure IS the mitigation.
+//
+// This reason no longer instructs the author to split the pull request:
+// that remedy is structurally unavailable in this repository
+// (03-CONTEXT.md D-06 — a server-change-only PR fails the required
+// wire-oracle leg, and a transcripts-only PR has no mergeable base), and
+// telling a reviewer to do the impossible is worse than telling them
+// nothing.
 func buildReason(transcripts, serverChanges []string, depTouched bool) string {
 	var sb strings.Builder
-	sb.WriteString("D-03 anti-regeneration violation: this pull request changes frozen transcript(s) [")
+	sb.WriteString("D-03 anti-regeneration collision (advisory, not blocking, since 03-02): this pull request changes frozen transcript(s) [")
 	sb.WriteString(strings.Join(transcripts, ", "))
 	sb.WriteString("] together with ")
 
@@ -254,7 +268,7 @@ func buildReason(transcripts, serverChanges []string, depTouched bool) string {
 		causes = append(causes, "the MCP dependency line in go.mod")
 	}
 	sb.WriteString(strings.Join(causes, " and "))
-	sb.WriteString(". Split this into two pull requests: one for the protocol/server change, and a separate one that regenerates the frozen transcript(s) afterward. ")
+	sb.WriteString(". This guard's own remedy — splitting the change into two pull requests — is structurally unavailable in this repository (03-CONTEXT.md D-06: a server-change-only PR fails the required wire-oracle leg, and a transcripts-only PR has no mergeable base), so this collision no longer fails the build. The control that applies is the reviewed-diff pass D-06 mandates: capture the wire oracle before and after, read every changed line, and name every cause in the commit message. ")
 	sb.WriteString("This trigger set is a deliberate floor, not a proof of innocence: transcript bytes also legitimately depend on internal/query and internal/indexer (and the tree-sitter grammars), which this guard does not watch — a clean pass means this PR did not commit the one shape the guard can detect mechanically, not that this regeneration was safe.")
 	return sb.String()
 }
