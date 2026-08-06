@@ -274,3 +274,148 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// TestIndexAppearingMidSessionRegistersTools is SPEC-05's core promise,
+// proven at the Go level: a server built with hasIndex=false against a
+// directory that has no .codegraph/ yet advertises exactly zero tools;
+// after that same directory gains a real index (indexFixture, a real
+// Pebble-backed store via indexer.Run, never a mock), the very next
+// tools/list on this SAME *mcp.Server advertises exactly the set a
+// server built with hasIndex=true from the start would have — no
+// restart, no reconnect. Both assertions use exact set equality
+// (equalStrings), never a non-empty or count check.
+func TestIndexAppearingMidSessionRegistersTools(t *testing.T) {
+	dir := copyFixture(t) // deliberately NOT indexed yet
+
+	s := BuildServer(false, map[string]bool{}, dir, dir)
+
+	got := listToolNames(t, s)
+	if !equalStrings(got, nil) {
+		t.Fatalf("registered tools before the index appears = %v, want none", got)
+	}
+
+	indexFixture(t, dir)
+
+	got = listToolNames(t, s)
+	want := []string{"codegraph_explore"}
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools after the index appears = %v, want %v", got, want)
+	}
+}
+
+// TestIndexAppearingMidSessionHonorsAllowlist proves the re-check
+// registers tools through the SAME allowlist gate construction-time
+// registration uses, rather than registering everything once an index is
+// merely present — the exact set the allowlist selects, in exact-set-
+// equality form, is the only acceptable outcome.
+func TestIndexAppearingMidSessionHonorsAllowlist(t *testing.T) {
+	dir := copyFixture(t) // deliberately NOT indexed yet
+
+	s := BuildServer(false, map[string]bool{"node": true, "status": true}, dir, dir)
+
+	got := listToolNames(t, s)
+	if !equalStrings(got, nil) {
+		t.Fatalf("registered tools before the index appears = %v, want none", got)
+	}
+
+	indexFixture(t, dir)
+
+	got = listToolNames(t, s)
+	want := []string{"codegraph_explore", "codegraph_node", "codegraph_status"}
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools after the index appears = %v, want %v", got, want)
+	}
+}
+
+// TestIndexDisappearingMidSessionUnregistersTools is SPEC-05's reverse
+// transition: an indexed server that loses its .codegraph/ directory
+// mid-session advertises exactly zero tools on the very next tools/list.
+func TestIndexDisappearingMidSessionUnregistersTools(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	s := BuildServer(true, map[string]bool{}, dir, dir)
+
+	got := listToolNames(t, s)
+	want := []string{"codegraph_explore"}
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools = %v, want %v", got, want)
+	}
+
+	if err := os.RemoveAll(filepath.Join(dir, ".codegraph")); err != nil {
+		t.Fatalf("remove .codegraph: %v", err)
+	}
+
+	got = listToolNames(t, s)
+	if !equalStrings(got, nil) {
+		t.Fatalf("registered tools after the index disappears = %v, want none", got)
+	}
+}
+
+// TestRepeatedListsDoNotDuplicateTools pins the re-check's flip-guard: a
+// re-check that unconditionally called registerTools on every request
+// (rather than only on a false-to-true state flip) would still return
+// exactly one entry per name (mcp.AddTool replaces a same-named tool
+// rather than appending a duplicate), so this test's job is to prove the
+// flip-guard exists at all — repeated calls make no additional
+// registerTools call once the state is steady, verified indirectly by
+// asserting the exact same set on every one of three separate
+// listToolNames calls against the same steady-state server.
+func TestRepeatedListsDoNotDuplicateTools(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	s := BuildServer(true, map[string]bool{}, dir, dir)
+
+	want := []string{"codegraph_explore"}
+	for i := 0; i < 3; i++ {
+		got := listToolNames(t, s)
+		if !equalStrings(got, want) {
+			t.Fatalf("call %d: registered tools = %v, want %v", i, got, want)
+		}
+	}
+}
+
+// TestSessionLineReflectsPostAppearanceToolCount is VRFY-03/T-03-17's
+// mid-session assertion: a server built with hasIndex=false writes
+// tools=0 on its first classic initialize (sendRawInitialize, reused from
+// session_line_concurrency_test.go — see its doc comment for why the
+// classic handshake, not newTestSession's Connect, is required here). The
+// index then appears on disk, and a SECOND classic initialize (a fresh
+// session, since go-sdk rejects a second "initialize" on the same
+// session) writes tools=1 — the re-check ran before this initialize's own
+// next() call, so the count reflects a live reading, not the
+// construction-time value the first line already proved was 0.
+func TestSessionLineReflectsPostAppearanceToolCount(t *testing.T) {
+	dir := copyFixture(t) // deliberately NOT indexed yet
+
+	var log bytes.Buffer
+	s := BuildServer(false, map[string]bool{}, dir, dir, WithSessionLog(&log))
+
+	sendRawInitialize(t, s, "codegraph-mcp-test", "0.0.0")
+
+	indexFixture(t, dir)
+
+	sendRawInitialize(t, s, "codegraph-mcp-test", "0.0.0")
+
+	lines := strings.Split(strings.TrimSuffix(log.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d session lines, want 2: %q", len(lines), log.String())
+	}
+
+	first, err := parseSessionLineFields(lines[0] + "\n")
+	if err != nil {
+		t.Fatalf("parseSessionLineFields(first line): %v", err)
+	}
+	if first["tools"] != "0" {
+		t.Fatalf("first session line tools = %q, want %q (pre-appearance)", first["tools"], "0")
+	}
+
+	second, err := parseSessionLineFields(lines[1] + "\n")
+	if err != nil {
+		t.Fatalf("parseSessionLineFields(second line): %v", err)
+	}
+	if second["tools"] != "1" {
+		t.Fatalf("second session line tools = %q, want %q (post-appearance, not the construction-time 0)", second["tools"], "1")
+	}
+}

@@ -30,6 +30,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
+	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // version is this server's reported MCP implementation version. There is
@@ -315,6 +316,58 @@ func NewStdioServer(hasIndex bool, allowlist map[string]bool, repoPath, startPat
 	return &goSDKServer{inner: s}
 }
 
+// allToolNames returns codegraph_explore's name plus all 7 companion tool
+// names (regardless of allowlist), derived from exploreTool() and
+// companionTool(name) rather than re-typed string literals — the single
+// source registerTools and unregisterTools both read from, so the set a
+// re-check registers and the set it unregisters can never drift apart.
+// unregisterTools passes this whole set to (*mcp.Server).RemoveTools
+// unconditionally; RemoveTools is documented as a no-op for a name that
+// was never registered (e.g. a companion the allowlist never selected),
+// so removing more names than were ever added is always safe.
+func allToolNames() []string {
+	names := make([]string, 0, 1+len(companionNames))
+	names = append(names, exploreTool().Name)
+	for _, name := range companionNames {
+		names = append(names, companionTool(name).Name)
+	}
+	return names
+}
+
+// registerTools registers codegraph_explore plus every allowlisted
+// companion tool against s and returns the number of tools registered.
+// This is SPEC-05's single registration seam (D-05): BuildServer's
+// construction-time call and the per-request re-check inside
+// AddReceivingMiddleware both go through this exact function, so
+// "what the catalog contains" can never diverge between the two call
+// sites. detector is the one gitmeta.CachingDetector constructed per
+// server (D-13) — this function never constructs its own.
+func registerTools(s *mcp.Server, allowlist map[string]bool, repoPath, startPath string, detector *gitmeta.CachingDetector) int {
+	count := 0
+
+	// WR-04 (02-REVIEW-2.md): exploreHandler/companionHandler's parameter
+	// order is (repoPath, startPath), matching BuildServer's own
+	// (repoPath, startPath) signature.
+	mcp.AddTool(s, exploreTool(), exploreHandler(repoPath, startPath, detector))
+	count++
+	for _, name := range companionNames {
+		if allowlist[name] {
+			companionHandler(s, name, repoPath, startPath, detector)
+			count++
+		}
+	}
+	return count
+}
+
+// unregisterTools is registerTools' mirror: it removes every tool name
+// allToolNames() could ever have registered, via
+// (*mcp.Server).RemoveTools. Safe to call even when only a subset (or
+// none) of those names is currently registered — RemoveTools no-ops on a
+// name that isn't present.
+func unregisterTools(s *mcp.Server) {
+	s.RemoveTools(allToolNames()...)
+}
+
 // BuildServer constructs the stdio MCP server with startup-time
 // conditional tool registration (D-08a, Pattern 3): hasIndex gates
 // whether ANY tool is registered at all (MCP-03 — zero tools when no
@@ -347,13 +400,29 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 		opt(cfg)
 	}
 
-	// toolCount is derived at the registration seam below (each AddTool
-	// call increments it), never recomputed independently from
+	// toolCount is derived at the registration seam (registerTools'
+	// return value), never recomputed independently from
 	// hasIndex/allowlist — an independent recomputation would be
 	// duplicated state that silently drifts the first time a registration
 	// condition changes. The !hasIndex case leaves it zero by
-	// construction (the registration block below is skipped entirely).
-	var toolCount int
+	// construction (the registerTools call below is skipped entirely).
+	//
+	// Phase 3/SPEC-05: this is now written from TWO places — this
+	// function's construction-time registration below, and the
+	// per-request re-check inside AddReceivingMiddleware further down —
+	// and read from the session-line branch of that same middleware,
+	// potentially from a different goroutine than either writer. A plain
+	// int (its Phase-1/2 shape) is no longer safe for that access
+	// pattern; atomic.Int64 makes "no store is ever observed torn or
+	// reordered relative to a subsequent Load" a construction property
+	// rather than a data race the race detector would need to catch by
+	// luck. go-sdk exposes no tool-count accessor on *mcp.Server (no
+	// Server.Tools() or count method — Server.Sessions() is the only
+	// public feature-count-adjacent accessor, 03-RESEARCH.md Pitfall 2),
+	// so this counter remains the only source of truth and must be kept
+	// in sync at the exact point registration changes — both here and in
+	// the re-check below.
+	var toolCount atomic.Int64
 
 	// D-11: Capabilities must be set explicitly and unconditionally.
 	// Server.capabilities() only sets caps.Tools when HasTools ||
@@ -370,29 +439,104 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 		},
 	})
 
-	if hasIndex {
-		// One gitmeta.CachingDetector per SERVER, not per handler or per
-		// call (D-13, corrected). openEngine builds a FRESH query.Engine
-		// on every single tool call by design (its own doc comment says
-		// so), so an Engine-scoped cache alone would give ZERO cross-call
-		// benefit on this server's long-lived process — the exact
-		// surface the cache exists to help. Detection costs up to four
-		// git subprocesses per verdict; constructing exactly one detector
-		// here and closing it over every handler bounds that cost to
-		// once per (startPath, indexRoot) pair for this server's entire
-		// lifetime, however many tool calls follow.
-		detector := gitmeta.NewCachingDetector()
+	// One gitmeta.CachingDetector per SERVER, not per handler or per call
+	// (D-13, corrected). openEngine builds a FRESH query.Engine on every
+	// single tool call by design (its own doc comment says so), so an
+	// Engine-scoped cache alone would give ZERO cross-call benefit on
+	// this server's long-lived process — the exact surface the cache
+	// exists to help. Detection costs up to four git subprocesses per
+	// verdict; constructing exactly one detector here and closing it
+	// over every handler — including any handler registered later by
+	// the SPEC-05 re-check below — bounds that cost to once per
+	// (startPath, indexRoot) pair for this server's entire lifetime,
+	// however many tool calls follow. Phase 3/SPEC-05 moved this
+	// construction outside the `if hasIndex` block that used to gate it:
+	// the detector must exist even when hasIndex starts false, since the
+	// re-check may call registerTools (and therefore need it) later in
+	// this same server's lifetime — it is still constructed exactly
+	// once, never per re-check.
+	detector := gitmeta.NewCachingDetector()
 
-		// WR-04 (02-REVIEW-2.md): exploreHandler/companionHandler's
-		// parameter order is (repoPath, startPath), matching THIS
-		// function's own (repoPath, startPath) signature above.
-		mcp.AddTool(s, exploreTool(), exploreHandler(repoPath, startPath, detector))
-		toolCount++
-		for _, name := range companionNames {
-			if allowlist[name] {
-				companionHandler(s, name, repoPath, startPath, detector)
-				toolCount++
+	// catalogMu guards hasCatalog and every registerTools/unregisterTools
+	// call made after construction (the per-request re-check below) —
+	// the construction-time call just below does not need it (Run has
+	// not been called yet, so no concurrent request can be in flight).
+	// hasCatalog tracks this server's last-observed index presence, so a
+	// re-check that finds no change makes no registration call at all
+	// (TestRepeatedListsDoNotDuplicateTools' flip-guard).
+	var catalogMu sync.Mutex
+	hasCatalog := hasIndex
+
+	if hasIndex {
+		toolCount.Store(int64(registerTools(s, allowlist, repoPath, startPath, detector)))
+	}
+
+	// recheckCatalog is SPEC-05's per-request trigger (D-05): it
+	// re-resolves whether an index exists at the server's
+	// CONSTRUCTION-TIME startPath — never a request argument, see the
+	// middleware call site below — and, on a state flip, calls
+	// registerTools/unregisterTools (the exact same seam construction
+	// used) so the live catalog can never diverge from what a fresh
+	// BuildServer call would have produced for the same on-disk state.
+	//
+	// Mechanism: D-05 chose Server.AddTool/RemoveTools mutation over
+	// per-call filtering because mutation is faithful to "the catalog
+	// changed" and pre-builds most of SPEC-09's substrate (Phase 5's
+	// subscriptions/listen work) — changeAndNotify (called by both
+	// AddTool and RemoveTools) unconditionally emits
+	// notifications/tools/list_changed to every Legacy session the
+	// moment registration changes, a free, in-scope improvement this
+	// plan writes no code for. Modern sessions receive that notification
+	// only with an active subscriptions/listen stream, which Phase 5
+	// builds — so this does NOT pull SPEC-09 forward.
+	//
+	// Trigger: internal/watch's fsnotify watcher is deliberately NOT
+	// this mechanism. internal/cli/serve.go:71-78's own doc comment
+	// states verbatim that an index created mid-session "is served live
+	// by per-call query resolution but does NOT retroactively start the
+	// watcher" (IN-09, a deliberate v1.0-era decision boundary this
+	// phase does not move) — so a per-request re-check is SPEC-05's only
+	// correct trigger, matching its own wording ("re-checked per call").
+	//
+	// Concurrency: AddTool/RemoveTools are s.mu-guarded through
+	// changeAndNotify, and every reader a concurrent tools/call or
+	// tools/list dispatches through (listTools, getServerTool,
+	// capabilities()) acquires and releases that same s.mu briefly,
+	// never across handler execution — calling them from inside this
+	// middleware closure cannot deadlock and cannot race a concurrently
+	// executing tool handler (03-RESEARCH.md § Pattern 2, source-traced;
+	// exercised, not merely asserted, by Task 1's -race verify).
+	//
+	// Confinement: repoPath/startPath passed to registerTools here are
+	// ALWAYS this closure's own construction-time values, never
+	// re-derived from the resolved directory ResolveCodegraphDir
+	// returns — an index appearing at or above startPath tightens
+	// nothing about where tools may read from; confineToRepoRoot's
+	// anchor (repoPath) is not moved. Widening it in response to
+	// filesystem state a client may be able to influence would loosen
+	// CR-02's trust boundary at runtime (T-03-14).
+	recheckCatalog := func() {
+		catalogMu.Lock()
+		defer catalogMu.Unlock()
+
+		_, err := query.ResolveCodegraphDir(startPath)
+		switch {
+		case err == nil:
+			if !hasCatalog {
+				toolCount.Store(int64(registerTools(s, allowlist, repoPath, startPath, detector)))
+				hasCatalog = true
 			}
+		case errors.Is(err, query.ErrNotInitialized):
+			if hasCatalog {
+				unregisterTools(s)
+				toolCount.Store(0)
+				hasCatalog = false
+			}
+		default:
+			// A transient stat failure is "state unknown, leave the
+			// catalog as it is" — never treated as ErrNotInitialized,
+			// which would silently empty a working catalog on a passing
+			// filesystem hiccup.
 		}
 	}
 
@@ -401,13 +545,26 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 	// session-line WRITE is guarded on cfg.sessionLog != nil, so D-09's
 	// cacheScope correction is never accidentally coupled to session
 	// logging. Registered after the tool-registration block above so
-	// toolCount's final value is set by the time any request is actually
-	// handled (Run has not been called yet at this point in any caller,
-	// so this ordering is for readability, not correctness of the
-	// closure capture).
+	// toolCount's initial value is set by the time any request is
+	// actually handled (Run has not been called yet at this point in any
+	// caller, so this ordering is for readability, not correctness of
+	// the closure capture).
 	var mu sync.Mutex
 	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			// SPEC-05: re-check BEFORE next(...) runs, so the very same
+			// request that observes a just-appeared (or just-removed)
+			// index already reflects it in its own answer — no restart,
+			// no reconnect, no "one call behind." Gated to the four
+			// methods whose answer actually depends on the tool catalog;
+			// running this on every notification (progress, cancelled,
+			// etc.) would be an unbounded-per-request cost for no
+			// observable benefit (T-03-15).
+			switch method {
+			case "initialize", "tools/list", "tools/call", "server/discover":
+				recheckCatalog()
+			}
+
 			res, err := next(ctx, method, req)
 			if err != nil {
 				return res, err
@@ -440,13 +597,29 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 				// SDK itself parsed, never off session state (which
 				// only stores the request, never the negotiated result
 				// — 02-RESEARCH.md Q1).
+				//
+				// VRFY-03/T-03-17 (Phase 3): tools=N is the tool count
+				// OBSERVED FOR THIS REQUEST — the recheckCatalog() call
+				// above already ran before next(), so toolCount.Load()
+				// here reads a live value, not a construction-time
+				// constant. A user diagnosing "my tools vanished" reads
+				// this line, and once the catalog is dynamic, tools=N no
+				// longer describes the session's whole lifetime, only
+				// the instant this initialize was answered — a
+				// repudiation-adjacent semantics change, mitigated by
+				// stating it here rather than leaving it implicit. The
+				// "codegraph: mcp-session" prefix and every existing key
+				// name (requested, negotiated, client, tools) are
+				// UNCHANGED — Phase 1 D-16's one-way additive-only
+				// contract holds; only what the tools value MEANS changed,
+				// not its key name or the line's shape.
 				mu.Lock()
 				fmt.Fprint(cfg.sessionLog, formatSessionLine(
 					params.ProtocolVersion,
 					initRes.ProtocolVersion,
 					params.ClientInfo.Name,
 					params.ClientInfo.Version,
-					toolCount,
+					int(toolCount.Load()),
 				))
 				mu.Unlock()
 			case "tools/list":
