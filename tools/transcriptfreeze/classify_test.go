@@ -98,6 +98,93 @@ func TestClassify_TranscriptPlusGoModMCPBumpIsError(t *testing.T) {
 	})
 }
 
+// TestClassifySDKSwapExemption proves 02-CONTEXT.md's D-01/D-02/D-03
+// supersession of D-03's "Phase 2 = frozen, no exceptions" clause: a go.mod
+// diff that both REMOVES github.com/mark3labs/mcp-go and ADDS
+// github.com/modelcontextprotocol/go-sdk, together with a changed set
+// carrying a transcript path, is exempted (Violation false, SwapExemption
+// true) — but every neighbouring shape (add-only, remove-only, empty diff)
+// still reports Violation true, and a full-swap diff with no transcript
+// path changes nothing about the already-clean case. The three
+// Violation-true cases are the non-vacuity proof: without them the
+// exemption is indistinguishable from deleting the guard.
+func TestClassifySDKSwapExemption(t *testing.T) {
+	transcript := "testdata/wireoracle/transcripts/handshake-explore.golden"
+	serverFile := "internal/mcp/server.go"
+	fullSwapDiff := "--- a/go.mod\n+++ b/go.mod\n-\tgithub.com/mark3labs/mcp-go v0.56.0\n+\tgithub.com/modelcontextprotocol/go-sdk v1.7.0\n"
+
+	cases := []struct {
+		name          string
+		changed       []string
+		goModDiff     string
+		Violation     bool
+		SwapExemption bool
+	}{
+		{
+			name:          "full swap plus transcript+internal/mcp change is exempted",
+			changed:       []string{transcript, serverFile},
+			goModDiff:     fullSwapDiff,
+			Violation:     false,
+			SwapExemption: true,
+		},
+		{
+			name:      "go-sdk added without mark3labs removed is still Violation: true",
+			changed:   []string{transcript, serverFile},
+			goModDiff: "--- a/go.mod\n+++ b/go.mod\n+\tgithub.com/modelcontextprotocol/go-sdk v1.7.0\n",
+			Violation: true,
+		},
+		{
+			name:      "mark3labs removed without go-sdk added is still Violation: true",
+			changed:   []string{transcript, serverFile},
+			goModDiff: "--- a/go.mod\n+++ b/go.mod\n-\tgithub.com/mark3labs/mcp-go v0.56.0\n",
+			Violation: true,
+		},
+		{
+			name:      "empty go.mod diff is still Violation: true — the internal/mcp half alone still trips it",
+			changed:   []string{transcript, serverFile},
+			goModDiff: "",
+			Violation: true,
+		},
+		{
+			name:      "full swap diff with no transcript path changes nothing about the non-violating case",
+			changed:   []string{serverFile},
+			goModDiff: fullSwapDiff,
+			Violation: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			v := Classify(c.changed, c.goModDiff)
+			if v.Violation != c.Violation {
+				t.Errorf("Classify(%v, %q): Violation = %v, want %v", c.changed, c.goModDiff, v.Violation, c.Violation)
+			}
+			if v.SwapExemption != c.SwapExemption {
+				t.Errorf("Classify(%v, %q): SwapExemption = %v, want %v", c.changed, c.goModDiff, v.SwapExemption, c.SwapExemption)
+			}
+			if c.SwapExemption {
+				if !strings.Contains(v.Reason, "SDK-01") {
+					t.Errorf("Verdict.Reason does not name SDK-01's swap: %q", v.Reason)
+				}
+				if !strings.Contains(v.Reason, "self-expiring") {
+					t.Errorf("Verdict.Reason does not state the exemption is self-expiring: %q", v.Reason)
+				}
+			}
+		})
+	}
+}
+
+// TestSDKSwapExemptionRequiresActualDiffLines proves the exemption reads
+// only added/removed go.mod lines, exactly like MCPDependencyTouched: both
+// module paths appearing solely as unchanged context lines (no leading
+// +/-) must not fire the exemption.
+func TestSDKSwapExemptionRequiresActualDiffLines(t *testing.T) {
+	diff := " \tgithub.com/mark3labs/mcp-go v0.56.0\n \tgithub.com/modelcontextprotocol/go-sdk v1.7.0\n"
+	if sdkSwapExemption(diff) {
+		t.Fatalf("sdkSwapExemption(%q) = true, want false — both module paths appear only as context lines", diff)
+	}
+}
+
 // TestParseChangedListDistinguishesUnreadableFromEmpty proves the three
 // outcomes ParseChangedList and main.go's file-read step together must
 // never conflate: a clean empty diff, a malformed-but-successfully-read

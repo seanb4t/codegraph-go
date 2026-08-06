@@ -61,6 +61,7 @@ type Verdict struct {
 	Transcripts       []string
 	ServerChanges     []string
 	DependencyChanged bool
+	SwapExemption     bool
 	Reason            string
 }
 
@@ -146,15 +147,53 @@ func MCPDependencyTouched(goModDiff string) bool {
 	return false
 }
 
+// sdkSwapExemption reports whether goModDiff shows SDK-01's one-time
+// mark3labs-to-go-sdk transition: some line begins with a single "-"
+// (excluding the "---" file header) and contains
+// mcpSDKModulePrefixes[0] (github.com/mark3labs/mcp-go), AND some line
+// begins with a single "+" (excluding "+++") and contains
+// mcpSDKModulePrefixes[1] (github.com/modelcontextprotocol/go-sdk). Reusing
+// mcpSDKModulePrefixes' own entries by index — rather than retyping the
+// module paths — guarantees this predicate can never name a module
+// MCPDependencyTouched itself does not already consider an MCP SDK.
+//
+// This is a diff SHAPE, not a runtime switch: it reads no environment
+// variable, CLI switch, or author-addable file — the go.mod diff string is
+// its only input. Once github.com/mark3labs/mcp-go is absent from go.mod,
+// no future diff can reproduce a removal line naming it, so this predicate
+// is self-expiring by construction — it can fire at most once in this
+// repository's history.
+func sdkSwapExemption(goModDiff string) bool {
+	removedMark3labs := false
+	addedGoSDK := false
+	for _, line := range strings.Split(goModDiff, "\n") {
+		if strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "-") && strings.Contains(line, mcpSDKModulePrefixes[0]):
+			removedMark3labs = true
+		case strings.HasPrefix(line, "+") && strings.Contains(line, mcpSDKModulePrefixes[1]):
+			addedGoSDK = true
+		}
+	}
+	return removedMark3labs && addedGoSDK
+}
+
 // Classify collects transcript paths and server-change paths from changed,
 // computes MCPDependencyTouched(goModDiff), and reports Violation true if
 // and only if at least one transcript path is present AND (at least one
-// server-change path is present OR the MCP dependency was touched).
+// server-change path is present OR the MCP dependency was touched) AND the
+// collision is not the one shape sdkSwapExemption waives — SDK-01's
+// one-time mark3labs-to-go-sdk transition (02-CONTEXT.md D-01/D-02/D-03).
+// When the exemption fires, Violation stays false and SwapExemption records
+// that it did, with Reason carrying the exemption notice rather than a
+// failure message.
 //
 // This is D-03's narrow, deliberately-locked trigger set, not a blanket ban
 // on golden changes: transcript-only and internal/mcp-only changes are both
 // clean. See buildReason for the floor disclosure a violation's Reason
-// carries.
+// carries, and buildSwapExemptionNotice for the exemption's own notice.
 func Classify(changed []string, goModDiff string) Verdict {
 	var transcripts, serverChanges []string
 	for _, path := range changed {
@@ -173,6 +212,11 @@ func Classify(changed []string, goModDiff string) Verdict {
 		DependencyChanged: depTouched,
 	}
 	if len(transcripts) > 0 && (len(serverChanges) > 0 || depTouched) {
+		if sdkSwapExemption(goModDiff) {
+			v.SwapExemption = true
+			v.Reason = buildSwapExemptionNotice(transcripts, serverChanges, depTouched)
+			return v
+		}
 		v.Violation = true
 		v.Reason = buildReason(transcripts, serverChanges, depTouched)
 	}
@@ -204,5 +248,30 @@ func buildReason(transcripts, serverChanges []string, depTouched bool) string {
 	sb.WriteString(strings.Join(causes, " and "))
 	sb.WriteString(". Split this into two pull requests: one for the protocol/server change, and a separate one that regenerates the frozen transcript(s) afterward. ")
 	sb.WriteString("This trigger set is a deliberate floor, not a proof of innocence: transcript bytes also legitimately depend on internal/query and internal/indexer (and the tree-sitter grammars), which this guard does not watch — a clean pass means this PR did not commit the one shape the guard can detect mechanically, not that this regeneration was safe.")
+	return sb.String()
+}
+
+// buildSwapExemptionNotice names both sides of the collision sdkSwapExemption
+// waived and states the three facts a reviewer needs, mirroring buildReason's
+// structure for the one shape 02-CONTEXT.md's D-01/D-02/D-03 declared
+// exempt rather than forbidden. main.go prints this to stderr even on a
+// clean (exit 0) run — an exemption that fired must never be a silent pass.
+func buildSwapExemptionNotice(transcripts, serverChanges []string, depTouched bool) string {
+	var sb strings.Builder
+	sb.WriteString("D-03 anti-regeneration EXEMPTED (SDK-01 swap): this pull request changes frozen transcript(s) [")
+	sb.WriteString(strings.Join(transcripts, ", "))
+	sb.WriteString("] together with ")
+
+	var causes []string
+	if len(serverChanges) > 0 {
+		causes = append(causes, fmt.Sprintf("internal/mcp source file(s) [%s]", strings.Join(serverChanges, ", ")))
+	}
+	if depTouched {
+		causes = append(causes, "the MCP dependency line in go.mod")
+	}
+	sb.WriteString(strings.Join(causes, " and "))
+	sb.WriteString(fmt.Sprintf(". This is SDK-01's one-time %s -> %s transition. ", mcpSDKModulePrefixes[0], mcpSDKModulePrefixes[1]))
+	sb.WriteString("02-CONTEXT.md D-01/D-02/D-03 replaced this guard's byte-identity bar with semantic equivalence plus one human diff read, so these transcripts moving is expected, not a violation. ")
+	sb.WriteString(fmt.Sprintf("This exemption is self-expiring: once %s is absent from go.mod, no future diff can reproduce a removal line for it, so this exact waiver can fire at most once in this repository's history.", mcpSDKModulePrefixes[0]))
 	return sb.String()
 }

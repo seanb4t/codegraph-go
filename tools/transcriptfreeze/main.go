@@ -6,7 +6,10 @@
 //
 //	0 - clean: no violation, including when the changed-file list was
 //	    read successfully and contained zero records — a pull request
-//	    that touches nothing is clean, not broken.
+//	    that touches nothing is clean, not broken. If Classify's
+//	    SwapExemption fired (SDK-01's one-time mark3labs-to-go-sdk
+//	    transition), the exemption notice is also printed to stderr before
+//	    returning 0 — an exempted run is never a silent pass.
 //	1 - Classify reported a violation; the verdict's Reason is printed to
 //	    stderr.
 //	2 - unusable input: either input file is missing or unreadable
@@ -55,6 +58,10 @@ func run() int {
 	}
 
 	verdict := Classify(changed, string(gomodRaw))
+	if verdict.SwapExemption {
+		fmt.Fprintln(os.Stderr, verdict.Reason)
+		return 0
+	}
 	if verdict.Violation {
 		fmt.Fprintln(os.Stderr, verdict.Reason)
 		return 1
