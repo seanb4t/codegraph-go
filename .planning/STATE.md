@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.3.0
 milestone_name: MCP Protocol Currency
 current_phase_name: v0.3.0 shipped 2026-08-06; no active milestone
-status: completed
+status: "Milestone v0.3.0 shipped — PR #24"
 stopped_at: v0.3.0 milestone complete and archived
-last_updated: "2026-08-06T21:58:57.637Z"
+last_updated: "2026-08-06T22:28:13.846Z"
 last_activity: 2026-08-06
-last_activity_desc: v0.3.0 shipped — audit passed, archived, no git tag (D-06R)
 progress:
   total_phases: 5
   completed_phases: 5
   total_plans: 21
   completed_plans: 21
   percent: 100
-current_phase: "—"
+current_phase: —
+last_activity_desc: v0.3.0 shipped — audit passed, archived, no git tag (D-06R)
 ---
 
 # Project State
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-08-05)
 
 Phase: — (v0.3.0 shipped 2026-08-06; no active milestone)
 Plan: n/a
-Status: Milestone v0.3.0 complete and archived — run /gsd-new-milestone to start the next
-Last activity: 2026-08-06 — Phase 5 complete, transitioned to Phase 999.2
+Status: Milestone v0.3.0 shipped — PR #24
+Last activity: 2026-08-06
 
 Progress: [██████████] 100%
 
