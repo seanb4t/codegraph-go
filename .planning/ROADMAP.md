@@ -187,7 +187,17 @@ Plans:
   4. `TestRunWatchdogCancelsRunOnSimulatedReparent` (issue #17) passes under full-suite load, fixed at the cause rather than by isolating the test away from the load that exposes it (MAINT-02)
   5. `ci.yml` and `release.yml` name the same GoReleaser version (MAINT-03)
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Tracer: the tool-modfile scan end-to-end — `task vuln` replaced with a four-binary `-mode=binary` scan, a blocking ci.yml job stating its stance, and a permanent red-proof binary asserting exit 3 (VULN-01, VULN-02, VULN-03)
+- [ ] 04-02-PLAN.md — The daemon flake at its shared cause: measured baseline rate, one deadline-budget knob plus a Run-join helper closing the Goexit-orphans-goroutine window, re-measured to zero (MAINT-01, MAINT-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-03-PLAN.md — GoReleaser pin aligned upward with its git provenance resolved, plus the pin-parity and stated-stance guards, each demonstrated red first (VULN-03, MAINT-03)
 
 ### Phase 5: Live Tool-Catalog Change Notification
 
