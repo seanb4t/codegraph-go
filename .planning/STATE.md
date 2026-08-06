@@ -5,16 +5,16 @@ milestone_name: MCP Protocol Currency
 current_phase: 3
 current_phase_name: "`2026-07-28` Spec Compliance"
 status: planning
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-08-06T16:05:40.796Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-08-06T16:30:48.094Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 17
-  completed_plans: 16
-  percent: 40
+  completed_plans: 17
+  percent: 60
 ---
 
 # Project State
@@ -33,7 +33,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-08-06 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -157,6 +157,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 03 P02 | 2min | 2 tasks | 5 files |
 | Phase 03 P03 | 5min | 2 tasks | 4 files |
 | Phase 03 P04 | 6min | 2 tasks | 5 files |
+| Phase 03 P05 | 40min | 3 tasks | 27 files |
 
 ## Accumulated Context
 
@@ -202,6 +203,8 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: SPEC-02 closed by assertion: -32602/-32022 frozen and anchored, zero server code added; the -32601 observation in 03-CONTEXT.md is go-sdk's own lexical version-string comparison, retracted in-file
 - [Phase ?]: SPEC-05: live tool catalog via one registerTools/unregisterTools seam driven by a pre-next() per-request re-check inside AddReceivingMiddleware; confinement stays anchored at construction-time repoPath, never widened
 - [Phase ?]: Wire-oracle: index-appears-mid-session drives a real codegraph init subprocess mid-capture, blocking on response-observed (not sleep) via a restructured Capture; ExpectedScenarioCount now 27
+- [Phase ?]: SPEC-07's instructions string ships identically to both initialize and server/discover via ServerOptions.Instructions; SPEC-06 covered by one added tools/call on legacy-2024-11-05 rather than a new scenario, a LOW-confidence sufficiency judgment recorded as such
+- [Phase ?]: Phase 3's reviewed-diff pass ran a consolidated fourth time in 03-05: 24 of 27 transcripts re-frozen, three additive causes named with counts, zero unattributed lines, oracle re-proved non-vacuous via Mutation 1 with a byte-clean revert
 
 ### Pending Todos
 
@@ -263,8 +266,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T16:05:40.786Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-08-06T16:30:48.086Z
+Stopped at: Completed 03-05-PLAN.md
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

@@ -154,7 +154,7 @@ Plans:
   4. `tools/list` and `server/discover` carry `ttlMs: 0` and `cacheScope: "private"`, and a user who runs `codegraph init` while an MCP server is already running sees the tools appear — `hasIndex` is re-checked per call rather than snapshotted at server construction, so the cache promise is actually true (SPEC-04, SPEC-05)
   5. A client speaking `2025-11-25` or any earlier revision completes a session and calls tools against the upgraded server, asserted by test rather than assumed from the SDK's documentation — the single highest-consequence mistake available in this milestone is dropping Legacy support, which hard-fails every roster client with no client-side fallback (SPEC-06)
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -172,7 +172,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-05-PLAN.md — `instructions` on both the Modern and Legacy path, the oldest era's tool call, and the phase's one reviewed re-freeze pass
+- [x] 03-05-PLAN.md — `instructions` on both the Modern and Legacy path, the oldest era's tool call, and the phase's one reviewed re-freeze pass
 
 ### Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes
 
@@ -210,7 +210,7 @@ Plans:
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
 | 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
-| 3. `2026-07-28` Spec Compliance | v0.3.0 | 4/5 | In Progress|  |
+| 3. `2026-07-28` Spec Compliance | v0.3.0 | 5/5 | In Progress|  |
 | 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 0/0 | Not started | - |
 | 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
