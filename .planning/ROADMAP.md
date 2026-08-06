@@ -210,7 +210,12 @@ Plans:
   2. A client that opts into `subscriptions/listen` receives `notifications/tools/list_changed` when the tool catalog actually changes — for example when `codegraph init` creates an index under an already-running server (SPEC-09)
   3. A client that does not opt in observes no change in session behavior from Phase 3's server (SPEC-09)
 
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Prove on the wire that an opted-in Modern `subscriptions/listen` stream receives `notifications/tools/list_changed` after a real mid-session `codegraph init`; assert the acknowledgment echo (D-02's only live/dead discriminator) by set equality; demonstrate both gates RED
 
 ## Progress
 
