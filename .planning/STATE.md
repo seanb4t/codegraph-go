@@ -5,8 +5,8 @@ milestone_name: MCP Protocol Currency
 current_phase: 3
 current_phase_name: "`2026-07-28` Spec Compliance"
 status: planning
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-08-06T15:31:43.359Z"
+stopped_at: Completed 03-02-PLAN.md (D-03 guard advisory decision implemented)
+last_updated: "2026-08-06T15:33:05.528Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
@@ -154,6 +154,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 02 P04 | ~1h | 3 tasks | 10 files |
 | Phase 02 P05 | 2h | 3 tasks | 24 files |
 | Phase 03-2026-07-28-spec-compliance P01 | 6min | 3 tasks | 4 files |
+| Phase 03 P02 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -195,6 +196,7 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: 02-04: go mod tidy requires -e to proceed past a pre-existing, unrelated alex-pinkus/tree-sitter-swift test-dependency resolution quirk (reproduced against the untouched pre-task go.mod); result confirmed stable across two consecutive -e runs
 - [Phase ?]: 02-05: nine named causes for the go-sdk wire re-freeze; cause #9 (edge-call-before-initialize session-ordering rejection) was undiscovered by research, found at the checkpoint, and accepted by the maintainer as spec-correct
 - [Phase ?]: SPEC-04 discover cacheScope corrected to private via the AddReceivingMiddleware seam (D-03), mirroring D-09's tools/list fix
+- [Phase ?]: D-03 anti-regeneration guard becomes advisory, not blocking (option-advisory): the guard's own two-PR remedy is structurally unavailable in this repository; the reviewed-diff pass (D-06) is now the sole control, stated explicitly in Taskfile.yml and ci.yml so an advisory job is never mistaken for a gate.
 
 ### Pending Todos
 
@@ -256,8 +258,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T15:31:43.350Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-08-06T15:33:05.519Z
+Stopped at: Completed 03-02-PLAN.md (D-03 guard advisory decision implemented)
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

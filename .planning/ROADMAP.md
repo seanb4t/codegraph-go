@@ -160,7 +160,7 @@ Plans:
 **Wave 1**
 
 - [x] 03-01-PLAN.md — Tracer: Modern `server/discover` end-to-end — `cacheScope: "private"` on discover, one sessionless discover-then-call scenario frozen, hand-authored cache-control anchor
-- [ ] 03-02-PLAN.md — The anti-regeneration gate meets Phase 3: a recorded decision on a guard whose two-PR remedy is structurally unavailable, plus its stated stance and detection proof
+- [x] 03-02-PLAN.md — The anti-regeneration gate meets Phase 3: a recorded decision on a guard whose two-PR remedy is structurally unavailable, plus its stated stance and detection proof
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
