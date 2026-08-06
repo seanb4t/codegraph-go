@@ -35,15 +35,31 @@ delivered. **The same is true here** — see D-01. Do not build what already wor
   {"jsonrpc":"2.0","id":1,"method":"subscriptions/listen",
    "params":{"_meta":{…},"notifications":{"toolsListChanged":true}}}
   ```
-  Response — two frames, both correct:
+  Response — **one** frame:
   ```
   {"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged",
    "params":{"_meta":{"io.modelcontextprotocol/subscriptionId":1},
              "notifications":{"toolsListChanged":true}}}
-  {"jsonrpc":"2.0","id":1,"result":{"resultType":"complete",
-   "_meta":{"io.modelcontextprotocol/serverInfo":{…},
-            "io.modelcontextprotocol/subscriptionId":1}}}
   ```
+
+  **CORRECTED 2026-08-06 by `05-01-PLAN.md`'s own measurement (5/5 runs).** This
+  block originally also showed an id-matched `result` frame. That was my error —
+  I spliced the correct-field *request* with the response from the earlier
+  **typo'd** probe (D-02's dead-subscription case), which is a different
+  behavior, not the same one.
+
+  The distinction is load-bearing: `SubscriptionsListenResult` is written only on
+  **graceful subscription teardown**, and stdin EOF is not that path. An *empty*
+  subscription set closes the stream immediately and emits the result; a *live*
+  one stays open and emits nothing further. So **the frame count itself
+  distinguishes a live subscription from a dead one**, which reinforces D-02
+  rather than contradicting it.
+
+  Consequence the plan handles: `Capture`'s completion condition (one response
+  per request id) would otherwise wait out its 30s deadline, and
+  `assertFramingInvariant`'s exactly-one check would fail — hence
+  `Scenario.NoResponseRequests` with an exactly-zero assertion, so the exemption
+  is a live claim rather than a blind spot.
 
   Criterion 1 (`tools.listChanged: true` advertised) is **already satisfied** —
   it appears in every one of the 27 frozen transcripts' `initialize` capabilities.
