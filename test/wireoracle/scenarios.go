@@ -144,15 +144,27 @@ var legacyEraVersions = []string{
 // pre-migration server.
 const legacyUnsupportedVersion = "2026-07-28"
 
-// legacyOmittedVersionCoercion is what mark3labs v0.56.0 negotiates when a
-// client's initialize params carry NO protocolVersion key at all: the
-// server's own backwards-compat default, applied BEFORE the
-// ValidProtocolVersions check runs
-// [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1196-1198].
-// A THIRD, structurally distinct coercion path from the
-// unsupported-version case above — not the server's own latest, and not
-// the value the client (didn't) offer.
-const legacyOmittedVersionCoercion = "2025-03-26"
+// legacyOmittedVersionCoercion is what the server negotiates when a
+// client's initialize params carry NO protocolVersion key at all.
+//
+// Post-migration (go-sdk@v1.7.0): negotiatedVersion("") checks
+// slices.Contains(supportedProtocolVersions, "") — false, since the empty
+// string is never one of the five listed versions — and falls through to
+// the function's fallback, protocolVersion20251125
+// [VERIFIED: github.com/modelcontextprotocol/go-sdk@v1.7.0/mcp/shared.go:44-79,
+// 02-RESEARCH.md Q4, empirically confirmed by driving the real SDK with an
+// omitted protocolVersion]. Under go-sdk this is no longer a structurally
+// distinct THIRD coercion path: the omitted-version and
+// unsupported-version cases now land on the exact same fallback, for
+// different reasons (this one because "" never matches; unsupported
+// because negotiatedVersion caps every offer strictly below
+// protocolVersion20260728 — see legacyUnsupportedVersion above).
+//
+// Pre-migration (mark3labs v0.56.0) this was "2025-03-26" — the server's
+// own backwards-compat default, applied BEFORE the ValidProtocolVersions
+// check ran [VERIFIED: github.com/mark3labs/mcp-go@v0.56.0/server/server.go:1196-1198].
+// That value is superseded; do not resurrect it as a comparison target.
+const legacyOmittedVersionCoercion = "2025-11-25"
 
 // initializeRequestWithVersion returns an initialize request offering the
 // given protocolVersion literal — the four-supported-plus-one-unsupported
@@ -510,20 +522,39 @@ func Scenarios() []Scenario {
 			ExpectTools: 2, // explore + node
 		},
 
-		// --- one statelessness edge (counted separately from the four
-		// error shapes above, never as a fifth error: RESEARCH Pitfall 2 —
-		// mark3labs never gates tools/list/tools/call on Initialized(), so
-		// this is a currently-passing behavior being locked in, not an
-		// error) ---
+		// --- one session-ordering edge (counted separately from the four
+		// error shapes above, never as a fifth error) ---
 
 		{
 			// A tools/call sent as the very first message, with NO prior
-			// initialize. Today's server tolerates this — an accidental
-			// but real asset for Phase 3's statelessness work (RESEARCH
-			// Pitfall 2, verified by hand against the built binary this
-			// session: the explore call succeeds with no initialize
-			// handshake at all). Do not add server code for this — only
-			// the scenario (01-04-PLAN Task 2).
+			// initialize.
+			//
+			// RETRACTED (02-05, Task 1 checkpoint): this scenario's
+			// original doc comment (01-04-PLAN Task 2, RESEARCH Pitfall 2)
+			// called mark3labs' non-gating "a currently-passing behavior
+			// being locked in, not an error" and "an accidental but real
+			// asset for Phase 3's statelessness work." That framing is
+			// false post-migration and is not carried forward.
+			//
+			// Post-migration (go-sdk@v1.7.0): the server now REJECTS this
+			// request — {"code":0,"message":"method \"tools/call\" is
+			// invalid during session initialization"} — because go-sdk
+			// enforces MCP's own ordering requirement that initialize
+			// precede other requests. mark3labs' permissiveness was the
+			// spec deviation, not this. The maintainer accepted this as
+			// cause #9 of 02-05's re-freeze (semantic, not cosmetic):
+			// spec-correct, zero known blast radius against the 8-agent
+			// roster (VRFY-05 audit surfaced no client calling tools
+			// before initializing). This scenario now freezes go-sdk's
+			// session-ordering enforcement, not mark3labs' absence of it.
+			//
+			// The error code itself (0) is not a defined JSON-RPC integer
+			// error code — tracked as an upstream go-sdk defect
+			// (github.com/modelcontextprotocol/go-sdk#976), not
+			// codegraph-go's to fix. No anchor exists for it in
+			// anchors.go and none should be added; do not work around it.
+			// Do not add server code for this — only the scenario changed
+			// (01-04-PLAN Task 2 origin; 02-05 Task 2 retraction).
 			Name:         "edge-call-before-initialize",
 			Index:        true,
 			NoInitialize: true,

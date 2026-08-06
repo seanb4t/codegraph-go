@@ -1,2 +1,2 @@
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{"listChanged":true}},"protocolVersion":"2025-11-25","serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
 {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"**Alpha** (function)\n\n**Location:** pkga/pkga.go:15\n**Signature:** `() string`\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** Helper (pkgb/pkgb.go:9), Beta (pkga/pkga.go:20)\n**Called by ←** main (main.go:16)\n"}]}}

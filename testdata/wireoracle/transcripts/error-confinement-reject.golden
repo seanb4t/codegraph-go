@@ -1,2 +1,2 @@
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{"listChanged":true}},"protocolVersion":"2025-11-25","serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
 {"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"mcp: path \"/codegraph-wire-oracle-outside-root\" is outside the server's configured repo root"}],"isError":true}}

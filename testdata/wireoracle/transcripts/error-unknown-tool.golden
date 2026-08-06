@@ -1,2 +1,2 @@
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
-{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"tool 'codegraph_bogus_tool' not found: tool not found"}}
+{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"tools":{"listChanged":true}},"protocolVersion":"2025-11-25","serverInfo":{"name":"codegraph","version":"<VERSION>"}}}
+{"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"unknown tool \"codegraph_bogus_tool\""}}
