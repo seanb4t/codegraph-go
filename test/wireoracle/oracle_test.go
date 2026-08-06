@@ -520,13 +520,25 @@ func TestCaptureIsDeterministic(t *testing.T) {
 // assertFramingInvariant is D-02's framing invariant, applied to every
 // scenario (not just the three named Anchors()): every non-empty stdout
 // line parses as a JSON object carrying a "jsonrpc" field equal to "2.0",
-// and every request id sc.Requests sent has exactly one response line
-// bearing that id.
+// every request id the scenario actually owes a response for
+// (sc.expectedResponseIDs()) has exactly one response line bearing that
+// id, and every request id named by sc.NoResponseRequests has EXACTLY
+// ZERO — asserted positively, not merely left unchecked, so the exemption
+// is a live claim rather than a silent blind spot (05-01-PLAN,
+// 05-CONTEXT.md D-01: SubscriptionsListenResult is sent only on graceful
+// subscription teardown, never on stdin EOF).
 func assertFramingInvariant(t *testing.T, sc Scenario, stdout []byte) {
 	t.Helper()
 
-	wantIDs := requestIDs(sc.Requests)
-	seen := make(map[float64]int, len(wantIDs))
+	allIDs := requestIDs(sc.Requests)
+	wantIDs := sc.expectedResponseIDs()
+	noResponseIDs := make(map[float64]bool, len(allIDs)-len(wantIDs))
+	for id := range allIDs {
+		if !wantIDs[id] {
+			noResponseIDs[id] = true
+		}
+	}
+	seen := make(map[float64]int, len(allIDs))
 
 	for _, line := range bytes.Split(stdout, []byte("\n")) {
 		if len(bytes.TrimSpace(line)) == 0 {
@@ -550,6 +562,11 @@ func assertFramingInvariant(t *testing.T, sc Scenario, stdout []byte) {
 	for id := range wantIDs {
 		if seen[id] != 1 {
 			t.Fatalf("scenario %q: request id %v has %d response lines, want exactly 1", sc.Name, id, seen[id])
+		}
+	}
+	for id := range noResponseIDs {
+		if seen[id] != 0 {
+			t.Fatalf("scenario %q: request id %v (Scenario.NoResponseRequests) has %d response lines, want exactly 0", sc.Name, id, seen[id])
 		}
 	}
 }
@@ -685,20 +702,29 @@ func equalStrings(a, b []string) bool {
 
 // TestToolsListExactSets proves each tools/list variant advertises exactly
 // its expected set — exact-set for the non-empty cases, exact-zero for
-// toolslist-no-index — never a non-empty/length-greater-than check
-// (PITFALLS Trap D).
+// toolslist-no-index and modern-listen-catalog-change's pre-init id-2 call
+// — never a non-empty/length-greater-than check (PITFALLS Trap D). The two
+// modern-listen-catalog-change cases prove SPEC-09's catalog-transition
+// claim independently of the frozen transcript and the notification
+// anchors: the id-2 tools/list (before the mid-session `codegraph init`)
+// advertises exactly the empty set, and the id-3 tools/list (after it, same
+// connection) advertises exactly {codegraph_explore}.
 func TestToolsListExactSets(t *testing.T) {
 	cases := []struct {
+		name     string
 		scenario string
+		wantID   float64
 		want     []string
 	}{
-		{"toolslist-default", []string{"codegraph_explore"}},
-		{"toolslist-allowlist", []string{"codegraph_explore", "codegraph_node", "codegraph_status"}},
-		{"toolslist-no-index", []string{}},
+		{"toolslist-default", "toolslist-default", 2, []string{"codegraph_explore"}},
+		{"toolslist-allowlist", "toolslist-allowlist", 2, []string{"codegraph_explore", "codegraph_node", "codegraph_status"}},
+		{"toolslist-no-index", "toolslist-no-index", 2, []string{}},
+		{"modern-listen-catalog-change-pre-init", "modern-listen-catalog-change", 2, []string{}},
+		{"modern-listen-catalog-change-post-init", "modern-listen-catalog-change", 3, []string{"codegraph_explore"}},
 	}
 	for _, c := range cases {
-		t.Run(c.scenario, func(t *testing.T) {
-			got := toolNamesFromCapture(t, c.scenario, 2)
+		t.Run(c.name, func(t *testing.T) {
+			got := toolNamesFromCapture(t, c.scenario, c.wantID)
 			if !equalStrings(got, c.want) {
 				t.Fatalf("scenario %q: tools/list advertised %v, want exactly %v", c.scenario, got, c.want)
 			}

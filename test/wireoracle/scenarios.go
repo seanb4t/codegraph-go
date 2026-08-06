@@ -185,6 +185,78 @@ func discoverRequestWithMeta(id int, meta map[string]any) map[string]any {
 	}
 }
 
+// notificationSubscriptionsAcknowledgedMethod and
+// notificationToolsListChangedMethod are hand-authored, package-local
+// JSON-RPC method-name literals (VRFY-01) — never imported from the SDK
+// under test. They carry the same wire values as go-sdk@v1.7.0's own
+// unexported notificationSubscriptionsAck and notificationToolListChanged
+// constants [VERIFIED: github.com/modelcontextprotocol/go-sdk@v1.7.0/mcp/protocol.go:2350-2353],
+// transcribed here independently, matching this file's existing pattern for
+// every other spec-pinned literal (codeMethodNotFound, modernProtocolVersion,
+// etc.).
+const (
+	notificationSubscriptionsAcknowledgedMethod = "notifications/subscriptions/acknowledged"
+	notificationToolsListChangedMethod          = "notifications/tools/list_changed"
+)
+
+// notificationsOptInFieldName is the PLURAL JSON key a Modern
+// subscriptions/listen request's params.notifications object uses to opt
+// in to tool-catalog-change notifications — go-sdk's
+// NotificationSubscriptions.ToolsListChanged field,
+// `json:"toolsListChanged,omitempty"`
+// [VERIFIED: github.com/modelcontextprotocol/go-sdk@v1.7.0/mcp/protocol.go:2071-2073].
+//
+// The plural spelling is load-bearing, not cosmetic (05-CONTEXT.md D-02): a
+// client that sends the SINGULAR "toolListChanged" is silently ACCEPTED by
+// the server — answered with a subscriptionId and no error anywhere — and
+// acknowledged with an EMPTY subscription set, `"notifications":{}`,
+// because go-sdk's NotificationSubscriptions struct simply has no field
+// that spelling ever matches, so nothing is ever granted. A client that
+// types the singular by mistake therefore gets a successful-looking
+// subscription that will never deliver a notification, and the
+// acknowledgment echo (assertSubscriptionAckEcho, anchors.go) is the ONLY
+// discriminator available between that dead subscription and a live one —
+// Task 3's mutation 6 (MUTATION-PROOF.md) reproduces this exact shape
+// deliberately, by removing the AwaitAfterRequest wait rather than by
+// misspelling this constant, so the constant itself always stays correct.
+const notificationsOptInFieldName = "toolsListChanged"
+
+// modernToolsListRequest returns a "tools/list" request whose params carry
+// modernMetaParams() — the Modern (SEP-2575) sessionless counterpart to
+// toolsListRequest, used by modern-listen-catalog-change so every request
+// in that scenario carries Modern `_meta` (see that scenario's own doc
+// comment for why this is required, not stylistic).
+func modernToolsListRequest(id int) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "tools/list",
+		"params": map[string]any{
+			"_meta": modernMetaParams(),
+		},
+	}
+}
+
+// subscriptionsListenRequest returns a "subscriptions/listen" request whose
+// params carry modernMetaParams() plus a "notifications" object opting
+// into optIn. optIn is parameterized — rather than hardcoding
+// notificationsOptInFieldName inline — specifically so Task 3's dead-opt-in
+// mutation (MUTATION-PROOF.md mutation 6) is a one-token edit at a single
+// call site.
+func subscriptionsListenRequest(id int, optIn string) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "subscriptions/listen",
+		"params": map[string]any{
+			"_meta": modernMetaParams(),
+			"notifications": map[string]any{
+				optIn: true,
+			},
+		},
+	}
+}
+
 // modernUnsupportedVersion is a well-formed, supported-SHAPE protocol
 // version literal that is NOT one of the five versions this server
 // recognizes — 03-RESEARCH.md's Code Examples case 2, confirmed empirically
@@ -401,9 +473,12 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // + 1 scenario (phase 3 plan 04's SPEC-05 proof: index-appears-mid-session,
 // a real `codegraph init` run mid-session against the same connected
 // server, driving an empty tools/list to a one-tool tools/list on the same
-// connection) = 27. A shrinking count is the failure mode this constant
-// exists to catch.
-const ExpectedScenarioCount = 27
+// connection) + 1 scenario (phase 5 plan 01's SPEC-09 proof:
+// modern-listen-catalog-change, an opted-in Modern subscriptions/listen
+// stream observing notifications/tools/list_changed on the same live
+// connection after a real mid-session `codegraph init`) = 28. A shrinking
+// count is the failure mode this constant exists to catch.
+const ExpectedScenarioCount = 28
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -936,6 +1011,89 @@ func Scenarios() []Scenario {
 				toolsListRequest(2),
 				toolsListRequest(3),
 			},
+			ExpectTools: 0,
+		},
+
+		// --- SPEC-09 proof (phase 5 plan 01): live tool-catalog change
+		// notification. An opted-in Modern subscriptions/listen stream
+		// receives notifications/tools/list_changed on the SAME live stdio
+		// connection after a real mid-session `codegraph init` mutates the
+		// catalog — Phase 3's per-request re-check (recheckCatalog) and
+		// this phase's own subscription plumbing observed CONNECTED on the
+		// wire for the first time. 05-CONTEXT.md D-01 establishes both
+		// halves already worked independently; nobody had observed them
+		// wired together until this scenario. ---
+
+		{
+			// NoInitialize with Modern `_meta` on EVERY request is
+			// REQUIRED, not stylistic — this is the single easiest way to
+			// destroy this proof (05-CONTEXT.md D-01/key_links). go-sdk's
+			// notifySessions routes any session whose InitializeParams are
+			// nil OR whose negotiated version is below "2026-07-28" onto
+			// the Legacy shared channel, which receives
+			// notifications/tools/list_changed with NO opt-in at all. A
+			// scenario opening with a classic `initialize` would therefore
+			// receive the notification regardless of whether its
+			// subscription is actually live — a vacuous proof that would
+			// pass even with a dead opt-in. Modern `_meta`-bearing
+			// sessionless dispatch on every request is what sets this
+			// session's InitializeParams to "2026-07-28" and routes it
+			// onto the subscriber-only path, making the opt-in the SOLE
+			// delivery mechanism this scenario can ever observe — Task 3's
+			// mutations 5 and 6 (MUTATION-PROOF.md) prove that path is
+			// live, not merely present.
+			//
+			// Index: false plus the default allowlist is deliberate (mirrors
+			// index-appears-mid-session above): exactly one tool
+			// (codegraph_explore) registers on the mid-session transition,
+			// so changeAndNotify's 10ms debounce coalesces to exactly one
+			// notification frame — a count that does not depend on how many
+			// AddTool calls happen to land inside that debounce window.
+			//
+			// Request 1 (subscriptions/listen) is answered with an
+			// acknowledgment NOTIFICATION, never an id-matched result
+			// frame, on this transport (05-CONTEXT.md D-01, MEASURED 5/5
+			// isolated runs): go-sdk's SubscriptionsListenResult is sent
+			// only on graceful subscription teardown, and stdin EOF is not
+			// that path — hence NoResponseRequests: []int{1}, asserted as
+			// an exactly-zero claim by assertFramingInvariant
+			// (oracle_test.go), never a blind spot. AwaitAfterRequest maps
+			// index 1 to the acknowledgment method (go-sdk calls
+			// jsonrpc2.Async for every call except "initialize", so the ack
+			// frame races whatever is written next) and index 3 — the LAST
+			// request — to the tools-list-changed method, which keeps
+			// stdin open long enough for changeAndNotify's debounce timer
+			// to fire before Capture closes it: closing stdin immediately
+			// after the mutating request would let process shutdown race
+			// that timer and silently drop the notification from the
+			// transcript, a quietly weaker proof rather than a loud
+			// failure.
+			//
+			// Measured deterministic line order (05-01-PLAN, 5/5 runs):
+			// acknowledgment, id-2 result (tools:[]), id-3 result
+			// (tools:[codegraph_explore]), notifications/tools/list_changed.
+			//
+			// It carries no tools/call, so the at-most-one-and-last
+			// worker-pool ordering constraint documented above Scenarios()
+			// is trivially satisfied.
+			Name:               "modern-listen-catalog-change",
+			Index:              false,
+			NoInitialize:       true,
+			NoResponseRequests: []int{1},
+			InitAfterRequest:   2,
+			AwaitAfterRequest: map[int]string{
+				1: notificationSubscriptionsAcknowledgedMethod,
+				3: notificationToolsListChangedMethod,
+			},
+			Requests: []map[string]any{
+				subscriptionsListenRequest(1, notificationsOptInFieldName),
+				modernToolsListRequest(2),
+				modernToolsListRequest(3),
+			},
+			// ExpectTools is unread for a NoInitialize scenario (see
+			// modern-discover-explore above) — it asserts the absence of a
+			// session line instead (assertNoSessionLine), never a real
+			// tool count.
 			ExpectTools: 0,
 		},
 	}

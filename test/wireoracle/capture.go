@@ -98,6 +98,75 @@ type Scenario struct {
 	// writing any further request. Determinism comes from observing the
 	// response, never from a sleep.
 	InitAfterRequest int
+	// AwaitAfterRequest maps a 1-based index into Requests to a JSON-RPC
+	// "method" value. After writing that request, Capture blocks until a
+	// frame carrying that method has been observed on stdout — before
+	// writing the next request, or, when the index names the LAST request,
+	// before closing stdin. A nil map (every scenario predating this field)
+	// waits for nothing and takes the identical code path it took before
+	// this field existed.
+	//
+	// Two entries are load-bearing for two DIFFERENT reasons (05-01-PLAN,
+	// SPEC-09), and both matter for a subscriptions/listen scenario:
+	//
+	//  1. An entry on the LAST request is what makes a long-lived
+	//     notification stream's transcript deterministic rather than
+	//     quietly weaker. go-sdk's changeAndNotify debounces a list-changed
+	//     notification through a 10ms time.AfterFunc; if Capture closed
+	//     stdin immediately after the mutating request instead of waiting
+	//     for the notification to actually arrive, process shutdown would
+	//     race that timer and could drop the notification from the
+	//     transcript entirely — not a loud failure, a silently thinner one.
+	//  2. An entry on a request whose response the harness does NOT wait
+	//     for via InitAfterRequest exists because go-sdk calls
+	//     jsonrpc2.Async for every call except "initialize" — so the
+	//     acknowledgment frame a request like subscriptions/listen produces
+	//     races the response to whatever request is written after it.
+	//     Waiting for the acknowledgment's own method before writing the
+	//     next request is what keeps the captured line order deterministic.
+	AwaitAfterRequest map[int]string
+	// NoResponseRequests holds 1-based indices into Requests whose JSON-RPC
+	// id never carries a response line on this transport, at all, when the
+	// session ends at stdin EOF.
+	//
+	// MEASURED (05-01-PLAN, 5/5 isolated runs against a freshly built
+	// binary): a subscriptions/listen request's own id-bearing
+	// SubscriptionsListenResult is sent ONLY when the server tears the
+	// subscription down gracefully — go-sdk's own doc comment on that type
+	// says so verbatim — and an abrupt stdio close (stdin EOF) is not that
+	// path. This is go-sdk's own documented design, not a codegraph defect
+	// and not something to work around: a scenario with a live
+	// subscriptions/listen stream must name that request's index here, or
+	// Capture's completion condition (and assertFramingInvariant's
+	// exactly-one check) would wait forever for a response frame that is
+	// never coming.
+	//
+	// Capture's own completion condition and assertFramingInvariant
+	// (oracle_test.go) both read the ONE seam this field feeds —
+	// Scenario.expectedResponseIDs() — so the two can never drift apart on
+	// what a scenario owes, mirroring the one-seam rule Phase 3 applied to
+	// registerTools/unregisterTools.
+	NoResponseRequests []int
+}
+
+// expectedResponseIDs returns the set of JSON-RPC request ids this
+// scenario's session actually owes a response line for: every id in
+// sc.Requests, minus the ids named by sc.NoResponseRequests. Capture's
+// completion condition and assertFramingInvariant (oracle_test.go) both
+// call this one function — never their own independent derivation — so a
+// scenario's NoResponseRequests exemption can never silently become a
+// blind spot in one consumer while staying a live check in the other.
+func (sc Scenario) expectedResponseIDs() map[float64]bool {
+	ids := requestIDs(sc.Requests)
+	for _, idx := range sc.NoResponseRequests {
+		if idx < 1 || idx > len(sc.Requests) {
+			continue
+		}
+		if id, ok := idAsFloat64(sc.Requests[idx-1]["id"]); ok {
+			delete(ids, id)
+		}
+	}
+	return ids
 }
 
 // Transcript is one capture's raw output.
@@ -206,8 +275,9 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	// response's arrival — see drainUntil below and Scenario.
 	// InitAfterRequest's doc comment for why this ordering is load-bearing
 	// for determinism, not merely a refactor for its own sake.
-	wantIDs := requestIDs(sc.Requests)
+	wantIDs := sc.expectedResponseIDs()
 	seen := make(map[float64]bool, len(wantIDs))
+	methodsSeen := make(map[string]bool)
 
 	type scannedLine struct{ raw []byte }
 	lines := make(chan scannedLine)
@@ -223,23 +293,33 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	var out bytes.Buffer
 
 	// drainUntil reads from lines, appending every line to out and
-	// recording every response id it sees into seen, until the
-	// condition wantID describes is satisfied: a specific id (wantID
-	// non-nil, InitAfterRequest's wait) or the full wantIDs set (wantID
-	// nil, the scenario's normal completion condition — byte-identical
-	// to Capture's pre-restructuring final loop). It kills the
-	// subprocess and returns a named error on stdout closing early or
-	// on runCtx's deadline firing; a deadline while waiting for a
-	// specific id names both the scenario and the request id it was
-	// waiting on, never a silent continue.
-	drainUntil := func(wantID *float64) error {
+	// recording every response id and every frame method it sees into
+	// seen/methodsSeen, until one of three MUTUALLY EXCLUSIVE conditions is
+	// satisfied: a specific method has been observed (wantMethod non-empty
+	// — AwaitAfterRequest's wait), a specific id has been observed (wantID
+	// non-nil, wantMethod empty — InitAfterRequest's wait), or the full
+	// wantIDs set has been observed (both zero, the scenario's normal
+	// completion condition — now measured against sc.expectedResponseIDs()
+	// rather than every request's id, see Scenario.NoResponseRequests). It
+	// kills the subprocess and returns a named error on stdout closing
+	// early or on runCtx's deadline firing; a deadline while waiting for a
+	// specific id or method names the scenario and what it was waiting on,
+	// never a silent continue, never a best-effort skip.
+	drainUntil := func(wantID *float64, wantMethod string) error {
 		for {
-			if wantID != nil {
+			switch {
+			case wantMethod != "":
+				if methodsSeen[wantMethod] {
+					return nil
+				}
+			case wantID != nil:
 				if seen[*wantID] {
 					return nil
 				}
-			} else if len(seen) >= len(wantIDs) {
-				return nil
+			default:
+				if len(seen) >= len(wantIDs) {
+					return nil
+				}
 			}
 			select {
 			case ln, ok := <-lines:
@@ -253,8 +333,15 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 				if id, ok := responseID(ln.raw); ok {
 					seen[id] = true
 				}
+				if m, ok := frameMethod(ln.raw); ok {
+					methodsSeen[m] = true
+				}
 			case <-runCtx.Done():
 				_ = cmd.Process.Kill()
+				if wantMethod != "" {
+					return fmt.Errorf("wireoracle: scenario %q: capture deadline exceeded waiting for method %q; %d/%d responses observed; stderr:\n%s",
+						sc.Name, wantMethod, len(seen), len(wantIDs), stderrBuf.String())
+				}
 				if wantID != nil {
 					return fmt.Errorf("wireoracle: scenario %q: capture deadline exceeded waiting for the response to InitAfterRequest's request id %v; %d/%d responses observed; stderr:\n%s",
 						sc.Name, *wantID, len(seen), len(wantIDs), stderrBuf.String())
@@ -282,12 +369,23 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 				_ = cmd.Process.Kill()
 				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: InitAfterRequest=%d names a request with no usable id", sc.Name, sc.InitAfterRequest)
 			}
-			if err := drainUntil(&reqID); err != nil {
+			if err := drainUntil(&reqID, ""); err != nil {
 				return Transcript{}, err
 			}
 			if initOut, initErr := exec.CommandContext(runCtx, binPath, "init", workDir).CombinedOutput(); initErr != nil {
 				_ = cmd.Process.Kill()
 				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: mid-session init %s: %w: %s", sc.Name, workDir, initErr, initOut)
+			}
+		}
+
+		// AwaitAfterRequest's wait is placed AFTER the InitAfterRequest
+		// block above so a scenario that ever names the same index in both
+		// fields blocks on the observed response first, then on the
+		// observed method — a deliberate, documented order, not an
+		// accident of source position.
+		if method, ok := sc.AwaitAfterRequest[i+1]; ok && method != "" {
+			if err := drainUntil(nil, method); err != nil {
+				return Transcript{}, err
 			}
 		}
 	}
@@ -296,7 +394,7 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 		return Transcript{}, fmt.Errorf("wireoracle: scenario %q: close stdin: %w", sc.Name, closeErr)
 	}
 
-	if err := drainUntil(nil); err != nil {
+	if err := drainUntil(nil, ""); err != nil {
 		return Transcript{}, err
 	}
 
@@ -369,4 +467,21 @@ func responseID(raw []byte) (float64, bool) {
 		return 0, false
 	}
 	return idAsFloat64(frame.ID)
+}
+
+// frameMethod extracts the "method" field from one raw captured line,
+// mirroring responseID in shape and error handling: ok=false for a line
+// that is not valid JSON or carries no method (e.g. most response lines,
+// which have no top-level "method" key at all).
+func frameMethod(raw []byte) (string, bool) {
+	var frame struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		return "", false
+	}
+	if frame.Method == "" {
+		return "", false
+	}
+	return frame.Method, true
 }
