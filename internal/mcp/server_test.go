@@ -10,9 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
@@ -72,41 +70,49 @@ func indexFixture(t *testing.T, dir string) {
 	}
 }
 
-// initClient runs the MCP initialize handshake against c with a minimal
-// valid InitializeRequest, failing the test on error.
-func initClient(t *testing.T, ctx context.Context, c *mcpclient.Client) {
+// newTestSession builds an in-memory client/server session pair for s
+// (Phase 2, RESEARCH Testing Architecture): mcp.NewInMemoryTransports()
+// returns two *InMemoryTransport halves; s.Run is started on one in a
+// goroutine, and a client connects to the other via Connect, which
+// performs the MCP initialize handshake itself — go-sdk's Client has no
+// separate, repeatable Initialize call the way mark3labs' client did
+// (initClient no longer exists; this is the PROVEN-ABSENT finding
+// 02-RESEARCH.md Q1 asked to be confirmed rather than assumed: no
+// ServerOptions field or client method lets a caller inject a
+// ProtocolVersion — the repo-owned ProtocolVersion constant keeps its
+// role as the asserted pin). Every other test file in this package uses
+// this one helper rather than repeating the construction.
+//
+// The returned cleanup func closes the session; callers are responsible
+// for calling it (directly or via defer).
+func newTestSession(t *testing.T, s *mcp.Server) (*mcp.ClientSession, func()) {
 	t.Helper()
 
-	req := mcp.InitializeRequest{}
-	// ProtocolVersion is the repo-owned literal (this package's own
-	// protocol_version.go), referenced unqualified since this file is
-	// package mcp itself — a dependency bump must not move this value
-	// silently (VRFY-02).
-	req.Params.ProtocolVersion = ProtocolVersion
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-mcp-test", Version: "0.0.0"}
-
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("client Initialize: %v", err)
-	}
-}
-
-// listToolNames builds an in-process mcp-go client against s (no live
-// stdio transport, per RESEARCH's Testing Architecture — the
-// client/server pair talk to each other in-process) and returns the
-// sorted set of registered tool names.
-func listToolNames(t *testing.T, s *server.MCPServer) []string {
-	t.Helper()
-
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 
 	ctx := context.Background()
-	initClient(t, ctx, c)
+	go func() {
+		_ = s.Run(ctx, serverTransport)
+	}()
 
-	result, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-mcp-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client Connect: %v", err)
+	}
+
+	return session, func() { _ = session.Close() }
+}
+
+// listToolNames connects to s via newTestSession and returns the sorted
+// set of registered tool names.
+func listToolNames(t *testing.T, s *mcp.Server) []string {
+	t.Helper()
+
+	session, cleanup := newTestSession(t, s)
+	defer cleanup()
+
+	result, err := session.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -183,39 +189,16 @@ func TestExploreHandlerDelegatesToEngine(t *testing.T) {
 
 	s := BuildServer(true, map[string]bool{}, dir, dir)
 
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	initClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "codegraph_explore",
-			Arguments: map[string]any{
-				"query": "main",
-				"path":  dir,
-			},
-		},
+	result := callTool(t, s, "codegraph_explore", map[string]any{
+		"query": "main",
+		"path":  dir,
 	})
-	if err != nil {
-		t.Fatalf("CallTool codegraph_explore: %v", err)
-	}
 	if result.IsError {
 		t.Fatalf("codegraph_explore returned an error result: %+v", result)
 	}
-	if len(result.Content) == 0 {
-		t.Fatal("codegraph_explore returned no content")
-	}
-	text, ok := mcp.AsTextContent(result.Content[0])
-	if !ok {
-		t.Fatalf("codegraph_explore content[0] is not text: %+v", result.Content[0])
-	}
-	if !strings.Contains(text.Text, "**Exploration:") {
-		t.Fatalf("codegraph_explore output missing the Engine.Explore markdown header, got: %q", text.Text)
+	text := resultText(t, result)
+	if !strings.Contains(text, "**Exploration:") {
+		t.Fatalf("codegraph_explore output missing the Engine.Explore markdown header, got: %q", text)
 	}
 }
 
@@ -234,38 +217,13 @@ func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
 
 	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
 
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	initClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "codegraph_status",
-			Arguments: map[string]any{
-				"path": outside,
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CallTool codegraph_status: %v", err)
-	}
+	result := callTool(t, s, "codegraph_status", map[string]any{"path": outside})
 	if !result.IsError {
 		t.Fatal("codegraph_status with a path outside the server's repo root: expected an error result, got success")
 	}
-	if len(result.Content) == 0 {
-		t.Fatal("codegraph_status error result has no content")
-	}
-	text, ok := mcp.AsTextContent(result.Content[0])
-	if !ok {
-		t.Fatalf("codegraph_status error content[0] is not text: %+v", result.Content[0])
-	}
-	if !strings.Contains(text.Text, "outside") {
-		t.Fatalf("codegraph_status error message = %q, want it to explain the path is outside the repo root", text.Text)
+	text := resultText(t, result)
+	if !strings.Contains(text, "outside") {
+		t.Fatalf("codegraph_status error message = %q, want it to explain the path is outside the repo root", text)
 	}
 }
 

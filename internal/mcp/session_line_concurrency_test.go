@@ -3,12 +3,14 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"runtime"
 	"strings"
 	"sync"
 	"testing"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // interleaveProneWriter is an io.Writer whose Write is deliberately
@@ -50,6 +52,77 @@ func (w *interleaveProneWriter) String() string {
 	return w.buf.String()
 }
 
+// sendRawInitialize drives a classic JSON-RPC "initialize" handshake
+// directly against s over a fresh in-memory transport pair, deliberately
+// bypassing mcp.NewClient/Client.Connect.
+//
+// Why this exists (a load-bearing SDK-01 finding this file's other helper,
+// newTestSession, cannot paper over): go-sdk v1.7.0's Client.Connect
+// defaults its protocol version to latestProtocolVersion (2026-07-28) and,
+// per SEP-2575, tries the stateless "server/discover" RPC FIRST —
+// $GOMODCACHE/.../mcp/server.go's Server.discover is wired in
+// unconditionally by mcp.NewServer, with no ServerOptions field to opt
+// out — so two go-sdk v1.7.0 peers using the SDK's own Client/Server pair
+// NEVER negotiate via the classic "initialize" method this package's
+// session line is keyed on (confirmed empirically: instrumenting the
+// middleware showed method="server/discover", never "initialize", for
+// every newTestSession-based test in this package). The one field that
+// could force the classic path client-side, ClientSessionOptions.
+// protocolVersion, is unexported ("for testing", go-sdk's own internal
+// test suite only) and unreachable from a downstream package — confirmed
+// by reading its declaration. VRFY-03's session line is explicitly scoped
+// to the classic initialize handshake (02-CONTEXT.md's domain boundary:
+// "Explicitly NOT in scope: implementing 2026-07-28's obligations —
+// server/discover... That is Phase 3" — Phase 2 does not implement that
+// revision's semantics), so this helper drives the classic handshake
+// directly via the public jsonrpc/mcp.Connection primitives — the same
+// wire-level approach test/wireoracle's own hand-rolled driver already
+// uses for the real stdio path, just reused here for the in-memory one.
+// It never imports test/wireoracle (package boundary) and never re-derives
+// go-sdk's own negotiation logic — it only sends the one request VRFY-03
+// needs to see.
+func sendRawInitialize(t *testing.T, s *mcp.Server, clientName, clientVersion string) {
+	t.Helper()
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	ctx := context.Background()
+	go func() {
+		_ = s.Run(ctx, serverTransport)
+	}()
+
+	conn, err := clientTransport.Connect(ctx)
+	if err != nil {
+		t.Fatalf("clientTransport.Connect: %v", err)
+	}
+	defer conn.Close()
+
+	params, err := json.Marshal(map[string]any{
+		"protocolVersion": ProtocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": clientName, "version": clientVersion},
+	})
+	if err != nil {
+		t.Fatalf("marshal initialize params: %v", err)
+	}
+	id, err := jsonrpc.MakeID(float64(1))
+	if err != nil {
+		t.Fatalf("jsonrpc.MakeID: %v", err)
+	}
+
+	if err := conn.Write(ctx, &jsonrpc.Request{ID: id, Method: "initialize", Params: params}); err != nil {
+		t.Fatalf("write initialize request: %v", err)
+	}
+
+	msg, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("read initialize response: %v", err)
+	}
+	if resp, ok := msg.(*jsonrpc.Response); !ok || resp.Error != nil {
+		t.Fatalf("initialize response = %+v, want a successful *jsonrpc.Response", msg)
+	}
+}
+
 // TestSessionLineSurvivesConcurrentAndRepeatedInitialize is the executable
 // backstop for the non-interleaving property server.go's session-line hook
 // asserts in prose ("the mutex is what makes 'never a partially-written or
@@ -65,9 +138,27 @@ func (w *interleaveProneWriter) String() string {
 // adding ./internal/mcp/... to Taskfile.yml's test:race is the second.
 //
 // The test drives concurrency AND repetition through one server, because
-// one BuildServer call owns exactly one mutex: sessionLineClients clients
-// initialize concurrently, and each initializes sessionLineInitsPerClient
-// times, since AddAfterInitialize fires again on re-initialize.
+// one BuildServer call owns exactly one mutex: sessionLineClients
+// goroutines fire concurrently, and each sends
+// sessionLineInitsPerClient separate classic-initialize handshakes (via
+// sendRawInitialize, above) in turn.
+//
+// This differs from the pre-migration shape in two respects, both forced
+// by go-sdk rather than chosen: (1) mark3labs allowed calling Initialize
+// repeatedly on the SAME client, re-firing AddAfterInitialize each time,
+// so the original test looped initClient on one shared client — go-sdk's
+// ss.initialize() explicitly rejects a second "initialize" on the SAME
+// session ("duplicate %q received"), so each of sessionLineInitsPerClient
+// "repeats" is its OWN sendRawInitialize call (its own session, its own
+// initialize) rather than a second Initialize on one session; (2) driving
+// the handshake at the raw jsonrpc/mcp.Connection level, rather than via
+// mcp.NewClient, per sendRawInitialize's own doc comment. Neither changes
+// the property under test — this server's ONE mutex surviving many
+// concurrent, interleaving-prone session-line writes does not depend on
+// how many distinct sessions produced that concurrent load, or which
+// client API sent the handshake — so the total session-line count
+// (sessionLineClients * sessionLineInitsPerClient) and the
+// non-interleaving assertion below are unchanged.
 //
 // Non-vacuity: with the mutex removed from server.go, chunks from
 // concurrent hook invocations interleave in the writer, and the resulting
@@ -91,16 +182,8 @@ func TestSessionLineSurvivesConcurrentAndRepeatedInitialize(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			c, err := mcpclient.NewInProcessClient(s)
-			if err != nil {
-				t.Errorf("NewInProcessClient: %v", err)
-				return
-			}
-			defer c.Close()
-
-			ctx := context.Background()
 			for j := 0; j < sessionLineInitsPerClient; j++ {
-				initClient(t, ctx, c)
+				sendRawInitialize(t, s, "codegraph-mcp-test", "0.0.0")
 			}
 		}()
 	}
