@@ -8,11 +8,13 @@ confirmed-applied mutation.
 This is the one-time mutation matrix run against the real, built `codegraph` binary. For each
 mutation: the edit was applied, **confirmed applied** by inspecting the changed file (`git diff`)
 and rebuilding, `task test:wireoracle` was run and its verbatim failure recorded, then the edit was
-reverted and the suite confirmed green again. All four mutations below were executed exactly as
+reverted and the suite confirmed green again. All mutations below were executed exactly as
 described — none are described without having been run.
 
 Baseline precondition, confirmed before any mutation: `task test:wireoracle` exits 0 on the
-unmodified tree (23 scenarios).
+unmodified tree. Mutations 1-4 were run against a 23-scenario tree (phase 1); mutations 5 and 6
+below were run against a 28-scenario tree (phase 5 plan 01, SPEC-09) — the four scenarios added by
+phases 3 and 4 in between are not re-litigated here.
 
 ---
 
@@ -327,6 +329,226 @@ internal/mcp/protocol_version.go` showed zero lines changed; `go build ./...` ex
 ./test/wireoracle/... -count=1` exited 0; `go test ./internal/graphstore/archtest/... -count=1`
 exited 0 (unaffected by this mutation, run as a sanity check since Phase 3's SPEC-06 will later
 depend on this same literal).
+
+---
+
+## Mutation 5 — the wire gate, capability off (05-01-PLAN Task 3, SPEC-09)
+
+**Requirement:** the standing rule that a gate is not trusted until demonstrated RED against a
+confirmed-applied mutation, applied to phase 5 plan 01's two new gates: the
+`modern-listen-catalog-change` wire proof and the D-02 acknowledgment-echo anchor.
+
+**Edit:** `internal/mcp/server.go`, `BuildServer`'s capability construction:
+
+```diff
+ 	s := mcp.NewServer(&mcp.Implementation{Name: "codegraph", Version: version}, &mcp.ServerOptions{
+ 		Capabilities: &mcp.ServerCapabilities{
+-			Tools: &mcp.ToolCapabilities{ListChanged: true},
++			Tools: &mcp.ToolCapabilities{ListChanged: false},
+ 		},
+ 		Instructions: instructions,
+ 	})
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go` showed exactly this one-line change;
+`go build ./...` exited 0.
+
+**Gate that went red:** `TestFrozenTranscriptsMatch/modern-listen-catalog-change` failed at
+`Capture` itself — the capture never completes — and `TestSpecAnchorsHold/modern-listen-catalog-change`
+and both `TestToolsListExactSets/modern-listen-catalog-change-*` cases failed the same way.
+
+**`task test:wireoracle`'s verbatim failure** (excerpted — the capability flip is global, so every
+scenario whose `initialize`/`server/discover` response carries `capabilities.tools.listChanged`
+shows the identical collateral diff; one representative instance is kept, the rest are named):
+
+```
+--- FAIL: TestFrozenTranscriptsMatch (34.60s)
+    --- FAIL: TestFrozenTranscriptsMatch/handshake-explore (0.87s)
+        oracle_test.go:130: scenario "handshake-explore": normalized transcript differs at line 1:
+             got: "...{\"capabilities\":{\"tools\":{}},...\"protocolVersion\":\"2025-11-25\",...}"
+            want: "...{\"capabilities\":{\"tools\":{\"listChanged\":true}},...\"protocolVersion\":\"2025-11-25\",...}"
+    [... 20 more scenarios FAIL identically on this same collateral diff: toolslist-default,
+    toolslist-allowlist, toolslist-no-index, toolslist-repeat, call-node, call-search,
+    call-callers, call-callees, call-impact, call-files, call-status, error-unknown-method,
+    error-unknown-tool, error-malformed-args, error-confinement-reject, legacy-2025-11-25,
+    legacy-2025-06-18, legacy-2025-03-26, legacy-2024-11-05, legacy-unsupported-2026-07-28,
+    legacy-omitted-version, modern-discover-explore, index-appears-mid-session ...]
+    --- FAIL: TestFrozenTranscriptsMatch/modern-listen-catalog-change (30.00s)
+        oracle_test.go:120: capture scenario "modern-listen-catalog-change": wireoracle: scenario
+        "modern-listen-catalog-change": capture deadline exceeded waiting for method
+        "notifications/tools/list_changed"; 3/2 responses observed; stderr:
+--- FAIL: TestEveryDeclaredFiringRuleActuallyFires (33.86s)
+    oracle_test.go:471: capture scenario "modern-listen-catalog-change": wireoracle: scenario
+    "modern-listen-catalog-change": capture deadline exceeded waiting for method
+    "notifications/tools/list_changed"; 3/2 responses observed; stderr:
+--- FAIL: TestSpecAnchorsHold (33.85s)
+    --- FAIL: TestSpecAnchorsHold/handshake-explore (0.17s)
+        --- FAIL: TestSpecAnchorsHold/handshake-explore/capabilities.tools.listChanged_==_true_on_the_Legacy_initialize_path_(SPEC-09_criterion_1) (0.00s)
+            oracle_test.go:601: scenario "handshake-explore": result.capabilities.tools.listChanged
+            = false or absent, want true: "..."
+    --- FAIL: TestSpecAnchorsHold/modern-discover-explore (0.18s)
+        --- FAIL: TestSpecAnchorsHold/modern-discover-explore/capabilities.tools.listChanged_==_true_on_the_Modern_server/discover_path_(SPEC-09_criterion_1) (0.00s)
+            oracle_test.go:601: scenario "modern-discover-explore": result.capabilities.tools.listChanged
+            = false or absent, want true: "..."
+    --- FAIL: TestSpecAnchorsHold/modern-listen-catalog-change (30.01s)
+        oracle_test.go:589: capture scenario "modern-listen-catalog-change": wireoracle: scenario
+        "modern-listen-catalog-change": capture deadline exceeded waiting for method
+        "notifications/tools/list_changed"; 3/2 responses observed; stderr:
+--- FAIL: TestToolsListExactSets (60.29s)
+    --- FAIL: TestToolsListExactSets/modern-listen-catalog-change-pre-init (30.01s)
+        oracle_test.go:727: capture scenario "modern-listen-catalog-change": wireoracle: scenario
+        "modern-listen-catalog-change": capture deadline exceeded waiting for method
+        "notifications/tools/list_changed"; 3/2 responses observed; stderr:
+    --- FAIL: TestToolsListExactSets/modern-listen-catalog-change-post-init (30.00s)
+        oracle_test.go:727: capture scenario "modern-listen-catalog-change": wireoracle: scenario
+        "modern-listen-catalog-change": capture deadline exceeded waiting for method
+        "notifications/tools/list_changed"; 3/2 responses observed; stderr:
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/wireoracle	168.881s
+task: Failed to run task "test:wireoracle": exit status 1
+```
+
+**The precise mechanism, traced rather than assumed:** with the capability off,
+`allowedSubscriptions` grants nothing (`allowed.ToolsListChanged` stays `false`), so
+`shouldSendListChangedNotification` never fires and `changeAndNotify` never schedules a
+notification — the opted-in stream receives nothing at all, matching the plan's prediction exactly.
+
+**Collateral, matching the plan's prediction with one honest correction:** the plan predicted "the
+listen handler no longer blocks and does answer its own request id, so the exactly-zero check over
+`NoResponseRequests` ... also go[es] red." The FIRST half is confirmed true — go-sdk's own
+`subscriptionsListen` only awaits `<-ctx.Done()` when at least one subscription was actually
+granted; with nothing granted it returns immediately, so request id 1 DOES receive an (unawaited)
+response this run ("3/2 responses observed" — id 1, 2, and 3 all arrived, one more than the 2 the
+scenario's `NoResponseRequests` exemption expects). The SECOND half does not happen the way the
+plan predicted: `assertFramingInvariant`'s exactly-zero check never gets a chance to run, because
+`Capture` itself never returns — it is still blocked inside the write loop on `AwaitAfterRequest`'s
+wait for `notifications/tools/list_changed` on index 3, which this mutation ensures never arrives,
+so the 30-second deadline fires first and `mustCaptureScenario` fails the whole subtest before
+`assertFramingInvariant` is ever reached. Recorded here as the honest, measured behavior rather
+than silently restating the plan's prediction — this is exactly the kind of "measure, don't assume"
+finding this milestone is built on.
+
+**Revert confirmation:** the `ListChanged: false` was restored to `ListChanged: true`; `git diff
+--exit-code -- internal/mcp/server.go` exited 0; `go build ./...` exited 0; `go test
+./test/wireoracle/... -count=1` exited 0 (19-22s, all 28 scenarios).
+
+---
+
+## Mutation 6 — the acknowledgment-echo anchor, capability off AND the notification wait removed (05-01-PLAN Task 3, D-02)
+
+**Requirement:** Mutation 5 alone cannot prove `assertSubscriptionAckEcho` is non-vacuous, because
+`Capture` never completes under that mutation — the anchor never gets a chance to run. This
+mutation removes the scenario's `AwaitAfterRequest` entry for the LAST request so the capture
+completes without waiting for a notification that will never come, isolating the anchor's own
+behavior.
+
+**Edit 1** (repeats mutation 5's capability flip): `internal/mcp/server.go`:
+
+```diff
+ 		Capabilities: &mcp.ServerCapabilities{
+-			Tools: &mcp.ToolCapabilities{ListChanged: true},
++			Tools: &mcp.ToolCapabilities{ListChanged: false},
+ 		},
+```
+
+**Edit 2:** `test/wireoracle/scenarios.go`, the `modern-listen-catalog-change` scenario's
+`AwaitAfterRequest` map:
+
+```diff
+ 			AwaitAfterRequest: map[int]string{
+ 				1: notificationSubscriptionsAcknowledgedMethod,
+-				3: notificationToolsListChangedMethod,
+ 			},
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go test/wireoracle/scenarios.go` showed
+exactly these two edits; `go build ./...` exited 0.
+
+**Gate that went red:** `TestFrozenTranscriptsMatch/modern-listen-catalog-change`'s byte-comparison
+against the frozen transcript — its very first line is now the D-02 dead-subscription shape.
+
+**`task test:wireoracle`'s verbatim failure (the load-bearing excerpt):**
+
+```
+--- FAIL: TestFrozenTranscriptsMatch/modern-listen-catalog-change (0.07s)
+    oracle_test.go:130: scenario "modern-listen-catalog-change": normalized transcript differs at line 1:
+         got: "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/subscriptions/acknowledged\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/subscriptionId\":1},\"notifications\":{}}}"
+        want: "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/subscriptions/acknowledged\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/subscriptionId\":1},\"notifications\":{\"toolsListChanged\":true}}}"
+```
+
+That `"notifications":{}` on the `got` side is exactly 05-CONTEXT.md D-02's dead-subscription
+shape, reproduced deliberately.
+
+**A second, honestly-recorded, non-obvious collateral effect:** in the SAME run,
+`TestSpecAnchorsHold/modern-listen-catalog-change` and
+`TestToolsListExactSets/modern-listen-catalog-change-post-init` both failed for a DIFFERENT
+reason — the id-3 `tools/list` response itself went missing:
+
+```
+--- FAIL: TestSpecAnchorsHold/modern-listen-catalog-change (0.07s)
+    oracle_test.go:591: scenario "modern-listen-catalog-change": request id 3 has 0 response lines, want exactly 1
+--- FAIL: TestToolsListExactSets/modern-listen-catalog-change-post-init (0.07s)
+    oracle_test.go:727: scenario "modern-listen-catalog-change": no tools/list response (id=3) found in captured stdout
+```
+
+**Traced, not assumed:** go-sdk dispatches `tools/list` asynchronously too
+(`jsonrpc2.Async` fires for every call except `initialize` — the same fact `AwaitAfterRequest`'s
+own doc comment already cites for the acknowledgment). With the wait on index 3 removed, `Capture`
+writes the id-3 request and immediately closes stdin with nothing left to wait for; the async id-3
+handler now races process shutdown exactly the way `AwaitAfterRequest`'s doc comment warns a
+removed wait would race the notification — except here it is racing the RESPONSE, not just the
+notification, and in this run it lost the race. This means the exactly-one `assertFramingInvariant`
+check reached RED first in `TestSpecAnchorsHold`, before that subtest's per-scenario anchor loop
+ever got to invoke `assertSubscriptionAckEcho`'s own `t.Run` — the same "the earlier structural
+check masks the later semantic one" shape mutation 5 hit for a different reason.
+
+**Because of that masking, the anchor was ALSO proven directly, isolated from the id-3 race**, via a
+temporary, never-committed probe file (`test/wireoracle/mutation6_probe_test.go`, deleted
+immediately after this evidence was captured, never staged or committed — mirroring mutation 3's
+precedent above) that calls `assertSubscriptionAckEcho` directly against a fresh capture, bypassing
+`assertFramingInvariant`:
+
+```
+=== RUN   TestMutationProbe6Temporary
+    mutation6_probe_test.go:23: raw captured stdout:
+        {"jsonrpc":"2.0","method":"notifications/subscriptions/acknowledged","params":{"_meta":{"io.modelcontextprotocol/subscriptionId":1},"notifications":{}}}
+        {"jsonrpc":"2.0","id":1,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"codegraph","version":"0.1.0"},"io.modelcontextprotocol/subscriptionId":1}}}
+        {"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"codegraph","version":"0.1.0"}},"ttlMs":0,"cacheScope":"private","tools":[]}}
+    mutation6_probe_test.go:24: scenario "modern-listen-catalog-change": acknowledgment params.notifications = map[], want exactly map[toolsListChanged:true]: "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/subscriptions/acknowledged\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/subscriptionId\":1},\"notifications\":{}}}"
+--- FAIL: TestMutationProbe6Temporary (0.59s)
+FAIL
+```
+
+This is `assertSubscriptionAckEcho` failing with the observed notifications object empty against
+the wanted single-entry set — exactly the plan's predicted RED, demonstrated directly rather than
+inferred from the byte-diff alone. It also shows id 1's `SubscriptionsListenResult` now arriving
+immediately (nothing granted, so the handler no longer blocks — the same mechanism mutation 5
+observed) and confirms id 3 never arrived in this particular capture (only 3 lines total).
+
+**Revert confirmation:** both edits were reverted; `git diff --exit-code -- internal/
+test/wireoracle/scenarios.go` exited 0; the probe file was deleted (`git status --short --
+test/wireoracle/mutation6_probe_test.go` showed nothing, confirming it was never staged); `go build
+./...` exited 0; `go test ./test/wireoracle/... -count=1` exited 0 (22.6s, all 28 scenarios).
+
+---
+
+## Criterion 3 evidence (05-CONTEXT.md D-03/D-04)
+
+SPEC-09 criterion 3 — "a client that does not opt in observes no change in session behavior" — is
+satisfied by the 27 pre-existing frozen transcripts staying byte-unchanged across this phase, not by
+a new no-op scenario (05-CONTEXT.md D-03: the existing corpus already is that assertion). Evidence,
+gathered on the reverted, committed tree at the end of this plan:
+
+- `git diff --name-status -- testdata/wireoracle/transcripts/` (against this phase's base) shows
+  exactly one `A` line (`modern-listen-catalog-change.golden`) and zero `M` lines — none of the 27
+  pre-existing transcripts moved.
+- `go test ./test/wireoracle/... -count=1` passes all 28 scenarios, including
+  `TestFrozenTranscriptsMatch`'s byte-for-byte comparison against all 27 pre-existing goldens.
+- The advisory transcript-freeze CI job (`.github/workflows/ci.yml`'s `transcript-freeze` job,
+  `task check:transcript-freeze` — Phase 4's advisory-as-of guard) reports the one addition and
+  exits 0; it was not silenced, exempted, or edited by this plan (05-CONTEXT.md D-04).
+
+This — not a new scenario — is what satisfies criterion 3.
 
 ---
 
