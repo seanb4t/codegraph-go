@@ -38,6 +38,23 @@ import (
 // placeholder is fine here since MCP clients don't gate behavior on it.
 const version = "0.1.0"
 
+// instructions is SPEC-07's entire deliverable (03-05-PLAN Task 1):
+// ServerOptions.Instructions below reaches BOTH the classic `initialize`
+// result AND the `server/discover` result through the identical SDK field
+// — deliberate, not incidental, because zero of the eight roster agent
+// clients speak 2026-07-28 today, so a discover-only string would reach no
+// real user. It ships to every client on every session, which makes it a
+// wire contract: it MUST stay a compile-time literal with no interpolation
+// of any kind — no repository path, no resolved index root, no hostname,
+// no environment value — since a per-transcript variation here would
+// publish the capturing host's filesystem layout into every committed
+// wire-oracle transcript that carries it (T-03-19). Kept to a single
+// paragraph with no newline characters and roughly 600 bytes or fewer,
+// since the value is JSON-encoded into every one of those transcripts and
+// an embedded newline would become an escape sequence that makes each such
+// diff harder to read.
+const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. Every tool accepts an optional path argument; omitting it uses this server's own working directory. An empty tool list means this repository has no index yet, so run codegraph init to fix it, not that the server is broken. Tools appear automatically once an index exists, with no client restart required."
+
 // companionNames is the fixed vocabulary of the 7 tools CODEGRAPH_MCP_TOOLS
 // may allowlist (D-08a, MCP-02) — codegraph_explore is not in this list
 // because it is always visible when hasIndex is true (MCP-01) and is
@@ -437,6 +454,7 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 		Capabilities: &mcp.ServerCapabilities{
 			Tools: &mcp.ToolCapabilities{ListChanged: true},
 		},
+		Instructions: instructions,
 	})
 
 	// One gitmeta.CachingDetector per SERVER, not per handler or per call

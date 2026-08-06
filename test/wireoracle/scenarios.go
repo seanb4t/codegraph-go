@@ -760,6 +760,19 @@ func Scenarios() []Scenario {
 			ExpectTools: 1,
 		},
 		{
+			// SPEC-06 (03-05-PLAN Task 1): a trailing tools/call proves this
+			// scenario — the OLDEST Legacy era, maximal distance from
+			// Modern — completes a session AND successfully calls a tool,
+			// not merely negotiates. handshake-explore already proves the
+			// same at 2025-11-25, the NEWEST Legacy era. go-sdk's
+			// callTool/toolForErr never consult the request's protocol
+			// version once initialize has succeeded, so one success at
+			// each end of the Legacy range is judged sufficient evidence
+			// for the three eras between (2025-06-18, 2025-03-26, and the
+			// two coercion scenarios below, which stay negotiation-only).
+			// This is the judgment call 03-RESEARCH.md's "SPEC-06
+			// recommendation" flagged LOW confidence, not a proof —
+			// recorded as such deliberately, not overstated.
 			Name:                 legacyEraPrefix + "2024-11-05",
 			Index:                true,
 			EraScenario:          true,
@@ -768,6 +781,7 @@ func Scenarios() []Scenario {
 			Requests: []map[string]any{
 				initializeRequestWithVersion(1, legacyEraVersions[3]),
 				toolsListRequest(2),
+				toolCallRequest(3, "codegraph_explore", map[string]any{"query": handshakeExploreQuery}),
 			},
 			ExpectTools: 1,
 		},
