@@ -5,15 +5,15 @@ milestone_name: MCP Protocol Currency
 current_phase: 3
 current_phase_name: "`2026-07-28` Spec Compliance"
 status: planning
-stopped_at: Completed 03-02-PLAN.md (D-03 guard advisory decision implemented)
-last_updated: "2026-08-06T15:33:05.528Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-08-06T15:48:00.658Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 2 complete, transitioned to Phase 3
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 15
   percent: 40
 ---
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-08-06 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [████████░░] 76%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -155,6 +155,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 02 P05 | 2h | 3 tasks | 24 files |
 | Phase 03-2026-07-28-spec-compliance P01 | 6min | 3 tasks | 4 files |
 | Phase 03 P02 | 2min | 2 tasks | 5 files |
+| Phase 03 P03 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -197,6 +198,7 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: 02-05: nine named causes for the go-sdk wire re-freeze; cause #9 (edge-call-before-initialize session-ordering rejection) was undiscovered by research, found at the checkpoint, and accepted by the maintainer as spec-correct
 - [Phase ?]: SPEC-04 discover cacheScope corrected to private via the AddReceivingMiddleware seam (D-03), mirroring D-09's tools/list fix
 - [Phase ?]: D-03 anti-regeneration guard becomes advisory, not blocking (option-advisory): the guard's own two-PR remedy is structurally unavailable in this repository; the reviewed-diff pass (D-06) is now the sole control, stated explicitly in Taskfile.yml and ci.yml so an advisory job is never mistaken for a gate.
+- [Phase ?]: SPEC-02 closed by assertion: -32602/-32022 frozen and anchored, zero server code added; the -32601 observation in 03-CONTEXT.md is go-sdk's own lexical version-string comparison, retracted in-file
 
 ### Pending Todos
 
@@ -258,8 +260,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T15:33:05.519Z
-Stopped at: Completed 03-02-PLAN.md (D-03 guard advisory decision implemented)
+Last session: 2026-08-06T15:48:00.649Z
+Stopped at: Completed 03-03-PLAN.md
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

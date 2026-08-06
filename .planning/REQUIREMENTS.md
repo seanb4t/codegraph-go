@@ -12,7 +12,7 @@
 ### MCP Spec Compliance (SPEC)
 
 - [x] **SPEC-01**: An MCP client can call `server/discover` and receive the server's capabilities without first calling any tool — the spec makes this a **MUST for servers**, not an optional discovery convenience
-- [ ] **SPEC-02**: The server validates per-request `_meta` (protocol version, client identity, client capabilities), answering `-32602` on malformed or missing required fields and `UnsupportedProtocolVersionError` (`-32022`, SEP-2575) on an unsupported version, rather than failing silently or proceeding on assumptions
+- [x] **SPEC-02**: The server validates per-request `_meta` (protocol version, client identity, client capabilities), answering `-32602` on malformed or missing required fields and `UnsupportedProtocolVersionError` (`-32022`, SEP-2575) on an unsupported version, rather than failing silently or proceeding on assumptions
 - [x] **SPEC-03**: Every tool result carries `resultType: "complete"`
 - [x] **SPEC-04**: `tools/list` and `server/discover` responses carry `ttlMs: 0` and `cacheScope: "private"`, so no client caches a catalog this server cannot promise is still accurate
 - [ ] **SPEC-05**: A user who runs `codegraph init` while an MCP server is already running sees the tools appear — `hasIndex` is re-checked per call rather than snapshotted once at server construction
@@ -84,7 +84,7 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SPEC-01 | Phase 3 | Complete |
-| SPEC-02 | Phase 3 | Pending |
+| SPEC-02 | Phase 3 | Complete |
 | SPEC-03 | Phase 3 | Complete |
 | SPEC-04 | Phase 3 | Complete |
 | SPEC-05 | Phase 3 | Pending |
