@@ -5,15 +5,15 @@ milestone_name: MCP Protocol Currency
 current_phase: 4
 current_phase_name: Supply-Chain Coverage & Daemon Substrate Fixes
 status: Ready to discuss phase 4
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-08-06T16:39:48.796Z"
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-08-06T19:29:52.747Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 3 complete, transitioned to Phase 4
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 20
+  completed_plans: 18
   percent: 60
 ---
 
@@ -33,7 +33,7 @@ Plan: Not started
 Status: Ready to discuss phase 4
 Last activity: 2026-08-06 — Phase 3 complete, transitioned to Phase 4
 
-Progress: [██████████] 100%
+Progress: [█████████░] 90%
 
 ## Performance Metrics
 
@@ -158,6 +158,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 03 P03 | 5min | 2 tasks | 4 files |
 | Phase 03 P04 | 6min | 2 tasks | 5 files |
 | Phase 03 P05 | 40min | 3 tasks | 27 files |
+| Phase 04 P02 | 119min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -205,6 +206,8 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: Wire-oracle: index-appears-mid-session drives a real codegraph init subprocess mid-capture, blocking on response-observed (not sleep) via a restructured Capture; ExpectedScenarioCount now 27
 - [Phase ?]: SPEC-07's instructions string ships identically to both initialize and server/discover via ServerOptions.Instructions; SPEC-06 covered by one added tools/call on legacy-2024-11-05 rather than a new scenario, a LOW-confidence sufficiency judgment recorded as such
 - [Phase ?]: Phase 3's reviewed-diff pass ran a consolidated fourth time in 03-05: 24 of 27 transcripts re-frozen, three additive causes named with counts, zero unattributed lines, oracle re-proved non-vacuous via Mutation 1 with a byte-clean revert
+- [Phase ?]: MAINT-01 (getppid -race) closed structurally via t.Cleanup-registered join-before-restore, proven by 0 races across 3 post-fix full-suite -race runs plus a disproof/reproof toggle test
+- [Phase ?]: MAINT-02 plain-timeout tail not reduced to a literal zero on this session's machine due to a discovered confound: multiple concurrent sibling Claude Code agents plus a live desktop GUI competing for CPU (confirmed via ps aux); GOMAXPROCS=4 (CI-runner-class approximation) is 8/8 clean, isolated runs always clean
 
 ### Pending Todos
 
@@ -266,8 +269,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T16:30:48.086Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-08-06T19:29:52.738Z
+Stopped at: Completed 04-02-PLAN.md
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

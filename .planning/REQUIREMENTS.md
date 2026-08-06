@@ -45,8 +45,8 @@
 
 ### Maintenance (MAINT)
 
-- [ ] **MAINT-01**: Issue #13 — the daemon `-race` failure on the `getppid` test seam — is fixed, with the race demonstrated before the fix
-- [ ] **MAINT-02**: Issue #17 — `TestRunWatchdogCancelsRunOnSimulatedReparent` failing under full-suite load while passing isolated — is fixed at the cause rather than by isolating the test
+- [x] **MAINT-01**: Issue #13 — the daemon `-race` failure on the `getppid` test seam — is fixed, with the race demonstrated before the fix
+- [x] **MAINT-02**: Issue #17 — `TestRunWatchdogCancelsRunOnSimulatedReparent` failing under full-suite load while passing isolated — is fixed at the cause rather than by isolating the test
 - [ ] **MAINT-03**: The GoReleaser version pin agrees between `ci.yml` and `release.yml` (currently v2.17.1 vs v2.17.0)
 
 ## Future Requirements
@@ -105,8 +105,8 @@ Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 fo
 | VULN-01 | Phase 4 | Pending |
 | VULN-02 | Phase 4 | Pending |
 | VULN-03 | Phase 4 | Pending |
-| MAINT-01 | Phase 4 | Pending |
-| MAINT-02 | Phase 4 | Pending |
+| MAINT-01 | Phase 4 | Complete |
+| MAINT-02 | Phase 4 | Complete |
 | MAINT-03 | Phase 4 | Pending |
 
 **Coverage:**
