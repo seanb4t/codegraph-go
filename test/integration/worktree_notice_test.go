@@ -7,11 +7,7 @@ import (
 	"testing"
 	"time"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
-
-	codegraphmcp "github.com/seanb4t/codegraph-go/internal/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // newServeClient spawns the real binPath binary as `serve --mcp` with the
@@ -19,38 +15,30 @@ import (
 // requirement: the real cwd->resolveStartPath->serveServerPaths->
 // BuildServer wiring seam, not a `-p` flag (which drives the same `start`
 // value but never exercises os.Getwd()'s role in resolveStartPath) and
-// never an in-process client. transport.WithCommandFunc is mcp-go's
-// documented seam for exactly this ("working directories... environment
-// control"), used here instead of the plan's discretionary `-p` fallback
-// since it lets the anchor drive the REAL process cwd directly.
+// never an in-process client. exec.CommandContext ties the subprocess's
+// lifetime to ctx — the go-sdk equivalent of mark3labs' WithCommandFunc
+// seam this test used before the SDK swap (02-04) — and
+// mcp.CommandTransport{Command: cmd} plus Client.Connect performs the
+// initialize handshake itself, replacing mark3labs' separate
+// NewStdioMCPClientWithOptions + Initialize calls.
 //
-// initializes the MCP session and returns the connected client; the
+// initializes the MCP session and returns the connected session; the
 // caller does not need to call Close (registered via t.Cleanup).
-func newServeClient(t *testing.T, ctx context.Context, cwd string) *mcpclient.Client {
+func newServeClient(t *testing.T, ctx context.Context, cwd string) *mcp.ClientSession {
 	t.Helper()
 
-	c, err := mcpclient.NewStdioMCPClientWithOptions(binPath, nil, []string{"serve", "--mcp"},
-		transport.WithCommandFunc(func(ctx context.Context, command string, env []string, args []string) (*exec.Cmd, error) {
-			cmd := exec.CommandContext(ctx, command, args...)
-			cmd.Dir = cwd
-			cmd.Env = append(os.Environ(), env...)
-			return cmd, nil
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewStdioMCPClientWithOptions(serve --mcp, cwd=%s): %v", cwd, err)
-	}
-	t.Cleanup(func() { _ = c.Close() })
+	cmd := exec.CommandContext(ctx, binPath, "serve", "--mcp")
+	cmd.Dir = cwd
+	cmd.Env = os.Environ()
 
-	req := mcp.InitializeRequest{}
-	// codegraphmcp.ProtocolVersion is the repo-owned literal — a
-	// dependency bump must not move this value silently (VRFY-02).
-	req.Params.ProtocolVersion = codegraphmcp.ProtocolVersion
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("Initialize (cwd=%s): %v", cwd, err)
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+	if err != nil {
+		t.Fatalf("CommandTransport Connect(serve --mcp, cwd=%s): %v", cwd, err)
 	}
-	return c
+	t.Cleanup(func() { _ = session.Close() })
+
+	return session
 }
 
 // resultText extracts the first text content block from result, failing
@@ -66,7 +54,7 @@ func resultText(t *testing.T, result *mcp.CallToolResult) string {
 	if len(result.Content) == 0 {
 		t.Fatal("CallTool result has no content")
 	}
-	text, ok := mcp.AsTextContent(result.Content[0])
+	text, ok := result.Content[0].(*mcp.TextContent)
 	if !ok {
 		t.Fatalf("CallTool result content[0] is not text: %+v", result.Content[0])
 	}
@@ -75,17 +63,15 @@ func resultText(t *testing.T, result *mcp.CallToolResult) string {
 
 // exploreAlpha drives codegraph_explore for "Alpha" (pkga.Alpha, the same
 // symbol internal/cli/notice_test.go and internal/mcp/markdown_test.go
-// already rely on) against c, returning the payload text. codegraph_explore
-// needs no CODEGRAPH_MCP_TOOLS allowlist entry — it is always visible
-// (D-21 note; internal/mcp/tools.go/server.go).
-func exploreAlpha(t *testing.T, ctx context.Context, c *mcpclient.Client) string {
+// already rely on) against session, returning the payload text.
+// codegraph_explore needs no CODEGRAPH_MCP_TOOLS allowlist entry — it is
+// always visible (D-21 note; internal/mcp/tools.go/server.go).
+func exploreAlpha(t *testing.T, ctx context.Context, session *mcp.ClientSession) string {
 	t.Helper()
 
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "codegraph_explore",
-			Arguments: map[string]any{"query": "Alpha"},
-		},
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "codegraph_explore",
+		Arguments: map[string]any{"query": "Alpha"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool codegraph_explore: %v", err)
@@ -101,10 +87,10 @@ func exploreAlpha(t *testing.T, ctx context.Context, c *mcpclient.Client) string
 // with cwd in the main checkout, must not. This is the exact
 // cwd/argv->resolveStartPath->serveServerPaths->mcp.BuildServer wiring
 // in-process BuildServer->CallTool tests (internal/mcp/markdown_test.go)
-// structurally bypass: those tests construct a *server.MCPServer directly
-// and never touch serve.go's RunE at all, so they cannot detect a
-// regression in how serve.go derives BuildServer's arguments from a real
-// process's cwd.
+// structurally bypass: those tests construct a *mcp.Server directly and
+// never touch serve.go's RunE at all, so they cannot detect a regression
+// in how serve.go derives BuildServer's arguments from a real process's
+// cwd.
 //
 // Mutation-proof (CR-01 root cause, documented per the plan's acceptance
 // criteria — verified manually, not committed): temporarily editing

@@ -51,8 +51,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
@@ -1386,29 +1385,49 @@ func firstNChars(s string, n int) string {
 // Engine.Node) — the test exists to CATCH a future divergence, not to prove
 // something surprising.
 
+// newGoldenSession builds an in-memory client/server session pair for s,
+// mirroring internal/mcp/server_test.go's newTestSession (unexported
+// there; reimplemented here since this file lives in the external golden
+// package). go-sdk's Client.Connect performs the MCP initialize handshake
+// itself — there is no separate, repeatable Initialize call the way
+// mark3labs' client had (02-RESEARCH.md Q1's PROVEN-ABSENT finding: no
+// ServerOptions field or client method lets a caller inject a
+// ProtocolVersion, so internalmcp.ProtocolVersion keeps its role as the
+// asserted pin rather than a value this harness sends on the wire).
+func newGoldenSession(t *testing.T, s *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	ctx := context.Background()
+	go func() {
+		_ = s.Run(ctx, serverTransport)
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-golden-parity-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client Connect: %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	return session
+}
+
 // callExploreViaMCP drives codegraph_explore through a real, in-process
-// MCP server (internalmcp.BuildServer + mcpclient.NewInProcessClient),
-// mirroring internal/mcp/server_test.go's TestExploreHandlerDelegatesToEngine
+// MCP server (internalmcp.BuildServer + newGoldenSession), mirroring
+// internal/mcp/server_test.go's TestExploreHandlerDelegatesToEngine
 // pattern (reimplemented here since that file's helpers are unexported and
 // this file lives in the external golden package).
 func callExploreViaMCP(t *testing.T, repoDir, query string) string {
 	t.Helper()
 
 	s := internalmcp.BuildServer(true, map[string]bool{}, repoDir, repoDir)
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
+	session := newGoldenSession(t, s)
 
-	ctx := context.Background()
-	initMCPClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "codegraph_explore",
-			Arguments: map[string]any{"query": query},
-		},
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "codegraph_explore",
+		Arguments: map[string]any{"query": query},
 	})
 	if err != nil {
 		t.Fatalf("CallTool codegraph_explore(%q): %v", query, err)
@@ -1436,14 +1455,7 @@ func callNodeViaMCPWithArgs(t *testing.T, repoDir, symbol, file string, line *in
 	t.Helper()
 
 	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir, repoDir)
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	initMCPClient(t, ctx, c)
+	session := newGoldenSession(t, s)
 
 	args := map[string]any{"symbol": symbol}
 	if file != "" {
@@ -1453,11 +1465,9 @@ func callNodeViaMCPWithArgs(t *testing.T, repoDir, symbol, file string, line *in
 		args["line"] = float64(*line)
 	}
 
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "codegraph_node",
-			Arguments: args,
-		},
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "codegraph_node",
+		Arguments: args,
 	})
 	if err != nil {
 		t.Fatalf("CallTool codegraph_node(%q): %v", symbol, err)
@@ -1468,21 +1478,6 @@ func callNodeViaMCPWithArgs(t *testing.T, repoDir, symbol, file string, line *in
 	return mcpResultText(t, result)
 }
 
-// initMCPClient runs the MCP initialize handshake, mirroring
-// internal/mcp/server_test.go's unexported initClient helper.
-func initMCPClient(t *testing.T, ctx context.Context, c *mcpclient.Client) {
-	t.Helper()
-
-	req := mcp.InitializeRequest{}
-	// internalmcp.ProtocolVersion is the repo-owned literal — a dependency
-	// bump must not move this value silently (VRFY-02).
-	req.Params.ProtocolVersion = internalmcp.ProtocolVersion
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-golden-parity-test", Version: "0.0.0"}
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("client Initialize: %v", err)
-	}
-}
-
 // mcpResultText extracts the first text content block from a successful
 // CallTool result.
 func mcpResultText(t *testing.T, result *mcp.CallToolResult) string {
@@ -1491,7 +1486,7 @@ func mcpResultText(t *testing.T, result *mcp.CallToolResult) string {
 	if len(result.Content) == 0 {
 		t.Fatal("CallTool result has no content")
 	}
-	text, ok := mcp.AsTextContent(result.Content[0])
+	text, ok := result.Content[0].(*mcp.TextContent)
 	if !ok {
 		t.Fatalf("CallTool result content[0] is not text: %+v", result.Content[0])
 	}
