@@ -70,6 +70,14 @@ type Anchor struct {
 // "the one field a scenario's own captured line carries," it is a
 // cross-cutting structural check that applies uniformly to all 17
 // scenarios.
+//
+// A fourth anchor, modern-discover-explore's discover cache-control check
+// (SPEC-04), exists alongside the frozen transcript for a reason distinct
+// from redundancy: the transcript proves the captured bytes did not
+// change, while the anchor proves the specific spec-pinned property still
+// holds against a FRESH capture, so a wholesale transcript regeneration
+// (which replaces the golden file's bytes wholesale, D-06) cannot launder
+// a regression in this property past the byte-comparison test.
 func Anchors() []Anchor {
 	return []Anchor{
 		{
@@ -88,7 +96,63 @@ func Anchors() []Anchor {
 				assertErrorCode(t, "error-malformed-args", stdout, codeInvalidParams)
 			},
 		},
+		{
+			Scenario: "modern-discover-explore",
+			Name:     "discover cache control: cacheScope == \"private\", ttlMs == 0 (SPEC-04)",
+			Assert: func(t *testing.T, stdout []byte) {
+				t.Helper()
+				assertDiscoverCacheControl(t, "modern-discover-explore", stdout)
+			},
+		},
 	}
+}
+
+// discoverCacheScopePrivate and discoverCacheScopeTTLMs are SPEC-04's two
+// hand-authored, spec-pinned expected values (D-02/D-06/VRFY-01) — never
+// imported from the SDK under test, exactly as codeMethodNotFound and
+// codeInvalidParams above are hand-authored rather than read from
+// mcp.CodeMethodNotFound/mcp.CodeInvalidParams.
+const (
+	discoverCacheScopePrivate = "private"
+	discoverCacheScopeTTLMs   = 0
+)
+
+// assertDiscoverCacheControl decodes only response id=1's result.cacheScope
+// and result.ttlMs fields, field-by-field in assertErrorCode's style, and
+// fails naming the scenario and quoting the observed line if cacheScope is
+// not discoverCacheScopePrivate or ttlMs is not discoverCacheScopeTTLMs.
+// Fails if no id=1 result line is found at all — a missing response must
+// never read as a pass.
+func assertDiscoverCacheControl(t *testing.T, scenario string, stdout []byte) {
+	t.Helper()
+
+	for _, line := range bytes.Split(stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any `json:"id"`
+			Result *struct {
+				CacheScope string `json:"cacheScope"`
+				TTLMs      int    `json:"ttlMs"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != 1 || frame.Result == nil {
+			continue
+		}
+		if frame.Result.CacheScope != discoverCacheScopePrivate {
+			t.Fatalf("scenario %q: result.cacheScope = %q, want %q: %q", scenario, frame.Result.CacheScope, discoverCacheScopePrivate, line)
+		}
+		if frame.Result.TTLMs != discoverCacheScopeTTLMs {
+			t.Fatalf("scenario %q: result.ttlMs = %d, want %d: %q", scenario, frame.Result.TTLMs, discoverCacheScopeTTLMs, line)
+		}
+		return
+	}
+	t.Fatalf("scenario %q: no id=1 result found in captured stdout — a missing response must never read as a pass", scenario)
 }
 
 // assertErrorCode decodes only response id=2's top-level error.code field
