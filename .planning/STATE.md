@@ -5,16 +5,16 @@ milestone_name: MCP Protocol Currency
 current_phase: 4
 current_phase_name: Supply-Chain Coverage & Daemon Substrate Fixes
 status: Ready to discuss phase 4
-stopped_at: "Completed 04-01-PLAN.md (Taskfile.yml vuln/vuln:selftest targets, ci.yml tool-vuln job, testdata/vulnredpoc)"
-last_updated: "2026-08-06T19:47:40.885Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-08-06T20:02:25.987Z"
 last_activity: 2026-08-06
 last_activity_desc: Phase 3 complete, transitioned to Phase 4
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 20
-  completed_plans: 18
-  percent: 60
+  completed_plans: 20
+  percent: 80
 ---
 
 # Project State
@@ -33,7 +33,7 @@ Plan: Not started
 Status: Ready to discuss phase 4
 Last activity: 2026-08-06 — Phase 3 complete, transitioned to Phase 4
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -160,6 +160,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 03 P05 | 40min | 3 tasks | 27 files |
 | Phase 04 P02 | 119min | 3 tasks | 6 files |
 | Phase 04 P01 | 45min | 3 tasks | 3 files |
+| Phase 04 P03 | 40min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -210,6 +211,8 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: MAINT-01 (getppid -race) closed structurally via t.Cleanup-registered join-before-restore, proven by 0 races across 3 post-fix full-suite -race runs plus a disproof/reproof toggle test
 - [Phase ?]: MAINT-02 plain-timeout tail not reduced to a literal zero on this session's machine due to a discovered confound: multiple concurrent sibling Claude Code agents plus a live desktop GUI competing for CPU (confirmed via ps aux); GOMAXPROCS=4 (CI-runner-class approximation) is 8/8 clean, isolated runs always clean
 - [Phase ?]: 04-01: Tool-modfile vuln scan ships ADVISORY not blocking (D-04 superseded) — goreleaser's binary carries a real, permanently-unfixed, symbol-reachable GO-2026-5932 match (openpgp via cosign/rekor's PGP verifier); blocking would have been permanently red from first run
+- [Phase ?]: MAINT-03: aligned release.yml's GoReleaser pin upward to v2.17.1 (matching go.tool.mod), confirmed by git history that neither pin was deliberately moved away from the other
+- [Phase ?]: VULN-03: stance test re-derived from a divergence assertion to an agreement assertion after D-04's mid-phase supersession — tool-vuln and transcript-freeze are now both deliberately ADVISORY, not deliberately different
 
 ### Pending Todos
 
@@ -271,8 +274,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T19:47:40.874Z
-Stopped at: Completed 04-01-PLAN.md (Taskfile.yml vuln/vuln:selftest targets, ci.yml tool-vuln job, testdata/vulnredpoc)
+Last session: 2026-08-06T20:02:25.976Z
+Stopped at: Completed 04-03-PLAN.md
   NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
   CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
   PHASE 1 CARRY-INS FOR PHASE 2:

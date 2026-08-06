@@ -187,7 +187,7 @@ Plans:
   4. `TestRunWatchdogCancelsRunOnSimulatedReparent` (issue #17) passes under full-suite load, fixed at the cause rather than by isolating the test away from the load that exposes it (MAINT-02)
   5. `ci.yml` and `release.yml` name the same GoReleaser version (MAINT-03)
 
-**Plans**: 1/3 plans executed
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
@@ -197,7 +197,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-03-PLAN.md — GoReleaser pin aligned upward with its git provenance resolved, plus the pin-parity and stated-stance guards, each demonstrated red first (VULN-03, MAINT-03)
+- [x] 04-03-PLAN.md — GoReleaser pin aligned upward with its git provenance resolved, plus the pin-parity and stated-stance guards, each demonstrated red first (VULN-03, MAINT-03)
 
 ### Phase 5: Live Tool-Catalog Change Notification
 
@@ -221,7 +221,7 @@ Plans:
 | 1. Protocol Scoping & the SDK-Independent Wire Oracle | v0.3.0 | 7/7 | Complete    | 2026-08-05 |
 | 2. SDK Migration — official go-sdk on the existing surface | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
 | 3. `2026-07-28` Spec Compliance | v0.3.0 | 5/5 | Complete    | 2026-08-06 |
-| 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 1/3 | In Progress|  |
+| 4. Supply-Chain Coverage & Daemon Substrate Fixes | v0.3.0 | 3/3 | In Progress|  |
 | 5. Live Tool-Catalog Change Notification | v0.3.0 | 0/0 | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
