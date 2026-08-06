@@ -148,6 +148,78 @@ func modernToolCallRequest(id int, name string, arguments any) map[string]any {
 	}
 }
 
+// modernMetaMissingCapabilities returns modernMetaParams() with the
+// io.modelcontextprotocol/clientCapabilities key removed — the well-formed
+// half of SEP-2575's `_meta` that is nonetheless incomplete, which SPEC-02's
+// `-32602` half must reject. Built on modernMetaParams() rather than
+// re-typing its other two key literals, so the two helpers can never drift
+// apart.
+func modernMetaMissingCapabilities() map[string]any {
+	meta := modernMetaParams()
+	delete(meta, "io.modelcontextprotocol/clientCapabilities")
+	return meta
+}
+
+// modernMetaWithVersion returns modernMetaParams() with the
+// io.modelcontextprotocol/protocolVersion key replaced by version — used to
+// offer a well-formed-but-unsupported version (modernUnsupportedVersion
+// below) without re-typing modernMetaParams' other two key literals.
+func modernMetaWithVersion(version string) map[string]any {
+	meta := modernMetaParams()
+	meta["io.modelcontextprotocol/protocolVersion"] = version
+	return meta
+}
+
+// discoverRequestWithMeta returns a "server/discover" request whose params
+// carry the given `_meta` object verbatim — the variation-parameterized
+// counterpart to discoverRequest, which always sends modernMetaParams()
+// unmodified.
+func discoverRequestWithMeta(id int, meta map[string]any) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "server/discover",
+		"params": map[string]any{
+			"_meta": meta,
+		},
+	}
+}
+
+// modernUnsupportedVersion is a well-formed, supported-SHAPE protocol
+// version literal that is NOT one of the five versions this server
+// recognizes — 03-RESEARCH.md's Code Examples case 2, confirmed empirically
+// this phase to answer `-32022`.
+//
+// Its lexical relationship to "2026-07-28" is LOAD-BEARING, not cosmetic:
+// go-sdk's unexported validateRequestMeta (mcp/shared.go:543-576) compares
+// version strings with a plain lexical comparison and reclassifies any
+// `_meta.protocolVersion` value that sorts lexically SMALLER than
+// "2026-07-28" as not-using-the-new-protocol BEFORE the unsupported-version
+// check ever runs. A smaller literal therefore lands on the Modern-only
+// method-availability gate instead of the version check, and answers
+// `-32601` with a message the JSON-RPC transport's generic
+// errors.Is(ErrMethodNotFound) rewrite (internal/jsonrpc2/conn.go:694-695)
+// has already overwritten. This is a property of go-sdk itself, with no
+// codegraph-go seam to change it: validateRequestMeta runs inside the SDK's
+// own unexported ss.handle, before internal/mcp's AddReceivingMiddleware
+// chain is ever invoked (03-RESEARCH.md Q1, PROVEN-ABSENT).
+//
+// 03-CONTEXT.md's "SPEC-02 is a real gap ... the least understood item in
+// the phase" framing described exactly this `-32601` observation (its probe
+// offered "1999-01-01", which sorts lexically before "2026-07-28") — that
+// framing is RETRACTED here, superseded by 03-RESEARCH.md's source trace and
+// its eleven empirically captured request/response pairs. The `-32601`
+// answer is go-sdk's own lexical-comparison classification quirk on an
+// old-looking literal, not a codegraph-go defect, and it is not asserted by
+// any scenario in this file (see anchors.go's Anchors() doc comment for the
+// matching statement on the anchor side). "2099-01-01" sorts lexically
+// AFTER "2026-07-28" and is not one of the five supported era strings, so it
+// reaches the unsupported-version check and answers `-32022` — the only
+// shape a real Modern client would ever construct, since the entire point of
+// a client sending `_meta.protocolVersion` at all is that it believes it
+// speaks >= 2026-07-28.
+const modernUnsupportedVersion = "2099-01-01"
+
 // handshakeExploreProtocolVersion is a package-local, hand-authored
 // literal (D-06) — never an SDK constant — matching what mark3labs
 // v0.56.0's server negotiates today (its own LATEST_PROTOCOL_VERSION).
@@ -323,9 +395,12 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // 05's "six-era" blocking-checkpoint selection: the multi-era Legacy
 // handshake baseline) + 1 scenario (phase 3 plan 01's tracer,
 // modern-discover-explore: the Modern 2026-07-28 server/discover +
-// sessionless tools/call proof) = 24. A shrinking count is the failure
-// mode this constant exists to catch.
-const ExpectedScenarioCount = 24
+// sessionless tools/call proof) + 2 scenarios (phase 3 plan 03's SPEC-02
+// proof: modern-meta-invalid-params and modern-meta-unsupported-version,
+// freezing the -32602 and -32022 halves of per-request `_meta` validation)
+// = 26. A shrinking count is the failure mode this constant exists to
+// catch.
+const ExpectedScenarioCount = 26
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -759,6 +834,41 @@ func Scenarios() []Scenario {
 			// ExpectTools is unread for a NoInitialize scenario — it
 			// asserts the absence of a session line instead
 			// (assertNoSessionLine), never a real tool count.
+			ExpectTools: 0,
+		},
+
+		// --- SPEC-02 proof (phase 3 plan 03): the two per-request `_meta`
+		// failure answers the requirement actually demands, frozen and
+		// independently anchored. Both are sessionless (SEP-2575), like
+		// modern-discover-explore above — NOT session-ordering violations.
+		// See modernUnsupportedVersion's doc comment above for why no
+		// `-32601` scenario is added here (that observation is go-sdk's own
+		// lexical-comparison classification quirk, retracted from
+		// 03-CONTEXT.md's "real gap" framing, not a shape SPEC-02 asks this
+		// suite to prove). ---
+
+		{
+			// A well-formed Modern `_meta` whose
+			// io.modelcontextprotocol/clientCapabilities key is absent —
+			// SPEC-02's `-32602` half.
+			Name:         "modern-meta-invalid-params",
+			Index:        true,
+			NoInitialize: true,
+			Requests: []map[string]any{
+				discoverRequestWithMeta(1, modernMetaMissingCapabilities()),
+			},
+			ExpectTools: 0,
+		},
+		{
+			// A well-formed Modern `_meta` offering modernUnsupportedVersion,
+			// a supported-SHAPE but unrecognized protocol version that sorts
+			// lexically AFTER "2026-07-28" — SPEC-02's `-32022` half.
+			Name:         "modern-meta-unsupported-version",
+			Index:        true,
+			NoInitialize: true,
+			Requests: []map[string]any{
+				discoverRequestWithMeta(1, modernMetaWithVersion(modernUnsupportedVersion)),
+			},
 			ExpectTools: 0,
 		},
 	}
