@@ -219,7 +219,13 @@ Standing decisions that outlive v1.0:
 
 ### Pending Todos
 
-None. The three previously-listed todos were resolved during v1.0 and filed to
+1 pending — `/gsd-capture --list` to review.
+
+| Created | Area | Severity | Title |
+|---------|------|----------|-------|
+| 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
+
+Three earlier todos were resolved during v1.0 and filed to
 `.planning/todos/completed/` at milestone close:
 
 | Resolved | Area | Title |
