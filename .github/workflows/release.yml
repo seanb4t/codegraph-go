@@ -21,13 +21,15 @@
 #     breaking libresolv-based DNS resolution in the resulting binary —
 #     a real, multi-source-corroborated risk for a binary
 #     (`codegraph upgrade`) that makes real HTTPS calls on every
-#     platform, including macOS. Only linux/arm64 and both windows
-#     targets cross-compile via zig. As of the 10-03 maintainer
-#     checkpoint, the darwin legs run on namespace-profile-macos-6x14-tahoe
-#     (a native Apple-Silicon macOS profile, per the maintainer) and the
-#     linux/windows legs run on namespace-profile-linux-amd64-4x8 — see
-#     the `build` matrix below and 10-03-SUMMARY.md for what is and is
-#     not verified about that runner change.
+#     platform, including macOS. Only linux/arm64 cross-compiles via zig.
+#     As of the 10-03 maintainer checkpoint, the darwin legs run on
+#     namespace-profile-macos-6x14-tahoe (a native Apple-Silicon macOS
+#     profile, per the maintainer) and the linux legs run on
+#     namespace-profile-linux-amd64-4x8 — see the `build` matrix below
+#     and 10-03-SUMMARY.md for what is and is not verified about that
+#     runner change. Native Windows is not a supported platform (quick
+#     task 260807-gho); Windows users run the linux/amd64 asset under
+#     WSL2, so no windows leg exists here.
 #
 #   - Per-binary signing (RESEARCH.md Finding 1, see the `assemble` job):
 #     internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY
@@ -61,13 +63,13 @@ env:
   GORELEASER_VERSION: "v2.17.1"
 
 jobs:
-  # Native 2-OS matrix: each of the 6 (goos,goarch) targets in
+  # Native 2-OS matrix: each of the 4 (goos,goarch) targets in
   # .goreleaser.yaml is built independently via
   # `goreleaser build --single-target` (an OSS command — no GoReleaser
   # Pro `release --split`/`continue --merge`/prebuilt-builder directive
   # is used anywhere in this workflow, per RESEARCH.md Finding 2/
   # Pitfall 3) and uploaded as a CI artifact. A later `assemble` job
-  # downloads all 6 and does the release/sign/SBOM/publish work.
+  # downloads all 4 and does the release/sign/SBOM/publish work.
   build:
     name: build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ${{ matrix.runner }}
@@ -75,25 +77,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # namespace-profile-linux-amd64-4x8 builds linux + windows: native
-          # gcc for linux/amd64 (no cross-toolchain needed); zig cc for the
-          # linux/arm64 and windows cross targets (CC/CXX for these are
-          # already set per-build-id inside .goreleaser.yaml itself —
-          # this job only needs to ensure the `zig` binary is on PATH).
+          # namespace-profile-linux-amd64-4x8 builds both linux arches:
+          # native gcc for linux/amd64 (no cross-toolchain needed); zig cc
+          # for the linux/arm64 cross target (CC/CXX for it are already set
+          # per-build-id inside .goreleaser.yaml itself — this job only
+          # needs to ensure the `zig` binary is on PATH).
           - runner: namespace-profile-linux-amd64-4x8
             goos: linux
             goarch: amd64
             needs_zig: false
           - runner: namespace-profile-linux-amd64-4x8
             goos: linux
-            goarch: arm64
-            needs_zig: true
-          - runner: namespace-profile-linux-amd64-4x8
-            goos: windows
-            goarch: amd64
-            needs_zig: true
-          - runner: namespace-profile-linux-amd64-4x8
-            goos: windows
             goarch: arm64
             needs_zig: true
           # namespace-profile-macos-6x14-tahoe builds BOTH darwin arches
@@ -134,7 +128,7 @@ jobs:
         with:
           cache: go
 
-      - name: Install zig (linux/arm64 + windows cross targets only)
+      - name: Install zig (linux/arm64 cross target only)
         if: matrix.needs_zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
@@ -166,13 +160,9 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           set -euo pipefail
-          EXT=""
-          if [ "$GOOS" = "windows" ]; then
-            EXT=".exe"
-          fi
 
           # internal/upgrade.releaseAssetName()'s exact contract shape
-          # (Finding 1): codegraph_<tag>_<goos>_<goarch>[.exe]. Locate the
+          # (Finding 1): codegraph_<tag>_<goos>_<goarch>. Locate the
           # built binary via dist/artifacts.json — GoReleaser's own
           # documented stable lookup (dist/ subdirectory names are NOT
           # guaranteed stable across GoReleaser versions) — with a
@@ -185,14 +175,14 @@ jobs:
               dist/artifacts.json)
           fi
           if [ -z "$BIN_PATH" ] || [ ! -f "$BIN_PATH" ]; then
-            BIN_PATH=$(find dist -type f \( -name 'codegraph' -o -name 'codegraph.exe' \) | head -n1)
+            BIN_PATH=$(find dist -type f -name 'codegraph' | head -n1)
           fi
           if [ -z "$BIN_PATH" ] || [ ! -f "$BIN_PATH" ]; then
             echo "::error::could not locate built binary for ${GOOS}/${GOARCH} under dist/"
             exit 1
           fi
 
-          DEST="codegraph_${TAG}_${GOOS}_${GOARCH}${EXT}"
+          DEST="codegraph_${TAG}_${GOOS}_${GOARCH}"
           cp "$BIN_PATH" "$DEST"
           echo "name=${DEST}" >> "$GITHUB_OUTPUT"
 
@@ -203,7 +193,7 @@ jobs:
           path: ${{ steps.asset.outputs.name }}
           if-no-files-found: error
 
-  # Downloads all 6 binaries, computes checksums, signs EACH BINARY
+  # Downloads all 4 binaries, computes checksums, signs EACH BINARY
   # individually with cosign v3 keyless (Finding 1 — internal/upgrade's
   # defaultVerify hashes the downloaded binary itself, never a checksums
   # file), emits a per-binary SBOM via syft, and publishes everything as

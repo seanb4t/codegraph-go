@@ -11,23 +11,21 @@ import (
 // goReleaserAssetName reproduces .goreleaser.yaml's archives.name_template
 // literally:
 //
-//	{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}{{ if eq .Os "windows" }}.exe{{ end }}
+//	{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
 //
 // GoReleaser's default .Os/.Arch template values are the same strings as Go's
 // own GOOS/GOARCH (this project sets no goarch/goos `replacements:` block in
-// .goreleaser.yaml), so goos/goarch here are passed through unchanged.
+// .goreleaser.yaml), so goos/goarch here are passed through unchanged. The
+// template carries no `.exe` conditional because native Windows is not a
+// supported platform (quick task 260807-gho).
 func goReleaserAssetName(tag, goos, goarch string) string {
-	ext := ""
-	if goos == "windows" {
-		ext = ".exe"
-	}
-	return fmt.Sprintf("codegraph_%s_%s_%s%s", tag, goos, goarch, ext)
+	return fmt.Sprintf("codegraph_%s_%s_%s", tag, goos, goarch)
 }
 
 // TestReleaseAssetNameMatchesGoReleaser pins D-14: the asset name
 // internal/upgrade downloads (releaseAssetName) MUST equal, byte for byte,
 // the asset name .goreleaser.yaml's archives.name_template actually produces
-// for every one of the 6 shipped release targets. A divergence here means
+// for every one of the 4 shipped release targets. A divergence here means
 // `codegraph upgrade` 404s on a genuine, correctly-published release.
 func TestReleaseAssetNameMatchesGoReleaser(t *testing.T) {
 	const tag = "v1.2.3"
@@ -35,21 +33,21 @@ func TestReleaseAssetNameMatchesGoReleaser(t *testing.T) {
 	// One literal expectation per shipped (goos,goarch) pair (RESEARCH.md
 	// Finding 2 / .goreleaser.yaml's builds: list) — pinned independently of
 	// both goReleaserAssetName and releaseAssetName so a bug shared by both
-	// implementations can't hide from this test.
+	// implementations can't hide from this test. Windows pairs were removed
+	// with native Windows support (quick task 260807-gho); a WSL2 user's
+	// host reports linux, so the linux pairs already cover them.
 	pairs := []struct {
 		goos, goarch string
 		want         string
 	}{
 		{"linux", "amd64", "codegraph_v1.2.3_linux_amd64"},
 		{"linux", "arm64", "codegraph_v1.2.3_linux_arm64"},
-		{"windows", "amd64", "codegraph_v1.2.3_windows_amd64.exe"},
-		{"windows", "arm64", "codegraph_v1.2.3_windows_arm64.exe"},
 		{"darwin", "amd64", "codegraph_v1.2.3_darwin_amd64"},
 		{"darwin", "arm64", "codegraph_v1.2.3_darwin_arm64"},
 	}
 
-	if len(pairs) != 6 {
-		t.Fatalf("expected exactly 6 os/arch pairs (the shipped release matrix), got %d", len(pairs))
+	if len(pairs) != 4 {
+		t.Fatalf("expected exactly 4 os/arch pairs (the shipped release matrix), got %d", len(pairs))
 	}
 
 	hostMatched := false
@@ -76,7 +74,7 @@ func TestReleaseAssetNameMatchesGoReleaser(t *testing.T) {
 	}
 
 	if !hostMatched {
-		t.Fatalf("host os/arch (%s/%s) is not one of the 6 pinned release pairs — releaseAssetName was never cross-checked against a real template literal", runtime.GOOS, runtime.GOARCH)
+		t.Fatalf("host os/arch (%s/%s) is not one of the 4 pinned release pairs — releaseAssetName was never cross-checked against a real template literal", runtime.GOOS, runtime.GOARCH)
 	}
 }
 

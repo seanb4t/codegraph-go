@@ -59,8 +59,10 @@ body:
     id: platform
     attributes:
       label: Platform
-      description: OS and architecture. Include the distribution on Linux.
-      placeholder: macOS 15.2 arm64 / Ubuntu 24.04 amd64 / Windows 11 amd64
+      description: >-
+        OS and architecture. Include the distribution on Linux. Native Windows
+        is not supported — if you are on Windows, report the WSL2 distribution.
+      placeholder: macOS 15.2 arm64 / Ubuntu 24.04 amd64 / WSL2 Ubuntu 24.04 amd64
     validations:
       required: true
 

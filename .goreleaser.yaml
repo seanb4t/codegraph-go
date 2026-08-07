@@ -11,7 +11,7 @@
 #       ("Rename to release-asset contract name" in the build job, and
 #       "Checksums" in the assemble job), which must independently agree
 #       with internal/upgrade.releaseAssetName() (Finding 1, Phase 8
-#       research; contract shape: codegraph_<tag>_<goos>_<goarch>[.exe],
+#       research; contract shape: codegraph_<tag>_<goos>_<goarch>,
 #       using the v-prefixed tag, not the prefix-stripped version). The
 #       archives.name_template below documents that same shape for a
 #       human reader but is otherwise inert — if you change the asset
@@ -27,10 +27,17 @@
 #
 #   (c) Signing and SBOM generation are performed by release.yml's
 #       assembly job (Plan 08-04, Finding 2), NOT here — the native
-#       6-target matrix is built per-runner via
+#       4-target matrix is built per-runner via
 #       `goreleaser build --single-target` (OSS-only; no Pro
 #       release --split/--merge or prebuilt-builder directives).
 #       This file intentionally has no `signs:` or `sbom:` block.
+#
+#   (d) Native Windows is NOT a supported platform (quick task
+#       260807-gho). Windows users run the linux/amd64 binary under
+#       WSL2. Do not re-add windows build entries here without
+#       reversing that decision in README.md's Supported platforms
+#       section and re-adding the corresponding release.yml matrix
+#       legs, CI vet jobs, and internal/upgrade .exe handling.
 
 version: 2
 
@@ -64,34 +71,6 @@ builds:
       - CGO_ENABLED=1
       - CC=zig cc -target aarch64-linux-gnu
       - CXX=zig c++ -target aarch64-linux-gnu
-    flags:
-      - -trimpath
-    ldflags: *version_ldflags
-    mod_timestamp: "{{ .CommitTimestamp }}"
-
-  - id: codegraph-windows-amd64
-    main: ./cmd/codegraph
-    binary: codegraph
-    goos: [windows]
-    goarch: [amd64]
-    env:
-      - CGO_ENABLED=1
-      - CC=zig cc -target x86_64-windows-gnu
-      - CXX=zig c++ -target x86_64-windows-gnu
-    flags:
-      - -trimpath
-    ldflags: *version_ldflags
-    mod_timestamp: "{{ .CommitTimestamp }}"
-
-  - id: codegraph-windows-arm64
-    main: ./cmd/codegraph
-    binary: codegraph
-    goos: [windows]
-    goarch: [arm64]
-    env:
-      - CGO_ENABLED=1
-      - CC=zig cc -target aarch64-windows-gnu
-      - CXX=zig c++ -target aarch64-windows-gnu
     flags:
       - -trimpath
     ldflags: *version_ldflags
@@ -138,7 +117,7 @@ builds:
 archives:
   - formats: [binary]
     name_template: >-
-      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}{{ if eq .Os "windows" }}.exe{{ end }}
+      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
 
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Tag }}_checksums.txt"

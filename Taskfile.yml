@@ -114,36 +114,11 @@ tasks:
     desc: >-
       go vet ./... — NEW enforcement as of this target (DEV-01): plain
       `go vet ./...` has never run in CI before; only two package-scoped
-      GOOS=windows vets did (see vet:windows / vet:daemon-windows). Findings
-      surfaced on first run are fixed, not suppressed.
+      GOOS=windows vets did, and those retired with native Windows support
+      (quick task 260807-gho). Findings surfaced on first run are fixed,
+      not suppressed.
     cmds:
       - go vet ./...
-
-  vet:windows:
-    desc: >-
-      Typecheck the windows lock classifier (GOOS=windows go vet
-      internal/graphstore) — WR-01: the only guard against the windows
-      lock-classifier rotting with no windows runner in CI. No precondition:
-      internal/graphstore is CGo-free, so the cross-GOOS vet works on any
-      host.
-    cmds:
-      - GOOS=windows GOARCH=amd64 go vet ./internal/graphstore/
-
-  vet:daemon-windows:
-    desc: >-
-      Typecheck the windows PPID watchdog (GOOS=windows go vet
-      internal/daemon) — needs a REAL mingw-w64 cross C toolchain, unlike
-      vet:windows: internal/daemon transitively imports the tree-sitter CGo
-      grammar bindings, and cgo runs the target C compiler even to
-      typecheck.
-    preconditions:
-      - sh: command -v x86_64-w64-mingw32-gcc
-        msg: "mingw-w64 not found. Install with: apt-get install gcc-mingw-w64-x86-64 (Debian/Ubuntu; see your platform's equivalent). See CONTRIBUTING.md's Building section."
-    env:
-      CGO_ENABLED: "1"
-      CC: x86_64-w64-mingw32-gcc
-    cmds:
-      - GOOS=windows GOARCH=amd64 go vet ./internal/daemon/
 
   vuln:
     desc: >-
@@ -378,16 +353,19 @@ tasks:
 
   check:cross:
     desc: >-
-      6-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
+      4-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
       gate release-please.yml's pretag-gate job runs before a tag can be
       created. Run this locally before pushing to main to catch a
       platform-specific go.sum/build-constraint failure your own GOOS/GOARCH
       can't see (the exact failure class that reached the v0.1 rc.1 release
-      candidate).
+      candidate). The pair list is machine-held set-equal to
+      .goreleaser.yaml's builds: targets by
+      TestCheckCrossMatchesGoreleaserTargets, so the windows pairs left here
+      in lockstep with the build entries (quick task 260807-gho).
     cmds:
       - |
         set -euo pipefail
-        for pair in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+        for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
           GOOS="${pair%/*}" GOARCH="${pair#*/}" go list -mod=readonly ./... > /dev/null || {
             echo "::error::go list -mod=readonly ./... failed for GOOS=${pair%/*} GOARCH=${pair#*/}"
             exit 1
@@ -743,9 +721,7 @@ tasks:
       runs concurrently). test:daemon and test:race both pass -p 1
       specifically to avoid cross-test contention; running the two
       concurrently with each other would reintroduce exactly the flakiness
-      those flags exist to prevent. Cross-toolchain targets (vet:windows,
-      vet:daemon-windows) are separate by design — not part of this
-      wrapper.
+      those flags exist to prevent.
     cmds:
       - task: test:unit
       - task: test:golden
