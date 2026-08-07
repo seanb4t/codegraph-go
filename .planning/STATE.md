@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-05)
 Phase: — (v0.3.0 shipped 2026-08-06; no active milestone)
 Plan: n/a
 Status: Milestone v0.3.0 shipped — PR #24
-Last activity: 2026-08-06
+Last activity: 2026-08-07 - Completed quick task 260807-gho: Drop native Windows support — WSL2 only
 
 Progress: [██████████] 100%
 
@@ -247,7 +247,11 @@ Carried forward:
 
 ### Quick Tasks Completed
 
-Archived with v1.0. Directories remain under `.planning/quick/`.
+v1.0's quick tasks are archived; their directories remain under `.planning/quick/`.
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260807-gho | Drop native Windows support — WSL2 only | 2026-08-07 | 085b7a3 | [260807-gho-drop-native-windows-support-wsl2-only](./quick/260807-gho-drop-native-windows-support-wsl2-only/) |
 
 ## Deferred Items
 
