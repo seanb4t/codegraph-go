@@ -10,20 +10,20 @@ how the release gets cut in the first place.
 
 ## 1. Pre-tag gate (mandatory — D-09)
 
-Before tagging **anything** (rc or stable), run the following for **all 6**
+Before tagging **anything** (rc or stable), run the following for **all 4**
 release targets. This is the exact check that would have caught the v0.1
 `rc.1` failure: a **linux-only** `go.sum` hash (`prometheus/procfs`) that
 was invisible on a darwin-only dev machine and to green local CI.
 
 ```sh
-for pair in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
   GOOS="${pair%/*}" GOARCH="${pair#*/}" go list -mod=readonly ./... > /dev/null \
     && echo "OK   $pair" \
     || echo "FAIL $pair"
 done
 ```
 
-All 6 lines must print `OK`. A single `FAIL` means a platform-specific
+All 4 lines must print `OK`. A single `FAIL` means a platform-specific
 `go.sum`/build-constraint issue exists that local CI (which only runs on
 your dev machine's own `GOOS`/`GOARCH`) cannot see — do not tag until every
 target is green.
@@ -108,11 +108,10 @@ The release-PR merge is the trigger, not a hand-run `git tag`:
    `GITHUB_TOKEN` — App-authored refs *do* trigger downstream workflow
    runs, which is exactly why this works), fires `release.yml`. Its three
    jobs are unchanged from the pipeline this section has always described:
-   - **`build`** — compiles all 6 `(GOOS,GOARCH)` targets (native darwin
+   - **`build`** — compiles all 4 `(GOOS,GOARCH)` targets (native darwin
      matrix via `macos-latest`/Xcode clang; zig cross-compilation for
-     `linux/arm64` and both `windows` targets from `ubuntu-latest`),
-     uploading each as a CI artifact.
-   - **`assemble`** — downloads all 6 build artifacts, signs each binary
+     `linux/arm64` from `ubuntu-latest`), uploading each as a CI artifact.
+   - **`assemble`** — downloads all 4 build artifacts, signs each binary
      **individually** with cosign keyless (`cosign sign-blob
      --bundle="${f}.sigstore.json"` — internal/upgrade hashes the
      downloaded binary itself, not a checksums file, so per-binary signing
@@ -232,7 +231,7 @@ slsa-verifier verify-artifact \
 > **Corrected 2026-08-01.** (b) previously named
 > `codegraph_<tag>_checksums.txt.intoto.jsonl` and passed the checksums file as
 > the artifact. No such file is published, and the checksums file is not an
-> attested subject — the six platform binaries are, sharing one
+> attested subject — the platform binaries are, sharing one
 > `multiple.intoto.jsonl`. The old command returns
 > `FAILED: artifact hash does not match provenance subject` against a valid
 > release. Found while verifying `v0.2.0`; `docs/RELEASE.md` §1(b) carried the
