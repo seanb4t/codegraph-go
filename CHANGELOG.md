@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/seanb4t/codegraph-go/compare/v0.2.0...v0.3.0) (2026-08-07)
+
+
+### Features
+
+* **mcp:** protocol currency — official go-sdk v1.7.0 and 2026-07-28 spec compliance ([#24](https://github.com/seanb4t/codegraph-go/issues/24)) ([13f2875](https://github.com/seanb4t/codegraph-go/commit/13f2875de1332bdb45666bc476b395c224677b1f))
+
 ## [0.2.0](https://github.com/seanb4t/codegraph-go/compare/v0.1.0...v0.2.0) (2026-08-01)
 
 
