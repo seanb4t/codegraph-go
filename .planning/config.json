@@ -12,7 +12,7 @@
   "jina": false,
   "git": {
     "branching_strategy": "milestone",
-    "create_tag": true,
+    "create_tag": false,
     "phase_branch_template": "gsd/phase-{phase}-{slug}",
     "milestone_branch_template": "gsd/{milestone}-{slug}",
     "quick_branch_template": null
@@ -65,8 +65,6 @@
     "source_grounding": true,
     "source_grounding_authority": "grep"
   },
-  "quick_branch_template": null,
-  "create_tag": true,
   "intel": {
     "enabled": true
   },

@@ -73,6 +73,17 @@ tasks:
     cmds:
       - go test ./test/integration/...
 
+  test:wireoracle:
+    desc: >-
+      Wire-level regression oracle (test/wireoracle) — spawns the real
+      binary over real stdio and byte-compares normalized transcripts
+      against testdata/wireoracle/transcripts/*.golden. Pre-migration wire
+      regression baseline (VRFY-01/VRFY-04): must never be relaxed or
+      re-baselined during the SDK swap in Phase 2. Measured 2026-08-05:
+      ~5.8s wall-clock on the frozen single-scenario tree.
+    cmds:
+      - go test ./test/wireoracle/...
+
   test:daemon:
     desc: >-
       internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
@@ -89,7 +100,15 @@ tasks:
       no-parallel-package-contention isolation test:daemon relies on — do not
       run this concurrently with test:daemon (see the test wrapper's comment).
     cmds:
-      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/...
+      # internal/mcp added during phase-01 UAT (01-UAT.md test 2): the
+      # session-line hook in server.go writes to a shared caller-supplied
+      # io.Writer from AddAfterInitialize, which fires once per initialize
+      # across concurrent sessions — a genuine concurrency seam that had
+      # neither a test nor race-detector coverage. The seam's own regression
+      # test (TestSessionLineSurvivesConcurrentAndRepeatedInitialize) fails
+      # deterministically without -race; this entry is the fallback net for
+      # the races it cannot model.
+      - go test -race -count=1 -p 1 ./internal/daemon/... ./internal/watch/... ./internal/cli/... ./internal/mcp/...
 
   vet:
     desc: >-
@@ -128,12 +147,121 @@ tasks:
 
   vuln:
     desc: >-
-      govulncheck over the main module (call-graph-aware vulnerability scan).
-      This does NOT replace ci.yml's blocking "govulncheck (DIST-03,
-      blocking)" gate, which runs golang/govulncheck-action unchanged — this
-      target exists so the same check is reachable locally before pushing.
+      ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —
+      see 04-01-SUMMARY.md): govulncheck -mode=binary over the four tool
+      binaries built from go.tool.mod (task, goreleaser, govulncheck) and
+      go.tool-lint.mod (actionlint) — the 357 measured third-party modules
+      that execute as credentialed CI tooling (repository write access and
+      secrets) and were previously scanned by nothing (D-05: this target
+      used to run `govulncheck ./...` over the main module only, a no-op
+      duplicate of ci.yml's own gate that never touched either tool
+      modfile). Reports, but never fails the build — this target was
+      designed BLOCKING and was demoted to advisory after its own first
+      real run found that goreleaser's binary carries a real,
+      permanently-unfixed, symbol-reachable match for GO-2026-5932 (110
+      vulnerable symbols in golang.org/x/crypto/openpgp, reached via
+      goreleaser/cmd -> pipe/ko -> google/ko -> sigstore/cosign/oci ->
+      sigstore/rekor/pkg/pki/pgp; goreleaser never imports openpgp
+      directly, the ko pipe compiles into every goreleaser binary
+      regardless of config, and the upstream package is unmaintained,
+      Fixed in: N/A). Shipped blocking, this gate would have been
+      permanently red from its first run on real in-scope tooling — worse
+      than the no-op it replaces. All four binaries stay in scope (no
+      allowlist, no exclusion): the point is detection, not build-failure,
+      so a NEW finding in any binary is exactly as visible as this known
+      one. -mode=binary is also symbol-level, NOT call-graph-aware: per
+      govulncheck's own documentation, "Because Go binaries do not contain
+      detailed call information, govulncheck cannot show the call graphs...
+      It may also report false positives for code that is in the binary but
+      unreachable" — a materially weaker guarantee than the source-mode
+      analysis ci.yml's "govulncheck (DIST-03, blocking)" job performs over
+      the main module, which this target does not replace or modify and
+      which stays blocking, unchanged. Exit-code classification still
+      drives what gets reported: 0 is clean (or a module-level-only match
+      govulncheck itself does not consider a symbol hit); 3 is a
+      symbol-matched vulnerability; any other status (usage error,
+      vuln.go.dev unreachable) is also reported distinctly, never silently
+      folded into "clean" — but none of the three fails this task. See
+      vuln:selftest for the non-vacuity proof that DETECTION (not build
+      failure) still fires.
     cmds:
-      - "{{.GO_TOOL}} govulncheck ./..."
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        echo "==> Building tool binaries (GOWORK=off; go.tool.mod x3, go.tool-lint.mod x1)"
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/task" github.com/go-task/task/v3/cmd/task
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/goreleaser" github.com/goreleaser/goreleaser/v2
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/govulncheck" golang.org/x/vuln/cmd/govulncheck
+        GOWORK=off go build -modfile=go.tool-lint.mod -o "${scratch}/actionlint" github.com/rhysd/actionlint/cmd/actionlint
+
+        # ADVISORY (D-04 superseded): every outcome below is REPORTED, never
+        # fails this task. See this target's desc: for why — goreleaser's
+        # binary carries a real, permanently-unfixed, symbol-reachable
+        # vulnerability (GO-2026-5932) that would otherwise make a blocking
+        # gate permanently red.
+        for name in task goreleaser govulncheck actionlint; do
+          set +e
+          out=$({{.GO_TOOL}} govulncheck -mode=binary "${scratch}/${name}" 2>&1)
+          status=$?
+          set -e
+          case "${status}" in
+            0)
+              echo "    ${name}: CLEAN (exit 0 — no symbol-matched vulnerability, or a module-level-only match govulncheck does not consider a symbol hit)"
+              ;;
+            3)
+              echo "::warning::${name}: DETECTED — govulncheck -mode=binary exited 3 (symbol-matched vulnerability; advisory, does not fail the build)"
+              echo "${out}"
+              ;;
+            *)
+              echo "::warning::${name}: SCAN ERROR — govulncheck -mode=binary exited ${status} (usage error or vuln.go.dev unreachable; reported distinctly, never folded into CLEAN)"
+              echo "${out}"
+              ;;
+          esac
+        done
+
+  vuln:selftest:
+    desc: >-
+      Non-vacuity proof for `vuln` (VULN-02): builds the permanent red-proof
+      program (testdata/vulnredpoc — see its own doc comment) from
+      go.tool.mod and asserts the underlying govulncheck -mode=binary scan
+      exits EXACTLY 3 and names GO-2026-5932. Unlike `vuln` itself, THIS
+      target is allowed to fail the build: a failure here means govulncheck's
+      own exit-3/advisory-ID classification broke — a detection-mechanism
+      regression, not a new vulnerability finding — which is exactly the
+      failure `vuln`'s advisory stance cannot surface on its own (an
+      advisory job that silently stops detecting is worse than a blocking
+      one). testdata/vulnredpoc is excluded from `go list ./...`
+      (GOLDEN-01) and built only here, by explicit path against
+      go.tool.mod — it never enters the main module's package graph and
+      adds no requirement to the root go.mod.
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/vulnredpoc" ./testdata/vulnredpoc
+
+        set +e
+        out=$({{.GO_TOOL}} govulncheck -mode=binary "${scratch}/vulnredpoc" 2>&1)
+        status=$?
+        set -e
+
+        echo "${out}"
+
+        if [ "${status}" -ne 3 ]; then
+          echo "::error::vuln:selftest FAILED — govulncheck -mode=binary exited ${status} (want 3) scanning the deliberately-vulnerable testdata/vulnredpoc binary; the tool-modfile vulnerability gate's detection mechanism could not be proven able to fire"
+          exit 1
+        fi
+
+        if ! printf '%s' "${out}" | grep -q "GO-2026-5932"; then
+          echo "::error::vuln:selftest FAILED — scan exited 3 but its output does not name GO-2026-5932; a different advisory firing is not accepted as proof this specific detection path works"
+          exit 1
+        fi
+
+        echo "vuln:selftest: PASS — govulncheck -mode=binary exited 3 and named GO-2026-5932 against testdata/vulnredpoc"
 
   check:darwin-toolchain:
     desc: >-
@@ -270,6 +398,44 @@ tasks:
     desc: Lint GitHub Actions workflows (workflow static analysis).
     cmds:
       - "{{.GO_TOOL_LINT}} actionlint .github/workflows/*.yml"
+
+  check:transcript-freeze:
+    desc: >-
+      D-03 anti-regeneration guard, ADVISORY since 03-02 (v0.3.0 Phase 3):
+      reports, but never fails the build, when a pull request's merge-base
+      diff changes a frozen wire-oracle transcript together with
+      internal/mcp/*.go or the MCP dependency line in go.mod. Became
+      advisory because the guard's own "split into two pull requests"
+      remedy is structurally unavailable in this repository (03-CONTEXT.md
+      D-06: a server-change-only PR fails the required wire-oracle leg, and
+      a transcripts-only PR has no mergeable base) — the control that
+      applies instead is the reviewed-diff pass D-06 mandates: capture the
+      wire oracle before and after, read every changed line, name every
+      cause in the commit message. SDK-01's swap still carries its own
+      self-expiring exemption notice keyed to the mark3labs-to-go-sdk
+      go.mod transition (02-CONTEXT.md D-01/D-02/D-03). Requires
+      TRANSCRIPT_FREEZE_BASE (a ref name, e.g. origin/main) so the diff is
+      computed against the merge-base rather than a per-commit comparison —
+      pull-request granularity is what survives this repository's
+      squash-merge model.
+    cmds:
+      - |
+        set -euo pipefail
+        if [ -z "${TRANSCRIPT_FREEZE_BASE:-}" ]; then
+          echo "::error::TRANSCRIPT_FREEZE_BASE is not set — check:transcript-freeze needs a base ref to compute the merge-base diff against (e.g. TRANSCRIPT_FREEZE_BASE=origin/main task check:transcript-freeze)."
+          exit 1
+        fi
+        git rev-parse --verify "${TRANSCRIPT_FREEZE_BASE}" >/dev/null
+        mb=$(git merge-base "${TRANSCRIPT_FREEZE_BASE}" HEAD)
+        CHANGED_LIST=$(mktemp)
+        GOMOD_DIFF=$(mktemp)
+        trap 'rm -f "$CHANGED_LIST" "$GOMOD_DIFF"' EXIT
+        # --name-status with rename/copy detection (-M -C), NOT --name-only:
+        # both sides of a renamed transcript or a renamed transcripts
+        # directory must reach the classifier.
+        git diff --name-status -M -C "$mb" HEAD > "$CHANGED_LIST"
+        git diff "$mb" HEAD -- go.mod > "$GOMOD_DIFF"
+        go run ./tools/transcriptfreeze -changed-list "$CHANGED_LIST" -gomod-diff "$GOMOD_DIFF"
 
   diag:cpu:
     desc: >-
@@ -571,18 +737,20 @@ tasks:
 
   test:
     desc: >-
-      Contributor wrapper: the five host-only legs (test:unit, test:golden,
-      test:integration, test:daemon, test:race), run SERIALLY via a list of
-      sub-task commands (never deps:, which go-task runs concurrently).
-      test:daemon and test:race both pass -p 1 specifically to avoid
-      cross-test contention; running the two concurrently with each other
-      would reintroduce exactly the flakiness those flags exist to prevent.
-      Cross-toolchain targets (vet:windows, vet:daemon-windows) are
-      separate by design — not part of this wrapper.
+      Contributor wrapper: the six host-only legs (test:unit, test:golden,
+      test:integration, test:wireoracle, test:daemon, test:race), run
+      SERIALLY via a list of sub-task commands (never deps:, which go-task
+      runs concurrently). test:daemon and test:race both pass -p 1
+      specifically to avoid cross-test contention; running the two
+      concurrently with each other would reintroduce exactly the flakiness
+      those flags exist to prevent. Cross-toolchain targets (vet:windows,
+      vet:daemon-windows) are separate by design — not part of this
+      wrapper.
     cmds:
       - task: test:unit
       - task: test:golden
       - task: test:integration
+      - task: test:wireoracle
       - task: test:daemon
       - task: test:race
 

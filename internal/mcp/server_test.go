@@ -10,9 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
@@ -72,37 +70,49 @@ func indexFixture(t *testing.T, dir string) {
 	}
 }
 
-// initClient runs the MCP initialize handshake against c with a minimal
-// valid InitializeRequest, failing the test on error.
-func initClient(t *testing.T, ctx context.Context, c *mcpclient.Client) {
+// newTestSession builds an in-memory client/server session pair for s
+// (Phase 2, RESEARCH Testing Architecture): mcp.NewInMemoryTransports()
+// returns two *InMemoryTransport halves; s.Run is started on one in a
+// goroutine, and a client connects to the other via Connect, which
+// performs the MCP initialize handshake itself — go-sdk's Client has no
+// separate, repeatable Initialize call the way mark3labs' client did
+// (initClient no longer exists; this is the PROVEN-ABSENT finding
+// 02-RESEARCH.md Q1 asked to be confirmed rather than assumed: no
+// ServerOptions field or client method lets a caller inject a
+// ProtocolVersion — the repo-owned ProtocolVersion constant keeps its
+// role as the asserted pin). Every other test file in this package uses
+// this one helper rather than repeating the construction.
+//
+// The returned cleanup func closes the session; callers are responsible
+// for calling it (directly or via defer).
+func newTestSession(t *testing.T, s *mcp.Server) (*mcp.ClientSession, func()) {
 	t.Helper()
 
-	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-mcp-test", Version: "0.0.0"}
-
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("client Initialize: %v", err)
-	}
-}
-
-// listToolNames builds an in-process mcp-go client against s (no live
-// stdio transport, per RESEARCH's Testing Architecture — the
-// client/server pair talk to each other in-process) and returns the
-// sorted set of registered tool names.
-func listToolNames(t *testing.T, s *server.MCPServer) []string {
-	t.Helper()
-
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 
 	ctx := context.Background()
-	initClient(t, ctx, c)
+	go func() {
+		_ = s.Run(ctx, serverTransport)
+	}()
 
-	result, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-mcp-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client Connect: %v", err)
+	}
+
+	return session, func() { _ = session.Close() }
+}
+
+// listToolNames connects to s via newTestSession and returns the sorted
+// set of registered tool names.
+func listToolNames(t *testing.T, s *mcp.Server) []string {
+	t.Helper()
+
+	session, cleanup := newTestSession(t, s)
+	defer cleanup()
+
+	result, err := session.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
 	}
@@ -179,39 +189,16 @@ func TestExploreHandlerDelegatesToEngine(t *testing.T) {
 
 	s := BuildServer(true, map[string]bool{}, dir, dir)
 
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	initClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "codegraph_explore",
-			Arguments: map[string]any{
-				"query": "main",
-				"path":  dir,
-			},
-		},
+	result := callTool(t, s, "codegraph_explore", map[string]any{
+		"query": "main",
+		"path":  dir,
 	})
-	if err != nil {
-		t.Fatalf("CallTool codegraph_explore: %v", err)
-	}
 	if result.IsError {
 		t.Fatalf("codegraph_explore returned an error result: %+v", result)
 	}
-	if len(result.Content) == 0 {
-		t.Fatal("codegraph_explore returned no content")
-	}
-	text, ok := mcp.AsTextContent(result.Content[0])
-	if !ok {
-		t.Fatalf("codegraph_explore content[0] is not text: %+v", result.Content[0])
-	}
-	if !strings.Contains(text.Text, "**Exploration:") {
-		t.Fatalf("codegraph_explore output missing the Engine.Explore markdown header, got: %q", text.Text)
+	text := resultText(t, result)
+	if !strings.Contains(text, "**Exploration:") {
+		t.Fatalf("codegraph_explore output missing the Engine.Explore markdown header, got: %q", text)
 	}
 }
 
@@ -230,38 +217,13 @@ func TestOpenEnginePathConfinedToRepoRoot(t *testing.T) {
 
 	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
 
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
-
-	ctx := context.Background()
-	initClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "codegraph_status",
-			Arguments: map[string]any{
-				"path": outside,
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("CallTool codegraph_status: %v", err)
-	}
+	result := callTool(t, s, "codegraph_status", map[string]any{"path": outside})
 	if !result.IsError {
 		t.Fatal("codegraph_status with a path outside the server's repo root: expected an error result, got success")
 	}
-	if len(result.Content) == 0 {
-		t.Fatal("codegraph_status error result has no content")
-	}
-	text, ok := mcp.AsTextContent(result.Content[0])
-	if !ok {
-		t.Fatalf("codegraph_status error content[0] is not text: %+v", result.Content[0])
-	}
-	if !strings.Contains(text.Text, "outside") {
-		t.Fatalf("codegraph_status error message = %q, want it to explain the path is outside the repo root", text.Text)
+	text := resultText(t, result)
+	if !strings.Contains(text, "outside") {
+		t.Fatalf("codegraph_status error message = %q, want it to explain the path is outside the repo root", text)
 	}
 }
 
@@ -311,4 +273,149 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestIndexAppearingMidSessionRegistersTools is SPEC-05's core promise,
+// proven at the Go level: a server built with hasIndex=false against a
+// directory that has no .codegraph/ yet advertises exactly zero tools;
+// after that same directory gains a real index (indexFixture, a real
+// Pebble-backed store via indexer.Run, never a mock), the very next
+// tools/list on this SAME *mcp.Server advertises exactly the set a
+// server built with hasIndex=true from the start would have — no
+// restart, no reconnect. Both assertions use exact set equality
+// (equalStrings), never a non-empty or count check.
+func TestIndexAppearingMidSessionRegistersTools(t *testing.T) {
+	dir := copyFixture(t) // deliberately NOT indexed yet
+
+	s := BuildServer(false, map[string]bool{}, dir, dir)
+
+	got := listToolNames(t, s)
+	if !equalStrings(got, nil) {
+		t.Fatalf("registered tools before the index appears = %v, want none", got)
+	}
+
+	indexFixture(t, dir)
+
+	got = listToolNames(t, s)
+	want := []string{"codegraph_explore"}
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools after the index appears = %v, want %v", got, want)
+	}
+}
+
+// TestIndexAppearingMidSessionHonorsAllowlist proves the re-check
+// registers tools through the SAME allowlist gate construction-time
+// registration uses, rather than registering everything once an index is
+// merely present — the exact set the allowlist selects, in exact-set-
+// equality form, is the only acceptable outcome.
+func TestIndexAppearingMidSessionHonorsAllowlist(t *testing.T) {
+	dir := copyFixture(t) // deliberately NOT indexed yet
+
+	s := BuildServer(false, map[string]bool{"node": true, "status": true}, dir, dir)
+
+	got := listToolNames(t, s)
+	if !equalStrings(got, nil) {
+		t.Fatalf("registered tools before the index appears = %v, want none", got)
+	}
+
+	indexFixture(t, dir)
+
+	got = listToolNames(t, s)
+	want := []string{"codegraph_explore", "codegraph_node", "codegraph_status"}
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools after the index appears = %v, want %v", got, want)
+	}
+}
+
+// TestIndexDisappearingMidSessionUnregistersTools is SPEC-05's reverse
+// transition: an indexed server that loses its .codegraph/ directory
+// mid-session advertises exactly zero tools on the very next tools/list.
+func TestIndexDisappearingMidSessionUnregistersTools(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	s := BuildServer(true, map[string]bool{}, dir, dir)
+
+	got := listToolNames(t, s)
+	want := []string{"codegraph_explore"}
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools = %v, want %v", got, want)
+	}
+
+	if err := os.RemoveAll(filepath.Join(dir, ".codegraph")); err != nil {
+		t.Fatalf("remove .codegraph: %v", err)
+	}
+
+	got = listToolNames(t, s)
+	if !equalStrings(got, nil) {
+		t.Fatalf("registered tools after the index disappears = %v, want none", got)
+	}
+}
+
+// TestRepeatedListsDoNotDuplicateTools pins the re-check's flip-guard: a
+// re-check that unconditionally called registerTools on every request
+// (rather than only on a false-to-true state flip) would still return
+// exactly one entry per name (mcp.AddTool replaces a same-named tool
+// rather than appending a duplicate), so this test's job is to prove the
+// flip-guard exists at all — repeated calls make no additional
+// registerTools call once the state is steady, verified indirectly by
+// asserting the exact same set on every one of three separate
+// listToolNames calls against the same steady-state server.
+func TestRepeatedListsDoNotDuplicateTools(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	s := BuildServer(true, map[string]bool{}, dir, dir)
+
+	want := []string{"codegraph_explore"}
+	for i := 0; i < 3; i++ {
+		got := listToolNames(t, s)
+		if !equalStrings(got, want) {
+			t.Fatalf("call %d: registered tools = %v, want %v", i, got, want)
+		}
+	}
+}
+
+// TestSessionLineReflectsPostAppearanceToolCount is VRFY-03/T-03-17's
+// mid-session assertion: a server built with hasIndex=false writes
+// tools=0 on its first classic initialize (sendRawInitialize, reused from
+// session_line_concurrency_test.go — see its doc comment for why the
+// classic handshake, not newTestSession's Connect, is required here). The
+// index then appears on disk, and a SECOND classic initialize (a fresh
+// session, since go-sdk rejects a second "initialize" on the same
+// session) writes tools=1 — the re-check ran before this initialize's own
+// next() call, so the count reflects a live reading, not the
+// construction-time value the first line already proved was 0.
+func TestSessionLineReflectsPostAppearanceToolCount(t *testing.T) {
+	dir := copyFixture(t) // deliberately NOT indexed yet
+
+	var log bytes.Buffer
+	s := BuildServer(false, map[string]bool{}, dir, dir, WithSessionLog(&log))
+
+	sendRawInitialize(t, s, "codegraph-mcp-test", "0.0.0")
+
+	indexFixture(t, dir)
+
+	sendRawInitialize(t, s, "codegraph-mcp-test", "0.0.0")
+
+	lines := strings.Split(strings.TrimSuffix(log.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d session lines, want 2: %q", len(lines), log.String())
+	}
+
+	first, err := parseSessionLineFields(lines[0] + "\n")
+	if err != nil {
+		t.Fatalf("parseSessionLineFields(first line): %v", err)
+	}
+	if first["tools"] != "0" {
+		t.Fatalf("first session line tools = %q, want %q (pre-appearance)", first["tools"], "0")
+	}
+
+	second, err := parseSessionLineFields(lines[1] + "\n")
+	if err != nil {
+		t.Fatalf("parseSessionLineFields(second line): %v", err)
+	}
+	if second["tools"] != "1" {
+		t.Fatalf("second session line tools = %q, want %q (post-appearance, not the construction-time 0)", second["tools"], "1")
+	}
 }

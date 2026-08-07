@@ -17,9 +17,7 @@ import (
 	"testing"
 	"time"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // newServeClientWithEnv mirrors worktree_notice_test.go's newServeClient
@@ -27,29 +25,21 @@ import (
 // subprocess (appended to os.Environ(), never replacing it) — this test
 // needs CODEGRAPH_DEBOUNCE_MS lowered so the debounced flush fires within
 // a CI-friendly window instead of the 2s production default.
-func newServeClientWithEnv(t *testing.T, ctx context.Context, cwd string, env []string) *mcpclient.Client {
+func newServeClientWithEnv(t *testing.T, ctx context.Context, cwd string, env []string) *mcp.ClientSession {
 	t.Helper()
 
-	c, err := mcpclient.NewStdioMCPClientWithOptions(binPath, env, []string{"serve", "--mcp"},
-		transport.WithCommandFunc(func(ctx context.Context, command string, cmdEnv []string, args []string) (*exec.Cmd, error) {
-			cmd := exec.CommandContext(ctx, command, args...)
-			cmd.Dir = cwd
-			cmd.Env = append(os.Environ(), cmdEnv...)
-			return cmd, nil
-		}),
-	)
-	if err != nil {
-		t.Fatalf("NewStdioMCPClientWithOptions(serve --mcp, cwd=%s, env=%v): %v", cwd, env, err)
-	}
-	t.Cleanup(func() { _ = c.Close() })
+	cmd := exec.CommandContext(ctx, binPath, "serve", "--mcp")
+	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(), env...)
 
-	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("Initialize (cwd=%s): %v", cwd, err)
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
+	if err != nil {
+		t.Fatalf("CommandTransport Connect(serve --mcp, cwd=%s, env=%v): %v", cwd, env, err)
 	}
-	return c
+	t.Cleanup(func() { _ = session.Close() })
+
+	return session
 }
 
 // TestLiveEditAutoSyncReachesExplore proves WATCH-01 end-to-end against the
@@ -115,11 +105,9 @@ func TestLiveEditAutoSyncReachesExplore(t *testing.T) {
 	lastTouch := time.Now()
 	var lastPayload string
 	for time.Now().Before(deadline) {
-		result, err := c.CallTool(ctx, mcp.CallToolRequest{
-			Params: mcp.CallToolParams{
-				Name:      "codegraph_explore",
-				Arguments: map[string]any{"query": "Zeta"},
-			},
+		result, err := c.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "codegraph_explore",
+			Arguments: map[string]any{"query": "Zeta"},
 		})
 		if err != nil {
 			t.Fatalf("codegraph_explore transport error during a live watch session: %v", err)

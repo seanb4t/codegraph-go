@@ -41,10 +41,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
@@ -59,27 +58,18 @@ const worktreeNoticeText = "⚠ CodeGraph results below come from a different gi
 // codegraph_status carries instead of the compact notice.
 const worktreeBlockquotePrefix = "> ⚠ This CodeGraph index belongs to a different git working tree."
 
-// callTool runs the MCP initialize handshake against s (in-process, via
-// mcpclient.NewInProcessClient, per server_test.go's existing pattern) and
-// CallTools name with args, returning the raw result so callers can decide
-// how to handle an error result themselves.
-func callTool(t *testing.T, s *server.MCPServer, name string, args map[string]any) *mcp.CallToolResult {
+// callTool connects to s via newTestSession (server_test.go) and CallTools
+// name with args, returning the raw result so callers can decide how to
+// handle an error result themselves.
+func callTool(t *testing.T, s *mcp.Server, name string, args map[string]any) *mcp.CallToolResult {
 	t.Helper()
 
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
+	session, cleanup := newTestSession(t, s)
+	defer cleanup()
 
-	ctx := context.Background()
-	initClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      name,
-			Arguments: args,
-		},
+	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      name,
+		Arguments: args,
 	})
 	if err != nil {
 		t.Fatalf("CallTool %s: %v", name, err)
@@ -95,7 +85,7 @@ func resultText(t *testing.T, result *mcp.CallToolResult) string {
 	if len(result.Content) == 0 {
 		t.Fatal("CallTool result has no content")
 	}
-	text, ok := mcp.AsTextContent(result.Content[0])
+	text, ok := result.Content[0].(*mcp.TextContent)
 	if !ok {
 		t.Fatalf("CallTool result content[0] is not text: %+v", result.Content[0])
 	}
@@ -428,9 +418,34 @@ func TestWorktreeNoticeConsistentAcrossCalls(t *testing.T) {
 // silently disabling the worktree notice for the rest of the server's
 // life. This reproduces the reviewer's proof through the REAL
 // BuildServer -> CallTool handler path (not a unit test on the cache
-// alone, per 02-REVIEW-2.md's acceptance bar): call 1 issues with an
-// ALREADY-CANCELLED context; call 2 is an ordinary, healthy call against
-// the SAME server and must still see the notice.
+// alone, per 02-REVIEW-2.md's acceptance bar).
+//
+// DEVIATION forced by go-sdk (Phase 2, SDK-01): the pre-migration test
+// passed an ALREADY-CANCELLED context straight to CallTool. Under
+// go-sdk this is structurally impossible to reach the server with:
+// ioConn.Write checks ctx.Done() BEFORE writing ("As in [ioConn.Read],
+// enforce that Writes on a closed context are an error." —
+// $GOMODCACHE/.../mcp/transport.go), so an already-cancelled ctx never
+// even reaches the wire — session.CallTool returns ctx.Err() locally,
+// confirmed empirically ("CallTool (cancelled ctx): context canceled").
+// This is deliberate, documented SDK behavior, not a bug to work around.
+//
+// The real mechanism go-sdk provides for a caller aborting an in-flight
+// call is protocol-level: when Await observes ctx cancellation WHILE a
+// call is outstanding (not before it was ever sent), mcp's call() helper
+// sends a "notifications/cancelled" for that request id
+// ($GOMODCACHE/.../mcp/transport.go's cancelCall) — the server's
+// canceller Preempter receives it and cancels that specific request's
+// server-side context, which is what actually reaches
+// eng.WorktreeMismatch(ctx) and aborts its git subprocess. Call 1 below
+// therefore issues with a context.WithTimeout short enough to expire
+// WHILE the server is still working (git subprocess spawn overhead is
+// milliseconds; DetectIndexMismatch's own doc comment notes up to four
+// sequential subprocesses per verdict) but long enough to clear the
+// client-side write check first — reaching the server for real, then
+// genuinely cancelling mid-flight, which is the same class of event
+// (an aborted-but-accepted request) the pre-migration already-cancelled
+// ctx was standing in for.
 func TestCancelledCallDoesNotPoisonNoticeForSubsequentCalls(t *testing.T) {
 	wt, _ := mcpWorktreeMismatchFixture(t)
 
@@ -449,32 +464,29 @@ func TestCancelledCallDoesNotPoisonNoticeForSubsequentCalls(t *testing.T) {
 	// detector/cache.
 	s2 := BuildServer(true, map[string]bool{}, deriveServeRepoPath(t, wt), wt)
 
-	c, err := mcpclient.NewInProcessClient(s2)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
+	// newTestSession establishes the session on a LIVE context — only the
+	// TOOL call below carries the short-lived one.
+	session, cleanup := newTestSession(t, s2)
+	defer cleanup()
 
-	// The MCP initialize handshake must succeed on a live context —
-	// only the TOOL call below carries the cancelled one.
-	initClient(t, context.Background(), c)
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 3*time.Millisecond)
+	defer cancel()
 
-	cancelledCtx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	// Call 1: an ALREADY-CANCELLED context. openEngine still succeeds
-	// (query.OpenAt takes no ctx), but eng.WorktreeMismatch(ctx)'s git
-	// subprocess is aborted instantly by exec.CommandContext, so
-	// DetectIndexMismatch degrades to nil for THIS call (WORK-03: never
-	// block or error a read on a failed git probe) — that degradation
-	// itself is correct and expected, and is NOT what this test pins.
-	if _, err := c.CallTool(cancelledCtx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name:      "codegraph_explore",
-			Arguments: map[string]any{"query": "main"},
-		},
-	}); err != nil {
-		t.Fatalf("CallTool (cancelled ctx): %v", err)
+	// Call 1: a context that expires mid-flight. openEngine still
+	// succeeds (query.OpenAt takes no ctx), but
+	// eng.WorktreeMismatch(ctx)'s git subprocess is aborted once the
+	// cancellation notification lands, so DetectIndexMismatch degrades to
+	// nil for THIS call (WORK-03: never block or error a read on a
+	// failed git probe) — that degradation itself is correct and
+	// expected, and is NOT what this test pins. The call itself is
+	// expected to return the context-deadline error client-side (that is
+	// what triggers the cancellation notification in the first place);
+	// only an unexpected non-deadline error fails the test here.
+	if _, err := session.CallTool(timeoutCtx, &mcp.CallToolParams{
+		Name:      "codegraph_explore",
+		Arguments: map[string]any{"query": "main"},
+	}); err != nil && !strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+		t.Fatalf("CallTool (short-timeout ctx): %v", err)
 	}
 
 	// Call 2: a normal, healthy call against the SAME server (s2) — same

@@ -81,6 +81,7 @@ var taskWrapperExpectedLegs = []string{
 	"test:integration",
 	"test:race",
 	"test:unit",
+	"test:wireoracle",
 }
 
 // inScopeJob names one job, by its YAML map key (not its `name:` display
@@ -109,6 +110,8 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "goreleaser-check"},
 	{Workflow: "ci.yml", JobID: "reproducibility"},
 	{Workflow: "ci.yml", JobID: "perf-regression"},
+	{Workflow: "ci.yml", JobID: "transcript-freeze"},
+	{Workflow: "ci.yml", JobID: "tool-vuln"},
 	{Workflow: "release-please.yml", JobID: "pretag-gate"},
 }
 
@@ -257,6 +260,57 @@ func parseGoModRequireVersion(src, pkg string) (string, error) {
 	return "", fmt.Errorf("parseGoModRequireVersion: no require line found for package %q", pkg)
 }
 
+// parseWorkflowEnvValue returns the value of key from a workflow YAML
+// source's WORKFLOW-LEVEL `env:` block only — a job-level or step-level
+// `env:` entry with the same key (both indented deeper than column 0) must
+// not satisfy it, since the pin this guards (MAINT-03) is a workflow-level
+// value. Surrounding quotes are stripped. Returns a non-nil error naming
+// key whenever the workflow declares no top-level env: block at all, the
+// block exists but does not declare key, or declares key with an empty
+// value — never a usable zero value on any of those misses (the CR-01
+// defect class every parser in this file guards against).
+func parseWorkflowEnvValue(src, key string) (string, error) {
+	envBlockRe := regexp.MustCompile(`^env:\s*$`)
+	keyRe := regexp.MustCompile(`^  (\S+):\s*(.*)$`)
+
+	inBlock := false
+	for _, line := range strings.Split(src, "\n") {
+		if envBlockRe.MatchString(line) {
+			inBlock = true
+			continue
+		}
+		if !inBlock {
+			continue
+		}
+		// A non-blank line at column 0 (no leading whitespace) ends the
+		// workflow-level env: block — e.g. the following `jobs:` key.
+		if line != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			break
+		}
+		if m := keyRe.FindStringSubmatch(line); m != nil && m[1] == key {
+			v := strings.TrimSpace(m[2])
+			v = strings.Trim(v, `"'`)
+			if v == "" {
+				return "", fmt.Errorf("parseWorkflowEnvValue: workflow-level env: key %q found but its value is empty", key)
+			}
+			return v, nil
+		}
+	}
+	if !inBlock {
+		return "", fmt.Errorf("parseWorkflowEnvValue: no workflow-level env: block found")
+	}
+	return "", fmt.Errorf("parseWorkflowEnvValue: workflow-level env: block found but no key %q present", key)
+}
+
+func mustWorkflowEnvValue(t *testing.T, src, key string) string {
+	t.Helper()
+	v, err := parseWorkflowEnvValue(src, key)
+	if err != nil {
+		t.Fatalf("mustWorkflowEnvValue: %v", err)
+	}
+	return v
+}
+
 // parseToolModfileHeaderComment returns the leading `//`-comment block that
 // precedes a tool modfile's `module` directive line, with the `// ` prefix
 // stripped from each line and joined by spaces. Returns a non-nil error if
@@ -357,6 +411,69 @@ func mustParseTaskBlocks(t *testing.T, src string) map[string]string {
 	v, err := parseTaskBlocks(src)
 	if err != nil {
 		t.Fatalf("mustParseTaskBlocks: %v", err)
+	}
+	return v
+}
+
+// descKeyLineRe matches a `desc:` key line within a task block (as produced
+// by parseTaskBlocks), capturing its own leading indentation and whatever
+// follows the colon on the same line — either an inline value or a YAML
+// block-scalar indicator (>-, |-, >, |).
+var descKeyLineRe = regexp.MustCompile(`^(\s*)desc:\s*(.*)$`)
+
+// parseTaskDescription returns a task block's desc: value, handling both
+// the inline form (`desc: some text`) and the folded/literal block-scalar
+// form (`desc: >-` or `desc: |-` followed by lines indented deeper than
+// the desc: key itself, joined with single spaces per YAML folding —
+// exactly the form every multi-line desc: in this Taskfile uses). Returns
+// a non-nil error when block declares no desc: key at all, or declares one
+// whose resulting text is empty — never a usable zero value on either
+// miss.
+func parseTaskDescription(block string) (string, error) {
+	lines := strings.Split(block, "\n")
+	for i, line := range lines {
+		m := descKeyLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		indent, rest := m[1], strings.TrimSpace(m[2])
+
+		if rest != "" && rest != ">-" && rest != "|-" && rest != ">" && rest != "|" {
+			v := strings.Trim(rest, `"'`)
+			v = strings.TrimSpace(v)
+			if v == "" {
+				return "", fmt.Errorf("parseTaskDescription: desc: key found but its inline value is empty")
+			}
+			return v, nil
+		}
+
+		var cont []string
+		for j := i + 1; j < len(lines); j++ {
+			next := lines[j]
+			trimmed := strings.TrimSpace(next)
+			if trimmed == "" {
+				continue
+			}
+			nextIndent := len(next) - len(strings.TrimLeft(next, " "))
+			if nextIndent <= len(indent) {
+				break
+			}
+			cont = append(cont, trimmed)
+		}
+		v := strings.TrimSpace(strings.Join(cont, " "))
+		if v == "" {
+			return "", fmt.Errorf("parseTaskDescription: desc: key found but its block-scalar value is empty")
+		}
+		return v, nil
+	}
+	return "", fmt.Errorf("parseTaskDescription: no desc: key found in task block")
+}
+
+func mustTaskDescription(t *testing.T, block string) string {
+	t.Helper()
+	v, err := parseTaskDescription(block)
+	if err != nil {
+		t.Fatalf("mustTaskDescription: %v", err)
 	}
 	return v
 }
@@ -535,6 +652,46 @@ func sortedPairSet(pairs []string) string {
 	return strings.Join(sorted, ",")
 }
 
+// gateStanceWords are the two gate-stance words this repo's guards state
+// explicitly in prose (Phase 3's D-03 transcript-freeze pattern,
+// generalized by VULN-03): a job `name:` or step `name:` is a short,
+// single-purpose display string, so naming neither word or naming both is
+// not a legible single stance statement for that site.
+var gateStanceWords = []string{"advisory", "blocking"}
+
+// hasStanceWord reports whether text contains word as a case-insensitive
+// whole word — matching the word itself, not a whole formatted string, so
+// a reworded but still-honest name does not fail a stance guard while a
+// deleted stance does.
+func hasStanceWord(text, word string) bool {
+	re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(word) + `\b`)
+	return re.MatchString(text)
+}
+
+// parseGateStanceWord returns whichever of gateStanceWords appears in text
+// as a case-insensitive whole word. Returns a non-nil error if text names
+// neither word, or names both (an ambiguous, self-contradicting single-line
+// stance statement) — never a usable zero value on either miss. Intended
+// for short display strings (job/step name: values), not free-form prose
+// like a task desc:, which may legitimately narrate a stance's history
+// using both words.
+func parseGateStanceWord(text string) (string, error) {
+	var found []string
+	for _, w := range gateStanceWords {
+		if hasStanceWord(text, w) {
+			found = append(found, w)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return "", fmt.Errorf("parseGateStanceWord: text states neither %q nor %q: %q", gateStanceWords[0], gateStanceWords[1], text)
+	case 1:
+		return found[0], nil
+	default:
+		return "", fmt.Errorf("parseGateStanceWord: text states both %v — an ambiguous, self-contradicting stance statement: %q", found, text)
+	}
+}
+
 // --- tests -------------------------------------------------------------
 
 // TestRequiredCheckNamesPreserved is the T-10-01-05 information-disclosure
@@ -591,6 +748,124 @@ func TestRequiredCheckNamesPreserved_ZeroJobsIsError(t *testing.T) {
 	src := "name: empty\non:\n  push:\njobs: {}\n"
 	if _, err := parseWorkflowJobNames(src); err == nil {
 		t.Fatalf("parseWorkflowJobNames: expected a non-nil error for a workflow with zero job name: keys, got nil")
+	}
+}
+
+// TestGoreleaserPinParity is the MAINT-03 pin-parity guard: go.tool.mod's
+// goreleaser require line and release.yml's workflow-level
+// GORELEASER_VERSION must name the same version. Two independent pin sites
+// drifted apart silently for five weeks before this test existed (19 days
+// between ee258d9, which set release.yml's v2.17.0, and 82ffd60, which
+// created go.tool.mod already carrying v2.17.1) — this test fails the
+// build on any future divergence, naming both sites and both versions so
+// the offending pair is immediately actionable.
+func TestGoreleaserPinParity(t *testing.T) {
+	toolModData, err := os.ReadFile(toolModfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", toolModfilePath, err)
+	}
+	toolVersion, err := parseGoModRequireVersion(string(toolModData), "github.com/goreleaser/goreleaser")
+	if err != nil {
+		t.Fatalf("%s: %v", toolModfilePath, err)
+	}
+
+	releaseData, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	releaseVersion := mustWorkflowEnvValue(t, string(releaseData), "GORELEASER_VERSION")
+
+	toolNorm := strings.TrimPrefix(toolVersion, "v")
+	releaseNorm := strings.TrimPrefix(releaseVersion, "v")
+
+	if toolNorm != releaseNorm {
+		t.Fatalf("GoReleaser pin mismatch (MAINT-03): %s requires goreleaser@%s but %s sets GORELEASER_VERSION=%s — the two pin sites must name the same version", toolModfilePath, toolVersion, releaseWorkflowPath, releaseVersion)
+	}
+}
+
+// TestGateStancesStated is the VULN-03 stance guard.
+//
+// NOTE (D-04 superseded 2026-08-06 at 04-01's Task 1 checkpoint — see
+// 04-CONTEXT.md and 04-01-SUMMARY.md): this test was originally designed
+// to assert a DELIBERATE blocking-versus-advisory divergence between the
+// tool-modfile scan (Taskfile.yml's `vuln` task / ci.yml's `tool-vuln`
+// job) and the D-03 transcript-freeze guard (Phase 3's sibling
+// advisory-stance pattern). Implementing the tool-modfile scan surfaced a
+// real, permanently-unfixed, symbol-reachable vulnerability in
+// goreleaser's own binary (GO-2026-5932) that would have made a blocking
+// gate permanently red from its first CI run, so the maintainer demoted it
+// to ADVISORY — now MATCHING transcript-freeze's stance rather than
+// deliberately differing from it. This test is re-derived accordingly: it
+// asserts all three sites state ADVISORY and that the tool-vuln job and
+// transcript-freeze's advisory-guard step still agree with each other, so
+// a future silent flip of either site back to BLOCKING — re-introducing an
+// unstated stance mismatch — still fails loudly, naming the offending
+// site.
+func TestGateStancesStated(t *testing.T) {
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	blocks := mustParseTaskBlocks(t, string(taskfileData))
+	vulnBlock, ok := blocks["vuln"]
+	if !ok {
+		t.Fatalf("Taskfile.yml declares no top-level %q task", "vuln")
+	}
+	vulnDesc := mustTaskDescription(t, vulnBlock)
+	if !hasStanceWord(vulnDesc, "advisory") {
+		t.Errorf("Taskfile.yml vuln task's desc: does not state the ADVISORY stance (VULN-03): %q", vulnDesc)
+	}
+
+	ciPath := filepath.Join(workflowsDir, "ci.yml")
+	ciData, err := os.ReadFile(ciPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", ciPath, err)
+	}
+	ciSrc := string(ciData)
+
+	jobNames := mustWorkflowJobNames(t, ciSrc)
+	var toolVulnName string
+	for _, n := range jobNames {
+		if strings.Contains(n, "tool-vuln") {
+			toolVulnName = n
+			break
+		}
+	}
+	if toolVulnName == "" {
+		t.Fatalf("ci.yml declares no job name: containing %q (VULN-03)", "tool-vuln")
+	}
+	toolVulnStance, err := parseGateStanceWord(toolVulnName)
+	if err != nil {
+		t.Errorf("ci.yml tool-vuln job's name: %v", err)
+	}
+
+	tfSteps, err := parseWorkflowJobSteps(ciSrc, "transcript-freeze")
+	if err != nil {
+		t.Fatalf("ci.yml transcript-freeze: %v", err)
+	}
+	var tfStepName string
+	for _, s := range tfSteps {
+		if hasStanceWord(s.Name, "advisory") {
+			tfStepName = s.Name
+			break
+		}
+	}
+	if tfStepName == "" {
+		t.Fatalf("ci.yml transcript-freeze job has no step whose name: states the ADVISORY stance (D-03)")
+	}
+	tfStance, err := parseGateStanceWord(tfStepName)
+	if err != nil {
+		t.Errorf("ci.yml transcript-freeze step %q: %v", tfStepName, err)
+	}
+
+	if toolVulnStance != "" && toolVulnStance != "advisory" {
+		t.Errorf("ci.yml tool-vuln job's name: states %q, want %q: %q", toolVulnStance, "advisory", toolVulnName)
+	}
+	if tfStance != "" && tfStance != "advisory" {
+		t.Errorf("ci.yml transcript-freeze step %q states %q, want %q", tfStepName, tfStance, "advisory")
+	}
+	if toolVulnStance != "" && tfStance != "" && toolVulnStance != tfStance {
+		t.Errorf("tool-vuln job states %q but transcript-freeze's advisory-guard step states %q — the two gates' stances no longer agree (D-04 superseded: they are now deliberately equal, not deliberately different)", toolVulnStance, tfStance)
 	}
 }
 
@@ -692,6 +967,20 @@ func TestTaskfileShapeHelpersFailLoudly(t *testing.T) {
 				return err
 			},
 		},
+		{
+			name: "parseWorkflowEnvValue: empty input",
+			fn: func() error {
+				_, err := parseWorkflowEnvValue("", "GORELEASER_VERSION")
+				return err
+			},
+		},
+		{
+			name: "parseTaskDescription: empty input",
+			fn: func() error {
+				_, err := parseTaskDescription("")
+				return err
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -700,6 +989,17 @@ func TestTaskfileShapeHelpersFailLoudly(t *testing.T) {
 				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
 			}
 		})
+	}
+}
+
+// TestParseWorkflowEnvValue_NoWorkflowLevelEnvBlockIsError is the edge case
+// named by this task's own <behavior>: a workflow source that declares
+// jobs: but no workflow-level env: block at all must produce a non-nil
+// error, never an empty string that would compare equal to nothing.
+func TestParseWorkflowEnvValue_NoWorkflowLevelEnvBlockIsError(t *testing.T) {
+	src := "name: x\non:\n  push:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n      - name: s\n        run: task build\n"
+	if _, err := parseWorkflowEnvValue(src, "GORELEASER_VERSION"); err == nil {
+		t.Fatalf("parseWorkflowEnvValue(%q, %q): expected a non-nil error for a workflow with jobs but no workflow-level env: block, got nil", src, "GORELEASER_VERSION")
 	}
 }
 

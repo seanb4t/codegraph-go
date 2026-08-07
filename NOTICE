@@ -63,7 +63,7 @@ Notable components:
   project's one CGo dependency; the rationale is recorded in
   `PARSER-DECISION.md`.
 - **CockroachDB Pebble** (BSD-3-Clause) — the embedded graph store.
-- **mark3labs/mcp-go** (MIT) — MCP server transport and tool registration.
+- **modelcontextprotocol/go-sdk** (Apache-2.0) — MCP server transport and tool registration.
 - **spf13/cobra** (Apache-2.0) — CLI framework.
 
 Each dependency retains its own license; nothing here supersedes them.

@@ -13,7 +13,12 @@ import (
 // proving the poll goroutine actually joined (RESEARCH Pitfall 4).
 func TestWatchdogCancelsOnReparent(t *testing.T) {
 	origGetppid := getppid
-	defer func() { getppid = origGetppid }()
+	// t.Cleanup (not defer): a defer positioned here would still run on
+	// the runtime.Goexit() unwind a failing t.Fatalf takes, but ONLY a
+	// t.Cleanup registered AFTER the join below is guaranteed by LIFO to
+	// run AFTER that join's cleanup — see joinDaemonRun's ordering
+	// contract (MAINT-01).
+	t.Cleanup(func() { getppid = origGetppid })
 
 	const original = 12345
 	var current int32 = original
@@ -23,13 +28,25 @@ func TestWatchdogCancelsOnReparent(t *testing.T) {
 	defer cancel()
 
 	stop := startWatchdog(ctx, cancel, 5*time.Millisecond)
+	// joinDaemonRun's t.Cleanup, registered AFTER the getppid restore
+	// above, runs FIRST on LIFO unwind: stop() — bounded by the shared
+	// budget, not left to block the whole run indefinitely — is guaranteed
+	// to complete before getppid is restored, regardless of which
+	// statement in this test triggers a Goexit-driven unwind (MAINT-01).
+	stopErr := make(chan error, 1)
+	go func() {
+		stop()
+		stopErr <- nil
+		close(stopErr)
+	}()
+	joinDaemonRun(t, cancel, stopErr)
 
 	// Simulate a reparent shortly after start.
 	atomic.StoreInt32(&current, original+1)
 
 	select {
 	case <-ctx.Done():
-	case <-time.After(2 * time.Second):
+	case <-time.After(testBudget(2 * time.Second)):
 		t.Fatal("expected ctx to be cancelled after simulated reparent")
 	}
 
@@ -40,7 +57,7 @@ func TestWatchdogCancelsOnReparent(t *testing.T) {
 	}()
 	select {
 	case <-joined:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testBudget(2 * time.Second)):
 		t.Fatal("stop() did not join the watchdog goroutine promptly")
 	}
 }
@@ -51,7 +68,9 @@ func TestWatchdogCancelsOnReparent(t *testing.T) {
 // calls cancel a second time.
 func TestWatchdogJoinsOnCtxCancelWithoutFiringCancel(t *testing.T) {
 	origGetppid := getppid
-	defer func() { getppid = origGetppid }()
+	// t.Cleanup, not defer — see TestWatchdogCancelsOnReparent's comment;
+	// registered before the join below so LIFO makes the join run first.
+	t.Cleanup(func() { getppid = origGetppid })
 
 	const original = 54321
 	getppid = func() int { return original } // parent never changes
@@ -65,6 +84,13 @@ func TestWatchdogJoinsOnCtxCancelWithoutFiringCancel(t *testing.T) {
 	}
 
 	stop := startWatchdog(ctx, wrappedCancel, 5*time.Millisecond)
+	stopErr := make(chan error, 1)
+	go func() {
+		stop()
+		stopErr <- nil
+		close(stopErr)
+	}()
+	joinDaemonRun(t, cancel, stopErr)
 
 	cancel() // external cancellation, not a reparent
 
@@ -75,7 +101,7 @@ func TestWatchdogJoinsOnCtxCancelWithoutFiringCancel(t *testing.T) {
 	}()
 	select {
 	case <-joined:
-	case <-time.After(2 * time.Second):
+	case <-time.After(testBudget(2 * time.Second)):
 		t.Fatal("stop() did not join the watchdog goroutine promptly")
 	}
 

@@ -101,6 +101,14 @@ jobs:
       - name: Test subprocess integration harness (test/integration)
         run: task test:integration
 
+      # VRFY-01/VRFY-04 (v0.3.0 Phase 1): the wire-level regression oracle
+      # spawns the real binary over real stdio and byte-compares normalized
+      # transcripts against testdata/wireoracle/transcripts/*.golden — a
+      # required PR leg from the moment it lands, never relaxed or
+      # re-baselined during the Phase 2 SDK swap.
+      - name: Test wire oracle (test/wireoracle)
+        run: task test:wireoracle
+
       - name: Test internal/daemon (isolated, -count=1)
         # internal/daemon's TestSoak + flush-lock tests are a documented,
         # PRE-EXISTING flake under full-suite parallel load (STATE.md,
@@ -169,6 +177,60 @@ jobs:
         with:
           go-version-file: go.mod
           repo-checkout: false
+
+  # tool-vuln (VULN-01/02/03): govulncheck -mode=binary over the four tool
+  # binaries built from go.tool.mod/go.tool-lint.mod — the 357 measured
+  # third-party modules that execute as credentialed CI tooling (repository
+  # write access and secrets) and were previously scanned by nothing
+  # (Taskfile.yml's `vuln` target used to be a no-op duplicate of the
+  # govulncheck job above, D-05). This job deliberately does NOT replace the
+  # govulncheck job above, which keeps covering the main module in source
+  # mode, unchanged, and stays BLOCKING. -mode=binary is symbol-level, not
+  # call-graph-aware — a materially weaker guarantee than that source-mode
+  # gate's — so a reader must not generalize its call-graph framing onto
+  # this job.
+  #
+  # ADVISORY, not blocking (D-04 superseded — see 04-01-SUMMARY.md): this
+  # job was designed blocking and demoted after its own first real run
+  # found that `goreleaser`'s binary carries a real, permanently-unfixed,
+  # symbol-reachable match for GO-2026-5932 (golang.org/x/crypto/openpgp,
+  # reached via goreleaser/cmd -> pipe/ko -> google/ko ->
+  # sigstore/cosign/oci -> sigstore/rekor/pkg/pki/pgp; upstream unmaintained,
+  # Fixed in: N/A). Shipped blocking, this job would have been permanently
+  # red from its first run on real in-scope tooling. `task vuln` reports
+  # every finding (including that one) and always exits 0; `task
+  # vuln:selftest` is the exception — it proves DETECTION still fires
+  # against a known-vulnerable target and is allowed to fail this job if
+  # that detection mechanism itself regresses.
+  #
+  # Making this job (or its selftest) a branch-protection required context
+  # is a separate, out-of-repo ruleset change this plan does not perform.
+  tool-vuln:
+    name: tool-vuln (VULN-01/02/03, advisory)
+    runs-on: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Tool-modfile vulnerability scan (advisory — reports, never fails the build)
+        run: task vuln
+
+      - name: Non-vacuity proof the advisory scan can still detect (VULN-02, may fail this job on a detection regression)
+        run: task vuln:selftest
 
   reproducibility:
     name: reproducibility (double-build hash-diff, DIST-04)
@@ -319,6 +381,41 @@ jobs:
 
       - name: Run actionlint
         run: task lint:actions
+
+  transcript-freeze:
+    name: transcript-freeze
+    # D-03 (v0.3.0 Phase 1): pull-request-only, because the guard's
+    # merge-base diff is only meaningful against a PR's base ref — a plain
+    # push to main has no comparable base for this check.
+    if: github.event_name == 'pull_request'
+    runs-on: namespace-profile-linux-amd64-2x4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache Go modules and build
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        with:
+          cache: go
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      # Base ref reaches the shell only through this step-level env: entry,
+      # never interpolated into the run: body — matching this workflow's
+      # existing env-indirection discipline (T-06-01).
+      - name: Anti-regeneration guard (D-03, advisory since 03-02)
+        env:
+          TRANSCRIPT_FREEZE_BASE: origin/${{ github.event.pull_request.base.ref }}
+        run: task check:transcript-freeze
 
   goreleaser-check:
     name: goreleaser check (config validation, DIST-01)

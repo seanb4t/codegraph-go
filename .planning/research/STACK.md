@@ -1,246 +1,178 @@
-# Technology Stack
+# Stack Research: MCP 2026-07-28 Protocol Currency
 
-**Project:** CodeGraph Go — Go port of TypeScript CodeGraph
-**Researched:** 2026-07-10
-**Confidence:** MEDIUM (HIGH on release-engineering tooling; MEDIUM on storage/MCP SDKs; MEDIUM-LOW on the parser strategy, which needs an empirical Phase-1 spike before it can be called HIGH)
+**Domain:** MCP server SDK currency + tool-manifest vulnerability scanning (subsequent-milestone stack decision, v0.3.0)
+**Researched:** 2026-08-03
+**Confidence:** HIGH — every version number and code claim below was fetched live (GitHub REST API, raw source at pinned tags, or executed locally in this repo) on 2026-08-03, not recalled from training data or inferred from the MCP blog post.
 
 ## Recommended Stack
 
-### Core Technologies
+### Core Decision: DEFER the SDK swap and the 2026-07-28 protocol adoption — with a dated re-check
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Go | latest stable (1.24/1.25 line) | Language/runtime | Static binaries, cross-compilation, project constraint |
-| `github.com/tree-sitter/go-tree-sitter` | v0.25.x + per-language grammar modules (`tree-sitter/tree-sitter-<lang>`) | Source parsing into concrete syntax trees | Official, org-maintained since Aug 2024 (successor to the community `smacker/go-tree-sitter` fork); only path with mature, broad, actively-updated grammar coverage for 12+ languages today. **This is a justified CGo exception** — see "The Parser Decision" below. |
-| `modernc.org/sqlite` | latest (v1.3x line) | Pure-Go SQLite driver — used ONLY for the migration reader that ingests existing TS-CodeGraph `.codegraph/` SQLite indexes | CGo-free, cross-compiles trivially. Do not use for the new graph store itself (see Storage below) — this is purely the read path for the one-way migration tool. |
-| `github.com/mark3labs/mcp-go` | latest (v0.3x+ line) | MCP server (stdio transport, tool registration) | Broadest real-world adoption among Go MCP servers today, simple ergonomic API (`server.NewMCPServer`, `mcp.NewTool`, `server.ServeStdio`), lets v1 ship now. Re-evaluate the official SDK at each subsequent milestone (see Alternatives). |
-| `github.com/spf13/cobra` | v1.9.x | CLI framework | De facto standard for Go CLIs (kubectl, docker, gh, hugo); built-in shell-completion and man-page generation map directly onto the parity command surface (`init`, `install`, `uninstall`, `uninit`, `upgrade`, `explore`, migrate). |
-| `github.com/fsnotify/fsnotify` | v1.9.x | Cross-platform low-level file event notifications | Only realistic cross-platform (inotify/kqueue/ReadDirectoryChangesW) primitive in the Go ecosystem; auto-sync must be built on top of it, not instead of it. |
+| Decision point | Verdict | Confidence |
+|---|---|---|
+| Adopt `2026-07-28` on `mark3labs/mcp-go` now | **Not possible.** The dependency does not support it in any shipped release. | HIGH (verified: latest release inspected directly) |
+| Swap to `modelcontextprotocol/go-sdk` now | **Not recommended for this milestone.** SDK is ready; our verification harness (a prerequisite this milestone also owns) is not. Migrating before it exists is exactly the circularity the milestone's own "Key context" warns against. | HIGH on SDK readiness; this is a judgment call on sequencing, not a hard fact |
+| Explicit dated defer | **Recommended outcome.** SEP-2577 guarantees a ≥12-month deprecation window (until at least 2027-07-28) on the initialize handshake, roots/sampling/logging, and list-changed notifications our server currently exercises none of beyond the handshake — so nothing breaks by waiting. Re-check at the next milestone boundary or when `mark3labs/mcp-go` ships `server/discover` (issue #928), whichever comes first. | HIGH on the deprecation-window fact (from the spec); the recommendation itself is this research's judgment, flagged as such |
 
-### Storage — the new graph format
+This is a **decision recommendation, not a technology table** — the "stack" question this milestone poses is binary (which SDK, which protocol revision), not a list of libraries to add. The supporting evidence for each numbered question follows.
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| `github.com/cockroachdb/pebble` | latest | Embedded LSM key-value store backing the new graph format | Pure Go, no CGo, built specifically because CGo-wrapped RocksDB was untenable for CockroachDB's hot path — same motivation this project has. Handles concurrent access far better than bbolt's single-writer model (critical for "optimized for concurrent access and monorepo scale"), has range deletes (useful for pruning stale file/symbol subgraphs on re-index) and snapshots (useful for consistent-read MCP queries while a background re-index is writing). Actively maintained, production-proven at large scale. |
+---
 
-### Supporting Libraries
+## Q1 — Does `mark3labs/mcp-go` support `2026-07-28`?
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `github.com/tree-sitter/go-tree-sitter` grammar modules | per-language, pinned | Language grammars | One `go.mod` require per supported language (`tree-sitter-go`, `tree-sitter-java`, `tree-sitter-c-sharp`, `tree-sitter-python`, `tree-sitter-typescript`, etc.) — only pull in what's needed per the Go → Java/C# → Python → TS/JS priority order. |
-| `github.com/goreleaser/goreleaser` | v2.x | Release build/packaging automation | Cross-platform builds, checksums, SBOM (Syft) and cosign signing wired in as native config blocks; the standard tool for exactly this supply-chain bundle. |
-| `github.com/sigstore/cosign` (v3 CLI) | latest | Keyless artifact signing | Sign the GoReleaser checksums file via GitHub Actions OIDC (`id-token: write`) — no long-lived private key to manage or leak. |
-| `slsa-framework/slsa-github-generator` (`builder_go_slsa3.yml`) | pinned `@vX.Y.Z` tag | SLSA Build Level 3 provenance | Reusable GH Actions workflow purpose-built for Go binaries; produces verifiable provenance consumable by `slsa-verifier`. |
-| `anchore/syft` (via GoReleaser's `sbom:` block) | latest | SBOM generation | Default choice — one line of GoReleaser config (`sbom: {artifacts: all}`), covers Go and any non-Go release assets uniformly. |
-| `CycloneDX/cyclonedx-gomod` (optional, `app` mode) | latest | Higher-fidelity Go-specific SBOM | Use instead of / alongside Syft if you need SBOMs that respect Go build constraints per platform (only modules actually compiled into each binary) — more precise than a generic Syft scan for a multi-platform Go release. |
-| `golang.org/x/vuln/cmd/govulncheck` | latest | Vulnerability scanning gate | `govulncheck ./...` in CI; call-graph-aware (flags only reachable vulns, not the whole dependency tree) — lower noise than naive SCA tools, output formats include SARIF for GitHub code-scanning integration. |
-| `github.com/spf13/viper` | latest | Layered config (flags/env/file) | Pairs with Cobra for CLI config; only pull in if config complexity grows beyond flags + a single config file. |
-| `github.com/tetratelabs/wazero` | latest | Pure-Go WASM runtime | Only needed if/when the Phase-1 parser spike (see below) decides to move tree-sitter grammars to a WASM sandbox instead of CGo. Not a v1 dependency under the primary recommendation. |
+**VERIFIED, not inferred:** No.
 
-## Installation
+| Fact | Value | Source |
+|---|---|---|
+| Our pinned version | `v0.56.0` | `go.mod:13` |
+| Latest published release | `v0.57.0`, published `2026-07-23T09:18:40Z` | `gh api repos/mark3labs/mcp-go/releases` |
+| `mcp.LATEST_PROTOCOL_VERSION` in `v0.57.0` source | `"2025-11-25"` | fetched `mcp/types.go` at tag `v0.57.0` directly |
+| `mcp.ValidProtocolVersions` in `v0.57.0` | `["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]` | same file |
+| `2026-07-28` mentioned anywhere in `v0.57.0`'s changelog | No | `gh api repos/mark3labs/mcp-go/releases/tags/v0.57.0` |
 
-```bash
-# Core
-go get github.com/tree-sitter/go-tree-sitter@v0.25
-go get github.com/tree-sitter/tree-sitter-go/bindings/go
-go get github.com/cockroachdb/pebble@latest
-go get github.com/mark3labs/mcp-go@latest
-go get github.com/spf13/cobra@latest
-go get github.com/fsnotify/fsnotify@latest
-go get modernc.org/sqlite@latest   # migration reader only
+**What changed between our pinned `v0.56.0` and latest `v0.57.0`** (full changelog, none of it protocol-revision-related): atomic `initialized` state fix, `jsonschema_description`/enum struct-tag support, streamable-HTTP session-close-before-shutdown fix, `Content-Type` parameter tolerance on the GET listening stream, per-method JSON-RPC error labeling on streamable HTTP, embedded-resource-contents unmarshal fix, a new **streamable HTTP stream resumability** feature via pluggable `EventStore`, a multi-line SSE data-field concatenation fix, and in-process-transport notification delivery fix. Bumping to `v0.57.0` is safe and worthwhile on its own merits but does not touch spec currency at all — it is not a substitute for the milestone's protocol question.
 
-# Dev / CI tooling (not go.mod deps — install as CLI tools in CI)
-go install golang.org/x/vuln/cmd/govulncheck@latest
-go install github.com/sigstore/cosign/v3/cmd/cosign@latest
-# goreleaser + slsa-github-generator installed as GitHub Actions, not go-installed
+**Open issue, not a roadmap statement:** [`mark3labs/mcp-go#928`](https://github.com/mark3labs/mcp-go/issues/928) — "feat(server): support SEP-2575 stateless MCP (`server/discover` + `Mcp-Method`/`Mcp-Name` headers)" — filed 2026-07-14, **still open**, zero maintainer comments (the one comment is an automated internal-tracker link-bot), no linked PR, no milestone/label indicating a target release. The issue author explicitly scopes out SEP-2322 (MRTR), SEP-2549 (cache hints), and SEP-2567 (sessionless) as "arguably deserve their own issues" — meaning even a merged #928 would not be full `2026-07-28` currency, just the minimal `server/discover` + header surface. **There is no committed timeline of any kind.** Treat "mark3labs ships 2026-07-28" as an unscheduled community contribution, not a plan.
+
+**No `WithProtocolVersion`-style constructor option exists** in `mark3labs/mcp-go` (`v0.57.0`) — every exported `With*` `ServerOption` was enumerated directly from `server/server.go`; none configures protocol version. The server always echoes back either the client's requested version (if it appears in `ValidProtocolVersions`) or `LATEST_PROTOCOL_VERSION` — see Q4.
+
+## Q2 — State of `modelcontextprotocol/go-sdk` (the official Go SDK)
+
+**VERIFIED:** Mature, stable, and already current with `2026-07-28` on release day.
+
+| Fact | Value | Source |
+|---|---|---|
+| Latest version | `v1.7.0`, published `2026-07-28T13:09:53Z` — the **same calendar day** as the spec revision | `gh api repos/modelcontextprotocol/go-sdk/releases` |
+| Stability | Well past 1.0 (`v1.0.0` shipped earlier; the module has been on the `v1.x` line through 6+ minor releases: 1.1 → 1.7, released roughly monthly since 2025-10-30) | release list |
+| `go.mod` minimum Go version | `go 1.25.0` — compatible with this repo's `go 1.26.5` | fetched `go.mod` at tag `v1.7.0` |
+| Spec revisions supported | `2026-07-28` (new, default for new clients), with full backward compatibility to `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` — negotiated automatically, highest mutually-supported version wins | `v1.7.0` release notes (read directly, not the MCP blog) |
+| Adoption signal (verified via API) | 4,926 stars, 490 forks, 81 open issues, pushed same day as this research (`2026-08-03`) | `gh api repos/modelcontextprotocol/go-sdk` |
+| Adoption signal (production use, cited in the SDK's own release notes) | "`v1.7.0-pre.3` is already successfully used by GitHub, serving more than half a million users" (linking to a GitHub Changelog post about GitHub's own MCP server) | `v1.7.0` release notes |
+| Comparison: `mark3labs/mcp-go` | 8,970 stars, 864 forks, 32 open issues — still the larger community by raw star count, but that gap does not track the protocol-currency question this milestone is actually asking | `gh api repos/mark3labs/mcp-go` |
+
+**Server construction / tool registration / stdio serve loop** — read directly from the SDK's own `examples/server/basic/main.go` at tag `v1.7.0`:
+
+```go
+type SayHiParams struct {
+    Name string `json:"name"`
+}
+
+func SayHi(ctx context.Context, req *mcp.CallToolRequest, args SayHiParams) (*mcp.CallToolResult, any, error) {
+    return &mcp.CallToolResult{
+        Content: []mcp.Content{&mcp.TextContent{Text: "Hi " + args.Name}},
+    }, nil, nil
+}
+
+server := mcp.NewServer(&mcp.Implementation{Name: "greeter", Version: "v0.0.1"}, nil)
+mcp.AddTool(server, &mcp.Tool{Name: "greet", Description: "say hi"}, SayHi)
+serverSession, err := server.Connect(ctx, &mcp.StdioTransport{}, nil)
+// or, for the simple single-session CLI case: server.Run(ctx, &mcp.StdioTransport{})
 ```
 
-## The Parser Decision (the central open question)
+This is the **idiomatic, typed** path (`mcp.AddTool[In, Out]`, generic, JSON schema auto-derived from `In`'s struct tags via reflection). A **non-generic path also exists** — `(*Server).AddTool(t *Tool, h ToolHandler)` where `ToolHandler = func(context.Context, *CallToolRequest) (*CallToolResult, error)` — but it **panics if `t.InputSchema` is nil**, i.e. it requires you to hand-author or hand-generate the JSON schema yourself; it does not offer `mark3labs`-style `mcp.WithString(...)` schema-builder sugar. The typed generic path is the SDK's own recommended shape (it's what every example uses).
 
-This is the one recommendation in this document that should be treated as **provisional pending a Phase-1 spike**, not settled fact. Three real options exist; here is what the evidence shows for each.
+## Q3 — Concrete migration-cost comparison
 
-### Option A — CGo tree-sitter bindings (`tree-sitter/go-tree-sitter`) — RECOMMENDED for v1
+Side-by-side at the exact granularity requested — server construction, tool definition/registration, handler signature, result construction — verified against both SDKs' actual source, not summarized from memory:
 
-- **Maturity:** Official, org-maintained, actively released through 2026. Grammar coverage for all 12+ target languages exists today as separate, independently-versioned Go modules.
-- **Performance:** Baseline — every other option is measured against this. Full-parse and incremental-reparse performance is the best available.
-- **Cost:** Breaks `CGO_ENABLED=0`. Requires a C toolchain in CI for every target platform (solvable — `zig cc` or `musl-cross` cross-compilation is a well-trodden path with GoReleaser, and this project's `mattn/go-sqlite3`-equivalent problem doesn't even arise here since SQLite itself won't be CGo — see Storage). The end-user artifact is still a single static binary per platform; CGo only complicates the *build* environment, not the *distribution* format.
-- **Risk:** A memory-safety bug in a grammar's hand-written C scanner (some language grammars have external C/C++ scanners, e.g. for heredocs or significant whitespace) can, in the worst case, crash the whole host process — including the MCP server — since there's no process/memory isolation between the C code and the Go host. For a tool that parses arbitrary, occasionally adversarial, third-party monorepo code, this is a real reliability tail-risk, not just a purity concern.
-- **Verdict:** This is the **justified CGo exception** referenced in the project's constraints. Given today's tooling landscape, it's the only path with both full 12-language coverage and top-tier performance. Cross-compilation risk is manageable with standard tooling (zig cc + GoReleaser); the crash-isolation risk is real but has historically been rare in practice for the well-exercised grammars this project needs first (Go, Java, C#, Python, TS/JS).
+| Aspect | `mark3labs/mcp-go` (current, `v0.56.0`/`v0.57.0`) | `modelcontextprotocol/go-sdk` (`v1.7.0`) |
+|---|---|---|
+| **Server construction** | `server.NewMCPServer(name, version string, opts ...ServerOption) *server.MCPServer` — our `BuildServer` calls `server.NewMCPServer("codegraph", version, server.WithToolCapabilities(true))` | `mcp.NewServer(impl *mcp.Implementation, opts *mcp.ServerOptions) *mcp.Server` — `impl` bundles name+version into one struct; `opts` is a single struct pointer, not variadic functional options |
+| **Tool schema definition** | `mcp.NewTool(name string, opts ...ToolOption) mcp.Tool`, builder-style: `mcp.WithString("query", mcp.Required(), mcp.Description(...))` per field. Our `exploreTool()`/`companionTool()` use this extensively (8 tool schemas, ~25 field declarations total across `tools.go`) | Idiomatic path: a plain Go struct per tool (`type ExploreParams struct { Query string \`json:"query"\`; Path string \`json:"path,omitempty"\`; ... }`), schema derived by reflection at `AddTool` time. Non-generic path: hand-build a `*jsonschema.Schema` or a `map[string]any` yourself — strictly more code than today's builder DSL, not less |
+| **Registration** | `s.AddTool(exploreTool(), exploreHandler(...))` — one call per tool, `ServerTool`-agnostic | `mcp.AddTool(server, &mcp.Tool{Name, Description}, handlerFunc)` (generic, type-inferred from `handlerFunc`'s signature) or `server.AddTool(t *mcp.Tool, h mcp.ToolHandler)` (non-generic) |
+| **Handler signature** | `server.ToolHandlerFunc = func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error)` — `req` by **value** | Generic: `mcp.ToolHandlerFor[In, Out] = func(ctx context.Context, req *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error)` — **3 params, 3 returns**, `req` by **pointer**, typed `input` instead of dynamic getters. Non-generic: `mcp.ToolHandler = func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error)` — same 2-and-2 shape as today, but still loses the `GetString`/`GetInt`/`RequireString` convenience helpers (see next row) |
+| **Argument extraction** | `req.GetString("path", defaultPath)`, `req.GetInt("max_files", 0)`, `req.RequireString("query")` — dynamic, no per-tool struct needed. Every handler in `tools.go` (8 of them) uses this pattern | No equivalent dynamic accessor found on `*CallToolRequest`/`CallToolParamsRaw` in the SDK source. The typed path gets args for free via `input In` (struct field access); the non-generic path requires you to unmarshal `req.Params.Arguments` (raw JSON) by hand per call |
+| **Result construction (success)** | `mcp.NewToolResultText(s string) *mcp.CallToolResult` — one-line helper. Every handler in `tools.go` ends with this | **No equivalent helper exists.** Must construct manually: `&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: s}}}` — verified against the SDK's own canonical example, which does exactly this by hand |
+| **Result construction (error)** | `mcp.NewToolResultError(msg string) *mcp.CallToolResult` — one-line helper, used in every handler's error branch (multiple per handler) | No equivalent helper found. `CallToolResult.IsError bool` field exists (doc comment: "errors that originate from the tool should be reported inside Content, with IsError set to true") — manual construction: `&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}}, IsError: true}` |
+| **Serve loop** | `server.ServeStdio(s)` (not shown in our `tools.go`/`server.go` excerpt but is the standard mcp-go stdio entry point) | `server.Run(ctx, &mcp.StdioTransport{})` or `server.Connect(ctx, &mcp.StdioTransport{}, nil)` for session-level control |
 
-### Option B — tree-sitter grammars compiled to WASM, run via `wazero` — WORTH A PHASE-1 SPIKE, not v1-default
+**Honest port estimate for this codebase specifically:** `internal/mcp/tools.go` has exactly 2 handler *shapes* named in the milestone (`exploreHandler`, `companionHandler`) but `companionHandler` is a `switch` producing **7 distinct closures** (one per companion tool name) plus `exploreHandler` itself — **8 total handler bodies**, each currently ~10-25 lines built on `mcp.NewToolResultText`/`NewToolResultError` and `req.GetString`/`GetInt`/`RequireString`. Porting to the official SDK's idiomatic generic path means: (1) defining 8 typed parameter structs (mechanical, low-risk — every field already has a name, type, and description in the existing `mcp.With*` calls, so this is a direct transcription), (2) rewriting every `req.GetX(...)` call site to a struct field read (mechanical), (3) rewriting every `mcp.NewToolResultText(...)`/`NewToolResultError(...)` call site to manual `&mcp.CallToolResult{...}` construction (mechanical, more verbose), and (4) changing `BuildServer`'s construction call and the two `server.AddTool`/`mcp.AddTool` call sites. **This is a bounded, mechanical refactor confined to `internal/mcp/` — it does not reshape the package's architecture** (the seam this package already has — `openEngine`, `confineToRepoRoot`, `WorktreeNotice` prefixing, the `internal/query.Engine` delegation pattern — is SDK-agnostic and untouched by either SDK's API shape). The `server_test.go` and `mcptest`/in-process client usage would need a parallel rewrite against the new SDK's client API (not audited line-by-line here — flagged as the concrete scope of the "real-client MCP verification" work item, which this milestone already schedules separately and *before* any swap).
 
-- **Precedent that the pattern works at scale:** `ncruces/go-sqlite3` ships the *entire* SQLite C library compiled to WASM and run through wazero as a production, CGo-free `database/sql` driver — proof the approach scales to a C codebase considerably larger and more complex than tree-sitter's runtime. This is a genuinely strong signal that a WASM/wazero tree-sitter is technically viable, not just theoretically possible.
-- **The official maintainers explicitly declined this path** (`tree-sitter/go-tree-sitter#16`): they are not removing the C dependency, and if they ever added a WASM backend they'd target `wasmtime`, not `wazero`. That means there is **no official, ready-made WASM distribution of tree-sitter + grammars to consume** — building one is this project's own engineering work: compiling the tree-sitter C runtime and each grammar's C sources to a standalone WASM module (via `zig cc` or `wasi-sdk`), plus a hand-written C-ABI shim, since wazero can only pass scalar values across the host/guest boundary and tree-sitter's C API passes structs (`TSNode`, `TSPoint`) by value.
-- **Performance cost:** informal/community benchmarks of this exact pattern (WASM tree-sitter via wazero vs. CGo tree-sitter) put the WASM path at roughly **2x slower** than CGo for full parsing, dominated by host↔guest call-boundary overhead per AST node — mitigable but not eliminated by batching node exports. Treat this figure as directional, not authoritative (single low-confidence community source); a Phase-1 benchmark on this project's actual target languages and corpora is required to get a trustworthy number.
-- **Benefit beyond purity:** true crash/fault isolation — a WASM guest trap becomes a recoverable Go error instead of a process-killing SIGSEGV. This directly addresses Option A's reliability tail-risk when parsing adversarial or malformed third-party code.
-- **Verdict:** Real, credible, and aligned with the project's stated pure-Go preference — but it requires building and maintaining a non-trivial grammar-to-WASM compilation pipeline for every one of the 12+ target languages, with no existing mature open-source library to lean on (the closest prior art, `malivvan/tree-sitter`, is explicitly pre-release/experimental). **Recommendation: spike this in Phase 1 against 2-3 real languages (start with Go, since it's the first language target) and benchmark indexing throughput on a real monorepo before committing.** If the ~2x parse-time cost is invisible against the rest of the indexing pipeline (symbol resolution, storage writes, embedding — as one community report claimed) and the pipeline engineering cost is acceptable, migrate the parser layer behind an interface swap; if not, Option A stands.
+## Q4 — Can either SDK declare an explicit protocol version instead of inheriting a `LATEST_PROTOCOL_VERSION`-style constant?
 
-### Option C — Native pure-Go tree-sitter reimplementation — NOT RECOMMENDED for v1, monitor only
+**VERIFIED: No, neither SDK exposes a server-construction-time "pin this exact version" option.**
 
-- Community projects reimplementing the tree-sitter parse-table runtime in pure Go exist and claim substantial performance wins over the CGo binding, particularly on incremental reparse (the dominant editor/agent workload).
-- **Do not adopt for v1.** These projects are new, have thin community/production track records, and — critically — solving 12+ language grammar-table generation and external-scanner compatibility from scratch is exactly the "huge effort" the project's own constraints document already flagged as the downside of this path. The risk of picking an immature, single-maintainer dependency for the load-bearing parser of the whole product is disproportionate to the payoff versus Option A or a validated Option B.
-- Revisit only if, after a real v1 ships, Option A's CGo cross-compilation or crash-isolation costs prove painful in practice AND a specific pure-Go runtime has matured (broader grammar coverage, multiple maintainers, production adopters beyond its own author).
+- **`mark3labs/mcp-go`**: every exported `With*` `ServerOption` in `server/server.go` (29 functions, enumerated directly from source) was checked — none configures a fixed protocol version. The server's `protocolVersion(clientVersion string) string` method (also read directly) always **echoes the client's requested version if valid, else falls back to `mcp.LATEST_PROTOCOL_VERSION`** — negotiation is automatic and un-overridable at the `NewMCPServer`/`ServerOption` layer.
+- **`modelcontextprotocol/go-sdk`**: `ServerOptions` (the full struct, read directly from `mcp/server.go` at `v1.7.0`) has no protocol-version field either. Its own internal version constants (`latestProtocolVersion`, `protocolVersion20260728`, etc., in `mcp/shared.go`) are **unexported** — this SDK doesn't even give you a public constant to reference, let alone override. `StreamableHTTPOptions.Stateless` exists but is an HTTP-transport-only knob (irrelevant to our stdio-only server) that gates whether `2026-07-28` is *accepted* over that transport, not a version-pin mechanism.
 
-## Alternatives Considered
+**Implication for the milestone's stated need** ("assert our wire version in a test so a dependency bump cannot silently move it"): this cannot be satisfied by finding a constructor option on either SDK. It must be satisfied by **decoupling the test's expected value from any SDK-owned symbol** — replace `server_test.go`'s `req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION` (confirmed still present at `internal/mcp/server_test.go:81`, referencing the SDK's own moving constant) with a **repo-owned literal** (e.g. `const codegraphMCPProtocolVersion = "2025-11-25"`), sent as the request version, with the test asserting the **actual wire response** — not the SDK's compile-time constant — equals that same literal. This is SDK-agnostic guidance: it applies whether the milestone ultimately adopts or defers.
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|--------------------------|
-| `mark3labs/mcp-go` | `modelcontextprotocol/go-sdk` (official) | The official SDK is maintained in collaboration with Google and is spec-complete for the current MCP revision, shipping 2026-07-28 protocol support in v1.7.0 pre-releases as of mid-2026 — it is the long-term correct target. It's newer and has less real-world Go-server mileage than `mark3labs/mcp-go` today. Re-evaluate at the next milestone boundary; if the official SDK's stdio transport and tool-registration ergonomics have matured and its adoption has grown, migrate. Don't block v1 parity on this decision either way — the two APIs are structurally similar enough that a later swap is a bounded refactor, not a rewrite. |
-| `cockroachdb/pebble` | `dgraph-io/badger` | Badger's WiscKey (key/value-separated) design wins when values are large (1-100KB+). If profiling shows CodeGraph's stored payloads (source snippets, docstrings) are large enough to dominate write-amplification, Badger becomes competitive. For the graph's dominant workload — small structured records (symbols, edges, file metadata) — Pebble's design and lower read-latency are the better fit, and Pebble's `IndexedBatch` (read-your-writes within a transaction) maps cleanly onto graph-mutation semantics. |
-| `cockroachdb/pebble` | `etcd-io/bbolt` | bbolt is simpler and has the longest production track record of any pure-Go embedded store, but its single-writer transaction model is a structural bottleneck for "optimized for concurrent access" — reject for the primary graph store. Still worth considering for small, low-write-volume auxiliary metadata (e.g. per-project config) where simplicity outweighs concurrency needs. |
-| `modernc.org/sqlite` (migration reader only) | `mattn/go-sqlite3` | `mattn/go-sqlite3` is faster (it's the CGo baseline the pure-Go driver is benchmarked against) but requires CGO_ENABLED=1 for a component (the migration tool) that only needs to *read* existing TS-CodeGraph SQLite files once per user, not serve production query load — the CGo cross-compilation and static-binary cost isn't worth paying for this narrow, one-shot use case. |
-| `spf13/cobra` | `urfave/cli` | urfave/cli has a smaller API surface, faster cold start, and smaller binary footprint in microbenchmarks, and is a reasonable choice for flat, few-command CLIs. CodeGraph's command surface (init/install/uninstall/uninit/upgrade/explore + agent-installer subcommands + migration) is exactly the kind of nested, completion-needing hierarchy Cobra is built for — reject urfave/cli for this project. |
-| `anchore/syft` | `CycloneDX/cyclonedx-gomod` | Use cyclonedx-gomod's `app` mode instead of (or in addition to) Syft when you need SBOMs that are precise about which modules actually compiled into *each platform's* binary (it evaluates Go build constraints; Syft's scan is more generic). Reasonable to run both and publish whichever the target ecosystem (SPDX vs CycloneDX consumers) expects. |
+## Q5 — Correct `govulncheck` invocation for `go.tool.mod`
 
-## What NOT to Use
+**VERIFIED by direct execution in this repo, not by reading docs alone** — the naive approach was reproduced as vacuous, and a working alternative was confirmed live.
+
+### The modes that exist (from the installed `govulncheck v1.6.0`'s own `-h`, matching `go.tool.mod`'s pinned `golang.org/x/vuln v1.6.0`)
+
+```
+-mode value   supports 'source', 'binary', and 'extract' (default 'source')
+-scan value   one of 'module', 'package', or 'symbol' (default 'symbol')
+```
+
+- **`source`** (default): builds an SSA call graph from real source and reports only symbols *reachable* from your code's entry points — the most precise, lowest-noise mode, but it requires the target packages' source to be loadable as ordinary Go packages under the active module.
+- **`binary`**: analyzes a *compiled* binary's symbol table. Per the official docs (fetched from `pkg.go.dev/golang.org/x/vuln/cmd/govulncheck`): **not call-graph aware** — it "cannot show call graphs" and "may report false positives for code that is in the binary but unreachable." It is still meaningfully more precise than a naive dependency-list scan, because the Go linker's dead-code elimination means a vulnerable symbol usually only survives into the binary if something actually references it.
+- **`extract`**: pulls a minimal analysis blob out of a binary for later `-mode=binary` use (e.g., cross-machine); not relevant here.
+
+### What the current `task vuln` target actually does (reproduced live, not assumed)
+
+`Taskfile.yml`'s `vuln` target runs `GOWORK=off go tool -modfile=go.tool.mod govulncheck ./...`. Running this exact command and asking for `-show verbose` output proves it **scans the 146 modules of the main `go.mod`** (`internal/...`, `cmd/codegraph`, etc.) — **not** `go.tool.mod`'s ~368 third-party tool modules. The `-modfile=go.tool.mod` flag is consumed by `go tool` to select *which modfile's binary of `govulncheck` to run* — it does not propagate into govulncheck's own package-pattern resolution, which still defaults to the ambient `go.mod` at the repo root. **This target is currently a no-op duplicate of the CI gate, not an audit of the tool closure** — directly confirming the milestone's "999.3 closes the ~400-module credentialed-CI-tooling gap" framing is a real, currently-open gap, not a hypothetical one.
+
+**Attempted fix that does NOT currently work** (documented so it isn't re-attempted): pointing `govulncheck -mode=source` at the tool packages' import paths directly (`govulncheck github.com/go-task/task/v3/cmd/task ...`) while forcing module context via `GOFLAGS=-modfile=go.tool.mod` fails with `govulncheck: loading packages: err: exit status 1: stderr: build flag -modfile only valid when using modules` — reproduced live against the installed `govulncheck v1.6.0`. `go list -modfile=go.tool.mod <pkg>` works fine standalone; the failure is specific to how `govulncheck`'s internal `go/packages` driver invokes `go list` for source-mode loading, and no `golang/vuln` issue or doc confirms a supported workaround (issue search on `golang/vuln` for "modfile" returned nothing). **UNRESOLVED as a source-mode path** — flagging this precisely rather than guessing further, since it would need `x/vuln` maintainer confirmation or a newer `govulncheck` release to settle definitively.
+
+### What DOES work — verified live, this is the recommended invocation shape
+
+Build each tool's binary from `go.tool.mod` (no symbol stripping — do **not** pass `-ldflags="-s -w"` for this audit build, only for release artifacts), then run `govulncheck -mode=binary` per binary:
+
+```bash
+GOWORK=off go build -modfile=go.tool.mod -o /tmp/toolbins/task       github.com/go-task/task/v3/cmd/task
+GOWORK=off go build -modfile=go.tool.mod -o /tmp/toolbins/goreleaser github.com/goreleaser/goreleaser/v2
+GOWORK=off go build -modfile=go.tool.mod -o /tmp/toolbins/govulncheck golang.org/x/vuln/cmd/govulncheck
+
+govulncheck -mode=binary /tmp/toolbins/task
+govulncheck -mode=binary /tmp/toolbins/goreleaser
+govulncheck -mode=binary /tmp/toolbins/govulncheck
+```
+
+Executed live against the `task` binary: this produced **real, non-vacuous, distinct-from-main-module results** — `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained/unsafe-by-design) reported as present in a *required* module but not reachable from `task`'s own code paths ("Module Results", not "Symbol Results" — i.e. correctly down-ranked as lower-severity than a reachable finding). This is exactly the shape of finding a per-tool binary-mode scan should surface, and it is **not** a finding that appears in the main module's `govulncheck` output (verified: the main-module run's earlier output showed a *different* single module-level advisory, confirming the two scans cover genuinely disjoint dependency graphs, as expected).
+
+`go.tool-lint.mod` (the `actionlint` tool, ~13 modules including its own `require` block) needs the identical treatment — build `actionlint`'s binary from `-modfile=go.tool-lint.mod`, scan with `-mode=binary`. Smaller closure, same pattern, same fix.
+
+**Recommendation for the Taskfile `vuln` target and/or a new CI gate:** replace (or add alongside) `govulncheck ./...` with a per-tool `-mode=binary` loop over binaries built fresh from each isolated modfile. This trades call-graph precision (accepted: binary mode's own docs concede it can't show call graphs and may over-report unreachable code) for actually covering the ~380 modules (`go.tool.mod` + `go.tool-lint.mod` combined) that presently have zero vulnerability-scanning coverage despite running with full CI credentials (cosign signing, GitHub token, cloud-storage backends for GoReleaser). A `-scan=package` or `-scan=module` binary-mode run is not needed as a fallback — the default `-scan=symbol` behavior worked without adjustment in the live test above.
+
+---
+
+## What NOT to Use / What NOT to Do
 
 | Avoid | Why | Use Instead |
-|-------|-----|--------------|
-| `smacker/go-tree-sitter` | Community fork bundling all grammars in one repo, coupling grammar updates to the wrapper's release cycle; the tree-sitter org itself points users toward the official bindings as the maintained path forward. | `tree-sitter/go-tree-sitter` + per-language grammar modules |
-| `mattn/go-sqlite3` for the new graph store | Requires CGO_ENABLED=1 for the primary storage layer, defeating the single-static-binary / no-CGo goal for the component that matters most (it's not just the migration reader — it's every write on every index run). Also, SQLite's single-writer-lock model works against "optimized for concurrent access." | `cockroachdb/pebble` (new format) + `modernc.org/sqlite` (migration reader only, isolated to a one-shot code path) |
-| Hand-rolled recursive directory walking with polling for file watching | fsnotify's kqueue/inotify backends exist specifically to avoid polling's CPU cost and latency at monorepo scale; polling doesn't get better with more files, it gets linearly worse. | `fsnotify.NewWatcher` (or `NewBufferedWatcher` for high-volume trees), with an explicit recursive-add-on-Create loop since fsnotify doesn't recurse automatically |
-| Long-lived, manually-managed signing keys for release artifacts | Key custody/leak risk, no attestation of *how* the key was used; doesn't satisfy a "verifiable supply chain" story. | `cosign` keyless signing via GitHub Actions OIDC (`id-token: write`) |
-| Skipping `govulncheck` in favor of a generic dependency-list scanner (e.g. `go list -m all` + manual CVE lookups) | Naive dependency scanners flag every CVE in every transitive dependency regardless of reachability, producing enormous false-positive noise that teams learn to ignore. | `govulncheck ./...` — call-graph-aware, only flags vulnerabilities in code paths actually reachable from your program |
-
-## Stack Patterns by Variant
-
-**If the Phase-1 parser spike shows WASM/wazero overhead is acceptable (say, <20% of total indexing wall-clock on real repos) and the build pipeline cost is tractable:**
-- Migrate the parser layer to WASM grammars run via `wazero`, gaining `CGO_ENABLED=0` end-to-end and crash isolation.
-- Keep the parser behind a narrow internal interface (`Parser.Parse([]byte, *Tree) (*Tree, error)`-shaped) from day one specifically so this swap is a backend change, not an architecture change.
-
-**If cross-compilation friction from CGo tree-sitter proves painful in CI (e.g. flaky `zig cc` toolchain issues across GOOS/GOARCH matrix):**
-- Consider building only the highest-priority languages (Go, Java, C#) via CGo initially and gate lower-priority languages behind the same interface, deferring the wazero decision until it's forced rather than optional.
-
-**If monorepo-scale write concurrency benchmarks show Pebble's LSM write-amplification is a problem for the specific symbol/edge update pattern (many small, frequent single-record updates from file-watcher-triggered incremental re-indexing):**
-- Batch incremental updates per file-change debounce window into a single Pebble `Batch`/`IndexedBatch` commit rather than per-symbol writes — this is a usage pattern fix, not a storage-engine swap; only reconsider Badger if batching doesn't resolve it.
+|---|---|---|
+| Swapping to `modelcontextprotocol/go-sdk` *this milestone*, before a real-client verification harness exists | The milestone's own stated precondition: mcp-go's client silently skips malformed lines and cannot fail a purity test (established in v1.0 Phase 4) — validating a *new* SDK using that SDK's own client is the same circularity, just with a different SDK. Verification must precede migration, not follow it | Build the harness first (already a separate milestone work item); revisit the swap decision only once it exists |
+| Treating `mark3labs/mcp-go`'s eventual `2026-07-28` support as scheduled | Issue #928 is open, unclaimed, has no maintainer commitment, and explicitly scopes out most of the spec revision's actual content (MRTR, cache hints, sessionless) even if merged | Track #928; re-evaluate at the next milestone boundary, not on an assumed timeline |
+| `govulncheck ./...` (no `-mode`/pattern change) as "coverage" for `go.tool.mod` | Empirically proven vacuous in this exact repo today — it silently re-scans the main module under a different modfile name, giving zero new coverage while looking like a real gate | `govulncheck -mode=binary` over binaries built from each isolated tool modfile (see Q5) |
+| `GOFLAGS=-modfile=go.tool.mod` + `govulncheck -mode=source <pkg>` as a fix for the above | Reproduced failure: `build flag -modfile only valid when using modules`, from govulncheck's internal package-loading driver, not a transient issue | `-mode=binary` (see Q5); revisit source-mode only if a future `govulncheck`/`x/vuln` release documents modfile support |
+| Referencing `mcp.LATEST_PROTOCOL_VERSION` (or the official SDK's — nonexistent — public equivalent) inside a test meant to catch silent protocol drift | The whole point of the assertion is defeated if the expected value is itself supplied by the dependency being tested; a version bump moves both sides of the comparison together | A repo-owned literal constant, asserted against the actual wire-negotiated version from a live handshake (SDK-agnostic; do this regardless of the adopt/defer outcome) |
 
 ## Version Compatibility
 
 | Package A | Compatible With | Notes |
-|-----------|------------------|-------|
-| `tree-sitter/go-tree-sitter@v0.25.x` | `tree-sitter/tree-sitter-<lang>` grammar modules pinned to matching `v0.2x` lines | Grammar modules version independently; pin each explicitly and re-verify compatibility on bump — the official repo's own compatibility table (in `go.mod`/README) is the source of truth per release, don't assume lockstep versioning across grammars. |
-| `cockroachdb/pebble` | Go 1.23+ | Track Pebble's stated minimum Go version at upgrade time; it moves with CockroachDB's own toolchain requirements. |
-| `mark3labs/mcp-go` | MCP protocol rev in use by target agent clients (Claude Code, Cursor, etc.) | Verify which protocol revision `mark3labs/mcp-go`'s current release implements against the revision your target agents expect — the MCP spec itself is still moving (2025-11-25 → 2026-07-28 during this research window). |
-| `modernc.org/sqlite` | Existing TS-CodeGraph `.codegraph/` SQLite schema (v1.3.x) | Purely a read compatibility concern for the migration tool — confirm the on-disk SQLite file format/pragmas TS CodeGraph writes are readable by this driver's supported SQLite version before finalizing the migration tool design. |
+|---|---|---|
+| `github.com/mark3labs/mcp-go` | Go — no explicit floor found beyond what recent releases require; not a blocker either way | Repo currently pins `v0.56.0`; `v0.57.0` is available and safe to take independently of the protocol-currency decision (changelog reviewed — no breaking changes relevant to `internal/mcp/`) |
+| `github.com/modelcontextprotocol/go-sdk` | `go 1.25.0` minimum (verified from `go.mod` at `v1.7.0`) | Compatible with this repo's `go 1.26.5` — no toolchain blocker if/when the swap happens |
+| `golang.org/x/vuln/cmd/govulncheck` (pinned `v1.6.0` in `go.tool.mod`) | Requires the target packages to be reachable via ordinary `go list`/`go/packages` loading in `-mode=source`; `-mode=binary` has no such constraint | Use `-mode=binary` for `go.tool.mod`/`go.tool-lint.mod` per Q5 — sidesteps the `-modfile` loading failure entirely |
 
 ## Sources
 
-- `tree-sitter/go-tree-sitter` (Context7, MEDIUM confidence) — API surface, incremental parsing, CGo wrapping confirmed
-- `tree-sitter/go-tree-sitter#16` GitHub issue (web, cross-checked/verified — MEDIUM confidence) — official maintainers' stance on WASM/wazero, directly authoritative on this point
-- `ncruces/go-sqlite3` (Context7, MEDIUM confidence) — proof pattern that a large C codebase (SQLite) runs successfully as WASM via wazero in production Go tooling
-- `pkg.go.dev/modernc.org/sqlite/benchmark` (Context7, MEDIUM confidence, official benchmark data) — pure-Go vs CGo SQLite performance deltas
-- `etcd-io/bbolt`, `cockroachdb/pebble` (Context7, MEDIUM confidence) — official docs, concurrency models, transaction semantics
-- `dgraph-io/badger` design docs + community benchmark (web, LOW confidence, cross-referenced against official README claims) — WiscKey tradeoffs
-- `modelcontextprotocol/go-sdk` GitHub releases (web, MEDIUM confidence — cross-checked against multiple release notes) — official SDK maturity and protocol version support timeline
-- `mark3labs/mcp-go` (Context7, MEDIUM confidence) — stdio server API and adoption
-- `fsnotify/fsnotify` (Context7, MEDIUM confidence, official README/docs) — recursive-watch limitations, platform-specific fd/watch limits
-- `spf13/cobra` (Context7, MEDIUM confidence) + community comparison sources (web, LOW confidence) — CLI framework comparison
-- `goreleaser/goreleaser` (Context7, MEDIUM confidence, official docs) — reproducible build config, SBOM/signing integration
-- `sigstore/docs`, `goreleaser/example-supply-chain` (web, LOW confidence but consistent with official sigstore docs) — cosign keyless signing pattern
-- `slsa-framework/slsa-github-generator` (web, MEDIUM confidence — official repo README) — SLSA3 Go builder workflow
-- `CycloneDX/cyclonedx-gomod` README (web, LOW confidence) — SBOM mode comparison vs Syft
-- `pkg.go.dev/golang.org/x/vuln` (Context7, MEDIUM confidence, official docs) — govulncheck usage and CI integration
-
-**Caveat on the parser-strategy web sources:** several search results returned during this research (e.g. blog posts and repos describing specific wazero/tree-sitter proof-of-concept benchmarks) could not be independently corroborated beyond a single low-confidence source each, and at least a few carried signs of low-quality/synthetic content. Only the directly-verifiable, canonical sources (the official `tree-sitter/go-tree-sitter#16` issue, and `ncruces/go-sqlite3`'s own documented approach) were treated as load-bearing for the Option B recommendation above; the ~2x performance-overhead figure is explicitly flagged as directional pending the Phase-1 spike, not as a verified number to design around.
+- `gh api repos/mark3labs/mcp-go/releases` (GitHub REST API, HIGH confidence — primary source, not inferred) — full release/date list, confirms `v0.57.0` latest as of 2026-08-03
+- `gh api repos/mark3labs/mcp-go/releases/tags/v0.57.0` (HIGH confidence) — full changelog body, confirms zero `2026-07-28` content
+- Raw `mcp/types.go` and `server/server.go` fetched at tag `v0.57.0` (HIGH confidence, primary source) — `LATEST_PROTOCOL_VERSION` value, `ValidProtocolVersions` list, `protocolVersion()` negotiation method, full `With*` `ServerOption` enumeration
+- `gh api repos/mark3labs/mcp-go/issues/928` + its comments (HIGH confidence, primary source) — open SEP-2575 feature request, no maintainer timeline
+- `gh api repos/modelcontextprotocol/go-sdk/releases` + `releases/tags/v1.7.0` (HIGH confidence, primary source) — `v1.7.0` published 2026-07-28, full SEP-by-SEP changelog read directly (not summarized from the MCP blog)
+- Raw `mcp/server.go`, `mcp/shared.go`, `mcp/protocol.go`, `mcp/requests.go`, `examples/server/basic/main.go`, `mcp/mcp_example_test.go` fetched at tag `v1.7.0` (HIGH confidence, primary source) — `NewServer`/`ServerOptions`/`AddTool`/`ToolHandler`/`ToolHandlerFor`/`CallToolResult`/`CallToolRequest` signatures, canonical usage pattern, unexported internal protocol-version constants
+- `gh api repos/mark3labs/mcp-go` and `repos/modelcontextprotocol/go-sdk` (HIGH confidence) — star/fork/issue counts for adoption comparison
+- Live local execution in this repo (HIGH confidence, empirical, reproduced 2026-08-03): `GOWORK=off go tool -modfile=go.tool.mod govulncheck -show verbose ./...` (proves current `task vuln` scans the main module, not `go.tool.mod`); `GOFLAGS=-modfile=go.tool.mod ... govulncheck -mode=source <pkg>` (reproduces the `-modfile only valid when using modules` failure); `go build -modfile=go.tool.mod -o ... <tool-pkg>` + `govulncheck -mode=binary <binary>` (proves the working alternative, with real distinct findings)
+- `pkg.go.dev/golang.org/x/vuln/cmd/govulncheck` (MEDIUM confidence, official docs fetched via WebFetch — some detail on `-scan` was not present in the fetched page and is marked UNRESOLVED rather than guessed) — `-mode` semantics, binary-mode limitations
+- Local `govulncheck -h` / `-version` (HIGH confidence, primary source, matches `go.tool.mod`'s pinned `golang.org/x/vuln v1.6.0`) — authoritative current-release flag set
+- `.github/workflows/ci.yml:167-168` (HIGH confidence, this repo) — confirms `golang/govulncheck-action@v1.1.0` scans only the main module in CI today, corroborating the "credentialed-CI-tooling gap" framing in `PROJECT.md`
+- `gh api "search/issues?q=repo:golang/vuln+modfile"` (HIGH confidence on absence — search returned zero results, cited as the evidence for the Q5 UNRESOLVED note rather than a guess)
 
 ---
-*Stack research for: local-first code knowledge graph / MCP server tool, Go*
-*Researched: 2026-07-10*
-
----
-
-# Addendum: v1.0 Milestone — Human TUI & Parity Stack
-
-**Project:** CodeGraph Go — v1.0 Drop-in Parity & Human UX
-**Researched:** 2026-07-14
-**Confidence:** MEDIUM-HIGH (versions/import-paths verified directly against tagged `go.mod` files on GitHub, not just search snippets; audit posture is directional, not a ground-truth `govulncheck` run)
-
-**Scope:** Only the NEW stack surface for v1.0 — the Charm TUI, TTY-gating, and git/worktree detection. Everything in the v0.1 sections above (Pebble, tree-sitter, mcp-go, Cobra, fsnotify, sigstore-go, hujson, modernc.org/sqlite) is unchanged and already in `go.mod`.
-
-## Recommended Additions
-
-### Core Technologies
-
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| `charm.land/bubbletea/v2` | v2.0.8 (stable, released 2026-07-03) | Event-loop framework for the **interactive** screens only — `daemon` picker, `install`/`uninstall` multi-select, `init`/`index`/`sync` progress | The only mature, pure-Go, actively maintained TUI event-loop for Go (Elm-architecture Model-Update-View). **Do NOT use it for one-shot output** (`status`, `files`) — that's lipgloss's job (see below). Each interactive Cobra `RunE` constructs its own `tea.NewProgram(model).Run()` and returns control afterward; bubbletea does not wrap the whole CLI. |
-| `charm.land/lipgloss/v2` | v2.0.5 | Declarative styling (colors, borders, layout) for **static, one-shot prints** — `status`, `files`, and any plain agent-facing text that gets a human-facing styled variant | CSS-like styling API; v2's `lipgloss.Println`/`Printf` auto-downsample colors per-stream via `colorprofile`, fixing v1's stdin/stdout TTY-detection bugs (see TTY-gating below). This is the mechanism for "styled when human, plain when piped." |
-| `charm.land/bubbles/v2` | v2.1.1 | Pre-built interactive components: `list` (daemon picker, multi-select), `spinner`/`progress` (`init`/`index`/`sync` progress), `textinput` (if any interactive prompts are needed) | Maintained in lockstep with bubbletea/lipgloss v2 by the same org; reimplementing list/spinner/progress from scratch is wasted effort with no upside. |
-
-**Critical: v2 import paths changed to Charm's vanity domain.** All three moved from `github.com/charmbracelet/{bubbletea,lipgloss,bubbles}` to `charm.land/{bubbletea,lipgloss,bubbles}/v2` as part of the v2 release. Verified directly against each repo's tagged `go.mod` (not just docs/blog claims, which lag — pkg.go.dev's own cache still showed a stale `v2.0.0-beta.6` as "latest" for bubbletea at research time; GitHub tags/go.mod are the source of truth here). Use the `charm.land/...` path in new code — the old `github.com/charmbracelet/...` v2 path will not resolve for current tags.
-
-### TTY Detection — Use `colorprofile`, gate interactivity with `golang.org/x/term`
-
-Two distinct decisions need two distinct mechanisms:
-
-1. **"Should this one-shot print use color/styling?"** → `github.com/charmbracelet/colorprofile` (`colorprofile.Detect(os.Stdout, os.Environ())`), which lipgloss v2 uses internally via `lipgloss.Println`/`Printf`. It checks isatty on the *specific stream being written to* (fixing v1's stdout/stdin conflation bug — matters here because MCP writes JSON-RPC to stdout while a human might be watching stderr, or vice versa), plus `NO_COLOR`/`CLICOLOR`/`TERM=dumb`/CI-env conventions. This is already pulled in transitively by lipgloss v2 — do not hand-roll a second isatty check for styling decisions; let lipgloss own it.
-2. **"Should this command even attempt to launch an interactive bubbletea program?"** → `golang.org/x/term.IsTerminal(int(os.Stdout.Fd()))` (and stdin, since bubbletea reads keystrokes). **Already an indirect dependency in `go.mod` today** (`golang.org/x/term v0.45.0`, pulled in by sigstore-go) — promoting it to a direct, explicit use costs nothing new in the dependency graph. Gate every interactive command (`daemon` picker, `install`/`uninstall` multi-select) on this check up front: non-TTY → fall back to a flag-driven/scripted path (or a plain-text error telling the user to pass explicit flags) instead of calling `tea.NewProgram(...).Run()`, which would otherwise hang or misbehave when stdin/stdout are pipes. This is exactly the mechanism that keeps `serve --mcp` (stdio JSON-RPC) and golden-parity test output clean — MCP and CI never see ANSI or an interactive prompt.
-
-`github.com/mattn/go-isatty` is also already an indirect dep (v0.0.20, likely via a transitive path) but should NOT be used as a third, competing isatty check — pick `golang.org/x/term` for the boolean gate (stdlib-adjacent, already used this way in the Go ecosystem) and let `colorprofile` own the styling decision. Don't mix three isatty implementations for what is conceptually one policy.
-
-### Git / Worktree Detection — stdlib `os/exec`, no new dependency
-
-The TS reference (`dist/sync/worktree.d.ts`, inspected directly) confirms the exact shape to port: `gitWorktreeRoot(dir)` shells out to `git rev-parse --show-toplevel` (per-worktree root — main checkout and each linked worktree report distinct paths) and `gitCommonDir(dir)` to `git rev-parse --git-common-dir` (the shared `.git` all worktrees of one repo point at — same value across worktrees of one repo, different for a submodule/nested repo). Detection is explicitly best-effort: git unavailable or not-a-repo → report "no mismatch," never fail the command.
-
-**Use `os/exec.Command("git", "rev-parse", ...)` directly — no library needed.** This is two simple subprocess calls with string output, not general git object access. A pure-Go git implementation (`go-git/go-git`) would be strictly worse here: it pulls dozens of transitive dependencies (crypto/ssh, gcfg, sha256-simd, billy filesystem abstraction, etc.) to replace two `exec.Command` calls, works against a real installed `git` the user already trusts and has configured (credential helpers, worktree metadata, hooks), and TS parity is explicitly "shell out to the git binary, degrade gracefully if missing" — reimplementing that in a pure-Go git library is scope creep, not parity.
-
-### Git Hooks (post-commit/merge/checkout)
-
-Also stdlib-only: writing an executable shell script (or a shim invoking `codegraph sync`) into `$(git rev-parse --git-dir)/hooks/post-commit` etc. is `os.WriteFile` + `os.Chmod(..., 0o755)`, using the already-necessary `--git-common-dir`/`--git-dir` resolution above. No hook-management library exists or is warranted for three static shim files.
-
-## Installation
-
-```bash
-go get charm.land/bubbletea/v2@v2.0.8
-go get charm.land/lipgloss/v2@v2.0.5
-go get charm.land/bubbles/v2@v2.1.1
-# golang.org/x/term: already an indirect dep; go.mod will promote it to direct
-# automatically once code imports it directly — no separate `go get` required,
-# but running `go mod tidy` after adding the import is sufficient.
-```
-
-No new dependency is needed for git/worktree detection or git hooks (`os/exec`, `os.WriteFile`, `os.Chmod` — stdlib).
-
-## Supply-Chain Impact (quantified against the "minimal audited deps, no new CGo" constraint)
-
-**No new CGo.** The entire Charm ecosystem (bubbletea/lipgloss/bubbles + their terminal-I/O helpers `charmbracelet/x/term`, `charmbracelet/x/termios`, `charmbracelet/x/windows`, `muesli/cancelreader`) is pure Go — terminal raw-mode/ioctl access is done via `golang.org/x/sys` syscalls, not cgo. tree-sitter remains the sole documented CGo exception, unchanged by this addendum.
-
-**New transitive modules pulled in (deduplicated across all three Charm libraries):** approximately 20 new `go.sum` entries — `charm.land/{bubbletea,lipgloss,bubbles}/v2` (3 direct) plus indirect: `charmbracelet/colorprofile`, `charmbracelet/ultraviolet`, `charmbracelet/x/{ansi,term,termios,windows,exp/golden}`, `lucasb-eyer/go-colorful`, `muesli/cancelreader`, `rivo/uniseg`, `mattn/go-runewidth`, `clipperhouse/{displaywidth,uax29/v2,stringish}`, `xo/terminfo`, `aymanbagabas/go-udiff`, `MakeNowJust/heredoc`, `atotto/clipboard`, `charmbracelet/harmonica`, `sahilm/fuzzy`, `kylelemons/godebug`. A handful overlap with what's already in `go.mod` (`golang.org/x/sync`, `golang.org/x/sys`, `dustin/go-humanize` are all already indirect deps from Pebble/sigstore-go, so those specific version constraints just get unified, not net-new). This is a moderate, bounded addition for what a TUI framework needs — no bloated kitchen-sink transitive tree (no HTTP clients, no crypto beyond what's already pulled by sigstore-go, no database drivers).
-
-**Audit posture:** All Charm-org modules (`charmbracelet/*`, and the vanity `charm.land/*` re-exports of the same repos) are actively maintained by a company (Charm) whose tools (`gh`'s `glamour` rendering, `soft-serve`, Kubernetes-adjacent tooling) have wide production adoption — treat as MEDIUM-HIGH confidence, same tier as the v0.1 stack's `mcp-go`/`cobra`. The smaller peripheral libs (`sahilm/fuzzy`, `MakeNowJust/heredoc`, `kylelemons/godebug`, `clipperhouse/*`) are lower-profile single-purpose utilities with thinner track records — LOW-MEDIUM confidence individually, but low-risk given their narrow scope (fuzzy string matching, heredoc string parsing, diff formatting) and the fact they run only in the interactive human-TUI code path, never in the MCP/agent-facing hot path. Run `govulncheck ./...` (already gating CI per the v0.1 release-hardening phase) after adding these — no known blocking CVEs identified during this research, but this addendum does not substitute for that gate.
-
-**One runtime-only caveat, not a build/supply-chain one:** `atotto/clipboard` (pulled in by `bubbles/v2` for components that support copy/paste) shells out to `pbcopy`/`pbpaste` on macOS and `xclip`/`xsel`/`wl-copy` on Linux at runtime if a component's clipboard feature is actually exercised. This does not affect the static-binary build or CGo status — it's an optional runtime `exec.Command` call, exactly analogous to the git shell-outs above — but note it if any interactive component ends up wiring clipboard support, since it can silently no-op on a minimal Linux container without those binaries.
-
-## What NOT to Use (v1.0 addendum)
-
-| Avoid | Why | Use Instead |
-|-------|-----|--------------|
-| `bubbletea` for `status`/`files`/any one-shot printed output | It's an event-loop framework for *interactive* programs (keystroke handling, a render loop, alt-screen management) — using it to print a static table is architectural overkill and, worse, would force those commands through TTY/raw-mode negotiation they don't need, risking exactly the "hangs when piped" failure mode the parity requirement explicitly rules out. | `lipgloss` styling + a plain `fmt.Println`/`lipgloss.Println` call, gated by `colorprofile`/`x/term` as above |
-| `github.com/charmbracelet/bubbletea` (old, non-vanity v2 import path) | Doesn't resolve for current v2 tags — the module was renamed to `charm.land/bubbletea/v2` as part of the v2 release; only the v1 line (now unmaintained-for-new-features) still lives under the old path. | `charm.land/bubbletea/v2` |
-| `go-git/go-git` for worktree/common-dir detection | Pure-Go git implementation pulling dozens of transitive deps (SSH, crypto, custom filesystem abstraction) to replace two `git rev-parse` subprocess calls — the TS reference itself just shells out; matching that is parity, reimplementing git is not. | `os/exec.Command("git", "rev-parse", ...)` |
-| A second/third isatty library (`mattn/go-isatty` used directly, alongside `colorprofile` and `x/term`) for TTY-gating decisions | Three different isatty mechanisms making three independently-reasoned decisions is a bug magnet — e.g. one code path thinking it's a TTY while another doesn't, producing inconsistent styled/plain output within the same command. | Pick `golang.org/x/term.IsTerminal` for the "launch interactive program?" boolean; let `colorprofile` (already load-bearing inside lipgloss v2) own styling decisions. `mattn/go-isatty` stays an untouched transitive dep, not a direct import. |
-
-## Version Compatibility
-
-| Package A | Compatible With | Notes |
-|-----------|------------------|-------|
-| `charm.land/bubbletea/v2@v2.0.8` | `charm.land/lipgloss/v2@v2.0.5`, `charm.land/bubbles/v2@v2.1.1` | All three are released and versioned independently by the same Charm org but developed in lockstep for v2; `bubbles/v2`'s own `go.mod` requires `bubbletea/v2` and `lipgloss/v2` directly, so `go mod tidy` will resolve a mutually consistent set — don't hand-pin mismatched majors (v1 lipgloss with v2 bubbletea, etc.), the v1→v2 APIs are not source-compatible. |
-| `charm.land/bubbletea/v2` | Go 1.25.0+ (per its own `go.mod`) | Below the project's `go 1.26.5` floor — no conflict. |
-| `charm.land/lipgloss/v2` / `charm.land/bubbles/v2` | Go 1.24.2+ | Also below the project floor — no conflict. |
-| `golang.org/x/term` (TTY gate) | Already pinned `v0.45.0` in `go.mod` (indirect, via sigstore-go) | No version bump forced by adding a direct import — verify `go mod tidy` doesn't need to raise it once Charm's own `golang.org/x/sys` requirement is reconciled (Charm modules currently request `x/sys` in the `v0.41.0`–`v0.46.0` range depending on which was fetched; Go's MVS will pick the highest, still compatible). |
-
-## Sources
-
-- `charmbracelet/bubbletea` GitHub tags API + raw `go.mod` at tag `v2.0.8` (web, direct GitHub content — HIGH confidence, ground truth over docs/blog claims) — confirmed latest stable version, vanity import path `charm.land/bubbletea/v2`, pure-Go dependency list
-- `charmbracelet/lipgloss` raw `go.mod` at tag `v2.0.0` + GitHub tags API (web, HIGH confidence) — confirmed v2.0.5 latest, vanity import path, dependency list
-- `charmbracelet/bubbles` raw `go.mod` at tag `v2.0.0` + GitHub tags API (web, HIGH confidence) — confirmed v2.1.1 latest, vanity import path, dependency list
-- `charmbracelet/colorprofile` raw `go.mod` (web, HIGH confidence) — confirmed pure-Go, dependency footprint
-- Context7 `/websites/pkg_go_dev_github_com_charmbracelet_bubbletea` and `/charmbracelet/{bubbles,lipgloss}` (Context7, MEDIUM confidence — pkg.go.dev's own version cache was stale relative to GitHub tags at research time, so version numbers were cross-verified against raw `go.mod` rather than trusted from Context7/pkg.go.dev alone)
-- Lip Gloss v2 discussion #506 "What's New" + GitHub issue #439 (web, MEDIUM confidence, official repo discussion) — confirmed `colorprofile`-based per-stream TTY detection replacing v1's stdin/stdout conflation bug, `lipgloss.Println`/`Printf` auto-downsampling behavior
-- `/opt/homebrew/lib/node_modules/@colbymchenry/codegraph/dist/sync/worktree.d.ts` (installed TS CodeGraph v1.3.1 reference, direct inspection — HIGH confidence, this IS the parity target) — confirmed `git rev-parse --show-toplevel`/`--git-common-dir` shell-out approach and best-effort-degrade semantics to port
-- Existing project `go.mod` (direct inspection) — confirmed `golang.org/x/term v0.45.0` and `github.com/mattn/go-isatty v0.0.20` are already present as indirect dependencies, zero net-new cost for the TTY-gate boolean check
-- `slsa-framework`/`govulncheck` posture: extrapolated from the v0.1 STACK.md's already-established CI gates (Sources section above); no new CVE database query performed for the Charm module set — treat the "no known blocking CVEs" statement as LOW-MEDIUM confidence pending an actual `govulncheck ./...` run once these deps land in `go.mod`
-
----
-*Stack research for: human-facing TUI + git/worktree parity, Go*
-*Researched: 2026-07-14*
+*Stack research for: codegraph-go v0.3.0 "MCP Protocol Currency" milestone*
+*Researched: 2026-08-03*

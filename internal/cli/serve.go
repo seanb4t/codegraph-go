@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 
 	"github.com/seanb4t/codegraph-go/internal/daemon"
@@ -249,8 +248,14 @@ func newServeCmd() *cobra.Command {
 			// repoPath for both collapses startPath == repoRoot and every
 			// worktree-mismatch check silently short-circuits to nil on
 			// every production call. See mcp.BuildServer's doc comment.
-			s := mcp.BuildServer(hasIndex, allowlist, repoPath, start)
-			return server.ServeStdio(s)
+			//
+			// SDK-02: bootstraps entirely through the mcp.Server seam —
+			// this file names no MCP SDK package. cmd.ErrOrStderr() is
+			// already this file's stderr idiom (mcp.WarnUnknownToolsTo
+			// above uses it too); VRFY-03's always-on session line rides
+			// the same writer.
+			s := mcp.NewStdioServer(hasIndex, allowlist, repoPath, start, cmd.ErrOrStderr())
+			return s.ServeStdio()
 		},
 	}
 

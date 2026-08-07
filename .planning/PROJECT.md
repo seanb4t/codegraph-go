@@ -14,7 +14,9 @@ An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate
 
 The shipped artifact line is `v0.2.0` (signed, SBOM'd, SLSA-attested, cut entirely by release-please). **There is deliberately no `v1.0.0` git tag** — see the amendment below. "v1.0" is a planning-milestone name only, and carries **no git tag at all**: since Phase 9, release-please is the sole tag authority (D-06R), so the milestone record lives in `MILESTONES.md` and `milestones/v1.0-*` rather than in a hand-created tag.
 
-**Next milestone goals (candidates, not yet scoped):** the four backlog items carried forward — tmux-driven TTY e2e harness (999.2), vulnerability scanning for the tool modfiles (999.3), `CheckRegression` current-metrics positivity guard (999.4), macOS Gatekeeper signing/notarization (999.5) — plus the deferred Team Scale work and SEED-001 (Svelte web UI) / SEED-002 (homebrew path). Run `/gsd-new-milestone` to scope.
+**Next milestone: v0.3.0 — MCP Protocol Currency (scoped 2026-08-03, see below).** Carried-forward items NOT taken into it and still parked in `ROADMAP.md` → Backlog: tmux-driven TTY e2e harness (999.2), `CheckRegression` current-metrics positivity guard (999.4), macOS Gatekeeper signing/notarization (999.5) — plus the deferred Team Scale work and SEED-001 (Svelte web UI) / SEED-002 (homebrew path).
+
+**Milestone-label convention changed at this boundary.** v0.1 and v1.0 were planning labels decoupled from the shipped artifact line, which shipped `v0.2.0` under a milestone called "v1.0" and required a standing paragraph to explain. From v0.3.0 onward the milestone label tracks the **actual release line** (maintainer directive, 2026-08-03). This is still a planning label carrying **no git tag** — release-please remains the sole tag authority (D-06R) and computes the real version from Conventional Commits, so the label is a prediction: it holds if the milestone lands `feat:` commits, and a fixes-only outcome would cut `v0.2.1` instead.
 
 <details>
 <summary>v1.0 milestone goal as originally stated</summary>
@@ -34,6 +36,25 @@ The shipped artifact line is `v0.2.0` (signed, SBOM'd, SLSA-attested, cut entire
 - **First signed `v1.0.0` release** — closes v0.1's still-pending DIST-02 (real `v*` tag) and PERF-01 (published numbers); audits the new Charm deps via govulncheck/SBOM.
 
 </details>
+
+## Current Milestone: v0.3.0 MCP Protocol Currency
+
+**Goal:** Assess what the MCP `2026-07-28` specification changes for codegraph-go's agent surface, decide the SDK question it forces, and either adopt the new spec or defer it on an explicit dated decision — with the verification depth to prove the agent surface works against real clients rather than against our own SDK.
+
+**Target features:**
+- **MCP `2026-07-28` impact assessment** (backlog 999.6) — what actually reaches a stdio, tools-only server; an empirical protocol-revision audit across the 8-agent roster; and an explicit read-out of the **Team Scale** implications, since the stateless protocol core changes the architecture assumption milestone-2 was designed against
+- **SDK decision** — `mark3labs/mcp-go v0.56.0` vs `modelcontextprotocol/go-sdk`, discharging the standing re-evaluation commitment recorded in `.claude/CLAUDE.md`'s Alternatives Considered table. A recorded decision is the deliverable, either way
+- **Real-client MCP verification** — a harness that does not use the SDK under test as its own oracle. Must land *before* any SDK swap
+- **Adopt or dated-defer** — on adopt, replace the `mcp.LATEST_PROTOCOL_VERSION` pin with an explicit asserted version so wire behavior cannot move silently on a dependency bump; on defer, a dated decision naming the 12-month deprecation window
+- **Tool-modfile vulnerability scanning** (backlog 999.3) — closes the ~400-module credentialed-CI-tooling gap, landing the milestone's new dependency closure already covered
+- **Daemon test-seam fixes** — issues #13 (`getppid` race) and #17 (watchdog flakes under full-suite load), on the substrate this milestone modifies
+- **GoReleaser pin reconciliation** — `ci.yml` v2.17.1 vs `release.yml` v2.17.0
+
+**Key context:**
+- An **explicit dated defer is an acceptable outcome** for adoption — the spec guarantees a 12-month minimum deprecation window. What is not acceptable is leaving the choice implicit
+- **Verification precedes migration.** mcp-go's own client silently skips malformed lines and cannot fail a purity test (established in v1.0 Phase 4), so validating a new SDK with that SDK's client is circular
+- The **8-agent roster failure mode is quiet** — a client that has moved to the new spec and mis-negotiates surfaces as tools silently not advertised, with no red check anywhere
+- Standing repo rule applies throughout: a gate is not trusted until demonstrated RED against a confirmed-applied mutation
 
 ## Requirements
 
@@ -68,14 +89,15 @@ The shipped artifact line is `v0.2.0` (signed, SBOM'd, SLSA-attested, cut entire
 
 - **v1.0 Phase 10 — Local Build Tooling & CONTRIBUTING**: a `Taskfile.yml` (go-task) wrapping build/test/lint/release-check as the *single definition* of each workflow, with CI job bodies rewired to invoke the task targets and `TestWorkflowRunBodiesInvokeTask` enforcing that as a demonstrably non-vacuous invariant; `CONTRIBUTING.md` documents the CGo toolchain prerequisites, verified by a real scratch-clone run proving `task build`/`test`/`lint` succeed with only Go and a C toolchain on `PATH`. `check:cross` became the sole definition of the 6-target `go list -mod=readonly` sweep with a real-YAML set-equality guard against `.goreleaser.yaml`'s build matrix. A permanent `darwin-toolchain-canary.yml` machine-proves the release pipeline's macOS runner class and native Apple Silicon toolchain outside the tag-only `release.yml` loop. Incidentally found and fixed a **51.5%-stale perf baseline** that had left the regression gate only able to fire on a ~38% drop, and hardened `CheckRegression` to refuse runner/scratch_fs mismatch as a category error — closing the blind spot behind this repo's retracted fictitious 10.6% regression — **validated in v1.0 Phase 10**
 
+- **v0.3.0 Phase 1 — Protocol Scoping & the SDK-Independent Wire Oracle**: the project now owns a wire-level regression oracle that reads the actual bytes on stdio and is proven able to fail. 23 frozen transcripts captured from the **current, unmodified** `mark3labs`-backed `serve --mcp` (VRFY-04) by a standalone capture tool that never uses the SDK under test as its own oracle (VRFY-01) — covering all 8 tools, three `tools/list` variants, four error/edge shapes, and a multi-era Legacy handshake baseline. Two captures were deliberately one-way, taken before `mark3labs/mcp-go` can leave `go.mod`. `serve --mcp` gained an always-on stderr session line reporting requested vs negotiated protocol version, with no flag or env var to enable it (VRFY-03) — the only available mitigation for a spec-sanctioned silent version mismatch, hardened against hostile `clientInfo` (nine injection shapes pinned). The declared protocol version is asserted against a repo-owned literal with an archtest forbidding any `LATEST_PROTOCOL_VERSION`-style SDK constant tree-wide (VRFY-02), and `internal/cli/serve.go` now bootstraps entirely through the narrow `internal/mcp.Server` seam, importing no MCP SDK package (SDK-02) — the one production-code SDK leak, closed while it was still cheap. A dated 8-agent audit measured what each roster client actually negotiates via a byte-exact proxying shim rather than reading their docs (VRFY-05). Non-vacuity was proven, not assumed: four one-time mutations demonstrated red against the real binary, plus permanent structural guards for the exact scenario count, the empty transcript, and per-rule normalization scope. A cross-AI review round found a real blocker (a malformed tracer `explore` call that would have frozen an error as the 8th tool's coverage) before capture ran. UAT found and closed one further gap — the session-line mutex had no test and `internal/mcp` was outside the race-detector's package set — **validated in v0.3.0 Phase 1** (6/6 requirements, 30/30 threats closed)
+
 ### Active
 
-**No active milestone.** v1.0 shipped 2026-08-03; the next milestone is unscoped. Run `/gsd-new-milestone` to define it.
+**Active milestone: v0.3.0 — MCP Protocol Currency** (scoped 2026-08-03). Requirements are defined in `REQUIREMENTS.md`; phases in `ROADMAP.md`. Taken into this milestone from the backlog: **999.6** (MCP `2026-07-28` impact assessment — the milestone's spine) and **999.3** (tool-modfile vulnerability scanning, pulled in because an SDK migration *is* a dependency-closure change).
 
-Carried forward as backlog (see `ROADMAP.md` → Backlog, preserved across the milestone close):
+Remaining backlog, deliberately NOT in v0.3.0 (see `ROADMAP.md` → Backlog, preserved across the milestone close):
 
-- [ ] 999.2 — tmux-driven real-PTY e2e/UAT harness for the interactive TUI (the missing rung between piped TTY-blind integration tests and manual human UAT; motivated by two TTY-only bugs Phase 7 UAT caught)
-- [ ] 999.3 — vulnerability scanning for `go.tool.mod` / `go.tool-lint.mod` (~400 modules executed as credentialed CI tooling; the blocking `govulncheck` job scans root `go.mod` only)
+- [ ] 999.2 — tmux-driven real-PTY e2e/UAT harness for the interactive TUI (the missing rung between piped TTY-blind integration tests and manual human UAT; motivated by two TTY-only bugs Phase 7 UAT caught). *Deferred from v0.3.0: the failure shape rhymes with this milestone's real-client MCP verification work, but it is a different surface and a different harness.*
 - [ ] 999.4 — `CheckRegression` current-metrics positivity guard (degenerate `current.PeakRSSBytes = 0` silently passes both the relative and absolute checks)
 - [ ] 999.5 — macOS Gatekeeper signing + notarization for darwin binaries (cosign is a different mechanism and does nothing for Gatekeeper; measured `spctl` = `rejected` on both darwin arches — scoped to browser downloads only, since `codegraph upgrade` carries no quarantine xattr)
 
@@ -126,6 +148,8 @@ Deferred to later releases:
 | Worktree awareness scoped at parity for v1.0 | TS `sync/worktree.js` only detects a borrowed index + warns; matching that is the 1.0 bar. Auto-init/share is a larger design | ✓ Delivered (Phase 2): 4-gate detect + CLI warning + inline MCP notice, at TS parity. Going beyond (auto-init / `git-common-dir` sharing) remains deliberately deferred |
 | **No milestone git tags** — release-please is the sole tag authority | Since Phase 9, release-please owns all tag creation from Conventional Commits (D-06R); a hand-created planning tag reintroduces exactly the manual-tagging practice that phase removed. The milestone record is already durable in `MILESTONES.md` + `milestones/v1.0-*` without one. `milestone-v0.1` (2026-07-14) **predates release-please** (`v0.2.0`, 2026-07-31) and is a pre-automation artifact, not a convention to continue | ✓ Decided at v1.0 close — no `milestone-v1.0` tag created. Corollary if this is ever revisited: a planning tag must NOT match `release.yml`'s `push: tags: "v[0-9]*"` trigger, or it fires the full release pipeline and falsely claims a release release-please never cut |
 | Plan for embeddings, communities, graph-viz UI as future milestones | Long-term product direction; v1 schema versioned + annotation-ready so they bolt on | — Pending (unchanged; still deferred after v1.0) |
+| Build the wire oracle **before** any SDK code moves | v1.0 Phase 4 already established that an SDK's own client silently skips malformed stdout lines and therefore cannot fail a purity test. A harness written after the swap and validated with the new SDK's client would describe the new behavior rather than test it | ✓ Delivered (v0.3.0 Phase 1): 23 transcripts frozen against the pre-migration server, non-vacuity mutation-proven. Two captures (all-8-tool coverage, multi-era Legacy baseline) were one-way — unrecapturable once `mark3labs/mcp-go` leaves `go.mod` |
+| VRFY-02 is an **asserted pin**, not an injection point, for Phase 1 | `mark3labs/mcp-go` v0.56.0 decides the negotiated revision in an unexported method and exposes no `WithProtocolVersion` option, so no caller can inject a repo-owned literal while it is the backend. The pin still delivers the property that matters: a dependency bump turns the oracle red instead of moving wire behavior silently | ✓ Decided at v0.3.0 Phase 1 UAT — ROADMAP criterion 3 restated from "reads from" to "asserted against" to match REQUIREMENTS.md and the shipped mechanism. The stricter "reads from" property is carried to Phase 2, when the official go-sdk supplies a backend a caller can actually supply a revision to |
 
 ## Evolution
 
@@ -145,4 +169,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-03 after v1.0 milestone — Drop-in Parity & Human UX shipped (10/10 phases verified, 48/48 requirements); archived to `milestones/v1.0-*`*
+*Last updated: 2026-08-05 after v0.3.0 Phase 1 — wire oracle delivered and proven against the pre-migration server (6/6 requirements, 30/30 threats closed); VRFY-02 recorded as an asserted pin with the "reads from" property carried to Phase 2*

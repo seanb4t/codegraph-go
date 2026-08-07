@@ -56,7 +56,7 @@ func TestSendStop(t *testing.T) {
 			// SIGTERM's default disposition is termination — cmd.Wait
 			// returning (even with a non-zero/signaled *exec.ExitError) is
 			// exactly the expected outcome, not a failure.
-		case <-time.After(5 * time.Second):
+		case <-time.After(testBudget(5 * time.Second)):
 			_ = cmd.Process.Kill()
 			<-done
 			t.Fatal("sendStop: process did not exit within 5s of SIGTERM")

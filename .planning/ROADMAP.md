@@ -4,13 +4,16 @@
 
 CodeGraph Go is a ground-up Go rewrite of TypeScript CodeGraph — a drop-in, TS-v1.3.x-parity replacement in a single static binary. **v0.1 (Initial Release) shipped 2026-07-14**: the core capabilities (indexing, query, MCP server, sync, migration) work from a signed/attested/SBOM'd release that beats TS 1.3.1 on every measured benchmark — but the CLI/agent surface still diverged *behaviorally* from TS. **v1.0 (Drop-in Parity & Human UX) shipped 2026-08-03**: those gaps are closed. An existing user can now swap binaries with zero change in experience — TS-identical `explore`/`node`/`status` behavior, watcher-on-MCP by default, git/worktree awareness, output hygiene, a human-facing Charm TUI behind a build-enforced rendering seam (the agent/MCP path never sees ANSI), systematic flag reconciliation, fully automated signed releases via release-please + GoReleaser, and contributor-facing local build tooling. Work was risk-front-loaded: the load-bearing shared-engine behavioral algorithms landed first, the human TUI last.
 
-**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line is `v0.2.0`, computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestones carry **no git tag** — release-please is the sole tag authority since Phase 9, and the milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
+**v0.3.0 (MCP Protocol Currency) is in progress.** MCP published spec revision `2026-07-28` six days after v1.0 shipped, which makes codegraph-go's server a **Legacy** implementation in that spec's own terminology. This milestone brings the agent surface current on the official `modelcontextprotocol/go-sdk` — the maintainer's pre-decision, since `mark3labs/mcp-go` has no `2026-07-28` support and no announced timeline — without breaking any of the 8 agent clients `codegraph install` already configures. Work is ordered around one non-negotiable: the wire-level verification oracle is built and proven against the **current** server before any SDK code moves, because this project already established (v1.0 Phase 4) that an SDK's own client silently skips malformed stdout lines and therefore cannot fail a purity test.
+
+**Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line is `v0.2.0`, computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). From v0.3.0 onward the milestone label tracks the actual release line, but it is still a planning label carrying **no git tag** — release-please remains the sole tag authority and computes the real version from Conventional Commits, so `v0.3.0` is a prediction that holds if this milestone lands `feat:` commits. Milestones carry no git tag; the milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
 
 ## Milestones
 
 - ✅ **v0.1 — Initial Release** — Phases 1–8 (shipped 2026-07-14) — core capabilities + signed release; not yet a drop-in parity replacement
 - ✅ **v1.0 — Drop-in Parity & Human UX** — Phases 1–10 (shipped 2026-08-03) — behavioral + surface parity with TS 1.3.1, human TUI, automated signed releases, local build tooling
-- 📋 **Next** — unscoped; run `/gsd-new-milestone`. Candidates: the four Backlog items below, Team Scale (central server, CI-distributed indexes), annotations (embeddings/communities/export), local Svelte web UI (SEED-001), homebrew install path (SEED-002)
+- ✅ **v0.3.0 — MCP Protocol Currency** — Phases 1–5 (shipped 2026-08-06) — official Go SDK adoption, `2026-07-28` spec compliance without breaking Legacy clients, a wire-level verification oracle, tool-modfile vulnerability coverage
+- 📋 **Later** — unscoped. Candidates: the Backlog items below (999.2 tmux TTY harness, 999.4 CheckRegression guard, 999.5 macOS Gatekeeper), Team Scale (central server, CI-distributed indexes), MRTR/elicitation (MRTR-01), annotations (embeddings/communities/export), local Svelte web UI (SEED-001), homebrew install path (SEED-002)
 
 ## Phases
 
@@ -54,40 +57,30 @@ Full phase details archived in [`milestones/v1.0-ROADMAP.md`](milestones/v1.0-RO
 
 </details>
 
-## Progress
+<details>
+<summary>✅ v0.3.0 — MCP Protocol Currency (Phases 1–5) — SHIPPED 2026-08-06</summary>
 
-| Phase | Milestone | Plans Complete | Status | Completed |
-| ----- | --------- | -------------- | ------ | --------- |
-| 1. Behavioral Parity — explore & node | v1.0 | 17/17 | Complete | 2026-07-15 |
-| 2. status Content & Git/Worktree Awareness | v1.0 | 7/7 | Complete | 2026-07-16 |
-| 3. Watcher-on-MCP Default | v1.0 | 5/5 | Complete | 2026-07-16 |
-| 4. Output Hygiene | v1.0 | 3/3 | Complete | 2026-07-16 |
-| 5. Git Sync Hooks | v1.0 | 5/5 | Complete | 2026-07-17 |
-| 6. Rendering Seam & Pretty status/files | v1.0 | 3/3 | Complete | 2026-07-17 |
-| 7. Interactive TUI — Daemon Picker & Install Multi-Select | v1.0 | 8/8 | Complete | 2026-07-26 |
-| 8. Surface Reconciliation & Signed v1.0.0 Release | v1.0 | 9/9 | Complete | 2026-07-28 |
-| 9. release-please + GoReleaser | v1.0 | 8/8 | Complete | 2026-08-01 |
-| 10. Local Build Tooling & CONTRIBUTING | v1.0 | 7/7 | Complete | 2026-08-03 |
-| 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
-| 999.3. Vulnerability scanning for tool modfiles | Backlog | 0/0 | Not started | - |
-| 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
-| 999.5. macOS Gatekeeper signing/notarization | Backlog | 0/0 | Not started | - |
+Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.0-ROADMAP.md); phase artifacts in [`milestones/v0.3.0-phases/`](milestones/v0.3.0-phases/); requirements in [`milestones/v0.3.0-REQUIREMENTS.md`](milestones/v0.3.0-REQUIREMENTS.md); audit in [`v0.3.0-MILESTONE-AUDIT.md`](v0.3.0-MILESTONE-AUDIT.md).
+
+- [x] Phase 1: Protocol Scoping & the SDK-Independent Wire Oracle (7/7 plans) — completed 2026-08-05
+- [x] Phase 2: SDK Migration — official go-sdk on the existing surface (5/5 plans) — completed 2026-08-06
+- [x] Phase 3: `2026-07-28` Spec Compliance (5/5 plans) — completed 2026-08-06
+- [x] Phase 4: Supply-Chain Coverage & Daemon Substrate Fixes (3/3 plans) — completed 2026-08-06
+- [x] Phase 5: Live Tool-Catalog Change Notification (1/1 plans) — completed 2026-08-06
+
+**Delivered:** codegraph-go's stdio MCP server is current with spec revision `2026-07-28` on `modelcontextprotocol/go-sdk@v1.7.0`, with `mark3labs/mcp-go` gone. All 25 requirements satisfied, all 5 phases independently verified, 21 plans over 136 commits in 4 days (174 files, +32,372/−1,901). Legacy clients are unbroken — a `2024-11-05` client completes a session and calls a tool, asserted on the wire. The verification oracle grew 23 → 28 frozen transcripts and never imports the SDK it tests.
+
+**Accepted limitations, carried not closed:** the daemon extreme-load timeout tail and its feedback-latency tradeoff (CI load ruled the governing standard for MAINT-02), and `GO-2026-5932` — a real, unmitigated vulnerability reachable in `goreleaser`'s binary through cosign/rekor's unmaintained openpgp, surfaced by the new advisory scan rather than resolved.
+
+**No git tag.** release-please is the sole tag authority (D-06R); a `v0.3.0` tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+
+</details>
 
 ## Backlog
 
 ### Phase 999.2: tmux e2e/UAT test harness and suite (BACKLOG)
 
 **Goal:** [Captured for future planning] A real-PTY end-to-end test harness that drives the interactive TUI through **tmux** (send-keys + capture-pane) so the terminal actually replies to escape queries and actually scrolls — the exact conditions the current piped/non-TTY suite can never reproduce. Motivation: v1.0 Phase 7's human UAT caught two user-visible TUI bugs that BOTH the full piped automated suite AND a deep multi-agent code review missed, because they only manifest on a live TTY — G-07-1 (bare `daemon` on a TTY with an empty registry leaked the terminal's DECRQM capability-probe responses `^[[?2026;2$y^[[?2027;0$y`) and G-07-2 (both bubbletea pickers rendered inline without alt-screen → heavy flicker + blank list). bubbletea Models are unit-testable via synthetic `tea.Msg` (state transitions) but that path never renders. Scope a suite that spawns the release binary inside a tmux pane and asserts on `capture-pane` output: (a) bare `daemon` empty-registry prints ONLY `no running daemons` with no leaked escape sequences; (b) the daemon picker enters the alternate screen, renders `Running daemons` + a seeded record, and restores the main buffer on quit (no residual escapes in scrollback); (c) the install/uninstall checkbox picker renders `[x]`/`[ ]` glyphs, `space` toggles, `q`/`esc` cancels with zero config writes; (d) no flicker proxy (stable capture across N frames). Reuse the `tmux` skill's send-keys/capture-pane idioms; gate the suite behind a build tag / CI job that has tmux available (skip cleanly where it isn't). This is the missing rung between the piped never-hang/byte-identity integration tests (necessary, TTY-blind) and manual human UAT (thorough, unautomated).
-**Requirements:** TBD
-**Plans:** 0 plans
-
-Plans:
-
-- [ ] TBD (promote with /gsd-review-backlog when ready)
-
-### Phase 999.3: Vulnerability scanning for the tool modfiles (BACKLOG)
-
-**Goal:** [Captured for future planning] Close the supply-chain gap surfaced by the Phase 10 security audit (recorded in `10-SECURITY.md` → "Advisory — Unregistered Surface"; also code-review finding WR-07). Phase 10 introduced `go.tool.mod` and `go.tool-lint.mod` — roughly **400 modules** including goreleaser plus the AWS/GCP/Azure SDKs, k8s client libraries, cosign and sigstore, plus actionlint's dependency tree. These are built from source and **executed as credentialed CI tooling**: `goreleaser` signs and publishes releases, and `task` drives every CI job body. But `ci.yml:156-171`'s blocking `govulncheck` job scans the **root `go.mod` only**. `Taskfile.yml`'s `vuln` target is the only thing that ever points govulncheck at `go.tool.mod`, is documented as local-only (`go.tool.mod:10-15`), and is invoked by **no** CI job; `go.tool-lint.mod` has no vulnerability-scanning path at all. Threat T-10-01-01 covers *how* these modules are fetched (checksummed module proxy, no `curl | sh`), but nothing covers a **known-vulnerable dependency being executed** inside the credentialed release pipeline. Scope: (a) mint a registered threat for this trust boundary rather than leaving it advisory; (b) add a CI scanning path that covers both tool modfiles — note `govulncheck` is call-graph-aware, so scanning a modfile whose only entry points are third-party `main` packages needs its invocation shape thought through (`-mode=binary` over the built tool, or per-tool package targets, rather than a naive `./...`); (c) decide blocking vs advisory — the root-`go.mod` job is blocking, and a tool-modfile job that is merely advisory should say so out loud rather than look like a gate. Guard against this repo's recurring failure mode: whatever lands must be demonstrated RED against a known-vulnerable pin before it is trusted.
 **Requirements:** TBD
 **Plans:** 0 plans
 

@@ -51,9 +51,14 @@ permissions:
   contents: read
 
 env:
-  # Pinned to the GoReleaser version validated locally in Plan 08-01
-  # (goreleaser --version -> v2.17.0) for build-config reproducibility.
-  GORELEASER_VERSION: "v2.17.0"
+  # Deliberately kept equal to go.tool.mod's goreleaser require line
+  # (v2.17.1) — machine-enforced by TestGoreleaserPinParity in
+  # internal/upgrade/taskfile_shape_test.go. Aligned upward to v2.17.1
+  # (was v2.17.0) because go.tool.mod's pin is the one with live, repeated
+  # PR validation (task check:goreleaser, task check:darwin-release-build);
+  # this env value's prior "validated locally in Plan 08-01" provenance
+  # predated both the Taskfile rewiring and go.tool.mod's existence.
+  GORELEASER_VERSION: "v2.17.1"
 
 jobs:
   # Native 2-OS matrix: each of the 6 (goos,goarch) targets in

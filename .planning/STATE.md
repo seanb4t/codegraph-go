@@ -1,47 +1,63 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: Drop-in Parity & Human UX
-status: Awaiting next milestone
-stopped_at: Completed 10-07-PLAN.md (final plan of Phase 10)
-last_updated: "2026-08-03T15:36:28.745Z"
-last_activity: 2026-08-03
-last_activity_desc: Milestone v1.0 completed and archived
+milestone: v0.3.0
+milestone_name: MCP Protocol Currency
+current_phase_name: v0.3.0 shipped 2026-08-06; no active milestone
+status: "Milestone v0.3.0 shipped — PR #24"
+stopped_at: v0.3.0 milestone complete and archived
+last_updated: "2026-08-06T22:28:13.846Z"
+last_activity: 2026-08-06
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 72
-  completed_plans: 72
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 21
+  completed_plans: 21
   percent: 100
-current_phase: 999.2
-current_phase_name: tmux e2e/UAT test harness and suite (BACKLOG)
+current_phase: —
+last_activity_desc: v0.3.0 shipped — audit passed, archived, no git tag (D-06R)
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-03)
+See: .planning/PROJECT.md (updated 2026-08-05)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Between milestones — v1.0 shipped 2026-08-03. Next milestone unscoped; run `/gsd-new-milestone`.
+**Current focus:** Phase 2 — SDK Migration — official go-sdk on the existing surface
 
 ## Current Position
 
-Phase: Milestone v1.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-03 — Milestone v1.0 completed and archived
+Phase: — (v0.3.0 shipped 2026-08-06; no active milestone)
+Plan: n/a
+Status: Milestone v0.3.0 shipped — PR #24
+Last activity: 2026-08-06
+
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
-**Velocity (v1.0):**
+**Velocity (v0.3.0):**
 
-- Total plans completed: 73 (v0.1 shipped 58+ plans across 8 phases — see milestones/v0.1-*)
+- Total plans completed: 21
 - Average duration: — min
 - Total execution time: 0.0 hours
 
-**By Phase (v1.0):**
+**By Phase (v0.3.0):**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 01 | 7 | - | - |
+| 2 | 5 | - | - |
+| 3 | 5 | - | - |
+| 4 | 3 | - | - |
+| 5 | 1 | - | - |
+
+**Recent Trend:** Milestone just scoped; no execution data yet.
+
+*Updated after each plan completion*
+
+**By Phase (v1.0 — archived, milestone shipped 2026-08-03):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -56,9 +72,12 @@ Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 | 09 | 8 | - | - |
 | 10 | 7 | - | - |
 
-**Recent Trend:** 9 of 10 v1.0 phases complete; Phase 09 closed 2026-08-01 with v0.2.0 published and REL-02 satisfied on both halves. (Note: the "Total plans completed" line above counts SUMMARY files (66) while the frontmatter `completed_plans` counts PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.)
+v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8 phases — see `milestones/v0.1-*`). Note the standing reconciliation: "plans completed" counts SUMMARY files (66) while the old frontmatter `completed_plans` counted PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.
 
-*Updated after each plan completion*
+**Per-Plan Metrics (v1.0 — archived):**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
 | Phase 01-behavioral-parity-explore-node P01 | 55min | 3 tasks | 30 files |
 | Phase 01 P02 | 5min | 1 tasks | 1 files |
 | Phase 01-behavioral-parity-explore-node P03 | 20min | 2 tasks | 2 files |
@@ -66,11 +85,11 @@ Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 | Phase 01-behavioral-parity-explore-node P05 | 19min | 2 tasks | 9 files |
 | Phase 01-behavioral-parity-explore-node P06 | 15min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P07 | 15min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P11 | 5min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P12 | 35min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P08 | 20min | 2 tasks | 4 files |
 | Phase 01-behavioral-parity-explore-node P09 | 24min | 2 tasks | 4 files |
 | Phase 01-behavioral-parity-explore-node P10 | 20min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P11 | 5min | 2 tasks | 2 files |
+| Phase 01-behavioral-parity-explore-node P12 | 35min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P13 | 25min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node P14 | 12min | 2 tasks | 2 files |
 | Phase 01-behavioral-parity-explore-node PP15 | 12min | 2 tasks | 0 files |
@@ -88,10 +107,6 @@ Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 | Phase 03 P03 | 9min | 2 tasks | 2 files |
 | Phase 03-watcher-on-mcp-default P04 | 9min | 3 tasks | 3 files |
 | Phase 03-watcher-on-mcp-default P05 | 5min | 2 tasks | 1 files |
-**Per-Plan Metrics:**
-
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
 | Phase 04 P01 | 4min | 2 tasks | 3 files |
 | Phase 04-output-hygiene P02 | 9min | 2 tasks | 2 files |
 | Phase 04-output-hygiene P03 | 8min | 2 tasks | 2 files |
@@ -107,8 +122,8 @@ Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 | Phase 07 P02 | 6min | 2 tasks | 2 files |
 | Phase 07 P03 | 30min | 2 tasks | 6 files |
 | Phase 07 P04 | 12min | 2 tasks | 4 files |
-| Phase 7 P06 | 13min | 2 tasks | 6 files |
 | Phase 07 P05 | 9min | 2 tasks | 2 files |
+| Phase 7 P06 | 13min | 2 tasks | 6 files |
 | Phase 07 P07 | 25min | 3 tasks | 5 files |
 | Phase 07 P08 | 15min | 2 tasks | 2 files |
 | Phase 08 P01 | 20min | 3 tasks | 3 files |
@@ -129,10 +144,24 @@ Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 | Phase 10 P01 | 45min | 3 tasks | 8 files |
 | Phase 10 P02 | unknown | 3 tasks | 5 files |
 | Phase 10 P03 | unknown | 2 tasks | 3 files |
-| Phase 10 P05 | 41min | 3 tasks | 4 files |
 | Phase 10 P04 | ~16h (checkpoint-investigation dominated) | 3 tasks | 8 files |
+| Phase 10 P05 | 41min | 3 tasks | 4 files |
 | Phase 10 P06 | ~24min | 3 tasks | 5 files |
 | Phase 10 P07 | 55min | 3 tasks | 3 files |
+| Phase 02 P01 | ~2h | 3 tasks | 12 files |
+| Phase 02 P02 | 20min | 2 tasks | 4 files |
+| Phase 02 P03 | 35min | 2 tasks | 1 files |
+| Phase 02 P04 | ~1h | 3 tasks | 10 files |
+| Phase 02 P05 | 2h | 3 tasks | 24 files |
+| Phase 03-2026-07-28-spec-compliance P01 | 6min | 3 tasks | 4 files |
+| Phase 03 P02 | 2min | 2 tasks | 5 files |
+| Phase 03 P03 | 5min | 2 tasks | 4 files |
+| Phase 03 P04 | 6min | 2 tasks | 5 files |
+| Phase 03 P05 | 40min | 3 tasks | 27 files |
+| Phase 04 P02 | 119min | 3 tasks | 6 files |
+| Phase 04 P01 | 45min | 3 tasks | 3 files |
+| Phase 04 P03 | 40min | 2 tasks | 2 files |
+| Phase 05 P01 | 50min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -140,7 +169,22 @@ Last activity: 2026-08-03 — Milestone v1.0 completed and archived
 
 v1.0's decision log is archived with the milestone — per-phase decisions live in
 `milestones/v1.0-phases/*/`, and the durable product-level ones are summarized in
-PROJECT.md → Key Decisions. This section restarts for the next milestone.
+PROJECT.md → Key Decisions. This section restarts for v0.3.0.
+
+Decisions already made for v0.3.0, before any phase executes:
+
+- **Adopt `github.com/modelcontextprotocol/go-sdk@v1.7.0`** (maintainer pre-decision, 2026-08-03). Evidence was one-sided: `mark3labs/mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"`, has no `2026-07-28` support, no announced timeline, and one unclaimed tracking issue (#928); the official SDK shipped stable on 2026-07-27 with five-era negotiation (`2026-07-28` → `2024-11-05`) built in. **There is no decision-gate phase and no dated-defer branch** — the roadmap's SUMMARY-suggested Phase 3 (adopt-vs-defer) and Phase 4b (dated defer) are superseded.
+- **Verification precedes migration** (VRFY-04, hard sequencing constraint). An SDK's own client silently skips malformed stdout lines and cannot fail a purity test — established in v1.0 Phase 4. A harness written after the swap would describe the new behavior rather than test it.
+- **`ttlMs: 0` + `cacheScope: "private"` paired with a per-call `hasIndex` re-check** — two halves of one correctness property, not independent options. A long `ttlMs` is a true statement about the mechanism and a dangerous one about the promise.
+- **Legacy `initialize` support is NOT dropped.** Per the spec's own compatibility matrix, a Modern-only server hard-fails every still-Legacy client with no client-side fallback, and zero of the 8 roster clients have confirmed `2026-07-28` support. This is the single highest-consequence mistake available in this milestone.
+- **SPEC-09 is sequenced last, alone.** It is a long-lived-stream mechanism materially larger than the rest of the SPEC work and explicitly not required for correctness once `ttlMs: 0` ships, so it is isolated in Phase 5 where slipping it cannot block the milestone's core value.
+
+Decisions made during Phase 1 (completed 2026-08-05):
+
+- **VRFY-02 ships as an asserted pin, not an injection point.** `mark3labs/mcp-go` v0.56.0 decides the negotiated revision in the unexported `(*MCPServer).protocolVersion` and exposes no `WithProtocolVersion` option, so no caller can inject a repo-owned literal while it is the backend. ROADMAP criterion 3 was restated from "reads from" to "asserted against" to match REQUIREMENTS.md and the shipped mechanism; the stricter "reads from" property is carried to Phase 2. Recorded in `internal/mcp/protocol_version.go:9-22` so it cannot be mistaken for an injection point later.
+- **The unsupported-version scenario is frozen as an observed success, not an assumed error.** `mark3labs` v0.56.0 silently coerces an unrecognized `protocolVersion` to its own latest, and `UnsupportedProtocolVersionError` is client-side only. Freezing an error response there would have encoded a validation the server does not perform. The compensating control is VRFY-03's session line, which reports requested and negotiated separately.
+- **The session line panics on a nil writer; `io.Discard` is the only opt-out.** "Always on" is a construction property, not a calling convention — a future caller passing nil would otherwise silently disable the milestone's sole mismatch mitigation.
+- **A gate is not trusted until demonstrated RED** was applied literally: four one-time mutations against the real binary, plus the UAT-added session-line concurrency test, each observed red before being trusted.
 
 Standing decisions that outlive v1.0:
 
@@ -150,6 +194,28 @@ Standing decisions that outlive v1.0:
 - CGo tree-sitter is the single documented CGo exception (DIST-05 / PARSER-DECISION.md).
 - `Taskfile.yml` is the single definition of every CI job body; `TestWorkflowRunBodiesInvokeTask` enforces it.
 - A gate is not trusted until it has been demonstrated RED against a confirmed-applied mutation.
+- [Phase ?]: 02-01: go-sdk's StdioTransport{} lacks a customization hook, so a real client-disconnect race (stdin closes before an in-flight response is written) required a custom IOTransport wrapper (stdinLingerReader/pendingWriter) in goSDKServer.ServeStdio().
+- [Phase ?]: 02-01: go-sdk defaults to the 2026-07-28 SEP-2575 server/discover handshake, never classic initialize, when both client and server are go-sdk v1.7.0 defaults — VRFY-03's session-line middleware only fires for classic initialize (in scope for this phase); internal/mcp's own tests now drive a raw jsonrpc handshake (sendRawInitialize) to exercise it.
+- [Phase ?]: 02-01: added a narrow, function-scoped HYG-02 archtest allowlist (internal/graphstore/archtest) for internal/mcp's now-necessary direct os.Stdout reference in ServeStdio() — the one legitimate transport-target write, not a diagnostic leak; proven scoped via a new self-test.
+- [Phase ?]: 02-02: reused mcpSDKModulePrefixes by index for the SDK-01 swap exemption rather than retyping module paths
+- [Phase ?]: SDK-04 closed: internal/mcp/error_mapping_test.go pins the error-to-wire mapping for handler-returned errors, schema-rejected missing arguments, undeclared arguments, and engine-level failures, demonstrated RED via a jsonrpc.Error mutation on codegraph_status's error path
+- [Phase ?]: 02-04: testdata/golden's t.Errorf/t.Fatalf count dropped 114->112 because go-sdk's Client.Connect atomically merges connect+handshake (mark3labs needed two separate fallible steps); no test assertion weakened, only setup-error-check plumbing shrank
+- [Phase ?]: 02-04: go mod tidy requires -e to proceed past a pre-existing, unrelated alex-pinkus/tree-sitter-swift test-dependency resolution quirk (reproduced against the untouched pre-task go.mod); result confirmed stable across two consecutive -e runs
+- [Phase ?]: 02-05: nine named causes for the go-sdk wire re-freeze; cause #9 (edge-call-before-initialize session-ordering rejection) was undiscovered by research, found at the checkpoint, and accepted by the maintainer as spec-correct
+- [Phase ?]: SPEC-04 discover cacheScope corrected to private via the AddReceivingMiddleware seam (D-03), mirroring D-09's tools/list fix
+- [Phase ?]: D-03 anti-regeneration guard becomes advisory, not blocking (option-advisory): the guard's own two-PR remedy is structurally unavailable in this repository; the reviewed-diff pass (D-06) is now the sole control, stated explicitly in Taskfile.yml and ci.yml so an advisory job is never mistaken for a gate.
+- [Phase ?]: SPEC-02 closed by assertion: -32602/-32022 frozen and anchored, zero server code added; the -32601 observation in 03-CONTEXT.md is go-sdk's own lexical version-string comparison, retracted in-file
+- [Phase ?]: SPEC-05: live tool catalog via one registerTools/unregisterTools seam driven by a pre-next() per-request re-check inside AddReceivingMiddleware; confinement stays anchored at construction-time repoPath, never widened
+- [Phase ?]: Wire-oracle: index-appears-mid-session drives a real codegraph init subprocess mid-capture, blocking on response-observed (not sleep) via a restructured Capture; ExpectedScenarioCount now 27
+- [Phase ?]: SPEC-07's instructions string ships identically to both initialize and server/discover via ServerOptions.Instructions; SPEC-06 covered by one added tools/call on legacy-2024-11-05 rather than a new scenario, a LOW-confidence sufficiency judgment recorded as such
+- [Phase ?]: Phase 3's reviewed-diff pass ran a consolidated fourth time in 03-05: 24 of 27 transcripts re-frozen, three additive causes named with counts, zero unattributed lines, oracle re-proved non-vacuous via Mutation 1 with a byte-clean revert
+- [Phase ?]: MAINT-01 (getppid -race) closed structurally via t.Cleanup-registered join-before-restore, proven by 0 races across 3 post-fix full-suite -race runs plus a disproof/reproof toggle test
+- [Phase ?]: MAINT-02 plain-timeout tail not reduced to a literal zero on this session's machine due to a discovered confound: multiple concurrent sibling Claude Code agents plus a live desktop GUI competing for CPU (confirmed via ps aux); GOMAXPROCS=4 (CI-runner-class approximation) is 8/8 clean, isolated runs always clean
+- [Phase ?]: 04-01: Tool-modfile vuln scan ships ADVISORY not blocking (D-04 superseded) — goreleaser's binary carries a real, permanently-unfixed, symbol-reachable GO-2026-5932 match (openpgp via cosign/rekor's PGP verifier); blocking would have been permanently red from first run
+- [Phase ?]: MAINT-03: aligned release.yml's GoReleaser pin upward to v2.17.1 (matching go.tool.mod), confirmed by git history that neither pin was deliberately moved away from the other
+- [Phase ?]: VULN-03: stance test re-derived from a divergence assertion to an agreement assertion after D-04's mid-phase supersession — tool-vuln and transcript-freeze are now both deliberately ADVISORY, not deliberately different
+- [Phase ?]: NoInitialize with Modern _meta on every request is required for the SPEC-09 proof scenario — a classic initialize would route the session onto go-sdk's Legacy no-opt-in notification channel and make the proof vacuous
+- [Phase ?]: Registered 4 anchors (not the plan's stated 5) matching the plan's own action-text description exactly; documented as a plan-text inconsistency, not an omission
 
 ### Pending Todos
 
@@ -167,11 +233,17 @@ None. The three previously-listed todos were resolved during v1.0 and filed to
 v1.0's phase-scoped blockers are all resolved and archived with the milestone.
 Carried forward:
 
+- **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` (tool-modfile vulnerability scanning) and `999.6` (MCP `2026-07-28` impact assessment) were both promoted into v0.3.0 — 999.3 into Phase 4, 999.6's useful residue into Phase 1 — but all five `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. PROJECT.md's remaining-backlog list names only 999.2 / 999.4 / 999.5. Decide whether the two promoted entries should be struck from the Backlog or annotated as promoted; nothing was removed pending that call.
 - **Residual darwin release-path check.** `release.yml`'s goreleaser / cosign / SLSA steps have never executed on `namespace-profile-macos-6x14-tahoe`, because `release.yml` triggers only on `v[0-9]*` tag push. A permanent canary (`darwin-toolchain-canary.yml`) machine-proves that runner's availability and native Apple Silicon toolchain, so the residual gap is narrower than "the darwin leg" — but the goreleaser/signing/attestation path and a `codegraph upgrade` smoke test against the resulting macOS binary still want a human eye at the next real tag push.
-- **GoReleaser pin mismatch.** `ci.yml` uses v2.17.1; `release.yml` uses v2.17.0. Filed rather than silently bumped, to avoid an unaudited change to the Phase-8-audited pipeline.
-- **Open GitHub issues (none blocking):** #13 daemon `-race` on the `getppid` test seam · #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity) · #17 `TestRunWatchdogCancelsRunOnSimulatedReparent` fails under full-suite load, passes isolated.
+- **GoReleaser pin mismatch.** `ci.yml` uses v2.17.1; `release.yml` uses v2.17.0. Now scheduled as MAINT-03 in Phase 4.
+- **Client-side `tools/list` caching bugs are a known confound.** Real, primary-source GitHub issues exist against Claude Code itself (anthropics/claude-code #41123, #40025, #50515; claude-ai-mcp #45). These will be misdiagnosed as migration regressions unless documented as a known confound before Phase 2 ships.
+- **Open GitHub issues:** #13 daemon `-race` on the `getppid` test seam (→ MAINT-01, Phase 4) · #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity) · #17 `TestRunWatchdogCancelsRunOnSimulatedReparent` fails under full-suite load, passes isolated (→ MAINT-02, Phase 4).
 - **Advisory, unregistered surfaces** from the Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
 - **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing.
+- state.advance-plan failed: 'Cannot parse Current Plan or Total Plans in Phase from STATE.md' — Current Position still reads 'Plan: Not started' from the phase-planning step; likely needs orchestrator-side initialization to 'Plan: 1 of 5' before advance-plan can parse it. Not hand-edited per planning-artifacts rule (tool-owned file).
+- Daemon extreme-load tail (ACCEPTED, not a gap). Phase 4 fixed the structural cause of the rotating daemon flake set — orphaned goroutines surviving t.Fatalf's runtime.Goexit() — proven by zero DATA RACE under full-suite -race and 6/6 clean at GOMAXPROCS=4. Under pathological workstation load (~22 concurrent agent processes, load avg 6.3) one plain-timeout failure still appears. 52/52 real ci.yml runs back to 2026-07-13 show no daemon failure on the actual runner class, so CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06). Not scheduled for further work.
+- Daemon test feedback-latency tradeoff. Phase 4 raised the daemon test time budget to absorb contention: the package now runs ~65s clean at GOMAXPROCS=4 (was ~30s), and a failure under extreme load takes ~250s to surface instead of ~10s. Tolerance bought at the cost of feedback speed. Acceptable at CI concurrency; revisit if the daemon suite becomes a CI bottleneck.
+- GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling. goreleaser's binary reaches golang.org/x/crypto/openpgp (110 vulnerable symbols) via pipe/ko then google/ko then sigstore/cosign/oci then sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The new advisory tool-vuln job is now the only thing surfacing it — reported, not resolved. This is why D-04 was superseded from blocking to advisory.
 
 ### Quick Tasks Completed
 
@@ -179,16 +251,25 @@ Archived with v1.0. Directories remain under `.planning/quick/`.
 
 ## Deferred Items
 
-Items acknowledged and deferred at v1.0 milestone close on 2026-08-03:
+Items acknowledged and deferred at v1.0 milestone close on 2026-08-03, minus the two promoted into v0.3.0:
 
 | Category | Item | Status |
 |----------|------|--------|
 | seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant; triggers now that parity has landed |
 | seed | SEED-002 — homebrew installation path | dormant |
-| backlog | 999.2 — tmux e2e/UAT test harness for the interactive TUI | in ROADMAP Backlog |
-| backlog | 999.3 — vulnerability scanning for the tool modfiles | in ROADMAP Backlog |
+| backlog | 999.2 — tmux e2e/UAT test harness for the interactive TUI | in ROADMAP Backlog; deliberately NOT in v0.3.0 (its failure shape rhymes with VRFY-01, but it is the TUI surface and a different harness) |
 | backlog | 999.4 — CheckRegression current-metrics positivity guard | in ROADMAP Backlog |
 | backlog | 999.5 — macOS Gatekeeper signing and notarization | in ROADMAP Backlog |
+| requirement | MRTR-01 — mid-call elicitation via `resultType: "input_required"` | genuinely enabled for the first time by this spec revision; deferred as new product behavior, not protocol currency |
+| requirement | TASK-01 — long-running operations via `io.modelcontextprotocol/tasks` | not applicable today; codegraph's MCP tools are fast read-only queries |
+| milestone | Team Scale (central server, CI-distributed indexes, concurrent access) | v0.3.0 records the strategic read-out as a decision (the stateless core removes the sticky-routing/session-store infrastructure it would have needed); it builds none of it |
+
+Promoted into v0.3.0 (no longer deferred):
+
+| Category | Item | Landed as |
+|----------|------|-----------|
+| backlog | 999.6 — MCP `2026-07-28` impact assessment | the milestone's spine; residual scoping work folded into Phase 1 |
+| backlog | 999.3 — vulnerability scanning for the tool modfiles | VULN-01/02/03, Phase 4 |
 
 Carried forward from the v0.1 close and **closed during v1.0**:
 
@@ -199,14 +280,20 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-03
-Stopped at: v1.0 milestone closed and archived (verified closeout — all 10 phases `verification_status: passed`, 48/48 requirements)
-  NEXT: no active milestone. Run `/gsd-new-milestone` to scope the next one.
-  CARRY-OVER: see Blockers/Concerns above — the residual darwin release-path check at the next real tag push, the GoReleaser pin mismatch (ci v2.17.1 vs release v2.17.0), and open issues #13–#17.
-  NOTE: the branch `gsd/v1.0-drop-in-parity-human-ux` still needs to reach `main` via PR #21. No milestone tag was created — release-please owns tagging.
+Last session: 2026-08-06T21:36:47.136Z
+Stopped at: Completed 05-01-PLAN.md
+  NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
+  CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
+  PHASE 1 CARRY-INS FOR PHASE 2:
+
+    - The two ONE-WAY captures are done. Once `mark3labs/mcp-go` leaves `go.mod` the all-8-tool coverage and the multi-era Legacy baseline can never be recaptured — any further extension of the frozen set must happen BEFORE the swap.
+    - Known frozen-set gap (from `01-07`'s MUTATION-PROOF.md, carried in `01-UAT.md` → Gaps): no scenario exercises a handler's own required-argument validation failure. All four captured error shapes are protocol-level, so mutating `exploreHandler`'s missing-query error shape turns nothing red. Extendable today, impossible after the swap. Input to Phase 2's SDK-04 audit.
+    - VRFY-02's "reads from" property is Phase 2's to deliver if the official go-sdk exposes an injection point.
+  NOTE: no milestone tag will be created — release-please owns tagging (D-06R).
 Resume file: None
 
 ## Operator Next Steps
 
-- Land `gsd/v1.0-drop-in-parity-human-ux` on `main`
-- Start the next milestone with `/gsd-new-milestone`
+- Review `.planning/ROADMAP.md` — 5 phases, requirement coverage 25/25
+- Decide the 999.3 / 999.6 Backlog bookkeeping question (strike vs. annotate as promoted)
+- `/gsd-plan-phase 1` to begin

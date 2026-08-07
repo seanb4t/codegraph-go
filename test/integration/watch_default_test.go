@@ -4,18 +4,14 @@
 package integration
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/client/transport"
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // TestDefaultWatchHandshakePrompt proves WATCH-01/WATCH-02 end-to-end: a
@@ -40,7 +36,7 @@ func TestDefaultWatchHandshakePrompt(t *testing.T) {
 	// default-on path) and completes Initialize under ctx.
 	c := newServeClient(t, ctx, main)
 
-	result, err := c.ListTools(ctx, mcp.ListToolsRequest{})
+	result, err := c.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatalf("ListTools on default-on serve --mcp: %v (default-on watcher must not delay the handshake or first-tool availability)", err)
 	}
@@ -65,62 +61,37 @@ func TestDefaultWatchHandshakePrompt(t *testing.T) {
 // CODEGRAPH_NO_WATCH=1 in the spawned subprocess's environment, serve --mcp
 // still completes Initialize (best-effort/never-block — disabling the
 // watcher must not fail serve, D-06/serveWatchStart's ErrWatchDisabled
-// branch), and the child's real stderr (via client.GetStderr, mcp-go's
-// documented seam) carries the verbatim D-12/D-13 disabled message.
+// branch), and the child's real stderr (piped directly via cmd.Stderr,
+// since this test owns the *exec.Cmd itself rather than going through
+// mark3labs' client.GetStderr seam) carries the verbatim D-12/D-13
+// disabled message.
 //
 // The disabled message is printed by serve.go's watcher goroutine, which
 // runs off the handshake path (D-06) — so it may land slightly after
-// Initialize returns. Stderr is read continuously from a goroutine started
-// BEFORE Initialize to avoid a race against the pipe buffer, and the
-// assertion polls a bounded grace window rather than expecting the message
-// strictly before Initialize.
+// Initialize returns. cmd.Stderr is wired to a syncBuffer BEFORE
+// Client.Connect (which starts the subprocess and performs the initialize
+// handshake internally) so nothing the child writes to stderr is ever
+// missed, and the assertion polls a bounded grace window rather than
+// expecting the message strictly before Initialize.
 func TestNoWatchEnvDisablesViaStderr(t *testing.T) {
 	_, main := buildWorktreeFixture(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	c, err := mcpclient.NewStdioMCPClientWithOptions(binPath, []string{"CODEGRAPH_NO_WATCH=1"}, []string{"serve", "--mcp"},
-		transport.WithCommandFunc(func(cctx context.Context, command string, env []string, args []string) (*exec.Cmd, error) {
-			cmd := exec.CommandContext(cctx, command, args...)
-			cmd.Dir = main
-			cmd.Env = append(os.Environ(), env...)
-			return cmd, nil
-		}),
-	)
+	cmd := exec.CommandContext(ctx, binPath, "serve", "--mcp")
+	cmd.Dir = main
+	cmd.Env = append(os.Environ(), "CODEGRAPH_NO_WATCH=1")
+
+	var stderrBuf syncBuffer
+	cmd.Stderr = &stderrBuf
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd}, nil)
 	if err != nil {
-		t.Fatalf("NewStdioMCPClientWithOptions(serve --mcp, CODEGRAPH_NO_WATCH=1): %v", err)
+		t.Fatalf("CommandTransport Connect(serve --mcp, CODEGRAPH_NO_WATCH=1): %v (disabling the watcher must never fail serve)", err)
 	}
-	t.Cleanup(func() { _ = c.Close() })
-
-	stderrReader, ok := mcpclient.GetStderr(c)
-	if !ok {
-		t.Fatal("client.GetStderr: transport does not expose the subprocess's stderr")
-	}
-
-	var mu sync.Mutex
-	var stderrBuf bytes.Buffer
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, readErr := stderrReader.Read(buf)
-			if n > 0 {
-				mu.Lock()
-				stderrBuf.Write(buf[:n])
-				mu.Unlock()
-			}
-			if readErr != nil {
-				return
-			}
-		}
-	}()
-
-	req := mcp.InitializeRequest{}
-	req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-	req.Params.ClientInfo = mcp.Implementation{Name: "codegraph-integration-test", Version: "0.0.0"}
-	if _, err := c.Initialize(ctx, req); err != nil {
-		t.Fatalf("Initialize (CODEGRAPH_NO_WATCH=1): %v (disabling the watcher must never fail serve)", err)
-	}
+	t.Cleanup(func() { _ = session.Close() })
 
 	// D-12/D-13 verbatim disabled message: "[CodeGraph MCP] File watcher
 	// disabled — CODEGRAPH_NO_WATCH=1 is set. The graph will not
@@ -130,9 +101,7 @@ func TestNoWatchEnvDisablesViaStderr(t *testing.T) {
 	deadline := time.Now().Add(10 * time.Second)
 	var got string
 	for time.Now().Before(deadline) {
-		mu.Lock()
 		got = stderrBuf.String()
-		mu.Unlock()
 		if strings.Contains(got, wantSubstring) {
 			if !strings.Contains(got, "codegraph sync") {
 				t.Fatalf("disabled stderr message missing the `codegraph sync` refresh guidance: %q", got)

@@ -1,14 +1,10 @@
 package mcp
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	mcpclient "github.com/mark3labs/mcp-go/client"
-	"github.com/mark3labs/mcp-go/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
@@ -49,39 +45,17 @@ func TestReconnectReconcile(t *testing.T) {
 	}
 
 	s := BuildServer(true, map[string]bool{}, dir, dir)
-	c, err := mcpclient.NewInProcessClient(s)
-	if err != nil {
-		t.Fatalf("NewInProcessClient: %v", err)
-	}
-	defer c.Close()
 
-	ctx := context.Background()
-	initClient(t, ctx, c)
-
-	result, err := c.CallTool(ctx, mcp.CallToolRequest{
-		Params: mcp.CallToolParams{
-			Name: "codegraph_explore",
-			Arguments: map[string]any{
-				"query": "ReconnectSentinel",
-				"path":  dir,
-			},
-		},
+	result := callTool(t, s, "codegraph_explore", map[string]any{
+		"query": "ReconnectSentinel",
+		"path":  dir,
 	})
-	if err != nil {
-		t.Fatalf("CallTool codegraph_explore: %v", err)
-	}
 	if result.IsError {
 		t.Fatalf("codegraph_explore returned an error result: %+v", result)
 	}
-	if len(result.Content) == 0 {
-		t.Fatal("codegraph_explore returned no content")
-	}
-	text, ok := mcp.AsTextContent(result.Content[0])
-	if !ok {
-		t.Fatalf("codegraph_explore content[0] is not text: %+v", result.Content[0])
-	}
-	if !strings.Contains(text.Text, "ReconnectSentinel") {
-		t.Fatalf("codegraph_explore after reconcile: got %q, want it to find the offline-added ReconnectSentinel symbol", text.Text)
+	text := resultText(t, result)
+	if !strings.Contains(text, "ReconnectSentinel") {
+		t.Fatalf("codegraph_explore after reconcile: got %q, want it to find the offline-added ReconnectSentinel symbol", text)
 	}
 
 	// A second reconcile with nothing changed must be a cheap no-op.

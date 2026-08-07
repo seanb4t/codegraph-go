@@ -1,442 +1,313 @@
-# Architecture Research: v1.0 Integration into codegraph-go
+# Architecture Research — MCP `2026-07-28` Protocol Currency
 
-**Domain:** CLI + MCP server for a Go static-binary code-knowledge-graph tool (subsequent-milestone integration research, not greenfield)
-**Researched:** 2026-07-14
-**Confidence:** HIGH (grounded directly in the read v0.1 source — `internal/query`, `internal/mcp`, `internal/cli`, `internal/daemon`, `internal/watch`, `internal/agents`; MEDIUM on git-hooks-in-worktrees mechanics, which is corroborated by general git documentation, not this project's own prior art)
+**Domain:** MCP server integration architecture (stdio, tools-only), codegraph-go v0.3.0
+**Researched:** 2026-08-03 (corrected 2026-08-03 — see amendment note below)
+**Confidence:** MEDIUM overall — code-derived findings (file/symbol enumeration) are HIGH confidence (read directly); protocol-spec findings are sourced from the official `modelcontextprotocol.io` spec/changelog and blog, which is the spec's own primary source, but the research seam's generic `classify-confidence` tool has no tier above LOW for raw `websearch`/`webfetch` providers — see Sources for the honest breakdown.
 
-> Supersedes the pre-implementation ARCHITECTURE.md written before v0.1 was built (2026-07-10, general code-graph-indexer ecosystem survey). This document is scoped to v1.0's integration into the ACTUAL shipped v0.1 codebase, not a greenfield design.
+> **Correction (2026-08-03, same day):** the original version of this file understated `modelcontextprotocol/go-sdk`'s maturity — it characterized `v1.7.0-pre.1` (the first pre-release) as the current state of the art. The coordinator verified directly against the Go module proxy (`go list -m -json ... @latest`) and the module source (`go-sdk@v1.7.0/mcp/shared.go`) that **`v1.7.0` is a STABLE release, published 2026-07-27T15:20:53Z — the day before the spec's public announcement** — shipping five-era protocol negotiation (`2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) and the SEP-2575-numbered `CodeUnsupportedProtocolVersion = -32022`. This is now corrected throughout, most consequentially in Q4 and Q5. The mark3labs finding (`mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"`, no `2026-07-28` support) was independently re-verified and stands unchanged.
 
-## Standard Architecture
+This is a **subsequent-milestone** research file. It does not re-litigate the stack (see `.claude/CLAUDE.md`'s Technology Stack section, already shipped) — it integrates MCP `2026-07-28` into the existing, shipped Go architecture described in `internal/mcp/`, `internal/cli/serve.go`, and `test/integration/`.
 
-### System Overview (v0.1, unchanged skeleton v1.0 bolts onto)
+## Standard Architecture — Current State (as shipped, v1.0)
+
+### System Overview
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  internal/cli (Cobra)          internal/mcp (stdio, mark3labs/mcp-go) │
-│  thin commands, plain fmt.Fprint   handlers, plain text/JSON only     │
-└───────────────┬─────────────────────────────┬─────────────────────────┘
-                │                             │
-                └──────────────┬──────────────┘
-                               ▼
-                  internal/query.Engine (shared, read-only)
-              query/search/callers/callees/impact/affected/
-              files/status/node/explore — ONE snapshot per call
-                               │
-                               ▼
-                 internal/graphstore.Reader (Pebble snapshot)
-
-  internal/daemon (single-writer lockfile) ──drives──> indexer.Sync
-        ▲                                                   ▲
-        │ shares lockfile                                   │
-  internal/cli `serve --mcp --watch` (in-process fallback)───┘
-        │
-  internal/watch (fsnotify + debouncer)
-
-  internal/agents (self-registering AgentTarget registry,
-                    marker-fenced instruction injection,
-                    surgical MCP-config writes)
+│  Agent client (Claude Code, Cursor, ...) — spawns ONE subprocess      │
+│  per session via the stdio invocation internal/agents wrote           │
+└───────────────────────────────┬────────────────────────────────────┘
+                                 │ stdio (stdin/stdout pipes)
+┌────────────────────────────────▼───────────────────────────────────┐
+│  internal/cli/serve.go — newServeCmd().RunE                         │
+│   1. resolveStartPath(path)              → start                    │
+│   2. serveServerPaths(start)             → repoPath, hasIndex        │
+│   3. indexer.Sync(repoPath, storeDir,…)  → reconnect reconcile (D-06)│
+│   4. serveWatchStart(repoPath, hasIndex,…) → background watcher      │
+│   5. mcp.BuildServer(hasIndex, allowlist, repoPath, start) → *server.MCPServer │
+│   6. server.ServeStdio(s)                → blocks on stdin/stdout    │
+└────────────────────────────────┬───────────────────────────────────┘
+                                 │ *server.MCPServer (mark3labs concrete type)
+┌────────────────────────────────▼───────────────────────────────────┐
+│  internal/mcp (server.go + tools.go) — D-08 seam                    │
+│   BuildServer: registers codegraph_explore (always) + 7 companion   │
+│   tools (allowlist-gated), closes over ONE gitmeta.CachingDetector  │
+│   per server, and over (repoPath, startPath) — both process-start-  │
+│   time constants baked into every handler closure                   │
+│   Each handler: resolvePath → confineToRepoRoot (CR-02) →           │
+│   query.OpenAt (FRESH snapshot, D-02/D-08b) → Engine method →       │
+│   Render*Markdown → mcp.NewToolResultText                            │
+└────────────────────────────────┬───────────────────────────────────┘
+                                 │ imports only internal/query
+┌────────────────────────────────▼───────────────────────────────────┐
+│  internal/query.Engine — shared read-only engine (CLI + MCP)         │
+│  → internal/graphstore (Pebble) — single-writer, snapshot reads      │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-v1.0 adds four things to this picture, all as **siblings**, not rewrites:
+### Component Responsibilities
 
-1. A **rendering seam** inside `internal/cli` only (TTY-gated lipgloss/bubbletea presenter wrapping the same plain data `internal/query` already returns).
-2. Behavioral changes **inside `internal/query.Engine`** (`explore`/`node` relevance/disambiguation) — no new package, shared by construction because CLI and MCP already both call `Engine`.
-3. A new **`internal/gitmeta`** package (worktree detection), consumed by `internal/query` (to populate `WorktreeMismatch`/live staleness) and by `internal/cli` (for the pretty status banner) and threaded into MCP tool results as a compact string prefix.
-4. A new **`internal/githooks`** package (git hook install/remove), structurally parallel to `internal/agents` but not part of it — different trust boundary, different registry shape (fixed 3 hooks, not 8 targets).
+| Component | Responsibility | Current implementation |
+|-----------|----------------|-------------------------|
+| `internal/cli/serve.go` (`newServeCmd`, `serveServerPaths`, `serveWatchStart`) | Process bootstrap: resolve repo, reconcile offline changes, start watcher, construct server, block on transport | Owns the ONE call to `mcp.BuildServer` and the ONE call to `server.ServeStdio` — both mark3labs-typed |
+| `internal/mcp/server.go` (`BuildServer`, `ParseAllowlist`, `WarnUnknownToolsTo`) | Startup-time conditional tool registration; one `gitmeta.CachingDetector` per server | Returns `*server.MCPServer` (mark3labs concrete type) — see Q2 leak finding |
+| `internal/mcp/tools.go` (`exploreHandler`, `companionHandler`, `openEngine`, `confineToRepoRoot`, `resolvePath`) | Per-call arg parsing, path confinement, fresh-engine delegation, markdown rendering | Every handler is `server.ToolHandlerFunc` (mark3labs type); tool schemas built with `mcp.NewTool`/`mcp.With*` (mark3labs builder DSL) |
+| `internal/query.Engine` | Read-only query surface shared byte-for-byte by CLI and MCP | Untouched by this milestone — the seam this milestone must not disturb |
+| `test/integration/*_test.go`, `internal/mcp/*_test.go`, `testdata/golden/golden_parity_test.go` | Behavioral + protocol verification | Nearly all use `mcpclient` (mark3labs client) as the driving client — see Q3 |
 
-### Component Responsibilities (v1.0 deltas only)
+## Q1 — Team Scale Strategic Assessment (read-out, not a build order)
 
-| Component | Responsibility | New/Modified |
-|-----------|----------------|--------------|
-| `internal/query.Engine` | Add relevance scoring to `Explore`, multi-def disambiguation + `⚠️ no covering tests` to `Node`, multi-word query arity, richer `Status` fields (DB size; nodes-by-kind/languages already scaffolded) | **Modified** — same package, same public methods, richer internals |
-| `internal/gitmeta` (new) | Detect `.codegraph/` "borrowed index" (repo root resolved by `ResolveCodegraphDir` is a different worktree than the one the caller is actually in); compute `worktreeMismatch` string and a live "pending changes" signal | **New**, imported by `internal/query` and `internal/cli` |
-| `internal/githooks` (new) | Install/remove `post-commit`/`post-merge`/`post-checkout` hook scripts that shell out to `codegraph sync`; idempotent, marker-fenced like `internal/agents` but a separate package/trust boundary | **New**, imported only by `internal/cli` |
-| `internal/cli/present` (new, or a `render*.go` cluster inside `internal/cli`) | TTY-gated lipgloss styling + bubbletea interactive pickers, wrapping `query.StatusResult`/`query.FilesResult`/agent registry data | **New**, imported only by `internal/cli` — **never** by `internal/query` or `internal/mcp` |
-| `internal/mcp` | Unchanged shape; benefits automatically from `Engine` improvements; gets a short inline worktree-mismatch notice prefixed onto tool results | **Thin modification** (prefix line only) |
-| `internal/cli/serve.go` | `--mcp` implies watch by default; add `--no-watch` | **Modified** |
-| `internal/daemon`, `internal/watch` | No structural change — `serve --mcp`'s watcher-by-default just flips the existing `--watch` bool's default and wires it through the same `daemon.New`/lockfile path already there | **Unmodified** (one small new exported read, `daemon.Status`, for the interactive picker) |
+**Verdict: YES, materially more tractable — for a specific, narrow reason, not a blanket one.**
 
-## Recommended Project Structure (delta from v0.1)
+### What actually changes
 
-```
-internal/
-├── query/                    # UNCHANGED package boundary — richer internals
-│   ├── explore.go            # + relevance scoring (rankedNode already carries a `tier`; extend)
-│   ├── node.go                # + multi-def disambiguation prompt/list, "no covering tests" check
-│   ├── status.go              # + DB size (Pebble disk usage); nodes-by-kind/languages already scaffolded
-│   ├── resolve.go             # ResolveCodegraphDir stays upward-walk; gitmeta cross-checks it, doesn't replace it
-│   └── gitmeta_bridge.go      # NEW: thin glue — Engine.Status()/Explore() calls gitmeta.Detect(repoRoot) and folds
-│                               #      the result into StatusResult.WorktreeMismatch / a new blast/status field
-├── gitmeta/                   # NEW package
-│   ├── worktree.go            # git-common-dir vs git-dir detection, "borrowed index" comparison
-│   └── worktree_test.go
-├── githooks/                  # NEW package
-│   ├── hooks.go                # Install/Remove/Status for post-commit/post-merge/post-checkout
-│   ├── scripts.go              # embedded hook-script templates (marker-fenced, like agents/instructions.go)
-│   └── hooks_test.go
-├── fsatomic/                   # NEW package (extraction from internal/agents/shared.go)
-│   ├── fsatomic.go              # atomicWriteFile, replaceOrAppendMarkedSection, removeMarkedSection
-│   └── fsatomic_test.go         # moved verbatim from agents/shared_test.go
-├── cli/
-│   ├── present/                # NEW subpackage (or file cluster) — the ONLY place lipgloss/bubbletea is imported
-│   │   ├── style.go             # lipgloss styles, TTY gate (isatty check on cmd.OutOrStdout())
-│   │   ├── status_view.go       # pretty status renderer wrapping query.StatusResult
-│   │   ├── files_view.go        # pretty tree renderer wrapping query.FilesResult
-│   │   ├── daemon_picker.go     # bubbletea daemon-status/attach picker
-│   │   ├── install_picker.go    # bubbletea multi-select, REPLACES promptAgentMultiSelect's bufio prompt when TTY
-│   │   └── progress.go          # bubbletea progress model for init/index/sync
-│   ├── status.go                # calls present.RenderStatus(result) when TTY, else existing plain fmt.Fprintf
-│   ├── files.go                 # same TTY branch for --format tree
-│   ├── serve.go                 # --mcp implies watch; --no-watch opt-out
-│   ├── githooks.go              # NEW: `codegraph githooks install|remove|status` (dedicated command — see Q4 below)
-│   └── archtest/                 # NEW: import-graph guard mirroring graphstore/archtest and migrate/archtest
-│       └── no_charm_leak_test.go # asserts bubbletea/lipgloss import path only appears under internal/cli(/present)
-└── mcp/
-    └── tools.go                  # + one-line worktree-mismatch prefix on tool results; otherwise unchanged
-```
+The prior (pre-`2026-07-28`) stateful protocol tied a client to a server-held, in-memory session established during `initialize`/`notifications/initialized` and addressed by `Mcp-Session-Id`. Any multi-instance deployment of that protocol needed one of two things codegraph-go's deferred milestone-2 never designed: **sticky routing** (an LB pins a session to the instance that negotiated it) or a **shared session store** (any instance can serve any session id by reading shared state). `2026-07-28` removes the session concept from the protocol entirely (SEP-2567, SEP-2575): `initialize`/`initialized` is gone, every request self-describes via `_meta` (`io.modelcontextprotocol/protocolVersion`, `io.modelcontextprotocol/clientCapabilities`, `io.modelcontextprotocol/clientInfo`), and `server/discover` (a servers-MUST-implement RPC advertising supported versions/capabilities/identity) is answerable identically by any instance. The practical result: **a plain round-robin LB with zero shared session infrastructure is now a valid production topology for an MCP server** — an entire category of infrastructure work milestone-2 would otherwise have had to build is simply gone.
 
-### Structure Rationale
+### Why codegraph-go specifically benefits more than a typical MCP server would
 
-- **`internal/query` stays the seam of truth.** It already has `WorktreeMismatch *string` and `PendingChanges` fields sitting inert in `StatusResult` (see `internal/query/status.go`'s mapping table) — v1.0's job for worktree awareness is to make those live, not invent a new shape. Both CLI `status` and MCP `codegraph_status` read the same `StatusResult`, so wiring `gitmeta` in at the `Engine` level means CLI and MCP get worktree awareness in the same commit, with zero risk of the two surfaces drifting.
-- **`internal/gitmeta` is new, not folded into `internal/query`,** for the same reason `internal/watch` isn't folded into `internal/daemon`: it's a distinct, independently testable concern (parsing `.git`/`git-common-dir` layout) that `internal/query` calls into, mirroring the existing precedent of `internal/query` depending on `internal/graphstore` and `internal/indexer/goextract` (for `RefKindCalls`) — a read-only engine composing narrow, focused packages is the established pattern here, not a monolith.
-- **`internal/githooks` is a new top-level package, not a member of `internal/agents`,** because the trust boundary and registry shape are genuinely different (see Pattern 4 below for the detailed argument) — but it deliberately reuses `internal/agents/shared.go`'s already-proven idioms (marker-fenced replace-or-append, atomic temp-file-then-rename writes). **Recommendation: extract `internal/fsatomic`** from `internal/agents/shared.go` — `atomicWriteFile`, `replaceOrAppendMarkedSection`, `removeMarkedSection` — so both `internal/agents` and `internal/githooks` import it, rather than `internal/githooks` importing `internal/agents` directly (a naming/conceptual smell — a git-plumbing package has no business depending on an agent-config package) or duplicating non-trivial, security-relevant (V12 atomic-write) logic a second time. This breaks the codebase's OTHER established precedent — trivial single-constant duplication across packages (`codegraphDirName` duplicated verbatim in `internal/cli`, `internal/query`, `internal/daemon`, each with a comment explaining why) — but deliberately: that precedent is for one-line constants with nothing to drift; these are ~40-line, tested, security-sensitive functions where a second implementation is a real duplication-drift risk, not cosmetic.
-- **`internal/cli/present` (or equivalent) is the ONLY package that imports `bubbletea`/`lipgloss`.** This is the direct analog of the `internal/graphstore/archtest` (pebble confinement) and `internal/migrate/archtest` (`modernc.org/sqlite` confinement) precedents already in this codebase — same pattern, new dependency. Add `internal/cli/archtest` with a `go/packages`-based test (structurally identical to `internal/graphstore/archtest/import_graph_test.go`) asserting `github.com/charmbracelet/{bubbletea,lipgloss}` only appears under `internal/cli/...`. This is the load-bearing guarantee behind "MCP never sees ANSI" — not a design intention alone, but a CI-enforced boundary, matching how this codebase already treats its other supply-chain-sensitive imports.
+Three decisions made in v1.0 for LOCAL, single-process reasons turn out to already match the shape `2026-07-28` recommends for stateless cross-call state:
 
-## Architectural Patterns
+1. **`path` is already an explicit per-call tool argument, not implicit session state.** Every one of the 8 tool schemas (`tools.go` `exploreTool`/`companionTool`) declares `mcp.WithString("path", ...)`, and every handler resolves it per-call via `resolvePath`/`confineToRepoRoot` (CR-01/CR-02) rather than trusting a session-bound value. This is *exactly* the "explicit, server-minted handle passed as ordinary tool arguments" pattern the `2026-07-28` blog names as the replacement for protocol-level session state. codegraph-go didn't need to invent this for team-scale readiness — it already exists, because CR-02's trust boundary ("an MCP client may be an AI agent processing attacker-influenced content") demanded it independently.
+2. **Every handler opens a FRESH `query.Engine` snapshot per call** (`openEngine`, D-02/D-08b — deliberately never a cached engine held across calls). There is no session-scoped read cache to reconcile across instances; each call is already independently satisfiable by any process that can reach the right physical store.
+3. **`gitmeta.CachingDetector` is the only genuinely session-scoped state today**, and it is explicitly documented as "one per SERVER... bounds [git subprocess] cost to once per (startPath, indexRoot) pair for this server's entire lifetime" — a pure performance cache, not a correctness dependency. It generalizes to a keyed cache (by tenant/repo) sitting above per-request server construction; nothing about its existence forecloses a stateless design.
 
-### Pattern 1: Plain-data-core + TTY-gated presenter (the rendering seam)
+### What a remote/team codegraph MCP server would look like under `2026-07-28` (future milestone, sketch only)
 
-**What:** `internal/query.Engine` methods keep returning exactly what they return today — Go structs (`StatusResult`, `FilesResult`) for JSON-shaped commands, and plain markdown strings (`Explore`, `Node`) for the two flagship agent-facing commands. `internal/mcp` is untouched: it marshals structs to JSON or passes markdown strings through verbatim, exactly as it does now (`tools.go`'s `companionHandler`/`exploreHandler` bodies do not change at all). `internal/cli` adds a presentation layer that takes the SAME `StatusResult`/`FilesResult` value the plain-text branch already prints and, when the output is a real terminal, renders a styled version instead.
+| Concern | Current (stdio, 1 repo/process) | Remote/team shape under `2026-07-28` |
+|---|---|---|
+| Transport | stdio, one subprocess per session | Streamable HTTP (mandatory `Mcp-Method`/`Mcp-Name` routing headers per SEP-2243; no `Mcp-Session-Id`; no SSE resumability — a broken stream means the client re-issues as a new request, which is trivially safe for codegraph-go's read-only, idempotent queries) |
+| Auth | None — process-spawn trust boundary | OAuth 2.1 resource-server pattern; **Client ID Metadata Documents (CIMD)** preferred over per-AS Dynamic Client Registration (good fit for an 8-agent roster — each client publishes one CIMD document instead of registering per install); **RFC 9207** `iss` validation on the client side; **RFC 8707** Resource Indicators binding a token to this specific tenant's codegraph server so a token can't be replayed against a different tenant's index |
+| Which repo/index a request targets | Baked into `BuildServer`'s closure at process construction (`repoPath`, `startPath`) | Must become **request-scoped**, resolved from (authenticated tenant/token audience) × (an identifier analogous to today's `path` argument, reinterpreted as a repo/org id, not a raw filesystem path) — looked up through a registry that resolves to a physical index location (local disk cache fed by CI-distributed index artifacts — the already-deferred backlog item) |
+| Tool catalog construction | `BuildServer` runs ONCE at process start; `hasIndex`/`allowlist` are startup-time snapshots | Must move from constructor-time to **per-request-resolved** (a given HTTP request's tenant may or may not have an index yet) — this is the one clear, bounded refactor forced by statelessness, not by the transport change alone |
+| `gitmeta.CachingDetector` | One per server process | Promote to a cache keyed by (tenant, repo), held by a router/connection-pool layer above per-request server construction |
+| Store access | `query.OpenAt` opens a LOCAL Pebble path per call | Unchanged in shape — Pebble was chosen specifically for concurrent-read/snapshot semantics under exactly this kind of many-reader load; `query.OpenAt` already just takes a resolved path, so the resolution layer is new, not `query.OpenAt` itself |
+| `tools/list` caching | N/A today (no `ttlMs`/`cacheScope` field exists in the current SDK) | `cacheScope` must be `"private"` (catalog varies per tenant/repo — never safe for a shared intermediary to cache across tenants) with a short `ttlMs` (catalog can change the moment CI publishes a tenant's first index) — contrast with the stdio case (Q4) where the registered tool set is mechanically fixed for a process's life, but see Q4's reconciliation on why "mechanically fixed" is not the same as "safe to advertise as long-lived" |
 
-**When to use:** Any command whose CLI output currently branches on `--json` (`status`, `files`) is exactly where this seam goes — that branch already proves the command has a clean data/presentation split; add a third branch (pretty) alongside the existing plain and `--json` ones, gated on TTY rather than a flag.
+### Does anything in the CURRENT design foreclose this path?
 
-**Trade-offs:** Three render paths per command (`--json` / plain / pretty) instead of two is more surface, but it's additive — the existing two paths are untouched code, so this is zero risk to the golden-template tests that already pin `explore`/`node`/`status` shapes. `explore` and `node` themselves get NO pretty path in v1.0 (per the milestone's own scope: "lipgloss-styled `status`/`files`" only) — their markdown output already IS the human-facing format (it's what the golden corpus pins), so there is nothing to prettify without risking exactly the drift the milestone is trying to avoid.
+**No.** The one real structural gap is `mcp.BuildServer(hasIndex, allowlist, repoPath, startPath)` being a constructor-time-only API — every one of these four parameters would need a request-scoped resolution path for a multi-tenant server. That is a bounded, already-anticipated refactor (the standing constraint literally says "must accommodate milestone-2 team features... without a rewrite") — not a rewrite, because the actual query-and-render pipeline underneath (`openEngine` → `Engine` method → `Render*Markdown`) needs no change at all. The auth/tenant-resolution/CI-index-distribution layers are entirely NEW components with no existing analog to conflict with.
 
-**Example:**
-```go
-// internal/cli/status.go — the TTY branch added alongside the existing two
-result, err := eng.Status()
-if err != nil { return err }
+**Recommendation:** Record this assessment in `PROJECT.md`'s Key Decisions or Context section as the deferred milestone-2 read-out (a decision-record entry, not a phase). Do not open an HTTP transport in this milestone (explicitly out of scope per the quality gate) — but the phase that eventually does should budget for exactly the four rows above, in this order: (1) promote `BuildServer`'s four parameters to per-request resolution behind an interface (this is also what Q2's narrow seam recommendation sets up for free), (2) add the auth/tenant-resolution layer, (3) add the CI-index-distribution/pull-cache layer feeding `query.OpenAt`, (4) add the Streamable HTTP transport itself last, once (1)-(3) exist and can be exercised over stdio in a test harness first.
 
-if jsonOut {
-    data, _ := query.MarshalStatusJSON(result)
-    return writeJSONLine(cmd, data)
-}
+## Q2 — The SDK Seam
 
-if present.IsInteractive(cmd.OutOrStdout()) {
-    return present.RenderStatus(cmd.OutOrStdout(), result) // lipgloss, TTY only
-}
+### Every file/symbol touching mark3labs types
 
-// unchanged plain fallback — exactly today's fmt.Fprintf line
-fmt.Fprintf(cmd.OutOrStdout(), "backend=%s files=%d ...\n", ...)
-```
+**Production code (non-test):**
+
+| File | Symbols |
+|---|---|
+| `internal/mcp/server.go` | `server.NewMCPServer`, `server.WithToolCapabilities`, `server.MCPServer` (return type of `BuildServer`), `server.ToolHandlerFunc` (parameter type of `exploreHandler`/`companionHandler`), `s.AddTool` |
+| `internal/mcp/tools.go` | `mcp.CallToolRequest`, `mcp.CallToolResult`, `mcp.NewTool`, `mcp.WithDescription`, `mcp.WithString`, `mcp.WithNumber`, `mcp.Required`, `mcp.NewToolResultText`, `mcp.NewToolResultError`, `server.ToolHandlerFunc` |
+| `internal/cli/serve.go` | `server.ServeStdio(s)` — takes the `*server.MCPServer` `BuildServer` returned |
+
+**Test code (all import `mcpclient "github.com/mark3labs/mcp-go/client"` and/or `mcp-go/mcp`, using the SDK's client as the driving/asserting client):**
+
+`internal/mcp/server_test.go`, `internal/mcp/reconnect_test.go`, `internal/mcp/markdown_test.go`, `internal/mcp/tools_schema_drift_test.go` (AST-parses source, imports `mcp-go/mcp` incidentally), `test/integration/mcp_stdout_purity_test.go` (imports only for the `mcp.LATEST_PROTOCOL_VERSION` constant — the actual frame encode/decode is 100% hand-rolled, see Q3), `test/integration/watch_default_test.go`, `test/integration/watch_live_sync_test.go`, `test/integration/worktree_notice_test.go`, `testdata/golden/golden_parity_test.go`.
+
+### Is `internal/mcp` a genuine seam?
+
+**Partially.** The package boundary correctly holds for the *query* dependency (`internal/mcp` imports only `internal/query`, never `internal/graphstore` directly — the existing archtest-enforced boundary is untouched by this analysis). But the SDK itself leaks across the `internal/mcp` → `internal/cli` boundary: `BuildServer` returns `*server.MCPServer`, a concrete mark3labs struct, and `internal/cli/serve.go` must import `github.com/mark3labs/mcp-go/server` directly just to call `server.ServeStdio(s)` on that returned value. That is a real, avoidable leak — `internal/cli` should never need to name an SDK type.
+
+The much larger leak is in the **test surface**: every test that wants to drive the server end-to-end (in-process or real-stdio) constructs an `mcpclient.Client` and calls `mcpclient.NewInProcessClient`/`NewStdioMCPClientWithOptions`/`c.CallTool` — meaning mark3labs' client implementation is the de facto verification oracle across nearly the entire test suite, not an implementation detail hidden behind `internal/mcp`.
+
+### Narrowest interface worth introducing
 
 ```go
-// internal/cli/present/style.go
-// IsInteractive gates ALL styling — piped/redirected output (a script, a
-// CI log, an agent's captured stdout) NEVER receives ANSI, matching the
-// same isatty-style check install.go already uses for its own TTY gate
-// (installStdinIsInteractive) — just applied to stdout instead of stdin.
-func IsInteractive(w io.Writer) bool {
-    f, ok := w.(*os.File)
-    if !ok {
-        return false
-    }
-    fi, err := f.Stat()
-    if err != nil {
-        return false
-    }
-    return fi.Mode()&os.ModeCharDevice != 0
+// internal/mcp
+type Server interface {
+    ServeStdio() error
 }
 ```
 
-The one thing to get right: `IsInteractive` must check the SAME writer `cmd.OutOrStdout()` returns (which is `os.Stdout` in production, a `bytes.Buffer` in every test — mirroring `installStdinIsInteractive`'s existing `cmd.InOrStdin() != os.Stdin` short-circuit) — not a bare `os.Stdout` global check, or tests that inject a buffer lose the ability to force the plain branch.
+`BuildServer` would return this interface (backed today by a thin wrapper holding the `*server.MCPServer`), and `internal/cli/serve.go` would depend only on `internal/mcp.Server` — never importing mark3labs directly. This is small, surgical, and worth doing **now, independent of the SDK decision**: it removes the one real non-test leak for near-zero cost and closes exactly the gap Q1's Team Scale refactor will need anyway (a `BuildServer`-shaped construction point that `internal/cli` treats opaquely).
 
-### Pattern 2: Shared-engine algorithm changes, never surface-specific logic
+**What this narrow interface does NOT buy you, and it would be dishonest to claim otherwise:**
 
-**What:** `explore`'s relevance ranking and `node`'s multi-definition disambiguation are algorithmic changes to `internal/query.Engine.Explore`/`Engine.Node` and their private helpers (`matchNodes`, `lexicalMatchTier` in `internal/query/search.go`; `resolveNodeForDetail` in `internal/query/resolve.go`). They must NOT be implemented as a CLI-side post-filter on `Engine`'s output, and must NOT be duplicated in `internal/mcp`.
+1. **Tool schema construction is not abstracted, and should not be.** `tools.go`'s `mcp.NewTool`/`mcp.With*` builder calls are SDK-specific by nature — building a codegraph-owned schema DSL to hide this would itself be a shadow SDK, disproportionate for 8 tools. An SDK swap means **porting `tools.go` directly**, not swapping an implementation behind an interface.
+2. **It does nothing for the test-surface leak.** The interface only covers the one production call site. The verification harness (Q3) is the actual fix for test-side SDK coupling, and it is a materially larger effort than the interface itself.
 
-**When to use:** Always, for this project — `internal/mcp`'s own package doc comment states the invariant explicitly ("one engine, two front-ends, so MCP output shapes cannot drift into two code paths") and `internal/mcp/tools.go`'s handlers already prove it structurally: `exploreHandler`/`companionHandler` call `eng.Explore(...)`/`eng.Node(...)` and pass the result straight to `mcp.NewToolResultText`, with zero local re-rendering.
+**Honest recommendation:** introduce the `internal/mcp.Server` interface now (cheap, unambiguously worth it, and it is literally the same seam Q1's Team Scale refactor needs). Do **not** attempt to make the SDK swap "just a backend change" at the tool-schema level — budget the swap as a direct, file-by-file port of `tools.go` + `server.go`, plus a full rewrite of every test's client-side calls (Q3 exists to make that rewrite verifiable without circularity).
 
-**Trade-offs:** None, really — this is not an optional design choice given the existing architecture, it's the only choice that doesn't create a second rendering/ranking path. The one real risk is regression against the golden corpus (`testdata/golden/corpus/weft-go/*.json`): `rankedNode.tier` already carries a lexical match tier (`internal/query/search.go`); extending it with a numeric relevance score (rather than replacing the tier concept) keeps ties broken the same deterministic way the golden tests currently pin, and the new `⚠️ no covering tests` warning is an ADDITIVE line appended to existing blast-radius output (`exploreBlast` already carries `TestFiles []string` — a warning is just "when `TestFiles` is empty for a symbol with `CallerCount > 0`, emit the line"), not a reshape of the existing section order the golden tests assert on.
+## Q3 — Real-Client Verification Harness
 
-**Example (conceptual — extend, don't replace):**
-```go
-// internal/query/explore.go — additive: a new field, not a new code path
-type exploreBlast struct {
-    Symbol      *schema.Node
-    CallerCount int
-    TestFiles   []string
-    // NEW: derived, not stored — computed in buildBlastEntry
-}
+### What already exists and why it matters
 
-func (e *Engine) buildBlastEntry(n *schema.Node, rev map[string][]*schema.Edge) (exploreBlast, error) {
-    // ...unchanged existing logic...
-    bl := exploreBlast{Symbol: n, CallerCount: len(callers), TestFiles: testFiles}
-    return bl, nil
-}
+`test/integration/mcp_stdout_purity_test.go` (`TestServeMCPStdoutIsPureJSONRPC`) already IS the SDK-independent raw-stdio harness the project's history required in v1.0 Phase 4: it spawns the real binary via plain `os/exec`, writes hand-framed JSON-RPC requests (`map[string]any` → `json.Marshal`) directly to `cmd.StdinPipe()`, and reads `cmd.StdoutPipe()` through a raw `bufio.Scanner`, decoding each line into an **anonymous struct** (`jsonrpc`/`id`/`error` fields only) — never through `mcpclient`. Its only mark3labs import is `mcp.LATEST_PROTOCOL_VERSION`, used solely to embed a valid version string in a hand-built map; that one reference is trivially replaceable with a literal string constant. This file is the correct precedent to generalize, not a new pattern to invent.
 
-// render_markdown.go's RenderExplore appends "⚠️ no covering tests" only
-// when bl.CallerCount > 0 && len(bl.TestFiles) == 0 — a pure function of
-// data already computed, not a new query.
-```
+### Harness design for `2026-07-28`
 
-### Pattern 3: Narrow-package worktree detection, cross-checked (not replacing) the upward-walk resolver
+**Location:** `test/integration/` — extend the existing raw-stdio pattern rather than adding a parallel mechanism. Concretely: factor the hand-framing/raw-scanning helpers (`writeLine`, the scanner-goroutine-plus-channel pattern) out of `mcp_stdout_purity_test.go` into a small shared internal helper (e.g. `test/integration/rawmcp_helper_test.go`) so new assertions don't re-implement the raw reader, and add a new test file for the `2026-07-28`-specific assertions (e.g. `test/integration/mcp_protocol_2026_test.go`).
 
-**What:** `ResolveCodegraphDir` (`internal/query/resolve.go`) walks upward from `start` looking for the nearest `.codegraph/` — this IS the "borrowed index" bug: in a linked worktree with no `.codegraph/` of its own, the walk finds the MAIN worktree's `.codegraph/` and silently queries it. `internal/gitmeta` doesn't change that walk (v1.0 is explicitly TS-parity scoped: "detect+warn+notice", not "auto-init or share" — see PROJECT.md's Key Decisions). It adds a SEPARATE check, run alongside `ResolveCodegraphDir`, that answers "is `start`'s actual git worktree the same one `.codegraph/`'s resolved directory sits in?"
+**What it must assert**, each as a literal byte-level check on the raw JSON frame — never via any SDK's typed result:
 
-**When to use:** Called once per `Engine` construction path that has a `repoRoot` (i.e. `OpenAt`), threaded into `StatusResult.WorktreeMismatch` (already a `*string` field, currently always `nil`) and into a new lightweight field/prefix `Explore`/`Node`/every MCP tool result can surface.
+1. **`server/discover` is implemented** and returns supported protocol versions + capabilities + identity — spec-mandatory (`SEP-2575`). Send the raw request, parse the raw response into a local anonymous struct, assert the expected fields are present.
+2. **Statelessness is real, not just documented:** issue a `tools/call` (or `tools/list`) as the very first request on a fresh connection, with `_meta["io.modelcontextprotocol/protocolVersion"]` and `_meta["io.modelcontextprotocol/clientCapabilities"]` set, and NO prior `initialize`/`notifications/initialized` exchange — assert a normal, non-error response. This is the single most important new assertion: it is the one behavior that, if wrong, silently breaks every client that has moved to the new spec (the "quiet failure mode" `PROJECT.md` names).
+3. **`tools/list` carries `ttlMs`/`cacheScope`** (`SEP-2549`) — raw JSON field-presence check.
+4. **Version-mismatch handling:** send a request with an unsupported/malformed protocol version in `_meta`, assert the response is a JSON-RPC error with the renumbered `UnsupportedProtocolVersion` code (`-32022` under the new error-code allocation policy — independently confirmed as `CodeUnsupportedProtocolVersion = -32022` in `go-sdk@v1.7.0/mcp/shared.go:394`, not the old `-32004`).
+5. **Deterministic `tools/list` ordering** (SHOULD, minor change #3): call `tools/list` twice, diff the raw tool-name order.
+6. **Stdout purity, re-run against whichever SDK is in place** — this is the existing `TestServeMCPStdoutIsPureJSONRPC` test, kept as a permanent regression guard for the exact historical failure mode (an SDK's own client silently skipping malformed lines).
 
-**Trade-offs:** Git worktree layout has real edge cases (bare repos, submodules, `.git` as a file vs directory) — scope the v1.0 implementation to the common case (walk for a `.git` file containing `gitdir: <path>` vs a `.git` directory, without shelling out to `git rev-parse`) and fail SOFT (treat "can't determine" as "no mismatch detected", never block a query over it) — this is a UX nicety per the milestone scope, not a correctness gate.
+### Avoiding circularity — the actual answer to "which oracle"
 
-**Example:**
-```go
-// internal/gitmeta/worktree.go
-package gitmeta
+Three candidate oracles were considered:
 
-// WorktreeInfo answers whether repoRoot's resolved .codegraph/ directory
-// belongs to a DIFFERENT git worktree than the one `start` is actually in.
-type WorktreeInfo struct {
-    Mismatch        bool
-    MainWorktree    string // the worktree .codegraph/ actually belongs to
-    CurrentWorktree string // the worktree `start` is actually in
-}
+- **Captured real-client traffic** (record actual Claude Code/Cursor/etc. byte streams against `2026-07-28`, replay as fixtures): the highest-fidelity option, but `2026-07-28` is brand new (release-candidate as of this research date) — no real fixtures exist yet for most of the 8-agent roster. Defer; revisit once agent clients actually ship `2026-07-28` support to capture against.
+- **A hand-rolled JSON-RPC client** (generalizing `mcp_stdout_purity_test.go`'s existing pattern): the primary mechanism, and the one with zero new infrastructure cost — it is precisely what the project already proved necessary and already has running.
+- **A conformance corpus validated against the official spec's own JSON Schema** (vendor the `2026-07-28` `schema.json` published at `modelcontextprotocol.io`, validate captured frames against it with a generic, oracle-neutral JSON-Schema validator such as `github.com/santhosh-tekuri/jsonschema`): recommended as a **complementary second layer**, not a replacement for the hand-rolled client. This resolves the philosophical bind directly — the official schema *is* the spec itself, not a competing SDK's interpretation of it, so validating against it is not circular the way asserting against mark3labs' or the official SDK's own client would be. Use it for the fields that matter most (`resultType`, `ttlMs`, `cacheScope`, the `_meta` keys) where a hand-written struct-shape check would otherwise have to duplicate the schema by hand.
 
-// Detect never errors out to the caller for anything but a genuine I/O
-// failure reading .git — an ambiguous/unsupported git layout resolves to
-// Mismatch: false (fail soft), matching Status()'s existing degrade-safely
-// precedent for computeStale with no repoRoot.
-func Detect(codegraphResolvedDir, callerStartDir string) (WorktreeInfo, error)
-```
+**The harness must exist and pass against the CURRENT (mark3labs) server before any SDK code changes** — this both discharges backlog 999.6's empirical-audit requirement (run it against what ships today to see exactly what `2026-07-28` behaviors are missing) and gives the SDK-swap phase (if any) a fixed, SDK-independent acceptance gate: the same test file, unmodified, must stay green against whatever server exists after the swap.
 
-```go
-// internal/query/status.go (or a new gitmeta_bridge.go) — Status wiring
-info, _ := gitmeta.Detect(e.repoRoot, e.startDir) // startDir: new Engine field, the ORIGINAL start path OpenAt received, before ResolveCodegraphDir's walk
-var mismatch *string
-if info.Mismatch {
-    msg := fmt.Sprintf("querying %s's index from worktree %s", info.MainWorktree, info.CurrentWorktree)
-    mismatch = &msg
-}
-result.WorktreeMismatch = mismatch
-```
+## Q4 — Dynamic Catalog vs. Cacheable Lists
 
-Note the ONE structural addition this requires to `Engine`/`OpenAt`: today `NewWithRoot(reader, dir)` only stores the RESOLVED `.codegraph/`-containing directory (`dir` — the walk's answer), not the ORIGINAL `start` the caller passed in. `gitmeta.Detect` needs both (resolved dir vs actual caller cwd) to notice a mismatch. `OpenAt(start string)` must thread `start` itself through to the `Engine` (a new unexported field, e.g. `startDir`) alongside the existing `repoRoot` — a small, additive `Engine` struct change, not a signature-breaking one (`OpenAt`'s existing callers in `internal/cli` and `internal/mcp` don't change).
+### The registered tool set is mechanically fixed within a process — but that is not the same claim as "safe to cache"
 
-### Pattern 4: Two independent marker-fenced-write registries (agents vs git hooks), sharing low-level plumbing only
+Re-reading `internal/cli/serve.go` and `internal/mcp/server.go` closely: `hasIndex` and `allowlist` are **both computed once, at process startup**, and closed over for the server's entire lifetime. `serveServerPaths`'s doc comment states this explicitly for `hasIndex` (IN-09: "An index created mid-session... does NOT retroactively start the watcher... auto-sync begins on the next serve --mcp session"), and `CODEGRAPH_MCP_TOOLS` is read once via `os.Getenv` in `newServeCmd`'s `RunE`. `BuildServer` calls `s.AddTool` only during its own single invocation and never again — mechanically, **the registered tool set cannot change for the life of one `serve --mcp` process**, because nothing in the codebase calls `AddTool`/removes a tool afterward.
 
-**What:** `internal/agents.AgentTarget` is a per-agent interface implemented by 8 concrete types self-registering via `init()`. Git hooks are NOT the same shape: there are exactly 3 fixed hook names (`post-commit`, `post-merge`, `post-checkout`), one script body (a thin shell wrapper invoking `codegraph sync --quiet` against the worktree the hook fires in), and no "detection" concept analogous to `AgentTarget.Detect` (there's no ambiguity about whether git hooks are "installed" — either the marker-fenced block is in `.git/hooks/<name>` or it isn't).
+### Reconciling with the FEATURES researcher's finding — which reading is right
 
-**When to use:** `internal/githooks` as its own package, exposing `Install(repoRoot string) (WriteResult, error)` / `Remove(repoRoot string) (WriteResult, error)` / `Status(repoRoot string) ([]HookStatus, error)` — deliberately mirroring `agents.WriteResult`'s shape (`Files []FileResult`, `Errors []error`, `Notes []string`) so `internal/cli` can reuse `printAgentResults`-style reporting, but NOT implementing `agents.AgentTarget` or registering into `agents.registry` — these are genuinely different write targets (`.git/hooks/*`, executable shell scripts, vs `~/.claude.json`-style JSON/TOML configs) with a different failure mode worth keeping visually distinct (a broken git hook can silently no-op a sync; a broken agent config just means the agent falls back to grep).
+The FEATURES research independently found the same underlying mechanism (`hasIndex` is a construction-time snapshot) and concluded that `ttlMs: 0` would be a lie unless `tools/list` re-checks `hasIndex` per call, because a user can run `codegraph init` while a long-lived MCP server is already running. **On reconciliation, the FEATURES reading is the one that should drive the actual value chosen, and my original "large ttlMs is accurate" framing was the wrong product conclusion even though it was mechanically true.** Here is why both are correct at their own layer, and why that resolves in FEATURES' favor:
 
-**Trade-offs:** Reusing `agents`'s low-level file-write helpers (`atomicWriteFile`, `replaceOrAppendMarkedSection`, `removeMarkedSection`) means either (a) importing `internal/agents` from `internal/githooks` — cheap but creates a dependency edge from a git-plumbing package to an agent-config package that has nothing to do with git — or (b) extracting those three functions into a new `internal/fsatomic` package both import. **Recommend (b)** — it's a pure refactor of existing, already-tested code (`internal/agents/shared_test.go` covers it), low risk, and removes an awkward cross-domain import.
+- My claim is a true statement about the **mechanism**: given today's register-once code, the tool set genuinely will not change without a process restart, so a long `ttlMs` would not be contradicted by any event this server can produce.
+- FEATURES' claim is the correct statement about **what the field is for**: `ttlMs` is a promise to the *client* that it can stop checking and trust the cached list. The scenario that breaks this is exactly the one FEATURES names — a server started before `.codegraph/` existed (`hasIndex=false`, zero tools ever registered, including `codegraph_explore`) stays permanently toolless for that connection's whole life even after `codegraph init` runs, and a client that has cached `tools/list` for a long `ttlMs` now has **less** chance of ever re-checking and recovering than a client that was never told it could cache at all. Advertising a long `ttlMs` doesn't just describe the existing MCP-03 gap — it actively encourages clients to stop working around it.
 
-**Critical git-hooks-specific concern the agents pattern does NOT have to deal with:** hooks must not silently clobber a pre-existing hook installed by another tool (Husky, Lefthook, pre-commit, a repo's own custom hook). `replaceOrAppendMarkedSection`'s existing "no markers present → append after existing content" behavior handles this correctly for the common case (a shell script with other content already in it) as long as the git-hook shell scripts codegraph writes are POSIX-sh (not bash-specific) and end each marker-fenced block in a way that never short-circuits the rest of the hook chain — verify this at implementation time; it's the one place git hooks are meaningfully riskier to auto-write than an agent's JSON config (a malformed JSON write fails loud on next parse; a malformed shell hook fails silently and can block `git commit`/`git checkout` entirely for the user). **Recommendation: git hooks in v1.0 are opt-in only** (per PROJECT.md's "opt-in git sync hooks"), never installed by default `codegraph install`, and the install path should detect+warn (not clobber) an existing non-codegraph hook file that has no marker-fenced insertion point available (e.g., a hook that's a symlink to a shared Lefthook binary, not a plain editable script).
+**Conclusion: `ttlMs` should be short/conservative (effectively near-zero) as the honest default under the current mechanism**, not the large value the mechanical fact alone would justify. `cacheScope` should still be `"private"` (unchanged reasoning — this server's catalog is specific to its own `repoPath`/`allowlist` configuration, and Q1's remote-server sketch shows why no shared intermediary should ever conflate two tenants' catalogs). The more complete fix — making `hasIndex` genuinely dynamic (re-evaluated per `tools/list` call rather than snapshotted once) — is a legitimate scope candidate for this milestone precisely because the SDK-swap work (if adopted) already touches this exact code path in `internal/mcp/server.go`; landing it removes the tension entirely rather than merely picking a conservative `ttlMs` around it. This should be raised explicitly when this milestone's phases are planned, not silently deferred.
 
-**Worktree note (MEDIUM confidence, general git knowledge not this project's own prior art):** git hooks live under `$(git rev-parse --git-common-dir)/hooks/` — the hooks directory is SHARED across all linked worktrees of a repo (not duplicated per-worktree) unless the repo has `core.hooksPath` overridden. This means a single `codegraph githooks install` run from ANY worktree installs the hook for every worktree of that repo — a genuine, if partial, positive side-effect for the worktree-mismatch problem: a `post-checkout` firing in a linked worktree can run `codegraph sync` scoped to `$(pwd)` (the worktree the hook actually fired in) rather than the main worktree's index — but only if that worktree ALSO has its own `.codegraph/` (auto-init across worktrees is explicitly deferred per PROJECT.md, out of scope for v1.0's "detect+warn" bar).
+### Implementation caveat (corrected)
 
-### Pattern 5: Watcher-on-MCP-by-default, mechanically a default flip plus a deference message, not new plumbing
+mark3labs `mcp-go@v0.57.0` (protocol `2025-11-25`) has no `ttlMs`/`cacheScope` field on its `ListToolsResult` type at all today — this is a `2026-07-28`-only `CacheableResult` interface (`SEP-2549`). **Landing this concretely is gated on the SDK decision (Q5), but that gate is far less restrictive than originally stated:** the official `modelcontextprotocol/go-sdk` shipped `2026-07-28` support, including `CacheableResult`-shaped fields, in the **stable** `v1.7.0` release (published 2026-07-27) — it is available today, not pending. The gate is the SDK *decision*, not SDK *availability*. The **impact assessment can and should document the target values now** (near-zero `ttlMs`, `"private"` `cacheScope`, per the reconciliation above); the code lands as part of whichever SDK-swap phase Q5 produces.
 
-**What:** `internal/cli/serve.go` already has full `--watch` in-process-fallback plumbing (the `if watchMode && hasIndex { ... daemon.New(...); d.Run(watchCtx) ... }` block) — it is complete and already gracefully defers to a live standalone daemon via the shared lockfile (`daemon.ErrLockLive` is caught and logged, not treated as fatal). v1.0's job here is almost entirely a **default-value flip**: `watchMode` currently defaults `false` via `cmd.Flags().BoolVar(&watchMode, "watch", false, ...)`; it needs to default `true` when `--mcp` is set, with a new `--no-watch` flag to opt out.
+### Interaction with `internal/mcp/reconnect_test.go`
 
-**When to use:** This is the correct integration point precisely because it's not a new mechanism — the existing `--watch` code path (debounced fsnotify watcher, shared daemon lockfile, `ErrLockLive` graceful-defer) is already correct and tested; only the flag DEFAULT needs to change.
+`TestReconnectReconcile` covers a **completely different staleness axis** and must not be conflated with catalog caching. It pins D-06/SYNC-03: the `indexer.Sync` reconcile pass `serve.go`'s `RunE` runs before `BuildServer` is even called, catching *content* drift (a file edited while no watcher/daemon was running) so the first `codegraph_explore` call after a reconnect reads current graph *data*. Nothing about `ttlMs`/`cacheScope` touches this path — the catalog (which tools exist) and the graph content (what those tools return) are orthogonal freshness concerns, and no future change should let a `tools/list` cache-invalidation mechanism reach into the graph store, or vice versa. A `tools/list` handler must never need to consult `query.Engine`/`graphstore` to decide `ttlMs` — `hasIndex`/`allowlist` are already known, static-for-the-process facts by the time `BuildServer` runs (or would be re-evaluated directly from the filesystem check `serveServerPaths` already performs, if `hasIndex` is made dynamic per the reconciliation above — either way, no dependency on the graph store itself).
 
-**Trade-offs:** The one real design decision is flag semantics: Cobra `BoolVar` gives every flag one static default, so "watch defaults true only when `--mcp` is set" needs either (a) a tri-state (`--watch`/`--no-watch`/unset) resolved in `RunE` rather than at flag-registration time, or (b) since `--mcp` is ALWAYS required today (`serve` without it already errors: "`--mcp` is required (stdio is the only supported transport)"), simply defaulting the existing bool to `true` unconditionally is equivalent in practice. **Recommend (b)**: flip the literal default in `BoolVar` from `false` to `true`, rename the flag registration to `--no-watch` with an inverted variable (`noWatch bool`, default `false`), and change the guard from `if watchMode && hasIndex` to `if !noWatch && hasIndex`. This is a two-line diff, not a redesign.
+## Q5 — Suggested Build Order
 
-**Example:**
-```go
-// internal/cli/serve.go — the flag-default flip
-var noWatch bool
-// ...
-cmd.Flags().BoolVar(&noWatch, "no-watch", false, "disable the in-process watcher that runs by default alongside --mcp")
-// ...
-if !noWatch && hasIndex {
-    // ...existing watchMode block body, unchanged...
-}
-```
+Dependencies, not narrative convenience, drive this ordering. The standing constraint (verification harness precedes any SDK swap) is structural, not sequencing preference: Phase C's decision cannot be trusted, and Phase D's swap cannot be verified as non-regressive, without Phase B existing first.
 
-`install.go` already writes the byte-identical `serve --mcp` invocation into every agent's MCP config (per PROJECT.md's context: "our `install` already writes the byte-identical `serve --mcp` invocation; only the watch default differs") — so this flip requires ZERO changes to `internal/agents` or any agent config-writer; every already-installed agent gets watch-by-default for free the next time the user upgrades the binary, with no re-`install` needed.
-
-### Pattern 6: Interactive TUI stays CLI-local; engine/MCP see only its inputs and outputs
-
-**What:** The daemon picker (interactive attach/status view over `internal/daemon`) and the `install`/`uninstall` multi-select upgrade (replacing `promptAgentMultiSelect`'s bare `bufio`-scanned numeric-list prompt with a bubbletea list model) both live entirely in `internal/cli/present`. They call INTO existing read-only surfaces — a NEW `daemon.Status(repoRoot) (DaemonStatus, error)` read, `agents.AllTargets()`/`agents.DetectAll()` — and never the reverse.
-
-**When to use:** Any new interactive flow added in v1.0.
-
-**Trade-offs:** `internal/daemon` currently has no "is a daemon running, and what is it doing" read API — `Run` is the only entry point, and liveness/staleness logic (`isStale`, `readLock`) is unexported in `lock.go`. The interactive picker needs a read-only status query (pid, started-at, live/stale) WITHOUT acquiring or releasing the lock. **Add `daemon.Status(codegraphDir string) (DaemonStatus, error)`** — a thin new exported function wrapping the existing unexported `readLock`/`isStale`, returned as a small struct (`Running bool`, `PID int`, `StartedAt time.Time`) — this is the one small `internal/daemon` surface addition v1.0's interactive picker needs; everything else (`Unlock`) already exists and is already a safe read-then-conditionally-write op the picker can call directly.
-
-**Example:**
-```go
-// internal/daemon/lock.go — new small exported read, no behavior change
-type DaemonStatus struct {
-    Running   bool
-    PID       int
-    StartedAt time.Time
-}
-
-func Status(codegraphDir string) (DaemonStatus, error) {
-    info, ok, err := readLock(codegraphDir)
-    if err != nil || !ok {
-        return DaemonStatus{}, err
-    }
-    return DaemonStatus{Running: !isStale(info), PID: info.PID, StartedAt: info.StartedAt}, nil
-}
-```
-
-```go
-// internal/cli/present/daemon_picker.go — bubbletea model, CLI-only
-type daemonPickerModel struct {
-    status daemon.DaemonStatus // plain data in, from internal/daemon — no bubbletea leak the other direction
-}
-```
-
-## Data Flow
-
-### Explore/Node request flow (unchanged shape, richer internals)
+**Corrected input to this ordering:** `mark3labs/mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"` with no `2026-07-28` support and no announced timeline (unchanged finding). `modelcontextprotocol/go-sdk@v1.7.0` is a **stable** release (published 2026-07-27, one day before the spec's public announcement) shipping five-era negotiation (`2026-07-28` down to `2024-11-05`) and the SEP-2575 error codes out of the box. This is a materially different starting position for Phase C than "no SDK is ready yet," and it changes how much weight the dated-defer branch can honestly carry.
 
 ```
-CLI `explore <q>`  ──┐
-                      ├──> query.Engine.Explore(q, maxFiles)  [ALL relevance/disambiguation logic here]
-MCP codegraph_explore─┘         │
-                                 ├──> matchNodes (extended ranking)
-                                 ├──> buildBlastEntry (+ no-covering-tests check)
-                                 └──> RenderExplore (markdown, unchanged section order)
-                                          │
-                      ┌───────────────────┴──────────────────┐
-                      ▼                                       ▼
-        CLI: fmt.Fprint(stdout, out)              MCP: mcp.NewToolResultText(out)
-        (present/ NOT involved — explore/node      (unchanged — never touches present/)
-         stay plain markdown, no pretty path)
+Phase A: MCP 2026-07-28 impact assessment (999.6)
+  │  Research + document what reaches a stdio, tools-only server;
+  │  audit across the 8-agent roster; produce the Team Scale read-out (Q1).
+  │  Depends on: nothing new (this research file is largely Phase A's output).
+  ▼
+Phase B: Real-client verification harness (Q3)
+  │  Extend test/integration's raw-stdio pattern with 2026-07-28 assertions
+  │  (server/discover, stateless-first-request, ttlMs/cacheScope presence,
+  │  renumbered error codes, deterministic tools/list order).
+  │  MUST run green against the CURRENT mark3labs server first — this is
+  │  the empirical half of Phase A's audit, and the fixed acceptance gate
+  │  for whatever Phase C decides.
+  │  Depends on: Phase A (to know exactly which behaviors need assertions).
+  ▼
+Phase C: SDK decision (mark3labs v0.57.0 vs modelcontextprotocol/go-sdk v1.7.0)
+  │  A recorded decision (adopt-now / dated-defer) discharging the standing
+  │  re-evaluation commitment in .claude/CLAUDE.md's Alternatives table.
+  │  mark3labs does not support 2026-07-28 today and has no announced
+  │  timeline; the official SDK's 2026-07-28 support is STABLE (v1.7.0,
+  │  released 2026-07-27) with built-in five-era negotiation — the
+  │  "wait for the SDK to mature" rationale for deferring no longer
+  │  applies (see the dated-defer note below).
+  │  Depends on: Phase A (impact) + Phase B (a harness that can actually
+  │  prove whichever choice is made).
+  ▼
+        ┌───────────────────────┴────────────────────────┐
+        ▼                                                 ▼
+Phase D: SDK swap (if ADOPT)                    Phase D': Dated defer (if DEFER)
+  Port internal/mcp/tools.go + server.go to        WEAKENED by the corrected
+  the new SDK's API. Because go-sdk's own          finding — see note below.
+  supportedProtocolVersions/negotiatedMe-          Record the decision with the
+  chanism already implements five-era              spec's 12-month minimum
+  negotiation, this phase does NOT need to         deprecation window named
+  build any bespoke dual-era compatibility          explicitly. No code change
+  shim of its own — that work is inherited          required beyond the decision
+  from the SDK, not built by this project.          record itself.
+  Fix the Q2 leak at the same call site being
+  touched anyway (internal/mcp.Server interface
+  into serve.go). Replace mcp.LATEST_PROTOCOL_
+  VERSION with an explicit literal asserted
+  version (wire behavior stops moving silently
+  on a dependency bump). Migrate every test call
+  site (server_test.go, markdown_test.go,
+  reconnect_test.go, golden_parity_test.go,
+  watch_*_test.go, worktree_notice_test.go,
+  tools_schema_drift_test.go) off mark3labs'
+  client. Land the near-zero ttlMs / "private"
+  cacheScope values from Q4 once the new SDK's
+  CacheableResult fields are wired up — consider
+  also making hasIndex dynamic per Q4's
+  reconciliation while this file is already open.
+  Acceptance gate: Phase B's harness, UNMODIFIED,
+  stays green against the new server.
+  Depends on: Phase C = adopt, Phase B (harness).
+        └───────────────────────┬────────────────────────┘
+                                 ▼
+Phase E: Tool-modfile vulnerability scanning (999.3)
+  │  Closes the ~400-module credentialed-CI-tooling gap over whichever
+  │  dependency closure Phase C/D produced (new SDK module, or an
+  │  unchanged mark3labs closure on defer).
+  │  Depends on: Phase C (needs the final dependency set to be meaningful —
+  │  running it before C is decided means re-running it after).
+
+Phase F: Daemon test-seam fixes (#13 getppid race, #17 watchdog flakes)
+  │  Independent bug fixes; PROJECT.md notes they sit "on the substrate
+  │  this milestone modifies." Bundle with Phase D if adopting (both touch
+  │  serve.go-adjacent code, reducing churn on the same files); otherwise
+  │  schedule standalone. No hard dependency on A-D.
+
+Phase G: GoReleaser pin reconciliation (ci.yml v2.17.1 vs release.yml v2.17.0)
+  │  Pure housekeeping. No dependency on anything above — schedule
+  │  wherever convenient (first or last).
 ```
 
-### Status request flow (the rendering-seam pattern in full)
+**Critical path:** A → B → C → (D or D′) → E. F and G float freely; F is cheapest to bundle with D when D happens.
 
-```
-CLI `status`  ──┐
-                 ├──> query.Engine.Status()  [gitmeta.Detect wired in here]
-MCP codegraph_status─┘        │
-                               ▼
-                      query.StatusResult{..., WorktreeMismatch: *string, Stale: bool}
-                               │
-              ┌────────────────┼─────────────────────┐
-              ▼                ▼                      ▼
-     CLI --json:         CLI plain (piped/CI):    CLI TTY (present.RenderStatus):
-     MarshalStatusJSON   fmt.Fprintf (unchanged)   lipgloss table/box, colored
-                                                     Stale/WorktreeMismatch banners
-              │
-              ▼
-     MCP: MarshalStatusJSON + a short worktree-mismatch
-     text PREFIX line ("⚠ borrowed index: ...\n\n" + json),
-     analogous to staleBanner's existing prefix pattern in
-     render_markdown.go — same idiom, new field.
-```
+**On the weakened dated-defer branch (D′):** the original framing implicitly justified deferring as "waiting for tooling to mature" — that justification is now false; a stable, spec-authored, multi-era-capable SDK is available today. The only argument for D′ that survives the correction is **production-track-record caution**: `v1.7.0` is roughly a week old as of this research (published 2026-07-27), versus mark3labs' longer field history on a now-superseded protocol revision. If Phase C still lands on defer, the decision record must name the actual tradeoff honestly — "we chose a longer track record on a stale protocol revision over a newer stable release of the current one, and we accept the 12-month-window clock this starts" — rather than "no SDK supports this yet," which is no longer true. Given `go-sdk` also eliminates the need for this project to build its own dual-era negotiation logic (Phase D inherits `supportedProtocolVersions`/`negotiatedVersion` for free), the balance of evidence assembled in this research favors adopt over defer more than the original build order implied — though Phase C remains the actual decision point, not this document.
 
-### Watcher-on-MCP flow
+## Anti-Patterns to Avoid in This Milestone
 
-```
-codegraph serve --mcp  (no --no-watch)
-        │
-        ├──> indexer.Sync (one-shot reconcile, unchanged — already there today)
-        │
-        ├──> daemon.New(repoPath, opts) + d.Run(watchCtx) in a goroutine
-        │         │
-        │         ├──> acquire(lockfile)  ──X──> ErrLockLive?  ──> log "deferring to it", MCP still serves reads
-        │         └──> OK ──> watch.Open + Debouncer ──> indexer.Sync on every debounced flush
-        │
-        └──> mcp.BuildServer + server.ServeStdio  (blocks; on ctx cancel, watcher goroutine joins before exit)
-```
+### Anti-Pattern 1: Abstracting the tool-schema builder DSL "for portability"
 
-This flow is IDENTICAL to today's `--watch` opt-in path — only the caller's decision to enter the `if` branch changes (default true vs default false).
+**What people do:** wrap `mcp.NewTool`/`mcp.With*` in a codegraph-owned schema builder so an SDK swap "only touches one file."
+**Why it's wrong:** for 8 tools, this is a shadow SDK — more code to maintain than the port it's meant to avoid, and it still doesn't solve the test-surface coupling (Q3), which is the actual expensive part of a swap.
+**Instead:** treat `tools.go`'s schema definitions as a direct-port surface. Spend the abstraction budget on the `internal/mcp.Server` interface at the `ServeStdio` call site instead (Q2) — that one is cheap and genuinely reusable for Team Scale.
 
-## Scaling Considerations
+### Anti-Pattern 2: Validating the new SDK with the new SDK's own client
 
-Not the primary axis of this milestone (v1.0 is behavioral parity + human UX on the existing single-repo, single-writer-daemon model — team-scale is explicitly deferred per PROJECT.md's "Deferred to later releases"). Noted only where it interacts with v1.0's specific additions:
+**What people do:** after a swap, write "it works" tests using the new SDK's client library.
+**Why it's wrong:** this is exactly the failure mode `PROJECT.md` names as already proven in v1.0 Phase 4 — an SDK's client can silently skip or misrepresent malformed wire output, so a test built on it can pass while the actual bytes on stdout are wrong.
+**Instead:** the Phase B raw-stdio/JSON-Schema harness (Q3) is the only trusted oracle, and it must predate and outlive any specific SDK choice.
 
-| Concern | v1.0 (this milestone) | Later (team scale, out of scope here) |
-|---------|------------------------|----------------------------------------|
-| Worktree count | `gitmeta.Detect` does a lightweight `.git`-file/dir read per call — fine at N worktrees for a human-scale monorepo; no caching needed | A central server milestone would want worktree metadata cached, not re-read per query |
-| Git hooks across worktrees | Shared hooks dir means one install covers all worktrees "for free" (see Pattern 4) — a feature of git's own design, not something this project has to build | N/A |
-| Watcher-by-default on every `serve --mcp` | One fsnotify watcher per repo-root process; the existing single-writer lockfile already prevents two watchers double-syncing the same repo — unchanged cost profile from today's opt-in `--watch` | CI-distributed index milestone removes the need for per-agent-session watchers entirely |
+### Anti-Pattern 3: Conflating catalog cache-control with content-freshness reconciliation
 
-## Anti-Patterns
-
-### Anti-Pattern 1: Rendering inside `internal/query` or `internal/mcp`
-
-**What people do:** Add an `if isTTY { ... }` branch, or a lipgloss import, directly inside `Engine.Status()`/`RenderExplore` "since it's convenient" or "just for the CLI's benefit."
-**Why it's wrong:** `internal/mcp` calls the exact same `Engine` methods and `render_markdown.go` formatters as the CLI (`internal/mcp`'s own package doc says so explicitly). Any styling that leaks into that shared layer reaches MCP's stdout — which IS the JSON-RPC transport itself (`tools.go`'s `WarnUnknownToolsTo` comment: "Diagnostics never go to stdout — stdout is reserved for the MCP JSON-RPC transport"). ANSI escape codes in an MCP tool result are, at best, garbage the agent has to strip and, at worst, a transport-corrupting bug.
-**Do this instead:** `internal/query`/`internal/mcp` return/emit plain data or plain text, unconditionally, forever. All conditional styling lives in `internal/cli/present`, gated by `present.IsInteractive`, called only from `internal/cli`'s own command files.
-
-### Anti-Pattern 2: Duplicating relevance/disambiguation logic per surface
-
-**What people do:** Implement `explore`'s new relevance ranking as a CLI-side re-sort of `Engine.Explore`'s markdown output (e.g., regex-parsing the rendered markdown to reorder file blocks), because "the algorithm only needs to affect what the human sees."
-**Why it's wrong:** This is exactly the two-code-path drift `internal/mcp`'s package doc warns against, and it's strictly worse than adding the logic to `Engine` directly — post-processing rendered markdown is fragile (couples to exact string shape) AND leaves MCP's output unimproved, defeating the milestone's own stated goal ("v0.1's golden test proved template shape but never the selection/relevance algorithms" — for BOTH surfaces, not just CLI).
-**Do this instead:** Every relevance/disambiguation change is a change to `Engine.Explore`/`Engine.Node`'s Go logic (ranking, tie-breaking, warning computation) before rendering — `RenderExplore`/`RenderNode` stay dumb formatters of already-decided data, exactly as they are today.
-
-### Anti-Pattern 3: Auto-installing git hooks by default
-
-**What people do:** Fold git-hook installation into `codegraph install`'s default flow (alongside the 8 agent targets), reasoning "it's just another sync mechanism, why make the user ask for it twice."
-**Why it's wrong:** Unlike agent MCP-config edits (JSON files the tool safely round-trips and can cleanly detect/repair), a malformed or interacting-badly-with-another-tool git hook can silently block `git commit`/`git checkout`/`git merge` for the user — a much higher blast radius for a much smaller convenience win, and PROJECT.md's own milestone scope explicitly calls these "opt-in."
-**Do this instead:** A separate, explicit command (`codegraph githooks install`) the user must actively choose, with a clear status/remove path, and detect-but-don't-clobber behavior toward any existing non-codegraph hook content.
-
-### Anti-Pattern 4: A `present`-package dependency cycle back into foundational packages
-
-**What people do:** Let the bubbletea daemon-picker model import `internal/daemon` directly for convenience, then later let something in `internal/daemon` (a future feature) reach back into `internal/cli/present` for a status string, creating a cycle.
-**Why it's wrong:** Go forbids import cycles outright (compile error), but the softer version — a "just this once" dependency from a foundational package toward a CLI-presentation package — is a design smell that will resurface as a real compile error the moment someone tries to reuse `internal/daemon` from a second entry point (e.g. a future central-server milestone).
-**Do this instead:** `internal/cli/present` depends downward on `internal/daemon`, `internal/query`, `internal/agents`, `internal/gitmeta`, `internal/githooks` — never the reverse. Enforce with the same `internal/cli/archtest` import-graph test that also confines bubbletea/lipgloss (one test, two assertions: "no bubbletea/lipgloss outside `internal/cli`" AND "no package under `internal/{query,mcp,daemon,watch,gitmeta,githooks,agents}` imports `internal/cli`").
+**What people do:** wire `ttlMs`/`cacheScope` invalidation to the same reconcile path that keeps graph content fresh (`indexer.Sync`, the reconnect path `reconnect_test.go` covers).
+**Why it's wrong:** they are orthogonal (Q4) — the registered tool set is mechanically fixed per-process; content freshness is a live, per-call concern. Coupling them adds a graph-store dependency to `tools/list` construction for no correctness benefit and makes the two staleness models harder to reason about independently.
+**Instead:** keep `ttlMs`/`cacheScope` decided from already-known `hasIndex`/`allowlist` values (static today, or re-evaluated directly against the filesystem if `hasIndex` becomes dynamic per Q4) — no new dependency on `query.Engine`.
 
 ## Integration Points
 
-### Internal Boundaries (v1.0 deltas)
+### Internal Boundaries
 
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| `internal/cli` ↔ `internal/query.Engine` | Direct Go calls, same as today | No change — `status`/`files`/`explore`/`node` command files gain a TTY branch calling into `internal/cli/present`, still calling `Engine` first exactly as before |
-| `internal/mcp` ↔ `internal/query.Engine` | Direct Go calls, same as today | `Status`/`Explore`/`Node` results carry richer data (worktree, relevance, warnings) automatically — zero `internal/mcp` code changes needed for the algorithm improvements themselves; only the worktree-prefix formatting (a few lines in `tools.go` or a new `internal/mcp` helper) is new |
-| `internal/query.Engine` ↔ `internal/gitmeta` | Direct Go calls | New edge. `internal/gitmeta` has NO dependency back on `internal/query` — it takes plain paths in, returns a plain struct, matching every other package `Engine` composes (`graphstore.Reader`, `goextract.RefKindCalls`) |
-| `internal/cli` ↔ `internal/githooks` | Direct Go calls | New edge, CLI-only — mirrors `internal/cli` ↔ `internal/agents` |
-| `internal/cli/present` ↔ `internal/daemon` | Direct Go calls (new `daemon.Status` read) | New edge, one direction only |
-| `internal/cli` (`serve.go`) ↔ `internal/daemon` | Unchanged — same `daemon.New`/`Run`/`ErrLockLive` calls, just gated by `!noWatch` instead of `watchMode` | No new edge |
-| `internal/agents` + `internal/githooks` ↔ `internal/fsatomic` (new) | Direct Go calls, replacing today's package-local `internal/agents/shared.go` helpers | Refactor + new capability — needed so `internal/githooks` can reuse the same atomic-write/marker-fence primitives without importing `internal/agents` |
-
-### External Services
-
-None new for v1.0 — no external service calls are introduced by any of the six integration areas. (`internal/upgrade`'s existing GitHub-releases network path is unaffected and out of this research's scope.)
-
-## Suggested Build Order
-
-Front-loads shared-engine behavioral work (highest risk to the golden-template contract and to MCP/CLI parity) before CLI-only polish, per the milestone's own stated priority ("close behavioral gaps... then... human-facing TUI"). Each phase below is independently shippable/testable; later phases depend on earlier ones only where noted.
-
-**Phase A — `explore`/`node` relevance & disambiguation (internal/query only)**
-Highest risk (golden-template regression, the core parity gap), zero new dependencies, zero new packages. Touches `internal/query/explore.go`, `search.go`, `resolve.go`, `render_markdown.go`. Both CLI and MCP improve simultaneously by construction — no MCP-specific work needed. Validate against the existing golden corpus plus new fixtures for ambiguous names / multi-word queries (the milestone's own "behavioral parity test harness" requirement) before moving on.
-
-**Phase B — `status` richer content + worktree awareness (internal/query + new internal/gitmeta)**
-Depends on Phase A only for shared test-harness infrastructure, not code. Add `internal/gitmeta`, wire it into `Engine.Status`/`OpenAt` (the `startDir` field addition from Pattern 3), add DB-size to `StatusResult` (nodes-by-kind and languages are already computed in `Status()` today — this is mostly surfacing one new Pebble disk-size call plus the worktree field going live). Both CLI plain-text `status` and MCP `codegraph_status` get worktree-mismatch and the DB-size field in the same commit.
-
-**Phase C — Watcher-on-MCP default flip (internal/cli only)**
-Small, mechanical (Pattern 5's two-line diff), but sequenced after A/B so it's validated against the now-final `Engine` behavior it's wrapping, not against code that's still changing under it. No new packages.
-
-**Phase D — Output hygiene (Pebble WAL log silencing, stderr discipline)**
-Small, can run in parallel with C — no shared surface. Confirm Pebble's logger can be redirected/silenced (a `pebble.Options{Logger: ...}` at store-open time is the likely mechanism — `internal/graphstore` already controls store-open options centrally, so this is a change confined to `internal/graphstore/pebble_store.go`, not a stderr-suppression hack elsewhere).
-
-**Phase E — Git hooks (new internal/githooks, opt-in surface)**
-Depends on the `internal/fsatomic` extraction (a small, low-risk prerequisite refactor of `internal/agents/shared.go` — do this extraction as the first step of Phase E, verified by re-running `internal/agents`'s existing test suite unchanged against the extracted functions). Independent of Phases A-D otherwise. CLI surface: `codegraph githooks install|remove|status` as a new top-level command — the cleaner choice over folding into `install`/`init`, since git hooks are a genuinely separate concern from agent MCP-config (different trust boundary per Anti-Pattern 3), and a dedicated command gives `status`/idempotent `remove` a natural home without overloading `install`'s existing `--target`/`--location` flag semantics, which are agent-registry concepts that don't map onto "3 fixed git hook names."
-
-**Phase F — Rendering seam + TTY-gated pretty `status`/`files` (new internal/cli/present, new dep: lipgloss)**
-Depends on B (richer `StatusResult` is what's being prettified) and D (silenced Pebble logs matter more once output is styled — noisy WAL lines under a lipgloss box look worse than under plain text). Add `internal/cli/present` with `IsInteractive` + `RenderStatus`/`RenderFiles` (Pattern 1), plus the `internal/cli/archtest` import-graph guard (write the guard test FIRST, red, then add the lipgloss import — TDD the boundary itself). This phase also adds the `lipgloss` dependency to `go.mod`, so it's the natural place to run `govulncheck`/update the SBOM story for the new dep, per the milestone's own "audits the new Charm deps via govulncheck/SBOM" requirement.
-
-**Phase G — Interactive daemon picker + install multi-select (internal/cli/present, new dep: bubbletea)**
-Depends on F (same `present` package, same archtest boundary already in place) and on the small `daemon.Status` read addition (Pattern 6). Replace `promptAgentMultiSelect`'s `bufio` prompt with a bubbletea list model — but only when `installStdinIsInteractive` is true; the existing non-interactive/CI fallback path (`agents.ResolveTargetFlag("auto", loc)`) is untouched, so this is additive to `install.go`, not a rewrite of its control flow. Add a `codegraph daemon status` interactive view (or a picker embedded in an existing command) as the bubbletea entry point.
-
-**Phase H — Behavioral parity test harness formalization + surface reconciliation + `v1.0.0` release cut**
-Last, by design — this is the milestone's own closing validation + release phase (per-command flag parity audit, `search` stance decision, signed `v1.0.0` tag), depending on every prior phase being complete and stable.
-
-**Why this order:** A/B (shared engine) come first because they're both the highest-parity-value work AND the riskiest to the golden-template contract — get them stable before building CLI-only polish on top of a still-moving target. C/D are small, low-risk, and unblock nothing else, so they can slot in wherever convenient (shown as C/D for narrative clarity, not a hard dependency). E (git hooks) is fully independent of the rendering work and could run in parallel with F/G if resourced separately — it's ordered after D only to reuse the `fsatomic` extraction's validation cycle, not because of a true dependency. F before G because G's archtest boundary and TTY-gate helper are things G reuses, not reinvents. H last because it's the release gate.
+| Boundary | Current coupling | Notes |
+|---|---|---|
+| `internal/cli/serve.go` ↔ `internal/mcp` | `internal/cli` imports `mark3labs/mcp-go/server` directly for `server.ServeStdio(s)` | Real leak (Q2) — fixable now with a narrow `internal/mcp.Server` interface, independent of the SDK decision |
+| `internal/mcp` ↔ `internal/query` | Clean — `internal/mcp` never imports `internal/graphstore` directly (archtest-enforced) | Untouched by this milestone; do not let any MCP protocol work weaken this |
+| `internal/mcp` (production) ↔ test suite | Nearly every test drives the server via `mcpclient` (mark3labs) | The actual expensive coupling; Phase B's raw-stdio harness is the fix, not a production-code interface |
+| `internal/agents` ↔ MCP transport | None at all — `internal/agents` only writes a `serve --mcp` stdio invocation string into each agent's config; it never imports `mcp-go` | Confirms the 8-agent installer surface is fully decoupled from the SDK question — an SDK swap changes nothing here |
 
 ## Sources
 
-- Direct read of this repository's v0.1 source (HIGH confidence — primary source, not inferred): `internal/query/{engine,explore,node,status,resolve,search,render_markdown}.go`, `internal/mcp/{server,tools}.go`, `internal/cli/{serve,daemon,status,root,files,explore,install}.go`, `internal/daemon/{daemon,lock}.go`, `internal/watch/watcher.go`, `internal/agents/{registry,shared}.go`, `internal/graphstore/archtest/import_graph_test.go`, `go.mod`, `.planning/PROJECT.md`
-- `charmbracelet/lipgloss` (Context7, resolved — library confirmed current/actively maintained; TTY/color-profile detection is a documented lipgloss concern, corroborating the TTY-gate design rather than needing this project to hand-roll ANSI stripping)
-- Git hooks general mechanics (web search, MEDIUM confidence — general git documentation, not project-specific prior art): [Git - Git Hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks), [Git - githooks Documentation](https://git-scm.com/docs/githooks) — confirms post-commit/post-merge/post-checkout semantics and the shared-hooks-directory-across-worktrees behavior (`git-common-dir`) this research's Pattern 4 relies on
+- `internal/mcp/server.go`, `internal/mcp/tools.go`, `internal/mcp/reconnect_test.go`, `internal/mcp/server_test.go`, `internal/mcp/markdown_test.go`, `internal/mcp/tools_schema_drift_test.go`, `internal/cli/serve.go`, `test/integration/mcp_stdout_purity_test.go`, `test/integration/watch_default_test.go`, `test/integration/watch_live_sync_test.go`, `test/integration/worktree_notice_test.go`, `testdata/golden/golden_parity_test.go`, `internal/agents/*.go` — read directly, HIGH confidence (primary source, this repository).
+- `.planning/PROJECT.md` — read directly, HIGH confidence (primary source, this repository).
+- [`https://modelcontextprotocol.io/specification/2026-07-28/changelog`](https://modelcontextprotocol.io/specification/2026-07-28/changelog) — official spec changelog, fetched directly. The research seam's `classify-confidence` tool has no tier above LOW for the generic `webfetch` provider id, but this is the specification's own primary-source document (SEP-2567, SEP-2575, SEP-2549, SEP-2243, SEP-2468, SEP-2596 all cited directly from this page) — treat the *content* as authoritative, the *tier label* as a tooling gap, not a signal about the source's reliability.
+- [`https://blog.modelcontextprotocol.io/posts/2026-07-28/`](https://blog.modelcontextprotocol.io/posts/2026-07-28/) — official MCP blog announcement, fetched directly. Same tooling-tier caveat as above; same primary-source status.
+- **`go list -m -json github.com/modelcontextprotocol/go-sdk@latest`** (module proxy) and **`go-sdk@v1.7.0/mcp/shared.go:45-65,68+,394`** (module source) — verified directly by the coordinator, not by this research pass originally; this is the correction basis for the `v1.7.0` stable-release, five-era-negotiation, and `CodeUnsupportedProtocolVersion = -32022` findings now reflected throughout. HIGH confidence — primary source (module proxy + actual dependency source code), the same evidentiary standard as this document's own repository-code findings, and strictly better sourcing than the WebSearch-derived claim it corrects.
+- `mark3labs/mcp-go@v0.57.0/mcp/types.go:163` (`LATEST_PROTOCOL_VERSION = "2025-11-25"`) — independently re-verified alongside the correction above; HIGH confidence, primary source. Supersedes this document's earlier `v0.56.0` version reference to the version actually re-checked during the correction.
+- [`https://mer.vin/2026/07/stateful-vs-stateless-mcp-sticky-sessions-gone/`](https://mer.vin/2026/07/stateful-vs-stateless-mcp-sticky-sessions-gone/), [`https://appwrite.io/blog/post/mcp-goes-stateless-in-the-2026-07-28-specification`](https://appwrite.io/blog/post/mcp-goes-stateless-in-the-2026-07-28-specification), [`https://4sysops.com/archives/2026-07-28-model-context-protocol-mcp-stateless-multi-round-trip-routable-headers-authorization-hardening/`](https://4sysops.com/archives/2026-07-28-model-context-protocol-mcp-stateless-multi-round-trip-routable-headers-authorization-hardening/), [`https://workos.com/blog/mcp-2026-spec-agent-authentication`](https://workos.com/blog/mcp-2026-spec-agent-authentication) — third-party commentary, WebSearch results only (not individually fetched), used only to corroborate/cross-check the official changelog's own wording on stateless core, MRTR, routing headers, and CIMD/RFC 9207 — LOW confidence per the seam, used for corroboration only, never as the sole source for a claim in this document.
+- WebSearch on mark3labs/mcp-go and `modelcontextprotocol/go-sdk` protocol-version support — LOW confidence per the seam (generic `websearch` provider), and this specific search is what produced the now-corrected "pre-release only" claim about `go-sdk` (it surfaced only the first pre-release, `v1.7.0-pre.1`, and missed the subsequent stable `v1.7.0`). Retained here as a documented example of why the module-proxy/source-level verification above is the standard this file now holds itself to for SDK-maturity claims, not as a source still being relied on for that claim.
 
 ---
-*Architecture research for: codegraph-go v1.0 milestone integration*
-*Researched: 2026-07-14*
+*Architecture research for: MCP 2026-07-28 protocol currency integration, codegraph-go v0.3.0*
+*Researched: 2026-08-03; corrected 2026-08-03*

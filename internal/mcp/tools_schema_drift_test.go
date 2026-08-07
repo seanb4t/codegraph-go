@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/google/jsonschema-go/jsonschema"
 )
 
 // numericClaimRe matches a human-readable numeric claim in a tool or
@@ -41,20 +41,43 @@ var engineConstantFor = map[string]string{
 // schemas.
 //
 // This test reads BOTH sides from their source of truth rather than
-// restating literals: the claimed values are extracted from the actually
-// registered mcp.Tool schemas (exploreTool/companionTool), and the expected
-// values are parsed out of internal/query/validate.go's const block with
-// go/parser — necessary because defaultDepth and defaultMaxFiles are
-// unexported and internal/query cannot be imported for their values from a
-// package it does not export them to. Changing either side alone fails the
-// test.
+// restating literals: the claimed VALUES come from calling
+// jsonschema.For[XArgs](nil) directly on each tool's typed input struct —
+// the exact inference mcp.AddTool performs internally (D-07) — since
+// go-sdk's Tool.InputSchema is typed any and is populated by AddTool at
+// registration time, not present on the *mcp.Tool value exploreTool()/
+// companionTool() return on their own. Each tool's top-level description
+// still comes from exploreTool()/companionTool(), which set it directly.
+// The expected values are parsed out of internal/query/validate.go's const
+// block with go/parser — necessary because defaultDepth and defaultMaxFiles
+// are unexported and internal/query cannot be imported for their values
+// from a package it does not export them to. Changing either side alone
+// fails the test.
 func TestMCPToolSchemaNumericClaimsMatchEngineConstants(t *testing.T) {
 	consts := parseQueryConstants(t)
 
-	tools := map[string]mcp.Tool{"codegraph_explore": exploreTool()}
-	for _, name := range companionNames {
-		tool := companionTool(name)
-		tools[tool.Name] = tool
+	type toolClaims struct {
+		description string
+		properties  map[string]*jsonschema.Schema
+	}
+
+	mustSchema := func(s *jsonschema.Schema, err error) map[string]*jsonschema.Schema {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("jsonschema.For: %v", err)
+		}
+		return s.Properties
+	}
+
+	tools := map[string]toolClaims{
+		"codegraph_explore": {description: exploreTool().Description, properties: mustSchema(jsonschema.For[ExploreArgs](nil))},
+		"codegraph_node":    {description: companionTool("node").Description, properties: mustSchema(jsonschema.For[NodeArgs](nil))},
+		"codegraph_search":  {description: companionTool("search").Description, properties: mustSchema(jsonschema.For[SearchArgs](nil))},
+		"codegraph_callers": {description: companionTool("callers").Description, properties: mustSchema(jsonschema.For[CallersArgs](nil))},
+		"codegraph_callees": {description: companionTool("callees").Description, properties: mustSchema(jsonschema.For[CalleesArgs](nil))},
+		"codegraph_impact":  {description: companionTool("impact").Description, properties: mustSchema(jsonschema.For[ImpactArgs](nil))},
+		"codegraph_files":   {description: companionTool("files").Description, properties: mustSchema(jsonschema.For[FilesArgs](nil))},
+		"codegraph_status":  {description: companionTool("status").Description, properties: mustSchema(jsonschema.For[StatusArgs](nil))},
 	}
 
 	// Guard the guard: if the tool set or its descriptions ever stop
@@ -64,14 +87,9 @@ func TestMCPToolSchemaNumericClaimsMatchEngineConstants(t *testing.T) {
 
 	for toolName, tool := range tools {
 		t.Run(toolName, func(t *testing.T) {
-			texts := map[string]string{"": tool.Description}
-			for prop, raw := range tool.InputSchema.Properties {
-				schema, ok := raw.(map[string]any)
-				if !ok {
-					continue
-				}
-				desc, _ := schema["description"].(string)
-				texts[prop] = desc
+			texts := map[string]string{"": tool.description}
+			for prop, schema := range tool.properties {
+				texts[prop] = schema.Description
 			}
 
 			for prop, text := range texts {

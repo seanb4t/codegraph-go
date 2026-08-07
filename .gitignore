@@ -22,6 +22,9 @@ coverage.html
 # Local dev binary (produced by `go build ./testdata/golden/gocapture/...`)
 /gocapture
 
+# Local dev binary (produced by `go build ./tools/mcpaudit/...`)
+/mcpaudit
+
 # graphify skill scratch output
 graphify-out/
 
@@ -37,3 +40,6 @@ testdata/golden/corpus/*/src/.codegraph/
 # Python bytecode (scripts/pr_template_policy.py)
 __pycache__/
 *.pyc
+
+# GSD run-scoped dispatch-isolation sentinel (ephemeral session state)
+.gsd/
