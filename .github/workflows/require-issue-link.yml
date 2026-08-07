@@ -71,6 +71,14 @@ jobs:
             case "$f" in
               .planning/*|docs/*|.github/*) ;;
               go.mod|go.sum|.gitignore|README.md|CONTRIBUTING.md|CODE_OF_CONDUCT.md|SECURITY.md|NOTICE|LICENSE|CHANGELOG.md) ;;
+              # Keep in sync with scripts/pr_template_policy.py's EXEMPT_EXACT.
+              # Isolated tool modfiles (issue #18) and release-please's own
+              # machinery — the release PR touches exactly
+              # {.release-please-manifest.json, CHANGELOG.md}, and the bot
+              # regenerates its body every run, so a manual exemption marker
+              # cannot survive there.
+              go.tool.mod|go.tool.sum|go.tool-lint.mod|go.tool-lint.sum) ;;
+              .release-please-manifest.json|release-please-config.json) ;;
               *) all_exempt=false; break ;;
             esac
           done <<< "$CHANGED_FILES"

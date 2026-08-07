@@ -36,9 +36,28 @@ EXEMPT_PREFIXES = (
     "docs/",
     ".planning/",
 )
+# Root-level machine-maintained manifests belong here by class, not by
+# accident: this set is an allowlist of literal names, so every new one is
+# gate-tripping until it is added by hand. Keep it in sync with the `case`
+# list in .github/workflows/require-issue-link.yml, which reimplements the
+# same policy in shell so that job stays dependency-free.
 EXEMPT_EXACT = {
     "go.mod",
     "go.sum",
+    # Isolated tool modfiles (Phase 10 / DEV-01). Recorded as a known
+    # follow-up in issue #18: a PR touching only these is the same class of
+    # housekeeping change as one touching go.mod.
+    "go.tool.mod",
+    "go.tool.sum",
+    "go.tool-lint.mod",
+    "go.tool-lint.sum",
+    # release-please machinery. The manifest is rewritten by the bot on
+    # every release, so without this the release PR — which touches exactly
+    # {.release-please-manifest.json, CHANGELOG.md} — trips both hygiene
+    # gates every single time, and the bot regenerates its body on each run
+    # so a manual exemption marker cannot survive.
+    ".release-please-manifest.json",
+    "release-please-config.json",
     ".gitignore",
     "README.md",
     "CONTRIBUTING.md",
