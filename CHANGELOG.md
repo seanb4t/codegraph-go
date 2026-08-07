@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/seanb4t/codegraph-go/compare/v0.3.0...v0.4.0) (2026-08-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **platform:** drop native Windows support — WSL2 only ([#29](https://github.com/seanb4t/codegraph-go/issues/29))
+
+### Features
+
+* **platform:** drop native Windows support — WSL2 only ([#29](https://github.com/seanb4t/codegraph-go/issues/29)) ([80d2e0a](https://github.com/seanb4t/codegraph-go/commit/80d2e0a455f937eeb93d1d3f450263b6a88f23e4))
+
 ## [0.3.0](https://github.com/seanb4t/codegraph-go/compare/v0.2.0...v0.3.0) (2026-08-07)
 
 
