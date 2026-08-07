@@ -17,9 +17,9 @@ that is a bug in this doc (or the workflow), please report it.
 ## 1. Verifying a release
 
 Every tagged release (`v[0-9]*`) publishes, per platform
-(`darwin`/`linux`/`windows` × `amd64`/`arm64`):
+(`darwin`/`linux` × `amd64`/`arm64`):
 
-- a raw binary: `codegraph_<tag>_<goos>_<goarch>[.exe]`
+- a raw binary: `codegraph_<tag>_<goos>_<goarch>`
 - a per-binary cosign bundle: `<binary>.sigstore.json`
 - a per-binary SPDX SBOM: `<binary>.spdx.json`
 - one shared checksums file: `codegraph_<tag>_checksums.txt`
@@ -73,9 +73,10 @@ slsa-verifier verify-artifact \
   codegraph_<tag>_<goos>_<goarch>
 ```
 
-Provenance is attested over **each platform binary directly**, and all six
-subjects share a single bundle. Verify the binary you actually intend to run —
-pass that binary as the final argument.
+Provenance is attested over **each platform binary directly**, and all of a
+release's subjects share a single bundle (four binaries as of the drop of
+native Windows support; six for v0.3.0 and earlier). Verify the binary you
+actually intend to run — pass that binary as the final argument.
 
 > **Bundle filename.** Releases **after v0.2.0** publish
 > `codegraph_<tag>.intoto.jsonl`. **v0.2.0 and earlier** published the SLSA
@@ -186,17 +187,17 @@ explicitly rather than hiding cross-target drift behind one green check:**
   `reproducibility` job builds the binary twice, back to back, with
   identical flags and environment, and fails the job if the two resulting
   binaries' SHA-256 digests differ.
-- **All other targets (`linux/arm64`, both `windows` arches, both `darwin`
-  arches) are best-effort and reported, not blocking.** CGo cross-linked
-  artifacts (via `zig cc`, or via native `macos-latest`/Xcode toolchain for
-  darwin) are inherently harder to guarantee bit-identical across
-  toolchain versions and host environments than a native `linux/amd64`
-  build. Today only the `linux/arm64` leg has an automated double-build
-  check (also in `ci.yml`, via `continue-on-error: true`, so a mismatch is
-  visible as a warning without failing the run); the `windows` and
-  `darwin` legs are not yet independently double-built in CI. Being
-  explicit about which target is the hard guarantee is more honest than a
-  passing check that silently doesn't cover the other five.
+- **All other targets (`linux/arm64`, both `darwin` arches) are
+  best-effort and reported, not blocking.** CGo cross-linked artifacts
+  (via `zig cc`, or via native `macos-latest`/Xcode toolchain for darwin)
+  are inherently harder to guarantee bit-identical across toolchain
+  versions and host environments than a native `linux/amd64` build. Today
+  only the `linux/arm64` leg has an automated double-build check (also in
+  `ci.yml`, via `continue-on-error: true`, so a mismatch is visible as a
+  warning without failing the run); the `darwin` legs are not yet
+  independently double-built in CI. Being explicit about which target is
+  the hard guarantee is more honest than a passing check that silently
+  doesn't cover the other three.
 
 ### Reproducing a build locally
 

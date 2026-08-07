@@ -201,15 +201,13 @@ func defaultDownload(version string) (binary []byte, bundleJSON []byte, err erro
 
 // releaseAssetName is D-14-finalized: TestReleaseAssetNameMatchesGoReleaser
 // (verify_release_e2e_test.go) pins this literal shape
-// (codegraph_<tag>_<goos>_<goarch>[.exe]) against .goreleaser.yaml's
-// archives.name_template for all 6 shipped release targets, proving the two
-// agree rather than merely asserting it in a comment.
+// (codegraph_<tag>_<goos>_<goarch>) against .goreleaser.yaml's
+// archives.name_template for all 4 shipped release targets, proving the two
+// agree rather than merely asserting it in a comment. There is no .exe
+// variant: native Windows is not a supported platform (quick task
+// 260807-gho), and WSL2 users resolve the linux asset for their arch.
 func releaseAssetName(version string) string {
-	ext := ""
-	if runtime.GOOS == "windows" {
-		ext = ".exe"
-	}
-	return fmt.Sprintf("codegraph_%s_%s_%s%s", version, runtime.GOOS, runtime.GOARCH, ext)
+	return fmt.Sprintf("codegraph_%s_%s_%s", version, runtime.GOOS, runtime.GOARCH)
 }
 
 // downloadReleaseAsset fetches one named asset from this project's GitHub

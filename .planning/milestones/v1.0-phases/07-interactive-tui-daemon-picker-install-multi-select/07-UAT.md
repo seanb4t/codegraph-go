@@ -25,7 +25,7 @@ note: "Alt-screen checkbox picker (post G-07-2 fix) renders 'Select agents to co
 ### 3. Windows daemon stop termination + PPID watchdog on a real Windows host
 expected: On Windows, `daemon start` then `daemon stop` from another shell terminates the daemon (hard-kill via TerminateProcess) and clears its registry record; the PPID watchdog shuts a daemon/watcher down when its supervising process dies. (No Windows CI runner exists; cross-compile + `GOOS=windows go vet` via mingw-w64 pass, but real termination/liveness semantics need a Windows host.)
 result: skipped
-reason: "Windows platform gap — tester is on macOS, no Windows host available. Windows-tagged code is cross-compiled + go-vet-typechecked via mingw-w64 in CI; only real runtime termination/liveness semantics remain unverified. Accepted platform gap, tracked for a future Windows verification pass."
+reason: "CLOSED PERMANENTLY 2026-08-07 — will not be tested. Native Windows was dropped as a supported platform (quick task 260807-gho); Windows users run the linux binary under WSL2, where this test's subject does not exist. The code under test (stop_windows.go's TerminateProcess hard-kill, watchdog_windows.go's PPID watchdog) has been deleted, along with the mingw-w64 cross-vet that was its only CI coverage. This is no longer a gap to close but a scenario that cannot occur. Original reason, superseded: tester was on macOS with no Windows host available, tracked for a future Windows verification pass. NOTE: the UAT format's result: vocabulary is pass|skipped|blocked|pending with no waived/n-a value, so this stays result: skipped and will keep appearing in /gsd-audit-uat as one explained item — that is a tooling expressiveness gap, not outstanding work."
 
 ## Summary
 

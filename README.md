@@ -17,6 +17,24 @@ ranked by graph relevance, not string similarity.
 
 ---
 
+## Supported platforms
+
+| Platform | Architectures | Status |
+|----------|---------------|--------|
+| Linux | `amd64`, `arm64` | Supported |
+| macOS | `amd64`, `arm64` | Supported |
+| Windows | — | **Not supported natively — use WSL2** |
+
+On Windows, run codegraph inside [WSL2](https://learn.microsoft.com/windows/wsl/install)
+and install the `linux` binary for your architecture. Everything works there,
+including `codegraph upgrade`, because WSL2 is Linux.
+
+One caveat worth knowing: if your project lives on a `/mnt/<drive>` Windows
+mount rather than inside the WSL2 filesystem, codegraph turns the file watcher
+off automatically — recursive watching across that mount is too slow to be
+reliable. Keep repositories on the WSL2 side (`~/...`, not `/mnt/c/...`) for
+full functionality, or pass `--watch` to force it on anyway.
+
 ## Install
 
 Download a binary from [Releases](https://github.com/seanb4t/codegraph-go/releases/latest):

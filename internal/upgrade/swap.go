@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 )
 
 // checkWritable probes whether the current user can replace targetPath, by
@@ -33,8 +32,9 @@ func checkWritable(targetPath string) error {
 // fully written and made executable BEFORE anything touches targetPath, so
 // a crash/interrupt at any point before the final rename leaves the
 // ORIGINAL binary intact (T-06-06-03) — os.Rename within one directory is
-// atomic on POSIX. Windows can't overwrite a running .exe directly, so the
-// original is renamed aside first, then the new file renamed into place
+// atomic on POSIX, and POSIX is the whole supported surface: native
+// Windows is not a supported platform (quick task 260807-gho), so the
+// rename-self-aside dance a running .exe would have required is gone
 // (pattern source: minio/selfupdate's apply.go, referenced per RESEARCH —
 // not a dependency, D-13/Alternatives Considered).
 func atomicSwap(targetPath string, newBinary []byte) error {
@@ -76,45 +76,9 @@ func atomicSwap(targetPath string, newBinary []byte) error {
 		return fmt.Errorf("upgrade: chmod temp file: %w", err)
 	}
 
-	if runtime.GOOS == "windows" {
-		return swapWindows(targetPath, tmpPath, &cleanupTemp)
-	}
-
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		return fmt.Errorf("upgrade: rename new binary into place: %w", err)
 	}
 	cleanupTemp = false
-	return nil
-}
-
-// swapWindows performs the rename-self-aside-then-rename-new dance: a
-// running .exe can't be overwritten directly on Windows, so the original
-// is moved aside first, the new file is renamed into the now-vacant final
-// path, and the aside copy is removed. On failure to rename the new file
-// into place, it attempts to restore the original from the aside path
-// rather than leaving the install with no binary at targetPath at all.
-//
-// WR-04: the restore attempt's own error is checked. If restoring also
-// fails, targetPath would otherwise end up pointing at nothing — the
-// user's codegraph binary gone, with no way to fix it by re-running the
-// now-missing tool. In that case the error message points at asidePath
-// (still holding the original binary) as the manual recovery path, rather
-// than silently discarding the restore failure.
-func swapWindows(targetPath, tmpPath string, cleanupTemp *bool) error {
-	asidePath := targetPath + ".old"
-	os.Remove(asidePath) // best-effort: a stale .old from an interrupted prior upgrade
-
-	if err := os.Rename(targetPath, asidePath); err != nil {
-		return fmt.Errorf("upgrade: rename running binary aside: %w", err)
-	}
-	if err := os.Rename(tmpPath, targetPath); err != nil {
-		if restoreErr := os.Rename(asidePath, targetPath); restoreErr != nil {
-			return fmt.Errorf("upgrade: install failed (%v) AND restoring the original binary failed (%v); "+
-				"your original binary is preserved at %s — rename it back to %s manually", err, restoreErr, asidePath, targetPath)
-		}
-		return fmt.Errorf("upgrade: rename new binary into place: %w", err)
-	}
-	os.Remove(asidePath)
-	*cleanupTemp = false
 	return nil
 }

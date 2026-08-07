@@ -69,7 +69,9 @@ var forbiddenTaskfileGateKeys = []string{"status", "platforms"}
 // crossToolchainTokens are command-line tokens that mark a task as
 // requiring a non-host toolchain — any task whose command text references
 // one of these MUST carry a preconditions: entry with a non-empty msg:.
-var crossToolchainTokens = []string{"x86_64-w64-mingw32-gcc", "zig"}
+// mingw-w64's x86_64-w64-mingw32-gcc left this list with native Windows
+// support (quick task 260807-gho); zig remains for the linux/arm64 cross.
+var crossToolchainTokens = []string{"zig"}
 
 // taskWrapperExpectedLegs is the literal D-10 fixture for the `test`
 // wrapper's five host-only legs, compared as a sorted set against the
@@ -130,21 +132,18 @@ type runBodyException struct {
 }
 
 // runBodyExceptions is the literal, exhaustive exception list for the
-// in-scope jobs above. Two entries, both in ci.yml:
-//   - "Install mingw-w64" (job test) installs an apt package
-//     (gcc-mingw-w64-x86-64), not a contributor-invokable command — there
-//     is no task target for "apt-get install a cross-toolchain".
+// in-scope jobs above. One entry, in ci.yml:
 //   - "Compute determinism inputs" (job reproducibility) writes to the CI
 //     step-output file ($GITHUB_OUTPUT) via `id: repro`; it has no meaning
 //     outside a runner and produces no artifact a contributor would ever
 //     invoke directly.
+//
+// A second entry ("Install mingw-w64", job test) retired with native
+// Windows support (quick task 260807-gho) — the apt step it excepted no
+// longer exists, and the loop at the bottom of
+// TestWorkflowRunStepsInvokeTaskTargets fails any exception that matches
+// no real step, so a stale entry cannot silently widen this allowlist.
 var runBodyExceptions = []runBodyException{
-	{
-		Workflow: "ci.yml",
-		Job:      "test",
-		Step:     "Install mingw-w64 (windows cross-CGO toolchain for internal/daemon vet)",
-		Reason:   "installs an apt package (gcc-mingw-w64-x86-64), not a contributor-invokable command",
-	},
 	{
 		Workflow: "ci.yml",
 		Job:      "reproducibility",

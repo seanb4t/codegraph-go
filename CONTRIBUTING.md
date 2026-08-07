@@ -66,9 +66,12 @@ CGO_ENABLED=1 go test ./...
 CGO_ENABLED=1 go vet ./...
 ```
 
-Cross-compiling to other platforms needs more: `zig` for cross-builds, and
-`mingw-w64` to vet the Windows targets. If you are only changing Go code for
-your own platform, you do not need them.
+Cross-compiling to other platforms needs `zig`. If you are only changing Go
+code for your own platform, you do not need it.
+
+codegraph targets **Linux and macOS** (amd64 and arm64). Native Windows is
+not supported — Windows contributors should work inside WSL2, where the
+Linux toolchain and the Linux build are what you exercise.
 
 Workflow changes should pass `actionlint` locally before you push.
 
@@ -81,10 +84,9 @@ Every command CI runs is defined exactly once, as a `task` target — see
   subprocess integration, isolated daemon, and race — and needs nothing
   beyond the C toolchain above.
 - The cross-toolchain checks are deliberately separate targets, not part of
-  `task test`: `task vet:daemon-windows` needs `mingw-w64`, and
-  `task check:reproducibility:arm64` needs `zig`. Both fail with an install
-  instruction rather than skipping, so a green run means the same thing here
-  and in CI.
+  `task test`: `task check:reproducibility:arm64` needs `zig`. It fails with
+  an install instruction rather than skipping, so a green run means the same
+  thing here and in CI.
 - `task check:cross` is the same pre-tag sweep `release-please.yml`'s
   `pretag-gate` job runs before a tag can be created.
 - CI calls these same fine-grained targets directly — a contributor and CI
