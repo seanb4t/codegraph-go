@@ -414,6 +414,14 @@ type Config struct {
 	Ctx context.Context
 }
 
+// beforeChildCopy is an unexported package-level test seam (mirroring the
+// getppid/registryDir convention in internal/daemon): proxy_test.go overrides
+// it to delay the child->caller copy goroutine and make the cmd.Wait pipe-close
+// race deterministic. It is a no-op in production. Without it the race is
+// invisible on darwin — it was reliably won locally across every phase of this
+// milestone and only ever lost on a loaded Linux CI runner.
+var beforeChildCopy = func() {}
+
 // Run proxies stdio between the caller (an agent client, or a test) and a
 // spawned instance of cfg.RealBin, observing — but never terminating or
 // altering — both directions until the initialize exchange completes,
@@ -468,6 +476,16 @@ func Run(cfg Config) error {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
+	// outDone tracks ONLY the child->caller copy below, separately from wg.
+	// os/exec's StdoutPipe contract is explicit: "Wait will close the pipe
+	// after seeing the command exit ... it is thus incorrect to call Wait
+	// before all reads from the pipe have completed." The real binary exits
+	// as soon as its stdin closes, so cmd.Wait can close childOut while that
+	// copy is still in flight and truncate it — observed in CI as a
+	// byte-exactness failure with output "" (empty, not corrupted), on a
+	// rotating subset of the two passthrough tests run to run.
+	var outDone sync.WaitGroup
+	outDone.Add(1)
 	go func() {
 		defer wg.Done()
 		defer func() { _ = childIn.Close() }()
@@ -479,6 +497,8 @@ func Run(cfg Config) error {
 	}()
 	go func() {
 		defer wg.Done()
+		defer outDone.Done()
+		beforeChildCopy()
 		forwardLines(childOut, out, func(line []byte) {
 			if !obs.isComplete() {
 				obs.observeServerLine(line)
@@ -487,9 +507,15 @@ func Run(cfg Config) error {
 	}()
 
 	// cmd.Wait is run on its own goroutine so a caught termination signal
-	// (ctx.Done) can react to it without blocking on it.
+	// (ctx.Done) can react to it without blocking on it. It waits on
+	// outDone first so every read from childOut has completed before Wait
+	// closes that pipe. The signaled path still unblocks: killing the child
+	// closes its stdout, so the copy above sees EOF and releases outDone.
 	cmdDone := make(chan error, 1)
-	go func() { cmdDone <- cmd.Wait() }()
+	go func() {
+		outDone.Wait()
+		cmdDone <- cmd.Wait()
+	}()
 
 	var waitErr error
 	var signaled bool

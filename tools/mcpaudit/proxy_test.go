@@ -240,6 +240,54 @@ func TestProxyIsByteExactInBothDirections(t *testing.T) {
 	}
 }
 
+// TestProxyPassthroughSurvivesSlowChildCopy is a regression test for a real
+// race found when this branch's CI `test` job ran for the first time (ci.yml
+// fires on pull_request + push:[main], so 143 commits of milestone work were
+// only ever validated locally on darwin, where this race is reliably won).
+//
+// Run launched cmd.Wait concurrently with the childOut->out copy. os/exec's
+// StdoutPipe contract forbids exactly that — "it is incorrect to call Wait
+// before all reads from the pipe have completed" — because Wait closes the
+// pipe on child exit. `cat` exits the instant its stdin closes, so on a loaded
+// runner Wait won and truncated the copy, surfacing as output "" (EMPTY, not
+// corrupted) on a ROTATING subset of the two passthrough tests: the byte-exact
+// one on the first CI run, the CRLF one on the re-run.
+//
+// The beforeChildCopy seam makes that ordering deterministic rather than
+// probabilistic. Planting a delay reproduced the CI failure byte-for-byte;
+// with the outDone gate in place the same delay passes. Reverting the gate
+// must turn this test RED — verified by mutation, per the repo's standing
+// rule that a fix is demonstrated, not merely added.
+func TestProxyPassthroughSurvivesSlowChildCopy(t *testing.T) {
+	catPath, err := exec.LookPath("cat")
+	if err != nil {
+		t.Skip("cat not found on PATH")
+	}
+	original := beforeChildCopy
+	beforeChildCopy = func() { time.Sleep(50 * time.Millisecond) }
+	// Restored only after Run returns, so the copy goroutine reading this
+	// seam has already completed (Run's own wg.Wait guarantees it on the
+	// non-signaled path) — the join-before-restore ordering internal/daemon's
+	// seam tests use.
+	defer func() { beforeChildCopy = original }()
+
+	input := []byte("slow copy line one\nslow copy line two\n")
+	var out bytes.Buffer
+	cfg := Config{
+		RealBin: catPath,
+		LogPath: filepath.Join(t.TempDir(), "obs.jsonl"),
+		In:      bytes.NewReader(input),
+		Out:     &out,
+		ErrOut:  io.Discard,
+	}
+	if err := Run(cfg); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), input) {
+		t.Fatalf("output bytes = %q, want %q — cmd.Wait closed childOut before the copy drained it", out.Bytes(), input)
+	}
+}
+
 func TestProxyPreservesCRLFAndUnterminatedFinalFrame(t *testing.T) {
 	catPath, err := exec.LookPath("cat")
 	if err != nil {
