@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.0
-milestone_name: MCP Protocol Currency
-current_phase_name: v0.3.0 shipped 2026-08-06; no active milestone
-status: "Milestone v0.3.0 shipped — PR #24"
-stopped_at: v0.3.0 milestone complete and archived
-last_updated: "2026-08-06T22:28:13.846Z"
-last_activity: 2026-08-06
+milestone: v0.5.0
+milestone_name: macOS Distribution & Homebrew
+status: planning
+last_updated: "2026-08-08T00:17:24.784Z"
+last_activity: 2026-08-07
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
-current_phase: —
-last_activity_desc: v0.3.0 shipped — audit passed, archived, no git tag (D-06R)
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,12 +24,10 @@ See: .planning/PROJECT.md (updated 2026-08-05)
 
 ## Current Position
 
-Phase: — (v0.3.0 shipped 2026-08-06; no active milestone)
-Plan: n/a
-Status: Milestone v0.3.0 shipped — PR #24
-Last activity: 2026-08-07 - Completed quick task 260807-gho: Drop native Windows support — WSL2 only
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-08-07 — Milestone v0.5.0 started
 
 ## Performance Metrics
 
