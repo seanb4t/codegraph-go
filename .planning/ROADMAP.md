@@ -110,7 +110,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
   3. Against assets **re-downloaded from the published release** — never a local `dist/` copy — `cosign verify-blob` returns Verified OK under the unchanged `release.yml@refs/tags/v*` SAN, `gh attestation verify` passes against the `actions/attest-build-provenance` attestation, and a genuinely shipped prior binary self-upgrades via `codegraph upgrade` on darwin/arm64 and linux/amd64 (REL-08)
   4. For each platform the release carries both a raw `codegraph_<tag>_<goos>_<goarch>` asset — extension-free, directly executable, and byte-shape-identical to what `internal/upgrade.releaseAssetName()` builds — and a distinctly-named `.zip`; a mutation changing the raw entry away from `formats: [binary]` turns a test red rather than shipping an archive that verifies its signature and then bricks the install (REL-09)
 
-**Plans**: 5 plans
+**Plans**: 6 plans
 
 Plans:
 **Wave 1**
@@ -119,12 +119,13 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — `.goreleaser.yaml` owns archive/checksum/sign/SBOM: raw + `.zip` entries by id, 8-payload checksum scope, `binary_signs:`, per-binary `sboms:`
+- [ ] 01-02-PLAN.md — `.goreleaser.yaml` owns archive/checksum/sign/SBOM/release: raw + `.zip` entries by id, 8-payload checksum scope, `binary_signs:`, per-binary `sboms:`, and an explicit `release:` block pinning rerun idempotency
 - [ ] 01-03-PLAN.md — collapse `release.yml` to one `goreleaser release` job; delete the hand-rolled checksum/sign/SBOM shell; scope `id-token: write` to that one job
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [ ] 01-04-PLAN.md — swap the SLSA generic generator for `actions/attest-build-provenance`; rewrite every published verification instruction and REL-08's wording
+- [ ] 01-06-PLAN.md — exercise the `binary_signs:` sign pipe before the one-way release, using a throwaway local cosign key, proving four DISTINCT `.sigstore.json` sidecars rather than four colliding ones
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
