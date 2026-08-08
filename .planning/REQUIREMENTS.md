@@ -1,134 +1,99 @@
-# Requirements: CodeGraph Go — v0.3.0 (MCP Protocol Currency)
+# Requirements: CodeGraph Go — v0.5.0 (macOS Distribution & Homebrew)
 
-**Defined:** 2026-08-03
+**Defined:** 2026-08-08
 **Core Value:** An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
 
-**Milestone framing.** MCP published spec revision `2026-07-28` on 2026-07-28, six days before this milestone was scoped. codegraph-go's MCP server is a **Legacy** implementation under that spec's own terminology. This milestone brings it current, and does so without breaking the 8 agent clients `codegraph install` already configures.
+**Milestone framing.** codegraph-go's macOS binaries are measurably un-installable by convention today: `spctl -a -vv -t exec` returns **rejected** on both darwin arches, and there is no package-manager path at all. This milestone closes both — a browser-downloaded asset passes Gatekeeper, and `brew install` works from a tap we control. Backlog **999.5** is promoted and seed **SEED-002** is consumed.
 
-**Pre-decided by the maintainer (2026-08-03), superseding the "adopt or dated-defer" framing this milestone was captured under:** adopt `github.com/modelcontextprotocol/go-sdk@v1.7.0`. The evidence was one-sided — `mark3labs/mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"`, has no `2026-07-28` support, no announced timeline, and one unclaimed tracking issue (#928). The official SDK shipped stable on 2026-07-27 with five-era negotiation built in. The dated-defer branch is therefore **not** in this milestone's scope; see Out of Scope.
+**Constraint that shapes everything.** GoReleaser's `notarize:` and `homebrew_casks:` blocks execute only under `goreleaser release`, and this pipeline has only ever run `goreleaser build --single-target`. Research (2026-08-07) established that `goreleaser release` refuses a `dist/` built elsewhere and that both escape hatches — `release --split`/`continue --merge` and the `prebuilt` builder — are GoReleaser **Pro**. A single `macos-latest` runner with `zig cc` on both linux legs is therefore the only OSS path, and REL-05 exists to prove it is reachable before anything is built on it.
 
-## v0.3.0 Requirements
+**Three scoping assumptions were falsified by research and corrected before these requirements were written:** `brews:` is deprecated in favour of `homebrew_casks:`; a `.zip` cannot be stapled any more than a bare Mach-O can; and the single-runner question is answered negatively rather than open. See PROJECT.md → Key Decisions.
 
-### MCP Spec Compliance (SPEC)
+## v0.5.0 Requirements
 
-- [x] **SPEC-01**: An MCP client can call `server/discover` and receive the server's capabilities without first calling any tool — the spec makes this a **MUST for servers**, not an optional discovery convenience
-- [x] **SPEC-02**: The server validates per-request `_meta` (protocol version, client identity, client capabilities), answering `-32602` on malformed or missing required fields and `UnsupportedProtocolVersionError` (`-32022`, SEP-2575) on an unsupported version, rather than failing silently or proceeding on assumptions
-- [x] **SPEC-03**: Every tool result carries `resultType: "complete"`
-- [x] **SPEC-04**: `tools/list` and `server/discover` responses carry `ttlMs: 0` and `cacheScope: "private"`, so no client caches a catalog this server cannot promise is still accurate
-- [x] **SPEC-05**: A user who runs `codegraph init` while an MCP server is already running sees the tools appear — `hasIndex` is re-checked per call rather than snapshotted once at server construction
-- [x] **SPEC-06**: An agent client speaking any prior protocol revision (`2025-11-25` and earlier) continues to work against the upgraded server, asserted by test rather than assumed from the SDK's documentation
-- [x] **SPEC-07**: `server/discover`'s `instructions` field carries codegraph usage guidance, so an agent gets orientation without spending a tool call
-- [x] **SPEC-08**: Tool results carry `io.modelcontextprotocol/serverInfo` in `_meta`, so a client debugging a negotiation problem can see which server version answered
-- [x] **SPEC-09**: A client that opts into `subscriptions/listen` is notified via `notifications/tools/list_changed` when the tool catalog changes, with `tools.listChanged: true` advertised
+### Release Pipeline (REL)
 
-### SDK Migration (SDK)
+- [ ] **REL-05**: A maintainer can decide the pipeline architecture on measured evidence — whether `zig cc` cross-compiles the CGo tree-sitter dependency to linux/amd64 **and** linux/arm64 from a macOS host, proven by the resulting binaries *running on real Linux*, not by the build exiting 0
+- [ ] **REL-06**: A release is cut by a single `goreleaser release` invocation, with GoReleaser owning archive, checksum, sign, and SBOM generation
+- [ ] **REL-07**: Exactly one process writes `codegraph_<tag>_checksums.txt` — the hand-rolled `sha256sum` step is deleted in the same change that makes `.goreleaser.yaml`'s `checksum:` block live, so the two can never disagree
+- [ ] **REL-08**: Every supply-chain claim still verifies against real published assets after the migration — `cosign verify-blob`, `slsa-verifier verify-artifact`, and a genuinely shipped prior binary self-upgrading through `codegraph upgrade`
+- [ ] **REL-09**: A release carries both the raw per-platform binaries `codegraph upgrade` consumes and `.zip` archives for browser download and Homebrew, with the raw binary byte-unchanged from today (D-02/Finding 1 preserved, not amended)
 
-- [x] **SDK-01**: `internal/mcp` runs on `modelcontextprotocol/go-sdk@v1.7.0`, with all existing tools semantically unchanged from the pre-migration server across the wire-oracle corpus — every transcript diff read line by line, every changed line explained, none regenerated wholesale
-- [x] **SDK-02**: `internal/cli/serve.go` no longer imports an MCP SDK package directly — the process bootstrap goes through a narrow `internal/mcp.Server` interface, closing the one production-code SDK leak
-- [x] **SDK-03**: `mark3labs/mcp-go` is removed from `go.mod`, and the resulting dependency closure is re-audited through the existing `govulncheck` and SBOM paths
-- [x] **SDK-04**: Error-to-JSON-RPC mapping is explicitly audited and asserted — a handler returning a plain `error` becomes a *protocol* error under mark3labs but a tool-visible `IsError: true` *result* under the official SDK, a wire-behavior change invisible in the Go type signature
-- [x] **SDK-05**: Tool input schemas are explicitly audited for constraints lost in translation (notably enum constraints dropped by struct-tag reflection), with any loss either fixed or recorded as a deliberate divergence
+### macOS Signing & Notarization (SIGN)
 
-### Verification (VRFY)
+- [ ] **SIGN-01**: Darwin binaries are Developer ID codesigned and notarized during the release, with the certificate and App Store Connect API key held as CI secrets
+- [ ] **SIGN-02**: A user who downloads a release asset in a browser and runs it is not blocked by Gatekeeper — proven by `spctl -a -vv -t exec` reporting `source=Notarized Developer ID` and `syspolicy_check distribution` passing, against an asset carrying a genuine `com.apple.quarantine` xattr
+- [ ] **SIGN-03**: The Gatekeeper gate is demonstrated RED against a confirmed-applied mutation before it is trusted green — an un-notarized binary must fail it, so a green CI step, a passing `codesign -dvv`, or an Accepted `notarytool` history cannot stand in for verification
+- [ ] **SIGN-04**: What cosign signs and SLSA attests is byte-identical to what a user downloads — verified by diffing sha256 across pipeline stages, because notarization mutates the Mach-O and the current pipeline never modifies a binary after building it
 
-- [x] **VRFY-01**: A verification harness asserts on **raw stdio wire bytes**, not SDK-typed Go objects, and does not use the SDK under test as its own oracle
-- [x] **VRFY-02**: The server's declared protocol version is asserted against a **repo-owned literal**, not an SDK-owned constant, with a CI guard proving no stray `LATEST_PROTOCOL_VERSION`-style references remain — a dependency bump must never move wire behavior silently
-- [x] **VRFY-03**: The server logs the negotiated protocol version to stderr on every connection, always on — the only available mitigation for a spec-sanctioned silent version mismatch
-- [x] **VRFY-04**: The harness passes against the **current, pre-migration** server before any SDK change lands, establishing it as a genuine regression oracle rather than a description of the new code's behavior
-- [x] **VRFY-05**: A dated audit records which protocol revision each of the 8 roster agent clients negotiates, re-run immediately before the migration lands rather than relied on from earlier research
+### Homebrew Distribution (BREW)
 
-### Supply Chain (VULN)
+- [ ] **BREW-01**: A user can run `brew tap seanb4t/tap && brew install codegraph` on a clean machine and get a working binary
+- [ ] **BREW-02**: The tap is published by GoReleaser's `homebrew_casks:` block on every release, authenticated by a token scoped to the tap repository alone
+- [ ] **BREW-03**: The cask installs shell completions for bash, zsh, and fish, generated from the binary at cask-build time
+- [ ] **BREW-04**: The cask installs man pages
+- [ ] **BREW-05**: The cask carries a `test:` block exercising a real command, so a broken cask fails before a user hits it
+- [ ] **BREW-06**: A failed tap push leaves an otherwise-good release intact, and re-running recovers without duplicate or orphaned assets
 
-- [x] **VULN-01**: `govulncheck` covers `go.tool.mod` and `go.tool-lint.mod` — approximately 400 third-party modules executed as credentialed CI tooling — via `-mode=binary` over binaries built from those manifests, replacing the current `task vuln` target which was reproduced to be a no-op duplicate of the main-module CI scan
-- [x] **VULN-02**: The scanning job is demonstrated RED against a deliberately known-vulnerable pin before it is trusted
-- [x] **VULN-03**: The job's blocking-versus-advisory stance is stated explicitly in the workflow, so an advisory job cannot be mistaken for a gate
+### Upgrade × Package Manager (UPGR)
 
-### Maintenance (MAINT)
+- [ ] **UPGR-01**: `codegraph upgrade` detects a Homebrew-managed install and refuses, pointing at `brew upgrade codegraph`, and never modifies the Cellar
+- [ ] **UPGR-02**: Brew detection resolves symlinks to the real install path rather than matching a hardcoded prefix, so it is correct on Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew
+- [ ] **UPGR-03**: `codegraph upgrade --check` still works under a brew-managed install — read-only, no mutation — and reports how to upgrade
 
-- [x] **MAINT-01**: Issue #13 — the daemon `-race` failure on the `getppid` test seam — is fixed, with the race demonstrated before the fix
-- [x] **MAINT-02**: Issue #17 — `TestRunWatchdogCancelsRunOnSimulatedReparent` failing under full-suite load while passing isolated — is fixed at the cause rather than by isolating the test
-- [x] **MAINT-03**: The GoReleaser version pin agrees between `ci.yml` and `release.yml` (currently v2.17.1 vs v2.17.0)
+## v0.5.x Requirements
 
-## Future Requirements
+Deferred to a follow-up release. Tracked but not in this roadmap.
 
-Acknowledged, deliberately not in v0.3.0.
+### Distribution polish
 
-### Team Scale (remote / multi-user)
-
-- **Informed by this milestone.** The `2026-07-28` stateless core removes the sticky-routing / shared-session-store infrastructure a central codegraph MCP server would otherwise have needed. This milestone records that read-out as a decision; it builds none of it. codegraph-go's existing design does not foreclose it — `path` is already an explicit per-call tool argument and every handler already opens a fresh query-engine snapshot per call.
-
-### MRTR / elicitation
-
-- **MRTR-01**: The server can ask the user a question mid-call (e.g. "no index found here — initialize now?") via `resultType: "input_required"`, rather than returning an empty tool set. Genuinely enabled for the first time by this spec revision; deferred because it is new product behavior, not protocol currency.
-
-### Tasks extension
-
-- **TASK-01**: Long-running operations exposed via `io.modelcontextprotocol/tasks`. Not applicable today — codegraph's MCP tools are fast read-only queries, and indexing happens on the CLI/watcher side.
+- **DIST-06**: Offline-safe first launch on macOS via a stapled container (`.pkg` or `.dmg`), if evidence shows real users hitting the offline case
+- **BREW-07**: homebrew-core submission, so users need no `brew tap` step, once adoption justifies the review queue
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Streamable HTTP transport | codegraph-go is stdio-only. The spec's headline changes are HTTP-scaling-driven, and its HTTP-only mechanics — `Mcp-Method`/`Mcp-Name` routing headers (SEP-2243), SSE resumability, load-balancer fan-out — have no surface here. Adding a transport is Team Scale work, not currency work |
-| Dated-defer branch | Superseded by the maintainer's pre-decision to adopt. Retained here as an explicit exclusion so the milestone does not silently reacquire a decision it has already made |
-| Dropping Legacy `initialize` support | Per the spec's own compatibility matrix, a Modern-only server **hard-fails** every still-Legacy client with no client-side fallback. Zero of the 8 roster clients have confirmed `2026-07-28` support. This is the single highest-consequence mistake available in this milestone |
-| Roots / Sampling / Logging | Deprecated by this exact revision (SEP-2577). codegraph-go never declared them and already uses the spec-endorsed replacements — tool-argument paths, no sampling need, stderr logging |
-| Authorization work (CIMD, DCR, RFC 9207 `iss`) | Applies to remote/HTTP MCP servers. A stdio subprocess has no OAuth surface |
-| Bespoke dual-era negotiation logic | Would have been a P1 work item, but `go-sdk@v1.7.0` ships five-era negotiation (`2026-07-28` → `2024-11-05`) with `negotiatedVersion()` preferring the client's version. Inherited from the dependency choice — writing our own would be building a shadow SDK |
-| Backlog 999.2 (tmux TTY harness), 999.4 (CheckRegression guard), 999.5 (Gatekeeper) | Orthogonal surfaces. 999.2's failure *shape* rhymes with VRFY-01, but it is the TUI surface and a different harness |
+| Stapling / offline-safe first launch | `stapler` attaches tickets only to `.app`/`.pkg`/`.dmg`; a bare Mach-O **and** a `.zip` categorically cannot be stapled, and Quill has no staple command. Shipping notarized-but-unstapled matches GoReleaser's own choice for its own CLI. Gatekeeper still passes with network. Deferred as DIST-06, revisitable on evidence — and reachable without GoReleaser Pro via hand-rolled `pkgbuild`/`productbuild`/`productsign`/`xcrun stapler` |
+| homebrew-core submission | External review queue and notability criteria whose outcome we cannot schedule. Own tap ships now; deferred as BREW-07 |
+| A `brews:` formula, or a parallel formula kept "just in case" | Deprecated in GoReleaser v2.10; Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries (Homebrew/brew #20291). A parallel definition directly contradicts the deprecation |
+| GoReleaser Pro | Not adopted. Held as a **costed fallback** if REL-05 fails — it would preserve the native darwin matrix, but detaches from `go.tool.mod` and blinds three existing gates (`check:goreleaser`/DIST-01, `TestGoreleaserPinParity`, `tool-vuln`/VULN-01-03, the last turning `GO-2026-5932` from measured into unmeasurable). See PROJECT.md → Key Decisions |
+| A `.pkg` installer that writes outside a controlled prefix | Anti-feature — users expect a CLI on `$PATH`, not a system-modifying installer |
+| Ad-hoc self-signing (`codesign -s -`) as a substitute for notarization | Anti-feature — still triggers Gatekeeper warnings and does nothing for the "damaged and can't be opened" failure; Homebrew's maintainers call it hacky. Real signing is not meaningfully harder given the certificate is already held |
+| Non-macOS package managers (scoop, apt, yum, nix) | Different milestone. macOS is the surface with the measured Gatekeeper failure and the requested brew path |
+| Backlog 999.2 (tmux TTY harness) and 999.4 (`CheckRegression` positivity guard) | Deliberately parked to keep this milestone tight. Preserved in `ROADMAP.md` → Backlog |
+| The v0.3.0 open threads (`toolslist-repeat` flake, `cmd.Wait` sweep, `stdinLingerReader` bound, `requiredCheckNames` drift, `SECURITY.md` govulncheck wording) | Parked. Recorded in PROJECT.md → Active. `GO-2026-5932` is the one exception that may be revisited on evidence, since this milestone touches `goreleaser` directly |
 
 ## Traceability
 
-Populated during roadmap creation (2026-08-03). Phase numbering restarts at 1 for this milestone, matching the repo's convention (v0.1 was Phases 1–8, v1.0 was Phases 1–10).
+Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SPEC-01 | Phase 3 | Complete |
-| SPEC-02 | Phase 3 | Complete |
-| SPEC-03 | Phase 3 | Complete |
-| SPEC-04 | Phase 3 | Complete |
-| SPEC-05 | Phase 3 | Complete |
-| SPEC-06 | Phase 3 | Complete |
-| SPEC-07 | Phase 3 | Complete |
-| SPEC-08 | Phase 3 | Complete |
-| SPEC-09 | Phase 5 | Complete |
-| SDK-01 | Phase 2 | Complete |
-| SDK-02 | Phase 1 | Complete |
-| SDK-03 | Phase 2 | Complete |
-| SDK-04 | Phase 2 | Complete |
-| SDK-05 | Phase 2 | Complete |
-| VRFY-01 | Phase 1 | Complete |
-| VRFY-02 | Phase 1 | Complete |
-| VRFY-03 | Phase 1 | Complete |
-| VRFY-04 | Phase 1 | Complete |
-| VRFY-05 | Phase 1 | Complete |
-| VULN-01 | Phase 4 | Complete |
-| VULN-02 | Phase 4 | Complete |
-| VULN-03 | Phase 4 | Complete |
-| MAINT-01 | Phase 4 | Complete |
-| MAINT-02 | Phase 4 | Complete |
-| MAINT-03 | Phase 4 | Complete |
+| REL-05 | TBD | Pending |
+| REL-06 | TBD | Pending |
+| REL-07 | TBD | Pending |
+| REL-08 | TBD | Pending |
+| REL-09 | TBD | Pending |
+| SIGN-01 | TBD | Pending |
+| SIGN-02 | TBD | Pending |
+| SIGN-03 | TBD | Pending |
+| SIGN-04 | TBD | Pending |
+| BREW-01 | TBD | Pending |
+| BREW-02 | TBD | Pending |
+| BREW-03 | TBD | Pending |
+| BREW-04 | TBD | Pending |
+| BREW-05 | TBD | Pending |
+| BREW-06 | TBD | Pending |
+| UPGR-01 | TBD | Pending |
+| UPGR-02 | TBD | Pending |
+| UPGR-03 | TBD | Pending |
 
 **Coverage:**
-
-- v0.3.0 requirements: 25 total
-- Mapped to phases: 25 ✓
-- Unmapped: 0 — no orphans, no duplicates; every requirement maps to exactly one phase
-
-**Per-phase distribution:**
-
-| Phase | Requirements | Count |
-|-------|--------------|-------|
-| Phase 1 — Protocol Scoping & the SDK-Independent Wire Oracle | VRFY-01, VRFY-02, VRFY-03, VRFY-04, VRFY-05, SDK-02 | 6 |
-| Phase 2 — SDK Migration (official go-sdk) | SDK-01, SDK-03, SDK-04, SDK-05 | 4 |
-| Phase 3 — `2026-07-28` Spec Compliance | SPEC-01, SPEC-02, SPEC-03, SPEC-04, SPEC-05, SPEC-06, SPEC-07, SPEC-08 | 8 |
-| Phase 4 — Supply-Chain Coverage & Daemon Substrate Fixes | VULN-01, VULN-02, VULN-03, MAINT-01, MAINT-02, MAINT-03 | 6 |
-| Phase 5 — Live Tool-Catalog Change Notification | SPEC-09 | 1 |
-
-**REQ-ID prefix note (2026-08-03):** `SPEC`, `SDK`, `VRFY`, `VULN`, and `MAINT` were chosen specifically to avoid collision with the prefixes already used by v0.1 (`AGNT ARCH CLI COMM DIST EMBED INDX LANG MCP MIGR PERF QRY RES SYNC VIZ`) and v1.0 (`DEV DMON EXPL HOOK HYG NODE REL STAT SURF TEST TUI WATCH WORK`). In particular **`MCP-01`–`MCP-04` are already taken by v0.1** — the v0.3.0 research artifacts reference "the existing MCP-03 gap", which is a v0.1 requirement ID, not a new one. This repo has already lost time to exactly this class of collision (a decision gate failed on a `D-08a` citation colliding with a v0.1 decision ID left in `serve.go` comments).
-
-**Ordering note:** VRFY-04 is a hard sequencing constraint, not a preference. This project established in v1.0 Phase 4 that an SDK's own client silently skips malformed stdout lines and therefore cannot fail a purity test. A harness written after the swap, validated against the new SDK using that SDK's client, would be circular — it would describe the new behavior rather than test it.
+- v0.5.0 requirements: 18 total
+- Mapped to phases: 0
+- Unmapped: 18 ⚠️ (roadmap not yet created)
 
 ---
-*Requirements defined: 2026-08-03*
-*Last updated: 2026-08-03 after roadmap creation — traceability populated, 25/25 mapped across 5 phases*
+*Requirements defined: 2026-08-08*
+*Last updated: 2026-08-08 after initial definition*
