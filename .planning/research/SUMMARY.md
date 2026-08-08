@@ -149,7 +149,7 @@ Two questions the research raised were put to the maintainer and answered before
 - Apple: `developer.apple.com/documentation/security/customizing-the-notarization-workflow` and `.../notarizing-macos-software-before-distribution` — staple-ability constraints
 - Homebrew: `docs.brew.sh/Acceptable-Formulae` (self-update policy), `docs.brew.sh/Adding-Software-to-Homebrew`, `docs.brew.sh/Formula-Cookbook`, `docs.brew.sh/FAQ`
 - Homebrew/brew PR #20291 — maintainers' direct statements on formula-vs-cask for precompiled binaries
-- `cli/cli` (issues #6949, #10242, #2141; PR #70784, #4247; `docs/install_macos.md`) and `jesseduffield/lazygit` (`pkg/updates/updates.go`, PR #189) — build-time updater-disable precedent
+- `cli/cli` (issues #6949, #10242, #2141; PRs #70784, #4247; its macOS install documentation) and `jesseduffield/lazygit` (its updater package and user-config gate, PR #189) — build-time updater-disable precedent. **External repositories, cited for precedent only** — no file in this repo is implied
 - `google-gemini/gemini-cli` PR #14727 — real false-positive brew-detection bug and its `brew --prefix` + symlink-resolution fix
 - `gh api repos/goreleaser/goreleaser/releases/latest` executed locally 2026-08-07 — confirms v2.17.1 current
 - This repo, read directly 2026-08-07: `.goreleaser.yaml`, `.github/workflows/release.yml`, `Taskfile.yml`, `internal/upgrade/{upgrade,verify,release,swap}.go`, `.planning/PROJECT.md`
