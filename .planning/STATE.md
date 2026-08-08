@@ -2,9 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
+current_phase: 1
+current_phase_name: Cross-Compile Spike & `goreleaser release` Migration
 status: planning
-last_updated: "2026-08-08T12:00:00.000Z"
+stopped_at: Phase 1 context gathered
+last_updated: "2026-08-08T14:24:10.708Z"
 last_activity: 2026-08-08
+last_activity_desc: v0.5.0 roadmap created, 18/18 requirements mapped
 progress:
   total_phases: 4
   completed_phases: 0
@@ -308,29 +312,34 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-08
-Stopped at: v0.5.0 roadmap created (4 phases, 18/18 requirements mapped)
+Last session: 2026-08-08T14:24:10.700Z
+Stopped at: Phase 1 context gathered
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
+
     - `GO-2026-5932` is accepted-unmitigated in `goreleaser`'s own binary. This milestone
       touches `goreleaser` directly, so it may be revisited **on evidence** — and the
       GoReleaser Pro fallback would make it unmeasurable rather than merely unfixed.
+
     - The residual darwin release-path concern is partly closed: both darwin arches built,
       signed and SBOM'd on the real macOS runner during v0.3.0's release. What is still
       unexercised is `goreleaser release` (not `build`) on that runner class, plus
       zig-cross-to-linux **from** a macOS host — which is exactly REL-05.
   PHASE 1 CARRY-INS:
+
     - Phase 1's published release is deliberately un-notarized, and is Phase 2's RED baseline
       for SIGN-03. Do not delete or overwrite that asset before Phase 2 has recorded the
       `rejected` result against it.
+
     - `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` anchors the cosign SAN to
       `.github/workflows/release.yml@refs/tags/v[0-9]*`. Collapsing jobs is fine; renaming the
       workflow file or changing the tag trigger is not.
+
     - `release.yml` carries a deliberate comment that no GoReleaser Pro directive is used.
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: None
+Resume file: .planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-CONTEXT.md
 
 ## Operator Next Steps
 
