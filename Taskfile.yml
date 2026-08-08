@@ -536,6 +536,26 @@ tasks:
         # mask a misconfiguration.
         "${GORELEASER_BIN}" release --clean
 
+        # Emit the checksums-file hash as a $GITHUB_OUTPUT `hashes` value
+        # when running under GitHub Actions (GITHUB_OUTPUT is only set
+        # there — a no-op locally). release.yml's provenance: job still
+        # consumes this output until plan 01-04 removes both together.
+        # PRECISION (2026-08-01): provenance attests over the SIX
+        # BINARIES, not the checksums file itself; this base64-encodes the
+        # file's *contents* as the subject-list transport the SLSA generic
+        # generator parses. Folded in here, rather than a second
+        # release.yml step, so the release job's Release step keeps
+        # exactly one run: body (T-01-14).
+        if [ -n "${GITHUB_OUTPUT:-}" ]; then
+          TAG="$(git describe --exact-match --tags HEAD)"
+          CHECKSUMS_FILE="dist/codegraph_${TAG}_checksums.txt"
+          if [ ! -f "${CHECKSUMS_FILE}" ]; then
+            echo "::error::${CHECKSUMS_FILE} not found — expected GoReleaser's checksum: pipe to have produced it"
+            exit 1
+          fi
+          echo "hashes=$(base64 -w0 < "${CHECKSUMS_FILE}")" >> "${GITHUB_OUTPUT}"
+        fi
+
   check:linux-cross-export:
     desc: >-
       Resolve both linux binaries the just-run `goreleaser release`
