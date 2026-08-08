@@ -630,3 +630,60 @@ func TestSbomsArePerBinaryWithSpdxNames(t *testing.T) {
 		seen[got] = true
 	}
 }
+
+// ---------------------------------------------------------------------
+// Task 3: release: — rerun idempotency and prerelease handling are config,
+// not GoReleaser defaults (review HIGH-2).
+// ---------------------------------------------------------------------
+
+// TestReleaseBlockIsRerunIdempotent holds T-01-44: .goreleaser.yaml
+// declares a top-level release: block, and within it
+// replace_existing_artifacts is the boolean true. Fails if the release:
+// block is absent entirely, if the key is absent (GoReleaser v2.17.1
+// defaults it to false), or if it is present and false.
+func TestReleaseBlockIsRerunIdempotent(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	block := mustGoreleaserTopLevelBlock(t, src, "release")
+	v, ok := block["replace_existing_artifacts"]
+	if !ok {
+		t.Fatalf("release: block has no replace_existing_artifacts key (GoReleaser v2.17.1 defaults this to false)")
+	}
+	b, ok := v.(bool)
+	if !ok || !b {
+		t.Errorf("release.replace_existing_artifacts = %v (%T), want true", v, v)
+	}
+}
+
+// TestReleaseBlockDoesNotRewriteReleaseBody holds T-01-30 / D-06R: within
+// the release: block, prerelease is exactly the string "auto", and neither
+// a name_template nor a header/footer/draft/disable key is declared —
+// release-please authors the Release name and body, and GoReleaser must
+// only add assets to it.
+func TestReleaseBlockDoesNotRewriteReleaseBody(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	block := mustGoreleaserTopLevelBlock(t, src, "release")
+	v, ok := block["prerelease"]
+	if !ok {
+		t.Fatalf("release: block has no prerelease key")
+	}
+	s, ok := v.(string)
+	if !ok || s != "auto" {
+		t.Errorf("release.prerelease = %v (%T), want %q", v, v, "auto")
+	}
+
+	for _, forbidden := range []string{"name_template", "header", "footer", "draft", "disable"} {
+		if _, ok := block[forbidden]; ok {
+			t.Errorf("release: block declares forbidden key %q — release-please owns Release authorship (D-06R)", forbidden)
+		}
+	}
+}
