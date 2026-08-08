@@ -51,7 +51,8 @@ target is green.
 Never use a `milestone-v*`-style name for anything you actually want
 `release.yml` to build and sign — it is intentionally shaped to never fire.
 Conversely, never push a real `v[0-9]*` tag casually — every one of them
-fires the full signed build/assemble/provenance pipeline.
+fires the full signed build/archive/checksum/sign/SBOM/publish/attest
+pipeline (one job, described in full in §4 below).
 
 ## 3. Branch/tag model
 
@@ -106,25 +107,43 @@ The release-PR merge is the trigger, not a hand-run `git tag`:
    release-please's own changelog as the release body.
 6. The tag push, authored by the GitHub App token (not the default
    `GITHUB_TOKEN` — App-authored refs *do* trigger downstream workflow
-   runs, which is exactly why this works), fires `release.yml`. Its three
-   jobs are unchanged from the pipeline this section has always described:
-   - **`build`** — compiles all 4 `(GOOS,GOARCH)` targets (native darwin
-     matrix via `macos-latest`/Xcode clang; zig cross-compilation for
-     `linux/arm64` from `ubuntu-latest`), uploading each as a CI artifact.
-   - **`assemble`** — downloads all 4 build artifacts, signs each binary
-     **individually** with cosign keyless (`cosign sign-blob
-     --bundle="${f}.sigstore.json"` — internal/upgrade hashes the
+   runs, which is exactly why this works), fires `release.yml`. It has
+   exactly ONE job, `release`, running natively on a real Apple-Silicon
+   macOS profile (`namespace-profile-macos-6x14-tahoe`) — no separate
+   `build`/`assemble`/`provenance` jobs and no CI-artifact round trip
+   between them (that three-job topology was collapsed by plan 01-03/01-04
+   into a single `goreleaser release --clean` invocation, run via
+   `task release:goreleaser`):
+   - **Build** — compiles all 4 `(GOOS,GOARCH)` targets: darwin native
+     (Xcode clang, both arches, on this same macOS runner) and BOTH linux
+     legs cross-compiled via `zig cc`/`zig c++` from this one host
+     (D-01/D-02, REL-05 — proven on real hardware, not just a green build
+     exit code).
+   - **Archive** — GoReleaser's `archives:` pipe produces both the raw
+     per-platform binary `codegraph upgrade` swaps in and a `.zip` archive
+     of the same binary, for browser downloads and the Homebrew tap
+     (REL-09); the raw binary's bytes are byte-unchanged by the archive
+     step.
+   - **Checksum** — GoReleaser's `checksum:` pipe writes the shared
+     `codegraph_<tag>_checksums.txt`, covering exactly the 8 raw-binary +
+     `.zip` payloads (D-12) — the ONLY writer of that file (REL-07).
+   - **Sign** — `binary_signs:` shells out to cosign keyless
+     (`sign-blob --bundle=...`) per binary — internal/upgrade hashes the
      downloaded binary itself, not a checksums file, so per-binary signing
-     is required), generates a per-binary SPDX SBOM via `syft`, computes
-     the shared `codegraph_<tag>_checksums.txt`, and publishes into the
-     release.
-   - **`provenance`** — runs SLSA3 build provenance
-     (`slsa-framework/slsa-github-generator`'s generic generator) over the
-     checksums file, producing an `.intoto.jsonl` attestation.
-7. `assemble`'s publish step finds the Release release-please already
-   created and uploads the signed binaries into it with `gh release upload
-   --clobber`, leaving release-please's changelog body and prerelease flag
-   untouched (see the `assemble` job's `Publish GitHub release` step).
+     is required, same trust boundary as before.
+   - **SBOM** — `sboms:` shells out to `syft`, per binary, publishing an
+     SPDX SBOM alongside each.
+   - **Publish** — GoReleaser's declarative `release:` pipe uploads into
+     the Release release-please already created, idempotently
+     (`replace_existing_artifacts: true`), without rewriting
+     release-please's changelog body or prerelease flag.
+   - **Attest** — `actions/attest-build-provenance` (GitHub's first-party
+     attestor) runs as the job's last step, over the SAME 8 payloads the
+     checksums file covers, publishing through GitHub's Attestations API
+     rather than as a release asset (D-09 — replaces the third-party SLSA
+     generic generator entirely; see `docs/RELEASE.md` §1(b) for the
+     `gh attestation verify` command that replaces `slsa-verifier
+     verify-artifact` for releases cut by this pipeline).
 
 **The version is computed, not chosen.** The bump comes from accumulated
 Conventional Commits and that is the intended, default behaviour: while the
@@ -168,10 +187,11 @@ git push origin v0.0.0-rc.N
 
 A `v0.0.0-rc.N` tag pushed by hand still matches `release.yml`'s
 `v[0-9]*` trigger and still fires the signed build; since no release-please
-Release exists yet for it, the `assemble` job's publish step takes its
-*create* branch (`gh release create … --generate-notes --prerelease`)
-rather than its upload branch. This is the only path in this repo where a
-human still runs `git tag` directly — stable releases never use it.
+Release exists yet for it, GoReleaser's declarative `release:` pipe
+**creates** the Release itself (marked prerelease, per `prerelease: auto`)
+rather than uploading into one that already exists. This is the only path
+in this repo where a human still runs `git tag` directly — stable releases
+never use it.
 
 ## 5. The `verify.go` LOCKED contract
 
@@ -211,7 +231,7 @@ After the release publishes, verify it the same way an end user would (see
 `docs/RELEASE.md` §1 for the full user-facing walkthrough):
 
 ```sh
-# a) cosign keyless signature (per-binary)
+# a) cosign keyless signature (per-binary) — UNCHANGED by the attestor swap
 cosign verify-blob \
   --bundle codegraph_<tag>_<goos>_<goarch>.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -219,23 +239,30 @@ cosign verify-blob \
     '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
   codegraph_<tag>_<goos>_<goarch>
 
-# b) SLSA provenance — attested over each BINARY, in one shared bundle
-#    (v0.2.0 and earlier: the bundle is named multiple.intoto.jsonl)
-slsa-verifier verify-artifact \
-  --provenance-path codegraph_<tag>.intoto.jsonl \
-  --source-uri github.com/seanb4t/codegraph-go \
-  --source-tag <tag> \
-  codegraph_<tag>_<goos>_<goarch>
+# b) build provenance — GitHub's first-party attestor (D-09), published
+#    through GitHub's Attestations API, over all 8 payloads (4 raw
+#    binaries + 4 .zip archives)
+gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go
 ```
 
-> **Corrected 2026-08-01.** (b) previously named
-> `codegraph_<tag>_checksums.txt.intoto.jsonl` and passed the checksums file as
-> the artifact. No such file is published, and the checksums file is not an
-> attested subject — the platform binaries are, sharing one
-> `multiple.intoto.jsonl`. The old command returns
-> `FAILED: artifact hash does not match provenance subject` against a valid
-> release. Found while verifying `v0.2.0`; `docs/RELEASE.md` §1(b) carried the
-> same error and is corrected too.
+> **(b) is for releases from the migrated pipeline onward only.** Releases
+> up to and including the last pre-migration tag published a separate
+> `codegraph_<tag>.intoto.jsonl` (`multiple.intoto.jsonl` for v0.2.0 and
+> earlier), verifiable with `slsa-verifier verify-artifact
+> --provenance-path <bundle> --source-uri github.com/seanb4t/codegraph-go
+> --source-tag <tag> <binary>` instead — that command cannot verify the new
+> attestation format (D-10), and the new command cannot verify the old
+> one. See `docs/RELEASE.md` §1(b) for the full historical note.
+>
+> **Corrected 2026-08-01 (applies to the pre-migration generator only).**
+> (b) previously named `codegraph_<tag>_checksums.txt.intoto.jsonl` and
+> passed the checksums file as the artifact. No such file was published,
+> and the checksums file was not an attested subject — the platform
+> binaries were, sharing one `multiple.intoto.jsonl`. The old command
+> returned `FAILED: artifact hash does not match provenance subject`
+> against a valid release. Found while verifying `v0.2.0`;
+> `docs/RELEASE.md` §1(b) carried the same error and was corrected too.
+> Retained for anyone verifying a pre-migration release.
 
 Both commands must succeed for at least one platform's artifacts before
 considering the release verified. A signature from any other issuer, any
@@ -251,34 +278,52 @@ other workflow file, or any non-tag trigger will fail (a) — as it should.
 
 ## 7. Rollback / cleanup
 
-A release-please cut leaves **three** artifacts behind, and rolling back
-means undoing all three — not just deleting a tag:
+**Recovery posture is PATCH FORWARD (D-07) — this section governs
+`rc`-prerelease cleanup only, never a stable (`vX.Y.Z`) release.** Do
+**not** delete or re-push a published tag or Release to "fix" a bad cut.
+Deleting and re-pushing a tag re-fires `release.yml` — a human touching tag
+authority release-please owns (D-06R) — and, more concretely, would destroy
+any un-notarized or otherwise deliberately-preserved asset a later phase
+depends on as its baseline (the exact mistake this note exists to prevent).
+A wrong stable release is fixed by the **next** release-please patch
+release, not by rewriting history. This section's delete-and-retry
+procedure below applies **only** to a disposable `rc`-shaped tag (§4's
+escape hatch, §9's disposable live proof) — never to a real `vX.Y.Z`.
+
+For an `rc` cleanup, a release-please cut leaves **up to three** artifacts
+behind (an `rc` tag pushed by hand per §4's escape hatch has no
+version-bump commit, so only the first two apply there):
 
 1. the tag,
-2. the GitHub Release object release-please created for it, and
-3. the version-bump commit on `main` (the `CHANGELOG.md` entry plus the
-   `.release-please-manifest.json` bump) together with its merged release
-   PR.
+2. the GitHub Release object created for it, and
+3. (release-please-cut releases only) the version-bump commit on `main`
+   (the `CHANGELOG.md` entry plus the `.release-please-manifest.json`
+   bump) together with its merged release PR.
 
-Deleting the tag alone is no longer sufficient — release-please's next run
-walks `main`'s history and, seeing the manifest already bumped, would
-believe the version already shipped.
+For a release-please-cut release, deleting the tag alone is not
+sufficient — release-please's next run walks `main`'s history and, seeing
+the manifest already bumped, would believe the version already shipped.
 
-**1. Delete the Release and its tag:**
+**1. Delete the Release and its tag (`rc` cuts only):**
 
 ```sh
 gh release delete v0.0.0-rc.N --cleanup-tag -y
-
-# If the tag was pushed but the release step never ran (e.g. build failed
-# before assemble), just delete the tag directly:
-git push --delete origin v0.0.0-rc.N
-git tag -d v0.0.0-rc.N
 ```
 
-Nothing is published to the GitHub release until the `build`/`assemble`
-gates pass — a failed build produces no Sigstore transparency-log entries
-and no public GitHub release, so this step is a no-op (beyond the tag
-itself) when the failure happened before `assemble`.
+If the tag was pushed but no Release was ever created (e.g. the build
+failed before GoReleaser's `release:` pipe ran), `gh release delete` has
+nothing to delete — in that case the tag itself is the only artifact left,
+and it is still an `rc` tag pushed by hand under §4's escape hatch, not a
+release-please-authored ref, so deleting just the tag is the correct and
+only step; skip straight to confirming with `git tag -l 'v0.0.0-rc.N'` and
+`git ls-remote --tags origin 'v0.0.0-rc.N'` that nothing remains, rather
+than assuming a Release exists to delete.
+
+Nothing is published to the GitHub release until every step in the single
+`release` job succeeds — a failed build produces no Sigstore
+transparency-log entries and no public GitHub release, so deletion is a
+no-op beyond the tag itself when the failure happened before GoReleaser's
+`release:` pipe ran.
 
 **2. Revert the release commit on `main`:** so release-please's next run
 does not believe the version already shipped, revert the merged
