@@ -322,12 +322,12 @@ var releaseJobAttestationsWriteRe = regexp.MustCompile(`attestations:\s*write`)
 var releaseJobInvokesGoreleaserRe = regexp.MustCompile(`task release:goreleaser|\bgoreleaser\s`)
 
 // parseReleaseJobShapes walks every top-level job under release.yml's
-// `jobs:` key and returns each job's releaseJobShape. Generalizes
-// parseReleaseProvenanceJob's job-boundary-scanning technique (find a job's
-// start via a column-2 `<jobname>:` line, find its end via the next such
-// line or EOF) to every job in the file rather than one named job. Returns
-// a non-nil error — never a usable empty slice — when the file declares no
-// `jobs:` key at all, or when `jobs:` has zero top-level job entries.
+// `jobs:` key and returns each job's releaseJobShape, using a
+// job-boundary-scanning technique (find a job's start via a column-2
+// `<jobname>:` line, find its end via the next such line or EOF) shared by
+// parseAttestStep below. Returns a non-nil error — never a usable empty
+// slice — when the file declares no `jobs:` key at all, or when `jobs:` has
+// zero top-level job entries.
 func parseReleaseJobShapes(src string) ([]releaseJobShape, error) {
 	lines := strings.Split(src, "\n")
 
@@ -452,73 +452,117 @@ func isMacOSClassRunner(label string) bool {
 	return false
 }
 
-// provenanceJobShape is the subset of the `provenance:` job's YAML this
-// package cares about: which reusable workflow it calls, and whether it
-// declares a runs-on: of its own (it must not — D-07).
-type provenanceJobShape struct {
-	Uses      string
-	HasRunsOn bool
+// attestStepShape is the subset of the `actions/attest-build-provenance`
+// step's YAML this package cares about (plan 01-04, D-09/D-11/D-12): its
+// full `uses:` reference (for SHA-pin verification), the id of the job it
+// lives in (must be the goreleaser-invoking job), and its
+// `subject-checksums:` input (cross-file compared against
+// .goreleaser.yaml's checksum.name_template — review Codex Plan-04 LOW,
+// C8). Replaces the prior provenance-job shape type now that the SLSA
+// generic generator's reusable-workflow `provenance:` job is gone entirely.
+type attestStepShape struct {
+	Uses             string
+	JobID            string
+	SubjectChecksums string
 }
 
-// parseReleaseProvenanceJob locates the top-level `provenance:` job and
-// returns its `uses:` reusable-workflow reference plus whether it declares
-// its own `runs-on:` key anywhere in its body.
-func parseReleaseProvenanceJob(src string) (provenanceJobShape, error) {
+var attestStepUsesRe = regexp.MustCompile(`uses:\s*(actions/attest-build-provenance\S*)`)
+var attestStepSubjectChecksumsRe = regexp.MustCompile(`^\s*subject-checksums:\s*(.+)$`)
+
+// attestActionPinnedRe asserts actions/attest-build-provenance is pinned to
+// a full 40-hex commit SHA — never a bare tag, never a branch — mirroring
+// the style of the prior SLSA-generator tag-pin regex it replaces
+// (regex-on-a-uses:-string) but asserting a SHA pin instead of a tag pin:
+// this Action follows the SAME SHA-pinning convention as every other
+// third-party Action in release.yml, now unconditional (D-09 — the SLSA
+// generator's documented tag-pin exception left with it).
+var attestActionPinnedRe = regexp.MustCompile(`^actions/attest-build-provenance@[0-9a-f]{40}$`)
+
+// parseAttestStep scans every top-level job in release.yml (the same
+// job-boundary technique parseReleaseJobShapes uses: find a job's start via
+// a column-2 `<jobname>:` line, its end via the next such line or EOF) for
+// the ONE step whose `uses:` references actions/attest-build-provenance,
+// and returns its `uses:` reference, the id of the job it lives in, and its
+// `subject-checksums:` input value. Returns a non-nil error — never a
+// usable zero value — when no such step exists anywhere in the file, or
+// when more than one does.
+func parseAttestStep(src string) (attestStepShape, error) {
 	lines := strings.Split(src, "\n")
-	jobRe := regexp.MustCompile(`^  provenance:\s*$`)
-	jobIdx := -1
+
+	jobsIdx := -1
 	for i, line := range lines {
-		if jobRe.MatchString(line) {
-			jobIdx = i
+		if releaseJobsBlockRe.MatchString(line) {
+			jobsIdx = i
 			break
 		}
 	}
-	if jobIdx == -1 {
-		return provenanceJobShape{}, fmt.Errorf("parseReleaseProvenanceJob: no top-level 'provenance:' job found")
+	if jobsIdx == -1 {
+		return attestStepShape{}, fmt.Errorf("parseAttestStep: no top-level jobs: key found")
 	}
 
-	otherJobRe := regexp.MustCompile(`^  [A-Za-z0-9_-]+:\s*$`)
-	jobEnd := len(lines)
-	for i := jobIdx + 1; i < len(lines); i++ {
-		if otherJobRe.MatchString(lines[i]) {
-			jobEnd = i
-			break
+	var starts []int
+	var ids []string
+	for i := jobsIdx + 1; i < len(lines); i++ {
+		if m := releaseTopLevelJobRe.FindStringSubmatch(lines[i]); m != nil {
+			starts = append(starts, i)
+			ids = append(ids, m[1])
+		}
+	}
+	if len(starts) == 0 {
+		return attestStepShape{}, fmt.Errorf("parseAttestStep: jobs: key has no top-level job entries")
+	}
+
+	var matches []attestStepShape
+	for idx, start := range starts {
+		end := len(lines)
+		if idx+1 < len(starts) {
+			end = starts[idx+1]
+		}
+		for i := start + 1; i < end; i++ {
+			m := attestStepUsesRe.FindStringSubmatch(lines[i])
+			if m == nil {
+				continue
+			}
+			shape := attestStepShape{Uses: m[1], JobID: ids[idx]}
+			// Scan forward within this job for the step's
+			// subject-checksums: input, bounded by the next step's `- `
+			// start or this job's end.
+			for j := i + 1; j < end; j++ {
+				line := lines[j]
+				if sm := attestStepSubjectChecksumsRe.FindStringSubmatch(line); sm != nil {
+					shape.SubjectChecksums = strings.Trim(strings.TrimSpace(sm[1]), `"'`)
+				}
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "- name:") || strings.HasPrefix(trimmed, "- uses:") {
+					break // next step started
+				}
+			}
+			matches = append(matches, shape)
 		}
 	}
 
-	usesRe := regexp.MustCompile(`^\s*uses:\s*(\S+)\s*$`)
-	runsOnRe := regexp.MustCompile(`^\s*runs-on:`)
-
-	var shape provenanceJobShape
-	for i := jobIdx + 1; i < jobEnd; i++ {
-		line := lines[i]
-		if m := usesRe.FindStringSubmatch(line); m != nil && shape.Uses == "" {
-			shape.Uses = strings.Trim(m[1], `"'`)
+	switch len(matches) {
+	case 0:
+		return attestStepShape{}, fmt.Errorf("parseAttestStep: no step uses: actions/attest-build-provenance found in release.yml")
+	case 1:
+		return matches[0], nil
+	default:
+		var uses []string
+		for _, m := range matches {
+			uses = append(uses, m.Uses)
 		}
-		if runsOnRe.MatchString(line) {
-			shape.HasRunsOn = true
-		}
+		return attestStepShape{}, fmt.Errorf("parseAttestStep: %d steps use actions/attest-build-provenance (%v), want exactly 1", len(matches), uses)
 	}
-	if shape.Uses == "" {
-		return provenanceJobShape{}, fmt.Errorf("parseReleaseProvenanceJob: provenance job has no uses: key")
-	}
-	return shape, nil
 }
 
-func mustReleaseProvenanceJob(t *testing.T, src string) provenanceJobShape {
+func mustAttestStep(t *testing.T, src string) attestStepShape {
 	t.Helper()
-	v, err := parseReleaseProvenanceJob(src)
+	v, err := parseAttestStep(src)
 	if err != nil {
-		t.Fatalf("mustReleaseProvenanceJob: %v", err)
+		t.Fatalf("mustAttestStep: %v", err)
 	}
 	return v
 }
-
-// slsaGeneratorTaggedRe matches the SLSA generic generator's reusable-
-// workflow reference ONLY when pinned by a full vX.Y.Z semver tag —
-// slsa-verifier rejects both a SHA pin and a short tag (@v2) for this
-// specific reusable workflow.
-var slsaGeneratorTaggedRe = regexp.MustCompile(`^slsa-framework/slsa-github-generator/\.github/workflows/generator_generic_slsa3\.yml@v\d+\.\d+\.\d+`)
 
 // --- tests ------------------------------------------------------------
 
@@ -556,23 +600,15 @@ func TestDarwinLegsBuildNatively(t *testing.T) {
 	}
 }
 
-// provenanceJobIDTokenAllowance is the ONE named, staleness-checked
-// temporary exception to D-11's "exactly one job holds id-token: write":
-// the reusable-workflow provenance: job still declares its own
-// id-token: write until plan 01-04 removes both the job and this
-// allowance together. A stale allowance (naming a job that no longer
-// exists in release.yml) fails TestOIDCWriteScopedToSingleGoreleaserJob
-// rather than silently widening it.
-const provenanceJobIDTokenAllowance = "provenance"
-
 // TestOIDCWriteScopedToSingleGoreleaserJob is the D-11 mitigation for
 // T-01-11: scans every top-level job in release.yml and asserts that
-// id-token: write is held ONLY by the job that invokes goreleaser and (as a
-// named, temporary, staleness-checked allowance) the provenance: job — no
-// third holder, and the goreleaser job itself must be a holder. Demonstrated
-// red by adding id-token: write to a throwaway scratch job (a THIRD holder;
-// post-collapse the file has only these two, so a second holder is the
-// expected temporary allowance and would not go red).
+// id-token: write is held ONLY by the job that invokes goreleaser — no
+// second holder, no allowance, and the goreleaser job itself must be a
+// holder. Plan 01-03's temporary provenance:-job allowance is REMOVED here
+// (plan 01-04): the `provenance:` job it named is deleted entirely, so the
+// allowance would now be permanently stale. Demonstrated red by adding
+// id-token: write to a throwaway scratch job (a SECOND holder; post-01-04
+// the file has only one, so any second holder is unexpected).
 func TestOIDCWriteScopedToSingleGoreleaserJob(t *testing.T) {
 	data, err := os.ReadFile(releaseWorkflowPath)
 	if err != nil {
@@ -583,18 +619,6 @@ func TestOIDCWriteScopedToSingleGoreleaserJob(t *testing.T) {
 	shapes := mustReleaseJobShapes(t, src)
 	goreleaserJob := mustGoreleaserInvokingJob(t, src)
 
-	allowanceExists := false
-	for _, s := range shapes {
-		if s.ID == provenanceJobIDTokenAllowance {
-			allowanceExists = true
-			break
-		}
-	}
-	if !allowanceExists {
-		t.Fatalf("provenanceJobIDTokenAllowance names job %q, which no longer exists in release.yml — this allowance is stale and must be removed (plan 01-04)", provenanceJobIDTokenAllowance)
-	}
-
-	allowed := map[string]bool{goreleaserJob.ID: true, provenanceJobIDTokenAllowance: true}
 	var holders []string
 	var unexpected []string
 	for _, s := range shapes {
@@ -602,7 +626,7 @@ func TestOIDCWriteScopedToSingleGoreleaserJob(t *testing.T) {
 			continue
 		}
 		holders = append(holders, s.ID)
-		if !allowed[s.ID] {
+		if s.ID != goreleaserJob.ID {
 			unexpected = append(unexpected, s.ID)
 		}
 	}
@@ -611,7 +635,7 @@ func TestOIDCWriteScopedToSingleGoreleaserJob(t *testing.T) {
 		t.Fatalf("no job in release.yml declares id-token: write — no signing identity is possible")
 	}
 	if len(unexpected) > 0 {
-		t.Errorf("id-token: write held by unexpected job(s) %v — only the goreleaser job (%q) and the temporary provenance: allowance may hold it (D-11)", unexpected, goreleaserJob.ID)
+		t.Errorf("id-token: write held by unexpected job(s) %v — only the goreleaser job (%q) may hold it, with no allowance (D-11)", unexpected, goreleaserJob.ID)
 	}
 
 	goreleaserJobHolds := false
@@ -717,25 +741,118 @@ func TestParseReleaseJobShapes_NoJobsIsError(t *testing.T) {
 	}
 }
 
-// TestProvenanceJobUsesTaggedSLSAGenerator is the D-07 mitigation for
-// T-10-03-04: the provenance job must reference the SLSA generic generator
-// by a full vX.Y.Z tag (never a SHA — slsa-verifier requires the tag form)
-// and must declare no runs-on: of its own, since a reusable-workflow caller
-// cannot override the callee's runner.
-func TestProvenanceJobUsesTaggedSLSAGenerator(t *testing.T) {
-	data, err := os.ReadFile(releaseWorkflowPath)
+// TestProvenanceAttestorIsPinnedNativeAction is the D-09/D-11/D-12
+// mitigation REPLACING TestProvenanceJobUsesTaggedSLSAGenerator: the SLSA
+// generic generator's reusable workflow and its `provenance:` job are gone
+// entirely; actions/attest-build-provenance runs as a SHA-pinned step
+// inside the SAME job that invokes goreleaser; that job declares
+// attestations: write; and the step's subject-checksums: input names the
+// EXACT SAME concrete file .goreleaser.yaml's checksum.name_template
+// resolves to — proven by resolving both sides against one pinned tag
+// literal with the real template engine, not by a loose pattern match
+// (review Codex Plan-04 LOW, C8). Demonstrated red by three mutations
+// recorded in the plan SUMMARY: a bare-tag uses: pin, the attest step moved
+// to a non-goreleaser job, and a mismatched .goreleaser.yaml checksum stem.
+func TestProvenanceAttestorIsPinnedNativeAction(t *testing.T) {
+	releaseData, err := os.ReadFile(releaseWorkflowPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
 	}
-	src := string(data)
+	releaseSrc := string(releaseData)
+	strippedRelease := stripFullLineShellComments(releaseSrc)
 
-	shape := mustReleaseProvenanceJob(t, src)
-
-	if !slsaGeneratorTaggedRe.MatchString(shape.Uses) {
-		t.Errorf("provenance job uses: %q, want the SLSA generic generator referenced by a full vX.Y.Z tag", shape.Uses)
+	if strings.Contains(strippedRelease, "slsa-framework/slsa-github-generator") {
+		t.Errorf("release.yml still references slsa-framework/slsa-github-generator after comment-stripping — the third-party reusable workflow must be gone entirely (D-09)")
 	}
-	if shape.HasRunsOn {
-		t.Errorf("provenance job declares its own runs-on: — a reusable-workflow caller cannot override the callee's runner (D-07); this job must have none")
+
+	provenanceJobRe := regexp.MustCompile(`(?m)^  provenance:\s*$`)
+	if provenanceJobRe.MatchString(strippedRelease) {
+		t.Errorf("release.yml still declares a top-level provenance: job — it must be deleted entirely, replaced by a step inside the goreleaser job (D-09)")
+	}
+
+	step := mustAttestStep(t, releaseSrc)
+
+	if !attestActionPinnedRe.MatchString(step.Uses) {
+		t.Errorf("attest step uses: %q, want actions/attest-build-provenance pinned to a full 40-hex commit SHA — never a bare tag or branch", step.Uses)
+	}
+
+	// Confirm the pin also carries the trailing version-tag comment
+	// convention every other third-party Action in this file follows (the
+	// header's SHA-pinning statement is now unconditional — D-09's note
+	// that the SLSA generator's tag-pin exception left with it). The
+	// attestStepUsesRe capture is space-terminated and never includes
+	// trailing comment text, so this reads the raw source directly instead.
+	pinCommentRe := regexp.MustCompile(`uses:\s*actions/attest-build-provenance@[0-9a-f]{40}\s*#\s*v\d+\.\d+\.\d+`)
+	if !pinCommentRe.MatchString(releaseSrc) {
+		t.Errorf("release.yml's actions/attest-build-provenance step has no trailing # vX.Y.Z version comment, unlike every other pinned Action in this file")
+	}
+
+	goreleaserJob, err := parseGoreleaserInvokingJob(releaseSrc)
+	if err != nil {
+		t.Fatalf("parseGoreleaserInvokingJob: %v", err)
+	}
+	if step.JobID != goreleaserJob.ID {
+		t.Errorf("attest step lives in job %q, want the goreleaser-invoking job %q (D-11: one job, one signing identity)", step.JobID, goreleaserJob.ID)
+	}
+	if !goreleaserJob.HasAttestationsWrite {
+		t.Errorf("job %q (the goreleaser job) does not declare attestations: write — required by GitHub's Attestations API for actions/attest-build-provenance", goreleaserJob.ID)
+	}
+
+	if step.SubjectChecksums == "" {
+		t.Fatalf("attest step has no subject-checksums: input")
+	}
+
+	// Cross-file (review Codex Plan-04 LOW, C8): resolve the workflow's
+	// subject-checksums: value and .goreleaser.yaml's checksum.name_template
+	// against the SAME pinned tag literal, using the real template engine
+	// (resolveGoreleaserFieldTemplate, shared with goreleaser_shape_test.go's
+	// "assert the property, not the literal" discipline), and assert they
+	// name the SAME concrete file. .goreleaser.yaml is the source of truth;
+	// the workflow is the side that can silently drift.
+	goreleaserData, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	goreleaserSrc := string(goreleaserData)
+
+	checksumBlock := mustGoreleaserTopLevelBlock(t, goreleaserSrc, "checksum")
+	nameTemplateRaw, ok := checksumBlock["name_template"]
+	if !ok {
+		t.Fatalf("%s's checksum: block has no name_template: key", goreleaserConfigPath)
+	}
+	nameTemplate, ok := nameTemplateRaw.(string)
+	if !ok {
+		t.Fatalf("%s's checksum.name_template is %T, not a string", goreleaserConfigPath, nameTemplateRaw)
+	}
+
+	wantFilename, err := resolveGoreleaserFieldTemplate(nameTemplate, map[string]any{
+		"ProjectName": "codegraph",
+		"Tag":         pinnedReleaseTag,
+	})
+	if err != nil {
+		t.Fatalf("resolve checksum.name_template: %v", err)
+	}
+
+	// The workflow side uses GitHub Actions expression syntax
+	// (${{ github.ref_name }}), not Go-template syntax — substitute the
+	// SAME pinned tag literal, then compare basenames so a "./dist/" prefix
+	// difference (this step's path vs. GoReleaser's own dist/-relative
+	// output path) cannot cause a false mismatch.
+	resolvedSubject := strings.ReplaceAll(step.SubjectChecksums, "${{ github.ref_name }}", pinnedReleaseTag)
+	gotFilename := filepath.Base(resolvedSubject)
+
+	if gotFilename != wantFilename {
+		t.Errorf("attest step's subject-checksums: resolves to %q, .goreleaser.yaml's checksum.name_template resolves to %q — want the SAME file (review Codex Plan-04 LOW / C8)", gotFilename, wantFilename)
+	}
+}
+
+// TestParseAttestStep_NoAttestStepIsError is the non-vacuity companion:
+// parseAttestStep must return a non-nil error, never a usable zero value,
+// when its source declares no actions/attest-build-provenance step at all.
+func TestParseAttestStep_NoAttestStepIsError(t *testing.T) {
+	_, err := parseAttestStep("")
+	if err == nil {
+		t.Fatalf(`parseAttestStep("") = nil error, want non-nil`)
 	}
 }
 
@@ -871,9 +988,9 @@ func TestWorkflowSourceHelpersFailLoudly(t *testing.T) {
 			},
 		},
 		{
-			name: "parseReleaseProvenanceJob: no provenance: job found",
+			name: "parseAttestStep: no attest step found",
 			fn: func() error {
-				_, err := parseReleaseProvenanceJob("name: example\njobs:\n  build:\n    runs-on: ubuntu-latest\n")
+				_, err := parseAttestStep("name: example\njobs:\n  build:\n    runs-on: ubuntu-latest\n")
 				return err
 			},
 		},

@@ -40,9 +40,15 @@
 #
 #   - Every third-party Action below is pinned to a full commit SHA
 #     (resolved from the exact release tag noted in the trailing
-#     comment) except the SLSA generic generator, which slsa-verifier
-#     requires to be referenced by a full @vX.Y.Z semver tag, not a SHA
-#     (see the `provenance` job).
+#     comment) — UNCONDITIONALLY: the SLSA generic generator's
+#     documented tag-pin exception left with it (D-09). Build
+#     provenance moved from that third-party reusable workflow to
+#     GitHub's first-party actions/attest-build-provenance, published
+#     through GitHub's Attestations API rather than as an
+#     .intoto.jsonl release asset — the verification command changed
+#     accordingly; see docs/RELEASE.md § b (`gh attestation verify`,
+#     never `slsa-verifier verify-artifact`, which architecturally
+#     cannot verify this format, D-10).
 
 name: release
 
@@ -85,9 +91,13 @@ jobs:
       # job's OIDC token is what produces the cert SAN
       # releaseWorkflowRefPattern anchors on: this exact
       # workflow file, triggered by this exact tag ref. It is
-      # the ONLY job in this file that can mint one (T-01-11).
-    outputs:
-      hashes: ${{ steps.release.outputs.hashes }}
+      # the ONLY job in this file that can mint one (T-01-11, D-11:
+      # exactly one job in this file may hold id-token: write —
+      # machine-checked by TestOIDCWriteScopedToSingleGoreleaserJob,
+      # no allowance).
+      attestations: write # actions/attest-build-provenance (D-09) — new
+      # permission GitHub's Attestations API requires; absent from
+      # this job before this plan.
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -157,63 +167,25 @@ jobs:
       # only via this step's env:, never interpolated into a run: body.
       # GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which
       # is the gh CLI's own variable (review MEDIUM, pi Plan-03).
-      # release:goreleaser also emits this step's `hashes` output (the
-      # provenance: job below still consumes it until plan 01-04 removes
-      # both together) — folded into the Taskfile target rather than a
-      # second release.yml step so this job keeps exactly one run: body.
       - name: Release
         id: release
         run: task release:goreleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # SLSA3 provenance via the GENERIC generator (not the Go builder,
-  # which would rebuild the binary under its own fixed config and
-  # cannot accommodate the zig-cc CGo cross-build) over the release
-  # job's checksums file. Per slsa-github-generator's own documented
-  # requirement, this reusable workflow MUST be referenced by a full
-  # @vX.Y.Z semver tag — a SHA pin is explicitly rejected/unsupported
-  # and a short tag (@v2) is rejected by slsa-verifier.
-  #
-  # PRECISION (corrected 2026-08-01): provenance is attested over the SIX
-  # BINARIES, not over the checksums file. release:goreleaser's hash-output
-  # step base64-encodes the *contents* of the checksums file, and the SLSA
-  # generic generator parses each `<sha256>  <name>` line in it as a
-  # separate subject — so the checksums file is the transport for the
-  # subject list, never a subject itself.
-  #
-  # This job does NOT run on Namespace: a reusable workflow declares its
-  # own `runs-on` internally, and a caller cannot override it (D-07,
-  # structural, not a trade-off). It is the documented sole exception to
-  # every other job in this file moving to a Namespace runner class —
-  # left as-is deliberately, not an oversight. TEMPORARY (plan 01-03):
-  # this job still declares its own id-token: write, which is the ONE
-  # named, staleness-checked allowance TestOIDCWriteScopedToSingleGoreleaserJob
-  # carries for "which jobs may hold id-token: write" (D-11) until plan
-  # 01-04 removes this job's OIDC-signing role and the allowance together.
-  provenance:
-    name: SLSA provenance
-    needs: release
-    permissions:
-      actions: read # required for the generator to detect the GH Actions environment
-      id-token: write # provenance signing identity
-      contents: write # upload provenance to the release created by `release`
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: "${{ needs.release.outputs.hashes }}"
-      upload-assets: ${{ startsWith(github.ref, 'refs/tags/') }}
-      # Name the provenance bundle after the release. The generator's default
-      # for a multi-subject attestation is the literal `multiple.intoto.jsonl`,
-      # which identifies neither the project nor the version: downloaded
-      # alongside assets from any other release it collides by name, and on its
-      # own it is impossible to tell what it attests. Releases up to and
-      # including v0.2.0 published the default name; v0.2.0's own provenance is
-      # unaffected and still verifies.
-      provenance-name: codegraph_${{ github.ref_name }}.intoto.jsonl
-      # This repo is private (for now — it is destined to be public OSS). The
-      # SLSA generic generator halts by default on a private repo to avoid
-      # writing the repo name into the PUBLIC Sigstore/Rekor transparency log.
-      # We opt in: keyless cosign signing (the `release` job) already publishes
-      # the repo name via the certificate SAN, so provenance exposes nothing new,
-      # and the intended end state is a public repo anyway.
-      private-repository: true
+      # Build provenance via GitHub's first-party attestor (D-09), replacing
+      # the third-party SLSA generic generator entirely — no more
+      # `provenance:` job, no more hand-rolled base64 subject-list encoding
+      # (this Action parses the checksums file's own shasum-format lines as
+      # its subject list). Runs LAST, after `task release:goreleaser` has
+      # populated dist/, over the SAME 8 subjects GoReleaser's checksum:
+      # pipe covers (D-12): the 4 raw binaries + 4 .zip archives —
+      # .sigstore.json/.spdx.json sidecars and the checksums file itself are
+      # deliberately excluded. Published through GitHub's Attestations API,
+      # not as a release asset; verify with `gh attestation verify`
+      # (docs/RELEASE.md § b) — never `slsa-verifier verify-artifact`,
+      # which is architecturally unable to verify this format (D-10).
+      - name: Attest build provenance (8 subjects)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: ./dist/codegraph_${{ github.ref_name }}_checksums.txt
