@@ -110,7 +110,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
   3. Against assets **re-downloaded from the published release** — never a local `dist/` copy — `cosign verify-blob` returns Verified OK under the unchanged `release.yml@refs/tags/v*` SAN, `gh attestation verify` passes against the `actions/attest-build-provenance` attestation, and a genuinely shipped prior binary self-upgrades via `codegraph upgrade` on darwin/arm64 and linux/amd64 (REL-08)
   4. For each platform the release carries both a raw `codegraph_<tag>_<goos>_<goarch>` asset — extension-free, directly executable, and byte-shape-identical to what `internal/upgrade.releaseAssetName()` builds — and a distinctly-named `.zip`; a mutation changing the raw entry away from `formats: [binary]` turns a test red rather than shipping an archive that verifies its signature and then bricks the install (REL-09)
 
-**Plans**: 3/6 plans executed
+**Plans**: 5/6 plans executed
 
 Plans:
 **Wave 1**
@@ -124,8 +124,8 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-04-PLAN.md — swap the SLSA generic generator for `actions/attest-build-provenance`; rewrite every published verification instruction and REL-08's wording
-- [ ] 01-06-PLAN.md — exercise the `binary_signs:` sign pipe before the one-way release, using a throwaway local cosign key, proving four DISTINCT `.sigstore.json` sidecars rather than four colliding ones
+- [x] 01-04-PLAN.md — swap the SLSA generic generator for `actions/attest-build-provenance`; rewrite every published verification instruction and REL-08's wording
+- [x] 01-06-PLAN.md — exercise the `binary_signs:` sign pipe before the one-way release, using a throwaway local cosign key, proving four DISTINCT `.sigstore.json` sidecars rather than four colliding ones
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -195,7 +195,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
-| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 3/6 | In Progress|  |
+| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 5/6 | In Progress|  |
 | 2. Apple Signing & Notarization | v0.5.0 | 0/TBD | Not started | - |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
