@@ -50,13 +50,13 @@ created: 2026-08-08
 
 ## Wave 0 Requirements
 
-- [ ] New canary workflow (D-03) exercising zig-cross-from-macOS for both linux legs and **executing** the resulting binaries on real Linux (amd64 profile + new arm64 profile) — the REL-05 spike itself
+- [ ] New canary workflow (D-03) exercising zig-cross-from-macOS for both linux legs and **executing** the resulting binaries on real Linux — `namespace-profile-linux-amd64-4x8` + `namespace-profile-linux-arm64-4x8`, **both already provisioned** — the REL-05 spike itself
 - [ ] New Taskfile target(s) for the D-06 `goreleaser release --snapshot --skip=publish,sign` dry run
 - [ ] New Go shape tests in `internal/upgrade/` for: D-11's single-job `id-token: write` scope, D-14's `.sigstore.json` template contract, REL-07's hand-rolled-`sha256sum`-absence assertion
 - [ ] Rewrite of `TestDarwinLegsBuildNatively` per D-13's new invariant
 - [ ] Rewrite of `TestProvenanceJobUsesTaggedSLSAGenerator` (or its replacement) for the `actions/attest-build-provenance` job shape, per D-10
 - [ ] New post-release automated self-upgrade job/workflow (D-08)
-- [ ] New Namespace linux-arm64 runner profile — **infrastructure, not code**; dashboard-provisioned, unknown lead time, blocks the REL-05 arm64 leg
+- ~~New Namespace linux-arm64 runner profile~~ — **not a gap.** `default-arm64`, `linux-arm64-4×8`, and `linux-arm64-2×4` are already provisioned on the account `[VERIFIED: maintainer dashboard screenshot, 2026-08-08]`; the arm64 leg is a `runs-on:` value, covered by the canary-workflow item above
 
 ---
 

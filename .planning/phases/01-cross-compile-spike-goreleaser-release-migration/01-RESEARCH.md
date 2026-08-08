@@ -17,9 +17,22 @@
   both say `macos-latest`; that prose is wrong about this repository and should be read as
   "one macOS runner."
 - **D-02:** The "runs on real Linux" half of the pass condition executes on **Namespace Linux
-  profiles** — the existing `namespace-profile-linux-amd64-4x8` for amd64, and a **new Namespace
-  linux-arm64 profile** for arm64. No emulation. This repository has no arm64 execution runner
-  today. Standing up that profile is new infrastructure inside this phase, not a reused job.
+  profiles** — the existing `namespace-profile-linux-amd64-4x8` for amd64, and an
+  **already-provisioned linux/arm64 profile** for arm64. No emulation.
+
+  > **[CORRECTED 2026-08-08 — maintainer-supplied evidence]** An earlier revision of this document
+  > claimed "this repository has no arm64 execution runner today" and treated standing one up as new
+  > infrastructure with lead time. That is **false**. The Namespace account's Profiles dashboard
+  > (`cloud.namespace.so/.../actions/profiles`) already lists three linux/arm64 profiles:
+  > `default-arm64` (4×16), `linux-arm64-4×8`, and `linux-arm64-2×4` — the last of which was in
+  > active use as of this correction. The repo has simply never *referenced* one; the only arm64
+  > work in `ci.yml` is `check:reproducibility:arm64`, a build-only double-build diff on an AMD64
+  > host. Following the confirmed label convention (dashboard `macos-6×14-tahoe` →
+  > `namespace-profile-macos-6x14-tahoe`, i.e. `×` renders as `x`), the available labels are
+  > `namespace-profile-default-arm64`, `namespace-profile-linux-arm64-4x8`, and
+  > `namespace-profile-linux-arm64-2x4`. **The arm64 execution leg is therefore a one-line
+  > `runs-on:` change, not a provisioning task, and does not block anything.** Recommend
+  > `namespace-profile-linux-arm64-4x8` to mirror the amd64 leg's existing 4×8 shape.
 - **D-03:** The spike ships as a **permanent, dispatchable canary workflow**, mirroring
   `.github/workflows/darwin-toolchain-canary.yml` (`workflow_dispatch`, same runner family). Not
   a throwaway.
@@ -155,9 +168,10 @@ single-invocation shape, or CGo cross-compilation for the wrong host-target pair
 silently short-circuit.
 
 **Primary recommendation:** Treat REL-05 as a real spike with an enumerated FAIL bar (D-04) before
-touching any GoReleaser config. Stand up the Namespace linux-arm64 profile via the dashboard
-first — it is an external, no-code dependency with lead time, not implementation work, and it
-blocks the "real Linux execution" half of the pass condition. Once the spike passes, the
+touching any GoReleaser config. ~~Stand up the Namespace linux-arm64 profile via the dashboard
+first~~ **[CORRECTED — see D-02 above: arm64 profiles are already provisioned; the arm64 leg is a
+one-line `runs-on: namespace-profile-linux-arm64-4x8` change with no lead time and no blocker.]**
+Once the spike passes, the
 `.goreleaser.yaml` config changes are additive and well-documented (activate dead `archives:`/
 `checksum:` blocks already in the correct shape, add `binary_signs:` and `sboms:` blocks) — the
 job is porting proven config vocabulary, not inventing new mechanism.
@@ -647,16 +661,17 @@ above sounds encouraging about zig's general Linux cross-compilation support.
    - Recommendation: default to `gh attestation verify` per D-10's own stated fallback unless the
      plan-checker or maintainer flags a reason to prefer `slsa-verifier verify-github-attestation`.
 
-2. **Exact Namespace linux-arm64 profile label and current account availability.**
-   - What we know: Namespace's custom-profile mechanism (`namespace-profile-*`, dashboard-created
-     at `cloud.namespace.so/workspace/actions/profiles`) is how this repo's existing
-     `namespace-profile-macos-6x14-tahoe` and `namespace-profile-linux-amd64-4x8` profiles were
-     provisioned `[CITED: namespace.so/docs/reference/github-actions/runner-configuration]`.
-   - What's unclear: whether this specific account already has arm64 capacity/entitlement, and
-     what the maintainer will name the new profile.
-   - Recommendation: this is a pre-implementation, human, dashboard-side action item — surface it
-     at the very start of the plan (see Environment Availability) so it isn't discovered mid-spike
-     as a blocking gap with unknown lead time.
+2. ~~**Exact Namespace linux-arm64 profile label and current account availability.**~~
+   **RESOLVED 2026-08-08 — maintainer-supplied dashboard evidence. No longer an open question.**
+   - The account already has three linux/arm64 profiles provisioned: `default-arm64` (4×16),
+     `linux-arm64-4×8`, and `linux-arm64-2×4` (the last in active use at time of check)
+     `[VERIFIED: maintainer screenshot of cloud.namespace.so/.../actions/profiles, 2026-08-08]`.
+   - Label convention confirmed by the working `macos-6×14-tahoe` → `namespace-profile-macos-6x14-tahoe`
+     mapping (`×` renders as `x`), giving `namespace-profile-default-arm64`,
+     `namespace-profile-linux-arm64-4x8`, and `namespace-profile-linux-arm64-2x4`.
+   - **Recommendation: use `namespace-profile-linux-arm64-4x8`** — mirrors the amd64 leg's existing
+     4×8 shape, so the two REL-05 legs differ only in architecture. This is a one-line `runs-on:`
+     value in the new canary workflow. There is no provisioning task, no lead time, and no blocker.
 
 3. **Does the migrated single job's runtime budget (4 CGo builds + zig setup + archive + checksum
    + sign + SBOM + attest, serialized on one macOS runner) fit comfortably inside GitHub Actions'
@@ -675,7 +690,7 @@ above sounds encouraging about zig's general Linux cross-compilation support.
 |------------|------------|-----------|---------|----------|
 | `namespace-profile-macos-6x14-tahoe` | D-01, entire migrated pipeline | ✓ | — (already in production use by `release.yml`, `darwin-toolchain-canary.yml`) | — |
 | `namespace-profile-linux-amd64-4x8` | D-02 (amd64 execution leg) | ✓ | — (already in production use by `release.yml`'s `build` job) | — |
-| **New Namespace linux-arm64 profile** | D-02 (arm64 execution leg — no prior instance of this exists in the repo) | ✗ **unconfirmed — requires dashboard provisioning at `cloud.namespace.so/workspace/actions/profiles`** | — | None viable within REL-05's own pass condition — emulation is explicitly rejected as "the same category of weaker proof the criterion already rejects for 'build exited 0'" (D-02). This is a hard blocker for the arm64 half of REL-05 until provisioned. |
+| `namespace-profile-linux-arm64-4x8` | D-02 (arm64 execution leg) | ✓ **already provisioned** `[VERIFIED: maintainer screenshot of the Namespace Profiles dashboard, 2026-08-08]` — the account carries `default-arm64` (4×16), `linux-arm64-4×8`, and `linux-arm64-2×4`; the repo has simply never referenced one | — | `namespace-profile-default-arm64` or `namespace-profile-linux-arm64-2x4` if the 4×8 profile is unavailable at run time. Emulation remains rejected (D-02), but no fallback is needed — this is a one-line `runs-on:` value, not infrastructure work. |
 | `mlugg/setup-zig` on a macOS runner | D-01/D-02, REL-05 spike | Not yet exercised on `namespace-profile-macos-6x14-tahoe` specifically (only exercised today on the linux amd64 profile, for the arm64 leg) | pin `d1434d0...` / zig `0.15.1` `[VERIFIED: release.yml:131-135]` | If the action itself fails on this image (distinct from zig-the-toolchain's general macOS support, which is not in question), fall back to manually downloading zig's official macOS tarball and adding it to `PATH` in a raw step |
 | `actions/attest-build-provenance` | D-09/D-10 | ✓ (first-party GitHub Action, no account provisioning needed) | exact tag TBD — verify at implementation time | — |
 | `gh` CLI / `GH_TOKEN` | Release publish, REL-08 verification, D-08's self-upgrade job | ✓ (already ambient in every GitHub Actions job) | — | — |
@@ -683,10 +698,11 @@ above sounds encouraging about zig's general Linux cross-compilation support.
 | `slsa-verifier` CLI | Only if Open Question 1 resolves toward `verify-github-attestation` instead of `gh attestation verify` | Not currently installed anywhere in this repo's CI | — | Install via its own GitHub Action/binary download if this path is chosen; otherwise not needed at all |
 
 **Missing dependencies with no fallback:**
-- The **new Namespace linux-arm64 profile** (D-02). This must be provisioned before REL-05's
-  arm64 execution leg can be attempted. Recommend this be the first task in the plan, sequenced
-  ahead of any GoReleaser config work, since it has external lead time this research cannot
-  bound.
+- ~~The new Namespace linux-arm64 profile (D-02)~~ — **RESOLVED 2026-08-08; not missing.** The
+  profiles are already provisioned (see the table row above). There is no external-lead-time
+  dependency in this phase, and no task needs to be sequenced ahead of the GoReleaser config work
+  on this account. The arm64 leg is `runs-on: namespace-profile-linux-arm64-4x8`.
+- None remaining.
 
 **Missing dependencies with fallback:**
 - `mlugg/setup-zig` on the macOS Namespace image — low risk (zig's own macOS support is solid),
@@ -730,7 +746,8 @@ above sounds encouraging about zig's general Linux cross-compilation support.
 ### Wave 0 Gaps
 
 - [ ] New canary workflow file (D-03) exercising zig-cross-from-macOS for both linux legs,
-      executing the resulting binaries on real Linux (amd64 profile + new arm64 profile) —
+      executing the resulting binaries on real Linux (`namespace-profile-linux-amd64-4x8` +
+      `namespace-profile-linux-arm64-4x8`, both already provisioned) —
       the REL-05 spike itself.
 - [ ] New Taskfile target(s) for the D-06 `--snapshot --skip=publish,sign` dry run.
 - [ ] New Go test(s) in `internal/upgrade/` for: D-11's `id-token: write` single-job shape,
@@ -739,7 +756,9 @@ above sounds encouraging about zig's general Linux cross-compilation support.
 - [ ] Rewrite of `TestProvenanceJobUsesTaggedSLSAGenerator` (or its replacement) for the
       `actions/attest-build-provenance` job shape, per D-10.
 - [ ] New post-release automated self-upgrade job/workflow (D-08).
-- [ ] New Namespace linux-arm64 profile (infrastructure, not code — see Environment Availability).
+- ~~New Namespace linux-arm64 profile~~ — **not a gap; already provisioned** (see Environment
+  Availability). The arm64 leg is a `runs-on:` value in the new canary workflow, covered by the
+  first bullet above.
 
 ## Security Domain
 
