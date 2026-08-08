@@ -4,9 +4,9 @@ milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
 current_phase: 1
 current_phase_name: Cross-Compile Spike & `goreleaser release` Migration
-status: planning
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-08-08T16:18:32.145Z"
+last_updated: "2026-08-08T17:38:59.409Z"
 last_activity: 2026-08-08
 last_activity_desc: v0.5.0 roadmap created, 18/18 requirements mapped
 progress:
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 1 — Cross-Compile Spike & `goreleaser release` Migration (blocking REL-05 spike decides whether the OSS single-runner architecture is reachable)
+**Current focus:** Phase 1 — Cross-Compile Spike & `goreleaser release` Migration
 
 ## Current Position
 
-Phase: 1 of 4 — Cross-Compile Spike & `goreleaser release` Migration (not started)
-Plan: —
-Status: Roadmap created; awaiting `/gsd-plan-phase 1`
-Last activity: 2026-08-08 — v0.5.0 roadmap created, 18/18 requirements mapped
+Phase: 1 (Cross-Compile Spike & `goreleaser release` Migration) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 1
+Last activity: 2026-08-08 — Phase 1 execution started
 
 Progress: [....] 0/4 phases complete (0%)
 
