@@ -66,34 +66,44 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REL-05 | TBD | Pending |
-| REL-06 | TBD | Pending |
-| REL-07 | TBD | Pending |
-| REL-08 | TBD | Pending |
-| REL-09 | TBD | Pending |
-| SIGN-01 | TBD | Pending |
-| SIGN-02 | TBD | Pending |
-| SIGN-03 | TBD | Pending |
-| SIGN-04 | TBD | Pending |
-| BREW-01 | TBD | Pending |
-| BREW-02 | TBD | Pending |
-| BREW-03 | TBD | Pending |
-| BREW-04 | TBD | Pending |
-| BREW-05 | TBD | Pending |
-| BREW-06 | TBD | Pending |
-| UPGR-01 | TBD | Pending |
-| UPGR-02 | TBD | Pending |
-| UPGR-03 | TBD | Pending |
+| REL-05 | Phase 1 | Pending |
+| REL-06 | Phase 1 | Pending |
+| REL-07 | Phase 1 | Pending |
+| REL-08 | Phase 1 | Pending |
+| REL-09 | Phase 1 | Pending |
+| SIGN-01 | Phase 2 | Pending |
+| SIGN-02 | Phase 2 | Pending |
+| SIGN-03 | Phase 2 | Pending |
+| SIGN-04 | Phase 2 | Pending |
+| BREW-01 | Phase 3 | Pending |
+| BREW-02 | Phase 3 | Pending |
+| BREW-03 | Phase 3 | Pending |
+| BREW-04 | Phase 3 | Pending |
+| BREW-05 | Phase 3 | Pending |
+| BREW-06 | Phase 3 | Pending |
+| UPGR-01 | Phase 4 | Pending |
+| UPGR-02 | Phase 4 | Pending |
+| UPGR-03 | Phase 4 | Pending |
+
+**Phase mapping:**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 1 | Cross-Compile Spike & `goreleaser release` Migration | REL-05, REL-06, REL-07, REL-08, REL-09 |
+| 2 | Apple Signing & Notarization | SIGN-01, SIGN-02, SIGN-03, SIGN-04 |
+| 3 | Homebrew Tap & Cask | BREW-01, BREW-02, BREW-03, BREW-04, BREW-05, BREW-06 |
+| 4 | `codegraph upgrade` × Homebrew | UPGR-01, UPGR-02, UPGR-03 |
 
 **Coverage:**
 - v0.5.0 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️ (roadmap not yet created)
+- Mapped to phases: 18 ✓
+- Unmapped: 0
+- Duplicated across phases: 0
+
+The v0.5.x deferrals (DIST-06, BREW-07) are deliberately unmapped — they are not in this roadmap.
 
 ---
 *Requirements defined: 2026-08-08*
-*Last updated: 2026-08-08 after initial definition*
+*Last updated: 2026-08-08 — traceability populated during roadmap creation (4 phases)*
