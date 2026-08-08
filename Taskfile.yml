@@ -346,6 +346,250 @@ tasks:
 
         rm -rf dist
 
+  release:dry-run:
+    desc: >-
+      Prove the FULL `goreleaser release` composition — all four
+      .goreleaser.yaml build entries (linux/amd64, linux/arm64, darwin/amd64,
+      darwin/arm64) in ONE invocation — on a native darwin host, without
+      publishing or signing anything (D-06, REL-05 enabling change).
+      check:darwin-release-build already proves GoReleaser can drive a
+      `build --single-target` darwin invocation; this target is the first
+      thing in this repo to exercise `goreleaser release` itself, the
+      single-runner shape the migrated release.yml (plan 01-03) will use.
+      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      GoReleaser hard-fails ("git tag ... was not made against commit ...")
+      without one — the resolved version string is the only thing --snapshot
+      changes, not the property this target verifies. Uses
+      --skip=publish,sign so nothing is published to GitHub and no signing
+      key/OIDC token is needed locally.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:dry-run must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. The moment plan 01-02 activates .goreleaser.yaml's sboms: block, this target shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the SIGN pipe today, but plan 01-02 wires binary_signs: through this same target, and the permanent linux-cross-canary installs cosign before invoking it for exactly this reason. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Build GoReleaser NATIVELY, with no GOOS/GOARCH in the environment,
+        # exactly as check:darwin-release-build does and for the same
+        # reason: a GOARCH-cross-built GoReleaser runs under Rosetta and its
+        # child `xcrun` then resolves as x86_64, which cannot load the
+        # arm64-only libxcrun.dylib from CommandLineTools — a confusing
+        # "# runtime/cgo" architecture error that reads like a broken
+        # toolchain but is really a cross-built tool. release.yml does not
+        # hit this because goreleaser-action installs a native prebuilt
+        # binary — reproduced here by building the tool with no GOOS/GOARCH
+        # override.
+        GORELEASER_BIN="$(mktemp -d)/goreleaser"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")"' EXIT
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        # zig cc/zig c++ default their LOCAL cache directory to a path next
+        # to the C source file being compiled unless overridden. This
+        # project's CGo tree-sitter dependencies compile from Go's module
+        # cache (GOMODCACHE), which is read-only by design — without this
+        # override, zig fails with "unable to open local cache directory
+        # ...: AccessDenied" the first time either linux build id's zig cc
+        # override actually runs. Point both the local and global cache at
+        # a scratch dir cleaned up by the same trap as GORELEASER_BIN above.
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")" "${ZIG_CACHE_ROOT}"' EXIT
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # No GOOS/GOARCH set here: unlike `build --single-target`,
+        # `goreleaser release` resolves every target from each builds:
+        # entry's own goos:/goarch: list, not from the environment. A
+        # leftover GOOS/GOARCH would be at best a no-op and at worst mask a
+        # misconfiguration (RESEARCH.md Pattern 5 / Pitfall 2).
+        echo "==> goreleaser release --snapshot --skip=publish,sign --clean"
+        "${GORELEASER_BIN}" release --snapshot --skip=publish,sign --clean
+
+        # Assert via dist/artifacts.json (GoReleaser's own documented stable
+        # lookup, same as check:darwin-release-build) that exactly four
+        # released Binary entries exist, one per (goos,goarch) pair — a
+        # green exit code alone is explicitly NOT the check (RESEARCH.md
+        # anti-pattern). `goreleaser release` records type=="Binary" TWICE
+        # per platform: once for the raw `go build` output (named literally
+        # "codegraph", extra.Builder set, no extra.Format) and once for the
+        # archives: pipe's renamed/copied release asset (extra.Format ==
+        # "binary", the codegraph_<tag>_<goos>_<goarch> shape
+        # internal/upgrade.releaseAssetName() expects) — filtering on
+        # extra.Format=="binary" selects the actual release asset, not the
+        # intermediate build artifact.
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::goreleaser release produced no dist/artifacts.json"
+          exit 1
+        fi
+
+        BINARY_COUNT=$(jq -r '[.[] | select(.type=="Binary" and .extra.Format=="binary")] | length' dist/artifacts.json)
+        if [ "${BINARY_COUNT}" != "4" ]; then
+          echo "::error::dist/artifacts.json has ${BINARY_COUNT} released Binary entries (extra.Format==\"binary\"), want exactly 4"
+          exit 1
+        fi
+
+        for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}"
+          GOARCH="${pair#*/}"
+
+          BIN=""
+          if command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg goos "${GOOS}" --arg goarch "${GOARCH}" \
+              '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph -path "*${GOOS}*${GOARCH}*" 2>/dev/null | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::goreleaser release produced no ${pair} binary under dist/"
+            exit 1
+          fi
+
+          # Assert the object is the right machine — the failure mode a
+          # green `goreleaser release` exit code alone cannot catch.
+          DESC=$(file -b "${BIN}")
+          echo "    ${pair}: ${BIN}: ${DESC}"
+          case "${GOOS}:${GOARCH}:${DESC}" in
+            linux:amd64:*ELF*x86-64*) ;;
+            linux:arm64:*ELF*aarch64*) ;;
+            darwin:amd64:*Mach-O*x86_64*) ;;
+            darwin:arm64:*Mach-O*arm64*) ;;
+            *) echo "::error::${pair} produced the wrong object: ${DESC}"; exit 1 ;;
+          esac
+        done
+
+        echo "release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation."
+
+  check:linux-cross-export:
+    desc: >-
+      Resolve both linux binaries the just-run `goreleaser release`
+      (task release:dry-run) produced from dist/artifacts.json and copy
+      each to a fixed, documented export path under dist/export/, named
+      <goos>-<goarch>. Exists because actions/upload-artifact's `path:`
+      input is a literal glob, not a shell — it cannot itself run the
+      dist/artifacts.json jq lookup, and GoReleaser writes binaries under
+      generated, build-id-nested dist/ paths that are not stable enough to
+      hard-code as a glob (review LOW, Codex Plan-01). These export paths
+      are a CONTRACT with linux-cross-canary.yml's two exec jobs and with
+      check:linux-cross-exec's default CODEGRAPH_BIN path — do not rename
+      dist/export/linux-amd64 or dist/export/linux-arm64 without updating
+      all three.
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found — run task release:dry-run first"
+          exit 1
+        fi
+
+        mkdir -p dist/export
+
+        for pair in linux/amd64 linux/arm64; do
+          GOOS="${pair%/*}"
+          GOARCH="${pair#*/}"
+
+          BIN=""
+          if command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg goos "${GOOS}" --arg goarch "${GOARCH}" \
+              '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph -path "*${GOOS}*${GOARCH}*" 2>/dev/null | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::could not resolve the ${pair} binary from dist/artifacts.json — run task release:dry-run first"
+            exit 1
+          fi
+
+          EXPORT="dist/export/${GOOS}-${GOARCH}"
+          cp "${BIN}" "${EXPORT}"
+          chmod +x "${EXPORT}"
+          echo "    ${pair}: ${BIN} -> ${EXPORT}"
+        done
+
+  check:linux-cross-exec:
+    desc: >-
+      Convert "the linker accepted the cross-compiled object" into "the CGo
+      tree-sitter parse path works on this OS and arch" — REL-05's real
+      evidence bar (review synthesis finding S1). Takes the path to an
+      already-built codegraph binary via CODEGRAPH_BIN (default
+      dist/export/linux-<GOHOSTARCH>, the check:linux-cross-export
+      contract), chmod +x's it, asserts its file(1) ELF machine matches the
+      HOST architecture (a wrong-arch artifact fails loudly here instead of
+      as a confusing exec-format error a few lines later), then runs the
+      binary's real `init` subcommand against the checked-out repository
+      working tree and asserts `codegraph status --json`'s exact numeric
+      fileCount/nodeCount JSON fields (not rendered text — review
+      suggestion, Codex Plan-01) are non-zero. A zero-count graph, an empty
+      output, or a bare exit code is a FAIL — that is the whole point of
+      the criterion. Emits exactly one machine-parseable REL05-EVIDENCE
+      line as the last thing it prints; the target itself asserts both
+      counts are non-zero and exits non-zero otherwise, so "a green step
+      with no counts" is a structural impossibility.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "check:linux-cross-exec proves REL-05's real-Linux-execution half — it must run on a real Linux host, never emulated (D-02). Dispatch linux-cross-canary.yml, which runs this on namespace-profile-linux-amd64-4x8 / namespace-profile-linux-arm64-4x8."
+      - sh: command -v jq
+        msg: "jq not found — required to parse codegraph status --json's numeric fields."
+    cmds:
+      - |
+        set -euo pipefail
+
+        HOST_ARCH="$(go env GOHOSTARCH)"
+        BIN="${CODEGRAPH_BIN:-dist/export/linux-${HOST_ARCH}}"
+        if [ ! -f "${BIN}" ]; then
+          echo "::error::codegraph binary not found at ${BIN} — set CODEGRAPH_BIN or run task check:linux-cross-export first"
+          exit 1
+        fi
+        chmod +x "${BIN}"
+
+        HOST_MACHINE="$(uname -m)"
+        DESC="$(file -b "${BIN}")"
+        echo "    binary: ${BIN}"
+        echo "    host uname -m: ${HOST_MACHINE}"
+        echo "    file -b: ${DESC}"
+
+        # A wrong-arch artifact must fail loudly HERE, not a few lines
+        # below as a confusing exec-format error.
+        case "${HOST_MACHINE}:${DESC}" in
+          x86_64:*ELF*x86-64*) ELF_MACHINE="x86-64" ;;
+          aarch64:*ELF*aarch64*) ELF_MACHINE="aarch64" ;;
+          *)
+            echo "::error::${BIN} (${DESC}) does not match the host architecture (uname -m: ${HOST_MACHINE})"
+            exit 1
+            ;;
+        esac
+
+        # The real REL-05 evidence: index THIS checked-out repository — a
+        # real, multi-language tree — not `--version`, not an exit code.
+        REPO_ROOT="$(pwd)"
+        rm -rf "${REPO_ROOT}/.codegraph"
+        "${BIN}" init "${REPO_ROOT}"
+
+        STATUS_JSON="$("${BIN}" status --json --path "${REPO_ROOT}")"
+        FILES=$(printf '%s' "${STATUS_JSON}" | jq -r '.fileCount')
+        SYMBOLS=$(printf '%s' "${STATUS_JSON}" | jq -r '.nodeCount')
+
+        if ! [[ "${FILES}" =~ ^[0-9]+$ ]] || [ "${FILES}" -eq 0 ]; then
+          echo "::error::codegraph status --json reports fileCount=${FILES} — REL-05 requires a non-zero count, not a green exit code"
+          exit 1
+        fi
+        if ! [[ "${SYMBOLS}" =~ ^[0-9]+$ ]] || [ "${SYMBOLS}" -eq 0 ]; then
+          echo "::error::codegraph status --json reports nodeCount=${SYMBOLS} — REL-05 requires a non-zero count, not a green exit code"
+          exit 1
+        fi
+
+        echo "REL05-EVIDENCE uname=${HOST_MACHINE} elf=${ELF_MACHINE} files=${FILES} symbols=${SYMBOLS}"
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
