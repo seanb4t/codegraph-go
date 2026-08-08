@@ -42,8 +42,10 @@ a tag-triggered ref. That is deliberate: an unanchored or prefix-only pattern
 would accept a signature produced by *any* workflow in this repository,
 including ones running against untrusted pull-request code.
 
-SLSA provenance covers the platform binaries directly and is verifiable with
-`slsa-verifier verify-artifact --source-tag <tag>`.
+Build provenance is attested by GitHub's first-party attestor
+(`actions/attest-build-provenance`) over every published binary and `.zip`
+archive, published through GitHub's Attestations API, and is verifiable with
+`gh attestation verify <asset> -R seanb4t/codegraph-go`.
 
 **If verification fails, do not run the binary.** Report it through the channel
 above — a signature that doesn't verify is itself a security report.

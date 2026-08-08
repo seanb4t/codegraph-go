@@ -145,8 +145,9 @@ The reason this is one static binary rather than a bundled runtime:
 - **Signed** — cosign keyless, per binary, with the signing identity anchored to
   this repository's release workflow and a tag ref. The identity is compiled
   into the binary, so `codegraph upgrade` refuses anything signed elsewhere.
-- **Provenance** — SLSA Build Level 3 via `slsa-github-generator`, verifiable
-  with `slsa-verifier` against the source tag.
+- **Provenance** — GitHub-native build provenance via
+  `actions/attest-build-provenance`, published through GitHub's Attestations
+  API, verifiable with `gh attestation verify`.
 - **SBOM** — SPDX per platform, published as a release asset.
 - **Reproducible** — CI rebuilds every release binary and fails on a hash diff.
 - **Scanned** — `govulncheck` gates every merge.
