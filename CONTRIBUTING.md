@@ -89,6 +89,36 @@ Every command CI runs is defined exactly once, as a `task` target — see
   thing here and in CI.
 - `task check:cross` is the same pre-tag sweep `release-please.yml`'s
   `pretag-gate` job runs before a tag can be created.
+- `task release:dry-run` proves the full `goreleaser release` composition —
+  all four release targets in one invocation — on a native darwin host,
+  without publishing or signing anything. Needs `zig`, `syft`, and `cosign`
+  on `PATH` in addition to the C toolchain above.
+- `task release:dry-run-signed` is the same composition but does NOT skip
+  `sign` — it exercises the `binary_signs:`/`sboms:` pipes against a
+  throwaway local cosign key, so it needs no OIDC token, and asserts four
+  distinctly-named published signature and SBOM artifacts from
+  `dist/artifacts.json`.
+- `task release:goreleaser` is the single definition of a REAL release —
+  the same `goreleaser release --clean` composition, but it actually
+  publishes to GitHub Releases, signs with cosign, and emits SBOMs. It is
+  what release.yml's `release` job calls on a tag push; use `release:dry-run`
+  above, not this one, to exercise the composition locally.
+- `task check:linux-cross-export` and `task check:linux-cross-exec` are the
+  REL-05 real-Linux-execution proof: the first resolves the two zig-crossed
+  linux binaries `release:dry-run` just produced; the second runs one of
+  them (via `CODEGRAPH_BIN`) on a **real Linux host** and asserts it indexes
+  a real tree to a non-zero graph. Both are driven end-to-end by the
+  permanent, dispatchable `linux-cross-canary` workflow — see
+  `.github/workflows/linux-cross-canary.yml` — rather than run standalone
+  locally.
+- `task verify:release-assets` and `task verify:self-upgrade` re-prove
+  REL-06/REL-07/REL-08 against a PUBLISHED release's RE-DOWNLOADED assets —
+  never a local `dist/` copy. They need `TAG`/`REPO`/`GH_TOKEN` (plus
+  `GOOS`/`GOARCH` for the self-upgrade target) in the environment and are
+  driven automatically by the permanent, `workflow_run`-triggered
+  `post-release-verify` workflow — see
+  `.github/workflows/post-release-verify.yml` — every time `release.yml`
+  completes, rather than run standalone locally.
 - CI calls these same fine-grained targets directly — a contributor and CI
   run identical command bodies, never a divergent local approximation.
 - `task`, `goreleaser`, and `actionlint` build on demand from `go.tool.mod`

@@ -1,49 +1,58 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.0
-milestone_name: MCP Protocol Currency
-current_phase_name: v0.3.0 shipped 2026-08-06; no active milestone
-status: "Milestone v0.3.0 shipped — PR #24"
-stopped_at: v0.3.0 milestone complete and archived
-last_updated: "2026-08-06T22:28:13.846Z"
-last_activity: 2026-08-06
+milestone: v0.5.0
+milestone_name: macOS Distribution & Homebrew
+current_phase: 1
+current_phase_name: Cross-Compile Spike & `goreleaser release` Migration
+status: executing
+stopped_at: Phase 1 context gathered
+last_updated: "2026-08-08T17:38:59.409Z"
+last_activity: 2026-08-08
+last_activity_desc: v0.5.0 roadmap created, 18/18 requirements mapped
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 21
-  completed_plans: 21
-  percent: 100
-current_phase: —
-last_activity_desc: v0.3.0 shipped — audit passed, archived, no git tag (D-06R)
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 6
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-05)
+See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 2 — SDK Migration — official go-sdk on the existing surface
+**Current focus:** Phase 1 — Cross-Compile Spike & `goreleaser release` Migration
 
 ## Current Position
 
-Phase: — (v0.3.0 shipped 2026-08-06; no active milestone)
-Plan: n/a
-Status: Milestone v0.3.0 shipped — PR #24
-Last activity: 2026-08-07 - Completed quick task 260807-gho: Drop native Windows support — WSL2 only
+Phase: 1 (Cross-Compile Spike & `goreleaser release` Migration) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 1
+Last activity: 2026-08-08 — Phase 1 execution started
 
-Progress: [██████████] 100%
+Progress: [....] 0/4 phases complete (0%)
 
 ## Performance Metrics
 
-**Velocity (v0.3.0):**
+**Velocity (v0.5.0):**
 
-- Total plans completed: 21
+- Total plans completed: 0
 - Average duration: — min
 - Total execution time: 0.0 hours
 
-**By Phase (v0.3.0):**
+**By Phase (v0.5.0):**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 1 | 0 | - | - |
+| 2 | 0 | - | - |
+| 3 | 0 | - | - |
+| 4 | 0 | - | - |
+
+**By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -53,7 +62,7 @@ Progress: [██████████] 100%
 | 4 | 3 | - | - |
 | 5 | 1 | - | - |
 
-**Recent Trend:** Milestone just scoped; no execution data yet.
+**Recent Trend:** Roadmap created 2026-08-08; no execution data yet.
 
 *Updated after each plan completion*
 
@@ -167,9 +176,22 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 
 ### Decisions
 
+Decisions already made for v0.5.0, before any phase executes (full rationale in
+PROJECT.md -> Key Decisions, 2026-08-07):
+
+- **Move to `goreleaser release`, not an extended build matrix** (maintainer directive, against recommendation). `notarize:` and `homebrew_casks:` execute only under `release`. Research the same day hardened rather than cleared the risk: `release` refuses a foreign `dist/`, and both `--split`/`--merge` and the `prebuilt` builder are Pro-only, so **one `macos-latest` runner with `zig cc` on both linux legs is the only OSS shape** — not merely the likely one.
+- **REL-05 is a blocking Phase-1 spike with a locked pass condition.** `zig cc` cross-compiles CGo tree-sitter to linux/amd64 **and** linux/arm64 from a macOS host, and the resulting binaries **run on real Linux**. A build exiting 0 is not a pass.
+- **GoReleaser Pro is costed and held as the fallback, not adopted.** On spike failure: buy Pro, reshape around `release --split`/`continue --merge`, and carry three named gate repairs as explicit added scope — `check:goreleaser`/DIST-01, `TestGoreleaserPinParity`, and `tool-vuln`/VULN-01-02-03 (which would turn `GO-2026-5932` from accepted-and-measured into unmeasurable).
+- **`homebrew_casks:`, not `brews:`** — `brews:` is deprecated as of GoReleaser v2.10, and Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries (Homebrew/brew #20291). Corrected before any planning was drawn over the falsified assumption.
+- **Archives *alongside* raw binaries.** Multiple `archives:` entries keyed by `id` are natively supported, so D-02/Finding 1 is preserved untouched rather than amended. `binary_signs:` replaces `signs: {artifacts: binary}` once both shapes coexist.
+- **The checksums collision is resolved by deletion, not reconciliation.** `.goreleaser.yaml`'s dead `checksum:` block and `release.yml`'s hand-rolled `sha256sum` step both emit `codegraph_<tag>_checksums.txt`; the hand-rolled step is deleted in the same change that makes the block live.
+- **Notarize but do not staple; document the offline gap.** `.zip` and bare Mach-O are both categorically unstaplable and Quill has no staple command. Gatekeeper passes via online ticket lookup; offline first launch is a documented known limitation, matching what GoReleaser ships for its own CLI.
+- **Four checks feel like verification and are not:** a green CI step; `codesign -dvv` (it already passes on the adhoc-signed darwin/arm64 binary `spctl` rejects); `notarytool history` showing Accepted; and `spctl` on a file that was never quarantined. The only trustworthy gate forces a real `com.apple.quarantine` xattr onto the actually-published asset.
+- **`codegraph upgrade` refuses under a brew-managed install,** detected by resolving symlinks to the real Cellar path — never a path-prefix guess.
+
 v1.0's decision log is archived with the milestone — per-phase decisions live in
 `milestones/v1.0-phases/*/`, and the durable product-level ones are summarized in
-PROJECT.md → Key Decisions. This section restarts for v0.3.0.
+PROJECT.md -> Key Decisions. The v0.3.0 log that follows is retained as carried context.
 
 Decisions already made for v0.3.0, before any phase executes:
 
@@ -290,20 +312,39 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-06T21:36:47.136Z
-Stopped at: Completed 05-01-PLAN.md
-  NEXT: Phase 2 Wave 2 — `/gsd-execute-phase 2 --wave 2` (plans 02-03, 02-04)
-  CARRY-OVER: see Blockers/Concerns above — the backlog bookkeeping call on 999.3/999.6, the residual darwin release-path check at the next real tag push, and open issues #13–#17 (two of which are now scheduled as MAINT-01/02).
-  PHASE 1 CARRY-INS FOR PHASE 2:
+Last session: 2026-08-08T14:24:10.700Z
+Stopped at: Phase 1 context gathered
+  NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
+  CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
-    - The two ONE-WAY captures are done. Once `mark3labs/mcp-go` leaves `go.mod` the all-8-tool coverage and the multi-era Legacy baseline can never be recaptured — any further extension of the frozen set must happen BEFORE the swap.
-    - Known frozen-set gap (from `01-07`'s MUTATION-PROOF.md, carried in `01-UAT.md` → Gaps): no scenario exercises a handler's own required-argument validation failure. All four captured error shapes are protocol-level, so mutating `exploreHandler`'s missing-query error shape turns nothing red. Extendable today, impossible after the swap. Input to Phase 2's SDK-04 audit.
-    - VRFY-02's "reads from" property is Phase 2's to deliver if the official go-sdk exposes an injection point.
-  NOTE: no milestone tag will be created — release-please owns tagging (D-06R).
-Resume file: None
+    - `GO-2026-5932` is accepted-unmitigated in `goreleaser`'s own binary. This milestone
+      touches `goreleaser` directly, so it may be revisited **on evidence** — and the
+      GoReleaser Pro fallback would make it unmeasurable rather than merely unfixed.
+
+    - The residual darwin release-path concern is partly closed: both darwin arches built,
+      signed and SBOM'd on the real macOS runner during v0.3.0's release. What is still
+      unexercised is `goreleaser release` (not `build`) on that runner class, plus
+      zig-cross-to-linux **from** a macOS host — which is exactly REL-05.
+  PHASE 1 CARRY-INS:
+
+    - Phase 1's published release is deliberately un-notarized, and is Phase 2's RED baseline
+      for SIGN-03. Do not delete or overwrite that asset before Phase 2 has recorded the
+      `rejected` result against it.
+
+    - `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` anchors the cosign SAN to
+      `.github/workflows/release.yml@refs/tags/v[0-9]*`. Collapsing jobs is fine; renaming the
+      workflow file or changing the tag trigger is not.
+
+    - `release.yml` carries a deliberate comment that no GoReleaser Pro directive is used.
+      Reversing that is a recorded decision, not a silent config change.
+  NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
+  tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+Resume file: .planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-CONTEXT.md
 
 ## Operator Next Steps
 
-- Review `.planning/ROADMAP.md` — 5 phases, requirement coverage 25/25
-- Decide the 999.3 / 999.6 Backlog bookkeeping question (strike vs. annotate as promoted)
+- Review `.planning/ROADMAP.md` — 4 phases, requirement coverage 18/18
+- Confirm the REL-05 pass condition and the GoReleaser Pro fallback branch read correctly before Phase 1 is planned
+- Acquire the Phase-2 prerequisites early (Apple Developer ID Application certificate + App Store Connect API key as CI secrets) and the Phase-3 tap PAT scoped to `seanb4t/homebrew-tap` alone — both are external lead-time items, not implementation work
+- Decide the 999.3 / 999.6 Backlog bookkeeping question (strike vs. annotate as promoted); 999.5 has now been promoted into this milestone and its Backlog entry removed, with 999.2 and 999.4 preserved verbatim
 - `/gsd-plan-phase 1` to begin

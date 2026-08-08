@@ -2,35 +2,34 @@
 #
 # IMPORTANT CONTRACTS — do not change without reading the linked findings:
 #
-#   (a) release.yml's build job invokes `goreleaser build --single-target`
-#       ONLY (never `goreleaser release`), so the archives/checksum blocks
-#       below are NOT executed by this project's pipeline — GoReleaser's
-#       `build` subcommand compiles binaries only and does not run the
-#       archive/checksum/sign/sbom pipes. The real asset-naming/checksum
-#       contract is enforced entirely by release.yml's own shell steps
-#       ("Rename to release-asset contract name" in the build job, and
-#       "Checksums" in the assemble job), which must independently agree
-#       with internal/upgrade.releaseAssetName() (Finding 1, Phase 8
-#       research; contract shape: codegraph_<tag>_<goos>_<goarch>,
-#       using the v-prefixed tag, not the prefix-stripped version). The
-#       archives.name_template below documents that same shape for a
-#       human reader but is otherwise inert — if you change the asset
-#       name shape, change BOTH release.yml's DEST= line and
-#       internal/upgrade.releaseAssetName(); editing name_template alone
-#       has no effect on the actual release artifacts (WR-01, Phase 8
-#       re-review).
+#   (a) release.yml no longer invokes `goreleaser build --single-target`;
+#       a single `goreleaser release` invocation now builds all four
+#       targets AND runs the archive/checksum/binary_signs/sboms/release
+#       pipes below (REL-06). They are LIVE, not inert. The archives:
+#       entry with id: raw carries the asset-naming contract with
+#       internal/upgrade.releaseAssetName() (contract shape:
+#       codegraph_<tag>_<goos>_<goarch>, using the v-prefixed tag, not
+#       the prefix-stripped version) — TestReleaseAssetNameMatchesGoReleaser
+#       (internal/upgrade/verify_release_e2e_test.go) pins the two
+#       independent implementations of that string together. If you
+#       change the raw entry's name_template, you MUST also change
+#       internal/upgrade.releaseAssetName() in the same change, or
+#       `codegraph upgrade` 404s on a genuine, correctly-published
+#       release.
 #
 #   (b) The reproducibility flags on every build entry (-trimpath,
 #       -buildid=, mod_timestamp) exist so the DIST-04 double-build
 #       determinism gate (Plan 08-08) can byte-for-byte diff two builds
 #       of the same commit. Do not remove them.
 #
-#   (c) Signing and SBOM generation are performed by release.yml's
-#       assembly job (Plan 08-04, Finding 2), NOT here — the native
-#       4-target matrix is built per-runner via
-#       `goreleaser build --single-target` (OSS-only; no Pro
-#       release --split/--merge or prebuilt-builder directives).
-#       This file intentionally has no `signs:` or `sbom:` block.
+#   (c) Signing and SBOM generation are performed HERE, by the
+#       binary_signs: and sboms: pipes below, under a single
+#       `goreleaser release` invocation (REL-06) — NOT by a hand-rolled
+#       shell loop in release.yml's assemble job. That hand-rolled loop
+#       is deleted in the same phase (plan 01-03). The native 4-target
+#       build remains OSS-only: no GoReleaser Pro `release --split`,
+#       `continue --merge`, or prebuilt-builder directive is used
+#       anywhere in this file.
 #
 #   (d) Native Windows is NOT a supported platform (quick task
 #       260807-gho). Windows users run the linux/amd64 binary under
@@ -44,6 +43,11 @@ version: 2
 project_name: codegraph
 
 builds:
+  # Both linux legs cross-compile via zig cc/zig c++ (D-01/D-02, REL-05):
+  # this is what makes a single macOS host able to produce all four release
+  # targets in one `goreleaser release` invocation (Phase 1 spike). The
+  # amd64 leg no longer uses the runner's native gcc — see
+  # codegraph-linux-arm64 below, which already did this before this phase.
   - id: codegraph-linux-amd64
     main: ./cmd/codegraph
     binary: codegraph
@@ -51,6 +55,8 @@ builds:
     goarch: [amd64]
     env:
       - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-linux-gnu
+      - CXX=zig c++ -target x86_64-linux-gnu
     flags:
       - -trimpath
     ldflags: &version_ldflags
@@ -105,20 +111,197 @@ builds:
     ldflags: *version_ldflags
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-# Raw per-platform binaries, NEVER tar.gz/zip (D-02/Finding 1): the
-# upgrade path in internal/upgrade downloads and swaps in this exact
-# byte stream directly, with no archive extraction step.
+# Raw per-platform binaries, NEVER tar.gz/zip for the `raw` entry (D-02/
+# Finding 1): the upgrade path in internal/upgrade downloads and swaps in
+# that exact byte stream directly, with no archive extraction step. A
+# second `zip` entry (REL-09/D-15) carries the SAME per-platform stem
+# plus `.zip`, for consumers (e.g. Phase 3's Homebrew cask) that want an
+# archive instead of a raw executable — the two coexist deliberately
+# (add-alongside, not promote: see 01-02-PLAN.md's assumption-delta
+# decision) and `codegraph upgrade` only ever consumes the `raw` entry.
 #
-# NOTE (WR-01, Phase 8 re-review): this block (and the checksum: block
-# below) is dead configuration under this project's pipeline — see the
-# header comment at the top of this file. It never executes because
-# release.yml only runs `goreleaser build --single-target`, never
-# `goreleaser release`. Kept as documentation of intent only.
+# NOTE (updated from the WR-01/Phase 8 "dead configuration" note): this
+# block and the checksum: block below are now LIVE under
+# `goreleaser release` (REL-06) — see the header comment at the top of
+# this file, which plan 01-02's Task 2 brings up to date with the
+# binary_signs:/sboms:/release: blocks it adds.
 archives:
-  - formats: [binary]
+  - id: raw
+    ids:
+      - codegraph-linux-amd64
+      - codegraph-linux-arm64
+      - codegraph-darwin-amd64
+      - codegraph-darwin-arm64
+    formats: [binary]
+    # UNCHANGED character-for-character (D-02/Finding 1): this is a
+    # runtime contract with internal/upgrade.releaseAssetName(), pinned
+    # by TestReleaseAssetNameMatchesGoReleaser
+    # (verify_release_e2e_test.go) and TestRawArchiveEntryStaysBinaryFormat
+    # (goreleaser_shape_test.go). `codegraph upgrade` downloads and swaps
+    # in this exact byte stream with no extraction step — changing
+    # `formats:` away from `binary`, or changing name_template by a
+    # single character, bricks every user's next upgrade.
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
+
+  - id: zip
+    ids:
+      - codegraph-linux-amd64
+      - codegraph-linux-arm64
+      - codegraph-darwin-amd64
+      - codegraph-darwin-arm64
+    formats: [zip]
+    # Same stem as the `raw` entry plus `.zip` (D-15). No `files:`
+    # override — relies on GoReleaser v2.17.1's actual default archive
+    # file set: the binary plus LICENSE*, README* AND CHANGELOG*
+    # (internal/pipe/archive/archive.go:83-91 in the pinned module; this
+    # repo has a real CHANGELOG.md at the root, so it is included). D-16's
+    # binding requirement is that shell completions and man pages stay
+    # OUT of this zip, because BREW-03/BREW-04 generate those from the
+    # binary at Homebrew cask-build time and shipping them here would
+    # create a second, staler source — NOT that the file set is limited
+    # to exactly "binary + LICENSE + README" (that description was
+    # incomplete; see cycle-3 review, Codex Plan-02 MEDIUM).
     name_template: >-
       {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
 
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Tag }}_checksums.txt"
   algorithm: sha256
+  # D-12: scoped to exactly the 8 downloadable payloads (4 raw binaries +
+  # 4 zips). `.sigstore.json`/`.spdx.json` sidecars and this checksums
+  # file itself are deliberately excluded — checksumming a signature is
+  # circular. Held by TestChecksumCoversRawAndZipIdsOnly. (This block is
+  # NOT yet the sole writer of the published checksums file on its own —
+  # that additionally requires plan 01-03 to delete release.yml's
+  # hand-rolled `sha256sum` step, proven post-publish by plan 01-05.)
+  ids: [raw, zip]
+
+# binary_signs: (D-14) reproduces today's hand-rolled
+# `cosign sign-blob --bundle="${f}.sigstore.json" --yes "$f"` loop
+# (release.yml's assemble job, deleted by plan 01-03) declaratively.
+# `binary_signs:` (not `signs:`) is used because it is format-independent
+# — once `.zip` archives coexist with the `raw` binaries (REL-09), the
+# `signs:` pipe's `artifacts: binary` mode (which requires
+# `archives.formats: binary` project-wide) would no longer cleanly apply.
+#
+# IMPORTANT — this is NOT the same substitution behavior as sboms: below,
+# and gets it wrong if you copy that pattern verbatim. GoReleaser's
+# binary_signs: pipe signs the RAW build-output artifact (type Binary —
+# the pre-rename `codegraph`, filtered via
+# `artifact.ByType(artifact.Binary)`,
+# internal/pipe/sign/sign_binary.go:80 in the pinned goreleaser/v2@v2.17.1
+# module), NOT the archives: pipe's renamed release asset (type
+# UploadableBinary, which is what sboms: with artifacts: binary
+# resolves to via ByBinaryLikeArtifacts' dedupe-preferring-uploadable
+# rule). For the PUBLISHED signature asset's name, `${artifact}` in a
+# signature: template expands to that raw artifact's .Name — the literal
+# `binary:` value ("codegraph") for every one of the 4 platforms in this
+# project's builds:, since none of them template it by os/arch
+# (confirmed in internal/pipe/sign/sign.go's signone(): env["artifact"]
+# is reset to art.Name, not art.Path, for the second/publish-naming
+# template pass; internal/tmpl/tmpl.go's WithArtifact binds
+# artifactName: a.Name). A `signature: "${artifact}.sigstore.json"`
+# template — GoReleaser's own documented pattern, and what RESEARCH.md's
+# Pattern 2 specified — therefore publishes ONE `codegraph.sigstore.json`
+# asset for all 4 platforms. With release.replace_existing_artifacts:
+# true (see release: below) this clobbers 3 of 4 sidecars SILENTLY: the
+# exact same defect class cycle-3 review caught in sboms.documents
+# (HIGH-B), but for signatures — not caught by any prior review cycle of
+# this plan, found instead by tracing this pipe's actual pinned-version
+# source during Task 2 execution. The fix mirrors sboms' own authorized
+# fallback: template on Go-template FIELDS
+# (.ProjectName/.Tag/.Os/.Arch, bound from the raw artifact's own
+# Goos/Goarch — which ARE correct per-platform) instead of the $artifact
+# env var, mirroring the `raw` archive entry's name_template
+# character-for-character. Held by
+# TestBinarySignsSidecarMatchesUpgradeContract, which RESOLVES this
+# template for all four platforms and asserts the results are four
+# DISTINCT strings each matching internal/upgrade's download contract —
+# not a literal string match, per the same "assert the property, not the
+# literal" discipline cycle-3 review required for sboms.documents.
+binary_signs:
+  - cmd: cosign
+    signature: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}.sigstore.json"
+    args:
+      - "sign-blob"
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: binary
+
+# sboms: (D-17) reproduces today's hand-rolled
+# `syft "$f" -o spdx-json="${f}.spdx.json"` loop (release.yml's assemble
+# job, deleted by plan 01-03) declaratively, per-binary. `artifacts:
+# binary` is set EXPLICITLY — the pipe's own default is `archive`, and
+# leaving it defaulted would silently catalog the new `zip` entries
+# instead, dropping the per-binary DIST-03 contract. The zips
+# deliberately get no separate SBOM: their contents (the same binary
+# already catalogued here, plus LICENSE/README/CHANGELOG) would be a
+# duplicate.
+#
+# `documents:` is NAME-derived (`{{ .ArtifactName }}`), NOT PATH-derived
+# (`${artifact}`) — this is cycle-3 review HIGH-B and is a correctness
+# requirement, not a style choice. GoReleaser's sboms: pipe, with
+# artifacts: binary, dedupes by PATH preferring the archives: pipe's
+# renamed UploadableBinary artifact
+# (internal/artifact/artifact.go:734 ByBinaryLikeArtifacts, pinned
+# goreleaser/v2@v2.17.1 module), whose .Path is still the pre-rename
+# build output but whose .Name (bound to Go-template field
+# .ArtifactName by internal/tmpl's WithArtifact) IS the renamed,
+# per-platform `raw` asset name. A `${artifact}`-based (path-derived)
+# template would therefore resolve to the same `codegraph.spdx.json`
+# for all 4 platforms; `{{ .ArtifactName }}.spdx.json` resolves to the
+# four distinct `codegraph_<tag>_<goos>_<goarch>.spdx.json` names
+# today's syft loop publishes. Held by TestSbomsArePerBinaryWithSpdxNames,
+# which RESOLVES this template for all four platforms and asserts the
+# results are four DISTINCT strings, not a literal string match. Plan
+# 01-06's `release:dry-run-signed` leg resolves this template against a
+# REAL pipe (not just this static config assertion) before the
+# irreversible publish.
+sboms:
+  - id: binary-sbom
+    artifacts: binary
+    cmd: syft
+    args:
+      - "$artifact"
+      - "--output"
+      - "spdx-json=$document"
+    documents:
+      - "{{ .ArtifactName }}.spdx.json"
+
+# release: (review HIGH-2) pins rerun idempotency and prerelease
+# handling in config rather than inheriting GoReleaser's defaults, which
+# would silently drop both behaviors the deleted (plan 01-03)
+# `gh release upload --clobber` step (release.yml) provided today.
+#
+# NOTE: the release: pipe is the one pipe in this configuration that no
+# dry run can exercise — `goreleaser release --snapshot --skip=publish,sign`
+# structurally cannot reach it, and there is no local mode that publishes
+# to a real GitHub Release without publishing to a real GitHub Release.
+# Every other contract in this phase is proven by a demonstrated-RED test
+# or a canary run; this one is proven by pinning the config explicitly
+# instead of inheriting defaults, and is observed for the first time
+# during plan 01-05's real release (see its Task 2 checkpoint).
+release:
+  # GoReleaser v2.17.1 defaults this to false (pkg/config/config.go:671).
+  # The pre-migration publisher was `gh release upload --clobber`
+  # (release.yml:325), so re-running a failed or partial release was
+  # safe and idempotent. Deleting that step (plan 01-03) WITHOUT setting
+  # this key would make a re-run after a partial upload fail on
+  # already-existing assets — blocking the patch-forward recovery D-07
+  # mandates, at exactly the moment it is needed, since D-07 also
+  # forbids deleting the tag to retry. Held by
+  # TestReleaseBlockIsRerunIdempotent.
+  replace_existing_artifacts: true
+  # Replaces release.yml:306's `*-*) PRERELEASE_FLAG="--prerelease"`
+  # case: `auto` marks a release as a prerelease when the tag contains a
+  # prerelease identifier, the same rule expressed declaratively.
+  prerelease: auto
+  # No name_template/header/footer/draft/disable key: release-please
+  # creates the tag AND the GitHub Release object with its own generated
+  # body BEFORE release.yml ever fires (release-please.yml:57-92), so
+  # GoReleaser's job is only to add assets to an ALREADY-EXISTING
+  # Release. Regenerating the body would move release authorship away
+  # from the tool D-06R reserves it to. Held by
+  # TestReleaseBlockDoesNotRewriteReleaseBody.

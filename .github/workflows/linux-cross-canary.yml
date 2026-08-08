@@ -1,0 +1,276 @@
+# Linux-cross canary (D-03, REL-05).
+#
+# THE PROPERTY AT RISK: whether `zig cc`/`zig c++`, invoked from a macOS
+# host, can cross-compile this repo's CGo tree-sitter dependency — including
+# grammars carrying hand-written external C/C++ scanners — to linux/amd64
+# AND linux/arm64 such that the resulting binaries actually PARSE on real
+# Linux. `release.yml` fires only on a `v[0-9]*` tag push, so without this
+# canary nothing re-proves that property whenever zig, the Namespace runner
+# image, `.goreleaser.yaml`, or a tree-sitter grammar moves.
+#
+# THE FAILURE MODE IS QUIET: a wrong toolchain still produces a binary that
+# builds, signs, attests, and prints `--version` cleanly — it fails only
+# when the tree-sitter parse path is actually exercised. That is exactly why
+# this canary's pass condition is "indexes a real tree and reports a
+# non-zero graph", never "the build/link exited 0" (RESEARCH.md Pitfall 3).
+#
+# D-04 FAIL-BAR VARIATION LIST — enumerated here, BEFORE the first dispatch,
+# so the GoReleaser Pro decision stays falsifiable. A list written after a
+# failure is rationalization, not a bound. Apply variations in order by
+# editing the zig `version:` input below and/or `.goreleaser.yaml`'s linux
+# build ids' target triples, recording which V-number produced the recorded
+# run in the plan SUMMARY:
+#
+#   V1 — zig 0.15.1 (this file's pin), target triples x86_64-linux-gnu and
+#        aarch64-linux-gnu, default (dynamic) CGO_LDFLAGS.
+#   V2 — zig 0.15.1, explicit glibc floor: triples x86_64-linux-gnu.2.28
+#        and aarch64-linux-gnu.2.28, default CGO_LDFLAGS.
+#   V3 — zig 0.15.1, glibc floor 2.28, CGO_LDFLAGS=-static-libgcc
+#        (deliberately NOT a full -static link — glibc + dlopen is its own
+#        failure class).
+#   V4 — one zig minor newer than the pin, default triples, default
+#        CGO_LDFLAGS.
+#   V5 — one zig minor newer than the pin, glibc floor 2.28, default
+#        CGO_LDFLAGS.
+#
+# Exhausting V1-V5 without BOTH linux legs indexing a real tree on real
+# Linux declares REL-05 FAIL and escalates to the costed GoReleaser Pro
+# fallback (`release --split`/`continue --merge`), with its three named
+# gate repairs entered as scope: check:goreleaser/DIST-01, TestGoreleaserPinParity,
+# and tool-vuln/VULN-01-02-03 (which would turn GO-2026-5932 from
+# accepted-and-measured into unmeasurable). This canary ships wired to V1.
+#
+# Two triggers, deliberately:
+#   - workflow_dispatch: run it on demand before deciding REL-05 or cutting
+#     a release.
+#   - pull_request, PATH-SCOPED: re-prove the property automatically
+#     whenever something that can affect it changes.
+#
+# This is a permanent, dispatchable canary (D-03) — a sibling of
+# darwin-toolchain-canary.yml, not a throwaway — and is intentionally NOT in
+# main's required-status-check set: it tells you the linux-cross toolchain
+# is broken, it does not block unrelated work while someone investigates.
+#
+# THE sign-snapshot JOB (plan 01-06, D-14, cycle-3 review HIGH-A/HIGH-B):
+# THE PROPERTY AT RISK is that GoReleaser expands `${artifact}` from an
+# artifact's PATH but PUBLISHES that artifact under its NAME, and for a
+# `formats: [binary]` archive those two DIFFER because the rename lives
+# only in metadata. All four build ids in `.goreleaser.yaml` produce a
+# binary called `codegraph`, so a PATH-derived template publishes four
+# COLLIDING `codegraph.sigstore.json` assets instead of four distinct
+# sidecars; `codegraph upgrade` downloads `<assetName>.sigstore.json`
+# literally, so the failure mode is a 404 AFTER the user's binary has
+# already been fetched. The `sboms:` pipe carries the identical collision,
+# where `release.replace_existing_artifacts: true` makes the loss SILENT
+# and regresses DIST-03. Every other dry run in this repository passes
+# `--skip=sign`, so without this job the templates would first resolve
+# during a production release that D-07 forbids withdrawing. THE PASS
+# CONDITION is FOUR DISTINCT PUBLISHED NAMES PER PIPE, read from
+# `dist/artifacts.json` — never a green exit code, and never a filename
+# listing, which cannot distinguish the broken config from the correct fix.
+name: linux-cross-canary
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/workflows/linux-cross-canary.yml"
+      - ".goreleaser.yaml"
+      - "Taskfile.yml"
+      - "go.mod"
+      - "go.sum"
+
+permissions:
+  contents: read
+
+jobs:
+  # Builds all four release targets in ONE goreleaser release invocation on
+  # the same macOS profile release.yml and darwin-toolchain-canary.yml
+  # already use (D-01), with both linux legs zig-crossed (D-02). Exports the
+  # two linux binaries to a fixed path the two exec jobs below consume.
+  cross-build:
+    name: cross-build (macOS, both linux legs via zig)
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # goreleaser needs full history + tags to resolve
+          # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # No nscloud-cache-action here, unlike release.yml's build job: a
+      # canary should have the smallest possible failure surface.
+
+      - name: Install zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: "0.15.1" # V1 — see the FAIL-bar variation list above
+
+      # syft and cosign are NOT speculative and must not be trimmed as "the
+      # canary doesn't sign". `release:dry-run` skips publish/sign but NOT
+      # the sboms: pipe — the moment plan 01-02 activates .goreleaser.yaml's
+      # sboms: block, this canary (which re-fires on every .goreleaser.yaml
+      # change, including 01-02's own) shells out to syft. Without the
+      # installer the canary would go red at the SBOM pipe BEFORE reaching
+      # the exec jobs below, blinding this phase's own blocking REL-05 gate
+      # at exactly the moment it matters (review HIGH-4). cosign is
+      # installed for the same forward reason and is consumed by plan
+      # 01-06's sign-enabled leg.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      # Kept as separate steps (not folded into one shell block) so a red
+      # run says WHICH layer broke — "goreleaser release itself failed" and
+      # "the artifact export lookup failed" are different pages of the
+      # runbook.
+      - name: Prove goreleaser release cross-compiles all four targets
+        run: task release:dry-run
+
+      - name: Export the two linux binaries for the exec jobs
+        run: task check:linux-cross-export
+
+      - name: Upload linux/amd64 binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codegraph-linux-amd64
+          path: dist/export/linux-amd64
+          if-no-files-found: error
+
+      - name: Upload linux/arm64 binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codegraph-linux-arm64
+          path: dist/export/linux-arm64
+          if-no-files-found: error
+
+  # Executes the linux/amd64 binary on REAL linux/amd64 hardware — no
+  # emulation — and asserts it indexes this checked-out repository to a
+  # non-zero graph. This is the half of REL-05 a green `cross-build` cannot
+  # prove: the linker accepting the object says nothing about whether the
+  # CGo tree-sitter parse path actually works on this OS/arch.
+  exec-linux-amd64:
+    name: exec (real linux/amd64)
+    needs: cross-build
+    runs-on: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download linux/amd64 binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: codegraph-linux-amd64
+          path: dist/export
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Index this repository and assert a non-zero graph
+        env:
+          CODEGRAPH_BIN: dist/export/linux-amd64
+        run: task check:linux-cross-exec
+
+  # Same as exec-linux-amd64, but on REAL linux/arm64 hardware (D-02) — not
+  # an emulated amd64 host. An emulated exec is the same category of weaker
+  # proof this criterion already rejects for "the build exited 0".
+  exec-linux-arm64:
+    name: exec (real linux/arm64)
+    needs: cross-build
+    runs-on: namespace-profile-linux-arm64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Download linux/arm64 binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: codegraph-linux-arm64
+          path: dist/export
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Index this repository and assert a non-zero graph
+        env:
+          CODEGRAPH_BIN: dist/export/linux-arm64
+        run: task check:linux-cross-exec
+
+  # Rehearses .goreleaser.yaml's binary_signs:/sboms: pipes against a
+  # throwaway local cosign key — see the header comment's sign-snapshot
+  # paragraph for the property at risk and the pass condition. Declares NO
+  # `needs:` on the exec jobs above: this leg is independent of the REL-05
+  # execution proof and should still report if those fail, so a red run
+  # distinguishes "the cross-compile broke" from "the sign template broke"
+  # — the same reasoning darwin-toolchain-canary.yml applies to keeping
+  # canary legs in separate jobs. No `id-token: write` here, and no
+  # `permissions:` block of its own (the file-scoped `contents: read`
+  # above is the whole of it): the throwaway key is what makes that
+  # possible, and a signing rehearsal able to mint a certificate the
+  # production SAN would accept would not be a rehearsal — which is also
+  # why this job is safe on the `pull_request:` trigger this canary
+  # already carries.
+  sign-snapshot:
+    name: sign-snapshot (throwaway-key sign + SBOM pipe rehearsal)
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # goreleaser needs full history + tags to resolve
+          # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: "0.15.1" # V1 — see the FAIL-bar variation list above
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: "Rehearse binary_signs:/sboms: against a throwaway local key"
+        env:
+          # A literal throwaway value, never a repository secret — a
+          # secret here would imply the key matters. release:dry-run-signed
+          # generates its own key pair into a temp dir and removes it on
+          # exit; this only supplies the password to decrypt it.
+          COSIGN_PASSWORD: codegraph-throwaway-rehearsal-password-not-for-verification
+        run: task release:dry-run-signed

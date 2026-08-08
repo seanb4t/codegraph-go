@@ -19,13 +19,19 @@ that is a bug in this doc (or the workflow), please report it.
 Every tagged release (`v[0-9]*`) publishes, per platform
 (`darwin`/`linux` × `amd64`/`arm64`):
 
-- a raw binary: `codegraph_<tag>_<goos>_<goarch>`
+- a raw binary: `codegraph_<tag>_<goos>_<goarch>` — the asset
+  `codegraph upgrade` downloads and self-replaces with; unchanged by this
+  section's other additions
+- a `.zip` archive of the same binary: `codegraph_<tag>_<goos>_<goarch>.zip`
+  — for browser downloads from the GitHub Releases page and for the
+  Homebrew tap; not consumed by `codegraph upgrade`
 - a per-binary cosign bundle: `<binary>.sigstore.json`
 - a per-binary SPDX SBOM: `<binary>.spdx.json`
-- one shared checksums file: `codegraph_<tag>_checksums.txt`
-- SLSA3 build provenance: an `.intoto.jsonl` attestation, generated over the
-  checksums file by `slsa-framework/slsa-github-generator`'s generic
-  generator
+- one shared checksums file: `codegraph_<tag>_checksums.txt`, covering all
+  8 of the above payloads (4 raw binaries + 4 `.zip` archives)
+- GitHub build-provenance attestation over those same 8 payloads, published
+  through GitHub's Attestations API (`actions/attest-build-provenance`) —
+  not a downloadable release asset, unlike everything else in this list
 
 All three verification steps below use only these published assets.
 
@@ -58,49 +64,67 @@ enforces:
   for example, would never satisfy this pattern).
 
 A signature from any other issuer, any other workflow file, or any
-non-tag trigger will fail this check — as it should.
+non-tag trigger will fail this check — as it should. The release pipeline
+migration that added `.zip` archives and native build-provenance attestation
+(below) collapsed the former multi-job pipeline into a single
+`goreleaser release` invocation, but did not touch this workflow's filename
+or its `refs/tags/v[0-9]*` trigger — the SAN this command checks still
+resolves to the same workflow file and tag ref it always has.
 
-### b) Verify SLSA provenance
+### b) Verify build provenance
 
-Install [`slsa-verifier`](https://github.com/slsa-framework/slsa-verifier),
-then:
+Releases from **`<first-migrated-release-tag>`** onward (this section will
+name the exact tag once plan 01-05 has cut it) are attested by GitHub's
+first-party `actions/attest-build-provenance`, published through GitHub's
+Attestations API — not as a downloadable `.intoto.jsonl` release asset.
+Verify with the `gh` CLI, already installed if you use GitHub at all:
 
 ```sh
-slsa-verifier verify-artifact \
-  --provenance-path codegraph_<tag>.intoto.jsonl \
-  --source-uri github.com/seanb4t/codegraph-go \
-  --source-tag <tag> \
-  codegraph_<tag>_<goos>_<goarch>
+gh attestation verify codegraph_<tag>_<goos>_<goarch> -R seanb4t/codegraph-go
 ```
 
-Provenance is attested over **each platform binary directly**, and all of a
-release's subjects share a single bundle (four binaries as of the drop of
-native Windows support; six for v0.3.0 and earlier). Verify the binary you
-actually intend to run — pass that binary as the final argument.
+Run this against whichever published asset you intend to trust — a raw
+binary or a `.zip` archive; both are covered by the same attestation, over
+all 8 published payloads (4 raw binaries + 4 `.zip` archives).
 
-> **Bundle filename.** Releases **after v0.2.0** publish
-> `codegraph_<tag>.intoto.jsonl`. **v0.2.0 and earlier** published the SLSA
-> generator's default name, `multiple.intoto.jsonl` — substitute that if you are
-> verifying one of those. Both are the same artifact in every other respect;
-> only the filename changed. Check the release's asset list if unsure.
-
-A successful run names the builder and the source commit:
+A successful run looks like (exact wording may vary across `gh` versions):
 
 ```
-Verified build using builder "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@refs/tags/v2.1.0" at commit <sha>
-PASSED: SLSA verification passed
+Loaded digest sha256:<digest> for file://codegraph_<tag>_<goos>_<goarch>
+Loading attestations for sha256:<digest>
+
+The following policy criteria will be enforced:
+- Predicate type must match:................ https://slsa.dev/provenance/v1
+- Source Repository URI must match:.......... https://github.com/seanb4t/codegraph-go
+- Subject Alternative Name must match regex:.. (?i)^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^\s]*$
+
+✓ Verification succeeded!
 ```
 
-> **Corrected 2026-08-01.** This section previously instructed verifying
-> `codegraph_<tag>_checksums.txt` against a provenance file named
-> `codegraph_<tag>_checksums.txt.intoto.jsonl`, and stated that provenance was
-> generated over the checksums file rather than over each binary. Both were
-> wrong: no such file is published, and the checksums file is not an attested
-> subject. Following the old instructions produced
-> `FAILED: artifact hash does not match provenance subject` on a release whose
-> provenance is entirely valid — found while verifying `v0.2.0`. Attesting the
-> binaries directly is the stronger arrangement; only the documentation was
-> wrong.
+> **Releases up to and including the last pre-migration tag** published
+> `codegraph_<tag>.intoto.jsonl` (`multiple.intoto.jsonl` for v0.2.0 and
+> earlier) — a separate downloadable SLSA3 provenance bundle generated by
+> `slsa-framework/slsa-github-generator`'s generic generator, verifiable
+> with `slsa-verifier verify-artifact`. That command CANNOT verify releases
+> from the migrated pipeline: `actions/attest-build-provenance` output is a
+> structurally different attestation format, published to a different
+> location (GitHub's Attestations API, not a release asset). If you are
+> verifying an older release, use the pre-migration instructions this
+> section previously documented; if you are verifying a current one, use
+> `gh attestation verify` above.
+
+> **Corrected 2026-08-01 (applies to the pre-migration generator only).**
+> This section previously instructed verifying `codegraph_<tag>_checksums.txt`
+> against a provenance file named `codegraph_<tag>_checksums.txt.intoto.jsonl`,
+> and stated that provenance was generated over the checksums file rather than
+> over each binary. Both were wrong: no such file was published, and the
+> checksums file was not an attested subject. Following the old instructions
+> produced `FAILED: artifact hash does not match provenance subject` on a
+> release whose provenance was entirely valid — found while verifying
+> `v0.2.0`. Attesting the binaries directly was the stronger arrangement;
+> only the documentation was wrong. This historical note is retained for
+> anyone verifying a pre-migration release; it does not apply to
+> `gh attestation verify` above.
 
 ### c) Inspect the SBOM
 

@@ -283,11 +283,29 @@ tasks:
       GoReleaser hard-fails ("git tag ... was not made against commit ...")
       without one. The resolved version string is the only thing --snapshot
       changes, and the version string is not the property this target verifies.
+
+      LOCAL-ONLY SINCE 2026-08-08 — this target is NO LONGER RUN IN CI, and it
+      now requires an interactive Sigstore session. Plan 01-02 activated
+      `binary_signs:`, which runs inside the BUILD pipeline (that is what
+      distinguishes it from `signs:`, which runs during release). `goreleaser
+      build` has no `--skip=sign` — its only valid --skip values are before,
+      post-hooks, pre-hooks and validate — so this target now always reaches a
+      cosign KEYLESS signing call, which needs an OIDC token. On a developer
+      machine that means a browser flow; in a pull_request workflow there is no
+      token at all, and granting `id-token: write` to a PR-triggered canary
+      would be a security regression rather than a fix. The
+      darwin-toolchain-canary step that used to run this was therefore removed
+      (see that workflow's comment). The property it proved — GoReleaser driving
+      a native darwin build — is now covered by `task release:dry-run` in
+      linux-cross-canary's `cross-build` job on the same macOS profile, because
+      `goreleaser release` DOES accept `--skip=sign`.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
       - sh: command -v clang
         msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
+      - sh: command -v cosign
+        msg: "cosign not found. Since plan 01-02 activated binary_signs:, `goreleaser build` reaches the sign pipe and there is no --skip=sign for the build command, so this target needs cosign AND an interactive Sigstore keyless session. Install with `brew install cosign`. If you only want the darwin build composition without signing, run `task release:dry-run` instead — it uses `goreleaser release --skip=publish,sign` and needs no OIDC."
     cmds:
       - |
         set -euo pipefail
@@ -346,10 +364,890 @@ tasks:
 
         rm -rf dist
 
+  release:dry-run:
+    desc: >-
+      Prove the FULL `goreleaser release` composition — all four
+      .goreleaser.yaml build entries (linux/amd64, linux/arm64, darwin/amd64,
+      darwin/arm64) in ONE invocation — on a native darwin host, without
+      publishing or signing anything (D-06, REL-05 enabling change).
+      check:darwin-release-build already proves GoReleaser can drive a
+      `build --single-target` darwin invocation; this target is the first
+      thing in this repo to exercise `goreleaser release` itself, the
+      single-runner shape the migrated release.yml (plan 01-03) will use.
+      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      GoReleaser hard-fails ("git tag ... was not made against commit ...")
+      without one — the resolved version string is the only thing --snapshot
+      changes, not the property this target verifies. Uses
+      --skip=publish,sign so nothing is published to GitHub and no signing
+      key/OIDC token is needed locally.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:dry-run must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. The moment plan 01-02 activates .goreleaser.yaml's sboms: block, this target shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the SIGN pipe today, but plan 01-02 wires binary_signs: through this same target, and the permanent linux-cross-canary installs cosign before invoking it for exactly this reason. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Build GoReleaser NATIVELY, with no GOOS/GOARCH in the environment,
+        # exactly as check:darwin-release-build does and for the same
+        # reason: a GOARCH-cross-built GoReleaser runs under Rosetta and its
+        # child `xcrun` then resolves as x86_64, which cannot load the
+        # arm64-only libxcrun.dylib from CommandLineTools — a confusing
+        # "# runtime/cgo" architecture error that reads like a broken
+        # toolchain but is really a cross-built tool. release.yml does not
+        # hit this because goreleaser-action installs a native prebuilt
+        # binary — reproduced here by building the tool with no GOOS/GOARCH
+        # override.
+        GORELEASER_BIN="$(mktemp -d)/goreleaser"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")"' EXIT
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        # zig cc/zig c++ default their LOCAL cache directory to a path next
+        # to the C source file being compiled unless overridden. This
+        # project's CGo tree-sitter dependencies compile from Go's module
+        # cache (GOMODCACHE), which is read-only by design — without this
+        # override, zig fails with "unable to open local cache directory
+        # ...: AccessDenied" the first time either linux build id's zig cc
+        # override actually runs. Point both the local and global cache at
+        # a scratch dir cleaned up by the same trap as GORELEASER_BIN above.
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")" "${ZIG_CACHE_ROOT}"' EXIT
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # No GOOS/GOARCH set here: unlike `build --single-target`,
+        # `goreleaser release` resolves every target from each builds:
+        # entry's own goos:/goarch: list, not from the environment. A
+        # leftover GOOS/GOARCH would be at best a no-op and at worst mask a
+        # misconfiguration (RESEARCH.md Pattern 5 / Pitfall 2).
+        echo "==> goreleaser release --snapshot --skip=publish,sign --clean"
+        "${GORELEASER_BIN}" release --snapshot --skip=publish,sign --clean
+
+        # Assert via dist/artifacts.json (GoReleaser's own documented stable
+        # lookup, same as check:darwin-release-build) that exactly four
+        # released Binary entries exist, one per (goos,goarch) pair — a
+        # green exit code alone is explicitly NOT the check (RESEARCH.md
+        # anti-pattern). `goreleaser release` records type=="Binary" TWICE
+        # per platform: once for the raw `go build` output (named literally
+        # "codegraph", extra.Builder set, no extra.Format) and once for the
+        # archives: pipe's renamed/copied release asset (extra.Format ==
+        # "binary", the codegraph_<tag>_<goos>_<goarch> shape
+        # internal/upgrade.releaseAssetName() expects) — filtering on
+        # extra.Format=="binary" selects the actual release asset, not the
+        # intermediate build artifact.
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::goreleaser release produced no dist/artifacts.json"
+          exit 1
+        fi
+
+        BINARY_COUNT=$(jq -r '[.[] | select(.type=="Binary" and .extra.Format=="binary")] | length' dist/artifacts.json)
+        if [ "${BINARY_COUNT}" != "4" ]; then
+          echo "::error::dist/artifacts.json has ${BINARY_COUNT} released Binary entries (extra.Format==\"binary\"), want exactly 4"
+          exit 1
+        fi
+
+        for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}"
+          GOARCH="${pair#*/}"
+
+          BIN=""
+          if command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg goos "${GOOS}" --arg goarch "${GOARCH}" \
+              '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph -path "*${GOOS}*${GOARCH}*" 2>/dev/null | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::goreleaser release produced no ${pair} binary under dist/"
+            exit 1
+          fi
+
+          # Assert the object is the right machine — the failure mode a
+          # green `goreleaser release` exit code alone cannot catch.
+          DESC=$(file -b "${BIN}")
+          echo "    ${pair}: ${BIN}: ${DESC}"
+          case "${GOOS}:${GOARCH}:${DESC}" in
+            linux:amd64:*ELF*x86-64*) ;;
+            linux:arm64:*ELF*aarch64*) ;;
+            darwin:amd64:*Mach-O*x86_64*) ;;
+            darwin:arm64:*Mach-O*arm64*) ;;
+            *) echo "::error::${pair} produced the wrong object: ${DESC}"; exit 1 ;;
+          esac
+        done
+
+        echo "release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation."
+
+  release:dry-run-signed:
+    desc: >-
+      Sibling of release:dry-run — but does NOT skip sign. release:dry-run
+      skips BOTH publish and sign, so binary_signs:'s upgrade-sidecar naming
+      template is never resolved except by a static assertion until the
+      production release, where a wrong answer cannot be withdrawn (D-07).
+      Resolves it early against a THROWAWAY LOCAL cosign key (no OIDC) — the
+      reason plan 01-05's merge checkpoint can clear. Same run also proves
+      sboms: documents: (--skip=publish does not skip SBOM). Pass condition:
+      FOUR DISTINCT PUBLISHED NAMES per pipe from dist/artifacts.json — never
+      a green exit code, never an on-disk listing (cycle-3 review HIGH-A).
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. This target's release invocation exercises the sboms: pipe (--skip=publish does not skip it). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. This target's release invocation exercises the binary_signs: pipe against a throwaway local key. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # The config under test must be exactly what shipped.
+        if ! git diff --quiet HEAD -- .goreleaser.yaml; then
+          echo "::error::.goreleaser.yaml has uncommitted changes — the config under test must be exactly the committed one, or the SIGN-EVIDENCE/SBOM-EVIDENCE observation below is invalid"
+          exit 1
+        fi
+
+        # ONE run-scoped temp dir tree for everything this rehearsal
+        # generates — key material, the generated config copy, and the
+        # native GoReleaser tool binary — never dist/ (--clean wipes it)
+        # and never the working tree. Removed on exit via a single trap.
+        SIGNTEST_DIR="$(mktemp -d)"
+        GORELEASER_DIR="$(mktemp -d)"
+        GORELEASER_BIN="${GORELEASER_DIR}/goreleaser"
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        cleanup() { rm -rf "${SIGNTEST_DIR}" "${GORELEASER_DIR}" "${ZIG_CACHE_ROOT}"; }
+        trap cleanup EXIT
+
+        # A THROWAWAY LOCAL cosign key pair, generated fresh in this temp
+        # dir and used once — makes the sign pipe RUN. Not the production
+        # identity; signs nothing anyone will verify. Production signing
+        # (binary_signs: carries no --key) stays keyless-OIDC, untouched.
+        export COSIGN_PASSWORD="${COSIGN_PASSWORD:-codegraph-throwaway-rehearsal-password-not-for-verification}"
+        cosign generate-key-pair --output-key-prefix "${SIGNTEST_DIR}/cosign" >/dev/null
+
+        # Inject --key into a GENERATED COPY of .goreleaser.yaml — the whole
+        # mechanism, not optional. COSIGN_PASSWORD DECRYPTS a key; it does
+        # not SELECT one — without --key, cosign sign-blob falls through to
+        # the keyless Fulcio/OIDC flow this job is denied (no id-token:
+        # write anywhere in this composition), hanging or hard-failing
+        # (cycle-2 review HIGH-1). Confirmed against the pinned
+        # goreleaser/v2@v2.17.1 module that the sign pipe's subprocess
+        # already inherits the full process environment (pkg/context:
+        # Env = ToEnv(append(os.Environ(), ...))), so COSIGN_PASSWORD needs
+        # no per-pipe env: addition — this one inserted line is the delta.
+        GENERATED_CONFIG="${SIGNTEST_DIR}/.goreleaser.signtest.yaml"
+        awk -v keyline="      - \"--key=${SIGNTEST_DIR}/cosign.key\"" '
+          { print }
+          /^      - "sign-blob"$/ { print keyline }
+        ' .goreleaser.yaml > "${GENERATED_CONFIG}"
+
+        # Assert the copy is a MINIMAL, ADDITIONS-ONLY delta before
+        # invoking anything, so the rehearsal cannot silently drift into
+        # testing a different configuration than the one that ships. `<`
+        # lines in default diff(1) output are deletions/replacements —
+        # their presence is a hard failure. Every `>` (added) line must
+        # carry --key= or COSIGN_PASSWORD.
+        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_CONFIG}" || true)"
+        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
+          echo "::error::${GENERATED_CONFIG} differs from the committed .goreleaser.yaml by more than additions:"
+          printf '%s\n' "${DIFF_OUT}"
+          exit 1
+        fi
+        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
+        if [ -n "${BAD_ADDITIONS}" ]; then
+          echo "::error::${GENERATED_CONFIG} has additions not matching --key= or COSIGN_PASSWORD:"
+          printf '%s\n' "${BAD_ADDITIONS}"
+          exit 1
+        fi
+        echo "generated config differs from the committed .goreleaser.yaml by additions only:"
+        printf '%s\n' "${DIFF_OUT}"
+
+        # Build GoReleaser NATIVELY, no GOOS/GOARCH in the environment —
+        # identical reasoning to release:dry-run's own comment: a
+        # GOARCH-cross-built GoReleaser runs under Rosetta and its child
+        # xcrun then resolves as x86_64, which cannot load the arm64-only
+        # libxcrun.dylib from CommandLineTools.
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        # Same zig-cache AccessDenied trap release:dry-run already hit
+        # (01-01-SUMMARY.md Rule-3 deviation): this invocation still
+        # cross-compiles all four targets before the sign/sbom pipes run.
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # Invoke against the GENERATED copy — --skip=publish ONLY. `sign`
+        # is deliberately NOT skipped: that is the entire point of this
+        # target. Because the config now lives outside the repo root,
+        # assert immediately after that dist/artifacts.json exists AT THE
+        # REPO ROOT — GoReleaser resolves `dist` relative to the process
+        # working directory, but a silent relocation would make every
+        # assertion below vacuous.
+        echo "==> goreleaser release -f ${GENERATED_CONFIG} --snapshot --skip=publish --clean"
+        "${GORELEASER_BIN}" release -f "${GENERATED_CONFIG}" --snapshot --skip=publish --clean
+
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found at the repo root after the run — goreleaser resolves dist relative to the process working directory"
+          exit 1
+        fi
+
+        # ASSERT FROM dist/artifacts.json, NOT FROM A FILENAME GLOB, and
+        # treat a green exit code as no evidence at all.
+        #
+        # Why the source of truth is the metadata file and not the
+        # filesystem (cycle-3 review HIGH-A): GoReleaser expands ${artifact}
+        # from art.Path when it decides WHERE to write the signature
+        # (sign.go:179-182), then re-expands the same template with
+        # env["artifact"] = art.Name to compute the artifact record it will
+        # PUBLISH (sign.go:274-276); the release pipe uploads by
+        # artifact.Name. For a formats: [binary] archive the rename lives
+        # only in metadata (archive.go:308-310 — Name: finalName, Path:
+        # binary.Path), so no renamed file is ever written to disk. The
+        # on-disk basename is therefore identical under BOTH the broken
+        # configuration and the correct remediation — a filesystem oracle
+        # would false-RED the preferred fix and is structurally blind to
+        # the SBOM collision in the neighbouring pipe. Confirmed against
+        # the pinned goreleaser/v2@v2.17.1 module: the `type` field written
+        # to dist/artifacts.json (internal/pipe/metadata/metadata.go:
+        # writeArtifacts) is the literal strings "Signature" and "SBOM".
+        OK=1
+
+        SIGN_COUNT=$(jq -r '[.[] | select(.type=="Signature")] | length' dist/artifacts.json)
+        if [ "${SIGN_COUNT}" = "0" ]; then
+          echo "::error::0 Signature-typed records in dist/artifacts.json — a filter matching nothing is a HARD FAILURE, not a pass: GoReleaser logs 'no artifacts matching the given filters found' and returns nil, and goreleaser check does not validate the artifacts: enum at all"
+          OK=0
+        fi
+        SIGN_NAMES=$(jq -r '[.[] | select(.type=="Signature") | .name] | join(",")' dist/artifacts.json)
+        SIGN_DISTINCT=$(jq -r '[.[] | select(.type=="Signature") | .name] | unique | length' dist/artifacts.json)
+        if [ "${SIGN_COUNT}" != "0" ] && [ "${SIGN_DISTINCT}" != "${SIGN_COUNT}" ]; then
+          echo "::error::Signature records are not distinct: ${SIGN_COUNT} records, ${SIGN_DISTINCT} distinct names (${SIGN_NAMES}) — a PATH-derived template collides to one name per platform; this is D-14's exact failure mode"
+          OK=0
+        fi
+        if [ "${SIGN_COUNT}" != "0" ]; then
+          for pair in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            MATCHED=$(jq -r --arg suf "_${pair}.sigstore.json" \
+              '[.[] | select(.type=="Signature") | select(.name | startswith("codegraph_")) | select(.name | endswith($suf))] | length' \
+              dist/artifacts.json)
+            if [ "${MATCHED}" != "1" ]; then
+              echo "::error::expected exactly 1 Signature name matching codegraph_<tag>_${pair}.sigstore.json, found ${MATCHED} (names=${SIGN_NAMES})"
+              OK=0
+            fi
+          done
+        fi
+
+        SBOM_COUNT=$(jq -r '[.[] | select(.type=="SBOM")] | length' dist/artifacts.json)
+        if [ "${SBOM_COUNT}" = "0" ]; then
+          echo "::error::0 SBOM-typed records in dist/artifacts.json — a filter matching nothing is a HARD FAILURE, not a pass: GoReleaser logs 'no artifacts matching the given filters found' and returns nil, and goreleaser check does not validate the artifacts: enum at all"
+          OK=0
+        fi
+        SBOM_NAMES=$(jq -r '[.[] | select(.type=="SBOM") | .name] | join(",")' dist/artifacts.json)
+        SBOM_DISTINCT=$(jq -r '[.[] | select(.type=="SBOM") | .name] | unique | length' dist/artifacts.json)
+        if [ "${SBOM_COUNT}" != "0" ] && [ "${SBOM_DISTINCT}" != "${SBOM_COUNT}" ]; then
+          echo "::error::SBOM records are not distinct: ${SBOM_COUNT} records, ${SBOM_DISTINCT} distinct names (${SBOM_NAMES}) — a PATH-derived template collides to one name per platform; this is HIGH-B's exact failure mode"
+          OK=0
+        fi
+        if [ "${SBOM_COUNT}" != "0" ]; then
+          for pair in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            MATCHED=$(jq -r --arg suf "_${pair}.spdx.json" \
+              '[.[] | select(.type=="SBOM") | select(.name | startswith("codegraph_")) | select(.name | endswith($suf))] | length' \
+              dist/artifacts.json)
+            if [ "${MATCHED}" != "1" ]; then
+              echo "::error::expected exactly 1 SBOM name matching codegraph_<tag>_${pair}.spdx.json, found ${MATCHED} (names=${SBOM_NAMES})"
+              OK=0
+            fi
+          done
+        fi
+
+        # Two machine-parseable summary lines, as the LAST things printed —
+        # mirroring plan 01-01's REL05-EVIDENCE convention. Emitted on BOTH
+        # the pass and the fail path: a RED observation is the most
+        # valuable output this target can produce, and a signature failure
+        # must not short-circuit the SBOM line, because the two
+        # remediations are independent.
+        echo "SIGN-EVIDENCE count=${SIGN_COUNT} distinct=${SIGN_DISTINCT} names=${SIGN_NAMES}"
+        echo "SBOM-EVIDENCE count=${SBOM_COUNT} distinct=${SBOM_DISTINCT} names=${SBOM_NAMES}"
+
+        if [ "${OK}" != "1" ]; then
+          exit 1
+        fi
+
+  release:goreleaser:
+    desc: >-
+      Cut a REAL release: one `goreleaser release --clean` invocation —
+      publishes to GitHub Releases, signs every binary with cosign keyless
+      (OIDC), and emits SBOMs. The single definition release.yml's
+      collapsed `release` job calls (plan 01-03, DEV-01); not currently
+      bound by TestWorkflowRunBodiesInvokeTask's inScopeJobs fixture (D-08
+      exception) — applied deliberately, not because a test requires it.
+      Meant to run in CI on a tag push, NOT casually from a laptop. For the
+      local, non-publishing equivalent, use `task release:dry-run`.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:goreleaser must run on a native darwin host — the linux legs cross-compile via zig from here (D-01/D-02) and darwin must build natively; a linux host would silently produce a cross-linked darwin binary (libresolv/DNS-resolution risk). Use `task release:dry-run` or the linux-cross-canary workflow instead."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml cross-compile via zig cc/zig c++ (CI pins 0.15.1 via mlugg/setup-zig). Install locally: brew install zig."
+      - sh: command -v cosign
+        msg: "cosign not found. .goreleaser.yaml's binary_signs: pipe shells out to it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+      - sh: command -v syft
+        msg: "syft not found. .goreleaser.yaml's sboms: pipe shells out to it. CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: git describe --exact-match --tags HEAD
+        msg: "no tag found at HEAD. `goreleaser release` hard-fails without one. For a tagless, non-publishing run of the same composition, use `task release:dry-run` instead."
+      - sh: '[ -n "${GITHUB_TOKEN:-}" ]'
+        msg: "GITHUB_TOKEN is not set. GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which is the gh CLI's own variable. Set GITHUB_TOKEN before running this target."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # ONE prefer-then-build algorithm (C6): prefer a `goreleaser` on
+        # PATH (CI path — goreleaser-action install-only already put the
+        # pinned build there, so nothing compiles inside the OIDC job);
+        # else build go.tool.mod's pin as the LOCAL fallback. Either way,
+        # `goreleaser --version` is asserted against the pin below.
+        PINNED_VERSION="$(GOWORK=off go list -m -modfile=go.tool.mod -f '{{.Version}}' github.com/goreleaser/goreleaser/v2)"
+        PINNED_VERSION="${PINNED_VERSION#v}"
+
+        CLEANUP_DIR=""
+        cleanup() { [ -n "${CLEANUP_DIR}" ] && rm -rf "${CLEANUP_DIR}"; }
+        trap cleanup EXIT
+
+        if command -v goreleaser >/dev/null 2>&1; then
+          GORELEASER_BIN="$(command -v goreleaser)"
+        else
+          # Build NATIVELY, no GOOS/GOARCH in the environment — same
+          # reasoning as release:dry-run's identical comment: a
+          # GOARCH-cross-built GoReleaser runs under Rosetta and its child
+          # xcrun then resolves as x86_64, which cannot load the
+          # arm64-only libxcrun.dylib from CommandLineTools.
+          CLEANUP_DIR="$(mktemp -d)"
+          GORELEASER_BIN="${CLEANUP_DIR}/goreleaser"
+          GOWORK=off go build -modfile=go.tool.mod \
+            -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+        fi
+
+        # Assert the resolved binary's version (`goreleaser --version`)
+        # matches the go.tool.mod pin before invoking release — keeps
+        # prefer-then-build honest at the point of use (MAINT-03).
+        RESOLVED_VERSION="$("${GORELEASER_BIN}" --version 2>&1 | grep -m1 '^GitVersion:' | awk '{print $2}')"
+        if [ -z "${RESOLVED_VERSION}" ] || [ "${RESOLVED_VERSION}" != "${PINNED_VERSION}" ]; then
+          echo "::error::resolved goreleaser (${GORELEASER_BIN}) reports version '${RESOLVED_VERSION}', want '${PINNED_VERSION}' (go.tool.mod's pin, MAINT-03). A stale goreleaser on PATH would otherwise silently hollow out TestGoreleaserPinParity's guarantee at the point of use."
+          exit 1
+        fi
+
+        # No GOOS/GOARCH set here: unlike `build --single-target`,
+        # `goreleaser release` resolves every target from each builds:
+        # entry's own goos:/goarch: list, not from the environment. A
+        # carried-over GOOS/GOARCH would be at best a no-op and at worst
+        # mask a misconfiguration.
+        "${GORELEASER_BIN}" release --clean
+
+        # Emit the checksums-file hash as a $GITHUB_OUTPUT `hashes` value
+        # when running under GitHub Actions (GITHUB_OUTPUT is only set
+        # there — a no-op locally). release.yml's provenance: job still
+        # consumes this output until plan 01-04 removes both together.
+        # PRECISION (2026-08-01): provenance attests over the SIX
+        # BINARIES, not the checksums file itself; this base64-encodes the
+        # file's *contents* as the subject-list transport the SLSA generic
+        # generator parses. Folded in here, rather than a second
+        # release.yml step, so the release job's Release step keeps
+        # exactly one run: body (T-01-14).
+        if [ -n "${GITHUB_OUTPUT:-}" ]; then
+          TAG="$(git describe --exact-match --tags HEAD)"
+          CHECKSUMS_FILE="dist/codegraph_${TAG}_checksums.txt"
+          if [ ! -f "${CHECKSUMS_FILE}" ]; then
+            echo "::error::${CHECKSUMS_FILE} not found — expected GoReleaser's checksum: pipe to have produced it"
+            exit 1
+          fi
+          echo "hashes=$(base64 -w0 < "${CHECKSUMS_FILE}")" >> "${GITHUB_OUTPUT}"
+        fi
+
+  check:linux-cross-export:
+    desc: >-
+      Resolve both linux binaries the just-run `goreleaser release`
+      (task release:dry-run) produced from dist/artifacts.json and copy
+      each to a fixed, documented export path under dist/export/, named
+      <goos>-<goarch>. Exists because actions/upload-artifact's `path:`
+      input is a literal glob, not a shell — it cannot itself run the
+      dist/artifacts.json jq lookup, and GoReleaser writes binaries under
+      generated, build-id-nested dist/ paths that are not stable enough to
+      hard-code as a glob (review LOW, Codex Plan-01). These export paths
+      are a CONTRACT with linux-cross-canary.yml's two exec jobs and with
+      check:linux-cross-exec's default CODEGRAPH_BIN path — do not rename
+      dist/export/linux-amd64 or dist/export/linux-arm64 without updating
+      all three.
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found — run task release:dry-run first"
+          exit 1
+        fi
+
+        mkdir -p dist/export
+
+        for pair in linux/amd64 linux/arm64; do
+          GOOS="${pair%/*}"
+          GOARCH="${pair#*/}"
+
+          BIN=""
+          if command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg goos "${GOOS}" --arg goarch "${GOARCH}" \
+              '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph -path "*${GOOS}*${GOARCH}*" 2>/dev/null | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::could not resolve the ${pair} binary from dist/artifacts.json — run task release:dry-run first"
+            exit 1
+          fi
+
+          EXPORT="dist/export/${GOOS}-${GOARCH}"
+          cp "${BIN}" "${EXPORT}"
+          chmod +x "${EXPORT}"
+          echo "    ${pair}: ${BIN} -> ${EXPORT}"
+        done
+
+  check:linux-cross-exec:
+    desc: >-
+      Convert "the linker accepted the cross-compiled object" into "the CGo
+      tree-sitter parse path works on this OS and arch" — REL-05's real
+      evidence bar (review synthesis finding S1). Takes the path to an
+      already-built codegraph binary via CODEGRAPH_BIN (default
+      dist/export/linux-<GOHOSTARCH>, the check:linux-cross-export
+      contract), chmod +x's it, asserts its file(1) ELF machine matches the
+      HOST architecture (a wrong-arch artifact fails loudly here instead of
+      as a confusing exec-format error a few lines later), then runs the
+      binary's real `init` subcommand against the checked-out repository
+      working tree and asserts `codegraph status --json`'s exact numeric
+      fileCount/nodeCount JSON fields (not rendered text — review
+      suggestion, Codex Plan-01) are non-zero. A zero-count graph, an empty
+      output, or a bare exit code is a FAIL — that is the whole point of
+      the criterion. Emits exactly one machine-parseable REL05-EVIDENCE
+      line as the last thing it prints; the target itself asserts both
+      counts are non-zero and exits non-zero otherwise, so "a green step
+      with no counts" is a structural impossibility.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "check:linux-cross-exec proves REL-05's real-Linux-execution half — it must run on a real Linux host, never emulated (D-02). Dispatch linux-cross-canary.yml, which runs this on namespace-profile-linux-amd64-4x8 / namespace-profile-linux-arm64-4x8."
+      - sh: command -v jq
+        msg: "jq not found — required to parse codegraph status --json's numeric fields."
+    cmds:
+      - |
+        set -euo pipefail
+
+        HOST_ARCH="$(go env GOHOSTARCH)"
+        BIN="${CODEGRAPH_BIN:-dist/export/linux-${HOST_ARCH}}"
+        if [ ! -f "${BIN}" ]; then
+          echo "::error::codegraph binary not found at ${BIN} — set CODEGRAPH_BIN or run task check:linux-cross-export first"
+          exit 1
+        fi
+        chmod +x "${BIN}"
+
+        HOST_MACHINE="$(uname -m)"
+        DESC="$(file -b "${BIN}")"
+        echo "    binary: ${BIN}"
+        echo "    host uname -m: ${HOST_MACHINE}"
+        echo "    file -b: ${DESC}"
+
+        # A wrong-arch artifact must fail loudly HERE, not a few lines
+        # below as a confusing exec-format error.
+        case "${HOST_MACHINE}:${DESC}" in
+          x86_64:*ELF*x86-64*) ELF_MACHINE="x86-64" ;;
+          aarch64:*ELF*aarch64*) ELF_MACHINE="aarch64" ;;
+          *)
+            echo "::error::${BIN} (${DESC}) does not match the host architecture (uname -m: ${HOST_MACHINE})"
+            exit 1
+            ;;
+        esac
+
+        # The real REL-05 evidence: index THIS checked-out repository — a
+        # real, multi-language tree — not `--version`, not an exit code.
+        REPO_ROOT="$(pwd)"
+        rm -rf "${REPO_ROOT}/.codegraph"
+        "${BIN}" init "${REPO_ROOT}"
+
+        STATUS_JSON="$("${BIN}" status --json --path "${REPO_ROOT}")"
+        FILES=$(printf '%s' "${STATUS_JSON}" | jq -r '.fileCount')
+        SYMBOLS=$(printf '%s' "${STATUS_JSON}" | jq -r '.nodeCount')
+
+        if ! [[ "${FILES}" =~ ^[0-9]+$ ]] || [ "${FILES}" -eq 0 ]; then
+          echo "::error::codegraph status --json reports fileCount=${FILES} — REL-05 requires a non-zero count, not a green exit code"
+          exit 1
+        fi
+        if ! [[ "${SYMBOLS}" =~ ^[0-9]+$ ]] || [ "${SYMBOLS}" -eq 0 ]; then
+          echo "::error::codegraph status --json reports nodeCount=${SYMBOLS} — REL-05 requires a non-zero count, not a green exit code"
+          exit 1
+        fi
+
+        echo "REL05-EVIDENCE uname=${HOST_MACHINE} elf=${ELF_MACHINE} files=${FILES} symbols=${SYMBOLS}"
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
       - "{{.GO_TOOL}} goreleaser check"
+
+  verify:release-assets:
+    desc: >-
+      Re-prove REL-06/REL-07/REL-08's asset-set, checksum, cosign, and
+      attestation claims against assets RE-DOWNLOADED from the PUBLISHED
+      release named by $TAG — never a local dist/ copy, which never passes
+      through the real GitHub Releases upload path, the Sigstore
+      transparency log, or the attestation subject binding. Driven by
+      .github/workflows/post-release-verify.yml's verify-supply-chain job on
+      every future release; $TAG must already be resolved and validated
+      (that job's resolve-tag dependency), never head_branch re-read here.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. verify:release-assets requires TAG (the resolved, validated release tag) in the environment — post-release-verify.yml's resolve-tag job supplies it via needs.resolve-tag.outputs.tag."
+      - sh: '[ -n "${REPO:-}" ]'
+        msg: "REPO is not set. verify:release-assets requires REPO (owner/repo) in the environment."
+      - sh: '[ -n "${GH_TOKEN:-}" ]'
+        msg: "GH_TOKEN is not set. Every gh invocation in this target needs it; a missing token would otherwise fail mid-target and look like a supply-chain break rather than a missing credential."
+      - sh: command -v gh
+        msg: "gh CLI not found. This target assumes the runner image ships it (matching GitHub-hosted runner images); locally: brew install gh / apt install gh."
+      - sh: command -v jq
+        msg: "jq not found. This target parses gh's --json output with it. CI runner images ship it; locally: brew install jq."
+      - sh: command -v cosign
+        msg: "cosign not found. This target verifies the published cosign bundle with it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "verify:release-assets: TAG=${TAG} REPO=${REPO}"
+
+        REQUIRED_RAW_SUFFIXES="linux_amd64 linux_arm64 darwin_amd64 darwin_arm64"
+
+        # --- REQUIRED / ALLOWED / UNCLASSIFIED classification, never a
+        # fixed total: this workflow re-fires on every future release, and
+        # Phase 2 notarization / Phase 3 Homebrew cask artifacts may
+        # legitimately add assets.
+        ALLOWED_ASSETS=""
+        # ^ intentionally EMPTY in this phase. Adding an asset here is a
+        # deliberate edit, not a default — see the header comment in
+        # post-release-verify.yml.
+
+        # --- Bounded wait for asset visibility. Even after release.yml
+        # reports success, GitHub's release-asset API and CDN can lag
+        # briefly. Poll until the REQUIRED set is present, with a hard
+        # attempt ceiling — a visibility-lag tolerance, never a substitute
+        # for the workflow_run trigger's own ordering guarantee.
+        MAX_ATTEMPTS=10
+        SLEEP_SECONDS=6
+        ATTEMPT=1
+        NAMES=""
+        while [ "${ATTEMPT}" -le "${MAX_ATTEMPTS}" ]; do
+          ASSETS_JSON="$(gh release view "${TAG}" --repo "${REPO}" --json assets 2>/dev/null || echo '{"assets":[]}')"
+          NAMES="$(printf '%s' "${ASSETS_JSON}" | jq -r '.assets[].name')"
+          MISSING=""
+          printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_checksums.txt" || MISSING="${MISSING} checksums"
+          for suf in ${REQUIRED_RAW_SUFFIXES}; do
+            printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_${suf}" || MISSING="${MISSING} raw:${suf}"
+            printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_${suf}.zip" || MISSING="${MISSING} zip:${suf}"
+            printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_${suf}.sigstore.json" || MISSING="${MISSING} sig:${suf}"
+            printf '%s\n' "${NAMES}" | grep -qx "codegraph_${TAG}_${suf}.spdx.json" || MISSING="${MISSING} sbom:${suf}"
+          done
+          if [ -z "${MISSING}" ]; then
+            echo "verify:release-assets: all required assets visible after ${ATTEMPT} attempt(s)"
+            break
+          fi
+          echo "verify:release-assets: attempt ${ATTEMPT}/${MAX_ATTEMPTS} — still missing:${MISSING}"
+          if [ "${ATTEMPT}" -eq "${MAX_ATTEMPTS}" ]; then
+            echo "::error::required assets still missing after ${MAX_ATTEMPTS} attempts (${SLEEP_SECONDS}s apart):${MISSING}"
+            exit 1
+          fi
+          ATTEMPT=$((ATTEMPT + 1))
+          sleep "${SLEEP_SECONDS}"
+        done
+
+        TOTAL_COUNT=$(printf '%s\n' "${NAMES}" | grep -c . || true)
+        echo "verify:release-assets: OBSERVED ${TOTAL_COUNT} total published assets (recorded, not asserted — REQUIRED/ALLOWED/UNCLASSIFIED below is the real check)"
+
+        UNCLASSIFIED=""
+        for name in ${NAMES}; do
+          case "${name}" in
+            "codegraph_${TAG}_checksums.txt") continue ;;
+          esac
+          IS_REQUIRED=0
+          for suf in ${REQUIRED_RAW_SUFFIXES}; do
+            case "${name}" in
+              "codegraph_${TAG}_${suf}"|"codegraph_${TAG}_${suf}.zip"|"codegraph_${TAG}_${suf}.sigstore.json"|"codegraph_${TAG}_${suf}.spdx.json")
+                IS_REQUIRED=1
+                ;;
+            esac
+          done
+          if [ "${IS_REQUIRED}" = "1" ]; then
+            continue
+          fi
+          IS_ALLOWED=0
+          for allowed in ${ALLOWED_ASSETS}; do
+            if [ "${name}" = "${allowed}" ]; then
+              IS_ALLOWED=1
+            fi
+          done
+          if [ "${IS_ALLOWED}" = "1" ]; then
+            continue
+          fi
+          UNCLASSIFIED="${UNCLASSIFIED} ${name}"
+        done
+        if [ -n "${UNCLASSIFIED}" ]; then
+          echo "::error::UNCLASSIFIED published asset(s), not in REQUIRED or ALLOWED:${UNCLASSIFIED} — an unexpected asset on a supply-chain release is a finding, not noise; add it to ALLOWED_ASSETS deliberately if it is expected"
+          exit 1
+        fi
+
+        # Exact set equality on REQUIRED, both directions: every required
+        # member present exactly once.
+        for suf in ${REQUIRED_RAW_SUFFIXES}; do
+          for kind_suffix in "" ".zip" ".sigstore.json" ".spdx.json"; do
+            NAME="codegraph_${TAG}_${suf}${kind_suffix}"
+            COUNT=$(printf '%s\n' "${NAMES}" | grep -cx "${NAME}" || true)
+            if [ "${COUNT}" != "1" ]; then
+              echo "::error::expected exactly 1 published asset named ${NAME}, found ${COUNT}"
+              exit 1
+            fi
+          done
+        done
+        CHECKSUMS_COUNT=$(printf '%s\n' "${NAMES}" | grep -cx "codegraph_${TAG}_checksums.txt" || true)
+        if [ "${CHECKSUMS_COUNT}" != "1" ]; then
+          echo "::error::expected exactly 1 codegraph_${TAG}_checksums.txt, found ${CHECKSUMS_COUNT}"
+          exit 1
+        fi
+
+        # --- Download every raw + zip payload and the checksums file into a
+        # temp dir; assert coverage and sha256sum -c.
+        DL_DIR="$(mktemp -d)"
+        trap 'rm -rf "${DL_DIR}"' EXIT
+        gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
+          --pattern "codegraph_${TAG}_checksums.txt"
+        for suf in ${REQUIRED_RAW_SUFFIXES}; do
+          gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
+            --pattern "codegraph_${TAG}_${suf}"
+          gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
+            --pattern "codegraph_${TAG}_${suf}.zip"
+        done
+
+        CHECKSUMS_FILE="${DL_DIR}/codegraph_${TAG}_checksums.txt"
+        LINE_COUNT=$(wc -l < "${CHECKSUMS_FILE}" | tr -d ' ')
+        if [ "${LINE_COUNT}" != "8" ]; then
+          echo "::error::${CHECKSUMS_FILE} has ${LINE_COUNT} lines, want exactly 8"
+          exit 1
+        fi
+
+        # Both-directions set equality between the checksums file's named
+        # entries and the 8 downloaded payloads; no sidecar or
+        # self-reference line (D-12).
+        CHECKSUM_NAMES="$(awk '{print $2}' "${CHECKSUMS_FILE}" | sed 's/^\*//' | sort)"
+        DOWNLOADED_NAMES="$(cd "${DL_DIR}" && ls -1 | grep -v "^codegraph_${TAG}_checksums\.txt$" | sort)"
+        if [ "${CHECKSUM_NAMES}" != "${DOWNLOADED_NAMES}" ]; then
+          echo "::error::checksums file's named entries do not set-equal the 8 downloaded payloads"
+          echo "checksums names: ${CHECKSUM_NAMES}"
+          echo "downloaded names: ${DOWNLOADED_NAMES}"
+          exit 1
+        fi
+        if printf '%s\n' "${CHECKSUM_NAMES}" | grep -Eq '\.(sigstore|spdx)\.json$|_checksums\.txt$'; then
+          echo "::error::checksums file names a sidecar or itself — D-12 exclusion violated"
+          exit 1
+        fi
+
+        (cd "${DL_DIR}" && sha256sum -c "$(basename "${CHECKSUMS_FILE}")")
+
+        # --- cosign verify-blob, VERBATIM flags from docs/RELEASE.md § a —
+        # a looser regex here would prove less than the published
+        # instruction claims (REL-08 criterion 3, D-11a).
+        cosign verify-blob \
+          --bundle "${DL_DIR}/codegraph_${TAG}_linux_amd64.sigstore.json" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          --certificate-identity-regexp \
+            '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+          "${DL_DIR}/codegraph_${TAG}_linux_amd64"
+        echo "verify:release-assets: cosign verify-blob: Verified OK"
+
+        # --- Attestation verification, the command plan 01-04 selected.
+        gh attestation verify "${DL_DIR}/codegraph_${TAG}_linux_amd64" -R "${REPO}"
+
+        echo "verify:release-assets: PASS — checksums, cosign, and attestation all verified against re-downloaded published assets for ${TAG}"
+
+  verify:self-upgrade:
+    desc: >-
+      Re-prove REL-08's self-upgrade claim (D-08): a genuinely shipped PRIOR
+      release binary self-upgrades via `codegraph upgrade "$TAG"` to the
+      published release named by $TAG, and the resulting binary's sha256
+      equals the published asset's — asserted by byte identity, never an
+      exit code. Driven by .github/workflows/post-release-verify.yml's
+      self-upgrade matrix (darwin/arm64, linux/amd64) on every future
+      release.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. verify:self-upgrade requires TAG (the resolved, validated release tag) in the environment — post-release-verify.yml's resolve-tag job supplies it via needs.resolve-tag.outputs.tag."
+      - sh: '[ -n "${REPO:-}" ]'
+        msg: "REPO is not set. verify:self-upgrade requires REPO (owner/repo) in the environment."
+      - sh: '[ -n "${GOOS:-}" ]'
+        msg: "GOOS is not set. verify:self-upgrade requires GOOS (darwin or linux) in the environment."
+      - sh: '[ -n "${GOARCH:-}" ]'
+        msg: "GOARCH is not set. verify:self-upgrade requires GOARCH (amd64 or arm64) in the environment."
+      - sh: '[ -n "${GH_TOKEN:-}" ]'
+        msg: "GH_TOKEN is not set. Every gh invocation in this target needs it; a missing token would otherwise fail mid-target and look like a supply-chain break rather than a missing credential."
+      - sh: command -v gh
+        msg: "gh CLI not found. This target assumes the runner image ships it (matching GitHub-hosted runner images); locally: brew install gh / apt install gh."
+      - sh: command -v jq
+        msg: "jq not found. This target parses gh api output with it. CI runner images ship it; locally: brew install jq."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "verify:self-upgrade: TAG=${TAG} REPO=${REPO} GOOS=${GOOS} GOARCH=${GOARCH}"
+
+        # macOS ships no sha256sum by default (BSD userland); shasum -a 256
+        # is the native equivalent. Prefer sha256sum when present (Linux),
+        # fall back to shasum (darwin) — this target's matrix runs on both.
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # --- 1. Resolve the PRIOR release by SEMANTIC-VERSION PREDECESSOR
+        # ORDER, never gh's publication-chronology list order (cycle-2
+        # review MEDIUM/Codex) — a historical dispatch of an old $TAG must
+        # not select a release NEWER than $TAG, and an RC must not select
+        # the wrong stable/prerelease neighbour.
+        RELEASES_JSON="$(gh api "repos/${REPO}/releases" --paginate)"
+
+        DRAFT_TAGS="$(printf '%s' "${RELEASES_JSON}" | jq -r '.[] | select(.draft == true) | .tag_name')"
+        if [ -n "${DRAFT_TAGS}" ]; then
+          echo "verify:self-upgrade: dropping draft release(s) — a draft has no downloadable asset and cannot be upgraded from:"
+          printf '%s\n' "${DRAFT_TAGS}" | sed 's/^/    /'
+        fi
+        NON_DRAFT_JSON="$(printf '%s' "${RELEASES_JSON}" | jq -c '[.[] | select(.draft == false)]')"
+
+        SEMVER_RE='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+
+        TAG_PARSED="$(printf '%s' "${TAG}" | jq -R -c \
+          'capture("^v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)(-(?<pre>[0-9A-Za-z.-]+))?$")')"
+        if [ -z "${TAG_PARSED}" ] || [ "${TAG_PARSED}" = "null" ]; then
+          echo "::error::TAG '${TAG}' under verification does not parse as major.minor.patch[-prerelease] — cannot resolve a predecessor"
+          exit 1
+        fi
+        TAG_MAJOR="$(printf '%s' "${TAG_PARSED}" | jq -r '.major | tonumber')"
+        TAG_MINOR="$(printf '%s' "${TAG_PARSED}" | jq -r '.minor | tonumber')"
+        TAG_PATCH="$(printf '%s' "${TAG_PARSED}" | jq -r '.patch | tonumber')"
+        TAG_PRE="$(printf '%s' "${TAG_PARSED}" | jq -r '.pre // ""')"
+
+        UNPARSEABLE="$(printf '%s' "${NON_DRAFT_JSON}" | jq -r --arg re "${SEMVER_RE}" \
+          '[.[] | select(.tag_name | test($re) | not) | .tag_name] | .[]')"
+        if [ -n "${UNPARSEABLE}" ]; then
+          echo "verify:self-upgrade: skipping unparseable tag(s) (not major.minor.patch[-prerelease]), never silently ignored:"
+          printf '%s\n' "${UNPARSEABLE}" | sed 's/^/    /'
+        fi
+
+        PARSED_JSON="$(printf '%s' "${NON_DRAFT_JSON}" | jq -c \
+          '[.[] | . as $r
+             | ($r.tag_name | capture("^v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)(-(?<pre>[0-9A-Za-z.-]+))?$")?) as $p
+             | select($p != null)
+             | {tag: $r.tag_name, major: ($p.major|tonumber), minor: ($p.minor|tonumber), patch: ($p.patch|tonumber), pre: ($p.pre // "")}]')"
+
+        # Filter to versions strictly LESS THAN $TAG under semver ordering.
+        # A prerelease sorts below its own release (1.0.0-rc1 < 1.0.0).
+        # Comparing two prereleases of the IDENTICAL major.minor.patch
+        # falls back to a lexical comparison of the prerelease string — a
+        # documented, accepted simplification; no full semver-precedence
+        # library is available in this shell/jq environment.
+        LESS_THAN_JSON="$(printf '%s' "${PARSED_JSON}" | jq -c \
+          --argjson tmaj "${TAG_MAJOR}" --argjson tmin "${TAG_MINOR}" --argjson tpat "${TAG_PATCH}" --arg tpre "${TAG_PRE}" \
+          '[.[] | select(
+              (.major < $tmaj)
+              or (.major == $tmaj and .minor < $tmin)
+              or (.major == $tmaj and .minor == $tmin and .patch < $tpat)
+              or (.major == $tmaj and .minor == $tmin and .patch == $tpat and .pre != "" and $tpre == "")
+              or (.major == $tmaj and .minor == $tmin and .patch == $tpat and .pre != "" and $tpre != "" and .pre < $tpre)
+           )]')"
+        CANDIDATE_COUNT="$(printf '%s' "${LESS_THAN_JSON}" | jq 'length')"
+
+        # Prerelease policy (a decision, not an implementation detail):
+        # when $TAG is a stable version (no prerelease component), prefer
+        # the greatest STABLE predecessor and fall back to a prerelease
+        # predecessor only if no stable one exists. When $TAG is itself a
+        # prerelease, allow either.
+        POLICY="prerelease"
+        FILTERED_JSON="${LESS_THAN_JSON}"
+        if [ -z "${TAG_PRE}" ]; then
+          STABLE_ONLY_JSON="$(printf '%s' "${LESS_THAN_JSON}" | jq -c '[.[] | select(.pre == "")]')"
+          STABLE_COUNT="$(printf '%s' "${STABLE_ONLY_JSON}" | jq 'length')"
+          if [ "${STABLE_COUNT}" -gt 0 ]; then
+            FILTERED_JSON="${STABLE_ONLY_JSON}"
+            POLICY="stable"
+          fi
+        fi
+        FILTERED_COUNT="$(printf '%s' "${FILTERED_JSON}" | jq 'length')"
+        if [ "${FILTERED_COUNT}" -eq 0 ]; then
+          echo "::error::no prior release exists to upgrade FROM (${CANDIDATE_COUNT} strictly-earlier candidate(s) before the prerelease policy filter) — this reads as 'no prior release', not a supply-chain failure. The first release ever cut has nothing to upgrade from."
+          exit 1
+        fi
+
+        # Select the MAXIMUM of what remains: sort ascending by
+        # [major, minor, patch, (stable > prerelease at the same base), pre],
+        # take the last.
+        PRIOR_TAG="$(printf '%s' "${FILTERED_JSON}" | jq -r \
+          '[.[] | . + {rank: (if .pre == "" then 1 else 0 end)}] | sort_by([.major, .minor, .patch, .rank, .pre]) | last | .tag')"
+
+        echo "PRIOR-RELEASE tag=${PRIOR_TAG} policy=${POLICY} candidates=${FILTERED_COUNT}"
+
+        # --- 2. Download the prior release's raw asset for
+        # GOOS/GOARCH — a genuinely shipped binary, which is the whole
+        # point of the claim.
+        DL_DIR="$(mktemp -d)"
+        trap 'rm -rf "${DL_DIR}"' EXIT
+
+        PRIOR_ASSET="codegraph_${PRIOR_TAG}_${GOOS}_${GOARCH}"
+        gh release download "${PRIOR_TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
+          --pattern "${PRIOR_ASSET}"
+        PRIOR_BIN="${DL_DIR}/${PRIOR_ASSET}"
+        chmod +x "${PRIOR_BIN}"
+        PRIOR_SHA256="$(sha256_of "${PRIOR_BIN}")"
+
+        # --- 3. Run the real codegraph upgrade invocation against it, with
+        # $TAG EXPLICIT as the positional version argument — an
+        # argument-less invocation would instead resolve GitHub's
+        # timing-sensitive "latest" endpoint (internal/upgrade/release.go)
+        # and could silently verify the wrong release under concurrent tag
+        # activity (review MEDIUM, Codex Plan-05).
+        "${PRIOR_BIN}" upgrade "${TAG}"
+        UPGRADED_SHA256="$(sha256_of "${PRIOR_BIN}")"
+
+        # --- 4. Assert byte identity against the NEW release's raw asset
+        # for the same platform, re-downloaded independently — not
+        # "upgrade exited 0".
+        NEW_ASSET="codegraph_${TAG}_${GOOS}_${GOARCH}"
+        gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
+          --pattern "${NEW_ASSET}" --clobber
+        PUBLISHED_SHA256="$(sha256_of "${DL_DIR}/${NEW_ASSET}")"
+
+        echo "SELF-UPGRADE-EVIDENCE goos=${GOOS} goarch=${GOARCH} prior_tag=${PRIOR_TAG} prior_sha256=${PRIOR_SHA256} upgraded_sha256=${UPGRADED_SHA256} published_sha256=${PUBLISHED_SHA256}"
+
+        if [ "${UPGRADED_SHA256}" != "${PUBLISHED_SHA256}" ]; then
+          echo "::error::upgraded binary sha256 (${UPGRADED_SHA256}) does not equal the published ${TAG} asset's sha256 (${PUBLISHED_SHA256})"
+          exit 1
+        fi
+
+        # --- 5. Assert the upgraded binary reports the new version.
+        REPORTED_VERSION="$("${PRIOR_BIN}" version --json | jq -r '.version')"
+        if [ "${REPORTED_VERSION}" != "${TAG}" ]; then
+          echo "::error::upgraded binary reports version '${REPORTED_VERSION}', want '${TAG}'"
+          exit 1
+        fi
+
+        echo "verify:self-upgrade: PASS — ${GOOS}/${GOARCH} self-upgraded from ${PRIOR_TAG} to ${TAG} byte-identically to the published asset"
 
   check:cross:
     desc: >-

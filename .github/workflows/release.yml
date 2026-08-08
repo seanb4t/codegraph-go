@@ -15,32 +15,40 @@
 #     user. If this file is ever renamed, releaseWorkflowRefPattern in
 #     verify.go MUST change in lockstep.
 #
-#   - Native 2-OS runner matrix (RESEARCH.md Finding 2): darwin targets
-#     build NATIVELY on a macOS runner (Xcode clang, no zig, no osxcross)
-#     because a Linux-hosted CGo cross-link to darwin risks silently
-#     breaking libresolv-based DNS resolution in the resulting binary —
-#     a real, multi-source-corroborated risk for a binary
-#     (`codegraph upgrade`) that makes real HTTPS calls on every
-#     platform, including macOS. Only linux/arm64 cross-compiles via zig.
-#     As of the 10-03 maintainer checkpoint, the darwin legs run on
-#     namespace-profile-macos-6x14-tahoe (a native Apple-Silicon macOS
-#     profile, per the maintainer) and the linux legs run on
-#     namespace-profile-linux-amd64-4x8 — see the `build` matrix below
-#     and 10-03-SUMMARY.md for what is and is not verified about that
-#     runner change. Native Windows is not a supported platform (quick
+#   - Single job, single runner class (plan 01-03, D-01, D-11): the
+#     goreleaser job runs NATIVELY on a real Apple-Silicon macOS profile
+#     (namespace-profile-macos-6x14-tahoe) and both linux legs
+#     cross-compile via `zig cc`/`zig c++` from it (D-01/D-02, REL-05
+#     enabling change, proven on real hardware by canary run 31273571889 —
+#     see 01-01-SUMMARY.md). A Linux-hosted CGo cross-link to darwin risks
+#     silently breaking libresolv-based DNS resolution in the resulting
+#     binary — a real, multi-source-corroborated risk for a binary
+#     (`codegraph upgrade`) that makes real HTTPS calls on every platform,
+#     including macOS. Native Windows is not a supported platform (quick
 #     task 260807-gho); Windows users run the linux/amd64 asset under
-#     WSL2, so no windows leg exists here.
+#     WSL2, so no windows leg exists here. Prior to plan 01-03 this file
+#     ran a 4-leg build matrix on two runner classes plus a separate
+#     assemble job with its own CI-artifact round trip; see
+#     10-03-SUMMARY.md and 01-01-SUMMARY.md for that history.
 #
-#   - Per-binary signing (RESEARCH.md Finding 1, see the `assemble` job):
-#     internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY
-#     ITSELF (sha256.Sum256(binary)), not a checksums file — cosign MUST
-#     sign each binary individually.
+#   - Per-binary signing (RESEARCH.md Finding 1): internal/upgrade's
+#     defaultVerify hashes the DOWNLOADED BINARY ITSELF
+#     (sha256.Sum256(binary)), not a checksums file — cosign MUST sign
+#     each binary individually. This is done declaratively by
+#     .goreleaser.yaml's binary_signs: pipe (plan 01-02), not a shell loop
+#     in this file.
 #
 #   - Every third-party Action below is pinned to a full commit SHA
 #     (resolved from the exact release tag noted in the trailing
-#     comment) except the SLSA generic generator, which slsa-verifier
-#     requires to be referenced by a full @vX.Y.Z semver tag, not a SHA
-#     (see the `provenance` job).
+#     comment) — UNCONDITIONALLY: the SLSA generic generator's
+#     documented tag-pin exception left with it (D-09). Build
+#     provenance moved from that third-party reusable workflow to
+#     GitHub's first-party actions/attest-build-provenance, published
+#     through GitHub's Attestations API rather than as an
+#     .intoto.jsonl release asset — the verification command changed
+#     accordingly; see docs/RELEASE.md § b (`gh attestation verify`,
+#     never `slsa-verifier verify-artifact`, which architecturally
+#     cannot verify this format, D-10).
 
 name: release
 
@@ -63,52 +71,33 @@ env:
   GORELEASER_VERSION: "v2.17.1"
 
 jobs:
-  # Native 2-OS matrix: each of the 4 (goos,goarch) targets in
-  # .goreleaser.yaml is built independently via
-  # `goreleaser build --single-target` (an OSS command — no GoReleaser
-  # Pro `release --split`/`continue --merge`/prebuilt-builder directive
-  # is used anywhere in this workflow, per RESEARCH.md Finding 2/
-  # Pitfall 3) and uploaded as a CI artifact. A later `assemble` job
-  # downloads all 4 and does the release/sign/SBOM/publish work.
-  build:
-    name: build (${{ matrix.goos }}/${{ matrix.goarch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # namespace-profile-linux-amd64-4x8 builds both linux arches:
-          # native gcc for linux/amd64 (no cross-toolchain needed); zig cc
-          # for the linux/arm64 cross target (CC/CXX for it are already set
-          # per-build-id inside .goreleaser.yaml itself — this job only
-          # needs to ensure the `zig` binary is on PATH).
-          - runner: namespace-profile-linux-amd64-4x8
-            goos: linux
-            goarch: amd64
-            needs_zig: false
-          - runner: namespace-profile-linux-amd64-4x8
-            goos: linux
-            goarch: arm64
-            needs_zig: true
-          # namespace-profile-macos-6x14-tahoe builds BOTH darwin arches
-          # NATIVELY (Xcode's own clang, arch-only cross for darwin/amd64) —
-          # no zig, no osxcross, no manually-sourced SDK: this is the
-          # darwin-DNS-resolver mitigation (Finding 2 / Pitfall 2), preserved
-          # here because this is still a native Apple-Silicon macOS host, not
-          # a cross-build. Moved from macos-latest to this Namespace profile
-          # per the 10-03 maintainer checkpoint decision (10-03-SUMMARY.md);
-          # the profile's nativeness is maintainer-attested from the
-          # Namespace dashboard, not yet machine-observed in a real workflow
-          # run — see that summary's Known Unknowns before assuming this leg
-          # is fully proven.
-          - runner: namespace-profile-macos-6x14-tahoe
-            goos: darwin
-            goarch: amd64
-            needs_zig: false
-          - runner: namespace-profile-macos-6x14-tahoe
-            goos: darwin
-            goarch: arm64
-            needs_zig: false
+  # Collapsed single job (plan 01-03, D-01, D-11): one `goreleaser release`
+  # invocation (task release:goreleaser), on one native macOS-class runner,
+  # does everything the former build+assemble jobs did across two runner
+  # classes and a CI-artifact round trip — cross-compile all four targets
+  # (darwin native, linux via zig cc), checksum, sign, SBOM, and publish.
+  # This job is the ONLY job in this file that can mint the OIDC token
+  # producing the cert SAN releaseWorkflowRefPattern anchors on: this exact
+  # workflow file, triggered by this exact tag ref (T-01-11 — the OIDC
+  # write scope is now a machine check, TestOIDCWriteScopedToSingleGoreleaserJob,
+  # not an eyeball one; see T-01-29 for the accepted intra-job execution
+  # surface this collapse widens).
+  release:
+    name: build, sign, SBOM, and publish release
+    runs-on: namespace-profile-macos-6x14-tahoe
+    permissions:
+      contents: write # publishing release assets
+      id-token: write # cosign keyless OIDC signing (Finding 1) — this
+      # job's OIDC token is what produces the cert SAN
+      # releaseWorkflowRefPattern anchors on: this exact
+      # workflow file, triggered by this exact tag ref. It is
+      # the ONLY job in this file that can mint one (T-01-11, D-11:
+      # exactly one job in this file may hold id-token: write —
+      # machine-checked by TestOIDCWriteScopedToSingleGoreleaserJob,
+      # no allowance).
+      attestations: write # actions/attest-build-provenance (D-09) — new
+      # permission GitHub's Attestations API requires; absent from
+      # this job before this plan.
     steps:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -123,253 +112,80 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
-        with:
-          cache: go
+      # nscloud-cache-action (present in the pre-collapse build job) is
+      # deliberately NOT carried into this job: it now also holds
+      # id-token: write, so every additional Action inside it is inside
+      # the signing boundary, and a release build should not read from a
+      # mutable cache any PR on any branch can populate (review synthesis
+      # finding S2; T-01-29).
 
-      - name: Install zig (linux/arm64 cross target only)
-        if: matrix.needs_zig
+      - name: Install zig
+        # UNCONDITIONAL (D-02): both linux build ids in .goreleaser.yaml
+        # now cross via zig cc/zig c++ from this one darwin host — the
+        # per-leg `if: matrix.needs_zig` guard the old build matrix used
+        # no longer applies now that there is no matrix.
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
           version: "0.15.1"
 
+      - name: Install cosign
+        # Moved up from the deleted assemble job: .goreleaser.yaml's
+        # binary_signs: pipe shells out to cosign, so it must be on PATH
+        # before goreleaser runs.
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install syft
+        # Moved up from the deleted assemble job: .goreleaser.yaml's
+        # sboms: pipe shells out to syft, so it must be on PATH before
+        # goreleaser runs.
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
       - name: Install GoReleaser
+        # GoReleaser install strategy, DECIDED (C6, not left to chance):
+        # install-only: true keeps GORELEASER_VERSION's meaning concrete —
+        # the version this Action installs — which is what
+        # TestGoreleaserPinParity holds equal to go.tool.mod. A
+        # Taskfile-only build would make this env var vestigial in CI and
+        # quietly hollow that test (and the tool-vuln/VULN-01-02-03 gate's
+        # view of the pinned tool version) out. It also avoids paying a
+        # from-source GoReleaser build inside this OIDC-bearing job.
+        # Taskfile.yml's release:goreleaser target prefers this installed
+        # binary and falls back to building go.tool.mod's pin only as a
+        # LOCAL convenience when no Action is available.
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           distribution: goreleaser
           version: ${{ env.GORELEASER_VERSION }}
           install-only: true
 
-      - name: Build single target
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      # The single run: body in this job (T-01-14): goreleaser release
+      # --clean has exactly one definition, in Taskfile.yml's
+      # release:goreleaser target (DEV-01) — workflow context reaches it
+      # only via this step's env:, never interpolated into a run: body.
+      # GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which
+      # is the gh CLI's own variable (review MEDIUM, pi Plan-03).
+      - name: Release
+        id: release
+        run: task release:goreleaser
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: goreleaser build --single-target --clean
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Rename to release-asset contract name
-        id: asset
-        shell: bash
-        # Pass workflow context via env (never interpolate ${{ }} directly
-        # into the run script — a crafted tag name could otherwise inject
-        # shell commands into the release runner). Referencing $TAG/$GOOS/
-        # $GOARCH treats the values as data, not script text.
-        env:
-          TAG: ${{ github.ref_name }}
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-        run: |
-          set -euo pipefail
-
-          # internal/upgrade.releaseAssetName()'s exact contract shape
-          # (Finding 1): codegraph_<tag>_<goos>_<goarch>. Locate the
-          # built binary via dist/artifacts.json — GoReleaser's own
-          # documented stable lookup (dist/ subdirectory names are NOT
-          # guaranteed stable across GoReleaser versions) — with a
-          # defensive find(1) fallback if artifacts.json is absent or
-          # doesn't contain a matching entry.
-          BIN_PATH=""
-          if [ -f dist/artifacts.json ]; then
-            BIN_PATH=$(jq -r --arg goos "$GOOS" --arg goarch "$GOARCH" \
-              '[.[] | select(.type=="Binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
-              dist/artifacts.json)
-          fi
-          if [ -z "$BIN_PATH" ] || [ ! -f "$BIN_PATH" ]; then
-            BIN_PATH=$(find dist -type f -name 'codegraph' | head -n1)
-          fi
-          if [ -z "$BIN_PATH" ] || [ ! -f "$BIN_PATH" ]; then
-            echo "::error::could not locate built binary for ${GOOS}/${GOARCH} under dist/"
-            exit 1
-          fi
-
-          DEST="codegraph_${TAG}_${GOOS}_${GOARCH}"
-          cp "$BIN_PATH" "$DEST"
-          echo "name=${DEST}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      # Build provenance via GitHub's first-party attestor (D-09), replacing
+      # the third-party SLSA generic generator entirely — no more
+      # `provenance:` job, no more hand-rolled base64 subject-list encoding
+      # (this Action parses the checksums file's own shasum-format lines as
+      # its subject list). Runs LAST, after `task release:goreleaser` has
+      # populated dist/, over the SAME 8 subjects GoReleaser's checksum:
+      # pipe covers (D-12): the 4 raw binaries + 4 .zip archives —
+      # .sigstore.json/.spdx.json sidecars and the checksums file itself are
+      # deliberately excluded. Published through GitHub's Attestations API,
+      # not as a release asset; verify with `gh attestation verify`
+      # (docs/RELEASE.md § b) — never `slsa-verifier verify-artifact`,
+      # which is architecturally unable to verify this format (D-10).
+      - name: Attest build provenance (8 subjects)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          name: ${{ steps.asset.outputs.name }}
-          path: ${{ steps.asset.outputs.name }}
-          if-no-files-found: error
-
-  # Downloads all 4 binaries, computes checksums, signs EACH BINARY
-  # individually with cosign v3 keyless (Finding 1 — internal/upgrade's
-  # defaultVerify hashes the downloaded binary itself, never a checksums
-  # file), emits a per-binary SBOM via syft, and publishes everything as
-  # one GitHub release. SLSA provenance runs as a separate job below.
-  #
-  # PRECISION (corrected 2026-08-01): provenance is attested over the SIX
-  # BINARIES, not over the checksums file. The `hash` step below base64-encodes
-  # the *contents* of checksums.txt, and the SLSA generic generator parses each
-  # `<sha256>  <name>` line in it as a separate subject — so the checksums file
-  # is the transport for the subject list, never a subject itself. The earlier
-  # wording here ("over this job's checksums file") was ambiguous enough that it
-  # propagated into docs/RELEASE.md and docs/RELEASE-PROCEDURES.md as an
-  # instruction to verify the checksums file, which fails against every valid
-  # release with "artifact hash does not match provenance subject".
-  #
-  # Provenance and the per-binary cosign bundle serve different verifiers
-  # (slsa-verifier vs. `codegraph upgrade`) and are allowed different scopes
-  # (Finding 1).
-  assemble:
-    name: sign, SBOM, and publish release
-    needs: build
-    runs-on: namespace-profile-linux-amd64-2x4
-    permissions:
-      contents: write # gh release create + asset uploads
-      id-token: write # cosign keyless OIDC signing (Finding 1) — this
-      # job's OIDC token is what produces the cert SAN
-      # releaseWorkflowRefPattern anchors on: this exact
-      # workflow file, triggered by this exact tag ref.
-    outputs:
-      hashes: ${{ steps.hash.outputs.hashes }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Download all built binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: "codegraph_*"
-          path: release
-          merge-multiple: true
-
-      - name: Checksums
-        working-directory: release
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          sha256sum codegraph_* > "codegraph_${TAG}_checksums.txt"
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      - name: Sign each binary individually (Finding 1)
-        working-directory: release
-        run: |
-          set -euo pipefail
-          # internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY
-          # ITSELF (sha256.Sum256(binary)) — cosign MUST sign each
-          # binary individually here, producing a per-binary
-          # <asset>.sigstore.json sidecar (cosign v3's --bundle flag).
-          # Signing only the checksums file would make every real
-          # `codegraph upgrade` fail signature verification (Finding 1).
-          for f in codegraph_*; do
-            case "$f" in
-            *_checksums.txt | *.sigstore.json | *.spdx.json) continue ;;
-            esac
-            cosign sign-blob --bundle="${f}.sigstore.json" --yes "$f"
-          done
-
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
-
-      - name: Per-binary SBOM (DIST-03)
-        working-directory: release
-        run: |
-          set -euo pipefail
-          for f in codegraph_*; do
-            case "$f" in
-            *_checksums.txt | *.sigstore.json | *.spdx.json) continue ;;
-            esac
-            syft "$f" -o spdx-json="${f}.spdx.json"
-          done
-
-      - name: Base64-encode checksums for SLSA provenance
-        id: hash
-        working-directory: release
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          echo "hashes=$(base64 -w0 < "codegraph_${TAG}_checksums.txt")" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub release
-        # release-please (D-02) creates the tag AND the GitHub Release
-        # object in one API call before this job ever runs, so the Release
-        # is always present when the tag ref is (release-please path). The
-        # create branch below exists only for a hand-pushed rc tag (D-10),
-        # where no Release exists yet. Deciding on gh release view's exit
-        # status (never an ||-chained fallback) keeps a transient API
-        # failure from being silently treated as "release absent" (D-04).
-        working-directory: release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          PRERELEASE_FLAG=""
-          case "$TAG" in
-          *-*) PRERELEASE_FLAG="--prerelease" ;;
-          esac
-
-          # Asset-presence guard: an unmatched glob would otherwise be
-          # passed to gh as the literal word "codegraph_*", silently
-          # publishing nothing instead of failing loudly.
-          set -- codegraph_*
-          if [ ! -e "$1" ]; then
-            echo "::error::no release assets found matching codegraph_* in $(pwd)"
-            exit 1
-          fi
-
-          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            # release-please already created this release (D-04): the body
-            # and the prerelease flag belong to release-please and must
-            # NOT be regenerated or re-set here. --clobber replaces any
-            # same-named assets from a prior run, which is what makes this
-            # step idempotent across assemble re-runs (roadmap criterion
-            # 3's replace_existing_artifacts intent for this pipeline).
-            gh release upload "$TAG" --repo "$REPO" --clobber codegraph_*
-          else
-            # manual rc tag path (D-10) — unchanged from before this plan.
-            # shellcheck disable=SC2086
-            gh release create "$TAG" \
-              --repo "$REPO" \
-              --title "$TAG" \
-              --generate-notes \
-              $PRERELEASE_FLAG \
-              codegraph_*
-          fi
-
-  # SLSA3 provenance via the GENERIC generator (not the Go builder,
-  # which would rebuild the binary under its own fixed config and
-  # cannot accommodate the zig-cc CGo cross-build) over the assemble
-  # job's checksums file. Per slsa-github-generator's own documented
-  # requirement, this reusable workflow MUST be referenced by a full
-  # @vX.Y.Z semver tag — a SHA pin is explicitly rejected/unsupported
-  # and a short tag (@v2) is rejected by slsa-verifier.
-  #
-  # This job does NOT run on Namespace: a reusable workflow declares its
-  # own `runs-on` internally, and a caller cannot override it (D-07,
-  # structural, not a trade-off). It is the documented sole exception to
-  # every other job in this file moving to a Namespace runner class —
-  # left as-is deliberately, not an oversight.
-  provenance:
-    name: SLSA provenance
-    needs: assemble
-    permissions:
-      actions: read # required for the generator to detect the GH Actions environment
-      id-token: write # provenance signing identity
-      contents: write # upload provenance to the release created by `assemble`
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
-    with:
-      base64-subjects: "${{ needs.assemble.outputs.hashes }}"
-      upload-assets: ${{ startsWith(github.ref, 'refs/tags/') }}
-      # Name the provenance bundle after the release. The generator's default
-      # for a multi-subject attestation is the literal `multiple.intoto.jsonl`,
-      # which identifies neither the project nor the version: downloaded
-      # alongside assets from any other release it collides by name, and on its
-      # own it is impossible to tell what it attests. Releases up to and
-      # including v0.2.0 published the default name; v0.2.0's own provenance is
-      # unaffected and still verifies.
-      provenance-name: codegraph_${{ github.ref_name }}.intoto.jsonl
-      # This repo is private (for now — it is destined to be public OSS). The
-      # SLSA generic generator halts by default on a private repo to avoid
-      # writing the repo name into the PUBLIC Sigstore/Rekor transparency log.
-      # We opt in: keyless cosign signing (the `assemble` job) already publishes
-      # the repo name via the certificate SAN, so provenance exposes nothing new,
-      # and the intended end state is a public repo anyway.
-      private-repository: true
+          subject-checksums: ./dist/codegraph_${{ github.ref_name }}_checksums.txt
