@@ -467,6 +467,129 @@ tasks:
 
         echo "release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation."
 
+  check:linux-cross-export:
+    desc: >-
+      Resolve both linux binaries the just-run `goreleaser release`
+      (task release:dry-run) produced from dist/artifacts.json and copy
+      each to a fixed, documented export path under dist/export/, named
+      <goos>-<goarch>. Exists because actions/upload-artifact's `path:`
+      input is a literal glob, not a shell — it cannot itself run the
+      dist/artifacts.json jq lookup, and GoReleaser writes binaries under
+      generated, build-id-nested dist/ paths that are not stable enough to
+      hard-code as a glob (review LOW, Codex Plan-01). These export paths
+      are a CONTRACT with linux-cross-canary.yml's two exec jobs and with
+      check:linux-cross-exec's default CODEGRAPH_BIN path — do not rename
+      dist/export/linux-amd64 or dist/export/linux-arm64 without updating
+      all three.
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found — run task release:dry-run first"
+          exit 1
+        fi
+
+        mkdir -p dist/export
+
+        for pair in linux/amd64 linux/arm64; do
+          GOOS="${pair%/*}"
+          GOARCH="${pair#*/}"
+
+          BIN=""
+          if command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg goos "${GOOS}" --arg goarch "${GOARCH}" \
+              '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph -path "*${GOOS}*${GOARCH}*" 2>/dev/null | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::could not resolve the ${pair} binary from dist/artifacts.json — run task release:dry-run first"
+            exit 1
+          fi
+
+          EXPORT="dist/export/${GOOS}-${GOARCH}"
+          cp "${BIN}" "${EXPORT}"
+          chmod +x "${EXPORT}"
+          echo "    ${pair}: ${BIN} -> ${EXPORT}"
+        done
+
+  check:linux-cross-exec:
+    desc: >-
+      Convert "the linker accepted the cross-compiled object" into "the CGo
+      tree-sitter parse path works on this OS and arch" — REL-05's real
+      evidence bar (review synthesis finding S1). Takes the path to an
+      already-built codegraph binary via CODEGRAPH_BIN (default
+      dist/export/linux-<GOHOSTARCH>, the check:linux-cross-export
+      contract), chmod +x's it, asserts its file(1) ELF machine matches the
+      HOST architecture (a wrong-arch artifact fails loudly here instead of
+      as a confusing exec-format error a few lines later), then runs the
+      binary's real `init` subcommand against the checked-out repository
+      working tree and asserts `codegraph status --json`'s exact numeric
+      fileCount/nodeCount JSON fields (not rendered text — review
+      suggestion, Codex Plan-01) are non-zero. A zero-count graph, an empty
+      output, or a bare exit code is a FAIL — that is the whole point of
+      the criterion. Emits exactly one machine-parseable REL05-EVIDENCE
+      line as the last thing it prints; the target itself asserts both
+      counts are non-zero and exits non-zero otherwise, so "a green step
+      with no counts" is a structural impossibility.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "check:linux-cross-exec proves REL-05's real-Linux-execution half — it must run on a real Linux host, never emulated (D-02). Dispatch linux-cross-canary.yml, which runs this on namespace-profile-linux-amd64-4x8 / namespace-profile-linux-arm64-4x8."
+      - sh: command -v jq
+        msg: "jq not found — required to parse codegraph status --json's numeric fields."
+    cmds:
+      - |
+        set -euo pipefail
+
+        HOST_ARCH="$(go env GOHOSTARCH)"
+        BIN="${CODEGRAPH_BIN:-dist/export/linux-${HOST_ARCH}}"
+        if [ ! -f "${BIN}" ]; then
+          echo "::error::codegraph binary not found at ${BIN} — set CODEGRAPH_BIN or run task check:linux-cross-export first"
+          exit 1
+        fi
+        chmod +x "${BIN}"
+
+        HOST_MACHINE="$(uname -m)"
+        DESC="$(file -b "${BIN}")"
+        echo "    binary: ${BIN}"
+        echo "    host uname -m: ${HOST_MACHINE}"
+        echo "    file -b: ${DESC}"
+
+        # A wrong-arch artifact must fail loudly HERE, not a few lines
+        # below as a confusing exec-format error.
+        case "${HOST_MACHINE}:${DESC}" in
+          x86_64:*ELF*x86-64*) ELF_MACHINE="x86-64" ;;
+          aarch64:*ELF*aarch64*) ELF_MACHINE="aarch64" ;;
+          *)
+            echo "::error::${BIN} (${DESC}) does not match the host architecture (uname -m: ${HOST_MACHINE})"
+            exit 1
+            ;;
+        esac
+
+        # The real REL-05 evidence: index THIS checked-out repository — a
+        # real, multi-language tree — not `--version`, not an exit code.
+        REPO_ROOT="$(pwd)"
+        rm -rf "${REPO_ROOT}/.codegraph"
+        "${BIN}" init "${REPO_ROOT}"
+
+        STATUS_JSON="$("${BIN}" status --json --path "${REPO_ROOT}")"
+        FILES=$(printf '%s' "${STATUS_JSON}" | jq -r '.fileCount')
+        SYMBOLS=$(printf '%s' "${STATUS_JSON}" | jq -r '.nodeCount')
+
+        if ! [[ "${FILES}" =~ ^[0-9]+$ ]] || [ "${FILES}" -eq 0 ]; then
+          echo "::error::codegraph status --json reports fileCount=${FILES} — REL-05 requires a non-zero count, not a green exit code"
+          exit 1
+        fi
+        if ! [[ "${SYMBOLS}" =~ ^[0-9]+$ ]] || [ "${SYMBOLS}" -eq 0 ]; then
+          echo "::error::codegraph status --json reports nodeCount=${SYMBOLS} — REL-05 requires a non-zero count, not a green exit code"
+          exit 1
+        fi
+
+        echo "REL05-EVIDENCE uname=${HOST_MACHINE} elf=${ELF_MACHINE} files=${FILES} symbols=${SYMBOLS}"
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
