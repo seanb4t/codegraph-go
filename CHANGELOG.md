@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/seanb4t/codegraph-go/compare/v0.4.0...v0.5.0) (2026-08-08)
+
+
+### Features
+
+* **release:** migrate to single-runner goreleaser release with zig cross-compilation ([#35](https://github.com/seanb4t/codegraph-go/issues/35)) ([ff7c357](https://github.com/seanb4t/codegraph-go/commit/ff7c357e10371f6b85281c4487137db33ce2f286))
+
 ## [0.4.0](https://github.com/seanb4t/codegraph-go/compare/v0.3.0...v0.4.0) (2026-08-07)
 
 
