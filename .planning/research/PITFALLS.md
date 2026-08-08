@@ -1,327 +1,264 @@
-# Pitfalls Research
+# Pitfalls Research — macOS Notarization + Homebrew Distribution
 
-**Domain:** MCP protocol-revision migration (2026-07-28) and Go MCP SDK swap, for an already-shipped, installed-in-8-agents, stdio-only, tools-only server
-**Researched:** 2026-08-03
-**Confidence:** MEDIUM overall — official spec/SDK sources (modelcontextprotocol.io, blog.modelcontextprotocol.io, GitHub releases from `modelcontextprotocol/go-sdk` and `mark3labs/mcp-go`) are cross-checked across multiple independent hits (MEDIUM per this repo's classify-confidence seam, `--verified` tier — the seam has no HIGH tier for `exa`). Single-source vendor blog commentary and one-off migration write-ups are flagged LOW/inferred inline. Some conclusions about codegraph-go's own current test suite are direct code-reading (`internal/mcp/server_test.go`), not web research — those are marked INFERRED (repo-specific).
+**Domain:** Adding Apple notarization and a Homebrew tap to an existing signed/attested Go release pipeline (GoReleaser + cosign + SLSA3 + release-please)
+**Researched:** 2026-08-07
+**Confidence:** MEDIUM-HIGH overall (Apple/Homebrew/GoReleaser official docs and issue trackers are HIGH confidence; some integration-specific predictions are MEDIUM — this repo's own `.goreleaser.yaml`/`release.yml` are the ground truth, read directly, so those claims are HIGH by construction)
+
+This file assumes the reader has `.planning/PROJECT.md`, `.goreleaser.yaml`, and `.github/workflows/release.yml` open. Every pitfall below is framed as: **what goes wrong → how to detect it → how to prevent it → which phase owns it**, per this repo's standing rule that a gate is not trusted until demonstrated RED against a confirmed-applied mutation.
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: The spec's stateless rework is an HTTP-scaling story that stdio servers can wrongly over-apply
+### Pitfall 1: `goreleaser release` cannot consume dist/ artifacts built on other runners — the single-runner conflict is real, not hypothetical
 
 **What goes wrong:**
-Every primary source on 2026-07-28 (the official blog, New Relic, Appwrite, Microsoft's App Service post, Solo.io) frames the entire release around removing session state so a *remote, load-balanced HTTP* server can scale. A team reading this guidance and mechanically "adopting the whole spec" risks two wasted-effort traps for a stdio server: (1) implementing the `Mcp-Method`/`Mcp-Name` HTTP header requirements (SEP-2243) and `ttlMs`/`cacheScope` cache hints (SEP-2549) — both are Streamable HTTP transport concepts with no stdio equivalent; (2) treating the removal of the `initialize`/`initialized` handshake as mandatory for a stdio server, when a real-world audit of four production stdio MCP servers found "None of this breaks stdio-transport servers immediately — stdio was never part of the stateful-session model in the first place. The exposure is almost entirely on the remote/HTTP+SSE side."
+`goreleaser release` "expects to wholly manage the `dist` directory, returning an error if it exists" (confirmed via GoReleaser's own GitHub issue tracker). There is no `--use-existing-dist` / `--skip-build` flag in OSS. The only mechanism GoReleaser ships for building on separate runners and combining results into one release is **Split & Merge** (`goreleaser release --split` / `goreleaser continue --merge`), and that is explicitly, exclusively a **GoReleaser Pro** feature per the official docs ("This feature is exclusively available with GoReleaser Pro"). This directly falsifies the implicit assumption in today's `release.yml` design (native-darwin-on-macOS + zig-cross-linux-on-Linux, merged in a downstream `assemble` job) that a plain `goreleaser release` invocation could simply replace the current `build --single-target` + hand-rolled assemble step. It cannot, as OSS, across two runner classes.
 
-**Why it happens:**
-The announcement material is written for the primary audience the spec revision was built for (remote/HTTP operators scaling behind load balancers). A stdio, one-process-per-client server reading that material top-to-bottom will naturally infer more required work than actually applies to it.
+**Why it happens:** The current pipeline's per-runner `goreleaser build --single-target` pattern was deliberately chosen (per `.goreleaser.yaml`'s own header comment) to avoid GoReleaser Pro dependencies. Migrating to `goreleaser release` while assuming the same two-runner-class topology "just works" is exactly the kind of unverified assumption PROJECT.md itself flagged ("must be confirmed, not assumed") — and this research confirms the assumption was right to be suspicious of.
 
-**How to avoid:**
-Scope the impact assessment (backlog 999.6, the milestone's spine) explicitly to what reaches a stdio transport: version negotiation semantics (`server/discover`, `UnsupportedProtocolVersionError`), the Roots/Sampling/Logging deprecation (does codegraph-go use any of the three? — it does not, per the `internal/mcp` surface: tools-only, no `ClientCapabilities.roots/sampling`, no `ServerCapabilities.logging`), and the SDK's stdio-specific behavior changes (see Pitfall 8, `server/discover` probe cost on stdio). Explicitly write "N/A — HTTP-only" next to SEP-2243 (header routing) and SEP-2549 (cache hints) in the impact assessment so the scoping decision is visible and auditable, not implied by omission.
+**How to avoid:** Run the entire `goreleaser release` invocation on a single runner. Given darwin must build natively (the recorded libresolv/DNS finding), that runner must be `macos-latest`/Namespace macOS, with `zig cc` cross-compiling both linux/amd64 and linux/arm64 from the same host — exactly the "likely resolution" PROJECT.md already named. This eliminates the merge problem entirely: one `goreleaser release` process builds all 4 targets, archives, checksums, signs (if quill or a macOS-native path is used for cosign too — cosign itself doesn't care about host OS), notarizes, and publishes, without ever needing Pro's split/merge.
 
-**Warning signs:**
-The impact-assessment document spends more words on HTTP transport mechanics (headers, load balancing, `Mcp-Session-Id`) than on stdio version negotiation. That is the tell that HTTP-centric guidance is being over-applied.
+**Warning signs:** A plan that still shows `build` as a per-runner matrix job feeding an `assemble` job, but relabels the assemble step's `goreleaser build --single-target` as `goreleaser release`. That shape cannot work — `release` refuses a pre-populated `dist/`.
 
-**Phase to address:**
-The MCP `2026-07-28` impact-assessment phase (999.6) — first phase of the milestone, before the SDK decision.
+**Detection (RED-demonstrable):** Write a throwaway workflow that runs `goreleaser build --single-target` on `namespace-profile-linux-amd64-4x8` to populate `dist/`, uploads it as an artifact, downloads it into a second job, and then runs `goreleaser release --clean` in that second job. This MUST fail with GoReleaser's dirty/existing-dist error. Confirming this failure, live, is the RED proof that the two-runner-class + `release` combination cannot work in OSS before any phase plan is written around it.
+
+**Phase to address:** The `goreleaser release` migration phase — this is the enabling/blocking decision every other feature in the milestone (notarize, archives, brews) depends on. Must be resolved before notarization or brews work begins.
 
 ---
 
-### Pitfall 2: `LATEST_PROTOCOL_VERSION` pin silently moves the declared wire version on a routine dependency bump
+### Pitfall 2: Notarization "succeeds" (Accepted) while `spctl` still rejects the binary — a real, documented failure family, not a hypothetical
 
-**What goes wrong:**
-`internal/mcp/server_test.go` (line 81) sets `req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION` — an SDK-owned constant, not a value this repo controls. If `mark3labs/mcp-go` ever ships 2026-07-28 support in a routine `go get -u` (no `go.mod` major-version bump, since Go modules don't gate this), the wire-declared protocol version changes with zero code review of the actual behavioral delta, and the test that's supposed to pin behavior instead tracks whatever the dependency now claims. This is exactly the failure the milestone's own "Adopt or dated-defer" requirement calls out: "on adopt, replace the `mcp.LATEST_PROTOCOL_VERSION` pin with an explicit asserted version so wire behavior cannot move silently on a dependency bump."
+**What goes wrong:** `notarytool submit` returning `Accepted` is not proof the shipped artifact will pass Gatekeeper. Apple Developer Forums document multiple real cases of `notarytool history` showing successful notarization, `stapler` reporting success, and `spctl -a -vv -t exec` still rejecting the artifact with "Unnotarized Developer ID" or similar. One documented root cause: the notary ticket did not cover all the Mach-O images actually present in the shipped artifact (e.g. a nested binary, a nested dylib, or — relevant here — a binary added to an archive *after* the notarized artifact was built), so Gatekeeper's post-hoc ticket lookup finds no matching record for what's actually on disk.
 
-**Why it happens:**
-`LATEST_PROTOCOL_VERSION` is the natural, low-friction choice when writing a test — it's always "correct" from the SDK's point of view and never needs updating by hand. That is precisely what makes it dangerous as a pin: it stops being a *test* of a specific behavior and becomes a *mirror* of the dependency.
+**Why it happens:** Notarization is a request to notarize *exactly the bytes submitted*. If the pipeline notarizes binary A, then repackages/re-signs/rebuilds anything downstream (re-archiving, adding a README to the zip, GoReleaser regenerating the archive after signing instead of before), the bytes Gatekeeper checks are no longer the bytes Apple has a ticket for. This is an ordering bug (see Pitfall 6), and it produces exactly this symptom.
 
-**How to avoid:**
-Replace every `mcp.LATEST_PROTOCOL_VERSION` reference in test and production code with the literal string codegraph-go has verified it correctly negotiates against real clients (e.g. `"2025-11-25"` until adoption is complete, or `"2026-07-28"` post-adoption), sourced from a single named constant this repo owns (not the SDK's). Add a CI check that fails if `mcp.LATEST_PROTOCOL_VERSION` appears anywhere outside that one constant's definition/tests-of-the-constant-itself — mirroring the pattern already used for the ANSI-isolation archtest in v1.0 Phase 4.
+**How to avoid:** Notarize the *final* artifact shape — the archive/container that will actually be distributed, built in its final form, with nothing added or modified afterward. Verify by running `spctl -a -vv -t exec` against the literal file that will be uploaded to the GitHub Release, not against an intermediate build artifact.
 
-**Warning signs:**
-`rg 'LATEST_PROTOCOL_VERSION'` returns hits outside a single, deliberately-named "asserted protocol version" seam.
+**Warning signs:** `notarytool history` shows Accepted, but this check was run against a local build artifact in `dist/`, not against the file downloaded from the published GitHub Release.
 
-**Phase to address:**
-The "Adopt or dated-defer" phase — this is explicitly named as the deliverable in `PROJECT.md`'s milestone scope.
+**Detection (RED-demonstrable):** On a genuinely quarantined copy of the actual published release asset (see Pitfall 3 for how to force real quarantine), run `spctl -a -vv -t exec <path>` and require `accepted` with `source=Notarized Developer ID` in the output. Anything else — including a `notarytool` history entry of Accepted — is not sufficient evidence.
 
----
+**Phase to address:** Notarization phase, as the phase's own verification gate (not a side check — this should be the phase's primary UAT criterion, matching PROJECT.md's own framing: "The bar is `spctl -a -vv -t exec` returning `accepted` on a file actually carrying `com.apple.quarantine` — not on the pipeline being wired").
 
-### Pitfall 3: mark3labs/mcp-go does not yet speak 2026-07-28 — "SDK decision" and "spec adoption" are two different clocks
-
-**What goes wrong:**
-As of this research (2026-08-03, six days after the spec's final release), `mark3labs/mcp-go`'s latest tagged release (`v0.57.0`) and its README/pkg.go.dev documentation still state it "implements the Model Context Protocol specification version 2025-11-25, with backward compatibility for versions 2025-06-18, 2025-03-26, and 2024-11-05." No evidence was found of a merged PR adding 2026-07-28 support. `modelcontextprotocol/go-sdk` v1.7.0, by contrast, shipped 2026-07-28 support the same day as the spec. This means "adopt the new spec" and "stay on mark3labs" are currently mutually exclusive — a team that decides "defer the SDK swap, just bump mark3labs" cannot land on 2026-07-28 today regardless of how much migration work is done, because the dependency itself hasn't caught up.
-
-**Why it happens:**
-Community SDKs lag official ones on day-one spec support by design (mark3labs is unofficial, single-maintainer-adjacent, and the official Go SDK is now the fast-follow reference implementation the spec team ships alongside the spec itself).
-
-**How to avoid:**
-Treat "does mark3labs support 2026-07-28 at all yet" as a gating fact-check performed *at execution time*, not at planning time — verify current mark3labs release notes and the spec-support table before writing the "adopt or dated-defer" decision. If mark3labs still doesn't support it, "dated-defer, revisit when mark3labs lands support or when the SDK-swap phase completes" is the only coherent adopt-path without doing the SDK swap first.
-
-**Warning signs:**
-Any adoption plan that says "bump mark3labs, get 2026-07-28" without first confirming mark3labs has a release that claims that support.
-
-**Phase to address:**
-The MCP `2026-07-28` impact-assessment phase (999.6), as an explicit fact-check gating the SDK-decision phase.
+**Confidence:** HIGH (multiple corroborating Apple Developer Forum threads on this exact failure shape, cross-referenced).
 
 ---
 
-### Pitfall 4: The spec explicitly sanctions silent failure for a modern client against a legacy (or dual-era) server — this is not a bug, it's documented behavior
+### Pitfall 3: The "wired up but cannot fire" trap, applied to notarization — four specific checks that feel like verification and are not
 
-**What goes wrong:**
-The official versioning spec (`modelcontextprotocol.io/specification/2026-07-28/basic/versioning`) publishes a client×server outcome matrix. The `Modern client × Legacy server` row reads (verbatim): *"Fails. The server may reject the request with an implementation-defined error, stay silent, or even process an era-ambiguous method under legacy semantics. On stdio, clients **SHOULD** send `server/discover` first to fail deterministically."* Note the word "SHOULD," not "MUST" — a client that skips the `server/discover` probe (permitted by spec) and simply sends a modern-shaped request to codegraph-go's stdio server has spec-sanctioned license to fail in an undefined, possibly-silent way. Since codegraph-go's dynamic tool catalog already returns **zero tools with no error** when there's no `.codegraph/` index (`TestNoIndexZeroTools`), the failure surface a user would see — "no tools" — is *indistinguishable* between "this repo isn't indexed" and "the client and server didn't understand each other." That ambiguity is the milestone's own named highest-severity risk.
+This is the single highest-priority section given this repo's documented history (retracted fictitious perf regression, inverted `rg -qv` gate, stale perf baseline, degenerate-input `CheckRegression` pass, drifted `requiredCheckNames` fixture, two passthrough tests). Notarization has its own version of every one of these failure shapes.
 
-**Why it happens:**
-The spec designs for a world where a probe (`server/discover`) is available, but makes it optional for clients — a legacy server has no way to force a client to probe, and the outcome when a client doesn't is deliberately left implementation-defined ("may... stay silent").
+**Checks that FEEL like verification but are NOT:**
 
-**How to avoid:**
-Do not rely on `server/discover` existing or being called — this milestone's server won't implement it as a modern feature yet (it's a modern-server-only requirement), and even if it did, clients aren't obligated to call it. Instead, instrument the *initialize handshake itself*: have `serve --mcp` log (to stderr, never stdout) the negotiated `protocolVersion` and the requesting `clientInfo.name`/`version` on every session, at a level visible without `--verbose` flags. This turns "which protocol era did this session actually negotiate" from an invisible internal detail into a one-line, always-on fact a user (or Sean, running this daily) can grep out of their agent's MCP debug log.
+1. **A green CI step.** GoReleaser's `notarize:` block can be configured (or accidentally end up configured, e.g. via a missing/empty secret) to skip notarization silently and still exit 0 — the step shows green whether or not notarization actually ran. A green `notarize` job step proves the *command* didn't error; it proves nothing about whether Apple's notary service was ever contacted.
+2. **`codesign -dvv` passing.** This validates that *a* signature is present and its certificate chain is valid — it passes identically for an ad-hoc signature (no Developer ID, no notarization possible) and for a properly Developer-ID-signed, notarized binary. Multiple sources confirm this explicitly: passing `codesign` verification "does not indicate notarization status." Never treat this as evidence of notarization.
+3. **`notarytool` history/submission status showing `Accepted`.** As Pitfall 2 demonstrates, this is necessary but not sufficient — it proves Apple accepted *some* submission, not that the ticket covers the bytes actually shipped, and not that stapling (where applicable) succeeded.
+4. **`spctl` on a file that was never quarantined.** This is the most insidious one, because it is the *exact same command* as the correct check, run on the wrong file. Gatekeeper's full assessment path (the one that actually rejects unnotarized software for end users) is triggered by the `com.apple.quarantine` extended attribute, which is set by browsers, `curl -O` with certain flags is used with, Safari/Chrome downloads, AirDrop, and Mail — but NOT by a local build artifact freshly produced by `goreleaser build`, NOT by `git clone`, and NOT by the real `codegraph upgrade` path (per PROJECT.md's own measurement: "a binary fetched by the real `codegraph upgrade` path was measured to carry only `com.apple.provenance`"). Running `spctl -a -vv -t exec` on such a file exercises a much weaker code path and can return `accepted` even for software that would be rejected for a real end user. One source states this plainly: "Gatekeeper signature checks are performed only to files with the Quarantine attribute, not to every file."
 
-**Warning signs:**
-A user reports "codegraph_explore isn't showing up" and the only diagnostic step available is re-running `codegraph status` to rule out "no index" — with no way to also rule out "the client's protocol era and codegraph-go's didn't match."
+**The ONE trustworthy check:**
 
-**Phase to address:**
-"Real-client MCP verification" phase — the harness this phase builds should assert on the negotiated-version log line as a first-class observable output, not just on tool-list contents.
+```bash
+# Force a real quarantine attribute, matching what a browser download sets
+# (com.apple.quarantine's value format: <flags>;<timestamp-hex>;<agent>;<uuid>)
+xattr -w com.apple.quarantine "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" <path-to-downloaded-asset>
 
----
+# Now run the assessment Gatekeeper actually performs on a downloaded file
+spctl -a -vv -t exec <path-to-downloaded-asset>
+```
 
-### Pitfall 5: Client-side stale tool-list caching is a second, independent silent-failure channel — already observed in the wild, unrelated to version negotiation
+Expect: `<path>: accepted` and `source=Notarized Developer ID` on the second line. Any other `source=` value (e.g. `source=Unnotarized Developer ID`, or a rejection) means the release is not actually trustworthy for real users, regardless of what CI reported.
 
-**What goes wrong:**
-Multiple confirmed GitHub issues (`anthropics/claude-code#41123`, `#40025`, `#50515`; `anthropics/claude-ai-mcp#45`) document MCP clients — including Claude Code itself, one of codegraph-go's 8 installed agent targets — caching a server's `tools/list` response across reconnects, `/mcp` manual reconnects, and even full client restarts, with **no error surfaced** and no reliable client-side invalidation. One issue found the cache was keyed by server *name* in the client config, so identical binaries under a renamed entry showed the correct (fresh) tool list while the original name stayed stuck. This means even a byte-perfect protocol-version migration can still produce "codegraph_explore isn't showing up" reports that have nothing to do with 2026-07-28 at all — they're pre-existing client-side caching bugs that will be misdiagnosed as migration regressions if the team isn't already aware of them.
+Do this against the literal file downloaded from the real, published GitHub Release URL (or at minimum an artifact with a genuinely synthesized quarantine attribute, as above) — never against a local `dist/` build artifact.
 
-**Why it happens:**
-Client implementations treat `tools/list` as cacheable more aggressively than the spec's `notifications/tools/list_changed` mechanism (or, in 2026-07-28, the `ttlMs`/`cacheScope` hints — HTTP-only, not applicable here) actually guarantees freshness for.
+**Phase to address:** Notarization phase. This exact sequence (force quarantine → `spctl`) should be the phase's acceptance gate, run by a human or a scripted macOS runner step against the real published asset — and per this repo's standing rule, the phase is not done until this has been shown to move `rejected` → `accepted` on a genuinely quarantined download, not merely asserted.
 
-**How to avoid:**
-Document this as a known confound *before* the migration ships: when a user reports missing tools post-upgrade, the triage checklist must include "does renaming the server entry in the client config make the tools reappear?" as a fast discriminator between a real codegraph-go regression and a pre-existing client cache bug. This belongs in a troubleshooting note shipped alongside the milestone, not just tribal knowledge.
-
-**Warning signs:**
-A "tools missing" bug report where `codegraph status` and a raw stdio protocol trace both look correct.
-
-**Phase to address:**
-"Real-client MCP verification" phase — the verification harness should explicitly test the "reconnect after tool-set change" path against at least one real agent client (not just the in-process client), since this is the one silent-failure mode a real client is required to exercise.
+**Confidence:** HIGH for the mechanism (official Apple documentation on quarantine + spctl behavior, cross-referenced across multiple independent sources); the exact `xattr` flag/timestamp encoding is MEDIUM confidence (community-documented format, not from a single canonical Apple source) — verify the synthesized attribute actually reproduces browser-download behavior before relying on it as the sole gate, or use a real browser download as the primary check and the `xattr` trick only as a fast local iteration aid.
 
 ---
 
-### Pitfall 6: A naive port to the official Go SDK silently changes error-to-JSON-RPC-error mapping on the wire
+### Pitfall 4: Stapling a bare Mach-O binary is impossible — this forces the archive-vs-raw-binary asset split, it isn't optional polish
 
-**What goes wrong:**
-Per the `juburr/mad-skills` migration guide (verified against go-sdk v1.6.1) and confirmed by the SDK's own design doc language around typed handlers: in `mark3labs/mcp-go`, `return nil, err` from a tool handler produces a **protocol-level JSON-RPC error**. In `modelcontextprotocol/go-sdk`'s generic `AddTool` path, only a `*jsonrpc.Error` is treated as a protocol-level error — any other Go `error` returned from the typed handler is instead wrapped into a successful `CallToolResult` with `IsError: true`, and **the error message becomes visible to the LLM as tool output**, not to the transport layer. This is invisible in type signatures (`error` is `error` either way) and would silently change what an agent sees on every failure path — including codegraph-go's confinement-rejection path (`TestOpenEnginePathConfinedToRepoRoot`), which currently returns `result.IsError = true` deliberately (so this specific path is *already* using the "tool error" shape mark3labs also supports) — but any handler that currently does `return nil, err` to signal a protocol failure would change behavior on migration.
+**What goes wrong:** Apple's notary service can notarize a bare executable (by wrapping it in a zip for submission), but **stapling requires a container** — a `.app` bundle, `.pkg` installer, or `.dmg` disk image. Per Apple's own guidance (multiple corroborating sources): "Tickets can't be stapled to single-file Mach-O executables, but they can be stapled to Installer packages containing them." GoReleaser's own docs are explicit about a related trap: "Do not use this method if you create App Bundles. App Bundles in which only the binary is signed/notarized are deemed damaged by macOS" — i.e. signing/notarizing the inner binary is not a substitute for signing/notarizing the container itself.
 
-**Why it happens:**
-The two SDKs made different design choices about what "an error means" at the handler boundary, and neither the Go type system nor a shallow code review surfaces the difference — only reading each SDK's dispatch code (or its docs) does.
+**Why it matters here specifically:** This is exactly the constraint PROJECT.md already identified as "the real design call" — a bare Mach-O notarized-but-not-stapled binary falls back to Apple's online ticket lookup at Gatekeeper-check time, which **fails on an offline machine or when Apple's OCSP/notary lookup service is unreachable**. This is why the milestone's own Key Decisions committed to "archives alongside raw binaries" rather than trying to notarize+staple the raw binary that `internal/upgrade` needs to remain byte-unchanged.
 
-**How to avoid:**
-Before any SDK swap, audit every `mcp.CallToolResult` construction and every bare `return nil, err` in `internal/mcp/` and classify each as "intended to be a protocol-level failure" vs. "intended to be a tool-visible error the agent should see and potentially retry differently." Convert the former to the official SDK's `*jsonrpc.Error` construction explicitly; leave the latter as a normal Go error. Do this as a deliberate mapping table reviewed alongside the migration diff, not as an incidental side effect of "the code compiles."
+**How to avoid:** Notarize and staple the **archive** (zip is the simplest container GoReleaser natively supports for a CLI binary; `.dmg`/`.pkg` are also viable but add build complexity with little benefit for a CLI tool) as the browser-download / Homebrew-facing asset. Never attempt to staple the raw binary that `internal/upgrade` consumes — that asset stays exactly as it is today (unnotarized-at-the-file-level is fine, because `internal/upgrade` never triggers a Gatekeeper quarantine check in the first place, per PROJECT.md's own `com.apple.provenance`-only measurement).
 
-**Warning signs:**
-Post-migration, an agent that used to receive a hard connection-level error on a malformed request instead receives a normal-looking tool result with `isError: true` and has to parse free text to detect the failure — or vice versa.
+**Warning signs:** A plan step that says "staple the binary" (singular, bare) instead of "staple the archive." Also watch for `xcrun stapler staple` being invoked directly on a `codegraph_<tag>_darwin_arm64` raw-binary asset — this will fail (stapler returns an error for non-container inputs) or, worse, silently produce a container that still fails offline Gatekeeper checks if some tooling wraps it in a technically-valid-but-wrong container shape.
 
-**Phase to address:**
-SDK-swap implementation (if adoption is chosen this milestone or a later one) — must be a named review step in that phase's plan, not assumed covered by "tests pass."
+**Detection (RED-demonstrable):** Run `xcrun stapler staple <raw-binary-path>` on the actual raw binary GoReleaser/`release.yml` produces and confirm it errors (this proves the constraint is real, not assumed) before designing the archive path. Then run `xcrun stapler validate <archive-path>` on the actual zip that will ship and confirm it succeeds.
 
----
+**Phase to address:** Notarization phase, in coordination with the archives phase (they are two views of the same asset-shape decision, per PROJECT.md's own Key Decision rationale).
 
-### Pitfall 7: Struct-tag JSON schema generation silently drops enum constraints and changes field-omission behavior
-
-**What goes wrong:**
-The official SDK infers tool input schemas from Go struct tags via reflection (`jsonschema.For[T]`), replacing mark3labs's explicit builder functions (`mcp.WithString(..., mcp.Enum(...))`). Per the migration guide's "Known Gotchas": *"Struct-tag-based schema generation does not support enums"* — a tool argument that mark3labs declared as a closed enum (rejecting invalid values at the schema-validation layer, before the handler even runs) silently becomes an unconstrained string unless the migration explicitly sets `Tool.InputSchema` via `jsonschema.For[T]` with `ForOptions{TypeSchemas: ...}` or falls back to the low-level `AddTool`. Separately, the go-sdk v1.7.0 release notes name an actual shipped regression of this exact shape: `ToolAnnotations.ReadOnlyHint`/`IdempotentHint` are bare `bool` (not `*bool`) in the Go type, so `omitempty` can no longer distinguish "false" from "unset" — the SDK's own fix required a `MCPGODEBUG=hintomitempty=1` escape hatch to restore the old wire shape, meaning this is a documented, not hypothetical, JSON-marshalling behavior change between SDK versions.
-
-**Why it happens:**
-Reflection-based schema generation from Go's type system cannot express every JSON Schema construct Go's type system doesn't have a native analogue for (enums chief among them); pointer-vs-value field types for optional booleans are a perennial Go/JSON-Schema impedance mismatch that bit the SDK's own authors.
-
-**How to avoid:**
-For every existing tool argument with a closed value set (are there any in codegraph-go's tool inputs? — audit `internal/mcp` tool registrations for this before migration), explicitly verify the migrated schema still rejects out-of-set values, by diffing the raw `tools/list` JSON schema output (not a parsed Go struct) before and after migration. Treat any `omitempty`-sensitive boolean field the same way.
-
-**Warning signs:**
-A tool that used to reject an invalid enum value with a schema-validation error now silently accepts it and fails later (or not at all) inside the handler.
-
-**Phase to address:**
-SDK-swap implementation, if pursued — schema-diff step should be part of the migration's verification loop, sourced from raw wire JSON (see Pitfall 9 below), not from Go struct equality.
+**Confidence:** HIGH (GoReleaser official docs + multiple independent Apple-developer-community sources agree on this exact constraint).
 
 ---
 
-### Pitfall 8: `server/discover` on stdio has real per-connection cost and a documented spawn-count trap for CLI tools
+### Pitfall 5: The checksums-file collision is not hypothetical — it is already latent in this repo's own config
 
-**What goes wrong:**
-The TypeScript SDK's own docs (directly informative for understanding the official Go SDK's parallel design, since both implement the same SEP-2575 mechanism) document that the stdio transport's `server/discover` probe, when run in `'auto'` negotiation mode, spawns a **short-lived sibling process** separate from the real session process — because "some stdio servers exit on any pre-`initialize` request... the probe must not spend the caller's one child process." The same docs explicitly warn: *"Do not default a spawn-per-invocation CLI tool to `'auto'`. On stdio, a legacy server that never answers unknown pre-`initialize` requests stalls `connect()` for the full probe timeout before falling back, and the probe spawns an extra short-lived server process per connect."* This is directly relevant to codegraph-go: every one of the 8 installed agent clients spawns `codegraph serve --mcp` as a subprocess per session. If any of those 8 clients adopts `'auto'` era-negotiation as a default, every single codegraph-go MCP session incurs **two process spawns instead of one** (a throwaway discover-probe process plus the real session process) until codegraph-go itself speaks 2026-07-28 and can answer the probe inline. On a system indexing multiple monorepos with `codegraph install`'d agents, that is a measurable startup-latency and process-count regression codegraph-go did not cause but will be blamed for.
+**What goes wrong:** `.goreleaser.yaml`'s `checksum:` block (currently documented as dead config) is:
 
-**Why it happens:**
-The stdio transport has no way to ask "what era do you speak" without either sending a real (possibly session-mutating) request or spawning a disposable probe process — the SDK authors chose the latter to avoid corrupting a legacy server's single-process assumption.
+```yaml
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Tag }}_checksums.txt"
+```
 
-**How to avoid:**
-This is a client-side behavior codegraph-go cannot control directly, but the impact assessment should explicitly note it as a reason to land 2026-07-28 support (so the probe short-circuits to a real `server/discover` reply instead of a timeout-and-fallback) if any of the 8 target clients is confirmed to use `'auto'` mode. Treat "does this client's stdio transport probe-spawn" as one of the 8-agent audit's checklist items, not an afterthought.
+which resolves to `codegraph_v0.5.0_checksums.txt`. `release.yml`'s `assemble` job independently, by hand, produces:
 
-**Warning signs:**
-Doubled process counts or startup latency for `codegraph serve --mcp` sessions after an agent client's own SDK upgrade — with no codegraph-go-side change at all. This would look like a codegraph-go regression from a client-side dependency bump.
+```bash
+sha256sum codegraph_* > "codegraph_${TAG}_checksums.txt"
+```
 
-**Phase to address:**
-The MCP `2026-07-28` impact-assessment phase's per-agent audit (999.6) — add "stdio probe behavior" as an audited dimension per client.
+which resolves to the **identical filename**. The moment `goreleaser release` actually runs its `checksum:` pipe (which it will, once the migration from `build` to `release` lands — this is precisely the "two blocks that have never executed wake up" risk PROJECT.md names), there will be two independent processes writing a file with the same name into the same release: GoReleaser's own checksums covering whatever `archives:`/binaries GoReleaser itself produced, and (if the hand-rolled step is not removed) the old shell step's checksums covering the renamed assets it finds on disk. Depending on execution order and whether `gh release upload ... --clobber` runs before or after GoReleaser's own publish step, one silently overwrites the other, or GoReleaser's own publish step fails outright on a duplicate asset name.
+
+**Why it happens:** This is a direct consequence of migrating one component (the checksum mechanism) of a pipeline that has two independent implementations of the same responsibility, without deleting the now-redundant one. It's the textbook "gate that cannot fire" shape this repo keeps rediscovering — except here the risk isn't a test silently never running, it's an artifact silently being overwritten with a **different, undocumented set of covered files** than the one that was actually attested/signed.
+
+**How to avoid:** When the `goreleaser release` migration lands, the hand-rolled `sha256sum codegraph_* > ...` step in `release.yml`'s `assemble` job (or its successor) must be deleted, not left to run alongside GoReleaser's own `checksum:` pipe. Decide, explicitly, whether GoReleaser's cosign/SLSA integration signs GoReleaser's own checksums file or continues the current per-binary-signing scheme (see Pitfall 6) — do not let both checksum generators exist simultaneously even transiently, because a partial migration where GoReleaser produces `checksum:` output *and* the old shell step also runs is the exact shape where "last writer wins" silently determines what the SLSA provenance and cosign identities actually cover.
+
+**Detection (RED-demonstrable):** After the migration, download the actual `codegraph_<tag>_checksums.txt` from the published release and diff its line count/content against the full asset list (`gh release view <tag> --json assets`). Every published binary and archive must have exactly one entry; a missing or duplicated entry proves the collision occurred.
+
+**Phase to address:** The `goreleaser release` migration phase, as an explicit removal task tracked alongside the archives/checksum-block-goes-live risk PROJECT.md already flags.
+
+**Confidence:** HIGH — this is derived directly from reading this repo's own `.goreleaser.yaml` and `release.yml`, not from external sources.
+
+---
+
+### Pitfall 6: `internal/upgrade`'s cosign verification contract can silently stop matching what's actually shipped
+
+**What goes wrong:** `internal/upgrade`'s `defaultVerify` hashes the **downloaded raw binary itself** (`sha256.Sum256(binary)`) and verifies a per-binary `.sigstore.json` bundle produced by `cosign sign-blob` in the `assemble` job — this is explicit in `release.yml`'s own comments ("internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY ITSELF ... cosign MUST sign each binary individually"). Once `goreleaser release` is live with `archives:` and `notarize:` blocks, there is a real risk of introducing a step, anywhere in the new pipeline, that re-derives, re-copies, or re-names the raw binary asset *after* cosign has already signed it — for example, if a future refactor accidentally has GoReleaser's own `archives:` pipe repackage the binary from a different intermediate `dist/` path than the one cosign actually hashed, or if notarization is (incorrectly, per Pitfall 4) attempted against the raw binary and that process rewrites the file's signature bytes (codesign always rewrites the Mach-O when it signs), producing a binary whose bytes no longer match what cosign attested.
+
+**Symptom:** `codegraph upgrade` starts failing with a hash-mismatch or signature-verification error for every user on a specific platform, but the release itself "looks" successful — the GitHub Release page has assets, cosign's own log shows `Verified OK` (because cosign verified the version of the file *it* was given at signing time, which may not be the version that ended up published).
+
+**Why it's easy to miss:** The `cosign verify-blob` and SLSA verification steps this repo already runs check that a signature/attestation is internally consistent — they don't independently confirm that the *specific bytes at the public download URL* are the ones that were hashed, unless the verification step re-downloads the released asset (not a local `dist/` copy) before verifying, which is what the existing `TestVerifyReleaseE2E` does today (per PROJECT.md: "executing against a real artifact"). Any new pipeline step inserted between "binary built" and "binary published" that touches the binary's bytes — including codesign for notarization, if mistakenly applied to the raw asset — breaks this invariant.
+
+**How to avoid:** Keep an explicit, auditable ordering invariant: raw binary is built → cosign signs the raw binary → raw binary is uploaded, byte-for-byte, unchanged. Notarization/codesigning/stapling happen only on the **separate archive artifact**, never on the raw binary that `internal/upgrade` consumes. Do not let GoReleaser's `archives:` block be configured to "archive" by re-copying/re-touching the same file path cosign already signed — verify GoReleaser's archive step reads from the already-built, already-signed binary without modification (it should, since `archives:` operates on already-built artifacts, but this must be confirmed for this repo's specific build-id/archive-id wiring once configured, not assumed).
+
+**Detection (RED-demonstrable):** Extend the existing `TestVerifyReleaseE2E` (or add a sibling test) that, after a real release, downloads the raw binary asset AND independently downloads the archive asset for the same platform, and asserts the raw binary's bytes inside the archive (if extracted) are byte-identical to the standalone raw-binary asset. A divergence here is exactly the symptom this pitfall predicts, and should be demonstrated impossible (or fixed) before the phase is considered done, not assumed safe because cosign's own step reported success.
+
+**Phase to address:** Split across the `goreleaser release` migration phase (ordering) and the notarization phase (must notarize the archive only, never re-touch the raw binary) — call out explicitly as an acceptance criterion in whichever phase finalizes the archive-building step.
+
+**Confidence:** MEDIUM — the specific failure mechanism (codesign rewrites Mach-O bytes) is HIGH confidence (universally documented codesign behavior), but whether this repo's eventual GoReleaser config actually risks it depends on implementation details not yet written; flagged as a design constraint to verify against, not a confirmed bug.
+
+---
+
+### Pitfall 7: Hardened runtime entitlements — likely a non-issue for this specific CGo binary, but must be verified, not assumed
+
+**What goes wrong (if it applies):** macOS's Hardened Runtime enables library validation by default, which "only allows processes to load code signed by Apple or with the same Team ID as the executable." A binary that `dlopen()`s an unsigned or differently-signed shared library at runtime will fail with a code-signing-related mmap/load error under Hardened Runtime unless `com.apple.security.cs.disable-library-validation` is set — and setting that entitlement itself has a documented downside ("Disabling library validation makes it harder to pass Gatekeeper" per Apple Developer Forum reports of it interfering with notarization in some configurations).
+
+**Why this is likely NOT a live issue for codegraph-go specifically:** Per this repo's own architecture (STACK.md / CLAUDE.md), `tree-sitter/go-tree-sitter` and its grammar modules are linked via **CGo at compile time** — the C code is compiled and statically linked into the single Go binary, not loaded via `dlopen()` at runtime. A statically-linked CGo binary has no runtime dynamic-library-loading behavior for tree-sitter itself, so Hardened Runtime's library-validation restriction should not be triggered by it. This should hold for Pebble (pure Go), fsnotify (pure Go), and the MCP/CLI stack (pure Go) as well — none of them dlopen anything at runtime.
+
+**Where it could still bite:** If the Go runtime itself dynamically loads any system library at startup (e.g. certain cgo-linked networking/DNS paths, or `net` package's use of the system resolver via `libresolv`/`libSystem` on darwin — notably, this repo's own release.yml comments already flag libresolv/DNS as a live darwin-specific concern in a different context, i.e. cross-compilation, not hardened runtime, but it's the same subsystem). Hardened Runtime's library validation applies specifically to *bundle-signed dependent libraries*, not to the OS's own system frameworks (Apple-signed libraries always pass library validation under any Team ID) — so this risk is low but not exactly zero without an actual test.
+
+**How to avoid:** Do not add `com.apple.security.cs.disable-library-validation` speculatively. Sign with default Hardened Runtime options (`--options=runtime`) and run the binary end-to-end (all CLI commands, `serve --mcp`, indexing a real repo) on the actual notarized+signed artifact before assuming entitlements are unnecessary.
+
+**Detection (RED-demonstrable):** After signing with Hardened Runtime enabled and no special entitlements, run the full existing CLI/MCP integration test suite against the signed macOS binary (not just `spctl`/notarization checks — an actual functional smoke test). A load failure (typically manifesting as a crash on startup with a codesign/dyld error in `Console.app` or stderr, not a Gatekeeper rejection) is the signal that an entitlement is actually needed; absence of a crash across the full command surface is the evidence entitlements are not needed, not an assumption.
+
+**Phase to address:** Notarization phase, as a functional-smoke-test acceptance criterion alongside the `spctl` gate.
+
+**Confidence:** MEDIUM — the general Hardened Runtime mechanism is HIGH confidence (well-documented Apple behavior), but whether it applies to this specific binary is an inference from this repo's known architecture, not something directly tested by this research pass.
+
+---
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|-----------------|-----------------|
-| Keep `mcp.LATEST_PROTOCOL_VERSION` in tests "just for this milestone" | No test churn while the SDK decision is pending | Reintroduces Pitfall 2 the moment `go get -u` lands a new spec-supporting release, silently | Never past this milestone's "Adopt or dated-defer" deliverable — that item exists specifically to close this |
-| Defer the whole spec assessment because "we're stdio-only, HTTP scaling doesn't apply to us" | Saves the impact-assessment effort | Misses the version-negotiation, deprecation-window, and probe-cost items that DO apply to stdio (Pitfalls 4, 6, 8) — "N/A" is a per-SEP judgment, not a per-revision one | Never as a blanket judgment; acceptable per-SEP once actually checked (see Pitfall 1's prevention) |
-| Adopt mark3labs's next release blind, assuming semver-minor bumps are behavior-neutral | Fast, low-review-overhead dependency bump | mark3labs has shipped field-type breaking changes in minor-looking releases before (`Result.Meta` in v0.37.0); nothing in Go module versioning prevents this for a pre-1.0-spirited, actively-evolving library | Never for this dependency without reading the release's "Breaking Changes" section first — mark3labs publishes one when it applies |
+|----------|-------------------|-----------------|------------------|
+| Leaving the hand-rolled `sha256sum` step in `release.yml` "just in case" while also enabling GoReleaser's `checksum:` block | Feels like a safety net during migration | Two checksum files/generators racing (Pitfall 5) — silently changes what's actually attested | Never past the migration PR that flips `build` → `release`; delete in the same change |
+| Notarizing all 4 build targets (including Linux) because it's easier than conditionalizing the `notarize:` block per-OS | Simpler GoReleaser config, one code path | Wasted CI time and unpredictable notarization-API latency on binaries that will never be Gatekeeper-checked (a documented real-world GoReleaser gotcha) | Never — gate `notarize:` to darwin build IDs only from the start |
+| Skipping the "force real quarantine + spctl" check in favor of trusting `notarytool` history during early iteration | Faster local dev loop | Exactly the false-positive shape of Pitfall 3 — a maintainer can convince themselves it works when it doesn't | Acceptable ONLY as a fast local iteration signal, never as the phase's actual acceptance gate |
+| Using a personal Apple ID / ad-hoc signing during development instead of the real Developer ID cert | No secrets management needed locally | `codesign -dvv` passes identically for ad-hoc and Developer-ID-signed binaries (Pitfall 3, item 2) — easy to forget which one CI actually uses | Fine for pure local dev signing sanity checks; never for anything claiming to validate the release pipeline |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|-------------|----------------|-------------------|
-| The 8-agent installed base (`codegraph install`) | Assuming an agent's MCP client behavior is static once installed — client apps auto-update independently of `codegraph install`/`upgrade` | Treat "which protocol era does each of the 8 agents' current released client actually negotiate" as a fact to re-verify at ship time, not something inferred once and assumed stable; agents update on their own release cadence |
-| `mark3labs/mcp-go` in-process test client (`mcpclient.NewInProcessClient`) | Using it to validate the very SDK it's part of — see Pitfall/Testing-trap section below | Real-client verification harness must exercise a *different* implementation than the one under test (see Testing Traps) |
-| `govulncheck` against `go.tool.mod`/`go.tool-lint.mod` | Running `govulncheck ./...` from the repo root, which only sees the main module's `go.mod` and silently never touches the ~400 tool-mod dependencies | Invoke govulncheck per-modfile, either via `go tool -modfile=go.tool.mod govulncheck ./...` executed with cwd/GOFLAGS pointed at that modfile, or an explicit `-C`/directory argument that makes `go list` resolve the tool modfile — verify by mutation (see govulncheck section below) |
-
-## Performance Traps
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|-----------------|
-| Client-side `'auto'` era-negotiation probe-spawn (Pitfall 8) | Doubled process count / startup latency per `serve --mcp` invocation, appearing after an *agent's* update, not codegraph-go's | Track per-agent stdio negotiation mode as part of the 8-agent audit; prioritize landing `server/discover` support if any agent is confirmed `'auto'` | The moment any of the 8 installed clients ships an SDK update defaulting to `'auto'` mode against a codegraph-go binary that doesn't yet answer `server/discover` |
+|-------------|-----------------|-------------------|
+| GoReleaser `release` ↔ release-please | Letting GoReleaser's own `release:` publisher create/manage the GitHub Release (title, body, changelog) when release-please already created it with its own changelog body | Configure GoReleaser to skip GitHub Release creation/changelog entirely (`release.disable: true` or `--skip=publish` for the release-object step while still using GoReleaser for build/archive/sign/notarize/checksum), reusing this repo's existing pattern of `gh release upload ... --clobber` against the release-please-created Release, exactly as `release.yml` does today for assets |
+| GoReleaser `release` ↔ multi-runner build topology | Assuming `goreleaser release` can consume `dist/` artifacts assembled from separate `build` jobs on different runner classes, the way `build --single-target` currently is assembled | Confirmed impossible in OSS (Pitfall 1) — restructure to a single macOS runner using `zig cc` for both linux legs, or explicitly budget for GoReleaser Pro's Split & Merge |
+| GoReleaser `brews:` ↔ tap repo | Publishing the formula (tap push) before the corresponding GitHub Release assets finish uploading, so `brew install` immediately after a release momentarily 404s on the download URL | GoReleaser's own publish ordering runs `release` (asset upload) before `brews:` (tap push) within a single `goreleaser release` invocation by design — but if brews publishing is ever split into a separate job/step (e.g. for token-scoping reasons), it MUST be sequenced strictly after asset upload completes and be verified, not assumed sequential |
+| GoReleaser `brews:` ↔ parallel formula builds | Multiple brew formula uploads to the same tap repo racing each other (documented GoReleaser issue: "the 2nd upload always fails ... only one of the formulas being uploaded and committed") | Not directly applicable here (one formula, `codegraph`) unless a `-bin`/cask-style second formula is ever added later — if it is, this race is a known, documented GoReleaser bug to watch for |
+| `internal/upgrade` ↔ Homebrew Cellar | Letting `codegraph upgrade` self-replace the binary at the symlinked `/opt/homebrew/bin/codegraph` (or `/usr/local/bin`) path, silently diverging from what `brew`'s Cellar manifest records as installed | Per Homebrew's own Acceptable Formulae policy, self-update MUST be disabled when the tool is a formula (this repo's committed decision — `codegraph upgrade` refuses under a brew-managed install) — verify detection resolves symlinks to a real `Cellar/codegraph/<version>` path, not a path-prefix string match (see Pitfall 8) |
+| cosign/SLSA verification ↔ notarization | Assuming notarization "does something" for the cosign/SLSA-verified raw-binary path | It does nothing — notarization and Gatekeeper are Apple-specific, cosign/SLSA are supply-chain provenance for a different threat model and a different consumer (`internal/upgrade`, not Gatekeeper). PROJECT.md itself already states this ("cosign is a *different* mechanism and does nothing for Gatekeeper") — do not let a notarization PR description imply it strengthens the existing attestation chain, it's orthogonal |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Treating a version-mismatch `UnsupportedProtocolVersionError` (or its absence) as authorization-adjacent | None currently applicable — codegraph-go's confinement checks (`TestOpenEnginePathConfinedToRepoRoot`) are unrelated to protocol version and must not be conflated with it during migration review | Keep the SDK-swap review's error-mapping audit (Pitfall 6) scoped to protocol-level vs. tool-level error semantics only; do not let it touch or "helpfully improve" the path-confinement trust boundary in the same change |
+| Storing the Developer ID Application `.p12` and App Store Connect API key as long-lived GitHub Actions secrets without rotation tracking | A leaked/stale secret silently breaks notarization (submission rejected) or, worse, is usable by anyone with repo-secret access to notarize arbitrary binaries under this identity | Track cert/key expiry explicitly (Apple Developer certs typically expire annually); add an explicit CI failure mode check (notarization step failing with an identity/auth error, not a build error) to the release runbook so cert rotation is caught fast, not discovered on a broken release |
+| Assuming a Team ID mismatch "can't happen" because there's only one Apple Developer Program membership | If the App Store Connect API key or the Developer ID cert is ever regenerated under a different team context (e.g. after an Apple account restructuring), notarization fails with an opaque "Team is not yet configured for notarization" error that looks like an infra issue, not an identity issue | When notarization first fails post-setup, check team configuration/API-key-team association before assuming a pipeline bug — per Apple's own forum guidance, this specific error class routes to Developer Programs Support, not a technical fix |
+| Treating a brew-detection bypass (a user manually placing the binary at a Homebrew-looking path without actually being brew-managed) as out of scope | Low severity, but a false-positive "refuse to upgrade" for a non-brew user who happens to have `/opt/homebrew/bin` in PATH is a real usability regression, and a false-negative (fails to detect a real brew install) lets `codegraph upgrade` corrupt the Cellar | Detect via resolving the running binary's real path (`os.Executable()` + `filepath.EvalSymlinks`) and checking whether it resolves into an actual `Cellar/<formula>/<version>/bin/` structure — not a bare prefix string match (see Pitfall 8) |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-------------------|
-| No visible log of the negotiated protocol version per session (Pitfall 4) | User sees "no tools" and has no way to distinguish "not indexed" from "protocol mismatch" without a raw wire capture | Always-on stderr line per session: negotiated version + clientInfo, cheap and non-intrusive, closes the diagnostic gap named as this milestone's top risk |
-| Silently-stale client tool cache (Pitfall 5) misattributed to codegraph-go | User files a codegraph-go bug for what is actually a client-side caching defect they can't see | Ship a troubleshooting note pointing at the "rename the server entry" discriminator test before assuming a codegraph-go regression |
+| `codegraph upgrade` under Homebrew prints a generic "refused" message | User doesn't know what to do next | Match PROJECT.md's own committed UX: explicitly point at `brew upgrade codegraph` |
+| A user downloads the raw binary from GitHub Releases via browser (triggering quarantine) instead of the archive | Binary fails Gatekeeper on first run even though the pipeline is fully correct, because the raw binary was never notarized/stapled (only the archive was, by design — Pitfall 4) | Release notes / README must clearly steer browser-downloaders to the archive (`.zip`) asset, not the raw binary, for interactive/GUI use; the raw binary remains correctly intended only for `codegraph upgrade`'s non-browser fetch path |
+| `brew install codegraph` succeeds but the binary silently fails at first run due to an untested Hardened Runtime interaction (Pitfall 7) | Worse than a `curl`-downloaded failure, because Homebrew users have a strong trust prior that `brew install` "just works" | Full functional smoke test (not just `spctl`) against the exact bottle/binary Homebrew would install, before considering the notarization phase done |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **"Adopt or dated-defer" decision**: Often missing the *asserted-version constant* replacing `mcp.LATEST_PROTOCOL_VERSION` — verify with `rg 'LATEST_PROTOCOL_VERSION'` returning zero hits outside one definition site.
-- [ ] **8-agent impact audit**: Often missing an actual check of each client's *current shipped* SDK/protocol support, substituting an assumption instead — verify each of the 8 has a dated, sourced note (release version + protocol era it negotiates), not a general "should be fine."
-- [ ] **Real-client MCP verification harness**: Often "real" only in the sense of "not literally the SDK's Go client," while still round-tripping through parsed Go structs somewhere in the assertion path — verify by finding the exact line that reads raw bytes off the child process's stdout pipe, independent of any MCP SDK's own JSON-RPC decoder.
-- [ ] **govulncheck over tool modfiles**: Often "wired into CI" while actually scanning zero of the ~400 tool-module dependencies — verify by deliberately introducing (in a throwaway branch) a known-vulnerable version pin into `go.tool.mod` and confirming the CI job goes red before merging that verification away.
-- [ ] **Dated-defer decision (if chosen)**: Often missing a concrete trigger condition and calendar reminder mechanism — verify a dated defer names both an explicit removal-eligibility date (spec revision release + 12 months, i.e. no earlier than 2027-07-28) and a re-check owner/mechanism, not just prose acknowledging the window exists.
+- [ ] **Notarization pipeline green:** Often missing the forced-quarantine `spctl` check against the actual published archive — verify with `xattr -w com.apple.quarantine ...` + `spctl -a -vv -t exec` on the real downloaded asset, not a local `dist/` file (Pitfall 3)
+- [ ] **`goreleaser release` migration "complete":** Often missing removal of the now-redundant hand-rolled checksum step, leaving two checksum generators racing (Pitfall 5) — verify by diffing the published checksums file's line count against the real asset list
+- [ ] **Homebrew tap "working":** Often verified only by a manual `brew install` run once, right after a release, when GitHub's CDN/API is warm — verify by testing `brew install` cold, some time after a release, and after a formula update from a *second* subsequent release (catches livecheck/version-bump edge cases)
+- [ ] **`codegraph upgrade` brew-refusal "tested":** Often tested only against a hand-constructed fake path (e.g. an env var or a literal `/opt/homebrew/` string check) rather than a real `brew install` followed by running the actual binary — verify against a genuine `brew tap` + `brew install` on a real machine, per PROJECT.md's own stated bar ("Detection must be tested against a real brew-managed layout, not a path-prefix guess")
+- [ ] **Archive asset "notarized":** Often means "the binary inside the archive was signed" — verify the *archive itself* was submitted to and accepted by `notarytool`, and that `xcrun stapler validate` succeeds on the archive, not just that `codesign --verify` succeeds on the inner binary (Pitfall 4)
+- [ ] **cosign/SLSA verification "still passes" post-migration:** Often re-run only against local build output, not against the actual published release — extend `TestVerifyReleaseE2E`-style checks to run after every future `goreleaser release`-based release, not just the first one during development (Pitfall 6)
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|-----------------|
-| `LATEST_PROTOCOL_VERSION` pin drifted silently (Pitfall 2) | LOW | Grep, replace with the asserted constant, add the CI guard; no data/state is at risk, this is a build-time-only fix |
-| SDK-swap error-mapping regression shipped (Pitfall 6) | MEDIUM | Diff `tools/call` error responses (raw JSON) between the pre- and post-migration binaries against a fixed set of known-failing inputs (malformed args, confinement violation, missing index); patch the specific handlers whose shape changed |
-| A client silently mis-negotiates in production (Pitfall 4) | LOW once instrumented, HIGH before | Ship the stderr negotiated-version log line; ask the affected user to paste it — turns an otherwise-unbounded investigation into a one-line diagnostic |
+|---------|----------------|------------------|
+| Checksums collision published in a real release (Pitfall 5) | MEDIUM | Delete the wrong checksums asset via `gh release delete-asset`, regenerate the correct one from the actual published binaries, re-upload, and re-run SLSA provenance if the base64-subjects hash changed (may require a follow-up patch release if `internal/upgrade`'s verify path depends on it) |
+| Notarized-but-not-stapled release shipped, offline users failing Gatekeeper (Pitfall 4) | LOW–MEDIUM | Notarization tickets remain valid; staple after the fact with `xcrun stapler staple` against the already-notarized archive and re-upload the asset — no need to re-notarize |
+| Brew formula pointing at a since-deleted or renamed asset (tap/release race, or a force-pushed formula) | LOW | Regenerate and re-push the formula from the current release's real checksums/URLs; `brew update` picks up the corrected tap on the next run — but any user who already ran `brew install` during the broken window needs to `brew reinstall` |
+| `codegraph upgrade` false-positive brew-refusal shipped (blocks a legitimate non-brew user) | LOW | Patch release with corrected detection logic; document a manual override/workaround in the interim (e.g. a documented flag or direct binary replacement instructions) |
+| Developer ID cert expired mid-release-cycle, notarization pipeline broken until renewed | MEDIUM (external dependency on Apple's cert issuance turnaround) | Fall back to shipping unnotarized archives temporarily (raw binaries + cosign/SLSA path is entirely unaffected and continues to work for `codegraph upgrade` users) while the cert is renewed; communicate the temporary Gatekeeper-friction to browser-downloading users |
 
 ## Pitfall-to-Phase Mapping
 
-| Pitfall | Prevention Phase | Verification |
-|---------|-------------------|---------------|
-| HTTP-scaling guidance over-applied to stdio (P1) | MCP impact-assessment phase (999.6) | Impact-assessment doc explicitly marks each SEP N/A or applicable-with-reason for stdio |
-| `LATEST_PROTOCOL_VERSION` silent drift (P2) | Adopt-or-defer decision phase | `rg` CI guard: zero hits outside the one owned constant |
-| mark3labs lacks 2026-07-28 support today (P3) | MCP impact-assessment phase (999.6), gating the SDK-decision phase | Decision doc cites the mark3labs release/README checked, dated |
-| Spec-sanctioned silent failure on version mismatch (P4) | Real-client MCP verification phase | Harness asserts the stderr negotiated-version+clientInfo log line is emitted every session |
-| Client-side stale tool-list caching (P5) | Real-client MCP verification phase | Harness includes a "reconnect after tool-set change" scenario against a real (not in-process) client |
-| Naive error-mapping port (P6) | SDK-swap implementation phase (if pursued) | Raw-JSON diff of `tools/call` error responses pre/post migration across a fixed fixture set |
-| Struct-tag schema silently drops enums/omitempty (P7) | SDK-swap implementation phase (if pursued) | Raw `tools/list` JSON schema diff pre/post migration, not Go-struct comparison |
-| `server/discover` stdio probe-spawn cost (P8) | MCP impact-assessment phase (999.6) 8-agent audit | Per-agent audit row records confirmed negotiation mode (`legacy`/`auto`/`pin`) where discoverable |
-| Vacuous same-SDK conformance tests (see Testing Traps) | Real-client MCP verification phase | Mutation-proof: corrupt a wire byte / drop a required field and confirm the specific test goes red |
-| `govulncheck` scanning nothing over tool modfiles (see govulncheck section) | Tool-modfile vulnerability scanning phase (999.3) | Deliberately-introduced known-vulnerable tool-mod dependency turns the job red before the fix lands |
-| Deprecation-window discovered late (see Deprecation-window section) | Adopt-or-defer decision phase | Dated-defer entry includes explicit calendar trigger date + re-check owner, checked into `PROJECT.md`/`ROADMAP.md` backlog |
-
----
-
-## Testing Traps — vacuous MCP conformance patterns (highest-value section per the research brief)
-
-This project's own hard-won rule — a gate is not trusted until demonstrated RED against a confirmed-applied mutation — is the correct lens for every pattern below. Each entry gives the pattern, the mutation that *should* turn it red, and whether it actually would.
-
-### Trap A: Using an SDK's own client to validate that SDK's own server
-
-**The pattern (INFERRED — repo-specific, direct code reading):** `internal/mcp/server_test.go`'s `listToolNames` helper builds an `mcpclient.NewInProcessClient(s)` — a `mark3labs/mcp-go` client — against a `server.MCPServer` built by the same `mark3labs/mcp-go` library, then calls `c.ListTools`/`c.CallTool` through it. Every test in that file (`TestDefaultToolVisibility`, `TestAllowlist`, `TestNoIndexZeroTools`, `TestExploreHandlerDelegatesToEngine`, `TestOpenEnginePathConfinedToRepoRoot`, `TestConfinementAnchoredOnRepoRootNotStartPath`) goes through this same in-process, same-SDK client.
-
-**Why this specific case is (mostly) not vacuous today, and where it would become vacuous:** These tests correctly validate codegraph-go's *own* logic (tool allowlisting, confinement, handler delegation) — the SDK is acting as inert plumbing between two pieces of codegraph-go's own code (`BuildServer` and the assertions), so a bug in codegraph-go's confinement logic or allowlist parsing genuinely turns them red. **The trap specifically applies to the migration**: if this same in-process-client pattern is reused to "verify" that the server *correctly speaks the 2026-07-28 wire protocol* or that a mark3labs→official-SDK swap didn't break wire compatibility, it becomes circular — the SDK's own client necessarily encodes/decodes using the SDK's own (possibly incorrect, possibly-just-changed) understanding of the wire format, so a bug in that shared understanding is invisible to a client built from the identical code.
-
-**The mutation that should turn it red:** Deliberately have the server emit a wire-malformed frame (e.g. a stray non-JSON `fmt.Println` on stdout mid-session — exactly the "noisy" bug pattern documented as "the single most common way a working server fails in the wild") — an in-process client bypasses the wire (stdio bytes) entirely, so **this mutation would not turn the in-process tests red at all**, regardless of SDK.
-
-**Prevention:** For anything claiming to verify *wire* behavior (as opposed to codegraph-go's own business logic, where the in-process pattern above remains legitimate), the "real-client MCP verification" harness must spawn the actual `codegraph serve --mcp` binary as a real subprocess and read/write real stdio bytes — reusing the project's own precedent from v1.0 Phase 4's `TestOutputHygieneStdoutIsJSONRPCOnly`-style raw-reader test (built specifically because "mcp-go's own client silently skips malformed lines and cannot fail a purity test"). Ideally use a *second, independent* MCP client implementation (the official Go SDK's client, or a hand-rolled minimal NDJSON reader, or the TypeScript reference client via `npx @modelcontextprotocol/inspector`) rather than mark3labs's own client, so a version-negotiation or schema-shape bug shared between "the server's SDK" and "the test's SDK" cannot hide.
-
-**Phase to address:** Real-client MCP verification phase — explicitly required by `PROJECT.md` to land *before* any SDK swap.
-
----
-
-### Trap B: Asserting on parsed Go objects instead of raw wire bytes
-
-**The pattern:** A test calls `c.ListTools(ctx, ...)` and asserts on the resulting `[]mcp.Tool` slice, or calls `c.CallTool` and asserts on `result.Content[0].(mcp.TextContent).Text`. This is the *only* pattern currently used in `server_test.go` (see `TestExploreHandlerDelegatesToEngine` asserting via `mcp.AsTextContent`).
-
-**Why it's dangerous specifically for a protocol-revision migration:** Every field-omission change (Pitfall 7's `omitempty`-on-bare-bool regression, real and shipped in go-sdk v1.7.0), every JSON-RPC error-code change (the go-sdk's own issue #976 shows a nonexistent-method error returning code `0` instead of the standard `-32601` over stdio — invisible if a test only checks `err != nil` or `result.IsError`), and every schema-shape drift (enum dropped, field renamed) is only visible in the *serialized bytes on the wire* — a Go struct comparison after both the encode and decode round-trip through the same library's (possibly buggy, possibly-just-changed) marshal/unmarshal code cannot see a bug in that exact round-trip.
-
-**The mutation that should turn it red:** Change a JSON-RPC error's numeric code from the spec-correct `-32601` to the SDK's actual bug-shipped `0` (a real, cited go-sdk issue, not hypothetical). A parsed-object test that only asserts `result.IsError == true` or `err != nil` **would not go red** — both are still true regardless of the numeric code. A raw-bytes test asserting the literal `"code":-32601` substring (or a parsed-but-independently-decoded JSON map, not the SDK's typed error struct) **would** go red.
-
-**Prevention:** For any assertion whose entire purpose is proving wire-format correctness (as opposed to codegraph-go's own business-logic correctness, where typed assertions remain appropriate and idiomatic), decode the raw response with `encoding/json` into a generic `map[string]any` or assert directly on the byte string, never through the SDK-under-test's own typed unmarshal path.
-
-**Phase to address:** Real-client MCP verification phase.
-
----
-
-### Trap C: Golden files regenerated from current behavior
-
-**The pattern:** A snapshot/golden test captures "whatever the server currently outputs" as the expected value, then re-generates that golden file whenever the output changes (the `github-mcp-server` migration material found in this research literally documents this exact tool: `UPDATE_TOOLSNAPS=true go test ./...`, with the explicit warning "you should however, only update the toolsnaps after confirming that the schema changes are intentional and correct").
-
-**Why it's dangerous:** A golden file regenerated *during* the SDK-swap migration itself captures whatever the new SDK happens to produce — including any of the unintended shape changes from Pitfall 7 — and then asserts that shape is "correct" forever after, because the person running `UPDATE_TOOLSNAPS=true` was focused on making CI pass, not on independently re-deriving what the schema *should* be.
-
-**The mutation that should turn it red:** Regressing a real tool's schema (dropping a required field) *and simultaneously* regenerating the golden file in the same commit — by construction, this **never turns red**, because the golden file and the regression are updated together. This is the git-diff-of-generated-artifact class of vacuous gate this project's own `planning-artifacts.md` rule describes for a different domain (tool-owned files), applied here to test fixtures.
-
-**Prevention:** Golden/snapshot files for MCP schema shape must be reviewed as a diff against a *hand-authored* expected schema (or the pre-migration golden, from TS CodeGraph or the pre-swap SDK, whichever is the actual source of truth for what the shape should be) at the moment they're regenerated — never regenerated and merged in the same review pass as the behavior change they're meant to catch. Practically: CI should refuse to auto-accept a golden-file diff in the same PR that also changes SDK version pins or tool-registration code, forcing a human to look at exactly the diff this trap would otherwise hide.
-
-**Phase to address:** SDK-swap implementation phase (if pursued) — golden-file update discipline should be a stated rule in that phase's plan, not implicit.
-
----
-
-### Trap D: Asserting a tool list is non-empty rather than set-equal
-
-**The pattern:** `if len(got) == 0 { t.Fatal(...) }` instead of `equalStrings(got, want)`.
-
-**Why it matters here specifically:** codegraph-go's actual tests already do this correctly — `TestDefaultToolVisibility` and `TestAllowlist` both assert exact set equality (`equalStrings(got, want)`), and `TestNoIndexZeroTools` asserts the *inverse* (exact zero), which is the strictest possible form. This is worth stating explicitly as a **positive existing pattern to preserve**, precisely because the failure mode this trap describes is so easy to regress toward during a migration: a v0.56.0→official-SDK port that accidentally starts registering an extra internal/debug tool, or drops one real tool while gaining an unrelated one (net-zero count, wrong set), would pass a non-empty check and pass a same-*count* check, but only a full set-equality assertion catches it.
-
-**The mutation that should turn it red:** Swap the allowlist's expected tool `"node"` for an unregistered similarly-named tool while keeping the count the same. A `len(got) == 3` check stays green; `equalStrings(got, want)` goes red.
-
-**Prevention:** Keep the existing set-equality discipline; explicitly re-verify it wasn't loosened to a count-only or non-empty check during the SDK migration's test-signature churn (the official SDK's 3-return-value handler signature and struct-based schema changes are exactly the kind of mechanical, high-diff-volume change where a "just make it compile and pass" pass can silently weaken an assertion).
-
-**Phase to address:** SDK-swap implementation phase (if pursued) — a diff-review checklist item: "did any `equalStrings`/set-equality assertion get replaced with a weaker one during the mechanical port?"
-
----
-
-## `govulncheck` over tool modfiles — non-vacuous gate checklist
-
-The milestone's tool-modfile vulnerability scanning item (999.3, closing the ~400-module credentialed-CI-tooling gap) has several silent-pass failure shapes, catalogued here with what makes each demonstrably non-vacuous:
-
-1. **Wrong-directory / wrong-modfile scan.** `govulncheck ./...` run from the main module's root only ever resolves the main `go.mod`'s dependency graph — Go's tool-modfile mechanism (`go.tool.mod`, introduced by the Go 1.24 `tool` directive design) is a *separate* module graph, invisible to a `govulncheck` invocation that doesn't explicitly target it. **Non-vacuous proof:** run `go list -modfile=go.tool.mod tool` (or the equivalent for `go.tool-lint.mod`) and confirm the CI job's actual invocation targets that same modfile — then deliberately downgrade one tool dependency in `go.tool.mod` to a version with a known, call-graph-reachable CVE (the tutorial-standard `golang.org/x/text@v0.3.5` / `GO-2021-0113` pair is a well-documented, reproducible example) and confirm the job goes red. Revert and confirm green.
-2. **`-scan module` (or `-mode` equivalent) instead of the default `-scan symbol`.** Module-level scanning degrades govulncheck to "is the vulnerable module anywhere in the graph," discarding the call-graph reachability analysis that is govulncheck's entire value proposition over a naive advisory-matching scanner — this can *look* like the right tool while actually behaving like the noisy tool it was chosen to replace. **Non-vacuous proof:** confirm the CI invocation's flags don't include a coarser `-scan`/`-mode` override, and that a vulnerability in an *unreached* function of a real tool dependency reports as "informational," not a hard failure (proving the reachability analysis is actually running, not just presence-matching).
-3. **Exit code swallowed by a pipe.** Any CI step piping `govulncheck`'s output through another command (`| tee`, `| jq`, a custom formatter) without checking `${PIPESTATUS[0]}` (bash) or equivalent loses the tool's own non-zero exit code — a real finding then produces "readable output" but a green CI job. **Non-vacuous proof:** confirm the CI step's exit-code check is against govulncheck's own exit status, not the exit status of a downstream pipe stage; verify with the same deliberately-downgraded-dependency mutation as (1) and confirm the *job* (not just the log output) is marked failed.
-4. **No reachable entry point in a tool binary.** Some of the ~400 tool-mod dependencies are used only by tools invoked in narrowly-scoped ways (a linter plugin, a code-generator run once at build time) — govulncheck's call-graph analysis may correctly report zero reachable vulnerabilities for a tool whose vulnerable code path genuinely isn't exercised by how codegraph-go's CI invokes it. This is not a bug in the gate, but it *looks* identical to a mis-scoped scan from the outside. **Non-vacuous proof:** the same deliberately-introduced-CVE mutation (1) must be performed against a dependency that genuinely IS reachable from at least one tool's actual invocation (e.g. a CVE in a code path the linter/tool actually calls during its normal CI invocation, not merely present in its binary) — a scan that stays green against a genuinely-reachable known-vulnerable version, but only in that one case, points at (1) or (2), not at legitimate unreachability.
-
-## Deprecation-Window Traps
-
-**What goes wrong for projects that defer:** SEP-2596's window is measured **from the spec revision's release date (2026-07-28), not from when a given implementation notices or starts caring** — the clock is already running regardless of codegraph-go's own migration timeline. The SEP text itself flags the subtler trap: the 12-month floor is only observable in practice *if* the SDKs a project depends on support every revision released within that trailing window — "a consumer that updates the SDK between releases can move directly from one that predates the deprecation to one that postdates removal, never seeing the Deprecated marker" at all. For codegraph-go specifically: Roots/Sampling/Logging are irrelevant (the server implements none of the three — tools-only per `PROJECT.md`), so that half of SEP-2577 imposes zero migration burden regardless of timing. The HTTP+SSE transport deprecation is *also* irrelevant (stdio-only). The item that actually matters for a deferred decision is **version-negotiation behavior itself** (SEP-2575/2567) — that's a core-protocol mechanism, not a lifecycle-tagged feature, and has no analogous 12-month grace window; a legacy server simply stops being able to talk to a client that has fully removed legacy `initialize` support, whenever that client-side removal happens (which is NOT bound by the SEP-2596 clock at all, since that clock governs the *specification's own* removal of legacy-era support, not any individual client's choice to drop it early).
-
-**What a deferring project should put in place now:**
-1. A dated calendar entry, not just a prose note: earliest possible spec-mandated removal of the HTTP+SSE transport and Roots/Sampling/Logging is **2027-07-28 or later** (12 months from the 2026-07-28 revision release) — but since neither applies to codegraph-go, this date is informational only, not action-forcing.
-2. The action-forcing date is **not** the SEP-2596 deprecation floor — it's whenever any of the 8 installed agent clients' *own* release cadence drops legacy `initialize` support entirely (unknowable in advance, not governed by the spec's grace period). The correct mitigation is the always-on negotiated-version stderr log (Pitfall 4) as an early-warning system, not a calendar date.
-3. A named owner and re-check trigger recorded directly in the dated-defer decision itself (per `PROJECT.md`'s own requirement: "an explicit dated defer is an acceptable outcome... What is not acceptable is leaving the choice implicit") — e.g. "re-check mark3labs's 2026-07-28 support status and re-run the 8-agent negotiation audit at the next milestone boundary."
+| Pitfall | Prevention Phase | Verification (RED-demonstrable) |
+|---------|-------------------|-----------------------------------|
+| 1. Single-runner conflict / Pro-only split-merge | `goreleaser release` migration phase | Reproduce the dist-exists error live with a two-job pattern before committing to final runner topology; confirms single-macOS-runner + zig-cc-for-linux is required |
+| 2. Notarization Accepted but `spctl` rejects | Notarization phase | `spctl -a -vv -t exec` on the real published archive after forcing quarantine, expect `accepted` + `source=Notarized Developer ID` |
+| 3. "Wired up but cannot fire" false-positive checks | Notarization phase (acceptance gate, not a side check) | The forced-quarantine `spctl` sequence is the phase's UAT criterion; every other check (codesign -dvv, notarytool history, green CI) explicitly documented as insufficient in the phase's own verification notes |
+| 4. Stapling requires a container | Notarization phase + Archives phase (shared decision) | `xcrun stapler staple` on the raw binary must fail (proves constraint); `xcrun stapler validate` on the shipped archive must succeed |
+| 5. Checksums-file collision | `goreleaser release` migration phase | Diff published checksums file's covered-file list against `gh release view --json assets` after first real release under the new pipeline |
+| 6. cosign/SLSA-attested bytes diverge from published bytes | `goreleaser release` migration phase + Notarization phase | Extend `TestVerifyReleaseE2E` to assert raw-binary bytes are untouched between cosign-signing time and publish time, run against every future release, not just once |
+| 7. Hardened Runtime entitlements | Notarization phase | Full CLI/MCP functional smoke test against the actual signed+notarized binary with default (no extra entitlement) Hardened Runtime options; a dyld/codesign crash is the signal an entitlement is needed |
+| 8. Brew-managed-install detection fragility (see Integration Gotchas) | `codegraph upgrade` brew-detection phase | Test against a real `brew tap` + `brew install` on a real machine (Apple Silicon `/opt/homebrew` at minimum; Intel `/usr/local` and linuxbrew as available), resolving symlinks to a real Cellar path rather than string-matching a prefix |
+| Self-update-vs-Cellar conflict (Homebrew policy) | `codegraph upgrade` brew-detection phase | Confirm `brew audit --new --formula codegraph` does not flag self-update behavior — Homebrew's own Acceptable-Formulae audit explicitly checks for this policy area |
+| Tap push racing release asset publish | Homebrew tap phase | Verify GoReleaser's own within-run publish ordering (`release` before `brews`) is preserved if brews publishing is ever separated into its own job; add a real cold `brew install` test run some time after a release, not immediately after, to catch propagation-timing issues |
 
 ## Sources
 
-- `modelcontextprotocol.io/specification/2026-07-28/changelog` (official spec changelog) — MEDIUM confidence (verified/cross-checked)
-- `blog.modelcontextprotocol.io/posts/2026-07-28/` and `.../2026-07-28-release-candidate/` (official MCP blog, lead maintainers) — MEDIUM confidence (verified/cross-checked)
-- `modelcontextprotocol.io/specification/2026-07-28/basic/versioning` (official versioning/compatibility spec page, client×server outcome matrix) — MEDIUM confidence (verified/cross-checked)
-- `modelcontextprotocol.io/seps/2577-deprecate-roots-sampling-and-logging` and `.../seps/2596-spec-feature-lifecycle-and-deprecation` (official SEP text) — MEDIUM confidence (verified/cross-checked)
-- `github.com/modelcontextprotocol/go-sdk` releases (v1.7.0 release notes, Version Compatibility table) — MEDIUM confidence (verified/cross-checked)
-- `github.com/mark3labs/mcp-go` releases and `pkg.go.dev/github.com/mark3labs/mcp-go` (release history, current README/doc text) — MEDIUM confidence (verified/cross-checked)
-- `github.com/juburr/mad-skills` — `go-mcp/references/migration-from-mark3labs.md` (community migration guide, verified against go-sdk v1.6.1) — LOW/MEDIUM confidence, single source but internally detailed and cross-consistent with `github.com/txn2/mcp-s3` PR #22 and `github/github-mcp-server` migration PRs
-- `github.com/modelcontextprotocol/go-sdk/issues/976` (stdio malformed-JSON-RPC / error-code-0 bug report) — MEDIUM confidence, primary-source GitHub issue on the official SDK's own repo
-- `github.com/anthropics/claude-code/issues/41123`, `#40025`, `#50515`; `github.com/anthropics/claude-ai-mcp/issues/45` (client-side stale tool-list caching reports) — MEDIUM confidence, primary-source GitHub issues, several with maintainer/bot responses confirming the behavior
-- `ts.sdk.modelcontextprotocol.io/v2/protocol-versions.html` (TypeScript SDK docs on era negotiation, `server/discover` probe mechanics on stdio) — MEDIUM confidence (official SDK docs); used as informative parallel for the Go SDK's equivalent SEP-2575 mechanism, not a direct Go-SDK citation
-- `likeone.ai/blog/mcp-server-spec-migration-audit-guide-2026` (real-world audit of 4 production stdio MCP servers against 2026-07-28) — LOW confidence, single vendor blog, but directly on-point and internally consistent with the official spec's own framing
-- `www.alexedwards.net/blog/how-to-manage-tool-dependencies-in-go-1.24-plus` (canonical `-modfile`/tool-directive walkthrough) — LOW confidence, single blog source, but consistent with `go.dev/ref/mod` official documentation cited alongside it
-- `go.dev/ref/mod` (official Go Modules Reference, `tool` directive) — MEDIUM confidence (official documentation)
-- `dev.to/gabrielanhaia/govulncheck-scan-go-code-for-cves-you-can-actually-reach` and `go.dev/doc/tutorial/govulncheck` — LOW/MEDIUM confidence respectively; used for `-scan symbol` vs `-scan module` reachability-analysis distinction
-- codegraph-go repo: `internal/mcp/server_test.go` (direct code reading, not web research) — used for Pitfalls 2, Testing Traps A/D, and the "N/A: Roots/Sampling/Logging unused" determination in the Deprecation-Window section
-- codegraph-go repo: `.planning/PROJECT.md` (milestone scope, `PROJECT.md`'s own risk framing) — direct project-artifact reading, used throughout for phase-mapping and to confirm which pitfalls the milestone has already anticipated vs. which are new findings from this research
+- [Notarization successful but spctl … | Apple Developer Forums (thread 128497)](https://developer.apple.com/forums/thread/128497) — MEDIUM-HIGH; documents Accepted-but-rejected family, notary ticket missing Mach-O images
+- [Gatekeeper rejects notarized app | Apple Developer Forums (thread 794080)](https://developer.apple.com/forums/thread/794080) — MEDIUM-HIGH
+- [spctl --type install rejects notarized .pkg on macOS 26 Tahoe | Apple Developer Forums (thread 817887)](https://developer.apple.com/forums/thread/817887) — MEDIUM; recent (Tahoe-era) corroboration the failure family is still live
+- [App Fails spctl After signing and notarization | Apple Developer Forums (thread 767998)](https://developer.apple.com/forums/thread/767998) — MEDIUM
+- [Notarize macOS Applications – GoReleaser official docs](https://goreleaser.com/customization/sign/notarize/) — HIGH; App-Bundle-inner-binary-only trap, native vs quill methods, requires macOS runner for native path
+- [Notarized MacOS application blocked by Gatekeeper when downloaded | Apple Developer Forums (thread 706638)](https://developer.apple.com/forums/thread/706638) — MEDIUM
+- [Apple Codesigning In Depth: Part I — Kayla McArthur](https://kayla.is/posts/codesigning-part-i/) — MEDIUM; codesign vs spctl distinction, ad-hoc signature behavior
+- [macOS distribution gist — rsms](https://gist.github.com/rsms/929c9c2fec231f0cf843a1a746a416f5) — MEDIUM; community-compiled but cross-corroborated with official sources
+- [Split & Merge – GoReleaser official docs](https://goreleaser.com/customization/general/partial/) — HIGH; confirms Pro-only, explains split/merge mechanics
+- [GoReleaser Split and Merge — Carlos Becker (GoReleaser maintainer's own blog)](https://carlosbecker.com/posts/goreleaser-split-merge/) — HIGH; maintainer-authored, directly authoritative
+- [Release Merged Builds / Using Existing Builds During Release · Issue #2320 · goreleaser/goreleaser](https://github.com/goreleaser/goreleaser/issues/2320) — HIGH; official GitHub issue confirming `release` cannot consume pre-existing `dist/`, no `--skip-build` flag exists
+- [Multiple brew formulas fail to upload to the same repository · Issue #1120 · goreleaser/goreleaser](https://github.com/goreleaser/goreleaser/issues/1120) — MEDIUM-HIGH; documented parallel-tap-push race
+- [Git is in a dirty state – GoReleaser official error docs](https://goreleaser.com/resources/errors/dirty/) — HIGH
+- [goreleaser release CLI reference – GoReleaser official docs](https://goreleaser.com/cmd/goreleaser_release/) — HIGH; `--skip` valid values including `notarize`, `homebrew`
+- [Homebrew Documentation: Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) — HIGH; official self-update policy, directly relevant to `codegraph upgrade` brew-refusal decision
+- [Homebrew Documentation: Adding Software to Homebrew](https://docs.brew.sh/Adding-Software-to-Homebrew) — HIGH; `brew audit --new` requirement
+- [M1 Mac has reverted HOMEBREW_PREFIX to /usr/local · Discussion #664 · Homebrew/discussions](https://github.com/Homebrew/discussions/discussions/664) — MEDIUM; real-world prefix-detection edge cases (migrated systems, symlink confusion)
+- [HOMEBREW_PREFIX error when use `brew` symlink · Issue #16044 · Homebrew/brew](https://github.com/Homebrew/brew/issues/16044) — MEDIUM
+- [How notarization works – The Eclectic Light Company](https://eclecticlight.co/2020/08/28/how-notarization-works/) — MEDIUM-HIGH; independent technical writer, cross-corroborated with Apple docs, widely cited in the macOS dev community
+- [Notarization: the hardened runtime – The Eclectic Light Company](https://eclecticlight.co/2021/01/07/notarization-the-hardened-runtime/) — MEDIUM-HIGH
+- [Disable library validation entitlements makes app fail GateKeeper | Apple Developer Forums (thread 673889)](https://developer.apple.com/forums/thread/673889) — MEDIUM
+- [Notarization says I'm not member of my team | Apple Developer Forums (thread 119445)](https://developer.apple.com/forums/thread/119445) — MEDIUM; Team ID mismatch symptom class
+- [Error 7000 "Team is not yet configured for notarization" | Apple Developer Forums (thread 814080)](https://developer.apple.com/forums/thread/814080) — MEDIUM
+- [Building and notarizing command tools as Universal binaries – The Eclectic Light Company](https://eclecticlight.co/2020/08/27/building-and-notarizing-command-tools-as-universal-binaries/) — MEDIUM-HIGH; directly relevant CLI-tool (not .app) notarization guidance
+- [Possible to notarize only a single … | Apple Developer Forums (thread 131610)](https://developer.apple.com/forums/thread/131610) — MEDIUM; confirms notarize-the-container-not-the-binary requirement, stapling-to-single-Mach-O impossibility
+- `.goreleaser.yaml` and `.github/workflows/release.yml` (this repo, read directly 2026-08-07) — HIGH; ground truth for the checksums-collision and asset-naming findings
 
 ---
-*Pitfalls research for: MCP 2026-07-28 protocol migration + Go MCP SDK swap on an installed, stdio-only, tools-only agent server*
-*Researched: 2026-08-03*
+*Pitfalls research for: macOS Gatekeeper notarization + Homebrew tap distribution, added to an existing signed/attested Go release pipeline*
+*Researched: 2026-08-07*

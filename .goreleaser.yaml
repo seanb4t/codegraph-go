@@ -44,6 +44,11 @@ version: 2
 project_name: codegraph
 
 builds:
+  # Both linux legs cross-compile via zig cc/zig c++ (D-01/D-02, REL-05):
+  # this is what makes a single macOS host able to produce all four release
+  # targets in one `goreleaser release` invocation (Phase 1 spike). The
+  # amd64 leg no longer uses the runner's native gcc — see
+  # codegraph-linux-arm64 below, which already did this before this phase.
   - id: codegraph-linux-amd64
     main: ./cmd/codegraph
     binary: codegraph
@@ -51,6 +56,8 @@ builds:
     goarch: [amd64]
     env:
       - CGO_ENABLED=1
+      - CC=zig cc -target x86_64-linux-gnu
+      - CXX=zig c++ -target x86_64-linux-gnu
     flags:
       - -trimpath
     ldflags: &version_ldflags
