@@ -93,6 +93,11 @@ Every command CI runs is defined exactly once, as a `task` target — see
   all four release targets in one invocation — on a native darwin host,
   without publishing or signing anything. Needs `zig`, `syft`, and `cosign`
   on `PATH` in addition to the C toolchain above.
+- `task release:dry-run-signed` is the same composition but does NOT skip
+  `sign` — it exercises the `binary_signs:`/`sboms:` pipes against a
+  throwaway local cosign key, so it needs no OIDC token, and asserts four
+  distinctly-named published signature and SBOM artifacts from
+  `dist/artifacts.json`.
 - `task release:goreleaser` is the single definition of a REAL release —
   the same `goreleaser release --clean` composition, but it actually
   publishes to GitHub Releases, signs with cosign, and emits SBOMs. It is

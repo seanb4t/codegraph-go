@@ -50,6 +50,24 @@
 # darwin-toolchain-canary.yml, not a throwaway — and is intentionally NOT in
 # main's required-status-check set: it tells you the linux-cross toolchain
 # is broken, it does not block unrelated work while someone investigates.
+#
+# THE sign-snapshot JOB (plan 01-06, D-14, cycle-3 review HIGH-A/HIGH-B):
+# THE PROPERTY AT RISK is that GoReleaser expands `${artifact}` from an
+# artifact's PATH but PUBLISHES that artifact under its NAME, and for a
+# `formats: [binary]` archive those two DIFFER because the rename lives
+# only in metadata. All four build ids in `.goreleaser.yaml` produce a
+# binary called `codegraph`, so a PATH-derived template publishes four
+# COLLIDING `codegraph.sigstore.json` assets instead of four distinct
+# sidecars; `codegraph upgrade` downloads `<assetName>.sigstore.json`
+# literally, so the failure mode is a 404 AFTER the user's binary has
+# already been fetched. The `sboms:` pipe carries the identical collision,
+# where `release.replace_existing_artifacts: true` makes the loss SILENT
+# and regresses DIST-03. Every other dry run in this repository passes
+# `--skip=sign`, so without this job the templates would first resolve
+# during a production release that D-07 forbids withdrawing. THE PASS
+# CONDITION is FOUR DISTINCT PUBLISHED NAMES PER PIPE, read from
+# `dist/artifacts.json` — never a green exit code, and never a filename
+# listing, which cannot distinguish the broken config from the correct fix.
 name: linux-cross-canary
 
 on:
@@ -202,3 +220,57 @@ jobs:
         env:
           CODEGRAPH_BIN: dist/export/linux-arm64
         run: task check:linux-cross-exec
+
+  # Rehearses .goreleaser.yaml's binary_signs:/sboms: pipes against a
+  # throwaway local cosign key — see the header comment's sign-snapshot
+  # paragraph for the property at risk and the pass condition. Declares NO
+  # `needs:` on the exec jobs above: this leg is independent of the REL-05
+  # execution proof and should still report if those fail, so a red run
+  # distinguishes "the cross-compile broke" from "the sign template broke"
+  # — the same reasoning darwin-toolchain-canary.yml applies to keeping
+  # canary legs in separate jobs. No `id-token: write` here, and no
+  # `permissions:` block of its own (the file-scoped `contents: read`
+  # above is the whole of it): the throwaway key is what makes that
+  # possible, and a signing rehearsal able to mint a certificate the
+  # production SAN would accept would not be a rehearsal — which is also
+  # why this job is safe on the `pull_request:` trigger this canary
+  # already carries.
+  sign-snapshot:
+    name: sign-snapshot (throwaway-key sign + SBOM pipe rehearsal)
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # goreleaser needs full history + tags to resolve
+          # {{.Tag}}/{{.FullCommit}}/{{.CommitDate}}/{{.CommitTimestamp}}.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install zig
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: "0.15.1" # V1 — see the FAIL-bar variation list above
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: "Rehearse binary_signs:/sboms: against a throwaway local key"
+        env:
+          # A literal throwaway value, never a repository secret — a
+          # secret here would imply the key matters. release:dry-run-signed
+          # generates its own key pair into a temp dir and removes it on
+          # exit; this only supplies the password to decrypt it.
+          COSIGN_PASSWORD: codegraph-throwaway-rehearsal-password-not-for-verification
+        run: task release:dry-run-signed

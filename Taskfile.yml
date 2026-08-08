@@ -467,6 +467,200 @@ tasks:
 
         echo "release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation."
 
+  release:dry-run-signed:
+    desc: >-
+      Sibling of release:dry-run — but does NOT skip sign. release:dry-run
+      skips BOTH publish and sign, so binary_signs:'s upgrade-sidecar naming
+      template is never resolved except by a static assertion until the
+      production release, where a wrong answer cannot be withdrawn (D-07).
+      Resolves it early against a THROWAWAY LOCAL cosign key (no OIDC) — the
+      reason plan 01-05's merge checkpoint can clear. Same run also proves
+      sboms: documents: (--skip=publish does not skip SBOM). Pass condition:
+      FOUR DISTINCT PUBLISHED NAMES per pipe from dist/artifacts.json — never
+      a green exit code, never an on-disk listing (cycle-3 review HIGH-A).
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. This target's release invocation exercises the sboms: pipe (--skip=publish does not skip it). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. This target's release invocation exercises the binary_signs: pipe against a throwaway local key. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # The config under test must be exactly what shipped.
+        if ! git diff --quiet HEAD -- .goreleaser.yaml; then
+          echo "::error::.goreleaser.yaml has uncommitted changes — the config under test must be exactly the committed one, or the SIGN-EVIDENCE/SBOM-EVIDENCE observation below is invalid"
+          exit 1
+        fi
+
+        # ONE run-scoped temp dir tree for everything this rehearsal
+        # generates — key material, the generated config copy, and the
+        # native GoReleaser tool binary — never dist/ (--clean wipes it)
+        # and never the working tree. Removed on exit via a single trap.
+        SIGNTEST_DIR="$(mktemp -d)"
+        GORELEASER_DIR="$(mktemp -d)"
+        GORELEASER_BIN="${GORELEASER_DIR}/goreleaser"
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        cleanup() { rm -rf "${SIGNTEST_DIR}" "${GORELEASER_DIR}" "${ZIG_CACHE_ROOT}"; }
+        trap cleanup EXIT
+
+        # A THROWAWAY LOCAL cosign key pair, generated fresh in this temp
+        # dir and used once — makes the sign pipe RUN. Not the production
+        # identity; signs nothing anyone will verify. Production signing
+        # (binary_signs: carries no --key) stays keyless-OIDC, untouched.
+        export COSIGN_PASSWORD="${COSIGN_PASSWORD:-codegraph-throwaway-rehearsal-password-not-for-verification}"
+        cosign generate-key-pair --output-key-prefix "${SIGNTEST_DIR}/cosign" >/dev/null
+
+        # Inject --key into a GENERATED COPY of .goreleaser.yaml — the whole
+        # mechanism, not optional. COSIGN_PASSWORD DECRYPTS a key; it does
+        # not SELECT one — without --key, cosign sign-blob falls through to
+        # the keyless Fulcio/OIDC flow this job is denied (no id-token:
+        # write anywhere in this composition), hanging or hard-failing
+        # (cycle-2 review HIGH-1). Confirmed against the pinned
+        # goreleaser/v2@v2.17.1 module that the sign pipe's subprocess
+        # already inherits the full process environment (pkg/context:
+        # Env = ToEnv(append(os.Environ(), ...))), so COSIGN_PASSWORD needs
+        # no per-pipe env: addition — this one inserted line is the delta.
+        GENERATED_CONFIG="${SIGNTEST_DIR}/.goreleaser.signtest.yaml"
+        awk -v keyline="      - \"--key=${SIGNTEST_DIR}/cosign.key\"" '
+          { print }
+          /^      - "sign-blob"$/ { print keyline }
+        ' .goreleaser.yaml > "${GENERATED_CONFIG}"
+
+        # Assert the copy is a MINIMAL, ADDITIONS-ONLY delta before
+        # invoking anything, so the rehearsal cannot silently drift into
+        # testing a different configuration than the one that ships. `<`
+        # lines in default diff(1) output are deletions/replacements —
+        # their presence is a hard failure. Every `>` (added) line must
+        # carry --key= or COSIGN_PASSWORD.
+        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_CONFIG}" || true)"
+        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
+          echo "::error::${GENERATED_CONFIG} differs from the committed .goreleaser.yaml by more than additions:"
+          printf '%s\n' "${DIFF_OUT}"
+          exit 1
+        fi
+        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
+        if [ -n "${BAD_ADDITIONS}" ]; then
+          echo "::error::${GENERATED_CONFIG} has additions not matching --key= or COSIGN_PASSWORD:"
+          printf '%s\n' "${BAD_ADDITIONS}"
+          exit 1
+        fi
+        echo "generated config differs from the committed .goreleaser.yaml by additions only:"
+        printf '%s\n' "${DIFF_OUT}"
+
+        # Build GoReleaser NATIVELY, no GOOS/GOARCH in the environment —
+        # identical reasoning to release:dry-run's own comment: a
+        # GOARCH-cross-built GoReleaser runs under Rosetta and its child
+        # xcrun then resolves as x86_64, which cannot load the arm64-only
+        # libxcrun.dylib from CommandLineTools.
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        # Same zig-cache AccessDenied trap release:dry-run already hit
+        # (01-01-SUMMARY.md Rule-3 deviation): this invocation still
+        # cross-compiles all four targets before the sign/sbom pipes run.
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # Invoke against the GENERATED copy — --skip=publish ONLY. `sign`
+        # is deliberately NOT skipped: that is the entire point of this
+        # target. Because the config now lives outside the repo root,
+        # assert immediately after that dist/artifacts.json exists AT THE
+        # REPO ROOT — GoReleaser resolves `dist` relative to the process
+        # working directory, but a silent relocation would make every
+        # assertion below vacuous.
+        echo "==> goreleaser release -f ${GENERATED_CONFIG} --snapshot --skip=publish --clean"
+        "${GORELEASER_BIN}" release -f "${GENERATED_CONFIG}" --snapshot --skip=publish --clean
+
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found at the repo root after the run — goreleaser resolves dist relative to the process working directory"
+          exit 1
+        fi
+
+        # ASSERT FROM dist/artifacts.json, NOT FROM A FILENAME GLOB, and
+        # treat a green exit code as no evidence at all.
+        #
+        # Why the source of truth is the metadata file and not the
+        # filesystem (cycle-3 review HIGH-A): GoReleaser expands ${artifact}
+        # from art.Path when it decides WHERE to write the signature
+        # (sign.go:179-182), then re-expands the same template with
+        # env["artifact"] = art.Name to compute the artifact record it will
+        # PUBLISH (sign.go:274-276); the release pipe uploads by
+        # artifact.Name. For a formats: [binary] archive the rename lives
+        # only in metadata (archive.go:308-310 — Name: finalName, Path:
+        # binary.Path), so no renamed file is ever written to disk. The
+        # on-disk basename is therefore identical under BOTH the broken
+        # configuration and the correct remediation — a filesystem oracle
+        # would false-RED the preferred fix and is structurally blind to
+        # the SBOM collision in the neighbouring pipe. Confirmed against
+        # the pinned goreleaser/v2@v2.17.1 module: the `type` field written
+        # to dist/artifacts.json (internal/pipe/metadata/metadata.go:
+        # writeArtifacts) is the literal strings "Signature" and "SBOM".
+        OK=1
+
+        SIGN_COUNT=$(jq -r '[.[] | select(.type=="Signature")] | length' dist/artifacts.json)
+        if [ "${SIGN_COUNT}" = "0" ]; then
+          echo "::error::0 Signature-typed records in dist/artifacts.json — a filter matching nothing is a HARD FAILURE, not a pass: GoReleaser logs 'no artifacts matching the given filters found' and returns nil, and goreleaser check does not validate the artifacts: enum at all"
+          OK=0
+        fi
+        SIGN_NAMES=$(jq -r '[.[] | select(.type=="Signature") | .name] | join(",")' dist/artifacts.json)
+        SIGN_DISTINCT=$(jq -r '[.[] | select(.type=="Signature") | .name] | unique | length' dist/artifacts.json)
+        if [ "${SIGN_COUNT}" != "0" ] && [ "${SIGN_DISTINCT}" != "${SIGN_COUNT}" ]; then
+          echo "::error::Signature records are not distinct: ${SIGN_COUNT} records, ${SIGN_DISTINCT} distinct names (${SIGN_NAMES}) — a PATH-derived template collides to one name per platform; this is D-14's exact failure mode"
+          OK=0
+        fi
+        if [ "${SIGN_COUNT}" != "0" ]; then
+          for pair in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            MATCHED=$(jq -r --arg suf "_${pair}.sigstore.json" \
+              '[.[] | select(.type=="Signature") | select(.name | startswith("codegraph_")) | select(.name | endswith($suf))] | length' \
+              dist/artifacts.json)
+            if [ "${MATCHED}" != "1" ]; then
+              echo "::error::expected exactly 1 Signature name matching codegraph_<tag>_${pair}.sigstore.json, found ${MATCHED} (names=${SIGN_NAMES})"
+              OK=0
+            fi
+          done
+        fi
+
+        SBOM_COUNT=$(jq -r '[.[] | select(.type=="SBOM")] | length' dist/artifacts.json)
+        if [ "${SBOM_COUNT}" = "0" ]; then
+          echo "::error::0 SBOM-typed records in dist/artifacts.json — a filter matching nothing is a HARD FAILURE, not a pass: GoReleaser logs 'no artifacts matching the given filters found' and returns nil, and goreleaser check does not validate the artifacts: enum at all"
+          OK=0
+        fi
+        SBOM_NAMES=$(jq -r '[.[] | select(.type=="SBOM") | .name] | join(",")' dist/artifacts.json)
+        SBOM_DISTINCT=$(jq -r '[.[] | select(.type=="SBOM") | .name] | unique | length' dist/artifacts.json)
+        if [ "${SBOM_COUNT}" != "0" ] && [ "${SBOM_DISTINCT}" != "${SBOM_COUNT}" ]; then
+          echo "::error::SBOM records are not distinct: ${SBOM_COUNT} records, ${SBOM_DISTINCT} distinct names (${SBOM_NAMES}) — a PATH-derived template collides to one name per platform; this is HIGH-B's exact failure mode"
+          OK=0
+        fi
+        if [ "${SBOM_COUNT}" != "0" ]; then
+          for pair in linux_amd64 linux_arm64 darwin_amd64 darwin_arm64; do
+            MATCHED=$(jq -r --arg suf "_${pair}.spdx.json" \
+              '[.[] | select(.type=="SBOM") | select(.name | startswith("codegraph_")) | select(.name | endswith($suf))] | length' \
+              dist/artifacts.json)
+            if [ "${MATCHED}" != "1" ]; then
+              echo "::error::expected exactly 1 SBOM name matching codegraph_<tag>_${pair}.spdx.json, found ${MATCHED} (names=${SBOM_NAMES})"
+              OK=0
+            fi
+          done
+        fi
+
+        # Two machine-parseable summary lines, as the LAST things printed —
+        # mirroring plan 01-01's REL05-EVIDENCE convention. Emitted on BOTH
+        # the pass and the fail path: a RED observation is the most
+        # valuable output this target can produce, and a signature failure
+        # must not short-circuit the SBOM line, because the two
+        # remediations are independent.
+        echo "SIGN-EVIDENCE count=${SIGN_COUNT} distinct=${SIGN_DISTINCT} names=${SIGN_NAMES}"
+        echo "SBOM-EVIDENCE count=${SBOM_COUNT} distinct=${SBOM_DISTINCT} names=${SBOM_NAMES}"
+
+        if [ "${OK}" != "1" ]; then
+          exit 1
+        fi
+
   release:goreleaser:
     desc: >-
       Cut a REAL release: one `goreleaser release --clean` invocation —
