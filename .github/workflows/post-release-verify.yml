@@ -1,0 +1,280 @@
+# Post-release verification (D-08, REL-06, REL-08).
+#
+# THE PROPERTY AT RISK: every claim this project makes about its supply
+# chain — cosign signature, GitHub build attestation, and a working
+# self-upgrade path — is currently a set of commands documented in
+# docs/RELEASE.md that nobody re-runs after the day they were hand-checked.
+# A local `dist/` copy never passes through the real GitHub Releases upload
+# path, the Sigstore transparency log, or the attestation subject binding,
+# so verifying against it can pass while the actually-published asset is
+# broken. This workflow re-proves REL-08's three claims, plus REL-06/REL-07's
+# asset-set invariant, against the PUBLISHED release, automatically, on
+# every future release — not as a runbook step true only on the day a human
+# checked it. It also guards the three-part runtime contract
+# (`releaseAssetName()`, the `.sigstore.json` sidecar name, and the cosign
+# certificate SAN) that `codegraph upgrade` depends on and that crosses this
+# phase's migration boundary.
+#
+# TRIGGER — `workflow_run`, NOT `release: [published]`. This is the single
+# most consequential decision in this file (cross-AI review, cycle 1, HIGH,
+# raised independently by two reviewers). `.github/workflows/
+# release-please.yml`'s `release-please` job (release-please.yml:57-92)
+# creates the git tag AND the GitHub Release object TOGETHER, via
+# `googleapis/release-please-action`. GitHub emits `release: published` at
+# RELEASE-CREATION time — before any asset exists. `.github/workflows/
+# release.yml`'s tag-push trigger (release.yml:47-50) only fires afterwards,
+# and its `goreleaser release` invocation uploads assets minutes later. A
+# `release: [published]` verifier would therefore start against an EMPTY
+# asset list, hard-fail on every single release, and never automatically
+# retry (GoReleaser updating an already-published Release does not
+# guarantee a second `published` event). That would have shipped a
+# permanently-red gate whose first failure arrived AFTER the phase's
+# irreversible publish. Do not "simplify" this trigger back to
+# `release: [published]` — read the paragraph above first.
+#
+# Two triggers:
+#   - workflow_run: workflows: ["release"], types: [completed] — fires once
+#     release.yml has actually finished, success or not.
+#   - workflow_dispatch, with a `tag` input — retained for re-verification
+#     of a historical tag on demand.
+#
+# THE CONCLUSION GUARD MUST BE EVENT-AWARE (cross-AI review, cycle 2,
+# MEDIUM/pi). Every job below carries an `if:` disjunct that short-circuits
+# on event_name before ever testing the upstream run's conclusion (see each
+# job's own `if:` line for the exact, machine-checked form) — NOT the bare
+# `github.event.workflow_run.conclusion == 'success'`. The
+# bare form is required on the workflow_run path (`completed` fires on
+# failure and cancellation too), but under workflow_dispatch the whole
+# `github.event.workflow_run` object is null, so the bare expression
+# evaluates false and every job would SKIP. Skipping is not failing: the
+# workflow would report a clean, all-green run while verifying nothing, and
+# the retained historical-re-verification trigger would be dead from the day
+# it shipped, with nothing ever surfacing the fact. Do not "simplify" this
+# guard back to the bare form either.
+#
+# THE TAG UNDER VERIFICATION IS RESOLVED AND VALIDATED, never assumed
+# (cross-AI review, cycle 2, MEDIUM/Codex). GitHub documents only that a
+# workflow_run job's OWN GITHUB_REF/GITHUB_SHA refer to the default branch
+# and its tip — nothing guarantees `github.event.workflow_run.head_branch`
+# carries the tag name for a tag-push-triggered run. The `resolve-tag` job
+# below requires the candidate to match `v[0-9]*`, verifies `refs/tags/$TAG`
+# exists, cross-checks the tag's peeled commit against `head_sha` (with an
+# exactly-one-matching-tag fallback when `head_branch` is empty or
+# non-tag-shaped), and emits one `TAG-EVIDENCE` line binding run id, head
+# sha, tag and tag commit. Both downstream jobs consume ONLY
+# `needs.resolve-tag.outputs.tag` — never `head_branch` or the dispatch
+# input directly.
+#
+# GH_TOKEN ON EVERY STEP THAT SHELLS OUT TO `gh` (cross-AI review, cycle 1,
+# HIGH). Granting `contents: read` does NOT export a token into the
+# environment; every `gh release view`/`download`, API query, and
+# `gh attestation verify` in this file needs one explicitly, or the failure
+# looks like a supply-chain break rather than a missing variable.
+name: post-release-verify
+
+on:
+  workflow_run:
+    workflows: ["release"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Release tag to (re-)verify, e.g. v0.5.0. Required on manual
+          dispatch — resolve-tag fails loudly if this is empty.
+        required: false
+        type: string
+
+# This workflow verifies; it never publishes, and must not be able to. No
+# write scope of any kind, anywhere in this file.
+permissions:
+  contents: read
+  attestations: read
+
+jobs:
+  # Resolves and VALIDATES the tag under verification before anything else
+  # in this workflow consumes it. See the header comment's "THE TAG UNDER
+  # VERIFICATION" paragraph for why this exists as its own job rather than
+  # an inline expression in each downstream job.
+  resolve-tag:
+    name: resolve and validate the tag under verification
+    # Event-aware conclusion guard (T-01-38) — see the header comment. This
+    # exact disjunct is required, verbatim, on every job in this file.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: namespace-profile-linux-amd64-4x8
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Resolve and validate the tag under verification
+        id: resolve
+        env:
+          # Precedence resolved HERE, in the env: expression — never in
+          # shell. On a real workflow_run event, github.event.inputs is
+          # undefined, so this falls through to head_branch; on a
+          # workflow_dispatch event, github.event.workflow_run is null, so
+          # this resolves to the dispatch input.
+          CANDIDATE: ${{ github.event.inputs.tag || github.event.workflow_run.head_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if ! command -v jq >/dev/null 2>&1; then
+            echo "::error::jq not found on this runner — resolve-tag needs it to parse gh api output"
+            exit 1
+          fi
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "::error::gh CLI not found on this runner — this workflow assumes the Namespace runner image ships it, matching GitHub-hosted runner images; if this fires, an explicit install step is needed here"
+            exit 1
+          fi
+
+          # Reject a candidate that does not match v[0-9]*, naming the
+          # value seen. An empty or branch-shaped head_branch is a hard
+          # failure, not a fallback to "latest" — UNLESS we are on the
+          # workflow_run path, where we can instead fall back to resolving
+          # the tag from head_sha via the tags API (below).
+          case "${CANDIDATE}" in
+            v[0-9]*)
+              TAG="${CANDIDATE}"
+              ;;
+            *)
+              if [ "${EVENT_NAME}" != "workflow_run" ]; then
+                echo "::error::candidate '${CANDIDATE}' does not match v[0-9]* — refusing to guess. A workflow_dispatch run must supply a v[0-9]*-shaped tag input."
+                exit 1
+              fi
+              if [ -z "${HEAD_SHA}" ]; then
+                echo "::error::workflow_run event carries no head_sha — cannot fall back to tag-by-commit resolution"
+                exit 1
+              fi
+              echo "head_branch ('${CANDIDATE}') is empty or not v[0-9]*-shaped — falling back to resolving the tag from head_sha=${HEAD_SHA} via the tags API. Zero or more than one match is a failure, not a guess."
+              # $sha below is a jq --arg variable (bound by --arg sha
+              # "${HEAD_SHA}" on the next line), not a shell variable; the
+              # filter is deliberately single-quoted so the shell does not
+              # touch it.
+              # shellcheck disable=SC2016
+              MATCHES_JSON="$(gh api "repos/${REPO}/tags" --paginate --jq --arg sha "${HEAD_SHA}" \
+                '[.[] | select(.commit.sha==$sha) | .name] | map(select(test("^v[0-9]")))')"
+              MATCH_COUNT="$(printf '%s' "${MATCHES_JSON}" | jq 'length')"
+              if [ "${MATCH_COUNT}" != "1" ]; then
+                echo "::error::expected exactly one v[0-9]* tag pointing at head_sha ${HEAD_SHA}, found ${MATCH_COUNT}: ${MATCHES_JSON}"
+                exit 1
+              fi
+              TAG="$(printf '%s' "${MATCHES_JSON}" | jq -r '.[0]')"
+              ;;
+          esac
+
+          SOURCE="dispatch"
+          if [ "${EVENT_NAME}" = "workflow_run" ]; then
+            SOURCE="workflow_run"
+          fi
+
+          # Verify refs/tags/$TAG exists in the repository — every path
+          # through this step converges on the same explicit check, even
+          # the fallback branch above (whose match already implies
+          # existence via the tags API).
+          if ! gh api "repos/${REPO}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::refs/tags/${TAG} does not exist in ${REPO}"
+            exit 1
+          fi
+
+          # Resolve the tag's PEELED commit sha. The commits/<ref> endpoint
+          # always resolves to the underlying commit, whether the tag is
+          # lightweight or annotated — no separate peeling step needed.
+          TAG_COMMIT="$(gh api "repos/${REPO}/commits/${TAG}" --jq '.sha')"
+          if [ -z "${TAG_COMMIT}" ]; then
+            echo "::error::could not resolve refs/tags/${TAG} to a commit sha"
+            exit 1
+          fi
+
+          # On the workflow_run path ONLY: cross-check the tag's peeled
+          # commit against the completed run's head_sha. A
+          # dispatch-supplied tag has no upstream run to cross-check
+          # against.
+          if [ "${SOURCE}" = "workflow_run" ] && [ "${TAG_COMMIT}" != "${HEAD_SHA}" ]; then
+            echo "::error::refs/tags/${TAG}'s peeled commit (${TAG_COMMIT}) does not equal the completed run's head_sha (${HEAD_SHA})"
+            exit 1
+          fi
+
+          echo "TAG-EVIDENCE tag=${TAG} tag_commit=${TAG_COMMIT} upstream_run=${UPSTREAM_RUN_ID} upstream_head_sha=${HEAD_SHA} source=${SOURCE}"
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+  # Re-downloads the published release's assets and re-proves REL-06's
+  # asset-set invariant, the cosign signature (REL-08 criterion 3, D-11a),
+  # and the build-provenance attestation (REL-08) — never against a local
+  # dist/ copy. See Taskfile.yml's verify:release-assets for the full
+  # implementation.
+  verify-supply-chain:
+    name: verify supply-chain claims against the published release
+    needs: resolve-tag
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: namespace-profile-linux-amd64-4x8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Verify published release assets
+        env:
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: task verify:release-assets
+
+  # Proves REL-08's self-upgrade claim: a genuinely shipped PRIOR release
+  # binary self-upgrades via `codegraph upgrade` to $TAG, and the resulting
+  # binary's sha256 equals the published asset's — asserted by byte
+  # identity, not an exit code. Matrix over the two platforms D-08 names.
+  # Deliberately does NOT declare needs: verify-supply-chain: the two claims
+  # are independent evidence and both should report on a bad release, so a
+  # broken sidecar name and a broken self-upgrade are distinguishable rather
+  # than one masking the other.
+  self-upgrade:
+    name: "self-upgrade proof (${{ matrix.goos }}/${{ matrix.goarch }})"
+    needs: resolve-tag
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+            runner: namespace-profile-macos-6x14-tahoe
+          - goos: linux
+            goarch: amd64
+            runner: namespace-profile-linux-amd64-4x8
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Prove self-upgrade byte-identity
+        env:
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GH_TOKEN: ${{ github.token }}
+        run: task verify:self-upgrade
