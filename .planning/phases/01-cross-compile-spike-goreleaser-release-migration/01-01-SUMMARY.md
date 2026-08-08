@@ -19,8 +19,8 @@ affects: ["01-02 (activates sboms:/binary_signs:)", "01-03 (collapses release.ym
 # Actuals (#2632)
 actuals:
   tokens: 8400
-  tasks: 2
-  commits: 2
+  tasks: 3
+  commits: 3
 
 tech-stack:
   added: []
@@ -47,7 +47,7 @@ key-decisions:
 patterns-established:
   - "Any future .goreleaser.yaml env-parsing Go test decodes with yaml.Unmarshal into typed structs (parseGoreleaserBuildEnv), never a hand-written line scanner — binds plans 01-02/01-03 per the plan's <parser_strategy>."
 
-requirements-completed: []  # REL-05 NOT YET satisfied — Task 3 (the human-verify checkpoint that dispatches the canary and records PASS/FAIL) has not run. See Next Phase Readiness.
+requirements-completed: [REL-05, REL-06]  # REL-05 satisfied by canary run 31273571889 (V1, first dispatch) — both linux legs executed on real, non-emulated Namespace hardware and indexed a real tree to files=430 symbols=4281. See "Task 3 — REL-05 Decision".
 
 coverage:
   - id: D1
@@ -91,25 +91,42 @@ coverage:
   - id: D5
     description: "check:linux-cross-exec converts a linked object into REL-05's real evidence: ELF-machine-vs-host-arch assertion, real `codegraph init` against the checked-out repo, codegraph status --json fileCount/nodeCount both asserted non-zero, one REL05-EVIDENCE line emitted"
     requirement: "REL-05"
-    verification: []
+    verification:
+      - kind: other
+        ref: "linux-cross-canary run 31273571889 — REL05-EVIDENCE uname=x86_64 elf=x86-64 files=430 symbols=4281 (job label namespace-profile-linux-amd64-4x8)"
+        status: pass
+      - kind: other
+        ref: "linux-cross-canary run 31273571889 — REL05-EVIDENCE uname=aarch64 elf=aarch64 files=430 symbols=4281 (job label namespace-profile-linux-arm64-4x8)"
+        status: pass
     human_judgment: true
-    rationale: "check:linux-cross-exec's precondition requires GOHOSTOS=linux and was only syntax-checked (bash -n) plus precondition-halt-verified on this darwin execution host — it has never actually run end-to-end. The REAL evidence (both linux legs executing on namespace-profile-linux-amd64-4x8 / namespace-profile-linux-arm64-4x8 and reporting non-zero REL05-EVIDENCE lines) can only come from Task 3's canary dispatch, which is a blocking human-verify checkpoint this plan halted at — not auto-approvable per the orchestrator's explicit instruction."
+    rationale: "Resolved by Task 3's canary dispatch on 2026-08-08. Both legs executed on real, non-emulated Namespace hardware (runner labels confirmed via the jobs API, not inferred from job names) and each independently indexed the checked-out repository to a non-zero graph. Maintainer recorded PASS against run 31273571889."
+  - id: D6
+    description: "REL-05 decided on third-party-re-inspectable evidence: one goreleaser release --snapshot invocation on macOS produced both zig-crossed linux binaries, each of which then EXECUTED on real Linux hardware of its own architecture and indexed a real tree to a non-zero graph"
+    requirement: "REL-05"
+    verification:
+      - kind: other
+        ref: "gh run view 31273571889 --json jobs → 0 non-success jobs, all three jobs present (cross-build, exec real linux/amd64, exec real linux/arm64)"
+        status: pass
+      - kind: other
+        ref: "gh run view 31273571889 --log → exactly two RESOLVED REL05-EVIDENCE lines, both with files>0 and symbols>0 and agreeing uname/elf fields"
+        status: pass
+    human_judgment: false
 
 duration: 95min
 completed: 2026-08-08
-status: halted
+status: complete
 ---
 
 # Phase 1 Plan 1: Cross-Compile Spike & `goreleaser release` Migration Summary
 
-**Both linux .goreleaser.yaml build ids now zig-cross from a native macOS host in one `goreleaser release` invocation, proven locally with file(1)-verified ELF/Mach-O output; a permanent linux-cross-canary workflow exists to prove the harder half — real execution on real Linux hardware — but has not yet been dispatched.**
+**REL-05 PASSES on V1, first dispatch. Both linux `.goreleaser.yaml` build ids zig-cross from a native macOS host in one `goreleaser release` invocation, and both resulting binaries EXECUTE on real, non-emulated Namespace Linux hardware of their own architecture and index the checked-out repository to a non-zero graph (`files=430 symbols=4281`). The OSS single-runner architecture is reachable; the costed GoReleaser Pro fallback is not needed.**
 
 ## Performance
 
 - **Duration:** ~95 min
 - **Started:** 2026-08-08 (approx, continuation from prior session's context load)
 - **Completed:** 2026-08-08T18:52:41Z
-- **Tasks:** 2 of 3 completed (Task 3 is a blocking human-verify checkpoint, not yet run)
+- **Tasks:** 3 of 3 completed (Task 3 was a blocking human-verify checkpoint; resolved PASS against canary run 31273571889)
 - **Files modified:** 7 (2 created, 5 modified)
 
 ## Accomplishments
@@ -124,8 +141,50 @@ status: halted
 
 1. **Task 1: End-to-end "one goreleaser invocation cross-compiles all four targets from macOS"** — `e25cbe4` (feat)
 2. **Task 2: Permanent linux-cross canary — build on macOS, EXECUTE on real Linux, index a real tree** — `5609765` (feat)
+3. **Task 3: Dispatch the canary and record the REL-05 architecture decision** — checkpoint resolved by the maintainer against run [31273571889](https://github.com/seanb4t/codegraph-go/actions/runs/31273571889); recorded in this SUMMARY (docs commit below).
 
-Task 3 (checkpoint:human-verify, `gate="blocking"`) has **not** run — this plan halts here pending maintainer dispatch of the canary. No plan-metadata commit exists yet; that lands after Task 3 resolves.
+## Task 3 — REL-05 Decision: **PASS** (V1, first dispatch)
+
+**Run:** https://github.com/seanb4t/codegraph-go/actions/runs/31273571889
+**Variation applied:** V1 — zig `0.15.1` (the `release.yml` pin), target triples `x86_64-linux-gnu` and `aarch64-linux-gnu`, default (dynamic) `CGO_LDFLAGS`. V2–V5 were never needed; the FAIL-bar list is unexhausted.
+
+Verbatim evidence lines, one per exec job:
+
+```
+REL05-EVIDENCE uname=x86_64  elf=x86-64  files=430 symbols=4281
+REL05-EVIDENCE uname=aarch64 elf=aarch64 files=430 symbols=4281
+```
+
+Supporting `file -b` output from each leg:
+
+```
+exec (real linux/amd64)  ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked,
+                         interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 2.0.0
+exec (real linux/arm64)  ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV), dynamically linked,
+                         interpreter /lib/ld-linux-aarch64.so.1, for GNU/Linux 2.0.0
+```
+
+Each acceptance criterion re-derived from the run URL by the orchestrator, independently of the executor:
+
+| Criterion | Method | Result |
+|---|---|---|
+| 0 non-success jobs | `gh run view --json jobs --jq '[.jobs[]\|select(.conclusion!="success")]\|length'` | `0` |
+| All three jobs ran (none skipped) | `gh run view --json jobs` | `cross-build`, `exec (real linux/amd64)`, `exec (real linux/arm64)` |
+| Two resolved `REL05-EVIDENCE` lines | `gh run view --log` | 2 resolved (see caveat below) |
+| Both counts > 0 | evidence lines | `files=430`, `symbols=4281` on both legs |
+| `uname=`/`elf=` agree per leg | evidence lines | `x86_64`/`x86-64`; `aarch64`/`aarch64` |
+| arm64 leg NOT emulated | `gh api .../jobs --jq '.jobs[].labels'` | `["namespace-profile-linux-arm64-4x8"]` |
+
+**Why the identical counts are corroborating rather than suspicious:** both legs report `430/4281` while a local darwin run of the same tree reports `424/4203`. The CI numbers come from each leg's own fresh checkout with `.codegraph` deleted before `init`, so two independent architectures converged on the same graph from the same source — evidence the CGo tree-sitter parse path genuinely works on both, not that an artifact was copied.
+
+### Deviations discovered during Task 3
+
+**1. [Plan defect] Task 3's prescribed dispatch command is unrunnable as written.**
+The plan specifies `gh workflow run linux-cross-canary.yml --ref <branch>`. GitHub only registers a `workflow_dispatch` trigger from the **default branch**, and `linux-cross-canary.yml` is new — it does not exist on `main`. The command fails until the workflow lands there. This survived three cross-AI convergence cycles undetected.
+*Resolution:* used the canary's other trigger — the path-scoped `pull_request` filter the same plan authored, which this branch's diff matches on all six paths. Draft PR [#35](https://github.com/seanb4t/codegraph-go/pull/35) was opened and the canary fired on `pull_request`. Once this branch merges, `workflow_dispatch` registers and the documented command becomes valid; the canary is dispatchable from then on, exactly as D-03 intends.
+
+**2. [Criterion precision] "exactly two `REL05-EVIDENCE` lines" over-matches.**
+`rg -c 'REL05-EVIDENCE'` against the raw run log returns **4**, not 2: `task` echoes each command before running it, so the unexpanded source line `REL05-EVIDENCE uname=${HOST_MACHINE} …` appears once per exec job alongside the resolved line. The criterion is satisfied on its intent (exactly two *resolved* lines) but a literal count assertion would fail. Any future automation of this check must match resolved content (e.g. `REL05-EVIDENCE uname=[a-z0-9_]+ .* files=[0-9]+`), not the bare token — the same "assert the property, not a literal string" lesson the cycle-3 review applied to the `sboms:` name template.
 
 ## Files Created/Modified
 
@@ -206,16 +265,22 @@ None beyond the two deviations documented above.
 
 ## User Setup Required
 
-None - no external service configuration required for Tasks 1-2. Task 3 requires a maintainer (or an authorized agent with `gh` access) to dispatch the canary — see Next Phase Readiness.
+None. Task 3's canary dispatch is done; its evidence is recorded above. Draft PR [#35](https://github.com/seanb4t/codegraph-go/pull/35) now carries this branch — note its `Require Issue Link` check is red because no tracking issue exists yet for v0.5.0. That is a merge-time concern, not a phase-1 blocker.
 
 ## Next Phase Readiness
 
-**This plan is HALTED, not complete.** Task 3 — `checkpoint:human-verify`, `gate="blocking"` — is the task carrying REL-05's actual evidence bar (both linux legs executing on real Namespace Linux hardware and reporting non-zero `REL05-EVIDENCE` counts) and was explicitly withheld from auto-approval by the orchestrator's dispatch instructions: *"Auto-mode is NOT authorized for it… Do NOT dispatch the canary yourself, do NOT self-approve, and do NOT write a REL-05 PASS into the SUMMARY. The maintainer decides."*
+**This plan is COMPLETE.** All three tasks executed; REL-05 decided PASS on re-inspectable evidence.
 
-**What is proven so far:** the `.goreleaser.yaml`/Taskfile config shape is correct and the zig-cross **link** succeeds on a real macOS host for both linux legs, verified locally end-to-end (`task release:dry-run` green, four correctly-typed objects). What is **not yet proven**: whether the resulting linux/amd64 and linux/arm64 binaries actually **run** and index a real tree on real, non-emulated Linux hardware — the harder half of REL-05, and the one a wrong toolchain can fail silently.
+**What is now proven:** one `goreleaser release --snapshot` invocation on `namespace-profile-macos-6x14-tahoe` produces all four release binaries with both linux legs `zig cc`-cross-compiled, and both linux binaries then EXECUTE on real, non-emulated Namespace hardware of their own architecture and index the checked-out repository to a non-zero graph. The OSS single-runner architecture is **reachable**.
 
-**Blocked on:** maintainer dispatch of `.github/workflows/linux-cross-canary.yml` (`gh workflow run linux-cross-canary.yml --ref <this branch>`), then recording the run URL and both `REL05-EVIDENCE` lines. If the run passes, plans 01-02 onward are unblocked. If it fails after exhausting the V1-V5 variation list, REL-05 is FAIL and the phase escalates to the GoReleaser Pro fallback per the plan header and PROJECT.md.
+**Consequences for the rest of the phase:**
+- Plans 01-02 through 01-06 are valid as written; none needs rework.
+- The costed GoReleaser Pro fallback is **not** triggered, so its three named gate repairs (`check:goreleaser`/DIST-01, `TestGoreleaserPinParity`, `tool-vuln`/VULN-01-02-03) do **not** enter scope.
+- The V1–V5 FAIL-bar list stays unexhausted and remains available if a future canary run regresses.
+- The canary now re-fires on any `pull_request` touching `release.yml`, `linux-cross-canary.yml`, `.goreleaser.yaml`, `Taskfile.yml`, `go.mod`, or `go.sum` — including plan 01-02's own `.goreleaser.yaml` edits. The `syft`/`cosign` installers added in Task 2 are what keep it from going red at the SBOM pipe when 01-02 activates `sboms:` (review HIGH-4). That forward-looking step is now load-bearing.
+
+**Standing trap for later plans in this phase:** `goreleaser release` records `type=="Binary"` **twice per platform** — once for the raw `go build` output and once for the `archives:` pipe's renamed release asset. Task 1 hit this as an 8-vs-4 count bug; the cycle-3 convergence review hit the same underlying model as the `${artifact}` path-vs-name collision in `binary_signs:` and `sboms:`. Any plan that reads `dist/artifacts.json` or writes a GoReleaser name template must be explicit about which of the two records it means.
 
 ---
 *Phase: 01-cross-compile-spike-goreleaser-release-migration*
-*Completed: 2026-08-08 (halted at Task 3 checkpoint)*
+*Completed: 2026-08-08 (all 3 tasks; REL-05 PASS on canary run 31273571889)*
