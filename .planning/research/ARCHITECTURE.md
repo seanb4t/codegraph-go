@@ -1,313 +1,431 @@
-# Architecture Research — MCP `2026-07-28` Protocol Currency
+# Architecture Research: macOS Notarization + Homebrew Integration into the Existing Release Pipeline
 
-**Domain:** MCP server integration architecture (stdio, tools-only), codegraph-go v0.3.0
-**Researched:** 2026-08-03 (corrected 2026-08-03 — see amendment note below)
-**Confidence:** MEDIUM overall — code-derived findings (file/symbol enumeration) are HIGH confidence (read directly); protocol-spec findings are sourced from the official `modelcontextprotocol.io` spec/changelog and blog, which is the spec's own primary source, but the research seam's generic `classify-confidence` tool has no tier above LOW for raw `websearch`/`webfetch` providers — see Sources for the honest breakdown.
+**Domain:** CI/CD release engineering — Go binary supply chain (GoReleaser, cosign, SLSA, syft) extended with Apple notarization and Homebrew tap publishing
+**Researched:** 2026-08-07
+**Confidence:** MEDIUM overall (repo facts HIGH; GoReleaser OSS/Pro feature boundaries MEDIUM — official docs, fetched via summarizing tool, not independently cross-checked against a second source; no claim here has been machine-verified against a real `goreleaser release` run in this repo)
 
-> **Correction (2026-08-03, same day):** the original version of this file understated `modelcontextprotocol/go-sdk`'s maturity — it characterized `v1.7.0-pre.1` (the first pre-release) as the current state of the art. The coordinator verified directly against the Go module proxy (`go list -m -json ... @latest`) and the module source (`go-sdk@v1.7.0/mcp/shared.go`) that **`v1.7.0` is a STABLE release, published 2026-07-27T15:20:53Z — the day before the spec's public announcement** — shipping five-era protocol negotiation (`2026-07-28`, `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) and the SEP-2575-numbered `CodeUnsupportedProtocolVersion = -32022`. This is now corrected throughout, most consequentially in Q4 and Q5. The mark3labs finding (`mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"`, no `2026-07-28` support) was independently re-verified and stands unchanged.
+**Standing rule applied:** every claim below is either (a) read directly from this repo's files (HIGH, file:line cited) or (b) sourced from GoReleaser's own current docs (MEDIUM — single official source per claim). Nothing here is inferred from the roadmap or from memory of older GoReleaser versions. Two claims materially contradict or sharpen what `PROJECT.md`'s Key Decisions table already asserts — both are flagged explicitly rather than silently reconciled, per this repo's own "report the gap, don't paper over it" convention.
 
-This is a **subsequent-milestone** research file. It does not re-litigate the stack (see `.claude/CLAUDE.md`'s Technology Stack section, already shipped) — it integrates MCP `2026-07-28` into the existing, shipped Go architecture described in `internal/mcp/`, `internal/cli/serve.go`, and `test/integration/`.
+---
 
-## Standard Architecture — Current State (as shipped, v1.0)
+## 1. Two findings that change the plan before any job graph is drawn
 
-### System Overview
+These surfaced during research and are load-bearing enough that the roadmap should see them before phase decomposition, not buried in prose below.
+
+### Finding A — `brews:` is deprecated; `homebrew_casks:` is GoReleaser's current CLI-formula mechanism
+
+PROJECT.md's Key Decisions table says: *"formula published by GoReleaser's `brews:` block"* (`.planning/PROJECT.md:54`, `:178`). GoReleaser's own docs (as of this research date) mark `brews:`/`homebrew_formulas:` **deprecated since v2.10**, explicitly stating *"Homebrew Casks should be used instead."* `homebrew_casks:` is OSS, supports a `binaries:` field for CLI executables (not just `.app` GUI bundles), and is the actively maintained path. `brews:` still functions today (deprecated ≠ removed) but is documented as legacy.
+
+**Confidence:** MEDIUM (GoReleaser docs, single source, fetched via summarizing WebFetch — not raw-read). **Recommendation:** this milestone should decide `brews:` vs `homebrew_casks:` as an explicit Phase-0 research/decision item, not silently follow the PROJECT.md wording. Using a documented-deprecated block for a new integration being built today is the wrong default; using `homebrew_casks:` for a CLI tool is documented but less battle-tested for that use case than the (deprecated) formula path, since casks were originally a GUI-app mechanism. **This needs a short, dedicated spike before Phase 3 (tap integration) is planned in detail** — do not let it be discovered mid-implementation.
+
+### Finding B — true offline-staplable notarization requires either GoReleaser Pro (`dmg:`) or a hand-built `.app` wrapper; the OSS `notarize.macos` (Quill) path notarizes but cannot staple a bare binary or a zip
+
+- GoReleaser OSS ships a cross-platform notarization pipe (`notarize.macos`, Anchore Quill-based) that operates on **raw binaries directly**, before archiving. It works; it is not a stub.
+- Apple's stapling mechanism (`stapler staple`) only attaches to a bundle container — `.app`, `.pkg`, `.dmg`. It **cannot** staple a bare Mach-O executable or a `.zip`.
+- GoReleaser's `dmg:` block — the one config surface that produces a staplable container with native notarization wired in — is **Pro-only**.
+- Consequence: an OSS-only pipeline that notarizes a raw binary and ships it in a `formats:[zip]` archive produces a **notarized-but-unstapled** artifact. Gatekeeper's behavior for that shape is: read `com.apple.quarantine` → attempt an **online** ticket lookup against Apple's servers → cache the result → allow. This satisfies the milestone's literal stated bar (`spctl -a -vv -t exec` → `accepted`, PROJECT.md:52, `:63`) whenever the verifying machine has network — which is the overwhelmingly common case for a first launch. It does **not** satisfy "verifiable fully offline," which the milestone's own key-decision language ("Stapling forces the asset decision," PROJECT.md:61) treats as the real design call.
+
+**Confidence:** MEDIUM (GoReleaser docs + Apple's documented stapling constraints, cross-referenced across 3 official-doc fetches this session; internally consistent, not independently re-verified against Apple's current developer docs directly). **This is not framed as a correctness bug** (nothing here signs a different byte stream than ships — see §3) — it is a **scope decision the roadmap must make explicitly**: (1) accept online-notarization-only via zip (OSS, cheapest, matches the milestone's literal `spctl` bar), (2) build a minimal `.app`-bundle wrapper around the CLI binary purely so it can be stapled, then zip the stapled `.app` (OSS-achievable, more engineering), or (3) pay for GoReleaser Pro's native `dmg:`/`notarize.macos_native` path (least engineering, ongoing cost, and reintroduces the Pro-license question already open for split/merge — see §2). Recommend **(1) for v0.5.0**, with (2)/(3) explicitly deferred — it clears the stated bar, costs nothing new, and matches this milestone's existing "Gatekeeper impact is genuinely narrow" framing (PROJECT.md:60).
+
+---
+
+## 2. The `goreleaser build` → `goreleaser release` restructure
+
+### 2.1 Before: today's job graph (as read from `.github/workflows/release.yml`)
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Agent client (Claude Code, Cursor, ...) — spawns ONE subprocess      │
-│  per session via the stdio invocation internal/agents wrote           │
-└───────────────────────────────┬────────────────────────────────────┘
-                                 │ stdio (stdin/stdout pipes)
-┌────────────────────────────────▼───────────────────────────────────┐
-│  internal/cli/serve.go — newServeCmd().RunE                         │
-│   1. resolveStartPath(path)              → start                    │
-│   2. serveServerPaths(start)             → repoPath, hasIndex        │
-│   3. indexer.Sync(repoPath, storeDir,…)  → reconnect reconcile (D-06)│
-│   4. serveWatchStart(repoPath, hasIndex,…) → background watcher      │
-│   5. mcp.BuildServer(hasIndex, allowlist, repoPath, start) → *server.MCPServer │
-│   6. server.ServeStdio(s)                → blocks on stdin/stdout    │
-└────────────────────────────────┬───────────────────────────────────┘
-                                 │ *server.MCPServer (mark3labs concrete type)
-┌────────────────────────────────▼───────────────────────────────────┐
-│  internal/mcp (server.go + tools.go) — D-08 seam                    │
-│   BuildServer: registers codegraph_explore (always) + 7 companion   │
-│   tools (allowlist-gated), closes over ONE gitmeta.CachingDetector  │
-│   per server, and over (repoPath, startPath) — both process-start-  │
-│   time constants baked into every handler closure                   │
-│   Each handler: resolvePath → confineToRepoRoot (CR-02) →           │
-│   query.OpenAt (FRESH snapshot, D-02/D-08b) → Engine method →       │
-│   Render*Markdown → mcp.NewToolResultText                            │
-└────────────────────────────────┬───────────────────────────────────┘
-                                 │ imports only internal/query
-┌────────────────────────────────▼───────────────────────────────────┐
-│  internal/query.Engine — shared read-only engine (CLI + MCP)         │
-│  → internal/graphstore (Pebble) — single-writer, snapshot reads      │
-└──────────────────────────────────────────────────────────────────────┘
+tag push (v[0-9]*, release-please-only)
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│ build (matrix: 4 legs, 2 runner classes)                        │
+│  linux/amd64  @ namespace-profile-linux-amd64-4x8 (native)      │
+│  linux/arm64  @ namespace-profile-linux-amd64-4x8 (zig cc)      │
+│  darwin/amd64 @ namespace-profile-macos-6x14-tahoe (native)     │
+│  darwin/arm64 @ namespace-profile-macos-6x14-tahoe (native)     │
+│  each: `goreleaser build --single-target --clean`               │
+│        → rename to codegraph_<tag>_<goos>_<goarch>               │
+│        → upload-artifact                                        │
+└───────────────────────────────┬───────────────────────────────┘
+                                 │ needs: build
+                                 ▼
+┌───────────────────────────────────────────────────────────────┐
+│ assemble (namespace-profile-linux-amd64-2x4)                    │
+│  download all 4 binaries                                        │
+│  sha256sum → codegraph_<tag>_checksums.txt   (HAND-ROLLED)      │
+│  cosign sign-blob --bundle per binary        (HAND-ROLLED)      │
+│  syft SBOM per binary                        (HAND-ROLLED)      │
+│  base64-encode checksums.txt → hashes output (HAND-ROLLED)      │
+│  gh release upload/create --clobber                             │
+└───────────────────────────────┬───────────────────────────────┘
+                                 │ needs: assemble
+                                 ▼
+┌───────────────────────────────────────────────────────────────┐
+│ provenance (reusable workflow, its own runner)                  │
+│  slsa-framework/slsa-github-generator generator_generic_slsa3   │
+│  base64-subjects: assemble.outputs.hashes (parses checksums.txt)│
+└───────────────────────────────────────────────────────────────┘
 ```
 
-### Component Responsibilities
+`archives:` and `checksum:` in `.goreleaser.yaml` are dead — `goreleaser build` never runs them (`.goreleaser.yaml:1-40`, `:108-124`). `release.yml`'s own shell steps are the entire asset-naming/checksum/signing contract today.
 
-| Component | Responsibility | Current implementation |
-|-----------|----------------|-------------------------|
-| `internal/cli/serve.go` (`newServeCmd`, `serveServerPaths`, `serveWatchStart`) | Process bootstrap: resolve repo, reconcile offline changes, start watcher, construct server, block on transport | Owns the ONE call to `mcp.BuildServer` and the ONE call to `server.ServeStdio` — both mark3labs-typed |
-| `internal/mcp/server.go` (`BuildServer`, `ParseAllowlist`, `WarnUnknownToolsTo`) | Startup-time conditional tool registration; one `gitmeta.CachingDetector` per server | Returns `*server.MCPServer` (mark3labs concrete type) — see Q2 leak finding |
-| `internal/mcp/tools.go` (`exploreHandler`, `companionHandler`, `openEngine`, `confineToRepoRoot`, `resolvePath`) | Per-call arg parsing, path confinement, fresh-engine delegation, markdown rendering | Every handler is `server.ToolHandlerFunc` (mark3labs type); tool schemas built with `mcp.NewTool`/`mcp.With*` (mark3labs builder DSL) |
-| `internal/query.Engine` | Read-only query surface shared byte-for-byte by CLI and MCP | Untouched by this milestone — the seam this milestone must not disturb |
-| `test/integration/*_test.go`, `internal/mcp/*_test.go`, `testdata/golden/golden_parity_test.go` | Behavioral + protocol verification | Nearly all use `mcpclient` (mark3labs client) as the driving client — see Q3 |
+### 2.2 After: recommended job graph under `goreleaser release`
 
-## Q1 — Team Scale Strategic Assessment (read-out, not a build order)
+```
+tag push (v[0-9]*, release-please-only) — UNCHANGED trigger, UNCHANGED file identity
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────┐
+│ release (SINGLE job, SINGLE runner: namespace-profile-macos-*)  │
+│                                                                   │
+│  1. checkout (fetch-depth: 0) — unchanged                       │
+│  2. setup-go, cache — unchanged                                 │
+│  3. install zig (now used for BOTH linux legs, not just arm64)  │
+│  4. install goreleaser (pinned, same version)                   │
+│  5. install cosign, syft — still needed on this runner if       │
+│     signs:/sboms: shell out to their CLIs (GoReleaser's         │
+│     signs:/sboms: pipes call these as external commands)        │
+│  6. `goreleaser release --clean`  ← ONE invocation does:         │
+│       builds:      all 4 targets, natively-darwin +             │
+│                     zig-cross-linux, on this ONE macOS host      │
+│       notarize:     darwin binaries only (macos Quill block)    │
+│       archives:     raw-binary passthrough (upgrade contract)   │
+│                      AND zip archives (brew/browser)             │
+│       checksum:     ONE checksums.txt over ALL assets            │
+│                      (binaries + archives) — GoReleaser-owned,   │
+│                      hand-rolled step DELETED                    │
+│       binary_signs: cosign keyless over the raw binaries only    │
+│                      (matches internal/upgrade's per-binary      │
+│                      .sigstore.json contract exactly)            │
+│       signs:        (optional) cosign over the zip archives too  │
+│       sboms:        syft SBOM per binary (and optionally per     │
+│                      archive)                                    │
+│       homebrew_casks (or brews, see Finding A): push formula     │
+│                      to seanb4t/homebrew-tap                     │
+│       release:      gh-release publish, mode: keep-existing      │
+│                      (preserves D-04: release-please owns the    │
+│                      Release body/prerelease flag)                │
+│  7. emit checksums.txt (or its per-asset hashes) as a job         │
+│     output for the provenance job — same mechanism as today's    │
+│     `hash` step, just reading GoReleaser's checksums.txt          │
+│     instead of the hand-rolled one                                │
+└───────────────────────────────┬───────────────────────────────┘
+                                 │ needs: release
+                                 ▼
+┌───────────────────────────────────────────────────────────────┐
+│ provenance (unchanged shape — reusable workflow, its own runner)│
+│  base64-subjects now covers BOTH binaries AND archives           │
+│  (expanded scope — see §3.4)                                     │
+└───────────────────────────────────────────────────────────────┘
+```
 
-**Verdict: YES, materially more tractable — for a specific, narrow reason, not a blanket one.**
+**What moves:**
+- `build` + `assemble`'s asset-producing steps collapse into ONE job's ONE `goreleaser release` call.
+- The hand-rolled checksum/cosign/syft shell loops in `assemble` (`.github/workflows/release.yml:238-278`) are **deleted**, replaced by native GoReleaser pipes (`checksum:`, `binary_signs:`/`signs:`, `sboms:`).
+- The 2-runner-class matrix (`namespace-profile-linux-amd64-4x8` for linux, `namespace-profile-macos-6x14-tahoe` for darwin) collapses to **one runner class** (`namespace-profile-macos-6x14-tahoe`, or equivalent) for the whole release. The Linux Namespace runner is no longer used by `release.yml` at all (still fine elsewhere, e.g. `ci.yml`).
+- `zig` installation moves from "linux/arm64-only, conditional" (`release.yml:131-135`, `matrix.needs_zig`) to unconditional, now targeting linux/amd64 too (previously native-only).
 
-### What actually changes
+**What disappears:**
+- The `build` job's matrix entirely (4 parallel legs → 1 sequential/composite build inside one `goreleaser release` run).
+- The `assemble` job as a separate `needs: build` stage — folded into `release`.
+- The "Rename to release-asset contract name" hand-rolled shell step (`release.yml:150-187`) — GoReleaser's `archives:` `name_template` now IS the naming contract, machine-enforced, not shell-script-enforced.
+- The dead-code comments in `.goreleaser.yaml` marking `archives:`/`checksum:` as inert (`.goreleaser.yaml:108-116`) — they go live and those comments must be rewritten, not left stale.
 
-The prior (pre-`2026-07-28`) stateful protocol tied a client to a server-held, in-memory session established during `initialize`/`notifications/initialized` and addressed by `Mcp-Session-Id`. Any multi-instance deployment of that protocol needed one of two things codegraph-go's deferred milestone-2 never designed: **sticky routing** (an LB pins a session to the instance that negotiated it) or a **shared session store** (any instance can serve any session id by reading shared state). `2026-07-28` removes the session concept from the protocol entirely (SEP-2567, SEP-2575): `initialize`/`initialized` is gone, every request self-describes via `_meta` (`io.modelcontextprotocol/protocolVersion`, `io.modelcontextprotocol/clientCapabilities`, `io.modelcontextprotocol/clientInfo`), and `server/discover` (a servers-MUST-implement RPC advertising supported versions/capabilities/identity) is answerable identically by any instance. The practical result: **a plain round-robin LB with zero shared session infrastructure is now a valid production topology for an MCP server** — an entire category of infrastructure work milestone-2 would otherwise have had to build is simply gone.
+**What MUST be preserved (hard constraints, not suggestions):**
+- `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` (`internal/upgrade/verify.go:41-45`) anchors the cosign OIDC cert SAN to `.github/workflows/release.yml@refs/tags/v[0-9]*` — the workflow file's **name and trigger** must not change, and the job producing the cosign signature must still run under this exact workflow+ref. Collapsing jobs is fine; renaming the file or changing the tag trigger pattern is not.
+- `internal/upgrade.releaseAssetName()` (`internal/upgrade/upgrade.go:209-211`): `codegraph_<tag>_<goos>_<goarch>`, **no extension**, `<tag>` is the v-prefixed `github.ref_name`, not GoReleaser's stripped `.Version`. The raw-binary `archives:` entry's `name_template` must emit exactly this — `.goreleaser.yaml`'s currently-dead template (`.goreleaser.yaml:119-120`, `{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}`) already matches this shape and can be reused verbatim once live; only a second `archives:` entry (zip, distinct `name_template`) needs to be added.
+- `.sigstore.json` sidecar naming (`internal/upgrade/upgrade.go:195`, `assetName+".sigstore.json"`) — GoReleaser's `binary_signs:` default `signature:` template must be set to reproduce `<binary-asset-name>.sigstore.json` exactly, not GoReleaser's own default signature name template.
+- Per-binary (not per-checksums-file) cosign signing semantics — `internal/upgrade`'s `defaultVerify` hashes the **downloaded binary itself** (`internal/upgrade/upgrade.go:161-177`, `sha256.Sum256(binary)`). `binary_signs:` (not `signs: artifacts: checksum`) is the correct GoReleaser pipe for this — confirmed via research (§ below) as the pipe purpose-built for "sign the binaries themselves, not the archive."
+- `release: mode: keep-existing` (or equivalent existing-release preservation) so release-please's Release body/prerelease flag is never overwritten (D-04, `release.yml:289-296` today hand-rolls this distinction).
 
-### Why codegraph-go specifically benefits more than a typical MCP server would
+### 2.3 Single-runner constraint — candidate architectures
 
-Three decisions made in v1.0 for LOCAL, single-process reasons turn out to already match the shape `2026-07-28` recommends for stateless cross-call state:
+| # | Architecture | Verdict | Rationale |
+|---|---|---|---|
+| **A** | **All-on-macOS-runner; zig cc cross-compiles both linux legs from the macOS host; darwin builds native.** | **RECOMMENDED** | OSS-compatible — `goreleaser release` is one invocation, one runner, exactly what GoReleaser's own build model requires without Pro. Zig is host-agnostic (bundles its own libc/headers), so `zig cc -target x86_64-linux-gnu` / `aarch64-linux-gnu` from a macOS host is the same class of operation `.goreleaser.yaml` already does today for linux/arm64 FROM a Linux host (`.goreleaser.yaml:65-77`) — just changing the host, not inventing a new mechanism. This is also the resolution PROJECT.md already names as "likely" (PROJECT.md:58). **New risk, front-load it**: linux/amd64 has never been zig-cross-built before (today it's native on a Linux runner, `.goreleaser.yaml:46-63`) — this is a genuinely new, unproven path for THIS project's CGo (tree-sitter) dependency, and must be validated before the rest of the phase is planned, not discovered mid-build. |
+| **B** | **Matrix-build (as today) then a separate `goreleaser release --skip=build` job consuming pre-built artifacts.** | REJECTED | Requires hand-assembling GoReleaser's internal `dist/artifacts.json` + per-target directory layout across runners without GoReleaser's own merge logic. This repo's own `release.yml` comment already flags that `dist/` layout is "NOT guaranteed stable across GoReleaser versions" (`release.yml:166-176`) — building a hand-rolled recombination on top of an explicitly-unstable internal format is exactly the kind of undocumented-format dependency this repo's engineering culture rejects elsewhere (see the `dist/artifacts.json`-with-`find`-fallback pattern already defending against this). This is, in effect, reimplementing GoReleaser Pro's split/merge without its guarantees. |
+| **C** | **GoReleaser Pro `--split`/`--merge`.** | DEFERRED, not rejected | Purpose-built for exactly this (multi-runner CGo cross-arch, confirmed Pro-exclusive — "introduced in v1.12.0-pro," MEDIUM confidence, official GoReleaser blog/docs). Real, correct, costs a paid license. Only revisit if Option A's zig-cross-linux-from-macOS proves broken or unacceptably slow in the Phase-0 spike. |
 
-1. **`path` is already an explicit per-call tool argument, not implicit session state.** Every one of the 8 tool schemas (`tools.go` `exploreTool`/`companionTool`) declares `mcp.WithString("path", ...)`, and every handler resolves it per-call via `resolvePath`/`confineToRepoRoot` (CR-01/CR-02) rather than trusting a session-bound value. This is *exactly* the "explicit, server-minted handle passed as ordinary tool arguments" pattern the `2026-07-28` blog names as the replacement for protocol-level session state. codegraph-go didn't need to invent this for team-scale readiness — it already exists, because CR-02's trust boundary ("an MCP client may be an AI agent processing attacker-influenced content") demanded it independently.
-2. **Every handler opens a FRESH `query.Engine` snapshot per call** (`openEngine`, D-02/D-08b — deliberately never a cached engine held across calls). There is no session-scoped read cache to reconcile across instances; each call is already independently satisfiable by any process that can reach the right physical store.
-3. **`gitmeta.CachingDetector` is the only genuinely session-scoped state today**, and it is explicitly documented as "one per SERVER... bounds [git subprocess] cost to once per (startPath, indexRoot) pair for this server's entire lifetime" — a pure performance cache, not a correctness dependency. It generalizes to a keyed cache (by tenant/repo) sitting above per-request server construction; nothing about its existence forecloses a stateless design.
+**SLSA generic generator subject list under Option A:** unaffected in mechanism — the `provenance` job still consumes a base64-encoded checksums file and lets the generic generator parse `<sha256>  <name>` lines as subjects (`release.yml:196-214`, `:280-287`). What changes is **scope**: today's checksums.txt covers 4 binaries only; under the new `archives:` config it will cover binaries **and** zip archives in one file (unless deliberately filtered via `checksum:`'s own `ids`/artifact-type options). **Recommend widening SLSA coverage to include the archives** — browser/brew users download the zip, not the raw binary, and "what gets signed and attested is what users actually download" (this milestone's own stated correctness bar) argues for covering both artifact classes, not just the one `internal/upgrade` cares about.
 
-### What a remote/team codegraph MCP server would look like under `2026-07-28` (future milestone, sketch only)
+**`checksum:` duplication:** resolve by **deletion, not reconciliation** — once `goreleaser release` runs `checksum:` live with the exact `name_template` this repo's `.goreleaser.yaml` already documents (`.goreleaser.yaml:122-124`, matching `release.yml`'s hand-rolled `codegraph_${TAG}_checksums.txt`), the hand-rolled `sha256sum` step (`release.yml:238-244`) becomes a strictly redundant second writer of the same filename and must be removed, not kept as a cross-check. Two writers of one filename in one job is a race/last-writer-wins hazard, not a safety net.
 
-| Concern | Current (stdio, 1 repo/process) | Remote/team shape under `2026-07-28` |
-|---|---|---|
-| Transport | stdio, one subprocess per session | Streamable HTTP (mandatory `Mcp-Method`/`Mcp-Name` routing headers per SEP-2243; no `Mcp-Session-Id`; no SSE resumability — a broken stream means the client re-issues as a new request, which is trivially safe for codegraph-go's read-only, idempotent queries) |
-| Auth | None — process-spawn trust boundary | OAuth 2.1 resource-server pattern; **Client ID Metadata Documents (CIMD)** preferred over per-AS Dynamic Client Registration (good fit for an 8-agent roster — each client publishes one CIMD document instead of registering per install); **RFC 9207** `iss` validation on the client side; **RFC 8707** Resource Indicators binding a token to this specific tenant's codegraph server so a token can't be replayed against a different tenant's index |
-| Which repo/index a request targets | Baked into `BuildServer`'s closure at process construction (`repoPath`, `startPath`) | Must become **request-scoped**, resolved from (authenticated tenant/token audience) × (an identifier analogous to today's `path` argument, reinterpreted as a repo/org id, not a raw filesystem path) — looked up through a registry that resolves to a physical index location (local disk cache fed by CI-distributed index artifacts — the already-deferred backlog item) |
-| Tool catalog construction | `BuildServer` runs ONCE at process start; `hasIndex`/`allowlist` are startup-time snapshots | Must move from constructor-time to **per-request-resolved** (a given HTTP request's tenant may or may not have an index yet) — this is the one clear, bounded refactor forced by statelessness, not by the transport change alone |
-| `gitmeta.CachingDetector` | One per server process | Promote to a cache keyed by (tenant, repo), held by a router/connection-pool layer above per-request server construction |
-| Store access | `query.OpenAt` opens a LOCAL Pebble path per call | Unchanged in shape — Pebble was chosen specifically for concurrent-read/snapshot semantics under exactly this kind of many-reader load; `query.OpenAt` already just takes a resolved path, so the resolution layer is new, not `query.OpenAt` itself |
-| `tools/list` caching | N/A today (no `ttlMs`/`cacheScope` field exists in the current SDK) | `cacheScope` must be `"private"` (catalog varies per tenant/repo — never safe for a shared intermediary to cache across tenants) with a short `ttlMs` (catalog can change the moment CI publishes a tenant's first index) — contrast with the stdio case (Q4) where the registered tool set is mechanically fixed for a process's life, but see Q4's reconciliation on why "mechanically fixed" is not the same as "safe to advertise as long-lived" |
+**cosign — GoReleaser's `signs:`/`binary_signs:` pipes vs explicit workflow steps:**
+Move into GoReleaser's native pipes. Researched shape (MEDIUM confidence, GoReleaser docs):
+```yaml
+binary_signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]
+    output: true
+```
+`binary_signs:` (not `signs: artifacts: binary`) is the correct pipe specifically because this project now has **non-binary archives coexisting** with raw binaries — GoReleaser's docs state `artifacts: binary` under `signs:` only applies "when `archives.format` is 'binary'" for *all* archives; `binary_signs:` exists precisely for "sign the built binaries themselves, when your archives are NOT `format: binary`" (v2.2+). This is exactly this project's post-milestone shape (raw binary passthrough archives + real zip archives, side by side).
 
-### Does anything in the CURRENT design foreclose this path?
+Identity/OIDC properties are preserved either way — GoReleaser's `signs:`/`binary_signs:` still shells out to the real `cosign` CLI running inside the same GitHub Actions job, under the same `id-token: write` permission and the same GitHub OIDC issuer, producing an identical certificate SAN shape (still anchored to `release.yml@refs/tags/v*`). The verified identity does not change; only which process (a shell step vs. a GoReleaser-invoked subprocess) issues the `cosign sign-blob` call.
 
-**No.** The one real structural gap is `mcp.BuildServer(hasIndex, allowlist, repoPath, startPath)` being a constructor-time-only API — every one of these four parameters would need a request-scoped resolution path for a multi-tenant server. That is a bounded, already-anticipated refactor (the standing constraint literally says "must accommodate milestone-2 team features... without a rewrite") — not a rewrite, because the actual query-and-render pipeline underneath (`openEngine` → `Engine` method → `Render*Markdown`) needs no change at all. The auth/tenant-resolution/CI-index-distribution layers are entirely NEW components with no existing analog to conflict with.
+---
 
-**Recommendation:** Record this assessment in `PROJECT.md`'s Key Decisions or Context section as the deferred milestone-2 read-out (a decision-record entry, not a phase). Do not open an HTTP transport in this milestone (explicitly out of scope per the quality gate) — but the phase that eventually does should budget for exactly the four rows above, in this order: (1) promote `BuildServer`'s four parameters to per-request resolution behind an interface (this is also what Q2's narrow seam recommendation sets up for free), (2) add the auth/tenant-resolution layer, (3) add the CI-index-distribution/pull-cache layer feeding `query.OpenAt`, (4) add the Streamable HTTP transport itself last, once (1)-(3) exist and can be exercised over stdio in a test harness first.
+## 3. Where notarization sits in the artifact-flow graph
 
-## Q2 — The SDK Seam
+### 3.1 Full trace: build → notarize → archive → SBOM → cosign → SLSA → release assets → consumers
 
-### Every file/symbol touching mark3labs types
+```
+[builds:]  4 raw Mach-O/ELF binaries (darwin×2 native, linux×2 zig-cross)
+     │
+     ├─ linux/amd64, linux/arm64 ─────────────────────────────┐
+     │                                                          │
+     └─ darwin/amd64, darwin/arm64                              │
+           │                                                    │
+           ▼                                                    │
+     [notarize.macos:]  darwin binaries ONLY (ids: filter)      │
+       codesign (Developer ID Application cert)                 │
+       submit to notarytool (App Store Connect API key)         │
+       wait for Apple's response                                │
+       — MODIFIES THE BYTES on darwin binaries (embeds a         │
+         code signature into the Mach-O) —                       │
+           │                                                    │
+           ▼                                                    │
+     darwin binaries are now the FINAL, signed-by-Apple bytes    │
+     (still un-stapled — see Finding B, §1)                      │
+           │                                                    │
+           └────────────────┬───────────────────────────────────┘
+                             ▼
+                   [archives:]  TWO entries per build id:
+                     (a) formats:[binary]  → raw passthrough,
+                         name: codegraph_<tag>_<os>_<arch>
+                         (upgrade contract, D-02)
+                     (b) formats:[zip]     → compressed container,
+                         name: codegraph_<tag>_<os>_<arch>.zip
+                         (browser + brew contract)
+                             │
+                             ▼
+                   [checksum:]  ONE checksums.txt over ALL of
+                     the above (binaries + zips)
+                             │
+                             ▼
+              ┌──────────────┴──────────────┐
+              ▼                              ▼
+     [binary_signs:]                   [sboms:]
+       cosign sign-blob over             syft SBOM per binary
+       the RAW BINARIES only             (and optionally per zip)
+       → codegraph_<tag>_<os>_<arch>
+         .sigstore.json
+              │                              │
+              └──────────────┬───────────────┘
+                              ▼
+                   [homebrew_casks:] (or brews:, Finding A)
+                     formula references the ZIP archive's
+                     GitHub release download URL + its sha256
+                     (from checksum:'s output)
+                              │
+                              ▼
+                   [release:]  gh release publish,
+                     mode: keep-existing (preserves D-04)
+                     uploads: binaries, zips, .sigstore.json,
+                              .spdx.json, checksums.txt
+                              │
+                              ▼
+                   (separate job) [provenance:]
+                     SLSA3 over checksums.txt subjects
+                     (binaries + zips, widened scope — §2.3)
+```
 
-**Production code (non-test):**
+### 3.2 Ordering correctness — no bug found in the GoReleaser-native pipeline, IF ordering is preserved
 
-| File | Symbols |
-|---|---|
-| `internal/mcp/server.go` | `server.NewMCPServer`, `server.WithToolCapabilities`, `server.MCPServer` (return type of `BuildServer`), `server.ToolHandlerFunc` (parameter type of `exploreHandler`/`companionHandler`), `s.AddTool` |
-| `internal/mcp/tools.go` | `mcp.CallToolRequest`, `mcp.CallToolResult`, `mcp.NewTool`, `mcp.WithDescription`, `mcp.WithString`, `mcp.WithNumber`, `mcp.Required`, `mcp.NewToolResultText`, `mcp.NewToolResultError`, `server.ToolHandlerFunc` |
-| `internal/cli/serve.go` | `server.ServeStdio(s)` — takes the `*server.MCPServer` `BuildServer` returned |
+Notarization happens on **raw binaries**, and GoReleaser's own pipe order runs `notarize` before `archive`/`checksum`/`sign`/`sbom` (confirmed via GoReleaser's notarize docs: "operates on raw Go binaries directly, before archiving" — MEDIUM confidence, official docs). This is the **correct** order: the bytes that get archived, checksummed, cosign-signed, SBOM'd, and SLSA-attested are the **post-notarization** bytes — i.e., exactly what a user downloads and what `spctl` will assess. There is no window in the native-pipe design where a pre-notarization binary is signed/attested while a post-notarization one ships.
 
-**Test code (all import `mcpclient "github.com/mark3labs/mcp-go/client"` and/or `mcp-go/mcp`, using the SDK's client as the driving/asserting client):**
+**This ordering constraint is worth stating as an explicit acceptance check, not just trusted from docs** (per this repo's "measure the binary, don't infer" rule): after Phase 2 lands, a verification step should diff the sha256 of the notarized darwin binary as it exists in `dist/` immediately after the `notarize` pipe runs against the sha256 actually recorded in the released checksums.txt / cosign bundle / SBOM subject. If GoReleaser's pipe ordering is ever changed by a config mistake (e.g., a custom `before:`/`after:` hook, or accidentally scoping `notarize.ids` to run post-archive against an archive artifact type it doesn't support), this is exactly the class of "signed a pre-X, shipped a post-X" correctness bug the quality gate calls out. **No evidence such a bug exists today** — this is a forward-looking acceptance gate to add, not a defect found in research.
 
-`internal/mcp/server_test.go`, `internal/mcp/reconnect_test.go`, `internal/mcp/markdown_test.go`, `internal/mcp/tools_schema_drift_test.go` (AST-parses source, imports `mcp-go/mcp` incidentally), `test/integration/mcp_stdout_purity_test.go` (imports only for the `mcp.LATEST_PROTOCOL_VERSION` constant — the actual frame encode/decode is 100% hand-rolled, see Q3), `test/integration/watch_default_test.go`, `test/integration/watch_live_sync_test.go`, `test/integration/worktree_notice_test.go`, `testdata/golden/golden_parity_test.go`.
+### 3.3 What must happen before/after, concretely
 
-### Is `internal/mcp` a genuine seam?
+| Stage | Must run before | Must run after | Why |
+|---|---|---|---|
+| `builds:` | everything | — | source of all bytes |
+| `notarize.macos:` (darwin only) | `archives:`, `checksum:`, `binary_signs:`, `sboms:` | `builds:` | modifies darwin binary bytes; everything downstream must attest to the modified bytes |
+| `archives:` (both entries) | `checksum:`, `binary_signs:`, `sboms:`, `homebrew_casks:`, `release:` | `notarize.macos:` (for darwin ids), `builds:` (for linux ids — no notarize step applies) | archives must contain final bytes |
+| `checksum:` | `release:`, `provenance` job | `archives:` | must hash final archived+raw assets, not pre-archive intermediates |
+| `binary_signs:` | `release:` | `archives:` (raw-binary entry) | must sign the exact bytes `internal/upgrade` will later hash |
+| `sboms:` | `release:` | `archives:`/`builds:` | SBOM should describe the shipped artifact, not an intermediate |
+| `homebrew_casks:` | — (terminal within `release`) | `archives:` (zip entry), `checksum:` | formula's sha256 must match the actual uploaded zip |
+| `release:` (publish) | — | all of the above | uploads everything in one shot |
+| `provenance` (separate job) | — | `release` job (needs:) | subjects must be the exact bytes now sitting in the GitHub Release |
 
-**Partially.** The package boundary correctly holds for the *query* dependency (`internal/mcp` imports only `internal/query`, never `internal/graphstore` directly — the existing archtest-enforced boundary is untouched by this analysis). But the SDK itself leaks across the `internal/mcp` → `internal/cli` boundary: `BuildServer` returns `*server.MCPServer`, a concrete mark3labs struct, and `internal/cli/serve.go` must import `github.com/mark3labs/mcp-go/server` directly just to call `server.ServeStdio(s)` on that returned value. That is a real, avoidable leak — `internal/cli` should never need to name an SDK type.
+---
 
-The much larger leak is in the **test surface**: every test that wants to drive the server end-to-end (in-process or real-stdio) constructs an `mcpclient.Client` and calls `mcpclient.NewInProcessClient`/`NewStdioMCPClientWithOptions`/`c.CallTool` — meaning mark3labs' client implementation is the de facto verification oracle across nearly the entire test suite, not an implementation detail hidden behind `internal/mcp`.
+## 4. Dual-asset topology
 
-### Narrowest interface worth introducing
+### 4.1 Asset inventory and consumers
 
+| Asset | Producer | Naming | Consumer | Breaks if renamed |
+|---|---|---|---|---|
+| `codegraph_<tag>_<os>_<arch>` (raw binary, no extension) | `archives:` entry (a), `formats:[binary]` | Must equal `internal/upgrade.releaseAssetName()` exactly (`internal/upgrade/upgrade.go:209-211`) | `codegraph upgrade` (`downloadReleaseAsset`, `internal/upgrade/upgrade.go:219-220`) | **Yes — silently.** `codegraph upgrade` builds this URL by string template; a name-shape drift produces a 404, not a build failure. `TestReleaseAssetNameMatchesGoReleaser` (`internal/upgrade/verify_release_e2e_test.go`, referenced at `.goreleaser.yaml:1-21`) is the only machine guard — it must be re-run/re-verified once `archives:` goes live, not just trusted from the comment. |
+| `codegraph_<tag>_<os>_<arch>.sigstore.json` | `binary_signs:` | `<raw-binary-name>+".sigstore.json"` | `codegraph upgrade`'s `defaultVerify` (`internal/upgrade/upgrade.go:195`) | Yes, same failure mode — a missing/misnamed sidecar makes every upgrade fail signature verification. |
+| `codegraph_<tag>_<os>_<arch>.zip` (or GoReleaser's default archive template) | `archives:` entry (b), `formats:[zip]` | Distinct from the raw-binary name — must not collide | Browser downloaders (GitHub Releases page), `homebrew_casks:` formula's `url` | Homebrew formula pins a URL+sha256 at publish time; renaming the template breaks the **next** `brew install`/`brew upgrade` for anyone on an older formula version pointing at the old name, though GoReleaser regenerates the formula each release, so this is a forward-compat risk (new releases self-heal), not a permanent break. |
+| `codegraph_<tag>_checksums.txt` | `checksum:` | `.goreleaser.yaml`'s existing (currently dead) `name_template` (`.goreleaser.yaml:122-124`) | `provenance` job (base64-subjects source) | Yes — the provenance job's `hash` step reads this exact filename. |
+| `*.spdx.json` | `sboms:` | Per-artifact, syft default or explicit template | Downstream SBOM consumers (not currently machine-verified by any test in this repo) | No known automated consumer today — lowest risk of the set. |
+| `<formula>.rb` in `seanb4t/homebrew-tap` | `homebrew_casks:`/`brews:` | Formula/cask class name, conventionally derived from `name:` | `brew install`/`brew upgrade` end users | Breaks discoverability (`brew search`) if renamed; does not break already-installed users' `brew upgrade` since brew tracks by formula file path in the tap, not by release asset name. |
+
+### 4.2 What `internal/upgrade`'s asset-name resolution assumes today, and the collision risk
+
+`releaseAssetName()` (`internal/upgrade/upgrade.go:202-211`) assumes:
+1. Exactly one asset per `(tag, goos, goarch)` triple matches the pattern `codegraph_<tag>_<goos>_<goarch>` with **no extension** and **no other qualifier**.
+2. That asset is a raw, directly-executable binary — `downloadReleaseAsset` (`internal/upgrade/upgrade.go:219-236`) does no extraction, decompression, or archive handling; the downloaded bytes are hashed and atomically swapped in as-is (`internal/upgrade/swap.go:40-84`).
+
+**Collision risk from adding archives:** low, *if* the zip archive's `name_template` includes an extension (GoReleaser's default archive template already does — `.zip`/`.tar.gz` — and the existing dead `archives:` block already documents the extension-free raw-binary shape as deliberate, `.goreleaser.yaml:117-121`). The real risk is **not** name collision but **config drift**: if a future edit changes the raw-binary `archives:` entry's `formats:` away from `[binary]` (e.g., someone "simplifies" to one shared archive block for both use cases), GoReleaser would silently start producing a `.tar.gz`/`.zip` under the name `codegraph_<tag>_<os>_<arch>` with a `.tar.gz` suffix change or, worse, the SAME literal filename now containing compressed bytes — `codegraph upgrade` would download it, `sha256.Sum256` a byte stream that IS what was signed (cosign would still verify, since it signs whatever bytes are named), but `atomicSwap` would then install a **non-executable archive** as the binary, since it never unpacks. This would pass signature verification and still brick the install. **Recommend**: a machine test analogous to `TestReleaseAssetNameMatchesGoReleaser` should also assert `archives:`'s raw-binary entry has `formats: [binary]` specifically (not just that the name matches), so a format regression fails CI rather than shipping.
+
+---
+
+## 5. The tap repository (`seanb4t/homebrew-tap`) as a new component
+
+**What it structurally is:** a second, independent public GitHub repository (not a directory in `codegraph-go`), containing formula/cask `.rb` files under a `Formula/` (or cask-equivalent) directory — the Homebrew convention for a third-party "tap." It has its own git history, its own default branch, and no CI of its own required (GoReleaser writes directly via git operations).
+
+**How GoReleaser pushes to it:** `homebrew_casks:`/`brews:` clones the tap repo, writes/updates the generated formula file, and commits+pushes directly to its default branch (or opens a PR, if `pull_request:` config is set — an OSS-available option per the docs surfaced this session, though `check_boxes`-style PR automation is Pro-only). No GitHub App or webhook is required — it's a git push authenticated via a token.
+
+**Credential and least-privilege shape:** GoReleaser's docs explicitly warn the default `GITHUB_TOKEN` from the `release.yml` job **cannot** be used — it's scoped to the triggering repo only (`seanb4t/codegraph-go`), not `seanb4t/homebrew-tap`. A **separate PAT** (classic, or a fine-grained token scoped to just `seanb4t/homebrew-tap` with Contents: Read and Write) is required, stored as a repo secret on `codegraph-go` (e.g. `HOMEBREW_TAP_TOKEN`) and referenced in `.goreleaser.yaml`'s `repository.token` via `{{ .Env.HOMEBREW_TAP_TOKEN }}`. **Least-privilege shape:** a fine-grained PAT scoped to exactly `seanb4t/homebrew-tap` with Contents read/write only (no Actions, no other repos, no org-wide scope) is strictly narrower than a classic PAT with `repo` scope across the whole account — recommend fine-grained if GitHub's fine-grained PAT support is mature enough for this use case by implementation time (worth a quick live check, not assumed).
+
+**Failure mode if the tap push fails mid-release:** under `goreleaser release`, publish steps run as part of the single pipeline invocation; a `homebrew_casks:`/`brews:` push failure would fail that pipe but — per GoReleaser's general pipeline design — does not automatically roll back already-published GitHub Release assets from earlier pipes in the same run (release assets, cosign signatures, and SBOMs would already be live). This is a **partial-success** state: users can `curl`/browser-download and `codegraph upgrade`, but `brew install` breaks (formula missing or stale). Recommend the release job **not** treat a tap-push failure as fully fatal to the workflow's exit status in a way that blocks re-running — GoReleaser's own retry/re-run semantics (idempotent re-publish via `--clean` + existing-release `mode: keep-existing`) should let a second workflow run (or a manual `goreleaser continue`-equivalent) safely retry just the tap push without re-uploading already-published assets. This needs to be verified against GoReleaser's actual re-run behavior in practice, not assumed — flag as a Phase-3 acceptance test (kill the tap-push step deliberately, confirm the rest of the release is unaffected and a re-run recovers).
+
+---
+
+## 6. `codegraph upgrade` brew detection — seam placement
+
+**Recommended location:** a new file within the existing `internal/upgrade` package (not a new top-level package) — e.g. `internal/upgrade/brewdetect.go` — because the detection result gates `upgrade.Run` (`internal/upgrade/upgrade.go:82-153`) at the same decision point `checkWritable` already gates it (before any download), and `Run`'s existing `Options` struct + function-var seam pattern (`resolveLatest`, `download`, `verify`, `swap` — all package-level func-typed fields defaulting to production implementations, `internal/upgrade/upgrade.go:69-72`, `:88-91`, `:123-126`, `:132-135`, `:143-146`) is exactly the established convention this repo already uses for testability (matches the `beforeChildCopy`/`getppid`/`registryDir`-style seam pattern named in the project's own conventions).
+
+**Concrete shape, following the existing pattern exactly:**
 ```go
-// internal/mcp
-type Server interface {
-    ServeStdio() error
+// brewdetect.go
+type brewCheckFunc func(targetPath string) (bool, error)
+
+var checkBrewManaged brewCheckFunc = defaultCheckBrewManaged // production default, package var, test-overridable
+
+func defaultCheckBrewManaged(targetPath string) (bool, error) {
+    // resolve targetPath (already os.Executable()-resolved by the CLI caller,
+    // same as targetPath's existing contract, upgrade.go:79-81)
+    // real signal, NOT a path-prefix guess (explicit non-goal per PROJECT.md:179):
+    //   - brew --prefix codegraph (if `brew` is on PATH) resolving to a Cellar
+    //     path that targetPath is a symlink into, OR
+    //   - targetPath, once symlinks are resolved (filepath.EvalSymlinks),
+    //     containing "/Cellar/codegraph/" in its resolved path
+    // ...
 }
 ```
 
-`BuildServer` would return this interface (backed today by a thin wrapper holding the `*server.MCPServer`), and `internal/cli/serve.go` would depend only on `internal/mcp.Server` — never importing mark3labs directly. This is small, surgical, and worth doing **now, independent of the SDK decision**: it removes the one real non-test leak for near-zero cost and closes exactly the gap Q1's Team Scale refactor will need anyway (a `BuildServer`-shaped construction point that `internal/cli` treats opaquely).
+Then `Run` (or the CLI-level `internal/cli` upgrade command, wherever `targetPath` is first resolved) calls `checkBrewManaged(targetPath)` and, if true, returns a fixed, actionable error (*"codegraph was installed via Homebrew; run `brew upgrade codegraph` instead"*) **before** `checkWritable`/download — same "fail before touching anything" ordering the D-13 writable-check already establishes (`internal/upgrade/upgrade.go:117-121`).
 
-**What this narrow interface does NOT buy you, and it would be dishonest to claim otherwise:**
+**How to make it testable without a real Homebrew install** (the milestone's own stated bar — "tested against a real brew-managed layout, not a path-prefix guess," PROJECT.md:55, `:179`):
+1. **Unit-level, via the func-var seam:** `upgrade_test.go`-style tests inject a fake `checkBrewManaged` returning true/false, proving `Run` refuses/proceeds correctly — this covers `Run`'s branching logic without touching the filesystem or `brew` at all (mirrors how `upgrade_test.go` already injects `resolveLatest`/`download`/`verify`/`swap`).
+2. **Integration-level, real layout without real Homebrew:** `defaultCheckBrewManaged`'s own test should construct a **real symlink tree on disk** shaped exactly like Homebrew's actual install layout (`$(brew --prefix)/Cellar/codegraph/<version>/bin/codegraph` symlinked from `$(brew --prefix)/bin/codegraph`) inside a `t.TempDir()`, and assert detection fires on the resolved-symlink path and does NOT fire on an unrelated symlink or a plain non-symlinked binary at a path that merely contains the substring "Cellar" (the exact "path-prefix guess" this repo's own decision log calls out as an insufficient gate, PROJECT.md:179). This proves the mechanism against the real layout shape without requiring the `brew` binary or a real Homebrew installation in CI — matching how `check:darwin-toolchain`/`check:darwin-release-build` already separate "prove the mechanism" from "requires exotic host state" (`Taskfile.yml:241-345`).
+3. If `brew --prefix` is used as a signal at all, it must be **optional/best-effort** (if `brew` isn't on PATH, fall back to the symlink-resolution check alone) — never a hard dependency that makes `codegraph upgrade` fail entirely on a non-brew machine that also happens to lack `brew` on PATH.
 
-1. **Tool schema construction is not abstracted, and should not be.** `tools.go`'s `mcp.NewTool`/`mcp.With*` builder calls are SDK-specific by nature — building a codegraph-owned schema DSL to hide this would itself be a shadow SDK, disproportionate for 8 tools. An SDK swap means **porting `tools.go` directly**, not swapping an implementation behind an interface.
-2. **It does nothing for the test-surface leak.** The interface only covers the one production call site. The verification harness (Q3) is the actual fix for test-side SDK coupling, and it is a materially larger effort than the interface itself.
+---
 
-**Honest recommendation:** introduce the `internal/mcp.Server` interface now (cheap, unambiguously worth it, and it is literally the same seam Q1's Team Scale refactor needs). Do **not** attempt to make the SDK swap "just a backend change" at the tool-schema level — budget the swap as a direct, file-by-file port of `tools.go` + `server.go`, plus a full rewrite of every test's client-side calls (Q3 exists to make that rewrite verifiable without circularity).
+## 7. New vs modified components — explicit list
 
-## Q3 — Real-Client Verification Harness
-
-### What already exists and why it matters
-
-`test/integration/mcp_stdout_purity_test.go` (`TestServeMCPStdoutIsPureJSONRPC`) already IS the SDK-independent raw-stdio harness the project's history required in v1.0 Phase 4: it spawns the real binary via plain `os/exec`, writes hand-framed JSON-RPC requests (`map[string]any` → `json.Marshal`) directly to `cmd.StdinPipe()`, and reads `cmd.StdoutPipe()` through a raw `bufio.Scanner`, decoding each line into an **anonymous struct** (`jsonrpc`/`id`/`error` fields only) — never through `mcpclient`. Its only mark3labs import is `mcp.LATEST_PROTOCOL_VERSION`, used solely to embed a valid version string in a hand-built map; that one reference is trivially replaceable with a literal string constant. This file is the correct precedent to generalize, not a new pattern to invent.
-
-### Harness design for `2026-07-28`
-
-**Location:** `test/integration/` — extend the existing raw-stdio pattern rather than adding a parallel mechanism. Concretely: factor the hand-framing/raw-scanning helpers (`writeLine`, the scanner-goroutine-plus-channel pattern) out of `mcp_stdout_purity_test.go` into a small shared internal helper (e.g. `test/integration/rawmcp_helper_test.go`) so new assertions don't re-implement the raw reader, and add a new test file for the `2026-07-28`-specific assertions (e.g. `test/integration/mcp_protocol_2026_test.go`).
-
-**What it must assert**, each as a literal byte-level check on the raw JSON frame — never via any SDK's typed result:
-
-1. **`server/discover` is implemented** and returns supported protocol versions + capabilities + identity — spec-mandatory (`SEP-2575`). Send the raw request, parse the raw response into a local anonymous struct, assert the expected fields are present.
-2. **Statelessness is real, not just documented:** issue a `tools/call` (or `tools/list`) as the very first request on a fresh connection, with `_meta["io.modelcontextprotocol/protocolVersion"]` and `_meta["io.modelcontextprotocol/clientCapabilities"]` set, and NO prior `initialize`/`notifications/initialized` exchange — assert a normal, non-error response. This is the single most important new assertion: it is the one behavior that, if wrong, silently breaks every client that has moved to the new spec (the "quiet failure mode" `PROJECT.md` names).
-3. **`tools/list` carries `ttlMs`/`cacheScope`** (`SEP-2549`) — raw JSON field-presence check.
-4. **Version-mismatch handling:** send a request with an unsupported/malformed protocol version in `_meta`, assert the response is a JSON-RPC error with the renumbered `UnsupportedProtocolVersion` code (`-32022` under the new error-code allocation policy — independently confirmed as `CodeUnsupportedProtocolVersion = -32022` in `go-sdk@v1.7.0/mcp/shared.go:394`, not the old `-32004`).
-5. **Deterministic `tools/list` ordering** (SHOULD, minor change #3): call `tools/list` twice, diff the raw tool-name order.
-6. **Stdout purity, re-run against whichever SDK is in place** — this is the existing `TestServeMCPStdoutIsPureJSONRPC` test, kept as a permanent regression guard for the exact historical failure mode (an SDK's own client silently skipping malformed lines).
-
-### Avoiding circularity — the actual answer to "which oracle"
-
-Three candidate oracles were considered:
-
-- **Captured real-client traffic** (record actual Claude Code/Cursor/etc. byte streams against `2026-07-28`, replay as fixtures): the highest-fidelity option, but `2026-07-28` is brand new (release-candidate as of this research date) — no real fixtures exist yet for most of the 8-agent roster. Defer; revisit once agent clients actually ship `2026-07-28` support to capture against.
-- **A hand-rolled JSON-RPC client** (generalizing `mcp_stdout_purity_test.go`'s existing pattern): the primary mechanism, and the one with zero new infrastructure cost — it is precisely what the project already proved necessary and already has running.
-- **A conformance corpus validated against the official spec's own JSON Schema** (vendor the `2026-07-28` `schema.json` published at `modelcontextprotocol.io`, validate captured frames against it with a generic, oracle-neutral JSON-Schema validator such as `github.com/santhosh-tekuri/jsonschema`): recommended as a **complementary second layer**, not a replacement for the hand-rolled client. This resolves the philosophical bind directly — the official schema *is* the spec itself, not a competing SDK's interpretation of it, so validating against it is not circular the way asserting against mark3labs' or the official SDK's own client would be. Use it for the fields that matter most (`resultType`, `ttlMs`, `cacheScope`, the `_meta` keys) where a hand-written struct-shape check would otherwise have to duplicate the schema by hand.
-
-**The harness must exist and pass against the CURRENT (mark3labs) server before any SDK code changes** — this both discharges backlog 999.6's empirical-audit requirement (run it against what ships today to see exactly what `2026-07-28` behaviors are missing) and gives the SDK-swap phase (if any) a fixed, SDK-independent acceptance gate: the same test file, unmodified, must stay green against whatever server exists after the swap.
-
-## Q4 — Dynamic Catalog vs. Cacheable Lists
-
-### The registered tool set is mechanically fixed within a process — but that is not the same claim as "safe to cache"
-
-Re-reading `internal/cli/serve.go` and `internal/mcp/server.go` closely: `hasIndex` and `allowlist` are **both computed once, at process startup**, and closed over for the server's entire lifetime. `serveServerPaths`'s doc comment states this explicitly for `hasIndex` (IN-09: "An index created mid-session... does NOT retroactively start the watcher... auto-sync begins on the next serve --mcp session"), and `CODEGRAPH_MCP_TOOLS` is read once via `os.Getenv` in `newServeCmd`'s `RunE`. `BuildServer` calls `s.AddTool` only during its own single invocation and never again — mechanically, **the registered tool set cannot change for the life of one `serve --mcp` process**, because nothing in the codebase calls `AddTool`/removes a tool afterward.
-
-### Reconciling with the FEATURES researcher's finding — which reading is right
-
-The FEATURES research independently found the same underlying mechanism (`hasIndex` is a construction-time snapshot) and concluded that `ttlMs: 0` would be a lie unless `tools/list` re-checks `hasIndex` per call, because a user can run `codegraph init` while a long-lived MCP server is already running. **On reconciliation, the FEATURES reading is the one that should drive the actual value chosen, and my original "large ttlMs is accurate" framing was the wrong product conclusion even though it was mechanically true.** Here is why both are correct at their own layer, and why that resolves in FEATURES' favor:
-
-- My claim is a true statement about the **mechanism**: given today's register-once code, the tool set genuinely will not change without a process restart, so a long `ttlMs` would not be contradicted by any event this server can produce.
-- FEATURES' claim is the correct statement about **what the field is for**: `ttlMs` is a promise to the *client* that it can stop checking and trust the cached list. The scenario that breaks this is exactly the one FEATURES names — a server started before `.codegraph/` existed (`hasIndex=false`, zero tools ever registered, including `codegraph_explore`) stays permanently toolless for that connection's whole life even after `codegraph init` runs, and a client that has cached `tools/list` for a long `ttlMs` now has **less** chance of ever re-checking and recovering than a client that was never told it could cache at all. Advertising a long `ttlMs` doesn't just describe the existing MCP-03 gap — it actively encourages clients to stop working around it.
-
-**Conclusion: `ttlMs` should be short/conservative (effectively near-zero) as the honest default under the current mechanism**, not the large value the mechanical fact alone would justify. `cacheScope` should still be `"private"` (unchanged reasoning — this server's catalog is specific to its own `repoPath`/`allowlist` configuration, and Q1's remote-server sketch shows why no shared intermediary should ever conflate two tenants' catalogs). The more complete fix — making `hasIndex` genuinely dynamic (re-evaluated per `tools/list` call rather than snapshotted once) — is a legitimate scope candidate for this milestone precisely because the SDK-swap work (if adopted) already touches this exact code path in `internal/mcp/server.go`; landing it removes the tension entirely rather than merely picking a conservative `ttlMs` around it. This should be raised explicitly when this milestone's phases are planned, not silently deferred.
-
-### Implementation caveat (corrected)
-
-mark3labs `mcp-go@v0.57.0` (protocol `2025-11-25`) has no `ttlMs`/`cacheScope` field on its `ListToolsResult` type at all today — this is a `2026-07-28`-only `CacheableResult` interface (`SEP-2549`). **Landing this concretely is gated on the SDK decision (Q5), but that gate is far less restrictive than originally stated:** the official `modelcontextprotocol/go-sdk` shipped `2026-07-28` support, including `CacheableResult`-shaped fields, in the **stable** `v1.7.0` release (published 2026-07-27) — it is available today, not pending. The gate is the SDK *decision*, not SDK *availability*. The **impact assessment can and should document the target values now** (near-zero `ttlMs`, `"private"` `cacheScope`, per the reconciliation above); the code lands as part of whichever SDK-swap phase Q5 produces.
-
-### Interaction with `internal/mcp/reconnect_test.go`
-
-`TestReconnectReconcile` covers a **completely different staleness axis** and must not be conflated with catalog caching. It pins D-06/SYNC-03: the `indexer.Sync` reconcile pass `serve.go`'s `RunE` runs before `BuildServer` is even called, catching *content* drift (a file edited while no watcher/daemon was running) so the first `codegraph_explore` call after a reconnect reads current graph *data*. Nothing about `ttlMs`/`cacheScope` touches this path — the catalog (which tools exist) and the graph content (what those tools return) are orthogonal freshness concerns, and no future change should let a `tools/list` cache-invalidation mechanism reach into the graph store, or vice versa. A `tools/list` handler must never need to consult `query.Engine`/`graphstore` to decide `ttlMs` — `hasIndex`/`allowlist` are already known, static-for-the-process facts by the time `BuildServer` runs (or would be re-evaluated directly from the filesystem check `serveServerPaths` already performs, if `hasIndex` is made dynamic per the reconciliation above — either way, no dependency on the graph store itself).
-
-## Q5 — Suggested Build Order
-
-Dependencies, not narrative convenience, drive this ordering. The standing constraint (verification harness precedes any SDK swap) is structural, not sequencing preference: Phase C's decision cannot be trusted, and Phase D's swap cannot be verified as non-regressive, without Phase B existing first.
-
-**Corrected input to this ordering:** `mark3labs/mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"` with no `2026-07-28` support and no announced timeline (unchanged finding). `modelcontextprotocol/go-sdk@v1.7.0` is a **stable** release (published 2026-07-27, one day before the spec's public announcement) shipping five-era negotiation (`2026-07-28` down to `2024-11-05`) and the SEP-2575 error codes out of the box. This is a materially different starting position for Phase C than "no SDK is ready yet," and it changes how much weight the dated-defer branch can honestly carry.
-
-```
-Phase A: MCP 2026-07-28 impact assessment (999.6)
-  │  Research + document what reaches a stdio, tools-only server;
-  │  audit across the 8-agent roster; produce the Team Scale read-out (Q1).
-  │  Depends on: nothing new (this research file is largely Phase A's output).
-  ▼
-Phase B: Real-client verification harness (Q3)
-  │  Extend test/integration's raw-stdio pattern with 2026-07-28 assertions
-  │  (server/discover, stateless-first-request, ttlMs/cacheScope presence,
-  │  renumbered error codes, deterministic tools/list order).
-  │  MUST run green against the CURRENT mark3labs server first — this is
-  │  the empirical half of Phase A's audit, and the fixed acceptance gate
-  │  for whatever Phase C decides.
-  │  Depends on: Phase A (to know exactly which behaviors need assertions).
-  ▼
-Phase C: SDK decision (mark3labs v0.57.0 vs modelcontextprotocol/go-sdk v1.7.0)
-  │  A recorded decision (adopt-now / dated-defer) discharging the standing
-  │  re-evaluation commitment in .claude/CLAUDE.md's Alternatives table.
-  │  mark3labs does not support 2026-07-28 today and has no announced
-  │  timeline; the official SDK's 2026-07-28 support is STABLE (v1.7.0,
-  │  released 2026-07-27) with built-in five-era negotiation — the
-  │  "wait for the SDK to mature" rationale for deferring no longer
-  │  applies (see the dated-defer note below).
-  │  Depends on: Phase A (impact) + Phase B (a harness that can actually
-  │  prove whichever choice is made).
-  ▼
-        ┌───────────────────────┴────────────────────────┐
-        ▼                                                 ▼
-Phase D: SDK swap (if ADOPT)                    Phase D': Dated defer (if DEFER)
-  Port internal/mcp/tools.go + server.go to        WEAKENED by the corrected
-  the new SDK's API. Because go-sdk's own          finding — see note below.
-  supportedProtocolVersions/negotiatedMe-          Record the decision with the
-  chanism already implements five-era              spec's 12-month minimum
-  negotiation, this phase does NOT need to         deprecation window named
-  build any bespoke dual-era compatibility          explicitly. No code change
-  shim of its own — that work is inherited          required beyond the decision
-  from the SDK, not built by this project.          record itself.
-  Fix the Q2 leak at the same call site being
-  touched anyway (internal/mcp.Server interface
-  into serve.go). Replace mcp.LATEST_PROTOCOL_
-  VERSION with an explicit literal asserted
-  version (wire behavior stops moving silently
-  on a dependency bump). Migrate every test call
-  site (server_test.go, markdown_test.go,
-  reconnect_test.go, golden_parity_test.go,
-  watch_*_test.go, worktree_notice_test.go,
-  tools_schema_drift_test.go) off mark3labs'
-  client. Land the near-zero ttlMs / "private"
-  cacheScope values from Q4 once the new SDK's
-  CacheableResult fields are wired up — consider
-  also making hasIndex dynamic per Q4's
-  reconciliation while this file is already open.
-  Acceptance gate: Phase B's harness, UNMODIFIED,
-  stays green against the new server.
-  Depends on: Phase C = adopt, Phase B (harness).
-        └───────────────────────┬────────────────────────┘
-                                 ▼
-Phase E: Tool-modfile vulnerability scanning (999.3)
-  │  Closes the ~400-module credentialed-CI-tooling gap over whichever
-  │  dependency closure Phase C/D produced (new SDK module, or an
-  │  unchanged mark3labs closure on defer).
-  │  Depends on: Phase C (needs the final dependency set to be meaningful —
-  │  running it before C is decided means re-running it after).
-
-Phase F: Daemon test-seam fixes (#13 getppid race, #17 watchdog flakes)
-  │  Independent bug fixes; PROJECT.md notes they sit "on the substrate
-  │  this milestone modifies." Bundle with Phase D if adopting (both touch
-  │  serve.go-adjacent code, reducing churn on the same files); otherwise
-  │  schedule standalone. No hard dependency on A-D.
-
-Phase G: GoReleaser pin reconciliation (ci.yml v2.17.1 vs release.yml v2.17.0)
-  │  Pure housekeeping. No dependency on anything above — schedule
-  │  wherever convenient (first or last).
-```
-
-**Critical path:** A → B → C → (D or D′) → E. F and G float freely; F is cheapest to bundle with D when D happens.
-
-**On the weakened dated-defer branch (D′):** the original framing implicitly justified deferring as "waiting for tooling to mature" — that justification is now false; a stable, spec-authored, multi-era-capable SDK is available today. The only argument for D′ that survives the correction is **production-track-record caution**: `v1.7.0` is roughly a week old as of this research (published 2026-07-27), versus mark3labs' longer field history on a now-superseded protocol revision. If Phase C still lands on defer, the decision record must name the actual tradeoff honestly — "we chose a longer track record on a stale protocol revision over a newer stable release of the current one, and we accept the 12-month-window clock this starts" — rather than "no SDK supports this yet," which is no longer true. Given `go-sdk` also eliminates the need for this project to build its own dual-era negotiation logic (Phase D inherits `supportedProtocolVersions`/`negotiatedVersion` for free), the balance of evidence assembled in this research favors adopt over defer more than the original build order implied — though Phase C remains the actual decision point, not this document.
-
-## Anti-Patterns to Avoid in This Milestone
-
-### Anti-Pattern 1: Abstracting the tool-schema builder DSL "for portability"
-
-**What people do:** wrap `mcp.NewTool`/`mcp.With*` in a codegraph-owned schema builder so an SDK swap "only touches one file."
-**Why it's wrong:** for 8 tools, this is a shadow SDK — more code to maintain than the port it's meant to avoid, and it still doesn't solve the test-surface coupling (Q3), which is the actual expensive part of a swap.
-**Instead:** treat `tools.go`'s schema definitions as a direct-port surface. Spend the abstraction budget on the `internal/mcp.Server` interface at the `ServeStdio` call site instead (Q2) — that one is cheap and genuinely reusable for Team Scale.
-
-### Anti-Pattern 2: Validating the new SDK with the new SDK's own client
-
-**What people do:** after a swap, write "it works" tests using the new SDK's client library.
-**Why it's wrong:** this is exactly the failure mode `PROJECT.md` names as already proven in v1.0 Phase 4 — an SDK's client can silently skip or misrepresent malformed wire output, so a test built on it can pass while the actual bytes on stdout are wrong.
-**Instead:** the Phase B raw-stdio/JSON-Schema harness (Q3) is the only trusted oracle, and it must predate and outlive any specific SDK choice.
-
-### Anti-Pattern 3: Conflating catalog cache-control with content-freshness reconciliation
-
-**What people do:** wire `ttlMs`/`cacheScope` invalidation to the same reconcile path that keeps graph content fresh (`indexer.Sync`, the reconnect path `reconnect_test.go` covers).
-**Why it's wrong:** they are orthogonal (Q4) — the registered tool set is mechanically fixed per-process; content freshness is a live, per-call concern. Coupling them adds a graph-store dependency to `tools/list` construction for no correctness benefit and makes the two staleness models harder to reason about independently.
-**Instead:** keep `ttlMs`/`cacheScope` decided from already-known `hasIndex`/`allowlist` values (static today, or re-evaluated directly against the filesystem if `hasIndex` becomes dynamic per Q4) — no new dependency on `query.Engine`.
-
-## Integration Points
-
-### Internal Boundaries
-
-| Boundary | Current coupling | Notes |
+| Component | New / Modified | Notes |
 |---|---|---|
-| `internal/cli/serve.go` ↔ `internal/mcp` | `internal/cli` imports `mark3labs/mcp-go/server` directly for `server.ServeStdio(s)` | Real leak (Q2) — fixable now with a narrow `internal/mcp.Server` interface, independent of the SDK decision |
-| `internal/mcp` ↔ `internal/query` | Clean — `internal/mcp` never imports `internal/graphstore` directly (archtest-enforced) | Untouched by this milestone; do not let any MCP protocol work weaken this |
-| `internal/mcp` (production) ↔ test suite | Nearly every test drives the server via `mcpclient` (mark3labs) | The actual expensive coupling; Phase B's raw-stdio harness is the fix, not a production-code interface |
-| `internal/agents` ↔ MCP transport | None at all — `internal/agents` only writes a `serve --mcp` stdio invocation string into each agent's config; it never imports `mcp-go` | Confirms the 8-agent installer surface is fully decoupled from the SDK question — an SDK swap changes nothing here |
+| `.github/workflows/release.yml` | **Modified** (structural — job graph collapses) | File identity, name, and tag trigger MUST NOT change (cosign SAN contract, `internal/upgrade/verify.go:41-45`) |
+| `.goreleaser.yaml` | **Modified** (multiple new blocks) | `archives:` (2nd entry added, both go live), `checksum:` (goes live), `notarize:` (new), `binary_signs:`/`signs:` (new, replaces workflow-step cosign), `sboms:` (new, replaces workflow-step syft), `homebrew_casks:` or `brews:` (new — decision pending, Finding A), `release:` (new, `mode: keep-existing`) |
+| `Taskfile.yml` | **Modified** | New targets almost certainly needed: a local notarization dry-run/validation target (paralleling `check:darwin-toolchain`), a `check:goreleaser`-equivalent assertion that the new blocks are internally consistent (raw-binary format assertion from §4.2), and per this repo's own D-01/D-02 convention, any new CI step's command body belongs in a task target, not inline in the workflow YAML |
+| `.github/workflows/darwin-toolchain-canary.yml` | **Modified or superseded by a new canary** | Must additionally prove zig-cross-TO-linux FROM a macOS host now that this is a real release-path dependency, not just darwin-native build proof |
+| `internal/upgrade/brewdetect.go` (or similarly named) | **New** | Brew-managed-install detection, seam-testable per §6 |
+| `internal/upgrade/upgrade.go` | **Modified** | Wire the new detection check into `Run` (or the CLI caller) before `checkWritable` |
+| `internal/cli` (upgrade command surface) | **Possibly modified** | Actionable error message surfacing ("run `brew upgrade codegraph`") |
+| `seanb4t/homebrew-tap` (external repo) | **New** | Not part of this repo's tree; created once, then written to by every release |
+| Apple Developer Program enrollment, Developer ID Application cert, App Store Connect API key | **New** (external prerequisites) | CI secrets: cert (`.p12`+password) and API key (`.p8`+issuer/key IDs), least-privilege = scoped only to the release job's environment, never exposed to PR-triggered workflows |
+| `HOMEBREW_TAP_TOKEN` (or equivalent PAT) | **New** (CI secret) | Least-privilege = fine-grained PAT scoped to `seanb4t/homebrew-tap` only |
+| `docs/RELEASE.md` / `docs/RELEASE-PROCEDURES.md` | **Modified** | Already shown to drift from reality once before (the checksums-file-vs-binaries provenance-scope correction noted at `release.yml:205-210`) — must be updated in the same change that restructures the pipeline, not after |
+
+---
+
+## 8. Suggested build order
+
+Front-loading risk means: prove the single-runner zig-cross claim and the notarization ordering/stapling reality **before** committing to a phase plan that assumes either works as hoped. Both are exactly the kind of "confident wrong conclusion from a malformed probe" this repo has a recorded history of (per milestone context) — measure, don't infer.
+
+### Phase 0 — De-risking spikes (no shipped user-facing change)
+1. **Zig-cross-linux-from-macOS spike.** On a real macOS runner (reuse `darwin-toolchain-canary.yml`'s runner class or extend it), CGO-cross-build linux/amd64 AND linux/arm64 via `zig cc` and confirm: (a) it links successfully against this project's CGo dependency (tree-sitter grammars), (b) the resulting binary runs correctly (at minimum, boots and indexes a small fixture — not just "compiles"), (c) ideally, byte-for-byte or functional parity against today's native-linux build. **This is the single highest-leverage risk in the whole milestone** — if it fails, Option A (§2.3) is dead and the milestone must fall back to Option C (GoReleaser Pro) or renegotiate scope.
+2. **`homebrew_casks:` vs `brews:` decision spike** (Finding A). Small, cheap, but must land before Phase 3's tap integration is planned in detail — the two blocks have different config shapes and different `binaries:`/`ids:` semantics.
+3. **Notarization container-shape decision spike** (Finding B). Confirm the online-only-notarization-via-zip acceptance is genuinely sufficient for the milestone's stated `spctl` bar (it should be, per research), and get explicit maintainer sign-off that full offline stapling is out of scope for v0.5.0 — this is a scope decision, not an engineering task, and should not be discovered mid-Phase-2.
+
+### Phase 1 — `goreleaser build` → `goreleaser release` restructure (mechanical, no new capability)
+Depends on: Phase 0 spike 1 (must know the single-runner approach works before restructuring around it).
+- Rewrite `.goreleaser.yaml`: dual `archives:` entries, live `checksum:`, `binary_signs:`, `sboms:`, `release: mode: keep-existing`.
+- Collapse `release.yml`'s `build`+`assemble` jobs into one macOS-runner job.
+- Update the `provenance` job to consume GoReleaser-native checksums output.
+- **Acceptance is measurement, not inference**: cut a real tag (or rc-style tag per this repo's existing `check:darwin-release-build`/D-10 pattern), then independently verify `cosign verify-blob`, `slsa-verifier verify-artifact`, and a live `codegraph upgrade` self-upgrade all still pass — the same three checks this repo's own history already performs at every release-pipeline change (PROJECT.md:13, `:94`).
+- This phase alone delivers zero new user-facing capability but re-proves the entire existing supply-chain claim under the new mechanism, isolated from notarize/brew risk — any regression here is unambiguously attributable to the restructure.
+
+### Phase 2 — Apple codesign + notarization
+Depends on: Phase 1 shipped and verified (notarization slots into an already-working `goreleaser release` pipeline, not a half-migrated one); Phase 0 spike 3's scope decision.
+- Acquire and wire Apple Developer ID Application cert + App Store Connect API key as least-privilege CI secrets.
+- Add `notarize.macos`, scoped via `ids:` to darwin build ids only.
+- **Correctness acceptance gate (§3.2)**: verify the notarized bytes are what's actually archived/checksummed/signed/SBOM'd/attested — diff sha256 at each stage, don't trust pipe-ordering docs alone.
+- **User-facing acceptance gate**: `spctl -a -vv -t exec` moves `rejected` → `accepted` on a genuinely `com.apple.quarantine`-tagged download (real browser download, not a synthetic xattr set) — the milestone's own stated bar (PROJECT.md:52, `:63`).
+
+### Phase 3 — Dual-asset archives + Homebrew tap
+Depends on: Phase 1 (archives infrastructure) and Phase 2 (notarized darwin bytes should be what the zip contains — sequencing archives after notarization is already enforced by GoReleaser's pipe order, §3, but the darwin archive's *content* isn't meaningfully "done" until Phase 2 ships, even though the archive *mechanism* itself is Phase-1 work covering all 4 platforms).
+- Finalize `homebrew_casks:`/`brews:` config (per Phase 0 spike 2's decision).
+- Create `seanb4t/homebrew-tap`, wire the least-privilege PAT.
+- **Acceptance gate**: `brew tap seanb4t/tap && brew install codegraph` on a clean machine (the milestone's own stated bar, PROJECT.md:54).
+- **Failure-mode acceptance gate (§5)**: deliberately fail the tap-push step and confirm the rest of the release (binaries, cosign, SLSA, GitHub Release) is unaffected, then confirm a re-run recovers the tap push without duplicating or corrupting already-published assets.
+
+### Phase 4 — `codegraph upgrade` brew detection
+Depends on: nothing from Phases 1-3 structurally (it's pure Go logic in `internal/upgrade`), but should land **after** Phase 3 so the real Homebrew-managed layout it's tested against (§6.2) reflects the actual shipped tap/formula shape rather than a guessed one. Can be developed in parallel with Phases 1-3 if a synthetic Homebrew-shaped fixture is built early, but final acceptance against a **real** `brew install` (per the milestone's explicit non-goal of a path-prefix guess) should follow Phase 3.
+- Implement `checkBrewManaged` seam per §6.
+- Unit tests via the func-var seam (parallel-safe with Phases 1-3).
+- Integration test against a constructed real-shaped Cellar symlink tree (§6.2, item 2).
+- Final acceptance: install via the real published tap (Phase 3's output), attempt `codegraph upgrade`, confirm refusal + correct pointer message, confirm `brew upgrade codegraph` still works.
+
+### Ordering summary
+
+```
+Phase 0 (spikes, parallel)
+   ├─ 0.1 zig-cross-linux-from-macOS  ─────────┐
+   ├─ 0.2 homebrew_casks vs brews decision      │
+   └─ 0.3 notarization container-shape decision │
+                                                 ▼
+                                          Phase 1 (restructure)
+                                                 │
+                        ┌────────────────────────┴───────────────┐
+                        ▼                                        ▼
+                 Phase 2 (notarize)                   Phase 4 (brew detection,
+                        │                               dev can start early;
+                        ▼                               final accept waits)
+                 Phase 3 (archives + tap) ──────────────────────►│
+                                                                  ▼
+                                                          Final acceptance
+```
+
+---
+
+## 9. Anti-patterns to avoid
+
+### Anti-pattern: trusting `dist/artifacts.json` layout stability across a hand-rolled multi-runner recombination
+**What people do:** try to run `goreleaser build` per-runner (as today) then stitch results into a single `goreleaser release --skip=build` invocation by manually reconstructing GoReleaser's internal dist layout.
+**Why it's wrong:** this repo's own code already documents that layout as explicitly unstable across versions (`release.yml:166-176`). It's reimplementing GoReleaser Pro's split/merge without its guarantees — see §2.3, Option B.
+**Instead:** run the whole `goreleaser release` on one runner (Option A), or pay for Pro's actual split/merge (Option C).
+
+### Anti-pattern: silently keeping the deprecated `brews:` block because PROJECT.md happened to name it
+**What people do:** implement exactly what a planning doc says, even after research surfaces that the named mechanism is documented-deprecated by its own maintainers.
+**Why it's wrong:** PROJECT.md is a planning artifact, not ground truth about GoReleaser's current API surface — and per this repo's own "measure, don't infer" standing rule, a stale assumption baked into a decision log is exactly the failure mode to catch, not propagate.
+**Instead:** flag it (done, §1 Finding A), let the roadmap make an explicit choice with the current facts.
+
+### Anti-pattern: treating "notarized" and "stapled" as the same property
+**What people do:** ship a notarized-but-unstapled zip and describe it as "fully offline-Gatekeeper-verifiable."
+**Why it's wrong:** it isn't — see Finding B. It IS `spctl`-acceptable when network is available, which is a real, valuable, and probably sufficient property for this milestone, but claiming more than that invites a false "verified" status later.
+**Instead:** state the actual guarantee precisely in `docs/RELEASE.md` and PROJECT.md's decision log once this ships: "notarized, online-verified; not stapled."
+
+---
 
 ## Sources
 
-- `internal/mcp/server.go`, `internal/mcp/tools.go`, `internal/mcp/reconnect_test.go`, `internal/mcp/server_test.go`, `internal/mcp/markdown_test.go`, `internal/mcp/tools_schema_drift_test.go`, `internal/cli/serve.go`, `test/integration/mcp_stdout_purity_test.go`, `test/integration/watch_default_test.go`, `test/integration/watch_live_sync_test.go`, `test/integration/worktree_notice_test.go`, `testdata/golden/golden_parity_test.go`, `internal/agents/*.go` — read directly, HIGH confidence (primary source, this repository).
-- `.planning/PROJECT.md` — read directly, HIGH confidence (primary source, this repository).
-- [`https://modelcontextprotocol.io/specification/2026-07-28/changelog`](https://modelcontextprotocol.io/specification/2026-07-28/changelog) — official spec changelog, fetched directly. The research seam's `classify-confidence` tool has no tier above LOW for the generic `webfetch` provider id, but this is the specification's own primary-source document (SEP-2567, SEP-2575, SEP-2549, SEP-2243, SEP-2468, SEP-2596 all cited directly from this page) — treat the *content* as authoritative, the *tier label* as a tooling gap, not a signal about the source's reliability.
-- [`https://blog.modelcontextprotocol.io/posts/2026-07-28/`](https://blog.modelcontextprotocol.io/posts/2026-07-28/) — official MCP blog announcement, fetched directly. Same tooling-tier caveat as above; same primary-source status.
-- **`go list -m -json github.com/modelcontextprotocol/go-sdk@latest`** (module proxy) and **`go-sdk@v1.7.0/mcp/shared.go:45-65,68+,394`** (module source) — verified directly by the coordinator, not by this research pass originally; this is the correction basis for the `v1.7.0` stable-release, five-era-negotiation, and `CodeUnsupportedProtocolVersion = -32022` findings now reflected throughout. HIGH confidence — primary source (module proxy + actual dependency source code), the same evidentiary standard as this document's own repository-code findings, and strictly better sourcing than the WebSearch-derived claim it corrects.
-- `mark3labs/mcp-go@v0.57.0/mcp/types.go:163` (`LATEST_PROTOCOL_VERSION = "2025-11-25"`) — independently re-verified alongside the correction above; HIGH confidence, primary source. Supersedes this document's earlier `v0.56.0` version reference to the version actually re-checked during the correction.
-- [`https://mer.vin/2026/07/stateful-vs-stateless-mcp-sticky-sessions-gone/`](https://mer.vin/2026/07/stateful-vs-stateless-mcp-sticky-sessions-gone/), [`https://appwrite.io/blog/post/mcp-goes-stateless-in-the-2026-07-28-specification`](https://appwrite.io/blog/post/mcp-goes-stateless-in-the-2026-07-28-specification), [`https://4sysops.com/archives/2026-07-28-model-context-protocol-mcp-stateless-multi-round-trip-routable-headers-authorization-hardening/`](https://4sysops.com/archives/2026-07-28-model-context-protocol-mcp-stateless-multi-round-trip-routable-headers-authorization-hardening/), [`https://workos.com/blog/mcp-2026-spec-agent-authentication`](https://workos.com/blog/mcp-2026-spec-agent-authentication) — third-party commentary, WebSearch results only (not individually fetched), used only to corroborate/cross-check the official changelog's own wording on stateless core, MRTR, routing headers, and CIMD/RFC 9207 — LOW confidence per the seam, used for corroboration only, never as the sole source for a claim in this document.
-- WebSearch on mark3labs/mcp-go and `modelcontextprotocol/go-sdk` protocol-version support — LOW confidence per the seam (generic `websearch` provider), and this specific search is what produced the now-corrected "pre-release only" claim about `go-sdk` (it surfaced only the first pre-release, `v1.7.0-pre.1`, and missed the subsequent stable `v1.7.0`). Retained here as a documented example of why the module-proxy/source-level verification above is the standard this file now holds itself to for SDK-maturity claims, not as a source still being relied on for that claim.
+- `.planning/PROJECT.md` (HIGH — direct read, this repo)
+- `.github/workflows/release.yml` (HIGH — direct read, this repo)
+- `.goreleaser.yaml` (HIGH — direct read, this repo)
+- `Taskfile.yml` (HIGH — direct read, this repo)
+- `internal/upgrade/upgrade.go`, `verify.go`, `release.go`, `swap.go` (HIGH — direct read, this repo)
+- GoReleaser official docs: notarization (`/customization/sign/notarize/`), Homebrew casks (`/customization/publish/homebrew_casks/`), Homebrew formulas/deprecation (`/customization/publish/homebrew_formulas/`), archives (`/customization/archive/`), signing (`/customization/sign/`), binary signing (`/customization/sign/binary_sign/`), releases/existing-release mode (`/customization/release/`), split/merge (`/customization/general/partial/`), DMG (`/customization/package/dmg/`) — MEDIUM confidence each (official source, single-pass fetch via a summarizing tool this session, not independently cross-checked against a second source or against a real `goreleaser release` run)
+- GoReleaser Pro feature-boundary claims (split/merge, native `dmg:`/`notarize.macos_native`) — MEDIUM confidence, consistent across multiple official-doc fetches this session, not verified against a live Pro trial
 
 ---
-*Architecture research for: MCP 2026-07-28 protocol currency integration, codegraph-go v0.3.0*
-*Researched: 2026-08-03; corrected 2026-08-03*
+*Architecture research for: macOS Gatekeeper notarization + Homebrew distribution integration into codegraph-go's existing signed/attested GoReleaser release pipeline*
+*Researched: 2026-08-07*

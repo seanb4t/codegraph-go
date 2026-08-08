@@ -1,178 +1,192 @@
-# Stack Research: MCP 2026-07-28 Protocol Currency
+# Stack Research: macOS Gatekeeper Notarization + Homebrew Distribution
 
-**Domain:** MCP server SDK currency + tool-manifest vulnerability scanning (subsequent-milestone stack decision, v0.3.0)
-**Researched:** 2026-08-03
-**Confidence:** HIGH — every version number and code claim below was fetched live (GitHub REST API, raw source at pinned tags, or executed locally in this repo) on 2026-08-03, not recalled from training data or inferred from the MCP blog post.
+**Domain:** Go release engineering — GoReleaser-native macOS code signing/notarization and Homebrew tap publishing, layered onto an existing signed+attested pipeline
+**Researched:** 2026-08-07
+**Confidence:** HIGH on the Pro/OSS boundary and config schema (multiple independent official-doc fetches converged); MEDIUM on the single-runner zig-cross-from-macOS recommendation (well-documented pattern, not yet executed in this repo); LOW flagged explicitly where noted.
 
-## Recommended Stack
+## Headline Answer to the Central Risk (Q1)
 
-### Core Decision: DEFER the SDK swap and the 2026-07-28 protocol adoption — with a dated re-check
+**`goreleaser release --split` / `goreleaser continue --merge` is Pro-only, confirmed from the official docs page itself:** goreleaser.com/customization/partial/ states in its own words *"This capability is exclusively a Pro feature"* — corroborated independently by GoReleaser's own Pro marketing page (goreleaser.com/pro/) and Carlos Becker's (GoReleaser's creator) blog post announcing the feature in v1.12-pro. The **`prebuilt` builder** (importing binaries built outside GoReleaser into its `release` lifecycle) is **also confirmed Pro-only** (goreleaser.com/customization/builds/builders/prebuilt/: *"This feature is exclusively available with GoReleaser Pro"*). Together these close off both routes to "build per-platform on separate runners, then have one `goreleaser release` invocation assemble/publish them" without a paid license. **Confidence: HIGH** — stated in GoReleaser's own docs in nearly identical wording across three independent pages.
 
-| Decision point | Verdict | Confidence |
-|---|---|---|
-| Adopt `2026-07-28` on `mark3labs/mcp-go` now | **Not possible.** The dependency does not support it in any shipped release. | HIGH (verified: latest release inspected directly) |
-| Swap to `modelcontextprotocol/go-sdk` now | **Not recommended for this milestone.** SDK is ready; our verification harness (a prerequisite this milestone also owns) is not. Migrating before it exists is exactly the circularity the milestone's own "Key context" warns against. | HIGH on SDK readiness; this is a judgment call on sequencing, not a hard fact |
-| Explicit dated defer | **Recommended outcome.** SEP-2577 guarantees a ≥12-month deprecation window (until at least 2027-07-28) on the initialize handshake, roots/sampling/logging, and list-changed notifications our server currently exercises none of beyond the handshake — so nothing breaks by waiting. Re-check at the next milestone boundary or when `mark3labs/mcp-go` ships `server/discover` (issue #928), whichever comes first. | HIGH on the deprecation-window fact (from the spec); the recommendation itself is this research's judgment, flagged as such |
+**This does NOT force a Pro purchase.** There is a viable, well-precedented OSS path (detailed in Q1 below): run the **entire** `goreleaser release` invocation on a single **macOS** runner, with `zig cc` cross-compiling **both** linux legs (this repo already zig-cross-compiles linux/arm64 today, just from a Linux host — the pattern is host-independent). GoReleaser's own example repository (`goreleaser/example-zig-cgo`) demonstrates exactly this: CGo cross-compilation via zig from any host to any target. **Confidence: MEDIUM** — the pattern is officially documented and demonstrated, but has not been exercised in *this* repo's CGo/tree-sitter build, so Phase 1 execution should still smoke-test it before committing the CI restructure.
 
-This is a **decision recommendation, not a technology table** — the "stack" question this milestone poses is binary (which SDK, which protocol revision), not a list of libraries to add. The supporting evidence for each numbered question follows.
+## Recommended Stack (Additions Only)
 
----
+### Core Additions
 
-## Q1 — Does `mark3labs/mcp-go` support `2026-07-28`?
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| GoReleaser (existing pin) | **v2.17.1** (unchanged — confirmed current: `gh api repos/goreleaser/goreleaser/releases/latest` returns `v2.17.1`, published 2026-07-26, on 2026-08-07) | Same binary, new subcommand (`release` instead of `build --single-target`) and two new config blocks | No version bump needed. `notarize.macos` (cross-platform) predates v2.1; `homebrew_casks` was introduced in v2.10; both are well inside v2.17.1. **Confidence: HIGH** (live GitHub API check + official docs version-since notes). |
+| `anchore/quill` (embedded in GoReleaser — **not a separate dependency to add**) | vendored by GoReleaser's `notarize.macos` pipe | Pure-Go, cross-platform Apple code signing + notarization submission, with no `codesign`/`xcrun`/Keychain dependency | This is the mechanism that makes notarization possible **without requiring a macOS runner for the signing step itself** — confirmed directly from GoReleaser's own docs: the cross-platform `notarize.macos` GitHub Actions example runs on `runs-on: ubuntu-latest` with `distribution: goreleaser` (the free/OSS distribution, not `goreleaser-pro`). Quill's own README lists its commands (`sign`, `notarize`, `sign-and-notarize`, `p12 attach-chain`, `describe`, `submission status/logs/list`) with **no `staple` command** — Apple's `stapler` only attaches tickets to `.app`/`.pkg`/`.dmg` containers, not bare Mach-O binaries, and quill does not attempt to work around that. **Confidence: HIGH** (goreleaser.com/customization/sign/notarize/ fetched twice via different tools, converged; quill's own README fetched directly from raw GitHub). |
+| `zig` (already a repo dependency for linux/arm64 cross) | pinned `0.15.1` (existing `mlugg/setup-zig@v2.2.1` step) | Extend zig-cross to **both** linux legs from a macOS host, so the entire `goreleaser release` runs on one runner | `CC="zig cc -target x86_64-linux-gnu"` / `aarch64-linux-gnu` works identically regardless of host OS — zig bundles its own libc/sysroots per target, it doesn't borrow the host's. GoReleaser's own `goreleaser/example-zig-cgo` repo demonstrates cross-compiling CGO Go binaries via zig from any host OS to any target. **Confidence: MEDIUM** — officially documented pattern with a working example repo, but this exact CGo/tree-sitter binary + this exact host/target pairing (macOS host → linux/amd64 AND linux/arm64) has not been built in this repo yet; treat as a Phase-1 spike, not a given. |
 
-**VERIFIED, not inferred:** No.
+### GoReleaser Config Additions (`.goreleaser.yaml`)
 
-| Fact | Value | Source |
-|---|---|---|
-| Our pinned version | `v0.56.0` | `go.mod:13` |
-| Latest published release | `v0.57.0`, published `2026-07-23T09:18:40Z` | `gh api repos/mark3labs/mcp-go/releases` |
-| `mcp.LATEST_PROTOCOL_VERSION` in `v0.57.0` source | `"2025-11-25"` | fetched `mcp/types.go` at tag `v0.57.0` directly |
-| `mcp.ValidProtocolVersions` in `v0.57.0` | `["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]` | same file |
-| `2026-07-28` mentioned anywhere in `v0.57.0`'s changelog | No | `gh api repos/mark3labs/mcp-go/releases/tags/v0.57.0` |
+**1. `notarize:` block (new top-level key) — cross-platform/OSS variant, NOT `macos_native`:**
 
-**What changed between our pinned `v0.56.0` and latest `v0.57.0`** (full changelog, none of it protocol-revision-related): atomic `initialized` state fix, `jsonschema_description`/enum struct-tag support, streamable-HTTP session-close-before-shutdown fix, `Content-Type` parameter tolerance on the GET listening stream, per-method JSON-RPC error labeling on streamable HTTP, embedded-resource-contents unmarshal fix, a new **streamable HTTP stream resumability** feature via pluggable `EventStore`, a multi-line SSE data-field concatenation fix, and in-process-transport notification delivery fix. Bumping to `v0.57.0` is safe and worthwhile on its own merits but does not touch spec currency at all — it is not a substitute for the milestone's protocol question.
-
-**Open issue, not a roadmap statement:** [`mark3labs/mcp-go#928`](https://github.com/mark3labs/mcp-go/issues/928) — "feat(server): support SEP-2575 stateless MCP (`server/discover` + `Mcp-Method`/`Mcp-Name` headers)" — filed 2026-07-14, **still open**, zero maintainer comments (the one comment is an automated internal-tracker link-bot), no linked PR, no milestone/label indicating a target release. The issue author explicitly scopes out SEP-2322 (MRTR), SEP-2549 (cache hints), and SEP-2567 (sessionless) as "arguably deserve their own issues" — meaning even a merged #928 would not be full `2026-07-28` currency, just the minimal `server/discover` + header surface. **There is no committed timeline of any kind.** Treat "mark3labs ships 2026-07-28" as an unscheduled community contribution, not a plan.
-
-**No `WithProtocolVersion`-style constructor option exists** in `mark3labs/mcp-go` (`v0.57.0`) — every exported `With*` `ServerOption` was enumerated directly from `server/server.go`; none configures protocol version. The server always echoes back either the client's requested version (if it appears in `ValidProtocolVersions`) or `LATEST_PROTOCOL_VERSION` — see Q4.
-
-## Q2 — State of `modelcontextprotocol/go-sdk` (the official Go SDK)
-
-**VERIFIED:** Mature, stable, and already current with `2026-07-28` on release day.
-
-| Fact | Value | Source |
-|---|---|---|
-| Latest version | `v1.7.0`, published `2026-07-28T13:09:53Z` — the **same calendar day** as the spec revision | `gh api repos/modelcontextprotocol/go-sdk/releases` |
-| Stability | Well past 1.0 (`v1.0.0` shipped earlier; the module has been on the `v1.x` line through 6+ minor releases: 1.1 → 1.7, released roughly monthly since 2025-10-30) | release list |
-| `go.mod` minimum Go version | `go 1.25.0` — compatible with this repo's `go 1.26.5` | fetched `go.mod` at tag `v1.7.0` |
-| Spec revisions supported | `2026-07-28` (new, default for new clients), with full backward compatibility to `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05` — negotiated automatically, highest mutually-supported version wins | `v1.7.0` release notes (read directly, not the MCP blog) |
-| Adoption signal (verified via API) | 4,926 stars, 490 forks, 81 open issues, pushed same day as this research (`2026-08-03`) | `gh api repos/modelcontextprotocol/go-sdk` |
-| Adoption signal (production use, cited in the SDK's own release notes) | "`v1.7.0-pre.3` is already successfully used by GitHub, serving more than half a million users" (linking to a GitHub Changelog post about GitHub's own MCP server) | `v1.7.0` release notes |
-| Comparison: `mark3labs/mcp-go` | 8,970 stars, 864 forks, 32 open issues — still the larger community by raw star count, but that gap does not track the protocol-currency question this milestone is actually asking | `gh api repos/mark3labs/mcp-go` |
-
-**Server construction / tool registration / stdio serve loop** — read directly from the SDK's own `examples/server/basic/main.go` at tag `v1.7.0`:
-
-```go
-type SayHiParams struct {
-    Name string `json:"name"`
-}
-
-func SayHi(ctx context.Context, req *mcp.CallToolRequest, args SayHiParams) (*mcp.CallToolResult, any, error) {
-    return &mcp.CallToolResult{
-        Content: []mcp.Content{&mcp.TextContent{Text: "Hi " + args.Name}},
-    }, nil, nil
-}
-
-server := mcp.NewServer(&mcp.Implementation{Name: "greeter", Version: "v0.0.1"}, nil)
-mcp.AddTool(server, &mcp.Tool{Name: "greet", Description: "say hi"}, SayHi)
-serverSession, err := server.Connect(ctx, &mcp.StdioTransport{}, nil)
-// or, for the simple single-session CLI case: server.Run(ctx, &mcp.StdioTransport{})
+```yaml
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - codegraph-darwin-amd64
+        - codegraph-darwin-arm64
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"       # base64 P12, or a file path
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+        # entitlements: omit — see Apple Tooling section; a bare Go CLI needs none
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"              # base64 P8, or a file path
+        wait: true
+        timeout: 20m
 ```
 
-This is the **idiomatic, typed** path (`mcp.AddTool[In, Out]`, generic, JSON schema auto-derived from `In`'s struct tags via reflection). A **non-generic path also exists** — `(*Server).AddTool(t *Tool, h ToolHandler)` where `ToolHandler = func(context.Context, *CallToolRequest) (*CallToolResult, error)` — but it **panics if `t.InputSchema` is nil**, i.e. it requires you to hand-author or hand-generate the JSON schema yourself; it does not offer `mark3labs`-style `mcp.WithString(...)` schema-builder sugar. The typed generic path is the SDK's own recommended shape (it's what every example uses).
+Key facts (each independently confirmed from goreleaser.com/customization/sign/notarize/ and goreleaser.com/customization/notarize):
+- **Two variants exist**: `notarize.macos` (cross-platform, Quill-backed, **OSS**, any OS) and `notarize.macos_native` (native `codesign`+`xcrun notarytool`+`productsign`, **Pro-only**, macOS-only, needed for App Bundle/DMG/PKG). This repo ships a bare CLI binary, not an app bundle — `macos_native` buys nothing here even setting Pro aside. **Confidence: HIGH.**
+- `ids` filters which **build** ids get signed — confirmed to match this repo's existing `codegraph-darwin-amd64`/`codegraph-darwin-arm64` build ids.
+- The signed bytes **replace the build artifact in place and flow forward** into whatever consumes it next (archive, checksum, upload) — GoReleaser's own docs: *"Once the binaries are built, the notary step does everything in a single run. The signed binaries are then used from that point forward."* This means the raw darwin binary that `internal/upgrade` will eventually hash **is** the Apple-signed, notarized binary — not a separate unsigned copy. This is consistent with D-02 (format is still "raw binary, not an archive"), but is a real behavioral change worth flagging explicitly to the roadmap: today's binaries are `adhoc, linker-signed`/unsigned; after this change they will carry a real Apple Developer ID signature. **Confidence: HIGH** on the mechanism, this is an architectural implication for the roadmap to weigh, not a stack question to resolve here.
+- Does **not** require a macOS runner. Does **not** staple (see Apple Tooling section — this is a hard Apple platform constraint, not a GoReleaser gap).
 
-## Q3 — Concrete migration-cost comparison
+**2. `homebrew_casks:` block — NOT `brews:`.** `brews:` (formula-based, "hackyish... installed pre-compiled binaries" per GoReleaser's own words) has been soft-deprecated since v2.10 and its docs page is now titled "Homebrew Formulas (deprecated)". `homebrew_casks:` is the correct, current, non-deprecated block, also introduced in v2.10 (confirmed OSS — only `alternative_names`, the `app:` DMG option, `token_type` cross-SCM publishing, and PR `check_boxes` are Pro-gated sub-features; the base cask-publishing flow is free). **Confidence: HIGH** (goreleaser.com/customization/publish/homebrew_casks/, fetched directly).
 
-Side-by-side at the exact granularity requested — server construction, tool definition/registration, handler signature, result construction — verified against both SDKs' actual source, not summarized from memory:
-
-| Aspect | `mark3labs/mcp-go` (current, `v0.56.0`/`v0.57.0`) | `modelcontextprotocol/go-sdk` (`v1.7.0`) |
-|---|---|---|
-| **Server construction** | `server.NewMCPServer(name, version string, opts ...ServerOption) *server.MCPServer` — our `BuildServer` calls `server.NewMCPServer("codegraph", version, server.WithToolCapabilities(true))` | `mcp.NewServer(impl *mcp.Implementation, opts *mcp.ServerOptions) *mcp.Server` — `impl` bundles name+version into one struct; `opts` is a single struct pointer, not variadic functional options |
-| **Tool schema definition** | `mcp.NewTool(name string, opts ...ToolOption) mcp.Tool`, builder-style: `mcp.WithString("query", mcp.Required(), mcp.Description(...))` per field. Our `exploreTool()`/`companionTool()` use this extensively (8 tool schemas, ~25 field declarations total across `tools.go`) | Idiomatic path: a plain Go struct per tool (`type ExploreParams struct { Query string \`json:"query"\`; Path string \`json:"path,omitempty"\`; ... }`), schema derived by reflection at `AddTool` time. Non-generic path: hand-build a `*jsonschema.Schema` or a `map[string]any` yourself — strictly more code than today's builder DSL, not less |
-| **Registration** | `s.AddTool(exploreTool(), exploreHandler(...))` — one call per tool, `ServerTool`-agnostic | `mcp.AddTool(server, &mcp.Tool{Name, Description}, handlerFunc)` (generic, type-inferred from `handlerFunc`'s signature) or `server.AddTool(t *mcp.Tool, h mcp.ToolHandler)` (non-generic) |
-| **Handler signature** | `server.ToolHandlerFunc = func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error)` — `req` by **value** | Generic: `mcp.ToolHandlerFor[In, Out] = func(ctx context.Context, req *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error)` — **3 params, 3 returns**, `req` by **pointer**, typed `input` instead of dynamic getters. Non-generic: `mcp.ToolHandler = func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error)` — same 2-and-2 shape as today, but still loses the `GetString`/`GetInt`/`RequireString` convenience helpers (see next row) |
-| **Argument extraction** | `req.GetString("path", defaultPath)`, `req.GetInt("max_files", 0)`, `req.RequireString("query")` — dynamic, no per-tool struct needed. Every handler in `tools.go` (8 of them) uses this pattern | No equivalent dynamic accessor found on `*CallToolRequest`/`CallToolParamsRaw` in the SDK source. The typed path gets args for free via `input In` (struct field access); the non-generic path requires you to unmarshal `req.Params.Arguments` (raw JSON) by hand per call |
-| **Result construction (success)** | `mcp.NewToolResultText(s string) *mcp.CallToolResult` — one-line helper. Every handler in `tools.go` ends with this | **No equivalent helper exists.** Must construct manually: `&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: s}}}` — verified against the SDK's own canonical example, which does exactly this by hand |
-| **Result construction (error)** | `mcp.NewToolResultError(msg string) *mcp.CallToolResult` — one-line helper, used in every handler's error branch (multiple per handler) | No equivalent helper found. `CallToolResult.IsError bool` field exists (doc comment: "errors that originate from the tool should be reported inside Content, with IsError set to true") — manual construction: `&mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: err.Error()}}, IsError: true}` |
-| **Serve loop** | `server.ServeStdio(s)` (not shown in our `tools.go`/`server.go` excerpt but is the standard mcp-go stdio entry point) | `server.Run(ctx, &mcp.StdioTransport{})` or `server.Connect(ctx, &mcp.StdioTransport{}, nil)` for session-level control |
-
-**Honest port estimate for this codebase specifically:** `internal/mcp/tools.go` has exactly 2 handler *shapes* named in the milestone (`exploreHandler`, `companionHandler`) but `companionHandler` is a `switch` producing **7 distinct closures** (one per companion tool name) plus `exploreHandler` itself — **8 total handler bodies**, each currently ~10-25 lines built on `mcp.NewToolResultText`/`NewToolResultError` and `req.GetString`/`GetInt`/`RequireString`. Porting to the official SDK's idiomatic generic path means: (1) defining 8 typed parameter structs (mechanical, low-risk — every field already has a name, type, and description in the existing `mcp.With*` calls, so this is a direct transcription), (2) rewriting every `req.GetX(...)` call site to a struct field read (mechanical), (3) rewriting every `mcp.NewToolResultText(...)`/`NewToolResultError(...)` call site to manual `&mcp.CallToolResult{...}` construction (mechanical, more verbose), and (4) changing `BuildServer`'s construction call and the two `server.AddTool`/`mcp.AddTool` call sites. **This is a bounded, mechanical refactor confined to `internal/mcp/` — it does not reshape the package's architecture** (the seam this package already has — `openEngine`, `confineToRepoRoot`, `WorktreeNotice` prefixing, the `internal/query.Engine` delegation pattern — is SDK-agnostic and untouched by either SDK's API shape). The `server_test.go` and `mcptest`/in-process client usage would need a parallel rewrite against the new SDK's client API (not audited line-by-line here — flagged as the concrete scope of the "real-client MCP verification" work item, which this milestone already schedules separately and *before* any swap).
-
-## Q4 — Can either SDK declare an explicit protocol version instead of inheriting a `LATEST_PROTOCOL_VERSION`-style constant?
-
-**VERIFIED: No, neither SDK exposes a server-construction-time "pin this exact version" option.**
-
-- **`mark3labs/mcp-go`**: every exported `With*` `ServerOption` in `server/server.go` (29 functions, enumerated directly from source) was checked — none configures a fixed protocol version. The server's `protocolVersion(clientVersion string) string` method (also read directly) always **echoes the client's requested version if valid, else falls back to `mcp.LATEST_PROTOCOL_VERSION`** — negotiation is automatic and un-overridable at the `NewMCPServer`/`ServerOption` layer.
-- **`modelcontextprotocol/go-sdk`**: `ServerOptions` (the full struct, read directly from `mcp/server.go` at `v1.7.0`) has no protocol-version field either. Its own internal version constants (`latestProtocolVersion`, `protocolVersion20260728`, etc., in `mcp/shared.go`) are **unexported** — this SDK doesn't even give you a public constant to reference, let alone override. `StreamableHTTPOptions.Stateless` exists but is an HTTP-transport-only knob (irrelevant to our stdio-only server) that gates whether `2026-07-28` is *accepted* over that transport, not a version-pin mechanism.
-
-**Implication for the milestone's stated need** ("assert our wire version in a test so a dependency bump cannot silently move it"): this cannot be satisfied by finding a constructor option on either SDK. It must be satisfied by **decoupling the test's expected value from any SDK-owned symbol** — replace `server_test.go`'s `req.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION` (confirmed still present at `internal/mcp/server_test.go:81`, referencing the SDK's own moving constant) with a **repo-owned literal** (e.g. `const codegraphMCPProtocolVersion = "2025-11-25"`), sent as the request version, with the test asserting the **actual wire response** — not the SDK's compile-time constant — equals that same literal. This is SDK-agnostic guidance: it applies whether the milestone ultimately adopts or defers.
-
-## Q5 — Correct `govulncheck` invocation for `go.tool.mod`
-
-**VERIFIED by direct execution in this repo, not by reading docs alone** — the naive approach was reproduced as vacuous, and a working alternative was confirmed live.
-
-### The modes that exist (from the installed `govulncheck v1.6.0`'s own `-h`, matching `go.tool.mod`'s pinned `golang.org/x/vuln v1.6.0`)
-
-```
--mode value   supports 'source', 'binary', and 'extract' (default 'source')
--scan value   one of 'module', 'package', or 'symbol' (default 'symbol')
+```yaml
+homebrew_casks:
+  - name: codegraph
+    ids:
+      - <archive id producing the zip, NOT the raw-binary archive id>
+    binaries:
+      - codegraph
+    repository:
+      owner: seanb4t
+      name: homebrew-tap
+      branch: main
+      # token: use a dedicated PAT env var, see Secrets below — GITHUB_TOKEN
+      # cannot write to a different repository.
+    commit_author:
+      name: fzy-release-please[bot]   # or a dedicated bot identity — match
+      email: ...                       # whatever release-please already uses, for consistency
+    commit_msg_template: "chore(cask): update codegraph to {{ .Tag }}"
+    url:
+      template: "https://github.com/seanb4t/codegraph-go/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
 ```
 
-- **`source`** (default): builds an SSA call graph from real source and reports only symbols *reachable* from your code's entry points — the most precise, lowest-noise mode, but it requires the target packages' source to be loadable as ordinary Go packages under the active module.
-- **`binary`**: analyzes a *compiled* binary's symbol table. Per the official docs (fetched from `pkg.go.dev/golang.org/x/vuln/cmd/govulncheck`): **not call-graph aware** — it "cannot show call graphs" and "may report false positives for code that is in the binary but unreachable." It is still meaningfully more precise than a naive dependency-list scan, because the Go linker's dead-code elimination means a vulnerable symbol usually only survives into the binary if something actually references it.
-- **`extract`**: pulls a minimal analysis blob out of a binary for later `-mode=binary` use (e.g., cross-machine); not relevant here.
+- **Token scope**: the workflow's default `GITHUB_TOKEN` is scoped to the triggering repo only and **cannot** push to `seanb4t/homebrew-tap`. Every independent source (GoReleaser docs, DNSControl's own GoReleaser writeup, multiple community how-tos) agrees: this requires a **separate PAT** — a fine-grained token scoped to just `homebrew-tap` with "Contents: Read and Write", or a classic token with `repo` scope — stored as a repo secret (commonly named `HOMEBREW_TAP_TOKEN` or similar) and passed via `repository.token` in the cask block, or as the `GITHUB_TOKEN` env var GoReleaser reads by default for the *publish* step specifically (GoReleaser lets you override per-pipe). **Confidence: HIGH** (converged across GoReleaser's own docs and three independent community sources).
+- **Binary vs. archive input**: `homebrew_casks` does **not** mandate a zip/tar archive — it can point `url.template` at any downloadable artifact, and Homebrew Cask's own staging mechanism unpacks common archive extensions automatically; a raw binary URL also works if the `binary` artifact stanza is used, which is what GoReleaser generates by default via the `binaries:` key above. **Given this repo's D-02 constraint, the cleanest shape is still to feed `homebrew_casks` from a *second*, zip-formatted `archives:` entry** (see below) rather than the raw-binary one — keeps the raw-binary asset's name/shape contract (`internal/upgrade.releaseAssetName()`) completely untouched by anything brew-related. **Confidence: MEDIUM** (documented behavior, but the "point brew straight at the raw binary vs. a zip" choice is an architecture decision for the roadmap, not something GoReleaser forces either way).
+- **Signing note from the docs themselves**: *"casks are supposed to be signed"* — GoReleaser's own homebrew_casks docs page explicitly calls out that unsigned casks either need an `xattr`-based quarantine-removal post-install hook (which the docs themselves warn "Apple may disable... without notice") or proper `sign`/notarization. **This repo doing real notarization via `notarize.macos` is exactly what avoids needing that hack** — a direct synergy between the two new blocks, not a coincidence. **Confidence: HIGH.**
 
-### What the current `task vuln` target actually does (reproduced live, not assumed)
+**3. Second `archives:` entry (new — today's single entry is dead `formats: [binary]`).** GoReleaser supports multiple `archives:` blocks distinguished by `id`, each filtered by `ids:` (which *builds* it packages) — confirmed directly from the official archives schema doc, including the exact "split archives by build id" pattern GoReleaser recommends when you need per-format variants of the same builds:
 
-`Taskfile.yml`'s `vuln` target runs `GOWORK=off go tool -modfile=go.tool.mod govulncheck ./...`. Running this exact command and asking for `-show verbose` output proves it **scans the 146 modules of the main `go.mod`** (`internal/...`, `cmd/codegraph`, etc.) — **not** `go.tool.mod`'s ~368 third-party tool modules. The `-modfile=go.tool.mod` flag is consumed by `go tool` to select *which modfile's binary of `govulncheck` to run* — it does not propagate into govulncheck's own package-pattern resolution, which still defaults to the ambient `go.mod` at the repo root. **This target is currently a no-op duplicate of the CI gate, not an audit of the tool closure** — directly confirming the milestone's "999.3 closes the ~400-module credentialed-CI-tooling gap" framing is a real, currently-open gap, not a hypothetical one.
-
-**Attempted fix that does NOT currently work** (documented so it isn't re-attempted): pointing `govulncheck -mode=source` at the tool packages' import paths directly (`govulncheck github.com/go-task/task/v3/cmd/task ...`) while forcing module context via `GOFLAGS=-modfile=go.tool.mod` fails with `govulncheck: loading packages: err: exit status 1: stderr: build flag -modfile only valid when using modules` — reproduced live against the installed `govulncheck v1.6.0`. `go list -modfile=go.tool.mod <pkg>` works fine standalone; the failure is specific to how `govulncheck`'s internal `go/packages` driver invokes `go list` for source-mode loading, and no `golang/vuln` issue or doc confirms a supported workaround (issue search on `golang/vuln` for "modfile" returned nothing). **UNRESOLVED as a source-mode path** — flagging this precisely rather than guessing further, since it would need `x/vuln` maintainer confirmation or a newer `govulncheck` release to settle definitively.
-
-### What DOES work — verified live, this is the recommended invocation shape
-
-Build each tool's binary from `go.tool.mod` (no symbol stripping — do **not** pass `-ldflags="-s -w"` for this audit build, only for release artifacts), then run `govulncheck -mode=binary` per binary:
-
-```bash
-GOWORK=off go build -modfile=go.tool.mod -o /tmp/toolbins/task       github.com/go-task/task/v3/cmd/task
-GOWORK=off go build -modfile=go.tool.mod -o /tmp/toolbins/goreleaser github.com/goreleaser/goreleaser/v2
-GOWORK=off go build -modfile=go.tool.mod -o /tmp/toolbins/govulncheck golang.org/x/vuln/cmd/govulncheck
-
-govulncheck -mode=binary /tmp/toolbins/task
-govulncheck -mode=binary /tmp/toolbins/goreleaser
-govulncheck -mode=binary /tmp/toolbins/govulncheck
+```yaml
+archives:
+  - id: raw-binary               # existing, unchanged in shape/name_template — D-02
+    ids: [codegraph-linux-amd64, codegraph-linux-arm64, codegraph-darwin-amd64, codegraph-darwin-arm64]
+    formats: [binary]
+    name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+  - id: zip-archive               # new — feeds browser download + homebrew_casks
+    ids: [codegraph-linux-amd64, codegraph-linux-arm64, codegraph-darwin-amd64, codegraph-darwin-arm64]
+    formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}_archive"
 ```
+**Confidence: HIGH** for the multi-archive mechanism itself (official schema doc, "Splitting Archives by Build" example fetched verbatim); the exact `name_template` values above are illustrative — the *raw-binary* one MUST byte-match today's `internal/upgrade.releaseAssetName()` contract exactly, which is an implementation detail for the plan phase, not something this research can finalize from docs alone.
 
-Executed live against the `task` binary: this produced **real, non-vacuous, distinct-from-main-module results** — `GO-2026-5932` (`golang.org/x/crypto/openpgp` unmaintained/unsafe-by-design) reported as present in a *required* module but not reachable from `task`'s own code paths ("Module Results", not "Symbol Results" — i.e. correctly down-ranked as lower-severity than a reachable finding). This is exactly the shape of finding a per-tool binary-mode scan should surface, and it is **not** a finding that appears in the main module's `govulncheck` output (verified: the main-module run's earlier output showed a *different* single module-level advisory, confirming the two scans cover genuinely disjoint dependency graphs, as expected).
+**4. `checksum:` block wakes up (already present, currently dead per the file's own header comment).** Under `goreleaser build`, it never runs; under `goreleaser release`, it does. It duplicates `release.yml`'s hand-rolled `sha256sum codegraph_* > ..._checksums.txt` step — **that hand-rolled step must be deleted**, not run alongside GoReleaser's, to avoid two divergent checksum files. **Confidence: HIGH** on the duplication risk (both are visible directly in the files this research read); resolving *which one wins* is a Phase-1 implementation decision.
 
-`go.tool-lint.mod` (the `actionlint` tool, ~13 modules including its own `require` block) needs the identical treatment — build `actionlint`'s binary from `-modfile=go.tool-lint.mod`, scan with `-mode=binary`. Smaller closure, same pattern, same fix.
+**5. `release:` block — mode against release-please's pre-existing Release object.** Confirmed from the official release customization docs: *"If a release already exists in the target platform before running GoReleaser, the tool will not overwrite existing body text by default"* and GoReleaser *"can automatically replace existing artifacts if an upload fails due to a conflict."* This is exactly the disposition `release.yml`'s current hand-rolled `gh release view` / `gh release upload --clobber` logic already implements by hand (D-04: release-please owns the body, never regenerated). GoReleaser's default behavior needs no `mode: replace` override to preserve that invariant — only `skip_upload: false` (default) so it actually uploads assets. **Confidence: MEDIUM** — docs confirm the default-safe behavior in words, but the exact interaction with a Release object created by a *different* tool (release-please, not a prior GoReleaser run) should be smoke-tested against a real prerelease tag before trusting it in Phase-1 execution.
 
-**Recommendation for the Taskfile `vuln` target and/or a new CI gate:** replace (or add alongside) `govulncheck ./...` with a per-tool `-mode=binary` loop over binaries built fresh from each isolated modfile. This trades call-graph precision (accepted: binary mode's own docs concede it can't show call graphs and may over-report unreachable code) for actually covering the ~380 modules (`go.tool.mod` + `go.tool-lint.mod` combined) that presently have zero vulnerability-scanning coverage despite running with full CI credentials (cosign signing, GitHub token, cloud-storage backends for GoReleaser). A `-scan=package` or `-scan=module` binary-mode run is not needed as a fallback — the default `-scan=symbol` behavior worked without adjustment in the live test above.
+### What NOT to Add (Q5)
 
----
+| Avoid | Why | Instead |
+|-------|-----|---------|
+| `notarize.macos_native` | Pro-only (confirmed: "exclusively available with GoReleaser Pro, since v2.8"), requires a macOS runner + real Keychain, and only adds value for App Bundles/DMG/PKG — this repo ships a bare CLI binary | `notarize.macos` (cross-platform/Quill, OSS, works on any runner) |
+| `brews:` (Homebrew Formula block) | Soft-deprecated since v2.10, docs page itself now titled "(deprecated)"; formulas are meant to build-from-source, which is semantically wrong for a pre-built signed binary anyway | `homebrew_casks:` |
+| GoReleaser's own `signs:` block (cosign integration) | Would create a **second**, differently-scoped signing flow alongside the existing hand-rolled `cosign sign-blob --bundle` step in `release.yml`'s `assemble` job — two signature sources for the same binary is confusing at best, and `internal/upgrade`'s `defaultVerify` is pinned to the existing per-binary `.sigstore.json` shape/identity (`releaseWorkflowRefPattern`). Do not let GoReleaser sign anything cosign-related. | Keep the existing hand-rolled `cosign sign-blob` step in the `assemble` job, run it on GoReleaser's `release`-produced binaries exactly as it runs on today's `build`-produced ones |
+| GoReleaser's `sboms:` block | Duplicates the existing `syft` step already wired into `assemble` | Keep existing `syft` step |
+| GoReleaser's built-in SLSA/provenance features (none exist as a first-class block, but don't reach for third-party GoReleaser plugins that claim to) | The existing `slsa-framework/slsa-github-generator` generic-generator job is already correct and independent of the build tool | No change needed here at all |
+| `prebuilt` builder / `--split`/`--merge`/`--prepare`/`continue --merge` | All confirmed Pro-only | Single-runner `goreleaser release` (see Headline Answer) |
+| homebrew-core | Already decided against by the maintainer (own tap) — external review queue, no schedule control | `seanb4t/homebrew-tap` |
+| `gon` / `mitchellh/gon` | Predates GoReleaser's native `notarize.macos` integration (quill absorbed and superseded gon's use case); adding it would be a redundant, unmaintained-adjacent extra dependency doing what `notarize:` now does natively | GoReleaser's built-in `notarize.macos` |
+| Windows `.exe`/scoop packaging | Native Windows support was explicitly dropped this project (v0.4.0, #29) | N/A — not in scope |
 
-## What NOT to Use / What NOT to Do
+## Apple Tooling (Q4)
 
-| Avoid | Why | Use Instead |
-|---|---|---|
-| Swapping to `modelcontextprotocol/go-sdk` *this milestone*, before a real-client verification harness exists | The milestone's own stated precondition: mcp-go's client silently skips malformed lines and cannot fail a purity test (established in v1.0 Phase 4) — validating a *new* SDK using that SDK's own client is the same circularity, just with a different SDK. Verification must precede migration, not follow it | Build the harness first (already a separate milestone work item); revisit the swap decision only once it exists |
-| Treating `mark3labs/mcp-go`'s eventual `2026-07-28` support as scheduled | Issue #928 is open, unclaimed, has no maintainer commitment, and explicitly scopes out most of the spec revision's actual content (MRTR, cache hints, sessionless) even if merged | Track #928; re-evaluate at the next milestone boundary, not on an assumed timeline |
-| `govulncheck ./...` (no `-mode`/pattern change) as "coverage" for `go.tool.mod` | Empirically proven vacuous in this exact repo today — it silently re-scans the main module under a different modfile name, giving zero new coverage while looking like a real gate | `govulncheck -mode=binary` over binaries built from each isolated tool modfile (see Q5) |
-| `GOFLAGS=-modfile=go.tool.mod` + `govulncheck -mode=source <pkg>` as a fix for the above | Reproduced failure: `build flag -modfile only valid when using modules`, from govulncheck's internal package-loading driver, not a transient issue | `-mode=binary` (see Q5); revisit source-mode only if a future `govulncheck`/`x/vuln` release documents modfile support |
-| Referencing `mcp.LATEST_PROTOCOL_VERSION` (or the official SDK's — nonexistent — public equivalent) inside a test meant to catch silent protocol drift | The whole point of the assertion is defeated if the expected value is itself supplied by the dependency being tested; a version bump moves both sides of the comparison together | A repo-owned literal constant, asserted against the actual wire-negotiated version from a live handshake (SDK-agnostic; do this regardless of the adopt/defer outcome) |
+**One-time, human, Apple Developer Portal setup (not CI-automated, done once by the maintainer who already holds the Developer Program membership per the milestone context):**
+1. Create/export a **"Developer ID Application"** certificate (the correct type for signing a distributed-outside-App-Store binary; "Developer ID Installer" is for `.pkg` installers, not relevant to a bare binary or zip) as a `.p12` file with its private key, base64-encode it → `MACOS_SIGN_P12` secret.
+2. Create an **App Store Connect API key** (Users and Access → Keys → App Store Connect API, "Developer" role is sufficient for notarization) → download the `.p8` file, base64-encode → `MACOS_NOTARY_KEY` secret; note its Key ID → `MACOS_NOTARY_KEY_ID`; note the account's Issuer ID (UUID, shown on the same Keys page) → `MACOS_NOTARY_ISSUER_ID`.
+   **Confidence: MEDIUM** — this is standard, widely-documented Apple Developer Portal process (multiple independent how-to sources agree on the steps), not verified live against Apple's actual current UI in this research pass; UI particulars can shift and should be confirmed by the maintainer during Phase-1 execution rather than assumed from docs.
+
+**GitHub Actions secrets required (all net-new to this repo):**
+
+| Secret | Contents | Used by |
+|--------|----------|---------|
+| `MACOS_SIGN_P12` | base64 of the Developer ID Application `.p12` | `notarize.macos.sign.certificate` |
+| `MACOS_SIGN_PASSWORD` | password protecting the `.p12` | `notarize.macos.sign.password` |
+| `MACOS_NOTARY_KEY` | base64 of the App Store Connect `.p8` key | `notarize.macos.notarize.key` |
+| `MACOS_NOTARY_KEY_ID` | that key's ID | `notarize.macos.notarize.key_id` |
+| `MACOS_NOTARY_ISSUER_ID` | App Store Connect issuer UUID | `notarize.macos.notarize.issuer_id` |
+| (name TBD, e.g. `HOMEBREW_TAP_TOKEN`) | fine-grained PAT scoped to `seanb4t/homebrew-tap`, Contents: Read+Write | `homebrew_casks[].repository.token` |
+
+None of these are macOS-Keychain-dependent — because `notarize.macos` is the Quill cross-platform path, this whole set of secrets works whether the job runs on `ubuntu-latest` or `macos-latest`. **Confidence: HIGH** (directly from GoReleaser's own docs example, which itself runs on `ubuntu-latest`).
+
+**Stapling — the hard constraint, confirmed independently, not just asserted by the milestone context:**
+- Apple's `stapler` tool only attaches notarization tickets to `.app` bundles, `.pkg` installers, and `.dmg` disk images — never to a bare executable or a `.zip`. This is an **Apple platform constraint**, not a GoReleaser limitation.
+- Quill's command surface (`sign`, `notarize`, `sign-and-notarize`, `submission {list,logs,status}`, `describe`, `extract certificates`, `p12 {attach-chain,describe}` — enumerated from its own README) confirms it never attempts stapling; it only submits to Apple's Notary API and reports status.
+- **Practical consequence for this milestone:** even after `notarize.macos` succeeds, the raw binary (and a zip containing it) can only pass a *Gatekeeper online check* (querying Apple's servers for the ticket at first launch) — never an offline staple check. This matches, and independently confirms, the milestone context's own framing: *"stapling requires a container... an offline machine falls back to an online Gatekeeper check that fails."* Getting real offline-capable stapling would require packaging as `.pkg` or `.dmg`, which routes straight back into `notarize.macos_native` — **Pro-only**. **Confidence: HIGH** on the stapling mechanics (Apple platform fact + quill's own documented command surface); this is a hard boundary the roadmap needs to accept, not something more research resolves.
+
+**Hardened runtime / entitlements for a CGo network-I/O CLI:**
+- Apple's notary service **requires** hardened runtime + a secure (Developer-ID) timestamp on the signature to accept any submission at all — this is non-negotiable, confirmed by multiple independent sources (Apple's own notarization docs referenced across community how-tos, and GoReleaser's `sign.options`/quill's own signing default). `notarize.macos` handles this automatically as part of `sign-and-notarize` — no manual `--options=runtime` flag needed in this repo's config.
+- **Networking is unaffected by hardened runtime** — none of the hardened-runtime restrictions relate to network access; a CLI doing HTTPS calls (this repo's `codegraph upgrade` self-update path) needs no special entitlement for that.
+- **JIT/dynamic-code entitlements (`allow-jit`, `allow-unsigned-executable-memory`) are not needed** — those exist for runtimes that generate and execute code at runtime (e.g. V8/Electron). A statically-linked Go binary with a CGo tree-sitter parser does ahead-of-time compilation only; tree-sitter's C scanners are compiled in, not JIT-generated. **No `entitlements:` file is needed for this binary** — leave `sign.entitlements` unset. **Confidence: MEDIUM** — this reasoning is sound and consistent with widely-reported successful notarization of plain Go CLI tools, but no source directly confirms "CGo-with-tree-sitter specifically notarizes clean with zero entitlements" — flagged as a real risk to smoke-test in Phase 1 (build, `quill sign-and-notarize` locally or in CI, then `codesign -dvv` + `spctl -a -vv -t exec` on the result) before assuming it.
+- **A separate, older risk class exists and is worth naming explicitly**: historical Go toolchain issues (`golang/go#30488`, `golang/go#34986`, and multiple "signature of the binary is invalid" notarization failures reported for Go binaries) were tied to Go's linker producing Mach-O structures the notary service's signature validator rejected. These reports mostly predate current Go toolchain versions and mostly concern `-buildmode=c-shared` (a different build mode than this repo's plain executable build) or missing the full Apple certificate chain (which quill's `p12 attach-chain` / embedded Apple-cert-chain handling addresses directly). **This repo's darwin binaries already accept `codesign` today** (measured fact from the milestone context: `adhoc, linker-signed` on arm64) — a real Developer-ID re-sign is a strictly smaller ask than getting *any* signature to validate at all, which already works. **Confidence: LOW-MEDIUM** on "this will notarize clean on the first try" — genuinely worth a Phase-1 spike rather than an assumption, given this is exactly the kind of "measure, don't recall" trap this repo's standing rule exists for.
+
+## Integration Points
+
+| File | Change |
+|------|--------|
+| `.goreleaser.yaml` | Add `notarize:` (macos, cross-platform variant) block; add `homebrew_casks:` block; add second `archives:` entry (zip format) alongside the existing raw-binary one; the existing `checksum:` block needs no change but will now actually execute — remove the header comments documenting it as dead, since under `release` it is live |
+| `.github/workflows/release.yml` | Collapse the 2-job matrix (`build` on 2 runner classes) + `assemble` + `provenance` shape so the **build+archive+notarize+homebrew_casks+GH-release-upload** work happens in **one job on one macOS runner**, running `goreleaser release --clean` (not `--split`, not `--single-target`) with `CC`/`CXX` env set for **both** linux legs via zig (in addition to today's linux/arm64-only zig use) and no CC override for the two native darwin legs. The existing `assemble` job's hand-rolled `sha256sum` step must be deleted (GoReleaser's `checksum:` now produces it). The existing `cosign sign-blob`/`syft` steps stay, but move to run **after** `goreleaser release` produces artifacts (either as a later step in the same job over `dist/`, or a downstream job consuming `dist/` — GoReleaser's `release` writes `dist/artifacts.json` exactly like `build` does today, so the existing "locate binary via artifacts.json with a `find` fallback" logic in "Rename to release-asset contract name" likely needs re-pointing at the new dist layout, not rewriting from scratch). The `provenance` job (SLSA generic generator) is unaffected in shape — it still consumes a base64 checksums blob, now sourced from GoReleaser's own `checksum:` output file instead of the hand-rolled one. New secrets (`MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`, `MACOS_NOTARY_KEY`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`, tap PAT) must be added to the job's `env:`. |
+| `Taskfile.yml` | If there's a local `task release:check`/equivalent dry-run target that currently calls `goreleaser build --single-target`, it should gain (or get replaced by) a `goreleaser release --skip=publish` (or `--snapshot`) dry-run target so contributors can validate the new blocks locally without secrets — `notarize.macos.enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'` already makes notarization a no-op (falls back to quill's ad-hoc-signing-only snapshot behavior) when secrets aren't present, which is exactly the pattern quill's own README recommends for this. |
+| `internal/upgrade` | No code change implied by this research alone — but the roadmap should explicitly verify the raw-binary `archives:` entry's `name_template` still produces byte-identical filenames to `internal/upgrade.releaseAssetName()`'s contract, since that logic is what's at risk of drifting when the pipeline moves off the current hand-rolled "Rename to release-asset contract name" shell step. |
+
+## Alternatives Considered
+
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|--------------------------|
+| `notarize.macos` (cross-platform/Quill, OSS) | `notarize.macos_native` (Pro) | If this project ever ships a `.app`/`.pkg`/`.dmg` (e.g. a future GUI), native notarization + real stapling becomes necessary and is worth the Pro license at that point — not for a bare CLI binary today |
+| Single macOS runner running the whole `goreleaser release` with zig-cross for both linux legs | GoReleaser Pro `--split`/`--merge` (native multi-runner) | If GoReleaser Pro is ever purchased for other reasons (e.g. Windows native signing, nightly builds, faster parallel builds), revisit — it's the more "designed for this" mechanism and would let linux legs stay on cheaper/faster linux runners instead of consolidating everything onto macOS |
+| `homebrew_casks:` | `brews:` (formula) | Never, for this project — formula is meant for build-from-source and is the deprecated path; no scenario in this project favors it |
+| Own tap (`seanb4t/homebrew-tap`) | homebrew-core | Already decided against (PROJECT.md Key Decisions) — revisit only once adoption independently justifies the review-queue cost |
+| GoReleaser's embedded quill (via `notarize.macos`) | Standalone `anchore/quill` CLI invoked as a build hook (the pattern quill's own README shows, and what predates the native GoReleaser integration) | Only if `notarize.macos`'s config surface turns out to be missing something quill's raw CLI exposes — unlikely given `notarize.macos` is a thin wrapper over the same library, but worth knowing this exists as an escape hatch |
 
 ## Version Compatibility
 
 | Package A | Compatible With | Notes |
-|---|---|---|
-| `github.com/mark3labs/mcp-go` | Go — no explicit floor found beyond what recent releases require; not a blocker either way | Repo currently pins `v0.56.0`; `v0.57.0` is available and safe to take independently of the protocol-currency decision (changelog reviewed — no breaking changes relevant to `internal/mcp/`) |
-| `github.com/modelcontextprotocol/go-sdk` | `go 1.25.0` minimum (verified from `go.mod` at `v1.7.0`) | Compatible with this repo's `go 1.26.5` — no toolchain blocker if/when the swap happens |
-| `golang.org/x/vuln/cmd/govulncheck` (pinned `v1.6.0` in `go.tool.mod`) | Requires the target packages to be reachable via ordinary `go list`/`go/packages` loading in `-mode=source`; `-mode=binary` has no such constraint | Use `-mode=binary` for `go.tool.mod`/`go.tool-lint.mod` per Q5 — sidesteps the `-modfile` loading failure entirely |
+|-----------|------------------|-------|
+| `goreleaser@v2.17.1` | `notarize.macos` (cross-platform) | Feature predates v2.1; fully supported at pinned version — no upgrade needed |
+| `goreleaser@v2.17.1` | `homebrew_casks` | Introduced v2.10; fully supported at pinned version — no upgrade needed. `pull_request.token` (separate PR-only token) ships in **v2.18, not yet released** as of this research — not usable yet; not needed for a direct-commit-to-`main` tap workflow anyway |
+| `zig 0.15.1` (existing `mlugg/setup-zig@v2.2.1` pin) | cross-compiling CGo to linux/amd64 **and** linux/arm64 from a macOS host | No version-specific incompatibility found; this is the same zig version already validated (per Phase-8/Phase-10 research) for linux/arm64 cross from a Linux host — extending its target set doesn't change its version requirements |
+| `goreleaser-action@v7.2.3` (existing pin) | `distribution: goreleaser` (not `goreleaser-pro`) | Unchanged — the OSS distribution string is exactly what the notarize/homebrew_casks docs' own working examples use |
 
 ## Sources
 
-- `gh api repos/mark3labs/mcp-go/releases` (GitHub REST API, HIGH confidence — primary source, not inferred) — full release/date list, confirms `v0.57.0` latest as of 2026-08-03
-- `gh api repos/mark3labs/mcp-go/releases/tags/v0.57.0` (HIGH confidence) — full changelog body, confirms zero `2026-07-28` content
-- Raw `mcp/types.go` and `server/server.go` fetched at tag `v0.57.0` (HIGH confidence, primary source) — `LATEST_PROTOCOL_VERSION` value, `ValidProtocolVersions` list, `protocolVersion()` negotiation method, full `With*` `ServerOption` enumeration
-- `gh api repos/mark3labs/mcp-go/issues/928` + its comments (HIGH confidence, primary source) — open SEP-2575 feature request, no maintainer timeline
-- `gh api repos/modelcontextprotocol/go-sdk/releases` + `releases/tags/v1.7.0` (HIGH confidence, primary source) — `v1.7.0` published 2026-07-28, full SEP-by-SEP changelog read directly (not summarized from the MCP blog)
-- Raw `mcp/server.go`, `mcp/shared.go`, `mcp/protocol.go`, `mcp/requests.go`, `examples/server/basic/main.go`, `mcp/mcp_example_test.go` fetched at tag `v1.7.0` (HIGH confidence, primary source) — `NewServer`/`ServerOptions`/`AddTool`/`ToolHandler`/`ToolHandlerFor`/`CallToolResult`/`CallToolRequest` signatures, canonical usage pattern, unexported internal protocol-version constants
-- `gh api repos/mark3labs/mcp-go` and `repos/modelcontextprotocol/go-sdk` (HIGH confidence) — star/fork/issue counts for adoption comparison
-- Live local execution in this repo (HIGH confidence, empirical, reproduced 2026-08-03): `GOWORK=off go tool -modfile=go.tool.mod govulncheck -show verbose ./...` (proves current `task vuln` scans the main module, not `go.tool.mod`); `GOFLAGS=-modfile=go.tool.mod ... govulncheck -mode=source <pkg>` (reproduces the `-modfile only valid when using modules` failure); `go build -modfile=go.tool.mod -o ... <tool-pkg>` + `govulncheck -mode=binary <binary>` (proves the working alternative, with real distinct findings)
-- `pkg.go.dev/golang.org/x/vuln/cmd/govulncheck` (MEDIUM confidence, official docs fetched via WebFetch — some detail on `-scan` was not present in the fetched page and is marked UNRESOLVED rather than guessed) — `-mode` semantics, binary-mode limitations
-- Local `govulncheck -h` / `-version` (HIGH confidence, primary source, matches `go.tool.mod`'s pinned `golang.org/x/vuln v1.6.0`) — authoritative current-release flag set
-- `.github/workflows/ci.yml:167-168` (HIGH confidence, this repo) — confirms `golang/govulncheck-action@v1.1.0` scans only the main module in CI today, corroborating the "credentialed-CI-tooling gap" framing in `PROJECT.md`
-- `gh api "search/issues?q=repo:golang/vuln+modfile"` (HIGH confidence on absence — search returned zero results, cited as the evidence for the Q5 UNRESOLVED note rather than a guess)
+- `/websites/goreleaser` (Context7, HIGH confidence — official docs mirror, cross-checked against live goreleaser.com fetches) — archives schema, sign pipe, GitHub Actions notarize example, split/merge/continue/publish --merge commands
+- https://goreleaser.com/customization/partial/ (web fetch, HIGH confidence, primary source) — split/merge Pro-only statement, verbatim
+- https://goreleaser.com/pro/ , Carlos Becker's "GoReleaser Split and Merge" post (web search, MEDIUM-HIGH, corroborating) — Pro-only status cross-check
+- https://goreleaser.com/customization/builds/builders/prebuilt/ (web fetch, HIGH, primary source) — prebuilt builder Pro-only statement, verbatim
+- https://goreleaser.com/customization/sign/notarize/ (web fetch x3 with different targeted prompts, HIGH, primary source) — notarize.macos vs macos_native config keys, secrets shape, OS requirements, stapling absence
+- https://goreleaser.com/customization/notarize (Context7 mirror, HIGH) — full YAML example, GitHub Actions example showing `runs-on: ubuntu-latest` + `distribution: goreleaser` for the cross-platform path
+- https://github.com/anchore/quill README + llms.txt (fetched directly via raw.githubusercontent.com, HIGH, primary source) — command surface confirming no `staple` command; sign/notarize env var names; snapshot ad-hoc-signing pattern
+- https://anchore.com/blog/meet-quill-a-cross-platform-code-signing-tool-for-macos/ (web search, MEDIUM, corroborating) — rationale for quill's pure-Go cross-platform design vs. gon's shell-out-to-codesign approach
+- https://goreleaser.com/customization/publish/homebrew_casks/ (web fetch, HIGH, primary source) — full key list, OSS-vs-Pro sub-feature split, since-v2.10 note, `token_type`/`pull_request.token` version gating
+- https://goreleaser.com/deprecations/ + community migration issue threads (web search, MEDIUM) — brews→homebrew_casks deprecation timeline
+- https://goreleaser.com/customization/package/archives (Context7 mirror, HIGH, primary source) — multiple archives blocks by id, "Splitting Archives by Build" pattern, format list including `binary`
+- https://goreleaser.com/customization/release (Context7 mirror, HIGH, primary source) — release mode defaults against a pre-existing Release object, disable/skip_upload keys
+- `gh api repos/goreleaser/goreleaser/releases/latest` (executed locally, HIGH — direct GitHub API call, 2026-08-07) — confirms v2.17.1 is current
+- https://github.com/goreleaser/example-zig-cgo (web search result, MEDIUM — official GoReleaser org example repo, not independently cloned/built in this research pass) — zig cross-compiling CGo from any host to any target
+- Multiple community sources on homebrew tap PAT scoping (DNSControl docs, mcginniscommawill.com, dev.to how-tos) (web search, MEDIUM, cross-corroborating but non-primary) — GITHUB_TOKEN repo-scoping limitation, PAT requirement
+- Apple hardened runtime / entitlements community sources (developer.apple.com forum threads, multiple Go-notarization blog posts) (web search, LOW-MEDIUM, non-primary, cross-corroborating on the "no special entitlements for plain Go CLI" conclusion but not CGo-tree-sitter-specific) — flagged explicitly as needing a Phase-1 empirical check, not treated as settled fact
 
 ---
-*Stack research for: codegraph-go v0.3.0 "MCP Protocol Currency" milestone*
-*Researched: 2026-08-03*
+*Stack research for: macOS Gatekeeper notarization + Homebrew tap distribution (v0.5.0 milestone)*
+*Researched: 2026-08-07*
