@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/seanb4t/codegraph-go/compare/v0.5.0...v0.5.1) (2026-08-08)
+
+
+### Bug Fixes
+
+* **release:** resolve goreleaser pin without a Task-eaten Go template ([#39](https://github.com/seanb4t/codegraph-go/issues/39)) ([edd2460](https://github.com/seanb4t/codegraph-go/commit/edd2460f912c4810894b1fc3b2559d839d76a359))
+
 ## [0.5.0](https://github.com/seanb4t/codegraph-go/compare/v0.4.0...v0.5.0) (2026-08-08)
 
 
