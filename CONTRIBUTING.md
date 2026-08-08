@@ -89,6 +89,10 @@ Every command CI runs is defined exactly once, as a `task` target — see
   thing here and in CI.
 - `task check:cross` is the same pre-tag sweep `release-please.yml`'s
   `pretag-gate` job runs before a tag can be created.
+- `task release:dry-run` proves the full `goreleaser release` composition —
+  all four release targets in one invocation — on a native darwin host,
+  without publishing or signing anything. Needs `zig`, `syft`, and `cosign`
+  on `PATH` in addition to the C toolchain above.
 - CI calls these same fine-grained targets directly — a contributor and CI
   run identical command bodies, never a divergent local approximation.
 - `task`, `goreleaser`, and `actionlint` build on demand from `go.tool.mod`

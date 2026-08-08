@@ -77,15 +77,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # namespace-profile-linux-amd64-4x8 builds both linux arches:
-          # native gcc for linux/amd64 (no cross-toolchain needed); zig cc
-          # for the linux/arm64 cross target (CC/CXX for it are already set
-          # per-build-id inside .goreleaser.yaml itself — this job only
-          # needs to ensure the `zig` binary is on PATH).
+          # namespace-profile-linux-amd64-4x8 builds both linux arches, both
+          # now via zig cc (Phase 1 spike, D-01/D-02): CC/CXX overrides for
+          # both linux build ids are set per-build-id inside
+          # .goreleaser.yaml itself — this job only needs to ensure the
+          # `zig` binary is on PATH. Transitional: linux/amd64 needs_zig
+          # flipped false -> true here so this still-three-job matrix stays
+          # coherent with .goreleaser.yaml's new codegraph-linux-amd64 CC/CXX
+          # override; plan 01-03 collapses this matrix entirely into the
+          # single-runner `goreleaser release` job.
           - runner: namespace-profile-linux-amd64-4x8
             goos: linux
             goarch: amd64
-            needs_zig: false
+            needs_zig: true
           - runner: namespace-profile-linux-amd64-4x8
             goos: linux
             goarch: arm64

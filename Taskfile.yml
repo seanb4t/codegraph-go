@@ -346,6 +346,127 @@ tasks:
 
         rm -rf dist
 
+  release:dry-run:
+    desc: >-
+      Prove the FULL `goreleaser release` composition — all four
+      .goreleaser.yaml build entries (linux/amd64, linux/arm64, darwin/amd64,
+      darwin/arm64) in ONE invocation — on a native darwin host, without
+      publishing or signing anything (D-06, REL-05 enabling change).
+      check:darwin-release-build already proves GoReleaser can drive a
+      `build --single-target` darwin invocation; this target is the first
+      thing in this repo to exercise `goreleaser release` itself, the
+      single-runner shape the migrated release.yml (plan 01-03) will use.
+      Uses --snapshot deliberately: a PR or dispatch HEAD carries no tag and
+      GoReleaser hard-fails ("git tag ... was not made against commit ...")
+      without one — the resolved version string is the only thing --snapshot
+      changes, not the property this target verifies. Uses
+      --skip=publish,sign so nothing is published to GitHub and no signing
+      key/OIDC token is needed locally.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:dry-run must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. The moment plan 01-02 activates .goreleaser.yaml's sboms: block, this target shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the SIGN pipe today, but plan 01-02 wires binary_signs: through this same target, and the permanent linux-cross-canary installs cosign before invoking it for exactly this reason. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # Build GoReleaser NATIVELY, with no GOOS/GOARCH in the environment,
+        # exactly as check:darwin-release-build does and for the same
+        # reason: a GOARCH-cross-built GoReleaser runs under Rosetta and its
+        # child `xcrun` then resolves as x86_64, which cannot load the
+        # arm64-only libxcrun.dylib from CommandLineTools — a confusing
+        # "# runtime/cgo" architecture error that reads like a broken
+        # toolchain but is really a cross-built tool. release.yml does not
+        # hit this because goreleaser-action installs a native prebuilt
+        # binary — reproduced here by building the tool with no GOOS/GOARCH
+        # override.
+        GORELEASER_BIN="$(mktemp -d)/goreleaser"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")"' EXIT
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        # zig cc/zig c++ default their LOCAL cache directory to a path next
+        # to the C source file being compiled unless overridden. This
+        # project's CGo tree-sitter dependencies compile from Go's module
+        # cache (GOMODCACHE), which is read-only by design — without this
+        # override, zig fails with "unable to open local cache directory
+        # ...: AccessDenied" the first time either linux build id's zig cc
+        # override actually runs. Point both the local and global cache at
+        # a scratch dir cleaned up by the same trap as GORELEASER_BIN above.
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        trap 'rm -rf "$(dirname "${GORELEASER_BIN}")" "${ZIG_CACHE_ROOT}"' EXIT
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # No GOOS/GOARCH set here: unlike `build --single-target`,
+        # `goreleaser release` resolves every target from each builds:
+        # entry's own goos:/goarch: list, not from the environment. A
+        # leftover GOOS/GOARCH would be at best a no-op and at worst mask a
+        # misconfiguration (RESEARCH.md Pattern 5 / Pitfall 2).
+        echo "==> goreleaser release --snapshot --skip=publish,sign --clean"
+        "${GORELEASER_BIN}" release --snapshot --skip=publish,sign --clean
+
+        # Assert via dist/artifacts.json (GoReleaser's own documented stable
+        # lookup, same as check:darwin-release-build) that exactly four
+        # released Binary entries exist, one per (goos,goarch) pair — a
+        # green exit code alone is explicitly NOT the check (RESEARCH.md
+        # anti-pattern). `goreleaser release` records type=="Binary" TWICE
+        # per platform: once for the raw `go build` output (named literally
+        # "codegraph", extra.Builder set, no extra.Format) and once for the
+        # archives: pipe's renamed/copied release asset (extra.Format ==
+        # "binary", the codegraph_<tag>_<goos>_<goarch> shape
+        # internal/upgrade.releaseAssetName() expects) — filtering on
+        # extra.Format=="binary" selects the actual release asset, not the
+        # intermediate build artifact.
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::goreleaser release produced no dist/artifacts.json"
+          exit 1
+        fi
+
+        BINARY_COUNT=$(jq -r '[.[] | select(.type=="Binary" and .extra.Format=="binary")] | length' dist/artifacts.json)
+        if [ "${BINARY_COUNT}" != "4" ]; then
+          echo "::error::dist/artifacts.json has ${BINARY_COUNT} released Binary entries (extra.Format==\"binary\"), want exactly 4"
+          exit 1
+        fi
+
+        for pair in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          GOOS="${pair%/*}"
+          GOARCH="${pair#*/}"
+
+          BIN=""
+          if command -v jq >/dev/null 2>&1; then
+            BIN=$(jq -r --arg goos "${GOOS}" --arg goarch "${GOARCH}" \
+              '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos==$goos and .goarch==$goarch)][0].path // empty' \
+              dist/artifacts.json)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            BIN=$(find dist -type f -name codegraph -path "*${GOOS}*${GOARCH}*" 2>/dev/null | head -n1)
+          fi
+          if [ -z "${BIN}" ] || [ ! -f "${BIN}" ]; then
+            echo "::error::goreleaser release produced no ${pair} binary under dist/"
+            exit 1
+          fi
+
+          # Assert the object is the right machine — the failure mode a
+          # green `goreleaser release` exit code alone cannot catch.
+          DESC=$(file -b "${BIN}")
+          echo "    ${pair}: ${BIN}: ${DESC}"
+          case "${GOOS}:${GOARCH}:${DESC}" in
+            linux:amd64:*ELF*x86-64*) ;;
+            linux:arm64:*ELF*aarch64*) ;;
+            darwin:amd64:*Mach-O*x86_64*) ;;
+            darwin:arm64:*Mach-O*arm64*) ;;
+            *) echo "::error::${pair} produced the wrong object: ${DESC}"; exit 1 ;;
+          esac
+        done
+
+        echo "release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation."
+
   check:goreleaser:
     desc: Validate .goreleaser.yaml (DIST-01).
     cmds:
