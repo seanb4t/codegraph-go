@@ -109,11 +109,15 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
   3. Against assets **re-downloaded from the published release** — never a local `dist/` copy — `cosign verify-blob` returns Verified OK under the unchanged `release.yml@refs/tags/v*` SAN, `slsa-verifier verify-artifact` passes, and a genuinely shipped prior binary self-upgrades via `codegraph upgrade` on darwin/arm64 and linux/amd64 (REL-08)
   4. For each platform the release carries both a raw `codegraph_<tag>_<goos>_<goarch>` asset — extension-free, directly executable, and byte-shape-identical to what `internal/upgrade.releaseAssetName()` builds — and a distinctly-named `.zip`; a mutation changing the raw entry away from `formats: [binary]` turns a test red rather than shipping an archive that verifies its signature and then bricks the install (REL-09)
 
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
 
-- [ ] TBD (populate with /gsd-plan-phase 1)
+- [ ] 01-01-PLAN.md — REL-05 spike (tracer): one `goreleaser release --snapshot` on macOS cross-compiles both linux legs via zig, and a permanent canary executes them on real Linux
+- [ ] 01-02-PLAN.md — `.goreleaser.yaml` owns archive/checksum/sign/SBOM: raw + `.zip` entries by id, 8-payload checksum scope, `binary_signs:`, per-binary `sboms:`
+- [ ] 01-03-PLAN.md — collapse `release.yml` to one `goreleaser release` job; delete the hand-rolled checksum/sign/SBOM shell; scope `id-token: write` to that one job
+- [ ] 01-04-PLAN.md — swap the SLSA generic generator for `actions/attest-build-provenance`; rewrite every published verification instruction and REL-08's wording
+- [ ] 01-05-PLAN.md — cut a real release and re-prove every supply-chain claim against re-downloaded published assets, automated to re-fire on every future release
 
 ### Phase 2: Apple Signing & Notarization
 **Goal**: A macOS user who downloads a release asset in a browser can run it without Gatekeeper blocking them — and the project can prove that claim with a check it has already watched fail.
@@ -176,7 +180,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
-| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 0/TBD | Not started | - |
+| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 0/5 | Not started | - |
 | 2. Apple Signing & Notarization | v0.5.0 | 0/TBD | Not started | - |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
