@@ -467,6 +467,75 @@ tasks:
 
         echo "release:dry-run: four correctly-typed binaries produced in one goreleaser release invocation."
 
+  release:goreleaser:
+    desc: >-
+      Cut a REAL release: one `goreleaser release --clean` invocation —
+      publishes to GitHub Releases, signs every binary with cosign keyless
+      (OIDC), and emits SBOMs. The single definition release.yml's
+      collapsed `release` job calls (plan 01-03, DEV-01); not currently
+      bound by TestWorkflowRunBodiesInvokeTask's inScopeJobs fixture (D-08
+      exception) — applied deliberately, not because a test requires it.
+      Meant to run in CI on a tag push, NOT casually from a laptop. For the
+      local, non-publishing equivalent, use `task release:dry-run`.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:goreleaser must run on a native darwin host — the linux legs cross-compile via zig from here (D-01/D-02) and darwin must build natively; a linux host would silently produce a cross-linked darwin binary (libresolv/DNS-resolution risk). Use `task release:dry-run` or the linux-cross-canary workflow instead."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml cross-compile via zig cc/zig c++ (CI pins 0.15.1 via mlugg/setup-zig). Install locally: brew install zig."
+      - sh: command -v cosign
+        msg: "cosign not found. .goreleaser.yaml's binary_signs: pipe shells out to it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+      - sh: command -v syft
+        msg: "syft not found. .goreleaser.yaml's sboms: pipe shells out to it. CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+      - sh: git describe --exact-match --tags HEAD
+        msg: "no tag found at HEAD. `goreleaser release` hard-fails without one. For a tagless, non-publishing run of the same composition, use `task release:dry-run` instead."
+      - sh: '[ -n "${GITHUB_TOKEN:-}" ]'
+        msg: "GITHUB_TOKEN is not set. GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which is the gh CLI's own variable. Set GITHUB_TOKEN before running this target."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # ONE prefer-then-build algorithm (C6): prefer a `goreleaser` on
+        # PATH (CI path — goreleaser-action install-only already put the
+        # pinned build there, so nothing compiles inside the OIDC job);
+        # else build go.tool.mod's pin as the LOCAL fallback. Either way,
+        # `goreleaser --version` is asserted against the pin below.
+        PINNED_VERSION="$(GOWORK=off go list -m -modfile=go.tool.mod -f '{{.Version}}' github.com/goreleaser/goreleaser/v2)"
+        PINNED_VERSION="${PINNED_VERSION#v}"
+
+        CLEANUP_DIR=""
+        cleanup() { [ -n "${CLEANUP_DIR}" ] && rm -rf "${CLEANUP_DIR}"; }
+        trap cleanup EXIT
+
+        if command -v goreleaser >/dev/null 2>&1; then
+          GORELEASER_BIN="$(command -v goreleaser)"
+        else
+          # Build NATIVELY, no GOOS/GOARCH in the environment — same
+          # reasoning as release:dry-run's identical comment: a
+          # GOARCH-cross-built GoReleaser runs under Rosetta and its child
+          # xcrun then resolves as x86_64, which cannot load the
+          # arm64-only libxcrun.dylib from CommandLineTools.
+          CLEANUP_DIR="$(mktemp -d)"
+          GORELEASER_BIN="${CLEANUP_DIR}/goreleaser"
+          GOWORK=off go build -modfile=go.tool.mod \
+            -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+        fi
+
+        # Assert the resolved binary's version (`goreleaser --version`)
+        # matches the go.tool.mod pin before invoking release — keeps
+        # prefer-then-build honest at the point of use (MAINT-03).
+        RESOLVED_VERSION="$("${GORELEASER_BIN}" --version 2>&1 | grep -m1 '^GitVersion:' | awk '{print $2}')"
+        if [ -z "${RESOLVED_VERSION}" ] || [ "${RESOLVED_VERSION}" != "${PINNED_VERSION}" ]; then
+          echo "::error::resolved goreleaser (${GORELEASER_BIN}) reports version '${RESOLVED_VERSION}', want '${PINNED_VERSION}' (go.tool.mod's pin, MAINT-03). A stale goreleaser on PATH would otherwise silently hollow out TestGoreleaserPinParity's guarantee at the point of use."
+          exit 1
+        fi
+
+        # No GOOS/GOARCH set here: unlike `build --single-target`,
+        # `goreleaser release` resolves every target from each builds:
+        # entry's own goos:/goarch: list, not from the environment. A
+        # carried-over GOOS/GOARCH would be at best a no-op and at worst
+        # mask a misconfiguration.
+        "${GORELEASER_BIN}" release --clean
+
   check:linux-cross-export:
     desc: >-
       Resolve both linux binaries the just-run `goreleaser release`

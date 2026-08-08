@@ -93,6 +93,11 @@ Every command CI runs is defined exactly once, as a `task` target — see
   all four release targets in one invocation — on a native darwin host,
   without publishing or signing anything. Needs `zig`, `syft`, and `cosign`
   on `PATH` in addition to the C toolchain above.
+- `task release:goreleaser` is the single definition of a REAL release —
+  the same `goreleaser release --clean` composition, but it actually
+  publishes to GitHub Releases, signs with cosign, and emits SBOMs. It is
+  what release.yml's `release` job calls on a tag push; use `release:dry-run`
+  above, not this one, to exercise the composition locally.
 - `task check:linux-cross-export` and `task check:linux-cross-exec` are the
   REL-05 real-Linux-execution proof: the first resolves the two zig-crossed
   linux binaries `release:dry-run` just produced; the second runs one of
