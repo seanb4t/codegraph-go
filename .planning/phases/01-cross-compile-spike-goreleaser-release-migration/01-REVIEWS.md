@@ -1,7 +1,8 @@
 ---
 phase: 1
 reviewers: [codex, pi]
-reviewed_at: 2026-08-08T16:28:42Z
+reviewed_at: 2026-08-08T17:05:01Z
+review_cycle: 3
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -11,330 +12,314 @@ plans_reviewed:
   - 01-06-PLAN.md
 ---
 
-# Cross-AI Plan Review — Phase 1
+# Cross-AI Plan Review — Phase 1 — Cycle 3 (FINAL)
 
 ## Codex Review
 
 ## Summary
 
-Most cycle-1 fixes hold, including the ordering, authentication, OIDC-surface, SBOM-tooling, and machine-checkable REL-05 repairs. Two release-critical issues remain. First, 01-02’s proposed `binary_signs.signature: "${artifact}.sigstore.json"` is incompatible with GoReleaser’s actual binary-signing semantics: `${artifact}` is the pre-archive binary path/name, and all four builds produce a binary named `codegraph`. Plan 01-06 will therefore expose the predicted collision, but it provides no remediation branch and forbids changing the faulty configuration. Second, 01-05 assumes `workflow_run.head_branch` reliably contains the triggering tag, while GitHub only guarantees that the downstream workflow’s own `GITHUB_REF`/`GITHUB_SHA` refer to the default branch. The verifier needs an explicit, validated tag-resolution mechanism. Consequently, executing all six plans as written does not reliably achieve the phase goal.
+The cycle-2 fixes landed correctly. The key-injection rehearsal is executable against GoReleaser v2.17.1, the RED-path signing remediation is sufficient, and the post-release workflow’s dispatch guard, tag-output wiring, and predecessor selection are coherently specified. No materially unresolved concern remains. The main residual risk is empirical—the first real publish pipe execution—which the plans already identify and gate appropriately.
 
-## Cycle-1 Fix Verification
+## Cycle-2 Fix Verdicts
 
-| Finding | Verdict | Evidence and mechanism |
+| Cycle-2 fix | Verdict | Evidence |
 |---|---|---|
-| H1: `release:[published]` races uploads | **PARTIAL** | Switching to `workflow_run` correctly waits for the upstream workflow to complete. This fits the current sequence: release-please creates the tag/release ([release-please.yml:57](.github/workflows/release-please.yml#L57)), then the tag triggers `release` ([release.yml:47](.github/workflows/release.yml#L47)). However, 01-05 derives `$TAG` from `github.event.workflow_run.head_branch` without proving tag semantics. GitHub documents that a `workflow_run` job’s own `GITHUB_REF` and `GITHUB_SHA` are the default branch and its tip, not the upstream tag. The ordering fix holds; tag recovery remains under-specified. |
-| H2: publish pipe unconfigured; `--clobber` deleted | **HOLDS** | 01-02 Task 3 pins `replace_existing_artifacts: true` and `prerelease: auto`; 01-03 JOINT #2 requires that configuration to coexist with removal of `--clobber`. This correctly preserves the behavior currently provided at [release.yml:318](.github/workflows/release.yml#L318)-[325](.github/workflows/release.yml#L325). The unexercised publish pipe is explicitly carried to the one-way checkpoint. |
-| H3: OIDC reach broadens | **HOLDS** | 01-03 now acknowledges the expanded privileged surface instead of treating job count as sufficient. It forbids GoReleaser hooks, removes the mutable cache currently used at [release.yml:126](.github/workflows/release.yml#L126), limits the job to one Taskfile shell entry point, and records the CGo build inside the OIDC boundary as an accepted residual. |
-| H4: SBOM activation breaks dry run/canary | **HOLDS** | 01-01 adds `syft`/`cosign` preconditions and installs both before the dry run. This correctly anticipates the currently separate syft installation at [release.yml:266](.github/workflows/release.yml#L266) and the fact that `--skip=publish,sign` does not skip SBOM generation. |
-| H5: verifier has no `gh` authentication | **HOLDS** | 01-05 places `GH_TOKEN` on every `task verify:*` step and adds Taskfile preconditions. The distinction from GoReleaser’s `GITHUB_TOKEN` is correct; the current `gh` publisher likewise uses `GH_TOKEN` at [release.yml:297](.github/workflows/release.yml#L297)-[300](.github/workflows/release.yml#L300). |
-| P2: `${artifact}` never dynamically exercised | **BROKEN** | 01-06 adds the right kind of experiment, but the configuration it tests is very likely already known to fail. Every build names its binary `codegraph` at [.goreleaser.yaml:47](.goreleaser.yaml#L47), [65](.goreleaser.yaml#L65), [84](.goreleaser.yaml#L84), and [96](.goreleaser.yaml#L96). GoReleaser’s pinned implementation assigns `${artifact}` from the binary artifact’s path and later publishes the signature artifact name using `art.Name`; see `sign.go:179–197` and `274–293` in `goreleaser/v2@v2.17.1`. Its default signature template adds OS/architecture specifically to avoid collisions (`sign_binary.go:16`). Moreover, keyed cosign signing requires `--key=<path>` in the arguments; `COSIGN_PASSWORD` only decrypts the selected key. 01-06 does not specify how the unchanged production args gain `--key`. |
-| S1: REL-05 evidence not machine-checkable | **HOLDS** | 01-01 now requires nonzero status counts and emits two machine-readable `REL05-EVIDENCE` lines. The intended JSON fields exist as `fileCount` and `nodeCount` at [status.go:51](internal/query/status.go#L51)-[52](internal/query/status.go#L52), and Task 2 explicitly instructs the executor to confirm them before scripting. |
-
-Spot checks of the remaining cycle-1 repairs:
-
-- C2, C3, C4, C5, C8, C9, C10, C11, P1, P6, S2, and C7/P5 are incorporated coherently.
-- C6 is only partial: 01-03 Task 1 says to always build GoReleaser from source, while Task 2 says the target should prefer the Action-installed binary and build only as a fallback.
-- The external-scanner fixture rejection is explicitly recorded and was not silently dropped.
-
-## Strengths
-
-- The phase now distinguishes static shape checks, snapshot experiments, real-Linux execution, and published-release verification instead of treating them as interchangeable evidence.
-- REL-05 is genuinely gated on two real architectures and the CGo parsing path, not build success or `--version`.
-- The two-sided JOINT checks in wave 2 accurately encode branch end-state invariants without reopening the adjudicated atomicity question.
-- The post-release verifier uses least privilege and classifies required, allowed, and unclassified assets rather than hard-coding a fragile total.
-- `codegraph upgrade "$TAG"` correctly avoids the timing-sensitive latest-release resolver implemented at [release.go:55](internal/upgrade/release.go#L55).
-- Typed YAML decoding matches the established repository pattern at [taskfile_shape_test.go:548](internal/upgrade/taskfile_shape_test.go#L548)-[590](internal/upgrade/taskfile_shape_test.go#L590).
+| HIGH-1 — cosign rehearsal lacked `--key` | **RESOLVED** | Plan 01-06 injects `--key=<absolute path>` immediately after `sign-blob` in a generated config and invokes it with `-f` ([01-06-PLAN.md:204](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-06-PLAN.md:204)). GoReleaser expands each configured argument and passes the resulting list directly to `exec.CommandContext` ([sign.go:205](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:205), [sign.go:249](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:249)). The process environment is inherited before pipe-specific additions, so `COSIGN_PASSWORD` reaches cosign ([sign.go:180](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:180), [sign.go:250](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:250)). |
+| HIGH-2 — no remediation after signature-name collision | **RESOLVED** | The plan now classifies collision, wrong-but-distinct, and green results, then authorizes two remediation candidates with mandatory rerun and static-test updates ([01-06-PLAN.md:271](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-06-PLAN.md:271), [01-06-PLAN.md:326](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-06-PLAN.md:326)). Candidate A is supported by v2.17.1: `signs.artifacts` accepts `binary`, `ids` filtering is applied, and raw-format archives become `UploadableBinary` artifacts carrying archive ID `raw` and the renamed asset name ([config.go:984](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/pkg/config/config.go:984), [sign.go:111](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:111), [archive.go:296](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/archive/archive.go:296)). If its filesystem-name validation rejects that shape, Candidate B remains authorized and validated. |
+| MEDIUM — dead `workflow_dispatch` fallback | **RESOLVED** | The required guard now explicitly admits non-`workflow_run` events, and the acceptance criteria require a dispatch observed executing rather than merely appearing green ([01-05-PLAN.md:172](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:172), [01-05-PLAN.md:354](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:354)). |
+| MEDIUM — tag resolution unvalidated | **RESOLVED** | `resolve-tag` validates tag shape and existence, binds the peeled tag commit to the upstream `head_sha`, emits `TAG-EVIDENCE`, and exposes one validated job output consumed via `needs` by both downstream jobs ([01-05-PLAN.md:189](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:189), [01-05-PLAN.md:217](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:217)). Standard GitHub Actions job outputs remain available through `needs` under `workflow_run`; nothing in this trigger changes that mechanism. |
+| MEDIUM — predecessor selection unspecified | **RESOLVED** | The plan specifies draft removal, semver parsing, strict `< $TAG` filtering, maximum selection, and a stable/prerelease policy, with behavioral checks for historical dispatches, RC adjacency, drafts, and no-predecessor cases ([01-05-PLAN.md:301](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:301), [01-05-PLAN.md:371](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:371)). |
+| LOW — stale `release: published` text | **RESOLVED** | Task 3 now explicitly reads evidence from the successful `workflow_run` path and its validated `TAG-EVIDENCE`, not the rejected publication event ([01-05-PLAN.md:489](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-05-PLAN.md:489)). |
+| LOW — unconditional GoReleaser source build contradicted install strategy | **RESOLVED** | Plan 01-03 now mandates one prefer-then-build algorithm and a version check on either path ([01-03-PLAN.md:177](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-03-PLAN.md:177)). This preserves the existing v2.17.1 pin in `go.tool.mod` and the workflow’s matching environment value ([go.tool.mod:234](/Volumes/Code/github.com/seanb4t/codegraph-go/go.tool.mod:234), [release.yml:55](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:55)). |
+| LOW — “third job” mutation named no concrete job | **RESOLVED** | The plan now explicitly creates and removes a throwaway scratch job, and acceptance requires that no scratch job survives and the final token-holder count returns to two ([01-03-PLAN.md:424](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-03-PLAN.md:424), [01-03-PLAN.md:461](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-03-PLAN.md:461)). |
 
 ## Concerns
 
-- **HIGH — The proposed signature naming mechanism cannot produce the required published sidecars as specified.**
+No unresolved actionable concerns.
 
-  `binary_signs` operates on `artifact.Binary` objects before archiving. GoReleaser sets `${artifact}` to the binary path, then sets the published signature artifact’s name using the binary’s `art.Name`. All four binary names are `codegraph`, so `"${artifact}.sigstore.json"` does not naturally become `codegraph_<tag>_<goos>_<goarch>.sigstore.json`.
+One implementation nuance is worth recognizing but does not require a plan change: Candidate A’s signature artifact may have the correct published `Name` while its on-disk signature basename follows the underlying binary path. GoReleaser initially expands `${artifact}` from `art.Path`, then records the signature artifact name using `art.Name` ([sign.go:179](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:179), [sign.go:274](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/internal/pipe/sign/sign.go:274)). The plan’s mandatory filesystem validation will catch this and route to Candidate B, so it cannot silently reach publication.
 
-  Plan 01-06 correctly anticipates this exact failure but says that `.goreleaser.yaml` must not be modified and defines no fail branch other than an unmet merge prerequisite. That means the six-plan execution can stall after wave 3 without a valid production configuration.
-
-  Concrete plan change: move the dynamic experiment ahead of finalizing 01-02’s signing mechanism, or let 01-06 amend `.goreleaser.yaml` after observing RED. Evaluate a post-archive `signs:` configuration over the raw `formats: [binary]` artifacts, or use a signature template that explicitly derives the published tag/OS/arch name. The chosen configuration must then be exercised in both keyed rehearsal and production-keyless argument forms.
-
-- **HIGH — The keyed rehearsal does not currently select the throwaway key.**
-
-  01-02’s proposed production args are:
-
-  ```yaml
-  sign-blob --bundle=${signature} ${artifact} --yes
-  ```
-
-  01-06 generates a key and sets `COSIGN_PASSWORD`, but a password does not select a private key. GoReleaser’s official keyed-cosign example includes `--key=cosign.key`; the unchanged config does not. Therefore the rehearsal will attempt keyless signing and fail without OIDC, or otherwise exercise a different mechanism than intended.
-
-  Concrete plan change: specify the exact mechanism. Prefer a temporary `cosign` wrapper placed first on `PATH` that injects `--key="$TEMP_KEY"` only for rehearsal while preserving GoReleaser’s artifact/signature substitutions, or add a templated optional key argument proven to be absent in production and present in rehearsal. Do not rely on an unspecified environment variable.
-
-- **MEDIUM — `workflow_run.head_branch` is not a sufficiently proven tag source.**
-
-  The upstream workflow is tag-triggered at [release.yml:47](.github/workflows/release.yml#L47)-[50](.github/workflows/release.yml#L50), but GitHub documents the downstream `workflow_run` context’s own `GITHUB_REF` and `GITHUB_SHA` as the default branch and its latest commit. The plan assumes `workflow_run.head_branch` is the tag and passes it straight to release verification.
-
-  Concrete plan change: add a first job/step that resolves and validates the tag. It should require a `v[0-9]*` value, verify `refs/tags/$TAG` exists, and verify that the tag’s peeled commit equals `github.event.workflow_run.head_sha`. If `head_branch` is empty or not a tag, query tag refs pointing to `head_sha` and require exactly one matching release tag. Emit a `TAG-EVIDENCE` line and use its job output everywhere. Keep the manual dispatch input as the explicit historical-tag path.
-
-- **MEDIUM — Prior-release selection is ambiguous for historical dispatches and prereleases.**
-
-  01-05 says to obtain “the release immediately preceding `$TAG` via the `gh` API,” but does not define ordering or filtering. API list order is publication chronology, not necessarily semantic-version predecessor order. A historical re-verification can therefore select a newer release, and an RC can select the wrong stable/prerelease neighbor.
-
-  Concrete plan change: enumerate non-draft releases, parse semantic versions, filter to versions strictly less than `$TAG`, and select the maximum under an explicit prerelease policy. Add tests for stable-after-RC, historical dispatch, drafts, and a first-release/no-predecessor case.
-
-- **LOW — GoReleaser installation behavior remains contradictory.**
-
-  01-03 Task 1 instructs the target to build GoReleaser natively before invocation; Task 2 instructs it to prefer the Action-installed binary and only build locally as fallback. The latter is the stated cycle-1 decision and preserves the meaning of `GORELEASER_VERSION`.
-
-  Concrete plan change: rewrite Task 1 to one algorithm: use `command -v goreleaser` when available, otherwise build the pinned `go.tool.mod` version into a temporary path. Assert `goreleaser --version` matches the pin before release.
-
-## Suggestions
-
-- Add a small config-level integration test using the pinned GoReleaser module’s actual `dist/artifacts.json` after signing. Assert both signature artifact `Name` and `Path`; filesystem basename count alone can miss distinct paths whose published names collide.
-- In 01-05, verify the upstream workflow identity using `github.event.workflow_run.path == ".github/workflows/release.yml"` or equivalent metadata in addition to the workflow display name.
-- Have the post-release workflow record upstream run ID, upstream `head_sha`, resolved tag, and tag commit in one evidence line. That makes the workflow-run-to-release binding independently inspectable.
-- Resolve the 01-06 signing failure branch before execution: “if RED, choose mechanism X and repeat” is needed just as REL-05 has an enumerated fallback.
+The external-config location is also safe: v2.17.1 loads the supplied path but does not change the working directory ([config.go:37](/Users/sean/go/pkg/mod/github.com/goreleaser/goreleaser/v2@v2.17.1/cmd/config.go:37)); `dist` therefore remains rooted at the invocation working directory, as the plan additionally verifies.
 
 ## Risk Assessment
 
-**Overall risk: HIGH.**
-
-The cycle-1 revisions materially improved the plan set, and five of the seven principal repairs hold. However, the release-critical sidecar contract remains technically unsound under GoReleaser’s actual `binary_signs` implementation, and the new rehearsal cannot currently select its throwaway key. The downstream verifier also lacks a fully reliable binding from the completed upstream run to the exact tag being verified.
-
-**Verdict: NO-GO as written.** Executing these six plans now is likely to reach 01-06, expose colliding or wrongly named signature artifacts—or fail by attempting keyless signing without OIDC—and then halt without an authorized remediation path. Fix the signing mechanism/rehearsal and make tag resolution explicit; after those changes, the remaining structure is strong enough to achieve the phase goal.
+**MEDIUM.** The plans are implementation-ready and the cycle-2 repairs converge. Remaining risk comes from inherently empirical operations: macOS-hosted CGo cross-compilation, real runner behavior, and the first live GoReleaser publish-pipe execution. Those risks are explicitly gated by recorded canary evidence, sign-pipe rehearsal, a one-way publish checkpoint, and post-release verification against re-downloaded assets.
 
 ---
 
 ## pi Review
 
-I have enough evidence. A few mechanism-level checks surfaced real issues; writing the review.
+I now have everything I need. All claims verified against the pinned `goreleaser/v2@v2.17.1` module source in the local module cache and the repo tree. Writing the review.
 
-# Cross-AI Plan Review — Cycle 2
+---
+
+# Cross-AI Plan Review — Phase 1 — Cycle 3 (FINAL)
 
 ## 1. Summary
 
-The cycle-1 fixes overwhelmingly hold, and they hold in the right way: the revisions do not just add prose, they add machine-checkable assertions (JOINT criteria, `REL05-EVIDENCE`/`SIGN-EVIDENCE` lines, negative-grep criteria) that I traced against the live tree and found correctly anchored (e.g., `release.yml:238-244` really does contain the `sha256sum` step the new tests will catch; `internal/upgrade/upgrade.go:209` is `releaseAssetName()` as cited; `internal/cli/upgrade.go` really does accept `upgrade [version]` positionally, confirming C10's fix). However, cycle-2 verification surfaced **two genuinely new mechanism bugs**: (a) plan 01-05's `workflow_dispatch` fallback is silently dead because both jobs carry an unconditional `workflow_run.conclusion` guard, and (b) plan 01-06's "point cosign at the throwaway key via the environment" is not executable as specified — the `binary_signs:` args shipped by 01-02 contain no `--key` flag, and cosign's `env://` key reference does not work through GoReleaser's sign pipe (goreleaser/goreleaser#4221), so the sign leg will fall into the keyless OIDC flow it was designed to avoid. Both are fixable with small plan-text edits. Overall risk: **MEDIUM**, down from cycle 1.
+The cycle-2 fixes mostly landed correctly, and I verified the load-bearing mechanisms against the **pinned `goreleaser/v2@v2.17.1` module source** in the local module cache, not just the plan text. HIGH-1's key-injection mechanism is sound: `-f <copy-outside-repo>` does **not** re-root `dist/` (it stays CWD-relative), and `--key` in the `sign-blob` args is valid. HIGH-2's premise is **confirmed real** — all four build ids name the binary `codegraph` (`.goreleaser.yaml:49,67,84,98`), `binary_signs:` filters the raw `artifact.Binary` build outputs (`internal/pipe/sign/sign_binary.go:80`), and the published signature artifact name derives from `art.Name` (`sign.go:275-276`), so the shipped config would publish four colliding `codegraph.sigstore.json` assets. Candidate A (`signs:` over the raw archive outputs) is valid for v2.17.1 with the enum value `binary` plus `ids: [raw]` (`sign.go:113-115` → `UploadableBinary`; `archive.go:308-325` → renamed name + `ExtraID: raw`).
 
-## 2. Cycle-1 Fix Verification
+**However, tracing the sign pipe end-to-end surfaced two genuinely unresolved HIGH findings in the same collision class** — one in 01-06's new GREEN/RED oracle (it observes the wrong signal and would reject the correct fix), and one in 01-02's `sboms:` block (the identical `${artifact}` collision, statically pinned as "correct" by a demonstrated-RED test, with no rehearsal and no remediation branch). Both are invisible to the executing agent and both defeat verification integrity — exactly what this final cycle exists to catch.
 
-| Finding | Verdict | Evidence |
+## 2. Cycle-2 Fix Verdicts
+
+| Cycle-2 fix | Verdict | Evidence |
 |---|---|---|
-| H1 `release:[published]` race | **HOLDS, with one new bug** (see Concern 1) | `release-please` does create tag+Release together (release.yml:289-296 comment confirms); the `workflow_run` + `conclusion=='success'` + bounded-retry design is correct. `workflows: ["release"]` matches `name: release` at `release.yml:46`. Negative-grep criterion is sound. |
-| H2 `release:` pipe unconfigured | **HOLDS** | 01-02 Task 3 pins `replace_existing_artifacts: true` (correct: today's idempotency comes from `gh release upload --clobber` at `release.yml:325`, which 01-03 deletes); JOINT #2 is a real two-sided check; the "unexercisable" framing in 01-05 Task 2's NAMED UNEXERCISED SURFACES is honest and correct — no rehearsal exists short of publishing. |
-| H3 OIDC intra-job reach | **HOLDS** | T-01-29's enumeration matches the tree: `nscloud-cache-action` is at `release.yml:126-129`, `id-token: write` at `:221`, top-level `permissions: contents: read` at `:52-53`. `TestNoGoreleaserHooksInReleaseConfig` is the right closure for the arbitrary-command path. Accepted-residual framing for CGo-in-boundary is honest. |
-| H4 sboms breaks dry-run | **HOLDS** | Correct sequencing: preconditions + installer steps land in wave 1, ahead of 01-02's `sboms:` activation in wave 2. `--skip=publish,sign` indeed does not skip the sboms pipe. |
-| H5 no auth env for `gh` | **HOLDS** | `GH_TOKEN: ${{ github.token }}` on verify steps is correct for the `gh` CLI; the explicit contrast with 01-03's `GITHUB_TOKEN` (GoReleaser's release pipe) is right — today's publisher uses `GH_TOKEN` at `release.yml:297` because it's `gh release upload`. Not an inconsistency. |
-| P2 `${artifact}` never exercised | **HOLDS in intent, mechanism broken** (Concern 2) | The rehearsal design is exactly right — all four build ids name the binary `codegraph` (`.goreleaser.yaml:49,67,84,98`, verified), so a wrong resolution collides, and there is a real chance it *does* resolve to the binary path (see Concern 2). The plan correctly gates 01-05's merge on it. But the key-injection mechanism doesn't work as written. |
-| S1 REL-05 human-only bar | **HOLDS** | `REL05-EVIDENCE` line + Task-3 criteria block checkable from `gh run view` output converts the bar to machine-checked. Runner labels match provisioned profiles (do-not-re-litigate #1 confirmed: arm64 leg is a `runs-on:` value). |
-| C2/C3/C4/C5/C6/C8/C9/C10/C11/P1/P6/S2/C7/P5 | **HOLD (spot-checked)** | C3: `CHANGELOG.md` exists at repo root, so the corrected default-set wording is accurate. C10: `cobra.MaximumNArgs(1)` + `Use: "upgrade [version]"` at `internal/cli/upgrade.go:31-37` confirms `upgrade "$TAG"`. C9: classification replaces fixed-17 correctly. C6: `goreleaser-action` with `install-only: true` is already the pattern at `release.yml:137-143`, so the decision is consistent with the tree. |
+| **HIGH-1** — key injection via generated config copy, `-f` outside repo | **RESOLVED** | `dist` is a plain relative default (`internal/pipe/dist/dist.go:31-32`) used via `os.Stat`/`os.MkdirAll` against the process CWD (`dist.go:23,41,61`) — no `filepath.Join(dir-of-config, …)` anywhere in the pipe. So `-f "$TMPDIR/.goreleaser.signtest.yaml"` run from the repo root leaves `dist/` at the repo root, and the plan's post-run `dist/artifacts.json`-exists assertion is the correct guard. `--key` position: the sign pipe executes `exec.CommandContext(ctx, cfg.Cmd, args...)` with args in config order (`sign.go:206-215, 251`), and `cosign sign-blob --key=<path> --bundle=… <artifact> --yes` is valid keyful signing (no OIDC). The additions-only diff guard and trap-cleaned `mktemp -d` are sound. |
+| **HIGH-2** — on-RED remediation branch | **PARTIALLY RESOLVED** | Branch structure, classification, candidate ordering, and the five-step validation are all sound, and Candidate A is mechanically valid for v2.17.1 (see Finding 2 below for the exact enum). **But the observation oracle the branch is keyed on is broken — see Finding 1.** As specified, applying the *correct* Candidate A would still report RED, sending the executor into the plan's own "both candidates failed → stop and report" deadlock branch. |
+| MEDIUM — event-aware `workflow_dispatch` guard | **RESOLVED** | `github.event_name != 'workflow_run' \|\| github.event.workflow_run.conclusion == 'success'` is correct Actions semantics: under `workflow_dispatch`, `github.event.workflow_run` is null and the disjunct short-circuits true, so jobs execute; under `workflow_run` with conclusion≠success they skip. The behavioral criterion (observed dispatched run, not a green skip) is the right evidence bar. |
+| MEDIUM — `resolve-tag` job | **RESOLVED** | Job outputs via `needs: resolve-tag` work identically under `workflow_run` and `workflow_dispatch` triggers; the shape/existence/peeled-commit validation plus exactly-one-tag fallback is sound. `TAG-EVIDENCE` mirrors the phase's `REL05-EVIDENCE` convention. |
+| MEDIUM — semver predecessor selection | **RESOLVED** | The five-step algorithm (drop drafts → parse → strictly-less-than `$TAG` → max under stated prerelease policy → `PRIOR-RELEASE` log) correctly handles the stable-after-RC, historical-dispatch, and no-predecessor cases the criteria name. |
+| LOW — stale `release: published` text in 01-05 Task 3 | **RESOLVED** | Task 3 `read_first` now says `workflow_run` and points at `TAG-EVIDENCE`. Verified in plan text. |
+| LOW — 01-03 Task 1 prefer-then-build vs C6 | **RESOLVED** | The single prefer-then-build algorithm with the either-way `goreleaser --version` pin assertion removes the contradiction and closes the stale-local-binary hole in `TestGoreleaserPinParity`'s guarantee. |
+| LOW — "THIRD job" scratch-job rewording | **RESOLVED** | The mutation now explicitly creates and reverts a scratch job, preserving the load-bearing "must produce a third holder" point, with a no-leftover criterion. |
 
-## 3. Strengths
+## 3. Concerns
 
-- **The JOINT criteria are real and correctly scoped.** JOINT #1/#2 read the other plan's file without adding it to `files_modified`, preserving the wave-2 zero-overlap invariant; and the "why no commit-ordering criterion" paragraph in 01-03 is the right argument (tag-push-only trigger at `release.yml:47-50` + squash-only + release-please tag authority ⇒ `main` never observes a half-migrated state).
-- **The throwaway-key insight is the best idea in the revision set.** It converts the one contract that bricks every user's `codegraph upgrade` from a static assertion into a dynamic observation *before* the one-way publish, and the distinctness-separate-from-count assertion targets the actual failure mode (all four build ids produce `codegraph`, verified above).
-- **01-04's binding-decision block is a model for adjudicated choices** — verbatim command string, no paraphrase, reversibility preserved at the correct gate (01-05 Task 2), and the `verify.plan-structure` warning pre-annotated as expected.
-- **Threat-model honesty improved materially**: T-01-29 records the CGo-compile-inside-the-OIDC-boundary as an *accepted* residual rather than claiming mitigation; the REL-09 transient-window assumption is recorded as accepted-not-covered (P6). This is how residual risk should be written down.
-- **01-06's flagged-assumption row on snapshot-vs-tag equivalence** correctly narrows rather than claims closure, and hands the remainder to 01-05's post-release check.
+### Finding 1 — HIGH / ACTIONABLE — 01-06's oracle observes on-disk basenames, which cannot distinguish the broken config from the correct fix
 
-## 4. Concerns
+**Evidence (pinned `goreleaser/v2@v2.17.1`):**
 
-- **[MEDIUM] 01-05: the `workflow_dispatch` fallback is dead.** Task 1 requires BOTH jobs to carry `if: ${{ github.event.workflow_run.conclusion == 'success' }}`. On manual dispatch, `github.event.workflow_run` is null, the guard evaluates false, and both jobs silently skip — so the retained "re-verify historical tags" trigger (an acceptance criterion: `workflow_dispatch:` with a `tag` input) can never run, and it skips rather than failing, so nobody would notice. **Fix:** change the guard in both jobs to `if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'`, and add an acceptance criterion asserting that shape.
-- **[MEDIUM] 01-06: the keyed-signing mechanism is unexecutable as written.** The `binary_signs:` args shipped by 01-02 are fixed: `["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]` — no `--key`. Without `--key`, cosign performs the *keyless* OIDC flow, which requires a browser/device interaction and fails on a headless runner (or hangs). Passing the key "via the environment" does not work: cosign's `env://KEY_VAR` key reference must still appear in the `--key` flag, and GoReleaser's pipe has been reported not to substitute it (goreleaser/goreleaser#4221). 01-06's own prohibition forbids editing `.goreleaser.yaml`, so the executor will be forced to improvise mid-task. **Fix (plan-text change, one paragraph in Task 1):** specify that the target generates a *temporary copy* of `.goreleaser.yaml` (e.g. `dist/.goreleaser.signtest.yaml`) with `--key=<temp key path>` appended to the `binary_signs` args and `COSIGN_PASSWORD` in the pipe env, invokes `goreleaser release -f <copy> --snapshot --skip=publish --clean`, and deletes the copy on exit — keeping the committed config untouched, which is what the prohibition actually protects. Note this slightly weakens the rehearsal's equivalence claim (args differ from production by exactly one flag); record that in the flagged-assumption row rather than hiding it.
-- **[MEDIUM] 01-06/01-02: if the rehearsal fails (likely), there is no remediation path.** For `artifacts: binary`, GoReleaser's sign pipes template `${artifact}` from the *binary* artifact (named `codegraph` in all four builds), and sidecars land next to the binary in per-build `dist/` subdirs with **four identical basenames** — publishing collides on GitHub's basename-keyed asset store. This is precisely what 01-06 exists to catch, but neither plan says what to do when the expected failure occurs, so the executor will invent the fix at the worst moment. **Fix:** add a short "on failure" branch to 01-06 Task 1 naming the candidate remediation (switch signing from `binary_signs:` to `signs:` over the `archives[id=raw]` outputs — whose names are already the templated `codegraph_<tag>_<goos>_<goarch>` — or a `signature` template keyed on per-build id), routed back through 01-02's static test which must then assert the *new* template.
-- **[LOW] 01-05 Task 3 `read_first` contradicts the H1 fix.** Its first bullet still says the post-release workflow runs "automatically on `release: published`" — pre-revision text. An executor reading it re-learns the racing trigger the plan just removed. **Fix:** update that bullet to say `workflow_run`.
-- **[LOW] 01-03: the OIDC mutation-RED demonstration is awkward as specified.** After the collapse, `release.yml` has exactly two jobs; "add `id-token: write` to a THIRD job" requires inventing a job to mutate. **Fix:** reword the demonstration as "add `id-token: write` to any job other than `release` (e.g. a scratch job)" and note it must be reverted, or mutate the `provenance:` allowance's staleness companion instead.
+- `sign.go:182`: `env["artifact"] = art.Path` — at signature-path computation time, `${artifact}` is the artifact's **filesystem path**.
+- `sign.go:195-197` + `tmplPath` (`sign.go:171-177`) + `relativeToDist` (`sign.go:160-168`): the on-disk signature file is written at `<art.Path>.sigstore.json`, kept verbatim when already under `dist/`.
+- `archive.go:308-325`: for `formats: [binary]`, the archive pipe's `UploadableBinary` artifact has `Path: binary.Path` — **the same build-output path** (`dist/<build-id>_<goos>_<goarch>/codegraph`). No renamed copy ever exists on disk; the renamed name lives only in artifact metadata.
+- `sign.go:275-276` (`env["artifact"] = art.Name` after signing) is what computes the artifact **record** name — the thing the release pipe publishes (`release.go:188-191` uploads by `artifact.Name`; `artifact.go:149` includes `Signature` in `ReleaseUploadableTypes`).
 
-## 5. Suggestions
+**Consequence:** under *both* the shipped `binary_signs:` config (broken: record names all `codegraph.sigstore.json`) *and* Candidate A (`signs: {artifacts: binary, ids: [raw]}`, correct: record names `codegraph_<tag>_<goos>_<goarch>.sigstore.json`), the **on-disk files are identical**: four files at `dist/<per-build-dir>/codegraph.sigstore.json`, basename `codegraph.sigstore.json` in every case. Plan 01-06 Task 1 asserts "their basenames are FOUR DISTINCT strings… each basename equals `<raw asset name>.sigstore.json`" against a filesystem listing. That oracle correctly goes RED on the shipped config — but goes RED **again** after the correct Candidate A remediation, at which point the plan's own instructions say "stop and report to the maintainer… the gate working correctly." The phase deadlocks on a false negative at the exact branch HIGH-2 exists to make safe. (The plan's "at most one survives" phrasing is also inaccurate — the four files coexist in per-build directories — but that is cosmetic.)
 
-- **01-06:** record the resolved four sidecar names into `dist/export/` as an artifact upload, so 01-05's merge prerequisite 5 can cite an artifact, not just a log line (logs expire; the checkpoint is human).
-- **01-05 Task 1:** `verify:self-upgrade` runs `codegraph upgrade "$TAG"` — note that `upgrade.Run` takes `Options.Version` positionally and hits `releases/latest` only when empty (`internal/upgrade/upgrade.go:93-109`); also consider asserting the prior binary's version string first, so a "prior == target" resolution failure reads clearly.
-- **01-01:** the exec legs `actions/download-artifact` across jobs in the same run needs no token — fine — but add `if-no-files-found`-equivalent (`download-artifact` fails hard by default; just confirm and note it).
-- **Phase-wide:** when 01-05 records the `release` job's wall-clock (Open Question 3), also record per-pipe durations from GoReleaser's own log; Phase 2's notarization lands in the same serialized job and the number will matter.
+**Plan change needed (01-06 Task 1):** change the SIGN-EVIDENCE oracle from filesystem basenames to the artifact metadata: assert via `dist/artifacts.json` (the metadata pipe writes all artifacts including their `name`, `metadata.go:65`) that exactly four artifacts with `type == "Signature"` exist, that their `name` fields are four distinct strings, and that each equals `<raw asset stem>.sigstore.json` for one platform. This is the same `artifacts.json`-first idiom the phase already uses everywhere else, and it observes the quantity that actually collides at publish.
 
-## 6. Risk Assessment
+### Finding 2 — HIGH / ACTIONABLE — the identical `${artifact}` collision afflicts `sboms:`, and 01-02 statically pins the broken template with no rehearsal and no remediation path
 
-**MEDIUM.** The cycle-1 fixes hold against the tree; the architecture (spike-first, gated publish, permanent canaries) is sound and the wave order is internally consistent — nothing in wave N depends on an artifact that wave N+1 produces, and the one structural impossibility (rehearsing the publish pipe) is correctly accepted rather than faked. The residual risk concentrates in two executable-mechanism bugs (Concerns 1 and 2) that are small plan-text edits away from resolution, plus one likely-eventual discovery (Concern 3) that the plan set is *designed* to surface but should pre-arm with a remediation path.
+**Evidence (pinned `goreleaser/v2@v2.17.1`):**
 
-**Verdict on the phase goal:** executing the six plans in the declared wave order — *with Concerns 1–3 addressed* — makes the phase goal true: REL-05 is decided on re-inspectable evidence before anything is built on it, REL-06/07/09 land atomically via squash-merge with joint end-state checks, and REL-08 is proven against re-downloaded published assets by automation that re-fires on every future release. Without the two MEDIUM fixes, the phase still likely succeeds, but 01-06 (the gate on the publish checkpoint) will stall on an unexecutable mechanism, and the historical re-verification path will be silently dead.
+- `sbom.go:65-66`: `sboms.artifacts` defaults to `archive` — the plan's D-17 warning is correct.
+- `sbom.go:124` + `artifact.go:734-750`: `artifacts: binary` filters `ByBinaryLikeArtifacts`, which dedupes by path *preferring `UploadableBinary`* — i.e. it catalogs the renamed raw-asset artifacts (same build paths).
+- `sbom.go:268-283` (`applyTemplate`): for `documents:`, `${artifact}` expands against `env["artifact"]` = the artifact's **dist path** (`sbom.go:275-279`), so `"${artifact}.spdx.json"` yields `dist/<build-dir>/codegraph.spdx.json`.
+- `sbom.go:250-253`: the SBOM artifact record name is `filepath.Base(path)` — **`codegraph.spdx.json` for all four platforms**. `SBOM` is in `ReleaseUploadableTypes` (`artifact.go:145`), so all four publish under one colliding name. With `replace_existing_artifacts: true` (01-02 Task 3), the clobbering is **silent** — the release succeeds with one `.spdx.json` asset instead of four, breaking D-17/DIST-03, and the first gate that can see it is 01-05's post-publish REQUIRED-set check — i.e. after the irreversible publish, under D-07 patch-forward. This is precisely the failure class 01-06 was created to catch for signatures, present in the neighboring pipe.
+
+**Worse than untested:** 01-02 Task 2's `TestSbomsArePerBinaryWithSpdxNames` asserts `documents:` contains **exactly** `"${artifact}.spdx.json"` — it statically pins the colliding template and is demonstrated-RED against any correction, and no plan carries an on-RED branch for it.
+
+**Plan change needed (01-02 Task 2 + 01-06 Task 1):**
+1. Change the `sboms:` document template to derive from the artifact **name**, not path — e.g. `documents: ["{{ .ArtifactName }}.spdx.json"]` (the template fields map includes `ArtifactName`, `tmpl.go:89,212`; for the deduped `UploadableBinary` it is the renamed `codegraph_<tag>_<goos>_<goarch>`, which reproduces D-17's `<asset>.spdx.json` exactly). Verify against the pinned module at execution time as the phase's convention requires.
+2. Update `TestSbomsArePerBinaryWithSpdxNames` to pin the corrected template.
+3. Extend 01-06's `release:dry-run-signed` leg (which already runs the sbom pipe, since only `publish` is skipped) to assert four distinct SBOM artifact **names** in `dist/artifacts.json` alongside the four signature names — same oracle fix as Finding 1, same run, near-zero marginal cost.
+
+### No other unresolved concerns
+
+The remaining open questions the review prompt named all check out: Candidate A's enum is `binary` (not `archive` — `artifacts: archive` would select only the zips, `sign.go:111-112` → `UploadableArchive`); `resolve-tag` output wiring holds under `workflow_run`; the do-not-relitigate items were all respected. REL-05's spike, the JOINT criteria, the binding `gh attestation verify` decision, and the accepted publish-pipe residual are unchanged and unaffected by these findings.
+
+## 4. Risk Assessment
+
+**MEDIUM.** The phase's architecture, sequencing, gates, and threat model remain sound, and 25 of 27 prior findings are verifiably resolved. But the two open findings sit in the phase's highest-stakes spot: the published-asset naming contracts that `codegraph upgrade` and DIST-03 depend on, discoverable only at publish time if the plans execute as written. Finding 1 turns the phase's own safety rehearsal into a deadlock trap; Finding 2 is a silent, clobbered-asset supply-chain regression statically locked in by a demonstrated-RED test. Both fixes are small, local, and fully specified above (a jq-over-`artifacts.json` oracle and a `{{ .ArtifactName }}` template change), require no re-planning of scope, and can be applied as a targeted revision without another convergence cycle. With those two edits applied, the risk drops to LOW and the phase is ready to execute.
 
 ---
 
 ## Consensus Summary
 
-This is **cycle 2** of the convergence loop. Both lanes (Codex, pi) were prompted to judge whether
-the cycle-1 fixes hold, not to re-derive cycle 1, and both had repo access and cited `file:line`
-evidence throughout. Both are prompt-fed, source-grounded lanes — neither carries a `diff-only` or
-`[reviewed-without-repo-access]` caveat, so both count at full consensus weight.
+Both reviewers had full repo access and both verified against the pinned
+`goreleaser/v2@v2.17.1` module source rather than plan text alone. They agree that **all eight
+cycle-2 fixes landed**, with one qualification: pi grades HIGH-2 PARTIALLY RESOLVED because the
+remediation branch's *observation oracle* is keyed on the wrong signal.
 
-**Verdict: the cycle-1 repairs substantially hold.** Both reviewers independently graded H2, H3, H4,
-H5 and S1 as HOLDS with concrete evidence, and both confirmed the C2–C11 / P1 / P6 / S2 / C7-P5
-incorporations landed coherently. Both also confirmed the C1 rejection was recorded rather than
-silently dropped. Neither reviewer re-raised any of the nine adjudicated items.
+The orchestrator independently re-derived every load-bearing claim below from the pinned module
+source in the local module cache, and — for the mechanism questions — empirically against the
+installed `goreleaser` binary with an instrumented `cosign` stand-in. Nothing here rests on
+reviewer assertion.
 
-**But cycle 2 surfaced two genuinely new, converging mechanism defects in the signing rehearsal
-(plan 01-06 + the config plan 01-02 ships), and both are blocking.** They were found independently
-by both lanes from different starting points, which is the strongest signal this review produced.
+**Net result: 25 of 27 prior findings are verifiably resolved. Two HIGH findings remain, both in
+the same defect class — GoReleaser expands `${artifact}` from an artifact's PATH, while the
+published release asset is named from its NAME, and for `formats: [binary]` outputs those two
+differ.** One is a cycle-2 fix that is structurally right but measures the wrong quantity; the
+other is a pre-existing defect in 01-02 that no prior cycle caught.
 
-Overall risk: the lanes diverge on the headline number — Codex says **HIGH / NO-GO as written**, pi
-says **MEDIUM**. The divergence is about consequence, not about mechanism: both agree the signing
-rehearsal cannot execute as specified. Codex weights that as phase-blocking because 01-06 gates the
-one-way publish checkpoint in 01-05 Task 2; pi weights it as "small plan-text edits away." Since the
-defect sits on the gate protecting the single irreversible action in the phase, this review adopts
-the more conservative reading: **the two signing findings are HIGH and must be resolved before
-execution.**
+### Independently verified — the questions cycle 2 left open
+
+| Question | Verdict | Evidence |
+|---|---|---|
+| Is `--key=` valid immediately after `sign-blob`? | **YES** | GoReleaser expands `${…}` placeholders and passes the args array to `exec.CommandContext` verbatim — no reordering, no validation (`internal/pipe/sign/sign.go:206-215`, `:251`). Recorded argv from a real run is index-for-index identical to the YAML. GoReleaser's own keyed-cosign example uses exactly this position. |
+| Does `COSIGN_PASSWORD` actually reach cosign? | **YES** | `cmd.Env = env.Strings()` replaces the child environment, but `ctx.Env` is seeded from `ToEnv(append(os.Environ(), config.Env...))` (`pkg/context/context.go:141`), so an exported `COSIGN_PASSWORD` is inherited. 01-06's conditional "add it to the pipe environment if the pipe does not already inherit" resolves to "not needed". |
+| Does `--key` perturb `${artifact}`/`${signature}` templating? | **NO** | Follows necessarily from the args being unparsed. The plan's flagged assumption is correct. |
+| Does `goreleaser -f <config outside repo root>` re-root `dist/`? | **NO** | `dist` resolves against the process working directory, not the config's directory (`internal/pipe/dist/dist.go:23,31-32,41,61` — a plain relative default used via `os.Stat`/`os.MkdirAll`, no join against the config dir). Verified empirically: config at `…/gr-cfg/`, CWD `…/proj` → `…/proj/dist/` created, `…/gr-cfg/dist/` absent. `--clean` wipes only the configured dist. 01-06's post-run `dist/artifacts.json`-at-repo-root assertion is correct and its rationale is accurate. |
+| Is candidate A (`signs:` over `archives[id=raw]`) valid for the pinned version? | **YES, with the enum `binary` — and its stated rationale is wrong** | See HIGH-A. |
+| Does `resolve-tag`'s `needs:`-based output wiring hold under `workflow_run`? | **YES** | Job outputs behave identically under `workflow_run` and `workflow_dispatch`. `outputs: tag` is declared once (`01-05-PLAN.md:199`) and consumed as `needs.resolve-tag.outputs.tag` at all seven reference sites with no name drift. |
+
+### HIGH-A — 01-06's sign oracle observes on-disk basenames, which cannot see the published name (ACTIONABLE)
+
+Raised by pi as HIGH/ACTIONABLE; independently found and confirmed by Codex and the orchestrator,
+though Codex graded it a non-actionable nuance.
+
+**Mechanism, from pinned source.** `${artifact}` expands to `art.Path` at signature-path
+computation time (`internal/pipe/sign/sign.go:179-182`, with the telling
+`env["artifactName"] = art.Name // shouldn't be used`). **After** signing, GoReleaser re-expands the
+same template with `env["artifact"] = art.Name` to compute the *published* artifact record
+(`sign.go:274-276`); the release pipe uploads by `artifact.Name`, and `Signature` is in
+`ReleaseUploadableTypes` (`internal/artifact/artifact.go:145`). For a `formats: [binary]` archive
+the rename lives only in `.name` — `.path` still points at the pre-rename build output
+(`internal/pipe/archive/archive.go:308-310`: `Name: finalName, Path: binary.Path`). No renamed copy
+is ever written to disk.
+
+**Consequence.** Under both the shipped `binary_signs:` config (broken) and candidate A (correct),
+the on-disk files are byte-identical in naming: four files at
+`dist/<per-build-dir>/codegraph.sigstore.json`. 01-06 Task 1 asserts on a filesystem listing —
+"exactly FOUR files matching `*.sigstore.json`… their basenames are FOUR DISTINCT strings"
+(`01-06-PLAN.md:243-246`), reused verbatim as validation step 1 (`:328`). That oracle correctly goes
+RED on the shipped config, but goes RED **again** on a correctly-applied candidate A.
+
+**Two corrections to the reviewers.** (1) pi concludes this deadlocks the phase. It does not:
+candidate B derives `signature:` from tag/OS/arch rather than from `${artifact}`, so
+`relativeToDist` (`sign.go:160-168`) places four distinctly-named sidecars at the dist root and the
+re-templated published name is equally correct — **B passes the oracle and is genuinely correct.**
+The plan authorizes B on exactly this trigger ("ONLY if A is rejected by … the pinned module's
+actual behavior", `01-06-PLAN.md:319-320`), so the branch fails closed onto a working config.
+(2) The plan's worry that B "may fix the on-disk filename and still publish a colliding asset name"
+(`:321-324`) is over-pessimistic in B's favour, not a live risk. (3) The plan's "at most one
+survives" phrasing (`:245`) is inaccurate — the four files coexist in per-build directories.
+
+**Why it is still actionable.** The oracle never observes the quantity that actually collides at
+publish. It happens to give the right verdict for the two reachable configs, but it false-REDs the
+PREFERRED candidate, and it would commit into `.goreleaser.yaml` a rationale comment asserting
+something untrue about `${artifact}` (`01-06-PLAN.md:302-316` instructs recording that reasoning).
+Decisively: **this same oracle blindness is what lets HIGH-B through undetected.**
+
+**Plan change needed (01-06 Task 1).** Derive `SIGN-EVIDENCE` from `dist/artifacts.json` — which
+the plan already asserts lands at the repo root — rather than from a filesystem glob: assert exactly
+four artifacts with `type == "Signature"`, four distinct `name` values, each equal to
+`<raw asset stem>.sigstore.json` for one platform. Correct candidate A's rationale to name
+`artifacts: binary` (not `archive`) and to stop claiming `${artifact}` yields the renamed asset.
+
+Two supporting traps worth recording in the plan: `signs.artifacts: archive` filters
+`UploadableArchive` (`sign.go:111`) and so matches **nothing** for a `formats: [binary]` archive —
+and a zero match is `log.Warn("no artifacts matching the given filters found")` + `return nil`, not
+an error. `goreleaser check` does **not** validate this enum (a bogus value returns "1 configuration
+file(s) validated"), so validation step 3 is vacuous for this class of error. Note also that the
+literal `binary` means `UploadableBinary` in a `signs:` block but `artifact.Binary` in a
+`binary_signs:` block.
+
+### HIGH-B — the identical collision afflicts `sboms:`, and 01-02 statically pins the broken template (ACTIONABLE, NEW)
+
+Raised by pi. **Independently confirmed by the orchestrator against pinned source and against
+today's pipeline.** This is a new finding — no prior cycle caught it.
+
+**Mechanism.** In `documents:`, `${artifact}` expands to the artifact's dist-relative **path**
+(`internal/pipe/sbom/sbom.go:268-283`, via `subprocessDistPath`). The SBOM artifact record is then
+named `filepath.Base(match)` (`sbom.go:250-253`). `artifacts: binary` filters
+`ByBinaryLikeArtifacts` (`sbom.go:124`), which dedupes by path preferring `UploadableBinary` — whose
+`Path` is still the pre-rename build output. So `documents: ["${artifact}.spdx.json"]` yields
+`dist/<build-dir>/codegraph.spdx.json` and a record name of **`codegraph.spdx.json` for all four
+platforms**. `SBOM` is in `ReleaseUploadableTypes` (`artifact.go:145`), so all four publish under
+one name.
+
+**Corroboration from GoReleaser itself.** Upstream's own default for `artifacts: binary` is
+`documents: ["{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}.sbom.json"]` (`sbom.go:70-71`) — a
+name-shaped, per-platform template, chosen precisely because the path-derived one collides.
+
+**This is a regression, not a pre-existing quirk.** Today's pipeline iterates the already-renamed
+assets and runs `syft "$f" -o spdx-json="${f}.spdx.json"` (`.github/workflows/release.yml:275-277`),
+producing four distinct `codegraph_<tag>_<goos>_<goarch>.spdx.json` assets. The planned block would
+publish one. With `replace_existing_artifacts: true` (01-02 Task 3) the clobbering is **silent** —
+the release succeeds with one `.spdx.json` instead of four, breaking D-17/DIST-03 and REL-09's
+name-shape invariant. The first gate that could see it is 01-05's post-publish REQUIRED-set check,
+i.e. after the irreversible publish, under D-07 patch-forward.
+
+**Worse than untested.** 01-02's plan text states the correct *intent* — "preserves today's
+`<asset>.spdx.json` names" (`01-02-PLAN.md:25`, `:59`, `:350`) — but pins the wrong *mechanism* at
+`:35`, `:348`, `:375`, and `TestSbomsArePerBinaryWithSpdxNames` asserts `documents:` contains
+**exactly** `${artifact}.spdx.json` (`:321-324`), demonstrated RED against any correction. The test
+would actively resist the fix. There is no rehearsal for the SBOM pipe and no on-RED branch anywhere
+in the phase.
+
+**Plan change needed.** (1) In 01-02 Task 2, change the template to derive from the artifact name
+rather than its path — pi proposes `documents: ["{{ .ArtifactName }}.spdx.json"]`, to be confirmed
+against the pinned module at execution time as this phase's convention requires. (2) Update
+`TestSbomsArePerBinaryWithSpdxNames` to pin the corrected template. (3) Extend 01-06's
+`release:dry-run-signed` leg — which already runs the SBOM pipe, since only `publish` is skipped —
+to assert four distinct SBOM artifact **names** in `dist/artifacts.json` alongside the four
+signature names. Same oracle fix as HIGH-A, same run, near-zero marginal cost.
 
 ### Agreed Strengths
 
-- **The cycle-1 fixes are machine-checkable, not prose.** Both lanes specifically praised that the
-  revisions added JOINT criteria, `REL05-EVIDENCE` / `SIGN-EVIDENCE` greppable lines, and negative-grep
-  criteria — and both traced those anchors to real tree locations (`release.yml:238-244`,
-  `internal/upgrade/upgrade.go:209`, `internal/query/status.go:51-52`,
-  `internal/cli/upgrade.go:31-37`).
-- **The phase now separates evidence classes** — static shape checks, snapshot experiments, real-Linux
-  execution, and published-release verification are no longer treated as interchangeable.
-- **REL-05 is gated on real execution on two architectures through the CGo parsing path**, not on
-  build success or `--version`.
-- **The two-sided JOINT checks in wave 2** encode branch end-state invariants correctly without
-  reopening the adjudicated REL-07 atomicity question.
-- **Threat-model honesty improved materially** — T-01-29 records CGo-compile-inside-the-OIDC-boundary
-  as an *accepted* residual rather than claiming mitigation, and P6's REL-09 transient window is
-  recorded as accepted-not-covered.
-- **The throwaway-key idea itself is sound** (pi calls it "the best idea in the revision set"): it
-  converts the one contract that bricks every user's `codegraph upgrade` from a static assertion into
-  a dynamic observation *before* the irreversible publish. The idea is right; only its mechanism is
-  broken.
-- **`codegraph upgrade "$TAG"`** correctly sidesteps the timing-sensitive `releases/latest` resolver.
+- **HIGH-1 is fully closed**, verified on all three of its load-bearing assumptions (arg position,
+  password inheritance, dist location). All three reviewers and the orchestrator's source check
+  agree. The run-scoped `mktemp -d`, trap cleanup, additions-only diff guard, and
+  `-f <copy>` invocation are sound.
+- **HIGH-2's branch structure is right** — classification, candidate ordering, mandatory re-run,
+  mandatory static-test re-pointing with a demonstrated RED, and record-observation-before-amending
+  ordering are all present and coherent. Only its oracle needs correcting.
+- **Candidate A is mechanically valid** for v2.17.1 with `artifacts: binary` + `ids: [raw]`; `ids:`
+  filtering is real and applied (`sign.go:124`).
+- **The dispatch guard is behaviorally gated**, not merely textually present: the criterion requires
+  an observed dispatched run that actually EXECUTED, closing the "a skip is also green" hole
+  (`01-05-PLAN.md:354-356`). Guard coverage is enforced by count with a negative criterion banning
+  the bare form.
+- **`resolve-tag` is sound** in wiring, shape/existence/peeled-commit validation, and its
+  exactly-one-tag fallback; `TAG-EVIDENCE` mirrors the phase's evidence-line convention.
+- Prior-release selection is fully specified with six behavioral criteria.
 
 ### Agreed Concerns
 
-Ordered by severity. The first two are the blocking findings.
-
-1. **[HIGH — both lanes, independently] The keyed signing rehearsal in 01-06 cannot select its
-   throwaway key, so it will attempt keyless OIDC and fail on a headless runner.**
-   Plan 01-02 pins the args verbatim as
-   `args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]` (`01-02-PLAN.md:311`,
-   `:337`) — there is **no `--key` flag**. Plan 01-06 supplies only `cosign generate-key-pair` plus
-   `COSIGN_PASSWORD` through the step `env:` block (`01-06-PLAN.md:161`, `:267`). A password decrypts
-   a selected key; it does not select one. Without `--key`, `cosign sign-blob` performs the keyless
-   Fulcio/OIDC flow — and 01-06's own prohibition (`01-06-PLAN.md:36`) correctly denies the job
-   `id-token: write`, so the rehearsal hangs or hard-fails. pi additionally notes that cosign's
-   `env://` key reference must still appear inside the `--key` flag and has been reported not to
-   substitute through GoReleaser's sign pipe (goreleaser/goreleaser#4221).
-   Compounding it: `01-06-PLAN.md:37` prohibits modifying `.goreleaser.yaml`, so an executor hitting
-   this has no sanctioned move and will improvise mid-task.
-   **Plan change needed:** name the exact key-injection mechanism in 01-06 Task 1. pi's concrete
-   proposal — generate a *temporary copy* of `.goreleaser.yaml` (e.g. `dist/.goreleaser.signtest.yaml`)
-   with `--key=<temp key path>` appended to the `binary_signs` args, invoke
-   `goreleaser release -f <copy> --snapshot --skip=publish --clean`, delete on exit — keeps the
-   committed config untouched, which is what the prohibition actually protects. Codex's alternative is
-   a `cosign` wrapper first on `PATH` injecting `--key` only for rehearsal. Either way, record in the
-   flagged-assumption row that the rehearsal args now differ from production by exactly one flag.
-
-2. **[HIGH — Codex HIGH / pi MEDIUM] `binary_signs.signature: "${artifact}.sigstore.json"` is very
-   likely the wrong template, and no plan has a remediation branch for the RED that 01-06 exists to
-   produce.**
-   All four builds name the binary `codegraph` (`.goreleaser.yaml:47/65/84/96`, verified by both
-   lanes). For `artifacts: binary`, GoReleaser templates `${artifact}` from the pre-archive *binary*
-   artifact and publishes the signature under the binary's `art.Name`, so the four sidecars collide on
-   a single published `codegraph.sigstore.json` rather than becoming
-   `codegraph_<tag>_<goos>_<goarch>.sigstore.json`. Codex cites `sign.go:179-197` / `274-293` in the
-   pinned `goreleaser/v2@v2.17.1`; both lanes independently note GoReleaser's *default* binary-sign
-   template embeds OS/arch precisely to avoid this collision. 01-02's static test asserts the template
-   *string*, so it passes while the runtime behavior is wrong — exactly the gap 01-06 was created to
-   close.
-   The problem is what happens next: 01-06 gates 01-05's merge, prohibits editing `.goreleaser.yaml`,
-   and defines no fail branch. The six-plan execution can therefore reach wave 3, correctly detect the
-   defect, and halt with no authorized path forward.
-   **Plan change needed:** add an explicit "on RED" branch to 01-06 Task 1 naming the candidate
-   remediation and routing it back through 01-02's static test, which must then assert the *new*
-   template. Both lanes name the same candidates: move signing to `signs:` over the
-   `archives[id=raw]` outputs (already named `codegraph_<tag>_<goos>_<goarch>`), or use a signature
-   template that explicitly derives the tag/OS/arch name. Codex additionally recommends sequencing —
-   run the dynamic experiment *before* 01-02 finalizes the signing mechanism, or explicitly authorize
-   01-06 to amend `.goreleaser.yaml` after observing RED.
-
-3. **[MEDIUM — pi, new; Codex did not catch this] 01-05's retained `workflow_dispatch` fallback is
-   silently dead.**
-   `01-05-PLAN.md:168` retains `workflow_dispatch:` with a `tag` input for re-verifying historical
-   tags, but `01-05-PLAN.md:163` and acceptance criterion `01-05-PLAN.md:282` *require* BOTH jobs to
-   carry `if: ${{ github.event.workflow_run.conclusion == 'success' }}` (the criterion mandates the
-   grep return exactly 2). On a manual dispatch `github.event.workflow_run` is null, the guard
-   evaluates false, and both jobs **skip rather than fail** — so the historical re-verification path
-   can never run and nothing surfaces the fact.
-   **Plan change needed:** change the mandated guard in both jobs to
-   `if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'`, and
-   update acceptance criterion `01-05-PLAN.md:282` to assert that shape instead of the current one.
-
-4. **[MEDIUM — Codex; pi graded this side as holding] The tag the verifier checks is not proven to be
-   the tag that was released.**
-   `01-05-PLAN.md:166` asserts parenthetically that "a tag push populates
-   `github.event.workflow_run.head_branch` with the tag name" and passes it straight into
-   verification. Codex's objection is that GitHub only guarantees the *downstream* job's own
-   `GITHUB_REF`/`GITHUB_SHA` refer to the default branch, and that the plan asserts the `head_branch`
-   tag semantics without validating them. This is a **divergent view** (see below), but the hardening
-   is cheap and is needed anyway once concern 3 is fixed, because the dispatch path must resolve `$TAG`
-   from its own input.
-   **Plan change needed:** add a first job/step that resolves and validates `$TAG` — require a
-   `v[0-9]*` shape, verify `refs/tags/$TAG` exists, and verify the tag's peeled commit equals
-   `github.event.workflow_run.head_sha`; fall back to querying tag refs pointing at `head_sha` and
-   requiring exactly one match. Emit a `TAG-EVIDENCE` line and consume the job output everywhere.
-   Keep `workflow_dispatch`'s input as the explicit historical path.
-
-5. **[MEDIUM — Codex] Prior-release selection is unspecified and will mis-select.**
-   `01-05-PLAN.md:249` says only "the release immediately preceding `$TAG` via the `gh` API". The API
-   lists in publication chronology, not semver predecessor order, so a historical dispatch can select a
-   *newer* release and an RC can select the wrong stable/prerelease neighbour.
-   **Plan change needed:** specify the algorithm — enumerate non-draft releases, parse semver, filter
-   to strictly-less-than `$TAG`, select the maximum under a stated prerelease policy — and add the
-   stable-after-RC, historical-dispatch, drafts, and no-predecessor cases as criteria.
-
-6. **[LOW — pi] `01-05-PLAN.md:405` still describes the workflow as running "automatically on
-   `release: published`"** — un-updated pre-revision text inside Task 3's `read_first`. An executor
-   reading it re-learns the exact racing trigger the H1 fix removed.
-   **Plan change needed:** update that bullet to say `workflow_run`.
-
-7. **[LOW — Codex] 01-03's GoReleaser install instruction contradicts its own C6 decision.**
-   `01-03-PLAN.md:177-179` (Task 1) instructs unconditionally to "build the tool with
-   `GOWORK=off go build -modfile=go.tool.mod` … then invoke that binary", while Task 2 (`:335-340`,
-   recorded at `:486`) decides to keep `goreleaser-action install-only` in CI and have the Taskfile
-   *prefer* a `goreleaser` already on `PATH`, building from source **only as the local fallback**.
-   As written, Task 1 pays a from-source build inside the OIDC-bearing job — the precise cost Task 2's
-   rationale says to avoid.
-   **Plan change needed:** rewrite Task 1 to the single algorithm (use `command -v goreleaser` when
-   present, else build the pinned `go.tool.mod` version to a temp path; assert `goreleaser --version`
-   matches the pin).
-
-8. **[LOW — pi] 01-03's OIDC mutation-RED demonstration names a job that will not exist.**
-   `01-03-PLAN.md:395-396` and `:468` specify demonstrating RED by adding `id-token: write` to "a
-   THIRD job", but after the collapse `release.yml` has exactly two (`release` + the temporarily
-   retained `provenance:`), so the executor must invent one.
-   **Plan change needed:** reword as "add `id-token: write` to any job other than `release` (e.g. a
-   scratch job), then revert".
+Both reviewers independently traced the sign pipe to the same `art.Path` vs `art.Name` split. They
+diverge only on grading (below). No other concern was raised by both.
 
 ### Divergent Views
 
-- **Overall risk rating.** Codex: **HIGH, NO-GO as written**. pi: **MEDIUM**, "still likely succeeds"
-  without the fixes. They agree on every mechanism; they disagree on blast radius. This review sides
-  with Codex because the defective mechanism sits on the gate guarding the phase's only irreversible
-  action.
-- **`workflow_run.head_branch` as a tag source (concern 4).** pi graded H1 as holding and treated
-  `head_branch` carrying the tag name as correct; Codex treats it as an unvalidated assumption and
-  wants an explicit resolve-and-verify step. pi is probably right about GitHub's actual payload
-  behavior for tag pushes, but Codex's hardening costs little and becomes *required* once the
-  `workflow_dispatch` guard bug (concern 3) is fixed. Recorded as actionable on those grounds rather
-  than as a disputed factual claim.
-- **Whether concern 2 is a defect or a successful detection.** pi frames the `${artifact}` collision as
-  "a likely-eventual discovery the plan set is *designed* to surface"; Codex frames shipping a
-  probably-wrong template in 01-02 as itself the defect. Both nonetheless converge on the same required
-  plan edit: pre-arm the remediation path.
-- **C6 (GoReleaser install).** Codex flags the Task-1/Task-2 contradiction; pi graded C6 as holding
-  (it checked the recorded decision at `01-03-PLAN.md:486`, not Task 1's action text). Independently
-  verified against the tree: Codex is correct — the contradiction is real.
+**HIGH-A grading.** pi: HIGH/ACTIONABLE, and claims the phase deadlocks. Codex: real, but
+non-actionable — "the plan's mandatory filesystem validation will catch this and route to Candidate
+B, so it cannot silently reach publication." The orchestrator's source trace resolves the
+disagreement in favour of pi on *actionability* and in favour of Codex on *safety*: the branch does
+fail closed onto a correct candidate B, so there is no deadlock — but the oracle still cannot
+observe the published name, and that same blindness is exactly what lets HIGH-B reach production
+undetected. Both should be fixed by the one `artifacts.json` change.
+
+Codex did not examine the `sboms:` pipe and so did not surface HIGH-B; pi did. This is the cycle's
+clearest demonstration of adversarial-review value.
+
+### Residual observations (recorded, NOT actionable)
+
+1. **`resolve-tag` names no ref-resolution mechanism.** It specifies "verify `refs/tags/$TAG`
+   exists", "the tag's PEELED commit", and "querying the tag refs pointing at `$HEAD_SHA`"
+   (`01-05-PLAN.md:206-210`) — git vocabulary — but declares no `actions/checkout` and no
+   `fetch-depth`/`git fetch --tags`; checkout appears only for `verify-supply-chain` (`:238`) and
+   `self-upgrade` (`:293`). Graded non-actionable because: the step's `env:` carries `REPO` and
+   `GH_TOKEN` with no checkout, which points unambiguously at `gh api`; the repo's release tags are
+   **lightweight** (`git cat-file -t v0.4.0` → `commit`), so there is no annotated-tag dereferencing
+   fork; the job fails closed and blocks both downstream jobs via `needs:`; and the behavioral
+   dispatch criterion exercises it. Both reviewers graded this fix RESOLVED. Worth one clarifying
+   sentence if 01-05 is touched anyway.
+2. **The copy-generation tool for `.goreleaser.signtest.yaml` is unnamed** (`01-06-PLAN.md:214-220`
+   gives the semantic target but no `sed`/`yq`/heredoc). A `yq` round-trip would likely reflow the
+   file and trip the additions-only guard — which is the guard working as intended. The
+   additions-only requirement is correctly worded to reject deletions and modifications, not only
+   non-matching additions.
+3. **The publish pipe remains unexercisable.** Re-confirmed: `--skip=publish` structurally cannot
+   reach it and no rehearsal exists that would exercise it without publishing. Correctly carried to
+   the one-way checkpoint. (Note that HIGH-B is *not* an instance of this: it is observable in the
+   snapshot rehearsal once the oracle reads `artifacts.json`.)
+4. `attestations: read` is granted workflow-wide though only one job consumes it — least-privilege
+   polish.
 
 ### Not Re-Litigated
 
-Neither reviewer re-raised any of the nine adjudicated items (arm64 profile provisioning, REL-07
-atomicity, the `gh attestation verify` attestor, the deliberately-stale REQUIREMENTS.md REL-08 row,
-`zig cc` byte changes, `releaseAssetName()`'s location, the seven spec-less probe rows, 01-04's
-removed checkpoint, or the structurally-unexercisable `release:` publish pipe). pi explicitly
-confirmed several of them against the tree and called the "NAMED UNEXERCISED SURFACES" framing
-"honest and correct — no rehearsal exists short of publishing". The C1 rejection was likewise
-confirmed as recorded, not dropped.
+All ten adjudicated items were supplied as out of scope and neither reviewer reopened any: the
+arm64 runner provisioning, REL-07 wave-2 separation, the `gh attestation verify` attestor (D-10),
+the deliberately-stale `REQUIREMENTS.md` REL-08 entry owned by 01-04, the ratified `zig cc`
+byte/glibc change, `releaseAssetName()` at `internal/upgrade/upgrade.go:209`, the 7 spec-less probe
+rows as flagged assumptions, 01-04's removed checkpoint and its expected `verify.plan-structure`
+warning, the unexercisable publish pipe, and `files_modified` not being an execution-time allowlist.
+
+The orchestrator additionally checked the one cross-plan interaction that could have been a real
+contradiction — whether candidate A would invert 01-02's `rg -n '^signs:' .goreleaser.yaml`
+returns-nothing criterion (`01-02-PLAN.md:376`). It does not: that is a plan-scoped acceptance
+criterion evaluated at 01-02's wave-2 execution, not a durable gate, and the one durable Go test
+(`TestBinarySignsSidecarMatchesUpgradeContract`) is explicitly re-pointed by 01-06 validation step 2.
+Wave-3 file sets were re-confirmed disjoint: 01-04 touches `release.yml` +
+`release_workflow_shape_test.go`; 01-06 touches `Taskfile.yml` + `linux-cross-canary.yml`, with
+`.goreleaser.yaml` + `goreleaser_shape_test.go` only on its RED branch.
+
+### Recommendation
+
+Both remaining findings are small, local, and fully specified: one changes an oracle from a
+filesystem glob to a `dist/artifacts.json` read; the other changes one template string plus the test
+that pins it. Neither requires re-planning scope, and the second fix rides along in the first's
+rehearsal run. Applying them as a targeted revision — rather than opening a fourth convergence
+cycle — is the proportionate response.
