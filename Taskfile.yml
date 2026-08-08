@@ -283,11 +283,29 @@ tasks:
       GoReleaser hard-fails ("git tag ... was not made against commit ...")
       without one. The resolved version string is the only thing --snapshot
       changes, and the version string is not the property this target verifies.
+
+      LOCAL-ONLY SINCE 2026-08-08 — this target is NO LONGER RUN IN CI, and it
+      now requires an interactive Sigstore session. Plan 01-02 activated
+      `binary_signs:`, which runs inside the BUILD pipeline (that is what
+      distinguishes it from `signs:`, which runs during release). `goreleaser
+      build` has no `--skip=sign` — its only valid --skip values are before,
+      post-hooks, pre-hooks and validate — so this target now always reaches a
+      cosign KEYLESS signing call, which needs an OIDC token. On a developer
+      machine that means a browser flow; in a pull_request workflow there is no
+      token at all, and granting `id-token: write` to a PR-triggered canary
+      would be a security regression rather than a fix. The
+      darwin-toolchain-canary step that used to run this was therefore removed
+      (see that workflow's comment). The property it proved — GoReleaser driving
+      a native darwin build — is now covered by `task release:dry-run` in
+      linux-cross-canary's `cross-build` job on the same macOS profile, because
+      `goreleaser release` DOES accept `--skip=sign`.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
       - sh: command -v clang
         msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
+      - sh: command -v cosign
+        msg: "cosign not found. Since plan 01-02 activated binary_signs:, `goreleaser build` reaches the sign pipe and there is no --skip=sign for the build command, so this target needs cosign AND an interactive Sigstore keyless session. Install with `brew install cosign`. If you only want the darwin build composition without signing, run `task release:dry-run` instead — it uses `goreleaser release --skip=publish,sign` and needs no OIDC."
     cmds:
       - |
         set -euo pipefail

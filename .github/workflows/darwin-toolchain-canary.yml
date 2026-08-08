@@ -61,13 +61,38 @@ jobs:
       - name: Prove the darwin toolchain
         run: task check:darwin-toolchain
 
-      # Deliberately a SECOND step rather than a replacement for the one above.
-      # The plain `go build` there is the narrowest possible toolchain signal;
-      # this one adds GoReleaser, .goreleaser.yaml, and go.tool.mod to the
-      # failure surface on purpose, because that composition is what release.yml
-      # actually runs and nothing else exercises it on this runner class. Kept
-      # separate so a red run says WHICH layer broke — "the darwin toolchain is
-      # gone" and "GoReleaser cannot drive it" are different pages of the
-      # runbook, and collapsing them into one step would lose that.
-      - name: Prove GoReleaser can drive the darwin release build
-        run: task check:darwin-release-build
+      # REMOVED 2026-08-08 (phase 1, plan 01-02 fallout): a second step here used
+      # to run `task check:darwin-release-build`, adding GoReleaser and
+      # .goreleaser.yaml to this canary's failure surface.
+      #
+      # Why it had to go, and it is NOT because the composition stopped mattering:
+      # plan 01-02 activated `binary_signs:`, and `binary_signs:` runs inside the
+      # BUILD pipeline (that is precisely what distinguishes it from `signs:`,
+      # which runs during release). `goreleaser build` has no `--skip=sign` —
+      # its only valid --skip values are before, post-hooks, pre-hooks, validate —
+      # so every `goreleaser build` in this repo now reaches a cosign keyless
+      # signing call. Keyless signing needs an OIDC token. Installing cosign does
+      # NOT fix it (verified: the call then fails with
+      # "retrieving ID token: authenticating caller: expired_token"), and the
+      # only thing that would — granting `id-token: write` to a workflow any pull
+      # request can trigger — is a security regression, not a fix. This canary
+      # keeps `permissions: contents: read` and stays unprivileged.
+      #
+      # WHERE THAT COVERAGE LIVES NOW (moved, not dropped):
+      #   - `linux-cross-canary.yml`'s `cross-build` job runs `task release:dry-run`
+      #     on this same `namespace-profile-macos-6x14-tahoe` profile. That is
+      #     `goreleaser release --snapshot --skip=publish,sign` — one invocation
+      #     covering all four build entries, INCLUDING both darwin arches built
+      #     natively, with a `file -b` assertion per binary that each darwin
+      #     artifact is Mach-O of the expected arch. `release` accepts
+      #     `--skip=sign`, which is why it can do this and `build` cannot.
+      #   - So "GoReleaser can drive the darwin release build on a native macOS
+      #     host" is still proven on every run of that canary, by the invocation
+      #     the real release actually uses.
+      #
+      # The `check:darwin-release-build` Taskfile target is intentionally KEPT for
+      # local use by a maintainer who has an interactive Sigstore session; it is
+      # simply no longer wired into CI. See its `desc:` for the OIDC requirement.
+      #
+      # The step above (`check:darwin-toolchain`, a plain `go build`) is
+      # unaffected: it is the narrowest darwin-host signal and needs no signing.
