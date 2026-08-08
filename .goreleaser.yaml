@@ -112,20 +112,68 @@ builds:
     ldflags: *version_ldflags
     mod_timestamp: "{{ .CommitTimestamp }}"
 
-# Raw per-platform binaries, NEVER tar.gz/zip (D-02/Finding 1): the
-# upgrade path in internal/upgrade downloads and swaps in this exact
-# byte stream directly, with no archive extraction step.
+# Raw per-platform binaries, NEVER tar.gz/zip for the `raw` entry (D-02/
+# Finding 1): the upgrade path in internal/upgrade downloads and swaps in
+# that exact byte stream directly, with no archive extraction step. A
+# second `zip` entry (REL-09/D-15) carries the SAME per-platform stem
+# plus `.zip`, for consumers (e.g. Phase 3's Homebrew cask) that want an
+# archive instead of a raw executable — the two coexist deliberately
+# (add-alongside, not promote: see 01-02-PLAN.md's assumption-delta
+# decision) and `codegraph upgrade` only ever consumes the `raw` entry.
 #
-# NOTE (WR-01, Phase 8 re-review): this block (and the checksum: block
-# below) is dead configuration under this project's pipeline — see the
-# header comment at the top of this file. It never executes because
-# release.yml only runs `goreleaser build --single-target`, never
-# `goreleaser release`. Kept as documentation of intent only.
+# NOTE (updated from the WR-01/Phase 8 "dead configuration" note): this
+# block and the checksum: block below are now LIVE under
+# `goreleaser release` (REL-06) — see the header comment at the top of
+# this file, which plan 01-02's Task 2 brings up to date with the
+# binary_signs:/sboms:/release: blocks it adds.
 archives:
-  - formats: [binary]
+  - id: raw
+    ids:
+      - codegraph-linux-amd64
+      - codegraph-linux-arm64
+      - codegraph-darwin-amd64
+      - codegraph-darwin-arm64
+    formats: [binary]
+    # UNCHANGED character-for-character (D-02/Finding 1): this is a
+    # runtime contract with internal/upgrade.releaseAssetName(), pinned
+    # by TestReleaseAssetNameMatchesGoReleaser
+    # (verify_release_e2e_test.go) and TestRawArchiveEntryStaysBinaryFormat
+    # (goreleaser_shape_test.go). `codegraph upgrade` downloads and swaps
+    # in this exact byte stream with no extraction step — changing
+    # `formats:` away from `binary`, or changing name_template by a
+    # single character, bricks every user's next upgrade.
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
+
+  - id: zip
+    ids:
+      - codegraph-linux-amd64
+      - codegraph-linux-arm64
+      - codegraph-darwin-amd64
+      - codegraph-darwin-arm64
+    formats: [zip]
+    # Same stem as the `raw` entry plus `.zip` (D-15). No `files:`
+    # override — relies on GoReleaser v2.17.1's actual default archive
+    # file set: the binary plus LICENSE*, README* AND CHANGELOG*
+    # (internal/pipe/archive/archive.go:83-91 in the pinned module; this
+    # repo has a real CHANGELOG.md at the root, so it is included). D-16's
+    # binding requirement is that shell completions and man pages stay
+    # OUT of this zip, because BREW-03/BREW-04 generate those from the
+    # binary at Homebrew cask-build time and shipping them here would
+    # create a second, staler source — NOT that the file set is limited
+    # to exactly "binary + LICENSE + README" (that description was
+    # incomplete; see cycle-3 review, Codex Plan-02 MEDIUM).
     name_template: >-
       {{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}
 
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Tag }}_checksums.txt"
   algorithm: sha256
+  # D-12: scoped to exactly the 8 downloadable payloads (4 raw binaries +
+  # 4 zips). `.sigstore.json`/`.spdx.json` sidecars and this checksums
+  # file itself are deliberately excluded — checksumming a signature is
+  # circular. Held by TestChecksumCoversRawAndZipIdsOnly. (This block is
+  # NOT yet the sole writer of the published checksums file on its own —
+  # that additionally requires plan 01-03 to delete release.yml's
+  # hand-rolled `sha256sum` step, proven post-publish by plan 01-05.)
+  ids: [raw, zip]
