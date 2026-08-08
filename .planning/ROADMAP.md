@@ -110,7 +110,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
   3. Against assets **re-downloaded from the published release** — never a local `dist/` copy — `cosign verify-blob` returns Verified OK under the unchanged `release.yml@refs/tags/v*` SAN, `gh attestation verify` passes against the `actions/attest-build-provenance` attestation, and a genuinely shipped prior binary self-upgrades via `codegraph upgrade` on darwin/arm64 and linux/amd64 (REL-08)
   4. For each platform the release carries both a raw `codegraph_<tag>_<goos>_<goarch>` asset — extension-free, directly executable, and byte-shape-identical to what `internal/upgrade.releaseAssetName()` builds — and a distinctly-named `.zip`; a mutation changing the raw entry away from `formats: [binary]` turns a test red rather than shipping an archive that verifies its signature and then bricks the install (REL-09)
 
-**Plans**: 1/6 plans executed
+**Plans**: 3/6 plans executed
 
 Plans:
 **Wave 1**
@@ -119,8 +119,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — `.goreleaser.yaml` owns archive/checksum/sign/SBOM/release: raw + `.zip` entries by id, 8-payload checksum scope, `binary_signs:`, per-binary `sboms:`, and an explicit `release:` block pinning rerun idempotency
-- [ ] 01-03-PLAN.md — collapse `release.yml` to one `goreleaser release` job; delete the hand-rolled checksum/sign/SBOM shell; scope `id-token: write` to that one job
+- [x] 01-02-PLAN.md — `.goreleaser.yaml` owns archive/checksum/sign/SBOM/release: raw + `.zip` entries by id, 8-payload checksum scope, `binary_signs:`, per-binary `sboms:`, and an explicit `release:` block pinning rerun idempotency
+- [x] 01-03-PLAN.md — collapse `release.yml` to one `goreleaser release` job; delete the hand-rolled checksum/sign/SBOM shell; scope `id-token: write` to that one job
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -195,7 +195,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
-| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 1/6 | In Progress|  |
+| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 3/6 | In Progress|  |
 | 2. Apple Signing & Notarization | v0.5.0 | 0/TBD | Not started | - |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
