@@ -711,8 +711,24 @@ tasks:
         # pinned build there, so nothing compiles inside the OIDC job);
         # else build go.tool.mod's pin as the LOCAL fallback. Either way,
         # `goreleaser --version` is asserted against the pin below.
-        PINNED_VERSION="$(GOWORK=off go list -m -modfile=go.tool.mod -f '{{.Version}}' github.com/goreleaser/goreleaser/v2)"
+        # awk, NOT `go list -f '{{.Version}}'`: Task renders every cmds: string
+        # through Go text/template BEFORE the shell sees it, so a literal
+        # {{.Version}} here is consumed by TASK, not passed to go list. Task has
+        # no .Version variable, so it rendered to empty — turning the command
+        # into `go list -f ''`, which falls back to go's default module format
+        # and yielded "github.com/goreleaser/goreleaser/v2 v2.17.1" instead of
+        # "v2.17.1". The comparison below could then never be equal, and it
+        # failed the v0.5.0 release before `goreleaser release` ever ran. The
+        # bug was invisible outside Task (the same command in a plain shell
+        # prints v2.17.1) and this target runs ONLY from release.yml on a tag
+        # push, so nothing exercised it until the real release. `go list -m`
+        # with no -f prints "<module> <version>", so field 2 is the version.
+        PINNED_VERSION="$(GOWORK=off go list -m -modfile=go.tool.mod github.com/goreleaser/goreleaser/v2 | awk '{print $2}')"
         PINNED_VERSION="${PINNED_VERSION#v}"
+        if [ -z "${PINNED_VERSION}" ]; then
+          echo "::error::could not resolve goreleaser's pinned version from go.tool.mod — refusing to release against an unverified toolchain (MAINT-03)"
+          exit 1
+        fi
 
         CLEANUP_DIR=""
         cleanup() { [ -n "${CLEANUP_DIR}" ] && rm -rf "${CLEANUP_DIR}"; }
@@ -735,7 +751,16 @@ tasks:
         # Assert the resolved binary's version (`goreleaser --version`)
         # matches the go.tool.mod pin before invoking release — keeps
         # prefer-then-build honest at the point of use (MAINT-03).
+        #
+        # BOTH sides are v-stripped, and that is load-bearing: the two install
+        # paths this target supports report DIFFERENT formats for the same
+        # version. goreleaser-action's prebuilt binary (the CI path) reports
+        # `GitVersion: 2.17.1`, while the from-source `go build` fallback (the
+        # local path) reports `GitVersion: v2.17.1`. Normalizing only the pin
+        # would make this assertion pass in CI and fail on every contributor
+        # machine that lacks goreleaser on PATH.
         RESOLVED_VERSION="$("${GORELEASER_BIN}" --version 2>&1 | grep -m1 '^GitVersion:' | awk '{print $2}')"
+        RESOLVED_VERSION="${RESOLVED_VERSION#v}"
         if [ -z "${RESOLVED_VERSION}" ] || [ "${RESOLVED_VERSION}" != "${PINNED_VERSION}" ]; then
           echo "::error::resolved goreleaser (${GORELEASER_BIN}) reports version '${RESOLVED_VERSION}', want '${PINNED_VERSION}' (go.tool.mod's pin, MAINT-03). A stale goreleaser on PATH would otherwise silently hollow out TestGoreleaserPinParity's guarantee at the point of use."
           exit 1
