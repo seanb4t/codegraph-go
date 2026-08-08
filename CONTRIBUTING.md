@@ -111,6 +111,14 @@ Every command CI runs is defined exactly once, as a `task` target — see
   permanent, dispatchable `linux-cross-canary` workflow — see
   `.github/workflows/linux-cross-canary.yml` — rather than run standalone
   locally.
+- `task verify:release-assets` and `task verify:self-upgrade` re-prove
+  REL-06/REL-07/REL-08 against a PUBLISHED release's RE-DOWNLOADED assets —
+  never a local `dist/` copy. They need `TAG`/`REPO`/`GH_TOKEN` (plus
+  `GOOS`/`GOARCH` for the self-upgrade target) in the environment and are
+  driven automatically by the permanent, `workflow_run`-triggered
+  `post-release-verify` workflow — see
+  `.github/workflows/post-release-verify.yml` — every time `release.yml`
+  completes, rather than run standalone locally.
 - CI calls these same fine-grained targets directly — a contributor and CI
   run identical command bodies, never a divergent local approximation.
 - `task`, `goreleaser`, and `actionlint` build on demand from `go.tool.mod`
