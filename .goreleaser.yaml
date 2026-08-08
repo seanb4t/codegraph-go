@@ -269,3 +269,39 @@ sboms:
       - "spdx-json=$document"
     documents:
       - "{{ .ArtifactName }}.spdx.json"
+
+# release: (review HIGH-2) pins rerun idempotency and prerelease
+# handling in config rather than inheriting GoReleaser's defaults, which
+# would silently drop both behaviors the deleted (plan 01-03)
+# `gh release upload --clobber` step (release.yml) provided today.
+#
+# NOTE: the release: pipe is the one pipe in this configuration that no
+# dry run can exercise — `goreleaser release --snapshot --skip=publish,sign`
+# structurally cannot reach it, and there is no local mode that publishes
+# to a real GitHub Release without publishing to a real GitHub Release.
+# Every other contract in this phase is proven by a demonstrated-RED test
+# or a canary run; this one is proven by pinning the config explicitly
+# instead of inheriting defaults, and is observed for the first time
+# during plan 01-05's real release (see its Task 2 checkpoint).
+release:
+  # GoReleaser v2.17.1 defaults this to false (pkg/config/config.go:671).
+  # The pre-migration publisher was `gh release upload --clobber`
+  # (release.yml:325), so re-running a failed or partial release was
+  # safe and idempotent. Deleting that step (plan 01-03) WITHOUT setting
+  # this key would make a re-run after a partial upload fail on
+  # already-existing assets — blocking the patch-forward recovery D-07
+  # mandates, at exactly the moment it is needed, since D-07 also
+  # forbids deleting the tag to retry. Held by
+  # TestReleaseBlockIsRerunIdempotent.
+  replace_existing_artifacts: true
+  # Replaces release.yml:306's `*-*) PRERELEASE_FLAG="--prerelease"`
+  # case: `auto` marks a release as a prerelease when the tag contains a
+  # prerelease identifier, the same rule expressed declaratively.
+  prerelease: auto
+  # No name_template/header/footer/draft/disable key: release-please
+  # creates the tag AND the GitHub Release object with its own generated
+  # body BEFORE release.yml ever fires (release-please.yml:57-92), so
+  # GoReleaser's job is only to add assets to an ALREADY-EXISTING
+  # Release. Regenerating the body would move release authorship away
+  # from the tool D-06R reserves it to. Held by
+  # TestReleaseBlockDoesNotRewriteReleaseBody.
