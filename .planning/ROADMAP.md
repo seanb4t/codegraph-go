@@ -99,6 +99,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
 ## Phase Details
 
 ### Phase 1: Cross-Compile Spike & `goreleaser release` Migration
+
 **Goal**: A maintainer knows, from measurement rather than inference, whether the OSS single-runner architecture is reachable — and the release pipeline is then a single `goreleaser release` invocation whose published assets still satisfy every supply-chain claim the old pipeline satisfied, while carrying `.zip` archives alongside the raw binaries `codegraph upgrade` consumes.
 **Depends on**: Nothing (first phase of v0.5.0)
 **Requirements**: REL-05, REL-06, REL-07, REL-08, REL-09
@@ -112,14 +113,25 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 01-01-PLAN.md — REL-05 spike (tracer): one `goreleaser release --snapshot` on macOS cross-compiles both linux legs via zig, and a permanent canary executes them on real Linux
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-02-PLAN.md — `.goreleaser.yaml` owns archive/checksum/sign/SBOM: raw + `.zip` entries by id, 8-payload checksum scope, `binary_signs:`, per-binary `sboms:`
 - [ ] 01-03-PLAN.md — collapse `release.yml` to one `goreleaser release` job; delete the hand-rolled checksum/sign/SBOM shell; scope `id-token: write` to that one job
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-04-PLAN.md — swap the SLSA generic generator for `actions/attest-build-provenance`; rewrite every published verification instruction and REL-08's wording
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-05-PLAN.md — cut a real release and re-prove every supply-chain claim against re-downloaded published assets, automated to re-fire on every future release
 
 ### Phase 2: Apple Signing & Notarization
+
 **Goal**: A macOS user who downloads a release asset in a browser can run it without Gatekeeper blocking them — and the project can prove that claim with a check it has already watched fail.
 **Depends on**: Phase 1 (notarization slots into a working `goreleaser release` pipeline, not a half-migrated one; Phase 1's published un-notarized asset is this phase's RED baseline)
 **Requirements**: SIGN-01, SIGN-02, SIGN-03, SIGN-04
@@ -140,6 +152,7 @@ Plans:
 - [ ] TBD (populate with /gsd-plan-phase 2)
 
 ### Phase 3: Homebrew Tap & Cask
+
 **Goal**: A macOS user installs codegraph the way they install everything else — `brew install` — and it keeps working across releases rather than only on the day it was hand-checked.
 **Depends on**: Phase 2 (the cask ships notarized bytes) and Phase 1 (the `.zip` the cask points at)
 **Requirements**: BREW-01, BREW-02, BREW-03, BREW-04, BREW-05, BREW-06
@@ -160,6 +173,7 @@ Plans:
 - [ ] TBD (populate with /gsd-plan-phase 3)
 
 ### Phase 4: `codegraph upgrade` × Homebrew
+
 **Goal**: Neither install path lies about what is installed — `codegraph upgrade` recognizes a Homebrew-managed install, steps aside with an actionable pointer, and never mutates the Cellar behind brew's back.
 **Depends on**: Phase 3 for **acceptance**. Implementation can proceed in parallel with Phases 2–3 against a constructed Cellar-shaped symlink tree in a temp dir, and the `Run`-branch logic is unit-testable through the existing `internal/upgrade` func-var seam — but the phase is not done until it has been run against the real tap Phase 3 publishes, because a synthetic layout can only prove the mechanism, not that it matches what actually ships.
 **Requirements**: UPGR-01, UPGR-02, UPGR-03
