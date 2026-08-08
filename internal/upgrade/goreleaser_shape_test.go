@@ -3,9 +3,11 @@ package upgrade
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
+	"text/template"
 
 	yaml "go.yaml.in/yaml/v3"
 )
@@ -361,5 +363,270 @@ func TestChecksumCoversRawAndZipIdsOnly(t *testing.T) {
 func TestParseGoreleaserArchives_NoArchivesBlockIsError(t *testing.T) {
 	if _, err := parseGoreleaserArchives(""); err == nil {
 		t.Fatalf("parseGoreleaserArchives(\"\") = nil error, want non-nil")
+	}
+}
+
+// ---------------------------------------------------------------------
+// Task 2: binary_signs:/sboms: — declarative sidecar names matching
+// today's hand-rolled loops (D-14, D-17).
+// ---------------------------------------------------------------------
+
+// releasePairs is the pinned 4-platform release matrix, mirroring
+// TestReleaseAssetNameMatchesGoReleaser's independent-literal discipline
+// (verify_release_e2e_test.go). Declared once here and reused by every
+// Task 2/3 test in this file that needs to resolve a per-platform template.
+var releasePairs = []struct{ goos, goarch string }{
+	{"linux", "amd64"},
+	{"linux", "arm64"},
+	{"darwin", "amd64"},
+	{"darwin", "arm64"},
+}
+
+// pinnedReleaseTag is the same kind of independently-pinned literal
+// TestReleaseAssetNameMatchesGoReleaser uses — never derived from
+// goReleaserAssetName or releaseAssetName, so a bug shared by both cannot
+// hide from a resolve-and-compare assertion.
+const pinnedReleaseTag = "v1.2.3"
+
+// goreleaserBinarySign mirrors one .goreleaser.yaml `binary_signs:` list
+// entry.
+type goreleaserBinarySign struct {
+	Cmd       string   `yaml:"cmd"`
+	Args      []string `yaml:"args"`
+	Signature string   `yaml:"signature"`
+	Artifacts string   `yaml:"artifacts"`
+}
+
+type goreleaserBinarySignsConfig struct {
+	BinarySigns []goreleaserBinarySign `yaml:"binary_signs"`
+}
+
+// parseGoreleaserBinarySigns decodes .goreleaser.yaml source src with a
+// real YAML decoder and returns every binary_signs: entry. Returns a
+// non-nil error — never a usable empty slice — when src fails to parse, or
+// when binary_signs: is absent or contains no entries.
+func parseGoreleaserBinarySigns(src string) ([]goreleaserBinarySign, error) {
+	var cfg goreleaserBinarySignsConfig
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserBinarySigns: %w", err)
+	}
+	if len(cfg.BinarySigns) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserBinarySigns: no binary_signs: entries found")
+	}
+	return cfg.BinarySigns, nil
+}
+
+func mustGoreleaserBinarySigns(t *testing.T, src string) []goreleaserBinarySign {
+	t.Helper()
+	v, err := parseGoreleaserBinarySigns(src)
+	if err != nil {
+		t.Fatalf("mustGoreleaserBinarySigns: %v", err)
+	}
+	return v
+}
+
+// goreleaserSBOM mirrors one .goreleaser.yaml `sboms:` list entry.
+type goreleaserSBOM struct {
+	ID        string   `yaml:"id"`
+	Cmd       string   `yaml:"cmd"`
+	Args      []string `yaml:"args"`
+	Documents []string `yaml:"documents"`
+	Artifacts string   `yaml:"artifacts"`
+}
+
+type goreleaserSBOMsConfig struct {
+	SBOMs []goreleaserSBOM `yaml:"sboms"`
+}
+
+// parseGoreleaserSBOMs decodes .goreleaser.yaml source src with a real YAML
+// decoder and returns every sboms: entry. Returns a non-nil error — never a
+// usable empty slice — when src fails to parse, or when sboms: is absent or
+// contains no entries.
+func parseGoreleaserSBOMs(src string) ([]goreleaserSBOM, error) {
+	var cfg goreleaserSBOMsConfig
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserSBOMs: %w", err)
+	}
+	if len(cfg.SBOMs) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserSBOMs: no sboms: entries found")
+	}
+	return cfg.SBOMs, nil
+}
+
+func mustGoreleaserSBOMs(t *testing.T, src string) []goreleaserSBOM {
+	t.Helper()
+	v, err := parseGoreleaserSBOMs(src)
+	if err != nil {
+		t.Fatalf("mustGoreleaserSBOMs: %v", err)
+	}
+	return v
+}
+
+// resolveGoreleaserFieldTemplate executes a .goreleaser.yaml Go-template
+// string (the {{ .Field }} form GoReleaser resolves via its internal/tmpl
+// package's text/template engine, once any ${VAR} env substitution has
+// already happened) against the given fields. Used to prove what a
+// template ACTUALLY resolves to for a given artifact, rather than
+// string-matching its literal source — the "assert the property, not the
+// literal" discipline cycle-3 review required for sboms.documents (HIGH-B)
+// and this plan's own binary_signs.signature finding (see the config
+// comment above binary_signs: in .goreleaser.yaml).
+func resolveGoreleaserFieldTemplate(tplSrc string, fields map[string]any) (string, error) {
+	tpl, err := template.New("goreleaser-field-template").Option("missingkey=error").Parse(tplSrc)
+	if err != nil {
+		return "", fmt.Errorf("resolveGoreleaserFieldTemplate: parse %q: %w", tplSrc, err)
+	}
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, fields); err != nil {
+		return "", fmt.Errorf("resolveGoreleaserFieldTemplate: execute %q: %w", tplSrc, err)
+	}
+	return buf.String(), nil
+}
+
+// TestBinarySignsSidecarMatchesUpgradeContract holds D-14: the
+// binary_signs: block's signature: template must resolve, for every one of
+// the 4 shipped platforms, to exactly the literal string internal/upgrade
+// downloads (assetName + ".sigstore.json"). This is the one contract whose
+// breakage bricks every user's codegraph upgrade after the binary has
+// already been downloaded.
+//
+// binary_signs: signs the RAW build-output artifact (type Binary), not the
+// renamed archives: release asset — confirmed against the pinned
+// goreleaser/v2@v2.17.1 module's internal/pipe/sign/sign_binary.go (filters
+// artifact.ByType(artifact.Binary)) and internal/pipe/sign/sign.go's
+// signone() (the PUBLISHED signature artifact's Name is computed from
+// env["artifact"] = art.Name, not art.Path). A raw Binary artifact's .Name
+// is this project's literal `binary: codegraph` value for every platform,
+// so a $artifact-based (env-var) template collides to one name; the
+// template must instead use Go-template FIELDS (.ProjectName/.Tag/.Os/
+// .Arch) bound from that same raw artifact's correct per-platform
+// Goos/Goarch. This test RESOLVES the shipped template — it does not
+// string-match its literal source — so a reversion to the colliding
+// $artifact form is caught by a failing resolved-name comparison, not by a
+// brittle text diff.
+func TestBinarySignsSidecarMatchesUpgradeContract(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	signs := mustGoreleaserBinarySigns(t, src)
+	if len(signs) != 1 {
+		t.Fatalf("binary_signs: has %d entries, want exactly 1", len(signs))
+	}
+	bs := signs[0]
+
+	if bs.Cmd != "cosign" {
+		t.Errorf("binary_signs[0].cmd = %q, want %q", bs.Cmd, "cosign")
+	}
+	if bs.Artifacts != "binary" {
+		t.Errorf("binary_signs[0].artifacts = %q, want %q", bs.Artifacts, "binary")
+	}
+	wantArgs := []string{"sign-blob", "--bundle=${signature}", "${artifact}", "--yes"}
+	if len(bs.Args) != len(wantArgs) {
+		t.Fatalf("binary_signs[0].args = %v, want %v", bs.Args, wantArgs)
+	}
+	for i, want := range wantArgs {
+		if bs.Args[i] != want {
+			t.Errorf("binary_signs[0].args[%d] = %q, want %q", i, bs.Args[i], want)
+		}
+	}
+
+	seen := map[string]bool{}
+	hostMatched := false
+	for _, p := range releasePairs {
+		got, err := resolveGoreleaserFieldTemplate(bs.Signature, map[string]any{
+			"ProjectName": "codegraph",
+			"Tag":         pinnedReleaseTag,
+			"Os":          p.goos,
+			"Arch":        p.goarch,
+		})
+		if err != nil {
+			t.Fatalf("resolve binary_signs[0].signature for %s/%s: %v", p.goos, p.goarch, err)
+		}
+		want := goReleaserAssetName(pinnedReleaseTag, p.goos, p.goarch) + ".sigstore.json"
+		if got != want {
+			t.Errorf("binary_signs[0].signature resolved for %s/%s = %q, want %q", p.goos, p.goarch, got, want)
+		}
+		if seen[got] {
+			t.Errorf("binary_signs[0].signature resolved to a NON-DISTINCT name %q for %s/%s — this is D-14's collision failure mode", got, p.goos, p.goarch)
+		}
+		seen[got] = true
+
+		if p.goos == runtime.GOOS && p.goarch == runtime.GOARCH {
+			hostMatched = true
+			wantHost := releaseAssetName(pinnedReleaseTag) + ".sigstore.json"
+			if got != wantHost {
+				t.Errorf("binary_signs[0].signature resolved for host %s/%s = %q, want %q (must agree with releaseAssetName)", p.goos, p.goarch, got, wantHost)
+			}
+		}
+	}
+	if !hostMatched {
+		t.Fatalf("host os/arch (%s/%s) is not one of the 4 pinned release pairs", runtime.GOOS, runtime.GOARCH)
+	}
+}
+
+// TestSbomsArePerBinaryWithSpdxNames holds D-17: the sboms: block declares
+// artifacts: binary (explicitly present, not defaulted — the pipe's own
+// default is archive, which would silently catalog the zips and break
+// DIST-03's per-binary .spdx.json contract), cmd: syft, and a documents:
+// list of exactly one NAME-derived template. It RESOLVES that template for
+// all four platforms and asserts the four results are four DISTINCT
+// strings, each equal to goReleaserAssetName(tag, goos, goarch) +
+// ".spdx.json" — the property cycle-3 review's HIGH-B finding cares about,
+// not the literal template text.
+func TestSbomsArePerBinaryWithSpdxNames(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	sboms := mustGoreleaserSBOMs(t, src)
+	if len(sboms) != 1 {
+		t.Fatalf("sboms: has %d entries, want exactly 1", len(sboms))
+	}
+	sb := sboms[0]
+
+	if sb.ID != "binary-sbom" {
+		t.Errorf("sboms[0].id = %q, want %q", sb.ID, "binary-sbom")
+	}
+	if sb.Artifacts != "binary" {
+		t.Errorf("sboms[0].artifacts = %q, want %q (absent defaults to \"archive\", which would break DIST-03)", sb.Artifacts, "binary")
+	}
+	if sb.Cmd != "syft" {
+		t.Errorf("sboms[0].cmd = %q, want %q", sb.Cmd, "syft")
+	}
+	wantArgs := []string{"$artifact", "--output", "spdx-json=$document"}
+	if len(sb.Args) != len(wantArgs) {
+		t.Fatalf("sboms[0].args = %v, want %v", sb.Args, wantArgs)
+	}
+	for i, want := range wantArgs {
+		if sb.Args[i] != want {
+			t.Errorf("sboms[0].args[%d] = %q, want %q", i, sb.Args[i], want)
+		}
+	}
+	if len(sb.Documents) != 1 {
+		t.Fatalf("sboms[0].documents has %d elements, want exactly 1", len(sb.Documents))
+	}
+
+	seen := map[string]bool{}
+	for _, p := range releasePairs {
+		artifactName := goReleaserAssetName(pinnedReleaseTag, p.goos, p.goarch)
+		got, err := resolveGoreleaserFieldTemplate(sb.Documents[0], map[string]any{
+			"ArtifactName": artifactName,
+		})
+		if err != nil {
+			t.Fatalf("resolve sboms[0].documents[0] for %s/%s: %v", p.goos, p.goarch, err)
+		}
+		want := artifactName + ".spdx.json"
+		if got != want {
+			t.Errorf("sboms[0].documents[0] resolved for %s/%s = %q, want %q", p.goos, p.goarch, got, want)
+		}
+		if seen[got] {
+			t.Errorf("sboms[0].documents[0] resolved to a NON-DISTINCT name %q for %s/%s — this is HIGH-B's collision failure mode", got, p.goos, p.goarch)
+		}
+		seen[got] = true
 	}
 }
