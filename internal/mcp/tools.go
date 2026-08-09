@@ -76,20 +76,79 @@ func openEngine(argPath, defaultPath, repoPath string, detector *gitmeta.Caching
 	return eng, closer.Close, nil
 }
 
-// toolAnnotations returns the same ToolAnnotations values mark3labs'
-// mcp.NewTool defaulted every tool to (readOnlyHint:false,
-// destructiveHint:true, idempotentHint:false, openWorldHint:true) —
-// carried over byte-for-byte per 02-CONTEXT.md's "Claude's Discretion"
-// resolution: these are mark3labs zero-values, not deliberate per-tool
-// choices, and arguably wrong for read-only query tools, but correcting
-// them is a semantic change out of scope for this phase (Phase 3
-// territory, per 02-CONTEXT.md <deferred>).
+// toolAnnotations returns the ToolAnnotations every codegraph MCP tool
+// carries: read-only, closed-world.
+//
+// These were inherited mark3labs zero-values (readOnlyHint:false,
+// destructiveHint:true, idempotentHint:false, openWorldHint:true), carried
+// through the go-sdk migration unexamined and deferred to "Phase 3" by a
+// comment that outlived Phase 3. The deferral is discharged here. Until it
+// was, `/mcp` in Claude Code rendered codegraph_explore — a graph query —
+// as "destructive, open-world", the same risk vocabulary a host uses for a
+// tool that deletes files and calls the internet.
+//
+// PER-TOOL AUDIT (all eight verified individually against their actual
+// reachable call graph, not assumed from the tool's name):
+//
+//	codegraph_explore  -> Engine.Explore
+//	codegraph_node     -> Engine.Node
+//	codegraph_search   -> Engine.Search
+//	codegraph_callers  -> Engine.Callers
+//	codegraph_callees  -> Engine.Callees
+//	codegraph_impact   -> Engine.Impact
+//	codegraph_files    -> Engine.Files
+//	codegraph_status   -> Engine.Status
+//
+// Every one of those eight reaches the store through openEngine, this
+// file's single read seam, which hands back a query.Engine holding a
+// graphstore.Reader — an interface with Get*/Iterate* methods and no
+// mutator at all, so a write is not merely absent from these handlers, it
+// is unreachable through the type they hold. No handler imports or calls
+// internal/indexer, internal/daemon, or internal/watch, so none can trigger
+// a reindex or touch the daemon lock. The startup reconcile and the file
+// watcher that DO write are serve.go's, on the server's own lifecycle,
+// never on a tool call.
+//
+// codegraph_status was scrutinized specifically, being the one whose name
+// suggests it might refresh what it reports: it does not. It scans the
+// snapshot (IterateFiles/IterateNodes/GetMeta), stats the store directory
+// for a size, and compares source mtimes against the last sync stamp to
+// decide whether to REPORT staleness. It reports; it never repairs.
+//
+// One honest caveat, deliberately not treated as disqualifying:
+// graphstore.Open opens Pebble read-write, which takes the store's
+// exclusive directory lock and can write WAL/manifest bytes under
+// .codegraph/store/. That is storage-engine bookkeeping, invisible above
+// the Reader interface and incapable of changing a single node, edge, or
+// file record. readOnlyHint describes the tool's effect on its
+// ENVIRONMENT — the graph, the repository, the host — and by that measure
+// all eight are read-only. Reporting them as mutating because Pebble
+// touched its own WAL would misinform a host about real risk.
+//
+// Field-by-field, against the spec's own definitions:
+//
+//   - ReadOnlyHint: true — none of the eight modifies its environment.
+//   - DestructiveHint: nil (omitted) — "meaningful only when ReadOnlyHint
+//     == false". Emitting it alongside readOnlyHint:true would be
+//     incoherent in either direction, so it is left unset rather than set
+//     to a value that cannot be true or false meaningfully.
+//   - IdempotentHint: false — also meaningful only when ReadOnlyHint is
+//     false. go-sdk serializes this field unconditionally (no omitempty on
+//     a plain bool), so its zero value ships; that is inert, not a claim.
+//   - OpenWorldHint: false — the domain of interaction is a local,
+//     pre-built index. Nothing under internal/query or internal/gitmeta
+//     imports net/http or dials anything; the only subprocesses in the
+//     reachable set are four read-only `git rev-parse` calls used for
+//     worktree detection, which are local and closed-world.
+//
+// Per the spec these remain HINTS, not authorization: a client must treat
+// them as untrusted unless the server is trusted. Nothing here is a
+// substitute for confineToRepoRoot above, which is the actual boundary.
 func toolAnnotations() *mcp.ToolAnnotations {
-	destructive := true
-	openWorld := true
+	openWorld := false
 	return &mcp.ToolAnnotations{
-		ReadOnlyHint:    false,
-		DestructiveHint: &destructive,
+		ReadOnlyHint:    true,
+		DestructiveHint: nil,
 		IdempotentHint:  false,
 		OpenWorldHint:   &openWorld,
 	}
