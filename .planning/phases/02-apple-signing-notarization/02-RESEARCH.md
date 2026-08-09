@@ -62,6 +62,38 @@ Neither `test/integration` nor `test/wireoracle`'s `TestMain` currently has a se
 
 ---
 
+## D-19 — MAINTAINER RULING (2026-08-09, cycle 1 of plan convergence): the Gatekeeper oracle is `spctl -a -vv -t install`
+
+**Status: LOCKED.** This ruling amends `REQUIREMENTS.md` SIGN-02 and `ROADMAP.md` Phase 2 success criteria 1 and 2. It resolves a **requirements defect**, not a plan defect — no amount of replanning could have fixed it, because the criteria named commands that cannot produce the stated result for this artifact shape.
+
+**What was measured** (macOS 27.0, this repo's maintainer machine, 2026-08-09; quarantine applied browser-style as `0081;<hex-epoch>;Safari;<uuid>` and confirmed present with `xattr -p` before each run):
+
+| Subject | `spctl -a -vv -t exec` | `spctl -a -vv -t install` |
+|---|---|---|
+| `codex` — Developer ID (OpenAI, 2DC432GLL2), notarized, `flags=0x10000(runtime)`, **quarantined** | `rejected (the code is valid but does not seem to be an app)`, exit 3 | **`accepted` / `source=Notarized Developer ID`**, exit 0 |
+| `docker` — Developer ID (Docker Inc, 9BNSXJN65R), notarized, hardened runtime | `rejected (…does not seem to be an app)`, exit 3 | `accepted` / `source=Notarized Developer ID`, exit 0 |
+| `gh` — `adhoc, linker-signed`, `TeamIdentifier=not set` (**this repo's shape today**) | — | **`rejected`, exit 3** ← the RED baseline still fires |
+
+`spctl -a -vv -t open` returns `rejected` / `source=Insufficient Context` and is not a usable oracle either.
+
+`syspolicy_check distribution` on both notarized subjects: `Notary Ticket Missing`, **Severity: Fatal**, exit 70, with the suggested fix being `stapler staple`.
+
+**Why the original criteria could not work.** `spctl`'s `-t` is an *assessment type*, not a formality. `-t exec` asks "may I launch this as an application"; a bare Mach-O is not an app, so it is rejected **on shape, before notarization is considered at all** — which is why the `origin=Developer ID Application: …` line still prints alongside the rejection. `-t install` asks "may this be installed from this origin", which is the question a downloaded CLI binary actually poses. Separately, `syspolicy_check distribution` treats a missing stapled ticket as Fatal, and DIST-06 puts stapling permanently out of scope (`.zip` and bare Mach-O are both categorically unstaplable and quill has no staple command) — so that half of SIGN-02 was in direct contradiction with the milestone's own shipped guarantee.
+
+**Why this was dangerous rather than merely wrong.** Under `-t exec`, plan 02-01's RED baseline would have gone red today for the *right* reason (adhoc, un-notarized) and stayed red after notarization for a *completely different* reason (wrong assessment type). That is a gate which passes its RED demonstration and can then never go green — this repo's two failure families (a gate that cannot FIRE, and a gate that cannot PASS) stacked in a single check, with discovery landing after plan 02-07's **irreversible publish**.
+
+**The ruling:**
+- SIGN-02 and criteria 1–2 now specify `spctl -a -vv -t install`.
+- `syspolicy_check distribution` is **removed** as a gating check. It may still be run and its output recorded as an observation, but it must never gate — its Fatal verdict is definitionally unreachable while DIST-06 holds. Any plan that keeps it must state that explicitly.
+- The verdict is taken from the **exit status** (0 = accepted, 3 = rejected), not from a substring search for `accepted`/`rejected` — a substring search matches the word inside `rejected (the code is valid…)` and inside `origin=` lines.
+- The RED-baseline discipline of SIGN-03 is unchanged and still satisfiable: the negative control above proves `-t install` rejects the shape this repo ships today.
+
+**What did NOT change:** the artifact shape (raw Mach-O primary, `.zip` alongside), DIST-06 (stapling out of scope), the shipped guarantee ("notarized, online-verified, not stapled"), D-04, D-18, and the phase's wave structure. Only the oracle changed.
+
+**Provenance:** surfaced by cycle 1 of `/gsd-plan-review-convergence 2 --codex --pi`; the orchestrator then reproduced both measurements independently against two vendors' binaries plus a negative control before the ruling was made. Neither reviewer lane proposed `-t install` — the review established that the specified commands fail, and the replacement came from testing the assessment types directly.
+
+---
+
 ## D-18 — MAINTAINER RULING (2026-08-09, at plan time): cosign moves to `signs:`
 
 **Status: LOCKED.** This ruling resolves the headline finding above and supersedes the *mechanism* of Phase 1's D-14 (not its asset-name contract). Assumption **A4 is CONFIRMED**; the planner must treat the items below as settled and must not re-litigate them.
