@@ -700,6 +700,23 @@ func equalStrings(a, b []string) bool {
 	return true
 }
 
+// allEightToolNames is the full default surface, sorted — the eight names
+// toolslist-default and toolslist-repeat advertise when CODEGRAPH_MCP_TOOLS
+// is unset. Hand-authored here rather than imported from internal/mcp,
+// matching this package's standing rule that its expected values are never
+// read from the code under test (VRFY-01, the same rule that keeps
+// legacyEraVersions and modernProtocolVersion local literals).
+var allEightToolNames = []string{
+	"codegraph_callees",
+	"codegraph_callers",
+	"codegraph_explore",
+	"codegraph_files",
+	"codegraph_impact",
+	"codegraph_node",
+	"codegraph_search",
+	"codegraph_status",
+}
+
 // TestToolsListExactSets proves each tools/list variant advertises exactly
 // its expected set — exact-set for the non-empty cases, exact-zero for
 // toolslist-no-index and modern-listen-catalog-change's pre-init id-2 call
@@ -709,6 +726,15 @@ func equalStrings(a, b []string) bool {
 // anchors: the id-2 tools/list (before the mid-session `codegraph init`)
 // advertises exactly the empty set, and the id-3 tools/list (after it, same
 // connection) advertises exactly {codegraph_explore}.
+//
+// The toolslist-default and toolslist-filter-empty rows are a MATCHED PAIR,
+// not two independent cases: both send a byte-identical request script
+// against a byte-identical fixture, and the ONLY difference between them is
+// whether CODEGRAPH_MCP_TOOLS is set to the empty string or not set at all.
+// An implementation reading os.Getenv instead of os.LookupEnv cannot tell
+// those apart and fails exactly one of these two rows — which is what makes
+// the pair a real gate on the narrowing contract rather than two spellings
+// of the same assertion.
 func TestToolsListExactSets(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -716,8 +742,9 @@ func TestToolsListExactSets(t *testing.T) {
 		wantID   float64
 		want     []string
 	}{
-		{"toolslist-default", "toolslist-default", 2, []string{"codegraph_explore"}},
-		{"toolslist-allowlist", "toolslist-allowlist", 2, []string{"codegraph_explore", "codegraph_node", "codegraph_status"}},
+		{"toolslist-default", "toolslist-default", 2, allEightToolNames},
+		{"toolslist-filter-empty", "toolslist-filter-empty", 2, []string{"codegraph_explore"}},
+		{"toolslist-narrowed", "toolslist-narrowed", 2, []string{"codegraph_explore", "codegraph_node", "codegraph_status"}},
 		{"toolslist-no-index", "toolslist-no-index", 2, []string{}},
 		{"modern-listen-catalog-change-pre-init", "modern-listen-catalog-change", 2, []string{}},
 		{"modern-listen-catalog-change-post-init", "modern-listen-catalog-change", 3, []string{"codegraph_explore"}},
@@ -784,8 +811,8 @@ func isSuccessfulToolCall(stdout []byte, wantID float64) bool {
 }
 
 // TestEveryRegisteredToolHasASuccessfulCallScenario derives the full
-// registered tool-name set from toolslist-repeat's capture (all seven
-// companionNames allowlisted, per internal/mcp/server.go:35, plus
+// registered tool-name set from toolslist-repeat's capture (the default
+// surface with CODEGRAPH_MCP_TOOLS unset: all seven companionNames plus
 // codegraph_explore — 8 names) and requires that for EACH of those 8 names
 // there exists a scenario whose Requests contains a tools/call naming it
 // AND whose captured response for that call decodes to result.isError

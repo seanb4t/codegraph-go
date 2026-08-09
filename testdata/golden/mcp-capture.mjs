@@ -10,6 +10,17 @@
 // Spawns `codegraph serve -p <projectPath> --mcp` (CODEGRAPH_MCP_TOOLS=
 // explore,node — TS gates `node` off by default, per
 // mcp/tools.js:668/DEFAULT_MCP_TOOLS), sends a minimal JSON-RPC 2.0
+//
+// DO NOT "fix" that env value to match this repo's Go server. This script
+// drives the LIVE TypeScript CodeGraph 1.3.1 binary (see the version gate
+// below), where CODEGRAPH_MCP_TOOLS is still an OPT-IN allowlist and `node`
+// must be named to appear at all. The Go server inverted the same variable
+// into an opt-out NARROWING filter (all eight tools by default), so the
+// identical value means something different on each side — on the Go server
+// this value would narrow the surface to explore+node rather than widen it
+// to explore+node. Both land on the same two tools here, which is exactly
+// what makes this an easy thing to get quietly wrong: the value is correct
+// for this oracle for the OPPOSITE reason it would be on the Go side.
 // initialize -> initialized -> tools/call handshake, and writes each tool's
 // text result through the same wrap_text-equivalent {command, output}
 // envelope and <CORPUS_PATH> normalization capture.sh's CLI path uses

@@ -13,12 +13,25 @@ const (
 	fixtureFuncBeta  = "Beta"
 )
 
-// Allowlist env strings this plan's scenarios drive CODEGRAPH_MCP_TOOLS
-// with (internal/mcp/server.go's companionNames, D-08a/MCP-02).
+// Narrowing-filter env strings the scenarios below drive
+// CODEGRAPH_MCP_TOOLS with (internal/mcp/server.go's companionNames).
+//
+// The variable is a NARROWING filter, not an allowlist: unset means all
+// eight tools register, and setting it removes every companion it does not
+// name. There is deliberately no "all companions" constant any more — under
+// the old opt-in semantics that value was how a scenario asked for the full
+// surface, and keeping it would now be an elaborate way of spelling "the
+// default", hiding whether a scenario exercises the default path or an
+// explicit filter that happens to select everything.
+//
+// envFilterExploreOnly is the SET-but-EMPTY value. It is not a degenerate
+// case to be tidied away: it is the only wire shape that distinguishes an
+// unset variable from a set one, and it is how an operator restores the
+// pre-inversion explore-only surface.
 const (
-	envAllowlistNodeStatus    = "CODEGRAPH_MCP_TOOLS=node,status"
-	envAllowlistAllCompanions = "CODEGRAPH_MCP_TOOLS=node,search,callers,callees,impact,files,status"
-	envAllowlistNodeOnly      = "CODEGRAPH_MCP_TOOLS=node"
+	envFilterNodeStatus  = "CODEGRAPH_MCP_TOOLS=node,status"
+	envFilterNodeOnly    = "CODEGRAPH_MCP_TOOLS=node"
+	envFilterExploreOnly = "CODEGRAPH_MCP_TOOLS="
 )
 
 // outsideRepoRootPath is a portable, host-independent literal — never a
@@ -476,9 +489,18 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // connection) + 1 scenario (phase 5 plan 01's SPEC-09 proof:
 // modern-listen-catalog-change, an opted-in Modern subscriptions/listen
 // stream observing notifications/tools/list_changed on the same live
-// connection after a real mid-session `codegraph init`) = 28. A shrinking
-// count is the failure mode this constant exists to catch.
-const ExpectedScenarioCount = 28
+// connection after a real mid-session `codegraph init`) + 1 scenario
+// (toolslist-filter-empty, added when CODEGRAPH_MCP_TOOLS inverted from an
+// opt-in allowlist to an opt-out narrowing filter: the SET-but-EMPTY value,
+// the only wire shape that distinguishes a set variable from an unset one,
+// and therefore the frozen proof that the server reads os.LookupEnv rather
+// than os.Getenv) = 29. A shrinking count is the failure mode this constant
+// exists to catch.
+//
+// Note that toolslist-allowlist was RENAMED to toolslist-narrowed in the
+// same change, not removed — a rename moves a .golden file's name without
+// moving this count.
+const ExpectedScenarioCount = 29
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -516,24 +538,42 @@ func Scenarios() []Scenario {
 					},
 				},
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 
-		// --- tools/list variants (D-05's three, plus a determinism probe) ---
+		// --- tools/list variants: the four points of the narrowing-filter
+		// matrix (unset / named subset / set-empty / no index), plus a
+		// determinism probe. Re-derived when CODEGRAPH_MCP_TOOLS inverted
+		// from an opt-in allowlist to an opt-out narrowing filter — the
+		// scenario NAMES moved with the semantics rather than the values
+		// being patched under names that no longer described them. ---
 
 		{
+			// The default surface: CODEGRAPH_MCP_TOOLS unset, index
+			// present, all eight tools. This scenario existed before the
+			// inversion and froze the opposite answer (one tool) under the
+			// same name — it is the single case the reported "the mcp
+			// server is only showing one tool" bug landed on, and the one
+			// whose frozen bytes prove the fix on the wire rather than in a
+			// unit test.
 			Name:  "toolslist-default",
 			Index: true,
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolsListRequest(2),
 			},
-			ExpectTools: 1, // explore-only default (MCP-01)
+			ExpectTools: 8, // explore + all 7 companions, no env set
 		},
 		{
-			Name:  "toolslist-allowlist",
+			// Renamed from toolslist-allowlist: the value and the answer
+			// are unchanged (explore + node + status), but the MECHANISM
+			// reversed — these two companions now survive a filter instead
+			// of being opted into an empty set. The observable set is
+			// identical under both contracts, which is precisely why this
+			// scenario cannot detect the inversion and the two below can.
+			Name:  "toolslist-narrowed",
 			Index: true,
-			Env:   []string{envAllowlistNodeStatus},
+			Env:   []string{envFilterNodeStatus},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolsListRequest(2),
@@ -541,12 +581,34 @@ func Scenarios() []Scenario {
 			ExpectTools: 3, // explore + node + status
 		},
 		{
+			// CODEGRAPH_MCP_TOOLS SET to the empty string — the operator
+			// escape hatch back to the pre-inversion explore-only surface,
+			// and the only wire shape that distinguishes a set variable
+			// from an unset one. Paired with toolslist-default above, these
+			// two transcripts are the frozen proof that the server reads
+			// the variable's PRESENCE (os.LookupEnv) and not merely its
+			// value: an implementation that used os.Getenv would produce
+			// byte-identical tools arrays for both, and this pair is what
+			// makes that indistinguishable state a loud failure.
+			Name:  "toolslist-filter-empty",
+			Index: true,
+			Env:   []string{envFilterExploreOnly},
+			Requests: []map[string]any{
+				initializeRequest(1),
+				toolsListRequest(2),
+			},
+			ExpectTools: 1, // explore alone
+		},
+		{
 			// Index: false — fixture copied but never indexed (MCP-03: no
 			// .codegraph/ means zero tools). initialize still succeeds;
-			// only tools/list is affected.
+			// only tools/list is affected. The filter is set here so this
+			// scenario proves the index gate dominates the filter gate:
+			// neither a narrowed nor a default surface survives a missing
+			// index.
 			Name:  "toolslist-no-index",
 			Index: false,
-			Env:   []string{envAllowlistNodeStatus},
+			Env:   []string{envFilterNodeStatus},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolsListRequest(2),
@@ -561,9 +623,14 @@ func Scenarios() []Scenario {
 			// not "tools/call", so both are handled synchronously in
 			// request order — no worker-pool race (see the concurrency
 			// ordering constraint documented above Scenarios()).
+			//
+			// It carries no Env: the full eight-tool surface it needs to
+			// make an ordering probe meaningful is now the default. It used
+			// to name all seven companions explicitly, which after the
+			// inversion would have been a filter selecting everything — a
+			// second, silently divergent way of spelling the default.
 			Name:  "toolslist-repeat",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolsListRequest(2),
@@ -575,12 +642,18 @@ func Scenarios() []Scenario {
 		// --- one tools/call per remaining tool (codegraph_explore is
 		// covered by handshake-explore above; TestEveryRegisteredTool-
 		// HasASuccessfulCallScenario asserts that coverage structurally
-		// rather than inheriting it by prose) ---
+		// rather than inheriting it by prose).
+		//
+		// None of these carries an Env any more: each used to name all
+		// seven companions to opt the tool it calls INTO the surface, and
+		// after the inversion the tool it calls is registered by default.
+		// Keeping the old value would have turned every one of these into a
+		// filter that selects everything — a second spelling of the default
+		// that would keep passing if the default silently regressed. ---
 
 		{
 			Name:  "call-node",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_node", map[string]any{"symbol": fixtureFuncAlpha}),
@@ -590,7 +663,6 @@ func Scenarios() []Scenario {
 		{
 			Name:  "call-search",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_search", map[string]any{"query": fixtureFuncAlpha}),
@@ -602,7 +674,6 @@ func Scenarios() []Scenario {
 			// result.
 			Name:  "call-callers",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_callers", map[string]any{"symbol": fixtureFuncBeta}),
@@ -614,7 +685,6 @@ func Scenarios() []Scenario {
 			// — a non-empty, two-entry callees result.
 			Name:  "call-callees",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_callees", map[string]any{"symbol": fixtureFuncAlpha}),
@@ -624,7 +694,6 @@ func Scenarios() []Scenario {
 		{
 			Name:  "call-impact",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_impact", map[string]any{"symbol": fixtureFuncBeta}),
@@ -637,7 +706,6 @@ func Scenarios() []Scenario {
 			// one.
 			Name:  "call-files",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_files", map[string]any{}),
@@ -648,7 +716,6 @@ func Scenarios() []Scenario {
 			// codegraph_status takes no required arguments.
 			Name:  "call-status",
 			Index: true,
-			Env:   []string{envAllowlistAllCompanions},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_status", map[string]any{}),
@@ -669,7 +736,7 @@ func Scenarios() []Scenario {
 					"method":  unimplementedMethod,
 				},
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			// codegraph_bogus_tool is never registered under any allowlist
@@ -684,7 +751,7 @@ func Scenarios() []Scenario {
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_bogus_tool", map[string]any{}),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			// error-malformed-args exercises a genuinely malformed
@@ -722,7 +789,7 @@ func Scenarios() []Scenario {
 				initializeRequest(1),
 				toolCallRequest(2, "", "not-an-object"),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			// codegraph_node with a "path" argument resolving outside the
@@ -730,7 +797,7 @@ func Scenarios() []Scenario {
 			// (internal/mcp/tools.go:24-45), the CR-02 trust boundary.
 			Name:  "error-confinement-reject",
 			Index: true,
-			Env:   []string{envAllowlistNodeOnly},
+			Env:   []string{envFilterNodeOnly},
 			Requests: []map[string]any{
 				initializeRequest(1),
 				toolCallRequest(2, "codegraph_node", map[string]any{"path": outsideRepoRootPath}),
@@ -808,7 +875,7 @@ func Scenarios() []Scenario {
 				initializeRequestWithVersion(1, legacyEraVersions[0]),
 				toolsListRequest(2),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			Name:                 legacyEraPrefix + "2025-06-18",
@@ -820,7 +887,7 @@ func Scenarios() []Scenario {
 				initializeRequestWithVersion(1, legacyEraVersions[1]),
 				toolsListRequest(2),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			Name:                 legacyEraPrefix + "2025-03-26",
@@ -832,7 +899,7 @@ func Scenarios() []Scenario {
 				initializeRequestWithVersion(1, legacyEraVersions[2]),
 				toolsListRequest(2),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			// SPEC-06 (03-05-PLAN Task 1): a trailing tools/call proves this
@@ -858,7 +925,7 @@ func Scenarios() []Scenario {
 				toolsListRequest(2),
 				toolCallRequest(3, "codegraph_explore", map[string]any{"query": handshakeExploreQuery}),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			// Silent coercion, not rejection (RESEARCH Pitfall 1): today's
@@ -875,7 +942,7 @@ func Scenarios() []Scenario {
 				initializeRequestWithVersion(1, legacyUnsupportedVersion),
 				toolsListRequest(2),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 		{
 			// A distinct, third coercion path (RESEARCH Pitfall 1, D-06's
@@ -892,7 +959,7 @@ func Scenarios() []Scenario {
 				initializeRequestOmittingVersion(1),
 				toolsListRequest(2),
 			},
-			ExpectTools: 1,
+			ExpectTools: 8,
 		},
 
 		// --- Modern (2026-07-28) tracer: server/discover then a
@@ -1043,12 +1110,22 @@ func Scenarios() []Scenario {
 			// mutations 5 and 6 (MUTATION-PROOF.md) prove that path is
 			// live, not merely present.
 			//
-			// Index: false plus the default allowlist is deliberate (mirrors
-			// index-appears-mid-session above): exactly one tool
-			// (codegraph_explore) registers on the mid-session transition,
-			// so changeAndNotify's 10ms debounce coalesces to exactly one
-			// notification frame — a count that does not depend on how many
-			// AddTool calls happen to land inside that debounce window.
+			// Index: false plus an EXPLICIT explore-only narrowing filter is
+			// deliberate: exactly one tool (codegraph_explore) registers on
+			// the mid-session transition, so changeAndNotify's 10ms debounce
+			// coalesces to exactly one notification frame — a count that does
+			// not depend on how many AddTool calls happen to land inside that
+			// debounce window.
+			//
+			// The filter is what preserves that property, and it was added
+			// when CODEGRAPH_MCP_TOOLS inverted. Before the inversion this
+			// scenario got its single AddTool call for free from the
+			// explore-only default and named no env at all; under
+			// default-all the same scenario would issue eight AddTool calls
+			// and the frame count would become a bet on the debounce window
+			// swallowing all eight. Setting envFilterExploreOnly keeps the
+			// one-frame count a structural property of the scenario rather
+			// than a timing observation that happens to hold today.
 			//
 			// Request 1 (subscriptions/listen) is answered with an
 			// acknowledgment NOTIFICATION, never an id-matched result
@@ -1078,6 +1155,7 @@ func Scenarios() []Scenario {
 			// is trivially satisfied.
 			Name:               "modern-listen-catalog-change",
 			Index:              false,
+			Env:                []string{envFilterExploreOnly},
 			NoInitialize:       true,
 			NoResponseRequests: []int{1},
 			InitAfterRequest:   2,
