@@ -92,7 +92,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
 - **`v0.5.0` carries no git tag.** release-please is the sole tag authority (D-06R), and a `v0.5.0` tag would match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline.
 
 - [x] **Phase 1: Cross-Compile Spike & `goreleaser release` Migration** - Decide the pipeline architecture on measured evidence, then move to one `goreleaser release` invocation that publishes both raw binaries and `.zip` archives with every supply-chain claim re-proven against real published assets (completed 2026-08-08)
-- [ ] **Phase 2: Apple Signing & Notarization** - A browser-downloaded darwin asset stops being blocked by Gatekeeper, proven by a gate shown RED against the un-notarized binary first
+- [x] **Phase 2: Apple Signing & Notarization** - A browser-downloaded darwin asset stops being blocked by Gatekeeper, proven by a gate shown RED against the un-notarized binary first (completed 2026-08-09)
 - [ ] **Phase 3: Homebrew Tap & Cask** - `brew tap seanb4t/tap && brew install codegraph` works on a clean machine, with completions, man pages, a real `test:` block, and a proven-recoverable tap-push failure
 - [ ] **Phase 4: `codegraph upgrade` × Homebrew** - `codegraph upgrade` detects a brew-managed install, refuses, and points at `brew upgrade codegraph` — never touching the Cellar
 
@@ -215,7 +215,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
-| 2. Apple Signing & Notarization | v0.5.0 | 7/7 | In Progress|  |
+| 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
