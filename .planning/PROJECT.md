@@ -153,7 +153,7 @@ Deferred to later releases:
 
 - **Tech stack**: Go (latest stable), single static binary per platform — the performance and supply-chain story both depend on it
 - **Supply chain**: Minimal, audited dependencies; prefer pure Go (CGo only with explicit justification pending parser research); signed + attested + reproducible + SBOM'd releases
-- **Compatibility**: Behavioral parity with TS CodeGraph v1.3.x agent-facing surface (MCP tools, CLI semantics); one-way migration from its SQLite format
+- **Compatibility**: TS CodeGraph v1.3.x is a **functionality baseline, not a binding constraint** (maintainer ruling 2026-08-09) — match its agent-facing capability surface (MCP tools, CLI semantics), but deliberate, documented divergence is acceptable where its behavior is worse. A TS behavior is evidence about what users expect, not a veto; do not cite this line as a blocker without weighing that ruling. One-way migration from its SQLite format still binds. See Key Decisions
 - **Architecture**: v1 storage and process design must accommodate milestone-2 team features (central server, CI-distributed indexes, concurrent access) without a rewrite
 - **Licensing**: Original is MIT — port with attribution
 
