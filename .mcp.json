@@ -1,0 +1,34 @@
+{
+  "mcpServers": {
+    "gsd-workflow": {
+      "command": "/opt/homebrew/Cellar/node/26.7.0/bin/node",
+      "args": [
+        "/Users/sean/Library/pnpm/store/v11/links/@opengsd/gsd-pi/1.12.0/b8e9e863d1487ce45bc9f14eaaf8301938ab24d984e287036c5fe0e700494cb3/node_modules/@opengsd/gsd-pi/packages/mcp-server/dist/cli.js"
+      ],
+      "cwd": "/Volumes/Code/github.com/seanb4t/codegraph-go",
+      "env": {
+        "GSD_CLI_PATH": "/Users/sean/Library/pnpm/global/v11/16571-19fcec07fe1-b94eb4e4b33cbbf1/node_modules/@opengsd/gsd-pi/dist/loader.js",
+        "GSD_BIN_PATH": "/Users/sean/Library/pnpm/global/v11/16571-19fcec07fe1-b94eb4e4b33cbbf1/node_modules/@opengsd/gsd-pi/dist/loader.js",
+        "GSD_WORKFLOW_EXECUTORS_MODULE": "/Users/sean/.gsd/agent/extensions/gsd/tools/workflow-tool-executors.js",
+        "GSD_WORKFLOW_WRITE_GATE_MODULE": "/Users/sean/.gsd/agent/extensions/gsd/bootstrap/write-gate.js",
+        "GSD_PERSIST_WRITE_GATE_STATE": "1",
+        "GSD_WORKFLOW_PROJECT_ROOT": "/Volumes/Code/github.com/seanb4t/codegraph-go"
+      }
+    },
+    "gsd-browser": {
+      "command": "gsd-browser",
+      "args": [
+        "mcp",
+        "--session",
+        "gsd-codegraph-go-a8d9fbdc",
+        "--identity-scope",
+        "project",
+        "--identity-key",
+        "gsd-codegraph-go-a8d9fbdc",
+        "--identity-project",
+        "gsd-codegraph-go-a8d9fbdc"
+      ],
+      "cwd": "/Volumes/Code/github.com/seanb4t/codegraph-go"
+    }
+  }
+}
