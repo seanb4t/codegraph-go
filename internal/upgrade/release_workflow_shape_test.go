@@ -19,6 +19,11 @@ import (
 // every shipped binary.
 const releaseWorkflowPath = "../../.github/workflows/release.yml"
 
+// postReleaseWorkflowPath is the on-disk path (relative to this package) to
+// post-release-verify.yml, read by TestPostReleaseJobsDeclareCheckoutPolicy
+// (plan 02-06 Task 3).
+const postReleaseWorkflowPath = "../../.github/workflows/post-release-verify.yml"
+
 // --- workflow-source helper pairs -----------------------------------------
 //
 // Each helper below is a pure `parseX(src string) (T, error)` core plus a
@@ -1289,5 +1294,125 @@ func TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError(t *testing.T) {
 	}
 	if _, err := decodeFullWorkflowDoc(path); err == nil {
 		t.Fatalf("decodeFullWorkflowDoc(%s): expected a non-nil error for a workflow with zero jobs:, got nil", path)
+	}
+}
+
+// --- plan 02-06 Task 3: post-release checkout policy -----------------------
+
+// postReleaseCheckoutShape is the subset of one post-release-verify.yml
+// job's shape TestPostReleaseJobsDeclareCheckoutPolicy needs: whether it
+// has an actions/checkout step at all, and that step's with.ref: value (if
+// any).
+type postReleaseCheckoutShape struct {
+	JobID       string
+	HasCheckout bool
+	CheckoutRef string
+}
+
+// postReleaseCheckoutShapes derives one postReleaseCheckoutShape per job in
+// doc, using the FIRST actions/checkout step found in each job (this
+// repository's workflows never declare more than one per job).
+func postReleaseCheckoutShapes(doc fullWorkflowDoc) []postReleaseCheckoutShape {
+	var shapes []postReleaseCheckoutShape
+	for jobID, job := range doc.Jobs {
+		shape := postReleaseCheckoutShape{JobID: jobID}
+		for _, step := range job.Steps {
+			if !strings.HasPrefix(step.Uses, "actions/checkout") {
+				continue
+			}
+			shape.HasCheckout = true
+			if ref, ok := step.With["ref"]; ok {
+				shape.CheckoutRef = fmt.Sprintf("%v", ref)
+			}
+			break
+		}
+		shapes = append(shapes, shape)
+	}
+	return shapes
+}
+
+// latestVerifierJobIDs and releaseMatchedTestJobIDs are the two checkout
+// policy classes TestPostReleaseJobsDeclareCheckoutPolicy enforces (Task 3,
+// review concern codex MEDIUM / pi LOW — the same seam from two angles). A
+// test named for governing every release-artifact job, while silently
+// excluding some, would invite a reader to believe coverage it does not
+// have; encoding both classes as named data, plus the completeness
+// assertion in the test body, is what converts that exclusion rationale
+// from narrative into something enforced.
+//
+//   - latest-verifier jobs run verification TARGETS from the tree with
+//     checkout DELIBERATELY UNPINNED, so the newest verifier applies even
+//     to an older tag — a fixed verifier SHOULD apply when re-verifying.
+//     resolve-tag performs no checkout at all (it only calls gh api), so
+//     the pinning rule holds on it vacuously; it is classified here rather
+//     than left unclassified so the completeness assertion below covers
+//     every job id in the file, not just the ones that happen to check out
+//     code.
+//   - release-matched-test jobs run TESTS or task targets that must match
+//     the artifact under test byte-for-byte, so checkout MUST be pinned to
+//     the resolved tag — otherwise a post-release red is ambiguous between
+//     a bad artifact and drifted tooling. gatekeeper joins notarized-suite
+//     here because plan 02-06 Task 2 requires its checkout pinned too (the
+//     Taskfile target it runs must be the one that shipped WITH the
+//     release under test, not whatever HEAD happens to be at verification
+//     time) — the classifying property is the PINNING REQUIREMENT, not
+//     whether the job happens to invoke `go test` specifically.
+var latestVerifierJobIDs = []string{"resolve-tag", "verify-supply-chain", "self-upgrade"}
+var releaseMatchedTestJobIDs = []string{"gatekeeper", "notarized-suite"}
+
+// TestPostReleaseJobsDeclareCheckoutPolicy is the plan 02-06 Task 3
+// mitigation: every job in post-release-verify.yml must be classified into
+// exactly one of latestVerifierJobIDs or releaseMatchedTestJobIDs, and its
+// checkout ref: (or lack of one) must match that class's pinning rule. A
+// newly added job that is not classified fails this test — see the two var
+// docs above for the two classes' rationale.
+func TestPostReleaseJobsDeclareCheckoutPolicy(t *testing.T) {
+	doc, err := decodeFullWorkflowDoc(postReleaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("decodeFullWorkflowDoc(%s): %v", postReleaseWorkflowPath, err)
+	}
+	shapes := postReleaseCheckoutShapes(doc)
+	if len(shapes) == 0 {
+		t.Fatalf("%s declares zero jobs", postReleaseWorkflowPath)
+	}
+
+	classOf := map[string]string{}
+	for _, id := range latestVerifierJobIDs {
+		classOf[id] = "latest-verifier"
+	}
+	for _, id := range releaseMatchedTestJobIDs {
+		classOf[id] = "release-matched-test"
+	}
+
+	seen := map[string]bool{}
+	for _, s := range shapes {
+		seen[s.JobID] = true
+		class, ok := classOf[s.JobID]
+		if !ok {
+			t.Errorf("job %q is not classified into latest-verifier or release-matched-test — classify every new artifact-consuming job rather than leaving it unlisted", s.JobID)
+			continue
+		}
+		switch class {
+		case "latest-verifier":
+			if s.CheckoutRef != "" {
+				t.Errorf("job %q is classified latest-verifier (checkout deliberately unpinned, so the newest verifier applies even to an older tag) but declares with: ref: %q", s.JobID, s.CheckoutRef)
+			}
+		case "release-matched-test":
+			if !s.HasCheckout {
+				t.Errorf("job %q is classified release-matched-test but has no actions/checkout step at all", s.JobID)
+				continue
+			}
+			if s.CheckoutRef == "" {
+				t.Errorf("job %q is classified release-matched-test (tests must match the artifact under test) but its checkout step has no with: ref:", s.JobID)
+			} else if !strings.Contains(s.CheckoutRef, "needs.resolve-tag.outputs.tag") {
+				t.Errorf("job %q's checkout ref: = %q, want it bound to needs.resolve-tag.outputs.tag", s.JobID, s.CheckoutRef)
+			}
+		}
+	}
+
+	for id := range classOf {
+		if !seen[id] {
+			t.Errorf("class list names job %q but %s declares no such job", id, postReleaseWorkflowPath)
+		}
 	}
 }
