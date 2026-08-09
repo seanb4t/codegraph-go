@@ -13,11 +13,11 @@
 
 ### Release Pipeline (REL)
 
-- [ ] **REL-05**: A maintainer can decide the pipeline architecture on measured evidence — whether `zig cc` cross-compiles the CGo tree-sitter dependency to linux/amd64 **and** linux/arm64 from a macOS host, proven by the resulting binaries *running on real Linux*, not by the build exiting 0
-- [ ] **REL-06**: A release is cut by a single `goreleaser release` invocation, with GoReleaser owning archive, checksum, sign, and SBOM generation
-- [ ] **REL-07**: Exactly one process writes `codegraph_<tag>_checksums.txt` — the hand-rolled `sha256sum` step is deleted in the same change that makes `.goreleaser.yaml`'s `checksum:` block live, so the two can never disagree
-- [ ] **REL-08**: Every supply-chain claim still verifies against real published assets after the migration — `cosign verify-blob`, `gh attestation verify` (reworded 2026-08-08, plan 01-04: the pre-migration verifier command architecturally cannot verify `actions/attest-build-provenance` output — confirmed by Phase-1 research, not a scope change; D-10 named this replacement command in advance), and a genuinely shipped prior binary self-upgrading through `codegraph upgrade`
-- [ ] **REL-09**: A release carries both the raw per-platform binaries `codegraph upgrade` consumes and `.zip` archives for browser download and Homebrew, with the raw binary byte-unchanged from today (D-02/Finding 1 preserved, not amended)
+- [x] **REL-05**: A maintainer can decide the pipeline architecture on measured evidence — whether `zig cc` cross-compiles the CGo tree-sitter dependency to linux/amd64 **and** linux/arm64 from a macOS host, proven by the resulting binaries *running on real Linux*, not by the build exiting 0
+- [x] **REL-06**: A release is cut by a single `goreleaser release` invocation, with GoReleaser owning archive, checksum, sign, and SBOM generation
+- [x] **REL-07**: Exactly one process writes `codegraph_<tag>_checksums.txt` — the hand-rolled `sha256sum` step is deleted in the same change that makes `.goreleaser.yaml`'s `checksum:` block live, so the two can never disagree
+- [x] **REL-08**: Every supply-chain claim still verifies against real published assets after the migration — `cosign verify-blob`, `gh attestation verify` (reworded 2026-08-08, plan 01-04: the pre-migration verifier command architecturally cannot verify `actions/attest-build-provenance` output — confirmed by Phase-1 research, not a scope change; D-10 named this replacement command in advance), and a genuinely shipped prior binary self-upgrading through `codegraph upgrade`
+- [x] **REL-09**: A release carries both the raw per-platform binaries `codegraph upgrade` consumes and `.zip` archives for browser download and Homebrew, with the raw binary byte-unchanged from today (D-02/Finding 1 preserved, not amended)
 
 ### macOS Signing & Notarization (SIGN)
 
@@ -68,11 +68,11 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REL-05 | Phase 1 | Pending |
-| REL-06 | Phase 1 | Pending |
-| REL-07 | Phase 1 | Pending |
-| REL-08 | Phase 1 | Pending |
-| REL-09 | Phase 1 | Pending |
+| REL-05 | Phase 1 | Complete |
+| REL-06 | Phase 1 | Complete |
+| REL-07 | Phase 1 | Complete |
+| REL-08 | Phase 1 | Complete |
+| REL-09 | Phase 1 | Complete |
 | SIGN-01 | Phase 2 | Pending |
 | SIGN-02 | Phase 2 | Pending |
 | SIGN-03 | Phase 2 | Pending |

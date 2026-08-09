@@ -91,7 +91,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
 - **Brew detection (Phase 4) can be developed in parallel with Phases 2–3 against a constructed Cellar-shaped symlink tree, but its acceptance needs the real tap Phase 3 publishes.** A path-prefix guess is the exact shape of gate this repo keeps finding cannot fire, so the honest acceptance test is a genuine `brew tap` + `brew install` followed by a refused `codegraph upgrade`.
 - **`v0.5.0` carries no git tag.** release-please is the sole tag authority (D-06R), and a `v0.5.0` tag would match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline.
 
-- [ ] **Phase 1: Cross-Compile Spike & `goreleaser release` Migration** - Decide the pipeline architecture on measured evidence, then move to one `goreleaser release` invocation that publishes both raw binaries and `.zip` archives with every supply-chain claim re-proven against real published assets
+- [x] **Phase 1: Cross-Compile Spike & `goreleaser release` Migration** - Decide the pipeline architecture on measured evidence, then move to one `goreleaser release` invocation that publishes both raw binaries and `.zip` archives with every supply-chain claim re-proven against real published assets (completed 2026-08-08)
 - [ ] **Phase 2: Apple Signing & Notarization** - A browser-downloaded darwin asset stops being blocked by Gatekeeper, proven by a gate shown RED against the un-notarized binary first
 - [ ] **Phase 3: Homebrew Tap & Cask** - `brew tap seanb4t/tap && brew install codegraph` works on a clean machine, with completions, man pages, a real `test:` block, and a proven-recoverable tap-push failure
 - [ ] **Phase 4: `codegraph upgrade` × Homebrew** - `codegraph upgrade` detects a brew-managed install, refuses, and points at `brew upgrade codegraph` — never touching the Cellar
@@ -110,7 +110,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
   3. Against assets **re-downloaded from the published release** — never a local `dist/` copy — `cosign verify-blob` returns Verified OK under the unchanged `release.yml@refs/tags/v*` SAN, `gh attestation verify` passes against the `actions/attest-build-provenance` attestation, and a genuinely shipped prior binary self-upgrades via `codegraph upgrade` on darwin/arm64 and linux/amd64 (REL-08)
   4. For each platform the release carries both a raw `codegraph_<tag>_<goos>_<goarch>` asset — extension-free, directly executable, and byte-shape-identical to what `internal/upgrade.releaseAssetName()` builds — and a distinctly-named `.zip`; a mutation changing the raw entry away from `formats: [binary]` turns a test red rather than shipping an archive that verifies its signature and then bricks the install (REL-09)
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -129,7 +129,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-05-PLAN.md — cut a real release and re-prove every supply-chain claim against re-downloaded published assets, automated to re-fire on every future release
+- [x] 01-05-PLAN.md — cut a real release and re-prove every supply-chain claim against re-downloaded published assets, automated to re-fire on every future release
 
 ### Phase 2: Apple Signing & Notarization
 
@@ -195,7 +195,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
-| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 5/6 | In Progress|  |
+| 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
 | 2. Apple Signing & Notarization | v0.5.0 | 0/TBD | Not started | - |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
