@@ -388,39 +388,97 @@ var releasePairs = []struct{ goos, goarch string }{
 // hide from a resolve-and-compare assertion.
 const pinnedReleaseTag = "v1.2.3"
 
-// goreleaserBinarySign mirrors one .goreleaser.yaml `binary_signs:` list
-// entry.
-type goreleaserBinarySign struct {
+// goreleaserSign mirrors one .goreleaser.yaml `signs:` list entry (D-18,
+// LOCKED, maintainer 2026-08-09: renamed from the pre-ruling build-scoped
+// `binary_signs:` block — see TestSignsSidecarMatchesUpgradeContract's doc
+// comment for the full rationale). ids: is the NEW D-18 field: signs[].ids
+// filters ARCHIVE ids (this project's raw/zip pair), a DIFFERENT namespace
+// from notarize.macos[].ids' BUILD ids — confusing the two is how the zip
+// archive shape could silently acquire its own cosign signature.
+type goreleaserSign struct {
 	Cmd       string   `yaml:"cmd"`
+	IDs       []string `yaml:"ids"`
 	Args      []string `yaml:"args"`
 	Signature string   `yaml:"signature"`
 	Artifacts string   `yaml:"artifacts"`
 }
 
-type goreleaserBinarySignsConfig struct {
-	BinarySigns []goreleaserBinarySign `yaml:"binary_signs"`
+type goreleaserSignsConfig struct {
+	Signs []goreleaserSign `yaml:"signs"`
 }
 
-// parseGoreleaserBinarySigns decodes .goreleaser.yaml source src with a
-// real YAML decoder and returns every binary_signs: entry. Returns a
-// non-nil error — never a usable empty slice — when src fails to parse, or
-// when binary_signs: is absent or contains no entries.
-func parseGoreleaserBinarySigns(src string) ([]goreleaserBinarySign, error) {
-	var cfg goreleaserBinarySignsConfig
+// parseGoreleaserSigns decodes .goreleaser.yaml source src with a real YAML
+// decoder and returns every signs: entry. Returns a non-nil error — never a
+// usable empty slice — when src fails to parse, or when signs: is absent or
+// contains no entries.
+func parseGoreleaserSigns(src string) ([]goreleaserSign, error) {
+	var cfg goreleaserSignsConfig
 	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
-		return nil, fmt.Errorf("parseGoreleaserBinarySigns: %w", err)
+		return nil, fmt.Errorf("parseGoreleaserSigns: %w", err)
 	}
-	if len(cfg.BinarySigns) == 0 {
-		return nil, fmt.Errorf("parseGoreleaserBinarySigns: no binary_signs: entries found")
+	if len(cfg.Signs) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserSigns: no signs: entries found")
 	}
-	return cfg.BinarySigns, nil
+	return cfg.Signs, nil
 }
 
-func mustGoreleaserBinarySigns(t *testing.T, src string) []goreleaserBinarySign {
+func mustGoreleaserSigns(t *testing.T, src string) []goreleaserSign {
 	t.Helper()
-	v, err := parseGoreleaserBinarySigns(src)
+	v, err := parseGoreleaserSigns(src)
 	if err != nil {
-		t.Fatalf("mustGoreleaserBinarySigns: %v", err)
+		t.Fatalf("mustGoreleaserSigns: %v", err)
+	}
+	return v
+}
+
+// goreleaserNotarizeMacos mirrors one .goreleaser.yaml `notarize.macos` list
+// entry. sign/notarize are decoded as map[string]any (not typed structs) so
+// TestNotarizeMacosOmitsEntitlements can assert on KEY PRESENCE — an unset
+// entitlements: key is distinguishable from one present with an empty
+// value, which a typed string field's zero value could not tell apart.
+type goreleaserNotarizeMacos struct {
+	Enabled  string         `yaml:"enabled"`
+	IDs      []string       `yaml:"ids"`
+	Sign     map[string]any `yaml:"sign"`
+	Notarize map[string]any `yaml:"notarize"`
+}
+
+type goreleaserNotarizeConfig struct {
+	Notarize struct {
+		Macos []goreleaserNotarizeMacos `yaml:"macos"`
+	} `yaml:"notarize"`
+}
+
+// parseGoreleaserNotarizeMacos decodes .goreleaser.yaml source src with a
+// real YAML decoder and returns the notarize.macos: list. Returns a
+// non-nil error — never a usable value — when src fails to parse, when the
+// list is absent or empty, OR when it carries more than one entry: a
+// second entry changes notary.MacOS's own Run from a sequential per-binary
+// loop inside one entry to a parallelized loop across entries (a semaphore
+// error group), which would invalidate every timeout/sequencing statement
+// this phase's config comments make (see TestNotarizeMacosHasExactlyOneEntry)
+// — so "read the first and ignore the rest" is never an acceptable outcome
+// here.
+func parseGoreleaserNotarizeMacos(src string) ([]goreleaserNotarizeMacos, error) {
+	var cfg goreleaserNotarizeConfig
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserNotarizeMacos: %w", err)
+	}
+	switch len(cfg.Notarize.Macos) {
+	case 0:
+		return nil, fmt.Errorf("parseGoreleaserNotarizeMacos: no notarize.macos: entries found")
+	case 1:
+		return cfg.Notarize.Macos, nil
+	default:
+		return nil, fmt.Errorf("parseGoreleaserNotarizeMacos: notarize.macos: has %d entries, want exactly 1 (a second entry changes the pipe's parallelism)", len(cfg.Notarize.Macos))
+	}
+}
+
+func mustGoreleaserNotarizeMacos(t *testing.T, src string) []goreleaserNotarizeMacos {
+	t.Helper()
+	v, err := parseGoreleaserNotarizeMacos(src)
+	if err != nil {
+		t.Fatalf("mustGoreleaserNotarizeMacos: %v", err)
 	}
 	return v
 }
@@ -483,74 +541,150 @@ func resolveGoreleaserFieldTemplate(tplSrc string, fields map[string]any) (strin
 	return buf.String(), nil
 }
 
-// TestBinarySignsSidecarMatchesUpgradeContract holds D-14: the
-// binary_signs: block's signature: template must resolve, for every one of
-// the 4 shipped platforms, to exactly the literal string internal/upgrade
-// downloads (assetName + ".sigstore.json"). This is the one contract whose
-// breakage bricks every user's codegraph upgrade after the binary has
-// already been downloaded.
+// resolveGoreleaserFieldTemplateWithFuncs is resolveGoreleaserFieldTemplate
+// plus an injectable template.FuncMap, so a predicate function (e.g. an
+// isEnvSet stand-in for GoReleaser's own env-presence template function)
+// can be controlled deterministically from a test rather than read from the
+// real process environment. resolveGoreleaserFieldTemplate's own signature
+// is left unchanged — every other test in this file depends on it.
+func resolveGoreleaserFieldTemplateWithFuncs(tplSrc string, fields map[string]any, funcs template.FuncMap) (string, error) {
+	tpl, err := template.New("goreleaser-field-template-funcs").Funcs(funcs).Option("missingkey=error").Parse(tplSrc)
+	if err != nil {
+		return "", fmt.Errorf("resolveGoreleaserFieldTemplateWithFuncs: parse %q: %w", tplSrc, err)
+	}
+	var buf strings.Builder
+	if err := tpl.Execute(&buf, fields); err != nil {
+		return "", fmt.Errorf("resolveGoreleaserFieldTemplateWithFuncs: execute %q: %w", tplSrc, err)
+	}
+	return buf.String(), nil
+}
+
+// isEnvSetFuncMap returns a template.FuncMap providing an "isEnvSet"
+// function matching GoReleaser's own env-presence template predicate
+// (goreleaser.com/customization/templates), backed by the given set of
+// variable names considered "present" rather than the real process
+// environment — so the resolved enabled: verdict can be tested under
+// controlled environments without mutating the actual process environment.
+// This is a LOCALLY CONSTRUCTED emulation of the predicate, not GoReleaser's
+// own runtime template evaluation — see TestNotarizeMacosEnabledIsEnvGated's
+// doc comment for what this does and does not prove.
+func isEnvSetFuncMap(present map[string]bool) template.FuncMap {
+	return template.FuncMap{
+		"isEnvSet": func(name string) bool {
+			return present[name]
+		},
+	}
+}
+
+// notarizeCredentialVars is the five credential env vars
+// notarize.macos[0].enabled must gate on CONJUNCTIVELY (D-18's
+// five-term-conjunction ruling in .goreleaser.yaml's notarize: comment) —
+// pinned independently here so a future edit that drops one variable from
+// the template is caught by this list, not discovered by re-reading the
+// template.
+var notarizeCredentialVars = []string{
+	"MACOS_SIGN_P12",
+	"MACOS_SIGN_PASSWORD",
+	"MACOS_NOTARY_ISSUER_ID",
+	"MACOS_NOTARY_KEY_ID",
+	"MACOS_NOTARY_KEY",
+}
+
+// TestSignsSidecarMatchesUpgradeContract holds D-18 (LOCKED, maintainer,
+// 2026-08-09): cosign now signs via the RELEASE-SCOPED signs: pipe, not the
+// build-scoped binary_signs: pipe this test was originally named and
+// pinned against (renamed here — the prior name described the
+// build-scoped block and is retired along with it). The test moved
+// deliberately, per this repo's own "a test pinning a broken invariant
+// resists correction worse than no test" rule — it keeps asserting the
+// SAME property (a distinct, download-contract-matching
+// sidecar name per platform), not a new one.
 //
-// binary_signs: signs the RAW build-output artifact (type Binary), not the
-// renamed archives: release asset — confirmed against the pinned
-// goreleaser/v2@v2.17.1 module's internal/pipe/sign/sign_binary.go (filters
-// artifact.ByType(artifact.Binary)) and internal/pipe/sign/sign.go's
-// signone() (the PUBLISHED signature artifact's Name is computed from
-// env["artifact"] = art.Name, not art.Path). A raw Binary artifact's .Name
-// is this project's literal `binary: codegraph` value for every platform,
-// so a $artifact-based (env-var) template collides to one name; the
-// template must instead use Go-template FIELDS (.ProjectName/.Tag/.Os/
-// .Arch) bound from that same raw artifact's correct per-platform
-// Goos/Goarch. This test RESOLVES the shipped template — it does not
-// string-match its literal source — so a reversion to the colliding
-// $artifact form is caught by a failing resolved-name comparison, not by a
-// brittle text diff.
-func TestBinarySignsSidecarMatchesUpgradeContract(t *testing.T) {
+// Why the block moved: GoReleaser's pipe execution order is a hardcoded Go
+// slice (internal/pipeline/pipeline.go), not driven by .goreleaser.yaml's
+// block order. sign.BinaryPipe{} (binary_signs:) and notary.MacOS{}
+// (notarize:) are BOTH registered inside BuildPipeline, with
+// sign.BinaryPipe{} first — so the pre-D-18 config cosign-signed bytes that
+// notary.MacOS{} (a sign-AND-notarize pipe: quill.Sign rewrites the Mach-O's
+// LC_CODE_SIGNATURE load command in place) then mutated afterward.
+// sign.Pipe{} (signs:), by contrast, is registered well AFTER
+// BuildPipeline entirely — and therefore after notarize — so moving cosign
+// here makes the signed subject and the published subject describe the
+// same, post-notarization bytes by construction. GoReleaser is not wrong
+// and this is not an upstream bug: the pre-D-18 config was simply asking
+// GoReleaser for the wrong thing (D-18, RESEARCH.md).
+//
+// The Path-vs-Name hazard D-14 (Phase 1) already found is UNCHANGED by this
+// move: signone() (internal/pipe/sign/sign.go) still rebinds
+// env["artifact"] = art.Name (not art.Path) for the publish-naming template
+// pass, so the explicit Go-template signature: field below remains the
+// mitigation and must never revert to a bare ${artifact} form —
+// GoReleaser's own documented "${artifact}.sigstore.json" idiom collapses
+// all 4 platforms to one name (D-14's original collision failure mode).
+//
+// ids: [raw] (the NEW D-18 field on this block) is the filter that
+// actually keeps this pipe off the zip archive shape (D-15/D-04):
+// signs[].ids filters ARCHIVE ids (this project's raw/zip pair), a
+// DIFFERENT namespace from notarize.macos[].ids' BUILD ids — confusing the
+// two is how the zip would silently acquire its own cosign signature. This
+// test asserts ids as an exact set ([raw], nothing else), never
+// containment, so an edit that adds "zip" alongside "raw" turns this red.
+//
+// This test RESOLVES the shipped signature: template for all 4 release
+// platforms and asserts the 4 results are DISTINCT strings each matching
+// internal/upgrade's download contract — it never string-matches the
+// template's literal source.
+func TestSignsSidecarMatchesUpgradeContract(t *testing.T) {
 	data, err := os.ReadFile(goreleaserConfigPath)
 	if err != nil {
 		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
 	}
 	src := string(data)
 
-	signs := mustGoreleaserBinarySigns(t, src)
+	signs := mustGoreleaserSigns(t, src)
 	if len(signs) != 1 {
-		t.Fatalf("binary_signs: has %d entries, want exactly 1", len(signs))
+		t.Fatalf("signs: has %d entries, want exactly 1", len(signs))
 	}
-	bs := signs[0]
+	s := signs[0]
 
-	if bs.Cmd != "cosign" {
-		t.Errorf("binary_signs[0].cmd = %q, want %q", bs.Cmd, "cosign")
+	if s.Cmd != "cosign" {
+		t.Errorf("signs[0].cmd = %q, want %q", s.Cmd, "cosign")
 	}
-	if bs.Artifacts != "binary" {
-		t.Errorf("binary_signs[0].artifacts = %q, want %q", bs.Artifacts, "binary")
+	if s.Artifacts != "binary" {
+		t.Errorf("signs[0].artifacts = %q, want %q", s.Artifacts, "binary")
+	}
+	wantSignIDs := sortedJoin([]string{"raw"})
+	if got := sortedJoin(s.IDs); got != wantSignIDs {
+		t.Errorf("signs[0].ids = %v, want exactly the set [raw] (D-15/D-04: this is the filter that keeps cosign off the zip archive shape; signs[].ids is an ARCHIVE-id filter, a different namespace from notarize.macos[].ids' BUILD-id filter)", s.IDs)
 	}
 	wantArgs := []string{"sign-blob", "--bundle=${signature}", "${artifact}", "--yes"}
-	if len(bs.Args) != len(wantArgs) {
-		t.Fatalf("binary_signs[0].args = %v, want %v", bs.Args, wantArgs)
+	if len(s.Args) != len(wantArgs) {
+		t.Fatalf("signs[0].args = %v, want %v", s.Args, wantArgs)
 	}
 	for i, want := range wantArgs {
-		if bs.Args[i] != want {
-			t.Errorf("binary_signs[0].args[%d] = %q, want %q", i, bs.Args[i], want)
+		if s.Args[i] != want {
+			t.Errorf("signs[0].args[%d] = %q, want %q", i, s.Args[i], want)
 		}
 	}
 
 	seen := map[string]bool{}
 	hostMatched := false
 	for _, p := range releasePairs {
-		got, err := resolveGoreleaserFieldTemplate(bs.Signature, map[string]any{
+		got, err := resolveGoreleaserFieldTemplate(s.Signature, map[string]any{
 			"ProjectName": "codegraph",
 			"Tag":         pinnedReleaseTag,
 			"Os":          p.goos,
 			"Arch":        p.goarch,
 		})
 		if err != nil {
-			t.Fatalf("resolve binary_signs[0].signature for %s/%s: %v", p.goos, p.goarch, err)
+			t.Fatalf("resolve signs[0].signature for %s/%s: %v", p.goos, p.goarch, err)
 		}
 		want := goReleaserAssetName(pinnedReleaseTag, p.goos, p.goarch) + ".sigstore.json"
 		if got != want {
-			t.Errorf("binary_signs[0].signature resolved for %s/%s = %q, want %q", p.goos, p.goarch, got, want)
+			t.Errorf("signs[0].signature resolved for %s/%s = %q, want %q", p.goos, p.goarch, got, want)
 		}
 		if seen[got] {
-			t.Errorf("binary_signs[0].signature resolved to a NON-DISTINCT name %q for %s/%s — this is D-14's collision failure mode", got, p.goos, p.goarch)
+			t.Errorf("signs[0].signature resolved to a NON-DISTINCT name %q for %s/%s — this is D-14's collision failure mode", got, p.goos, p.goarch)
 		}
 		seen[got] = true
 
@@ -558,12 +692,199 @@ func TestBinarySignsSidecarMatchesUpgradeContract(t *testing.T) {
 			hostMatched = true
 			wantHost := releaseAssetName(pinnedReleaseTag) + ".sigstore.json"
 			if got != wantHost {
-				t.Errorf("binary_signs[0].signature resolved for host %s/%s = %q, want %q (must agree with releaseAssetName)", p.goos, p.goarch, got, wantHost)
+				t.Errorf("signs[0].signature resolved for host %s/%s = %q, want %q (must agree with releaseAssetName)", p.goos, p.goarch, got, wantHost)
 			}
 		}
 	}
 	if !hostMatched {
 		t.Fatalf("host os/arch (%s/%s) is not one of the 4 pinned release pairs", runtime.GOOS, runtime.GOARCH)
+	}
+}
+
+// TestParseGoreleaserSigns_NoSignsBlockIsError is the non-vacuity
+// companion: parseGoreleaserSigns("") must return a non-nil error, never an
+// empty-but-usable slice.
+func TestParseGoreleaserSigns_NoSignsBlockIsError(t *testing.T) {
+	if _, err := parseGoreleaserSigns(""); err == nil {
+		t.Fatalf("parseGoreleaserSigns(\"\") = nil error, want non-nil")
+	}
+}
+
+// TestParseGoreleaserNotarize_NoNotarizeBlockIsError is the non-vacuity
+// companion: parseGoreleaserNotarizeMacos("") must return a non-nil error,
+// never an empty-but-usable slice.
+func TestParseGoreleaserNotarize_NoNotarizeBlockIsError(t *testing.T) {
+	if _, err := parseGoreleaserNotarizeMacos(""); err == nil {
+		t.Fatalf("parseGoreleaserNotarizeMacos(\"\") = nil error, want non-nil")
+	}
+}
+
+// wantDarwinBuildIDs is the two darwin build ids notarize.macos[0].ids must
+// name exactly (T-02-05) — pinned independently of wantBuildIDs (which
+// covers all 4 platforms), so this test cannot accidentally pass by
+// asserting notarize.macos[0].ids against the same 4-element slice it is
+// meant to exclude two elements from.
+var wantDarwinBuildIDs = []string{
+	"codegraph-darwin-amd64",
+	"codegraph-darwin-arm64",
+}
+
+// TestNotarizeMacosIdsCoverDarwinBuildIDs holds T-02-05: notarize.macos[0].ids
+// is exactly the set of this project's two darwin build ids — not a subset
+// (the default is [ProjectName] = ["codegraph"], which matches neither and
+// silently no-ops the pipe, exit 0, un-notarized binaries, no error
+// anywhere in the log), and not a superset (a linux build id, or an
+// archive id like "zip" smuggled into what is a BUILD-id filter). Both
+// directions matter: per D-15 the raw Mach-O is the only notarized
+// subject, and per D-04 notarizing the zip too was rejected as a redundant
+// Apple round-trip.
+func TestNotarizeMacosIdsCoverDarwinBuildIDs(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	entries := mustGoreleaserNotarizeMacos(t, src)
+	entry := entries[0]
+
+	want := sortedJoin(wantDarwinBuildIDs)
+	if got := sortedJoin(entry.IDs); got != want {
+		t.Errorf("notarize.macos[0].ids = %v, want exactly the set %v (matching too little silently skips notarization; matching too much notarizes a shape it should not, e.g. a linux build id or the zip archive id)", entry.IDs, wantDarwinBuildIDs)
+	}
+}
+
+// TestNotarizeMacosHasExactlyOneEntry holds the plan's parallelism
+// invariant: notarize.macos: must carry EXACTLY one entry. A second entry
+// does not merely go untested — it changes notary.MacOS's own Run from a
+// sequential per-binary loop inside one entry to a parallelized loop
+// ACROSS entries (a semaphore error group), which would invalidate every
+// timeout/sequencing statement this phase's config comments make. Proven
+// both on the real config (must parse to exactly 1 entry) and by mutation
+// (a synthetic 2-entry fixture must be REJECTED by the parser, not
+// silently truncated to its first element).
+func TestNotarizeMacosHasExactlyOneEntry(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	entries := mustGoreleaserNotarizeMacos(t, src)
+	if len(entries) != 1 {
+		t.Fatalf("notarize.macos: has %d entries, want exactly 1", len(entries))
+	}
+
+	// Mutation observation: a synthetic fixture naming a SECOND macos:
+	// entry must be REJECTED by the parser (see
+	// parseGoreleaserNotarizeMacos's "absent, empty, OR longer than one
+	// entry" contract), never silently read as its first element.
+	const twoEntryFixture = `
+notarize:
+  macos:
+    - enabled: "true"
+      ids: [codegraph-darwin-amd64]
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+    - enabled: "true"
+      ids: [codegraph-darwin-arm64]
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+`
+	if _, err := parseGoreleaserNotarizeMacos(twoEntryFixture); err == nil {
+		t.Fatalf("parseGoreleaserNotarizeMacos(<2-entry fixture>) = nil error, want non-nil — a second macos: entry changes the pipe's parallelism and must be rejected, not silently read as its first element")
+	}
+}
+
+// TestNotarizeMacosOmitsEntitlements holds D-03: notarize.macos[0].sign
+// declares no entitlements key at all — quill embeds nothing when the key
+// is unset (D-03's working hypothesis) while still applying the
+// hardened-runtime flag unconditionally regardless. sign: is decoded as
+// map[string]any specifically so this assertion is made on KEY PRESENCE,
+// never on a zero value that an empty-string entitlements: key would also
+// produce.
+func TestNotarizeMacosOmitsEntitlements(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	entries := mustGoreleaserNotarizeMacos(t, src)
+	entry := entries[0]
+
+	if entry.Sign == nil {
+		t.Fatalf("notarize.macos[0].sign is absent, want a mapping (certificate/password)")
+	}
+	if _, ok := entry.Sign["entitlements"]; ok {
+		t.Errorf("notarize.macos[0].sign declares an entitlements: key, want none (D-03: a future addition must be a deliberate decision, not drift)")
+	}
+}
+
+// TestNotarizeMacosEnabledIsEnvGated holds T-02-06: notarize.macos[0].enabled
+// must resolve to the true literal ONLY when all five credential variables
+// (notarizeCredentialVars) are present, and to the false literal when ANY
+// subset — including zero — is missing. Proven by resolving the template
+// under the all-present environment, the all-absent environment, and each
+// single-credential-missing environment in turn (7 resolutions total: 1
+// true, 6 false), never by reading the template source.
+//
+// This is a STATIC BACKSTOP over Go's text/template with a locally
+// constructed isEnvSet FuncMap emulating GoReleaser's own env-presence
+// template predicate — it proves the TEMPLATE's own logic (the conjunction
+// is correctly five-term and correctly conjunctive), not GoReleaser's
+// runtime template evaluation, which reads the real process environment
+// through its own internal/tmpl package. Runtime behaviour — whether the
+// pipe actually fires or skips under a real credential set in a real
+// `goreleaser build`/`release` invocation — is established only by plan
+// 02-04's rehearsal observing the pipe fire and not fire, never by this
+// test alone.
+func TestNotarizeMacosEnabledIsEnvGated(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	src := string(data)
+
+	entries := mustGoreleaserNotarizeMacos(t, src)
+	entry := entries[0]
+	if strings.TrimSpace(entry.Enabled) == "" {
+		t.Fatalf("notarize.macos[0].enabled is empty, want a non-empty template")
+	}
+
+	resolve := func(t *testing.T, present map[string]bool) string {
+		t.Helper()
+		got, err := resolveGoreleaserFieldTemplateWithFuncs(entry.Enabled, nil, isEnvSetFuncMap(present))
+		if err != nil {
+			t.Fatalf("resolve notarize.macos[0].enabled: %v", err)
+		}
+		return got
+	}
+
+	allPresent := map[string]bool{}
+	for _, v := range notarizeCredentialVars {
+		allPresent[v] = true
+	}
+	if got := resolve(t, allPresent); got != "true" {
+		t.Errorf("notarize.macos[0].enabled resolved with all 5 credentials present = %q, want %q", got, "true")
+	}
+
+	if got := resolve(t, map[string]bool{}); got != "false" {
+		t.Errorf("notarize.macos[0].enabled resolved with 0 credentials present = %q, want %q", got, "false")
+	}
+
+	for _, missing := range notarizeCredentialVars {
+		present := map[string]bool{}
+		for _, v := range notarizeCredentialVars {
+			present[v] = v != missing
+		}
+		if got := resolve(t, present); got != "false" {
+			t.Errorf("notarize.macos[0].enabled resolved with only %q missing = %q, want %q (a partial credential set must not enable the pipe)", missing, got, "false")
+		}
 	}
 }
 

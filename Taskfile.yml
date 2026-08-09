@@ -284,28 +284,40 @@ tasks:
       without one. The resolved version string is the only thing --snapshot
       changes, and the version string is not the property this target verifies.
 
-      LOCAL-ONLY SINCE 2026-08-08 — this target is NO LONGER RUN IN CI, and it
-      now requires an interactive Sigstore session. Plan 01-02 activated
-      `binary_signs:`, which runs inside the BUILD pipeline (that is what
-      distinguishes it from `signs:`, which runs during release). `goreleaser
-      build` has no `--skip=sign` — its only valid --skip values are before,
-      post-hooks, pre-hooks and validate — so this target now always reaches a
-      cosign KEYLESS signing call, which needs an OIDC token. On a developer
-      machine that means a browser flow; in a pull_request workflow there is no
-      token at all, and granting `id-token: write` to a PR-triggered canary
-      would be a security regression rather than a fix. The
-      darwin-toolchain-canary step that used to run this was therefore removed
-      (see that workflow's comment). The property it proved — GoReleaser driving
-      a native darwin build — is now covered by `task release:dry-run` in
-      linux-cross-canary's `cross-build` job on the same macOS profile, because
-      `goreleaser release` DOES accept `--skip=sign`.
+      LOCAL-ONLY SINCE 2026-08-08 — this target is still NO LONGER RUN IN CI,
+      but the reason changed (D-18, LOCKED, maintainer 2026-08-09): plan
+      01-02 originally activated `binary_signs:` inside the BUILD pipeline,
+      which forced `goreleaser build` (no `--skip=sign` exists for the build
+      command) through a cosign KEYLESS OIDC call this canary cannot supply.
+      Plan 02-02 moved cosign to the RELEASE-scoped `signs:` pipe — which is
+      registered well after GoReleaser's hardcoded BuildPipeline entirely
+      (internal/pipeline/pipeline.go, pinned goreleaser/v2@v2.17.1) — so
+      `goreleaser build` NO LONGER REACHES ANY cosign call, and this target
+      no longer needs a browser-driven keyless-signing flow or an OIDC
+      token to complete.
+
+      BUILD CLASS (plan 02-02's goreleaser-caller enumeration): this target's
+      `goreleaser build --single-target` DOES still reach the notarize:
+      pipe — `notary.MacOS{}` is registered INSIDE BuildPipeline, so it runs
+      on every `goreleaser build` invocation regardless of `--skip`. The
+      notarize skip key (`--skip=notarize`) is valid for the RELEASE command
+      and NOT for the build command (internal/skips/skips.go, pinned
+      goreleaser/v2@v2.17.1) — this target has NO escape hatch other than
+      notarize.macos[0].enabled's five-term credential conjunction
+      (MACOS_SIGN_P12/MACOS_SIGN_PASSWORD/MACOS_NOTARY_ISSUER_ID/
+      MACOS_NOTARY_KEY_ID/MACOS_NOTARY_KEY, .goreleaser.yaml). On this
+      canary's unprivileged environment none of those five are set, so
+      `enabled:` resolves false and the pipe no-ops; do not mistake the
+      absence of a `--skip=sign`-style flag for protection here — the
+      credential guard is the ONLY thing stopping this target from reaching
+      Apple. Was still covered pre-D-18 by `task release:dry-run` in
+      linux-cross-canary's `cross-build` job on the same macOS profile
+      (`goreleaser release` DOES accept `--skip=sign`); still true post-D-18.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
       - sh: command -v clang
         msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
-      - sh: command -v cosign
-        msg: "cosign not found. Since plan 01-02 activated binary_signs:, `goreleaser build` reaches the sign pipe and there is no --skip=sign for the build command, so this target needs cosign AND an interactive Sigstore keyless session. Install with `brew install cosign`. If you only want the darwin build composition without signing, run `task release:dry-run` instead — it uses `goreleaser release --skip=publish,sign` and needs no OIDC."
     cmds:
       - |
         set -euo pipefail
@@ -380,15 +392,28 @@ tasks:
       changes, not the property this target verifies. Uses
       --skip=publish,sign so nothing is published to GitHub and no signing
       key/OIDC token is needed locally.
+
+      RELEASE CLASS, notarize reachable (plan 02-02's goreleaser-caller
+      enumeration): `--skip=sign` skips the release-scoped `signs:` pipe
+      (cosign), but `notarize:` has its OWN skip key (`--skip=notarize`,
+      valid for the release command — unlike the build command, see
+      check:darwin-release-build's comment) that this target does NOT pass.
+      `notary.MacOS{}` therefore DOES run here, because it is registered
+      inside BuildPipeline and `goreleaser release` always runs
+      BuildPipeline first. What stops it from reaching Apple on this
+      unprivileged canary is ONLY notarize.macos[0].enabled's five-term
+      credential conjunction (MACOS_SIGN_P12 and 4 siblings,
+      .goreleaser.yaml) evaluating false — never `--skip=sign`, which is a
+      different pipe.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
       - sh: command -v zig
         msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
       - sh: command -v syft
-        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. The moment plan 01-02 activates .goreleaser.yaml's sboms: block, this target shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. .goreleaser.yaml's sboms: block shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
       - sh: command -v cosign
-        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the SIGN pipe today, but plan 01-02 wires binary_signs: through this same target, and the permanent linux-cross-canary installs cosign before invoking it for exactly this reason. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the release-scoped signs: pipe today, but the permanent linux-cross-canary installs cosign before invoking it as defense-in-depth. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
     cmds:
       - |
         set -euo pipefail
@@ -488,7 +513,7 @@ tasks:
   release:dry-run-signed:
     desc: >-
       Sibling of release:dry-run — but does NOT skip sign. release:dry-run
-      skips BOTH publish and sign, so binary_signs:'s upgrade-sidecar naming
+      skips BOTH publish and sign, so signs:'s upgrade-sidecar naming
       template is never resolved except by a static assertion until the
       production release, where a wrong answer cannot be withdrawn (D-07).
       Resolves it early against a THROWAWAY LOCAL cosign key (no OIDC) — the
@@ -496,6 +521,15 @@ tasks:
       sboms: documents: (--skip=publish does not skip SBOM). Pass condition:
       FOUR DISTINCT PUBLISHED NAMES per pipe from dist/artifacts.json — never
       a green exit code, never an on-disk listing (cycle-3 review HIGH-A).
+
+      RELEASE CLASS, notarize reachable (plan 02-02's goreleaser-caller
+      enumeration): identically to release:dry-run, `notarize:` is registered
+      inside BuildPipeline and runs here regardless of the `--skip=publish`
+      this target passes — the throwaway cosign key above rehearses ONLY the
+      signs: pipe, not notarize:, which needs its own five Apple credential
+      variables (MACOS_SIGN_P12 and siblings, .goreleaser.yaml) and is
+      stopped on this canary by `enabled:` evaluating false, not by any
+      `--skip` flag.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
@@ -504,7 +538,7 @@ tasks:
       - sh: command -v syft
         msg: "syft not found. This target's release invocation exercises the sboms: pipe (--skip=publish does not skip it). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
       - sh: command -v cosign
-        msg: "cosign not found. This target's release invocation exercises the binary_signs: pipe against a throwaway local key. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+        msg: "cosign not found. This target's release invocation exercises the signs: pipe against a throwaway local key. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
     cmds:
       - |
         set -euo pipefail
@@ -529,7 +563,7 @@ tasks:
         # A THROWAWAY LOCAL cosign key pair, generated fresh in this temp
         # dir and used once — makes the sign pipe RUN. Not the production
         # identity; signs nothing anyone will verify. Production signing
-        # (binary_signs: carries no --key) stays keyless-OIDC, untouched.
+        # (signs: carries no --key) stays keyless-OIDC, untouched.
         export COSIGN_PASSWORD="${COSIGN_PASSWORD:-codegraph-throwaway-rehearsal-password-not-for-verification}"
         cosign generate-key-pair --output-key-prefix "${SIGNTEST_DIR}/cosign" >/dev/null
 
@@ -682,20 +716,33 @@ tasks:
   release:goreleaser:
     desc: >-
       Cut a REAL release: one `goreleaser release --clean` invocation —
-      publishes to GitHub Releases, signs every binary with cosign keyless
+      publishes to GitHub Releases, notarizes both darwin binaries with
+      Apple (quill, in-process), signs every binary with cosign keyless
       (OIDC), and emits SBOMs. The single definition release.yml's
       collapsed `release` job calls (plan 01-03, DEV-01); not currently
       bound by TestWorkflowRunBodiesInvokeTask's inScopeJobs fixture (D-08
       exception) — applied deliberately, not because a test requires it.
       Meant to run in CI on a tag push, NOT casually from a laptop. For the
       local, non-publishing equivalent, use `task release:dry-run`.
+
+      RELEASE CLASS, BOTH reachable (plan 02-02's goreleaser-caller
+      enumeration): this is the one target where `notarize:` and the
+      release-scoped `signs:` (cosign) pipe are BOTH live and BOTH expected
+      to fire — this target's whole job is running them for real. The
+      release-scoped signs: pipe still shells out to cosign for a real
+      keyless OIDC signature, so its precondition below is unchanged and
+      kept. notarize:'s five Apple credential variables (MACOS_SIGN_P12 and
+      siblings) are supplied as CI secrets on release.yml's single
+      `id-token: write` job's env: (D-14/D-17: never on any
+      pull_request-triggerable workflow) — not by a precondition here, since
+      this target is meant to run only from that job.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:goreleaser must run on a native darwin host — the linux legs cross-compile via zig from here (D-01/D-02) and darwin must build natively; a linux host would silently produce a cross-linked darwin binary (libresolv/DNS-resolution risk). Use `task release:dry-run` or the linux-cross-canary workflow instead."
       - sh: command -v zig
         msg: "zig not found. Both linux build ids in .goreleaser.yaml cross-compile via zig cc/zig c++ (CI pins 0.15.1 via mlugg/setup-zig). Install locally: brew install zig."
       - sh: command -v cosign
-        msg: "cosign not found. .goreleaser.yaml's binary_signs: pipe shells out to it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+        msg: "cosign not found. .goreleaser.yaml's signs: pipe shells out to it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
       - sh: command -v syft
         msg: "syft not found. .goreleaser.yaml's sboms: pipe shells out to it. CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
       - sh: git describe --exact-match --tags HEAD
@@ -917,7 +964,17 @@ tasks:
         echo "REL05-EVIDENCE uname=${HOST_MACHINE} elf=${ELF_MACHINE} files=${FILES} symbols=${SYMBOLS}"
 
   check:goreleaser:
-    desc: Validate .goreleaser.yaml (DIST-01).
+    desc: >-
+      Validate .goreleaser.yaml (DIST-01). CHECK CLASS (plan 02-02's
+      goreleaser-caller enumeration): `goreleaser check` runs no pipes at
+      all — neither notarize: nor signs: executes, so this target never
+      reaches Apple or cosign and needs no credentials. It also does NOT
+      semantically validate the notarize:/signs: block contents (this
+      repo's own config comments already document that `goreleaser check`
+      does not validate the artifacts: enum; the same class of blind spot
+      is not independently confirmed for notarize: either) — a clean run
+      here is config-shape validation only, never evidence that the pipe
+      fires correctly.
     cmds:
       - "{{.GO_TOOL}} goreleaser check"
 
