@@ -284,28 +284,40 @@ tasks:
       without one. The resolved version string is the only thing --snapshot
       changes, and the version string is not the property this target verifies.
 
-      LOCAL-ONLY SINCE 2026-08-08 — this target is NO LONGER RUN IN CI, and it
-      now requires an interactive Sigstore session. Plan 01-02 activated
-      `binary_signs:`, which runs inside the BUILD pipeline (that is what
-      distinguishes it from `signs:`, which runs during release). `goreleaser
-      build` has no `--skip=sign` — its only valid --skip values are before,
-      post-hooks, pre-hooks and validate — so this target now always reaches a
-      cosign KEYLESS signing call, which needs an OIDC token. On a developer
-      machine that means a browser flow; in a pull_request workflow there is no
-      token at all, and granting `id-token: write` to a PR-triggered canary
-      would be a security regression rather than a fix. The
-      darwin-toolchain-canary step that used to run this was therefore removed
-      (see that workflow's comment). The property it proved — GoReleaser driving
-      a native darwin build — is now covered by `task release:dry-run` in
-      linux-cross-canary's `cross-build` job on the same macOS profile, because
-      `goreleaser release` DOES accept `--skip=sign`.
+      LOCAL-ONLY SINCE 2026-08-08 — this target is still NO LONGER RUN IN CI,
+      but the reason changed (D-18, LOCKED, maintainer 2026-08-09): plan
+      01-02 originally activated `binary_signs:` inside the BUILD pipeline,
+      which forced `goreleaser build` (no `--skip=sign` exists for the build
+      command) through a cosign KEYLESS OIDC call this canary cannot supply.
+      Plan 02-02 moved cosign to the RELEASE-scoped `signs:` pipe — which is
+      registered well after GoReleaser's hardcoded BuildPipeline entirely
+      (internal/pipeline/pipeline.go, pinned goreleaser/v2@v2.17.1) — so
+      `goreleaser build` NO LONGER REACHES ANY cosign call, and this target
+      no longer needs a browser-driven keyless-signing flow or an OIDC
+      token to complete.
+
+      BUILD CLASS (plan 02-02's goreleaser-caller enumeration): this target's
+      `goreleaser build --single-target` DOES still reach the notarize:
+      pipe — `notary.MacOS{}` is registered INSIDE BuildPipeline, so it runs
+      on every `goreleaser build` invocation regardless of `--skip`. The
+      notarize skip key (`--skip=notarize`) is valid for the RELEASE command
+      and NOT for the build command (internal/skips/skips.go, pinned
+      goreleaser/v2@v2.17.1) — this target has NO escape hatch other than
+      notarize.macos[0].enabled's five-term credential conjunction
+      (MACOS_SIGN_P12/MACOS_SIGN_PASSWORD/MACOS_NOTARY_ISSUER_ID/
+      MACOS_NOTARY_KEY_ID/MACOS_NOTARY_KEY, .goreleaser.yaml). On this
+      canary's unprivileged environment none of those five are set, so
+      `enabled:` resolves false and the pipe no-ops; do not mistake the
+      absence of a `--skip=sign`-style flag for protection here — the
+      credential guard is the ONLY thing stopping this target from reaching
+      Apple. Was still covered pre-D-18 by `task release:dry-run` in
+      linux-cross-canary's `cross-build` job on the same macOS profile
+      (`goreleaser release` DOES accept `--skip=sign`); still true post-D-18.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "check:darwin-release-build must run on a native darwin host — that is the property it exists to verify (D-08). Run it on macOS locally, or dispatch the darwin-toolchain-canary workflow."
       - sh: command -v clang
         msg: "clang not found. Install Xcode or the Command Line Tools: xcode-select --install"
-      - sh: command -v cosign
-        msg: "cosign not found. Since plan 01-02 activated binary_signs:, `goreleaser build` reaches the sign pipe and there is no --skip=sign for the build command, so this target needs cosign AND an interactive Sigstore keyless session. Install with `brew install cosign`. If you only want the darwin build composition without signing, run `task release:dry-run` instead — it uses `goreleaser release --skip=publish,sign` and needs no OIDC."
     cmds:
       - |
         set -euo pipefail
@@ -380,15 +392,28 @@ tasks:
       changes, not the property this target verifies. Uses
       --skip=publish,sign so nothing is published to GitHub and no signing
       key/OIDC token is needed locally.
+
+      RELEASE CLASS, notarize reachable (plan 02-02's goreleaser-caller
+      enumeration): `--skip=sign` skips the release-scoped `signs:` pipe
+      (cosign), but `notarize:` has its OWN skip key (`--skip=notarize`,
+      valid for the release command — unlike the build command, see
+      check:darwin-release-build's comment) that this target does NOT pass.
+      `notary.MacOS{}` therefore DOES run here, because it is registered
+      inside BuildPipeline and `goreleaser release` always runs
+      BuildPipeline first. What stops it from reaching Apple on this
+      unprivileged canary is ONLY notarize.macos[0].enabled's five-term
+      credential conjunction (MACOS_SIGN_P12 and 4 siblings,
+      .goreleaser.yaml) evaluating false — never `--skip=sign`, which is a
+      different pipe.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
       - sh: command -v zig
         msg: "zig not found. Both linux build ids in .goreleaser.yaml now cross-compile via zig cc/zig c++ (REL-05). CI installs zig 0.15.1 via mlugg/setup-zig; locally: brew install zig."
       - sh: command -v syft
-        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. The moment plan 01-02 activates .goreleaser.yaml's sboms: block, this target shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
+        msg: "syft not found. --skip=publish,sign only skips the SIGN pipe — it does NOT skip the sboms: pipe. .goreleaser.yaml's sboms: block shells out to syft, and this precondition turns that into a named, actionable halt instead of a confusing mid-pipe failure (review HIGH-4). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
       - sh: command -v cosign
-        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the SIGN pipe today, but plan 01-02 wires binary_signs: through this same target, and the permanent linux-cross-canary installs cosign before invoking it for exactly this reason. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+        msg: "cosign not found. Same forward reasoning as the syft precondition above: --skip=publish,sign skips the release-scoped signs: pipe today, but the permanent linux-cross-canary installs cosign before invoking it as defense-in-depth. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
     cmds:
       - |
         set -euo pipefail
@@ -488,7 +513,7 @@ tasks:
   release:dry-run-signed:
     desc: >-
       Sibling of release:dry-run — but does NOT skip sign. release:dry-run
-      skips BOTH publish and sign, so binary_signs:'s upgrade-sidecar naming
+      skips BOTH publish and sign, so signs:'s upgrade-sidecar naming
       template is never resolved except by a static assertion until the
       production release, where a wrong answer cannot be withdrawn (D-07).
       Resolves it early against a THROWAWAY LOCAL cosign key (no OIDC) — the
@@ -496,6 +521,15 @@ tasks:
       sboms: documents: (--skip=publish does not skip SBOM). Pass condition:
       FOUR DISTINCT PUBLISHED NAMES per pipe from dist/artifacts.json — never
       a green exit code, never an on-disk listing (cycle-3 review HIGH-A).
+
+      RELEASE CLASS, notarize reachable (plan 02-02's goreleaser-caller
+      enumeration): identically to release:dry-run, `notarize:` is registered
+      inside BuildPipeline and runs here regardless of the `--skip=publish`
+      this target passes — the throwaway cosign key above rehearses ONLY the
+      signs: pipe, not notarize:, which needs its own five Apple credential
+      variables (MACOS_SIGN_P12 and siblings, .goreleaser.yaml) and is
+      stopped on this canary by `enabled:` evaluating false, not by any
+      `--skip` flag.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:dry-run-signed must run on a native darwin host — that is the runner class the migrated single-job release.yml (plan 01-03) uses (D-01). Run it on macOS locally, or dispatch the linux-cross-canary workflow, which runs this same target on namespace-profile-macos-6x14-tahoe."
@@ -504,7 +538,7 @@ tasks:
       - sh: command -v syft
         msg: "syft not found. This target's release invocation exercises the sboms: pipe (--skip=publish does not skip it). CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
       - sh: command -v cosign
-        msg: "cosign not found. This target's release invocation exercises the binary_signs: pipe against a throwaway local key. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+        msg: "cosign not found. This target's release invocation exercises the signs: pipe against a throwaway local key. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
     cmds:
       - |
         set -euo pipefail
@@ -529,7 +563,7 @@ tasks:
         # A THROWAWAY LOCAL cosign key pair, generated fresh in this temp
         # dir and used once — makes the sign pipe RUN. Not the production
         # identity; signs nothing anyone will verify. Production signing
-        # (binary_signs: carries no --key) stays keyless-OIDC, untouched.
+        # (signs: carries no --key) stays keyless-OIDC, untouched.
         export COSIGN_PASSWORD="${COSIGN_PASSWORD:-codegraph-throwaway-rehearsal-password-not-for-verification}"
         cosign generate-key-pair --output-key-prefix "${SIGNTEST_DIR}/cosign" >/dev/null
 
@@ -682,20 +716,33 @@ tasks:
   release:goreleaser:
     desc: >-
       Cut a REAL release: one `goreleaser release --clean` invocation —
-      publishes to GitHub Releases, signs every binary with cosign keyless
+      publishes to GitHub Releases, notarizes both darwin binaries with
+      Apple (quill, in-process), signs every binary with cosign keyless
       (OIDC), and emits SBOMs. The single definition release.yml's
       collapsed `release` job calls (plan 01-03, DEV-01); not currently
       bound by TestWorkflowRunBodiesInvokeTask's inScopeJobs fixture (D-08
       exception) — applied deliberately, not because a test requires it.
       Meant to run in CI on a tag push, NOT casually from a laptop. For the
       local, non-publishing equivalent, use `task release:dry-run`.
+
+      RELEASE CLASS, BOTH reachable (plan 02-02's goreleaser-caller
+      enumeration): this is the one target where `notarize:` and the
+      release-scoped `signs:` (cosign) pipe are BOTH live and BOTH expected
+      to fire — this target's whole job is running them for real. The
+      release-scoped signs: pipe still shells out to cosign for a real
+      keyless OIDC signature, so its precondition below is unchanged and
+      kept. notarize:'s five Apple credential variables (MACOS_SIGN_P12 and
+      siblings) are supplied as CI secrets on release.yml's single
+      `id-token: write` job's env: (D-14/D-17: never on any
+      pull_request-triggerable workflow) — not by a precondition here, since
+      this target is meant to run only from that job.
     preconditions:
       - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
         msg: "release:goreleaser must run on a native darwin host — the linux legs cross-compile via zig from here (D-01/D-02) and darwin must build natively; a linux host would silently produce a cross-linked darwin binary (libresolv/DNS-resolution risk). Use `task release:dry-run` or the linux-cross-canary workflow instead."
       - sh: command -v zig
         msg: "zig not found. Both linux build ids in .goreleaser.yaml cross-compile via zig cc/zig c++ (CI pins 0.15.1 via mlugg/setup-zig). Install locally: brew install zig."
       - sh: command -v cosign
-        msg: "cosign not found. .goreleaser.yaml's binary_signs: pipe shells out to it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+        msg: "cosign not found. .goreleaser.yaml's signs: pipe shells out to it. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
       - sh: command -v syft
         msg: "syft not found. .goreleaser.yaml's sboms: pipe shells out to it. CI installs it via anchore/sbom-action/download-syft; locally: brew install syft."
       - sh: git describe --exact-match --tags HEAD
@@ -792,6 +839,747 @@ tasks:
           fi
           echo "hashes=$(base64 -w0 < "${CHECKSUMS_FILE}")" >> "${GITHUB_OUTPUT}"
         fi
+
+  release:record-final-hashes:
+    desc: >-
+      Makes the FIRST byte-identity comparison point (SIGN-04) observable.
+      Reads the release job's local dist/artifacts.json AFTER `task
+      release:goreleaser` (i.e. `goreleaser release --clean`) has fully
+      completed — archive, checksum, sign, and publish have ALL already run
+      by the time this target executes. This is NOT a capture "immediately
+      after notarize"; no mid-pipe hook exists in GoReleaser for that, and
+      labelling this value that way would silently assume the very
+      byte-identity ordering claim SIGN-04 exists to measure. The field this
+      target emits is named exactly for what it is: `final_local_sha256`.
+
+      Read-only and additive: writes nothing, uploads nothing, needs no new
+      CI permission and no secret. But it MUST FAIL LOUDLY (non-zero exit)
+      on absent dist/artifacts.json, an unreadable/missing artifact file, or
+      a missing darwin platform entry — after emitting the labelled
+      `not-found` SIGN04-PUBLISH-EVIDENCE line so the failure is
+      diagnosable. An earlier design considered suppressing all non-zero
+      exits here on the theory that "a recording step must never break a
+      publish" — that reasoning does not survive inspection: this step runs
+      AFTER `goreleaser release` has already published, so there is no
+      publish left to protect by staying silent. What a suppressed failure
+      would actually buy is a green release job with SIGN-04 permanently
+      unprovable, and D-12 forbids re-cutting the tag to fix that
+      afterward — so failing loudly here, while there is still something to
+      fail, is the only choice that keeps the claim provable.
+
+      Never falls back to a snapshot-derived or glob-found path when the
+      real tagged artifact cannot be located from dist/artifacts.json — a
+      local snapshot exercise (below) proves the selection logic only for
+      the empty-tag naming shape --snapshot produces; the real-tag path in
+      CI must fail loudly rather than silently resolve something else.
+
+      POST-PUBLISH FAILURE BRANCH: a hard failure here leaves the release
+      job's own conclusion RED with the release assets ALREADY LIVE on
+      GitHub — nothing left to build was skipped, only this recording step
+      failed. post-release-verify.yml triggers on `workflow_run` gated to a
+      `success` conclusion, so it will NEVER FIRE AUTOMATICALLY against a
+      release whose release.yml run ended RED here — the Gatekeeper job and
+      the notarized-suite job both silently do not run. Recovery: preserve
+      this job's run logs, then manually `workflow_dispatch`
+      post-release-verify.yml against the resolved tag. See
+      docs/RELEASE-PROCEDURES.md's "Recovering from a post-publish
+      hash-recording failure" section for the four states this can leave
+      the release in and the distinct remedy for each — read it before
+      acting, do not delete or re-push the release/tag (D-12).
+    preconditions:
+      - sh: command -v jq
+        msg: "jq not found. Every result this target reports is read from dist/artifacts.json with it — never a filename glob, never a bare exit code. Install locally: brew install jq."
+    cmds:
+      - |
+        set -euo pipefail
+
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # dist/artifacts.json is where `task release:goreleaser` (this
+        # target's ONLY intended caller — see release.yml's Record final
+        # local hashes step) leaves its output: the repo root's default
+        # `dist/` directory, no --dist override, no -f alternate config.
+        # Absent metadata is a HARD FAILURE, per this target's own contract
+        # above — never a silent pass.
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found — release:record-final-hashes must run AFTER task release:goreleaser has completed. This target never falls back to a snapshot-derived or glob-found path (see its desc:); absence is recorded and then hard-failed, not silently skipped."
+          echo "SIGN04-PUBLISH-EVIDENCE schema=1 goos=darwin goarch=not-found artifact_name=not-found final_local_sha256=not-found"
+          exit 1
+        fi
+
+        # Reuses plan 02-04's release:rehearse-notarize artifact-metadata
+        # reader VERBATIM, including its binary-format filter: GoReleaser
+        # records type=="Binary" TWICE per platform (the raw build output
+        # AND the archives: pipe's renamed release asset) — filtering on
+        # .extra.Format=="binary" too is what keeps this at 4 (one per
+        # platform) rather than counting 8.
+        darwin_binary_entry() {
+          # $1 = arch  $2 = field ("path" or "name")
+          jq -r --arg a "$1" --arg f "$2" \
+            '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos=="darwin" and .goarch==$a)][0][$f] // empty' \
+            dist/artifacts.json
+        }
+
+        FAILED=0
+        for arch in arm64 amd64; do
+          BIN_PATH="$(darwin_binary_entry "${arch}" path)"
+          BIN_NAME="$(darwin_binary_entry "${arch}" name)"
+
+          if [ -z "${BIN_PATH}" ] || [ ! -f "${BIN_PATH}" ]; then
+            echo "::error::darwin/${arch} binary not found in dist/artifacts.json (or the file it names is missing on disk) — cannot record final_local_sha256 for this platform"
+            echo "SIGN04-PUBLISH-EVIDENCE schema=1 goos=darwin goarch=${arch} artifact_name=not-found final_local_sha256=not-found"
+            FAILED=1
+            continue
+          fi
+
+          FINAL_LOCAL_SHA256="$(sha256_of "${BIN_PATH}")"
+          echo "SIGN04-PUBLISH-EVIDENCE schema=1 goos=darwin goarch=${arch} artifact_name=${BIN_NAME} final_local_sha256=${FINAL_LOCAL_SHA256}"
+        done
+
+        if [ "${FAILED}" = "1" ]; then
+          echo "::error::release:record-final-hashes: one or more darwin platforms missing from dist/artifacts.json — see the not-found SIGN04-PUBLISH-EVIDENCE line(s) above"
+          exit 1
+        fi
+
+  release:rehearse-notarize:
+    desc: >-
+      MAINTAINER-ONLY (D-08/D-09). Rehearses the one release-pipeline path
+      that cannot be rehearsed any other way: the real `notarize:`
+      submission to Apple, on the maintainer's own Mac, before any tag push.
+      Requires a real Developer ID Application certificate and App Store
+      Connect API key — see docs/RELEASE.md for how each of the five
+      credential variables below is obtained. Contributors are NOT expected
+      to hold an Apple certificate; there is deliberately no credential-free
+      contributor mode (considered and declined as surface with no
+      consumer — D-08, 02-CONTEXT.md <deferred>).
+
+      Two modes, selected by SIGN04_MUTATE:
+
+        default (SIGN04_MUTATE unset): a full, BOTH-DARWIN-ARCHES rehearsal
+        of the SHIPPED configuration — build, notarize both darwin binaries
+        with Apple, sign the POST-notarization bytes with cosign, archive,
+        checksum — then MEASURE (never assume) that the archived,
+        checksummed and cosign-signed subject is the SAME bytes as the
+        notarized binary (SIGN-04/D-05's byte-identity chain, minus the
+        re-downloaded-published-asset leg, which does not exist until plan
+        02-07 and is deliberately not simulated here).
+
+        SIGN04_MUTATE=1: reproduces the PRE-D-18-RULING signs: shape (
+        build-scoped, unfiltered) in a GENERATED COPY ONLY, and MEASURES the
+        ordering claim invert: under this shape cosign signs PRE-notarization
+        bytes, so the D-05 byte-identity relationship should now describe
+        the WRONG subject. This is D-07's one-time recorded mutation, never
+        a permanent regression test. Covers ONE darwin arch only (see the
+        Apple-submission-budget comment in this target's body) — the
+        mechanism proven is per-pipe, not per-architecture, so a second real
+        Apple submission during the mutation run would buy no extra
+        evidence.
+
+      A real pre-notarize baseline cannot be captured mid-pipe — GoReleaser
+      owns the transition between the build pipe and the notarize pipe and
+      exposes no hook between them (review concern, codex HIGH/pi MEDIUM).
+      Both modes therefore obtain their baseline from a SEPARATE,
+      notarize-DISABLED run of the IDENTICAL command and flags
+      (`release --snapshot --skip=publish --clean`) as the real rehearsal,
+      against a config generated from the SAME template with only the
+      notarize `enabled:` predicate different — and this target MEASURES
+      the determinism that substitution depends on (a double build,
+      asserted byte-identical) rather than assuming it, because this
+      repository's own reproducibility gate (ci.yml) has no darwin leg at
+      all and a non-blocking linux/arm64 leg — DIST-04 does not cover this
+      property, and no comment in this file claims otherwise.
+
+      What cosign signed is established CRYPTOGRAPHICALLY — by running
+      `cosign verify-blob` against BOTH the preserved pre-sign baseline and
+      the final binary and recording which ONE verifies — never by
+      re-hashing the path dist/artifacts.json names for the signature: that
+      path records the signature FILE, not its subject, and under the
+      mutation quill has already rewritten the file at that path in place.
+
+      Every generated config lives under a run-scoped temp dir removed by a
+      single trap; the target opens with a clean-worktree precondition and
+      closes by asserting the committed .goreleaser.yaml is still
+      byte-unchanged — no experiment here ever leaks into the working tree.
+    preconditions:
+      # --- host / tool guards, in the order a maintainer must satisfy them
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:rehearse-notarize must run on a native darwin host (D-08) — rehearsal is local-only by design, never CI. Run it on your own Mac."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml cross-compile via zig cc/zig c++ (REL-05); this rehearsal's release invocation still builds all four targets. Install locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. This rehearsal's release invocation exercises the sboms: pipe (--skip=publish does not skip it). Install locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. This rehearsal's release invocation exercises the signs: pipe against a throwaway local key (never the production keyless identity). Install locally: brew install cosign."
+      - sh: command -v jq
+        msg: "jq not found. Every result this target reports is read from dist/artifacts.json with it — never a filename glob, never a bare exit code. Install locally: brew install jq."
+      - sh: git diff --quiet HEAD -- .goreleaser.yaml
+        msg: "your .goreleaser.yaml has uncommitted changes — the config under test must be exactly the committed one, or the NOTARIZE-EVIDENCE/SIGN04-EVIDENCE this target records would describe a configuration nobody will ship. Commit or stash first."
+      # --- Apple credentials (D-09's literal content): one named
+      # precondition per variable, each halting BY NAME before any network
+      # round-trip to Apple — mirroring the command -v cosign precondition
+      # this repo added after binary_signs: hung ~5 minutes before failing
+      # with expired_token. MAINTAINER-ONLY: see docs/RELEASE.md for how to
+      # obtain each value. Ordered to match 02-04-PLAN.md's user_setup.
+      - sh: '[ -n "${MACOS_SIGN_P12:-}" ]'
+        msg: "MACOS_SIGN_P12 is not set. release:rehearse-notarize is MAINTAINER-ONLY and requires a real Developer ID Application certificate (base64-encoded .p12, or a filesystem path — quill accepts either). See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_SIGN_PASSWORD:-}" ]'
+        msg: "MACOS_SIGN_PASSWORD is not set. release:rehearse-notarize is MAINTAINER-ONLY and requires the password chosen when exporting the .p12 above. See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_NOTARY_ISSUER_ID:-}" ]'
+        msg: "MACOS_NOTARY_ISSUER_ID is not set. release:rehearse-notarize is MAINTAINER-ONLY and requires an App Store Connect API key's Issuer ID (Users and Access -> Integrations -> Keys). See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_NOTARY_KEY_ID:-}" ]'
+        msg: "MACOS_NOTARY_KEY_ID is not set. release:rehearse-notarize is MAINTAINER-ONLY and requires the App Store Connect API key's Key ID column value. See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_NOTARY_KEY:-}" ]'
+        msg: "MACOS_NOTARY_KEY is not set. release:rehearse-notarize is MAINTAINER-ONLY and requires the App Store Connect API key itself (base64-encoded .p8, or a filesystem path — quill accepts either). See docs/RELEASE.md."
+    cmds:
+      - |
+        set -euo pipefail
+
+        MUTATE="${SIGN04_MUTATE:-0}"
+        echo "release:rehearse-notarize: SIGN04_MUTATE=${MUTATE}"
+
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # --- 8 (recorded up front). The committed .goreleaser.yaml's OWN
+        # sha256 — plan 02-07's pre-flight config-equality check needs this
+        # value to compare against, and it must be read BEFORE any generated
+        # copy exists.
+        CONFIG_SHA256="$(sha256_of .goreleaser.yaml)"
+
+        # --- 1. ONE run-scoped temp dir tree for every generated config,
+        # the throwaway cosign key, the native GoReleaser build, the zig
+        # caches, AND every dist/ output this rehearsal produces — never the
+        # real dist/, which --clean would wipe and which every other target
+        # already owns. A single trap removes all of it.
+        REHEARSE_DIR="$(mktemp -d)"
+        GORELEASER_DIR="$(mktemp -d)"
+        GORELEASER_BIN="${GORELEASER_DIR}/goreleaser"
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        cleanup() { rm -rf "${REHEARSE_DIR}" "${GORELEASER_DIR}" "${ZIG_CACHE_ROOT}"; }
+        trap cleanup EXIT
+
+        BASELINE_DIST_1="${REHEARSE_DIR}/dist-baseline-1"
+        BASELINE_DIST_2="${REHEARSE_DIR}/dist-baseline-2"
+        MAIN_DIST="${REHEARSE_DIR}/dist-main"
+
+        # GoReleaser v2.17.1 has NO --dist CLI flag on `release` (confirmed
+        # against the pinned module's cmd/release.go and cmd/root.go — this
+        # target uses the config's own top-level dist: field instead,
+        # pkg/config/config.go + internal/pipe/dist/dist.go, which every
+        # generated copy below sets to a DISTINCT absolute path under
+        # REHEARSE_DIR). Never dist/, never a shared path two runs could
+        # race on or destroy each other's output from, and never a
+        # copy-aside step.
+        inject_dist() {
+          # $1 = source config  $2 = dist path  $3 = destination config
+          printf 'dist: %s\n' "$2" > "$3"
+          cat "$1" >> "$3"
+        }
+
+        # --- 2. A THROWAWAY LOCAL cosign key pair, and a generated copy of
+        # the committed .goreleaser.yaml with --key injected into the
+        # signs: pipe's sign-blob args — the SAME awk anchor and
+        # additions-only diff guard release:dry-run-signed already uses, so
+        # this rehearsal's cosign signature is verifiable offline with the
+        # key it was made with, never the production keyless OIDC identity.
+        # The five Apple credentials are NOT injected into the config here —
+        # they reach quill through the process environment via the
+        # committed config's own Env-bound Go-template fields, unchanged.
+        export COSIGN_PASSWORD="${COSIGN_PASSWORD:-codegraph-throwaway-rehearsal-password-not-for-verification}"
+        cosign generate-key-pair --output-key-prefix "${REHEARSE_DIR}/cosign" >/dev/null
+        COSIGN_PUBKEY="${REHEARSE_DIR}/cosign.pub"
+
+        GENERATED_ENABLED="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.yaml"
+        awk -v keyline="      - \"--key=${REHEARSE_DIR}/cosign.key\"" '
+          { print }
+          /^      - "sign-blob"$/ { print keyline }
+        ' .goreleaser.yaml > "${GENERATED_ENABLED}"
+
+        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_ENABLED}" || true)"
+        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
+          echo "::error::${GENERATED_ENABLED} differs from the committed .goreleaser.yaml by more than additions:"
+          printf '%s\n' "${DIFF_OUT}"
+          exit 1
+        fi
+        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
+        if [ -n "${BAD_ADDITIONS}" ]; then
+          echo "::error::${GENERATED_ENABLED} has additions not matching --key= or COSIGN_PASSWORD:"
+          printf '%s\n' "${BAD_ADDITIONS}"
+          exit 1
+        fi
+        echo "generated config (notarize-enabled base) differs from the committed .goreleaser.yaml by additions only:"
+        printf '%s\n' "${DIFF_OUT}"
+
+        # notarize-DISABLED baseline template: the SAME generated-enabled
+        # config, ONE line changed — notarize.macos[0].enabled forced to
+        # the literal "false", never a real Apple round-trip. Both configs
+        # are therefore emitted from ONE template (the awk pass above) and
+        # this sed is the single, provable delta between them — printed and
+        # hard-failed on below if it is ever more than that one line.
+        GENERATED_DISABLED_BASE="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.disabled-base.yaml"
+        sed -E 's/^(    - enabled: ).*$/\1"false"/' "${GENERATED_ENABLED}" > "${GENERATED_DISABLED_BASE}"
+
+        PREDICATE_DIFF="$(diff "${GENERATED_ENABLED}" "${GENERATED_DISABLED_BASE}" || true)"
+        echo "PREDICATE-DIFF (notarize-enabled base vs notarize-disabled baseline template — must be the enabled: line and nothing else):"
+        printf '%s\n' "${PREDICATE_DIFF}"
+        PREDICATE_CHANGED_LINES="$(printf '%s\n' "${PREDICATE_DIFF}" | grep -c '^[<>]' || true)"
+        if [ "${PREDICATE_CHANGED_LINES}" != "2" ] || ! printf '%s\n' "${PREDICATE_DIFF}" | grep -q 'enabled:'; then
+          echo "::error::the notarize-enabled and notarize-disabled generated configs differ by more than the notarize enable predicate (${PREDICATE_CHANGED_LINES} changed lines) — this rule governs the BASELINE pair only and must hold exactly"
+          exit 1
+        fi
+
+        GENERATED_DISABLED_1="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.disabled-1.yaml"
+        GENERATED_DISABLED_2="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.disabled-2.yaml"
+        inject_dist "${GENERATED_DISABLED_BASE}" "${BASELINE_DIST_1}" "${GENERATED_DISABLED_1}"
+        inject_dist "${GENERATED_DISABLED_BASE}" "${BASELINE_DIST_2}" "${GENERATED_DISABLED_2}"
+
+        # --- 3. Under SIGN04_MUTATE=1, reproduce the pre-D-18-ruling
+        # signs: configuration in a GENERATED COPY ONLY. TWO edits, both
+        # mandatory:
+        #   a) the top-level key renames from signs: (release-scoped) to
+        #      binary_signs: (build-scoped, the pre-ruling name)
+        #   b) the "    ids: [raw]" line is REMOVED — signs[].ids and
+        #      binary_signs[].ids resolve in DIFFERENT NAMESPACES (archive
+        #      ids vs build ids); there is no build with id "raw", so
+        #      carrying the filter across the rename would select ZERO
+        #      artifacts, and a zero-match sign pipe does not fail — it
+        #      logs a warning and returns nil. That would terminate this
+        #      experiment as MUTATION-PRODUCED-NO-SIGNATURE for a reason
+        #      that has nothing to do with pipe ordering, and the D-07
+        #      inversion this whole rehearsal exists to observe could never
+        #      be seen. The committed pre-ruling block carried no ids: at
+        #      all — exactly why it worked, and the proof a faithful
+        #      mutation removes the line rather than renaming around it.
+        GENERATED_FINAL="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.enabled-dist.yaml"
+        inject_dist "${GENERATED_ENABLED}" "${MAIN_DIST}" "${GENERATED_FINAL}"
+
+        # Apple-submission budget (review concern codex LOW): the shipped-
+        # configuration rehearsal above covers BOTH darwin arches, because
+        # that is the shape the release ships. The mutation proves a
+        # per-PIPE mechanism, not a per-architecture one, so a SECOND real
+        # Apple submission during a mutation run buys no extra evidence —
+        # mutation mode is single-arch BY DEFAULT, arm64, for that reason.
+        MUTATE_ARCH_ID="codegraph-darwin-arm64"
+
+        if [ "${MUTATE}" = "1" ]; then
+          # Narrow notarize.macos[0].ids to ONE darwin build id — a
+          # SEPARATE edit, applied BEFORE the two-edit signs: mutation
+          # below and diffed independently, so the mutation-mode diff
+          # guard (which permits EXACTLY the two D-07 signs:-block edits)
+          # never has to reason about this budget-only narrowing.
+          GENERATED_MUTATE_BASE="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.mutate-base.yaml"
+          awk -v id="${MUTATE_ARCH_ID}" '
+            BEGIN { in_ids = 0; seen = 0 }
+            /^      ids:$/ && !seen {
+              seen = 1
+              print
+              print "        - " id
+              in_ids = 1
+              next
+            }
+            in_ids && /^        - / { next }
+            { in_ids = 0; print }
+          ' "${GENERATED_ENABLED}" > "${GENERATED_MUTATE_BASE}"
+
+          BUDGET_DIFF="$(diff "${GENERATED_ENABLED}" "${GENERATED_MUTATE_BASE}" || true)"
+          echo "MUTATION-APPLE-SUBMISSION-BUDGET-DIFF (single-arch narrowing of notarize.macos[0].ids — NOT part of the two-edit signs: guard below):"
+          printf '%s\n' "${BUDGET_DIFF}"
+
+          # The two-edit signs:-block mutation itself.
+          GENERATED_MUTATED="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.mutated.yaml"
+          awk '
+            BEGIN { in_signs = 0 }
+            /^signs:$/ { in_signs = 1; print "binary_signs:"; next }
+            in_signs && /^[A-Za-z_]+:/ { in_signs = 0 }
+            in_signs && /^    ids: \[raw\]$/ { next }
+            { print }
+          ' "${GENERATED_MUTATE_BASE}" > "${GENERATED_MUTATED}"
+
+          MUTATION_DIFF="$(diff "${GENERATED_MUTATE_BASE}" "${GENERATED_MUTATED}" || true)"
+          echo "MUTATION-DIFF (the two-edit signs: block mutation, D-07):"
+          printf '%s\n' "${MUTATION_DIFF}"
+
+          MUT_REMOVED="$(printf '%s\n' "${MUTATION_DIFF}" | grep -c '^< ' || true)"
+          MUT_ADDED="$(printf '%s\n' "${MUTATION_DIFF}" | grep -c '^> ' || true)"
+          MUT_BAD=0
+          # The mutation-mode diff guard PERMITS exactly these two edits
+          # and no others — it must not enforce a single-edit shape, which
+          # would block a correct mutation rather than merely fail to
+          # require one.
+          if [ "${MUT_REMOVED}" != "2" ] || [ "${MUT_ADDED}" != "1" ]; then
+            echo "::error::MUTATION-CONFIG-INVALID: mutation diff removed ${MUT_REMOVED} line(s) and added ${MUT_ADDED} line(s) (want exactly 2 removed, 1 added) — the mutation-mode diff guard permits EXACTLY the two D-07 edits (top-level key rename, ids: [raw] removal) and no others"
+            MUT_BAD=1
+          fi
+          if ! printf '%s\n' "${MUTATION_DIFF}" | grep -q '^< signs:$'; then
+            echo "::error::MUTATION-CONFIG-INVALID: mutation diff does not remove the 'signs:' header line — edit (a), the top-level key rename, is missing"
+            MUT_BAD=1
+          fi
+          if ! printf '%s\n' "${MUTATION_DIFF}" | grep -q '^> binary_signs:$'; then
+            echo "::error::MUTATION-CONFIG-INVALID: mutation diff does not add the 'binary_signs:' header line — edit (a), the top-level key rename, is missing"
+            MUT_BAD=1
+          fi
+          if ! printf '%s\n' "${MUTATION_DIFF}" | grep -q '^<     ids: \[raw\]$'; then
+            echo "::error::MUTATION-CONFIG-INVALID: mutation diff does not remove the '    ids: [raw]' line — edit (b), the previous revision's known-wrong shape, is missing"
+            MUT_BAD=1
+          fi
+          if [ "${MUT_BAD}" = "1" ]; then
+            exit 1
+          fi
+
+          # --- 3a. Structurally validate the mutated config BEFORE any
+          # Apple round-trip: exactly one build-scoped signing entry, no
+          # release-scoped entry, that entry declares no id filter, and its
+          # signature:/args: are byte-unchanged from the committed block.
+          # Failure here costs nothing but a parse.
+          MCI_BAD=0
+          BINARY_SIGNS_COUNT="$(grep -c '^binary_signs:$' "${GENERATED_MUTATED}" || true)"
+          if [ "${BINARY_SIGNS_COUNT}" != "1" ]; then
+            echo "::error::MUTATION-CONFIG-INVALID: expected exactly one 'binary_signs:' top-level key in the mutated config, found ${BINARY_SIGNS_COUNT}"
+            MCI_BAD=1
+          fi
+          if grep -q '^signs:$' "${GENERATED_MUTATED}"; then
+            echo "::error::MUTATION-CONFIG-INVALID: the release-scoped 'signs:' key is still present in the mutated config — the rename edit did not take effect"
+            MCI_BAD=1
+          fi
+          if grep -q '^    ids: \[raw\]$' "${GENERATED_MUTATED}"; then
+            echo "::error::MUTATION-CONFIG-INVALID: the mutated config still declares 'ids: [raw]' under its signing entry — the removal edit did not take effect"
+            MCI_BAD=1
+          fi
+          ORIGINAL_SIGNATURE_LINE="$(grep -m1 '^    signature: ' .goreleaser.yaml || true)"
+          if [ -z "${ORIGINAL_SIGNATURE_LINE}" ]; then
+            echo "::error::MUTATION-CONFIG-INVALID: could not find a '    signature: ' line in the committed .goreleaser.yaml to compare against"
+            MCI_BAD=1
+          elif ! grep -qF "${ORIGINAL_SIGNATURE_LINE}" "${GENERATED_MUTATED}"; then
+            echo "::error::MUTATION-CONFIG-INVALID: the mutated config's signature: template line differs from the committed one — only the two D-07 edits are permitted"
+            MCI_BAD=1
+          fi
+          for argline in '      - "sign-blob"' '      - "--bundle=${signature}"' '      - "${artifact}"' '      - "--yes"' '    artifacts: binary'; do
+            if ! grep -qF "${argline}" "${GENERATED_MUTATED}"; then
+              echo "::error::MUTATION-CONFIG-INVALID: the mutated config is missing the committed args:/artifacts: line [${argline}] — only the two D-07 edits are permitted"
+              MCI_BAD=1
+            fi
+          done
+          if [ "${MCI_BAD}" = "1" ]; then
+            exit 1
+          fi
+          echo "MUTATION-CONFIG-INVALID check: PASSED (structural validation completed before any Apple round-trip)"
+
+          MAIN_DIST="${REHEARSE_DIR}/dist-mutated"
+          GENERATED_FINAL="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.mutated-dist.yaml"
+          inject_dist "${GENERATED_MUTATED}" "${MAIN_DIST}" "${GENERATED_FINAL}"
+        fi
+
+        # --- Build GoReleaser NATIVELY, no GOOS/GOARCH in the environment —
+        # same Rosetta/xcrun reasoning release:dry-run-signed and
+        # release:goreleaser already document: a GOARCH-cross-built
+        # GoReleaser runs under Rosetta and its child xcrun then resolves as
+        # x86_64, which cannot load the arm64-only libxcrun.dylib from
+        # CommandLineTools.
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # GoReleaser records type: "Binary" TWICE per platform (the raw
+        # build output and the archives pipe's renamed asset) — filtering
+        # on .extra.Format=="binary" too avoids counting 8 where 4 exist
+        # (02-RESEARCH.md Common Pitfalls; the same hazard release:dry-run's
+        # own artifacts.json reader already guards against).
+        darwin_binary_path() {
+          # $1 = dist dir  $2 = arch
+          jq -r --arg a "$2" \
+            '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos=="darwin" and .goarch==$a)][0].path // empty' \
+            "$1/artifacts.json"
+        }
+
+        # --- 4. Obtain a real pre-notarize baseline from a run that is
+        # COMMENSURABLE with the release run, rather than attempting a
+        # mid-pipe capture GoReleaser exposes no hook for. IDENTICAL
+        # command, IDENTICAL flags as the main run below
+        # (release --snapshot --skip=publish --clean), against the
+        # notarize-DISABLED template. Run it TWICE, into the two DISTINCT
+        # --dist-equivalent paths set above, and assert byte-equality
+        # BEFORE trusting either baseline value or touching cosign at all —
+        # this is the ONLY evidence in this repository for darwin
+        # goreleaser determinism (ci.yml's reproducibility job has a
+        # blocking linux/amd64 leg, a continue-on-error: true linux/arm64
+        # leg, NO DARWIN LEG AT ALL, and every leg uses a raw `go build`,
+        # never goreleaser — DIST-04 does not cover this property).
+        echo "==> baseline run 1/2: goreleaser release -f ${GENERATED_DISABLED_1} --snapshot --skip=publish --clean"
+        "${GORELEASER_BIN}" release -f "${GENERATED_DISABLED_1}" --snapshot --skip=publish --clean
+
+        echo "==> baseline run 2/2: goreleaser release -f ${GENERATED_DISABLED_2} --snapshot --skip=publish --clean"
+        "${GORELEASER_BIN}" release -f "${GENERATED_DISABLED_2}" --snapshot --skip=publish --clean
+
+        BASELINE_NONDETERMINISTIC=0
+        for arch in arm64 amd64; do
+          B1="$(darwin_binary_path "${BASELINE_DIST_1}" "${arch}")"
+          B2="$(darwin_binary_path "${BASELINE_DIST_2}" "${arch}")"
+          if [ -z "${B1}" ] || [ ! -f "${B1}" ] || [ -z "${B2}" ] || [ ! -f "${B2}" ]; then
+            echo "::error::could not resolve darwin/${arch}'s baseline binary from dist/artifacts.json in one or both baseline runs"
+            exit 1
+          fi
+          H1="$(sha256_of "${B1}")"
+          H2="$(sha256_of "${B2}")"
+          if [ "${H1}" != "${H2}" ]; then
+            echo "::error::BASELINE-NONDETERMINISTIC platform=darwin/${arch} run1_sha256=${H1} run2_sha256=${H2} — the two notarize-disabled baseline builds of the SAME commit are not byte-identical. This is a build-determinism finding about this repository, not an ordering finding about the sign/notarize pipes — STOPPING before any cosign verify-blob comparison, because a nondeterministic build would otherwise make 'neither candidate verifies' indistinguishable from a genuine ordering result."
+            BASELINE_NONDETERMINISTIC=1
+          else
+            echo "BASELINE-DETERMINISM-OK platform=darwin/${arch} sha256=${H1}"
+          fi
+        done
+        if [ "${BASELINE_NONDETERMINISTIC}" = "1" ]; then
+          exit 1
+        fi
+
+        # --- 5. The REAL rehearsal: IDENTICAL command and flags to the
+        # baseline pair above — no sign skip, no notarize skip, both pipes
+        # running is the entire point. Record the expected SNAPSHOT NAMING
+        # SHAPE before asserting anything about names: under --snapshot the
+        # tag segment resolves EMPTY, so every sidecar name carries a
+        # doubled separator (codegraph__darwin_arm64.sigstore.json, not
+        # codegraph_<tag>_darwin_arm64.sigstore.json) where the real tag
+        # would be. Names stay DISTINCT (os/arch still differ), so the
+        # distinctness assertion below still holds — this is the EXPECTED
+        # empty-tag shape, not a divergence from the tagged-release naming
+        # contract release:dry-run-signed pins.
+        echo "==> main run (mutate=${MUTATE}): goreleaser release -f ${GENERATED_FINAL} --snapshot --skip=publish --clean"
+        "${GORELEASER_BIN}" release -f "${GENERATED_FINAL}" --snapshot --skip=publish --clean
+
+        if [ ! -f "${MAIN_DIST}/artifacts.json" ]; then
+          echo "::error::${MAIN_DIST}/artifacts.json not found after the main run"
+          exit 1
+        fi
+
+        # --- 6. Assert FROM dist/artifacts.json, never a filename glob,
+        # never a bare exit code.
+        SIGN_COUNT="$(jq -r '[.[] | select(.type=="Signature")] | length' "${MAIN_DIST}/artifacts.json")"
+        SIGN_NAMES="$(jq -r '[.[] | select(.type=="Signature") | .name] | join(",")' "${MAIN_DIST}/artifacts.json")"
+        SIGN_DISTINCT="$(jq -r '[.[] | select(.type=="Signature") | .name] | unique | length' "${MAIN_DIST}/artifacts.json")"
+
+        OK=1
+        if [ "${MUTATE}" != "1" ]; then
+          if [ "${SIGN_COUNT}" != "4" ] || [ "${SIGN_DISTINCT}" != "4" ]; then
+            echo "::error::expected exactly 4 distinct Signature records in dist/artifacts.json (shipped configuration, all 4 platforms), got count=${SIGN_COUNT} distinct=${SIGN_DISTINCT} names=${SIGN_NAMES}"
+            exit 1
+          fi
+          echo "SIGNATURE-COUNT-OK count=${SIGN_COUNT} distinct=${SIGN_DISTINCT} names=${SIGN_NAMES} (snapshot-mode shape: the empty tag segment is EXPECTED, not a defect)"
+        else
+          # A zero-match sign pipe does not fail — it logs a warning and
+          # returns nil (source-confirmed). Name that no-op as its OWN
+          # failure class, never SUBJECT-INDETERMINATE below: "signed
+          # nothing" and "signed something that failed to invert" are
+          # different findings with different causes and different
+          # remedies, and collapsing them is exactly what would let a
+          # no-op masquerade as an inconclusive ordering result.
+          if [ "${SIGN_COUNT}" = "0" ]; then
+            echo "::error::MUTATION-PRODUCED-NO-SIGNATURE: the mutated run produced 0 Signature-typed records in dist/artifacts.json — the mutation signed NOTHING. This is NOT SUBJECT-INDETERMINATE (below) — verify the ids: [raw] removal actually widened the filter as intended."
+            exit 1
+          fi
+          echo "MUTATION-PRODUCED-NO-SIGNATURE check: PASSED (${SIGN_COUNT} Signature record(s), names=${SIGN_NAMES})"
+        fi
+
+        CHECKSUMS_FILE="$(jq -r '[.[] | select(.type=="Checksum")][0].path // empty' "${MAIN_DIST}/artifacts.json")"
+        if [ -z "${CHECKSUMS_FILE}" ] || [ ! -f "${CHECKSUMS_FILE}" ]; then
+          echo "::error::no Checksum-typed record found in ${MAIN_DIST}/artifacts.json — the checksum: pipe did not run or produced nothing (asserted from artifacts.json, never a filename glob)"
+          exit 1
+        fi
+
+        ASSESS_ARCHES="arm64 amd64"
+        if [ "${MUTATE}" = "1" ]; then
+          ASSESS_ARCHES="arm64"
+        fi
+
+        for arch in ${ASSESS_ARCHES}; do
+          FINAL_BIN="$(darwin_binary_path "${MAIN_DIST}" "${arch}")"
+          if [ -z "${FINAL_BIN}" ] || [ ! -f "${FINAL_BIN}" ]; then
+            echo "::error::could not resolve darwin/${arch}'s final binary from ${MAIN_DIST}/artifacts.json"
+            exit 1
+          fi
+          FINAL_SHA256="$(sha256_of "${FINAL_BIN}")"
+
+          PRESIGN_BIN="$(darwin_binary_path "${BASELINE_DIST_1}" "${arch}")"
+          PRESIGN_SHA256="$(sha256_of "${PRESIGN_BIN}")"
+
+          SHA_CHANGED="false"
+          if [ "${FINAL_SHA256}" != "${PRESIGN_SHA256}" ]; then SHA_CHANGED="true"; fi
+
+          # zip-content / checksums-file byte-identity: the D-05 chain that
+          # describes the SHIPPED configuration's guarantee. The mutation's
+          # own evidence is the cosign subject inversion below, not a
+          # re-assertion of this chain — its archives:/checksum: pipes
+          # still run (GoReleaser's hardcoded pipe order does not skip
+          # them), but re-asserting byte-identity there would prove nothing
+          # D-07 needs.
+          ZIP_CONTENT_SHA256="unknown"
+          CHECKSUMS_FILE_SHA256="unknown"
+          if [ "${MUTATE}" != "1" ]; then
+            ZIP_PATH="$(jq -r --arg a "${arch}" '[.[] | select(.type=="Archive" and .goos=="darwin" and .goarch==$a and (.name | endswith(".zip")))][0].path // empty' "${MAIN_DIST}/artifacts.json")"
+            if [ -z "${ZIP_PATH}" ] || [ ! -f "${ZIP_PATH}" ]; then
+              echo "::error::could not resolve darwin/${arch}'s zip archive from ${MAIN_DIST}/artifacts.json"
+              exit 1
+            fi
+            ZIP_EXTRACT_DIR="$(mktemp -d)"
+            unzip -q "${ZIP_PATH}" -d "${ZIP_EXTRACT_DIR}"
+            ZIP_BIN="$(find "${ZIP_EXTRACT_DIR}" -type f -name codegraph | head -n1)"
+            if [ -z "${ZIP_BIN}" ]; then
+              echo "::error::no codegraph binary found inside darwin/${arch}'s extracted zip"
+              rm -rf "${ZIP_EXTRACT_DIR}"
+              exit 1
+            fi
+            ZIP_CONTENT_SHA256="$(sha256_of "${ZIP_BIN}")"
+            rm -rf "${ZIP_EXTRACT_DIR}"
+            if [ "${ZIP_CONTENT_SHA256}" != "${FINAL_SHA256}" ]; then
+              echo "::error::darwin/${arch} zip-content sha256 (${ZIP_CONTENT_SHA256}) != final binary sha256 (${FINAL_SHA256})"
+              OK=0
+            fi
+
+            RAW_NAME="$(jq -r --arg a "${arch}" '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos=="darwin" and .goarch==$a)][0].name // empty' "${MAIN_DIST}/artifacts.json")"
+            CHECKSUMS_LINE_SHA256="$(awk -v n="${RAW_NAME}" '$2 == n || $2 == "*"n {print $1}' "${CHECKSUMS_FILE}" | head -n1)"
+            CHECKSUMS_FILE_SHA256="${CHECKSUMS_LINE_SHA256:-not-found}"
+            if [ "${CHECKSUMS_FILE_SHA256}" != "${FINAL_SHA256}" ]; then
+              echo "::error::darwin/${arch} checksums-file sha256 (${CHECKSUMS_FILE_SHA256}) != final binary sha256 (${FINAL_SHA256}) for asset ${RAW_NAME}"
+              OK=0
+            fi
+
+            if [ "${SHA_CHANGED}" != "true" ]; then
+              echo "::error::darwin/${arch} final sha256 (${FINAL_SHA256}) equals the pre-sign baseline (${PRESIGN_SHA256}) — expected them to DIFFER (the measurement that converts 'quill rewrites the Mach-O' from inferred to observed)"
+              OK=0
+            fi
+          fi
+
+          # --- 6a. Identify what cosign actually signed CRYPTOGRAPHICALLY —
+          # never by re-hashing dist/artifacts.json's recorded path, which
+          # names the signature FILE, not its subject, and which quill has
+          # already rewritten in place under the mutation. Verify the SAME
+          # bundle against BOTH candidate subjects; exactly one must verify.
+          SIG_PATH="$(jq -r --arg suf "_darwin_${arch}.sigstore.json" '[.[] | select(.type=="Signature") | select(.name | endswith($suf))][0].path // empty' "${MAIN_DIST}/artifacts.json")"
+          if [ -z "${SIG_PATH}" ] || [ ! -f "${SIG_PATH}" ]; then
+            echo "::error::could not resolve darwin/${arch}'s cosign signature bundle from ${MAIN_DIST}/artifacts.json"
+            exit 1
+          fi
+
+          set +e
+          cosign verify-blob --key "${COSIGN_PUBKEY}" --bundle "${SIG_PATH}" "${PRESIGN_BIN}" >"${REHEARSE_DIR}/verify-presign-${arch}.log" 2>&1
+          VERIFIES_PRESIGN_EXIT=$?
+          cosign verify-blob --key "${COSIGN_PUBKEY}" --bundle "${SIG_PATH}" "${FINAL_BIN}" >"${REHEARSE_DIR}/verify-final-${arch}.log" 2>&1
+          VERIFIES_FINAL_EXIT=$?
+          set -e
+          VERIFIES_PRESIGN="false"
+          if [ "${VERIFIES_PRESIGN_EXIT}" = "0" ]; then VERIFIES_PRESIGN="true"; fi
+          VERIFIES_FINAL="false"
+          if [ "${VERIFIES_FINAL_EXIT}" = "0" ]; then VERIFIES_FINAL="true"; fi
+          echo "COSIGN-VERIFY-BLOB platform=darwin/${arch} vs_presign_exit=${VERIFIES_PRESIGN_EXIT} vs_final_exit=${VERIFIES_FINAL_EXIT}"
+
+          COSIGN_SUBJECT="indeterminate"
+          if [ "${VERIFIES_PRESIGN}" = "true" ] && [ "${VERIFIES_FINAL}" = "false" ]; then
+            COSIGN_SUBJECT="presign"
+          elif [ "${VERIFIES_FINAL}" = "true" ] && [ "${VERIFIES_PRESIGN}" = "false" ]; then
+            COSIGN_SUBJECT="final"
+          fi
+
+          EXPECTED_SUBJECT="final"
+          if [ "${MUTATE}" = "1" ]; then EXPECTED_SUBJECT="presign"; fi
+          VERDICT="pass"
+          if [ "${COSIGN_SUBJECT}" != "${EXPECTED_SUBJECT}" ]; then VERDICT="fail"; fi
+
+          # --- 7. codesign -dvv (Team Identifier presence), then a SEPARATE,
+          # LOCAL-ONLY spctl -a -vv -t install (D-19 oracle, never -t exec)
+          # against a SYNTHETIC-quarantine copy. Deliberately NOT
+          # verify:gatekeeper — that target's contract is a PUBLISHED asset
+          # resolved by tag; widening it to accept a local path would
+          # weaken the one gate whose whole value is that it cannot read a
+          # local build.
+          CODESIGN_OUT="$(codesign -dvv "${FINAL_BIN}" 2>&1 || true)"
+          echo "REHEARSAL-CODESIGN-DVV platform=darwin/${arch}"
+          echo "${CODESIGN_OUT}"
+          TEAM_ID_PRESENT="false"
+          if printf '%s\n' "${CODESIGN_OUT}" | grep -q '^TeamIdentifier=' && ! printf '%s\n' "${CODESIGN_OUT}" | grep -q '^TeamIdentifier=not set$'; then
+            TEAM_ID_PRESENT="true"
+          fi
+
+          ASSESS_COPY="${REHEARSE_DIR}/spctl-assess-darwin-${arch}"
+          cp "${FINAL_BIN}" "${ASSESS_COPY}"
+          QUARANTINE_HEX_TS="$(printf '%x' "$(date +%s)")"
+          QUARANTINE_UUID="$(uuidgen)"
+          xattr -w com.apple.quarantine "0081;${QUARANTINE_HEX_TS};Safari;${QUARANTINE_UUID}" "${ASSESS_COPY}"
+          set +e
+          SPCTL_OUT="$(spctl -a -vv -t install "${ASSESS_COPY}" 2>&1)"
+          SPCTL_EXIT=$?
+          set -e
+          echo "REHEARSAL-SPCTL platform=darwin/${arch} exit=${SPCTL_EXIT}"
+          echo "${SPCTL_OUT}"
+          SPCTL_VERDICT="unclassifiable"
+          APPLE_STATUS="unknown"
+          case "${SPCTL_EXIT}" in
+            0) SPCTL_VERDICT="accepted"; APPLE_STATUS="notarized" ;;
+            3) SPCTL_VERDICT="rejected"; APPLE_STATUS="rejected-or-unnotarized" ;;
+          esac
+
+          # --- 6a (hard failure). Two verifications both succeeding, or
+          # both failing, means this experiment did not isolate what it
+          # claims to — NOT reported as an ordering finding. Because the
+          # BASELINE-NONDETERMINISTIC check above runs first and
+          # independently, a SUBJECT-INDETERMINATE result here arrives
+          # having already excluded build nondeterminism as the cause.
+          SUBJECT_INDETERMINATE=0
+          if [ "${COSIGN_SUBJECT}" = "indeterminate" ]; then
+            echo "::error::SUBJECT-INDETERMINATE platform=darwin/${arch} cosign_verifies_presign=${VERIFIES_PRESIGN} cosign_verifies_final=${VERIFIES_FINAL} — exactly one candidate must verify"
+            SUBJECT_INDETERMINATE=1
+          fi
+
+          # --- 9. Evidence lines, on BOTH the pass and fail path — schema=1
+          # first field, fixed key order, sentinels never omitted.
+          echo "NOTARIZE-EVIDENCE schema=1 goos=darwin goarch=${arch} presign_sha256=${PRESIGN_SHA256} final_sha256=${FINAL_SHA256} sha_changed=${SHA_CHANGED} team_id_present=${TEAM_ID_PRESENT} spctl_exit=${SPCTL_EXIT} spctl_verdict=${SPCTL_VERDICT} apple_status=${APPLE_STATUS}"
+          echo "SIGN04-EVIDENCE schema=1 goos=darwin goarch=${arch} final_sha256=${FINAL_SHA256} zip_content_sha256=${ZIP_CONTENT_SHA256} checksums_file_sha256=${CHECKSUMS_FILE_SHA256} cosign_verifies_presign=${VERIFIES_PRESIGN} cosign_verifies_final=${VERIFIES_FINAL} cosign_subject=${COSIGN_SUBJECT} verdict=${VERDICT} mutate=${MUTATE} config_sha256=${CONFIG_SHA256}"
+
+          if [ "${SUBJECT_INDETERMINATE}" = "1" ]; then
+            exit 1
+          fi
+          # NOTE: `[ cond ] && VAR=x` must never be the LAST statement of a
+          # loop body here. go-task runs cmds through its own embedded shell
+          # (mvdan.cc/sh), not the system shell, and under `set -e` that
+          # interpreter treats a FALSE and-list in final position as fatal —
+          # so the target aborted precisely when every verdict was `pass`,
+          # silently, with no ::error:: to print. Measured 2026-08-09 during
+          # plan 02-04 Task 2's first real run: an and-list mid-block or at
+          # top level is fine, last-in-loop is fatal. Second instance in this
+          # repo of a bug that lives in the Taskfile wrapper and is invisible
+          # to a plain `sh` run of the same script (the first shipped v0.5.0
+          # with zero assets). Use `if`/`fi`, not `&&`, for every conditional
+          # assignment in this file.
+          if [ "${VERDICT}" != "pass" ]; then OK=0; fi
+        done
+
+        # --- 10. The committed .goreleaser.yaml must be byte-unchanged —
+        # no experiment here may ever leak into the working tree.
+        if ! git diff --quiet HEAD -- .goreleaser.yaml; then
+          echo "::error::the committed .goreleaser.yaml changed during this rehearsal"
+          exit 1
+        fi
+        CONFIG_SHA256_AFTER="$(sha256_of .goreleaser.yaml)"
+        if [ "${CONFIG_SHA256_AFTER}" != "${CONFIG_SHA256}" ]; then
+          echo "::error::the committed .goreleaser.yaml's sha256 changed during this rehearsal (before=${CONFIG_SHA256} after=${CONFIG_SHA256_AFTER})"
+          exit 1
+        fi
+
+        if [ "${OK}" != "1" ]; then
+          exit 1
+        fi
+
+        echo "release:rehearse-notarize: PASS (mutate=${MUTATE})"
 
   check:linux-cross-export:
     desc: >-
@@ -917,7 +1705,17 @@ tasks:
         echo "REL05-EVIDENCE uname=${HOST_MACHINE} elf=${ELF_MACHINE} files=${FILES} symbols=${SYMBOLS}"
 
   check:goreleaser:
-    desc: Validate .goreleaser.yaml (DIST-01).
+    desc: >-
+      Validate .goreleaser.yaml (DIST-01). CHECK CLASS (plan 02-02's
+      goreleaser-caller enumeration): `goreleaser check` runs no pipes at
+      all — neither notarize: nor signs: executes, so this target never
+      reaches Apple or cosign and needs no credentials. It also does NOT
+      semantically validate the notarize:/signs: block contents (this
+      repo's own config comments already document that `goreleaser check`
+      does not validate the artifacts: enum; the same class of blind spot
+      is not independently confirmed for notarize: either) — a clean run
+      here is config-shape validation only, never evidence that the pipe
+      fires correctly.
     cmds:
       - "{{.GO_TOOL}} goreleaser check"
 
@@ -1314,6 +2112,397 @@ tasks:
         fi
 
         echo "verify:self-upgrade: PASS — ${GOOS}/${GOARCH} self-upgraded from ${PRIOR_TAG} to ${TAG} byte-identically to the published asset"
+
+  verify:gatekeeper:
+    desc: >-
+      SIGN-03's tracer: an Apple Gatekeeper verdict on one PUBLISHED darwin
+      release asset, never a local dist/ copy and never a locally rebuilt
+      binary. The single definition both the SIGN-03 RED baseline (plan
+      02-01 Task 2/3, against v0.5.1's deliberately un-notarized assets) and
+      the post-release GREEN check (plan 02-06) call — GATEKEEPER_EXPECT
+      selects which. Per D-19 (LOCKED, 02-RESEARCH.md) the oracle is
+      `spctl -a -vv -t install`, NEVER `-t exec` — `-t exec` rejects a bare
+      Mach-O on SHAPE before notarization is considered at all, which is why
+      it would stay red after notarization for a completely different
+      reason than the RED baseline's. The verdict is the EXIT STATUS alone
+      (0=accepted, 3=rejected), never a substring search — "accepted"
+      matches inside "rejected (the code is valid but does not seem to be
+      an app)" and inside origin= lines. `syspolicy_check distribution` is
+      recorded as a NON-GATING observation only: its verdict is fatal for
+      anything unstapled, and stapling is permanently out of scope
+      (D-16/DIST-06), so gating on it would be a gate that can never pass.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. verify:gatekeeper requires TAG (the release tag whose darwin asset is assessed) in the environment — e.g. TAG=v0.5.1 for the RED baseline."
+      - sh: '[ -n "${REPO:-}" ]'
+        msg: "REPO is not set. verify:gatekeeper requires REPO (owner/repo, e.g. seanb4t/codegraph-go) in the environment."
+      - sh: '[ -n "${GOOS:-}" ]'
+        msg: "GOOS is not set. verify:gatekeeper requires GOOS (darwin) in the environment — the asset name is codegraph_${TAG}_${GOOS}_${GOARCH}, matching internal/upgrade.releaseAssetName's contract."
+      - sh: '[ -n "${GOARCH:-}" ]'
+        msg: "GOARCH is not set. verify:gatekeeper requires GOARCH (amd64 or arm64) in the environment."
+      - sh: '[ -n "${GH_TOKEN:-}" ]'
+        msg: "GH_TOKEN is not set. Every gh invocation in this target needs it; a missing token would otherwise fail mid-target and look like a Gatekeeper break rather than a missing credential."
+      - sh: '[ -n "${GATEKEEPER_EXPECT:-}" ]'
+        msg: "GATEKEEPER_EXPECT is not set. Must be one of: accepted, rejected. The RED baseline (plan 02-01) uses rejected against v0.5.1's un-notarized assets; the post-release GREEN check (plan 02-06) uses accepted."
+      - sh: '[ "${GATEKEEPER_EXPECT:-}" = "accepted" ] || [ "${GATEKEEPER_EXPECT:-}" = "rejected" ]'
+        msg: "GATEKEEPER_EXPECT is set to a value other than 'accepted' or 'rejected'. An unvalidated value would fail safe but confusingly, turning every observation into a mismatch regardless of what spctl actually reports — value must be exactly one of the two allowed strings."
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "verify:gatekeeper must run on a native darwin host — spctl/syspolicy_check/xattr are macOS-only and this is not a build toolchain that can be cross-compiled around. Run it on macOS locally, or dispatch it on namespace-profile-macos-6x14-tahoe, the CI runner class release.yml and post-release-verify.yml use."
+      - sh: command -v gh
+        msg: "gh CLI not found. This target downloads the published release asset with it. CI runner images ship it; locally: brew install gh."
+      - sh: command -v jq
+        msg: "jq not found. This target parses gh release view --json assets output with it, to cross-check GitHub's own recorded per-asset digest against the recomputed sha256 — the provenance strengthening that turns 'the bytes I assessed' into 'the bytes the release serves'. CI runner images ship it; locally: brew install jq."
+      - sh: command -v xattr
+        msg: "xattr not found. This target applies and reads back the com.apple.quarantine extended attribute with it. macOS built-in — if missing, the host is misconfigured."
+      - sh: command -v spctl
+        msg: "spctl not found. This target's oracle IS spctl -a -vv -t install (D-19) — macOS built-in. If missing, the host is misconfigured."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "verify:gatekeeper: TAG=${TAG} REPO=${REPO} GOOS=${GOOS} GOARCH=${GOARCH} expect=${GATEKEEPER_EXPECT}"
+
+        # macOS ships no sha256sum by default (BSD userland); shasum -a 256
+        # is the native equivalent — mirrors verify:self-upgrade's sha256_of.
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # --- 1. Resolve the asset name: the raw binary, matching
+        # internal/upgrade.releaseAssetName's contract. Never the .zip.
+        ASSET_NAME="codegraph_${TAG}_${GOOS}_${GOARCH}"
+
+        # --- 2. Read the asset's metadata from the published release
+        # listing and extract its recorded digest. An asset absent from the
+        # listing is a hard failure naming the asset and the tag.
+        ASSETS_JSON="$(gh release view "${TAG}" --repo "${REPO}" --json assets)"
+        ASSET_ENTRY="$(printf '%s' "${ASSETS_JSON}" | jq -c --arg name "${ASSET_NAME}" '[.assets[] | select(.name == $name)] | first // empty')"
+        if [ -z "${ASSET_ENTRY}" ]; then
+          echo "::error::asset ${ASSET_NAME} not found among ${TAG}'s published assets — cannot assess an asset that was never published"
+          exit 1
+        fi
+        GH_DIGEST_RAW="$(printf '%s' "${ASSET_ENTRY}" | jq -r '.digest // empty')"
+        GH_DIGEST="${GH_DIGEST_RAW#sha256:}"
+
+        # --- 3. Download it with gh release download into a mktemp -d
+        # cleaned by a single trap. Downloading is not optional and a local
+        # dist/ copy is never acceptable — plan 01-05's false negatives came
+        # from a verifier that read an artifact it never downloaded.
+        DL_DIR="$(mktemp -d)"
+        trap 'rm -rf "${DL_DIR}"' EXIT
+        gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" --pattern "${ASSET_NAME}"
+        ASSET_PATH="${DL_DIR}/${ASSET_NAME}"
+
+        # --- 4. Recompute the sha256 and cross-check it against GitHub's
+        # recorded digest from step 2 — the provenance cross-check that
+        # makes the assessed bytes identifiable. A mismatch is always a
+        # hard failure. A MISSING digest is bound to GATEKEEPER_EXPECT
+        # (deliberate asymmetry, not an inconsistency):
+        #   - expect=accepted (GREEN, plan 02-06's CI job): a missing or
+        #     malformed digest is a HARD FAILURE. GREEN is the claim that
+        #     carries weight, so its provenance must be established, not
+        #     assumed. Sentinel-and-continue on a verification step is this
+        #     repository's single most-repeated failure class.
+        #   - expect=rejected (RED, this plan's baseline against a
+        #     preserved older release, where the API may genuinely predate
+        #     per-asset digests): record the sentinel and continue, but
+        #     WARN loudly and set digest_match=unknown so the downgrade is
+        #     visible in the evidence rather than silent.
+        SHA256="$(sha256_of "${ASSET_PATH}")"
+        DIGEST_MATCH="unknown"
+        if [ -n "${GH_DIGEST}" ]; then
+          if [ "${GH_DIGEST}" = "${SHA256}" ]; then
+            DIGEST_MATCH="true"
+          else
+            DIGEST_MATCH="false"
+          fi
+        fi
+        if [ "${DIGEST_MATCH}" = "false" ]; then
+          echo "::error::sha256 mismatch: downloaded ${ASSET_NAME} hashes to ${SHA256}, GitHub's recorded digest is ${GH_DIGEST} — the bytes assessed are NOT provably the bytes the release serves"
+          exit 1
+        fi
+        if [ "${DIGEST_MATCH}" = "unknown" ]; then
+          if [ "${GATEKEEPER_EXPECT}" = "accepted" ]; then
+            echo "::error::GitHub's recorded digest for ${ASSET_NAME} is unavailable on the GREEN path (GATEKEEPER_EXPECT=accepted) — provenance cannot be established, and GREEN is the claim that carries weight. This is a HARD FAILURE, not sentinel-and-continue (deliberate D-19/plan-02-01 asymmetry, stated here rather than left as an inconsistency)."
+            exit 1
+          fi
+          echo "::warning::GitHub's recorded digest for ${ASSET_NAME} is unavailable on the RED path (GATEKEEPER_EXPECT=rejected — a preserved older release whose API may predate per-asset digests). Recording digest_match=unknown and continuing. Deliberate scope decision, not an oversight."
+        fi
+
+        # --- 5. Assess the file BEFORE applying any xattr and record that
+        # verdict on its own labelled line as the explicit NON-EVIDENCE
+        # control — the observation that makes "spctl on a
+        # never-quarantined file" visibly distinct rather than silently
+        # conflated with the real verdict below.
+        set +e
+        PRE_XATTR_OUT="$(spctl -a -vv -t install "${ASSET_PATH}" 2>&1)"
+        PRE_XATTR_EXIT=$?
+        set -e
+        echo "GATEKEEPER-PRE-XATTR-CONTROL (NON-EVIDENCE — file was never quarantined at this point) exit=${PRE_XATTR_EXIT}"
+        echo "${PRE_XATTR_OUT}"
+
+        # --- 6. Apply a SYNTHETIC com.apple.quarantine xattr — Apple's
+        # documented four-field flags;timestamp;agent;event-uuid form,
+        # flags=0081 (downloaded-and-first-launch). Built in plain shell,
+        # via printf/uuidgen — no Go-template braces anywhere in this
+        # target, for the reason release:dry-run-signed has none: `task`
+        # renders every cmds: string through Go text/template BEFORE the
+        # shell sees it, and a stray double-brace template marker here
+        # would be eaten (the defect that shipped v0.5.0 empty). Called
+        # SYNTHETIC in every comment, label and evidence field — it is a
+        # simulation until Task 2's checkpoint confirms it behaves like an
+        # actual browser download; naming it anything else before that
+        # comparison would prejudge the one open question (assumption A2)
+        # this plan exists to settle.
+        QUARANTINE_HEX_TS="$(printf '%x' "$(date +%s)")"
+        QUARANTINE_UUID="$(uuidgen)"
+        QUARANTINE_VALUE="0081;${QUARANTINE_HEX_TS};Safari;${QUARANTINE_UUID}"
+        xattr -w com.apple.quarantine "${QUARANTINE_VALUE}" "${ASSET_PATH}"
+
+        # --- 7. Read the attribute back and HARD-FAIL if it is absent or
+        # empty. An assessment that runs without this confirmation is not
+        # evidence, and the target must refuse to produce one.
+        XATTR_READBACK="$(xattr -p com.apple.quarantine "${ASSET_PATH}" 2>/dev/null || true)"
+        if [ -z "${XATTR_READBACK}" ]; then
+          echo "::error::com.apple.quarantine xattr (SYNTHETIC) is absent or empty on ${ASSET_PATH} immediately after writing it — an assessment without this confirmation is not evidence, refusing to run spctl"
+          exit 1
+        fi
+        XATTR_PRESENT="true"
+        echo "GATEKEEPER-XATTR-SYNTHETIC value=${QUARANTINE_VALUE} readback=${XATTR_READBACK}"
+
+        # --- 8. Run the D-19 oracle: spctl -a -vv -t install (never -t
+        # exec — see this target's desc: for why). Capture stdout, stderr
+        # (spctl writes its verdict to stderr) and exit status without
+        # letting set -e abort the run — a rejection is the expected
+        # outcome on the RED path and must be reported, not crashed on.
+        set +e
+        SPCTL_OUT="$(spctl -a -vv -t install "${ASSET_PATH}" 2>&1)"
+        SPCTL_EXIT=$?
+        set -e
+        echo "GATEKEEPER-SPCTL exit=${SPCTL_EXIT}"
+        echo "${SPCTL_OUT}"
+
+        # --- 9. Derive the observed verdict from the EXIT STATUS ALONE: 0
+        # is accepted, 3 is rejected, anything else is unclassifiable and
+        # therefore a hard failure — NEVER a grep/case over the output
+        # text, which would classify wrongly (a substring search for
+        # "accepted" matches inside "rejected (the code is valid but does
+        # not seem to be an app)" and inside origin= lines), not merely
+        # weakly. Measured on macOS 27.0 while the CI runner is
+        # Tahoe-class, so a future version drift is anticipated: it
+        # surfaces here as a loud, unclassifiable-exit failure, never a
+        # silently wrong verdict.
+        OK=1
+        case "${SPCTL_EXIT}" in
+          0) OBSERVED="accepted" ;;
+          3) OBSERVED="rejected" ;;
+          *)
+            echo "::error::spctl exit status ${SPCTL_EXIT} is neither 0 (accepted) nor 3 (rejected) — unclassifiable, hard failure"
+            OBSERVED="unclassifiable"
+            OK=0
+            ;;
+        esac
+
+        # source_assertion is captured SEPARATELY from observed: whether
+        # the output names the notarized-Developer-ID source string. NOT
+        # part of the verdict — a deliberate SECOND, INDEPENDENT assertion,
+        # so rejecting exit 0 when the source line is absent does not read
+        # as a contradiction of "exit status is the oracle."
+        if printf '%s' "${SPCTL_OUT}" | grep -q 'source=Notarized Developer ID'; then
+          SOURCE_ASSERTION="pass"
+        else
+          SOURCE_ASSERTION="fail"
+        fi
+
+        # Truth table (mechanical, not left to interpretation): only an
+        # off-diagonal pair fails.
+        #   observed=accepted -> source_assertion MUST be pass
+        #   observed=rejected -> source_assertion MUST be fail (the
+        #     notarized-source line is legitimately ABSENT on the RED
+        #     path, and its absence is correct — a naive "must be pass"
+        #     reading would break the phase's first gate)
+        SOURCE_MISMATCH=0
+        if [ "${OBSERVED}" = "accepted" ] && [ "${SOURCE_ASSERTION}" != "pass" ]; then
+          SOURCE_MISMATCH=1
+        elif [ "${OBSERVED}" = "rejected" ] && [ "${SOURCE_ASSERTION}" != "fail" ]; then
+          SOURCE_MISMATCH=1
+        fi
+        if [ "${SOURCE_MISMATCH}" = "1" ]; then
+          echo "::error::SOURCE-ASSERTION-MISMATCH observed=${OBSERVED} source_assertion=${SOURCE_ASSERTION} — two independent assertions (observed from exit status alone; source_assertion from output text) disagree off the required diagonal"
+          OK=0
+        fi
+
+        # --- 10. Run syspolicy_check distribution and record its exit
+        # status and output verbatim under a labelled line. It MUST NOT
+        # gate: D-19 removes it as a gating check because its Fatal
+        # verdict is definitionally unreachable while stapling is out of
+        # scope (D-16/DIST-06), and a gate that can never pass is one of
+        # the two failure families this phase exists to close. If the
+        # binary is absent, record the sentinel and continue.
+        if command -v syspolicy_check >/dev/null 2>&1; then
+          set +e
+          SYSPOLICY_OUT="$(syspolicy_check distribution "${ASSET_PATH}" 2>&1)"
+          SYSPOLICY_EXIT=$?
+          set -e
+        else
+          SYSPOLICY_OUT="syspolicy_check not found on this host"
+          SYSPOLICY_EXIT="not-found"
+        fi
+        echo "GATEKEEPER-SYSPOLICY-CHECK (NON-GATING — see this target's desc: for why gating on it is forbidden) exit=${SYSPOLICY_EXIT}"
+        echo "${SYSPOLICY_OUT}"
+
+        # --- 11. Compare the observed verdict against GATEKEEPER_EXPECT.
+        if [ "${OBSERVED}" != "${GATEKEEPER_EXPECT}" ]; then
+          echo "::error::observed verdict '${OBSERVED}' does not match GATEKEEPER_EXPECT='${GATEKEEPER_EXPECT}'"
+          OK=0
+        fi
+
+        # --- 12. Emit the evidence line as the LAST line printed, on BOTH
+        # the pass and the fail path — a RED observation is the most
+        # valuable output this target can produce. schema=1 first, fixed
+        # key order, sentinels for anything unavailable (never omitted).
+        echo "GATEKEEPER-EVIDENCE schema=1 tag=${TAG} goos=${GOOS} goarch=${GOARCH} sha256=${SHA256} gh_digest=${GH_DIGEST:-not-found} digest_match=${DIGEST_MATCH} expect=${GATEKEEPER_EXPECT} observed=${OBSERVED} exit=${SPCTL_EXIT} xattr_present=${XATTR_PRESENT} source_assertion=${SOURCE_ASSERTION} syspolicy_exit=${SYSPOLICY_EXIT}"
+
+        if [ "${OK}" != "1" ]; then
+          exit 1
+        fi
+
+        echo "verify:gatekeeper: PASS — observed=${OBSERVED} matches GATEKEEPER_EXPECT=${GATEKEEPER_EXPECT}"
+
+  verify:notarized-suite:
+    desc: >-
+      ROADMAP criterion 4's proof: runs the REAL test/integration and
+      test/wireoracle suites against the RE-DOWNLOADED, NOTARIZED published
+      darwin binary named by $TAG/$GOOS/$GOARCH — never a locally rebuilt
+      one (D-10, plan 02-03's CODEGRAPH_TEST_BIN seam). test/wireoracle IS
+      IN SCOPE (02-03's recorded verdict: normalize.go's serverVersion rule
+      already erases the differing version field, so a release-shaped
+      binary passed all 27 frozen scenarios with zero transcript changes).
+      Integrity is verified — cosign verify-blob, the SAME issuer and
+      certificate-identity flags verify:release-assets already uses — BEFORE
+      the binary is ever made executable, never after: parallel independent
+      CI jobs give no ordering guarantee, so a tampered asset would
+      otherwise be executed even if a sibling supply-chain job's own
+      verification later failed.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. verify:notarized-suite requires TAG (the resolved, validated release tag) in the environment — post-release-verify.yml's resolve-tag job supplies it via needs.resolve-tag.outputs.tag."
+      - sh: '[ -n "${REPO:-}" ]'
+        msg: "REPO is not set. verify:notarized-suite requires REPO (owner/repo) in the environment."
+      - sh: '[ -n "${GOOS:-}" ]'
+        msg: "GOOS is not set. verify:notarized-suite requires GOOS (darwin) in the environment — the asset name is codegraph_${TAG}_${GOOS}_${GOARCH}, matching internal/upgrade.releaseAssetName's contract."
+      - sh: '[ -n "${GOARCH:-}" ]'
+        msg: "GOARCH is not set. verify:notarized-suite requires GOARCH (arm64 or amd64) in the environment."
+      - sh: '[ -n "${GH_TOKEN:-}" ]'
+        msg: "GH_TOKEN is not set. Every gh invocation in this target needs it; a missing token would otherwise fail mid-target and look like a supply-chain break rather than a missing credential."
+      - sh: command -v gh
+        msg: "gh CLI not found. This target downloads the published release asset and its cosign bundle with it. CI runner images ship it; locally: brew install gh."
+      - sh: command -v jq
+        msg: "jq not found. This target counts executed go test -json events with it. CI runner images ship it; locally: brew install jq."
+      - sh: command -v cosign
+        msg: "cosign not found. This target verifies the downloaded binary's cosign bundle with it BEFORE making the file executable. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "verify:notarized-suite: TAG=${TAG} REPO=${REPO} GOOS=${GOOS} GOARCH=${GOARCH}"
+
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        ASSET_NAME="codegraph_${TAG}_${GOOS}_${GOARCH}"
+        SIG_NAME="${ASSET_NAME}.sigstore.json"
+
+        # --- 1. Download the raw binary and its cosign bundle into TWO
+        # SEPARATE temp dirs, plus a third for the go test -json stream — the
+        # same two-temp-dirs discipline verify:release-assets already uses
+        # (the sidecar must never land next to the binary it signs). One
+        # trap covers all three from the moment they exist.
+        DL_DIR="$(mktemp -d)"
+        SIG_DIR="$(mktemp -d)"
+        JSON_OUT="$(mktemp)"
+        cleanup() { rm -rf "${DL_DIR}" "${SIG_DIR}"; rm -f "${JSON_OUT}"; }
+        trap cleanup EXIT
+
+        gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" --pattern "${ASSET_NAME}"
+        gh release download "${TAG}" --repo "${REPO}" --dir "${SIG_DIR}" --pattern "${SIG_NAME}"
+        BIN_PATH="${DL_DIR}/${ASSET_NAME}"
+
+        if [ ! -f "${SIG_DIR}/${SIG_NAME}" ]; then
+          echo "::error::cosign bundle ${SIG_NAME} was not downloaded — cannot verify the signature"
+          exit 1
+        fi
+
+        # --- 2. VERIFY BEFORE EXECUTING — the most important ordering
+        # constraint here (T-02-19, review concern codex HIGH). cosign
+        # verify-blob runs BEFORE any chmod, with the SAME issuer and
+        # certificate-identity flags verify:release-assets already uses
+        # (never a looser pattern, which would prove less than the
+        # published instruction claims). A failed verification is a hard
+        # failure before the binary is ever made executable.
+        cosign verify-blob \
+          --bundle "${SIG_DIR}/${SIG_NAME}" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          --certificate-identity-regexp \
+            '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+          "${BIN_PATH}"
+        echo "verify:notarized-suite: cosign verify-blob: Verified OK"
+
+        SHA256="$(sha256_of "${BIN_PATH}")"
+        echo "NOTARIZED-SUITE-ASSET-SHA256 tag=${TAG} goos=${GOOS} goarch=${GOARCH} sha256=${SHA256}"
+
+        # --- 3. Only NOW does the file become executable.
+        chmod +x "${BIN_PATH}"
+
+        # --- 4. Hard-fail BY NAME, before the suite runs, if the file is
+        # missing or not executable — an explicit belt to the download and
+        # chmod steps' braces, reachable even though both make this an
+        # unlikely path in practice.
+        if [ ! -f "${BIN_PATH}" ] || [ ! -x "${BIN_PATH}" ]; then
+          echo "::error::${BIN_PATH} is missing or not executable after download+chmod — refusing to run the suite against a file that cannot be the notarized binary"
+          exit 1
+        fi
+
+        ABS_BIN_DIR="$(cd "$(dirname "${BIN_PATH}")" && pwd)"
+        export CODEGRAPH_TEST_BIN="${ABS_BIN_DIR}/$(basename "${BIN_PATH}")"
+
+        # --- 5. Run the real suites — test/integration AND test/wireoracle
+        # (both IN SCOPE, see this target's desc:) — against the notarized
+        # binary. -count=1 disables Go's test cache so a cached result can
+        # never stand in for a real run against THIS downloaded file.
+        GO_TEST_EXIT=0
+        go test -json -count=1 ./test/integration/... ./test/wireoracle/... > "${JSON_OUT}" || GO_TEST_EXIT=$?
+
+        # --- 6. Count EXECUTED tests from the machine-readable -json
+        # stream, never from parsed human-readable go test text (review
+        # concern codex MEDIUM): go test emits no total-count line, and
+        # human output confuses cached package summaries with executed
+        # tests. A pass/fail event carrying a non-null Test field is one
+        # executed test case; package-level pass/fail summaries (Test:
+        # null) do not count.
+        EXECUTED_COUNT="$(jq -s '[.[] | select(.Test != null) | select(.Action=="pass" or .Action=="fail")] | length' "${JSON_OUT}")"
+        echo "NOTARIZED-SUITE-EVIDENCE schema=1 tag=${TAG} goos=${GOOS} goarch=${GOARCH} sha256=${SHA256} executed_tests=${EXECUTED_COUNT} go_test_exit=${GO_TEST_EXIT}"
+
+        if [ "${EXECUTED_COUNT}" = "0" ]; then
+          echo "::error::zero tests executed — a green job that ran nothing is the failure mode this whole phase is organised against, and a zero count is a hard failure regardless of go_test_exit=${GO_TEST_EXIT}"
+          exit 1
+        fi
+
+        if [ "${GO_TEST_EXIT}" != "0" ]; then
+          echo "::error::go test -json exited ${GO_TEST_EXIT} — see NOTARIZED-SUITE-EVIDENCE above and the captured JSON stream for the failing test(s)"
+          exit "${GO_TEST_EXIT}"
+        fi
+
+        echo "verify:notarized-suite: PASS — ${EXECUTED_COUNT} tests executed against the notarized ${GOOS}/${GOARCH} binary for ${TAG}"
 
   check:cross:
     desc: >-

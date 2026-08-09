@@ -21,10 +21,10 @@
 
 ### macOS Signing & Notarization (SIGN)
 
-- [ ] **SIGN-01**: Darwin binaries are Developer ID codesigned and notarized during the release, with the certificate and App Store Connect API key held as CI secrets
-- [ ] **SIGN-02**: A user who downloads a release asset in a browser and runs it is not blocked by Gatekeeper — proven by `spctl -a -vv -t exec` reporting `source=Notarized Developer ID` and `syspolicy_check distribution` passing, against an asset carrying a genuine `com.apple.quarantine` xattr
-- [ ] **SIGN-03**: The Gatekeeper gate is demonstrated RED against a confirmed-applied mutation before it is trusted green — an un-notarized binary must fail it, so a green CI step, a passing `codesign -dvv`, or an Accepted `notarytool` history cannot stand in for verification
-- [ ] **SIGN-04**: What cosign signs and SLSA attests is byte-identical to what a user downloads — verified by diffing sha256 across pipeline stages, because notarization mutates the Mach-O and the current pipeline never modifies a binary after building it
+- [x] **SIGN-01**: Darwin binaries are Developer ID codesigned and notarized during the release, with the certificate and App Store Connect API key held as CI secrets
+- [x] **SIGN-02**: A user who downloads a release asset in a browser and runs it is not blocked by Gatekeeper — proven by `spctl -a -vv -t install` reporting `accepted` with `source=Notarized Developer ID` (exit 0), against an asset carrying a genuine `com.apple.quarantine` xattr confirmed present via `xattr -p`. **Amended 2026-08-09 (D-19)**: previously specified `-t exec` plus `syspolicy_check distribution`. Both were measured unachievable for this artifact shape on macOS 27.0 — `-t exec` returns `rejected (the code is valid but does not seem to be an app)` for *any* bare Mach-O regardless of notarization (reproduced against Docker's and OpenAI's genuinely Developer-ID-signed, notarized, hardened-runtime CLIs), and `syspolicy_check distribution` returns `Notary Ticket Missing` / Severity **Fatal** / exit 70 for anything not stapled, which DIST-06 puts permanently out of scope. `-t install` is the assessment type that matches a downloaded CLI binary and returns the exact required string; its RED baseline still fires (an adhoc linker-signed binary — this repo's shape today — returns `rejected`, exit 3)
+- [x] **SIGN-03**: The Gatekeeper gate is demonstrated RED against a confirmed-applied mutation before it is trusted green — an un-notarized binary must fail it, so a green CI step, a passing `codesign -dvv`, or an Accepted `notarytool` history cannot stand in for verification
+- [x] **SIGN-04**: What cosign signs and SLSA attests is byte-identical to what a user downloads — verified by diffing sha256 across pipeline stages, because notarization mutates the Mach-O and the current pipeline never modifies a binary after building it
 
 ### Homebrew Distribution (BREW)
 
@@ -73,10 +73,10 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 | REL-07 | Phase 1 | Complete |
 | REL-08 | Phase 1 | Complete |
 | REL-09 | Phase 1 | Complete |
-| SIGN-01 | Phase 2 | Pending |
-| SIGN-02 | Phase 2 | Pending |
-| SIGN-03 | Phase 2 | Pending |
-| SIGN-04 | Phase 2 | Pending |
+| SIGN-01 | Phase 2 | Complete |
+| SIGN-02 | Phase 2 | Complete |
+| SIGN-03 | Phase 2 | Complete |
+| SIGN-04 | Phase 2 | Complete |
 | BREW-01 | Phase 3 | Pending |
 | BREW-02 | Phase 3 | Pending |
 | BREW-03 | Phase 3 | Pending |
@@ -97,6 +97,7 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 | 4 | `codegraph upgrade` × Homebrew | UPGR-01, UPGR-02, UPGR-03 |
 
 **Coverage:**
+
 - v0.5.0 requirements: 18 total
 - Mapped to phases: 18 ✓
 - Unmapped: 0

@@ -4,6 +4,10 @@ Out-of-scope discoveries logged during plan execution, per the executor's scope-
 ("only auto-fix issues directly caused by the current task's changes; log out-of-scope
 discoveries here rather than fixing them").
 
+**Phase-2 deferrals live in their own file, not here:** see
+`.planning/phases/02-apple-signing-notarization/deferred-items.md` for the deferred re-wiring of
+`check:darwin-release-build` into `darwin-toolchain-canary.yml` (plan 02-02).
+
 ## 01-03: docs/RELEASE-PROCEDURES.md describes the pre-collapse build/assemble topology
 
 **Found during:** 01-03 Task 2 (collapse release.yml to one job)

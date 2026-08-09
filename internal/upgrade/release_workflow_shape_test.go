@@ -19,6 +19,11 @@ import (
 // every shipped binary.
 const releaseWorkflowPath = "../../.github/workflows/release.yml"
 
+// postReleaseWorkflowPath is the on-disk path (relative to this package) to
+// post-release-verify.yml, read by TestPostReleaseJobsDeclareCheckoutPolicy
+// (plan 02-06 Task 3).
+const postReleaseWorkflowPath = "../../.github/workflows/post-release-verify.yml"
+
 // --- workflow-source helper pairs -----------------------------------------
 //
 // Each helper below is a pure `parseX(src string) (T, error)` core plus a
@@ -1002,5 +1007,412 @@ func TestWorkflowSourceHelpersFailLoudly(t *testing.T) {
 				t.Fatalf("%s: expected a non-nil error, got nil", c.name)
 			}
 		})
+	}
+}
+
+// --- plan 02-06 Task 1: Apple secrets scoping ------------------------------
+//
+// appleCredentialNames is the exact set of five secret names T-02-16 scopes
+// to exactly one job in exactly one workflow (release.yml's release job).
+// Defined once so the literal set is not duplicated across this test's
+// traversal and Taskfile.yml's own precondition guards.
+var appleCredentialNames = []string{
+	"MACOS_SIGN_P12",
+	"MACOS_SIGN_PASSWORD",
+	"MACOS_NOTARY_ISSUER_ID",
+	"MACOS_NOTARY_KEY_ID",
+	"MACOS_NOTARY_KEY",
+}
+
+// fullWorkflowStep, fullWorkflowJob and fullWorkflowDoc decode a workflow
+// file's full shape with the REAL YAML decoder (never a line scanner) —
+// richer than workflowRunStep/workflowJobYAML/workflowFileYAML
+// (taskfile_shape_test.go), which only capture name:/run:. These add env:,
+// permissions:, uses:, and with: (specifically with.ref:), and use
+// map[string]any rather than map[string]string for env:/permissions:/with:
+// values because a workflow env: value or a checkout `fetch-depth: 0` is
+// not always a YAML string scalar — this test only ever inspects KEYS
+// (env:/permissions:) or stringifies one known scalar (with.ref:), never
+// requires a typed value.
+//
+// On: is decoded as a raw yaml.Node, not resolved into a Go bool/string:
+// struct-field decoding matches the literal source key "on" against the
+// `yaml:"on"` tag directly (verified empirically against this exact
+// decoder before use — struct-tag matching does not hit YAML 1.1's
+// implicit on/off-as-bool resolution, which only bites map[string]any key
+// decoding).
+type fullWorkflowStep struct {
+	Name string         `yaml:"name"`
+	Uses string         `yaml:"uses"`
+	Env  map[string]any `yaml:"env"`
+	With map[string]any `yaml:"with"`
+}
+
+type fullWorkflowJob struct {
+	Env         map[string]any     `yaml:"env"`
+	Permissions map[string]any     `yaml:"permissions"`
+	Steps       []fullWorkflowStep `yaml:"steps"`
+}
+
+type fullWorkflowDoc struct {
+	On          yaml.Node                 `yaml:"on"`
+	Env         map[string]any             `yaml:"env"`
+	Permissions map[string]any             `yaml:"permissions"`
+	Jobs        map[string]fullWorkflowJob `yaml:"jobs"`
+}
+
+// decodeFullWorkflowDoc reads and decodes one workflow YAML file at path.
+// Returns a non-nil error — never a usable zero value — on a read failure,
+// a YAML parse failure, or a file declaring zero jobs: entries (the CR-01
+// defect class every parser in this package guards against).
+func decodeFullWorkflowDoc(path string) (fullWorkflowDoc, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fullWorkflowDoc{}, err
+	}
+	var doc fullWorkflowDoc
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return fullWorkflowDoc{}, fmt.Errorf("yaml.Unmarshal(%s): %w", path, err)
+	}
+	if len(doc.Jobs) == 0 {
+		return fullWorkflowDoc{}, fmt.Errorf("decodeFullWorkflowDoc(%s): declares zero jobs:", path)
+	}
+	return doc, nil
+}
+
+// workflowOnTriggers returns the set of trigger-event names named directly
+// under a workflow's on: key, handling all three shapes GitHub Actions
+// allows there: a bare scalar (`on: push`), a flow/block sequence
+// (`on: [push, pull_request]`), and a mapping
+// (`on:\n  push:\n  pull_request:`).
+func workflowOnTriggers(on yaml.Node) map[string]bool {
+	triggers := map[string]bool{}
+	switch on.Kind {
+	case yaml.ScalarNode:
+		triggers[on.Value] = true
+	case yaml.SequenceNode:
+		for _, item := range on.Content {
+			triggers[item.Value] = true
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(on.Content); i += 2 {
+			triggers[on.Content[i].Value] = true
+		}
+	}
+	return triggers
+}
+
+// credentialReference names one place a credential name in
+// appleCredentialNames was found: which file, which job (empty for a
+// workflow-level env: reference), which step (empty for job- or
+// workflow-level), and the scope it was found at.
+type credentialReference struct {
+	File     string
+	JobID    string
+	StepName string
+	Scope    string // "workflow", "job", or "step"
+}
+
+// findCredentialReferences scans doc (decoded from file) for every
+// reference to any name in credentials, at all three env: scopes:
+// workflow-level, job-level, and step-level.
+func findCredentialReferences(file string, doc fullWorkflowDoc, credentials []string) []credentialReference {
+	var refs []credentialReference
+	for _, cred := range credentials {
+		if _, ok := doc.Env[cred]; ok {
+			refs = append(refs, credentialReference{File: file, Scope: "workflow"})
+		}
+	}
+	for jobID, job := range doc.Jobs {
+		for _, cred := range credentials {
+			if _, ok := job.Env[cred]; ok {
+				refs = append(refs, credentialReference{File: file, JobID: jobID, Scope: "job"})
+			}
+		}
+		for _, step := range job.Steps {
+			for _, cred := range credentials {
+				if _, ok := step.Env[cred]; ok {
+					refs = append(refs, credentialReference{File: file, JobID: jobID, StepName: step.Name, Scope: "step"})
+				}
+			}
+		}
+	}
+	return refs
+}
+
+// jobHasIDTokenWrite reports whether a decoded permissions: mapping (job- or
+// workflow-level) declares id-token: write. Values are stringified via
+// fmt.Sprintf since GitHub Actions permission values are always the plain
+// scalars read/write/none, but the decoded map is map[string]any (see the
+// fullWorkflowStep doc comment for why).
+func jobHasIDTokenWrite(perms map[string]any) bool {
+	v, ok := perms["id-token"]
+	if !ok {
+		return false
+	}
+	return fmt.Sprintf("%v", v) == "write"
+}
+
+// workflowHasIDTokenWrite reports whether doc declares id-token: write at
+// its workflow-level permissions: block or at any job-level permissions:
+// block.
+func workflowHasIDTokenWrite(doc fullWorkflowDoc) bool {
+	if jobHasIDTokenWrite(doc.Permissions) {
+		return true
+	}
+	for _, job := range doc.Jobs {
+		if jobHasIDTokenWrite(job.Permissions) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestAppleSecretsScopedToSingleReleaseJob is the T-02-16 mitigation:
+// enumerates every workflow file in .github/workflows/ at RUNTIME (never a
+// fixture list, so a newly added workflow is covered the day it lands —
+// and fails loudly below if the directory scan finds zero files, which
+// would make this whole test vacuous) and asserts, over every one of them:
+//
+//   - every reference to any of the five Apple credential names appears
+//     ONLY in release.yml, and within it, only in the release job (the one
+//     job that already holds id-token: write, per
+//     TestOIDCWriteScopedToSingleGoreleaserJob);
+//   - every such reference is under a STEP-level env:, never job-level or
+//     workflow-level — step-level scoping is what keeps the values out of
+//     every other step in the job (review suggestion, codex);
+//   - no workflow whose triggers include pull_request OR
+//     pull_request_target (review concern, pi LOW — BOTH are treated as
+//     pull-request triggers: pull_request_target is the more dangerous
+//     fork-reachable form because it runs with repository context, and
+//     this repository has several workflows using it, so a detector
+//     matching only the plain trigger would miss the worse case)
+//     references any of the five names, or declares id-token: write;
+//   - release.yml still declares id-token: write in exactly one job, so
+//     this change cannot have widened T-01-11/D-11's existing invariant
+//     (re-verified here independently of TestOIDCWriteScopedToSingleGoreleaserJob,
+//     so this test does not silently depend on that one to catch a
+//     widening).
+//
+// SCOPE OF PROOF (T-02-20, review concern codex MEDIUM): this test proves
+// where credential NAMES are CONSUMED in workflow files — which workflow,
+// which job, which scope. It does NOT and CANNOT prove the GitHub-side
+// scope of the secrets themselves: whether they are configured as
+// REPOSITORY-scoped, organization-scoped, or environment-scoped secrets in
+// the GitHub dashboard, nor their access policies there. Those are
+// dashboard facts, covered by this plan's user_setup, not by any test that
+// runs against on-disk source. A reader must not over-trust a green result
+// here as proof of repository-scoped secret configuration.
+func TestAppleSecretsScopedToSingleReleaseJob(t *testing.T) {
+	entries, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		t.Fatalf("os.ReadDir(%s): %v", workflowsDir, err)
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml") {
+			files = append(files, filepath.Join(workflowsDir, e.Name()))
+		}
+	}
+	if len(files) == 0 {
+		t.Fatalf("workflow directory scan found zero files in %s — this would make the whole test vacuous", workflowsDir)
+	}
+
+	releaseSrc, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	releaseJob := mustGoreleaserInvokingJob(t, string(releaseSrc))
+
+	releaseAbs, err := filepath.Abs(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("filepath.Abs(%s): %v", releaseWorkflowPath, err)
+	}
+
+	for _, path := range files {
+		doc, err := decodeFullWorkflowDoc(path)
+		if err != nil {
+			t.Fatalf("decodeFullWorkflowDoc(%s): %v", path, err)
+		}
+
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			t.Fatalf("filepath.Abs(%s): %v", path, err)
+		}
+		isReleaseWorkflow := absPath == releaseAbs
+
+		refs := findCredentialReferences(path, doc, appleCredentialNames)
+		triggers := workflowOnTriggers(doc.On)
+		isPRTriggerable := triggers["pull_request"] || triggers["pull_request_target"]
+
+		for _, ref := range refs {
+			if !isReleaseWorkflow {
+				t.Errorf("%s references an Apple credential name outside release.yml (scope=%s job=%s step=%q) — T-02-16 requires exactly one workflow to hold these", ref.File, ref.Scope, ref.JobID, ref.StepName)
+				continue
+			}
+			if ref.JobID != releaseJob.ID {
+				t.Errorf("release.yml references an Apple credential name in job %q, want only the release job %q (scope=%s step=%q)", ref.JobID, releaseJob.ID, ref.Scope, ref.StepName)
+			}
+			if ref.Scope != "step" {
+				t.Errorf("release.yml references an Apple credential name at %s-level env: (job=%s step=%q) — must be step-level only, so the values stay out of every other step in the job", ref.Scope, ref.JobID, ref.StepName)
+			}
+		}
+
+		if isPRTriggerable {
+			if len(refs) > 0 {
+				t.Errorf("%s triggers on a pull-request event (pull_request or pull_request_target) AND references an Apple credential name — forbidden (T-02-16)", path)
+			}
+			if workflowHasIDTokenWrite(doc) {
+				t.Errorf("%s triggers on a pull-request event (pull_request or pull_request_target) AND declares id-token: write — must never coincide", path)
+			}
+		}
+	}
+
+	shapes := mustReleaseJobShapes(t, string(releaseSrc))
+	var holders []string
+	for _, s := range shapes {
+		if s.HasIDTokenWrite {
+			holders = append(holders, s.ID)
+		}
+	}
+	if len(holders) != 1 {
+		t.Errorf("release.yml declares id-token: write in %d job(s) %v, want exactly 1", len(holders), holders)
+	}
+}
+
+// TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError is the
+// non-vacuity companion: decodeFullWorkflowDoc must return a non-nil error,
+// never a usable zero value, for a workflow source with no jobs: entries.
+func TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "empty.yml")
+	if err := os.WriteFile(path, []byte("name: empty\non:\n  push:\njobs: {}\n"), 0o644); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	if _, err := decodeFullWorkflowDoc(path); err == nil {
+		t.Fatalf("decodeFullWorkflowDoc(%s): expected a non-nil error for a workflow with zero jobs:, got nil", path)
+	}
+}
+
+// --- plan 02-06 Task 3: post-release checkout policy -----------------------
+
+// postReleaseCheckoutShape is the subset of one post-release-verify.yml
+// job's shape TestPostReleaseJobsDeclareCheckoutPolicy needs: whether it
+// has an actions/checkout step at all, and that step's with.ref: value (if
+// any).
+type postReleaseCheckoutShape struct {
+	JobID       string
+	HasCheckout bool
+	CheckoutRef string
+}
+
+// postReleaseCheckoutShapes derives one postReleaseCheckoutShape per job in
+// doc, using the FIRST actions/checkout step found in each job (this
+// repository's workflows never declare more than one per job).
+func postReleaseCheckoutShapes(doc fullWorkflowDoc) []postReleaseCheckoutShape {
+	var shapes []postReleaseCheckoutShape
+	for jobID, job := range doc.Jobs {
+		shape := postReleaseCheckoutShape{JobID: jobID}
+		for _, step := range job.Steps {
+			if !strings.HasPrefix(step.Uses, "actions/checkout") {
+				continue
+			}
+			shape.HasCheckout = true
+			if ref, ok := step.With["ref"]; ok {
+				shape.CheckoutRef = fmt.Sprintf("%v", ref)
+			}
+			break
+		}
+		shapes = append(shapes, shape)
+	}
+	return shapes
+}
+
+// latestVerifierJobIDs and releaseMatchedTestJobIDs are the two checkout
+// policy classes TestPostReleaseJobsDeclareCheckoutPolicy enforces (Task 3,
+// review concern codex MEDIUM / pi LOW — the same seam from two angles). A
+// test named for governing every release-artifact job, while silently
+// excluding some, would invite a reader to believe coverage it does not
+// have; encoding both classes as named data, plus the completeness
+// assertion in the test body, is what converts that exclusion rationale
+// from narrative into something enforced.
+//
+//   - latest-verifier jobs run verification TARGETS from the tree with
+//     checkout DELIBERATELY UNPINNED, so the newest verifier applies even
+//     to an older tag — a fixed verifier SHOULD apply when re-verifying.
+//     resolve-tag performs no checkout at all (it only calls gh api), so
+//     the pinning rule holds on it vacuously; it is classified here rather
+//     than left unclassified so the completeness assertion below covers
+//     every job id in the file, not just the ones that happen to check out
+//     code.
+//   - release-matched-test jobs run TESTS or task targets that must match
+//     the artifact under test byte-for-byte, so checkout MUST be pinned to
+//     the resolved tag — otherwise a post-release red is ambiguous between
+//     a bad artifact and drifted tooling. gatekeeper joins notarized-suite
+//     here because plan 02-06 Task 2 requires its checkout pinned too (the
+//     Taskfile target it runs must be the one that shipped WITH the
+//     release under test, not whatever HEAD happens to be at verification
+//     time) — the classifying property is the PINNING REQUIREMENT, not
+//     whether the job happens to invoke `go test` specifically.
+var latestVerifierJobIDs = []string{"resolve-tag", "verify-supply-chain", "self-upgrade"}
+var releaseMatchedTestJobIDs = []string{"gatekeeper", "notarized-suite"}
+
+// TestPostReleaseJobsDeclareCheckoutPolicy is the plan 02-06 Task 3
+// mitigation: every job in post-release-verify.yml must be classified into
+// exactly one of latestVerifierJobIDs or releaseMatchedTestJobIDs, and its
+// checkout ref: (or lack of one) must match that class's pinning rule. A
+// newly added job that is not classified fails this test — see the two var
+// docs above for the two classes' rationale.
+func TestPostReleaseJobsDeclareCheckoutPolicy(t *testing.T) {
+	doc, err := decodeFullWorkflowDoc(postReleaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("decodeFullWorkflowDoc(%s): %v", postReleaseWorkflowPath, err)
+	}
+	shapes := postReleaseCheckoutShapes(doc)
+	if len(shapes) == 0 {
+		t.Fatalf("%s declares zero jobs", postReleaseWorkflowPath)
+	}
+
+	classOf := map[string]string{}
+	for _, id := range latestVerifierJobIDs {
+		classOf[id] = "latest-verifier"
+	}
+	for _, id := range releaseMatchedTestJobIDs {
+		classOf[id] = "release-matched-test"
+	}
+
+	seen := map[string]bool{}
+	for _, s := range shapes {
+		seen[s.JobID] = true
+		class, ok := classOf[s.JobID]
+		if !ok {
+			t.Errorf("job %q is not classified into latest-verifier or release-matched-test — classify every new artifact-consuming job rather than leaving it unlisted", s.JobID)
+			continue
+		}
+		switch class {
+		case "latest-verifier":
+			if s.CheckoutRef != "" {
+				t.Errorf("job %q is classified latest-verifier (checkout deliberately unpinned, so the newest verifier applies even to an older tag) but declares with: ref: %q", s.JobID, s.CheckoutRef)
+			}
+		case "release-matched-test":
+			if !s.HasCheckout {
+				t.Errorf("job %q is classified release-matched-test but has no actions/checkout step at all", s.JobID)
+				continue
+			}
+			if s.CheckoutRef == "" {
+				t.Errorf("job %q is classified release-matched-test (tests must match the artifact under test) but its checkout step has no with: ref:", s.JobID)
+			} else if !strings.Contains(s.CheckoutRef, "needs.resolve-tag.outputs.tag") {
+				t.Errorf("job %q's checkout ref: = %q, want it bound to needs.resolve-tag.outputs.tag", s.JobID, s.CheckoutRef)
+			}
+		}
+	}
+
+	for id := range classOf {
+		if !seen[id] {
+			t.Errorf("class list names job %q but %s declares no such job", id, postReleaseWorkflowPath)
+		}
 	}
 }

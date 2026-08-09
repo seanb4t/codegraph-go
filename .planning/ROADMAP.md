@@ -138,19 +138,38 @@ Plans:
 **Requirements**: SIGN-01, SIGN-02, SIGN-03, SIGN-04
 **Success Criteria** (what must be TRUE):
 
-  1. The gate is shown RED first: `spctl -a -vv -t exec` on the darwin asset Phase 1 published, with a `com.apple.quarantine` xattr confirmed present via `xattr -p`, reports `rejected` — recorded before any green run, so the check is known to be able to fire. A green CI step, a passing `codesign -dvv` (which already passes today on the adhoc-signed darwin/arm64 binary `spctl` rejects), an Accepted `notarytool` history entry, and `spctl` on a file that was never quarantined are each explicitly recorded as insufficient (SIGN-03)
-  2. The same command on the notarized, published darwin asset — quarantine xattr again confirmed present before the run — reports `accepted` with `source=Notarized Developer ID`, and `syspolicy_check distribution` passes (SIGN-01, SIGN-02)
+  1. The gate is shown RED first: `spctl -a -vv -t install` on the darwin asset Phase 1 published, with a `com.apple.quarantine` xattr confirmed present via `xattr -p`, reports `rejected` (exit 3) — recorded before any green run, so the check is known to be able to fire. A green CI step, a passing `codesign -dvv` (which already passes today on the adhoc-signed darwin/arm64 binary `spctl` rejects), an Accepted `notarytool` history entry, and `spctl` on a file that was never quarantined are each explicitly recorded as insufficient (SIGN-03)
+  2. The same command on the notarized, published darwin asset — quarantine xattr again confirmed present before the run — reports `accepted` with `source=Notarized Developer ID` (exit 0), and the verdict is taken from the exit status rather than from a substring search (SIGN-01, SIGN-02). **Amended 2026-08-09 (D-19)**: criteria 1 and 2 previously specified `-t exec`, and criterion 2 additionally required `syspolicy_check distribution` to pass. Measured on macOS 27.0: `-t exec` rejects *any* bare Mach-O with `rejected (the code is valid but does not seem to be an app)` regardless of notarization — reproduced against two vendors' genuinely notarized Developer ID CLIs — so it would have produced a false RED in criterion 1 and been permanently unreachable in criterion 2; and `syspolicy_check distribution` is Fatal (exit 70, `Notary Ticket Missing`) for anything unstapled, contradicting DIST-06. `-t install` is the assessment type matching a downloaded CLI binary, returns the required string, and still rejects the adhoc linker-signed shape this repo ships today
   3. The sha256 recorded immediately after the notarize pipe, the sha256 of the re-downloaded published asset, the cosign-signed subject, and the SLSA-attested subject are all the same value for each darwin binary — and a deliberately mis-ordered pipe makes them diverge, so the ordering is measured rather than trusted from GoReleaser's documentation (SIGN-04)
   4. The full CLI and MCP integration suite runs green against the notarized, hardened-runtime binary **itself** rather than a locally rebuilt one, so a library-validation load failure surfaces as a test failure instead of as a user's first-run crash
   5. `docs/RELEASE.md` states the shipped guarantee exactly — notarized, online-verified, **not stapled** — names offline first launch as a known limitation, and gives a reader the literal `xattr` + `spctl` commands to reproduce criterion 2 themselves
 
 **Notes**: Promoted from backlog **999.5**, whose captured measurements stand: `codesign -dvv` reports darwin/arm64 as `adhoc, linker-signed` with `TeamIdentifier=not set` (the Go linker emits this so the Apple Silicon kernel will exec the binary — it satisfies the kernel, not Gatekeeper), darwin/amd64 as `code object is not signed at all`, and `spctl -a -vv -t exec` returns **rejected** for both. cosign is a different mechanism entirely — a detached Sigstore sidecar verified in-process by `internal/upgrade`, not an embedded `LC_CODE_SIGNATURE` — and does nothing for Gatekeeper. The affected population is browser downloaders from the GitHub Releases page; a binary fetched by the real `codegraph upgrade` path was measured to carry only `com.apple.provenance`. 999.5's open asset-shape question (a bare Mach-O can be notarized but not stapled) is resolved across Phases 1 and 3: archives ship *alongside* raw binaries, and stapling is out of scope because `.zip` and bare Mach-O are both categorically unstaplable and Quill has no staple command.
 
-**Plans**: TBD
+**Plans**: 6/7 plans executed
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (populate with /gsd-plan-phase 2)
+- [x] 02-01-PLAN.md — tracer: build `verify:gatekeeper` end-to-end against a published asset (D-19 oracle: `spctl -a -vv -t install`, verdict by exit status) and record the SIGN-03 RED baseline on v0.5.1, settling the synthetic-quarantine question
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02-02-PLAN.md — apply the D-18 ruling: cosign moves to the release-scoped `signs:` pipe, `notarize:` goes live with explicit darwin ids and an env-gated `enabled:`, the false rationale comment is retracted, and every goreleaser caller gets a notarize-reachability verdict
+- [x] 02-03-PLAN.md — `CODEGRAPH_TEST_BIN` seam in both real-binary harnesses, with a resolver that aborts by name rather than silently rebuilding
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 02-04-PLAN.md — guarded maintainer-only notarize rehearsal (D-08/D-09) and the D-07 one-time mis-order mutation, with the cosign subject determined by `cosign verify-blob` against a separately-built pre-sign baseline
+- [x] 02-05-PLAN.md — `docs/RELEASE.md` states the guarantee exactly (notarized, online-verified, not stapled), names the offline limitation, and gives the reproduction commands
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 02-06-PLAN.md — Apple secrets on the single OIDC-bearing release job with a runtime-enumerating scoping test, plus the post-release Gatekeeper and notarized-suite jobs
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 02-07-PLAN.md — cut the real release and record criteria 2, 3 and 4 against the re-downloaded published assets
 
 ### Phase 3: Homebrew Tap & Cask
 
@@ -196,7 +215,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
-| 2. Apple Signing & Notarization | v0.5.0 | 0/TBD | Not started | - |
+| 2. Apple Signing & Notarization | v0.5.0 | 6/7 | In Progress|  |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
