@@ -94,6 +94,19 @@ Eight tools are exposed: `codegraph_explore`, `codegraph_node`,
 
 `codegraph_explore` answers most questions in one call.
 
+To expose fewer — a smaller tool surface leaves more of an agent's context for
+the work — set `CODEGRAPH_MCP_TOOLS` to the companions you want. It is a
+narrowing filter, not an allowlist: leaving it unset gives you all eight.
+
+```sh
+CODEGRAPH_MCP_TOOLS=node,status codegraph serve --mcp   # explore + node + status
+CODEGRAPH_MCP_TOOLS= codegraph serve --mcp              # explore alone
+```
+
+`codegraph_explore` is always present and cannot be filtered out. An empty tool
+list means something else entirely: this repo has no index yet, so run
+`codegraph init`.
+
 ## Commands
 
 | | |

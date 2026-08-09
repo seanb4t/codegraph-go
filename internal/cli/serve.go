@@ -176,7 +176,30 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the codegraph MCP server",
-		Args:  cobra.NoArgs,
+		Long: `Run the codegraph MCP server over stdio.
+
+All eight tools are exposed by default: codegraph_explore plus the seven
+companions (node, search, callers, callees, impact, files, status).
+
+Set CODEGRAPH_MCP_TOOLS to expose fewer — a smaller tool surface leaves more
+of an agent's context for the work. It is a NARROWING filter, not an
+allowlist: leaving it unset gives you all eight, and setting it removes every
+companion it does not name. Unrecognized names are ignored with a warning on
+stderr. codegraph_explore is always present and cannot be filtered out.
+
+A repository with no .codegraph/ index exposes zero tools; the server still
+starts and completes the MCP handshake, so agents fall back to their built-ins
+instead of the connection being refused. Run codegraph init to fix that — the
+tools appear on the next request, with no client restart.`,
+		Example: `  # all eight tools (the default)
+  codegraph serve --mcp
+
+  # explore + node + status only
+  CODEGRAPH_MCP_TOOLS=node,status codegraph serve --mcp
+
+  # codegraph_explore alone
+  CODEGRAPH_MCP_TOOLS= codegraph serve --mcp`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !mcpMode {
 				return fmt.Errorf("codegraph serve: --mcp is required (stdio is the only supported transport)")
