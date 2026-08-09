@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/seanb4t/codegraph-go/compare/v0.6.0...v0.7.0) (2026-08-09)
+
+
+### Features
+
+* **macos:** Developer ID signing and Apple notarization for darwin release assets ([#47](https://github.com/seanb4t/codegraph-go/issues/47)) ([de551be](https://github.com/seanb4t/codegraph-go/commit/de551beb776ee142bc5d2886a5750cf05ee41241))
+
+
+### Bug Fixes
+
+* **test:** join the subprocess before reading captured stderr in wireoracle ([#50](https://github.com/seanb4t/codegraph-go/issues/50)) ([29f6e3d](https://github.com/seanb4t/codegraph-go/commit/29f6e3d5e9e083b529d132aeaff8cf11d5a6b8b7))
+
 ## [0.6.0](https://github.com/seanb4t/codegraph-go/compare/v0.5.1...v0.6.0) (2026-08-09)
 
 
