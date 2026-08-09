@@ -1621,3 +1621,153 @@ See Taskfile.yml for the complete list.
 		t.Fatalf("TestContributingReferencesRealTaskTargets_UnknownTargetIsError: expected 'fake-nonexistent-target-xyz' in missing targets, got %v", missing)
 	}
 }
+
+// --- plan 02-01: verify:gatekeeper precondition-set guard ------------------
+
+// gatekeeperPrecondition mirrors one Taskfile.yml preconditions: list entry
+// (sh:/msg: pair).
+type gatekeeperPrecondition struct {
+	Sh  string `yaml:"sh"`
+	Msg string `yaml:"msg"`
+}
+
+// gatekeeperTaskYAML mirrors just the preconditions: field of one Taskfile.yml
+// task entry — the only field the guard below needs.
+type gatekeeperTaskYAML struct {
+	Preconditions []gatekeeperPrecondition `yaml:"preconditions"`
+}
+
+// gatekeeperTaskfileRoot mirrors just the tasks: map of Taskfile.yml, decoded
+// with the REAL YAML decoder (go.yaml.in/yaml/v3) — never a line scanner.
+// Taskfile.yml's preconditions: entries are an ordinary YAML list-of-maps;
+// a real decoder handles that shape unambiguously, the same way
+// parseGoreleaserCrossPairs above decodes .goreleaser.yaml's builds: entries
+// rather than regex-scanning them.
+type gatekeeperTaskfileRoot struct {
+	Tasks map[string]gatekeeperTaskYAML `yaml:"tasks"`
+}
+
+// gatekeeperExpectedPreconditionShs is the exact set of sh: values
+// verify:gatekeeper must declare: one per named input (TAG, REPO, GOOS,
+// GOARCH, GH_TOKEN, GATEKEEPER_EXPECT presence, GATEKEEPER_EXPECT value
+// validation), one per required tool (gh, jq, xattr, spctl), and the
+// darwin-host check — 12 total. Compared as an exact set, both directions: a
+// missing entry OR an unexpected extra entry both fail the guard.
+var gatekeeperExpectedPreconditionShs = []string{
+	`[ -n "${TAG:-}" ]`,
+	`[ -n "${REPO:-}" ]`,
+	`[ -n "${GOOS:-}" ]`,
+	`[ -n "${GOARCH:-}" ]`,
+	`[ -n "${GH_TOKEN:-}" ]`,
+	`[ -n "${GATEKEEPER_EXPECT:-}" ]`,
+	`[ "${GATEKEEPER_EXPECT:-}" = "accepted" ] || [ "${GATEKEEPER_EXPECT:-}" = "rejected" ]`,
+	`[ "$(go env GOHOSTOS)" = "darwin" ]`,
+	`command -v gh`,
+	`command -v jq`,
+	`command -v xattr`,
+	`command -v spctl`,
+}
+
+// gatekeeperPreconditionNameChecks maps a subset of the sh: values above to
+// the substring their msg: must contain — proving the precondition halts BY
+// NAME (D-09's discipline) rather than with a generic message.
+var gatekeeperPreconditionNameChecks = map[string]string{
+	`[ -n "${TAG:-}" ]`:               "TAG",
+	`[ -n "${REPO:-}" ]`:              "REPO",
+	`[ -n "${GOOS:-}" ]`:              "GOOS",
+	`[ -n "${GOARCH:-}" ]`:            "GOARCH",
+	`[ -n "${GH_TOKEN:-}" ]`:          "GH_TOKEN",
+	`[ -n "${GATEKEEPER_EXPECT:-}" ]`: "GATEKEEPER_EXPECT",
+	`command -v gh`:                   "gh",
+	`command -v jq`:                   "jq",
+	`command -v xattr`:                "xattr",
+	`command -v spctl`:                "spctl",
+}
+
+// parseGatekeeperPreconditions decodes Taskfile.yml source src with the real
+// YAML decoder and returns verify:gatekeeper's preconditions: list. Returns
+// a non-nil error when src fails to parse as YAML, when no verify:gatekeeper
+// task exists under tasks:, or when that task declares zero preconditions:
+// entries — never a usable empty slice on any of those misses (the CR-01
+// defect class every parser in this file guards against).
+func parseGatekeeperPreconditions(src string) ([]gatekeeperPrecondition, error) {
+	var root gatekeeperTaskfileRoot
+	if err := yaml.Unmarshal([]byte(src), &root); err != nil {
+		return nil, fmt.Errorf("parseGatekeeperPreconditions: %w", err)
+	}
+	task, ok := root.Tasks["verify:gatekeeper"]
+	if !ok {
+		return nil, fmt.Errorf("parseGatekeeperPreconditions: no verify:gatekeeper task found under tasks:")
+	}
+	if len(task.Preconditions) == 0 {
+		return nil, fmt.Errorf("parseGatekeeperPreconditions: verify:gatekeeper declares zero preconditions:")
+	}
+	return task.Preconditions, nil
+}
+
+// TestVerifyGatekeeperDeclaresNamedPreconditions pins plan 02-01 Task 1's
+// precondition contract for verify:gatekeeper: it hard-fails by name (D-09's
+// discipline) on every missing input and missing tool, and GATEKEEPER_EXPECT
+// additionally carries a value-validation precondition (review concern pi
+// LOW) rather than silently accepting anything. Fails if the target is
+// absent.
+func TestVerifyGatekeeperDeclaresNamedPreconditions(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	preconditions, err := parseGatekeeperPreconditions(string(data))
+	if err != nil {
+		t.Fatalf("parseGatekeeperPreconditions: %v", err)
+	}
+
+	gotShs := make([]string, 0, len(preconditions))
+	msgBySh := make(map[string]string, len(preconditions))
+	for _, p := range preconditions {
+		if strings.TrimSpace(p.Msg) == "" {
+			t.Errorf("verify:gatekeeper precondition sh=%q has an empty msg: — every precondition must hard-fail by name, not by a bare non-zero exit", p.Sh)
+		}
+		gotShs = append(gotShs, p.Sh)
+		msgBySh[p.Sh] = p.Msg
+	}
+
+	wantShs := append([]string(nil), gatekeeperExpectedPreconditionShs...)
+	sort.Strings(gotShs)
+	sort.Strings(wantShs)
+	if !reflect.DeepEqual(gotShs, wantShs) {
+		t.Fatalf("verify:gatekeeper preconditions: sh: values are not the expected exact set.\ngot:  %v\nwant: %v", gotShs, wantShs)
+	}
+
+	for sh, name := range gatekeeperPreconditionNameChecks {
+		msg, ok := msgBySh[sh]
+		if !ok {
+			continue // already reported above as part of the exact-set mismatch
+		}
+		if !strings.Contains(msg, name) {
+			t.Errorf("verify:gatekeeper precondition sh=%q has msg %q, which does not name %q — a precondition must halt BY NAME", sh, msg, name)
+		}
+	}
+
+	expectValueSh := `[ "${GATEKEEPER_EXPECT:-}" = "accepted" ] || [ "${GATEKEEPER_EXPECT:-}" = "rejected" ]`
+	if msg, ok := msgBySh[expectValueSh]; ok {
+		if !strings.Contains(msg, "accepted") || !strings.Contains(msg, "rejected") {
+			t.Errorf("verify:gatekeeper's GATEKEEPER_EXPECT value-validation precondition msg %q must name both allowed values (accepted, rejected)", msg)
+		}
+	}
+}
+
+// TestVerifyGatekeeperDeclaresNamedPreconditions_MissingTargetIsError is the
+// non-vacuity companion: it feeds parseGatekeeperPreconditions synthetic
+// Taskfile.yml source with no verify:gatekeeper task and verifies the parser
+// — and therefore the main test above — would fail rather than pass
+// vacuously if the target were ever removed or renamed.
+func TestVerifyGatekeeperDeclaresNamedPreconditions_MissingTargetIsError(t *testing.T) {
+	synthetic := `tasks:
+  build:
+    cmds:
+      - go build ./...
+`
+	if _, err := parseGatekeeperPreconditions(synthetic); err == nil {
+		t.Fatalf("parseGatekeeperPreconditions: expected an error for Taskfile.yml source with no verify:gatekeeper task, got nil")
+	}
+}

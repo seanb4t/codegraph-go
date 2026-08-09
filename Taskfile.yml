@@ -1315,6 +1315,266 @@ tasks:
 
         echo "verify:self-upgrade: PASS — ${GOOS}/${GOARCH} self-upgraded from ${PRIOR_TAG} to ${TAG} byte-identically to the published asset"
 
+  verify:gatekeeper:
+    desc: >-
+      SIGN-03's tracer: an Apple Gatekeeper verdict on one PUBLISHED darwin
+      release asset, never a local dist/ copy and never a locally rebuilt
+      binary. The single definition both the SIGN-03 RED baseline (plan
+      02-01 Task 2/3, against v0.5.1's deliberately un-notarized assets) and
+      the post-release GREEN check (plan 02-06) call — GATEKEEPER_EXPECT
+      selects which. Per D-19 (LOCKED, 02-RESEARCH.md) the oracle is
+      `spctl -a -vv -t install`, NEVER `-t exec` — `-t exec` rejects a bare
+      Mach-O on SHAPE before notarization is considered at all, which is why
+      it would stay red after notarization for a completely different
+      reason than the RED baseline's. The verdict is the EXIT STATUS alone
+      (0=accepted, 3=rejected), never a substring search — "accepted"
+      matches inside "rejected (the code is valid but does not seem to be
+      an app)" and inside origin= lines. `syspolicy_check distribution` is
+      recorded as a NON-GATING observation only: its verdict is fatal for
+      anything unstapled, and stapling is permanently out of scope
+      (D-16/DIST-06), so gating on it would be a gate that can never pass.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. verify:gatekeeper requires TAG (the release tag whose darwin asset is assessed) in the environment — e.g. TAG=v0.5.1 for the RED baseline."
+      - sh: '[ -n "${REPO:-}" ]'
+        msg: "REPO is not set. verify:gatekeeper requires REPO (owner/repo, e.g. seanb4t/codegraph-go) in the environment."
+      - sh: '[ -n "${GOOS:-}" ]'
+        msg: "GOOS is not set. verify:gatekeeper requires GOOS (darwin) in the environment — the asset name is codegraph_${TAG}_${GOOS}_${GOARCH}, matching internal/upgrade.releaseAssetName's contract."
+      - sh: '[ -n "${GOARCH:-}" ]'
+        msg: "GOARCH is not set. verify:gatekeeper requires GOARCH (amd64 or arm64) in the environment."
+      - sh: '[ -n "${GH_TOKEN:-}" ]'
+        msg: "GH_TOKEN is not set. Every gh invocation in this target needs it; a missing token would otherwise fail mid-target and look like a Gatekeeper break rather than a missing credential."
+      - sh: '[ -n "${GATEKEEPER_EXPECT:-}" ]'
+        msg: "GATEKEEPER_EXPECT is not set. Must be one of: accepted, rejected. The RED baseline (plan 02-01) uses rejected against v0.5.1's un-notarized assets; the post-release GREEN check (plan 02-06) uses accepted."
+      - sh: '[ "${GATEKEEPER_EXPECT:-}" = "accepted" ] || [ "${GATEKEEPER_EXPECT:-}" = "rejected" ]'
+        msg: "GATEKEEPER_EXPECT is set to a value other than 'accepted' or 'rejected'. An unvalidated value would fail safe but confusingly, turning every observation into a mismatch regardless of what spctl actually reports — value must be exactly one of the two allowed strings."
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "verify:gatekeeper must run on a native darwin host — spctl/syspolicy_check/xattr are macOS-only and this is not a build toolchain that can be cross-compiled around. Run it on macOS locally, or dispatch it on namespace-profile-macos-6x14-tahoe, the CI runner class release.yml and post-release-verify.yml use."
+      - sh: command -v gh
+        msg: "gh CLI not found. This target downloads the published release asset with it. CI runner images ship it; locally: brew install gh."
+      - sh: command -v jq
+        msg: "jq not found. This target parses gh release view --json assets output with it, to cross-check GitHub's own recorded per-asset digest against the recomputed sha256 — the provenance strengthening that turns 'the bytes I assessed' into 'the bytes the release serves'. CI runner images ship it; locally: brew install jq."
+      - sh: command -v xattr
+        msg: "xattr not found. This target applies and reads back the com.apple.quarantine extended attribute with it. macOS built-in — if missing, the host is misconfigured."
+      - sh: command -v spctl
+        msg: "spctl not found. This target's oracle IS spctl -a -vv -t install (D-19) — macOS built-in. If missing, the host is misconfigured."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "verify:gatekeeper: TAG=${TAG} REPO=${REPO} GOOS=${GOOS} GOARCH=${GOARCH} expect=${GATEKEEPER_EXPECT}"
+
+        # macOS ships no sha256sum by default (BSD userland); shasum -a 256
+        # is the native equivalent — mirrors verify:self-upgrade's sha256_of.
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # --- 1. Resolve the asset name: the raw binary, matching
+        # internal/upgrade.releaseAssetName's contract. Never the .zip.
+        ASSET_NAME="codegraph_${TAG}_${GOOS}_${GOARCH}"
+
+        # --- 2. Read the asset's metadata from the published release
+        # listing and extract its recorded digest. An asset absent from the
+        # listing is a hard failure naming the asset and the tag.
+        ASSETS_JSON="$(gh release view "${TAG}" --repo "${REPO}" --json assets)"
+        ASSET_ENTRY="$(printf '%s' "${ASSETS_JSON}" | jq -c --arg name "${ASSET_NAME}" '[.assets[] | select(.name == $name)] | first // empty')"
+        if [ -z "${ASSET_ENTRY}" ]; then
+          echo "::error::asset ${ASSET_NAME} not found among ${TAG}'s published assets — cannot assess an asset that was never published"
+          exit 1
+        fi
+        GH_DIGEST_RAW="$(printf '%s' "${ASSET_ENTRY}" | jq -r '.digest // empty')"
+        GH_DIGEST="${GH_DIGEST_RAW#sha256:}"
+
+        # --- 3. Download it with gh release download into a mktemp -d
+        # cleaned by a single trap. Downloading is not optional and a local
+        # dist/ copy is never acceptable — plan 01-05's false negatives came
+        # from a verifier that read an artifact it never downloaded.
+        DL_DIR="$(mktemp -d)"
+        trap 'rm -rf "${DL_DIR}"' EXIT
+        gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" --pattern "${ASSET_NAME}"
+        ASSET_PATH="${DL_DIR}/${ASSET_NAME}"
+
+        # --- 4. Recompute the sha256 and cross-check it against GitHub's
+        # recorded digest from step 2 — the provenance cross-check that
+        # makes the assessed bytes identifiable. A mismatch is always a
+        # hard failure. A MISSING digest is bound to GATEKEEPER_EXPECT
+        # (deliberate asymmetry, not an inconsistency):
+        #   - expect=accepted (GREEN, plan 02-06's CI job): a missing or
+        #     malformed digest is a HARD FAILURE. GREEN is the claim that
+        #     carries weight, so its provenance must be established, not
+        #     assumed. Sentinel-and-continue on a verification step is this
+        #     repository's single most-repeated failure class.
+        #   - expect=rejected (RED, this plan's baseline against a
+        #     preserved older release, where the API may genuinely predate
+        #     per-asset digests): record the sentinel and continue, but
+        #     WARN loudly and set digest_match=unknown so the downgrade is
+        #     visible in the evidence rather than silent.
+        SHA256="$(sha256_of "${ASSET_PATH}")"
+        DIGEST_MATCH="unknown"
+        if [ -n "${GH_DIGEST}" ]; then
+          if [ "${GH_DIGEST}" = "${SHA256}" ]; then
+            DIGEST_MATCH="true"
+          else
+            DIGEST_MATCH="false"
+          fi
+        fi
+        if [ "${DIGEST_MATCH}" = "false" ]; then
+          echo "::error::sha256 mismatch: downloaded ${ASSET_NAME} hashes to ${SHA256}, GitHub's recorded digest is ${GH_DIGEST} — the bytes assessed are NOT provably the bytes the release serves"
+          exit 1
+        fi
+        if [ "${DIGEST_MATCH}" = "unknown" ]; then
+          if [ "${GATEKEEPER_EXPECT}" = "accepted" ]; then
+            echo "::error::GitHub's recorded digest for ${ASSET_NAME} is unavailable on the GREEN path (GATEKEEPER_EXPECT=accepted) — provenance cannot be established, and GREEN is the claim that carries weight. This is a HARD FAILURE, not sentinel-and-continue (deliberate D-19/plan-02-01 asymmetry, stated here rather than left as an inconsistency)."
+            exit 1
+          fi
+          echo "::warning::GitHub's recorded digest for ${ASSET_NAME} is unavailable on the RED path (GATEKEEPER_EXPECT=rejected — a preserved older release whose API may predate per-asset digests). Recording digest_match=unknown and continuing. Deliberate scope decision, not an oversight."
+        fi
+
+        # --- 5. Assess the file BEFORE applying any xattr and record that
+        # verdict on its own labelled line as the explicit NON-EVIDENCE
+        # control — the observation that makes "spctl on a
+        # never-quarantined file" visibly distinct rather than silently
+        # conflated with the real verdict below.
+        set +e
+        PRE_XATTR_OUT="$(spctl -a -vv -t install "${ASSET_PATH}" 2>&1)"
+        PRE_XATTR_EXIT=$?
+        set -e
+        echo "GATEKEEPER-PRE-XATTR-CONTROL (NON-EVIDENCE — file was never quarantined at this point) exit=${PRE_XATTR_EXIT}"
+        echo "${PRE_XATTR_OUT}"
+
+        # --- 6. Apply a SYNTHETIC com.apple.quarantine xattr — Apple's
+        # documented four-field flags;timestamp;agent;event-uuid form,
+        # flags=0081 (downloaded-and-first-launch). Built in plain shell,
+        # via printf/uuidgen — no Go-template braces anywhere in this
+        # target, for the reason release:dry-run-signed has none: `task`
+        # renders every cmds: string through Go text/template BEFORE the
+        # shell sees it, and a stray double-brace template marker here
+        # would be eaten (the defect that shipped v0.5.0 empty). Called
+        # SYNTHETIC in every comment, label and evidence field — it is a
+        # simulation until Task 2's checkpoint confirms it behaves like an
+        # actual browser download; naming it anything else before that
+        # comparison would prejudge the one open question (assumption A2)
+        # this plan exists to settle.
+        QUARANTINE_HEX_TS="$(printf '%x' "$(date +%s)")"
+        QUARANTINE_UUID="$(uuidgen)"
+        QUARANTINE_VALUE="0081;${QUARANTINE_HEX_TS};Safari;${QUARANTINE_UUID}"
+        xattr -w com.apple.quarantine "${QUARANTINE_VALUE}" "${ASSET_PATH}"
+
+        # --- 7. Read the attribute back and HARD-FAIL if it is absent or
+        # empty. An assessment that runs without this confirmation is not
+        # evidence, and the target must refuse to produce one.
+        XATTR_READBACK="$(xattr -p com.apple.quarantine "${ASSET_PATH}" 2>/dev/null || true)"
+        if [ -z "${XATTR_READBACK}" ]; then
+          echo "::error::com.apple.quarantine xattr (SYNTHETIC) is absent or empty on ${ASSET_PATH} immediately after writing it — an assessment without this confirmation is not evidence, refusing to run spctl"
+          exit 1
+        fi
+        XATTR_PRESENT="true"
+        echo "GATEKEEPER-XATTR-SYNTHETIC value=${QUARANTINE_VALUE} readback=${XATTR_READBACK}"
+
+        # --- 8. Run the D-19 oracle: spctl -a -vv -t install (never -t
+        # exec — see this target's desc: for why). Capture stdout, stderr
+        # (spctl writes its verdict to stderr) and exit status without
+        # letting set -e abort the run — a rejection is the expected
+        # outcome on the RED path and must be reported, not crashed on.
+        set +e
+        SPCTL_OUT="$(spctl -a -vv -t install "${ASSET_PATH}" 2>&1)"
+        SPCTL_EXIT=$?
+        set -e
+        echo "GATEKEEPER-SPCTL exit=${SPCTL_EXIT}"
+        echo "${SPCTL_OUT}"
+
+        # --- 9. Derive the observed verdict from the EXIT STATUS ALONE: 0
+        # is accepted, 3 is rejected, anything else is unclassifiable and
+        # therefore a hard failure — NEVER a grep/case over the output
+        # text, which would classify wrongly (a substring search for
+        # "accepted" matches inside "rejected (the code is valid but does
+        # not seem to be an app)" and inside origin= lines), not merely
+        # weakly. Measured on macOS 27.0 while the CI runner is
+        # Tahoe-class, so a future version drift is anticipated: it
+        # surfaces here as a loud, unclassifiable-exit failure, never a
+        # silently wrong verdict.
+        OK=1
+        case "${SPCTL_EXIT}" in
+          0) OBSERVED="accepted" ;;
+          3) OBSERVED="rejected" ;;
+          *)
+            echo "::error::spctl exit status ${SPCTL_EXIT} is neither 0 (accepted) nor 3 (rejected) — unclassifiable, hard failure"
+            OBSERVED="unclassifiable"
+            OK=0
+            ;;
+        esac
+
+        # source_assertion is captured SEPARATELY from observed: whether
+        # the output names the notarized-Developer-ID source string. NOT
+        # part of the verdict — a deliberate SECOND, INDEPENDENT assertion,
+        # so rejecting exit 0 when the source line is absent does not read
+        # as a contradiction of "exit status is the oracle."
+        if printf '%s' "${SPCTL_OUT}" | grep -q 'source=Notarized Developer ID'; then
+          SOURCE_ASSERTION="pass"
+        else
+          SOURCE_ASSERTION="fail"
+        fi
+
+        # Truth table (mechanical, not left to interpretation): only an
+        # off-diagonal pair fails.
+        #   observed=accepted -> source_assertion MUST be pass
+        #   observed=rejected -> source_assertion MUST be fail (the
+        #     notarized-source line is legitimately ABSENT on the RED
+        #     path, and its absence is correct — a naive "must be pass"
+        #     reading would break the phase's first gate)
+        SOURCE_MISMATCH=0
+        if [ "${OBSERVED}" = "accepted" ] && [ "${SOURCE_ASSERTION}" != "pass" ]; then
+          SOURCE_MISMATCH=1
+        elif [ "${OBSERVED}" = "rejected" ] && [ "${SOURCE_ASSERTION}" != "fail" ]; then
+          SOURCE_MISMATCH=1
+        fi
+        if [ "${SOURCE_MISMATCH}" = "1" ]; then
+          echo "::error::SOURCE-ASSERTION-MISMATCH observed=${OBSERVED} source_assertion=${SOURCE_ASSERTION} — two independent assertions (observed from exit status alone; source_assertion from output text) disagree off the required diagonal"
+          OK=0
+        fi
+
+        # --- 10. Run syspolicy_check distribution and record its exit
+        # status and output verbatim under a labelled line. It MUST NOT
+        # gate: D-19 removes it as a gating check because its Fatal
+        # verdict is definitionally unreachable while stapling is out of
+        # scope (D-16/DIST-06), and a gate that can never pass is one of
+        # the two failure families this phase exists to close. If the
+        # binary is absent, record the sentinel and continue.
+        if command -v syspolicy_check >/dev/null 2>&1; then
+          set +e
+          SYSPOLICY_OUT="$(syspolicy_check distribution "${ASSET_PATH}" 2>&1)"
+          SYSPOLICY_EXIT=$?
+          set -e
+        else
+          SYSPOLICY_OUT="syspolicy_check not found on this host"
+          SYSPOLICY_EXIT="not-found"
+        fi
+        echo "GATEKEEPER-SYSPOLICY-CHECK (NON-GATING — see this target's desc: for why gating on it is forbidden) exit=${SYSPOLICY_EXIT}"
+        echo "${SYSPOLICY_OUT}"
+
+        # --- 11. Compare the observed verdict against GATEKEEPER_EXPECT.
+        if [ "${OBSERVED}" != "${GATEKEEPER_EXPECT}" ]; then
+          echo "::error::observed verdict '${OBSERVED}' does not match GATEKEEPER_EXPECT='${GATEKEEPER_EXPECT}'"
+          OK=0
+        fi
+
+        # --- 12. Emit the evidence line as the LAST line printed, on BOTH
+        # the pass and the fail path — a RED observation is the most
+        # valuable output this target can produce. schema=1 first, fixed
+        # key order, sentinels for anything unavailable (never omitted).
+        echo "GATEKEEPER-EVIDENCE schema=1 tag=${TAG} goos=${GOOS} goarch=${GOARCH} sha256=${SHA256} gh_digest=${GH_DIGEST:-not-found} digest_match=${DIGEST_MATCH} expect=${GATEKEEPER_EXPECT} observed=${OBSERVED} exit=${SPCTL_EXIT} xattr_present=${XATTR_PRESENT} source_assertion=${SOURCE_ASSERTION} syspolicy_exit=${SYSPOLICY_EXIT}"
+
+        if [ "${OK}" != "1" ]; then
+          exit 1
+        fi
+
+        echo "verify:gatekeeper: PASS — observed=${OBSERVED} matches GATEKEEPER_EXPECT=${GATEKEEPER_EXPECT}"
+
   check:cross:
     desc: >-
       4-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
