@@ -614,3 +614,301 @@ ROADMAP criterion 3 is produced by a GitHub Action that only runs in CI, so
 no local rehearsal can ever include the attested subject, and the
 five-point chain therefore closes for the first time only on the
 irreversible release in plan 02-07.
+
+## SIGN-02 — GREEN Gatekeeper verdict on the published release
+
+Tag: `v0.7.0`, cut by release-please (PR #48, `7b34ab1`) — no hand-made
+tag (D-13). Release run `31337821840` (`push`, `ref=v0.7.0`) completed
+`SUCCESS`; the notarize pipe's own log lines named both darwin build ids
+and showed a real submission to Apple (`notarizing and waiting...` /
+`notarized`) rather than a skip — the specific silent failure T-02-22
+exists to catch did not occur. Post-release verification ran
+**automatically** (`workflow_run`, run `31338004416`, `SUCCESS`, all 7
+jobs green), including the two per-architecture `Gatekeeper verdict
+(darwin/${goarch})` jobs.
+
+### darwin/arm64
+
+- Published asset: `codegraph_v0.7.0_darwin_arm64`
+- Full evidence line, emitted by the CI job (`task verify:gatekeeper`,
+  `GATEKEEPER_EXPECT=accepted`):
+  ```
+  GATEKEEPER-EVIDENCE schema=1 tag=v0.7.0 goos=darwin goarch=arm64 sha256=d7b897185958649ed1240498b0047288198f71aa85e76e1526e5d639f7c33171 gh_digest=d7b897185958649ed1240498b0047288198f71aa85e76e1526e5d639f7c33171 digest_match=true expect=accepted observed=accepted exit=0 xattr_present=true source_assertion=pass syspolicy_exit=70
+  ```
+  `xattr_present=true` — the quarantine attribute was confirmed present
+  immediately before the `spctl` assessment (D-19's read-back step never
+  skipped). `source_assertion=pass` is the target's own encoding of the
+  `source=Notarized Developer ID` string check baked into
+  `verify:gatekeeper`; the CI job's raw multi-line `spctl` transcript was
+  not itself pasted into the checkpoint transcript, only this structured
+  evidence line, so this document records the line rather than inventing
+  the verbose text around it. `syspolicy_exit=70` is the same D-19
+  non-gating observation as the RED baseline (Notary Ticket Missing,
+  Severity Fatal — unreachable-by-design because DIST-06 leaves stapling
+  out of scope) — recorded, never gating.
+- **Independent, unproxied corroboration** (checkpoint steps 7–8, the
+  maintainer's own Mac, real Safari download — see "Post-release
+  verification — manual-dispatch guard check and the maintainer's own
+  machine" below for the full transcript): `spctl -a -vv -t install`
+  verbatim reported `accepted`, `source=Notarized Developer ID`,
+  `origin=Developer ID Application: Sean Brandt (8D762W58T4)` — this is
+  the one place in the whole phase where the raw verbose `spctl` text
+  including the `source=` string was actually captured.
+
+### darwin/amd64
+
+- Published asset: `codegraph_v0.7.0_darwin_amd64`
+- Full evidence line:
+  ```
+  GATEKEEPER-EVIDENCE schema=1 tag=v0.7.0 goos=darwin goarch=amd64 sha256=39ce8fed01c5fdda80ebffe8113bfe35074abe98d61eba6dab40caaaab9f0533 gh_digest=39ce8fed01c5fdda80ebffe8113bfe35074abe98d61eba6dab40caaaab9f0533 digest_match=true expect=accepted observed=accepted exit=0 xattr_present=true source_assertion=pass syspolicy_exit=70
+  ```
+- No independent machine re-check exists for amd64 (checkpoint step 8 used
+  the real machine's own arm64 architecture) — this architecture's verdict
+  rests on the CI job's evidence line alone. Recorded plainly rather than
+  implied to have the same double coverage as arm64.
+
+### RED vs GREEN
+
+| | RED (`v0.5.1`, plan 02-01) | GREEN (`v0.7.0`, plan 02-07) |
+|---|---|---|
+| darwin/arm64 verdict | `rejected`, exit 3 | `accepted`, exit 0 |
+| darwin/amd64 verdict | `rejected`, exit 3 | `accepted`, exit 0 |
+| `xattr_present` (both arches) | `true` | `true` |
+| `digest_match` (both arches) | `true` | `true` |
+| `syspolicy_exit` (non-gating, both arches) | 70 | 70 |
+| `source=` string | absent (rejected — no notarized source) | `Notarized Developer ID` (confirmed verbatim on darwin/arm64, checkpoint step 7) |
+
+Same target (`task verify:gatekeeper`, the `GATEKEEPER-EVIDENCE` schema
+defined once at the top of this file), same procedure (D-19's oracle:
+synthetic `com.apple.quarantine` write, read-back confirmation before
+assessment, `spctl -a -vv -t install`, verdict read from exit status
+only) — differing only in which release it names. The GREEN result is
+trustworthy for exactly the reason the RED baseline was: nothing about
+the measurement method changed between the two runs.
+
+## SIGN-04 — five-point byte identity on the published release
+
+Per darwin architecture, five provenance-labelled entries — three HASHES
+(must be identical 64-character hex) and two BINDINGS (a command and its
+verbatim result; no hash value recorded unless the command actually
+printed one, per this plan's own prohibition against inventing a fourth
+and fifth hash).
+
+### darwin/arm64
+
+| # | Label | Kind | Value / result |
+|---|---|---|---|
+| 1 | `final_local_sha256` (release job's local `dist/` bytes, after archive/checksum/sign/publish all completed — never described as immediately-post-notarize) | HASH | `d7b897185958649ed1240498b0047288198f71aa85e76e1526e5d639f7c33171` |
+| 2 | sha256 recomputed from the re-downloaded published asset (the `Gatekeeper verdict (darwin/arm64)` job's own `sha256` field) | HASH | `d7b897185958649ed1240498b0047288198f71aa85e76e1526e5d639f7c33171` |
+| 3 | GitHub's own recorded per-asset digest, read independently via `gh api repos/seanb4t/codegraph-go/releases/tags/v0.7.0 --jq '.assets[] | {name, digest, size}'` | HASH | `codegraph_v0.7.0_darwin_arm64` → `sha256:d7b897185958649ed1240498b0047288198f71aa85e76e1526e5d639f7c33171` (62981112 bytes) |
+| 4 | `cosign verify-blob` — see scope note below | BINDING | see below |
+| 5 | `gh attestation verify` — see scope note below | BINDING | see below |
+
+Points 1–3: identical, 64-character hex, all three.
+
+### darwin/amd64
+
+| # | Label | Kind | Value / result |
+|---|---|---|---|
+| 1 | `final_local_sha256` | HASH | `39ce8fed01c5fdda80ebffe8113bfe35074abe98d61eba6dab40caaaab9f0533` |
+| 2 | sha256 recomputed from the re-downloaded published asset (`Gatekeeper verdict (darwin/amd64)` job's `sha256` field) | HASH | `39ce8fed01c5fdda80ebffe8113bfe35074abe98d61eba6dab40caaaab9f0533` |
+| 3 | GitHub's own recorded per-asset digest | HASH | `codegraph_v0.7.0_darwin_amd64` → `sha256:39ce8fed01c5fdda80ebffe8113bfe35074abe98d61eba6dab40caaaab9f0533` (65048887 bytes) |
+| 4 | `cosign verify-blob` — see scope note below | BINDING | see below |
+| 5 | `gh attestation verify` — see scope note below | BINDING | see below |
+
+Points 1–3: identical, 64-character hex, all three.
+
+### Points 4 and 5 — the actual scope of the bindings measured
+
+`Taskfile.yml`'s `verify:release-assets` (the command this plan's own
+`read_first` points to as the source of points 4–5) verifies
+`cosign verify-blob` and `gh attestation verify` against **exactly one
+asset: `codegraph_${TAG}_linux_amd64`** — read directly from the target's
+source (`Taskfile.yml` lines ~1903–1917), not inferred. It is not
+matrixed over darwin at all. The `verify-supply-chain` job's run against
+`v0.7.0` produced, verbatim:
+
+```
+verify:release-assets: cosign verify-blob: Verified OK
+verify:release-assets: PASS — checksums, cosign, and attestation all verified against re-downloaded published assets for v0.7.0
+```
+
+(`gh attestation verify` prints its own multi-line success transcript,
+summarized by that final `PASS` line; the checkpoint transcript did not
+capture the intermediate `gh attestation verify` lines verbatim, only the
+`cosign verify-blob` confirmation and the target's closing `PASS` line —
+recorded as given, not reconstructed.)
+
+**Honest scope limit, stated plainly rather than papered over:** neither
+darwin asset is the subject of that command. The closest darwin-scoped
+cryptographic check that did run is inside the separate `self-upgrade
+proof (darwin/arm64)` job: `verify:self-upgrade`'s own comment
+(`Taskfile.yml` lines ~2385–2390) states it runs `cosign verify-blob`
+with the *same* issuer/certificate-identity flags, against the
+darwin/arm64 asset, before ever making it executable — and that job
+reported `SUCCESS` in both the automatic and manual-dispatch runs. No
+verbatim command output for that check was captured in the checkpoint
+transcript, only the job's green conclusion, so this document records the
+conclusion and not invented output text. **darwin/amd64 has no
+self-upgrade matrix leg at all** (`post-release-verify.yml`'s
+`self-upgrade` job matrix is `darwin/arm64` + `linux/amd64` only) — so
+darwin/amd64's points 4 and 5 rest entirely on the same-workflow,
+same-signing-identity binding proven against `linux/amd64`'s asset, never
+against darwin/amd64's own bytes directly. Recording this gap is more
+useful than a five-point table that silently implies a per-darwin-arch
+binding check exists where none does.
+
+Point 4, `cosign verify-blob` (linux/amd64 subject, the only one
+verbatim-captured):
+```
+cosign verify-blob \
+  --bundle codegraph_v0.7.0_linux_amd64.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+  codegraph_v0.7.0_linux_amd64
+→ verify:release-assets: cosign verify-blob: Verified OK
+```
+No subject digest was printed by this command; no hash is recorded for
+this point, per this plan's own prohibition.
+
+Point 5, `gh attestation verify` (same subject):
+```
+gh attestation verify codegraph_v0.7.0_linux_amd64 -R seanb4t/codegraph-go
+→ "attestation all verified against re-downloaded published assets for v0.7.0"
+```
+No subject digest was printed by this command either; no hash is
+recorded for this point.
+
+### Assumption A3 — verdict on the published release
+
+**Verdict: no post-record, publish-path mutation was observed.** Points 1
+(the release job's local `dist/` bytes, recorded after archive, checksum,
+sign, AND publish all completed) and 2 (the sha256 recomputed from the
+re-downloaded published asset) are identical, 64-character hex, on both
+darwin architectures — and point 3 (GitHub's own independently-read
+per-asset digest) agrees with both. That is the full and correct scope of
+what this evidence supports: the bytes GoReleaser's local pipeline
+produced are byte-identical to the bytes a downloader actually receives
+from GitHub. It does **not** trace individual GoReleaser pipe boundaries
+(archive → checksum → sign → publish) — `final_local_sha256` is recorded
+post-everything, by design (Task 1), specifically so this section is never
+tempted to claim it does. Plan 02-04's rehearsal could not reach this
+verdict at all, because it ran `--skip=publish` and never reached the
+`publish:` pipe (`02-EVIDENCE.md`'s own A3 entry above, "Not fully
+closed"). This is the first run that reaches `publish:` for real, and it
+closes A3 in the narrow, defensible form the evidence actually supports —
+not the broader "no pipe between sign and publish reintroduces a
+mismatch" claim, which this evidence does not trace.
+
+## Criterion 4 — the suite against the notarized binary
+
+Job: `notarized suite proof (darwin/arm64)` (`post-release-verify.yml`),
+run automatically (`workflow_run` trigger, run `31338004416`), conclusion
+`SUCCESS`.
+
+- **Executed tests:** `executed_tests=142`, `go_test_exit=0`. A green job
+  that ran zero tests would not have satisfied this criterion; 142 is
+  non-zero.
+- **Subject binary's sha256:** `d7b897185958649ed1240498b0047288198f71aa85e76e1526e5d639f7c33171` —
+  the same value as darwin/arm64 points 1–3 in the byte-identity section
+  above. The suite ran against the identical bytes that section's chain
+  closes on, not a separately-fetched or separately-built copy.
+- **Scope carried from plan 02-03:** `test/wireoracle` was established
+  IN SCOPE for this criterion empirically, not by assertion — a binary
+  built with the same `-X .../internal/version.Version=<tag>` ldflags
+  `.goreleaser.yaml` injects at release time passed
+  `TestFrozenTranscriptsMatch`'s all 27 frozen scenarios via the
+  `CODEGRAPH_TEST_BIN` override, with zero transcript changes needed,
+  because `normalize.go`'s `serverVersion` rule already erases the
+  differing version field before comparison (`02-03-SUMMARY.md`). This
+  release's `notarized-suite` job runs `test/wireoracle` against the real
+  published binary using that same seam (D-10).
+- **Scope limit, stated explicitly:** this job's matrix is **darwin/arm64
+  only**. `post-release-verify.yml` has no `notarized-suite` leg for
+  darwin/amd64 and no Rosetta leg — amd64 has a Gatekeeper verdict (above)
+  but no executed-suite evidence anywhere in this phase. Criterion 4 was
+  measured on darwin/arm64 only; it must never be read as having covered
+  both architectures.
+- **What a hardened-runtime load failure would have looked like:** the
+  notarize pipe sets the hardened runtime flag (`flags=0x10000(runtime)`,
+  recorded in the local rehearsal's `codesign -dvv` output above); a
+  binary that failed to load under that runtime (e.g. an unsigned
+  executable-memory violation from the CGo tree-sitter grammars, D-03's
+  working hypothesis) would surface as every one of the 142 tests failing
+  to even start, not as a subtler runtime error. `go_test_exit=0` across
+  142 executed tests means that failure mode did not occur.
+
+## Post-release verification — manual-dispatch guard check and the maintainer's own machine
+
+**Manual-dispatch guard check** (checkpoint step 6): `post-release-verify.yml`
+manually dispatched (`workflow_dispatch`) against `v0.7.0`, run
+`31338409898`, conclusion `SUCCESS`. All 7 jobs ran to completion — none
+skipped: `resolve and validate the tag`, `Gatekeeper verdict
+(darwin/arm64)`, `Gatekeeper verdict (darwin/amd64)`, `self-upgrade proof
+(linux/amd64)`, `self-upgrade proof (darwin/arm64)`, `verify supply-chain
+claims against the published release`, `notarized suite proof
+(darwin/arm64)` — the same 7 names as the automatic run. This is the D-11
+trap disarmed: `github.event.workflow_run` is `null` under
+`workflow_dispatch`, and a bare `conclusion` comparison would have skipped
+every job while still reporting all-green; verifying the per-job
+conclusions individually, not just the workflow's overall status, is what
+this guard check actually proves.
+
+**The maintainer's own machine** (checkpoint steps 7–8) — the only
+unproxied observation in the whole phase; every other observation above is
+an instrument reading. Asset: `~/Downloads/codegraph_v0.7.0_darwin_arm64`,
+downloaded through Safari.
+
+```
+$ spctl -a -vv -t install ~/Downloads/codegraph_v0.7.0_darwin_arm64
+/Users/sean/Downloads/codegraph_v0.7.0_darwin_arm64: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: Sean Brandt (8D762W58T4)
+
+$ xattr -p com.apple.quarantine ~/Downloads/codegraph_v0.7.0_darwin_arm64
+0083;6a78fa7b;Safari;08C2AE12-4250-4D58-B7F5-CC95C8D93713
+
+$ ~/Downloads/codegraph_v0.7.0_darwin_arm64 --version
+codegraph version v0.7.0 (commit 7b34ab15bfeebf2713819ab2e0e5e87d3074567d, built 2026-08-09T21:48:43Z)
+```
+
+No Gatekeeper dialog appeared — the binary simply ran; the maintainer
+confirmed this explicitly.
+
+**Ordering note (D-06 specifies xattr-then-spctl; here `spctl` ran
+first).** The evidence still holds: `spctl -a` is a read-only assessment
+and does not itself clear the quarantine attribute (launch approval does)
+— the attribute was confirmed still present *after* the assessment, which
+means it was present *during* it. The reversed order does not weaken the
+observation, it is simply recorded honestly rather than silently
+reordered to match D-06's stated sequence.
+
+**Quarantine agent corroboration.** The `com.apple.quarantine` value's
+agent field names `Safari`, corroborating a real browser download rather
+than `curl`/`gh`. The `0083` flag value's individual bits are not decoded
+into any further claim about approval state — those semantics are not
+reliably documented, and this phase forbids recording an observation that
+was never made.
+
+**Documentation defect found by this step** (real defect, not a
+transcription issue — see the `docs/RELEASE.md` reconciliation below for
+the fix): a browser-downloaded raw Mach-O arrives without the execute
+bit. Verbatim `fish` failure before `chmod`:
+
+```
+$ ~/Downloads/codegraph_v0.7.0_darwin_arm64 --version
+fish: Unknown command. '/Users/sean/Downloads/codegraph_v0.7.0_darwin_arm64' exists but is not an executable file.
+```
+
+`docs/RELEASE.md` contained no chmod/executable-bit guidance anywhere
+before this plan (verified: `rg 'chmod|executable|\+x' docs/RELEASE.md`
+returned only two unrelated lines about `.app`/`.pkg`/`.dmg` container
+shape). This gap only surfaced because step 8 required a real browser
+download — `curl` and `gh release download` both preserve the execute
+bit, so no instrument reading elsewhere in this phase could have caught
+it.
+
+No release or tag was deleted or re-pushed at any point in this plan.
+Verified via `gh release list --repo seanb4t/codegraph-go --limit 10`:
+every release named in `docs/RELEASE-PROCEDURES.md` §7.1 is still listed,
+including the zero-asset `v0.5.0` and the un-notarized `v0.5.1` baseline.

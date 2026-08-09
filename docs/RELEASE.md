@@ -8,15 +8,19 @@ actually publishes — if a command here doesn't work against a real release,
 that is a bug in this doc (or the workflow), please report it.
 
 > **Status note:** tagged releases exist now and these commands are live,
-> not aspirational. `v0.5.1` and every release since (including `v0.6.0`,
-> the latest as of this writing) publish real assets and are verifiable
-> today via §1a (cosign), §1b (provenance) and §1c (SBOM) — all three run
-> clean against them. §1d (Gatekeeper) is different: it does not yet apply
-> to any published release, because none has gone through Apple
-> notarization yet. `v0.5.1`'s darwin binaries are, in fact, *deliberately*
-> un-notarized — they are this project's own recorded RED baseline for that
-> gate (`02-EVIDENCE.md`). See §1d's applicability table for exactly which
-> releases each section covers, and when that boundary moves.
+> not aspirational. `v0.5.1` and every release since publish real assets
+> and are verifiable today via §1a (cosign), §1b (provenance) and §1c
+> (SBOM) — all three run clean against them. §1d (Gatekeeper) now applies
+> starting with **`v0.7.0`**, the latest release as of this writing and the
+> first to go through real Apple notarization — confirmed with a GREEN
+> `spctl -a -vv -t install` verdict on both darwin architectures, plus an
+> independent, unproxied confirmation on the maintainer's own Mac via a
+> genuine Safari download (`02-EVIDENCE.md` § "SIGN-02 — GREEN Gatekeeper
+> verdict on the published release"). `v0.5.1`'s darwin binaries remain
+> *deliberately* un-notarized — they are this project's own preserved RED
+> baseline for that gate (`02-EVIDENCE.md`) and must not be deleted or
+> replaced (`docs/RELEASE-PROCEDURES.md` §7.1). See §1d's applicability
+> table for exactly which releases each section covers.
 > `codegraph upgrade` runs the equivalent of §1a automatically, in-process,
 > before ever swapping the installed binary.
 
@@ -169,7 +173,7 @@ Gatekeeper, and the guarantee below only applies to some of them:
 | Releases | What they published | Which sections apply |
 |---|---|---|
 | Every release through the last one published before Apple notarization lands (as of this writing: at least `v0.5.1` and `v0.6.0`) | Signed-or-adhoc darwin binaries, cosign bundles, SBOMs, build provenance — **not** Apple-notarized | §a, §b, §c only. §d does not apply: the Gatekeeper install-time assessment below rejects these darwin binaries by design (exit 3) — this is `v0.5.1`'s own recorded SIGN-03 RED baseline, `02-EVIDENCE.md` |
-| The first notarized release — tag pending, filled in by plan 02-07 once it publishes | The same artifacts, plus real Apple notarization of the darwin binaries | §a, §b, §c, §d all apply |
+| The first notarized release — **`v0.7.0`**, confirmed GREEN on both darwin architectures (`02-EVIDENCE.md` § "SIGN-02 — GREEN Gatekeeper verdict on the published release") | The same artifacts, plus real Apple notarization of the darwin binaries | §a, §b, §c, §d all apply |
 | Every release after the first notarized one | Same as above | §a, §b, §c, §d all apply |
 
 From the first notarized release onward (see the table above), this
@@ -193,6 +197,27 @@ exactly as an un-notarized binary would be. This is a deliberate scope
 decision, not an oversight — DIST-06 is the deferred requirement that
 would close it, and stapling remains out of scope for this
 milestone.[^staple-why]
+
+**Known limitation: a browser download loses the execute bit.** Unlike
+`gh release download` or `curl`, downloading a raw binary through a
+browser (e.g. Safari, from the GitHub Releases page) does not preserve
+the Unix executable permission — the file arrives as a plain, non-executable
+Mach-O. Trying to run it directly fails with a shell-specific message; for
+example, in `fish`:
+
+```
+fish: Unknown command. 'codegraph_<tag>_darwin_<arch>' exists but is not an executable file.
+```
+
+Restore the bit before running it:
+
+```sh
+chmod +x codegraph_<tag>_<goos>_<goarch>
+```
+
+(Found during `v0.7.0`'s browser-download verification — `02-EVIDENCE.md`
+§ "Post-release verification — manual-dispatch guard check and the
+maintainer's own machine".)
 
 [^staple-why]: Apple's `stapler` tool attaches tickets only to
 `.app`/`.pkg`/`.dmg` containers, never to a bare Mach-O executable or an
@@ -382,17 +407,25 @@ explicitly rather than hiding cross-target drift behind one green check:**
   independently double-built in CI. Being explicit about which target is
   the hard guarantee is more honest than a passing check that silently
   doesn't cover the other three.
-- **The darwin binaries carry a real code signature a third-party rebuild
-  cannot reproduce, once notarized (§1d).** As of this writing no release
-  has gone through Apple notarization (see §1d's applicability table), so
-  this is a description of what becomes true once the first notarized
-  release publishes — marked **pending** here rather than asserted as
-  already measured. The signature is embedded directly in the Mach-O binary
-  by the signing/notarization step; only someone holding this project's
-  actual Developer ID Application certificate can reproduce it bit-for-bit.
-  This does not change or weaken the `linux/amd64` canonical guarantee
-  above, which carries no such signature and remains reproducible
-  end-to-end by anyone.
+- **The darwin binaries carry a real code signature, confirmed as of
+  `v0.7.0` (§1d), and it is NOT bit-for-bit reproducible by anyone —
+  including the certificate holder.** This corrects an earlier, unmeasured
+  version of this claim. `02-EVIDENCE.md`'s SIGN-04 rehearsal measured that
+  the *pre-sign* build is byte-reproducible (`BASELINE-DETERMINISM-OK`,
+  identical hashes across repeated builds of the same commit), but the
+  *final*, signed-and-notarized binary is **not**: two separate signing
+  operations of the identical pre-sign bytes produced different final
+  hashes, because Apple's notarization service embeds a trusted timestamp
+  inside the code signature that varies per signing operation
+  (`02-EVIDENCE.md` § "The non-reproducible-signature finding"). Holding
+  this project's actual Developer ID Application certificate lets you
+  produce a *validly signed* binary — it does not let you reproduce the
+  exact published bytes. Anyone verifying a darwin release should compare
+  the **pre-sign** build against a source-only rebuild, never the final
+  signed artifact, or every single comparison will report a false
+  regression. This does not change or weaken the `linux/amd64` canonical
+  guarantee above, which carries no signature at all and remains
+  reproducible end-to-end, bit-for-bit, by anyone.
 
 ### Reproducing a build locally
 
