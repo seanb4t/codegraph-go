@@ -237,6 +237,14 @@ None — this plan operates entirely within the `<threat_model>` T-02-05/T-02-06
 - Every `goreleaser`-invoking Taskfile target's notarize-reachability is now documented in-file; the darwin-toolchain-canary re-wiring stays explicitly deferred (see `deferred-items.md`) pending plan 02-07's real notarized release observing the `enabled:` guard fire in both directions in actual CI.
 - No blockers for plan 02-03 or the rest of the wave.
 
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/02-apple-signing-notarization/02-02-SUMMARY.md`
+- FOUND: commit `c19a880` (Task 1)
+- FOUND: commit `25a6529` (Task 2)
+- FOUND: commit `7f040fb` (Task 3)
+- FOUND: commit `1812c6c` (plan metadata — SUMMARY.md + REQUIREMENTS.md)
+
 ---
 *Phase: 02-apple-signing-notarization*
 *Completed: 2026-08-09*
