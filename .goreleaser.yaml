@@ -4,9 +4,9 @@
 #
 #   (a) release.yml no longer invokes `goreleaser build --single-target`;
 #       a single `goreleaser release` invocation now builds all four
-#       targets AND runs the archive/checksum/binary_signs/sboms/release
-#       pipes below (REL-06). They are LIVE, not inert. The archives:
-#       entry with id: raw carries the asset-naming contract with
+#       targets AND runs the archive/checksum/notarize/signs/sboms/release
+#       pipes below (REL-06, SIGN-01). They are LIVE, not inert. The
+#       archives: entry with id: raw carries the asset-naming contract with
 #       internal/upgrade.releaseAssetName() (contract shape:
 #       codegraph_<tag>_<goos>_<goarch>, using the v-prefixed tag, not
 #       the prefix-stripped version) — TestReleaseAssetNameMatchesGoReleaser
@@ -22,11 +22,16 @@
 #       determinism gate (Plan 08-08) can byte-for-byte diff two builds
 #       of the same commit. Do not remove them.
 #
-#   (c) Signing and SBOM generation are performed HERE, by the
-#       binary_signs: and sboms: pipes below, under a single
+#   (c) Signing, notarization, and SBOM generation are performed HERE, by
+#       the notarize:, signs:, and sboms: pipes below, under a single
 #       `goreleaser release` invocation (REL-06) — NOT by a hand-rolled
 #       shell loop in release.yml's assemble job. That hand-rolled loop
-#       is deleted in the same phase (plan 01-03). The native 4-target
+#       is deleted in the same phase (plan 01-03). Per D-18 (LOCKED,
+#       maintainer, 2026-08-09): cosign signs via the RELEASE-scoped
+#       signs: pipe (registered after GoReleaser's hardcoded BuildPipeline
+#       Go slice, and therefore after notarize:, which mutates the
+#       Mach-O in place) — never the build-scoped binary_signs: key,
+#       which would sign PRE-notarization bytes. The native 4-target
 #       build remains OSS-only: no GoReleaser Pro `release --split`,
 #       `continue --merge`, or prebuilt-builder directive is used
 #       anywhere in this file.
@@ -177,51 +182,149 @@ checksum:
   # hand-rolled `sha256sum` step, proven post-publish by plan 01-05.)
   ids: [raw, zip]
 
-# binary_signs: (D-14) reproduces today's hand-rolled
-# `cosign sign-blob --bundle="${f}.sigstore.json" --yes "$f"` loop
-# (release.yml's assemble job, deleted by plan 01-03) declaratively.
-# `binary_signs:` (not `signs:`) is used because it is format-independent
-# — once `.zip` archives coexist with the `raw` binaries (REL-09), the
-# `signs:` pipe's `artifacts: binary` mode (which requires
-# `archives.formats: binary` project-wide) would no longer cleanly apply.
+# notarize: (SIGN-01, D-01/D-04/D-18) performs Developer ID codesigning AND
+# Apple notarization submission for the two darwin raw Mach-O binaries,
+# entirely in-process via github.com/goreleaser/quill (already an indirect
+# dependency, go.tool.mod:236) — never a codesign/xcrun notarytool
+# shell-out. notary.MacOS{} is registered inside GoReleaser's hardcoded
+# BuildPipeline Go slice (internal/pipeline/pipeline.go, pinned
+# goreleaser/v2@v2.17.1), which is why it runs before archives:/checksum:/
+# sboms:/signs: below with no reordering needed in this file — GoReleaser's
+# pipe order is a HARDCODED SLICE, NOT driven by this file's block order.
+#
+# notary.MacOS is a SIGN-AND-NOTARIZE pipe: quill.Sign embeds the Mach-O's
+# LC_CODE_SIGNATURE load command IN PLACE (Apple's notarization submission
+# itself mutates nothing). This is why signs: below — not the old
+# build-scoped binary_signs: key — is what must run after it; see that
+# block's comment for the full ordering rationale (D-18).
+#
+# `ids:` names ONLY the two darwin build ids explicitly — the default is
+# [ProjectName] ("codegraph"), which matches NEITHER build id and produces
+# a SILENT, non-fatal skip (pipe.Skipf): a green `goreleaser release` log
+# with un-notarized darwin binaries and no error anywhere. Held by
+# TestNotarizeMacosIdsCoverDarwinBuildIDs, an EXACT-SET assertion (fails on
+# too little — matches D-15's "raw Mach-O is the only notarized subject" —
+# AND on too much, e.g. the zip archive id smuggled into what is a
+# BUILD-id filter, a different namespace from signs[].ids' ARCHIVE-id
+# filter below).
+#
+# `enabled:` gates on ALL FIVE credential variables CONJUNCTIVELY, not on
+# the certificate alone. `notary.MacOS` IS reachable from `goreleaser
+# build` (unlike signs:, which is release-scoped and therefore is NOT) —
+# see Taskfile.yml's per-target notarize-reachability comments (D-18) — so
+# an ordinary developer's `check:darwin-release-build` run reaches this
+# gate on a half-populated environment. At source, when the notary inputs
+# are absent the pipe SIGNS the binary, logs that it will not attempt
+# notarization, and CONTINUES: a partial credential set does not fail
+# loudly, it ships a signed-but-un-notarized binary behind a green log. A
+# single separate enable flag was considered and REJECTED (a sixth input
+# whose accidental presence could enable an incomplete credential set is
+# exactly the failure this gate exists to prevent) — one mechanism, five
+# terms, no override. Held by TestNotarizeMacosEnabledIsEnvGated, a static
+# backstop resolving this template under 7 controlled environments.
+#
+# `sign:` declares NO entitlements key (D-03): quill embeds nothing when
+# it is unset while still applying the hardened-runtime code-directory
+# flag UNCONDITIONALLY (Apple requires hardened runtime for notarization
+# regardless). This repo's own CGo tree-sitter grammars compile at BUILD
+# time, not runtime, so no JIT/unsigned-executable-memory entitlement
+# should be needed — Criterion 4 (running the real suite against the real
+# notarized binary) is what converts that "should" into "measured". Held
+# by TestNotarizeMacosOmitsEntitlements; a future entitlements: addition
+# must turn it red so it is a deliberate decision, not drift.
+#
+# `wait: true` blocks the pipe until Apple responds. `timeout:` is a
+# PER-BINARY budget, not a shared one: the per-binary loop inside this ONE
+# entry is a plain sequential range (notary.MacOS parallelizes ACROSS
+# notarize.macos config entries via a semaphore error group, never within
+# one), so this two-id entry's wall-clock worst case is the SUM of two
+# such budgets, not the max of a concurrent pair — held by
+# TestNotarizeMacosHasExactlyOneEntry, which also rejects a second entry
+# outright, since a second entry would change that parallelism model.
+# At source, a timeout status and a pending status are BOTH logged and
+# then continued past — NEITHER fails the pipe. A slow Apple response on
+# release day can therefore ship signed-but-un-notarized binaries behind a
+# green release log; the post-release Gatekeeper job (plan 02-06,
+# `task verify:gatekeeper`) is the compensating control that turns that
+# into a red signal.
+notarize:
+  macos:
+    - enabled: '{{ and (isEnvSet "MACOS_SIGN_P12") (isEnvSet "MACOS_SIGN_PASSWORD") (isEnvSet "MACOS_NOTARY_ISSUER_ID") (isEnvSet "MACOS_NOTARY_KEY_ID") (isEnvSet "MACOS_NOTARY_KEY") }}'
+      ids:
+        - codegraph-darwin-amd64
+        - codegraph-darwin-arm64
+      sign:
+        certificate: "{{ .Env.MACOS_SIGN_P12 }}"
+        password: "{{ .Env.MACOS_SIGN_PASSWORD }}"
+        # entitlements: intentionally OMITTED — D-03's working hypothesis,
+        # measured by Criterion 4. See the block comment above.
+      notarize:
+        issuer_id: "{{ .Env.MACOS_NOTARY_ISSUER_ID }}"
+        key_id: "{{ .Env.MACOS_NOTARY_KEY_ID }}"
+        key: "{{ .Env.MACOS_NOTARY_KEY }}"
+        wait: true
+        timeout: 20m
+
+# signs: (D-18, LOCKED, maintainer, 2026-08-09) — cosign now signs via this
+# RELEASE-SCOPED pipe, not the build-scoped `binary_signs:` key this
+# project used before. GoReleaser's pipe execution order is a HARDCODED GO
+# SLICE (internal/pipeline/pipeline.go, pinned goreleaser/v2@v2.17.1), not
+# driven by this file's block order: `sign.Pipe{}` (this block) is
+# registered well AFTER BuildPipeline entirely, and therefore after
+# `notary.MacOS{}` (notarize: above) — which is a SIGN-AND-NOTARIZE pipe
+# whose signing half rewrites the Mach-O's LC_CODE_SIGNATURE load command
+# IN PLACE. Moving cosign here, instead of the old build-scoped key (which
+# ran BEFORE notarize and therefore signed PRE-notarization bytes), is
+# what makes the cosign-signed subject, the archived subject, the
+# checksummed subject, and the SLSA-attested subject all describe the
+# SAME, post-notarization bytes by construction — the property SIGN-04
+# requires and TestSignsSidecarMatchesUpgradeContract pins.
+#
+# RETRACTED: a prior revision of this comment block claimed the `signs:`
+# pipe's `artifacts: binary` mode "requires archives.formats: binary
+# project-wide" and used that as the reason to prefer `binary_signs:`.
+# That claim is FALSE at source level (D-18/A4, confirmed against the
+# pinned v2.17.1 module): the filter is PER-ARTIFACT-TYPE
+# (`artifact.ByType(artifact.UploadableBinary)`, internal/pipe/sign/
+# sign.go:113-114), and the coexisting `zip` archives: entry produces a
+# different artifact type (`UploadableArchive`) that this filter does not
+# match — no project-wide precondition exists. `ids: [raw]` below scopes
+# it explicitly to just the `raw` archives: entry regardless. GoReleaser
+# is not wrong and this was never an upstream bug — the prior config was
+# simply asking GoReleaser for the wrong thing.
 #
 # IMPORTANT — this is NOT the same substitution behavior as sboms: below,
 # and gets it wrong if you copy that pattern verbatim. GoReleaser's
-# binary_signs: pipe signs the RAW build-output artifact (type Binary —
-# the pre-rename `codegraph`, filtered via
-# `artifact.ByType(artifact.Binary)`,
-# internal/pipe/sign/sign_binary.go:80 in the pinned goreleaser/v2@v2.17.1
-# module), NOT the archives: pipe's renamed release asset (type
-# UploadableBinary, which is what sboms: with artifacts: binary
-# resolves to via ByBinaryLikeArtifacts' dedupe-preferring-uploadable
-# rule). For the PUBLISHED signature asset's name, `${artifact}` in a
-# signature: template expands to that raw artifact's .Name — the literal
-# `binary:` value ("codegraph") for every one of the 4 platforms in this
-# project's builds:, since none of them template it by os/arch
-# (confirmed in internal/pipe/sign/sign.go's signone(): env["artifact"]
-# is reset to art.Name, not art.Path, for the second/publish-naming
-# template pass; internal/tmpl/tmpl.go's WithArtifact binds
-# artifactName: a.Name). A `signature: "${artifact}.sigstore.json"`
-# template — GoReleaser's own documented pattern, and what RESEARCH.md's
-# Pattern 2 specified — therefore publishes ONE `codegraph.sigstore.json`
-# asset for all 4 platforms. With release.replace_existing_artifacts:
-# true (see release: below) this clobbers 3 of 4 sidecars SILENTLY: the
-# exact same defect class cycle-3 review caught in sboms.documents
-# (HIGH-B), but for signatures — not caught by any prior review cycle of
-# this plan, found instead by tracing this pipe's actual pinned-version
-# source during Task 2 execution. The fix mirrors sboms' own authorized
-# fallback: template on Go-template FIELDS
-# (.ProjectName/.Tag/.Os/.Arch, bound from the raw artifact's own
-# Goos/Goarch — which ARE correct per-platform) instead of the $artifact
-# env var, mirroring the `raw` archive entry's name_template
-# character-for-character. Held by
-# TestBinarySignsSidecarMatchesUpgradeContract, which RESOLVES this
-# template for all four platforms and asserts the results are four
-# DISTINCT strings each matching internal/upgrade's download contract —
-# not a literal string match, per the same "assert the property, not the
-# literal" discipline cycle-3 review required for sboms.documents.
-binary_signs:
+# `signs:` pipe, with `artifacts: binary`, filters
+# `artifact.ByType(artifact.UploadableBinary)` (internal/pipe/sign/
+# sign.go:113-114 in the pinned goreleaser/v2@v2.17.1 module) — narrowed
+# by `ids: [raw]` below to exactly the archives: `raw` entry's per-platform
+# UploadableBinary artifacts, the SAME on-disk file quill's notarize pipe
+# already mutated in place (`Path: binary.Path`, `archive.Pipe`'s `skip()`
+# branch, internal/pipe/archive/archive.go:296-310). For the PUBLISHED
+# signature asset's name, `${artifact}` in a `signature:` template expands
+# to that artifact's `.Name` — GoReleaser's own documented
+# `signature: "${artifact}.sigstore.json"` idiom collapses to the single
+# literal `codegraph.sigstore.json` for every one of the 4 platforms
+# (confirmed in internal/pipe/sign/sign.go's signone(): env["artifact"] is
+# reset to art.Name, not art.Path, for the second/publish-naming template
+# pass; internal/tmpl/tmpl.go's WithArtifact binds artifactName: a.Name).
+# With release.replace_existing_artifacts: true (see release: below) this
+# clobbers 3 of 4 sidecars SILENTLY: the exact same defect class cycle-3
+# review caught in sboms.documents (HIGH-B), but for signatures. The fix
+# mirrors sboms' own authorized fallback: template on Go-template FIELDS
+# (.ProjectName/.Tag/.Os/.Arch, bound from that same artifact's correct
+# per-platform Goos/Goarch) instead of the $artifact env var, mirroring
+# the `raw` archive entry's name_template character-for-character. Held
+# by TestSignsSidecarMatchesUpgradeContract, which RESOLVES this template
+# for all four platforms and asserts the results are four DISTINCT
+# strings each matching internal/upgrade's download contract — not a
+# literal string match, per the same "assert the property, not the
+# literal" discipline cycle-3 review required for sboms.documents. Never
+# revert to a bare `${artifact}` form.
+signs:
   - cmd: cosign
+    ids: [raw]
     signature: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}.sigstore.json"
     args:
       - "sign-blob"
