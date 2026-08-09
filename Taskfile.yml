@@ -1307,7 +1307,7 @@ tasks:
           PRESIGN_SHA256="$(sha256_of "${PRESIGN_BIN}")"
 
           SHA_CHANGED="false"
-          [ "${FINAL_SHA256}" != "${PRESIGN_SHA256}" ] && SHA_CHANGED="true"
+          if [ "${FINAL_SHA256}" != "${PRESIGN_SHA256}" ]; then SHA_CHANGED="true"; fi
 
           # zip-content / checksums-file byte-identity: the D-05 chain that
           # describes the SHIPPED configuration's guarantee. The mutation's
@@ -1371,9 +1371,9 @@ tasks:
           VERIFIES_FINAL_EXIT=$?
           set -e
           VERIFIES_PRESIGN="false"
-          [ "${VERIFIES_PRESIGN_EXIT}" = "0" ] && VERIFIES_PRESIGN="true"
+          if [ "${VERIFIES_PRESIGN_EXIT}" = "0" ]; then VERIFIES_PRESIGN="true"; fi
           VERIFIES_FINAL="false"
-          [ "${VERIFIES_FINAL_EXIT}" = "0" ] && VERIFIES_FINAL="true"
+          if [ "${VERIFIES_FINAL_EXIT}" = "0" ]; then VERIFIES_FINAL="true"; fi
           echo "COSIGN-VERIFY-BLOB platform=darwin/${arch} vs_presign_exit=${VERIFIES_PRESIGN_EXIT} vs_final_exit=${VERIFIES_FINAL_EXIT}"
 
           COSIGN_SUBJECT="indeterminate"
@@ -1384,9 +1384,9 @@ tasks:
           fi
 
           EXPECTED_SUBJECT="final"
-          [ "${MUTATE}" = "1" ] && EXPECTED_SUBJECT="presign"
+          if [ "${MUTATE}" = "1" ]; then EXPECTED_SUBJECT="presign"; fi
           VERDICT="pass"
-          [ "${COSIGN_SUBJECT}" != "${EXPECTED_SUBJECT}" ] && VERDICT="fail"
+          if [ "${COSIGN_SUBJECT}" != "${EXPECTED_SUBJECT}" ]; then VERDICT="fail"; fi
 
           # --- 7. codesign -dvv (Team Identifier presence), then a SEPARATE,
           # LOCAL-ONLY spctl -a -vv -t install (D-19 oracle, never -t exec)
@@ -1441,7 +1441,19 @@ tasks:
           if [ "${SUBJECT_INDETERMINATE}" = "1" ]; then
             exit 1
           fi
-          [ "${VERDICT}" != "pass" ] && OK=0
+          # NOTE: `[ cond ] && VAR=x` must never be the LAST statement of a
+          # loop body here. go-task runs cmds through its own embedded shell
+          # (mvdan.cc/sh), not the system shell, and under `set -e` that
+          # interpreter treats a FALSE and-list in final position as fatal —
+          # so the target aborted precisely when every verdict was `pass`,
+          # silently, with no ::error:: to print. Measured 2026-08-09 during
+          # plan 02-04 Task 2's first real run: an and-list mid-block or at
+          # top level is fine, last-in-loop is fatal. Second instance in this
+          # repo of a bug that lives in the Taskfile wrapper and is invisible
+          # to a plain `sh` run of the same script (the first shipped v0.5.0
+          # with zero assets). Use `if`/`fi`, not `&&`, for every conditional
+          # assignment in this file.
+          if [ "${VERDICT}" != "pass" ]; then OK=0; fi
         done
 
         # --- 10. The committed .goreleaser.yaml must be byte-unchanged —
