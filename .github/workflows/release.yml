@@ -167,11 +167,37 @@ jobs:
       # only via this step's env:, never interpolated into a run: body.
       # GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which
       # is the gh CLI's own variable (review MEDIUM, pi Plan-03).
+      #
+      # The five MACOS_* variables below (SIGN-01) are what makes
+      # .goreleaser.yaml's notarize: block's enabled: template
+      # (.goreleaser.yaml:252, a conjunction over all five) evaluate true.
+      # If any one is absent, that template evaluates false and this job
+      # ships an UN-NOTARIZED release with a GREEN run — no error, no
+      # warning, just a binary that later fails SIGN-03's Gatekeeper gate.
+      # No other workflow in this repository may reference these five
+      # names, and none may hold them outside this one step: this job is
+      # the only job in the only workflow permitted to (D-14/D-17,
+      # T-02-16), machine-enforced by TestAppleSecretsScopedToSingleReleaseJob
+      # (internal/upgrade), which enumerates .github/workflows/ at runtime
+      # rather than from a fixture list.
+      #
+      # No masking step precedes this. Assumption A5 (02-EVIDENCE.md) tested
+      # a real quill failure (a deliberately wrong MACOS_SIGN_PASSWORD) and
+      # found no certificate, key, or password material anywhere in the
+      # error output — the P12 decode fails locally, in under a second,
+      # before any Apple network contact. That verdict closes the masking
+      # question with a recorded reason rather than an unexplained absence;
+      # re-run the spot check if quill's error-wrapping ever changes.
       - name: Release
         id: release
         run: task release:goreleaser
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
 
       # Build provenance via GitHub's first-party attestor (D-09), replacing
       # the third-party SLSA generic generator entirely — no more
