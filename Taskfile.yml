@@ -840,6 +840,113 @@ tasks:
           echo "hashes=$(base64 -w0 < "${CHECKSUMS_FILE}")" >> "${GITHUB_OUTPUT}"
         fi
 
+  release:record-final-hashes:
+    desc: >-
+      Makes the FIRST byte-identity comparison point (SIGN-04) observable.
+      Reads the release job's local dist/artifacts.json AFTER `task
+      release:goreleaser` (i.e. `goreleaser release --clean`) has fully
+      completed — archive, checksum, sign, and publish have ALL already run
+      by the time this target executes. This is NOT a capture "immediately
+      after notarize"; no mid-pipe hook exists in GoReleaser for that, and
+      labelling this value that way would silently assume the very
+      byte-identity ordering claim SIGN-04 exists to measure. The field this
+      target emits is named exactly for what it is: `final_local_sha256`.
+
+      Read-only and additive: writes nothing, uploads nothing, needs no new
+      CI permission and no secret. But it MUST FAIL LOUDLY (non-zero exit)
+      on absent dist/artifacts.json, an unreadable/missing artifact file, or
+      a missing darwin platform entry — after emitting the labelled
+      `not-found` SIGN04-PUBLISH-EVIDENCE line so the failure is
+      diagnosable. An earlier design considered suppressing all non-zero
+      exits here on the theory that "a recording step must never break a
+      publish" — that reasoning does not survive inspection: this step runs
+      AFTER `goreleaser release` has already published, so there is no
+      publish left to protect by staying silent. What a suppressed failure
+      would actually buy is a green release job with SIGN-04 permanently
+      unprovable, and D-12 forbids re-cutting the tag to fix that
+      afterward — so failing loudly here, while there is still something to
+      fail, is the only choice that keeps the claim provable.
+
+      Never falls back to a snapshot-derived or glob-found path when the
+      real tagged artifact cannot be located from dist/artifacts.json — a
+      local snapshot exercise (below) proves the selection logic only for
+      the empty-tag naming shape --snapshot produces; the real-tag path in
+      CI must fail loudly rather than silently resolve something else.
+
+      POST-PUBLISH FAILURE BRANCH: a hard failure here leaves the release
+      job's own conclusion RED with the release assets ALREADY LIVE on
+      GitHub — nothing left to build was skipped, only this recording step
+      failed. post-release-verify.yml triggers on `workflow_run` gated to a
+      `success` conclusion, so it will NEVER FIRE AUTOMATICALLY against a
+      release whose release.yml run ended RED here — the Gatekeeper job and
+      the notarized-suite job both silently do not run. Recovery: preserve
+      this job's run logs, then manually `workflow_dispatch`
+      post-release-verify.yml against the resolved tag. See
+      docs/RELEASE-PROCEDURES.md's "Recovering from a post-publish
+      hash-recording failure" section for the four states this can leave
+      the release in and the distinct remedy for each — read it before
+      acting, do not delete or re-push the release/tag (D-12).
+    preconditions:
+      - sh: command -v jq
+        msg: "jq not found. Every result this target reports is read from dist/artifacts.json with it — never a filename glob, never a bare exit code. Install locally: brew install jq."
+    cmds:
+      - |
+        set -euo pipefail
+
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # dist/artifacts.json is where `task release:goreleaser` (this
+        # target's ONLY intended caller — see release.yml's Record final
+        # local hashes step) leaves its output: the repo root's default
+        # `dist/` directory, no --dist override, no -f alternate config.
+        # Absent metadata is a HARD FAILURE, per this target's own contract
+        # above — never a silent pass.
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::dist/artifacts.json not found — release:record-final-hashes must run AFTER task release:goreleaser has completed. This target never falls back to a snapshot-derived or glob-found path (see its desc:); absence is recorded and then hard-failed, not silently skipped."
+          echo "SIGN04-PUBLISH-EVIDENCE schema=1 goos=darwin goarch=not-found artifact_name=not-found final_local_sha256=not-found"
+          exit 1
+        fi
+
+        # Reuses plan 02-04's release:rehearse-notarize artifact-metadata
+        # reader VERBATIM, including its binary-format filter: GoReleaser
+        # records type=="Binary" TWICE per platform (the raw build output
+        # AND the archives: pipe's renamed release asset) — filtering on
+        # .extra.Format=="binary" too is what keeps this at 4 (one per
+        # platform) rather than counting 8.
+        darwin_binary_entry() {
+          # $1 = arch  $2 = field ("path" or "name")
+          jq -r --arg a "$1" --arg f "$2" \
+            '[.[] | select(.type=="Binary" and .extra.Format=="binary" and .goos=="darwin" and .goarch==$a)][0][$f] // empty' \
+            dist/artifacts.json
+        }
+
+        FAILED=0
+        for arch in arm64 amd64; do
+          BIN_PATH="$(darwin_binary_entry "${arch}" path)"
+          BIN_NAME="$(darwin_binary_entry "${arch}" name)"
+
+          if [ -z "${BIN_PATH}" ] || [ ! -f "${BIN_PATH}" ]; then
+            echo "::error::darwin/${arch} binary not found in dist/artifacts.json (or the file it names is missing on disk) — cannot record final_local_sha256 for this platform"
+            echo "SIGN04-PUBLISH-EVIDENCE schema=1 goos=darwin goarch=${arch} artifact_name=not-found final_local_sha256=not-found"
+            FAILED=1
+            continue
+          fi
+
+          FINAL_LOCAL_SHA256="$(sha256_of "${BIN_PATH}")"
+          echo "SIGN04-PUBLISH-EVIDENCE schema=1 goos=darwin goarch=${arch} artifact_name=${BIN_NAME} final_local_sha256=${FINAL_LOCAL_SHA256}"
+        done
+
+        if [ "${FAILED}" = "1" ]; then
+          echo "::error::release:record-final-hashes: one or more darwin platforms missing from dist/artifacts.json — see the not-found SIGN04-PUBLISH-EVIDENCE line(s) above"
+          exit 1
+        fi
+
   release:rehearse-notarize:
     desc: >-
       MAINTAINER-ONLY (D-08/D-09). Rehearses the one release-pipeline path

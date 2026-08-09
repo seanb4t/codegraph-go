@@ -566,3 +566,43 @@ Path B because the App becomes unavailable, the full recipe is:
 5. Update `release.yml`'s header comment in the **same commit**, so it no
    longer claims a tag-push-only trigger once a second trigger type
    exists.
+
+## 11. Recovering from a post-publish hash-recording failure (SIGN-04)
+
+`release.yml`'s `Record final local hashes (SIGN-04, post-everything)` step
+(`task release:record-final-hashes`, plan 02-07) runs AFTER the release has
+already published — archive, checksum, sign, and publish have all already
+happened. It exists to make the first byte-identity comparison point
+(`final_local_sha256`) observable, and it hard-fails (deliberately, not
+silently) if it cannot read that value from `dist/artifacts.json`.
+
+**Because it runs post-publish, its failure is structurally different from
+every other step in this job.** The release ASSETS ARE ALREADY LIVE when
+this step can fail — nothing upstream of it was skipped. And because
+`post-release-verify.yml` triggers on `workflow_run` gated to a `success`
+conclusion (§ above), a RED `release` job conclusion means post-release
+verification **never fires automatically** for that tag: the Gatekeeper job
+and the notarized-suite job both silently do not run. A red release with
+live assets and no automatic verification is exactly the state this runbook
+must not leave unattended.
+
+**First, always: preserve the logs.** Download both `release.yml`'s run
+logs and (if it ran at all) `post-release-verify.yml`'s run logs to local
+files before doing anything else. GitHub expires run logs; a failure branch
+that starts writing conclusions before capturing the raw material leaves any
+later post-mortem with nothing to work from.
+
+**Then distinguish which of four states the release is actually in** — they
+have different remedies, and treating one as another either under- or
+over-reacts:
+
+| State | What happened | How to tell | Remedy |
+|---|---|---|---|
+| (a) Hashes never recorded | The recording step failed (absent `dist/artifacts.json`, missing darwin binary, etc.) but assets are published | The `release` job's run log shows the `Record final local hashes` step red; the tag's GitHub Release has all expected assets | Manually `workflow_dispatch` `post-release-verify.yml` against the resolved tag (`gh workflow run post-release-verify.yml -f tag=<tag>`) to gather what verification IS still possible; SIGN-04's `final_local_sha256` provenance point for this tag is simply absent and must be recorded as such, not fabricated |
+| (b) Attestation never ran at all | The recording step's failure means the job never reached the `Attest build provenance` step, which follows it in the same job — the build-provenance claim is ABSENT from this release, not merely unverified | `gh attestation verify` against any asset of this tag returns no attestations found (not a verification failure — a genuine absence) | Same as (a): dispatch post-release-verify manually to confirm the absence directly rather than assume it; record the absence explicitly in the phase evidence |
+| (c) Manual dispatch surfaces both | A manual `workflow_dispatch` of `post-release-verify.yml` against this tag is expected to run every job — none skip — and the attestation-verification leg is expected to legitimately FAIL, since (b) means there is nothing for it to verify | The dispatched run's `verify-supply-chain` job (or equivalent) reports attestation verification failed, while other jobs (Gatekeeper, notarized-suite) may still pass if notarization and cosign both completed before the failure | This is the expected shape of (a)+(b) combined, not a new problem — do not re-run the dispatch hoping for a different result; move to (d) |
+| (d) A public supply-chain claim is genuinely absent | Either the byte-identity chain (SIGN-04) or the build-provenance attestation (or both) cannot be produced for this tag, confirmed by (a)-(c) above | Confirmed by the states above, not assumed | **Patch-forward, never re-cut (D-12/D-07).** Do not delete or re-push this release or tag. Cut a new patch release through the normal release-please flow (§4); that new tag's release job will produce a complete, provable chain. Record the incomplete tag's gap explicitly in the phase's evidence artifacts (never silently omit it or backfill a value nothing produced) |
+
+The unifying rule across all four states, restated from §7 above: **a
+red release here is patched forward with a new version, never rewritten by
+deleting or re-pushing the affected tag or release.**

@@ -199,6 +199,37 @@ jobs:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
 
+      # Records the release job's local dist/ bytes (SIGN-04) AFTER `task
+      # release:goreleaser` above has FULLY completed — archive, checksum,
+      # sign, and publish have all already run. This is NOT a capture
+      # "immediately after notarize"; no such mid-pipe hook exists, and
+      # labelling it that way would silently assume the very byte-identity
+      # ordering claim SIGN-04 exists to measure. Read-only: writes nothing,
+      # uploads nothing, needs no new permission and no secret.
+      #
+      # DELIBERATE HARD FAILURE, not a suppressed one, on absent metadata /
+      # an unreadable artifact / a missing darwin platform: this step runs
+      # AFTER the release has already published, so there is no publish
+      # left to protect by staying silent, and a silently-skipped failure
+      # here would leave SIGN-04 permanently unprovable (D-12 forbids
+      # re-cutting the tag to fix that afterward).
+      #
+      # POST-PUBLISH FAILURE BRANCH — read before reacting to this step
+      # going red. A failure here leaves the release job's own conclusion
+      # RED with the release assets ALREADY LIVE on GitHub.
+      # post-release-verify.yml triggers on `workflow_run` gated to a
+      # `success` conclusion, so it will NEVER FIRE AUTOMATICALLY against
+      # this tag — the Gatekeeper job and the notarized-suite job both
+      # silently do not run. Recovery: preserve this run's logs, then
+      # manually `workflow_dispatch` post-release-verify.yml against the
+      # resolved tag. See docs/RELEASE-PROCEDURES.md's "Recovering from a
+      # post-publish hash-recording failure" section for the four states
+      # this can leave the release in and the distinct remedy for each.
+      # Never delete or re-push the release/tag (D-12).
+      - name: Record final local hashes (SIGN-04, post-everything)
+        id: record-final-hashes
+        run: task release:record-final-hashes
+
       # Build provenance via GitHub's first-party attestor (D-09), replacing
       # the third-party SLSA generic generator entirely — no more
       # `provenance:` job, no more hand-rolled base64 subject-list encoding
