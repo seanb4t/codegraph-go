@@ -6,15 +6,15 @@ current_phase: 02
 current_phase_name: apple-signing-notarization
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-08-09T15:47:28.345Z"
+last_updated: "2026-08-09T17:48:20.143Z"
 last_activity: 2026-08-09
-last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 13
-  completed_plans: 6
+  completed_plans: 11
   percent: 25
+last_activity_desc: Phase 02 execution started
 ---
 
 # Project State
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 02 (apple-signing-notarization) — EXECUTING
 Plan: 1 of 7
 Status: Executing Phase 02
-Last activity: 2026-08-09 — Phase 02 execution started
+Last activity: 2026-08-09
 
 Progress: [....] 0/4 phases complete (0%)
 
@@ -273,6 +273,8 @@ Carried forward:
 - Daemon extreme-load tail (ACCEPTED, not a gap). Phase 4 fixed the structural cause of the rotating daemon flake set — orphaned goroutines surviving t.Fatalf's runtime.Goexit() — proven by zero DATA RACE under full-suite -race and 6/6 clean at GOMAXPROCS=4. Under pathological workstation load (~22 concurrent agent processes, load avg 6.3) one plain-timeout failure still appears. 52/52 real ci.yml runs back to 2026-07-13 show no daemon failure on the actual runner class, so CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06). Not scheduled for further work.
 - Daemon test feedback-latency tradeoff. Phase 4 raised the daemon test time budget to absorb contention: the package now runs ~65s clean at GOMAXPROCS=4 (was ~30s), and a failure under extreme load takes ~250s to surface instead of ~10s. Tolerance bought at the cost of feedback speed. Acceptable at CI concurrency; revisit if the daemon suite becomes a CI bottleneck.
 - GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling. goreleaser's binary reaches golang.org/x/crypto/openpgp (110 vulnerable symbols) via pipe/ko then google/ko then sigstore/cosign/oci then sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The new advisory tool-vuln job is now the only thing surfacing it — reported, not resolved. This is why D-04 was superseded from blocking to advisory.
+- Phase 2 HALTED at plan 02-04 Task 2: no Apple Developer ID Application certificate and no App Store Connect API key on this host (keychain holds only an Apple Configurator identity; of the five MACOS_* variables are set). Plans 02-06 and 02-07 are blocked_by 02-04.
+- TOOLING (not blocking work): 'gsd-tools query state.sync' counts a SUMMARY with 'status: halted' as a completed plan. It set progress.completed_plans to 11 (6 from phase 1 + all 5 phase-2 summaries) although 02-04 is halted, so STATE now disagrees with ROADMAP, which correctly reads 4/7. Sync also reported changing the body progress bar to 17% but left it reading '0/4 phases complete (0%)'. Not hand-edited per the planning-artifacts rule (tool-owned file); same treatment as the state.advance-plan gap already recorded above. Also note: 'gsd-tools query state.sync' MUTATES when invoked with no args - it has no dry-run probe mode, same hazard class as generate-claude-md.
 
 ### Quick Tasks Completed
 
