@@ -289,3 +289,328 @@ disagreeing — so the machine-parseable contract holds. Any downstream
 consumer (plan 02-06's CI job included) must key off the evidence line's
 presence and its `expect=`/`observed=` fields, never off `task`'s process
 exit code alone, to distinguish these failure modes.
+
+## SIGN-01 — local notarize rehearsal (D-08)
+
+**This is a rehearsal observation, not the phase's GREEN criterion.** The
+GREEN criterion (ROADMAP Phase 2 criterion 2, D-05's byte-identity chain)
+requires the re-downloaded, published release asset — that does not exist
+until plan 02-07's real, irreversible release. Everything recorded in this
+section is a local build, signed and notarized with the maintainer's real
+Developer ID Application certificate against Apple's real notary service,
+but never published and never re-downloaded, and is therefore evidence for
+the mechanism, not itself sufficient to close the criterion.
+
+Captured **2026-08-09** on the maintainer's real Mac, macOS 27.0,
+`darwin/arm64` host (Apple Silicon). Certificate:
+`Developer ID Application: Sean Brandt (8D762W58T4)`, issued by Apple's
+Developer ID Certification Authority, `notBefore=Aug 9 18:10:51 2026 GMT`,
+`notAfter=Feb 1 22:12:15 2027 GMT`. The five `MACOS_*` credential values
+were supplied via `op run --env-file=.env` as base64, deliberately the same
+input form CI will use in plan 02-06.
+
+### D-09 precondition proof (credential-free host)
+
+With all five `MACOS_*` variables unset:
+
+```
+task: MACOS_SIGN_P12 is not set. release:rehearse-notarize is MAINTAINER-ONLY and
+requires a real Developer ID Application certificate (base64-encoded .p12, or a
+filesystem path — quill accepts either). See docs/RELEASE.md.
+task: Failed to run task "release:rehearse-notarize": task: precondition not met
+```
+
+Exit `201`. Elapsed, measured under `time`: **0.036 s total** (0.02s user,
+0.01s system). Halted BY NAME on the first missing credential
+(`MACOS_SIGN_P12`), before any build work and before any network
+round-trip — D-09 is satisfied and this is its first demonstration on a
+genuinely credential-absent host.
+
+### The real rehearsal (final run, shipped configuration, both darwin arches)
+
+Baseline determinism — measured, not assumed; both notarize-disabled
+double-builds byte-identical:
+
+```
+BASELINE-DETERMINISM-OK platform=darwin/arm64 sha256=40fd5bf03d3ee08e25370a524c8a8b5396a53c8b18ff548dccaf4d410ca289da
+BASELINE-DETERMINISM-OK platform=darwin/amd64 sha256=856646e4c486da7f8ae065ca317e62f731a59fb8ba188690d3de06ef7708a4aa
+```
+
+`codesign -dvv`, both darwin arches — Team Identifier present in both:
+
+```
+REHEARSAL-CODESIGN-DVV platform=darwin/arm64
+Format=Mach-O thin (arm64)
+CodeDirectory v=20500 size=489781 flags=0x10000(runtime) hashes=15300+2 location=embedded
+Authority=Developer ID Application: Sean Brandt (8D762W58T4)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=Aug 9, 2026 at 3:24:59 PM
+TeamIdentifier=8D762W58T4
+Runtime Version=12.1.0
+
+REHEARSAL-CODESIGN-DVV platform=darwin/amd64
+Format=Mach-O thin (x86_64)
+CodeDirectory v=20500 size=505653 flags=0x10000(runtime) hashes=15796+2 location=embedded
+Authority=Developer ID Application: Sean Brandt (8D762W58T4)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=Aug 9, 2026 at 3:24:35 PM
+TeamIdentifier=8D762W58T4
+Runtime Version=12.1.0
+```
+
+`spctl -a -vv -t install` (D-19's oracle, verdict from exit status, never a
+substring search) against a synthetic-quarantine copy of each locally
+notarized binary:
+
+```
+REHEARSAL-SPCTL platform=darwin/arm64 exit=0
+  <tmpdir>/spctl-assess-darwin-arm64: accepted
+  source=Notarized Developer ID
+  origin=Developer ID Application: Sean Brandt (8D762W58T4)
+REHEARSAL-SPCTL platform=darwin/amd64 exit=0
+  <tmpdir>/spctl-assess-darwin-amd64: accepted
+  source=Notarized Developer ID
+  origin=Developer ID Application: Sean Brandt (8D762W58T4)
+```
+
+`NOTARIZE-EVIDENCE`/`SIGN04-EVIDENCE`, shipped configuration (`mutate=0`),
+both darwin arches:
+
+```
+NOTARIZE-EVIDENCE schema=1 goos=darwin goarch=arm64 presign_sha256=40fd5bf03d3ee08e25370a524c8a8b5396a53c8b18ff548dccaf4d410ca289da final_sha256=016db76bc32c79ee1ecf089917ae2c685728fb27885c0c62be19211db8714c2e sha_changed=true team_id_present=true spctl_exit=0 spctl_verdict=accepted apple_status=notarized
+SIGN04-EVIDENCE schema=1 goos=darwin goarch=arm64 final_sha256=016db76bc32c79ee1ecf089917ae2c685728fb27885c0c62be19211db8714c2e zip_content_sha256=016db76bc32c79ee1ecf089917ae2c685728fb27885c0c62be19211db8714c2e checksums_file_sha256=016db76bc32c79ee1ecf089917ae2c685728fb27885c0c62be19211db8714c2e cosign_verifies_presign=false cosign_verifies_final=true cosign_subject=final verdict=pass mutate=0 config_sha256=ce90b0c03ceedd04da2bbf2e151c102ed75a1ac9b1cbab4f599cb4e844d2b99f
+NOTARIZE-EVIDENCE schema=1 goos=darwin goarch=amd64 presign_sha256=856646e4c486da7f8ae065ca317e62f731a59fb8ba188690d3de06ef7708a4aa final_sha256=b85e2c0befea3ad1a36a8f34ea3002dd44fbb91dbbdb4ce83c5e87ef91934443 sha_changed=true team_id_present=true spctl_exit=0 spctl_verdict=accepted apple_status=notarized
+SIGN04-EVIDENCE schema=1 goos=darwin goarch=amd64 final_sha256=b85e2c0befea3ad1a36a8f34ea3002dd44fbb91dbbdb4ce83c5e87ef91934443 zip_content_sha256=b85e2c0befea3ad1a36a8f34ea3002dd44fbb91dbbdb4ce83c5e87ef91934443 checksums_file_sha256=b85e2c0befea3ad1a36a8f34ea3002dd44fbb91dbbdb4ce83c5e87ef91934443 cosign_verifies_presign=false cosign_verifies_final=true cosign_subject=final verdict=pass mutate=0 config_sha256=ce90b0c03ceedd04da2bbf2e151c102ed75a1ac9b1cbab4f599cb4e844d2b99f
+release:rehearse-notarize: PASS (mutate=0)   [exit 0]
+```
+
+Committed `.goreleaser.yaml` sha256, from the `config_sha256` field above —
+unchanged across every run in this document, including the mutation below:
+`ce90b0c03ceedd04da2bbf2e151c102ed75a1ac9b1cbab4f599cb4e844d2b99f`.
+
+### Snapshot-mode asset naming shape (expected, not a defect)
+
+Under `--snapshot`, the tag segment resolves empty, so the four signature
+sidecar names carry a doubled separator where the tag would sit. This is
+the **expected** shape for a snapshot rehearsal, recorded here so it is
+never later misread as a violation of the tagged-release naming contract;
+it does not describe the real tagged release plan 02-07 produces.
+
+### Apple submission timing — sequential, measured
+
+The two notarize submissions inside the single `notarize.macos[0]` entry
+run **sequentially** — `notary.MacOS{}` parallelizes ACROSS config entries
+via an error group, never within one entry's per-binary loop. This was
+already documented in `.goreleaser.yaml` (lines 236-243) from reading
+`notary.MacOS{}` at source; this rehearsal is the first time it is
+corroborated by measurement rather than only by reading the pipe's
+implementation. Observed wall-clock notarize durations, goreleaser-reported,
+across the runs performed this session: **1m16s and 49s** on the first full
+run, **48s** on the final run recorded above. These are the basis for
+`.goreleaser.yaml`'s configured 20-minute per-binary `timeout:` — comfortably
+above every observed value.
+
+**Apple pending/timeout behavior: OPEN, not measured by this rehearsal.** No
+submission returned `pending` and none timed out in any of the four runs
+performed this session (the real rehearsal twice, the mutation, and the
+secret-leak spot check, which failed locally before reaching Apple).
+`.goreleaser.yaml`'s comment states, from reading `notary.MacOS{}` at
+source, that a timeout status and a pending status are both logged and the
+pipe continues past rather than fails. That claim is a source-reading
+claim, not a measured one — this rehearsal never exercised the code path it
+describes, so the question is recorded here as still OPEN rather than
+restated as settled. Carried to plan 02-06/02-07: if a real submission ever
+returns pending or times out, that observation should be recorded here as
+measured.
+
+### D-03 — entitlements hypothesis: HOLDS
+
+No `entitlements:` key was configured (per `.goreleaser.yaml`'s `sign:`
+block), Apple notarized both darwin binaries under that omission, and
+`spctl -a -vv -t install` accepted both. This proves Apple **accepted** the
+binary under D-03's working hypothesis that this repository's CGo
+tree-sitter grammars (compiled at build time, not runtime) need no
+JIT/unsigned-executable-memory entitlement — it does **not** prove the
+binary **runs correctly**; ROADMAP criterion 4 (the full CLI/MCP suite
+against the real notarized asset) is what converts that remaining half from
+"accepted" to "works."
+
+### Legacy-RC2 PKCS#12 concern — not a problem for quill
+
+The concern that Keychain Access P12 exports use legacy RC2 encryption
+(requiring OpenSSL 3.6.3's `-legacy` flag to read) does not apply here:
+`quill` read the certificate without incident.
+
+## SIGN-04 — ordering, measured (D-07)
+
+The converged and divergent hash sets, side by side, per darwin platform:
+
+| Platform | Config | pre-sign sha256 | final sha256 | cosign verifies pre-sign | cosign verifies final | cosign subject |
+|---|---|---|---|---|---|---|
+| darwin/arm64 | shipped (`mutate=0`) | `40fd5bf03d3ee08e25370a524c8a8b5396a53c8b18ff548dccaf4d410ca289da` | `016db76bc32c79ee1ecf089917ae2c685728fb27885c0c62be19211db8714c2e` | false | true | final |
+| darwin/amd64 | shipped (`mutate=0`) | `856646e4c486da7f8ae065ca317e62f731a59fb8ba188690d3de06ef7708a4aa` | `b85e2c0befea3ad1a36a8f34ea3002dd44fbb91dbbdb4ce83c5e87ef91934443` | false | true | final |
+| darwin/arm64 | pre-D-18 mutation (`mutate=1`) | `40fd5bf03d3ee08e25370a524c8a8b5396a53c8b18ff548dccaf4d410ca289da` | `338b806608226297daebb979440b4dcefb40c3427a078419d508049d1b54c431` | true | false | presign |
+
+**The relationship inverted, which is the whole point:**
+
+```
+shipped config  (mutate=0): verifies_presign=false verifies_final=true  subject=final
+pre-D-18 config (mutate=1): verifies_presign=true  verifies_final=false subject=presign
+```
+
+This is D-07's one-time recorded mutation, discharged. SIGN-04 is now a
+MEASUREMENT, not an argument from reading GoReleaser's source. **No
+permanent ordering regression test was added** — D-07 declines one — and
+the residual risk is accepted exactly as D-07 named it: a future refactor
+could silently reorder the pipes with nothing firing.
+
+The mutation diff, verbatim:
+
+```
+MUTATION-DIFF (the two-edit signs: block mutation, D-07):
+324c324
+< signs:
+---
+> binary_signs:
+326d325
+<     ids: [raw]
+MUTATION-CONFIG-INVALID check: PASSED (structural validation completed before any Apple round-trip)
+```
+
+A separate, earlier single-arch narrowing (`254d253 < - codegraph-darwin-amd64`,
+restricting notarize to arm64 only for this run) is not one of the two D-07
+edits — it is the Apple-submission-budget narrowing the plan calls for,
+applied independently.
+
+`SIGN04-EVIDENCE`, mutation (`mutate=1`, arm64 only, per the
+Apple-submission budget — the mechanism the mutation proves is per-pipe,
+not per-architecture, so a second submission buys no extra evidence):
+
+```
+SIGN04-EVIDENCE schema=1 goos=darwin goarch=arm64 final_sha256=338b806608226297daebb979440b4dcefb40c3427a078419d508049d1b54c431 zip_content_sha256=unknown checksums_file_sha256=unknown cosign_verifies_presign=true cosign_verifies_final=false cosign_subject=presign verdict=pass mutate=1 config_sha256=ce90b0c03ceedd04da2bbf2e151c102ed75a1ac9b1cbab4f599cb4e844d2b99f
+release:rehearse-notarize: PASS (mutate=1)   [exit 0]
+```
+
+`zip_content_sha256`/`checksums_file_sha256` are `unknown` under the
+mutation by design: the mutated build-scoped `binary_signs:` shape signs the
+raw build artifact directly and never runs the release-scoped archive and
+checksum pipes the shipped configuration does, so there is no archived or
+checksummed subject to compare for this run.
+
+### Assumption A3 — verdict: SUPPORTED, with an honest scope limit
+
+A3 asked whether switching cosign from `binary_signs:` to
+`signs: {artifacts: binary}` is a complete fix, with no other
+GoReleaser-internal pipe between the sign pipe and publish reintroducing a
+mismatch. **Verdict: SUPPORTED for every pipe this rehearsal actually
+exercised** — the archived (`.zip`), checksummed, and cosign-verified
+subjects all equal the final notarized binary on both darwin arches under
+the shipped configuration (the table above). **Not fully closed:** this
+rehearsal runs `--skip=publish`, so it never reaches the `publish:` pipe or
+any release-scoped pipe registered after `sign.Pipe{}` and before publish.
+No such pipe is currently configured in this repository's
+`.goreleaser.yaml` (per `02-RESEARCH.md`'s Open Question 4), so there is
+nothing today that could reintroduce a mismatch — but that is a fact about
+the current config, not a property this rehearsal measured past the sign
+pipe. A3 is carried, in this narrower form, to plan 02-07 — the first run
+that reaches `publish:` for real.
+
+### The non-reproducible-signature finding (measured, not previously anticipated)
+
+Across the baseline-vs-notarize comparisons performed this session, the
+PRE-SIGN hashes were byte-identical run-to-run (arm64 `40fd5bf0...`, amd64
+`856646e4...`), but the FINAL (post-notarize) hashes DIFFERED between the
+first full run and the final run recorded above: arm64 `fb7ba58e...` (first
+run) vs `016db76b...` (final run, recorded above); amd64 `ebc7b80d...`
+(first run) vs `b85e2c0b...` (final run, recorded above).
+
+**Cause:** `codesign -dvv`'s `Timestamp=` line shows an embedded,
+Apple-issued trusted timestamp inside the code signature. The signature —
+and therefore the final notarized binary — is NOT byte-reproducible across
+separate signing operations, even though the pre-sign build that feeds it
+is (per the `BASELINE-DETERMINISM-OK` measurement above).
+
+**Consequence for any future darwin reproducibility leg:** it must compare
+PRE-SIGN artifacts, never final signed/notarized ones, or it will report a
+false regression on every single run — the signature timestamp alone
+guarantees a hash difference between any two signing operations of
+otherwise identical bytes.
+
+### Reconciliation against code comments
+
+No comment in `Taskfile.yml`'s `release:rehearse-notarize` target, and no
+comment in `.goreleaser.yaml`'s `notarize:`/`signs:` blocks, was found to be
+refuted by this run. The one candidate — `.goreleaser.yaml`'s existing
+claim (lines 236-249) that the two notarize submissions run sequentially
+and that timeout/pending both log-and-continue — is corroborated for its
+sequential half (measured above) and left explicitly OPEN for its
+pending/timeout half (also above), rather than "corrected" on no evidence.
+Nothing in `Taskfile.yml` or `.goreleaser.yaml` was changed by this task.
+
+## Assumption A5 — secret material in error paths
+
+**Verdict: RESOLVED, no leak observed.** `release:rehearse-notarize` step 2
+was re-run with a deliberately WRONG `MACOS_SIGN_PASSWORD`. Verbatim failure
+output:
+
+```
+⨯ release failed after 1s     error=unable to decode p12 file: pkcs12: decryption password incorrect
+task: Failed to run task "release:rehearse-notarize": exit status 1
+```
+
+The full failure output was scanned for: PEM headers (`BEGIN ... PRIVATE
+KEY` / `BEGIN CERTIFICATE`) — zero found; base64 runs of 200+ characters
+(the shape a P12 or API key blob would take) — zero found; the supplied
+(wrong) password itself — zero occurrences. The failure occurred in **1
+second**, before any Apple network contact — `quill`'s P12-decode step
+fails locally, well before the notarize submission. No certificate or key
+material appears anywhere in the error path exercised by this test.
+
+Because the verdict is negative (no leak), **no masking requirement is
+carried into plan 02-06's CI wiring** — this closes the open item in
+T-02-11's mitigation plan rather than adding new scope to it. If a future
+change to the signing library's error wrapping is made, this spot check
+should be re-run rather than assumed to still hold.
+
+### Cleanliness, confirmed after every run
+
+`git diff --stat -- .goreleaser.yaml` was EMPTY after all four runs
+performed this session, including the mutation — the generated-copy-only
+design held. `git status` additionally showed only the maintainer's own
+unrelated `.gitignore`/`.envrc` 1Password work, plus the `Taskfile.yml`
+and-list fix below, since committed as `775d4df`.
+
+### Defect found by this rehearsal, already fixed (`775d4df`)
+
+The FIRST real run exited `201` AFTER emitting a complete set of passing
+evidence lines, with no `::error::` printed. Root cause: `[ cond ] && VAR=x`
+as the LAST statement of a loop body. go-task runs `cmds:` through its own
+embedded shell (`mvdan.cc/sh`), not the system shell, and under `set -e`
+that interpreter treats a FALSE and-list in final position as fatal. The
+verdict-pass path is exactly the path where that condition is false — so
+the target aborted ON SUCCESS, silently, while the failure path printed its
+errors and also exited non-zero. The two outcomes were indistinguishable by
+exit code.
+
+Characterised empirically through `task` itself: and-list mid-block SAFE;
+and-list at top level SAFE; and-list last-in-loop FATAL. A plain `sh` run of
+the identical script exits `0` in all three positions, so the defect was
+invisible outside `task`. This is the SECOND instance in this repository of
+a bug that lives in the Taskfile wrapper and cannot be seen by running the
+same script in a normal shell — the first ate a Go template
+(`go list -f '{{.Version}}'`) and shipped v0.5.0 with zero assets.
+
+Fix (`775d4df`): the fatal site plus five latent siblings converted to
+`if`/`fi`, with the mechanism recorded in a `Taskfile.yml` comment.
+Re-verified after the fix: `PASS (mutate=0) exit 0` and
+`PASS (mutate=1) exit 0`.
+
+### Acknowledgement (checkpoint step 6)
+
+The maintainer explicitly read and accepted: the SLSA attestation leg of
+ROADMAP criterion 3 is produced by a GitHub Action that only runs in CI, so
+no local rehearsal can ever include the attested subject, and the
+five-point chain therefore closes for the first time only on the
+irreversible release in plan 02-07.
