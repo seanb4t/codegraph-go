@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -125,46 +126,120 @@ func listToolNames(t *testing.T, s *mcp.Server) []string {
 	return names
 }
 
+// allEightToolNames returns every tool name the default surface registers,
+// sorted — derived from exploreTool()/companionTool() via allToolNames()
+// rather than re-typed, so adding an eighth companion extends every
+// expectation below automatically instead of silently passing.
+func allEightToolNames(t *testing.T) []string {
+	t.Helper()
+	names := append([]string(nil), allToolNames()...)
+	sort.Strings(names)
+	return names
+}
+
+// TestDefaultToolVisibility pins the DEFAULT surface: CODEGRAPH_MCP_TOOLS
+// unset, an index present, all eight tools registered.
+//
+// This expectation was moved deliberately. It previously asserted exactly
+// [codegraph_explore] — the pre-inversion opt-in default — and passing it
+// through BuildServer with a hand-built empty map meant the test could not
+// see the default at all: it pinned BuildServer's behavior for one
+// particular map, while the actual default lived in serve.go's os.Getenv
+// call, untested. Routing through ResolveCompanions is the point of this
+// test, not a stylistic detail: this is the exact path production takes,
+// and the exact case the reported "the mcp server is only showing one tool"
+// bug landed on.
 func TestDefaultToolVisibility(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	s := BuildServer(true, map[string]bool{}, dir, dir)
+	// present=false is what os.LookupEnv reports for an unset variable.
+	companions, unknown := ResolveCompanions("", false)
+	if len(unknown) != 0 {
+		t.Fatalf("ResolveCompanions with the variable unset reported unknown names %v, want none", unknown)
+	}
+
+	s := BuildServer(true, companions, dir, dir)
 
 	got := listToolNames(t, s)
-	want := []string{"codegraph_explore"}
+	want := allEightToolNames(t)
+	if !equalStrings(got, want) {
+		t.Fatalf("registered tools = %v, want %v (default is every tool when CODEGRAPH_MCP_TOOLS is unset)", got, want)
+	}
+}
+
+// TestToolFilterNarrowsToNamedCompanions is the former TestAllowlist,
+// retargeted at narrowing semantics: a SET CODEGRAPH_MCP_TOOLS removes
+// every companion it does not name, rather than adding every companion it
+// does. The observable set for "node,status" is identical under both
+// contracts — which is exactly why this test alone cannot detect the
+// inversion, and why TestDefaultToolVisibility and
+// TestEmptyToolFilterNarrowsToExploreOnly are the two that can.
+func TestToolFilterNarrowsToNamedCompanions(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	companions, unknown := ResolveCompanions("node,status,bogus", true)
+
+	if !companions["node"] || !companions["status"] {
+		t.Fatalf("ResolveCompanions selected = %v, want node+status set", companions)
+	}
+	if companions["bogus"] {
+		t.Fatalf("ResolveCompanions selected contains unknown name %q", "bogus")
+	}
+	if len(unknown) != 1 || unknown[0] != "bogus" {
+		t.Fatalf("ResolveCompanions unknown = %v, want [bogus]", unknown)
+	}
+
+	var stderr bytes.Buffer
+	WarnToolFilterTo(&stderr, unknown, companions)
+	if !strings.Contains(stderr.String(), "bogus") {
+		t.Fatalf("WarnToolFilterTo did not mention %q, got %q", "bogus", stderr.String())
+	}
+	// The consequence half: naming what was ignored without naming what
+	// survived is what makes an all-typo'd value present as "the server is
+	// broken" rather than "I narrowed it too far". See WarnToolFilterTo.
+	if !strings.Contains(stderr.String(), "2 of 7") {
+		t.Fatalf("WarnToolFilterTo did not state the resulting surface (want %q in the output), got %q", "2 of 7", stderr.String())
+	}
+
+	s := BuildServer(true, companions, dir, dir)
+	got := listToolNames(t, s)
+	want := []string{"codegraph_explore", "codegraph_node", "codegraph_status"}
 	if !equalStrings(got, want) {
 		t.Fatalf("registered tools = %v, want %v", got, want)
 	}
 }
 
-func TestAllowlist(t *testing.T) {
+// TestEmptyToolFilterNarrowsToExploreOnly is the boundary neighbour the
+// inversion creates and the one case os.Getenv structurally cannot express:
+// a variable SET to the empty string narrows to codegraph_explore alone,
+// while the same empty VALUE with the variable unset registers all eight.
+// Both sub-cases run here, in one test, because the property being pinned
+// is the DIFFERENCE between them — asserting either alone would pass
+// against an implementation that ignored `present` entirely.
+func TestEmptyToolFilterNarrowsToExploreOnly(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	allowed, unknown := ParseAllowlist("node,status,bogus")
-
-	if !allowed["node"] || !allowed["status"] {
-		t.Fatalf("ParseAllowlist allowed = %v, want node+status set", allowed)
+	setEmpty, unknown := ResolveCompanions("", true)
+	if len(unknown) != 0 {
+		t.Fatalf("ResolveCompanions(\"\", true) reported unknown names %v, want none", unknown)
 	}
-	if allowed["bogus"] {
-		t.Fatalf("ParseAllowlist allowed contains unknown name %q", "bogus")
-	}
-	if len(unknown) != 1 || unknown[0] != "bogus" {
-		t.Fatalf("ParseAllowlist unknown = %v, want [bogus]", unknown)
+	if len(setEmpty) != 0 {
+		t.Fatalf("ResolveCompanions(\"\", true) selected %v, want no companions", setEmpty)
 	}
 
-	var stderr bytes.Buffer
-	WarnUnknownToolsTo(&stderr, unknown)
-	if !strings.Contains(stderr.String(), "bogus") {
-		t.Fatalf("WarnUnknownToolsTo did not mention %q, got %q", "bogus", stderr.String())
-	}
-
-	s := BuildServer(true, allowed, dir, dir)
-	got := listToolNames(t, s)
-	want := []string{"codegraph_explore", "codegraph_node", "codegraph_status"}
+	got := listToolNames(t, BuildServer(true, setEmpty, dir, dir))
+	want := []string{"codegraph_explore"}
 	if !equalStrings(got, want) {
-		t.Fatalf("registered tools = %v, want %v", got, want)
+		t.Fatalf("CODEGRAPH_MCP_TOOLS set to the empty string registered %v, want %v", got, want)
+	}
+
+	unset, _ := ResolveCompanions("", false)
+	gotUnset := listToolNames(t, BuildServer(true, unset, dir, dir))
+	if equalStrings(gotUnset, want) {
+		t.Fatalf("an UNSET CODEGRAPH_MCP_TOOLS registered the same set as one SET to the empty string (%v) — the present/absent distinction is being ignored, which is exactly the os.Getenv collapse this contract depends on avoiding", gotUnset)
 	}
 }
 
@@ -287,7 +362,8 @@ func equalStrings(a, b []string) bool {
 func TestIndexAppearingMidSessionRegistersTools(t *testing.T) {
 	dir := copyFixture(t) // deliberately NOT indexed yet
 
-	s := BuildServer(false, map[string]bool{}, dir, dir)
+	companions, _ := ResolveCompanions("", false) // the default surface
+	s := BuildServer(false, companions, dir, dir)
 
 	got := listToolNames(t, s)
 	if !equalStrings(got, nil) {
@@ -297,18 +373,22 @@ func TestIndexAppearingMidSessionRegistersTools(t *testing.T) {
 	indexFixture(t, dir)
 
 	got = listToolNames(t, s)
-	want := []string{"codegraph_explore"}
+	want := allEightToolNames(t)
 	if !equalStrings(got, want) {
 		t.Fatalf("registered tools after the index appears = %v, want %v", got, want)
 	}
 }
 
-// TestIndexAppearingMidSessionHonorsAllowlist proves the re-check
-// registers tools through the SAME allowlist gate construction-time
+// TestIndexAppearingMidSessionHonorsToolFilter proves the re-check
+// registers tools through the SAME narrowing filter construction-time
 // registration uses, rather than registering everything once an index is
-// merely present — the exact set the allowlist selects, in exact-set-
-// equality form, is the only acceptable outcome.
-func TestIndexAppearingMidSessionHonorsAllowlist(t *testing.T) {
+// merely present — the exact set the filter selects, in exact-set-
+// equality form, is the only acceptable outcome. Under the default-all
+// contract this test carries more weight than it did as
+// ...HonorsAllowlist: "register everything on transition" is now the
+// DEFAULT behavior, so a re-check that ignored the filter would look
+// correct in every other test in this file.
+func TestIndexAppearingMidSessionHonorsToolFilter(t *testing.T) {
 	dir := copyFixture(t) // deliberately NOT indexed yet
 
 	s := BuildServer(false, map[string]bool{"node": true, "status": true}, dir, dir)
@@ -334,10 +414,11 @@ func TestIndexDisappearingMidSessionUnregistersTools(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	s := BuildServer(true, map[string]bool{}, dir, dir)
+	companions, _ := ResolveCompanions("", false) // the default surface
+	s := BuildServer(true, companions, dir, dir)
 
 	got := listToolNames(t, s)
-	want := []string{"codegraph_explore"}
+	want := allEightToolNames(t)
 	if !equalStrings(got, want) {
 		t.Fatalf("registered tools = %v, want %v", got, want)
 	}
@@ -365,9 +446,10 @@ func TestRepeatedListsDoNotDuplicateTools(t *testing.T) {
 	dir := copyFixture(t)
 	indexFixture(t, dir)
 
-	s := BuildServer(true, map[string]bool{}, dir, dir)
+	companions, _ := ResolveCompanions("", false) // the default surface
+	s := BuildServer(true, companions, dir, dir)
 
-	want := []string{"codegraph_explore"}
+	want := allEightToolNames(t)
 	for i := 0; i < 3; i++ {
 		got := listToolNames(t, s)
 		if !equalStrings(got, want) {
@@ -383,14 +465,16 @@ func TestRepeatedListsDoNotDuplicateTools(t *testing.T) {
 // classic handshake, not newTestSession's Connect, is required here). The
 // index then appears on disk, and a SECOND classic initialize (a fresh
 // session, since go-sdk rejects a second "initialize" on the same
-// session) writes tools=1 — the re-check ran before this initialize's own
+// session) writes tools=8 — the re-check ran before this initialize's own
 // next() call, so the count reflects a live reading, not the
 // construction-time value the first line already proved was 0.
 func TestSessionLineReflectsPostAppearanceToolCount(t *testing.T) {
 	dir := copyFixture(t) // deliberately NOT indexed yet
 
+	companions, _ := ResolveCompanions("", false) // the default surface
+
 	var log bytes.Buffer
-	s := BuildServer(false, map[string]bool{}, dir, dir, WithSessionLog(&log))
+	s := BuildServer(false, companions, dir, dir, WithSessionLog(&log))
 
 	sendRawInitialize(t, s, "codegraph-mcp-test", "0.0.0")
 
@@ -415,7 +499,8 @@ func TestSessionLineReflectsPostAppearanceToolCount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseSessionLineFields(second line): %v", err)
 	}
-	if second["tools"] != "1" {
-		t.Fatalf("second session line tools = %q, want %q (post-appearance, not the construction-time 0)", second["tools"], "1")
+	wantTools := strconv.Itoa(len(allToolNames()))
+	if second["tools"] != wantTools {
+		t.Fatalf("second session line tools = %q, want %q (post-appearance, not the construction-time 0)", second["tools"], wantTools)
 	}
 }
