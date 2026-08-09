@@ -266,9 +266,44 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	if err := cmd.Start(); err != nil {
 		return Transcript{}, fmt.Errorf("wireoracle: scenario %q: start %s: %w", sc.Name, binPath, err)
 	}
-	defer func() {
-		_ = cmd.Wait()
-	}()
+	// join reaps the subprocess and — the load-bearing half — joins the
+	// goroutine os/exec spawned to copy the child's stderr pipe into
+	// stderrBuf. NOTHING ELSE joins that goroutine (syncBuffer's doc
+	// comment above says so), so every read of stderrBuf.String() must
+	// happen AFTER join returns or it reports a partial buffer.
+	//
+	// This replaces a deferred-only Wait, which is evaluated AFTER the
+	// return expression that reads stderrBuf — making Transcript.Stderr a
+	// race whose two directions fail very differently:
+	//
+	//   - LOUD: assertSessionLine wants exactly one "codegraph:
+	//     mcp-session" line and saw zero. Observed in CI as
+	//     TestFrozenTranscriptsMatch/toolslist-narrowed while the frozen
+	//     stdout comparison in the same subtest passed byte-for-byte —
+	//     stdout has its own explicitly drained StdoutPipe, so only the
+	//     stderr half could truncate. Passes 3/3 locally in isolation;
+	//     it needs CI scheduling pressure to lose the race.
+	//   - SILENT: assertNoSessionLine asserts stderr does NOT contain a
+	//     session line, which a truncated buffer satisfies VACUOUSLY. A
+	//     build that wrongly emitted the line before initialize would
+	//     still pass. That false GREEN is why this is fixed rather than
+	//     retried until green.
+	//
+	// Bounded by construction: cmd is built with exec.CommandContext on
+	// runCtx, so a child that never exits on stdin EOF is killed at the
+	// deadline and join cannot block past it.
+	var waitOnce sync.Once
+	join := func() { waitOnce.Do(func() { _ = cmd.Wait() }) }
+	defer join()
+
+	// killAndJoin kills the child and then joins, so a diagnostic that
+	// interpolates stderrBuf.String() reports the COMPLETE stderr instead
+	// of whatever had been copied at the moment things went wrong —
+	// precisely when the full text matters most.
+	killAndJoin := func() {
+		_ = cmd.Process.Kill()
+		join()
+	}
 
 	// The scanner goroutine and the response-draining bookkeeping start
 	// BEFORE the request-write loop (moved here from after it) precisely
@@ -325,7 +360,7 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 			select {
 			case ln, ok := <-lines:
 				if !ok {
-					_ = cmd.Process.Kill()
+					killAndJoin()
 					return fmt.Errorf("wireoracle: scenario %q: stdout closed after %d/%d responses; stderr:\n%s",
 						sc.Name, len(seen), len(wantIDs), stderrBuf.String())
 				}
@@ -338,7 +373,7 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 					methodsSeen[m] = true
 				}
 			case <-runCtx.Done():
-				_ = cmd.Process.Kill()
+				killAndJoin()
 				if wantMethod != "" {
 					return fmt.Errorf("wireoracle: scenario %q: capture deadline exceeded waiting for method %q; %d/%d responses observed; stderr:\n%s",
 						sc.Name, wantMethod, len(seen), len(wantIDs), stderrBuf.String())
@@ -356,25 +391,25 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	for i, req := range sc.Requests {
 		b, marshalErr := json.Marshal(req)
 		if marshalErr != nil {
-			_ = cmd.Process.Kill()
+			killAndJoin()
 			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: marshal request: %w", sc.Name, marshalErr)
 		}
 		if _, writeErr := stdin.Write(append(b, '\n')); writeErr != nil {
-			_ = cmd.Process.Kill()
+			killAndJoin()
 			return Transcript{}, fmt.Errorf("wireoracle: scenario %q: write request: %w", sc.Name, writeErr)
 		}
 
 		if sc.InitAfterRequest != 0 && i+1 == sc.InitAfterRequest {
 			reqID, ok := idAsFloat64(req["id"])
 			if !ok {
-				_ = cmd.Process.Kill()
+				killAndJoin()
 				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: InitAfterRequest=%d names a request with no usable id", sc.Name, sc.InitAfterRequest)
 			}
 			if err := drainUntil(&reqID, ""); err != nil {
 				return Transcript{}, err
 			}
 			if initOut, initErr := exec.CommandContext(runCtx, binPath, "init", workDir).CombinedOutput(); initErr != nil {
-				_ = cmd.Process.Kill()
+				killAndJoin()
 				return Transcript{}, fmt.Errorf("wireoracle: scenario %q: mid-session init %s: %w: %s", sc.Name, workDir, initErr, initOut)
 			}
 		}
@@ -391,13 +426,23 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 		}
 	}
 	if closeErr := stdin.Close(); closeErr != nil {
-		_ = cmd.Process.Kill()
+		killAndJoin()
 		return Transcript{}, fmt.Errorf("wireoracle: scenario %q: close stdin: %w", sc.Name, closeErr)
 	}
 
 	if err := drainUntil(nil, ""); err != nil {
 		return Transcript{}, err
 	}
+
+	// Join BEFORE building the Transcript — see join's doc comment. A
+	// deferred join would run AFTER this return expression evaluates
+	// stderrBuf.String(), which is exactly the bug. Transcript.Stderr
+	// documents itself as "the subprocess's complete captured stderr
+	// output"; this call is what makes that sentence true.
+	//
+	// drainUntil has already collected every response id this scenario
+	// expects into out, so nothing on the stdout side is still owed.
+	join()
 
 	return Transcript{
 		Stdout:  out.Bytes(),
