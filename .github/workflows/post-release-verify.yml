@@ -278,3 +278,74 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GH_TOKEN: ${{ github.token }}
         run: task verify:self-upgrade
+
+  # Re-fires SIGN-03's Gatekeeper gate — the SAME task verify:gatekeeper
+  # oracle plan 02-01 proved RED against v0.5.1's deliberately un-notarized
+  # assets (02-EVIDENCE.md) — against THIS release's published darwin
+  # assets, expecting the opposite verdict: accepted. Matrix over BOTH
+  # darwin architectures (D-19), fail-fast: false so one architecture's
+  # failure does not hide the other's. Unlike the notarized-suite job below,
+  # this job never EXECUTES the downloaded asset — spctl only ASSESSES it —
+  # so covering both architectures here carries none of that job's
+  # execution-under-translation risk.
+  #
+  # Deliberately does NOT declare needs: verify-supply-chain, mirroring the
+  # self-upgrade job's own independence rationale immediately above: a
+  # broken Gatekeeper verdict and a broken signature are independent
+  # evidence, and both should report on a bad release so neither masks the
+  # other. This job's independence is a DIFFERENT, and equally defensible,
+  # trade from that same-shaped choice: it assesses the file rather than
+  # executing it, so the tampered-artifact-execution ordering hazard
+  # T-02-19 exists to close for notarized-suite does not apply here.
+  gatekeeper:
+    name: "Gatekeeper verdict (darwin/${{ matrix.goarch }})"
+    needs: resolve-tag
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [arm64, amd64]
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Checked out AT the resolved tag, never the default branch tip
+          # (review concern codex HIGH): under workflow_run this workflow's
+          # own GITHUB_REF/GITHUB_SHA refer to the default branch, not the
+          # tag under verification (see this file's header comment).
+          # resolve-tag resolves which ASSETS to download; it says nothing
+          # about which TREE is checked out. Pinning here means the
+          # verify:gatekeeper Taskfile target this job invokes is the one
+          # that SHIPPED WITH this release, not whatever HEAD happens to be
+          # at verification time (release-matched-test checkout class —
+          # see TestPostReleaseJobsDeclareCheckoutPolicy).
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Assess Gatekeeper verdict on the published darwin/${{ matrix.goarch }} asset
+        env:
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          GH_TOKEN: ${{ github.token }}
+          # accepted: this is the post-release GREEN check (plan 02-06).
+          # The RED baseline (plan 02-01) used rejected against the
+          # deliberately un-notarized v0.5.1 assets and lives only in
+          # 02-EVIDENCE.md — that baseline is never re-run in CI, both
+          # because D-06/D-07 preserve v0.5.1's assets permanently for
+          # exactly this reason and because re-walking the release list to
+          # find it here would reintroduce the zero-asset/un-notarized
+          # release-walking hazard this job avoids entirely by resolving
+          # its asset ONLY from the validated $TAG.
+          GATEKEEPER_EXPECT: accepted
+        run: task verify:gatekeeper
