@@ -241,11 +241,12 @@ Standing decisions that outlive v1.0:
 
 ### Pending Todos
 
-1 pending — `/gsd-capture --list` to review.
+2 pending — `/gsd-capture --list` to review.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
 | 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
+| 2026-08-08 | agents | major | Author a codegraph usage skill for agents — closes the never-completed hand-off at `internal/agents/instructions.go:17-18`, which defers full tool guidance to an MCP initialize response that never carried it |
 
 Three earlier todos were resolved during v1.0 and filed to
 `.planning/todos/completed/` at milestone close:
