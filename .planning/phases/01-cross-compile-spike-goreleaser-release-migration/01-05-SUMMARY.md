@@ -48,30 +48,40 @@ key-decisions:
 patterns-established:
   - "Any future Taskfile target that needs 'the prior semver version below X, excluding drafts' resolves it via the drop-drafts -> parse -> filter-strictly-less-than -> stated-policy -> select-max jq pipeline this plan establishes in verify:self-upgrade, rather than gh release list's publication-chronology order."
 
-requirements-completed: []
-# REL-06 and REL-08 are explicitly NOT claimed complete by this SUMMARY.
-# Task 1 (the automated verification workflow itself) is built, statically
-# verified, and committed — but REL-06/REL-08's actual closure requires
-# Task 3 running the same claims against a REAL published release, which
-# requires Task 2's merge, which this dispatch was explicitly scoped NOT to
-# perform. See "Status" below.
+requirements-completed: [REL-06, REL-07, REL-08]
+# Closed against the REAL published v0.5.1, not a fixture. REL-06/REL-07 by
+# the asset-set + single-checksums-writer criteria; REL-08 by cosign
+# verify-blob, gh attestation verify, and a genuinely shipped v0.4.0 binary
+# self-upgrading byte-identically on BOTH darwin/arm64 and linux/amd64.
+# Evidence in "Task 3 — REL-08 Proven Against the Published Release".
 
-duration: ~70min
-completed: 2026-08-08
-status: halted
+duration: ~70min (Task 1) + release incident and recovery
+completed: 2026-08-09
+status: complete
 ---
 
 # Phase 1 Plan 5: Automated Post-Release Verification Workflow Summary
 
-**Task 1 complete and committed: a permanent, `workflow_run`-triggered `post-release-verify.yml` workflow plus two new Taskfile targets (`verify:release-assets`, `verify:self-upgrade`) that re-prove REL-06/REL-07/REL-08's supply-chain claims against a re-downloaded PUBLISHED release, automatically, on every future release. `task release:dry-run` re-confirmed clean on this darwin host post-01-04 (4 binaries, 4 zips, 1 checksums file, 4 SBOMs). Task 2 (the one-way `feat(release):` PR merge) and Task 3 (proving REL-08 against the real published release) were deliberately NOT executed — this SUMMARY reflects a halted, partial state and returns Task 2's checkpoint to the orchestrator for the maintainer's explicit merge decision.**
+**PLAN COMPLETE — all three tasks.** Task 1 built `post-release-verify.yml` plus the
+`verify:release-assets` and `verify:self-upgrade` Taskfile targets, which re-prove
+REL-06/REL-07/REL-08 against a re-downloaded PUBLISHED release on every future release. Task 2
+(the one-way merge) was performed by the maintainer: release-please cut **v0.5.0**, whose pipeline
+run **failed and published zero assets** on a Taskfile version-assertion bug, and then — after a
+patch-forward fix — **v0.5.1**, which succeeded with all 17 expected assets. Task 3 proved every
+REL-08 claim against v0.5.1's published assets: `cosign verify-blob` **Verified OK** under the
+unchanged cert identity, `gh attestation verify` green with a firing negative control, and a
+genuinely shipped v0.4.0 binary self-upgrading **byte-identically on both darwin/arm64 and
+linux/amd64**. This plan's own verifiers then failed on that good release; three false negatives
+were found and fixed, and the workflow re-dispatched green.
 
 ## Performance
 
-- **Duration:** ~70 min
+- **Duration:** ~70 min for Task 1, plus the v0.5.0 release incident and its patch-forward recovery
 - **Started:** 2026-08-08 (continuation-style dispatch; exact spawn time not captured)
-- **Completed:** 2026-08-08
-- **Tasks:** 1 of 3 completed (Task 2 is a blocking checkpoint returned to the orchestrator; Task 3 not attempted)
-- **Files modified:** 3 (1 created, 2 modified)
+- **Completed:** 2026-08-09
+- **Tasks:** 3 of 3 completed (Task 2's blocking checkpoint resolved by the maintainer's merge)
+- **Files modified:** 3 by the Task 1 dispatch (1 created, 2 modified), plus `Taskfile.yml` again in PRs #39 and #41 during recovery
+- **Releases produced:** v0.5.0 (FAILED — 0 assets, left as a permanent prerelease per D-07) and v0.5.1 (SUCCESS — 17 assets)
 
 ## Accomplishments
 
@@ -166,20 +176,159 @@ None beyond the two deviations documented above and the PR #35 `test` check flak
 
 None for Task 1. Task 2 requires the maintainer to review the prerequisite table above and perform the PR #35 merge by hand (agents are globally denied `gh pr merge`).
 
+## Task 2 — Publish: EXECUTED (maintainer merge, 2026-08-08/09)
+
+The maintainer merged PR #35. release-please parsed the `feat(release):` PR TITLE (squash-only,
+`squash_merge_commit_title=PR_TITLE`), computed the MINOR bump v0.4.0 → v0.5.0, opened release PR
+#38, and on its merge created the tag and Release. **D-06R held end to end: no human ran
+`git tag`, no `Release-As:` footer forced a version.**
+
+### The v0.5.0 incident — first execution of the `release:` pipe FAILED
+
+`release.yml` run 31284774340 failed and **published zero assets**. This plan's own text named
+the `release:` publish pipe as the single "UNEXERCISED, and unexercisable" surface; what actually
+broke was one layer out — the Taskfile guard wrapping the invocation, on the same unrehearsable
+path.
+
+**Root cause (a gate that could never PASS).** `task release:goreleaser` aborted on its own
+MAINT-03 assertion before `goreleaser release` ran:
+
+```
+resolved goreleaser reports version '2.17.1',
+want 'github.com/goreleaser/goreleaser/v2 v2.17.1'
+```
+
+Task renders every `cmds:` string through Go `text/template` **before the shell sees it**, so the
+literal `{{.Version}}` in `go list -f '{{.Version}}'` was consumed by *Task*, which has no
+`.Version` variable. It rendered empty → `go list -f ''` → go's default module format. The
+comparison could never be equal. Invisible outside Task (the same command in a plain shell prints
+`v2.17.1`), and this target runs only from `release.yml` on a tag push.
+
+**Blast radius contained:** the assertion precedes the release invocation, so nothing was built,
+signed, or uploaded. No partial or corrupt artifacts — just an empty Release.
+
+**Mitigation and recovery, D-07 respected throughout:**
+- `v0.5.0` marked **prerelease** (a flag edit, not a deletion) so `/releases/latest` fell back to
+  v0.4.0 — verified on BOTH paths `codegraph upgrade` uses: the API endpoint (→ v0.4.0, 14 assets)
+  and the `releases/latest` HTML redirect (→ `302 .../tag/v0.4.0`). `codegraph upgrade` never
+  stayed broken.
+- Fixed forward in PR #39 (`fix(release):`) — `go list -m` + `awk '{print $2}'`, no braces for
+  Task to eat. A **second latent bug** was caught on the other side of the comparison:
+  goreleaser-action's prebuilt binary reports `2.17.1` while the from-source fallback reports
+  `v2.17.1`, so normalizing only the pin would have gone green in CI and failed on every
+  contributor machine. Both sides are now v-stripped; a stale `2.16.0` is still rejected, proven
+  by negative control.
+- The tag and release were **never deleted or re-pushed**. v0.5.0 remains an empty prerelease
+  permanently, exactly as D-07 requires.
+
+### v0.5.1 — the migrated pipeline succeeded
+
+`release.yml` run 31285232766: **17 assets** — 4 raw binaries, 4 `.zip`, 4 `.sigstore.json`,
+4 `.spdx.json`, 1 `codegraph_v0.5.1_checksums.txt`. The sign/SBOM name-collision fix held under
+**real keyless OIDC**, not just plan 01-06's throwaway-key rehearsal.
+
+## Task 3 — REL-08 Proven Against the Published Release
+
+All claims verified against **re-downloaded published assets**, never a local `dist/` copy.
+Verified twice and independently: once by hand by the orchestrator, and once by the automated
+`post-release-verify` workflow (run 31285981504, all four jobs green).
+
+**REL-08 (a) — cosign, under the UNCHANGED certificate identity:**
+
+```
+cosign verify-blob \
+  --bundle codegraph_v0.5.1_linux_amd64.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+  codegraph_v0.5.1_linux_amd64
+→ Verified OK
+```
+
+The regex is byte-identical to the pre-migration one. **The collapse from three jobs to one did
+not move the cosign SAN (D-11a).**
+
+**REL-08 (b) — provenance via the native attestor:**
+
+`gh attestation verify codegraph_v0.5.1_linux_amd64 --repo seanb4t/codegraph-go` → exit 0,
+`predicateType: https://slsa.dev/provenance/v1`. Negative control (a file with no attestation)
+correctly exits 1 with HTTP 404, so the check demonstrably fires.
+
+Note: verifying the **checksums file** 404s by design — `subject-checksums:` makes the binaries
+listed *inside* it the attestation subjects; the file itself is never a subject. Plan 01-04's doc
+rewrite records this correctly, closing the drift tracked in issue #14.
+
+**REL-08 (c) — a genuinely shipped prior binary self-upgrades, both arches:**
+
+```
+SELF-UPGRADE-EVIDENCE goos=darwin goarch=arm64 prior_tag=v0.4.0
+  prior_sha256=c05378829d9493716ee7c7fb460e05d3b34815d3061fb833ac40806f068a1c09
+  upgraded_sha256=69325c30b8b5768dd226472ed31da8e30c1289b877a447fd59f808a6c997764d
+  published_sha256=69325c30b8b5768dd226472ed31da8e30c1289b877a447fd59f808a6c997764d
+
+SELF-UPGRADE-EVIDENCE goos=linux goarch=amd64 prior_tag=v0.4.0
+  prior_sha256=655ab31c91ac8d416dba540da4a683ad66e6e689e5ebe8f0e8757b54111c9d2a
+  upgraded_sha256=baafd6dcdeb9f9be76d3228d6160c7e39808f00939e5761300e40ddda36867fa
+  published_sha256=baafd6dcdeb9f9be76d3228d6160c7e39808f00939e5761300e40ddda36867fa
+```
+
+A v0.4.0 binary built by the **old** pipeline upgraded itself to v0.5.1 built by the **new** one,
+byte-identically. The three-part runtime contract (asset name, sidecar name, cert SAN) survives
+the migration boundary intact.
+
+**REL-06 / REL-07 — asset-set and single checksum writer:**
+
+| Property | Observed |
+|---|---|
+| Payloads covered by checksums | 8 (4 raw + 4 `.zip`) |
+| Sidecars in checksums | 0 |
+| Self-reference | none |
+| Duplicate entries | none |
+| Published payloads uncovered | none |
+| Total published | 17 = 8 payloads + 8 sidecars + 1 checksums |
+
+**Tag binding:** `TAG-EVIDENCE tag=v0.5.1 tag_commit=4fe18c9a8b5bcb655fd384d4201ee04c96472af9
+source=dispatch` — resolved and validated, never assumed.
+
+### Three false negatives in this plan's own verifiers, found by their first real run
+
+`post-release-verify` FAILED on v0.5.1 — a release whose claims all verify by hand. Fixed in
+PR #41 (`ci(release):`, typed so it cuts no release):
+
+1. **`verify:release-assets` never downloaded the cosign bundle.** It fetched checksums, raw and
+   `.zip` payloads, then handed cosign a `.sigstore.json` path that was never fetched. Fixed by
+   downloading it into a **separate** temp dir — `DL_DIR`'s listing is itself the set-equality
+   assertion, so adding a sidecar there would have traded one failure for another.
+2. **`verify:self-upgrade` judged "stable" by semver suffix alone.** `v0.5.0` has no suffix, so
+   `select(.pre == "")` read it as stable and chose it as v0.5.1's predecessor — despite being
+   API-flagged prerelease *because* it shipped empty. Now requires no suffix AND
+   `.prerelease == false`.
+3. **`verify:self-upgrade` did not skip zero-asset releases.** It already dropped drafts as
+   "no downloadable asset"; the identical reasoning was never extended to empty releases.
+
+Defects 2 and 3 were only reachable *because* v0.5.0 exists as an empty release — which D-07
+guarantees is permanent, so they had to be handled rather than waited out.
+
+After the fix, `post-release-verify` was **dispatched** against v0.5.1 (run 31285981504) and all
+four jobs passed. That dispatch also exercised the event-aware guard cycle-2 review flagged: under
+`workflow_dispatch`, `github.event.workflow_run` is null, so an unconditional conclusion test
+would have made every job SKIP silently. The jobs ran — the guard is correct.
+
 ## Next Phase Readiness
 
-**This plan is NOT complete.** Task 1 is done, committed, and its own `<verify>`/acceptance criteria pass in full for everything checkable without a real release. Task 2 is a blocking `checkpoint:decision` returned to the orchestrator, unresolved. Task 3 is blocked on Task 2 and was not attempted.
+**This plan is COMPLETE.** All three tasks executed; REL-06, REL-07 and REL-08 closed against a
+real published release.
 
-**REL-06 and REL-08 are NOT claimed complete by this plan.** The automated verification MACHINERY exists and is statically correct, but its claims are only proven once it runs against a real published release (Task 3), which requires Task 2's merge. Do not mark REL-06/REL-08 satisfied in `.planning/REQUIREMENTS.md` on the strength of this SUMMARY alone.
-
-**What downstream work needs:**
-- A human must review the Task 2 prerequisite table above, resolve the noted `test` check flake (re-run CI, or confirm it is the known pre-existing flake and proceed), and merge PR #35 by hand.
-- Once merged and `release.yml` fires, `post-release-verify.yml` will fire automatically via `workflow_run` and produce the evidence Task 3 needs to collect (asset list, checksums, `cosign verify-blob` output, attestation output, both self-upgrade legs' three sha256 values, `TAG-EVIDENCE`/`PRIOR-RELEASE` lines).
-- A fresh executor dispatch should then run Task 3: gather that evidence, fill in `docs/RELEASE.md` § b's cutover-tag placeholder, and close the phase.
+**Carry into Phase 2 — the SIGN-03 baseline moved:**
+- Phase 2's un-notarized-darwin RED baseline must come from **v0.5.1**, NOT v0.5.0. v0.5.0 has
+  zero assets and cannot serve as a baseline for anything. `codegraph_v0.5.1_darwin_arm64` and
+  `codegraph_v0.5.1_darwin_amd64` are the deliberately un-notarized artifacts; do not replace them.
+- `v0.5.0` remains a permanent empty prerelease. Any tooling that enumerates releases must
+  tolerate it — `verify:self-upgrade` now does, and future release-walking code should follow that
+  precedent rather than rediscovering it.
 
 ---
 *Phase: 01-cross-compile-spike-goreleaser-release-migration*
-*Halted: 2026-08-08 (Task 1 of 3 complete; Task 2 returned as a blocking checkpoint)*
+*Completed: 2026-08-09 (all 3 tasks; REL-06/REL-07/REL-08 proven against published v0.5.1)*
 
 ## Self-Check: PASSED
 

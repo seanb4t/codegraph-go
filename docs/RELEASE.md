@@ -73,10 +73,22 @@ resolves to the same workflow file and tag ref it always has.
 
 ### b) Verify build provenance
 
-Releases from **`<first-migrated-release-tag>`** onward (this section will
-name the exact tag once plan 01-05 has cut it) are attested by GitHub's
-first-party `actions/attest-build-provenance`, published through GitHub's
-Attestations API — not as a downloadable `.intoto.jsonl` release asset.
+Releases from **`v0.5.1`** onward are attested by GitHub's first-party
+`actions/attest-build-provenance`, published through GitHub's Attestations
+API — not as a downloadable `.intoto.jsonl` release asset.
+
+> `v0.5.1`, not `v0.5.0`, is the first migrated release. `v0.5.0` was tagged
+> but published **zero assets**: its pipeline aborted on a Taskfile version
+> assertion before `goreleaser release` ran. Per D-07 the tag and release were
+> left in place (patch forward, never delete or re-push) and `v0.5.0` is
+> marked prerelease so `/releases/latest` skips it. There is nothing to verify
+> at `v0.5.0` — it has no assets.
+
+Note the attestation's **subjects are the binaries**, not the checksums file.
+`subject-checksums:` feeds `actions/attest-build-provenance` the list of
+subjects to attest; the file transporting that list is never itself a subject.
+Verifying `codegraph_<tag>_checksums.txt` therefore returns HTTP 404 — that is
+correct behavior, not a missing attestation.
 Verify with the `gh` CLI, already installed if you use GitHub at all:
 
 ```sh
