@@ -25,18 +25,105 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 )
 
-// binPath is the absolute path to the real codegraph binary TestMain
-// builds once per `go test` run (D-18) — every test in this package reads
-// it; the harness never relies on a pre-built artifact or a PATH lookup.
+// binPath is the absolute path to the codegraph binary every test in this
+// package spawns — either freshly built from source by TestMain, or an
+// externally supplied binary named by the testBinEnvVar environment
+// variable (see resolveTestBinPath's doc comment for the resolution
+// contract). Never silently the wrong one: TestMain aborts by name rather
+// than falling back to a build when the override is set but invalid.
 var binPath string
 
-// TestMain builds the real release binary hermetically, once, into a
-// package-level temp dir before any test in this package runs. This
-// harness's entire value proposition is testing the REAL production
-// binary (D-18/D-19), so a build failure is a hard stop — it prints the
-// build output and os.Exit(1) rather than letting every test silently
-// skip or fail with a confusing "file not found".
+// testBinEnvVar is the environment variable name that lets this harness
+// run against an externally supplied binary instead of building one from
+// source: CODEGRAPH_TEST_BIN. Defined once so the literal appears exactly
+// twice in this package — this doc comment and the assignment below.
+const testBinEnvVar = "CODEGRAPH_TEST_BIN"
+
+// resolveTestBinPath resolves the raw value of the testBinEnvVar
+// environment variable into a usable binary path. It is a pure function —
+// no os.Getenv, no os.Exit, no writes — specifically so it is a table
+// test's ideal subject; TestMain is the only caller that touches the
+// environment or the process exit code.
+//
+// Contract: for a non-empty raw value there are exactly two outcomes —
+// (path, true, nil): the override is valid, use it; or ("", false, err):
+// the override is invalid, abort by name. There is no third outcome: no
+// input returns useEnv=true together with a non-nil error, and no
+// non-empty input returns useEnv=false with a nil error. That absence is
+// the property that forbids a silent fallback to a local `go build` on a
+// bad override — a fallback here would let a job claiming to test the
+// notarized release binary quietly test a locally rebuilt one instead.
+//
+// The checks below are STAT-LEVEL only: they confirm raw exists, is a
+// regular file, and carries at least one UNIX execute-permission bit
+// (owner, group, or other) — never that it is a valid,
+// architecture-compatible executable. This is deliberate, not an
+// oversight: this repository's harnesses target macOS and Linux only, so
+// UNIX mode semantics are the correct and only check to make here. A mode
+// bit proves neither architecture compatibility nor that the file is a
+// valid Mach-O/ELF; the real "does this binary actually run on this
+// machine" question is answered by the test suite itself failing, which
+// under ROADMAP criterion 4 is exactly the signal wanted — a
+// hardened-runtime library-validation failure should surface as a test
+// failure, not be pre-empted by a probe-execute here (which would be a
+// redundant surface and a foot-gun in a path that also handles untrusted
+// downloads).
+func resolveTestBinPath(raw string) (path string, useEnv bool, err error) {
+	if raw == "" {
+		return "", false, nil
+	}
+
+	info, statErr := os.Stat(raw)
+	if statErr != nil {
+		return "", false, fmt.Errorf("%s=%q: %w", testBinEnvVar, raw, statErr)
+	}
+	if info.IsDir() {
+		return "", false, fmt.Errorf("%s=%q: not a regular file (is a directory)", testBinEnvVar, raw)
+	}
+	if !info.Mode().IsRegular() {
+		return "", false, fmt.Errorf("%s=%q: not a regular file", testBinEnvVar, raw)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		return "", false, fmt.Errorf("%s=%q: not executable (no execute permission bit set)", testBinEnvVar, raw)
+	}
+
+	abs, absErr := filepath.Abs(raw)
+	if absErr != nil {
+		return "", false, fmt.Errorf("%s=%q: resolve absolute path: %w", testBinEnvVar, raw, absErr)
+	}
+	return abs, true, nil
+}
+
+// TestMain resolves the testBinEnvVar override first (see
+// resolveTestBinPath). When unset, it builds the real release binary
+// hermetically, once, into a package-level temp dir before any test in
+// this package runs — this harness's entire value proposition is testing
+// the REAL production binary (D-18/D-19), so a build failure is a hard
+// stop. When set and valid, it runs every test against that externally
+// supplied binary instead — no temp dir is created, no build runs, and
+// nothing this harness did not create is cleaned up. When set and
+// invalid, TestMain aborts before creating a temp dir, before building,
+// and before running a single test: it prints a message naming the
+// environment variable and the offending path to stderr and exits
+// non-zero.
+//
+// This deliberately inverts the skip-when-absent policy
+// internal/upgrade/verify_release_e2e_test.go's e2eArtifactPaths
+// established for a missing artifact: that test tolerates absence because
+// a skipped signature check is honest, whereas this harness silently
+// rebuilding from source on a bad override would report a pass for bytes
+// nobody shipped — the opposite of honest.
 func TestMain(m *testing.M) {
+	resolved, useEnv, err := resolveTestBinPath(os.Getenv(testBinEnvVar))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "integration: TestMain:", err)
+		os.Exit(1)
+	}
+	if useEnv {
+		binPath = resolved
+		os.Exit(m.Run())
+	}
+
 	tmpDir, err := os.MkdirTemp("", "codegraph-integration-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "integration: TestMain: MkdirTemp: %v\n", err)
