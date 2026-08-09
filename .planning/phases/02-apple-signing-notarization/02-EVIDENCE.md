@@ -152,6 +152,28 @@ both carry the digest.
 
 ## D-19 — the oracle, and the gate that could never have passed
 
+**The four checks that feel like verification and are not** (PROJECT.md Key
+Decisions), each explicitly recorded as insufficient, for a self-contained
+record:
+
+1. **A green CI step.** This entire phase exists because green CI never
+   proved Gatekeeper trust — nothing in `release.yml` or `ci.yml` has ever
+   run `spctl` against a real, quarantined, published asset before this
+   plan.
+2. **`codesign -dvv` passing.** Measured (Phase 1 background, ROADMAP.md
+   Phase 2 Notes) to already pass TODAY on the un-notarized, adhoc-signed
+   darwin/arm64 binary that this plan's own RED observation (below) shows
+   `spctl -a -vv -t install` rejects — it answers "is this signed," not
+   "does Gatekeeper trust this."
+3. **`notarytool history` showing Accepted.** Reports on Apple's notary
+   service accepting a submission, not on what a locally-quarantined
+   Gatekeeper install-time check does with the resulting binary — the two
+   are different questions, and this plan's oracle answers the second one.
+4. **`spctl` on a file that was never quarantined.** Recorded explicitly in
+   this document as the "Pre-xattr control (NON-EVIDENCE)" subsection above,
+   for both darwin arches — the observation that makes this insufficiency
+   visible rather than silently conflated with the real verdict.
+
 **Positive controls** (a notarized subject accepted, exit 0) — TWO
 independent vendors, both re-measured against this repo's exact SYNTHETIC
 quarantine value (`0081;6a78a6d5;Safari;399D5E8C-4C3A-4491-9A41-725818DF9851`),
