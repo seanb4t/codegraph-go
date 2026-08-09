@@ -20,9 +20,14 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
-// codegraphMCPToolsEnv is the operator allowlist env var (D-08a, MCP-02):
-// a comma-separated list of companion tool names to register alongside
-// the always-visible codegraph_explore.
+// codegraphMCPToolsEnv is the operator NARROWING filter (D-08a, MCP-02): a
+// comma-separated list of companion tool names. All eight tools register by
+// default; setting this variable narrows the surface to the companions it
+// names, plus the always-visible codegraph_explore. Setting it to the empty
+// string narrows to codegraph_explore alone.
+//
+// Read with os.LookupEnv, never os.Getenv — see mcp.ResolveCompanions for
+// why "unset" and "set to empty" must answer differently here.
 const codegraphMCPToolsEnv = "CODEGRAPH_MCP_TOOLS"
 
 // serveServerPaths computes BuildServer's two DELIBERATELY DISTINCT
@@ -171,7 +176,30 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the codegraph MCP server",
-		Args:  cobra.NoArgs,
+		Long: `Run the codegraph MCP server over stdio.
+
+All eight tools are exposed by default: codegraph_explore plus the seven
+companions (node, search, callers, callees, impact, files, status).
+
+Set CODEGRAPH_MCP_TOOLS to expose fewer — a smaller tool surface leaves more
+of an agent's context for the work. It is a NARROWING filter, not an
+allowlist: leaving it unset gives you all eight, and setting it removes every
+companion it does not name. Unrecognized names are ignored with a warning on
+stderr. codegraph_explore is always present and cannot be filtered out.
+
+A repository with no .codegraph/ index exposes zero tools; the server still
+starts and completes the MCP handshake, so agents fall back to their built-ins
+instead of the connection being refused. Run codegraph init to fix that — the
+tools appear on the next request, with no client restart.`,
+		Example: `  # all eight tools (the default)
+  codegraph serve --mcp
+
+  # explore + node + status only
+  CODEGRAPH_MCP_TOOLS=node,status codegraph serve --mcp
+
+  # codegraph_explore alone
+  CODEGRAPH_MCP_TOOLS= codegraph serve --mcp`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !mcpMode {
 				return fmt.Errorf("codegraph serve: --mcp is required (stdio is the only supported transport)")
@@ -237,8 +265,14 @@ func newServeCmd() *cobra.Command {
 				<-watchStartDone
 			}()
 
-			allowlist, unknown := mcp.ParseAllowlist(os.Getenv(codegraphMCPToolsEnv))
-			mcp.WarnUnknownToolsTo(cmd.ErrOrStderr(), unknown)
+			// os.LookupEnv, not os.Getenv: an UNSET variable means "register
+			// all eight tools" while a variable SET to the empty string means
+			// "register codegraph_explore alone". os.Getenv returns "" for
+			// both, so reading it here would silently reinstate the
+			// pre-inversion explore-only default for every user on earth.
+			rawFilter, filterSet := os.LookupEnv(codegraphMCPToolsEnv)
+			companions, unknown := mcp.ResolveCompanions(rawFilter, filterSet)
+			mcp.WarnToolFilterTo(cmd.ErrOrStderr(), unknown, companions)
 
 			// CR-01: repoPath (the RESOLVED index root) is the confinement
 			// root; start (the caller's actual cwd, captured above BEFORE
@@ -251,10 +285,10 @@ func newServeCmd() *cobra.Command {
 			//
 			// SDK-02: bootstraps entirely through the mcp.Server seam —
 			// this file names no MCP SDK package. cmd.ErrOrStderr() is
-			// already this file's stderr idiom (mcp.WarnUnknownToolsTo
+			// already this file's stderr idiom (mcp.WarnToolFilterTo
 			// above uses it too); VRFY-03's always-on session line rides
 			// the same writer.
-			s := mcp.NewStdioServer(hasIndex, allowlist, repoPath, start, cmd.ErrOrStderr())
+			s := mcp.NewStdioServer(hasIndex, companions, repoPath, start, cmd.ErrOrStderr())
 			return s.ServeStdio()
 		},
 	}

@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -249,7 +250,7 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 
 	cmd := exec.CommandContext(runCtx, binPath, "serve", "--mcp")
 	cmd.Dir = workDir
-	cmd.Env = append(os.Environ(), append([]string{"CODEGRAPH_NO_WATCH=1"}, sc.Env...)...)
+	cmd.Env = append(hermeticEnviron(), append([]string{"CODEGRAPH_NO_WATCH=1"}, sc.Env...)...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -403,6 +404,44 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 		Stderr:  stderrBuf.String(),
 		RepoDir: workDir,
 	}, nil
+}
+
+// captureScrubbedEnvVars names environment variables Capture strips from
+// the inherited environment before applying a scenario's own Env, so a
+// scenario that declares nothing genuinely runs with the variable UNSET
+// rather than with whatever the capturing developer happens to export.
+//
+// This exists because CODEGRAPH_MCP_TOOLS inverted from an opt-in allowlist
+// to an opt-out narrowing filter. Under the old semantics an inherited value
+// could only ADD companions, and every scenario that cared named the
+// variable explicitly. Under the new semantics the DEFAULT surface is
+// defined by the variable's ABSENCE — so a developer with it exported (the
+// most likely person to have it exported is whoever just finished debugging
+// tool visibility) would capture a narrowed transcript for toolslist-default
+// and freeze the wrong bytes, with no test able to tell that apart from a
+// real regression.
+var captureScrubbedEnvVars = []string{"CODEGRAPH_MCP_TOOLS"}
+
+// hermeticEnviron returns os.Environ() minus every captureScrubbedEnvVars
+// entry. A scenario that wants one of them set says so in its own Env, which
+// is appended afterwards and therefore wins (os/exec keeps the last
+// occurrence of a duplicated key).
+func hermeticEnviron() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		scrub := false
+		for _, name := range captureScrubbedEnvVars {
+			if strings.HasPrefix(kv, name+"=") {
+				scrub = true
+				break
+			}
+		}
+		if !scrub {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
 
 // copyTree copies src into dst, preserving directory structure. Lifted

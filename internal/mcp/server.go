@@ -53,51 +53,112 @@ const version = "0.1.0"
 // since the value is JSON-encoded into every one of those transcripts and
 // an embedded newline would become an escape sequence that makes each such
 // diff harder to read.
-const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. Every tool accepts an optional path argument; omitting it uses this server's own working directory. An empty tool list means this repository has no index yet, so run codegraph init to fix it, not that the server is broken. Tools appear automatically once an index exists, with no client restart required."
+const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. Every tool accepts an optional path argument; omitting it uses this server's own working directory. All eight tools register by default and appear automatically once an index exists, with no client restart required; an empty tool list means this repository has no index yet, so run codegraph init. Setting CODEGRAPH_MCP_TOOLS narrows the surface to the companions it names."
 
 // companionNames is the fixed vocabulary of the 7 tools CODEGRAPH_MCP_TOOLS
-// may allowlist (D-08a, MCP-02) — codegraph_explore is not in this list
-// because it is always visible when hasIndex is true (MCP-01) and is
-// never gated by the allowlist.
+// may narrow the surface to — codegraph_explore is not in this list because
+// it is always visible when hasIndex is true and is never removable by the
+// filter.
 var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "status"}
 
-// ParseAllowlist splits the CODEGRAPH_MCP_TOOLS env value on commas,
-// trims whitespace around each entry, and classifies each non-empty
-// name against companionNames (D-08a/MCP-02). Recognized names are
-// returned in allowed (allowed[name] == true); unrecognized names are
-// returned in unknown, in the order they were seen, for the caller to
-// warn about via WarnUnknownToolsTo — ParseAllowlist itself never writes
-// output or aborts, so an unknown name can never fail startup (MCP-02:
-// "unknown names ignored with a stderr warning").
-func ParseAllowlist(env string) (allowed map[string]bool, unknown []string) {
-	allowed = make(map[string]bool)
+// ResolveCompanions decides which of the 7 companion tools register,
+// from the raw CODEGRAPH_MCP_TOOLS value and whether that variable was SET
+// AT ALL. It is the ONE place the default lives; BuildServer knows only
+// "here is the companion set", never how it was derived.
+//
+// present is load-bearing and MUST come from os.LookupEnv — never from a
+// `value != ""` test. Under narrowing semantics "unset" and "set to the
+// empty string" are two DIFFERENT answers (all 7 companions vs none), and
+// os.Getenv collapses them into the same empty string. That collapse is the
+// single most fragile point of this inversion, which is why the distinction
+// is a parameter rather than an inference.
+//
+// Semantics (superseding the pre-inversion opt-in allowlist, which made
+// codegraph_explore the only default-visible tool and required the operator
+// to name every companion they wanted):
+//
+//   - unset            => all 7 companions register (8 tools total)
+//   - "node,status"    => only those 2 register (3 tools total)
+//   - ""               => no companion registers (explore only) — the
+//     pre-inversion default, still reachable, now by
+//     explicit operator action rather than by accident
+//
+// An index must still resolve for ANY tool to register; nothing here
+// overrides MCP-03's zero-tools-without-.codegraph/ rule, which BuildServer
+// enforces via hasIndex.
+func ResolveCompanions(value string, present bool) (companions map[string]bool, unknown []string) {
+	if !present {
+		companions = make(map[string]bool, len(companionNames))
+		for _, name := range companionNames {
+			companions[name] = true
+		}
+		return companions, nil
+	}
+	return ParseToolFilter(value)
+}
+
+// ParseToolFilter splits a SET CODEGRAPH_MCP_TOOLS value on commas, trims
+// whitespace around each entry, and classifies each non-empty name against
+// companionNames. Recognized names are returned in selected
+// (selected[name] == true); unrecognized names are returned in unknown, in
+// the order they were seen, for the caller to warn about via
+// WarnToolFilterTo — ParseToolFilter itself never writes output or aborts,
+// so an unknown name can never fail startup (MCP-02: "unknown names ignored
+// with a stderr warning").
+//
+// Callers should not reach for this directly: ResolveCompanions is the seam
+// that knows an UNSET variable means something entirely different from an
+// empty one. This function only ever sees the set case.
+func ParseToolFilter(value string) (selected map[string]bool, unknown []string) {
+	selected = make(map[string]bool)
 	known := make(map[string]bool, len(companionNames))
 	for _, n := range companionNames {
 		known[n] = true
 	}
 
-	for _, raw := range strings.Split(env, ",") {
+	for _, raw := range strings.Split(value, ",") {
 		name := strings.TrimSpace(raw)
 		if name == "" {
 			continue
 		}
 		if known[name] {
-			allowed[name] = true
+			selected[name] = true
 			continue
 		}
 		unknown = append(unknown, name)
 	}
-	return allowed, unknown
+	return selected, unknown
 }
 
-// WarnUnknownToolsTo writes one stderr-style warning line per unknown
-// allowlist name to w. Diagnostics never go to stdout — stdout is
-// reserved for the MCP JSON-RPC transport (T-03-07-Leak) — so callers
-// must pass os.Stderr, never os.Stdout, in production.
-func WarnUnknownToolsTo(w io.Writer, unknown []string) {
+// WarnToolFilterTo writes one stderr-style warning line per unrecognized
+// filter name to w, followed by ONE line stating the resulting surface.
+// Diagnostics never go to stdout — stdout is reserved for the MCP JSON-RPC
+// transport (T-03-07-Leak) — so callers must pass os.Stderr, never
+// os.Stdout, in production.
+//
+// The consequence line is not decoration. Under the pre-inversion opt-in
+// allowlist a typo cost exactly the mistyped tool: the operator was ADDING,
+// so the loss showed up as "the thing I asked for is missing", blast radius
+// one. Under narrowing semantics a value whose names are ALL typos narrows
+// the surface to codegraph_explore alone — blast radius seven, presenting as
+// the exact "the MCP server is only showing one tool" symptom this contract
+// was rewritten to eliminate. Naming what was ignored without naming what
+// survived leaves the operator to work that out themselves.
+//
+// Deliberately NOT fatal: MCP-02 requires unknown names be ignored with a
+// warning, and failing startup over one typo would take down a working
+// server. Equally deliberately NOT a silent fallback to the default set —
+// that would make a fully-typo'd value indistinguishable from a considered
+// choice to narrow.
+func WarnToolFilterTo(w io.Writer, unknown []string, companions map[string]bool) {
+	if len(unknown) == 0 {
+		return
+	}
 	for _, name := range unknown {
 		fmt.Fprintf(w, "codegraph mcp: unknown tool name %q in CODEGRAPH_MCP_TOOLS, ignoring\n", name)
 	}
+	fmt.Fprintf(w, "codegraph mcp: CODEGRAPH_MCP_TOOLS narrows the tool surface to the names it lists; after ignoring %d unrecognized name(s), %d of %d companion tools will register alongside codegraph_explore. Unset the variable entirely to register all %d tools.\n",
+		len(unknown), len(companions), len(companionNames), len(companionNames)+1)
 }
 
 // Server is SDK-02's narrow seam: the entire surface internal/cli needs to
@@ -325,22 +386,22 @@ func WithSessionLog(w io.Writer) Option {
 // not merely unlikely. Callers that genuinely want the line suppressed
 // (there is no such production caller today) must pass io.Discard
 // explicitly — a deliberate, greppable opt-out, never a nil default.
-func NewStdioServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath string, sessionLog io.Writer) Server {
+func NewStdioServer(hasIndex bool, companions map[string]bool, repoPath, startPath string, sessionLog io.Writer) Server {
 	if sessionLog == nil {
 		panic("mcp.NewStdioServer: sessionLog must not be nil — pass io.Discard to explicitly opt out of the always-on VRFY-03 session line")
 	}
-	s := BuildServer(hasIndex, allowlist, repoPath, startPath, WithSessionLog(sessionLog))
+	s := BuildServer(hasIndex, companions, repoPath, startPath, WithSessionLog(sessionLog))
 	return &goSDKServer{inner: s}
 }
 
 // allToolNames returns codegraph_explore's name plus all 7 companion tool
-// names (regardless of allowlist), derived from exploreTool() and
+// names (regardless of the filter), derived from exploreTool() and
 // companionTool(name) rather than re-typed string literals — the single
 // source registerTools and unregisterTools both read from, so the set a
 // re-check registers and the set it unregisters can never drift apart.
 // unregisterTools passes this whole set to (*mcp.Server).RemoveTools
 // unconditionally; RemoveTools is documented as a no-op for a name that
-// was never registered (e.g. a companion the allowlist never selected),
+// was never registered (e.g. a companion a narrowing filter excluded),
 // so removing more names than were ever added is always safe.
 func allToolNames() []string {
 	names := make([]string, 0, 1+len(companionNames))
@@ -351,15 +412,19 @@ func allToolNames() []string {
 	return names
 }
 
-// registerTools registers codegraph_explore plus every allowlisted
-// companion tool against s and returns the number of tools registered.
+// registerTools registers codegraph_explore plus every selected companion
+// tool against s and returns the number of tools registered.
 // This is SPEC-05's single registration seam (D-05): BuildServer's
 // construction-time call and the per-request re-check inside
 // AddReceivingMiddleware both go through this exact function, so
 // "what the catalog contains" can never diverge between the two call
 // sites. detector is the one gitmeta.CachingDetector constructed per
 // server (D-13) — this function never constructs its own.
-func registerTools(s *mcp.Server, allowlist map[string]bool, repoPath, startPath string, detector *gitmeta.CachingDetector) int {
+//
+// Iteration order is companionNames', never the map's — a Go map range is
+// randomized per run, and this function's call order is what determines the
+// registration order a tools/list response echoes back.
+func registerTools(s *mcp.Server, companions map[string]bool, repoPath, startPath string, detector *gitmeta.CachingDetector) int {
 	count := 0
 
 	// WR-04 (02-REVIEW-2.md): exploreHandler/companionHandler's parameter
@@ -368,7 +433,7 @@ func registerTools(s *mcp.Server, allowlist map[string]bool, repoPath, startPath
 	mcp.AddTool(s, exploreTool(), exploreHandler(repoPath, startPath, detector))
 	count++
 	for _, name := range companionNames {
-		if allowlist[name] {
+		if companions[name] {
 			companionHandler(s, name, repoPath, startPath, detector)
 			count++
 		}
@@ -389,8 +454,14 @@ func unregisterTools(s *mcp.Server) {
 // conditional tool registration (D-08a, Pattern 3): hasIndex gates
 // whether ANY tool is registered at all (MCP-03 — zero tools when no
 // .codegraph/ resolves, though MCP init still completes successfully),
-// allowlist gates which of the 7 companion tools register beyond the
-// always-visible codegraph_explore (MCP-01/02).
+// companions names which of the 7 companion tools register beyond the
+// always-visible codegraph_explore.
+//
+// companions is a RESOLVED set, never a raw environment value: this
+// function has no opinion about defaults, and in particular does not treat
+// an empty map as "the caller didn't say, so give them everything."
+// ResolveCompanions owns that decision, and an empty map here means exactly
+// what it says — register codegraph_explore and nothing else.
 //
 // repoPath and startPath are DELIBERATELY DISTINCT (CR-01, the Phase-1
 // CR-02 recurrence this parameter split fixes): repoPath is the
@@ -411,7 +482,7 @@ func unregisterTools(s *mcp.Server) {
 // positional call site (17 of them, all in tests, as of this change) keeps
 // compiling unchanged — only NewStdioServer, this file's one production
 // caller, passes WithSessionLog.
-func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath string, opts ...Option) *mcp.Server {
+func BuildServer(hasIndex bool, companions map[string]bool, repoPath, startPath string, opts ...Option) *mcp.Server {
 	cfg := &buildConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -419,7 +490,7 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 
 	// toolCount is derived at the registration seam (registerTools'
 	// return value), never recomputed independently from
-	// hasIndex/allowlist — an independent recomputation would be
+	// hasIndex/companions — an independent recomputation would be
 	// duplicated state that silently drifts the first time a registration
 	// condition changes. The !hasIndex case leaves it zero by
 	// construction (the registerTools call below is skipped entirely).
@@ -486,7 +557,7 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 	hasCatalog := hasIndex
 
 	if hasIndex {
-		toolCount.Store(int64(registerTools(s, allowlist, repoPath, startPath, detector)))
+		toolCount.Store(int64(registerTools(s, companions, repoPath, startPath, detector)))
 	}
 
 	// recheckCatalog is SPEC-05's per-request trigger (D-05): it
@@ -541,7 +612,7 @@ func BuildServer(hasIndex bool, allowlist map[string]bool, repoPath, startPath s
 		switch {
 		case err == nil:
 			if !hasCatalog {
-				toolCount.Store(int64(registerTools(s, allowlist, repoPath, startPath, detector)))
+				toolCount.Store(int64(registerTools(s, companions, repoPath, startPath, detector)))
 				hasCatalog = true
 			}
 		case errors.Is(err, query.ErrNotInitialized):

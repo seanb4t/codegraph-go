@@ -1,15 +1,15 @@
 # Wire Oracle Coverage Baseline
 
 **Originally captured:** 2026-08-05 (Phase 1, `01-protocol-scoping-the-sdk-independent-wire-oracle`)
-**Last updated:** 2026-08-06 (Phase 3 plan 05, `03-2026-07-28-spec-compliance`)
-**Scenario count:** 27 (`test/wireoracle.ExpectedScenarioCount`)
+**Last updated:** 2026-08-08 (debug session `mcp-server-one-tool-only` — the `CODEGRAPH_MCP_TOOLS` inversion)
+**Scenario count:** 29 (`test/wireoracle.ExpectedScenarioCount`)
 
 This is the human-readable index of the complete, frozen scenario set the wire oracle
 (`test/wireoracle`) captures against the real `codegraph` binary. It is **not** a second source of
 truth — the structural guarantees it describes already live in code, enforced on every `go test
 ./test/wireoracle/...` run by four tests:
 
-- `TestScenarioCountIsExact` — the count below is exactly 27, enforced with equality, never a lower
+- `TestScenarioCountIsExact` — the count below is exactly 29, enforced with equality, never a lower
   bound.
 - `TestTranscriptSetMatchesScenarioSet` — every scenario named below has exactly one
   `testdata/wireoracle/transcripts/<name>.golden` file, and no orphaned file exists.
@@ -40,6 +40,15 @@ tests above — are authoritative.
   (03-01, 03-03, 03-04, 03-05) and one new request appended to an existing scenario
   (`legacy-2024-11-05`, plan 03-05), bringing the total from 23 to 27. Every addition went through
   the same one-reviewed-diff-pass mechanism (D-06) each time the corpus's frozen bytes moved.
+- **Phase 5** (`05-live-tool-catalog-change-notification`) added `modern-listen-catalog-change`,
+  taking the count from 27 to 28. This file was not updated at the time and read `27` against a
+  constant of `28` until the entry below was written; that gap is corrected here rather than left
+  standing.
+- **Debug session `mcp-server-one-tool-only`** (2026-08-08) inverted `CODEGRAPH_MCP_TOOLS` from an
+  opt-in allowlist into an opt-out narrowing filter and made all eight tools the default surface. It
+  added `toolslist-filter-empty` (28 → 29), renamed `toolslist-allowlist` to `toolslist-narrowed`
+  (no count change), and moved the frozen bytes of most transcripts in the corpus — see the
+  tool-visibility table below.
 
 ## The complete scenario set, grouped by coverage category
 
@@ -49,14 +58,19 @@ tests above — are authoritative.
 |---|---|
 | `handshake-explore` | End-to-end: `initialize` → `tools/list` → `tools/call codegraph_explore` with a real query. The oracle architecture's own proof of life (plan 01-01). |
 
-### `tools/list` variants (4)
+### `tools/list` variants (5)
+
+`CODEGRAPH_MCP_TOOLS` is a NARROWING filter: unset registers all eight tools, and setting it removes
+every companion it does not name. These five scenarios are the complete matrix of that gate crossed
+with the index gate.
 
 | Scenario | Covers |
 |---|---|
-| `toolslist-default` | No allowlist env — explore-only default (MCP-01). |
-| `toolslist-allowlist` | `CODEGRAPH_MCP_TOOLS=node,status` — explore + 2 companions. |
-| `toolslist-no-index` | No `.codegraph/` present — zero tools, `initialize` still succeeds (MCP-03). |
-| `toolslist-repeat` | Two consecutive `tools/list` calls in one session — determinism probe (`TestToolsListOrderIsDeterministic`), all 8 tools allowlisted. |
+| `toolslist-default` | Variable UNSET, index present — all 8 tools. The default surface, and the exact case the "the mcp server is only showing one tool" report landed on. |
+| `toolslist-filter-empty` | Variable SET to the empty string — `codegraph_explore` alone. The operator escape hatch back to the pre-inversion surface, and the only wire shape that distinguishes a set variable from an unset one; paired with `toolslist-default` it is the frozen proof the server reads `os.LookupEnv`, not `os.Getenv`. |
+| `toolslist-narrowed` | `CODEGRAPH_MCP_TOOLS=node,status` — explore + 2 companions. Renamed from `toolslist-allowlist`: same value, same answer, reversed mechanism. |
+| `toolslist-no-index` | No `.codegraph/` present — zero tools even with a filter set, `initialize` still succeeds (MCP-03). The index gate dominates the filter gate. |
+| `toolslist-repeat` | Two consecutive `tools/list` calls in one session — determinism probe (`TestToolsListOrderIsDeterministic`) over the default 8-tool surface. |
 
 ### `tools/call` per registered tool (7)
 
@@ -116,6 +130,12 @@ four protocol revisions the server recognizes, plus the revision Phase 3 impleme
 | `modern-meta-invalid-params` | A well-formed Modern `_meta` missing `io.modelcontextprotocol/clientCapabilities` — `-32602` invalid-params (SPEC-02, hand-authored anchor at response id 1, a `NoInitialize` sessionless scenario). |
 | `modern-meta-unsupported-version` | A well-formed Modern `_meta` offering a supported-shape-but-unrecognized protocol version that sorts lexically after `"2026-07-28"` (`"2099-01-01"`, load-bearing for avoiding go-sdk's lexical-comparison reclassification trap) — `-32022` unsupported-protocol-version (SPEC-02, hand-authored anchor). |
 
+### Live catalog-change notification (1) — plan 05-01
+
+| Scenario | Covers |
+|---|---|
+| `modern-listen-catalog-change` | An opted-in Modern `subscriptions/listen` stream receives `notifications/tools/list_changed` on the SAME live stdio connection after a real mid-session `codegraph init`. Carries an explicit `CODEGRAPH_MCP_TOOLS=` (empty) filter so exactly one tool registers on the transition and the notification frame count stays a structural property rather than a bet on `changeAndNotify`'s 10ms debounce coalescing eight `AddTool` calls. |
+
 ### Dynamic tool catalog (1) — plan 03-04
 
 | Scenario | Covers |
@@ -124,9 +144,10 @@ four protocol revisions the server recognizes, plus the revision Phase 3 impleme
 
 ## Total
 
-1 (tracer) + 4 (tools/list) + 7 (tools/call) + 4 (error shapes) + 1 (statelessness edge)
+1 (tracer) + 5 (tools/list) + 7 (tools/call) + 4 (error shapes) + 1 (statelessness edge)
 + 6 (six-era Legacy baseline) + 1 (Modern discover tracer) + 2 (Modern `_meta` failures)
-+ 1 (dynamic tool catalog) = **27**, matching `ExpectedScenarioCount`.
++ 1 (dynamic tool catalog) + 1 (live catalog-change notification) = **29**, matching
+`ExpectedScenarioCount`.
 
 ## The original 23 mark3labs captures cannot be re-captured against that backend again
 
