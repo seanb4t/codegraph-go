@@ -146,7 +146,7 @@ Plans:
 
 **Notes**: Promoted from backlog **999.5**, whose captured measurements stand: `codesign -dvv` reports darwin/arm64 as `adhoc, linker-signed` with `TeamIdentifier=not set` (the Go linker emits this so the Apple Silicon kernel will exec the binary — it satisfies the kernel, not Gatekeeper), darwin/amd64 as `code object is not signed at all`, and `spctl -a -vv -t exec` returns **rejected** for both. cosign is a different mechanism entirely — a detached Sigstore sidecar verified in-process by `internal/upgrade`, not an embedded `LC_CODE_SIGNATURE` — and does nothing for Gatekeeper. The affected population is browser downloaders from the GitHub Releases page; a binary fetched by the real `codegraph upgrade` path was measured to carry only `com.apple.provenance`. 999.5's open asset-shape question (a bare Mach-O can be notarized but not stapled) is resolved across Phases 1 and 3: archives ship *alongside* raw binaries, and stapling is out of scope because `.zip` and bare Mach-O are both categorically unstaplable and Quill has no staple command.
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -165,7 +165,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-06-PLAN.md — Apple secrets on the single OIDC-bearing release job with a runtime-enumerating scoping test, plus the post-release Gatekeeper and notarized-suite jobs
+- [x] 02-06-PLAN.md — Apple secrets on the single OIDC-bearing release job with a runtime-enumerating scoping test, plus the post-release Gatekeeper and notarized-suite jobs
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -215,7 +215,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
-| 2. Apple Signing & Notarization | v0.5.0 | 5/7 | In Progress|  |
+| 2. Apple Signing & Notarization | v0.5.0 | 6/7 | In Progress|  |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
