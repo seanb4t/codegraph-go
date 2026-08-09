@@ -146,7 +146,7 @@ Plans:
 
 **Notes**: Promoted from backlog **999.5**, whose captured measurements stand: `codesign -dvv` reports darwin/arm64 as `adhoc, linker-signed` with `TeamIdentifier=not set` (the Go linker emits this so the Apple Silicon kernel will exec the binary — it satisfies the kernel, not Gatekeeper), darwin/amd64 as `code object is not signed at all`, and `spctl -a -vv -t exec` returns **rejected** for both. cosign is a different mechanism entirely — a detached Sigstore sidecar verified in-process by `internal/upgrade`, not an embedded `LC_CODE_SIGNATURE` — and does nothing for Gatekeeper. The affected population is browser downloaders from the GitHub Releases page; a binary fetched by the real `codegraph upgrade` path was measured to carry only `com.apple.provenance`. 999.5's open asset-shape question (a bare Mach-O can be notarized but not stapled) is resolved across Phases 1 and 3: archives ship *alongside* raw binaries, and stapling is out of scope because `.zip` and bare Mach-O are both categorically unstaplable and Quill has no staple command.
 
-**Plans**: 1/7 plans executed
+**Plans**: 4/7 plans executed
 
 Plans:
 **Wave 1**
@@ -155,13 +155,13 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — apply the D-18 ruling: cosign moves to the release-scoped `signs:` pipe, `notarize:` goes live with explicit darwin ids and an env-gated `enabled:`, the false rationale comment is retracted, and every goreleaser caller gets a notarize-reachability verdict
-- [ ] 02-03-PLAN.md — `CODEGRAPH_TEST_BIN` seam in both real-binary harnesses, with a resolver that aborts by name rather than silently rebuilding
+- [x] 02-02-PLAN.md — apply the D-18 ruling: cosign moves to the release-scoped `signs:` pipe, `notarize:` goes live with explicit darwin ids and an env-gated `enabled:`, the false rationale comment is retracted, and every goreleaser caller gets a notarize-reachability verdict
+- [x] 02-03-PLAN.md — `CODEGRAPH_TEST_BIN` seam in both real-binary harnesses, with a resolver that aborts by name rather than silently rebuilding
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [ ] 02-04-PLAN.md — guarded maintainer-only notarize rehearsal (D-08/D-09) and the D-07 one-time mis-order mutation, with the cosign subject determined by `cosign verify-blob` against a separately-built pre-sign baseline
-- [ ] 02-05-PLAN.md — `docs/RELEASE.md` states the guarantee exactly (notarized, online-verified, not stapled), names the offline limitation, and gives the reproduction commands
+- [x] 02-05-PLAN.md — `docs/RELEASE.md` states the guarantee exactly (notarized, online-verified, not stapled), names the offline limitation, and gives the reproduction commands
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -215,7 +215,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
-| 2. Apple Signing & Notarization | v0.5.0 | 1/7 | In Progress|  |
+| 2. Apple Signing & Notarization | v0.5.0 | 4/7 | In Progress|  |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
