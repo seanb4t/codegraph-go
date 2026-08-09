@@ -1,558 +1,492 @@
 ---
 phase: 2
+cycle: 2
 reviewers: [codex, pi]
-reviewed_at: 2026-08-09T10:27:00Z
-plans_reviewed:
-  - 02-01-PLAN.md
-  - 02-02-PLAN.md
-  - 02-03-PLAN.md
-  - 02-04-PLAN.md
-  - 02-05-PLAN.md
-  - 02-06-PLAN.md
-  - 02-07-PLAN.md
+reviewed_at: 2026-08-09T15:07:35Z
+plans_reviewed: [02-01-PLAN.md, 02-02-PLAN.md, 02-03-PLAN.md, 02-04-PLAN.md, 02-05-PLAN.md, 02-06-PLAN.md, 02-07-PLAN.md]
 ---
 
-# Cross-AI Plan Review — Phase 2
+# Cross-AI Plan Review — Phase 2 (Cycle 2)
 
-Both lanes ran prompt-fed and source-grounded (neither carries the
-`[reviewed-without-repo-access]` marker), and both were briefed that this
-repository is CodeGraph-indexed. Neither lane was trimmed.
+Both lanes were briefed that CodeGraph is indexed here and that D-19, D-04, D-18 and
+the 02-02 Task 2 deviation are settled and must not be re-litigated. Neither lane
+re-opened them. The index they were pointed at (430 files / 4,333 nodes / 10,453 edges)
+was confirmed current against `codegraph status` before invocation.
+
+**Codex lane caveat:** Codex reported it could not open `.codegraph/store/LOCK` under
+its sandbox and fell back to direct source reads. Its `path:line` citations were
+therefore produced by file reads, not graph queries — which is the stronger evidence
+form anyway, and the orchestrator re-verified every load-bearing citation below.
 
 ## Codex Review
 
-# Cross-AI Plan Review — Phase 2
+# Cross-AI Plan Review — Cycle 2
 
 ## Overall assessment
 
-The phase is thoughtfully decomposed and unusually disciplined about false-positive verification. The sequencing—RED Gatekeeper baseline, config mechanics, real-binary seams, rehearsal, documentation, CI wiring, then irreversible release—is sound.
+The revised plan set is substantially stronger. D-19 fixes the previously unreachable Gatekeeper gate; post-release execution now verifies integrity before running downloaded code; evidence distinguishes hashes from cryptographic bindings; and the test-binary seam correctly refuses silent fallback.
 
-However, three design gaps should be fixed before execution:
+Two material issues remain:
 
-1. Plan 02-04 cannot obtain a true “immediately after build” versus “immediately after notarize” hash merely by wrapping one opaque `goreleaser release` invocation.
-2. Plan 02-06 executes a downloaded release binary independently and potentially concurrently with supply-chain verification.
-3. Plan 02-07 labels a hash captured after the entire GoReleaser release as “immediately after notarize,” which it is not.
+1. Plan 02-04’s separate-build “pre-sign baseline” is not yet a sound substitute for the bytes entering quill.
+2. Plan 02-06 does not require the post-release test jobs to check out the resolved release tag, even though the workflow itself documents that its default ref is the default branch.
 
-There is also a documentation-timing problem in 02-05: it can publish a present-tense notarization guarantee before any notarized release exists.
+Overall phase risk remains **HIGH** until those are corrected because both affect the validity of evidence used to authorize an irreversible release.
 
-Overall risk: **HIGH until those four issues are corrected**, then **MEDIUM**, driven mostly by Apple credentials and the irreversible real-release gate.
-
----
-
-# Plan 02-01 — Gatekeeper RED baseline
-
-## Summary
-
-This is a strong tracer plan. It grounds SIGN-03 in the permanently preserved `v0.5.1` assets, separates the non-quarantined control from real evidence, and explicitly resolves the two Apple-tooling uncertainties on real macOS. The proposed target fits the existing published-asset verification style.
-
-## Strengths
-
-- The published-asset-only rule matches the existing release verification posture: `verify:release-assets` is explicitly designed around re-downloading rather than inspecting `dist/` ([Taskfile.yml:924](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:924)).
-- The asset name matches the upgrade contract exactly. `releaseAssetName` produces `codegraph_<version>_<goos>_<goarch>` with no archive suffix ([internal/upgrade/upgrade.go:209](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/upgrade.go:209)).
-- Recording the pre-xattr control separately is excellent. It directly prevents a never-quarantined assessment from being mistaken for SIGN-02 evidence.
-- Comparing synthetic quarantine with a genuine browser download appropriately addresses the largest uncertainty in the test rig.
-- The gate deliberately captures `spctl` stderr and nonzero status rather than letting `set -e` erase expected RED evidence.
-
-## Concerns
-
-- **MEDIUM — Verdict classification is underspecified.** Searching merged `spctl` output for literal `accepted` or `rejected` can misclassify diagnostic text containing those words. The plan captures the exit status but does not make it authoritative.
-- **MEDIUM — The xattr write is described as “genuine” too early.** A synthetic four-field xattr is only a simulation until the browser comparison confirms assumption A2. The target and evidence should consistently call it synthetic.
-- **LOW — Tool precondition asymmetry is awkward.** `jq` is required even though the described target body does not clearly need JSON processing. Conversely, `syspolicy_check` is optional because its existence is being researched. That may be intentional, but the resulting exact-set shape test will freeze `jq` even if implementation does not use it.
-- **LOW — `GH_TOKEN` is stricter than existing local `gh` authentication needs.** The checkpoint already assumes `gh` authentication. Requiring `GH_TOKEN` is reasonable for CI reuse, but the rationale should say it is a reproducibility input, not a technical requirement of local `gh`.
-
-## Suggestions
-
-- Classify the Gatekeeper result using both exit status and a narrowly matched final verdict line. Reject contradictory results such as exit 0 with `rejected`.
-- Keep evidence fields escaped or encoded. Raw tool output containing spaces should remain on separate labelled lines rather than inside the machine-readable record.
-- Drop `jq` unless the implementation actually uses it.
-- Record the downloaded asset’s GitHub asset ID and size alongside its hash to strengthen baseline provenance.
-
-## Risk assessment
-
-**MEDIUM.** The test design is good; remaining risk lies in interpreting undocumented Apple CLI behavior.
+CodeGraph could not open `.codegraph/store/LOCK` under the current sandbox, so Go call paths were verified through direct source reads. Context7 also failed to return documentation before timeout; findings below therefore rely on the pinned repository configuration and source-level contracts.
 
 ---
 
-# Plan 02-02 — GoReleaser signing and notarization configuration
+## 02-01 — Gatekeeper RED tracer
 
-## Summary
+### Summary
 
-The D-18 implementation is well aligned with the current repository. The existing config really does use `binary_signs:` and contains the now-retracted rationale that `signs:` requires a project-wide binary archive format ([.goreleaser.yaml:180](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:180), [.goreleaser.yaml:223](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:223)). Retargeting the existing resolved-name test rather than deleting it is the right approach.
+This is a well-designed tracer with a meaningful negative control, exit-status classification, quarantine read-back, and reusable evidence format. One fail-open digest path should be tightened.
 
-## Strengths
+### Strengths
 
-- The plan preserves the sidecar contract consumed by `defaultDownload`, which downloads `assetName + ".sigstore.json"` ([internal/upgrade/upgrade.go:188](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/upgrade.go:188)).
-- The existing test already resolves the template for all four release pairs and enforces distinctness ([internal/upgrade/goreleaser_shape_test.go:507](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/goreleaser_shape_test.go:507)). Retargeting it preserves meaningful coverage.
-- Exact-set assertions for notarize build IDs and signing archive IDs correctly defend against both silent underscope and accidental zip inclusion.
-- The plan correctly treats YAML block position as documentation only, not execution ordering.
-- The caller enumeration is justified by current stale assumptions. `check:darwin-release-build` presently says every `goreleaser build` reaches `binary_signs:` and requires cosign ([Taskfile.yml:270](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:270), [Taskfile.yml:308](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:308)).
-- Deferring PR-canary rewiring is prudent. The current canary explicitly avoids granting OIDC to a PR-triggerable workflow ([darwin-toolchain-canary.yml:71](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/darwin-toolchain-canary.yml:71)).
+- The oracle now matches D-19 exactly: `spctl -a -vv -t install`, classified by exit status rather than output text ([02-01-PLAN.md:185](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-01-PLAN.md:185)).
+- The plan correctly treats source text as corroboration rather than the verdict and detects contradictory status/output combinations ([02-01-PLAN.md:197](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-01-PLAN.md:197)).
+- The schema is practical: versioned, fixed-order, and explicit about unavailable values. That should make later evidence joins less fragile.
+- Synthetic-versus-browser quarantine comparison directly addresses the test-rig trust boundary instead of assuming it away.
 
-## Concerns
+### Concerns
 
-- **MEDIUM — The `enabled:` test may not faithfully emulate GoReleaser.** A locally invented `text/template` FuncMap can prove the expected predicate but not necessarily GoReleaser’s precise environment/template evaluation behavior. This is static backstop coverage, not runtime proof.
-- **MEDIUM — Credential gating on only `MACOS_SIGN_P12` permits partial credentials.** If the certificate exists but any password/notary input is absent, the pipe becomes enabled and fails later. The rehearsal target checks all five, but ordinary snapshot callers with a partially populated environment remain exposed.
-- **LOW — The plan edits Phase 1’s deferred-items file for a Phase 2 decision.** This is workable but weakens artifact ownership and may make the deferral harder to discover later.
-- **LOW — The asserted rerun idempotency is only a config-level backstop.** `replace_existing_artifacts: true` is present ([.goreleaser.yaml:286](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:286)), but it does not prove Apple will accept repeat submissions of the same input.
+- **MEDIUM — Missing GitHub digest does not fail the provenance check.** The plan calls digest cross-checking a must-have, but instructs the target to emit a sentinel and continue if GitHub supplies no digest ([02-01-PLAN.md:167](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-01-PLAN.md:167)). That allows the target to pass while the claimed identification of served bytes was never established.
+- **LOW — Source contradiction is stricter than the requirement.** Rejecting exit 0 when the expected source line is absent is defensible, but it makes output formatting an additional gate despite the plan saying exit status is the oracle. This should be described as an intentional second assertion, not a contradiction in the oracle.
 
-## Suggestions
+### Suggestions
 
-- Gate notarization on all required credential variables, or use a single explicit `MACOS_NOTARIZE_ENABLED` variable that is only set by guarded release/rehearsal targets.
-- Add a config test that resolves `enabled` under partial credential sets and documents the chosen behavior.
-- Record the canary deferral in the current phase’s deferred file, with a backlink from Phase 1 if desired.
-- Ensure the new parser rejects multiple `notarize.macos` entries, not merely that the main test expects one.
+- Make a missing or malformed GitHub digest fatal when the API version used is expected to provide it. If older releases genuinely lack digests, explicitly downgrade `digest_match` for the RED baseline only and require the field for GREEN.
+- Represent source-line verification as a separate property such as `source_assertion=pass|fail`; keep `observed` derived solely from status.
 
-## Risk assessment
+### Risk assessment
 
-**MEDIUM.** The core config change is well reasoned, but template behavior and partial credentials remain runtime hazards.
+**MEDIUM.** The Gatekeeper mechanism is sound; the remaining issue affects provenance strength, not the RED verdict itself.
 
 ---
 
-# Plan 02-03 — Published-binary test seams
+## 02-02 — GoReleaser signing and notarization configuration
 
-## Summary
+### Summary
 
-The need is real: both integration harnesses currently build the checked-out source unconditionally ([test/integration/main_test.go:39](/Volumes/Code/github.com/seanb4t/codegraph-go/test/integration/main_test.go:39), [test/wireoracle/main_test.go:21](/Volumes/Code/github.com/seanb4t/codegraph-go/test/wireoracle/main_test.go:21)). A strict override that cannot fall back silently is the correct design.
+The plan accurately targets the current repository shape and replaces the stale `binary_signs:` mechanism intentionally. Exact-set tests for both build IDs and archive IDs are particularly valuable.
 
-## Strengths
+### Strengths
 
-- The resolver’s two-outcome contract directly prevents a bad override from becoming a local rebuild.
-- Converting relative input to an absolute path is necessary because integration tests execute from multiple working directories.
-- The unset path preserves the existing hermetic build behavior.
-- Mirroring the seam into wireoracle avoids an unexplained asymmetric harness contract.
-- Deferring transcript changes if release metadata causes a mismatch respects the frozen-oracle discipline.
+- The existing configuration confirms why the change is necessary: `binary_signs:` is currently active at [.goreleaser.yaml:223](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:223), with a now-invalid rationale at [.goreleaser.yaml:183](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:183).
+- Retargeting rather than deleting `TestBinarySignsSidecarMatchesUpgradeContract` preserves the real upgrade-sidecar contract. The current test resolves all four names rather than matching a literal ([goreleaser_shape_test.go:507](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/goreleaser_shape_test.go:507)).
+- Exact `[raw]` and exact darwin-build-ID assertions defend both under-selection and over-selection.
+- The plan correctly labels the injected `text/template` test as a static backstop, not proof of GoReleaser runtime behavior ([02-02-PLAN.md:29](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-02-PLAN.md:29)).
+- Caller enumeration is justified. The current `check:darwin-release-build` comment and cosign precondition are indeed stale after D-18 ([Taskfile.yml:287](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:287), [Taskfile.yml:307](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:307)).
 
-## Concerns
+### Concerns
 
-- **MEDIUM — Elapsed time does not prove that no `go build` occurred.** Machine load and Go cache state make timing a weak oracle.
-- **MEDIUM — “Executable mode bit” does not prove executability on the running OS.** It rejects obvious errors but cannot prove architecture compatibility or that the file is a valid executable.
-- **LOW — Duplicating resolver logic can drift.** The reason that `_test.go` helpers are not importable across packages is true, but a small non-test internal harness package could be imported by both.
-- **LOW — Checking only mode bits can behave unexpectedly on non-Unix development hosts.** Native Windows support is dropped, but contributors may still run tooling in unusual environments.
+- **LOW — The chosen enablement mechanism is left to execution.** The plan permits either a five-way conjunction or a separate enable flag. Both can work, but they create different operational contracts and different secret-presence failure modes.
+- **LOW — Mutation-based acceptance checks are numerous and manual.** They are useful, but the executor must be disciplined about restoring the config after every mutation.
 
-## Suggestions
+### Suggestions
 
-- Prove no build by supplying a wrapper executable whose output or invocation side effect is unique, or run with a deliberately unavailable `go` in `PATH` while the override is set.
-- Add an end-to-end test using a tiny executable shim that records every invocation, proving the exact override path was spawned.
-- Consider a shared `internal/testbin` resolver if this seam is likely to spread further.
-- Preserve the override path rather than copying the file so the suite’s recorded sha256 stays joinable to CI evidence.
+- Prefer the explicit five-variable conjunction. A separate enable flag introduces a sixth input whose accidental presence could enable an incomplete credential set unless the template still validates all five.
+- Have mutation checks operate on temporary config fixtures wherever possible, rather than editing the working file.
 
-## Risk assessment
+### Risk assessment
 
-**LOW–MEDIUM.** The implementation is localized and testable; the main issue is strengthening the honesty proof.
+**LOW–MEDIUM.** The configuration transition is detailed, source-aligned, and well defended by non-vacuous tests.
 
 ---
 
-# Plan 02-04 — Local notarization rehearsal and ordering mutation
+## 02-03 — External test-binary seam
 
-## Summary
+### Summary
 
-The intent is excellent, but the proposed implementation contains a fundamental observability gap. A Task wrapper around one `goreleaser release` process cannot naturally hash a binary “immediately after the build pipe” and again “after the notarize pipe.” GoReleaser owns those internal transitions.
+The resolver design is appropriately fail-closed. Rejecting both a shared production package and probe-execution is reasonable for two test-only consumers.
 
-## Strengths
+### Strengths
 
-- Named preconditions for all five Apple credentials directly implement D-09.
-- Generated configuration and a surgical mutation avoid contaminating the committed `.goreleaser.yaml`.
-- Rehearsing both correct and deliberately misordered configurations is a strong empirical test.
-- The plan correctly distinguishes local rehearsal from the published-asset GREEN criterion.
-- A deliberate wrong-password run is a useful secret-leak check.
-- The use of `dist/artifacts.json` is consistent with existing practice; current release tasks already distrust exit status and verify artifact records ([Taskfile.yml:594](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:594), [Taskfile.yml:625](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:625)).
+- Current harnesses unconditionally build source binaries ([integration/main_test.go:39](/Volumes/Code/github.com/seanb4t/codegraph-go/test/integration/main_test.go:39), [wireoracle/main_test.go:21](/Volumes/Code/github.com/seanb4t/codegraph-go/test/wireoracle/main_test.go:21)), so the seam closes a real criterion-4 gap.
+- The proposed resolver’s two-outcome rule prevents the dangerous “invalid override → local rebuild” path.
+- Converting relative paths to absolute paths is necessary because integration tests execute from varying working directories.
+- Rejecting probe-execution is sound. Stat-level validation handles configuration mistakes; actual architecture, Mach-O, and hardened-runtime compatibility should be exposed by the suite itself ([02-03-PLAN.md:93](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-03-PLAN.md:93)).
+- The shim-based positive-identification proof is substantially stronger than elapsed-time inference.
+- Two small test-only copies are acceptable. A production `internal/testbin` package would give runtime code a test-harness concern and is premature with only two consumers.
 
-## Concerns
+### Concerns
 
-- **HIGH — The plan does not explain how it can observe the pre-notarize hash.** Step 5 invokes one opaque `goreleaser release`; step 4 claims hashes will be captured between internal pipes. A shell target cannot pause between `build.Pipe` and `notary.MacOS` unless it adds a GoReleaser hook, patches/builds an instrumented GoReleaser, or performs an independent equivalent build before release.
-- **HIGH — The mutation may not prove the stated four-way relationship.** Under `binary_signs:`, the signature sidecar records a signature over pre-quill bytes, but `artifacts.json` after completion points at the mutated on-disk binary path. Rehashing that path after completion does not recover the bytes cosign actually saw. Verification against the post-notarization file can show divergence, but the plan must use `cosign verify-blob` or extract the bundle subject digest—not “the file the Signature record was computed over.”
-- **MEDIUM — A snapshot’s tag-dependent asset names differ from a real tag.** The relationship can still be tested, but evidence must distinguish snapshot naming from release naming.
-- **MEDIUM — The plan states that pending/time-out submission may log and continue without source-backed confirmation in the current repository.** This is an open behavior that the rehearsal should determine, not assume.
-- **LOW — Repeated real Apple submissions increase operational cost/noise.** The plan asks for correct run, mutated run, wrong-password run, and an idempotency rerun. That is several Apple-facing executions.
+- **LOW — “Byte-identical unset behavior” is overstated.** `TestMain` necessarily changes structurally. What can be preserved is behavioral equivalence of the build path, not literal byte identity of the function.
+- **LOW — Executable-mode validation is platform-specific.** This is fine for the current macOS/Linux harness, but the resolver comment should say it intentionally follows Unix mode semantics.
 
-## Suggestions
+### Suggestions
 
-- Redesign the hash experiment around observable facts:
+- Change “byte-identically to today” to “behaviorally equivalent, using the unchanged build command and cleanup path.”
+- Consider one shared table of behavior descriptions copied into both packages’ tests, but do not introduce a production helper package yet.
 
-  - Create a separate deterministic pre-sign build of each Darwin binary and hash it.
-  - Run GoReleaser sign/notarize and hash the final binary.
-  - Under the misordered config, use `cosign verify-blob` against both the preserved pre-sign copy and final binary to prove which one the bundle authenticates.
-  - Under the correct config, verify the bundle only against the final binary.
+### Risk assessment
 
-- Alternatively, instrument the pinned GoReleaser binary with explicit before/after hash logging, but make that mechanism part of the plan.
-- Do not infer the cosign subject from `artifacts.json`; verify the bundle cryptographically.
-- Reduce Apple submissions by performing the misordering proof on one Darwin architecture if that is enough to establish the mechanism, while retaining both-arch correct rehearsal.
-
-## Risk assessment
-
-**HIGH.** As written, the central SIGN-04 rehearsal evidence cannot be produced reliably.
+**LOW.** The plan closes the silent-fallback risk cleanly without unnecessary abstraction.
 
 ---
 
-# Plan 02-05 — Release documentation
+## 02-04 — Local notarization and ordering rehearsal
 
-## Summary
+### Summary
 
-The documentation content is well scoped, but its execution timing conflicts with its present-tense guarantee. This plan runs before the first notarized release, yet its must-have says the document states that the shipped guarantee is “notarized, online-verified, not stapled.”
+The cryptographic two-candidate verification is conceptually correct, but the proposed separate-build baseline is not yet proven commensurable with the release run. This is the main unresolved defect in the plan set.
 
-## Strengths
+### Strengths
 
-- The exact guarantee is appropriately bounded and includes the offline limitation.
-- Requiring `xattr -p` before `spctl` prevents a misleading reproduction procedure.
-- Distinguishing detached Sigstore verification from the embedded Apple signature is essential and consistent with the upgrade path, which downloads a separate `.sigstore.json` bundle ([internal/upgrade/upgrade.go:188](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/upgrade.go:188)).
-- Scoping the reproducibility claim to unsigned build output is necessary once Developer ID signing mutates Darwin assets.
-- The plan correctly avoids claiming that notarization creates additional release assets; the current asset shapes are raw plus zip ([.goreleaser.yaml:128](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:128)).
+- `cosign verify-blob` against both candidates is the right way to identify the bundle’s subject. Exactly one successful verification distinguishes the subject cryptographically rather than inferring it from metadata ([02-04-PLAN.md:222](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-04-PLAN.md:222)).
+- The mutation should invert the verification relationship if the candidates are genuine pre- and post-sign versions of the same build.
+- A single-architecture mutation is reasonable. The tested property is pipe ordering and subject selection; both are configured once, outside architecture-specific build declarations. The correct configuration still rehearses both architectures.
+- Credential preconditions, config-copy mutation, clean-worktree checks, and secret-leak observation are strong controls.
+- The plan correctly stopped pretending a shell wrapper can capture a mid-pipeline hash.
 
-## Concerns
+### Concerns
 
-- **HIGH — It can publish a false present-tense guarantee.** Plan 02-05 precedes 02-07, so the latest published Darwin assets remain deliberately un-notarized when the documentation change lands. The plan simultaneously requires the exact shipped guarantee and says unmeasured claims should be marked pending.
-- **MEDIUM — “Apple notarization ticket” may imply attachment/stapling.** For an unstapled executable, the accepted notarization record exists with Apple; the file does not carry an attached ticket. Wording must be precise.
-- **MEDIUM — The docs claim a synthetic xattr reproduces browser behavior only if plan 02-01 confirms A2.** The branch is mentioned, but the acceptance criteria still require the synthetic write command unconditionally.
-- **LOW — Stating that bare Mach-O and zip are “categorically unstaplable” is accurate in phase context but unnecessary detail in user verification instructions.** It risks distracting from the actionable guarantee.
+- **HIGH — The separate `goreleaser build` baseline is not established as the release run’s pre-sign bytes.** The plan assumes reproducibility ([02-04-PLAN.md:173](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-04-PLAN.md:173)), but the binaries embed GoReleaser template values for tag, commit, and date ([.goreleaser.yaml:62](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:62)). The existing Taskfile explicitly says snapshot mode changes the resolved version string ([Taskfile.yml:282](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:282)). A separate `build` and `release --snapshot` can therefore differ before quill for metadata or command-mode reasons. If so:
 
-## Suggestions
+  - `final_sha256 != baseline_sha256` does not prove quill rewrote the file.
+  - Under the mutation, cosign may verify neither candidate, because it signed a third pre-quill byte stream from the release invocation.
+  - The “exactly one” gate fails without distinguishing nondeterminism from ordering.
 
-- Split the documentation work:
+- **MEDIUM — The repository’s reproducibility evidence is not sufficiently tied to this exact invocation pair.** Even if a prior CI gate double-builds successfully, it must use the same command, snapshot/version inputs, config, toolchain, output identity, and environment to license this substitution. The plan currently calls that a backstop rather than proving equivalence.
+- **LOW — The rehearsal does multiple Apple submissions for an ordering experiment whose crucial cosign mutation could potentially be isolated without resubmitting both architectures.** The one-architecture reduction helps, but the cost remains notable.
 
-  - Before release, document verification as applying “from the first notarized release onward,” with the tag marked pending.
-  - In 02-07, replace the pending tag boundary with the actual release tag after evidence exists.
+### Suggestions
 
-- Phrase the mechanism as “accepted by Apple’s notarization service; the unstapled file relies on online ticket lookup.”
-- If A2 is refuted, document a real browser-download procedure rather than retaining synthetic xattr commands.
-- Add a clear applicability table by tag rather than prose trying to cover empty `v0.5.0`, un-notarized `v0.5.1`, and the future notarized release.
+Before relying on the baseline, add a credential-free control:
 
-## Risk assessment
+1. Run the exact same generated config and exact same command twice with notarization disabled.
+2. Confirm each darwin output is byte-identical.
+3. Confirm the version/commit/date values embedded in both runs are identical.
+4. Only then compare one of those outputs with the notarized run.
 
-**HIGH** for truthfulness if executed unchanged; otherwise **LOW** once the release boundary is explicit.
+Preferably, make the baseline and notarized runs both use `goreleaser release --snapshot` with identical flags and generated config, differing only in the notarize enable predicate. Do not compare `goreleaser build` with `goreleaser release`.
 
----
+If identical-command unsigned runs do not reproduce, treat the two-candidate inversion experiment as blocked rather than weakening “exactly one verifies.”
 
-# Plan 02-06 — CI credentials and post-release verification
+### Risk assessment
 
-## Summary
-
-The secret-scoping and event-guard work is strong, but the notarized-suite job creates a significant trust-ordering problem: it executes a downloaded binary while the independent supply-chain verification job may still be running or may fail.
-
-## Strengths
-
-- The release job is presently the only job with `id-token: write` ([release.yml:85](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:85), [release.yml:90](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:90)). Adding credentials only to its Release step limits exposure within the job.
-- The workflow filename and tag-trigger identity remain untouched, preserving the verifier’s SAN contract.
-- Runtime enumeration of every workflow file is much stronger than a fixed allowlist.
-- The existing post-release workflow demonstrates the correct event-aware guard on every current job ([post-release-verify.yml:103](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:103), [post-release-verify.yml:212](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:212), [post-release-verify.yml:248](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:248)).
-- Resolving the tag through `needs.resolve-tag.outputs.tag` follows the existing validated flow.
-- The Gatekeeper job’s independence from supply-chain verification is defensible because it assesses rather than executes the file.
-
-## Concerns
-
-- **HIGH — The suite executes an unverified network-fetched binary.** The proposed job depends only on `resolve-tag`, just as the current `self-upgrade` job does ([post-release-verify.yml:245](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:245)). The threat model claims the same workflow independently verifies the asset, but parallel independent jobs provide no ordering guarantee. A tampered asset can execute even if `verify-supply-chain` later fails.
-- **MEDIUM — Secret reference scanning does not prove actual GitHub secret scope.** It proves workflow consumption sites, not that names are repository-scoped rather than organization-scoped or that access policies are correct. The user setup handles this manually, so tests should not overstate what they prove.
-- **MEDIUM — Running both Darwin architectures may not be feasible on the selected runner.** The plan acknowledges this, but criterion 4 says the full suite runs against “the binary itself” without defining required architecture coverage.
-- **MEDIUM — Test-count detection from `go test` text is fragile.** Standard `go test` does not provide a simple total count line. Parsing verbose output can confuse cached/package summaries with executed tests.
-- **LOW — Secrets are exposed to every process launched by the Release step.** That is unavoidable for GoReleaser, but the step should minimize shell logic and avoid dumping environment/config.
-
-## Suggestions
-
-- Make `notarized-suite` depend on both `resolve-tag` and `verify-supply-chain`, or perform cosign verification inside the same job before `chmod +x` and execution.
-- If independence of reporting is desired, split download/verification from execution: the execution job should only run after integrity verification succeeds.
-- Use `go test -json -count=1` and count `Action:"run"` or `Action:"pass"` test events instead of parsing human output.
-- Add a test proving Apple secret references occur only under a step-level `env`, not job-level or workflow-level environment.
-- Define architecture coverage explicitly: native arm64 is mandatory; amd64 is additional only if Rosetta execution is confirmed.
-
-## Risk assessment
-
-**HIGH.** Executing the artifact before its integrity verification completes is a material CI security flaw.
+**HIGH.** The ordering experiment’s oracle depends on a baseline equivalence the plan does not presently establish.
 
 ---
 
-# Plan 02-07 — Real release and final evidence
+## 02-05 — Release documentation
 
-## Summary
+### Summary
 
-The final checkpoint is appropriately irreversible and evidence-oriented, but its “post-notarize” hash collection is mislabeled and deliberately non-failing in a way that can leave SIGN-04 impossible to prove after publication.
+The documentation plan is careful about temporal truth and accurately reflects D-19. The per-tag table is useful initially but risks becoming a maintenance burden.
 
-## Strengths
+### Strengths
 
-- Release-please remains the only tag authority.
-- The checkpoint explicitly checks secret names before merging the release PR, addressing the silent-disabled-notarization risk.
-- It observes both automated Gatekeeper results and an actual browser launch.
-- Manual dispatch verifies that the event-aware guards do not turn a rerun into a vacuous green.
-- The RED/GREEN comparison uses the same target and procedure, which is strong evidence.
-- The plan correctly requires patch-forward recovery and preservation of earlier releases.
+- The plan avoids claiming notarization before a notarized release exists.
+- It explicitly separates Apple’s online notarization record from stapling, preventing the misleading “carries a ticket” phrasing.
+- It requires the documented xattr read-back before assessment and aligns commands with the measured gate.
+- It correctly relegates `syspolicy_check distribution` and `-t exec` to the “does not verify this claim” explanation.
+- It scopes reproducibility correctly: unsigned build reproducibility and signed Darwin artifact reproducibility are different claims.
 
-## Concerns
+### Concerns
 
-- **HIGH — `release:record-notarize-hashes` is not “immediately after notarize.”** It runs after the whole `goreleaser release` step finishes ([release.yml:170](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:170)) and before the separate attestation step ([release.yml:188](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:188)). It records final local bytes after archive, SBOM, checksum, release signing, and publish—not the boundary immediately after `notary.MacOS`.
-- **HIGH — Making the recording target unable to fail undermines a required criterion.** If metadata is absent or one Darwin artifact is missing, the plan prints `NOT-FOUND` and continues publishing. Since this is the only claimed first comparison point, SIGN-04 may become permanently unprovable for that release.
-- **MEDIUM — The four “sha256 values” are not all independently available.** `cosign verify-blob` and `gh attestation verify` prove that a downloaded subject matches signed/attested data; they do not necessarily print a separate subject hash. Task 3 acknowledges this, but the must-have still describes four hash values as if each is directly recorded.
-- **MEDIUM — A local snapshot exercise does not prove the recording step will locate a real tagged release artifact under identical names.**
-- **MEDIUM — The pre-flight config equality is underspecified.** It asks to compare the current config hash to what plan 02-04 measured, but 02-04 does not explicitly require recording the committed config’s sha256.
-- **LOW — The checkpoint asks the user to merge a release PR and monitor multiple external workflows.** This is appropriate, but failure branches should explicitly stop evidence recording until the relevant workflow logs are downloaded and preserved.
+- **LOW — Listing every released tag is unnecessary and will become stale.** The acceptance criterion requires the applicability table to list every tag known at execution time ([02-05-PLAN.md:175](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-05-PLAN.md:175)). This turns a focused release-verification document into a manually maintained release ledger.
+- **LOW — The section may be overlong for end users.** The six-item insufficiency list is valuable, but could bury the actionable three-command path.
 
-## Suggestions
+### Suggestions
 
-- Rename the captured value to `final-goreleaser-local-sha256`; do not call it immediate-post-notarize.
-- Obtain the true immediate-post-sign/notarize hash through the corrected 02-04 instrumentation. Then compare:
+- Use boundary rows rather than every tag: “through v0.5.1,” “first notarized release,” and “later releases.”
+- Put the concise user procedure first, then a collapsible or clearly secondary “Why these other checks do not count” subsection.
 
-  1. instrumented post-quill hash,
-  2. final local raw asset hash,
-  3. re-downloaded asset hash,
-  4. cryptographic verification of the same hash by cosign and attestation.
+### Risk assessment
 
-- Make missing metadata or missing Darwin artifacts fail the release before attestation/publish if a reliable pre-publish hook exists. If publication already occurred inside GoReleaser, at minimum fail the workflow loudly rather than return success.
-- Treat cryptographic verification as bindings to the re-downloaded hash, not invented additional hash observations.
-- Record `.goreleaser.yaml` sha256 in the rehearsal evidence so pre-flight equality is executable.
-- Make the suite execution wait for supply-chain verification as recommended for 02-06.
-
-## Risk assessment
-
-**HIGH.** The release checkpoint is correctly cautious, but the current hash-observation design does not establish SIGN-04 as stated.
+**LOW.** Mostly documentation maintainability and presentation risk.
 
 ---
 
-# Cross-plan dependency and scope review
+## 02-06 — CI secrets and post-release verification
 
-## What works well
+### Summary
 
-- The dependency graph is mostly coherent:
+The integrity-before-execution correction is strong, but the notarized suite may test a release binary against source and tests from the default branch rather than the resolved release tag.
 
-  - 02-01 establishes the oracle.
-  - 02-02 and 02-03 independently prepare pipeline and harnesses.
-  - 02-04 rehearses pipeline behavior.
-  - 02-06 wires CI after rehearsal.
-  - 02-07 performs the irreversible release.
+### Strengths
 
-- The current repository supports the need for each change:
+- Step-level secret scoping is better than job-level scoping and matches the minimum exposure possible inside the existing release job.
+- Runtime enumeration of all workflow files makes the secret-scope test forward-looking.
+- The test honestly states that it cannot verify GitHub dashboard-level secret scope.
+- The suite now verifies the downloaded binary with cosign before `chmod` or execution and also declares `needs: verify-supply-chain` ([02-06-PLAN.md:289](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-06-PLAN.md:289)). This correctly fixes the former parallel-execution security hole.
+- Counting `go test -json` `run` events is an appropriate non-vacuity check.
+- Keeping Gatekeeper independent is defensible because it assesses but does not execute the downloaded file.
 
-  - Signing is still build-scoped under `binary_signs:` ([.goreleaser.yaml:223](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:223)).
-  - Release assets are raw and zip in parallel ([.goreleaser.yaml:128](/Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:128)).
-  - Both test harnesses rebuild locally ([test/integration/main_test.go:47](/Volumes/Code/github.com/seanb4t/codegraph-go/test/integration/main_test.go:47), [test/wireoracle/main_test.go:29](/Volumes/Code/github.com/seanb4t/codegraph-go/test/wireoracle/main_test.go:29)).
-  - Post-release verification already has validated tag resolution and non-vacuous guards.
+### Concerns
 
-## Cross-plan concerns
+- **HIGH — The suite job is not instructed to check out the resolved tag.** The workflow’s own header states that a `workflow_run` job’s `GITHUB_REF/GITHUB_SHA` refer to the default branch and its tip ([post-release-verify.yml:55](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:55)). Existing checkout steps provide no `ref:` ([post-release-verify.yml:215](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:215), [post-release-verify.yml:261](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/post-release-verify.yml:261)), and plan 02-06 says to mirror that skeleton ([02-06-PLAN.md:210](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-06-PLAN.md:210)). Consequently, the job can execute the released binary against newer or otherwise different integration tests and fixtures from the default branch. This weakens both reproducibility and diagnosis.
+- **MEDIUM — `needs: verify-supply-chain` can make the suite skip after a supply-chain failure.** The in-job cosign verification already protects execution. If the phase also wants independent diagnostic evidence from the suite, the job dependency sacrifices it. This is not unsafe, but the plan should acknowledge the reporting tradeoff.
+- **LOW — Requiring both in-job cosign and prior supply-chain success duplicates network verification.** The belt-and-braces choice is reasonable for safety; it carries modest latency.
 
-- **HIGH — SIGN-04’s measurement mechanism is inconsistent across 02-04 and 02-07.** Both assume access to a post-notarize boundary neither plan actually defines.
-- **HIGH — Documentation is scheduled before the evidence it claims.**
-- **HIGH — Integrity verification and execution are ordered incorrectly in 02-06.**
-- **MEDIUM — The phase is over-specified in places.** Several plans devote extensive permanent tests to Taskfile precondition exact sets while the most critical runtime properties—Apple submission completion and post-quill byte identity—remain one-time manual observations.
-- **MEDIUM — Evidence parsing lacks a formal schema.** Multiple shell-generated evidence prefixes are introduced, but quoting, escaping, missing values, and versioning are not defined. That makes later automated joining fragile.
+### Suggestions
 
-## Recommended plan changes before execution
+- Add `with: ref: ${{ needs.resolve-tag.outputs.tag }}` to checkout in both new post-release jobs that consume repository scripts or tests. For the suite job this is essential.
+- Add a workflow-shape test that asserts every job executing release-tag artifacts checks out the same resolved tag.
+- Decide explicitly whether diagnostic independence or graph ordering is preferred. If independent diagnostics matter, keep in-job cosign and remove the `needs: verify-supply-chain` dependency; if graph clarity wins, retain both and state that a supply-chain failure intentionally suppresses the suite.
 
-1. Amend 02-04 with a concrete mechanism for observing pre-quill and post-quill bytes and cryptographically identifying the subject cosign signed.
-2. Amend 02-06 so no downloaded binary is executed before signature and attestation verification succeeds.
-3. Split or condition 02-05 so the present-tense guarantee only applies from the first successfully verified notarized tag.
-4. Rename 02-07’s hash point to final-local-release bytes, and make missing evidence fail loudly.
-5. Define a minimal evidence-line format—fixed keys, shell-safe values, and explicit `unknown`/`not-found` states.
+### Risk assessment
 
-# Final risk assessment
+**HIGH.** Security ordering is fixed, but source/tag mismatch can invalidate the claim that the released artifact passed its own release’s suite.
 
-**Overall risk: HIGH.**
+---
 
-The plans are unusually strong on traceability, RED-before-GREEN discipline, secret scoping, and preserving the raw upgrade contract. But SIGN-04—the most technically subtle requirement—currently relies on byte observations the described tooling cannot make, and the post-release suite may execute an artifact before its integrity is established. Those are goal-level and security-level problems, not documentation polish. Once corrected, the remaining phase risk should fall to **MEDIUM**, primarily because Apple notarization and Gatekeeper semantics can only be conclusively tested through real external systems and an irreversible release.
+## 02-07 — Real release and final evidence
+
+### Summary
+
+The final plan now labels observed values accurately and distinguishes hashes from bindings. It is structurally sound once the 02-04 baseline and 02-06 checkout issues are fixed.
+
+### Strengths
+
+- `final_local_sha256` accurately describes post-pipeline local bytes rather than claiming an unavailable mid-pipe observation.
+- The five-point chain correctly distinguishes three hashes from two cryptographic bindings ([02-07-PLAN.md:24](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-apple-signing-notarization/02-07-PLAN.md:24)).
+- Making the final-hash recorder fail loudly is correct because GoReleaser has already published by then; silent continuation would preserve the release but destroy the evidence.
+- Placement between release and attestation matches the current workflow ordering: GoReleaser publishes at [release.yml:170](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:170), and attestation follows at [release.yml:188](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:188).
+- The checkpoint preserves logs before analysis and retains patch-forward recovery.
+- The RED/GREEN comparison uses the same gate and differs only by tag, which is exactly the right evidence shape.
+
+### Concerns
+
+- **MEDIUM — A failing final-hash step makes the release workflow conclude failure after assets were published.** Because post-release verification is guarded on upstream success, automatic Gatekeeper and suite jobs will then skip. The manual-dispatch recovery exists, but the plan does not explicitly instruct it for this failure branch.
+- **MEDIUM — A3 is only partially closed by local-versus-published equality.** Equality proves nothing after `final_local_sha256` changed the local file and before download, but it cannot isolate which internal pipe would have mutated the file. That is acceptable for the user-facing identity property, but the evidence should say “no post-record/publish-path mutation observed,” not over-attribute the result to a particular GoReleaser interval.
+- **LOW — The `<done>` wording in Task 1 says the recorder “cannot break a publish.”** It cannot prevent already-completed publishing, but it deliberately can fail the release workflow. That distinction should be explicit.
+
+### Suggestions
+
+- Add a failure branch: if `release:record-final-hashes` fails after publish, manually dispatch post-release verification against the resolved tag after preserving logs; do not wait for the workflow-run trigger.
+- Describe A3’s conclusion narrowly: final local bytes matched served bytes; therefore no mutation occurred after the recorded point. Do not claim this alone traces all internal pipe boundaries.
+- Change “cannot break a publish” to “cannot prevent already-completed publication, but intentionally fails the workflow when evidence cannot be recorded.”
+
+### Risk assessment
+
+**MEDIUM**, conditional on correcting plans 02-04 and 02-06. The final publication/evidence workflow is otherwise coherent.
+
+---
+
+## Priority changes before execution
+
+1. **Block 02-04 until the pre-sign baseline uses an identical command/config/input path and demonstrates unsigned-run byte identity.**
+2. **Make post-release suite checkout the resolved tag, not the workflow’s default branch tip.**
+3. **Decide whether missing GitHub asset digests are fatal or explicitly acceptable only for the preserved RED baseline.**
+4. **Document the manual-dispatch recovery when a post-publish hash-recording step fails.**
+
+With those changes, the plan set would move from **HIGH** to **MEDIUM** risk, with the remaining uncertainty concentrated appropriately in the real Apple release event rather than in avoidable evidence ambiguity.
 
 ---
 
 ## pi Review
 
-All key mechanism claims verified against source. Here is the review.
+I have enough verified evidence. Here is my review.
 
-# Cross-AI Plan Review — Phase 2: Apple Signing & Notarization
+---
+
+# Cross-AI Plan Review — Phase 2: Apple Signing & Notarization (Cycle 2)
 
 ## Summary
 
-This is an exceptionally well-grounded plan set. Every load-bearing technical claim I checked against the pinned `goreleaser/v2@v2.17.1` module cache and this repo's files held up: the pipe-order finding (`sign.BinaryPipe{}` before `notary.MacOS{}` in `BuildPipeline`, `internal/pipeline/pipeline.go:102-106`), the `signs:` fix landing after `checksums.Pipe{}` (`pipeline.go:143`), the shared `signone()` Path/Name rebinding (`internal/pipe/sign/sign.go:182,275`), the `UploadableBinary` filter (`sign.go:114`), the `[ProjectName]` ids default and non-fatal skip (`internal/pipe/notary/macos.go:35-37,87-88`), and the skip-key asymmetry (`internal/skips/skips.go`: `Notarize` is in `Release`, absent from `Build`). Repo-side claims also check out: one `id-token: write` job (`release.yml:90`), the verbatim event-aware guard on all three existing post-release jobs (`post-release-verify.yml:103,212,248`), the hardcoded `go build` in both test harnesses (`test/integration/main_test.go:39-57`, `test/wireoracle/main_test.go:31`), the awk anchor's exact 6-space indentation match (`Taskfile.yml:547-551` vs `.goreleaser.yaml:228`), and the sidecar download contract (`internal/upgrade/upgrade.go:195`). The wave structure is sound and the RED-before-GREEN discipline is enforced structurally, not rhetorically. Two substantive issues below, both MEDIUM, are about factual accuracy of in-plan claims and an observability gap in D-05's first measurement point — neither invalidates the design.
+This is an unusually well-grounded plan set. Every structural claim I checked against the repository holds: the awk injection anchor in `release:dry-run-signed` really does match `/^      - "sign-blob"$/` at 6-space indent (Taskfile.yml:548 vs .goreleaser.yaml:227), the event-aware guard string in 02-06's acceptance criterion is verbatim the one on `post-release-verify.yml:103,212,248`, `id-token: write` exists exactly once repo-wide (release.yml:90), the `binary_signs:` comment block at .goreleaser.yaml:183-186 really does contain the false `signs:` rationale D-18 retracts, and the notary pipe source in the pinned v2.17.1 module confirms both the sequential per-binary loop and the corrected concurrency framing. The D-19 oracle amendment is correctly propagated everywhere (I found zero remaining `-t exec` gating references in the plans). The plans' main residual weakness is that 02-04's pre-sign baseline rests on a *darwin* build-determinism assumption the repo's own gates never prove — and proving it in-situ would be nearly free.
 
 ## Strengths
 
-- **Source-verified foundation.** The central design move (D-18: `binary_signs:` → `signs: {ids: [raw], artifacts: binary}`) is correct against the pinned source. `sign.go:182` binds `env["artifact"] = art.Path` for both pipes, and `archive.go`'s skip branch gives the `raw` entry's `UploadableBinary` the same `Path` quill mutates in place — so the rename is genuinely byte-safe and the `internal/upgrade` contract survives untouched. The plan's insistence on keeping the `signature:` Go-template (because `sign.go:275` rebinds to `art.Name` for the publish pass) is exactly right.
-- **The plan corrects Phase 1's false rationale in-place, with a zero-count grep assertion** (`rg -c 'no longer cleanly apply'`). I confirmed the false claim is really there today at `.goreleaser.yaml:183-186`. Treating comment retraction as a tested deliverable is the right response to this repo's documented failure class.
-- **Failure-mode-first design throughout.** `verify:gatekeeper` hard-fails on absent xattr read-back and on unclassifiable `spctl` output; the resolver in 02-03 has exactly two outcomes for a non-empty override (use it or abort by name), which structurally forecloses the silent-rebuild false green; 02-06's secrets-scoping test enumerates `.github/workflows/` at runtime and is required to be proven red by deliberate violation.
-- **Dependency ordering is honest.** 02-01 (RED baseline on published `v0.5.1`) precedes everything; 02-06 correctly defers all CI wiring until after local rehearsal (02-04); 02-07 is the only plan that can close A3, and it says so. The checkpoint gates (02-01 Task 2, 02-04 Task 2, 02-07 Task 2) sit exactly where irreversible or human-only actions occur.
-- **The `enabled:` two-direction hazard and the `[ProjectName]` silent-skip default are both turned into exact-set, resolve-under-both-environments tests** rather than documentation — matching the pinned source behavior I verified.
+- **The cryptographic subject-identification design (02-04 step 6a) is sound and I verified its premises at source.** The mutation arm inverts because `binary_signs:` signs pre-notarize bytes while `signs:` signs post-notarize bytes; `cosign verify-blob` against two candidate files with an exactly-one-must-verify rule is a genuine discriminator, and the "both or neither verifies = hard failure" clause correctly converts a broken experiment into an inconclusive result rather than false evidence. This is materially better than the cycle-1 re-hash-a-path design, which quill's in-place Mach-O rewrite (`notary/macos.go:101`, `quill.Sign(bin.Path, …)`) would indeed have corrupted.
+- **The exit-status-only verdict discipline (02-01) is correct.** spctl's stderr contains `rejected (the code is valid but does not seem to be an app)` — a substring search for "accepted" semantics would misclassify. Verified the plan greps nothing for classification and treats non-{0,3} exits as fatal, which is the safe failure direction.
+- **Partial-credential gating is not paranoia — the pipe signs-and-continues without notarizing.** `notary/macos.go:106-111`: when `IssuerID/KeyID/Key` are empty, quill *signs* the binary, logs `will not try to notarize`, and continues — a green log shipping a signed-but-unnotarized binary. 02-02's conjunctive all-five `enabled:` gate is the correct mitigation, and `TestNotarizeMacosEnabledIsEnvGated`'s partial-environment cases pin exactly this.
+- **02-06's verify-before-chmod ordering closes a real hole.** The existing `self-upgrade` job is deliberately independent (post-release-verify.yml:241-247, `needs: resolve-tag` only), and the plan correctly refuses to copy that shape for a job that *executes* the download — while preserving the gatekeeper job's independence with a recorded rationale (assessment ≠ execution). The in-target cosign flags matching `verify:release-assets` (Taskfile.yml:1104-1111) keeps the two verifiers from drifting.
+- **The `isEnvSet` idiom is valid in the pinned module** — `internal/tmpl/tmpl.go:299` registers it. The backstop-labeled FuncMap emulation honestly scopes what the static test proves.
+- **The rehearsal path genuinely reaches the notarize pipe under `--snapshot`.** `MacOS.Skip` (notary/macos.go:27-29) checks only `skips.Notarize` and empty config — no snapshot gate — so `release --snapshot --skip=publish` exercises sign+notarize for real. The plan's central rehearsal mechanism is viable.
+- **Evidence schema discipline** (schema=1, fixed key order, `not-found`/`unknown` sentinels) matches the existing `TAG-EVIDENCE`/`SIGN-EVIDENCE` conventions and fixes the real cross-plan fragility cycle 1 identified.
+- 02-03's two rejections are well-reasoned: a probe-execute in the resolver would both duplicate the suite's own purpose and run untrusted downloaded bytes earlier than necessary; the two-copy resolver mirrors the repo's existing four-copy `runGit*` precedent (visible at test/integration/main_test.go:57-60).
 
 ## Concerns
 
-- **MEDIUM — Plan 02-02's flagged-assumption "correction" about notarize concurrency is itself wrong for the config shape this phase ships.** The plan asserts darwin/amd64 and darwin/arm64 "are signed and submitted to Apple CONCURRENTLY, not sequentially — a detail RESEARCH.md Pattern 1 states the opposite way," and reasons that the configured timeout "bounds the pair rather than accumulating." At source: `MacOS.Run` (`macos.go:43-50`) parallelizes across `notarize.macos` **config entries** via `semerrgroup`, but this phase ships **one entry with two ids**, and inside `signAndNotarize` the per-binary loop (`macos.go:90` onward) is a plain sequential `for _, bin := range binaries.List()`, each iteration getting its own `StatusConfig{Timeout: cfg.Notarize.Timeout}`. So with the shipped shape, the two binaries are processed **sequentially**, each with its own full timeout budget — the research was right and the plan's correction is the error. Consequences: (a) the timeout-sizing rationale in 02-02 is wrong (two sequential 20m budgets, not one bounded pair); (b) worse, plan 02-04 Task 3 instructs the executor to "correct" any comment claiming sequential processing "since the pipe runs its entries under a parallel error group" — i.e., the plan orders a true comment to be replaced with a false one during execution. Fix: strike the concurrency correction from both plans; keep RESEARCH.md's sequential framing; size the timeout as per-binary, sequential.
-- **MEDIUM — D-05's first comparison point ("sha256 immediately after the notarize pipe") is not observable as literally specified, and 02-07's label overstates what was measured.** GoReleaser exposes no mid-pipe hook; `release:record-notarize-hashes` (02-07 Task 1) runs after **all** pipes complete, so its hash is "post-everything," and calling it "immediately after notarize" silently assumes A3 — the very assumption the measurement exists to settle. Similarly 02-04 Task 1 step 4 says "capture each darwin binary's sha256 immediately after the build pipe and again after the notarize pipe," which cannot be done within one invocation. The four-point comparison still has teeth (any inter-pipe mutation makes points diverge), but point one's provenance label should be honest: either approximate pre-notarize bytes via a separate `goreleaser build` run (accepting a build-reproducibility assumption and saying so), or relabel point one as "sha256 recorded in the release job from `dist/` post-run." As written, executors will either improvise mid-run or record a mislabeled value — and this repo's own rules treat a mislabeled provenance as a failed gate.
-- **LOW — Snapshot-mode `.Tag` emptiness vs. sidecar-name assertions in 02-04.** The rehearsal runs `release --snapshot`; under snapshot, `.Tag` resolves empty (as `release:dry-run`'s own comment notes, "the resolved version string is the only thing --snapshot changes"). Sidecar names will be `codegraph__darwin_arm64.sigstore.json` — still four distinct names (Os/Arch differ), so the distinctness assertion holds, but "matching the per-platform sidecar shape the existing target already asserts" won't literally match the `releaseAssetName` contract with a real tag. The plan should state the expected empty-tag name shape so the recorded evidence isn't misread as a divergence.
-- **LOW — 02-01 precondition list inconsistency.** `must_haves.truths` names tools `gh, xattr, spctl`; Task 1's action adds `jq` (used for what, exactly, is never stated — `gh release download` needs no JSON parsing; presumably asset resolution). Also `GATEKEEPER_EXPECT` has a named precondition for presence but no stated validation that its value is in `{accepted, rejected}` — an invalid value would make every observation a mismatch, which fails safe but confusingly.
-- **LOW — 02-06 Task 3's amd64 leg on the macOS runner.** The plan handles this ("scope to the native arch if the runner can't execute both"), but it's buried in the task body; on Apple Silicon hardware the amd64 notarized binary runs only under Rosetta, and a hardened-runtime library-validation failure could present differently under translation. Worth promoting to a `must_haves` truth so the scoping decision is recorded, not improvised.
-- **LOW — 02-07 Task 1's not-found path exits zero by design.** Defensible (a recording step must not break a publish), but combined with `--snapshot`-vs-real differences it means a silently absent `dist/artifacts.json` yields no first-point evidence and a green release. The checkpoint (Task 2 step 3) requires pasting the `SIGN04-PUBLISH-EVIDENCE` lines, which mitigates this — but the mitigation is human attention, and the plan should say that explicitly.
+**HIGH**
+
+1. **02-04's pre-sign baseline assumes *darwin goreleaser* determinism that no existing gate proves — and the assumption is load-bearing twice.** The repo's determinism evidence is `check:reproducibility` (ci.yml:216-273, Taskfile.yml:1559-1635): a blocking *linux/amd64* same-host double-build and a report-only linux/arm64 leg, both via raw `go build`. Nothing covers darwin, and nothing covers determinism *between two separate goreleaser invocations* (the baseline build vs. the release run's build pipe). The plan's `final != baseline` assertion is safe (quill provably rewrites the file — notary/macos.go:101), but a false difference doesn't prove quill did it, and the mutation arm's `verify-blob` against the baseline requires byte-equality to invert at all. The plan records this as a `backstop` truth — honest, but measuring it directly costs one extra notarize-disabled build in the same rehearsal: build the baseline **twice** and assert `baseline1 == baseline2` before trusting any comparison against it. As written, a nondeterministic darwin build surfaces as a confusing "neither verifies" hard failure with no label telling the maintainer *why*.
+
+**MEDIUM**
+
+2. **The timeout/pending behavior the plans carry as an unresolved assumption is readable at source *now*, and it sharpens the risk.** `notary/macos.go:129-138`: `TimeoutStatus` → log "notarize timeout" and continue; default (pending) → log and continue. Neither fails the pipe. So a slow Apple response on release day ships signed-but-unnotarized binaries behind a green release log — the rehearsal's checkpoint watches for this, but 02-02's flagged-assumption framing ("NOT source-confirmed… believed") understates what the pinned module already shows. More importantly, this makes 02-06's gatekeeper post-release job the *only* hard gate for a timeout-on-release-day — which is fine (it's designed for exactly this) but deserves to be stated as the compensating control rather than discovered as one.
+
+3. **02-07's `release:record-final-hashes` runs after publish, so its hard-fail can't break a publish — but it *can* mask one.** The step correctly fails loudly on missing metadata (a real improvement over cycle 1), but a hard failure *after* a successful publish leaves the release job red while assets are live, and the post-release-verify workflow's `workflow_run` trigger fires on `completed` with `conclusion == 'success'` — so a failed hash-recording step means **post-release-verify never runs for that tag automatically**. The maintainer must then know to use `workflow_dispatch`. The plan never names this interaction; one sentence in 02-07 Task 1 (failure ⇒ manual re-dispatch required) would close it.
+
+4. **02-01's digest cross-check depends on `gh release view --json assets` exposing a `digest` field.** That field is a relatively recent gh/API addition; the plan's sentinel fallback ("record the sentinel rather than skipping") is the right defensive shape, but the acceptance criteria never require the sentinel-vs-real-digest outcome to be recorded. If the runner's gh version lacks the field, every evidence line silently carries `digest_match=unknown` and the provenance strengthening (the stated justification for keeping `jq`) evaporates without anyone noticing. Require the checkpoint to state which case occurred.
+
+**LOW**
+
+5. **02-04: the `signs:`-arm evidence labels rely on snapshot naming** (empty tag segment), correctly flagged as expected — but the *attestation* leg of criterion 3 is entirely absent from rehearsal because `actions/attest-build-provenance` only runs in CI. Assumption A3 is carried to 02-07 appropriately; just note the rehearsal's "converged hash set" can never include the SLSA subject, so criterion 3's first *complete* five-point closure is only ever observed on the irreversible release. The plans say this; the checkpoint should ask the maintainer to acknowledge it explicitly.
+
+6. **02-06: `TestAppleSecretsScopedToSingleReleaseJob` enumerates `.github/workflows/` at runtime** — good — but the repo also has `release-please.yml` as a *tag-adjacent* workflow; a quick manual confirmation that the test's pull_request-trigger detection covers `pull_request_target` (not just `pull_request`) is worth one line, since `pull_request_target` is the more dangerous fork-reachable trigger and the repo has 13 workflow files.
+
+7. **02-01: spctl exit-code drift across macOS versions.** Exit 3 was measured on macOS 27.0; the CI runner is Tahoe-class (26). The non-{0,3}-is-fatal rule makes drift a loud failure rather than a wrong verdict — acceptable, but worth a one-line comment in the target.
 
 ## Suggestions
 
-1. Fix the concurrency error in 02-02's flagged assumptions and delete the corresponding "correct the comment" instruction in 02-04 Task 3; size `notarize.timeout` against two sequential per-binary submissions (the plan's 20m-over-10m-default instinct survives, but for the right reason).
-2. In 02-04 and 02-07, restate D-05 point one as what is actually captured (post-run `dist/` hash, or a separate `goreleaser build` baseline) and add one sentence acknowledging that A3 is settled by *divergence detection across points*, not by a literal mid-pipe snapshot.
-3. In 02-04, record the expected snapshot-mode asset names (empty tag segment) as the rehearsal's expected shape, so the evidence file doesn't invite a false "names don't match the contract" reading later.
-4. In 02-01, either use `jq` for something specific (e.g., resolving the asset digest from `gh release view --json assets` to cross-check the downloaded sha256 against GitHub's recorded digest — a genuinely useful addition) or drop it from the precondition set; and add value validation for `GATEKEEPER_EXPECT`.
-5. In 02-06 Task 3, lift the Rosetta/arch-scoping decision into `must_haves.truths` with a required recorded verdict.
-6. Consider asserting in 02-07's checkpoint that `gh api repos/.../releases` asset digests (GitHub now records per-asset SHA256 digests) match the re-downloaded hash — a fifth, independent provenance point that costs one command.
+1. **(02-04, addresses Concern 1)** Add a second notarize-disabled baseline build to the rehearsal target and assert `baseline1 == baseline2` with a distinctly-labelled failure (`BASELINE-NONDETERMINISTIC`) so the failure mode names itself. Zero extra Apple submissions; converts the backstop truth into a measurement.
+2. **(02-02)** Record the source-confirmed timeout/pending continue behavior (`notary/macos.go:129-138`) in the notarize block's comment now, replacing the "unresolved" framing — and state that the post-release gatekeeper job is the compensating control for a release-day timeout.
+3. **(02-07 Task 1)** Add one comment line: a hard failure in `release:record-final-hashes` after publish requires a manual `workflow_dispatch` of post-release-verify for that tag, since `workflow_run` only fires green.
+4. **(02-01 Task 2)** Add a checkpoint step: state whether GitHub's recorded digest was present or the sentinel was recorded, per asset.
+5. **(02-06 Task 1)** Extend the secrets-scoping test (or its doc comment) to name `pull_request_target` explicitly.
+6. **(02-03)** The shim-based positive-identification proof is clever; note in the test plan that the shim must `exec "$@"`-forward *and* be chmod +x, and that a suite failure *through* the shim would be indistinguishable from a real failure — record the log first, suite result second.
 
 ## Risk Assessment
 
-**MEDIUM-LOW.** The architecture is correct and verified at source level; the two MEDIUM findings are accuracy/observability defects in the plan text, not design flaws, and both are cheaply repairable before execution. The irreducible risks are the ones the plans already name honestly: Apple credential provisioning is out-of-repo and blocking; `syspolicy_check`/quarantine-xattr semantics are MEDIUM-confidence pending 02-01's tracer (correctly sequenced first); and the single unrehearsable CI path remains genuinely unrehearsed (D-08's accepted consequence). Nothing in the wave ordering, security posture (D-14/D-17 verified intact against the current files), or upgrade-path contract (`upgrade.go:195,209`, `verify.go:44`) gives me concern beyond what the plans themselves surface.
+**MEDIUM.** Down from HIGH in cycle 1. The two structural risks that made cycle 1 dangerous (an oracle that could never pass; an unsatisfiable mid-pipe hash capture) are both resolved with mechanisms I verified against the pinned GoReleaser source and this repo's actual files. What remains is concentrated where it should be: one unproven determinism assumption in the rehearsal baseline (Concern 1, cheaply fixable), and the irreducible fact — honestly carried by the plans — that the full evidence chain can only close on an irreversible publish. The wave structure, RED-first gate, cryptographic subject identification, and verify-before-execute ordering are all correct. With Concern 1 addressed, I'd rate this LOW-MEDIUM.
 
 ---
 
 ## Consensus Summary
 
-Both reviewers independently verified the phase's central mechanism claims against
-the pinned `goreleaser/v2@v2.17.1` module source and agreed the D-18 design is
-correct. Both also independently landed on the same structural defect: **D-05's
-first comparison point — "the sha256 immediately after the notarize pipe" — is not
-observable by any mechanism either plan defines.** Codex rates it HIGH, pi rates it
-MEDIUM, and they converge on the same remedy (relabel the captured value honestly,
-and obtain a genuine pre-notarize baseline from a separate run).
+Cycle 1's seven HIGH findings are resolved. Both lanes independently confirmed the
+substance of each fix at source: the D-19 oracle amendment is propagated with zero
+remaining `-t exec` gating references; `02-04`'s mid-pipe hash capture is gone and
+replaced with cryptographic subject identification; `02-06` verifies with cosign
+before `chmod`; `02-07`'s recorder is renamed `release:record-final-hashes` and now
+hard-fails on absent metadata; `02-05` carries a per-tag applicability table with a
+pending marker instead of an unqualified present-tense guarantee.
 
-The two lanes diverge sharply on overall risk (Codex HIGH, pi MEDIUM-LOW). The
-divergence is explained by scope: Codex reviewed the CI trust-ordering and
-documentation-timing dimensions that pi did not examine, while pi went deeper on
-the pinned GoReleaser source and caught a factual error in the plans' own
-flagged-assumption block that Codex missed.
+**Two HIGH concerns remain, both newly raised this cycle, both confirmed by the
+orchestrator against the working tree.**
+
+Overall risk: Codex rates the set **HIGH** until both are corrected, then MEDIUM.
+pi rates it **MEDIUM**, down from cycle 1, and LOW-MEDIUM once its Concern 1 is
+addressed. The gap is scope, not disagreement: pi did not assess the CI checkout-ref
+surface that produced Codex's second HIGH.
 
 ### Agreed Strengths
 
-- **The D-18 config move is correct at source level.** Both lanes independently
-  confirmed `sign.BinaryPipe{}` precedes `notary.MacOS{}` in `BuildPipeline`, and
-  that the release-scoped `signs:` pipe runs after `notary.MacOS` — so cosign
-  genuinely signs post-notarize bytes by construction.
-- **The `internal/upgrade` sidecar download contract survives the rename**
-  untouched, and keeping the explicit Go-template (rather than `${artifact}`) is
-  the right call given `signone()`'s Path/Name rebinding.
-- **Exact-set assertions on `notarize.macos[].ids` and `signs[].ids`** correctly
-  defend both directions — silent underscope via the `[ProjectName]` default, and
-  accidental zip inclusion.
-- **RED-before-GREEN discipline is structural, not rhetorical**, and the
-  checkpoints sit exactly where irreversible or human-only actions occur.
-- **02-03's two-outcome resolver** structurally forecloses the silent-rebuild
-  false green; both harnesses do currently `go build` unconditionally.
-- **Secret scoping in 02-06** is well designed: one job holds `id-token: write`,
-  and the runtime enumeration of every workflow file beats a fixed allowlist.
+- **The two-candidate `cosign verify-blob` design (02-04 step 6a) is sound.** Both
+  lanes verified its premise: `binary_signs:` signs pre-notarize bytes while `signs:`
+  signs post-notarize bytes, so an exactly-one-must-verify rule is a genuine
+  cryptographic discriminator, and the "both or neither verifies is a hard failure"
+  clause converts a broken experiment into an inconclusive result rather than false
+  evidence. Both agree this is materially better than cycle 1's re-hash-a-path design,
+  which quill's in-place Mach-O rewrite would have corrupted.
+- **Exit-status-only verdict classification (02-01) is correct.** pi confirmed spctl's
+  own output contains the string `rejected` in diagnostic text, so a substring search
+  really would misclassify; both lanes endorse treating non-{0,3} as fatal as the safe
+  failure direction.
+- **The evidence-line schema** (`schema=1`, fixed key order, `not-found`/`unknown`
+  sentinels) fixes the real cross-plan fragility cycle 1 identified, and matches the
+  repo's existing `TAG-EVIDENCE`/`SIGN-EVIDENCE` conventions.
+- **02-06's verify-before-chmod ordering closes a real hole**, and both lanes endorse
+  keeping the Gatekeeper job independent because it *assesses* without *executing*.
+- **02-03's two rejections are adequately reasoned.** Both lanes accepted them
+  independently. The orchestrator confirmed the load-bearing precedent: the repo does
+  carry exactly four deliberate copies of its git helper
+  (`internal/indexer/capability/matrix_test.go`, `internal/migrate/migratetest/fixture.go`,
+  `tools/bench/runner/main.go`, `tools/bench/realcorpus/manifest.go`), and the plan
+  writes down the extraction trigger rather than leaving it to taste.
+- **Single-arch mis-order mutation is a sound reduction.** Both lanes agree the tested
+  property is pipe ordering and subject selection, which are configured once outside
+  the architecture-specific build declarations.
+- **02-02's conjunctive all-five credential gate is the right mitigation**, and pi
+  supplied the reason it matters more than cycle 1 knew: at `notary/macos.go:106-111`
+  the pipe *signs* and logs "will not try to notarize" and continues when the notary
+  credentials are empty — a green log shipping signed-but-unnotarized bytes.
 
 ### Agreed Concerns
 
-- **HIGH/MEDIUM — D-05 point one is unobservable as specified** (Codex HIGH, pi
-  MEDIUM). `02-04` Task 1 step 4 asks for a hash "immediately after the build pipe
-  and again after the notarize pipe" inside one opaque `goreleaser release`
-  invocation; `02-07` Task 1 labels a post-everything `dist/` hash as
-  "immediately after notarize". Both reviewers note the label silently assumes A3,
-  the very assumption the measurement exists to settle.
-- **02-07's not-found path exiting zero** (Codex HIGH, pi LOW) leaves SIGN-04
-  potentially unprovable for a release that can never be re-cut (D-12).
-- **02-01's `jq` precondition is unjustified and `GATEKEEPER_EXPECT` is
-  unvalidated** (both LOW).
-- **02-06's amd64-on-Apple-Silicon scoping decision is buried in the task body**
-  rather than recorded as a must-have (Codex MEDIUM, pi LOW).
+- **HIGH — `02-04`'s separate-build pre-sign baseline is not established as
+  commensurable with the release run's pre-quill bytes.** Raised independently by both
+  lanes and confirmed by the orchestrator. `02-04-PLAN.md:173-185` substitutes a
+  separate notarize-disabled `goreleaser build` for the unobtainable mid-pipe capture
+  and rests it on "this repo already asserts that property (the reproducibility flags
+  exist for the double-build determinism gate)". At source that assertion is narrower
+  than the use:
+  - The determinism gate is `ci.yml:216-273` / `Taskfile.yml:1559-1635`. Its blocking
+    leg is **linux/amd64 only**; the linux/arm64 leg is `continue-on-error: true`,
+    reported and non-blocking per D-03. **No leg covers darwin at all**, and every leg
+    uses raw `go build`, not goreleaser.
+  - The comparison is across **two different commands** — `goreleaser build` versus
+    `goreleaser release --snapshot`. `Taskfile.yml:282-285` states the resolved version
+    string is what `--snapshot` changes, and the darwin ldflags at
+    `.goreleaser.yaml:62-69` embed `{{ .Tag }}`, `{{ .FullCommit }}` and
+    `{{ .CommitDate }}` directly into the binary. `02-04` step 4 never specifies
+    `--snapshot` for the baseline invocation, so the two runs can differ *before* quill
+    for version-string reasons alone.
+  - The assumption is load-bearing **twice**: it underwrites the `final != baseline`
+    reading, and the mutation arm's inversion cannot happen at all unless the baseline
+    is byte-equal to the release run's pre-quill bytes. A non-reproducible darwin build
+    surfaces as a "neither verifies" hard failure that is indistinguishable from a
+    genuine ordering finding.
+  - Both lanes converge on the same remedy shape. pi: build the baseline twice and
+    assert `baseline1 == baseline2` under a distinct `BASELINE-NONDETERMINISTIC` label
+    before trusting any comparison — zero extra Apple submissions. Codex: additionally
+    make both runs `goreleaser release --snapshot` with identical flags and generated
+    config, differing *only* in the notarize enable predicate, rather than comparing
+    `build` against `release`. Adopting both closes the finding completely.
+
+- **HIGH (Codex only, orchestrator-confirmed) — the new post-release suite job is not
+  instructed to check out the resolved release tag, so it would test the released
+  binary against the default branch's tests.** `02-06-PLAN.md:210` tells the executor
+  to mirror the existing job skeleton "checkout, Go setup and the Task install action,
+  in the established order". Both existing checkout steps —
+  `post-release-verify.yml:216` and `:262` — carry no `with: ref:`, and the workflow's
+  own header at `:55-60` states that a `workflow_run` job's `GITHUB_REF`/`GITHUB_SHA`
+  refer to the default branch and its tip. The new job runs `test/integration` against
+  the downloaded release asset, so mirroring that skeleton pairs *binary@tag* with
+  *tests@main*. Criterion 4's evidence ("the published binary passes its own release's
+  suite") does not hold under that pairing, and a post-release red becomes ambiguous
+  between a bad artifact and drifted tests. pi did not assess this surface. Remedy:
+  `with: ref: ${{ needs.resolve-tag.outputs.tag }}` on the suite job's checkout, plus a
+  workflow-shape test asserting that every job executing release-tag artifacts checks
+  out the same resolved tag.
+
+- **MEDIUM — a post-publish failure of `release:record-final-hashes` silently
+  suppresses post-release verification.** Raised by both lanes. The step correctly
+  fails loudly now, but it runs after GoReleaser has published, so the release workflow
+  concludes failure with assets already live — and `post-release-verify.yml`'s
+  `workflow_run` trigger fires only on `conclusion == 'success'`. Automatic Gatekeeper
+  and suite jobs therefore never run for that tag. Neither `02-07` nor `02-06` names
+  this interaction or instructs the manual `workflow_dispatch` recovery.
+
+- **MEDIUM — `02-01`'s GitHub-digest cross-check fails open.** Both lanes flagged it.
+  `02-01-PLAN.md:167` instructs the target to emit a sentinel and continue when GitHub
+  supplies no `digest` field, while the digest cross-check is carried as a must-have
+  and is the stated justification for the `jq` precondition. As written the target can
+  pass with `digest_match=unknown` on every line and nobody notices; pi adds that the
+  field is a relatively recent gh/API addition, so this is a live path rather than a
+  theoretical one.
 
 ### Divergent Views
 
-- **Overall risk: Codex HIGH vs pi MEDIUM-LOW.** Not a contradiction — different
-  surfaces reviewed. Codex's HIGHs on CI trust-ordering (02-06) and documentation
-  timing (02-05) are areas pi did not assess; pi's source-level MEDIUM on notarize
-  concurrency is an area Codex did not assess. Treat the union, not the average.
-- **Notarize concurrency (pi only, CONFIRMED).** pi found the plans' own
-  flagged-assumption "correction" is factually wrong. Codex did not examine this.
-- **Executing an unverified downloaded binary (Codex only).** pi did not raise it;
-  Codex's reading of the plan text is accurate.
+- **Overall risk: Codex HIGH vs pi MEDIUM.** Not a contradiction — different surfaces.
+  Codex's second HIGH (post-release checkout ref) is in a file pi did not assess for
+  that property; pi's risk rating is otherwise consistent with Codex's "MEDIUM once
+  corrected".
+- **`02-06`'s `needs: verify-supply-chain`.** pi reads it as a clean strengthening.
+  Codex accepts the safety but notes it costs independent diagnostic evidence: a
+  supply-chain failure now *skips* the suite instead of producing a second, separately
+  interpretable signal — the exact tradeoff the neighbouring `self-upgrade` job
+  deliberately refuses at `post-release-verify.yml:241-244`. Codex asks the plan to
+  choose consciously and record which it chose; the plan currently says "belt and
+  braces" without naming what the belt costs.
+- **`02-05`'s per-tag applicability table.** Codex alone objects that requiring every
+  released tag turns a verification document into a hand-maintained release ledger,
+  and proposes boundary rows ("through v0.5.1", "first notarized release", "later
+  releases") instead. pi did not flag it.
 
----
+### Orchestrator source-grounding
 
-## Verification coverage — orchestrator source-grounding
+Every HIGH and every MEDIUM above was re-verified by direct file read before being
+recorded. Two additional checks worth carrying forward:
 
-The orchestrator independently re-derived every load-bearing claim below from the
-pinned module cache, the working tree, and live macOS 27.0 (Tahoe) tooling. This
-section records what was **confirmed**, what was **refuted**, and two **new HIGH
-findings neither lane produced**.
-
-### Reviewer claims CONFIRMED at source
-
-| Claim | Verdict | Evidence |
-|---|---|---|
-| `sign.BinaryPipe{}` runs before `notary.MacOS{}`; release-scoped `sign.Pipe{}` runs after both | CONFIRMED | `internal/pipeline/pipeline.go:103,105,143` (v2@v2.17.1) |
-| `signs[].ids` filters **archive** ids; `notarize.macos[].ids` filters **build** ids | CONFIRMED | `archive.go:308-322` sets `ExtraID: archive.ID` on `UploadableBinary`; `notary/macos.go:80-83` filters `artifact.Binary` by `ByIDs` |
-| `signone()` rebinds `env["artifact"]` from `art.Path` to `art.Name` for the publish-naming pass | CONFIRMED | `internal/pipe/sign/sign.go:182` then `:275` |
-| `notarize.macos[].ids` defaults to `[ProjectName]` and an empty match is a **non-fatal skip** | CONFIRMED | `notary/macos.go:35-37`; `pipe.Skipf` at `:86-88` |
-| quill mutates the Mach-O **in place** at `bin.Path` (so sha256 necessarily changes) | CONFIRMED | `quill/sign.go:130-160` — `AddEmptyCodeSigningCmd` on `cfg.Path` |
-| Assumption **A3** (no later release-scoped pipe re-mutates the binary after `sign.Pipe`) | CONFIRMED by inspection | Every pipe after `sign.Pipe{}` (`aur`, `nix`, `winget`, `brew`, `cask`, `krew`, `scoop`, publish) emits manifests only |
-| The retracted-rationale text really is present today | CONFIRMED | `.goreleaser.yaml:183-186` |
-| Both harnesses `go build` unconditionally | CONFIRMED | `test/integration/main_test.go:47`, `test/wireoracle/main_test.go:29` |
-| `self-upgrade` deliberately omits `needs: verify-supply-chain`, with rationale | CONFIRMED | `.github/workflows/post-release-verify.yml:240-247` |
-| `record-notarize-hashes` would sit after publish, before attestation | CONFIRMED | `release.yml:169-173` (Release step) then `:188` (attest step) |
-| pi's notarize-concurrency refutation | **CONFIRMED — the plans are wrong** | `notary/macos.go:43-50` parallelizes across *config entries*; `:90` loops binaries **sequentially**. This phase ships one entry with two ids ⇒ sequential. Plan text at `02-02-PLAN.md:377-378` and `02-04-PLAN.md:297-298` |
-
-### Maintainer-flagged items independently re-verified
-
-- **Threat-ID duplication is benign.** `T-02-11`, `T-02-16`, `T-02-17` each appear
-  twice **within their own file only**; a cross-file collision scan returns empty.
-  Not the Phase-1 collision class. Confirmed.
-- **D-18 involves no upstream GoReleaser defect.** The pipe order is deliberate;
-  neither reviewer proposed reporting an upstream bug.
-
-### NEW HIGH findings — measured, not inferred
-
-Both were produced by running the actual tools on macOS 27.0 (build 26A5388g),
-the same OS class as the `namespace-profile-macos-6x14-tahoe` runner. Neither
-reviewer had a macOS host and neither raised these.
-
-**NEW-HIGH-1 — `spctl -a -vv -t exec` categorically rejects *any* bare Mach-O,
-so SIGN-02's stated proof can never pass and 02-01's RED baseline is a false RED.**
-
-A Developer ID-signed, hardened-runtime, notarized bare executable (Docker's
-`docker` binary, `Authority=Developer ID Application: Docker Inc (9BNSXJN65R)`,
-`flags=0x10000(runtime)`), copied and given a `com.apple.quarantine` xattr:
-
-```
-/tmp/sp-devid: rejected (the code is valid but does not seem to be an app)
-origin=Developer ID Application: Docker Inc (9BNSXJN65R)
-EXIT=3
-```
-
-An Apple-signed bare binary behaves identically (`origin=macOS Software Signing`,
-same `rejected … does not seem to be an app`, exit 3).
-
-Consequences:
-- `REQUIREMENTS.md:25` requires `spctl -a -vv -t exec` to report
-  `source=Notarized Developer ID`. For a bare Mach-O it **never will**, however
-  perfectly notarized. **Criterion 2 / SIGN-02 is unachievable as written.**
-- `02-01`'s RED baseline will observe `rejected` and be recorded as a working
-  gate — but the rejection reason is *"does not seem to be an app"*, not *"not
-  notarized"*. The gate would report RED for a correctly notarized binary too.
-  This is precisely the false-confidence failure mode SIGN-03 exists to prevent,
-  reproduced inside the mechanism meant to prevent it.
-- `02-07` would run the full phase to an **irreversible release** and only then
-  discover the GREEN criterion is unreachable — with D-12/D-13 forbidding a re-cut.
-
-This does not mean the phase's *user-facing* goal is wrong. Gatekeeper's runtime
-policy for a bare executable launched from a shell differs from `spctl`'s
-bundle-oriented assessment. What is refuted is the **chosen instrument**, not the
-guarantee. The phase needs a different oracle (e.g. LaunchServices-mediated open,
-or assessing a `.app`/zip shape), decided **before** 02-01 records a baseline.
-
-**NEW-HIGH-2 — `syspolicy_check distribution` fatally requires a *stapled* ticket,
-which this phase's guarantee explicitly excludes.**
-
-```
-$ syspolicy_check distribution <bare-macho>
-App has failed one or more pre-distribution checks.
-    Notary Ticket Missing
-    Severity: Fatal
-    Full Error: A Notarization ticket is not stapled to this application.
-$ echo $?   # 70
-```
-
-`REQUIREMENTS.md:25` requires `syspolicy_check distribution` to **pass**. The
-phase's own three-part guarantee is *"notarized, online-verified, **not
-stapled**"*, and the plans state a bare Mach-O is categorically unstaplable.
-These two requirements are in **direct contradiction**: the command's failure is
-fatal-by-design for exactly the artifact shape this project ships.
-
-Two secondary measurements that settle the plans' open questions on this tool:
-- **Exit status is authoritative** — `70` on fatal failure, so an exit-code gate
-  is sound (no silent green).
-- **`--json` stdout is clean and `jq`-parseable**; the `"Only one signature found
-  … skipping dual signature check"` preamble goes to **stderr**. This *justifies*
-  02-01's `jq` precondition, contradicting both reviewers' LOW suggesting it be
-  dropped — provided the target actually consumes `--json`.
-- Argument type is `<bundle-path>` — `syspolicy_check distribution --help` names
-  it "The application bundle to check for distribution."
-
-### Still genuinely open
-
-- Whether a synthetic `com.apple.quarantine` xattr behaves identically to a
-  browser-applied one (assumption A2) — untested here; 02-01's comparison stands.
-- What the correct Gatekeeper oracle *is* for an unbundled CLI binary, given
-  NEW-HIGH-1. This is now the phase's blocking design question.
+- **CONFIRMED — the pre-existing `self-upgrade` job has the same execute-before-verify
+  exposure that `02-06` fixes for the new job, and no plan touches it.**
+  `Taskfile.yml:1279-1291` does `gh release download`, then `chmod +x`, then executes
+  `"${PRIOR_BIN}" upgrade "${TAG}"` with no cosign verification anywhere in between.
+  This is pre-existing debt rather than a Phase 2 regression, and the job is
+  deliberately independent for a recorded reason — but `T-02-19`'s corrected mitigation
+  now asserts the team understands this ordering hazard while an identical one sits
+  three jobs away untouched. Worth an explicit "accepted pre-existing exposure" note in
+  `02-06`'s threat model rather than silence.
+- **CONFIRMED — threat IDs are unique across the phase** after the `T-02-20`/`T-02-21`
+  → `T-02-22`/`T-02-23` renumbering, and `02-02`'s `T-02-06` mitigation text still says
+  the enabled-template test "resolves the template under both environments and asserts
+  two different results" (`02-02-PLAN.md:400`) while Task 1 now specifies seven
+  environments asserting TRUE once and FALSE six times (`02-02-PLAN.md:115,167`). A
+  stale count in a threat-model row, not a design defect.
