@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/seanb4t/codegraph-go/compare/v0.5.1...v0.6.0) (2026-08-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** register all eight tools by default; CODEGRAPH_MCP_TOOLS now narrows ([#44](https://github.com/seanb4t/codegraph-go/issues/44))
+
+### Features
+
+* **mcp:** register all eight tools by default; CODEGRAPH_MCP_TOOLS now narrows ([#44](https://github.com/seanb4t/codegraph-go/issues/44)) ([4397d4b](https://github.com/seanb4t/codegraph-go/commit/4397d4b5cf589056271ae64b27720e6efa60816f))
+
 ## [0.5.1](https://github.com/seanb4t/codegraph-go/compare/v0.5.0...v0.5.1) (2026-08-08)
 
 
