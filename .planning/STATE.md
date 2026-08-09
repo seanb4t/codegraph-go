@@ -5,8 +5,8 @@ milestone_name: macOS Distribution & Homebrew
 current_phase: 2
 current_phase_name: Apple Signing & Notarization
 status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-09T00:34:27.448Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-08-09T12:44:01.105Z"
 last_activity: 2026-08-08
 last_activity_desc: v0.5.0 roadmap created, 18/18 requirements mapped
 progress:
@@ -313,8 +313,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-08T14:24:10.700Z
-Stopped at: Phase 1 context gathered
+Last session: 2026-08-09T12:44:01.096Z
+Stopped at: Phase 2 context gathered
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -340,7 +340,7 @@ Stopped at: Phase 1 context gathered
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/01-cross-compile-spike-goreleaser-release-migration/01-CONTEXT.md
+Resume file: .planning/phases/02-apple-signing-notarization/02-CONTEXT.md
 
 ## Operator Next Steps
 
