@@ -151,7 +151,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — tracer: build `verify:gatekeeper` end-to-end against a published asset and record the SIGN-03 RED baseline on v0.5.1, closing the quarantine-xattr and `syspolicy_check` open questions
+- [ ] 02-01-PLAN.md — tracer: build `verify:gatekeeper` end-to-end against a published asset (D-19 oracle: `spctl -a -vv -t install`, verdict by exit status) and record the SIGN-03 RED baseline on v0.5.1, settling the synthetic-quarantine question
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -160,7 +160,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-04-PLAN.md — guarded maintainer-only notarize rehearsal (D-08/D-09) and the D-07 one-time mis-order mutation that measures the ordering claim
+- [ ] 02-04-PLAN.md — guarded maintainer-only notarize rehearsal (D-08/D-09) and the D-07 one-time mis-order mutation, with the cosign subject determined by `cosign verify-blob` against a separately-built pre-sign baseline
 - [ ] 02-05-PLAN.md — `docs/RELEASE.md` states the guarantee exactly (notarized, online-verified, not stapled), names the offline limitation, and gives the reproduction commands
 
 **Wave 4** *(blocked on Wave 3 completion)*
