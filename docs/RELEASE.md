@@ -7,12 +7,18 @@ command below only references artifacts `.github/workflows/release.yml`
 actually publishes — if a command here doesn't work against a real release,
 that is a bug in this doc (or the workflow), please report it.
 
-> **Status note:** these are the commands a real, tagged release publishes
-> artifacts for. As of this writing no `v*` tag has been pushed yet, so no
-> live release exists to run these commands against — they are documented
-> now so the first real release (and every one after it) is verifiable from
-> day one. `codegraph upgrade` runs the equivalent of steps 1 below
-> automatically, in-process, before ever swapping the installed binary.
+> **Status note:** tagged releases exist now and these commands are live,
+> not aspirational. `v0.5.1` and every release since (including `v0.6.0`,
+> the latest as of this writing) publish real assets and are verifiable
+> today via §1a (cosign), §1b (provenance) and §1c (SBOM) — all three run
+> clean against them. §1d (Gatekeeper) is different: it does not yet apply
+> to any published release, because none has gone through Apple
+> notarization yet. `v0.5.1`'s darwin binaries are, in fact, *deliberately*
+> un-notarized — they are this project's own recorded RED baseline for that
+> gate (`02-EVIDENCE.md`). See §1d's applicability table for exactly which
+> releases each section covers, and when that boundary moves.
+> `codegraph upgrade` runs the equivalent of §1a automatically, in-process,
+> before ever swapping the installed binary.
 
 ## 1. Verifying a release
 
@@ -32,8 +38,12 @@ Every tagged release (`v[0-9]*`) publishes, per platform
 - GitHub build-provenance attestation over those same 8 payloads, published
   through GitHub's Attestations API (`actions/attest-build-provenance`) —
   not a downloadable release asset, unlike everything else in this list
+- (once notarized — see §1d's applicability table) Apple notarization of
+  the two darwin raw binaries above; this adds no new file to the list —
+  see §1d for exactly which releases this applies to and how to check it
+  yourself
 
-All three verification steps below use only these published assets.
+All four verification steps below use only these published assets.
 
 ### a) Verify the cosign keyless signature (per-binary)
 
@@ -149,6 +159,144 @@ cat codegraph_<tag>_<goos>_<goarch>.spdx.json | jq '.packages[] | {name, version
 This is the authoritative, machine-readable package inventory for that
 specific binary — see the dependency-tree narrative below for how to read
 it.
+
+### d) Verify Gatekeeper trust (notarization)
+
+**Applicability — read this table first.** This project's darwin release
+assets have not always meant the same thing with respect to macOS
+Gatekeeper, and the guarantee below only applies to some of them:
+
+| Releases | What they published | Which sections apply |
+|---|---|---|
+| Every release through the last one published before Apple notarization lands (as of this writing: at least `v0.5.1` and `v0.6.0`) | Signed-or-adhoc darwin binaries, cosign bundles, SBOMs, build provenance — **not** Apple-notarized | §a, §b, §c only. §d does not apply: the Gatekeeper install-time assessment below rejects these darwin binaries by design (exit 3) — this is `v0.5.1`'s own recorded SIGN-03 RED baseline, `02-EVIDENCE.md` |
+| The first notarized release — tag pending, filled in by plan 02-07 once it publishes | The same artifacts, plus real Apple notarization of the darwin binaries | §a, §b, §c, §d all apply |
+| Every release after the first notarized one | Same as above | §a, §b, §c, §d all apply |
+
+From the first notarized release onward (see the table above), this
+project's guarantee is exactly this, quotable verbatim:
+**notarized, online-verified, not stapled**.
+
+What each part means, operationally:
+
+- **Notarized** — the darwin binaries carry a real Apple Developer ID
+  signature and were accepted by Apple's notarization service.
+- **Online-verified** — the acceptance record lives with Apple, not with
+  the file. Gatekeeper resolves it over the network the first time the
+  binary runs.
+- **Not stapled** — nothing is attached to the binary itself. There is no
+  local ticket to fall back on if that first-launch network lookup fails.
+
+**Known limitation: offline first launch fails.** A browser-downloaded
+binary's *first* launch, on a machine with no network reachability to
+Apple, cannot complete the online ticket lookup above and is blocked
+exactly as an un-notarized binary would be. This is a deliberate scope
+decision, not an oversight — DIST-06 is the deferred requirement that
+would close it, and stapling remains out of scope for this
+milestone.[^staple-why]
+
+[^staple-why]: Apple's `stapler` tool attaches tickets only to
+`.app`/`.pkg`/`.dmg` containers, never to a bare Mach-O executable or an
+archive, and this project's notarization backend (Quill) has no staple
+command at all — see `PROJECT.md`'s macOS Distribution key decisions for
+the full rationale.
+
+**Reproducing the check yourself.** These are the same steps
+`verify:gatekeeper` in `Taskfile.yml` runs — this is the manual, one-off
+version; that target is the automated, repeatable one plan 02-06's CI job
+calls. Assumption A2 (`02-EVIDENCE.md`) confirmed that a synthetic
+quarantine attribute produces the identical `spctl` verdict as a genuine
+browser download on a byte-identical file, so the synthetic form below is
+measured, not assumed, to reproduce a real download.
+
+```sh
+# 1. Download the raw per-platform binary — never an archive; this is the
+# file spctl actually assesses in practice. (The automated target also
+# cross-checks GitHub's recorded digest before downloading; omitted here
+# for brevity — see Taskfile.yml's verify:gatekeeper for that version.)
+gh release download <tag> --repo seanb4t/codegraph-go \
+  --pattern 'codegraph_<tag>_darwin_<arch>'
+
+# 2. Apply a synthetic com.apple.quarantine attribute in Apple's documented
+# flags;timestamp;agent;event-uuid form. 0081 is "downloaded, not yet
+# launched" — the same flag value Safari itself writes, and the same value
+# this project's own verify:gatekeeper target uses.
+xattr -w com.apple.quarantine "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" \
+  "codegraph_<tag>_darwin_<arch>"
+
+# 3. Read the attribute back and confirm it is actually present. This step
+# is not optional: an assessment run against a file that was never
+# quarantined produces a misleading pass that has nothing to do with
+# notarization, and step 4 below must never run without this confirmation
+# succeeding first.
+xattr -p com.apple.quarantine "codegraph_<tag>_darwin_<arch>"
+
+# 4. Run the actual Gatekeeper install-time assessment. Read the EXIT
+# STATUS, never the text — see "read the exit status" below for why.
+spctl -a -vv -t install "codegraph_<tag>_darwin_<arch>"
+echo "exit status: $?"
+```
+
+**What a pass and a fail look like.** This asserts two independent things,
+mirroring §a's shape above: the exit status is the verdict itself, and the
+`source=` line is a second, separate confirmation of *why*.
+
+A pass, once a release is notarized:
+
+```
+codegraph_<tag>_darwin_<arch>: accepted
+source=Notarized Developer ID
+exit status: 0
+```
+
+A fail, on every release published before notarization (including every
+release in the table's first row today):
+
+```
+codegraph_<tag>_darwin_<arch>: rejected
+exit status: 3
+```
+
+**Read the exit status, never a text search.** `spctl`'s full verbose
+output can legitimately contain the substring "accepted" inside a
+*rejected* verdict's own explanatory text (e.g. "rejected (the code is
+valid but does not seem to be an app)"), and inside unrelated `origin=`
+lines. A `grep -q accepted` over that output would silently match the
+wrong thing. The exit status (`0` = accepted, `3` = rejected) is the only
+reliable signal, and it is what both this document's commands and
+`verify:gatekeeper` key off.
+
+<details>
+<summary>What does <em>not</em> count as verification</summary>
+
+None of the following demonstrate that Gatekeeper trusts a release, even
+though each one is easy to mistake for doing so:
+
+1. **A green CI step.** Nothing in this project's CI ever ran `spctl`
+   against a real, quarantined, published asset before Phase 2 — a green
+   pipeline never asked this question at all.
+2. **`codesign -dvv` reporting a valid signature.** This already passes
+   today on the adhoc-signed, un-notarized darwin binary that `spctl`
+   rejects (see the applicability table above). It answers "is this
+   signed," not "does Gatekeeper trust this."
+3. **`notarytool history` showing an Accepted submission.** That reports on
+   Apple's notary service accepting the *submission*; it says nothing about
+   what a locally-quarantined Gatekeeper install-time check does with the
+   resulting binary.
+4. **An assessment run on a file that was never quarantined.** See step 3
+   above — the read-back exists specifically because this produces a
+   misleading pass.
+5. **`spctl -a -vv -t exec`.** This assessment type rejects any bare
+   Mach-O executable on shape alone — a CLI binary is not an `.app` —
+   before notarization is even considered. Using it here would report a
+   broken release even when notarization is working exactly as intended.
+6. **`syspolicy_check distribution` reporting success.** Its `Notary
+   Ticket Missing` verdict, Severity Fatal, exit 70, is the *correct,
+   permanent, expected* result for every release this project ships,
+   because stapling is permanently out of scope (DIST-06). If you run it,
+   expect that Fatal line on every release, forever — it does not mean
+   anything is broken.
+
+</details>
 
 ## 2. Dependency tree (DIST-05)
 
