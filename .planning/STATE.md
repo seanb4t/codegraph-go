@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 2
-current_phase_name: Apple Signing & Notarization
+current_phase: 02
+current_phase_name: apple-signing-notarization
 status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-08-09T13:53:32.218Z"
-last_activity: 2026-08-08
-last_activity_desc: v0.5.0 roadmap created, 18/18 requirements mapped
+last_updated: "2026-08-09T15:47:28.345Z"
+last_activity: 2026-08-09
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 1 — Cross-Compile Spike & `goreleaser release` Migration
+**Current focus:** Phase 02 — apple-signing-notarization
 
 ## Current Position
 
-Phase: 2 — Apple Signing & Notarization
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-08 — Phase 1 complete, transitioned to Phase 2
+Phase: 02 (apple-signing-notarization) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 02
+Last activity: 2026-08-09 — Phase 02 execution started
 
 Progress: [....] 0/4 phases complete (0%)
 
