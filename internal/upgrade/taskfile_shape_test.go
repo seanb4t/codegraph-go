@@ -1771,3 +1771,92 @@ func TestVerifyGatekeeperDeclaresNamedPreconditions_MissingTargetIsError(t *test
 		t.Fatalf("parseGatekeeperPreconditions: expected an error for Taskfile.yml source with no verify:gatekeeper task, got nil")
 	}
 }
+
+// --- plan 02-04: release:rehearse-notarize credential-precondition guard ---
+
+// rehearseNotarizeExpectedCredentialVars is the exact set of Apple credential
+// environment variables release:rehearse-notarize must declare a named
+// precondition for — D-09's literal content: one precondition per
+// credential, each hard-failing BY NAME before any network round-trip to
+// Apple.
+var rehearseNotarizeExpectedCredentialVars = []string{
+	"MACOS_SIGN_P12",
+	"MACOS_SIGN_PASSWORD",
+	"MACOS_NOTARY_ISSUER_ID",
+	"MACOS_NOTARY_KEY_ID",
+	"MACOS_NOTARY_KEY",
+}
+
+// parseRehearseNotarizePreconditions decodes Taskfile.yml source src with the
+// real YAML decoder (reusing the gatekeeperTaskfileRoot/gatekeeperTaskYAML/
+// gatekeeperPrecondition structs plan 02-01 defined — their shape is generic
+// to any task's preconditions: list, not gatekeeper-specific) and returns
+// release:rehearse-notarize's preconditions: list. Mirrors
+// parseGatekeeperPreconditions's non-vacuity discipline: a missing task or a
+// task with zero preconditions is a returned error, never a usable empty
+// slice.
+func parseRehearseNotarizePreconditions(src string) ([]gatekeeperPrecondition, error) {
+	var root gatekeeperTaskfileRoot
+	if err := yaml.Unmarshal([]byte(src), &root); err != nil {
+		return nil, fmt.Errorf("parseRehearseNotarizePreconditions: %w", err)
+	}
+	task, ok := root.Tasks["release:rehearse-notarize"]
+	if !ok {
+		return nil, fmt.Errorf("parseRehearseNotarizePreconditions: no release:rehearse-notarize task found under tasks:")
+	}
+	if len(task.Preconditions) == 0 {
+		return nil, fmt.Errorf("parseRehearseNotarizePreconditions: release:rehearse-notarize declares zero preconditions:")
+	}
+	return task.Preconditions, nil
+}
+
+// TestRehearseNotarizeDeclaresCredentialPreconditions pins plan 02-04 Task
+// 1's credential-precondition contract for release:rehearse-notarize: one
+// named precondition per Apple credential variable (D-09's literal content),
+// each with a non-empty msg: that names the variable — halting BY NAME
+// rather than after a network round-trip to Apple. Fails if the target is
+// absent or if any one credential precondition is missing.
+func TestRehearseNotarizeDeclaresCredentialPreconditions(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	preconditions, err := parseRehearseNotarizePreconditions(string(data))
+	if err != nil {
+		t.Fatalf("parseRehearseNotarizePreconditions: %v", err)
+	}
+
+	if len(preconditions) < len(rehearseNotarizeExpectedCredentialVars) {
+		t.Fatalf("release:rehearse-notarize declares %d preconditions, want at least %d (one per Apple credential variable, plus host/tool/worktree guards)", len(preconditions), len(rehearseNotarizeExpectedCredentialVars))
+	}
+
+	joined := make([]string, 0, len(preconditions))
+	for _, p := range preconditions {
+		if strings.TrimSpace(p.Msg) == "" {
+			t.Errorf("release:rehearse-notarize precondition sh=%q has an empty msg: — every precondition must hard-fail by name, not by a bare non-zero exit", p.Sh)
+		}
+		joined = append(joined, p.Sh+" :: "+p.Msg)
+	}
+	haystack := strings.Join(joined, "\n")
+
+	for _, v := range rehearseNotarizeExpectedCredentialVars {
+		if !strings.Contains(haystack, v) {
+			t.Errorf("release:rehearse-notarize declares no precondition naming %q (sh: or msg:) — D-09 requires one named precondition per Apple credential variable", v)
+		}
+	}
+}
+
+// TestRehearseNotarizeDeclaresCredentialPreconditions_MissingTargetIsError is
+// the non-vacuity companion: parseRehearseNotarizePreconditions must fail —
+// not pass vacuously — against synthetic Taskfile.yml source with no
+// release:rehearse-notarize task.
+func TestRehearseNotarizeDeclaresCredentialPreconditions_MissingTargetIsError(t *testing.T) {
+	synthetic := `tasks:
+  build:
+    cmds:
+      - go build ./...
+`
+	if _, err := parseRehearseNotarizePreconditions(synthetic); err == nil {
+		t.Fatalf("parseRehearseNotarizePreconditions: expected an error for Taskfile.yml source with no release:rehearse-notarize task, got nil")
+	}
+}
