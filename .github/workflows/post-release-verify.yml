@@ -278,3 +278,163 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           GH_TOKEN: ${{ github.token }}
         run: task verify:self-upgrade
+
+  # Re-fires SIGN-03's Gatekeeper gate — the SAME task verify:gatekeeper
+  # oracle plan 02-01 proved RED against v0.5.1's deliberately un-notarized
+  # assets (02-EVIDENCE.md) — against THIS release's published darwin
+  # assets, expecting the opposite verdict: accepted. Matrix over BOTH
+  # darwin architectures (D-19), fail-fast: false so one architecture's
+  # failure does not hide the other's. Unlike the notarized-suite job below,
+  # this job never EXECUTES the downloaded asset — spctl only ASSESSES it —
+  # so covering both architectures here carries none of that job's
+  # execution-under-translation risk.
+  #
+  # Deliberately does NOT declare needs: verify-supply-chain, mirroring the
+  # self-upgrade job's own independence rationale immediately above: a
+  # broken Gatekeeper verdict and a broken signature are independent
+  # evidence, and both should report on a bad release so neither masks the
+  # other. This job's independence is a DIFFERENT, and equally defensible,
+  # trade from that same-shaped choice: it assesses the file rather than
+  # executing it, so the tampered-artifact-execution ordering hazard
+  # T-02-19 exists to close for notarized-suite does not apply here.
+  gatekeeper:
+    name: "Gatekeeper verdict (darwin/${{ matrix.goarch }})"
+    needs: resolve-tag
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [arm64, amd64]
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # Checked out AT the resolved tag, never the default branch tip
+          # (review concern codex HIGH): under workflow_run this workflow's
+          # own GITHUB_REF/GITHUB_SHA refer to the default branch, not the
+          # tag under verification (see this file's header comment).
+          # resolve-tag resolves which ASSETS to download; it says nothing
+          # about which TREE is checked out. Pinning here means the
+          # verify:gatekeeper Taskfile target this job invokes is the one
+          # that SHIPPED WITH this release, not whatever HEAD happens to be
+          # at verification time (release-matched-test checkout class —
+          # see TestPostReleaseJobsDeclareCheckoutPolicy).
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Assess Gatekeeper verdict on the published darwin/${{ matrix.goarch }} asset
+        env:
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GOOS: darwin
+          GOARCH: ${{ matrix.goarch }}
+          GH_TOKEN: ${{ github.token }}
+          # accepted: this is the post-release GREEN check (plan 02-06).
+          # The RED baseline (plan 02-01) used rejected against the
+          # deliberately un-notarized v0.5.1 assets and lives only in
+          # 02-EVIDENCE.md — that baseline is never re-run in CI, both
+          # because D-06/D-07 preserve v0.5.1's assets permanently for
+          # exactly this reason and because re-walking the release list to
+          # find it here would reintroduce the zero-asset/un-notarized
+          # release-walking hazard this job avoids entirely by resolving
+          # its asset ONLY from the validated $TAG.
+          GATEKEEPER_EXPECT: accepted
+        run: task verify:gatekeeper
+
+  # ROADMAP criterion 4's proof (SIGN-02): runs the REAL test/integration
+  # and test/wireoracle suites against the re-downloaded, NOTARIZED
+  # published darwin/arm64 binary — never a locally rebuilt one (D-10, plan
+  # 02-03's CODEGRAPH_TEST_BIN seam). See Taskfile.yml's
+  # verify:notarized-suite for the full implementation; this job is a thin
+  # wrapper around it, matching this repository's single-definition-of-CI-
+  # job-bodies convention (D-01/D-02, TestWorkflowRunBodiesInvokeTask).
+  #
+  # ARCHITECTURE COVERAGE VERDICT (recorded, not improvised): darwin/arm64
+  # NATIVE ONLY. darwin/arm64 is the MANDATORY minimum criterion-4 execution
+  # surface — dropping to zero darwin legs is never an acceptable
+  # resolution of this question. darwin/amd64 is deliberately NOT included:
+  # this plan found no confirmed evidence that
+  # namespace-profile-macos-6x14-tahoe can execute a darwin/amd64 binary
+  # under Rosetta translation. The local rehearsal (plan 02-04) only
+  # ASSESSED the amd64 binary with spctl on the maintainer's own Apple
+  # Silicon Mac — assessment, never execution. Running an untranslated
+  # amd64 binary here would either hard-fail for a translation-availability
+  # reason unrelated to notarization, or (worse) present a hardened-runtime
+  # library-validation failure DIFFERENTLY than a native arm64 run — an
+  # amd64 pass would be weaker evidence than an arm64 one even if
+  # translation is available. darwin/amd64 execution coverage is deferred
+  # to a future phase that first confirms Rosetta availability on this
+  # runner class, rather than improvised here.
+  #
+  # needs: BOTH resolve-tag AND verify-supply-chain — a DELIBERATE trade,
+  # not a free one (review concern codex MEDIUM), and the OPPOSITE choice
+  # from the self-upgrade job three jobs up: self-upgrade deliberately does
+  # NOT depend on verify-supply-chain, so a broken sidecar and a broken
+  # self-upgrade report as two independent, separately-interpretable
+  # signals. This job cannot make that same choice: it EXECUTES the
+  # downloaded binary, and parallel independent jobs give no ordering
+  # guarantee, so an unverified binary could be made executable and run
+  # before a sibling job's verification failure was even visible. The cost
+  # is real: a supply-chain failure SKIPS this job rather than producing a
+  # second, separately-interpretable signal — do not "harmonise" this back
+  # to self-upgrade's independence; the two choices are opposite on
+  # purpose. Chosen anyway — executing an unverified network-fetched binary
+  # was cycle 1's HIGH review finding, and safety outranks diagnostic
+  # breadth here. (The in-job cosign verify-blob inside
+  # verify:notarized-suite is what actually protects the runner; this
+  # needs: is what makes that intent legible in the job graph too — belt
+  # and braces.)
+  #
+  # Checkout is pinned to the resolved tag (release-matched-test class —
+  # see TestPostReleaseJobsDeclareCheckoutPolicy in internal/upgrade): this
+  # job runs test/integration and test/wireoracle FROM THE TREE against the
+  # published binary, and tests@main paired with binary@tag would make a
+  # post-release red ambiguous between a bad artifact and drifted tests —
+  # unlike verify-supply-chain and self-upgrade (latest-verifier class),
+  # which run fixed verification targets that SHOULD apply even to an
+  # older tag.
+  notarized-suite:
+    name: "notarized suite proof (darwin/arm64)"
+    needs: [resolve-tag, verify-supply-chain]
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: namespace-profile-macos-6x14-tahoe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # ESSENTIAL for this job specifically (not merely consistent with
+          # gatekeeper's own pinning above): it runs test/integration and
+          # test/wireoracle FROM THIS CHECKOUT against the released binary,
+          # so tests@main paired with binary@tag would make a post-release
+          # red ambiguous between a bad artifact and drifted tests.
+          ref: ${{ needs.resolve-tag.outputs.tag }}
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Run the real suite against the notarized published binary
+        env:
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GOOS: darwin
+          GOARCH: arm64
+          GH_TOKEN: ${{ github.token }}
+        run: task verify:notarized-suite

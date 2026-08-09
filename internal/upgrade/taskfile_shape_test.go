@@ -1860,3 +1860,116 @@ func TestRehearseNotarizeDeclaresCredentialPreconditions_MissingTargetIsError(t 
 		t.Fatalf("parseRehearseNotarizePreconditions: expected an error for Taskfile.yml source with no release:rehearse-notarize task, got nil")
 	}
 }
+
+// --- plan 02-06 Task 3: verify:notarized-suite precondition-set guard -----
+
+// notarizedSuiteExpectedPreconditionShs is the exact set of sh: values
+// verify:notarized-suite must declare: one per named input (TAG, REPO,
+// GOOS, GOARCH, GH_TOKEN), and one per required tool (gh, jq, cosign) — 8
+// total. Compared as an exact set, both directions, mirroring
+// gatekeeperExpectedPreconditionShs's own discipline.
+var notarizedSuiteExpectedPreconditionShs = []string{
+	`[ -n "${TAG:-}" ]`,
+	`[ -n "${REPO:-}" ]`,
+	`[ -n "${GOOS:-}" ]`,
+	`[ -n "${GOARCH:-}" ]`,
+	`[ -n "${GH_TOKEN:-}" ]`,
+	`command -v gh`,
+	`command -v jq`,
+	`command -v cosign`,
+}
+
+// notarizedSuitePreconditionNameChecks maps each sh: value above to the
+// substring its msg: must contain — proving the precondition halts BY NAME
+// (D-09's discipline) rather than with a generic message.
+var notarizedSuitePreconditionNameChecks = map[string]string{
+	`[ -n "${TAG:-}" ]`:      "TAG",
+	`[ -n "${REPO:-}" ]`:     "REPO",
+	`[ -n "${GOOS:-}" ]`:     "GOOS",
+	`[ -n "${GOARCH:-}" ]`:   "GOARCH",
+	`[ -n "${GH_TOKEN:-}" ]`: "GH_TOKEN",
+	`command -v gh`:          "gh",
+	`command -v jq`:          "jq",
+	`command -v cosign`:      "cosign",
+}
+
+// parseNotarizedSuitePreconditions decodes Taskfile.yml source src with the
+// real YAML decoder (reusing gatekeeperTaskfileRoot/gatekeeperTaskYAML/
+// gatekeeperPrecondition — generic to any task's preconditions: list) and
+// returns verify:notarized-suite's preconditions: list. Returns a non-nil
+// error when src fails to parse as YAML, when no verify:notarized-suite
+// task exists under tasks:, or when that task declares zero preconditions:
+// entries — never a usable empty slice on any of those misses.
+func parseNotarizedSuitePreconditions(src string) ([]gatekeeperPrecondition, error) {
+	var root gatekeeperTaskfileRoot
+	if err := yaml.Unmarshal([]byte(src), &root); err != nil {
+		return nil, fmt.Errorf("parseNotarizedSuitePreconditions: %w", err)
+	}
+	task, ok := root.Tasks["verify:notarized-suite"]
+	if !ok {
+		return nil, fmt.Errorf("parseNotarizedSuitePreconditions: no verify:notarized-suite task found under tasks:")
+	}
+	if len(task.Preconditions) == 0 {
+		return nil, fmt.Errorf("parseNotarizedSuitePreconditions: verify:notarized-suite declares zero preconditions:")
+	}
+	return task.Preconditions, nil
+}
+
+// TestVerifyNotarizedSuiteDeclaresNamedPreconditions pins plan 02-06 Task
+// 3's precondition contract for verify:notarized-suite: it hard-fails by
+// name (D-09's discipline) on every missing input and missing tool. Fails
+// if the target is absent, or if the sh: set is not exactly
+// notarizedSuiteExpectedPreconditionShs.
+func TestVerifyNotarizedSuiteDeclaresNamedPreconditions(t *testing.T) {
+	data, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	preconditions, err := parseNotarizedSuitePreconditions(string(data))
+	if err != nil {
+		t.Fatalf("parseNotarizedSuitePreconditions: %v", err)
+	}
+
+	gotShs := make([]string, 0, len(preconditions))
+	msgBySh := make(map[string]string, len(preconditions))
+	for _, p := range preconditions {
+		if strings.TrimSpace(p.Msg) == "" {
+			t.Errorf("verify:notarized-suite precondition sh=%q has an empty msg: — every precondition must hard-fail by name, not by a bare non-zero exit", p.Sh)
+		}
+		gotShs = append(gotShs, p.Sh)
+		msgBySh[p.Sh] = p.Msg
+	}
+
+	wantShs := append([]string(nil), notarizedSuiteExpectedPreconditionShs...)
+	sort.Strings(gotShs)
+	sort.Strings(wantShs)
+	if !reflect.DeepEqual(gotShs, wantShs) {
+		t.Fatalf("verify:notarized-suite preconditions: sh: values are not the expected exact set.\ngot:  %v\nwant: %v", gotShs, wantShs)
+	}
+
+	for sh, name := range notarizedSuitePreconditionNameChecks {
+		msg, ok := msgBySh[sh]
+		if !ok {
+			continue // already reported above as part of the exact-set mismatch
+		}
+		if !strings.Contains(msg, name) {
+			t.Errorf("verify:notarized-suite precondition sh=%q has msg %q, which does not name %q — a precondition must halt BY NAME", sh, msg, name)
+		}
+	}
+}
+
+// TestVerifyNotarizedSuiteDeclaresNamedPreconditions_MissingTargetIsError is
+// the non-vacuity companion: it feeds parseNotarizedSuitePreconditions
+// synthetic Taskfile.yml source with no verify:notarized-suite task and
+// verifies the parser — and therefore the main test above — would fail
+// rather than pass vacuously if the target were ever removed or renamed.
+func TestVerifyNotarizedSuiteDeclaresNamedPreconditions_MissingTargetIsError(t *testing.T) {
+	synthetic := `tasks:
+  build:
+    cmds:
+      - go build ./...
+`
+	if _, err := parseNotarizedSuitePreconditions(synthetic); err == nil {
+		t.Fatalf("parseNotarizedSuitePreconditions: expected an error for Taskfile.yml source with no verify:notarized-suite task, got nil")
+	}
+}

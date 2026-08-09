@@ -2266,6 +2266,137 @@ tasks:
 
         echo "verify:gatekeeper: PASS — observed=${OBSERVED} matches GATEKEEPER_EXPECT=${GATEKEEPER_EXPECT}"
 
+  verify:notarized-suite:
+    desc: >-
+      ROADMAP criterion 4's proof: runs the REAL test/integration and
+      test/wireoracle suites against the RE-DOWNLOADED, NOTARIZED published
+      darwin binary named by $TAG/$GOOS/$GOARCH — never a locally rebuilt
+      one (D-10, plan 02-03's CODEGRAPH_TEST_BIN seam). test/wireoracle IS
+      IN SCOPE (02-03's recorded verdict: normalize.go's serverVersion rule
+      already erases the differing version field, so a release-shaped
+      binary passed all 27 frozen scenarios with zero transcript changes).
+      Integrity is verified — cosign verify-blob, the SAME issuer and
+      certificate-identity flags verify:release-assets already uses — BEFORE
+      the binary is ever made executable, never after: parallel independent
+      CI jobs give no ordering guarantee, so a tampered asset would
+      otherwise be executed even if a sibling supply-chain job's own
+      verification later failed.
+    preconditions:
+      - sh: '[ -n "${TAG:-}" ]'
+        msg: "TAG is not set. verify:notarized-suite requires TAG (the resolved, validated release tag) in the environment — post-release-verify.yml's resolve-tag job supplies it via needs.resolve-tag.outputs.tag."
+      - sh: '[ -n "${REPO:-}" ]'
+        msg: "REPO is not set. verify:notarized-suite requires REPO (owner/repo) in the environment."
+      - sh: '[ -n "${GOOS:-}" ]'
+        msg: "GOOS is not set. verify:notarized-suite requires GOOS (darwin) in the environment — the asset name is codegraph_${TAG}_${GOOS}_${GOARCH}, matching internal/upgrade.releaseAssetName's contract."
+      - sh: '[ -n "${GOARCH:-}" ]'
+        msg: "GOARCH is not set. verify:notarized-suite requires GOARCH (arm64 or amd64) in the environment."
+      - sh: '[ -n "${GH_TOKEN:-}" ]'
+        msg: "GH_TOKEN is not set. Every gh invocation in this target needs it; a missing token would otherwise fail mid-target and look like a supply-chain break rather than a missing credential."
+      - sh: command -v gh
+        msg: "gh CLI not found. This target downloads the published release asset and its cosign bundle with it. CI runner images ship it; locally: brew install gh."
+      - sh: command -v jq
+        msg: "jq not found. This target counts executed go test -json events with it. CI runner images ship it; locally: brew install jq."
+      - sh: command -v cosign
+        msg: "cosign not found. This target verifies the downloaded binary's cosign bundle with it BEFORE making the file executable. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "verify:notarized-suite: TAG=${TAG} REPO=${REPO} GOOS=${GOOS} GOARCH=${GOARCH}"
+
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        ASSET_NAME="codegraph_${TAG}_${GOOS}_${GOARCH}"
+        SIG_NAME="${ASSET_NAME}.sigstore.json"
+
+        # --- 1. Download the raw binary and its cosign bundle into TWO
+        # SEPARATE temp dirs, plus a third for the go test -json stream — the
+        # same two-temp-dirs discipline verify:release-assets already uses
+        # (the sidecar must never land next to the binary it signs). One
+        # trap covers all three from the moment they exist.
+        DL_DIR="$(mktemp -d)"
+        SIG_DIR="$(mktemp -d)"
+        JSON_OUT="$(mktemp)"
+        cleanup() { rm -rf "${DL_DIR}" "${SIG_DIR}"; rm -f "${JSON_OUT}"; }
+        trap cleanup EXIT
+
+        gh release download "${TAG}" --repo "${REPO}" --dir "${DL_DIR}" --pattern "${ASSET_NAME}"
+        gh release download "${TAG}" --repo "${REPO}" --dir "${SIG_DIR}" --pattern "${SIG_NAME}"
+        BIN_PATH="${DL_DIR}/${ASSET_NAME}"
+
+        if [ ! -f "${SIG_DIR}/${SIG_NAME}" ]; then
+          echo "::error::cosign bundle ${SIG_NAME} was not downloaded — cannot verify the signature"
+          exit 1
+        fi
+
+        # --- 2. VERIFY BEFORE EXECUTING — the most important ordering
+        # constraint here (T-02-19, review concern codex HIGH). cosign
+        # verify-blob runs BEFORE any chmod, with the SAME issuer and
+        # certificate-identity flags verify:release-assets already uses
+        # (never a looser pattern, which would prove less than the
+        # published instruction claims). A failed verification is a hard
+        # failure before the binary is ever made executable.
+        cosign verify-blob \
+          --bundle "${SIG_DIR}/${SIG_NAME}" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          --certificate-identity-regexp \
+            '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+          "${BIN_PATH}"
+        echo "verify:notarized-suite: cosign verify-blob: Verified OK"
+
+        SHA256="$(sha256_of "${BIN_PATH}")"
+        echo "NOTARIZED-SUITE-ASSET-SHA256 tag=${TAG} goos=${GOOS} goarch=${GOARCH} sha256=${SHA256}"
+
+        # --- 3. Only NOW does the file become executable.
+        chmod +x "${BIN_PATH}"
+
+        # --- 4. Hard-fail BY NAME, before the suite runs, if the file is
+        # missing or not executable — an explicit belt to the download and
+        # chmod steps' braces, reachable even though both make this an
+        # unlikely path in practice.
+        if [ ! -f "${BIN_PATH}" ] || [ ! -x "${BIN_PATH}" ]; then
+          echo "::error::${BIN_PATH} is missing or not executable after download+chmod — refusing to run the suite against a file that cannot be the notarized binary"
+          exit 1
+        fi
+
+        ABS_BIN_DIR="$(cd "$(dirname "${BIN_PATH}")" && pwd)"
+        export CODEGRAPH_TEST_BIN="${ABS_BIN_DIR}/$(basename "${BIN_PATH}")"
+
+        # --- 5. Run the real suites — test/integration AND test/wireoracle
+        # (both IN SCOPE, see this target's desc:) — against the notarized
+        # binary. -count=1 disables Go's test cache so a cached result can
+        # never stand in for a real run against THIS downloaded file.
+        GO_TEST_EXIT=0
+        go test -json -count=1 ./test/integration/... ./test/wireoracle/... > "${JSON_OUT}" || GO_TEST_EXIT=$?
+
+        # --- 6. Count EXECUTED tests from the machine-readable -json
+        # stream, never from parsed human-readable go test text (review
+        # concern codex MEDIUM): go test emits no total-count line, and
+        # human output confuses cached package summaries with executed
+        # tests. A pass/fail event carrying a non-null Test field is one
+        # executed test case; package-level pass/fail summaries (Test:
+        # null) do not count.
+        EXECUTED_COUNT="$(jq -s '[.[] | select(.Test != null) | select(.Action=="pass" or .Action=="fail")] | length' "${JSON_OUT}")"
+        echo "NOTARIZED-SUITE-EVIDENCE schema=1 tag=${TAG} goos=${GOOS} goarch=${GOARCH} sha256=${SHA256} executed_tests=${EXECUTED_COUNT} go_test_exit=${GO_TEST_EXIT}"
+
+        if [ "${EXECUTED_COUNT}" = "0" ]; then
+          echo "::error::zero tests executed — a green job that ran nothing is the failure mode this whole phase is organised against, and a zero count is a hard failure regardless of go_test_exit=${GO_TEST_EXIT}"
+          exit 1
+        fi
+
+        if [ "${GO_TEST_EXIT}" != "0" ]; then
+          echo "::error::go test -json exited ${GO_TEST_EXIT} — see NOTARIZED-SUITE-EVIDENCE above and the captured JSON stream for the failing test(s)"
+          exit "${GO_TEST_EXIT}"
+        fi
+
+        echo "verify:notarized-suite: PASS — ${EXECUTED_COUNT} tests executed against the notarized ${GOOS}/${GOARCH} binary for ${TAG}"
+
   check:cross:
     desc: >-
       4-target go list -mod=readonly sanity sweep (D-15) — the same pre-tag
