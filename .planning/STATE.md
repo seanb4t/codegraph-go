@@ -4,15 +4,15 @@ milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
 current_phase: 2
 current_phase_name: Apple Signing & Notarization
-status: planning
+status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-08-09T12:44:01.105Z"
+last_updated: "2026-08-09T13:53:32.218Z"
 last_activity: 2026-08-08
 last_activity_desc: v0.5.0 roadmap created, 18/18 requirements mapped
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 6
+  total_plans: 13
   completed_plans: 6
   percent: 25
 ---
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 2 — Apple Signing & Notarization
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-08 — Phase 1 complete, transitioned to Phase 2
 
 Progress: [....] 0/4 phases complete (0%)
