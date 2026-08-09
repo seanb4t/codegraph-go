@@ -382,6 +382,17 @@ explicitly rather than hiding cross-target drift behind one green check:**
   independently double-built in CI. Being explicit about which target is
   the hard guarantee is more honest than a passing check that silently
   doesn't cover the other three.
+- **The darwin binaries carry a real code signature a third-party rebuild
+  cannot reproduce, once notarized (§1d).** As of this writing no release
+  has gone through Apple notarization (see §1d's applicability table), so
+  this is a description of what becomes true once the first notarized
+  release publishes — marked **pending** here rather than asserted as
+  already measured. The signature is embedded directly in the Mach-O binary
+  by the signing/notarization step; only someone holding this project's
+  actual Developer ID Application certificate can reproduce it bit-for-bit.
+  This does not change or weaken the `linux/amd64` canonical guarantee
+  above, which carries no such signature and remains reproducible
+  end-to-end by anyone.
 
 ### Reproducing a build locally
 
@@ -417,3 +428,14 @@ actual bytes about to be installed. Verification failure is fatal — `upgrade`
 never proceeds to swap the binary on a rejected signature. This document's
 manual commands exist so you can independently audit that automated path,
 not replace it.
+
+One distinction worth being explicit about, since the two are easy to
+conflate: the signature `codegraph upgrade` checks above is a *detached*
+Sigstore/cosign bundle — this project's own signing mechanism, checked
+in-process before ever swapping the installed binary. That is a completely
+different mechanism from the *embedded* Apple Developer ID signature
+notarization adds directly to the darwin Mach-O binary (§1d), and it does
+nothing for Gatekeeper: `codegraph upgrade` successfully verifying a cosign
+bundle has no bearing on whether a browser-downloaded copy of the same
+binary passes `spctl`. The two checks protect against different threats and
+neither substitutes for the other.
