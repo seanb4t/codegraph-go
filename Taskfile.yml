@@ -1085,11 +1085,28 @@ tasks:
 
         (cd "${DL_DIR}" && sha256sum -c "$(basename "${CHECKSUMS_FILE}")")
 
+        # --- Download the cosign bundle into a SEPARATE directory, never
+        # into DL_DIR. DL_DIR's contents are themselves an assertion: the
+        # set-equality check above compares the checksums file's named
+        # entries against `ls DL_DIR`, so DL_DIR must hold exactly the 8
+        # payloads and nothing else. Downloading the sidecar into it would
+        # trade this target's original bug (cosign reading a .sigstore.json
+        # that was never downloaded — the v0.5.1 post-release-verify failure)
+        # for a spurious set-equality failure. Two temp dirs, two meanings.
+        SIG_DIR="$(mktemp -d)"
+        trap 'rm -rf "${DL_DIR}" "${SIG_DIR}"' EXIT
+        gh release download "${TAG}" --repo "${REPO}" --dir "${SIG_DIR}" \
+          --pattern "codegraph_${TAG}_linux_amd64.sigstore.json"
+        if [ ! -f "${SIG_DIR}/codegraph_${TAG}_linux_amd64.sigstore.json" ]; then
+          echo "::error::cosign bundle codegraph_${TAG}_linux_amd64.sigstore.json was not downloaded — cannot verify the signature"
+          exit 1
+        fi
+
         # --- cosign verify-blob, VERBATIM flags from docs/RELEASE.md § a —
         # a looser regex here would prove less than the published
         # instruction claims (REL-08 criterion 3, D-11a).
         cosign verify-blob \
-          --bundle "${DL_DIR}/codegraph_${TAG}_linux_amd64.sigstore.json" \
+          --bundle "${SIG_DIR}/codegraph_${TAG}_linux_amd64.sigstore.json" \
           --certificate-oidc-issuer https://token.actions.githubusercontent.com \
           --certificate-identity-regexp \
             '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
@@ -1156,6 +1173,22 @@ tasks:
         fi
         NON_DRAFT_JSON="$(printf '%s' "${RELEASES_JSON}" | jq -c '[.[] | select(.draft == false)]')"
 
+        # Drop releases carrying ZERO downloadable assets, for exactly the
+        # reason drafts are dropped above: you cannot upgrade FROM a release
+        # that ships nothing. This is not hypothetical — v0.5.0 published
+        # empty (the release pipeline aborted on its own version assertion
+        # before goreleaser ran), and D-07 keeps such a release in the list
+        # permanently rather than deleting it. Without this filter the
+        # predecessor search happily selects it and then dies on
+        # `gh release download` with "no assets to download", which reads as
+        # a supply-chain failure when it is really "that release is empty".
+        EMPTY_TAGS="$(printf '%s' "${NON_DRAFT_JSON}" | jq -r '.[] | select((.assets | length) == 0) | .tag_name')"
+        if [ -n "${EMPTY_TAGS}" ]; then
+          echo "verify:self-upgrade: dropping release(s) with no downloadable assets — cannot upgrade from an empty release:"
+          printf '%s\n' "${EMPTY_TAGS}" | sed 's/^/    /'
+        fi
+        NON_DRAFT_JSON="$(printf '%s' "${NON_DRAFT_JSON}" | jq -c '[.[] | select((.assets | length) > 0)]')"
+
         SEMVER_RE='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
 
         TAG_PARSED="$(printf '%s' "${TAG}" | jq -R -c \
@@ -1180,7 +1213,7 @@ tasks:
           '[.[] | . as $r
              | ($r.tag_name | capture("^v(?<major>[0-9]+)\\.(?<minor>[0-9]+)\\.(?<patch>[0-9]+)(-(?<pre>[0-9A-Za-z.-]+))?$")?) as $p
              | select($p != null)
-             | {tag: $r.tag_name, major: ($p.major|tonumber), minor: ($p.minor|tonumber), patch: ($p.patch|tonumber), pre: ($p.pre // "")}]')"
+             | {tag: $r.tag_name, major: ($p.major|tonumber), minor: ($p.minor|tonumber), patch: ($p.patch|tonumber), pre: ($p.pre // ""), api_prerelease: ($r.prerelease == true)}]')"
 
         # Filter to versions strictly LESS THAN $TAG under semver ordering.
         # A prerelease sorts below its own release (1.0.0-rc1 < 1.0.0).
@@ -1204,10 +1237,18 @@ tasks:
         # the greatest STABLE predecessor and fall back to a prerelease
         # predecessor only if no stable one exists. When $TAG is itself a
         # prerelease, allow either.
+        #
+        # "Stable" means BOTH no semver prerelease component AND not flagged
+        # prerelease by the GitHub API. Checking only `.pre == ""` was a real
+        # bug: v0.5.0 carries no semver suffix, so it read as stable and was
+        # selected as v0.5.1's predecessor even though it is API-flagged
+        # prerelease precisely BECAUSE it shipped empty. A maintainer who
+        # marks a release prerelease is making exactly the statement this
+        # policy needs to hear, and the tag string cannot carry it.
         POLICY="prerelease"
         FILTERED_JSON="${LESS_THAN_JSON}"
         if [ -z "${TAG_PRE}" ]; then
-          STABLE_ONLY_JSON="$(printf '%s' "${LESS_THAN_JSON}" | jq -c '[.[] | select(.pre == "")]')"
+          STABLE_ONLY_JSON="$(printf '%s' "${LESS_THAN_JSON}" | jq -c '[.[] | select(.pre == "" and .api_prerelease == false)]')"
           STABLE_COUNT="$(printf '%s' "${STABLE_ONLY_JSON}" | jq 'length')"
           if [ "${STABLE_COUNT}" -gt 0 ]; then
             FILTERED_JSON="${STABLE_ONLY_JSON}"
