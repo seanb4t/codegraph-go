@@ -449,6 +449,87 @@ Compare the resulting SHA-256 against the released
 `linux/amd64` binary was built exactly from the source at that tag, with no
 undisclosed modification.
 
+## 4. Installing via Homebrew (macOS)
+
+The canonical install command lives in a single place — [`README.md`](../README.md)'s
+"Homebrew (macOS)" section — not repeated here or in the tap repository's own
+README. This section states the shipped guarantee precisely, in the same
+voice §1d states notarization's guarantee.
+
+**What the cask installs.** The `codegraph` binary, shell completions for
+bash, zsh, and fish, and man pages — but not the way a typical Homebrew
+formula ships completions and man pages (as files bundled inside the
+download). Completions and man pages are **generated from the installed
+binary at install time**: `generate_completions_from_executable` runs
+`codegraph completion <shell>` against the just-installed binary, and a
+post-install hook runs `codegraph man` against it. Neither is a static file
+this project authored — both are the exact output of the exact binary the
+cask installed, so a new subcommand or flag shows up without anyone editing
+a committed completion file.
+
+**What the install does on your behalf.** The post-install hook that
+generates man pages does more than generate them — it is the cask's install
+gate (BREW-05). It runs the installed binary and refuses to complete the
+install (rolling back everything already staged) if either: the binary
+cannot produce more than one man page, or the binary reports a version that
+does not match the cask's own declared version. This is why a corrupted or
+mismatched download fails loudly at `brew install` time, for you, rather
+than silently succeeding and failing quietly the first time you actually run
+`codegraph`. See `03-EVIDENCE.md` (this milestone's Phase 3 plan 4) for both
+failure modes demonstrated against real, deliberately broken artifacts —
+this is not an argued property, it has been watched fail both ways.
+
+**The man-path dependency — measured, not assumed.** Man pages install
+under the Homebrew prefix's own man directory
+(`$(brew --prefix)/share/man/man1`). Whether `man codegraph` resolves
+depends on whether that directory is on your shell's search path, and that
+in turn depends on whether Homebrew's own post-install shell setup has ever
+been sourced in your profile — Homebrew's own standard instruction after
+first install (`eval "$(brew shellenv)"` in `~/.zprofile`/`~/.bash_profile`,
+or via a login shell that runs `/usr/libexec/path_helper`). Measured
+directly on a real Apple Silicon Mac (Darwin 27.0.0): `/etc/manpaths.d/` is
+empty and `path_helper -s`'s own `MANPATH` output does not include
+`/opt/homebrew/share/man` — this prefix is genuinely **absent from the
+system-level man path configuration**, not merely "sometimes missing." In a
+shell that never sourced Homebrew's environment, `man codegraph` returns
+`No manual entry for codegraph` even with the page correctly installed
+on disk. If that happens to you, this invocation bypasses man-path
+resolution entirely and reads the page directly — measured working on this
+same machine, in an environment with no Homebrew shell setup sourced at
+all:
+
+```sh
+man "$(brew --prefix)/share/man/man1/codegraph.1"
+```
+
+**Upgrading.** A brew-managed install is upgraded with `brew upgrade
+codegraph`, not `codegraph upgrade`. As of this writing, `codegraph
+upgrade` does not yet detect a brew-managed install and does not yet
+refuse to run against one — teaching it to do exactly that is the next
+phase's work (`UPGR-01`/`UPGR-02`/`UPGR-03` in `.planning/ROADMAP.md`
+Phase 4) and is **not yet shipped**. Running `codegraph upgrade` against a
+brew-managed install today has undefined interaction with Homebrew's own
+Caskroom bookkeeping — use `brew upgrade codegraph` until Phase 4 ships.
+
+> **Pending — not yet verified as of this writing.** Three claims only a
+> real, published release can settle, and this document does not assert
+> them as already true:
+>
+> 1. **The tap resolves** — `brew tap seanb4t/tap` has not yet been
+>    exercised against the real, published `seanb4t/homebrew-tap`
+>    repository from a genuinely clean machine.
+> 2. **A cold install succeeds** — `brew install codegraph` from that tap,
+>    on a machine with no prior `codegraph`, against a cask GoReleaser
+>    regenerated for a real tagged release (not a local rehearsal), has not
+>    yet been run.
+> 3. **Completion works in all three shells** — through a real brew-
+>    installed binary, not the local rehearsal shape this milestone's
+>    evidence files record so far.
+>
+> Plan 03-05 closes each of these with a citation to real, executed
+> evidence, or re-justifies it explicitly. Do not read this section as
+> fully verified until then.
+
 ## `codegraph upgrade` as the automated consumer
 
 `codegraph upgrade` performs the equivalent of §1a above automatically,
