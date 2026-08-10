@@ -1,0 +1,59 @@
+package cli
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
+)
+
+// newManCmd builds the hidden `codegraph man <dir>` command: it writes the
+// full Cobra command-tree man page set (doc.GenManTree — codegraph.1 plus
+// one page per registered subcommand) into an explicit output directory.
+// This is a Go-only surface extension (D-01) — TS CodeGraph has no
+// man-page generation of any kind. It exists specifically so the
+// Homebrew cask's post-install hook
+// (.goreleaser.yaml homebrew_casks.hooks.post.install) can generate man
+// pages by running the INSTALLED binary at install time, rather than
+// shipping a committed or release-time-generated copy that could drift
+// from the binary that actually runs (D-05) — the same "generated from
+// the binary, not checked in" guarantee `generate_completions_from_executable`
+// already gives shell completions (D-06).
+//
+// Hidden: true (D-02) — deliberately NOT documented as a public,
+// interactive command the way `githooks` is. `man` exists purely as a
+// mechanism the cask hook invokes; a human never needs to run it
+// directly, so the FLAG-PARITY divergence footprint stays one documented
+// hidden command rather than a new public surface. This is the one place
+// this command's shape diverges from the internal/cli/githooks.go
+// precedent it otherwise mirrors (registration convention, doc-comment
+// decision-id citation) — githooks is NOT hidden.
+//
+// RunE returns doc.GenManTree's error directly, wrapped with the target
+// directory, rather than printing a friendly line and returning nil: a
+// hidden command invoked by a Ruby postflight hook has no interactive
+// user to address. What matters is the non-nil exit status Homebrew's
+// system_command raises on (D-10), not stdout a human would read.
+//
+// Does not reuse the package-level targetRoot(args): that helper resolves
+// the codegraph project root (the directory containing .codegraph/), an
+// unrelated concept to man's arbitrary output directory argument (D-04).
+func newManCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:    "man <dir>",
+		Short:  "Generate man pages for the full command tree",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := args[0]
+			header := &doc.GenManHeader{
+				Title:   "CODEGRAPH",
+				Section: "1",
+			}
+			if err := doc.GenManTree(newRootCmd(), header, dir); err != nil {
+				return fmt.Errorf("generate man pages into %s: %w", dir, err)
+			}
+			return nil
+		},
+	}
+}

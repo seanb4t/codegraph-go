@@ -6,6 +6,11 @@
 // to indexer.Run. sync/daemon/unlock (D-01/D-05) extend the surface with
 // incremental update, the shared watch/index server, and stale-lock
 // clearing, delegating to indexer.Sync and internal/daemon respectively.
+// migrate (D-08, phase 08) is the one-step TS-SQLite -> Pebble store
+// conversion, githooks (phase 05) manages marker-fenced git sync hooks,
+// and man (Phase 3 D-01/D-02) is the hidden man-page generator the
+// Homebrew cask's post-install hook invokes — all three are documented
+// Go-only surface extensions with no TS CodeGraph counterpart.
 package cli
 
 import (
@@ -28,7 +33,11 @@ var ErrNotInitialized = errors.New("cli: not initialized")
 // — the incremental-update surface: sync updates the graph in one shot,
 // daemon runs the shared watch/index server, and unlock clears a stale
 // daemon lock — and migrate (D-08), the one-step TS CodeGraph SQLite ->
-// new-format Pebble store conversion. Usage/error text is printed by the
+// new-format Pebble store conversion, and githooks (Phase 5), the
+// marker-fenced git sync hook manager. man (Phase 3 D-01/D-02) is a
+// hidden, Go-only command generating the full man-page tree from the
+// binary itself, invoked by the Homebrew cask's post-install hook rather
+// than by an interactive user. Usage/error text is printed by the
 // caller (cmd/codegraph/main.go), not by cobra itself, so SilenceUsage and
 // SilenceErrors are set on every command in the tree.
 func newRootCmd() *cobra.Command {
@@ -48,7 +57,7 @@ func newRootCmd() *cobra.Command {
 		newNodeCmd(), newExploreCmd(), newServeCmd(), newSyncCmd(),
 		newDaemonCmd(), newUnlockCmd(), newVersionCmd(), newTelemetryCmd(),
 		newUpgradeCmd(), newInstallCmd(), newUninstallCmd(), newMigrateCmd(),
-		newGithooksCmd())
+		newGithooksCmd(), newManCmd())
 	return root
 }
 
