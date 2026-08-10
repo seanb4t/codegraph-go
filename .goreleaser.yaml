@@ -473,13 +473,100 @@ homebrew_casks:
       post:
         install: |
           # D-10: the install itself is BREW-05's gate. system_command's
-          # default is must_succeed: true (Homebrew's
-          # SystemCommand.run!), and Cask::Installer#install_artifacts
-          # does not rescue that failure — it rolls back and re-raises,
-          # so `brew install` exits non-zero for the first user whose
-          # binary cannot even run `man`. Scoped to ONE assertion for
-          # this task; D-11's second assertion (reported version ==
-          # cask version) and D-08's Phase-4 sentinel write are plan
-          # 03-02's expansion, not this tracer slice's.
-          system_command "#{HOMEBREW_PREFIX}/bin/codegraph",
-                          args: ["man", "#{HOMEBREW_PREFIX}/share/man/man1"]
+          # default is must_succeed: true (Homebrew's SystemCommand.run!),
+          # and Cask::Installer#install_artifacts does not rescue that
+          # failure — it rolls back and re-raises (installer.rb:330-354:
+          # "rescue => e ... ensure purge_versioned_files; raise e"), so
+          # `brew install` exits non-zero for the first user whose binary
+          # cannot even run `man` or reports the wrong version.
+          # generate_completions_from_executable below CANNOT play this
+          # role: Cask::Artifact::GeneratedCompletion#write_completion
+          # (generated_completion.rb:138-148) wraps its own execution of
+          # the binary in `rescue => e; opoo e` — a warning, not a raise
+          # (RESEARCH.md Pitfall 1; measured directly by this repo's own
+          # perturbation in Taskfile.yml's release:rehearse-cask, which
+          # deliberately breaks that stanza and observes a green exit).
+          # This hook — and only this hook — is BREW-05's gate.
+          binary = "#{HOMEBREW_PREFIX}/bin/codegraph"
+          man_dir = "#{HOMEBREW_PREFIX}/share/man/man1"
+
+          # Assertion one (D-11): the man generation produced something.
+          # Reads the directory rather than trusting the exit status alone
+          # — a binary that ran and wrote nothing would otherwise pass
+          # vacuously (repo rule 84d1gfpywd). No specific count is
+          # pinned: the page tree grows with every new subcommand, and a
+          # pinned count would turn that growth into a broken install.
+          system_command binary, args: ["man", man_dir]
+          man_pages = Dir.glob("#{man_dir}/codegraph*.1")
+          if man_pages.length <= 1
+            raise "codegraph cask post-install: expected more than 1 man page under #{man_dir}, found #{man_pages.length}"
+          end
+
+          # Assertion two (D-11): it is the right artifact. Equality on
+          # values normalized by stripping a single leading "v" — never
+          # containment, since "0.8.0" is contained in both "0.8.01" and
+          # "10.8.0". `version` here is the Ruby DSL delegate (the cask's
+          # OWN declared version, base/dsl/base.rb:25's def_delegators),
+          # not a Go identifier.
+          version_result = system_command binary, args: ["version", "--json"]
+          reported_version = JSON.parse(version_result.stdout)["version"].to_s.sub(/\Av/, "")
+          declared_version = version.to_s.sub(/\Av/, "")
+          if reported_version != declared_version
+            raise "codegraph cask post-install: installed binary reports version #{reported_version.inspect}, cask declares #{declared_version.inspect}"
+          end
+
+          # The Phase-4 sentinel (D-08). Located by RESOLVING #{binary}
+          # THROUGH SYMLINKS (Pathname#realpath) — never by matching a
+          # path prefix — so detection is correct under /opt/homebrew,
+          # /usr/local, a custom prefix, and linuxbrew alike. This is a
+          # cross-phase contract: internal/upgrade reads this file's
+          # location and format in Phase 4; changing either leaves
+          # already-installed users undetectable until they reinstall.
+          real_bin_dir = Pathname.new(binary).realpath.dirname
+          sentinel = real_bin_dir/".codegraph-brew-install"
+          sentinel.atomic_write(<<~SENTINEL)
+            schema=1
+            cask_token=#{token}
+            cask_version=#{version}
+            homebrew_prefix=#{HOMEBREW_PREFIX}
+            man_dir=#{man_dir}
+            man_page_count=#{man_pages.length}
+            installed_at=#{Time.now.utc.iso8601}
+          SENTINEL
+
+          # Idempotency: every step above tolerates re-running over an
+          # existing install. `codegraph man`'s own os.MkdirAll is
+          # create-if-absent, doc.GenManTree overwrites each page, and
+          # Pathname#atomic_write always overwrites rather than appending
+          # (extend/pathname.rb:105-108) — Homebrew re-runs this hook on
+          # both reinstall and upgrade.
+        uninstall: |
+          # D-07: symmetric with post.install — brew does not track files
+          # a hook writes, so they must be removed explicitly. Both
+          # removals are force-style (FileUtils.rm_f: no error on an
+          # already-absent file — Homebrew removes the Caskroom versioned
+          # directory itself as part of the same uninstall, so the
+          # sentinel may legitimately be gone before this hook runs) via
+          # explicit statements, never a chained `&&` list. The
+          # declarative `uninstall: delete:`/`zap: trash:` stanzas were
+          # rejected: these are artifacts THIS CASK generated, not user
+          # data.
+          #
+          # staged_path — NOT a re-resolved #{HOMEBREW_PREFIX}/bin/codegraph
+          # symlink — locates the sentinel here: by the time
+          # uninstall_postflight artifacts run, Homebrew's own uninstall
+          # of the `binary "codegraph"` Symlinked artifact (declared
+          # earlier in this file, so it is uninstalled first —
+          # Cask::Installer#uninstall_artifacts iterates artifacts in
+          # declared order, installer.rb:642-687) has ALREADY removed
+          # that symlink; realpath-resolving it here would raise Errno::ENOENT.
+          # staged_path is Homebrew's own authoritative real-installation-
+          # directory value (token + version, dsl.rb:679-688 — not a
+          # hand-matched prefix) and, per A1 (03-01-SUMMARY.md), equals
+          # exactly the directory post.install's realpath resolution
+          # wrote into.
+          man_dir = Pathname.new("#{HOMEBREW_PREFIX}/share/man/man1")
+          Dir.glob((man_dir/"codegraph*.1").to_s).each { |f| FileUtils.rm_f(f) }
+
+          sentinel = Pathname.new(staged_path.to_s)/".codegraph-brew-install"
+          FileUtils.rm_f(sentinel)
