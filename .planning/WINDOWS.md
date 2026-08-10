@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 0
 fixed_count: 0
-total_count: 1
-last_updated: 2026-08-10T14:33:31.562Z
+total_count: 2
+last_updated: 2026-08-10T17:04:43.293Z
 ---
 
 # Broken Windows Ledger
@@ -16,6 +16,7 @@ last_updated: 2026-08-10T14:33:31.562Z
 | id | phase | kind | file | line | description | status | reason | recorded_at | resolved_at |
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
 | 1 | 03 | unrun-verify | Taskfile.yml |  | release:rehearse-cask could not reach a PASS in this session — Homebrew Cask unconditionally quarantines every download, so the post-install hook's system_command execution of the installed (ad-hoc-signed, non-notarized) binary is SIGKILLed by Gatekeeper. Requires maintainer-supplied MACOS_SIGN_P12/MACOS_SIGN_PASSWORD/MACOS_NOTARY_ISSUER_ID/MACOS_NOTARY_KEY_ID/MACOS_NOTARY_KEY to complete; A1/A3 assumptions remain unconfirmed. | open |  | 2026-08-10T14:33:31.562Z |  |
+| 2 | 03 | unrun-verify | .planning/phases/03-homebrew-tap-cask/03-03-PLAN.md |  | Task 2 GitHub App creation, Task 1 job-output-survival measurement, and Task 3 release.yml wiring all blocked: no authenticated browser session reachable for agent-browser to drive GitHub App creation UI. See 03-03-SUMMARY.md Deviations. | open |  | 2026-08-10T17:04:43.293Z |  |
 
 ````json
 [
@@ -29,6 +30,18 @@ last_updated: 2026-08-10T14:33:31.562Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-10T14:33:31.562Z",
+    "resolved_at": null
+  },
+  {
+    "id": 2,
+    "kind": "unrun-verify",
+    "phase": "03",
+    "file": ".planning/phases/03-homebrew-tap-cask/03-03-PLAN.md",
+    "line": null,
+    "description": "Task 2 GitHub App creation, Task 1 job-output-survival measurement, and Task 3 release.yml wiring all blocked: no authenticated browser session reachable for agent-browser to drive GitHub App creation UI. See 03-03-SUMMARY.md Deviations.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-10T17:04:43.293Z",
     "resolved_at": null
   }
 ]
