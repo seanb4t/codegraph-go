@@ -749,6 +749,23 @@ tasks:
         msg: "no tag found at HEAD. `goreleaser release` hard-fails without one. For a tagless, non-publishing run of the same composition, use `task release:dry-run` instead."
       - sh: '[ -n "${GITHUB_TOKEN:-}" ]'
         msg: "GITHUB_TOKEN is not set. GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which is the gh CLI's own variable. Set GITHUB_TOKEN before running this target."
+      # Two HOMEBREW_TAP_TOKEN checks (03-03, T-03-09), not one: presence
+      # alone would pass in the exact silent-degradation case this guards
+      # against. If unset, .goreleaser.yaml's `{{ .Env.HOMEBREW_TAP_TOKEN }}`
+      # template resolves to an empty string and GoReleaser's cask client
+      # falls back to internal/client/client.go's NewIfToken default — the
+      # RELEASE's own client — which cannot write seanb4t/homebrew-tap and
+      # the tap push silently fails or is skipped. If someone ever sets the
+      # two variables equal "to make it work", the push instead SUCCEEDS
+      # against the wrong credential (the release's own token, not the
+      # tap-scoped App's), and ROADMAP criterion 5 is quietly false behind
+      # a green log — a presence-only check cannot catch that second case,
+      # which is exactly the "every guard must assert it did its work" rule
+      # this repository holds elsewhere (repo rule 84d1gfpywd).
+      - sh: '[ -n "${HOMEBREW_TAP_TOKEN:-}" ]'
+        msg: "HOMEBREW_TAP_TOKEN is not set. .goreleaser.yaml's homebrew_casks[0].repository.token reads it (D-16); release.yml mints it from the tap-scoped GitHub App immediately before this step. Without it, the cask client falls back to GITHUB_TOKEN, which cannot write seanb4t/homebrew-tap."
+      - sh: '[ "${HOMEBREW_TAP_TOKEN:-}" != "${GITHUB_TOKEN:-}" ]'
+        msg: "HOMEBREW_TAP_TOKEN is byte-identical to GITHUB_TOKEN. These must be two distinct credentials (D-16): GITHUB_TOKEN is this release's own token and cannot write seanb4t/homebrew-tap; HOMEBREW_TAP_TOKEN must come from the tap-scoped GitHub App's installation token. A release must not proceed with the two collapsed to one value."
     cmds:
       - |
         set -euo pipefail

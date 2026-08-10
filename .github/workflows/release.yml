@@ -161,6 +161,41 @@ jobs:
       - name: Install Task
         uses: ./.github/actions/install-task
 
+      # Mints HOMEBREW_TAP_TOKEN (03-03, D-16) for the Release step below.
+      # PLACEMENT VERDICT: REDACTED, measured on a real workflow run rather
+      # than inferred (03-03 Task 1) — run
+      # https://github.com/seanb4t/codegraph-go/actions/runs/31417685002.
+      # A separate id-token-free job minted this same App's token and
+      # exposed it as a job output; the consuming job's own log recorded
+      # `##[warning]Skip output 'token' since it may contain secret.` and
+      # received an EMPTY value (PROBE-EVIDENCE non_empty=false length=0).
+      # GitHub's secret-masking machinery drops a job output that matches a
+      # registered mask entirely, rather than passing it through — so the
+      # separate-job placement RESEARCH.md Open Question 2 recommended is
+      # not usable here. This step therefore mints inside the release job,
+      # immediately before the step that consumes it, pinned to the exact
+      # same Action + SHA release-please.yml already carries. This places
+      # one more Action inside the OIDC boundary (T-01-29's accepted
+      # surface, now widened by one step) — chosen because the alternative
+      # was measured not to work, not because it was preferred. Compensating
+      # controls: the SHA pin below, and the step-level-only scoping
+      # TestHomebrewTapTokenScopedToReleaseJob (release_workflow_shape_test.go)
+      # asserts for HOMEBREW_TAP_APP_ID/HOMEBREW_TAP_APP_PRIVATE_KEY/
+      # HOMEBREW_TAP_TOKEN.
+      #
+      # Scoped at request time (owner + repositories:) to homebrew-tap
+      # alone, not left to the App's installation scope by itself (D-16)
+      # — the App is ALSO installed on homebrew-tap only, so this is
+      # belt-and-suspenders, not the only boundary.
+      - name: Mint tap-scoped App token
+        id: tap-app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}
+          owner: seanb4t
+          repositories: homebrew-tap
+
       # The single run: body in this job (T-01-14): goreleaser release
       # --clean has exactly one definition, in Taskfile.yml's
       # release:goreleaser target (DEV-01) — workflow context reaches it
@@ -198,6 +233,14 @@ jobs:
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          # .goreleaser.yaml's homebrew_casks[0].repository.token template
+          # (D-16) — a separate client from GITHUB_TOKEN above, minted by
+          # the step immediately preceding this one, scoped to
+          # seanb4t/homebrew-tap alone. See that step's comment for the
+          # REDACTED placement verdict. release:goreleaser's own
+          # preconditions (Taskfile.yml) assert this is present and
+          # distinct from GITHUB_TOKEN before goreleaser runs.
+          HOMEBREW_TAP_TOKEN: ${{ steps.tap-app-token.outputs.token }}
 
       # Records the release job's local dist/ bytes (SIGN-04) AFTER `task
       # release:goreleaser` above has FULLY completed — archive, checksum,

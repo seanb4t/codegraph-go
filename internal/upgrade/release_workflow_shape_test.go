@@ -1360,6 +1360,198 @@ func postReleaseCheckoutShapes(doc fullWorkflowDoc) []postReleaseCheckoutShape {
 var latestVerifierJobIDs = []string{"resolve-tag", "verify-supply-chain", "self-upgrade"}
 var releaseMatchedTestJobIDs = []string{"gatekeeper", "notarized-suite"}
 
+// --- plan 03-03 Task 3: tap-token mint scoping ------------------------------
+//
+// homebrewTapCredentialNames is the exact set of names 03-03's tap-token
+// mint introduces: the two GitHub App repository secrets — referenced by
+// NAME inside a step's with: block value (`${{ secrets.HOMEBREW_TAP_APP_ID }}`),
+// unlike appleCredentialNames above which happen to be used as env: KEYS —
+// plus the derived live-token env var name fed to the Release step's env:.
+// A widening of the App installation itself (T-03-07's residual, D-17) is
+// out of scope for this file, which can only see what workflow SOURCE
+// consumes, never GitHub-side installation configuration (same
+// SCOPE-OF-PROOF boundary TestAppleSecretsScopedToSingleReleaseJob's doc
+// comment already states for the Apple secrets).
+var homebrewTapCredentialNames = []string{
+	"HOMEBREW_TAP_APP_ID",
+	"HOMEBREW_TAP_APP_PRIVATE_KEY",
+	"HOMEBREW_TAP_TOKEN",
+}
+
+// findHomebrewTapCredentialReferences scans doc for every occurrence of any
+// name in credentials as either an env:/with: MAP KEY or a SUBSTRING of an
+// env:/with: map VALUE, at workflow-level env:, job-level env:, and
+// step-level env:/with:. Two reference shapes exist in this file and both
+// must be caught: HOMEBREW_TAP_TOKEN is used as an env: KEY (the release
+// step's `HOMEBREW_TAP_TOKEN: ${{ steps.tap-app-token.outputs.token }}`),
+// while HOMEBREW_TAP_APP_ID/HOMEBREW_TAP_APP_PRIVATE_KEY are used only as
+// VALUES inside the mint step's with: block
+// (`app-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}`) — findCredentialReferences
+// above only matches by key, which would silently miss the with: case.
+func findHomebrewTapCredentialReferences(file string, doc fullWorkflowDoc, credentials []string) []credentialReference {
+	matches := func(m map[string]any, cred string) bool {
+		for k, v := range m {
+			if k == cred {
+				return true
+			}
+			if strings.Contains(fmt.Sprintf("%v", v), cred) {
+				return true
+			}
+		}
+		return false
+	}
+	var refs []credentialReference
+	for _, cred := range credentials {
+		if matches(doc.Env, cred) {
+			refs = append(refs, credentialReference{File: file, Scope: "workflow"})
+		}
+	}
+	for jobID, job := range doc.Jobs {
+		for _, cred := range credentials {
+			if matches(job.Env, cred) {
+				refs = append(refs, credentialReference{File: file, JobID: jobID, Scope: "job"})
+			}
+		}
+		for _, step := range job.Steps {
+			for _, cred := range credentials {
+				if matches(step.Env, cred) || matches(step.With, cred) {
+					refs = append(refs, credentialReference{File: file, JobID: jobID, StepName: step.Name, Scope: "step"})
+				}
+			}
+		}
+	}
+	return refs
+}
+
+// TestHomebrewTapTokenScopedToReleaseJob is the 03-03 Task 3 mitigation,
+// modelled directly on TestAppleSecretsScopedToSingleReleaseJob and reusing
+// its helpers (decodeFullWorkflowDoc, workflowOnTriggers,
+// mustGoreleaserInvokingJob, mustReleaseJobShapes) rather than
+// reimplementing them. Enumerates the workflow directory at RUNTIME — never
+// a fixture list — and fails loudly if that scan finds zero files, so this
+// test cannot go vacuous. Asserts:
+//
+//   - every reference to any of the three names in homebrewTapCredentialNames
+//     appears ONLY in release.yml, and within it, only in the goreleaser-
+//     invoking job (the same job Task 1's REDACTED verdict placed the mint
+//     in — see release.yml's "Mint tap-scoped App token" step comment for
+//     the run URL);
+//   - every such reference is at STEP-level env: or with:, never job- or
+//     workflow-level env: — an unset variable at a wider scope is exactly
+//     the silent-fallback shape T-03-09 forbids;
+//   - no workflow whose triggers include pull_request OR
+//     pull_request_target references any of the three names, or declares
+//     id-token: write (same both-forms treatment as the Apple-secrets
+//     test, for the same reason: pull_request_target is the more
+//     dangerous fork-reachable form);
+//   - release.yml still declares id-token: write in exactly one job — RE-
+//     CHECKED INDEPENDENTLY here (fresh enumeration, not a call into
+//     TestOIDCWriteScopedToSingleGoreleaserJob or into
+//     TestAppleSecretsScopedToSingleReleaseJob), because this is exactly
+//     the kind of change that could widen that invariant and a delegating
+//     test would not notice.
+//
+// Demonstrated RED against three confirmed-applied mutations, each with its
+// failure message recorded in 03-03-SUMMARY.md and the file restored byte-
+// clean afterward: a second job referencing HOMEBREW_TAP_APP_ID; a job-
+// level env: carrying HOMEBREW_TAP_TOKEN; a second job declaring
+// id-token: write.
+func TestHomebrewTapTokenScopedToReleaseJob(t *testing.T) {
+	entries, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		t.Fatalf("os.ReadDir(%s): %v", workflowsDir, err)
+	}
+	var files []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml") {
+			files = append(files, filepath.Join(workflowsDir, e.Name()))
+		}
+	}
+	if len(files) == 0 {
+		t.Fatalf("workflow directory scan found zero files in %s — this would make the whole test vacuous", workflowsDir)
+	}
+
+	releaseSrc, err := os.ReadFile(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", releaseWorkflowPath, err)
+	}
+	releaseJob := mustGoreleaserInvokingJob(t, string(releaseSrc))
+
+	releaseAbs, err := filepath.Abs(releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("filepath.Abs(%s): %v", releaseWorkflowPath, err)
+	}
+
+	for _, path := range files {
+		doc, err := decodeFullWorkflowDoc(path)
+		if err != nil {
+			t.Fatalf("decodeFullWorkflowDoc(%s): %v", path, err)
+		}
+
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			t.Fatalf("filepath.Abs(%s): %v", path, err)
+		}
+		isReleaseWorkflow := absPath == releaseAbs
+
+		refs := findHomebrewTapCredentialReferences(path, doc, homebrewTapCredentialNames)
+		triggers := workflowOnTriggers(doc.On)
+		isPRTriggerable := triggers["pull_request"] || triggers["pull_request_target"]
+
+		for _, ref := range refs {
+			if !isReleaseWorkflow {
+				t.Errorf("%s references a Homebrew tap credential name outside release.yml (scope=%s job=%s step=%q) — must hold exactly one workflow", ref.File, ref.Scope, ref.JobID, ref.StepName)
+				continue
+			}
+			if ref.JobID != releaseJob.ID {
+				t.Errorf("release.yml references a Homebrew tap credential name in job %q, want only the release job %q (scope=%s step=%q)", ref.JobID, releaseJob.ID, ref.Scope, ref.StepName)
+			}
+			if ref.Scope != "step" {
+				t.Errorf("release.yml references a Homebrew tap credential name at %s-level env: (job=%s step=%q) — must be step-level only", ref.Scope, ref.JobID, ref.StepName)
+			}
+		}
+
+		if isPRTriggerable {
+			if len(refs) > 0 {
+				t.Errorf("%s triggers on a pull-request event (pull_request or pull_request_target) AND references a Homebrew tap credential name — forbidden", path)
+			}
+			if workflowHasIDTokenWrite(doc) {
+				t.Errorf("%s triggers on a pull-request event (pull_request or pull_request_target) AND declares id-token: write — must never coincide", path)
+			}
+		}
+	}
+
+	shapes := mustReleaseJobShapes(t, string(releaseSrc))
+	var holders []string
+	for _, s := range shapes {
+		if s.HasIDTokenWrite {
+			holders = append(holders, s.ID)
+		}
+	}
+	if len(holders) != 1 {
+		t.Errorf("release.yml declares id-token: write in %d job(s) %v, want exactly 1 (independent re-check, not delegated to TestOIDCWriteScopedToSingleGoreleaserJob)", len(holders), holders)
+	}
+}
+
+// TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets guards
+// against a future "consolidate the two Apps" edit turning a red test
+// instead of silently failing ROADMAP criterion 5 (D-16): the tap-scoped
+// App's two secret names must never equal the release-please App's two
+// secret names (release-please.yml's APP_ID/APP_PRIVATE_KEY).
+func TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets(t *testing.T) {
+	releasePleaseAppSecretNames := []string{"APP_ID", "APP_PRIVATE_KEY"}
+	for _, tapName := range homebrewTapCredentialNames[:2] { // exclude HOMEBREW_TAP_TOKEN, which is not a secret name
+		for _, rpName := range releasePleaseAppSecretNames {
+			if tapName == rpName {
+				t.Errorf("Homebrew tap App secret name %q equals release-please App secret name %q — the two Apps must never share a secret name (D-16)", tapName, rpName)
+			}
+		}
+	}
+}
+
 // TestPostReleaseJobsDeclareCheckoutPolicy is the plan 02-06 Task 3
 // mitigation: every job in post-release-verify.yml must be classified into
 // exactly one of latestVerifierJobIDs or releaseMatchedTestJobIDs, and its
