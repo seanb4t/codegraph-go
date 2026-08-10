@@ -2012,14 +2012,9 @@ tasks:
           cat "${SENTINEL_PATH}"
         fi
 
-        # --- Step 5c (BREW-03): completion files under Homebrew's own
-        # completion directories. Report-only until Task 2 adds
-        # generate_completions_from_executable — a hard assertion here
-        # before that config exists would fail Task 1's own <verify>, so
-        # this count is surfaced in the evidence line and hardened to a
-        # failing assertion once the block that produces these files
-        # lands (see the COMPLETION_COUNT check immediately below this
-        # comment in a later revision of this target).
+        # --- Step 5c (BREW-03, D-06): completion files under Homebrew's
+        # own completion directories — a hard assertion now that
+        # generate_completions_from_executable exists (Task 2).
         BASH_COMPLETION="$(brew --prefix)/etc/bash_completion.d/codegraph"
         ZSH_COMPLETION="$(brew --prefix)/share/zsh/site-functions/_codegraph"
         FISH_COMPLETION="$(brew --prefix)/share/fish/vendor_completions.d/codegraph.fish"
@@ -2028,6 +2023,20 @@ tasks:
           if [ -s "${f}" ]; then COMPLETION_COUNT=$((COMPLETION_COUNT + 1)); fi
         done
         echo "completion files present (non-empty): ${COMPLETION_COUNT}/3"
+        if [ "${COMPLETION_COUNT}" != "3" ]; then
+          echo "::error::expected all 3 completion files (bash/zsh/fish) present and non-empty after brew install --cask, found ${COMPLETION_COUNT}/3 (checked ${BASH_COMPLETION}, ${ZSH_COMPLETION}, ${FISH_COMPLETION})"
+          OK=0
+        fi
+
+        # Confirm codegraph completion bash works against the INSTALLED
+        # binary (not a locally-built one) — the mechanism BREW-03 relies
+        # on, verified directly rather than assumed.
+        if ! "${INSTALLED_BIN}" completion bash >/dev/null 2>&1; then
+          echo "::error::'${INSTALLED_BIN} completion bash' failed against the installed binary"
+          OK=0
+        else
+          echo "'${INSTALLED_BIN} completion bash' exits 0 and emits output (confirmed against the installed binary)"
+        fi
 
         # --- Step 5d: idempotency (D-11's action text) — Homebrew re-runs
         # post.install on both reinstall and upgrade, and every step the
@@ -2128,6 +2137,48 @@ tasks:
           CASK_INSTALLED=0
         fi
         echo "RESTORE-EVIDENCE exit=${RESTORE_INSTALL_EXIT}"
+
+        # --- Step 7b (Task 2 acceptance criterion): a deliberately wrong
+        # executable name in the completions stanza must NOT fail brew
+        # install — only warn (RESEARCH.md Pitfall 1, measured here on
+        # this machine rather than read from source alone). Reuses the
+        # SAME already-built zip and tap clone.
+        COMPLETIONS_LINE_NUM="$(grep -n -F 'generate_completions_from_executable "codegraph"' "${REHEARSAL_CASK}" | head -n1 | cut -d: -f1)"
+        if [ -z "${COMPLETIONS_LINE_NUM}" ]; then
+          echo "::error::could not find a 'generate_completions_from_executable \"codegraph\"' line in ${REHEARSAL_CASK} to mutate"
+          OK=0
+        else
+          MUTATED_COMPLETIONS_CASK="${REHEARSE_DIR}/rehearsal/codegraph.mutated-completions.rb"
+          cp "${REHEARSAL_CASK}" "${MUTATED_COMPLETIONS_CASK}"
+          sed -i.bak "${COMPLETIONS_LINE_NUM}s/generate_completions_from_executable \"codegraph\"/generate_completions_from_executable \"codegraph-does-not-exist\"/" "${MUTATED_COMPLETIONS_CASK}"
+
+          cp "${MUTATED_COMPLETIONS_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+          echo "==> brew install --cask ${TAP_NAME}/codegraph (MUTATED completions executable — expect exit 0 with a warning)"
+          set +e
+          COMPLETIONS_MUTATE_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
+          COMPLETIONS_MUTATE_EXIT=$?
+          set -e
+          echo "${COMPLETIONS_MUTATE_OUT}"
+          if [ "${COMPLETIONS_MUTATE_EXIT}" != "0" ]; then
+            echo "::error::brew install --cask exited ${COMPLETIONS_MUTATE_EXIT} with a deliberately wrong completions executable name — RESEARCH.md Pitfall 1 predicts a WARNING, not a failure; this contradicts that finding and must be recorded as such, not smoothed over"
+            OK=0
+          else
+            CASK_INSTALLED=1
+            if ! printf '%s\n' "${COMPLETIONS_MUTATE_OUT}" | grep -qiE 'Failed to generate .* completions|Warning:'; then
+              echo "::error::brew install --cask exited 0 but no completions-generation warning was observed in its output — cannot confirm Pitfall 1 fired rather than the completions stanza silently succeeding some other way"
+              OK=0
+            else
+              echo "COMPLETIONS-PERTURBATION-EVIDENCE exit=${COMPLETIONS_MUTATE_EXIT}"
+            fi
+            echo "==> brew uninstall --cask ${TAP_NAME}/codegraph (completions-perturbation cleanup)"
+            brew uninstall --cask "${TAP_NAME}/codegraph"
+            CASK_INSTALLED=0
+          fi
+
+          # Restore the tap clone's cask file to the correct rehearsal
+          # copy so the final untap leaves nothing mutated behind.
+          cp "${REHEARSAL_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+        fi
 
         echo "==> brew untap ${TAP_NAME}"
         brew untap "${TAP_NAME}"

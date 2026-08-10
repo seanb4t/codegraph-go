@@ -423,13 +423,38 @@ release:
 # release:rehearse-cask target rehearses exactly that render + a real
 # local `brew install`, never the tap push).
 #
-# This block is deliberately MINIMAL for this task (BREW-04's man-page
-# tracer slice, plan 03-01): completions
-# (generate_completions_from_executable, D-06), the post-uninstall
-# cleanup hook (D-07), the second positive assertion + Phase-4 sentinel
-# (D-11/D-08), and a dedicated shape test all belong to later plans in
-# this phase. Only the fields this task's rehearsal needs to prove the
-# end-to-end mechanism are present.
+# Discretionary metadata (03-CONTEXT.md "Claude's Discretion"), decided
+# and recorded here rather than left to a GoReleaser default:
+#
+#   - Platform scope: this block makes NO cross-platform claim. `ids:
+#     [zip]` (below) is an ARCHIVE-id filter required to avoid
+#     ErrMultipleArchivesSameOS — it is NOT an OS-scoping mechanism, and
+#     HomebrewCask has no os:/platform: field in this pinned v2.17.1
+#     (confirmed: pkg/config/config.go's HomebrewCask struct has none).
+#     Because the `zip` archive entry covers all 4 platforms, the
+#     rendered cask's `on_linux do ... end` block IS populated with real
+#     linux URLs/sha256 (measured this session against a real snapshot
+#     render) — a structural side effect of sharing one archive entry
+#     with the raw-binary/direct-download path, not a deliberate
+#     cross-platform decision. Every verification path this phase runs
+#     (Gatekeeper quarantine, notarization, the rehearsal itself) is
+#     macOS-only; no claim is made or tested about linuxbrew cask
+#     installability.
+#   - livecheck: GoReleaser's cask.rb template (templates/cask.rb)
+#     unconditionally emits `livecheck do skip "Auto-generated on
+#     release." end` for every cask — there is no config field to set;
+#     nothing to add here.
+#   - auto_updates: HomebrewCask has no such field and the template never
+#     emits an `auto_updates` stanza in this pinned version — not
+#     settable through this pipe. codegraph's own self-updater
+#     (`codegraph upgrade`) is unrelated to this cask-level claim, and
+#     Phase 4 teaches it to refuse when brew-managed (D-08's sentinel).
+#   - depends_on (macOS minimum): NOT asserted. HomebrewCaskDependency
+#     (pkg/config/config.go) carries only Cask/Formula fields with an
+#     explicit `// TODO: support macos, arch` comment — this pinned
+#     GoReleaser version cannot express a macOS-version depends_on for
+#     casks at all, so there is no evidence-backed floor to assert; this
+#     is an unavailable mechanism, not a declined one.
 homebrew_casks:
   - name: codegraph
     directory: Casks # GoReleaser's own default; explicit for clarity.
@@ -463,12 +488,39 @@ homebrew_casks:
       # that mints HOMEBREW_TAP_TOKEN land in plan 03-03.
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://github.com/seanb4t/codegraph-go"
+    # Mirrors internal/cli/root.go's newRootCmd().Short verbatim — one
+    # product description in one place, never a second hand-written one
+    # that can drift (the same drift shape D-15 rejected one level up).
     description: "Pre-indexed code knowledge graph for coding agents"
     binaries:
       # Plural form only (`binary`/`manpage` singular fields are
       # Deprecated on the pinned HomebrewCask struct,
       # pkg/config/config.go:246-250, and emit a deprecate.Notice).
       - codegraph
+    # generate_completions_from_executable (BREW-03, D-06): executes the
+    # INSTALLED binary at install time — `codegraph completion <shell>`
+    # already works with no CLI changes (Cobra 1.10.2 auto-registers
+    # `completion`; root.go never sets CompletionOptions.DisableDefaultCmd
+    # — confirmed against the binary release:rehearse-cask itself
+    # installs, not merely assumed). `executable:` is left unset
+    # deliberately: cask.go:78-79 auto-defaults it to `binaries[0]`
+    # ("codegraph") whenever shells/shell_parameter_format make this
+    # block "configured" — an explicit executable: would be a second,
+    # potentially-drifting spelling of the same binary name already
+    # named above. `shells:` is DELIBERATELY the three-element set below
+    # — narrower than Homebrew's own SUPPORTED_SHELLS default, which also
+    # includes pwsh, an unrequested shell whose generation failure would
+    # produce a warning nobody asked for.
+    #
+    # This artifact is NOT the install gate — see hooks.post.install's
+    # own comment below for the mechanistic reason
+    # (Cask::Artifact::GeneratedCompletion#write_completion swallows its
+    # own execution failure via `rescue => e; opoo e`); the two
+    # mechanisms both execute the binary but must never be confused for
+    # one another.
+    generate_completions_from_executable:
+      shells: [bash, zsh, fish]
+      shell_parameter_format: cobra
     hooks:
       post:
         install: |
