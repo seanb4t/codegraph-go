@@ -5,10 +5,10 @@ milestone_name: macOS Distribution & Homebrew
 current_phase: 4
 current_phase_name: "`codegraph upgrade` × Homebrew"
 status: planning
-stopped_at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
-last_updated: "2026-08-10T20:04:38.723Z"
+stopped_at: Phase 3 closed out — executed, shipped as v0.8.0, secured (03-SECURITY.md, 16/16 threats closed) and UAT-passed (03-UAT.md, 21/21). Phase 4 not yet planned
+last_updated: "2026-08-10T20:45:00.000Z"
 last_activity: 2026-08-10
-last_activity_desc: Phase 03 execution started
+last_activity_desc: Phase 03 UAT closed — 21/21 passed, 0 issues
 progress:
   total_phases: 4
   completed_phases: 3
