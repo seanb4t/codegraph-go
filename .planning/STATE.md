@@ -24,7 +24,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 02 — apple-signing-notarization
+**Current focus:** Phase 3 — Homebrew Tap & Cask
 
 ## Current Position
 
