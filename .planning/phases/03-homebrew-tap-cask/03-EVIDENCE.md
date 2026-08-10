@@ -462,6 +462,236 @@ by the same design choice D-12 made for the install gate above.
 
 ---
 
+## BREW-06, half one — the failure-and-recovery mechanism: A STRUCTURAL ARGUMENT, NOT EXECUTED EVIDENCE
+
+**Read this section's own limitation subsection before its claim.** Everything
+above this line in this file is a recorded observation — a command run, its
+verbatim output, a verdict. This section is different in kind: it is an
+argument from the pinned GoReleaser module's own source, and it carries **no
+executed run** anywhere in it. D-18R (maintainer decision, 2026-08-09) chose
+this shape deliberately, after the originally-planned reproduction
+(`--snapshot`) was falsified against the source before any plan was drawn
+over it. Nothing below should be read, quoted, or summarized elsewhere as
+"demonstrated," "proven," "verified," or "tested" — those words describe the
+observations elsewhere in this file, not this section.
+
+### The claim
+
+A failed tap push leaves an otherwise-good release intact: the GitHub
+Release, its raw binaries, `.zip` archives, checksums file, cosign bundles,
+SBOMs, and build-provenance attestation are already complete by the time a
+tap push is even attempted, so a push failure has nothing left to corrupt.
+
+### The evidence — from the pinned module's own source, not documentation
+
+All citations below are against `github.com/goreleaser/goreleaser/v2@v2.17.1`,
+the version this repository pins in `go.tool.mod` and `release.yml`'s
+`GORELEASER_VERSION`, read directly from the module cache
+(`$(go env GOMODCACHE)/github.com/goreleaser/goreleaser/v2@v2.17.1`).
+
+**1. `cask.Pipe{}` is a member of the MAIN run pipeline, where it RENDERS the
+cask file.** `internal/pipeline/pipeline.go:155`:
+
+```go
+var Pipeline = append(
+    BuildPipeline,
+    ...
+    // homebrew formula
+    brew.Pipe{},
+    // homebrew cask
+    cask.Pipe{},          // line 155
+    ...
+    // publishes artifacts
+    publish.New(),         // line 170
+    ...
+)
+```
+
+`cask.Pipe{}` here runs via its `Run(ctx)` method
+(`internal/pipe/cask/cask.go:96-103`), which calls `client.NewReleaseClient`
+and `runAll` — `doRun` writes `dist/homebrew/Casks/codegraph.rb` to local
+disk. Nothing is pushed to any repository at this point; this is the render
+step, and it runs whether or not `--snapshot` is set.
+
+**2. `cask.Pipe{}` is ALSO a member of the PUBLISH pipeline, where it PUSHES
+the rendered file to the tap — and the pipe's own source comment states
+why it is ordered where it is.** `internal/pipe/publish/publish.go:44-64`:
+
+```go
+// New publish pipeline.
+func New() Pipe {
+    return Pipe{
+        pipeline: []Publisher{
+            blob.Pipe{},
+            upload.Pipe{},
+            artifactory.Pipe{},
+            docker.Pipe{},
+            docker.ManifestPipe{},
+            dockerv2.Publish{},
+            dockerdigest.Pipe{},
+            ko.Pipe{},
+            sign.DockerPipe{},
+            snapcraft.Pipe{},
+            // This should be one of the last steps
+            release.Pipe{},                              // line 59
+            // brew et al use the release URL, so, they should be last
+            nix.New(),
+            winget.Pipe{},
+            brew.Pipe{},
+            cask.Pipe{},                                  // line 64
+            aur.Pipe{},
+            ...
+        },
+    }
+}
+```
+
+The comment at line 60 — quoted verbatim above, `// brew et al use the
+release URL, so, they should be last` — is the pipeline author's own stated
+reason `cask.Pipe{}` sits after `release.Pipe{}` (line 59) in this list.
+Here it runs via a **different** method on the same type,
+`Publish(ctx)` (`internal/pipe/cask/cask.go:106-112`), which calls
+`client.New(ctx)` — the release's own `GITHUB_TOKEN`-or-configured-token
+client, template-resolved per `.goreleaser.yaml`'s
+`homebrew_casks[0].repository.token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"` — and
+`publishAll`/`doPublish` push the commit to `seanb4t/homebrew-tap`.
+
+`internal/pipe/publish/publish.go:85-103`'s `Run` method executes this
+`pipeline` slice **in order**, propagating the first hard error
+(`cask.Pipe{}` also implements `Continuable`/`ContinueOnError() bool { return
+true }`, so a cask-publish failure is memoized and does not abort sibling
+publishers, but it is still evaluated strictly after `release.Pipe{}` has
+already run to completion in the same ordered loop). By the time
+`cask.Pipe{}.Publish()` is reached, `release.Pipe{}.Publish()` — the step
+that uploads every release asset — has already returned without error.
+
+**Same type, two interfaces, two different moments.** `cask.Pipe{}` is one
+Go value implementing both `pipeline.Piper` (`Run`, called from the render
+step, line 155) and `publish.Publisher` (`Publish`, called from the publish
+step, line 64) — an argument citing only one of the two list memberships
+would describe half the mechanism. The render always happens (nothing in
+`--snapshot` skips it); only the push is what a `--snapshot` run removes,
+per the next point.
+
+**3. Why the originally-specified reproduction (`--snapshot`) cannot reach
+the push at all.** `cmd/release.go:161-163`:
+
+```go
+if ctx.Snapshot {
+    skips.Set(ctx, skips.Publish, skips.Announce, skips.Validate)
+}
+```
+
+and `internal/pipe/publish/publish.go:82-83`:
+
+```go
+func (Pipe) String() string                 { return "publishing" }
+func (Pipe) Skip(ctx *context.Context) bool { return skips.Any(ctx, skips.Publish) }
+```
+
+A `--snapshot` run sets `skips.Publish`, and `publish.Pipe{}.Skip()` checks
+exactly that flag — so the **entire** publish pipeline (`publish.New()`'s
+`pipeline` slice, all 22 publishers including `cask.Pipe{}.Publish()`) is
+skipped as a unit under `skip.Maybe` in the outer pipeline runner. There is
+no partial-skip mode that runs `release.Pipe{}.Publish()` while still
+reaching `cask.Pipe{}.Publish()`; the render (list membership 1, above)
+still runs under `--snapshot`, which is exactly what
+`Taskfile.yml`'s `release:rehearse-cask` target exercises and all of this
+plan's predecessor plans' local rehearsals relied on — but the push never
+executes locally, by construction, regardless of any other flag.
+
+**4. `HomebrewCask.SkipUpload` exists but PREVENTS the push rather than
+FAILING it — not a substitute for observing a failure.**
+`pkg/config/config.go:226` (the `HomebrewCask` struct, confirmed by reading
+the struct itself rather than assuming field parity with the deprecated
+`Homebrew` formula struct one screen above it, which has a same-named but
+independently-declared field):
+
+```go
+type HomebrewCask struct {
+    ...
+    SkipUpload            string    `yaml:"skip_upload,omitempty" ...`
+    ...
+}
+```
+
+consumed in `internal/pipe/cask/cask.go:141-149`'s `doPublish`:
+
+```go
+func doPublish(ctx *context.Context, cask *artifact.Artifact, cl client.Client) error {
+    brew := artifact.MustExtra[config.HomebrewCask](*cask, brewConfigExtra)
+    if strings.TrimSpace(brew.SkipUpload) == "true" {
+        return pipe.Skip("brew.skip_upload is set")
+    }
+    if strings.TrimSpace(brew.SkipUpload) == "auto" && ctx.Semver.Prerelease != "" {
+        return pipe.Skip("prerelease detected with 'auto' upload, skipping homebrew publish")
+    }
+    ...
+```
+
+`pipe.Skip(...)` is a **skip** sentinel, handled by `publishAll`
+(`cask.go:124-139`) as `pipe.IsSkip(err)` and memorized into a non-fatal
+`SkipMemento` rather than surfaced as a publish failure. Setting
+`skip_upload` therefore reproduces "the push did not happen" — the render
+still occurs, so `dist/homebrew/Casks/codegraph.rb` is still inspectable —
+but it cannot reproduce "the push was attempted and failed," which is the
+shape of event this claim is actually about. `.goreleaser.yaml` sets no
+`skip_upload` key on this project's `homebrew_casks:` block; it is named
+here only to rule it out as an alternate reproduction path, not because
+this project uses it.
+
+### The limitation — stated here, in this section's own body, not a footnote
+
+**This half has NO executed evidence, and none is planned.** It has never
+been observed to fire, in this project or (so far as this evidence file's
+author can determine) in any rehearsal against this pinned module version.
+The maintainer raised, considered, and explicitly rejected a
+scratch-repository rehearsal (a real `goreleaser release` against a
+throwaway tap with a deliberately bad or withheld tap token) as the
+alternative to this argument, accepting the cost that follows from that
+choice rather than paying for the rehearsal (D-18R, `03-CONTEXT.md`).
+
+An argument from source-code ordering is not a demonstration, and nothing in
+this repository will notice if that ordering changes in a future GoReleaser
+version — a hypothetical v2.18 that reordered `publish.New()`'s pipeline
+slice to run `cask.Pipe{}` before `release.Pipe{}`, for example, would
+silently invalidate everything cited above, and this project's test suite,
+CI, and release pipeline would all stay green through that change. Two
+things would close this gap, neither of which this phase builds:
+
+1. **A shape test asserting the ordering against the pinned module** — for
+   example, reading `publish.New()`'s returned `pipeline` slice via
+   reflection or a small harness importing `internal/pipe/publish`, and
+   asserting `release.Pipe{}`'s index precedes `cask.Pipe{}`'s index. This
+   would turn a future GoReleaser version bump that reorders the slice into
+   a red test at `go.tool.mod` bump time, rather than a silent invalidation
+   discovered only if a tap push ever actually fails badly.
+2. **A rehearsal against a disposable, throwaway repository** — the
+   alternative D-18R considered and rejected for this phase, still available
+   to a future phase that wants executed evidence instead of an argument.
+
+Both remedies are named so the gap is recorded with what would close it, not
+left as an unlabelled dead end.
+
+### Scope note carried from this plan's maintainer-directed reduction
+
+The original plan (`03-05-PLAN.md`) proposed cutting a second release
+specifically to exercise more of GoReleaser's tap-push mechanics on a
+regenerated cask. The maintainer reduced that scope before execution
+(recorded in the executor's own task context, not reproduced in full here):
+a second release inside this phase would exercise GoReleaser's tap-push
+**UPDATE** path and `brew upgrade`'s consumption of it — both of which are
+code this project does not own and cannot patch, and which surface on the
+next release regardless. This section's argument is unaffected by that
+reduction: the ordering claim above depends only on `publish.New()`'s pipe
+list, not on how many releases have been cut. **Named plainly, not
+buried:** the tap-push UPDATE path (a second write to an already-existing
+`Casks/codegraph.rb`) and `brew upgrade codegraph` consuming a
+GoReleaser-regenerated cask both remain unexercised by this phase and
+accepted as a gap until the next natural release exercises them.
+
+---
+
 *Phase: 03-homebrew-tap-cask*
-*Plan: 03-04*
+*Plans: 03-04, 03-05*
 *Captured: 2026-08-10*
