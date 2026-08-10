@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 03
-current_phase_name: homebrew-tap-cask
-status: executing
+current_phase: 4
+current_phase_name: "`codegraph upgrade` × Homebrew"
+status: planning
 stopped_at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
-last_updated: "2026-08-10T13:20:58.891Z"
+last_updated: "2026-08-10T20:04:38.723Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 18
-  completed_plans: 13
-  percent: 50
+  completed_plans: 18
+  percent: 75
 ---
 
 # Project State
@@ -24,22 +24,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 03 — homebrew-tap-cask
+**Current focus:** Phase 04 — `codegraph upgrade` × Homebrew
 
 ## Current Position
 
-Phase: 03 (homebrew-tap-cask) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 03
-Last activity: 2026-08-10 — Phase 03 execution started
+Phase: 4 — `codegraph upgrade` × Homebrew
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-10 — Phase 03 complete, transitioned to Phase 4
 
-Progress: [....] 0/4 phases complete ([██████████] 100%)
+Progress: [....] 3/4 phases complete (75%)
 
 ## Performance Metrics
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 13
+- Total plans completed: 18
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -49,7 +49,7 @@ Progress: [....] 0/4 phases complete ([██████████] 100%)
 |-------|-------|-------|----------|
 | 1 | 6 | - | - |
 | 02 | 7 | - | - |
-| 3 | 0 | - | - |
+| 03 | 5 | - | - |
 | 4 | 0 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
