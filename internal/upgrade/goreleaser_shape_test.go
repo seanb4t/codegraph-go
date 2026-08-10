@@ -3,6 +3,7 @@ package upgrade
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -1005,6 +1006,275 @@ func TestReleaseBlockDoesNotRewriteReleaseBody(t *testing.T) {
 	for _, forbidden := range []string{"name_template", "header", "footer", "draft", "disable"} {
 		if _, ok := block[forbidden]; ok {
 			t.Errorf("release: block declares forbidden key %q — release-please owns Release authorship (D-06R)", forbidden)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// Task 3 (plan 03-02): homebrew_casks: — property tests holding the
+// block's non-obvious fields, each demonstrated RED against a real,
+// confirmed-applied, byte-cleanly-reverted mutation of .goreleaser.yaml
+// (see 03-02-SUMMARY.md for the mutation/message/revert record).
+// ---------------------------------------------------------------------
+
+// goreleaserHomebrewCasksTopLevel mirrors the top-level homebrew_casks:
+// SEQUENCE. Decoded as []map[string]any (not a typed struct) deliberately:
+// a typed struct silently drops an unrecognized key on decode, which would
+// make TestHomebrewCaskHasNoURLKey's "absent vs present" distinction
+// impossible to hold — a typed field's zero value looks identical whether
+// the YAML key was omitted or present-but-empty.
+type goreleaserHomebrewCasksTopLevel struct {
+	Casks []map[string]any `yaml:"homebrew_casks"`
+}
+
+// parseGoreleaserHomebrewCasks decodes .goreleaser.yaml source src with a
+// real YAML decoder and returns every homebrew_casks: entry as a raw map.
+// Returns a non-nil error — never a usable empty slice — when src fails to
+// parse, or when homebrew_casks: is absent or contains no entries.
+func parseGoreleaserHomebrewCasks(src string) ([]map[string]any, error) {
+	var cfg goreleaserHomebrewCasksTopLevel
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserHomebrewCasks: %w", err)
+	}
+	if len(cfg.Casks) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserHomebrewCasks: no homebrew_casks: entries found")
+	}
+	return cfg.Casks, nil
+}
+
+func mustGoreleaserHomebrewCask(t *testing.T, src string) map[string]any {
+	t.Helper()
+	v, err := parseGoreleaserHomebrewCasks(src)
+	if err != nil {
+		t.Fatalf("mustGoreleaserHomebrewCask: %v", err)
+	}
+	if len(v) != 1 {
+		t.Fatalf("homebrew_casks: has %d entries, want exactly 1", len(v))
+	}
+	return v[0]
+}
+
+// TestParseGoreleaserCask_NoBlockIsError is the non-vacuity companion:
+// parseGoreleaserHomebrewCasks("") must return a non-nil error, never an
+// empty-but-usable slice.
+func TestParseGoreleaserCask_NoBlockIsError(t *testing.T) {
+	if _, err := parseGoreleaserHomebrewCasks(""); err == nil {
+		t.Fatalf(`parseGoreleaserHomebrewCasks("") = nil error, want non-nil`)
+	}
+}
+
+// TestHomebrewCaskIDsIsExactlyZipArchiveSet holds BREW-04/RESEARCH.md
+// Pattern 1: homebrew_casks[0].ids is exactly the single-element set
+// naming the zip archive entry. An unscoped or wrongly-scoped filter makes
+// both archive shapes (raw, zip) match the same platform pairs and
+// cask.Pipe{}'s dataFor() throws its own ErrMultipleArchivesSameOS ("one
+// tap can handle only one archive of an OS/Arch combination").
+func TestHomebrewCaskIDsIsExactlyZipArchiveSet(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	cask := mustGoreleaserHomebrewCask(t, string(data))
+
+	rawIDs, ok := cask["ids"]
+	if !ok {
+		t.Fatalf("homebrew_casks[0] has no ids: key")
+	}
+	ids, err := toStringSlice(rawIDs)
+	if err != nil {
+		t.Fatalf("homebrew_casks[0].ids: %v", err)
+	}
+	want := sortedJoin([]string{"zip"})
+	if got := sortedJoin(ids); got != want {
+		t.Errorf("homebrew_casks[0].ids = %v, want exactly [zip] — naming the raw archive entry too (or instead) reintroduces cask.Pipe{}'s ErrMultipleArchivesSameOS", ids)
+	}
+}
+
+// TestHomebrewCaskHasNoURLKey holds RESEARCH.md Pattern 2: homebrew_casks[0]
+// declares no url: key at all — the unset default is GoReleaser's own
+// Name-derived ReleaseURLTemplate, and a hand-written url: template is the
+// Path-vs-Name collision class this file's signs:/sboms: blocks each
+// independently document having hit before. Decoded as a raw map
+// specifically so this test can distinguish "key absent" from "key present
+// with an empty value" — a typed struct's zero value cannot tell those
+// apart.
+func TestHomebrewCaskHasNoURLKey(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	cask := mustGoreleaserHomebrewCask(t, string(data))
+
+	if v, ok := cask["url"]; ok {
+		t.Errorf("homebrew_casks[0] declares a url: key (value=%v) — want it entirely absent; a hand-written url.template reintroduces the Path-vs-Name collision class this file's signs:/sboms: comments document", v)
+	}
+}
+
+// TestHomebrewCaskGeneratedCompletionsShellsIsExactSet holds BREW-03/D-06:
+// generate_completions_from_executable.shells is exactly the three-element
+// set {bash, zsh, fish} — narrower than Homebrew's own SUPPORTED_SHELLS
+// default, which also includes pwsh, an unrequested shell whose generation
+// failure would produce a warning nobody asked for.
+func TestHomebrewCaskGeneratedCompletionsShellsIsExactSet(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	cask := mustGoreleaserHomebrewCask(t, string(data))
+
+	raw, ok := cask["generate_completions_from_executable"]
+	if !ok {
+		t.Fatalf("homebrew_casks[0] has no generate_completions_from_executable: key")
+	}
+	block, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("homebrew_casks[0].generate_completions_from_executable is %T, not a mapping", raw)
+	}
+	rawShells, ok := block["shells"]
+	if !ok {
+		t.Fatalf("generate_completions_from_executable has no shells: key")
+	}
+	shells, err := toStringSlice(rawShells)
+	if err != nil {
+		t.Fatalf("generate_completions_from_executable.shells: %v", err)
+	}
+	want := sortedJoin([]string{"bash", "zsh", "fish"})
+	if got := sortedJoin(shells); got != want {
+		t.Errorf("generate_completions_from_executable.shells = %v, want exactly [bash zsh fish] — a superset (e.g. adding pwsh) reintroduces Homebrew's own unrequested default shell", shells)
+	}
+	if got, ok := block["shell_parameter_format"].(string); !ok || got != "cobra" {
+		t.Errorf("generate_completions_from_executable.shell_parameter_format = %v, want %q", block["shell_parameter_format"], "cobra")
+	}
+}
+
+// raiseKeywordPattern matches Ruby's `raise` keyword as a whole word, used
+// only by countNonCommentRaiseStatements below.
+var raiseKeywordPattern = regexp.MustCompile(`\braise\b`)
+
+// countNonCommentRaiseStatements counts lines in a Ruby hook body
+// containing the raise keyword, EXCLUDING comment lines (lines whose
+// trimmed content starts with "#") — so this file's own dense inline
+// commentary inside .goreleaser.yaml can never change the count. Used to
+// assert a STRUCTURAL property (how many distinct failure paths exist)
+// rather than pinning any raise message's literal text.
+func countNonCommentRaiseStatements(body string) int {
+	count := 0
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if raiseKeywordPattern.MatchString(line) {
+			count++
+		}
+	}
+	return count
+}
+
+// TestHomebrewCaskHooksHaveStructuralProperties holds BREW-05/D-11: both
+// hooks.post.install and hooks.post.uninstall are present and non-empty,
+// and the install body contains at least two distinct raise-style failure
+// paths — D-11's two positive assertions ("didn't run" / "ran but is the
+// wrong artifact"). Asserts PROPERTIES only, never pins a raise message's
+// literal text: a mutation that reworks a raise message's wording without
+// removing the raise must stay green here, while a mutation that deletes a
+// raise must turn this red. The raise count is derived with comment lines
+// excluded, so prose in this hook's own dense inline commentary can never
+// change the count.
+func TestHomebrewCaskHooksHaveStructuralProperties(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	cask := mustGoreleaserHomebrewCask(t, string(data))
+
+	rawHooks, ok := cask["hooks"]
+	if !ok {
+		t.Fatalf("homebrew_casks[0] has no hooks: key")
+	}
+	hooks, ok := rawHooks.(map[string]any)
+	if !ok {
+		t.Fatalf("homebrew_casks[0].hooks is %T, not a mapping", rawHooks)
+	}
+	rawPost, ok := hooks["post"]
+	if !ok {
+		t.Fatalf("homebrew_casks[0].hooks has no post: key")
+	}
+	post, ok := rawPost.(map[string]any)
+	if !ok {
+		t.Fatalf("homebrew_casks[0].hooks.post is %T, not a mapping", rawPost)
+	}
+
+	install, ok := post["install"].(string)
+	if !ok || strings.TrimSpace(install) == "" {
+		t.Fatalf("homebrew_casks[0].hooks.post.install is absent or empty")
+	}
+	uninstall, ok := post["uninstall"].(string)
+	if !ok || strings.TrimSpace(uninstall) == "" {
+		t.Fatalf("homebrew_casks[0].hooks.post.uninstall is absent or empty")
+	}
+
+	if n := countNonCommentRaiseStatements(install); n < 2 {
+		t.Errorf("hooks.post.install contains %d non-comment raise statement(s), want at least 2 (D-11's two positive assertions)", n)
+	}
+}
+
+// goreleaserArchivesRawTopLevel mirrors the top-level archives: sequence as
+// raw maps — used only by TestHomebrewCaskArchivesHaveNoFilesKey, which
+// needs to detect the PRESENCE of a files: key; the typed goreleaserArchive
+// struct earlier in this file has no Files field and would silently drop
+// it on decode, making that presence check impossible.
+type goreleaserArchivesRawTopLevel struct {
+	Archives []map[string]any `yaml:"archives"`
+}
+
+// parseGoreleaserArchivesRaw decodes .goreleaser.yaml source src with a
+// real YAML decoder and returns every archives: entry as a raw map.
+// Returns a non-nil error — never a usable empty slice — when src fails to
+// parse, or when archives: is absent or contains no entries.
+func parseGoreleaserArchivesRaw(src string) ([]map[string]any, error) {
+	var cfg goreleaserArchivesRawTopLevel
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		return nil, fmt.Errorf("parseGoreleaserArchivesRaw: %w", err)
+	}
+	if len(cfg.Archives) == 0 {
+		return nil, fmt.Errorf("parseGoreleaserArchivesRaw: no archives: entries found")
+	}
+	return cfg.Archives, nil
+}
+
+func mustGoreleaserArchivesRaw(t *testing.T, src string) []map[string]any {
+	t.Helper()
+	v, err := parseGoreleaserArchivesRaw(src)
+	if err != nil {
+		t.Fatalf("mustGoreleaserArchivesRaw: %v", err)
+	}
+	return v
+}
+
+// TestParseGoreleaserArchivesRaw_NoArchivesBlockIsError is the non-vacuity
+// companion: parseGoreleaserArchivesRaw("") must return a non-nil error,
+// never an empty-but-usable slice.
+func TestParseGoreleaserArchivesRaw_NoArchivesBlockIsError(t *testing.T) {
+	if _, err := parseGoreleaserArchivesRaw(""); err == nil {
+		t.Fatalf(`parseGoreleaserArchivesRaw("") = nil error, want non-nil`)
+	}
+}
+
+// TestHomebrewCaskArchivesHaveNoFilesKey holds D-16: no archives: entry
+// declares a files: key — a future attempt to ship completions or man
+// pages inside the zip (or raw) archive must turn this test red instead
+// of quietly creating a second, staler source alongside the install-time
+// generation this phase relies on.
+func TestHomebrewCaskArchivesHaveNoFilesKey(t *testing.T) {
+	data, err := os.ReadFile(goreleaserConfigPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", goreleaserConfigPath, err)
+	}
+	archives := mustGoreleaserArchivesRaw(t, string(data))
+	for _, a := range archives {
+		id, _ := a["id"].(string)
+		if _, ok := a["files"]; ok {
+			t.Errorf("archives[id=%s] declares a files: key — completions/man pages must be generated at install time (BREW-03/BREW-04), never shipped inside the archive", id)
 		}
 	}
 }
