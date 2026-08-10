@@ -186,11 +186,25 @@ Plans:
 
 **Notes**: Consumes seed **SEED-002**. `homebrew_casks:` is the block, not the deprecated `brews:` (GoReleaser v2.10; Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries per Homebrew/brew #20291). The default `GITHUB_TOKEN` cannot write cross-repo, so a dedicated least-privilege PAT is required. `gh`/`lazygit`'s build-time updater-disable ldflag does not transfer — casks ship precompiled binaries — so the cask-compatible analogue is a `homebrew_casks.hooks.post.install` sentinel, which is also the most robust signal Phase 4 can key on.
 
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (populate with /gsd-plan-phase 3)
+- [ ] 03-01-PLAN.md — confirm the one-way tap/cask naming, then a tracer: `codegraph man` plus a minimal `homebrew_casks:` block, rendered by GoReleaser and installed by real Homebrew, with the hook executing the installed binary
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — complete the cask: D-11's two positive assertions, the Phase-4 sentinel, symmetric uninstall, three-shell completions, and shape tests asserting properties rather than literals
+- [ ] 03-03-PLAN.md — the tap repository, a second GitHub App installed on it alone, the mint placed by a measured job-output verdict, and a release that halts on a missing or non-distinct tap credential
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-04-PLAN.md — watch the install gate fail twice and the tap credential be refused once, then amend BREW-05 and criterion 3 to name the mechanism that exists (D-09)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-05-PLAN.md — cut two releases, install cold from the second's regenerated cask, and record criterion 4's split: an argument for the failure half (D-18R), executed evidence for the integrity half
 
 ### Phase 4: `codegraph upgrade` × Homebrew
 

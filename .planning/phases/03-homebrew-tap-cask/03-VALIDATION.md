@@ -46,15 +46,17 @@ Task IDs are assigned at planning time; this table is seeded by requirement and 
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | 0 | BREW-02 | — | `homebrew_casks:` selects only the `zip` archive id | unit (shape) | `go test ./internal/upgrade/... -run TestHomebrewCaskShape` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 0 | BREW-03 | — | `generate_completions_from_executable` targets exactly `[bash, zsh, fish]` with `shell_parameter_format: cobra` | unit (shape) | `go test ./internal/upgrade/... -run TestHomebrewCaskCompletions` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 0 | BREW-04 | — | `newManCmd()` is `Hidden: true`, registered on root, takes one positional arg | unit | `go test ./internal/cli/... -run TestManCmd` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 0 | BREW-04 | — | `codegraph man <dir>` emits the full command tree | unit/integration | `go test ./internal/cli/... -run TestManCmdEmitsTree` | ❌ W0 | ⬜ pending |
-| TBD | TBD | 1+ | BREW-05 (amended) | T-03-xx | Post-install hook asserts man output non-empty AND version matches cask | manual, one-time recorded RED (D-12) | none — deliberately not a permanent re-fire | ❌ | ⬜ pending |
-| TBD | TBD | 1+ | BREW-02 | T-03-xx | Tap credential refused a write to `seanb4t/codegraph-go` | manual, one-time recorded (D-17) | none — explicitly not a permanent CI assertion | ❌ | ⬜ pending |
-| TBD | TBD | last | BREW-01 | — | Cold `brew tap` + `brew install` + a real command | manual, real release (D-13) | none possible locally | ❌ | ⬜ pending |
-| TBD | TBD | last | BREW-06 (integrity half) | — | Release assets, cosign bundles, SBOMs, SLSA provenance re-verified against re-downloaded artifacts | automated, existing | `task verify:release-assets` | ✅ exists | ⬜ pending |
-| TBD | TBD | — | BREW-06 (mechanism half) | — | A failed tap push cannot corrupt the release | **structural argument only (D-18R)** | **none — no executed evidence by maintainer decision** | ❌ | ⬜ accepted-limitation |
+| 03-01 T2 | 03-01 | 1 | BREW-04, BREW-05 | T-03-01, T-03-03 | Tracer: a GoReleaser-rendered cask installs via real Homebrew and its hook executes the installed binary | integration (local rehearsal) | `task release:rehearse-cask` | ❌ W0 | ⬜ pending |
+| 03-01 T3 | 03-01 | 1 | BREW-04 | — | `newManCmd()` is `Hidden: true`, registered on root, one positional arg, creates its output dir, errors on an unwritable path, emits the full tree | unit | `go test ./internal/cli/... -run TestManCmd` | ❌ W0 | ⬜ pending |
+| 03-02 T3 | 03-02 | 2 | BREW-02 | — | `homebrew_casks:` selects only the `zip` archive id, and declares no `url` key | unit (shape) | `go test ./internal/upgrade/... -run TestHomebrewCask` | ❌ W0 | ⬜ pending |
+| 03-02 T3 | 03-02 | 2 | BREW-03 | T-03-06 | `generate_completions_from_executable` targets exactly `[bash, zsh, fish]` with `shell_parameter_format: cobra` | unit (shape) | `go test ./internal/upgrade/... -run TestHomebrewCask` | ❌ W0 | ⬜ pending |
+| 03-02 T1 | 03-02 | 2 | BREW-05 | T-03-04, T-03-05 | Post-install hook asserts man output non-empty AND binary version equals cask version; sentinel written; uninstall symmetric | integration (local rehearsal) + shape | `task release:rehearse-cask` | ❌ W0 | ⬜ pending |
+| 03-03 T3 | 03-03 | 2 | BREW-02 | T-03-07, T-03-09, T-03-10 | Tap secrets scoped to one job at step level; `id-token: write` still singly held; release halts on a missing or non-distinct tap credential | unit (shape) | `go test ./internal/upgrade/... -run TestHomebrewTap` | ❌ W0 | ⬜ pending |
+| 03-04 T1 | 03-04 | 3 | BREW-05 (amended) | T-03-11 | A deliberately broken binary fails `brew install` non-zero and leaves nothing behind | manual, one-time recorded RED (D-12) | none — deliberately not a permanent re-fire | ❌ | ⬜ pending |
+| 03-04 T2 | 03-04 | 3 | BREW-02 | T-03-12 | Tap credential wrote the tap (positive control) and was refused a write to `seanb4t/codegraph-go` | manual, one-time recorded (D-17) | none — explicitly not a permanent CI assertion | ❌ | ⬜ pending |
+| 03-05 T2 | 03-05 | 4 | BREW-01 | T-03-14, T-03-15 | Cold `brew tap` + `brew install` + a real command, against the SECOND release's regenerated cask | manual, real release (D-13) | none possible locally | ❌ | ⬜ pending |
+| 03-05 T3 | 03-05 | 4 | BREW-06 (integrity half) | — | Release assets, cosign bundles, SBOMs, provenance re-verified against re-downloaded artifacts; no duplicated or orphaned asset | automated, existing | `task verify:release-assets` | ✅ exists | ⬜ pending |
+| 03-05 T1 | 03-05 | 4 | BREW-06 (mechanism half) | T-03-13 | A failed tap push cannot corrupt the release | **structural argument only (D-18R)** | **none — no executed evidence by maintainer decision** | ❌ | ⬜ accepted-limitation |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
