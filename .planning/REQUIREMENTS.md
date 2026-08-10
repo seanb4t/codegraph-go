@@ -28,12 +28,12 @@
 
 ### Homebrew Distribution (BREW)
 
-- [ ] **BREW-01**: A user can run `brew tap seanb4t/tap && brew install codegraph` on a clean machine and get a working binary
-- [ ] **BREW-02**: The tap is published by GoReleaser's `homebrew_casks:` block on every release, authenticated by a token scoped to the tap repository alone
+- [x] **BREW-01**: A user can run `brew tap seanb4t/tap && brew install codegraph` on a clean machine and get a working binary
+- [x] **BREW-02**: The tap is published by GoReleaser's `homebrew_casks:` block on every release, authenticated by a token scoped to the tap repository alone
 - [ ] **BREW-03**: The cask installs shell completions for bash, zsh, and fish, generated from the binary at cask-build time
 - [ ] **BREW-04**: The cask installs man pages
 - [ ] **BREW-05**: The cask carries a mechanism exercising a real command, so a broken cask fails before a user hits it — `hooks.post.install` runs the installed binary's man-page generation and its `version --json` output, and raises (rolling back the install) if either the man pages are absent or the reported version disagrees with the cask's own declared version. **Amended 2026-08-10 (plan 03-04)**: previously specified a cask `test:` block. Measured unachievable, not merely inconvenient: Homebrew Casks carry no `test` stanza (`Cask::DSL.instance_methods(false)` on Homebrew 6.0.16 has no `test` method), `brew test` operates only on installed formulae ("Run the test method provided by an installed formula" — `brew test --help`), and the pinned GoReleaser v2.17.1 `HomebrewCask` struct (`pkg/config/config.go`) exposes no such field. The replacement mechanism — `hooks.post.install`'s two positive assertions (D-11) — was demonstrated RED against two independently confirmed-applied, byte-clean-reverted mutations (a binary that cannot execute; a binary that executes and reports the wrong version), see `03-EVIDENCE.md` §"BREW-05 — the install gate demonstrated RED"
-- [ ] **BREW-06**: A failed tap push leaves an otherwise-good release intact, and re-running recovers without duplicate or orphaned assets
+- [x] **BREW-06**: A failed tap push leaves an otherwise-good release intact, and re-running recovers without duplicate or orphaned assets
 
 ### Upgrade × Package Manager (UPGR)
 
@@ -77,12 +77,12 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 | SIGN-02 | Phase 2 | Complete |
 | SIGN-03 | Phase 2 | Complete |
 | SIGN-04 | Phase 2 | Complete |
-| BREW-01 | Phase 3 | Pending |
-| BREW-02 | Phase 3 | Pending |
+| BREW-01 | Phase 3 | Complete |
+| BREW-02 | Phase 3 | Complete |
 | BREW-03 | Phase 3 | Pending |
 | BREW-04 | Phase 3 | Pending |
 | BREW-05 | Phase 3 | Pending |
-| BREW-06 | Phase 3 | Pending |
+| BREW-06 | Phase 3 | Complete |
 | UPGR-01 | Phase 4 | Pending |
 | UPGR-02 | Phase 4 | Pending |
 | UPGR-03 | Phase 4 | Pending |
