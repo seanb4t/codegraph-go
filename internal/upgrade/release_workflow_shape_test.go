@@ -1055,7 +1055,7 @@ type fullWorkflowJob struct {
 }
 
 type fullWorkflowDoc struct {
-	On          yaml.Node                 `yaml:"on"`
+	On          yaml.Node                  `yaml:"on"`
 	Env         map[string]any             `yaml:"env"`
 	Permissions map[string]any             `yaml:"permissions"`
 	Jobs        map[string]fullWorkflowJob `yaml:"jobs"`
@@ -1500,6 +1500,36 @@ func TestHomebrewTapTokenScopedToReleaseJob(t *testing.T) {
 		refs := findHomebrewTapCredentialReferences(path, doc, homebrewTapCredentialNames)
 		triggers := workflowOnTriggers(doc.On)
 		isPRTriggerable := triggers["pull_request"] || triggers["pull_request_target"]
+
+		// Positive-presence floor (repo rule 84d1gfpywd; secure-phase 03
+		// finding UF-4). Everything the loop below asserts is NEGATIVE —
+		// no reference outside release.yml, none outside the release job,
+		// none above step level. All three pass vacuously on an empty
+		// refs slice: a rename of any credential name, a restructured
+		// mint step, or any change to the with:/env: shape
+		// findHomebrewTapCredentialReferences walks would yield zero refs
+		// and skip the loop body entirely, leaving this test green with
+		// the scoping invariant unverified. The len(files) == 0 Fatal
+		// above guards non-vacuity of the *input scan* only — not of the
+		// *match set*, which is the quantity that actually carries the
+		// invariant. Asserted as set membership of the three distinct
+		// names rather than a count: a tally breaks the moment a fourth
+		// legitimate reference is added, whereas membership survives it
+		// (the edit-intolerance of counts is a recorded lesson here).
+		if isReleaseWorkflow {
+			for _, want := range homebrewTapCredentialNames {
+				// Probed through findHomebrewTapCredentialReferences
+				// itself, one name at a time, rather than by inspecting
+				// refs: credentialReference does not record which
+				// credential matched. Routing the floor through the same
+				// walker the assertions below depend on is the point — a
+				// floor built on a second, independent matcher could stay
+				// green while the walker those assertions use went blind.
+				if len(findHomebrewTapCredentialReferences(path, doc, []string{want})) == 0 {
+					t.Errorf("release.yml contains no reference to %q, but every scoping assertion in this test is negative and passes vacuously without one — the credential was renamed, the mint step restructured, or findHomebrewTapCredentialReferences no longer walks the shape that carries it (total refs found for %v: %d)", want, homebrewTapCredentialNames, len(refs))
+				}
+			}
+		}
 
 		for _, ref := range refs {
 			if !isReleaseWorkflow {
