@@ -408,3 +408,78 @@ release:
   # Release. Regenerating the body would move release authorship away
   # from the tool D-06R reserves it to. Held by
   # TestReleaseBlockDoesNotRewriteReleaseBody.
+
+# homebrew_casks: (BREW-01/03/04, D-14/D-15/D-16/D-05) publishes
+# Casks/codegraph.rb to the seanb4t/homebrew-tap repository (D-14,
+# maintainer-confirmed 2026-08-09: `brew tap seanb4t/tap && brew install
+# codegraph`) on every release. `cask.Pipe{}` is registered in TWO
+# GoReleaser pipelines in the pinned v2.17.1 module: the MAIN pipeline
+# (internal/pipeline/pipeline.go:155, which RENDERS
+# dist/homebrew/Casks/codegraph.rb) and the PUBLISH pipeline
+# (internal/pipe/publish/publish.go:64, which PUSHES it to the tap,
+# ordered last — "brew et al use the release URL, so, they should be
+# last"). `--snapshot` sets skips.Publish and therefore skips only the
+# second; the render always happens (Taskfile.yml's
+# release:rehearse-cask target rehearses exactly that render + a real
+# local `brew install`, never the tap push).
+#
+# This block is deliberately MINIMAL for this task (BREW-04's man-page
+# tracer slice, plan 03-01): completions
+# (generate_completions_from_executable, D-06), the post-uninstall
+# cleanup hook (D-07), the second positive assertion + Phase-4 sentinel
+# (D-11/D-08), and a dedicated shape test all belong to later plans in
+# this phase. Only the fields this task's rehearsal needs to prove the
+# end-to-end mechanism are present.
+homebrew_casks:
+  - name: codegraph
+    directory: Casks # GoReleaser's own default; explicit for clarity.
+    ids:
+      # LOAD-BEARING (RESEARCH.md Pattern 1, traced to
+      # internal/pipe/cask/cask.go's doRun()/dataFor()): this file
+      # declares TWO archive entries (`raw`, `zip`) covering the
+      # identical 4 platforms. cask.Pipe{}'s default artifact filter (no
+      # ids: set) matches BOTH shapes for every platform, and
+      # dataFor()'s platformCounts check then throws
+      # ErrMultipleArchivesSameOS ("one tap can handle only one archive
+      # of an OS/Arch combination. Consider using ids in the
+      # homebrew_casks section"). Scoping to the `zip` archive id alone
+      # — never `raw`, never both — is the fix the pipe's own error
+      # names.
+      - zip
+    # url.template: deliberately OMITTED (RESEARCH.md Pattern 2). The
+    # unset default is GoReleaser's own `{{ .ArtifactName }}`-derived
+    # ReleaseURLTemplate (Name-derived) — a hand-written `${artifact}`
+    # (Path-derived) form is the exact collision class this file's
+    # signs:/sboms: blocks each independently document having hit
+    # before. Do not add a url: key here without re-reading both.
+    repository:
+      owner: seanb4t
+      name: homebrew-tap
+      branch: main
+      # GitHub App installation token (D-16), minted per-release and
+      # scoped to homebrew-tap ALONE — a SEPARATE client from this
+      # release's own GITHUB_TOKEN (internal/client/client.go:153-166,
+      # NewIfToken). Wired here now; the App itself and the workflow job
+      # that mints HOMEBREW_TAP_TOKEN land in plan 03-03.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/seanb4t/codegraph-go"
+    description: "Pre-indexed code knowledge graph for coding agents"
+    binaries:
+      # Plural form only (`binary`/`manpage` singular fields are
+      # Deprecated on the pinned HomebrewCask struct,
+      # pkg/config/config.go:246-250, and emit a deprecate.Notice).
+      - codegraph
+    hooks:
+      post:
+        install: |
+          # D-10: the install itself is BREW-05's gate. system_command's
+          # default is must_succeed: true (Homebrew's
+          # SystemCommand.run!), and Cask::Installer#install_artifacts
+          # does not rescue that failure — it rolls back and re-raises,
+          # so `brew install` exits non-zero for the first user whose
+          # binary cannot even run `man`. Scoped to ONE assertion for
+          # this task; D-11's second assertion (reported version ==
+          # cask version) and D-08's Phase-4 sentinel write are plan
+          # 03-02's expansion, not this tracer slice's.
+          system_command "#{HOMEBREW_PREFIX}/bin/codegraph",
+                          args: ["man", "#{HOMEBREW_PREFIX}/share/man/man1"]
