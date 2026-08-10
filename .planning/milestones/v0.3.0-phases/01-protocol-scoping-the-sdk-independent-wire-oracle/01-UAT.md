@@ -114,3 +114,13 @@ not lost at phase close (NOT a UAT test — no maintainer action required to pas
   permanent, named coverage gap rather than outstanding work — recorded here so a future
   reader does not attempt an action the entry itself predicted would become impossible.
   No maintainer action required (this was already flagged above as *not* a UAT test).
+  status: resolved
+  resolved_at: 2026-08-10
+  resolution: "Not a gap and never was — the prose above labels it 'NOT a UAT test — no
+  maintainer action required to pass this phase'. It surfaced in /gsd-audit-uat only
+  because it was filed as a bullet inside the parsed `## Gaps` section, where
+  parseGapsItems reads every top-level bullet as a gap entry and a missing `status:`
+  falls through to category 'unknown'. Marked resolved (parseGapsItems skips a
+  case-insensitive `status: resolved`) rather than deleted, because the observation
+  itself is worth keeping. The mcp-go removal noted above independently closed the
+  window it described."
