@@ -244,7 +244,7 @@ Standing decisions that outlive v1.0:
 
 ### Pending Todos
 
-2 pending — `/gsd-capture --list` to review.
+10 pending — `/gsd-capture --list` to review.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
