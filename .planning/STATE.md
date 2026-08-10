@@ -5,8 +5,8 @@ milestone_name: macOS Distribution & Homebrew
 current_phase: 4
 current_phase_name: "`codegraph upgrade` × Homebrew"
 status: planning
-stopped_at: Phase 3 closed out — executed, shipped as v0.8.0, secured (03-SECURITY.md, 16/16 threats closed) and UAT-passed (03-UAT.md, 21/21). Phase 4 not yet planned
-last_updated: "2026-08-10T20:45:00.000Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-08-10T23:13:14.733Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 03 UAT closed — 21/21 passed, 0 issues
 progress:
@@ -318,8 +318,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-10T13:11:06.675Z
-Stopped at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
+Last session: 2026-08-10T23:13:14.719Z
+Stopped at: Phase 4 context gathered
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -345,7 +345,7 @@ Stopped at: Phase 3 planned — 5 plans across 4 waves, checker passed; executio
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/03-homebrew-tap-cask/03-01-PLAN.md
+Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-CONTEXT.md
 
 ## Operator Next Steps
 
