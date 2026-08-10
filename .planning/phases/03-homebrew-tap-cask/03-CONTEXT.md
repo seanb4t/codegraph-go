@@ -51,12 +51,22 @@ A macOS user installs codegraph the way they install everything else — `brew t
   - **Flagged for research, deliberately not decided here:** *where* the App token is minted. `release.yml:79-117` records that **exactly one job in the file may hold `id-token: write`**, and that every additional Action inside that job sits within the OIDC token's reach — the token that produces the cosign certificate SAN. Minting via `actions/create-github-app-token` inside that job places a new Action next to the signing identity; minting it in a separate job means passing a live write-token between jobs. Resolve on evidence.
   - **Secret placement:** the App's private key and ID must be **repository** secrets, not environment secrets. Memory `q5yhyebw5k` records the exact failure this avoids: environment-scoped Apple secrets would have shipped an un-notarized release **with a green log**. A missing tap credential is the same silent-degradation class.
 - **D-17:** Criterion 5's negative proof — the tap credential **refused** a write to `seanb4t/codegraph-go` — is a **one-time recorded run** (attempt the write, record status and response as committed evidence), consistent with SIGN-03's RED baseline and the D-07 mis-order mutation. Rejected: a permanent CI assertion (a deliberate unauthorized-write attempt on every release) and asserting App installation scope via the API (proves configuration rather than behavior).
-- **D-18:** The deliberately-failed tap push is reproduced by a **local dry-run** (`--snapshot`/local release), never against a published release.
-- **D-19:** **Criterion 4 is split**, and its wording in ROADMAP.md must be amended to say so:
-  1. **Failure-and-recovery mechanism** — proven locally per D-18: a failed cask push aborts without corrupting the upstream pipes, and a re-run publishes the tap cleanly.
-  2. **Release integrity** — proven by the **existing permanent post-release verification**, which already re-verifies cosign bundles, SLSA provenance and the asset set against re-downloaded artifacts on every release.
+- **D-18:** ~~The deliberately-failed tap push is reproduced by a local dry-run (`--snapshot`).~~ **FALSIFIED AND REPLACED 2026-08-09, before planning was drawn over it.**
 
-  Both halves are genuinely proven, each by the surface that owns it. Rejected: amending criterion 4 down to only what a local dry-run shows (removes a stated property rather than relocating it — a gate going blind), and inducing the failure on a real release.
+  **Why it was falsified — verified against the pinned module's own source, not documentation:**
+  - `goreleaser/v2@v2.17.1` `cmd/release.go:161-162` — `if ctx.Snapshot { skips.Set(ctx, skips.Publish, skips.Announce, skips.Validate) }`
+  - `internal/pipe/publish/publish.go` — `cask.Pipe{}` is a member of the **Publish** pipeline, listed after `release.Pipe{}` under the literal source comment *"brew et al use the release URL, so, they should be last"*
+
+  A `--snapshot` run therefore **structurally cannot reach the cask-push path at all**. `HomebrewCask.SkipUpload` (`config.go:226`) exists but *prevents* the push rather than failing it, so it is no substitute.
+
+  **D-18R (replacement, maintainer decision 2026-08-09): STRUCTURAL ARGUMENT ONLY.** The failure-and-recovery mechanism is **not** demonstrated by an executed run. It rests on the source-level ordering fact above: because `cask.Pipe{}` runs last in Publish, a tap-push failure cannot corrupt the Release, its cosign bundles, SBOMs or SLSA provenance, all of which are complete before the cask pipe starts. Rejected: a real `goreleaser release` against a throwaway scratch repo with a bad tap token (the house pattern from 01-06's throwaway cosign key and 02-04's guarded notarize rehearsal), and withholding the token on the real release.
+
+  **ACCEPTED RISK, NAMED EXPLICITLY AND NOT SILENT.** The orchestrator raised, and the maintainer accepted, that this leaves BREW-06's mechanism half as **a check that has never been observed to fire** — the failure mode this repo names as its own recurring one (`rez50fp4hp`, `yctys69cke`, `vep9bdqkw9`, rule `84d1gfpywd`). Downstream agents MUST carry this forward as a stated limitation rather than reporting BREW-06 as demonstrated. The verifier should expect **no executed evidence** for this leg and must not manufacture a substitute that passes vacuously.
+- **D-19:** **Criterion 4 is split**, and its wording in ROADMAP.md must be amended to say so:
+  1. **Failure-and-recovery mechanism** — **argued structurally per D-18R, not executed.** Recorded as an accepted limitation, citing the `publish.go` pipeline ordering as the evidence.
+  2. **Release integrity** — proven by the **existing permanent post-release verification**, which already re-verifies cosign bundles, SLSA provenance and the asset set against re-downloaded artifacts on every release. This half IS executed evidence.
+
+  Rejected: amending criterion 4 down without saying where the property went, and inducing the failure on a real release.
 
 ### Claude's Discretion
 
