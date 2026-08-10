@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -38,6 +39,11 @@ import (
 // Does not reuse the package-level targetRoot(args): that helper resolves
 // the codegraph project root (the directory containing .codegraph/), an
 // unrelated concept to man's arbitrary output directory argument (D-04).
+//
+// Creates the target directory (including missing parents) before
+// generating: doc.GenManTree does not create its own destination, and the
+// cask hook targets Homebrew's man1 directory, which is absent on a prefix
+// where nothing has yet installed a man page.
 func newManCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:    "man <dir>",
@@ -46,6 +52,9 @@ func newManCmd() *cobra.Command {
 		Args:   cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := args[0]
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("create man page directory %s: %w", dir, err)
+			}
 			header := &doc.GenManHeader{
 				Title:   "CODEGRAPH",
 				Section: "1",
