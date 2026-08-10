@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 3
-current_phase_name: Homebrew Tap & Cask
+current_phase: 03
+current_phase_name: homebrew-tap-cask
 status: executing
 stopped_at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
-last_updated: "2026-08-10T13:11:06.689Z"
-last_activity: 2026-08-09
-last_activity_desc: Phase 02 execution started
+last_updated: "2026-08-10T13:20:58.891Z"
+last_activity: 2026-08-10
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 4
   completed_phases: 2
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 3 — Homebrew Tap & Cask
+**Current focus:** Phase 03 — homebrew-tap-cask
 
 ## Current Position
 
-Phase: 3 — Homebrew Tap & Cask
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-09 — Phase 02 complete, transitioned to Phase 3
+Phase: 03 (homebrew-tap-cask) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 03
+Last activity: 2026-08-10 — Phase 03 execution started
 
 Progress: [....] 0/4 phases complete ([██████████] 100%)
 
