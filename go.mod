@@ -64,6 +64,7 @@ require (
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/swiss v0.0.0-20251224182025-b0f6560f979b // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20230818184609-3a137a874352 // indirect
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7 // indirect
@@ -124,6 +125,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.3 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect

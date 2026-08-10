@@ -8,15 +8,19 @@ actually publishes — if a command here doesn't work against a real release,
 that is a bug in this doc (or the workflow), please report it.
 
 > **Status note:** tagged releases exist now and these commands are live,
-> not aspirational. `v0.5.1` and every release since (including `v0.6.0`,
-> the latest as of this writing) publish real assets and are verifiable
-> today via §1a (cosign), §1b (provenance) and §1c (SBOM) — all three run
-> clean against them. §1d (Gatekeeper) is different: it does not yet apply
-> to any published release, because none has gone through Apple
-> notarization yet. `v0.5.1`'s darwin binaries are, in fact, *deliberately*
-> un-notarized — they are this project's own recorded RED baseline for that
-> gate (`02-EVIDENCE.md`). See §1d's applicability table for exactly which
-> releases each section covers, and when that boundary moves.
+> not aspirational. `v0.5.1` and every release since publish real assets
+> and are verifiable today via §1a (cosign), §1b (provenance) and §1c
+> (SBOM) — all three run clean against them. §1d (Gatekeeper) now applies
+> starting with **`v0.7.0`**, the latest release as of this writing and the
+> first to go through real Apple notarization — confirmed with a GREEN
+> `spctl -a -vv -t install` verdict on both darwin architectures, plus an
+> independent, unproxied confirmation on the maintainer's own Mac via a
+> genuine Safari download (`02-EVIDENCE.md` § "SIGN-02 — GREEN Gatekeeper
+> verdict on the published release"). `v0.5.1`'s darwin binaries remain
+> *deliberately* un-notarized — they are this project's own preserved RED
+> baseline for that gate (`02-EVIDENCE.md`) and must not be deleted or
+> replaced (`docs/RELEASE-PROCEDURES.md` §7.1). See §1d's applicability
+> table for exactly which releases each section covers.
 > `codegraph upgrade` runs the equivalent of §1a automatically, in-process,
 > before ever swapping the installed binary.
 
@@ -169,7 +173,7 @@ Gatekeeper, and the guarantee below only applies to some of them:
 | Releases | What they published | Which sections apply |
 |---|---|---|
 | Every release through the last one published before Apple notarization lands (as of this writing: at least `v0.5.1` and `v0.6.0`) | Signed-or-adhoc darwin binaries, cosign bundles, SBOMs, build provenance — **not** Apple-notarized | §a, §b, §c only. §d does not apply: the Gatekeeper install-time assessment below rejects these darwin binaries by design (exit 3) — this is `v0.5.1`'s own recorded SIGN-03 RED baseline, `02-EVIDENCE.md` |
-| The first notarized release — tag pending, filled in by plan 02-07 once it publishes | The same artifacts, plus real Apple notarization of the darwin binaries | §a, §b, §c, §d all apply |
+| The first notarized release — **`v0.7.0`**, confirmed GREEN on both darwin architectures (`02-EVIDENCE.md` § "SIGN-02 — GREEN Gatekeeper verdict on the published release") | The same artifacts, plus real Apple notarization of the darwin binaries | §a, §b, §c, §d all apply |
 | Every release after the first notarized one | Same as above | §a, §b, §c, §d all apply |
 
 From the first notarized release onward (see the table above), this
@@ -193,6 +197,27 @@ exactly as an un-notarized binary would be. This is a deliberate scope
 decision, not an oversight — DIST-06 is the deferred requirement that
 would close it, and stapling remains out of scope for this
 milestone.[^staple-why]
+
+**Known limitation: a browser download loses the execute bit.** Unlike
+`gh release download` or `curl`, downloading a raw binary through a
+browser (e.g. Safari, from the GitHub Releases page) does not preserve
+the Unix executable permission — the file arrives as a plain, non-executable
+Mach-O. Trying to run it directly fails with a shell-specific message; for
+example, in `fish`:
+
+```
+fish: Unknown command. 'codegraph_<tag>_darwin_<arch>' exists but is not an executable file.
+```
+
+Restore the bit before running it:
+
+```sh
+chmod +x codegraph_<tag>_<goos>_<goarch>
+```
+
+(Found during `v0.7.0`'s browser-download verification — `02-EVIDENCE.md`
+§ "Post-release verification — manual-dispatch guard check and the
+maintainer's own machine".)
 
 [^staple-why]: Apple's `stapler` tool attaches tickets only to
 `.app`/`.pkg`/`.dmg` containers, never to a bare Mach-O executable or an
@@ -382,17 +407,25 @@ explicitly rather than hiding cross-target drift behind one green check:**
   independently double-built in CI. Being explicit about which target is
   the hard guarantee is more honest than a passing check that silently
   doesn't cover the other three.
-- **The darwin binaries carry a real code signature a third-party rebuild
-  cannot reproduce, once notarized (§1d).** As of this writing no release
-  has gone through Apple notarization (see §1d's applicability table), so
-  this is a description of what becomes true once the first notarized
-  release publishes — marked **pending** here rather than asserted as
-  already measured. The signature is embedded directly in the Mach-O binary
-  by the signing/notarization step; only someone holding this project's
-  actual Developer ID Application certificate can reproduce it bit-for-bit.
-  This does not change or weaken the `linux/amd64` canonical guarantee
-  above, which carries no such signature and remains reproducible
-  end-to-end by anyone.
+- **The darwin binaries carry a real code signature, confirmed as of
+  `v0.7.0` (§1d), and it is NOT bit-for-bit reproducible by anyone —
+  including the certificate holder.** This corrects an earlier, unmeasured
+  version of this claim. `02-EVIDENCE.md`'s SIGN-04 rehearsal measured that
+  the *pre-sign* build is byte-reproducible (`BASELINE-DETERMINISM-OK`,
+  identical hashes across repeated builds of the same commit), but the
+  *final*, signed-and-notarized binary is **not**: two separate signing
+  operations of the identical pre-sign bytes produced different final
+  hashes, because Apple's notarization service embeds a trusted timestamp
+  inside the code signature that varies per signing operation
+  (`02-EVIDENCE.md` § "The non-reproducible-signature finding"). Holding
+  this project's actual Developer ID Application certificate lets you
+  produce a *validly signed* binary — it does not let you reproduce the
+  exact published bytes. Anyone verifying a darwin release should compare
+  the **pre-sign** build against a source-only rebuild, never the final
+  signed artifact, or every single comparison will report a false
+  regression. This does not change or weaken the `linux/amd64` canonical
+  guarantee above, which carries no signature at all and remains
+  reproducible end-to-end, bit-for-bit, by anyone.
 
 ### Reproducing a build locally
 
@@ -415,6 +448,87 @@ Compare the resulting SHA-256 against the released
 (after verifying that file per §1b above). A match proves the published
 `linux/amd64` binary was built exactly from the source at that tag, with no
 undisclosed modification.
+
+## 4. Installing via Homebrew (macOS)
+
+The canonical install command lives in a single place — [`README.md`](../README.md)'s
+"Homebrew (macOS)" section — not repeated here or in the tap repository's own
+README. This section states the shipped guarantee precisely, in the same
+voice §1d states notarization's guarantee.
+
+**What the cask installs.** The `codegraph` binary, shell completions for
+bash, zsh, and fish, and man pages — but not the way a typical Homebrew
+formula ships completions and man pages (as files bundled inside the
+download). Completions and man pages are **generated from the installed
+binary at install time**: `generate_completions_from_executable` runs
+`codegraph completion <shell>` against the just-installed binary, and a
+post-install hook runs `codegraph man` against it. Neither is a static file
+this project authored — both are the exact output of the exact binary the
+cask installed, so a new subcommand or flag shows up without anyone editing
+a committed completion file.
+
+**What the install does on your behalf.** The post-install hook that
+generates man pages does more than generate them — it is the cask's install
+gate (BREW-05). It runs the installed binary and refuses to complete the
+install (rolling back everything already staged) if either: the binary
+cannot produce more than one man page, or the binary reports a version that
+does not match the cask's own declared version. This is why a corrupted or
+mismatched download fails loudly at `brew install` time, for you, rather
+than silently succeeding and failing quietly the first time you actually run
+`codegraph`. See `03-EVIDENCE.md` (this milestone's Phase 3 plan 4) for both
+failure modes demonstrated against real, deliberately broken artifacts —
+this is not an argued property, it has been watched fail both ways.
+
+**The man-path dependency — measured, not assumed.** Man pages install
+under the Homebrew prefix's own man directory
+(`$(brew --prefix)/share/man/man1`). Whether `man codegraph` resolves
+depends on whether that directory is on your shell's search path, and that
+in turn depends on whether Homebrew's own post-install shell setup has ever
+been sourced in your profile — Homebrew's own standard instruction after
+first install (`eval "$(brew shellenv)"` in `~/.zprofile`/`~/.bash_profile`,
+or via a login shell that runs `/usr/libexec/path_helper`). Measured
+directly on a real Apple Silicon Mac (Darwin 27.0.0): `/etc/manpaths.d/` is
+empty and `path_helper -s`'s own `MANPATH` output does not include
+`/opt/homebrew/share/man` — this prefix is genuinely **absent from the
+system-level man path configuration**, not merely "sometimes missing." In a
+shell that never sourced Homebrew's environment, `man codegraph` returns
+`No manual entry for codegraph` even with the page correctly installed
+on disk. If that happens to you, this invocation bypasses man-path
+resolution entirely and reads the page directly — measured working on this
+same machine, in an environment with no Homebrew shell setup sourced at
+all:
+
+```sh
+man "$(brew --prefix)/share/man/man1/codegraph.1"
+```
+
+**Upgrading.** A brew-managed install is upgraded with `brew upgrade
+codegraph`, not `codegraph upgrade`. As of this writing, `codegraph
+upgrade` does not yet detect a brew-managed install and does not yet
+refuse to run against one — teaching it to do exactly that is the next
+phase's work (`UPGR-01`/`UPGR-02`/`UPGR-03` in `.planning/ROADMAP.md`
+Phase 4) and is **not yet shipped**. Running `codegraph upgrade` against a
+brew-managed install today has undefined interaction with Homebrew's own
+Caskroom bookkeeping — use `brew upgrade codegraph` until Phase 4 ships.
+
+> **Pending — not yet verified as of this writing.** Three claims only a
+> real, published release can settle, and this document does not assert
+> them as already true:
+>
+> 1. **The tap resolves** — `brew tap seanb4t/tap` has not yet been
+>    exercised against the real, published `seanb4t/homebrew-tap`
+>    repository from a genuinely clean machine.
+> 2. **A cold install succeeds** — `brew install codegraph` from that tap,
+>    on a machine with no prior `codegraph`, against a cask GoReleaser
+>    regenerated for a real tagged release (not a local rehearsal), has not
+>    yet been run.
+> 3. **Completion works in all three shells** — through a real brew-
+>    installed binary, not the local rehearsal shape this milestone's
+>    evidence files record so far.
+>
+> Plan 03-05 closes each of these with a citation to real, executed
+> evidence, or re-justifies it explicitly. Do not read this section as
+> fully verified until then.
 
 ## `codegraph upgrade` as the automated consumer
 

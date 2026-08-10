@@ -264,6 +264,25 @@ CONTEXT D-06.
 `githooks` (Phase 5) has no TS equivalent — documented Go-only extension,
 no flags to reconcile.
 
+## `man` (Go-only, no TS command)
+
+| TS flag | Go flag | Status |
+|---|---|---|
+| — | `man <dir>` — no flags | `Go-only` |
+
+`man` (Phase 3 D-01/D-02) has no TS 1.3.1 counterpart at all — documented
+Go-only extension, no flags to reconcile. It exists purely so the
+Homebrew cask's post-install hook can generate man pages from the
+installed binary at install time (D-05).
+
+**Divergence from the `githooks` precedent, recorded deliberately:** `man`
+is `Hidden: true`; `githooks` is not. Every other Go-only command in this
+document is a public, interactive command a user might reasonably run
+directly. `man` is not — it is a mechanism the cask hook invokes, with no
+interactive user to address (D-02), so it is hidden from `codegraph --help`
+rather than documented as a second public surface. This is a deliberate,
+named choice (D-02), not an oversight in an otherwise-consistent pattern.
+
 ## Summary of every recorded divergence
 
 - **Dual `files --filter`(language, kept)/`--dir`(directory, new)** — D-03
@@ -287,11 +306,13 @@ no flags to reconcile.
 - **`search`** — Go-only extension, no TS command.
 - **`migrate`** — Go-only extension/accepted divergence, no TS command.
 - **`githooks`** — Go-only extension, no TS command.
+- **`man`** — Go-only extension (Phase 3), no TS command; hidden where
+  `githooks` is not, a deliberate named choice (D-02).
 - **`daemon`/`daemons` subcommand surface, `serve --watch`, `version
   --json`, `sync -v`/`--workers`, `init -q`/`--workers`, `index
   --workers`, `node -l`/`--line`, `status -p`, `search`'s whole flag set**
   — additive Go-only extensions; no TS name was taken or altered.
 
 Every command registered in `newRootCmd()` (`internal/cli/root.go`) has a
-section above, including the three flag-less commands (`unlock`,
-`telemetry`, and every `githooks` subcommand).
+section above, including the four flag-less commands (`unlock`,
+`telemetry`, `man`, and every `githooks` subcommand).

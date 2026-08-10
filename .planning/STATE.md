@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 02
-current_phase_name: apple-signing-notarization
+current_phase: 03
+current_phase_name: homebrew-tap-cask
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-08-09T20:40:16.400Z"
-last_activity: 2026-08-09
-last_activity_desc: Phase 02 execution started
+stopped_at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
+last_updated: "2026-08-10T13:20:58.891Z"
+last_activity: 2026-08-10
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 4
-  completed_phases: 1
-  total_plans: 13
-  completed_plans: 12
-  percent: 25
+  completed_phases: 2
+  total_plans: 18
+  completed_plans: 13
+  percent: 50
 ---
 
 # Project State
@@ -24,22 +24,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 02 — apple-signing-notarization
+**Current focus:** Phase 03 — homebrew-tap-cask
 
 ## Current Position
 
-Phase: 02 (apple-signing-notarization) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 02
-Last activity: 2026-08-09 — Phase 02 execution resumed (wave continue)
+Phase: 03 (homebrew-tap-cask) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 03
+Last activity: 2026-08-10 — Phase 03 execution started
 
-Progress: [....] 0/4 phases complete (0%)
+Progress: [....] 0/4 phases complete ([██████████] 100%)
 
 ## Performance Metrics
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 6
+- Total plans completed: 13
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -48,7 +48,7 @@ Progress: [....] 0/4 phases complete (0%)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 6 | - | - |
-| 2 | 0 | - | - |
+| 02 | 7 | - | - |
 | 3 | 0 | - | - |
 | 4 | 0 | - | - |
 
@@ -171,6 +171,7 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 | Phase 04 P01 | 45min | 3 tasks | 3 files |
 | Phase 04 P03 | 40min | 2 tasks | 2 files |
 | Phase 05 P01 | 50min | 3 tasks | 6 files |
+| Phase 02 P07 | 90min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -238,6 +239,8 @@ Standing decisions that outlive v1.0:
 - [Phase ?]: VULN-03: stance test re-derived from a divergence assertion to an agreement assertion after D-04's mid-phase supersession — tool-vuln and transcript-freeze are now both deliberately ADVISORY, not deliberately different
 - [Phase ?]: NoInitialize with Modern _meta on every request is required for the SPEC-09 proof scenario — a classic initialize would route the session onto go-sdk's Legacy no-opt-in notification channel and make the proof vacuous
 - [Phase ?]: Registered 4 anchors (not the plan's stated 5) matching the plan's own action-text description exactly; documented as a plan-text inconsistency, not an omission
+- [Phase ?]: SIGN-04 points 4-5 recorded with explicit scope-limit: verify:release-assets checks cosign/attestation bindings against linux/amd64 only; darwin/amd64 has no binding check anywhere in the pipeline
+- [Phase ?]: docs/RELEASE.md's reproducibility-posture claim corrected (not just closed): the darwin signature is not bit-for-bit reproducible even by the cert holder, since Apple's notarization embeds a per-operation trusted timestamp
 
 ### Pending Todos
 
@@ -315,8 +318,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-09T12:44:01.096Z
-Stopped at: Phase 2 context gathered
+Last session: 2026-08-10T13:11:06.675Z
+Stopped at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -342,7 +345,7 @@ Stopped at: Phase 2 context gathered
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/02-apple-signing-notarization/02-CONTEXT.md
+Resume file: .planning/phases/03-homebrew-tap-cask/03-01-PLAN.md
 
 ## Operator Next Steps
 

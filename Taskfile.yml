@@ -749,6 +749,23 @@ tasks:
         msg: "no tag found at HEAD. `goreleaser release` hard-fails without one. For a tagless, non-publishing run of the same composition, use `task release:dry-run` instead."
       - sh: '[ -n "${GITHUB_TOKEN:-}" ]'
         msg: "GITHUB_TOKEN is not set. GoReleaser's release: pipe reads GITHUB_TOKEN — NOT GH_TOKEN, which is the gh CLI's own variable. Set GITHUB_TOKEN before running this target."
+      # Two HOMEBREW_TAP_TOKEN checks (03-03, T-03-09), not one: presence
+      # alone would pass in the exact silent-degradation case this guards
+      # against. If unset, .goreleaser.yaml's `{{ .Env.HOMEBREW_TAP_TOKEN }}`
+      # template resolves to an empty string and GoReleaser's cask client
+      # falls back to internal/client/client.go's NewIfToken default — the
+      # RELEASE's own client — which cannot write seanb4t/homebrew-tap and
+      # the tap push silently fails or is skipped. If someone ever sets the
+      # two variables equal "to make it work", the push instead SUCCEEDS
+      # against the wrong credential (the release's own token, not the
+      # tap-scoped App's), and ROADMAP criterion 5 is quietly false behind
+      # a green log — a presence-only check cannot catch that second case,
+      # which is exactly the "every guard must assert it did its work" rule
+      # this repository holds elsewhere (repo rule 84d1gfpywd).
+      - sh: '[ -n "${HOMEBREW_TAP_TOKEN:-}" ]'
+        msg: "HOMEBREW_TAP_TOKEN is not set. .goreleaser.yaml's homebrew_casks[0].repository.token reads it (D-16); release.yml mints it from the tap-scoped GitHub App immediately before this step. Without it, the cask client falls back to GITHUB_TOKEN, which cannot write seanb4t/homebrew-tap."
+      - sh: '[ "${HOMEBREW_TAP_TOKEN:-}" != "${GITHUB_TOKEN:-}" ]'
+        msg: "HOMEBREW_TAP_TOKEN is byte-identical to GITHUB_TOKEN. These must be two distinct credentials (D-16): GITHUB_TOKEN is this release's own token and cannot write seanb4t/homebrew-tap; HOMEBREW_TAP_TOKEN must come from the tap-scoped GitHub App's installation token. A release must not proceed with the two collapsed to one value."
     cmds:
       - |
         set -euo pipefail
@@ -1580,6 +1597,624 @@ tasks:
         fi
 
         echo "release:rehearse-notarize: PASS (mutate=${MUTATE})"
+
+  release:rehearse-cask:
+    desc: >-
+      MAINTAINER-ONLY, local, opt-in. Rehearses the entire Homebrew delivery
+      path GoReleaser's `homebrew_casks:` pipe drives — a real
+      `goreleaser release` render, a real `brew install --cask` of the
+      RENDERED cask (with its download URL rewritten to a local file), and
+      a real `brew uninstall --cask` — before the tap repository exists and
+      before any release publishes anything (Phase 3, plan 03-01 tracer
+      task). Proves: A1 (the `codegraph` binary sits at the root of the
+      extracted `zip`, so `binaries: [codegraph]` needs no rename
+      handling), A3 (the post-install hook's
+      `#{HOMEBREW_PREFIX}/bin/codegraph` path is live by the time
+      `postflight` runs), and D-10 (the install itself is BREW-05's gate —
+      a hook whose invoked binary cannot run makes `brew install` fail).
+
+      This target installs and uninstalls a REAL cask into the REAL
+      Homebrew prefix — not a sandbox, not `--snapshot`'s `dist/`-only
+      render. Never invoked by any CI workflow, never added to
+      `inScopeJobs` (TestWorkflowRunBodiesInvokeTask). Guarded by an
+      explicit opt-in variable so it cannot fire from a `task --list`
+      browse, and preconditions refuse to run over an already-installed
+      brew-managed `codegraph` rather than disturb it.
+
+      Rehearsal, not publication (BREW-05 prohibition): the cask installed
+      here is GoReleaser's OWN `dist/homebrew/Casks/codegraph.rb` render,
+      copied aside with EXACTLY ONE line rewritten — the download URL,
+      which under `--snapshot` points at a GitHub release that does not
+      exist. This is never a hand-written cask standing in for GoReleaser's
+      output, and its result must never be recorded as, or mistaken for,
+      BREW-01's published cold-install evidence.
+
+      REQUIRES REAL APPLE DEVELOPER ID CREDENTIALS — measured this session,
+      not assumed. Homebrew Cask UNCONDITIONALLY quarantines every download
+      via LaunchServices FFI regardless of URL scheme
+      (extend/os/mac/cask/quarantine.rb `cask!`, called from
+      cask/download.rb — no `--no-quarantine` flag exists; `spctl --add`
+      that could locally allowlist one binary was REMOVED as of macOS 15.0,
+      "operations that modify the rule database ... will no longer be
+      supported", confirmed against `man spctl` on this host). A binary
+      that is only ad-hoc signed (Go's own toolchain default) or entirely
+      unsigned is therefore SIGKILLed by Gatekeeper the moment the
+      post-install hook's `system_command` tries to execute it from a
+      quarantined Caskroom path — measured directly this session:
+      `brew install --cask` failed with "was terminated by uncaught signal
+      KILL" against a snapshot build with no MACOS_* credentials set, and
+      independently reproduced by manually quarantining an ad-hoc-signed
+      copy of the same binary (exit 137). This is Gatekeeper working
+      correctly, not a defect in this target — but it means the five
+      MACOS_* credentials `release:rehearse-notarize` already requires are
+      ALSO load-bearing here, even though `--skip=sign` is passed (that
+      only skips this target's own cosign `signs:` pipe; `notary.MacOS{}`
+      is registered inside BuildPipeline and still runs `goreleaser
+      release`'s sign-and-notarize step whenever its five-term `enabled:`
+      credential conjunction evaluates true).
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "darwin" ]'
+        msg: "release:rehearse-cask must run on a native darwin host — brew install --cask only makes sense against a real macOS Homebrew prefix. Run it on your own Mac."
+      - sh: command -v brew
+        msg: "brew not found. release:rehearse-cask installs and uninstalls a real Homebrew cask; without brew there is nothing to rehearse against. Install Homebrew: https://brew.sh."
+      - sh: command -v zig
+        msg: "zig not found. Both linux build ids in .goreleaser.yaml cross-compile via zig cc/zig c++ (REL-05); this rehearsal's release invocation still builds all four targets. Install locally: brew install zig."
+      - sh: command -v syft
+        msg: "syft not found. This rehearsal's release invocation exercises the sboms: pipe even under --skip=publish,sign. Install locally: brew install syft."
+      - sh: command -v cosign
+        msg: "cosign not found. --skip=sign skips this rehearsal's own signs: pipe, but notary.MacOS{} (registered inside BuildPipeline) still runs whenever its enabled: predicate is true (see the five MACOS_* preconditions below) — installed regardless as defense-in-depth matching release:dry-run's own precondition set. Install locally: brew install cosign."
+      - sh: command -v jq
+        msg: "jq not found. Every result this target reports is read from dist/artifacts.json with it — never a filename glob, never a bare exit code. Install locally: brew install jq."
+      - sh: command -v python3
+        msg: "python3 not found. This target's loopback-HTTP-server fallback (used only if brew's downloader rejects a file:// URL) needs it. Install locally: brew install python3."
+      - sh: '! brew list --cask codegraph >/dev/null 2>&1'
+        msg: "a brew-managed 'codegraph' cask is already installed. release:rehearse-cask installs and uninstalls a real cask into the real Homebrew prefix and refuses to run over an existing install rather than disturb it — run 'brew uninstall --cask codegraph' first if that install is disposable, or set up a clean environment."
+      # --- Apple credentials (measured this session, NOT optional):
+      # Homebrew Cask unconditionally quarantines every downloaded
+      # artifact (see this target's desc: above) — a binary that is not
+      # genuinely Developer-ID-signed AND notarized is SIGKILLed by
+      # Gatekeeper the instant the post-install hook tries to run it, so
+      # this rehearsal cannot reach a real PASS without these, unlike
+      # release:dry-run/release:dry-run-signed, which never execute the
+      # built binary at all. Same named-precondition shape
+      # release:rehearse-notarize already uses. MAINTAINER-ONLY: see
+      # docs/RELEASE.md for how to obtain each value.
+      - sh: '[ -n "${MACOS_SIGN_P12:-}" ]'
+        msg: "MACOS_SIGN_P12 is not set. release:rehearse-cask requires a real Developer ID Application certificate — Homebrew Cask unconditionally quarantines downloads, and an ad-hoc/unsigned binary is SIGKILLed by Gatekeeper when the post-install hook executes it (measured this session). See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_SIGN_PASSWORD:-}" ]'
+        msg: "MACOS_SIGN_PASSWORD is not set. release:rehearse-cask requires the password chosen when exporting the .p12 above. See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_NOTARY_ISSUER_ID:-}" ]'
+        msg: "MACOS_NOTARY_ISSUER_ID is not set. release:rehearse-cask requires notarization to complete (not just signing) — Gatekeeper's quarantine assessment on a Cask-installed binary checks both. See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_NOTARY_KEY_ID:-}" ]'
+        msg: "MACOS_NOTARY_KEY_ID is not set. See docs/RELEASE.md."
+      - sh: '[ -n "${MACOS_NOTARY_KEY:-}" ]'
+        msg: "MACOS_NOTARY_KEY is not set. See docs/RELEASE.md."
+      - sh: '[ "${CASK_REHEARSE:-0}" = "1" ]'
+        msg: "CASK_REHEARSE is not set to 1. release:rehearse-cask is MAINTAINER-ONLY and installs/uninstalls a REAL cask into your REAL Homebrew prefix — this explicit opt-in exists so it can never fire from a 'task --list' browse. Run: CASK_REHEARSE=1 task release:rehearse-cask."
+    cmds:
+      - |
+        set -euo pipefail
+
+        echo "release:rehearse-cask: starting"
+
+        sha256_of() {
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$1" | awk '{print $1}'
+          else
+            shasum -a 256 "$1" | awk '{print $1}'
+          fi
+        }
+
+        # --- 1. ONE run-scoped temp dir tree for the rewritten cask copy,
+        # the zig caches, and (if needed) the loopback HTTP server's cwd
+        # marker — never the real dist/, which --clean below wipes and
+        # which every other release target already owns. A single trap
+        # removes it, uninstalls the cask if this run installed one, and
+        # kills the HTTP server if one was started — on BOTH the pass and
+        # the fail path, so this target never leaves a half-installed cask
+        # or a stray server behind on the maintainer's machine.
+        REHEARSE_DIR="$(mktemp -d)"
+        GORELEASER_DIR="$(mktemp -d)"
+        GORELEASER_BIN="${GORELEASER_DIR}/goreleaser"
+        ZIG_CACHE_ROOT="$(mktemp -d)"
+        HTTP_SERVER_PID=""
+        CASK_INSTALLED=0
+        TAP_NAME=""
+        OUTCOME="fail"
+
+        cleanup() {
+          if [ "${CASK_INSTALLED}" = "1" ] && [ -n "${TAP_NAME}" ]; then
+            echo "==> cleanup: brew uninstall --cask ${TAP_NAME}/codegraph"
+            brew uninstall --cask "${TAP_NAME}/codegraph" >/dev/null 2>&1 || true
+          fi
+          if [ -n "${TAP_NAME}" ]; then
+            brew untap "${TAP_NAME}" >/dev/null 2>&1 || true
+          fi
+          if [ -n "${HTTP_SERVER_PID}" ]; then
+            kill "${HTTP_SERVER_PID}" >/dev/null 2>&1 || true
+          fi
+          rm -rf "${REHEARSE_DIR}" "${GORELEASER_DIR}" "${ZIG_CACHE_ROOT}"
+          if [ "${OUTCOME}" != "pass" ]; then
+            echo "CASK-REHEARSE-EVIDENCE schema=1 snapshot_version=${SNAPSHOT_VERSION:-unknown} cask_sha256=${CASK_SHA256:-unknown} url_mechanism=${URL_MECHANISM:-none} man_page_count=${MAN_PAGE_COUNT:-0} reported_version=${REPORTED_VERSION:-unknown} outcome=fail"
+          fi
+        }
+        trap cleanup EXIT
+
+        # --- 2. Build GoReleaser NATIVELY, no GOOS/GOARCH in the
+        # environment — same Rosetta/xcrun reasoning release:dry-run and
+        # release:rehearse-notarize already document.
+        echo "==> building goreleaser natively"
+        GOWORK=off go build -modfile=go.tool.mod \
+          -o "${GORELEASER_BIN}" github.com/goreleaser/goreleaser/v2
+
+        export ZIG_LOCAL_CACHE_DIR="${ZIG_CACHE_ROOT}/local"
+        export ZIG_GLOBAL_CACHE_DIR="${ZIG_CACHE_ROOT}/global"
+
+        # HOMEBREW_TAP_TOKEN: an obvious NON-CREDENTIAL placeholder.
+        # --skip=publish means cask.Pipe{}.Publish() (the tap push — the
+        # ONLY place this value is consumed) never runs, so a template
+        # referencing it cannot fail this run and can never be mistaken
+        # for a real secret in the log.
+        export HOMEBREW_TAP_TOKEN="cask-rehearsal-placeholder-not-a-credential"
+
+        # --- Step 1 (plan Task 2 algorithm): render, publish nothing.
+        echo "==> goreleaser release --snapshot --skip=publish,sign --clean"
+        "${GORELEASER_BIN}" release --snapshot --skip=publish,sign --clean
+
+        if [ ! -f dist/artifacts.json ]; then
+          echo "::error::goreleaser release produced no dist/artifacts.json"
+          exit 1
+        fi
+
+        SNAPSHOT_VERSION="$(jq -r '.[0].extra.Version // .[0].version // "unknown"' dist/artifacts.json 2>/dev/null || echo unknown)"
+
+        # --- Step 2: assert the render ACTUALLY happened — the positive
+        # assertion this repo's rule 84d1gfpywd requires. A target that
+        # proceeds to install a cask it never confirmed was written is
+        # exactly the vacuous-guard shape that rule exists for.
+        CASK_PATH="dist/homebrew/Casks/codegraph.rb"
+        if [ ! -s "${CASK_PATH}" ]; then
+          echo "::error::${CASK_PATH} does not exist or is empty after 'goreleaser release' — the homebrew_casks: cask.Pipe{} render did not happen (missing homebrew_casks: block in .goreleaser.yaml, or the ids:/repository: fields don't resolve). Nothing further can be rehearsed without a rendered cask on disk."
+          exit 1
+        fi
+        CASK_SHA256="$(sha256_of "${CASK_PATH}")"
+        echo "rendered cask: ${CASK_PATH} sha256=${CASK_SHA256}"
+
+        # --- Step 3: copy aside and rewrite exactly two lines — the
+        # download URL for THIS host's platform (darwin/arm64 or
+        # darwin/amd64, whichever this Mac is), located by the literal
+        # zip artifact name from dist/artifacts.json (never a hand-guessed
+        # template resolution); and the declared `version "..."` line,
+        # rewritten to the value the LOCAL, not-yet-installed build
+        # actually reports.
+        #
+        # The version rewrite (added alongside D-11's version-equality
+        # assertion, plan 03-02 Task 1) exists because `--snapshot` mode
+        # itself — not this cask, not the hook — makes GoReleaser's
+        # rendered `version "..."` (ctx.Version, a SNAPSHOT-suffixed
+        # pseudo-version e.g. "0.7.0-SNAPSHOT-<hash>") diverge from the
+        # ldflags-injected `internal/version.Version` (set from
+        # GoReleaser's own Tag field, the nearest real tag, e.g.
+        # "v0.7.0") that the binary itself reports — MEASURED this
+        # session: the completed hook's version
+        # assertion correctly raised "installed binary reports version
+        # \"0.7.0\", cask declares \"0.7.0-SNAPSHOT-91b6df6\"" on the
+        # very first GREEN attempt. In a REAL (tagged, non-snapshot)
+        # release these two values are the SAME tag (D-11's assertion
+        # would trivially pass), so this rewrite is a rehearsal-fidelity
+        # correction, not a weakening of the assertion under test —
+        # exactly the class of fix Rule 1/3 covers, not Rule 4: nothing
+        # about the gate's behavior changes, only what this LOCAL,
+        # snapshot-mode rehearsal declares as the cask's own version, so
+        # the two sides it compares agree the way a real release's would.
+        HOST_ARCH="$(go env GOARCH)"
+        mkdir -p "${REHEARSE_DIR}/rehearsal"
+        REHEARSAL_CASK="${REHEARSE_DIR}/rehearsal/codegraph.rb"
+        cp "${CASK_PATH}" "${REHEARSAL_CASK}"
+
+        ZIP_NAME="$(jq -r --arg goos darwin --arg goarch "${HOST_ARCH}" \
+          '[.[] | select(.type=="Archive" and .goos==$goos and .goarch==$goarch and (.name | endswith(".zip")))][0].name // empty' \
+          dist/artifacts.json)"
+        ZIP_PATH="$(jq -r --arg goos darwin --arg goarch "${HOST_ARCH}" \
+          '[.[] | select(.type=="Archive" and .goos==$goos and .goarch==$goarch and (.name | endswith(".zip")))][0].path // empty' \
+          dist/artifacts.json)"
+        if [ -z "${ZIP_NAME}" ] || [ -z "${ZIP_PATH}" ] || [ ! -f "${ZIP_PATH}" ]; then
+          echo "::error::could not resolve darwin/${HOST_ARCH}'s zip archive from dist/artifacts.json"
+          exit 1
+        fi
+        ZIP_ABS="$(cd "$(dirname "${ZIP_PATH}")" && pwd)/$(basename "${ZIP_PATH}")"
+
+        URL_LINE_NUM="$(grep -n -F "${ZIP_NAME}" "${REHEARSAL_CASK}" | head -n1 | cut -d: -f1)"
+        if [ -z "${URL_LINE_NUM}" ]; then
+          echo "::error::no line in ${CASK_PATH} references the darwin/${HOST_ARCH} zip artifact name (${ZIP_NAME}) — cannot identify which url line to rewrite"
+          exit 1
+        fi
+
+        # Locate the LOCAL (raw, not-yet-archived) build output for this
+        # host's darwin arch — type=="Binary" with no extra.Format, the
+        # go-build artifact BEFORE the archives: pipe's rename/copy (see
+        # release:dry-run's own comment on the two "Binary" records
+        # goreleaser release writes per platform). Executed directly, not
+        # via brew — no download, no quarantine, so no Gatekeeper concern.
+        LOCAL_BIN="$(jq -r --arg goos darwin --arg goarch "${HOST_ARCH}" \
+          '[.[] | select(.type=="Binary" and .goos==$goos and .goarch==$goarch and ((.extra.Format // "")==""))][0].path // empty' \
+          dist/artifacts.json)"
+        if [ -z "${LOCAL_BIN}" ] || [ ! -x "${LOCAL_BIN}" ]; then
+          echo "::error::could not resolve the local darwin/${HOST_ARCH} build output from dist/artifacts.json"
+          exit 1
+        fi
+        LOCAL_VERSION_JSON="$("${LOCAL_BIN}" version --json 2>&1)"
+        LOCAL_REPORTED_VERSION="$(printf '%s' "${LOCAL_VERSION_JSON}" | jq -r '.version // empty' | sed 's/^v//')"
+        if [ -z "${LOCAL_REPORTED_VERSION}" ]; then
+          echo "::error::could not parse .version from '${LOCAL_BIN} version --json' output: ${LOCAL_VERSION_JSON}"
+          exit 1
+        fi
+        echo "local build reports (JSON, v-stripped): ${LOCAL_REPORTED_VERSION}"
+
+        VERSION_LINE_NUM="$(grep -n -E '^  version "' "${REHEARSAL_CASK}" | head -n1 | cut -d: -f1)"
+        if [ -z "${VERSION_LINE_NUM}" ]; then
+          echo "::error::could not find a 'version \"...\"' line in ${REHEARSAL_CASK} to rewrite"
+          exit 1
+        fi
+
+        URL_MECHANISM="file"
+        NEW_URL="file://${ZIP_ABS}"
+        sed -i.bak "${URL_LINE_NUM}s|\"[^\"]*\"|\"${NEW_URL}\"|" "${REHEARSAL_CASK}"
+        sed -i.bak "${VERSION_LINE_NUM}s/.*/  version \"${LOCAL_REPORTED_VERSION}\"/" "${REHEARSAL_CASK}"
+
+        DIFF_OUT="$(diff "${CASK_PATH}" "${REHEARSAL_CASK}" || true)"
+        DIFF_CHANGED_LINES="$(printf '%s\n' "${DIFF_OUT}" | grep -c '^[<>]' || true)"
+        if [ "${DIFF_CHANGED_LINES}" != "4" ]; then
+          echo "::error::rehearsal cask differs from the rendered cask by ${DIFF_CHANGED_LINES} line(s) (two 1-line replacements are a 4-line unified diff: two removed, two added) — want exactly two lines changed (the download url and the declared version):"
+          printf '%s\n' "${DIFF_OUT}"
+          exit 1
+        fi
+        echo "REHEARSAL-DIFF (must be exactly the download URL and declared version lines):"
+        printf '%s\n' "${DIFF_OUT}"
+
+        # --- Step 4: brew install --cask the rewritten copy. Modern
+        # Homebrew (6.0.16, measured this session) REJECTS installing a
+        # loose .rb path directly ("Homebrew requires casks to be in a
+        # tap") — a real environment finding this rehearsal exists to
+        # surface, not documented anywhere in RESEARCH.md's source-level
+        # trace. The rehearsal therefore wraps the rewritten cask in a
+        # throwaway LOCAL git-repo tap (never the real seanb4t/homebrew-
+        # tap, which does not exist yet — D-14) and installs by its
+        # tap-qualified name. Try file:// first for the ZIP download URL
+        # (URL_MECHANISM=file, above); if Homebrew's downloader rejects
+        # that scheme, fall back to a loopback HTTP server rooted at
+        # dist/ (URL_MECHANISM=http) by editing the SAME tap clone's cask
+        # file in place — no re-tap needed.
+        TAP_NAME="local-rehearsal/cask-rehearsal-scratch"
+        LOCAL_TAP_SRC="${REHEARSE_DIR}/tap-src"
+        mkdir -p "${LOCAL_TAP_SRC}/Casks"
+        cp "${REHEARSAL_CASK}" "${LOCAL_TAP_SRC}/Casks/codegraph.rb"
+        (
+          cd "${LOCAL_TAP_SRC}"
+          git init -q -b main
+          git config user.email "cask-rehearsal@localhost"
+          git config user.name "release:rehearse-cask"
+          git add -A
+          git commit -q -m "rehearsal cask (throwaway, never pushed)"
+        )
+
+        export HOMEBREW_NO_AUTO_UPDATE=1
+        export HOMEBREW_NO_ENV_HINTS=1
+        brew tap "${TAP_NAME}" "file://${LOCAL_TAP_SRC}"
+        TAP_CLONE_DIR="$(brew --repo "${TAP_NAME}")"
+
+        set +e
+        INSTALL_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
+        INSTALL_EXIT=$?
+        set -e
+        echo "${INSTALL_OUT}"
+
+        if [ "${INSTALL_EXIT}" != "0" ] && printf '%s\n' "${INSTALL_OUT}" | grep -qiE 'unsupported url|no such file or directory.*curl|Curl download failed'; then
+          echo "==> file:// rejected by Homebrew's downloader; falling back to a loopback HTTP server"
+          URL_MECHANISM="http"
+          DIST_ABS="$(cd dist && pwd)"
+          HTTP_PORT="$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()')"
+          ( cd "${DIST_ABS}" && python3 -m http.server --bind 127.0.0.1 "${HTTP_PORT}" >"${REHEARSE_DIR}/http-server.log" 2>&1 & echo $! > "${REHEARSE_DIR}/http-server.pid" )
+          HTTP_SERVER_PID="$(cat "${REHEARSE_DIR}/http-server.pid")"
+          sleep 1
+
+          ZIP_REL="${ZIP_PATH#dist/}"
+          HTTP_URL="http://127.0.0.1:${HTTP_PORT}/${ZIP_REL}"
+          cp "${CASK_PATH}" "${REHEARSAL_CASK}"
+          sed -i.bak "${URL_LINE_NUM}s|\"[^\"]*\"|\"${HTTP_URL}\"|" "${REHEARSAL_CASK}"
+          sed -i.bak "${VERSION_LINE_NUM}s/.*/  version \"${LOCAL_REPORTED_VERSION}\"/" "${REHEARSAL_CASK}"
+
+          DIFF_OUT="$(diff "${CASK_PATH}" "${REHEARSAL_CASK}" || true)"
+          DIFF_CHANGED_LINES="$(printf '%s\n' "${DIFF_OUT}" | grep -c '^[<>]' || true)"
+          if [ "${DIFF_CHANGED_LINES}" != "4" ]; then
+            echo "::error::HTTP-fallback rehearsal cask differs from the rendered cask by ${DIFF_CHANGED_LINES} line(s), want exactly two lines changed (the download url and the declared version):"
+            printf '%s\n' "${DIFF_OUT}"
+            exit 1
+          fi
+          echo "REHEARSAL-DIFF (HTTP fallback, must be exactly the download URL and declared version lines):"
+          printf '%s\n' "${DIFF_OUT}"
+
+          # Edit the ALREADY-TAPPED clone's own cask file in place — no
+          # re-tap/re-clone needed, brew reads this file directly.
+          cp "${REHEARSAL_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+
+          set +e
+          INSTALL_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
+          INSTALL_EXIT=$?
+          set -e
+          echo "${INSTALL_OUT}"
+        fi
+
+        if [ "${INSTALL_EXIT}" != "0" ]; then
+          echo "::error::brew install --cask failed (exit ${INSTALL_EXIT}) via both file:// and http:// mechanisms — see output above"
+          brew untap "${TAP_NAME}" >/dev/null 2>&1 || true
+          exit 1
+        fi
+        CASK_INSTALLED=1
+        echo "URL-REWRITE-MECHANISM: ${URL_MECHANISM}"
+
+        # --- Step 5: assert the install's effects POSITIVELY (repo rule
+        # 84d1gfpywd) — never just the brew exit code, which the
+        # post-install hook's own system_command call could in principle
+        # satisfy without having produced anything if this assertion
+        # didn't independently re-check.
+        MAN_DIR="$(brew --prefix)/share/man/man1"
+        if [ ! -f "${MAN_DIR}/codegraph.1" ]; then
+          echo "::error::${MAN_DIR}/codegraph.1 does not exist after brew install --cask — the post-install hook's 'codegraph man' invocation did not produce the expected output (D-11's positive-assertion gate would have caught this at install time; this rehearsal independently re-confirms it)"
+          exit 1
+        fi
+        MAN_PAGE_COUNT="$(find "${MAN_DIR}" -maxdepth 1 -type f -name 'codegraph*' | wc -l | tr -d ' ')"
+        if [ "${MAN_PAGE_COUNT}" -le 1 ]; then
+          echo "::error::only ${MAN_PAGE_COUNT} codegraph man page(s) found in ${MAN_DIR} — want strictly more than 1 (the full command tree, not a single root page)"
+          exit 1
+        fi
+
+        INSTALLED_BIN="$(brew --prefix)/bin/codegraph"
+        if [ ! -x "${INSTALLED_BIN}" ]; then
+          echo "::error::${INSTALLED_BIN} is not executable after brew install --cask"
+          exit 1
+        fi
+        REPORTED_VERSION="$("${INSTALLED_BIN}" version 2>&1 || true)"
+        if [ -z "${REPORTED_VERSION}" ]; then
+          echo "::error::${INSTALLED_BIN} version produced no output"
+          exit 1
+        fi
+        echo "installed binary reports: ${REPORTED_VERSION}"
+
+        # v-stripped JSON version, used below to confirm the version-
+        # mismatch perturbation's failure message names the REAL reported
+        # value (not just the mutated declared one).
+        REPORTED_VERSION_JSON="$("${INSTALLED_BIN}" version --json 2>&1 || true)"
+        REPORTED_VERSION_STRIPPED="$(printf '%s' "${REPORTED_VERSION_JSON}" | jq -r '.version // empty' | sed 's/^v//')"
+        if [ -z "${REPORTED_VERSION_STRIPPED}" ]; then
+          echo "::error::could not parse .version from '${INSTALLED_BIN} version --json' output: ${REPORTED_VERSION_JSON}"
+          exit 1
+        fi
+        echo "installed binary reports (JSON, v-stripped): ${REPORTED_VERSION_STRIPPED}"
+
+        # --- Step 5b (D-11/D-08, schema=2): the Phase-4 sentinel,
+        # positively asserted rather than assumed from a green hook exit
+        # — a hook that ran and wrote nothing must be caught here even if
+        # brew's own exit code was 0. Located by resolving INSTALLED_BIN
+        # THROUGH SYMLINKS via python3 (already a precondition dependency;
+        # macOS's own /usr/bin/readlink has no GNU -f flag), never by
+        # matching a path prefix — the same mechanism the hook itself
+        # uses (D-08). OK accumulates across every assertion below rather
+        # than exiting on the first failure, so a single RED run can
+        # surface every new behavior's failure at once (this repo's own
+        # release:dry-run-signed idiom).
+        OK=1
+        REAL_BIN="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${INSTALLED_BIN}")"
+        REAL_BIN_DIR="$(dirname "${REAL_BIN}")"
+        SENTINEL_PATH="${REAL_BIN_DIR}/.codegraph-brew-install"
+        echo "resolved installed-binary directory (real, symlink-resolved): ${REAL_BIN_DIR}"
+        SENTINEL_VERDICT="absent"
+        if [ ! -f "${SENTINEL_PATH}" ]; then
+          echo "::error::${SENTINEL_PATH} does not exist after brew install --cask — the post-install hook did not write the Phase-4 sentinel (D-08)"
+          OK=0
+        else
+          SENTINEL_VERDICT="present"
+          SENTINEL_FIRST_LINE="$(head -n1 "${SENTINEL_PATH}")"
+          if [ "${SENTINEL_FIRST_LINE}" != "schema=1" ]; then
+            echo "::error::${SENTINEL_PATH} first line is '${SENTINEL_FIRST_LINE}', want schema=1"
+            OK=0
+          fi
+          for key in cask_token cask_version homebrew_prefix man_dir man_page_count installed_at; do
+            if ! grep -q "^${key}=" "${SENTINEL_PATH}"; then
+              echo "::error::${SENTINEL_PATH} is missing the ${key} key"
+              OK=0
+            fi
+          done
+          echo "sentinel contents:"
+          cat "${SENTINEL_PATH}"
+        fi
+
+        # --- Step 5c (BREW-03, D-06): completion files under Homebrew's
+        # own completion directories — a hard assertion now that
+        # generate_completions_from_executable exists (Task 2).
+        BASH_COMPLETION="$(brew --prefix)/etc/bash_completion.d/codegraph"
+        ZSH_COMPLETION="$(brew --prefix)/share/zsh/site-functions/_codegraph"
+        FISH_COMPLETION="$(brew --prefix)/share/fish/vendor_completions.d/codegraph.fish"
+        COMPLETION_COUNT=0
+        for f in "${BASH_COMPLETION}" "${ZSH_COMPLETION}" "${FISH_COMPLETION}"; do
+          if [ -s "${f}" ]; then COMPLETION_COUNT=$((COMPLETION_COUNT + 1)); fi
+        done
+        echo "completion files present (non-empty): ${COMPLETION_COUNT}/3"
+        if [ "${COMPLETION_COUNT}" != "3" ]; then
+          echo "::error::expected all 3 completion files (bash/zsh/fish) present and non-empty after brew install --cask, found ${COMPLETION_COUNT}/3 (checked ${BASH_COMPLETION}, ${ZSH_COMPLETION}, ${FISH_COMPLETION})"
+          OK=0
+        fi
+
+        # Confirm codegraph completion bash works against the INSTALLED
+        # binary (not a locally-built one) — the mechanism BREW-03 relies
+        # on, verified directly rather than assumed.
+        if ! "${INSTALLED_BIN}" completion bash >/dev/null 2>&1; then
+          echo "::error::'${INSTALLED_BIN} completion bash' failed against the installed binary"
+          OK=0
+        else
+          echo "'${INSTALLED_BIN} completion bash' exits 0 and emits output (confirmed against the installed binary)"
+        fi
+
+        # --- Step 5d: idempotency (D-11's action text) — Homebrew re-runs
+        # post.install on both reinstall and upgrade, and every step the
+        # hook takes (directory creation, page generation, sentinel write)
+        # must tolerate running again over an existing install.
+        echo "==> brew reinstall --cask ${TAP_NAME}/codegraph (idempotency)"
+        set +e
+        REINSTALL_OUT="$(brew reinstall --cask "${TAP_NAME}/codegraph" 2>&1)"
+        REINSTALL_EXIT=$?
+        set -e
+        echo "${REINSTALL_OUT}"
+        if [ "${REINSTALL_EXIT}" != "0" ]; then
+          echo "::error::brew reinstall --cask exited ${REINSTALL_EXIT} — the hook is not idempotent"
+          OK=0
+        fi
+        if [ ! -f "${MAN_DIR}/codegraph.1" ] || [ ! -f "${SENTINEL_PATH}" ]; then
+          echo "::error::man pages or sentinel missing after reinstall — the hook's directory-creation/write steps are not idempotent"
+          OK=0
+        fi
+        echo "SECOND-INSTALL-EVIDENCE exit=${REINSTALL_EXIT}"
+
+        # --- Step 6: uninstall now (also registered in the trap for the
+        # failure path above).
+        echo "==> brew uninstall --cask ${TAP_NAME}/codegraph"
+        brew uninstall --cask "${TAP_NAME}/codegraph"
+        CASK_INSTALLED=0
+
+        # --- Step 6b (D-07): post-uninstall symmetry — everything the
+        # hooks create must be gone; Homebrew does not track hook-written
+        # files, so hooks.post.uninstall must remove them explicitly.
+        if [ -f "${MAN_DIR}/codegraph.1" ]; then
+          echo "::error::${MAN_DIR}/codegraph.1 still exists after brew uninstall --cask — hooks.post.uninstall did not remove the man pages this cask wrote (D-07)"
+          OK=0
+        fi
+        if [ -f "${SENTINEL_PATH}" ]; then
+          echo "::error::${SENTINEL_PATH} still exists after brew uninstall --cask — hooks.post.uninstall did not remove the sentinel (D-08/D-07)"
+          OK=0
+        fi
+        echo "post-uninstall verdict: man pages absent=$([ ! -f "${MAN_DIR}/codegraph.1" ] && echo true || echo false), sentinel absent=$([ ! -f "${SENTINEL_PATH}" ] && echo true || echo false)"
+
+        # --- Step 7 (Task 1 acceptance criterion): a deliberate local
+        # perturbation proving D-11's version-equality assertion can
+        # actually fire. Reuses the ALREADY-BUILT zip — no rebuild, no
+        # re-notarization — hand-editing ONLY the declared `version "..."`
+        # line of the already-working rehearsal cask, reusing the SAME
+        # tap clone by overwriting its Casks/codegraph.rb in place (the
+        # HTTP-fallback path above already establishes this is safe with
+        # no re-tap needed).
+        VERSION_LINE_NUM="$(grep -n -E '^  version "' "${REHEARSAL_CASK}" | head -n1 | cut -d: -f1)"
+        if [ -z "${VERSION_LINE_NUM}" ]; then
+          echo "::error::could not find a 'version \"...\"' line in ${REHEARSAL_CASK} to mutate"
+          exit 1
+        fi
+        MUTATED_VERSION="0.0.0-cask-rehearsal-mutated-version"
+        MUTATED_CASK="${REHEARSE_DIR}/rehearsal/codegraph.mutated-version.rb"
+        cp "${REHEARSAL_CASK}" "${MUTATED_CASK}"
+        sed -i.bak "${VERSION_LINE_NUM}s/.*/  version \"${MUTATED_VERSION}\"/" "${MUTATED_CASK}"
+
+        cp "${MUTATED_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+        echo "==> brew install --cask ${TAP_NAME}/codegraph (MUTATED version — expect non-zero exit)"
+        set +e
+        MUTATE_INSTALL_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
+        MUTATE_INSTALL_EXIT=$?
+        set -e
+        echo "${MUTATE_INSTALL_OUT}"
+        if [ "${MUTATE_INSTALL_EXIT}" = "0" ]; then
+          echo "::error::brew install --cask exited 0 with a deliberately mismatched declared version (${MUTATED_VERSION}) — D-11's version-equality assertion did not fire"
+          OK=0
+          brew uninstall --cask "${TAP_NAME}/codegraph" >/dev/null 2>&1 || true
+        else
+          echo "VERSION-MISMATCH-EVIDENCE exit=${MUTATE_INSTALL_EXIT}"
+          if ! printf '%s\n' "${MUTATE_INSTALL_OUT}" | grep -qF "${MUTATED_VERSION}"; then
+            echo "::error::the failure message does not quote the mutated declared version (${MUTATED_VERSION}) — want both the reported and declared values named"
+            OK=0
+          fi
+          if ! printf '%s\n' "${MUTATE_INSTALL_OUT}" | grep -qF "${REPORTED_VERSION_STRIPPED}"; then
+            echo "::error::the failure message does not quote the actual reported version (${REPORTED_VERSION_STRIPPED})"
+            OK=0
+          fi
+        fi
+
+        # Restore and re-run clean — the paired observation the plan
+        # requires ("record both runs").
+        cp "${REHEARSAL_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+        echo "==> brew install --cask ${TAP_NAME}/codegraph (RESTORED — expect exit 0)"
+        set +e
+        RESTORE_INSTALL_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
+        RESTORE_INSTALL_EXIT=$?
+        set -e
+        echo "${RESTORE_INSTALL_OUT}"
+        if [ "${RESTORE_INSTALL_EXIT}" != "0" ]; then
+          echo "::error::brew install --cask exited ${RESTORE_INSTALL_EXIT} after restoring the correct version — want 0"
+          OK=0
+        else
+          CASK_INSTALLED=1
+          echo "==> brew uninstall --cask ${TAP_NAME}/codegraph (version-perturbation cleanup)"
+          brew uninstall --cask "${TAP_NAME}/codegraph"
+          CASK_INSTALLED=0
+        fi
+        echo "RESTORE-EVIDENCE exit=${RESTORE_INSTALL_EXIT}"
+
+        # --- Step 7b (Task 2 acceptance criterion): a deliberately wrong
+        # executable name in the completions stanza must NOT fail brew
+        # install — only warn (RESEARCH.md Pitfall 1, measured here on
+        # this machine rather than read from source alone). Reuses the
+        # SAME already-built zip and tap clone.
+        COMPLETIONS_LINE_NUM="$(grep -n -F 'generate_completions_from_executable "codegraph"' "${REHEARSAL_CASK}" | head -n1 | cut -d: -f1)"
+        if [ -z "${COMPLETIONS_LINE_NUM}" ]; then
+          echo "::error::could not find a 'generate_completions_from_executable \"codegraph\"' line in ${REHEARSAL_CASK} to mutate"
+          OK=0
+        else
+          MUTATED_COMPLETIONS_CASK="${REHEARSE_DIR}/rehearsal/codegraph.mutated-completions.rb"
+          cp "${REHEARSAL_CASK}" "${MUTATED_COMPLETIONS_CASK}"
+          sed -i.bak "${COMPLETIONS_LINE_NUM}s/generate_completions_from_executable \"codegraph\"/generate_completions_from_executable \"codegraph-does-not-exist\"/" "${MUTATED_COMPLETIONS_CASK}"
+
+          cp "${MUTATED_COMPLETIONS_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+          echo "==> brew install --cask ${TAP_NAME}/codegraph (MUTATED completions executable — expect exit 0 with a warning)"
+          set +e
+          COMPLETIONS_MUTATE_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
+          COMPLETIONS_MUTATE_EXIT=$?
+          set -e
+          echo "${COMPLETIONS_MUTATE_OUT}"
+          if [ "${COMPLETIONS_MUTATE_EXIT}" != "0" ]; then
+            echo "::error::brew install --cask exited ${COMPLETIONS_MUTATE_EXIT} with a deliberately wrong completions executable name — RESEARCH.md Pitfall 1 predicts a WARNING, not a failure; this contradicts that finding and must be recorded as such, not smoothed over"
+            OK=0
+          else
+            CASK_INSTALLED=1
+            if ! printf '%s\n' "${COMPLETIONS_MUTATE_OUT}" | grep -qiE 'Failed to generate .* completions|Warning:'; then
+              echo "::error::brew install --cask exited 0 but no completions-generation warning was observed in its output — cannot confirm Pitfall 1 fired rather than the completions stanza silently succeeding some other way"
+              OK=0
+            else
+              echo "COMPLETIONS-PERTURBATION-EVIDENCE exit=${COMPLETIONS_MUTATE_EXIT}"
+            fi
+            echo "==> brew uninstall --cask ${TAP_NAME}/codegraph (completions-perturbation cleanup)"
+            brew uninstall --cask "${TAP_NAME}/codegraph"
+            CASK_INSTALLED=0
+          fi
+
+          # Restore the tap clone's cask file to the correct rehearsal
+          # copy so the final untap leaves nothing mutated behind.
+          cp "${REHEARSAL_CASK}" "${TAP_CLONE_DIR}/Casks/codegraph.rb"
+        fi
+
+        echo "==> brew untap ${TAP_NAME}"
+        brew untap "${TAP_NAME}"
+        TAP_NAME=""
+
+        if [ "${OK}" != "1" ]; then
+          echo "::error::release:rehearse-cask FAILED — see ::error:: lines above"
+          exit 1
+        fi
+
+        OUTCOME="pass"
+        # --- Step 8: machine-parseable evidence, SIGN04-PUBLISH-EVIDENCE
+        # convention — schema=2 (widened from schema=1 with the sentinel,
+        # completions count, and post-uninstall verdicts), fixed key
+        # order, on the pass path here and on the fail path in the trap
+        # above.
+        echo "CASK-REHEARSE-EVIDENCE schema=2 snapshot_version=${SNAPSHOT_VERSION} cask_sha256=${CASK_SHA256} url_mechanism=${URL_MECHANISM} man_page_count=${MAN_PAGE_COUNT} sentinel=${SENTINEL_VERDICT} completion_count=${COMPLETION_COUNT} reported_version=${REPORTED_VERSION} outcome=pass"
+
+        echo "release:rehearse-cask: PASS"
 
   check:linux-cross-export:
     desc: >-

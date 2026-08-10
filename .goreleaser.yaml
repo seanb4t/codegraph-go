@@ -408,3 +408,217 @@ release:
   # Release. Regenerating the body would move release authorship away
   # from the tool D-06R reserves it to. Held by
   # TestReleaseBlockDoesNotRewriteReleaseBody.
+
+# homebrew_casks: (BREW-01/03/04, D-14/D-15/D-16/D-05) publishes
+# Casks/codegraph.rb to the seanb4t/homebrew-tap repository (D-14,
+# maintainer-confirmed 2026-08-09: `brew tap seanb4t/tap && brew install
+# codegraph`) on every release. `cask.Pipe{}` is registered in TWO
+# GoReleaser pipelines in the pinned v2.17.1 module: the MAIN pipeline
+# (internal/pipeline/pipeline.go:155, which RENDERS
+# dist/homebrew/Casks/codegraph.rb) and the PUBLISH pipeline
+# (internal/pipe/publish/publish.go:64, which PUSHES it to the tap,
+# ordered last — "brew et al use the release URL, so, they should be
+# last"). `--snapshot` sets skips.Publish and therefore skips only the
+# second; the render always happens (Taskfile.yml's
+# release:rehearse-cask target rehearses exactly that render + a real
+# local `brew install`, never the tap push).
+#
+# Discretionary metadata (03-CONTEXT.md "Claude's Discretion"), decided
+# and recorded here rather than left to a GoReleaser default:
+#
+#   - Platform scope: this block makes NO cross-platform claim. `ids:
+#     [zip]` (below) is an ARCHIVE-id filter required to avoid
+#     ErrMultipleArchivesSameOS — it is NOT an OS-scoping mechanism, and
+#     HomebrewCask has no os:/platform: field in this pinned v2.17.1
+#     (confirmed: pkg/config/config.go's HomebrewCask struct has none).
+#     Because the `zip` archive entry covers all 4 platforms, the
+#     rendered cask's `on_linux do ... end` block IS populated with real
+#     linux URLs/sha256 (measured this session against a real snapshot
+#     render) — a structural side effect of sharing one archive entry
+#     with the raw-binary/direct-download path, not a deliberate
+#     cross-platform decision. Every verification path this phase runs
+#     (Gatekeeper quarantine, notarization, the rehearsal itself) is
+#     macOS-only; no claim is made or tested about linuxbrew cask
+#     installability.
+#   - livecheck: GoReleaser's cask.rb template (templates/cask.rb)
+#     unconditionally emits `livecheck do skip "Auto-generated on
+#     release." end` for every cask — there is no config field to set;
+#     nothing to add here.
+#   - auto_updates: HomebrewCask has no such field and the template never
+#     emits an `auto_updates` stanza in this pinned version — not
+#     settable through this pipe. codegraph's own self-updater
+#     (`codegraph upgrade`) is unrelated to this cask-level claim, and
+#     Phase 4 teaches it to refuse when brew-managed (D-08's sentinel).
+#   - depends_on (macOS minimum): NOT asserted. HomebrewCaskDependency
+#     (pkg/config/config.go) carries only Cask/Formula fields with an
+#     explicit `// TODO: support macos, arch` comment — this pinned
+#     GoReleaser version cannot express a macOS-version depends_on for
+#     casks at all, so there is no evidence-backed floor to assert; this
+#     is an unavailable mechanism, not a declined one.
+homebrew_casks:
+  - name: codegraph
+    directory: Casks # GoReleaser's own default; explicit for clarity.
+    ids:
+      # LOAD-BEARING (RESEARCH.md Pattern 1, traced to
+      # internal/pipe/cask/cask.go's doRun()/dataFor()): this file
+      # declares TWO archive entries (`raw`, `zip`) covering the
+      # identical 4 platforms. cask.Pipe{}'s default artifact filter (no
+      # ids: set) matches BOTH shapes for every platform, and
+      # dataFor()'s platformCounts check then throws
+      # ErrMultipleArchivesSameOS ("one tap can handle only one archive
+      # of an OS/Arch combination. Consider using ids in the
+      # homebrew_casks section"). Scoping to the `zip` archive id alone
+      # — never `raw`, never both — is the fix the pipe's own error
+      # names.
+      - zip
+    # url.template: deliberately OMITTED (RESEARCH.md Pattern 2). The
+    # unset default is GoReleaser's own `{{ .ArtifactName }}`-derived
+    # ReleaseURLTemplate (Name-derived) — a hand-written `${artifact}`
+    # (Path-derived) form is the exact collision class this file's
+    # signs:/sboms: blocks each independently document having hit
+    # before. Do not add a url: key here without re-reading both.
+    repository:
+      owner: seanb4t
+      name: homebrew-tap
+      branch: main
+      # GitHub App installation token (D-16), minted per-release and
+      # scoped to homebrew-tap ALONE — a SEPARATE client from this
+      # release's own GITHUB_TOKEN (internal/client/client.go:153-166,
+      # NewIfToken). Wired here now; the App itself and the workflow job
+      # that mints HOMEBREW_TAP_TOKEN land in plan 03-03.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://github.com/seanb4t/codegraph-go"
+    # Mirrors internal/cli/root.go's newRootCmd().Short verbatim — one
+    # product description in one place, never a second hand-written one
+    # that can drift (the same drift shape D-15 rejected one level up).
+    description: "Pre-indexed code knowledge graph for coding agents"
+    binaries:
+      # Plural form only (`binary`/`manpage` singular fields are
+      # Deprecated on the pinned HomebrewCask struct,
+      # pkg/config/config.go:246-250, and emit a deprecate.Notice).
+      - codegraph
+    # generate_completions_from_executable (BREW-03, D-06): executes the
+    # INSTALLED binary at install time — `codegraph completion <shell>`
+    # already works with no CLI changes (Cobra 1.10.2 auto-registers
+    # `completion`; root.go never sets CompletionOptions.DisableDefaultCmd
+    # — confirmed against the binary release:rehearse-cask itself
+    # installs, not merely assumed). `executable:` is left unset
+    # deliberately: cask.go:78-79 auto-defaults it to `binaries[0]`
+    # ("codegraph") whenever shells/shell_parameter_format make this
+    # block "configured" — an explicit executable: would be a second,
+    # potentially-drifting spelling of the same binary name already
+    # named above. `shells:` is DELIBERATELY the three-element set below
+    # — narrower than Homebrew's own SUPPORTED_SHELLS default, which also
+    # includes pwsh, an unrequested shell whose generation failure would
+    # produce a warning nobody asked for.
+    #
+    # This artifact is NOT the install gate — see hooks.post.install's
+    # own comment below for the mechanistic reason
+    # (Cask::Artifact::GeneratedCompletion#write_completion swallows its
+    # own execution failure via `rescue => e; opoo e`); the two
+    # mechanisms both execute the binary but must never be confused for
+    # one another.
+    generate_completions_from_executable:
+      shells: [bash, zsh, fish]
+      shell_parameter_format: cobra
+    hooks:
+      post:
+        install: |
+          # D-10: the install itself is BREW-05's gate. system_command's
+          # default is must_succeed: true (Homebrew's SystemCommand.run!),
+          # and Cask::Installer#install_artifacts does not rescue that
+          # failure — it rolls back and re-raises (installer.rb:330-354:
+          # "rescue => e ... ensure purge_versioned_files; raise e"), so
+          # `brew install` exits non-zero for the first user whose binary
+          # cannot even run `man` or reports the wrong version.
+          # generate_completions_from_executable below CANNOT play this
+          # role: Cask::Artifact::GeneratedCompletion#write_completion
+          # (generated_completion.rb:138-148) wraps its own execution of
+          # the binary in `rescue => e; opoo e` — a warning, not a raise
+          # (RESEARCH.md Pitfall 1; measured directly by this repo's own
+          # perturbation in Taskfile.yml's release:rehearse-cask, which
+          # deliberately breaks that stanza and observes a green exit).
+          # This hook — and only this hook — is BREW-05's gate.
+          binary = "#{HOMEBREW_PREFIX}/bin/codegraph"
+          man_dir = "#{HOMEBREW_PREFIX}/share/man/man1"
+
+          # Assertion one (D-11): the man generation produced something.
+          # Reads the directory rather than trusting the exit status alone
+          # — a binary that ran and wrote nothing would otherwise pass
+          # vacuously (repo rule 84d1gfpywd). No specific count is
+          # pinned: the page tree grows with every new subcommand, and a
+          # pinned count would turn that growth into a broken install.
+          system_command binary, args: ["man", man_dir]
+          man_pages = Dir.glob("#{man_dir}/codegraph*.1")
+          if man_pages.length <= 1
+            raise "codegraph cask post-install: expected more than 1 man page under #{man_dir}, found #{man_pages.length}"
+          end
+
+          # Assertion two (D-11): it is the right artifact. Equality on
+          # values normalized by stripping a single leading "v" — never
+          # containment, since "0.8.0" is contained in both "0.8.01" and
+          # "10.8.0". `version` here is the Ruby DSL delegate (the cask's
+          # OWN declared version, base/dsl/base.rb:25's def_delegators),
+          # not a Go identifier.
+          version_result = system_command binary, args: ["version", "--json"]
+          reported_version = JSON.parse(version_result.stdout)["version"].to_s.sub(/\Av/, "")
+          declared_version = version.to_s.sub(/\Av/, "")
+          if reported_version != declared_version
+            raise "codegraph cask post-install: installed binary reports version #{reported_version.inspect}, cask declares #{declared_version.inspect}"
+          end
+
+          # The Phase-4 sentinel (D-08). Located by RESOLVING #{binary}
+          # THROUGH SYMLINKS (Pathname#realpath) — never by matching a
+          # path prefix — so detection is correct under /opt/homebrew,
+          # /usr/local, a custom prefix, and linuxbrew alike. This is a
+          # cross-phase contract: internal/upgrade reads this file's
+          # location and format in Phase 4; changing either leaves
+          # already-installed users undetectable until they reinstall.
+          real_bin_dir = Pathname.new(binary).realpath.dirname
+          sentinel = real_bin_dir/".codegraph-brew-install"
+          sentinel.atomic_write(<<~SENTINEL)
+            schema=1
+            cask_token=#{token}
+            cask_version=#{version}
+            homebrew_prefix=#{HOMEBREW_PREFIX}
+            man_dir=#{man_dir}
+            man_page_count=#{man_pages.length}
+            installed_at=#{Time.now.utc.iso8601}
+          SENTINEL
+
+          # Idempotency: every step above tolerates re-running over an
+          # existing install. `codegraph man`'s own os.MkdirAll is
+          # create-if-absent, doc.GenManTree overwrites each page, and
+          # Pathname#atomic_write always overwrites rather than appending
+          # (extend/pathname.rb:105-108) — Homebrew re-runs this hook on
+          # both reinstall and upgrade.
+        uninstall: |
+          # D-07: symmetric with post.install — brew does not track files
+          # a hook writes, so they must be removed explicitly. Both
+          # removals are force-style (FileUtils.rm_f: no error on an
+          # already-absent file — Homebrew removes the Caskroom versioned
+          # directory itself as part of the same uninstall, so the
+          # sentinel may legitimately be gone before this hook runs) via
+          # explicit statements, never a chained `&&` list. The
+          # declarative `uninstall: delete:`/`zap: trash:` stanzas were
+          # rejected: these are artifacts THIS CASK generated, not user
+          # data.
+          #
+          # staged_path — NOT a re-resolved #{HOMEBREW_PREFIX}/bin/codegraph
+          # symlink — locates the sentinel here: by the time
+          # uninstall_postflight artifacts run, Homebrew's own uninstall
+          # of the `binary "codegraph"` Symlinked artifact (declared
+          # earlier in this file, so it is uninstalled first —
+          # Cask::Installer#uninstall_artifacts iterates artifacts in
+          # declared order, installer.rb:642-687) has ALREADY removed
+          # that symlink; realpath-resolving it here would raise Errno::ENOENT.
+          # staged_path is Homebrew's own authoritative real-installation-
+          # directory value (token + version, dsl.rb:679-688 — not a
+          # hand-matched prefix) and, per A1 (03-01-SUMMARY.md), equals
+          # exactly the directory post.install's realpath resolution
+          # wrote into.
+          man_dir = Pathname.new("#{HOMEBREW_PREFIX}/share/man/man1")
+          Dir.glob((man_dir/"codegraph*.1").to_s).each { |f| FileUtils.rm_f(f) }
+
+          sentinel = Pathname.new(staged_path.to_s)/".codegraph-brew-install"
+          FileUtils.rm_f(sentinel)

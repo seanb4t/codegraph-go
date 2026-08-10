@@ -92,7 +92,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
 - **`v0.5.0` carries no git tag.** release-please is the sole tag authority (D-06R), and a `v0.5.0` tag would match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline.
 
 - [x] **Phase 1: Cross-Compile Spike & `goreleaser release` Migration** - Decide the pipeline architecture on measured evidence, then move to one `goreleaser release` invocation that publishes both raw binaries and `.zip` archives with every supply-chain claim re-proven against real published assets (completed 2026-08-08)
-- [ ] **Phase 2: Apple Signing & Notarization** - A browser-downloaded darwin asset stops being blocked by Gatekeeper, proven by a gate shown RED against the un-notarized binary first
+- [x] **Phase 2: Apple Signing & Notarization** - A browser-downloaded darwin asset stops being blocked by Gatekeeper, proven by a gate shown RED against the un-notarized binary first (completed 2026-08-09)
 - [ ] **Phase 3: Homebrew Tap & Cask** - `brew tap seanb4t/tap && brew install codegraph` works on a clean machine, with completions, man pages, a real `test:` block, and a proven-recoverable tap-push failure
 - [ ] **Phase 4: `codegraph upgrade` × Homebrew** - `codegraph upgrade` detects a brew-managed install, refuses, and points at `brew upgrade codegraph` — never touching the Cellar
 
@@ -146,7 +146,7 @@ Plans:
 
 **Notes**: Promoted from backlog **999.5**, whose captured measurements stand: `codesign -dvv` reports darwin/arm64 as `adhoc, linker-signed` with `TeamIdentifier=not set` (the Go linker emits this so the Apple Silicon kernel will exec the binary — it satisfies the kernel, not Gatekeeper), darwin/amd64 as `code object is not signed at all`, and `spctl -a -vv -t exec` returns **rejected** for both. cosign is a different mechanism entirely — a detached Sigstore sidecar verified in-process by `internal/upgrade`, not an embedded `LC_CODE_SIGNATURE` — and does nothing for Gatekeeper. The affected population is browser downloaders from the GitHub Releases page; a binary fetched by the real `codegraph upgrade` path was measured to carry only `com.apple.provenance`. 999.5's open asset-shape question (a bare Mach-O can be notarized but not stapled) is resolved across Phases 1 and 3: archives ship *alongside* raw binaries, and stapling is out of scope because `.zip` and bare Mach-O are both categorically unstaplable and Quill has no staple command.
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans executed
 
 Plans:
 **Wave 1**
@@ -169,7 +169,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 02-07-PLAN.md — cut the real release and record criteria 2, 3 and 4 against the re-downloaded published assets
+- [x] 02-07-PLAN.md — cut the real release and record criteria 2, 3 and 4 against the re-downloaded published assets
 
 ### Phase 3: Homebrew Tap & Cask
 
@@ -180,17 +180,31 @@ Plans:
 
   1. On a machine with no prior codegraph, `brew tap seanb4t/tap && brew install codegraph` completes and the installed binary runs a real command — verified cold, at least one release later, against a cask GoReleaser regenerated rather than the one hand-checked at first publish (BREW-01, BREW-02)
   2. After that install, `codegraph` completes its subcommands in bash, zsh **and** fish, and `man codegraph` renders — all generated from the binary at cask-build time, so a new subcommand appears without anyone editing a committed completion file (BREW-03, BREW-04)
-  3. The cask's `test:` block runs a real command and is demonstrated to **fail** when pointed at a deliberately broken binary, so a broken cask is caught before a user hits it rather than passing vacuously (BREW-05)
+  3. The cask's `hooks.post.install` block runs the installed binary and asserts two things about the result — that man-page generation produced more than one page, and that the reported version equals the cask's own declared version — and is demonstrated to **fail** on each assertion independently when pointed at a deliberately broken binary, so a broken cask is caught before a user hits it rather than passing vacuously. **Amended 2026-08-10 (plan 03-04):** previously named a cask `test:` block, a stanza Homebrew Casks do not have; see `.planning/REQUIREMENTS.md` BREW-05's amendment note and `03-EVIDENCE.md` for the falsification evidence (BREW-05)
   4. A deliberately failed tap push leaves the GitHub Release, its cosign bundles, SBOMs and SLSA provenance intact and independently re-verifiable, and a re-run publishes the tap with `gh release view --json assets` unchanged apart from the intended additions — no duplicated and no orphaned assets (BREW-06)
   5. The token that writes the tap can write `seanb4t/homebrew-tap` and nothing else — demonstrated by that same token being refused a write to `seanb4t/codegraph-go` (BREW-02)
 
 **Notes**: Consumes seed **SEED-002**. `homebrew_casks:` is the block, not the deprecated `brews:` (GoReleaser v2.10; Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries per Homebrew/brew #20291). The default `GITHUB_TOKEN` cannot write cross-repo, so a dedicated least-privilege PAT is required. `gh`/`lazygit`'s build-time updater-disable ldflag does not transfer — casks ship precompiled binaries — so the cask-compatible analogue is a `homebrew_casks.hooks.post.install` sentinel, which is also the most robust signal Phase 4 can key on.
 
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (populate with /gsd-plan-phase 3)
+- [ ] 03-01-PLAN.md — confirm the one-way tap/cask naming, then a tracer: `codegraph man` plus a minimal `homebrew_casks:` block, rendered by GoReleaser and installed by real Homebrew, with the hook executing the installed binary
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — complete the cask: D-11's two positive assertions, the Phase-4 sentinel, symmetric uninstall, three-shell completions, and shape tests asserting properties rather than literals
+- [ ] 03-03-PLAN.md — the tap repository, a second GitHub App installed on it alone, the mint placed by a measured job-output verdict, and a release that halts on a missing or non-distinct tap credential
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 03-04-PLAN.md — watch the install gate fail twice and the tap credential be refused once, then amend BREW-05 and criterion 3 to name the mechanism that exists (D-09)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 03-05-PLAN.md — cut two releases, install cold from the second's regenerated cask, and record criterion 4's split: an argument for the failure half (D-18R), executed evidence for the integrity half
 
 ### Phase 4: `codegraph upgrade` × Homebrew
 
@@ -215,7 +229,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
-| 2. Apple Signing & Notarization | v0.5.0 | 6/7 | In Progress|  |
+| 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
 | 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
