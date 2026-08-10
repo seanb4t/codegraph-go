@@ -502,6 +502,36 @@ all:
 man "$(brew --prefix)/share/man/man1/codegraph.1"
 ```
 
+**The bash-completion dependency — measured, not assumed.** zsh and fish
+each pick up their generated completion automatically (zsh via `compinit`,
+fish via its own vendor-completions auto-load) once Homebrew's own shell
+integration has been sourced. Bash is different: the Cobra-generated
+completion script's own fallback path still calls a helper function
+(`_get_comp_words_by_ref`) that only exists once the `bash-completion`
+formula (v1 or v2) is installed and sourced — without it, `codegraph <TAB>`
+silently falls back to ordinary filename completion instead of offering
+subcommands, with no error. If bash completion isn't offering subcommands,
+`brew install bash-completion` (or `bash-completion@2`) and make sure your
+`~/.bash_profile`/`~/.bashrc` sources `$(brew --prefix)/etc/profile.d/bash_completion.sh`
+— the same shell-setup step the man-path caveat above depends on.
+
+**If `brew install codegraph` refuses with "untrusted tap."** The first
+install from any newly-tapped, non-official tap on recent Homebrew versions
+requires an explicit trust step — this is a general Homebrew mechanism, not
+specific to this cask:
+
+```
+Error: Refusing to load cask seanb4t/tap/codegraph from untrusted tap seanb4t/tap.
+Run `brew trust --cask seanb4t/tap/codegraph` or `brew trust seanb4t/tap` to trust it.
+```
+
+Run the command the error names, then re-run `brew install codegraph`:
+
+```sh
+brew trust --tap seanb4t/tap
+brew install codegraph
+```
+
 **Upgrading.** A brew-managed install is upgraded with `brew upgrade
 codegraph`, not `codegraph upgrade`. As of this writing, `codegraph
 upgrade` does not yet detect a brew-managed install and does not yet
@@ -511,24 +541,45 @@ Phase 4) and is **not yet shipped**. Running `codegraph upgrade` against a
 brew-managed install today has undefined interaction with Homebrew's own
 Caskroom bookkeeping — use `brew upgrade codegraph` until Phase 4 ships.
 
-> **Pending — not yet verified as of this writing.** Three claims only a
-> real, published release can settle, and this document does not assert
-> them as already true:
+> **Verified 2026-08-10 (plan 03-05), against the published `v0.8.0`
+> release.** The three claims this section previously left pending are now
+> each closed, with a citation to real, executed evidence rather than a
+> rehearsal:
 >
-> 1. **The tap resolves** — `brew tap seanb4t/tap` has not yet been
->    exercised against the real, published `seanb4t/homebrew-tap`
->    repository from a genuinely clean machine.
-> 2. **A cold install succeeds** — `brew install codegraph` from that tap,
->    on a machine with no prior `codegraph`, against a cask GoReleaser
->    regenerated for a real tagged release (not a local rehearsal), has not
->    yet been run.
-> 3. **Completion works in all three shells** — through a real brew-
->    installed binary, not the local rehearsal shape this milestone's
->    evidence files record so far.
+> 1. **The tap resolves** — `brew tap seanb4t/tap` was run cold against the
+>    real, published `seanb4t/homebrew-tap` repository. See `03-EVIDENCE.md`
+>    "BREW-01 — the cold install."
+> 2. **A cold install succeeds** — `brew install codegraph` completed on a
+>    machine torn down of any prior `codegraph` cask, tap, binary, sentinel,
+>    or man pages, against the cask GoReleaser rendered and pushed for the
+>    real, tagged `v0.8.0` release. The starting state was a torn-down
+>    machine, not a genuinely never-had-codegraph one — recorded plainly as
+>    the weaker of the two, in `03-EVIDENCE.md`.
+> 3. **Completion works in all three shells** — bash, zsh, and fish each
+>    offered real subcommand names with descriptions, driven through a
+>    genuine interactive shell (`tmux send-keys`/`capture-pane`), against the
+>    real brew-installed binary. `03-EVIDENCE.md` "BREW-01 — the cold
+>    install" records all three as separate verdicts.
 >
-> Plan 03-05 closes each of these with a citation to real, executed
-> evidence, or re-justifies it explicitly. Do not read this section as
-> fully verified until then.
+> **One documentation gap this verification found, closed above and
+> repeated here for visibility.** The literal published two-command line
+> does not succeed unmodified on Homebrew 6.0.16: the first `brew install`
+> of any cask from a newly-tapped, non-official tap is refused
+> (`Error: Refusing to load cask seanb4t/tap/codegraph from untrusted tap
+> seanb4t/tap.`) until the tap is explicitly trusted
+> (`brew trust --tap seanb4t/tap` or `brew trust --cask
+> seanb4t/tap/codegraph`) — a real, general Homebrew mechanism, not a defect
+> in this cask or tap, but one this document did not previously mention. If
+> `brew install codegraph` refuses with that message, run the `brew trust`
+> command it names, then re-run `brew install codegraph`.
+>
+> **One release only was cut for this verification, not two.** GoReleaser's
+> tap-push *update* path (writing a second commit to an already-existing
+> `Casks/codegraph.rb`) and `brew upgrade codegraph` consuming a
+> regenerated cask both remain unexercised — an accepted gap, not a silently
+> dropped claim, closed on the next natural release. See `03-EVIDENCE.md`
+> "Scope reduction, recorded plainly" and ROADMAP criterion 1's 2026-08-10
+> amendment.
 
 ## `codegraph upgrade` as the automated consumer
 

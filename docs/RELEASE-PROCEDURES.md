@@ -699,7 +699,12 @@ it" response).
 plainly rather than implied.** No real tap push has ever failed in this
 milestone; this section describes what the pipeline's own ordering (cask
 publish strictly after every other release artifact) implies would happen,
-not something watched happen. See plan `03-05`'s evidence (BREW-06,
-ROADMAP Phase 3 criterion 4 — "an argument for the failure half") for the
-full pipeline-ordering argument this recovery procedure depends on, and
-for whichever executed evidence that plan adds alongside it.
+not something watched happen. See `03-EVIDENCE.md` "BREW-06, half one" for
+the full pipeline-ordering argument this recovery procedure depends on
+(citing `internal/pipe/publish/publish.go` and `internal/pipeline/pipeline.go`
+by file and line, labelled throughout as an argument with no executed
+evidence, per D-18R), and `03-EVIDENCE.md` "BREW-06, half two" for the
+release-integrity half, which IS executed evidence — re-verified against the
+real `v0.8.0` release cut by plan 03-05. ROADMAP Phase 3 criterion 4's
+2026-08-10 amendment records both halves' distinct evidentiary status in the
+same place a reader reaches first.

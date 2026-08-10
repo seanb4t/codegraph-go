@@ -178,33 +178,33 @@ Plans:
 **Requirements**: BREW-01, BREW-02, BREW-03, BREW-04, BREW-05, BREW-06
 **Success Criteria** (what must be TRUE):
 
-  1. On a machine with no prior codegraph, `brew tap seanb4t/tap && brew install codegraph` completes and the installed binary runs a real command — verified cold, at least one release later, against a cask GoReleaser regenerated rather than the one hand-checked at first publish (BREW-01, BREW-02)
+  1. On a machine with no prior codegraph, `brew tap seanb4t/tap && brew install codegraph` completes and the installed binary runs a real command — verified cold against the cask GoReleaser both rendered and pushed inside the same automated release run (BREW-01, BREW-02). **Amended 2026-08-10 (plan 03-05):** previously required "at least one release later, against a cask GoReleaser regenerated rather than the one hand-checked at first publish." That wording guarded against a curated-tap workflow this project does not have — GoReleaser renders the cask and pushes it inside one automated CI run, with no hand-check step for a first-release cask to be dependent on, so a second release proves nothing about that specific worry. The maintainer reduced this phase's scope to one release: a second release would have exercised GoReleaser's tap-push UPDATE path and `brew upgrade`, both of which are code this project does not own, cannot patch, and which surface on the next natural release regardless — an accepted, named gap (`03-EVIDENCE.md` "Scope reduction, recorded plainly"), not a silently dropped requirement. The cold install verified here (`03-EVIDENCE.md` "BREW-01 — the cold install") is against the real `v0.8.0` release's tap-published cask, cross-checked by sha256 against the real downloaded assets
   2. After that install, `codegraph` completes its subcommands in bash, zsh **and** fish, and `man codegraph` renders — all generated from the binary at cask-build time, so a new subcommand appears without anyone editing a committed completion file (BREW-03, BREW-04)
   3. The cask's `hooks.post.install` block runs the installed binary and asserts two things about the result — that man-page generation produced more than one page, and that the reported version equals the cask's own declared version — and is demonstrated to **fail** on each assertion independently when pointed at a deliberately broken binary, so a broken cask is caught before a user hits it rather than passing vacuously. **Amended 2026-08-10 (plan 03-04):** previously named a cask `test:` block, a stanza Homebrew Casks do not have; see `.planning/REQUIREMENTS.md` BREW-05's amendment note and `03-EVIDENCE.md` for the falsification evidence (BREW-05)
-  4. A deliberately failed tap push leaves the GitHub Release, its cosign bundles, SBOMs and SLSA provenance intact and independently re-verifiable, and a re-run publishes the tap with `gh release view --json assets` unchanged apart from the intended additions — no duplicated and no orphaned assets (BREW-06)
+  4. **Amended 2026-08-10 (D-19, plan 03-05):** this criterion is split into two halves with distinct evidentiary status, and neither is claimed as the other. **Half one — failure-and-recovery — is a STRUCTURAL ARGUMENT, not executed evidence:** the pinned GoReleaser module's own source shows the cask publisher runs strictly after the release publisher in the publish pipeline (`internal/pipe/publish/publish.go`'s own comment, "brew et al use the release URL, so, they should be last"), so a failed tap push cannot corrupt an already-complete release — but no failed push has ever been observed, none is planned, and a rehearsal was considered and rejected by decision (D-18R). See `03-EVIDENCE.md` "BREW-06, half one" for the argument, its citations, and the named remedy that would close the gap. **Half two — release integrity — IS executed evidence:** the existing permanent post-release verification re-verifies checksums, cosign bundles, SBOMs and build provenance against re-downloaded published assets on every release, and this phase's one cut release (`v0.8.0`) shows an asset-list shape identical to the prior release (`v0.7.0`) — 17 entries each, differing only by the version string — with no duplicated and no orphaned entries. See `03-EVIDENCE.md` "BREW-06, half two" (BREW-06)
   5. The token that writes the tap can write `seanb4t/homebrew-tap` and nothing else — demonstrated by that same token being refused a write to `seanb4t/codegraph-go` (BREW-02)
 
 **Notes**: Consumes seed **SEED-002**. `homebrew_casks:` is the block, not the deprecated `brews:` (GoReleaser v2.10; Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries per Homebrew/brew #20291). The default `GITHUB_TOKEN` cannot write cross-repo, so a dedicated least-privilege PAT is required. `gh`/`lazygit`'s build-time updater-disable ldflag does not transfer — casks ship precompiled binaries — so the cask-compatible analogue is a `homebrew_casks.hooks.post.install` sentinel, which is also the most robust signal Phase 4 can key on.
 
-**Plans**: 5 plans
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — confirm the one-way tap/cask naming, then a tracer: `codegraph man` plus a minimal `homebrew_casks:` block, rendered by GoReleaser and installed by real Homebrew, with the hook executing the installed binary
+- [x] 03-01-PLAN.md — confirm the one-way tap/cask naming, then a tracer: `codegraph man` plus a minimal `homebrew_casks:` block, rendered by GoReleaser and installed by real Homebrew, with the hook executing the installed binary
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 03-02-PLAN.md — complete the cask: D-11's two positive assertions, the Phase-4 sentinel, symmetric uninstall, three-shell completions, and shape tests asserting properties rather than literals
-- [ ] 03-03-PLAN.md — the tap repository, a second GitHub App installed on it alone, the mint placed by a measured job-output verdict, and a release that halts on a missing or non-distinct tap credential
+- [x] 03-02-PLAN.md — complete the cask: D-11's two positive assertions, the Phase-4 sentinel, symmetric uninstall, three-shell completions, and shape tests asserting properties rather than literals
+- [x] 03-03-PLAN.md — the tap repository, a second GitHub App installed on it alone, the mint placed by a measured job-output verdict, and a release that halts on a missing or non-distinct tap credential
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-04-PLAN.md — watch the install gate fail twice and the tap credential be refused once, then amend BREW-05 and criterion 3 to name the mechanism that exists (D-09)
+- [x] 03-04-PLAN.md — watch the install gate fail twice and the tap credential be refused once, then amend BREW-05 and criterion 3 to name the mechanism that exists (D-09)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-05-PLAN.md — cut two releases, install cold from the second's regenerated cask, and record criterion 4's split: an argument for the failure half (D-18R), executed evidence for the integrity half
+- [x] 03-05-PLAN.md — cut two releases, install cold from the second's regenerated cask, and record criterion 4's split: an argument for the failure half (D-18R), executed evidence for the integrity half
 
 ### Phase 4: `codegraph upgrade` × Homebrew
 
@@ -230,7 +230,7 @@ Plans:
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
 | 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
-| 3. Homebrew Tap & Cask | v0.5.0 | 0/TBD | Not started | - |
+| 3. Homebrew Tap & Cask | v0.5.0 | 5/5 | In Progress|  |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
