@@ -79,9 +79,9 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 | SIGN-04 | Phase 2 | Complete |
 | BREW-01 | Phase 3 | Complete |
 | BREW-02 | Phase 3 | Complete |
-| BREW-03 | Phase 3 | Pending |
-| BREW-04 | Phase 3 | Pending |
-| BREW-05 | Phase 3 | Pending |
+| BREW-03 | Phase 3 | Complete |
+| BREW-04 | Phase 3 | Complete |
+| BREW-05 | Phase 3 | Complete |
 | BREW-06 | Phase 3 | Complete |
 | UPGR-01 | Phase 4 | Pending |
 | UPGR-02 | Phase 4 | Pending |
