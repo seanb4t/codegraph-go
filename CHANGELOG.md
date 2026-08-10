@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/seanb4t/codegraph-go/compare/v0.7.0...v0.8.0) (2026-08-10)
+
+
+### Features
+
+* **homebrew:** Homebrew tap & cask — install completions, man pages, and a fail-loud install gate ([#51](https://github.com/seanb4t/codegraph-go/issues/51)) ([296c5a6](https://github.com/seanb4t/codegraph-go/commit/296c5a6f9a94893d3c721dccdc57125c39928c0d))
+
 ## [0.7.0](https://github.com/seanb4t/codegraph-go/compare/v0.6.0...v0.7.0) (2026-08-09)
 
 
