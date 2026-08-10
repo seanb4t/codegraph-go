@@ -5,8 +5,8 @@ milestone_name: macOS Distribution & Homebrew
 current_phase: 3
 current_phase_name: Homebrew Tap & Cask
 status: planning
-stopped_at: "Completed 02-07-PLAN.md (Task 3: recorded criteria 2/3/4 against published v0.7.0 release)"
-last_updated: "2026-08-09T23:12:14.671Z"
+stopped_at: Phase 3 context gathered
+last_updated: "2026-08-10T01:01:26.391Z"
 last_activity: 2026-08-09
 last_activity_desc: Phase 02 execution started
 progress:
@@ -318,8 +318,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-09T22:22:34.092Z
-Stopped at: Completed 02-07-PLAN.md (Task 3: recorded criteria 2/3/4 against published v0.7.0 release)
+Last session: 2026-08-10T01:01:26.375Z
+Stopped at: Phase 3 context gathered
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -345,7 +345,7 @@ Stopped at: Completed 02-07-PLAN.md (Task 3: recorded criteria 2/3/4 against pub
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: None
+Resume file: .planning/phases/03-homebrew-tap-cask/03-CONTEXT.md
 
 ## Operator Next Steps
 
