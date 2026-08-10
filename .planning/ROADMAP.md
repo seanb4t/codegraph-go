@@ -186,7 +186,7 @@ Plans:
 
 **Notes**: Consumes seed **SEED-002**. `homebrew_casks:` is the block, not the deprecated `brews:` (GoReleaser v2.10; Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries per Homebrew/brew #20291). The default `GITHUB_TOKEN` cannot write cross-repo, so a dedicated least-privilege PAT is required. `gh`/`lazygit`'s build-time updater-disable ldflag does not transfer — casks ship precompiled binaries — so the cask-compatible analogue is a `homebrew_casks.hooks.post.install` sentinel, which is also the most robust signal Phase 4 can key on.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -204,7 +204,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-05-PLAN.md — cut two releases, install cold from the second's regenerated cask, and record criterion 4's split: an argument for the failure half (D-18R), executed evidence for the integrity half
+- [x] 03-05-PLAN.md — cut two releases, install cold from the second's regenerated cask, and record criterion 4's split: an argument for the failure half (D-18R), executed evidence for the integrity half
 
 ### Phase 4: `codegraph upgrade` × Homebrew
 
@@ -230,7 +230,7 @@ Plans:
 | ----- | --------- | -------------- | ------ | --------- |
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
 | 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
-| 3. Homebrew Tap & Cask | v0.5.0 | 4/5 | In Progress|  |
+| 3. Homebrew Tap & Cask | v0.5.0 | 5/5 | In Progress|  |
 | 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
