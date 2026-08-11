@@ -3,12 +3,26 @@ created: 2026-08-10T00:00:00.000Z
 title: 03-EVIDENCE.md falsely claims a failed install can strand the Phase-4 sentinel
 area: docs
 severity: low
+status: resolved
+resolved_at: 2026-08-11T00:00:00.000Z
+resolved_by_phase: 04-02
 files:
   - .planning/phases/03-homebrew-tap-cask/03-EVIDENCE.md:829-831
   - .planning/phases/03-homebrew-tap-cask/03-EVIDENCE.md:1039
   - .goreleaser.yaml:551-587
 threat_ref: UF-3 (03-SECURITY.md)
 ---
+
+## Resolution (2026-08-11, Phase 04-02)
+
+Both passages corrected in place (`03-EVIDENCE.md`, scoped `Edit`s, no whole-file
+rewrite) with dated amendment notes citing `.goreleaser.yaml:553-555`, `:566-568`
+and `:577-587` — the sentinel write strictly follows both raises, so a failed
+install could never have stranded it; only man pages ever leaked. The corrected
+claim is now moot in full: Phase 4 (D-02, plan 04-02) removed the sentinel
+outright rather than merely correcting the false claim about it, since Phase 4's
+`codegraph upgrade` detection is structural and never needed the marker file.
+See commit history on this branch for the exact diff.
 
 ## Problem
 
