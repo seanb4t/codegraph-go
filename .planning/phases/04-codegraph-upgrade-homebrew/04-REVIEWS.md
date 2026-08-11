@@ -524,3 +524,34 @@ mention including comments, and produced a wrong invocation count of 10. The cor
 count anchors on `^\s*` to isolate real invocations. This is the same `rg -c` counts-lines-
 not-occurrences hazard the cycle-1 findings flag elsewhere — encountered live while
 checking them.*
+
+### CORRECTION to the above (2026-08-11, after the cycle-2 replan)
+
+**The "NOT REPRODUCED" verdict on `--certificate-identity-regexp` was WRONG, and the
+cycle-1 finding was right.** Both numbers are correct at different scopes:
+
+| Scope | Count | Whose number |
+|---|---|---|
+| `04-05`'s extractor scan set — `Taskfile.yml` (×2) + `README.md` + `docs/RELEASE.md` | **4** | the cycle-1 review's |
+| Repo-wide excluding `.planning/` — adds `SECURITY.md:35-36` and `docs/RELEASE-PROCEDURES.md:238-239` | **6** | the orchestrator's |
+
+The orchestrator counted repo-wide flag occurrences; the extractor parses identity *literal
+values* over a fixed three-file list. Different quantities, both measured correctly, and the
+`t.Fatalf` floor of 4 **is** already satisfied — the HIGH stands as originally filed.
+
+**The gap between 4 and 6 turned out to be a second, larger finding neither the review nor
+the orchestrator had named:** `SECURITY.md:36` and `docs/RELEASE-PROCEDURES.md:239` carry
+byte-identical identity literals that the extractor never scans, so `04-05`'s must-have
+("every restatement of the release identity accepts and rejects what the compiled policy
+does") was **false as written** — two published restatements were outside the guard entirely.
+The cycle-2 replan widens the scan set to five files and raises the floor to 7 accordingly.
+
+**Method lesson, recorded because it recurred twice in one session.** Both orchestrator
+mis-measurements had the same shape: counting a quantity adjacent to the one that matters.
+First `rg -o 'cosign verify-blob'` counted comment mentions alongside real invocations
+(10 vs 4); then flag occurrences were counted instead of the literal values the extractor
+parses, over a wider file set than the extractor reads (6 vs 4). **When checking a claim
+about a guard, measure through the guard's own matcher and over the guard's own input set —
+a count taken with a different matcher or a different scope refutes nothing.** This is the
+same principle as the sixth vacuous-pass instance in memory `xkbc8m36hm`, where a floor
+probed through a second independent matcher stayed green while the real walker went blind.
