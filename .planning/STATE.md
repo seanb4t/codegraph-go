@@ -5,14 +5,14 @@ milestone_name: macOS Distribution & Homebrew
 current_phase: 4
 current_phase_name: "`codegraph upgrade` × Homebrew"
 status: planning
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-10T23:13:14.733Z"
+stopped_at: Phase 4 planned — 6 plans across 4 waves, checker passed
+last_updated: "2026-08-11T12:24:31.009Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 03 UAT closed — 21/21 passed, 0 issues
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 18
+  total_plans: 24
   completed_plans: 18
   percent: 75
 ---
@@ -318,8 +318,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-10T23:13:14.719Z
-Stopped at: Phase 4 context gathered
+Last session: 2026-08-11T12:24:30.998Z
+Stopped at: Phase 4 planned — 6 plans across 4 waves, checker passed
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -345,7 +345,7 @@ Stopped at: Phase 4 context gathered
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-CONTEXT.md
+Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md
 
 ## Operator Next Steps
 
