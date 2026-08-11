@@ -533,13 +533,25 @@ brew install codegraph
 ```
 
 **Upgrading.** A brew-managed install is upgraded with `brew upgrade
-codegraph`, not `codegraph upgrade`. As of this writing, `codegraph
-upgrade` does not yet detect a brew-managed install and does not yet
-refuse to run against one — teaching it to do exactly that is the next
-phase's work (`UPGR-01`/`UPGR-02`/`UPGR-03` in `.planning/ROADMAP.md`
-Phase 4) and is **not yet shipped**. Running `codegraph upgrade` against a
-brew-managed install today has undefined interaction with Homebrew's own
-Caskroom bookkeeping — use `brew upgrade codegraph` until Phase 4 ships.
+codegraph`, not `codegraph upgrade`. `codegraph upgrade` detects a
+brew-managed install by resolving the running binary through symlinks and
+requiring Homebrew's own `INSTALL_RECEIPT.json` at the matching
+Caskroom/Cellar ancestor — correct under any install prefix, and it never
+shells out to `brew`. Under that detection, bare `codegraph upgrade`
+refuses with a pointer naming `brew upgrade codegraph` and exits non-zero,
+because it was asked for a mutation it declines to perform; `codegraph
+upgrade --check` reports the same pointer and exits zero, because it only
+answered a question it could answer. There is no override flag and no
+environment escape hatch: `brew uninstall --cask codegraph` is the way to
+leave Homebrew's management, and that is deliberate — a forced self-swap
+would leave `brew list --cask --versions` reporting a version that is no
+longer on disk.
+>
+> **Amended 2026-08-11 (phase 4, `UPGR-01`/`UPGR-02`/`UPGR-03`).** This
+> paragraph previously stated that detection and refusal did not exist and
+> that the interaction with Homebrew's own Caskroom bookkeeping was
+> undefined. All three claims are now closed: the mechanism above is what
+> ships as of this amendment.
 
 > **Verified 2026-08-10 (plan 03-05), against the published `v0.8.0`
 > release.** The three claims this section previously left pending are now

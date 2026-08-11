@@ -76,9 +76,11 @@ Installs the binary, shell completions, and man pages in one step — see
 man-path caveat worth knowing before you run `man codegraph`, a
 `bash-completion` prerequisite for bash completion specifically, what to do
 if `brew install` refuses with "untrusted tap" on its first run, and how
-upgrades work under a brew-managed install. Upgrade with `brew upgrade
-codegraph`, not `codegraph upgrade` — a brew-managed install isn't yet
-detected and refused by the self-updater (that's the next phase's work).
+upgrades work under a brew-managed install. Upgrade with `brew upgrade codegraph`,
+not `codegraph upgrade` — running `codegraph upgrade` against a brew-managed
+install refuses with a pointer to that command and exits non-zero, rather
+than mutating the install behind Homebrew's bookkeeping; `codegraph upgrade
+--check` reports the same pointer and exits zero.
 
 ## Quick start
 
