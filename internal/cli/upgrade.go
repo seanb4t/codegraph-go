@@ -33,8 +33,15 @@ func newUpgradeCmd() *cobra.Command {
 		Long: "Download the target-platform binary from GitHub Releases, verify its\n" +
 			"cosign-keyless signature/provenance in-process (never a cosign CLI), and\n" +
 			"only then atomically replace the running binary. --check reports whether\n" +
-			"a newer release is available without downloading anything.",
-		Example: "  codegraph upgrade --check\n  codegraph upgrade\n  codegraph upgrade v1.4.0",
+			"a newer release is available without downloading anything.\n\n" +
+			"A Homebrew-managed install is detected from the resolved location of\n" +
+			"the running binary. codegraph upgrade refuses to run there and exits\n" +
+			"non-zero, because it was asked for a mutation it declines to perform.\n" +
+			"codegraph upgrade --check steps aside with the same pointer and exits\n" +
+			"zero, because it only answered a question. Upgrade a Homebrew-managed\n" +
+			"install with: brew upgrade codegraph.",
+		Example: "  codegraph upgrade --check\n  codegraph upgrade\n  codegraph upgrade v1.4.0\n" +
+			"  codegraph upgrade --check  # brew-managed install: prints the pointer, exits 0",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var pinned string
