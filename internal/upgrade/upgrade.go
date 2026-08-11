@@ -72,8 +72,11 @@ type Options struct {
 	swap          swapFunc
 }
 
-// Run executes `codegraph upgrade` end to end: refuse a Homebrew-managed
-// install BEFORE resolving anything (D-11) → resolve latest → (Check?
+// Run executes `codegraph upgrade` end to end: detect a Homebrew-managed
+// install BEFORE resolving anything (D-11) — under --check it prints the
+// pointer and returns nil (exit 0, D-09/D-10: a question, answered),
+// otherwise it refuses with the same pointer and a non-nil error (exit
+// non-zero, D-05: a mutation, declined) — → resolve latest → (Check?
 // report and return, no download) → refuse a non-writable targetPath
 // BEFORE downloading (D-13) → download → verify (a non-nil error is FATAL
 // and Run NEVER falls through to swap — Pitfall 7, T-06-06-01/02) → swap.
@@ -87,12 +90,18 @@ func Run(currentVersion, targetPath string, opts Options) error {
 	}
 
 	// D-11: detection fires first, strictly before resolveLatest, so both
-	// the refusal (D-08) and the --check step-aside (D-09, wired in a
-	// later task) are reachable with zero network calls. The branch never
-	// reads opts.Force — its absence is the enforcement mechanism for
-	// D-06, not a runtime check (RESEARCH.md Pitfall 4).
+	// the refusal and the --check step-aside are reachable with zero
+	// network calls. The branch never reads opts.Force — its absence is
+	// the enforcement mechanism for D-06, not a runtime check (RESEARCH.md
+	// Pitfall 4). msg is bound once and consumed by both outcomes below,
+	// so the two surfaces cannot drift apart (must_haves.key_links).
 	if inst, ok := detectBrewManaged(targetPath); ok {
-		return fmt.Errorf("upgrade: %s", brewPointerMessage(inst))
+		msg := brewPointerMessage(inst)
+		if opts.Check {
+			fmt.Fprintln(out, msg)
+			return nil
+		}
+		return fmt.Errorf("upgrade: %s", msg)
 	}
 
 	resolveLatest := opts.resolveLatest

@@ -389,3 +389,132 @@ func TestUpgradeRun_RefusesBrewManagedCask(t *testing.T) {
 		t.Errorf("Run error = %q, does not match expected shape %q", runErr.Error(), wantPattern)
 	}
 }
+
+// buildBrewCaskFixture is TestUpgradeRun_RefusesBrewManagedCask's fixture
+// construction, reused by the --check and --force tests below so all
+// three exercise the identical constructed tree (D-09, D-06). Returns the
+// symlink path to hand to Run and the EvalSymlinks-resolved install
+// directory the tests assert against.
+func buildBrewCaskFixture(t *testing.T) (symlink, expectedInstallDir string) {
+	t.Helper()
+
+	root := t.TempDir()
+
+	versionDir := filepath.Join(root, "Caskroom", "codegraph", "0.8.0")
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+		t.Fatalf("mkdir version dir: %v", err)
+	}
+	payload := filepath.Join(versionDir, "codegraph")
+	if err := os.WriteFile(payload, []byte("real-binary-bytes"), 0o755); err != nil {
+		t.Fatalf("seed payload: %v", err)
+	}
+
+	metadataDir := filepath.Join(root, "Caskroom", "codegraph", ".metadata")
+	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+		t.Fatalf("mkdir metadata dir: %v", err)
+	}
+	receipt := filepath.Join(metadataDir, "INSTALL_RECEIPT.json")
+	if err := os.WriteFile(receipt, []byte(`{"used_options":[]}`), 0o644); err != nil {
+		t.Fatalf("seed receipt: %v", err)
+	}
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin dir: %v", err)
+	}
+	symlink = filepath.Join(binDir, "codegraph")
+	if err := os.Symlink(payload, symlink); err != nil {
+		t.Fatalf("symlink payload: %v", err)
+	}
+
+	resolvedPayload, err := filepath.EvalSymlinks(payload)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(payload): %v", err)
+	}
+	expectedInstallDir = filepath.Dir(resolvedPayload)
+	return symlink, expectedInstallDir
+}
+
+// TestUpgradeRun_CheckBrewManagedStepsAside asserts D-09/D-10: --check
+// under a brew-managed install steps aside with the same pointer rather
+// than resolving a version, returns nil (exit 0), and calls none of the
+// four orchestration seams — the read-only path is also the zero-network
+// path (D-11).
+func TestUpgradeRun_CheckBrewManagedStepsAside(t *testing.T) {
+	symlink, expectedInstallDir := buildBrewCaskFixture(t)
+
+	var resolveLatestCalled, downloadCalled, verifyCalled, swapCalled bool
+	var out bytes.Buffer
+	opts := Options{
+		Check: true,
+		Out:   &out,
+		resolveLatest: func(repoSlug string) (string, error) {
+			resolveLatestCalled = true
+			return "v1.2.3", nil
+		},
+		download: func(v string) ([]byte, []byte, error) {
+			downloadCalled = true
+			return nil, nil, nil
+		},
+		verify: func(binary, bundleJSON []byte) error {
+			verifyCalled = true
+			return nil
+		},
+		swap: func(targetPath string, newBinary []byte) error {
+			swapCalled = true
+			return nil
+		},
+	}
+
+	if err := Run("v1.0.0", symlink, opts); err != nil {
+		t.Fatalf("Run(--check, brew-managed): %v", err)
+	}
+	if resolveLatestCalled || downloadCalled || verifyCalled || swapCalled {
+		t.Fatalf("Run(--check, brew-managed) invoked resolveLatest=%v download=%v verify=%v swap=%v, want all false", resolveLatestCalled, downloadCalled, verifyCalled, swapCalled)
+	}
+	if !strings.Contains(out.String(), "brew upgrade codegraph") {
+		t.Errorf("Run(--check, brew-managed) output = %q, want it to contain %q", out.String(), "brew upgrade codegraph")
+	}
+	if !strings.Contains(out.String(), expectedInstallDir) {
+		t.Errorf("Run(--check, brew-managed) output = %q, want it to contain the resolved install dir %q", out.String(), expectedInstallDir)
+	}
+}
+
+// TestUpgradeRun_ForceDoesNotOverrideBrewRefusal asserts D-06: --force is
+// powerless against the brew refusal. The name is deliberately the
+// inverse of the regression it guards — a passing test asserting Force
+// DOES override detection would itself be the D-06 violation.
+func TestUpgradeRun_ForceDoesNotOverrideBrewRefusal(t *testing.T) {
+	symlink, _ := buildBrewCaskFixture(t)
+
+	downloadCalled := false
+	swapCalled := false
+	opts := Options{
+		Force: true,
+		resolveLatest: func(repoSlug string) (string, error) {
+			return "v1.2.3", nil
+		},
+		download: func(v string) ([]byte, []byte, error) {
+			downloadCalled = true
+			return nil, nil, nil
+		},
+		verify: func(binary, bundleJSON []byte) error {
+			return nil
+		},
+		swap: func(targetPath string, newBinary []byte) error {
+			swapCalled = true
+			return nil
+		},
+	}
+
+	err := Run("v1.0.0", symlink, opts)
+	if err == nil {
+		t.Fatal("Run(--force, brew-managed): expected a non-nil error, got nil")
+	}
+	if !strings.Contains(err.Error(), "brew upgrade codegraph") {
+		t.Errorf("Run(--force, brew-managed) error = %q, want it to contain %q", err.Error(), "brew upgrade codegraph")
+	}
+	if downloadCalled || swapCalled {
+		t.Fatalf("Run(--force, brew-managed) invoked download=%v swap=%v, want both false (D-06 violation)", downloadCalled, swapCalled)
+	}
+}
