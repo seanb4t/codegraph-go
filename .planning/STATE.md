@@ -3,11 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
 current_phase: 04
-status: completed
+status: "Phase 4 shipped — PR #55"
 stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-last_updated: "2026-08-11T18:27:54.279Z"
+last_updated: "2026-08-11T23:37:59.483Z"
 last_activity: 2026-08-11
-last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
   completed_phases: 4
@@ -15,6 +14,7 @@ progress:
   completed_plans: 24
   percent: 100
 current_phase_name: codegraph-upgrade-homebrew
+last_activity_desc: Phase 04 execution started
 ---
 
 # Project State
@@ -30,8 +30,8 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 04
 Plan: Not started
-Status: All phases complete
-Last activity: 2026-08-11 — Phase 04 complete
+Status: Phase 4 shipped — PR #55
+Last activity: 2026-08-11
 
 Progress: [....] 3/4 phases complete (75%)
 
