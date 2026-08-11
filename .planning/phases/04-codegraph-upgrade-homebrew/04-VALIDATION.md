@@ -60,7 +60,7 @@ created: 2026-08-11
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
 **Sampling continuity:** no three consecutive tasks lack an `<automated>` verify — every one of
-the 15 tasks above carries one. Tasks 04-06-02 and 04-06-03 additionally carry a `<human-check>`,
+the 16 tasks above carries one. Tasks 04-06-02 and 04-06-03 additionally carry a `<human-check>`,
 which is supplementary to their automated command, not a substitute for it
 (`workflow.human_verify_mode` is `end-of-phase`, so no `checkpoint:human-verify` task exists in
 this phase).
@@ -92,7 +92,7 @@ this phase).
 
 ## Validation Sign-Off
 
-- [x] All tasks have `<automated>` verify or Wave 0 dependencies — 15/15 tasks carry one
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies — 16/16 tasks carry one
 - [x] Sampling continuity: no 3 consecutive tasks without automated verify
 - [x] Wave 0 covers all MISSING references — the six ❌ W0 rows are created by plans 04-01, 04-04, 04-05 and 04-06 themselves, each in the task that first needs them
 - [x] No watch-mode flags

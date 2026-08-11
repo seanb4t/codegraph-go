@@ -30,6 +30,13 @@ teaching `codegraph upgrade` any new install channel.
 
 ### Detection: what the criteria should say (UPGR-02)
 
+> **CORRECTION 2026-08-11 (found by the planner, verified):** D-01 below says the `Cellar`
+> literal to amend in REQUIREMENTS.md lives in ~~UPGR-02~~ — **it is in UPGR-01**
+> (`.planning/REQUIREMENTS.md:40`, "…and never modifies the Cellar"). UPGR-02 contains no
+> `Cellar` literal. The decision itself is unchanged; only the requirement ID cited was wrong.
+> Plan `04-03` correctly amends **by grep enumeration, not by requirement ID**, which is the
+> right shape regardless — an ID-scoped amendment would have missed it entirely.
+
 - **D-01:** **ROADMAP criteria 1–3 and REQUIREMENTS UPGR-02 are amended from `Cellar` to
   `Caskroom`**, and the detector recognizes **both** trees. Phase 3 shipped a
   `homebrew_casks:` block, and a cask stages into
