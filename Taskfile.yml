@@ -2580,6 +2580,8 @@ tasks:
         msg: "gh CLI not found. This target assumes the runner image ships it (matching GitHub-hosted runner images); locally: brew install gh / apt install gh."
       - sh: command -v jq
         msg: "jq not found. This target parses gh api output with it. CI runner images ship it; locally: brew install jq."
+      - sh: command -v cosign
+        msg: "cosign not found. This target verifies the downloaded prior release binary's cosign bundle with it BEFORE making the file executable. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
     cmds:
       - |
         set -euo pipefail
@@ -2709,16 +2711,71 @@ tasks:
 
         # --- 2. Download the prior release's raw asset for
         # GOOS/GOARCH — a genuinely shipped binary, which is the whole
-        # point of the claim.
+        # point of the claim. TWO SEPARATE temp dirs (DL_DIR for the binary,
+        # SIG_DIR for its cosign bundle) — the same two-temp-dirs discipline
+        # verify:release-assets and verify:notarized-suite already use, so
+        # the sidecar never lands next to the binary it signs.
+        #
+        # Ordering is load-bearing, not stylistic (review cycle 2, LOW): the
+        # trap is installed IMMEDIATELY after the FIRST mktemp, before the
+        # SECOND directory is created. The naive reading — create both
+        # directories, then install one trap — is the one that leaks: if the
+        # second mktemp fails under `set -e`, DL_DIR is left on disk with no
+        # trap installed to remove it. cleanup() references SIG_DIR via
+        # ${SIG_DIR:-} so it is safe to run before that variable is set.
         DL_DIR="$(mktemp -d)"
-        trap 'rm -rf "${DL_DIR}"' EXIT
+        cleanup() { rm -rf "${DL_DIR}" "${SIG_DIR:-}"; }
+        trap cleanup EXIT
+        SIG_DIR="$(mktemp -d)"
 
         PRIOR_ASSET="codegraph_${PRIOR_TAG}_${GOOS}_${GOARCH}"
+        PRIOR_SIG_NAME="${PRIOR_ASSET}.sigstore.json"
         gh release download "${PRIOR_TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
           --pattern "${PRIOR_ASSET}"
         PRIOR_BIN="${DL_DIR}/${PRIOR_ASSET}"
+
+        # gh release download can exit 0 having matched nothing — this
+        # repository's own v0.5.1 post-release break. Hard-fail by name,
+        # naming the expected bundle filename, rather than letting cosign
+        # fail confusingly against an absent file.
+        gh release download "${PRIOR_TAG}" --repo "${REPO}" --dir "${SIG_DIR}" \
+          --pattern "${PRIOR_SIG_NAME}"
+        PRIOR_SIG="${SIG_DIR}/${PRIOR_SIG_NAME}"
+        if [ ! -f "${PRIOR_SIG}" ]; then
+          echo "::error::cosign bundle ${PRIOR_SIG_NAME} was not downloaded — cannot verify the prior release binary before it is executed"
+          exit 1
+        fi
+
+        # --- VERIFY BEFORE EXECUTING (T-04-15), the identical ordering
+        # constraint verify:notarized-suite already enforces for the same
+        # reason: cosign verify-blob runs BEFORE chmod +x, with the SAME
+        # issuer and certificate-identity flags verify:release-assets and
+        # verify:notarized-suite already use — never a looser pattern, which
+        # would prove less than the published instruction claims. This
+        # target's ordering is independent of any sibling CI job:
+        # post-release-verify.yml's self-upgrade job deliberately carries no
+        # `needs: verify-supply-chain` (a reporting-independence choice), so
+        # execution safety must live inside this target, not depend on a
+        # sibling job finishing first.
+        cosign verify-blob \
+          --bundle "${PRIOR_SIG}" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          --certificate-identity-regexp \
+            '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+          "${PRIOR_BIN}"
+        echo "SELF-UPGRADE-VERIFY-EVIDENCE prior_tag=${PRIOR_TAG} bundle=${PRIOR_SIG_NAME} verdict=verified"
+
+        # --- Only NOW does the file become executable.
         chmod +x "${PRIOR_BIN}"
         PRIOR_SHA256="$(sha256_of "${PRIOR_BIN}")"
+
+        # --- Belt-and-braces: hard-fail BY NAME, before execution, if the
+        # file is missing or not executable after download+chmod — the same
+        # re-check verify:notarized-suite carries.
+        if [ ! -f "${PRIOR_BIN}" ] || [ ! -x "${PRIOR_BIN}" ]; then
+          echo "::error::${PRIOR_BIN} is missing or not executable after download+chmod — refusing to execute a file that cannot be the verified prior release binary"
+          exit 1
+        fi
 
         # --- 3. Run the real codegraph upgrade invocation against it, with
         # $TAG EXPLICIT as the positional version argument — an

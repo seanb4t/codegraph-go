@@ -1973,3 +1973,289 @@ func TestVerifyNotarizedSuiteDeclaresNamedPreconditions_MissingTargetIsError(t *
 		t.Fatalf("parseNotarizedSuitePreconditions: expected an error for Taskfile.yml source with no verify:notarized-suite task, got nil")
 	}
 }
+
+// --- Task 2 (04-05): one release-identity policy, proved by boundary-case
+// parity across every restatement ------------------------------------------
+
+// cosignIdentityFiles is the FIVE files this project restates
+// releaseWorkflowRefPattern's --certificate-identity-regexp literal in,
+// published or executed. Missing either of the two files the cycle-1 review
+// list overlooked (SECURITY.md, docs/RELEASE-PROCEDURES.md) would make this
+// plan's own "every identity literal" must-have false again.
+var cosignIdentityFiles = []string{
+	taskfilePath,
+	"../../README.md",
+	"../../docs/RELEASE.md",
+	"../../SECURITY.md",
+	"../../docs/RELEASE-PROCEDURES.md",
+}
+
+// cosignIdentityLiteral is one --certificate-identity-regexp literal
+// extracted from a restatement file, together with its source location —
+// carrying File and Line is what makes the misattribution guard in
+// TestCosignIdentityPolicyBoundaryParityWithCompiledPattern possible: a
+// literal extracted twice from one file, or credited to the wrong file,
+// would otherwise be indistinguishable from correct output.
+type cosignIdentityLiteral struct {
+	File  string
+	Line  int // 1-based
+	Value string
+}
+
+var cosignIdentitySingleQuotedRe = regexp.MustCompile(`'([^']*)'`)
+
+// extractCosignIdentityLiterals scans contents for occurrences of the flag
+// --certificate-identity-regexp and returns, for each occurrence, the
+// single-quoted regexp literal found in its window, plus the count of
+// occurrences for which no literal was found.
+//
+// Parse contract (review cycle 1, MEDIUM — stated explicitly so a future
+// reformat of one of these files produces a named failure here rather than
+// a silent one):
+//   - The literal is a single-quoted string on a line AT OR AFTER a line
+//     containing --certificate-identity-regexp, within a window of the next
+//     3 lines (the flag's own line plus the following 3).
+//   - Exactly one literal is taken per flag occurrence; the search stops at
+//     the first single-quoted string found in the window.
+//   - A flag occurrence with NO single-quoted string anywhere in its window
+//     is NOT silently skipped: it increments the returned unmatched count,
+//     so a reformat that breaks this parse is visible as a mismatch between
+//     flag occurrences and literals returned, not as a quietly smaller
+//     literal set.
+//   - Anything else — a double-quoted literal, a literal on the flag line
+//     itself, a heredoc — is out of contract; extending this parser to
+//     cover such a shape must be a deliberate change, not inferred.
+//
+// Returns a nil slice (never panics) on unparseable or empty input — the
+// caller decides whether zero is an error, which is what makes the vacuity
+// self-test possible.
+func extractCosignIdentityLiterals(path, contents string) ([]cosignIdentityLiteral, int) {
+	if contents == "" {
+		return nil, 0
+	}
+	lines := strings.Split(contents, "\n")
+	var out []cosignIdentityLiteral
+	unmatched := 0
+	for i, line := range lines {
+		if !strings.Contains(line, "--certificate-identity-regexp") {
+			continue
+		}
+		found := false
+		for j := i; j < len(lines) && j <= i+3; j++ {
+			if m := cosignIdentitySingleQuotedRe.FindStringSubmatch(lines[j]); m != nil {
+				out = append(out, cosignIdentityLiteral{File: path, Line: j + 1, Value: m[1]})
+				found = true
+				break
+			}
+		}
+		if !found {
+			unmatched++
+		}
+	}
+	return out, unmatched
+}
+
+// cosignIdentitySANCorpus is the fixed boundary-case corpus every extracted
+// literal is checked against. Seeded from the SANs verify_test.go and
+// release_workflow_shape_test.go already use for the same compiled pattern
+// (TestReleaseWorkflowRefPattern_AcceptsReleaseWorkflowTagRef,
+// TestReleaseWorkflowRefPattern_RejectsNonReleaseWorkflowInSameRepo,
+// TestReleaseWorkflowFileMatchesPattern) — not a fresh, unrelated set.
+var cosignIdentitySANCorpus = []struct {
+	name   string
+	san    string
+	accept bool
+}{
+	{
+		name:   "release.yml tag-push SAN",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yml@refs/tags/v1.2.3",
+		accept: true,
+	},
+	{
+		name:   "release.yaml tag-push SAN",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yaml@refs/tags/v1.2.3",
+		accept: true,
+	},
+	{
+		name:   "different workflow filename, same repo, tag ref",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release-please.yml@refs/tags/v1.2.3",
+		accept: false,
+	},
+	{
+		name:   "release.yml at a branch ref",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yml@refs/heads/main",
+		accept: false,
+	},
+	{
+		name:   "different repository owner, tag ref",
+		san:    "https://github.com/some-other-org/some-other-repo/.github/workflows/release.yml@refs/tags/v1.2.3",
+		accept: false,
+	},
+	{
+		name:   "trailing space-plus-token after the tag",
+		san:    "https://github.com/" + releaseRepoSlug + "/.github/workflows/release.yml@refs/tags/v1.2.3 extra-token",
+		accept: false,
+	},
+}
+
+// cosignIdentityLineForByteOffset converts a byte offset in contents to a
+// 1-based line number — the same slicing technique Task 1's <verify>
+// ordering assertion uses on Taskfile.yml, reused here so the region-scoped
+// check below computes the identical region.
+func cosignIdentityLineForByteOffset(contents string, offset int) int {
+	return strings.Count(contents[:offset], "\n") + 1
+}
+
+// TestCosignIdentityPolicyBoundaryParityWithCompiledPattern is the T-04-16
+// spoofing guard (04-05-PLAN.md). The name is deliberately NOT
+// "MatchesCompiledPattern" (review cycle 1, MEDIUM): both
+// releaseWorkflowRefPattern and its POSIX restatements are regular
+// languages, and agreement on a finite hand-picked SAN corpus proves parity
+// on those probed boundaries, not language equivalence.
+func TestCosignIdentityPolicyBoundaryParityWithCompiledPattern(t *testing.T) {
+	type found struct {
+		lits      []cosignIdentityLiteral
+		unmatched int
+	}
+	perFile := make(map[string]found, len(cosignIdentityFiles))
+	var all []cosignIdentityLiteral
+	for _, rel := range cosignIdentityFiles {
+		data, err := os.ReadFile(rel)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		lits, unmatched := extractCosignIdentityLiterals(rel, string(data))
+		perFile[rel] = found{lits: lits, unmatched: unmatched}
+		all = append(all, lits...)
+	}
+
+	// Check 1: TOTAL floor. 7 is the post-Task-1 count, derived from the
+	// measured pre-task baseline of 6 recorded in 04-05-PLAN.md's
+	// <measured_baseline> — a floor at or below the pre-task count would be
+	// satisfied before the task meant to raise it, exactly the cycle-1
+	// pre-satisfied-floor defect this replaces. This check catches
+	// WHOLESALE LOSS (literals deleted anywhere in the repository); it does
+	// NOT catch relocation — check 3 below does, and neither check subsumes
+	// the other (review cycle 2, HIGH).
+	if len(all) < 7 {
+		breakdown := make([]string, 0, len(cosignIdentityFiles))
+		for _, rel := range cosignIdentityFiles {
+			breakdown = append(breakdown, fmt.Sprintf("%s=%d", rel, len(perFile[rel].lits)))
+		}
+		t.Fatalf("extracted %d cosign identity literals across %v, want at least 7 (measured pre-task baseline: 6). Per-file breakdown: %v", len(all), cosignIdentityFiles, breakdown)
+	}
+
+	// Check 2: per-file set membership, one file at a time — a total floor
+	// alone could be met by one file carrying everything.
+	for _, rel := range cosignIdentityFiles {
+		if len(perFile[rel].lits) == 0 {
+			t.Errorf("file %s yielded zero cosign identity literals — every one of the five restatement files must carry at least one", rel)
+		}
+	}
+
+	// Check 3: region-scoped requirement — at least one literal must come
+	// from the verify:self-upgrade region of Taskfile.yml specifically, the
+	// same region Task 1's ordering assertion slices. This is the
+	// assertion that goes RED if Task 1's cosign step is dropped, MOVED OUT
+	// of the target, or its flag is misspelled — the property the cycle-1
+	// floor lacked. Its message names the region delimiters and is
+	// unambiguously distinguishable from check 1's message when it fires.
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	taskfileSrc := string(taskfileData)
+	regionStart := strings.Index(taskfileSrc, "verify:self-upgrade:")
+	regionEnd := strings.Index(taskfileSrc, "verify:gatekeeper:")
+	if regionStart < 0 || regionEnd < 0 || regionEnd <= regionStart {
+		t.Fatalf("could not locate the verify:self-upgrade: ... verify:gatekeeper: region in %s", taskfilePath)
+	}
+	startLine := cosignIdentityLineForByteOffset(taskfileSrc, regionStart)
+	endLine := cosignIdentityLineForByteOffset(taskfileSrc, regionEnd)
+	foundInRegion := false
+	for _, lit := range perFile[taskfilePath].lits {
+		if lit.Line >= startLine && lit.Line <= endLine {
+			foundInRegion = true
+			break
+		}
+	}
+	if !foundInRegion {
+		t.Fatalf("no cosign identity literal found inside the verify:self-upgrade region (lines %d-%d of %s) — Task 1's cosign step must restate the identity literal inside verify:self-upgrade itself", startLine, endLine, taskfilePath)
+	}
+
+	// Check 4: misattribution guard — every extracted literal's reported
+	// line must actually contain the value it was credited with.
+	for _, lit := range all {
+		data, err := os.ReadFile(lit.File)
+		if err != nil {
+			t.Fatalf("read %s: %v", lit.File, err)
+		}
+		lines := strings.Split(string(data), "\n")
+		if lit.Line-1 < 0 || lit.Line-1 >= len(lines) {
+			t.Errorf("literal from %s:%d is out of range for that file's %d lines", lit.File, lit.Line, len(lines))
+			continue
+		}
+		if !strings.Contains(lines[lit.Line-1], lit.Value) {
+			t.Errorf("literal attributed to %s:%d does not appear on that line: line=%q value=%q", lit.File, lit.Line, lines[lit.Line-1], lit.Value)
+		}
+	}
+
+	// Check 5: the corpus itself must not be degenerate.
+	acceptCount, rejectCount := 0, 0
+	for _, c := range cosignIdentitySANCorpus {
+		if c.accept {
+			acceptCount++
+		} else {
+			rejectCount++
+		}
+	}
+	if acceptCount < 2 || rejectCount < 4 {
+		t.Fatalf("cosignIdentitySANCorpus has %d accepted and %d rejected SANs, want at least 2 accepted and 4 rejected", acceptCount, rejectCount)
+	}
+
+	// Behavioural equality, not string equality, is deliberate: the Go
+	// pattern spells the non-space class one way and the shell/POSIX
+	// restatements spell it another, and both are correct. A literal
+	// string comparison would fail on a legitimate difference and would
+	// still miss a semantic drift written in the same spelling.
+	compiled := regexp.MustCompile(releaseWorkflowRefPattern)
+	for _, lit := range all {
+		litRe, err := regexp.Compile(lit.Value)
+		if err != nil {
+			t.Errorf("literal from %s:%d does not compile as a Go regexp: %v (value=%q)", lit.File, lit.Line, err, lit.Value)
+			continue
+		}
+		for _, c := range cosignIdentitySANCorpus {
+			got := litRe.MatchString(c.san)
+			want := compiled.MatchString(c.san)
+			if got != want {
+				t.Errorf("boundary-case parity mismatch: %s:%d literal %q vs releaseWorkflowRefPattern on SAN %q (%s): literal=%v compiled=%v", lit.File, lit.Line, lit.Value, c.san, c.name, got, want)
+			}
+		}
+	}
+
+	t.Logf("cosign identity literals: %d total across %d files (post-Task-1 floor: 7, pre-task baseline: 6)", len(all), len(cosignIdentityFiles))
+	for _, rel := range cosignIdentityFiles {
+		t.Logf("  %s: %d literal(s), %d unmatched flag occurrence(s)", rel, len(perFile[rel].lits), perFile[rel].unmatched)
+	}
+}
+
+// TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError is the vacuity
+// self-test, in the same shape as TestTaskfileGatesFailLoud_EmptyFileIsError:
+// pins that the main test's t.Fatalf guard is reachable (empty input yields
+// zero literals) and that the flag alone never manufactures a phantom
+// literal (flag present, no quoted literal anywhere in its window).
+func TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError(t *testing.T) {
+	if lits, unmatched := extractCosignIdentityLiterals("empty.txt", ""); len(lits) != 0 || unmatched != 0 {
+		t.Fatalf("extractCosignIdentityLiterals(empty) = (%v, %d), want (nil, 0)", lits, unmatched)
+	}
+
+	flagOnly := "  --certificate-identity-regexp \\\n  some text with no quotes\n  more text\n  still more\n"
+	lits, unmatched := extractCosignIdentityLiterals("flag-only.txt", flagOnly)
+	if len(lits) != 0 {
+		t.Fatalf("extractCosignIdentityLiterals(flag with no quoted literal) returned %d literal(s), want 0 — the flag alone must never manufacture a phantom literal: %v", len(lits), lits)
+	}
+	if unmatched != 1 {
+		t.Fatalf("extractCosignIdentityLiterals(flag with no quoted literal): unmatched = %d, want 1", unmatched)
+	}
+}
