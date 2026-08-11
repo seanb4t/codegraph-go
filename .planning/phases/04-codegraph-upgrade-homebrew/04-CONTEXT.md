@@ -99,14 +99,43 @@ teaching `codegraph upgrade` any new install channel.
   criterion 4's brew-absent machine, adds a subprocess to every upgrade, and tests
   Homebrew's CLI rather than our wiring).
 
-- **D-04:** **Linuxbrew stays in criterion 3, scoped to the Cellar shape only,** with an
+- **D-04:** ~~**Linuxbrew stays in criterion 3, scoped to the Cellar shape only,** with an
   inline note recording why. Homebrew on Linux does not support casks, so the Caskroom leg
-  is unreachable there by construction; the Cellar-shape constructed-tree test under a
-  linuxbrew prefix is nearly free (detection is already prefix-agnostic) and guards against
-  someone later hardcoding `/opt/homebrew`.
-  - **Research must confirm before this is locked:** that Homebrew on Linux genuinely has
-    no cask support. It is asserted here from general knowledge, not measured — and this
-    milestone has now falsified five scoping assumptions taken the same way.
+  is unreachable there by construction.~~ **PREMISE FALSIFIED BY RESEARCH AND REPLACED
+  2026-08-11, before planning was drawn over it.**
+
+  The rationale above rested on "Homebrew on Linux does not support casks", which CONTEXT.md
+  itself flagged as *asserted, not measured*. Research confirmed it is **false for the
+  current Homebrew release line** — and it is the **sixth falsified scoping assumption in
+  this milestone**:
+  - Homebrew PR #19121 ("feat: allow linux binaries in casks") allows casks containing only
+    `binary` or `zap` stanzas to install on Linux.
+  - Homebrew 6.0.0 (2026-06-11 release notes) shipped four further Linux-cask items —
+    explicit Linux cask requirements (#21909), Caskroom using the user's primary group on
+    Linux (#22202), Linux checksum variations for casks (#22632), AppImage support.
+  - `brew --version` on this machine is `6.0.16-2` — the same major line.
+  - codegraph's own cask (`.goreleaser.yaml:495-523`) declares `binaries: [codegraph]` with
+    **no `app`/`pkg`/`zap` stanza** — exactly the shape PR #19121 made Linux-installable.
+
+  The belief was not mistaken when formed — a 2022 Homebrew maintainer statement did say
+  "Casks are only for macOS" (Homebrew discussion #3999). It **rotted**. Flagging it as
+  unmeasured is what caught it.
+
+  **D-04R (replacement, maintainer decision 2026-08-11): the linuxbrew constructed-tree test
+  covers BOTH the Caskroom and Cellar shapes,** and the ROADMAP/REQUIREMENTS amendment drops
+  the "unreachable by construction" claim rather than carrying it forward with a footnote.
+  Nearly free — detection is already prefix-agnostic (D-03), so this is one more table row,
+  not new detection logic. Rejected: keeping Cellar-only with a corrected-but-weaker
+  rationale (the test would then cover less than what Homebrew can actually produce for our
+  own cask), and measuring real Linuxbrew installability first (new scope, and it tests
+  Homebrew's Linux cask support plus Phase 3's publication surface — a direct D-13 violation).
+
+  - **Open, deliberately not closed (research assumption A2):** whether codegraph's cask —
+    with its `hooks.post.install`/`post.uninstall` Ruby blocks and
+    `generate_completions_from_executable`, beyond the bare `binary` stanza #19121 names —
+    actually installs end-to-end on a real Linuxbrew host. **Not measured, and deliberately
+    not scoped:** the detector's correctness does not depend on the answer, and measuring it
+    is D-13-prohibited. Recorded so a later reader does not mistake silence for evidence.
 
 ### Refusal semantics (UPGR-01)
 
