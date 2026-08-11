@@ -37,8 +37,8 @@
 
 ### Upgrade × Package Manager (UPGR)
 
-- [ ] **UPGR-01**: `codegraph upgrade` detects a Homebrew-managed install and refuses, pointing at `brew upgrade codegraph`, and never modifies the Cellar
-- [ ] **UPGR-02**: Brew detection resolves symlinks to the real install path rather than matching a hardcoded prefix, so it is correct on Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew
+- [ ] **UPGR-01**: `codegraph upgrade` detects a Homebrew-managed install and refuses, pointing at `brew upgrade codegraph`, and never modifies the Caskroom or the Cellar. **Amended 2026-08-11 (D-01, plan 04-03)**: previously named only "the Cellar" — the formula tree this project has never shipped into. It ships a cask via `homebrew_casks:`, so Caskroom is named as the tree that is actually mutated-against; Cellar is kept as the second covered shape for a future formula path (measured: `03-02-SUMMARY.md:128` records the sentinel resolving to `/opt/homebrew/Caskroom/codegraph/<version>`; `03-EVIDENCE.md:160` records `ls /opt/homebrew/Caskroom/codegraph`)
+- [ ] **UPGR-02**: Brew detection resolves symlinks to the real install path rather than matching a hardcoded prefix, so it is correct on Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew, recognizing both the Caskroom and Cellar tree shapes at every prefix. **Amended 2026-08-11 (D-04R, plan 04-03)**: linuxbrew was previously scoped assuming Homebrew on Linux has no cask support; that premise was falsified by research the same day — Homebrew PR #19121 allows `binary`/`zap`-only casks to install on Linux, and Homebrew 6.0.0 shipped four further Linux-cask items — so linuxbrew detection now covers the Caskroom shape too, not Cellar alone
 - [ ] **UPGR-03**: `codegraph upgrade --check` still works under a brew-managed install — read-only, no mutation — and reports how to upgrade
 
 ## v0.5.x Requirements
