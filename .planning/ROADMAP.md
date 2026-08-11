@@ -218,11 +218,26 @@ Plans:
   3. Detection fires on a resolved-symlink Cellar layout under Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew — and does **not** fire on a non-brew binary sitting at a path that merely contains the string `Cellar`. The false-positive case is an executing test, not a comment, because a path-prefix guess is the exact shape of gate this repo keeps finding cannot fire (UPGR-02)
   4. A non-brew install on a machine where `brew` is absent from `PATH` upgrades normally, so the detection can never turn `codegraph upgrade` into a hard dependency on Homebrew being present (UPGR-02)
 
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
+**Wave 1**
 
-- [ ] TBD (populate with /gsd-plan-phase 4)
+- [ ] 04-01-PLAN.md — tracer: `internal/upgrade/brew.go` resolves symlinks, matches the Caskroom/Cellar shape, requires Homebrew's own install receipt, and `Run()` refuses before any network call — proved by the seam assertion, plus the full prefix/tree table and the `--check` step-aside
+- [ ] 04-02-PLAN.md — remove the Phase-3 sentinel from both cask hooks and every rehearsal assertion (D-02), close UF-5 with an mtime-baseline man-page assertion, and correct `03-EVIDENCE.md`'s false stranding claim
+- [ ] 04-03-PLAN.md — amend ROADMAP criteria 1–3, the Phase-4 checkbox item, the milestone-ordering bullet, Phase 3's Notes, REQUIREMENTS UPGR-01/02 and PROJECT.md (D-01, D-04R, D-08, D-09)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-04-PLAN.md — `--help`, `README.md` and `docs/RELEASE.md` state the refusal, the pointer command and both exit behaviours (D-10), replacing three published claims this phase falsifies
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 04-05-PLAN.md — folded todo: cosign-verify the prior release binary before `chmod +x` in `verify:self-upgrade`, and prove every certificate-identity restatement behaviourally identical to the compiled `releaseWorkflowRefPattern`
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 04-06-PLAN.md — acceptance against the real Phase-3 tap: detection observed firing on a genuine Homebrew-authored tree, both exit behaviours observed, machine restored, and the one unproved leg named rather than claimed
 
 ## Progress
 
@@ -231,7 +246,7 @@ Plans:
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
 | 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
 | 3. Homebrew Tap & Cask | v0.5.0 | 5/5 | Complete    | 2026-08-10 |
-| 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/TBD | Not started | - |
+| 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/6 | Not started | - |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
 
