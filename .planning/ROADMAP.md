@@ -94,7 +94,7 @@ Full phase details archived in [`milestones/v0.3.0-ROADMAP.md`](milestones/v0.3.
 - [x] **Phase 1: Cross-Compile Spike & `goreleaser release` Migration** - Decide the pipeline architecture on measured evidence, then move to one `goreleaser release` invocation that publishes both raw binaries and `.zip` archives with every supply-chain claim re-proven against real published assets (completed 2026-08-08)
 - [x] **Phase 2: Apple Signing & Notarization** - A browser-downloaded darwin asset stops being blocked by Gatekeeper, proven by a gate shown RED against the un-notarized binary first (completed 2026-08-09)
 - [x] **Phase 3: Homebrew Tap & Cask** - `brew tap seanb4t/tap && brew trust --cask seanb4t/tap/codegraph && brew install codegraph` works on a clean machine, with completions, man pages, and a fail-loud post-install gate (completed 2026-08-10). **Amended 2026-08-10 (secure-phase 03, UF-1):** previously read "with completions, man pages, a real `test:` block, and a proven-recoverable tap-push failure" — both of those claims are falsified by this milestone's own criteria below and were amended there but not here. Criterion 3 records that Homebrew Casks have no `test:` stanza at all (the `hooks.post.install` gate replaces it); criterion 4 (D-19, D-18R) records the failure-and-recovery half as a **structural argument with no executed evidence, never observed, none planned**. The `brew trust` step is also stated here because Homebrew 6.0.16 refuses casks from untrusted third-party taps, so the two-command form this line previously carried does not work unmodified (`03-EVIDENCE.md`)
-- [ ] **Phase 4: `codegraph upgrade` × Homebrew** - `codegraph upgrade` detects a brew-managed install, refuses, and points at `brew upgrade codegraph` — never touching the Caskroom (or the Cellar, the formula tree formula detection also covers)
+- [x] **Phase 4: `codegraph upgrade` × Homebrew** - `codegraph upgrade` detects a brew-managed install, refuses, and points at `brew upgrade codegraph` — never touching the Caskroom (or the Cellar, the formula tree formula detection also covers) (completed 2026-08-11)
 
 ## Phase Details
 
@@ -246,7 +246,7 @@ Plans:
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
 | 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
 | 3. Homebrew Tap & Cask | v0.5.0 | 5/5 | Complete    | 2026-08-10 |
-| 4. `codegraph upgrade` × Homebrew | v0.5.0 | 6/6 | In Progress|  |
+| 4. `codegraph upgrade` × Homebrew | v0.5.0 | 6/6 | Complete    | 2026-08-11 |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
 
