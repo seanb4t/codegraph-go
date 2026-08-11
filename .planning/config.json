@@ -75,5 +75,10 @@
   },
   "mode": "yolo",
   "granularity": "standard",
-  "context_window": 1000000
+  "context_window": 1000000,
+  "review": {
+    "models": {
+      "opencode": "openrouter/moonshotai/kimi-k3"
+    }
+  }
 }
