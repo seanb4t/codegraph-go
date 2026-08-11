@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -292,5 +293,99 @@ func TestUpgradeRun_RefusesNonWritableTargetBeforeDownloading(t *testing.T) {
 	}
 	if downloadCalled {
 		t.Fatal("Run: download was invoked despite a non-writable target (D-13 violation)")
+	}
+}
+
+// TestUpgradeRun_RefusesBrewManagedCask asserts D-05/D-08: Run() invoked
+// through a symlink into a receipt-bearing Caskroom tree refuses with the
+// resolved install directory and `brew upgrade codegraph`, having called
+// none of the four orchestration seams — the refusal is reached before any
+// of them fire (D-11).
+func TestUpgradeRun_RefusesBrewManagedCask(t *testing.T) {
+	root := t.TempDir()
+
+	versionDir := filepath.Join(root, "Caskroom", "codegraph", "0.8.0")
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+		t.Fatalf("mkdir version dir: %v", err)
+	}
+	payload := filepath.Join(versionDir, "codegraph")
+	if err := os.WriteFile(payload, []byte("real-binary-bytes"), 0o755); err != nil {
+		t.Fatalf("seed payload: %v", err)
+	}
+
+	metadataDir := filepath.Join(root, "Caskroom", "codegraph", ".metadata")
+	if err := os.MkdirAll(metadataDir, 0o755); err != nil {
+		t.Fatalf("mkdir metadata dir: %v", err)
+	}
+	receipt := filepath.Join(metadataDir, "INSTALL_RECEIPT.json")
+	if err := os.WriteFile(receipt, []byte(`{"used_options":[]}`), 0o644); err != nil {
+		t.Fatalf("seed receipt: %v", err)
+	}
+
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin dir: %v", err)
+	}
+	symlink := filepath.Join(binDir, "codegraph")
+	if err := os.Symlink(payload, symlink); err != nil {
+		t.Fatalf("symlink payload: %v", err)
+	}
+
+	// t.TempDir() on macOS is itself a symlink into /private, so compute
+	// the expected directory via EvalSymlinks rather than raw string
+	// concatenation — a raw comparison would be flaky (RESEARCH Pitfall 1).
+	resolvedPayload, err := filepath.EvalSymlinks(payload)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(payload): %v", err)
+	}
+	expectedInstallDir := filepath.Dir(resolvedPayload)
+	if !filepath.IsAbs(expectedInstallDir) {
+		t.Fatalf("expected install dir %q is not absolute", expectedInstallDir)
+	}
+	if !strings.HasSuffix(expectedInstallDir, filepath.Join("Caskroom", "codegraph", "0.8.0")) {
+		t.Fatalf("expected install dir %q does not end with Caskroom/codegraph/0.8.0", expectedInstallDir)
+	}
+
+	var resolveLatestCalled, downloadCalled, verifyCalled, swapCalled bool
+	opts := Options{
+		resolveLatest: func(repoSlug string) (string, error) {
+			resolveLatestCalled = true
+			return "v1.2.3", nil
+		},
+		download: func(v string) ([]byte, []byte, error) {
+			downloadCalled = true
+			return nil, nil, nil
+		},
+		verify: func(binary, bundleJSON []byte) error {
+			verifyCalled = true
+			return nil
+		},
+		swap: func(targetPath string, newBinary []byte) error {
+			swapCalled = true
+			return nil
+		},
+	}
+
+	runErr := Run("v1.0.0", symlink, opts)
+	if runErr == nil {
+		t.Fatal("Run: expected a non-nil error for a Homebrew-managed cask, got nil")
+	}
+	if resolveLatestCalled || downloadCalled || verifyCalled || swapCalled {
+		t.Fatalf("Run: invoked resolveLatest=%v download=%v verify=%v swap=%v, want all false", resolveLatestCalled, downloadCalled, verifyCalled, swapCalled)
+	}
+	if !strings.Contains(runErr.Error(), "brew upgrade codegraph") {
+		t.Errorf("Run error = %q, want it to contain %q", runErr.Error(), "brew upgrade codegraph")
+	}
+	if !strings.Contains(runErr.Error(), expectedInstallDir) {
+		t.Errorf("Run error = %q, want it to contain the resolved install dir %q", runErr.Error(), expectedInstallDir)
+	}
+
+	wantPattern := `^upgrade: codegraph is managed by Homebrew \(.*/Caskroom/codegraph/0\.8\.0\)\. Upgrade with: brew upgrade codegraph$`
+	matched, matchErr := regexp.MatchString(wantPattern, runErr.Error())
+	if matchErr != nil {
+		t.Fatalf("regexp.MatchString: %v", matchErr)
+	}
+	if !matched {
+		t.Errorf("Run error = %q, does not match expected shape %q", runErr.Error(), wantPattern)
 	}
 }

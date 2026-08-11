@@ -72,7 +72,8 @@ type Options struct {
 	swap          swapFunc
 }
 
-// Run executes `codegraph upgrade` end to end: resolve latest → (Check?
+// Run executes `codegraph upgrade` end to end: refuse a Homebrew-managed
+// install BEFORE resolving anything (D-11) → resolve latest → (Check?
 // report and return, no download) → refuse a non-writable targetPath
 // BEFORE downloading (D-13) → download → verify (a non-nil error is FATAL
 // and Run NEVER falls through to swap — Pitfall 7, T-06-06-01/02) → swap.
@@ -83,6 +84,15 @@ func Run(currentVersion, targetPath string, opts Options) error {
 	out := opts.Out
 	if out == nil {
 		out = io.Discard
+	}
+
+	// D-11: detection fires first, strictly before resolveLatest, so both
+	// the refusal (D-08) and the --check step-aside (D-09, wired in a
+	// later task) are reachable with zero network calls. The branch never
+	// reads opts.Force — its absence is the enforcement mechanism for
+	// D-06, not a runtime check (RESEARCH.md Pitfall 4).
+	if inst, ok := detectBrewManaged(targetPath); ok {
+		return fmt.Errorf("upgrade: %s", brewPointerMessage(inst))
 	}
 
 	resolveLatest := opts.resolveLatest
