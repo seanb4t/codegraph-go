@@ -1,431 +1,351 @@
 ---
 phase: 4
-cycle: 2
-reviewers: [codex, opencode]
-reviewed_at: 2026-08-11T10:45:00-04:00
+cycle: 3
+reviewers: [codex]
+reviewers_unavailable: [opencode]
+reviewed_at: 2026-08-11T11:06:24-04:00
 plans_reviewed: [04-01-PLAN.md, 04-02-PLAN.md, 04-03-PLAN.md, 04-04-PLAN.md, 04-05-PLAN.md, 04-06-PLAN.md]
+plans_revision: 63ac13e
 source_grounding: true
 drift_guard_authority: intel
-prior_cycle: dbdc68f^ (cycle-1 REVIEWS.md text retained in git history)
+prior_cycle: cycle-2 REVIEWS.md text retained in git history
 ---
 
-# Cross-AI Plan Review — Phase 4 (Cycle 2)
+# Cross-AI Plan Review — Phase 4 (Cycle 3, final convergence cycle)
 
-Both lanes ran with repo access and returned source-grounded reviews (no `[reviewed-without-repo-access]`
-marker, neither stubbed). Reviewers were given the cycle-2 mandate (verify the 19 cycle-1 dispositions by
-measurement, cover the three dimensions the internal checker skipped, hunt for fixes that merely re-arm the
-same trap at a new threshold), the CONTEXT.md supersession ground rules (D-01 Caskroom-not-Cellar, D-08 seam
-assertion, D-09 `--check` step-aside, D-04R linuxbrew) and repo rule `84d1gfpywd`. Neither raised a
-stale-ROADMAP finding, so the ground rules held. `04-RESEARCH.md` and `04-VALIDATION.md` were both supplied
-in the prompt this cycle.
+Reviewers were given the cycle-3 mandate (verify each of the 11 claimed cycle-2 repairs **by
+measurement**, confirm the do-not-regress list, and hunt for newly introduced defects — especially
+a repair that lowers or raises a numeric floor), the CONTEXT.md supersession ground rules (D-01
+Caskroom-not-Cellar, D-08 seam assertion, D-09 `--check` step-aside, D-04R linuxbrew both shapes)
+and repo rule `84d1gfpywd`. Neither lane raised a stale-ROADMAP finding, so the ground rules held.
+
+**One of two lanes completed.** Codex ran with repo access and returned a fully source-grounded
+review. OpenCode was invoked twice and died mid-review both times — see its section for the exact
+diagnostic. Because a single-lane cycle cannot produce cross-reviewer consensus, every Codex
+finding below was **independently re-measured by the orchestrating agent** against the live repo;
+those measurements are recorded in "Cycle-2 disposition verification (independently measured)".
 
 ## Codex Review
 
 ## Summary
 
-Cycle 2 materially improves the plans: the numeric baselines now measure the right quantities, the Homebrew detector uses a root-preserving walk, `EvalSymlinks` has one consistent failure contract, and the previously vacuous test gates are now count-asserted. I measured 4 anchored cosign invocations versus the proposed floor of 5, 10 unanchored matching lines, 6 identity literals across all five files, and 0 identity literals in the current `verify:self-upgrade` region.
-
-However, plan 04-06 still risks altering a maintainer’s pre-existing Homebrew state: it unconditionally untaps an existing tap and removes potentially pre-existing man pages. Plan 04-02’s revised freshness mechanism also cannot implement its promised size fallback because its baseline records only mtimes. These require revisions before execution. Verdict: **revisions required**.
-
-Repository tests could not run because the read-only environment prevents Go from creating its temporary work directory. CodeGraph likewise could not acquire `.codegraph/store/LOCK`; source and shell measurements were used instead.
-
-## Cycle-1 disposition verification
-
-| # | Finding | Status | Verification |
-|---|---|---|---|
-| 1 | Cosign invocation floor was pre-satisfied | RESOLVED | Current source has 4 anchored invocations at [Taskfile.yml:1492](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:1492), [1494](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:1494), [2541](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:2541), and [3087](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:3087). Plan floor is 5 at [04-05-PLAN.md:178](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:178), so it is RED today. Unanchored count measured 10. |
-| 2 | Identity floor could not detect loss of Task 1 | RESOLVED | Baseline measured as 6: Taskfile ×2 plus one each in README, RELEASE, SECURITY, and RELEASE-PROCEDURES. Plan requires 7 and specifically requires a literal within `verify:self-upgrade` at [04-05-PLAN.md:267](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:267). Current region has 0. |
-| 3 | Absolute paths lost by split-and-rejoin | RESOLVED | Plan now mandates a `filepath.Dir` ancestry walk and explicitly forbids reconstruction at [04-01-PLAN.md:226](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md:226), with `filepath.IsAbs` assertions in every detected row at [04-01-PLAN.md:378](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md:378). |
-| 4 | No mechanical rollback around Caskroom mutation | PARTIALLY RESOLVED | A single script and pre-mutation trap are now required at [04-06-PLAN.md:211](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:211). New baseline-restoration defects remain; see concerns. |
-| 5 | Arbitrary pre-existing cask cannot be restored | RESOLVED | The acceptance run now halts if a cask is already installed at [04-06-PLAN.md:112](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:112). |
-| 6 | `rg -q 'ok\|PASS'` passed with no tests | RESOLVED | Replaced by separate named-PASS counts at [04-02-PLAN.md:286](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:286). Existing source defines exactly five `TestTaskfile*` tests at [taskfile_shape_test.go:936](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:936) through [1099](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:1099), plus one workflow-body test at [1342](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:1342). |
-| 7 | Multi-pattern `rg -c` did not prove set membership | RESOLVED | Relevant assertions are now independent, including ROADMAP seam tokens and evidence disposition rows; see [04-03-PLAN.md:200](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-03-PLAN.md:200) and [04-06-PLAN.md:356](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:356). |
-| 8 | Finite corpus overclaimed language equivalence | RESOLVED | Plan consistently calls this “selected boundary-case parity” and records the residual limitation at [04-05-PLAN.md:474](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:474). |
-| 9 | Contradictory `EvalSymlinks` behavior | RESOLVED | One rule now applies: any error returns not-detected immediately, with dangling and loop rows at [04-01-PLAN.md:371](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md:371). |
-| 10 | Eyeballed ordering assertions | RESOLVED | Replaced by scripted offsets in plan 04-01 and plan 04-05; for example [04-05-PLAN.md:178](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:178). |
-| 11 | `Time.now - 1` was a weak freshness oracle | PARTIALLY RESOLVED | Wall-clock comparison was replaced by per-path snapshots at [04-02-PLAN.md:150](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:150), but the promised size fallback is not implementable as specified. |
-| 12 | Identity extractor was format-fragile | RESOLVED | The plan requires provenance fields, unmatched-flag reporting, a documented parsing contract, and self-tests at [04-05-PLAN.md:292](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:292). |
-| 13 | Pointer no-drift claim ignored the CLI copy | RESOLVED | Plan 04-01 now limits the shared-builder guarantee to two surfaces; plan 04-04 explicitly treats CLI help as an independent copy at [04-04-PLAN.md:83](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-04-PLAN.md:83). |
-| 14 | GoReleaser test pattern did not read `.goreleaser.yaml` | RESOLVED | Retargeted to the five `TestHomebrewCask*` tests; those tests exist at [goreleaser_shape_test.go:1072](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/goreleaser_shape_test.go:1072) through [1268](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/goreleaser_shape_test.go:1268). |
-| 15 | Restoration gate had brew-absent and environment escape hatches | PARTIALLY RESOLVED | `command -v brew` and a positive receipt are now mandatory at [04-06-PLAN.md:268](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:268), and `CODEGRAPH_CASK_PREEXISTING` is gone. Exact baseline restoration is still incomplete. |
-| 16 | D-08 hash proxy was reintroduced | RESOLVED | Removed; plan explicitly records why the four seam assertions are stronger at [04-01-PLAN.md:207](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md:207). |
-| 17 | Evidence gate did not associate IDs with dispositions | RESOLVED | The plan fixes the table shape and asserts one anchored row per ID at [04-06-PLAN.md:342](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:342). |
-| 18 | Conflicting man-page marker creation points | RESOLVED | One pre-install marker and two consumers are now specified at [04-02-PLAN.md:249](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:249). |
-| 19 | `--force` evidence demanded byte-identical messages | RESOLVED | Relaxed to the actual property: both contain the same resolved-path pointer sentence, at [04-06-PLAN.md:278](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:278). |
+Cycle 3 confirms that the stated cycle-2 repairs are largely present and correctly measured: all `<automated>` tags balance, Homebrew tap restoration is bidirectional, pre-existing man pages block acceptance, Mutation 3 preserves the identity-literal total, and the revised floors remain calibrated to measured baselines. However, two newly exposed execution gaps remain. Most importantly, plan 04-06 protects only Task 2 with a restoration trap even though Task 1 performs the initial `brew tap`, trust, and install mutations. The cask rehearsal also reuses a pre-install timestamp marker after reinstall, which cannot independently prove that reinstall refreshed any page. These keep the plans from final convergence.
 
 ## Strengths
 
-- Plan 04-01 follows the existing orchestration seams. The current `Options` contains the four injectable functions at [upgrade.go:69](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/upgrade.go:69), while network resolution currently begins at [upgrade.go:88](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/upgrade.go:88). The prescribed detector insertion above that point genuinely proves zero-network refusal.
+- All six plans have balanced anchored `<automated>` tags: 01/02/05/06 have 3 open and 3 close tags; 03/04 have 2 and 2. This closes the structural defect without relying on the known-insufficient plan validator.
 
-- The cosign floor is now calibrated correctly: 4 current shell invocations versus a post-task floor of 5. This is a meaningful RED-before-GREEN gate, not just a larger arbitrary count.
+- The tap baseline is captured before mutation. Plan 04-06 explicitly probes `brew tap` before the first `brew tap seanb4t/tap`, persists `TAP_PREEXISTING=yes|no`, and requires conditional untapping ([04-06-PLAN.md:156](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:156>), [04-06-PLAN.md:165](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:165>), [04-06-PLAN.md:288](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:288>)).
 
-- The identity scan set is complete for current published/executed restatements: [README.md:59](/Volumes/Code/github.com/seanb4t/codegraph-go/README.md:59), [docs/RELEASE.md:62](/Volumes/Code/github.com/seanb4t/codegraph-go/docs/RELEASE.md:62), [SECURITY.md:35](/Volumes/Code/github.com/seanb4t/codegraph-go/SECURITY.md:35), [docs/RELEASE-PROCEDURES.md:238](/Volumes/Code/github.com/seanb4t/codegraph-go/docs/RELEASE-PROCEDURES.md:238), and two Taskfile occurrences.
+- Tap restoration is checked in both directions. The executable gate derives the required `TAP_ACTION` from the baseline and separately probes actual final tap state ([04-06-PLAN.md:352](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:352>)).
 
-- Research responsibilities are honored: detection stays in `internal/upgrade`, uses only the standard library, does not shell out to Homebrew, and the Linux-cask open question was resolved through D-04R rather than silently ignored.
+- Pre-existing man pages now block the run before mutation ([04-06-PLAN.md:149](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:149>)). This is necessary because the current cask hook unconditionally removes every matching shared-directory page ([.goreleaser.yaml:620](</Volumes/Code/github.com/seanb4t/codegraph-go/.goreleaser.yaml:620>)).
 
-- All 16 tasks carry automated verification, so sampling continuity holds. No three consecutive tasks lack an automated command.
+- Cleanup specifies an idempotency guard, `RESTORE_INVOCATIONS=1`, and disarm-then-exit handlers using 130/143 ([04-06-PLAN.md:299](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:299>), [04-06-PLAN.md:352](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:352>)).
+
+- Mutation 3 is now genuinely total-preserving: it relocates the flag and literal as inert comments into `verify:gatekeeper`, requires the observed total to remain 7, and explicitly forbids lowering the floor to 6 ([04-05-PLAN.md:464](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:464>), [04-05-PLAN.md:515](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:515>)).
+
+- The cosign floors match the live source: there are four current shell invocations in `Taskfile.yml`, so the planned floor of five is RED before implementation ([Taskfile.yml:1492](</Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:1492>), [Taskfile.yml:2541](</Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:2541>), [Taskfile.yml:3087](</Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:3087>)). The identity baseline is also six literals across the five named files, with Task 1 intended to add the seventh.
+
+- The size fallback is now executable rather than aspirational: the plan requires a `{mtime, size}` baseline and at least two `File.size` uses ([04-02-PLAN.md:157](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:157>), [04-02-PLAN.md:226](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:226>)). Edit 5 also explicitly owns the trailing `atomic_write` comment ([04-02-PLAN.md:202](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:202>)).
+
+- The five revised validation rows are synchronized with their task commands, including the named `TestCosignIdentityPolicy` PASS count and the expanded restoration checks ([04-VALIDATION.md:46](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:46>), [04-VALIDATION.md:55](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:55>), [04-VALIDATION.md:57](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:57>)).
+
+- The required plan-shape invariants remain present: artifacts sections in all six plans, the three flagged assumptions and no-silent-drop equality, the assumption-delta decision, descriptor-less prohibitions, and unrenumbered threat IDs.
 
 ## Concerns
 
-- **HIGH — NEW:** Plan 04-06 does not restore a pre-existing tap. Task 1 explicitly allows the tap to pre-exist and records `brew tap | rg seanb4t` as baseline at [04-06-PLAN.md:132](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:132), but the trap unconditionally runs `brew untap seanb4t/tap` at [04-06-PLAN.md:230](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:230). A maintainer who already had the tap finishes in a different state.
+- **HIGH — Task 1 mutates the workstation before any restoration trap exists.** Plan 04-06 Task 1 runs `brew tap`, `brew trust`, and `brew install`, then deliberately leaves the install for Task 2 ([04-06-PLAN.md:176](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:176>), [04-06-PLAN.md:196](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:196>)). The restoration trap is not installed until Task 2’s separate script ([04-06-PLAN.md:245](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:245>)). An interruption, harness failure, or executor stop between tasks can therefore leave an added tap, trust state, installed cask, and man pages behind. This directly contradicts the validation claim that “all mutating steps run inside one script whose EXIT trap is installed before the first mutating byte” ([04-VALIDATION.md:98](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:98>)).
 
-- **HIGH — NEW:** Plan 04-06 can delete pre-existing man pages. Task 1 deliberately records the initial `codegraph` man-page count at [04-06-PLAN.md:133](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:133), but the cleanup performs `brew uninstall --cask codegraph`, whose existing hook removes generated pages. The plan preserves neither their bytes nor metadata, despite promising the four final probes will match the baseline at [04-06-PLAN.md:289](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:289). This is especially relevant because the phase’s own evidence records orphaned man pages as a real prior state.
+- **MEDIUM — The reinstall freshness probe is pre-satisfied by the initial install.** Plan 04-02 creates one marker before the initial install and reuses it after `brew reinstall` ([04-02-PLAN.md:280](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:280>), [04-02-PLAN.md:300](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:300>)). Pages created by the first install remain newer than that marker even if reinstall writes nothing. Thus the Step 5d `find -newer` check cannot independently prove reinstall freshness, despite the claim that it does. The Ruby hook’s own before/after snapshot may still catch the defect, but the rehearsal’s purported independent confirmation does not.
 
-- **MEDIUM — NEW:** The freshness algorithm promises a size fallback without recording baseline sizes. `man_pages_before` is specified as `path → File.mtime` at [04-02-PLAN.md:153](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:153), but [04-02-PLAN.md:179](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:179) says a changed size should also count as fresh. There is no prior size to compare against.
-
-- **MEDIUM — NEW:** `trap restore_and_cleanup EXIT INT TERM` can invoke cleanup twice. A trapped `INT` or `TERM` calls the function, and a later shell exit invokes the same function again. That conflicts with the plan’s “do not call twice” intent at [04-06-PLAN.md:240](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:240) and could make a second `brew uninstall`/`untap` obscure the successful first restoration.
-
-- **LOW — NEW:** Plan 04-05’s temp-directory statement is backwards. It requires both `mktemp` calls before installing the trap and claims this prevents a leak, but failure of the second `mktemp` under `set -e` leaks the first directory. See [04-05-PLAN.md:143](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-05-PLAN.md:143).
-
-- **MEDIUM — NEW:** `04-VALIDATION.md` does not consistently mirror the corresponding task commands despite the explicit cycle-2 requirement. Examples:
-
-  - Row 04-02-02 omits the plan’s `schema=3` assertion ([VALIDATION:47](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:47) versus [04-02-PLAN.md:286](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-02-PLAN.md:286)).
-  - Row 04-03-01 omits the positive `Cellar` count from the task command ([VALIDATION:49](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:49) versus [04-03-PLAN.md:192](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-03-PLAN.md:192)).
-  - Row 04-04-02 omits the `brew trust` preservation check ([VALIDATION:52](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:52) versus [04-04-PLAN.md:200](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-04-PLAN.md:200)).
-  - Row 04-06-03 omits the plan command’s per-leg presence checks ([VALIDATION:58](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-VALIDATION.md:58) versus [04-06-PLAN.md:356](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:356)).
+- **LOW — Trust-state restoration is not represented in the acceptance baseline.** Task 1 invokes `brew trust --tap`, but the baseline records only tap presence, cask presence, man pages, and prefix ([04-06-PLAN.md:165](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:165>), [04-06-PLAN.md:176](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-codegraph-upgrade-homebrew/04-06-PLAN.md:176>)). If the tap pre-existed but was not trusted, the run changes persistent Homebrew trust state and leaves it changed. This conflicts with the stated “machine left in the state it started in” guarantee, though the exact restoration command should be confirmed against the installed Homebrew version before prescribing it.
 
 ## Suggestions
 
-1. In plan 04-06, record whether `seanb4t/tap` existed before the run. Untap only when this plan added it. Include that state in the restoration receipt.
+- Merge 04-06 Tasks 1 and 2 into one guarded acceptance script, or install a cleanup trap in Task 1 before `brew tap`. The trap should preserve the real install long enough to run the harness and behavioral observations, then restore on every exit or signal.
 
-2. Either halt when any `codegraph*.1` page exists before acceptance, or preserve and restore every matching page byte-for-byte with modes and mtimes. Do not rely only on the final count.
+- Capture Homebrew tap trust status in the baseline and restore it, or explicitly narrow the restoration claim and require the tap to be pre-trusted as another blocking precondition.
 
-3. Change `man_pages_before` to store both mtime and size, for example `{mtime:, size:}`, and compare both fields after generation. Alternatively, remove the claimed size fallback.
+- Use two man-page markers:
 
-4. Make `restore_and_cleanup` idempotent with a guard, and use signal handlers that exit after invoking cleanup while disabling traps before cleanup begins.
+  - one immediately before initial install for Step 5;
+  - a second immediately before `brew reinstall` for Step 5d.
 
-5. Install cleanup immediately after creating `DL_DIR`, then add `SIG_DIR` to state the cleanup function understands. This covers failure of the second `mktemp`.
+  This makes the reinstall freshness assertion independently RED-able. Keep the Ruby `{mtime, size}` before/after check as the in-hook gate.
 
-6. Synchronize every `04-VALIDATION.md` automated command byte-for-byte with its corresponding task command, or explicitly document why a validation row intentionally uses a reduced sampling gate.
+- Correct the manual-validation row so it no longer claims all mutations are already contained in one trapped script until the Task 1 gap is fixed.
 
 ## Risk Assessment
 
-**HIGH.** The production implementation plan is substantially improved and the cycle-1 numeric/vacuity defects are mostly closed. The remaining risk is concentrated in the real-workstation acceptance plan: as written, it can remove a pre-existing tap and pre-existing man pages while claiming exact restoration. Those are material, externally visible state changes, so execution should wait for the rollback protocol to be corrected.
+**HIGH.** The implementation plans are otherwise unusually rigorous, and every specifically requested cycle-2 repair measures what it claims. But the real-workstation acceptance plan still has an untrapped mutation window spanning an entire task boundary. Because that can leave persistent Homebrew state after interruption, it is a release-blocking execution-safety issue. The reinstall freshness flaw is narrower but should also be corrected before execution.
 
 ---
 
 ## OpenCode Review
 
+**UNAVAILABLE — lane died mid-review, twice.**
 
-# Cross-AI Plan Review — Phase 4, Cycle 2
+| Attempt | Wall time | Terminal state | Captured stderr | Output produced |
+|---|---|---|---|---|
+| 1 | ~25 min | killed | `[spawn error: ETIMEDOUT]` | 284 bytes — 2 narration lines, no sections |
+| 2 (`GSD_REVIEW_TIMEOUT_MS=3300000`) | ~12 min | killed | `[spawn error: ETIMEDOUT]` | 252 bytes — 3 narration lines, no sections |
 
-## Summary
+The lane resolved and planned cleanly (`review-lane plan` → `ok: true`, transport `spawn`, no prompt
+budget), and `review-lane invoke` reported `ok: true, stubbed: false` both times — the JSON result is
+therefore **not** a reliable signal here: the adapter exited 0 while its child had already been killed.
+The diagnostic lives only in `gsd-review-opencode.err`. Raising `GSD_REVIEW_TIMEOUT_MS` did not extend
+the run, so the timeout that fired is the adapter's own spawn timeout, not the lane's declared
+`timeoutFloorMs`; this lane cannot currently complete a review of this prompt size (355 KB) on this host.
 
-The revision is substantively honest: every baseline I was asked to verify independently reproduced exactly as stated, and the floors that cycle 1 found pre-satisfied are now RED against the current tree. I re-measured all five load-bearing numbers rather than trusting the plans' assertions — `cosign verify-blob` real invocations (4 anchored / 10 unanchored lines, `Taskfile.yml:1492,1494,2541,3087`), identity literals (6 across 5 files, confirmed flag/literal line pairs at `Taskfile.yml:2544-2545,3090-3091`, `README.md:59-60`, `docs/RELEASE.md:62-63`, `SECURITY.md:35-36`, `docs/RELEASE-PROCEDURES.md:238-239`), the named-PASS baselines (`TestTaskfile` 5, `TestWorkflowRunBodiesInvokeTask` 1, `TestHomebrewCask` 5), the `verify:self-upgrade` region contents (0 `SIG_DIR`, 0 `cosign`, 1 `chmod +x` today), and the stale-doc citations (`README.md:81`, `docs/RELEASE.md:540-541`, `Taskfile.yml:1671`'s rehearsal refusal, the sentinel write at `.goreleaser.yaml:579` and removal at `:624`). One NEW internal inconsistency exists in `04-05` Task 3: Mutation 3 cannot produce the outcome its own acceptance criterion demands, because the recalibrated total floor fires before the region-scoped assertion. That is a one-paragraph fix. Everything else verifies. **Verdict: revisions required — one MEDIUM fix in 04-05 Task 3, plus two LOW clarifications. No HIGH findings remain.**
+Both truncated transcripts stop mid-investigation. They carry two verbatim intermediate confirmations
+before dying — attempt 2's *"Tag balance confirmed on all six plans"* and *"Baselines confirmed"* — which
+**agree with** the orchestrator's independent measurements below. They are recorded as corroborating
+fragments only. They are **not** a review, carry no findings, and are **not** counted at consensus weight.
 
-## Cycle-1 disposition verification
+Attempt 1's final line names the one thread it was pulling when it died:
 
-| # | Finding | Disposition | Evidence |
-|---|---|---|---|
-| 1 | `cosign verify-blob` floor pre-satisfied, baseline "2" wrong | **RESOLVED** | Measured: 4 anchored invocations (`Taskfile.yml:1492,1494,2541,3087`), 10 unanchored lines. New gate `rg -c -e '^\s*cosign verify-blob' ≥ 5` exceeds the true baseline — RED today. True baseline recorded in the criterion |
-| 2 | Identity-literal floor 4 already met | **RESOLVED** | Extractor-yield derivation reproduced: exactly 6 literals across 5 files today (I confirmed all 6 flag→literal line pairs). Floor 7 > baseline 6, plus the region-scoped requirement (region measured: 0 cosign occurrences today) |
-| 3 | Root-losing split-and-rejoin in `brew.go` algorithm | **RESOLVED** | `04-01` Task 1 action step 2 prescribes a parent walk via `filepath.Dir` terminating on `parent == dir`; acceptance gates `strings\.Split` == 0 paired with `filepath\.Dir` ≥ 1, plus an executing `filepath.IsAbs(InstallDir)` assertion in every detected row |
-| 4 | No mechanical rollback in acceptance run | **RESOLVED** | `04-06` Task 2 mandates one script, `trap restore_and_cleanup EXIT INT TERM` installed at step 3 before the first mutating byte (step 4), bytes-first-then-cask ordering, `set -uo pipefail` with deliberate `-e` omission |
-| 5 | Pre-existing cask restoration unimplementable | **RESOLVED** | Blocking precondition in `04-06` Task 1 halts if `brew list --cask --versions codegraph` reports anything; the "reinstall prior version" branch is deleted. Matches the repo's own rehearsal posture — confirmed at `Taskfile.yml:1671` (`'! brew list --cask codegraph …'`) |
-| 6 | Vacuous `rg -q 'ok\|PASS'` gate | **RESOLVED** | `04-02` Task 2 now carries two independent count-asserted named-PASS gates; baselines measured today: `TestTaskfile` = 5, `TestWorkflowRunBodiesInvokeTask` = 1 — both match the plan's recorded numbers |
-| 7 | `rg -c` multi-`-e` set-membership misuse | **RESOLVED** | All instances I re-checked are split per-token: `Options\.download`/`Options\.swap` independently asserted with escaped dots (04-03), `Leg 1/2/3` and `UPGR-01/02/03` as per-token loops with `-F` (04-06), `^\| UPGR-0N \|` row-shape anchors (04-06 Task 3) |
-| 8 | Language-equivalence overclaim | **RESOLVED** | Test names, `must_haves`, and T-04-16 all say "boundary-case parity"; residual (drift outside probed boundaries) named. Prefix `TestCosignIdentityPolicy` retained so the `-eq 2` gate survives |
-| 9 | `EvalSymlinks` contract self-contradictory | **RESOLVED** | Single rule (error ⇒ not-detected, immediate return) stated identically in Task 1 action, T-04-03, and `must_haves.truths`; two executing rows (dangling, loop) with per-token name assertions |
-| 10 | Eyeball line-number comparisons | **RESOLVED** | `node -e` offset assertions with named throws in 04-01 Tasks 1/3; pattern traced — `s.indexOf("detectBrewManaged")` vs `s.indexOf("resolveLatest(releaseRepoSlug)")` targets real strings (`internal/upgrade/upgrade.go:95`) |
-| 11 | `Time.now - 1` weak oracle | **RESOLVED** | Replaced by `man_pages_before` path→mtime snapshot; `Time\.now` absence gate is satisfiable — the only current occurrence (`.goreleaser.yaml:586`) lives inside the sentinel heredoc being deleted |
-| 12 | Extractor format-fragility | **RESOLVED** | Parse contract documented, `File`/`Line`/`Value` struct, misattribution guard, phantom-literal self-test |
-| 13 | Third unpinned pointer-message copy | **RESOLVED** (with honest residual) | 04-01 `key_links` recalibrated to "exactly two surfaces"; 04-04 cross-surface gate widened to four files including `brew.go`; surrounding-wording drift explicitly accepted rather than claimed away |
-| 14 | `^TestGoreleaser` mis-scoped | **RESOLVED** | Confirmed the mis-scope independently: `^TestGoreleaser` matches only `TestGoreleaserPinParity`. Retargeted to `^TestHomebrewCask`, measured 5 PASS today — matches the plan's recorded baseline |
-| 15 | Restoration gate escape hatches | **RESOLVED** | `CODEGRAPH_CASK_PREEXISTING` short-circuit deleted; `command -v brew` asserted first; positive receipt floor (`RESTORE_VERDICT=ok` + equal before/after sha256 via `sort -u | wc -l == 1`) |
-| 16 | sha256 proxy reintroduced | **RESOLVED** | Removed from 04-01 Task 1 with a `review_note` recording why |
-| 17 | ID↔disposition association unenforced | **RESOLVED** | Fixed table shape (`## Carried assumption dispositions`, ID as first cell) + three independent `^\| UPGR-0N \|` == 1 assertions |
-| 18 | Two marker-creation points | **RESOLVED** | One `mktemp` (exactly-1 gate) paired with ≥4 total references; creation-before-install offset assertion |
-| 19 | `--force` byte-identity too strict | **RESOLVED** | Relaxed to same-resolved-path + same-literal containment, matching the unit-test bar |
+> "Now let me check whether 04-03's set-check gates are actually achievable — enumerating every `Cellar`
+> line in the three target files and comparing against the plan's seven edits"
 
-**19/19 verified against the repo. No REGRESSED and no NOT RESOLVED rows.**
-
-## Strengths
-
-- Every floor I re-derived independently matched the plan's stated baseline: 4 cosign invocations, 6 identity literals, 5/1/5 named-PASS counts, 0 `SIG_DIR` in the `verify:self-upgrade` region, `raise "codegraph cask post-install` = 2 today (04-02's ≥3 floor is RED today, `system_command … ["man", man_dir]` exactly 1 at `.goreleaser.yaml:551` ✓).
-- The `04-05` region slice (`verify:self-upgrade:` at `Taskfile.yml:2554` → `verify:gatekeeper:` at `:2751`) is anchored on target keys whose first occurrences are the keys themselves — the probe and the production ordering assertion share the same anchors, closing the "second independent matcher" hole.
-- 04-02's line citations trace: Step 5b sentinel block at `Taskfile.yml:2006-2030`, idempotency at `:2072`, symmetry at `:2091-2095`, evidence echo `schema=2` at `:2215` — all confirmed. The false EVIDENCE claim exists exactly where cited (`03-EVIDENCE.md:831,1039`) and the self-contradicting "30 orphaned" evidence at `:815`.
-- VALIDATION.md rows match plan tasks one-for-one (spot-checked 04-01-02 `-ge 16`, 04-02-02 dual named-PASS gates, 04-05-01 `≥ 5`, 04-06-02 receipt gate — identical commands in both documents). Sampling continuity: 16/16 tasks carry an automated verify. Pending-todo arithmetic is consistent across plans (10 → 8 after 04-02 → 7 after 04-05).
-- RESEARCH.md's two open questions are dispositioned: OQ1 resolved by D-04R + the 16-row table; OQ2 resolved as "no branch needed" with the single `brew upgrade codegraph` literal. Responsibility map honored (detection in `internal/upgrade`, D-12).
-
-## Concerns
-
-- **[MEDIUM — NEW] `04-05` Task 3, Mutation 3 is internally inconsistent with Task 2's check ordering.** Task 2 applies checks in order: (1) total < 7 → `t.Fatalf`, then (3) region-scoped → `t.Fatalf`. Mutation 3 deletes *only* the `verify:self-upgrade` literal, leaving 6 total — so **check 1 (total floor) fires before the region assertion is ever reached**. Yet Task 3's acceptance criterion demands: "Mutation 3 must show the REGION-SCOPED assertion firing, not the total floor — if the total floor is what fired, the guard has not been recalibrated correctly." As written, the criterion is unsatisfiable: any single-literal deletion trips the total floor first, and any mutation that preserves the total at ≥7 while emptying the region (e.g., moving the literal elsewhere in `Taskfile.yml`) would be a contrived non-regression. The fix is to reorder Task 2's checks so the region-scoped assertion runs *before* the total floor (region first, then total, then per-file) — then deleting Task 1's literal fires the region assertion exactly as the acceptance criterion requires, and the total floor remains RED-today as a separate guard.
-- **[LOW — NEW] `04-01` Task 3 action text vs. its own "exactly 1 call site" criterion.** The action says "`fmt.Fprintln(out, ...) the string returned by `brewPointerMessage(inst)`" and "return the wrapped error Task 1 introduced" — read naively that is two call sites, while the acceptance criterion enforces `rg -c 'brewPointerMessage' internal/upgrade/upgrade.go == 1`. The criterion forces the right shape (compute `msg` once, branch on it), but the action should say so explicitly so the executor doesn't write two call sites and then churn on the failing gate.
-- **[LOW — CARRIED in spirit] `04-02` Task 1 line-range citation drift.** The plan cites the sentinel write as lines 570-588; the actual `atomic_write` call is at `:579` and an `atomic_write`-mentioning comment sits at `:592`, *outside* the cited deletion range. The `rg -c 'atomic_write' == 0` acceptance gate makes this self-correcting, but Edit 5 should explicitly own removing the `:592` mention so the executor doesn't hunt for which edit was supposed to cover it.
-
-## Suggestions
-
-1. **04-05 Task 2 `<action>`:** reorder the numbered checks — region-scoped assertion (current step 3) before the total floor (current step 1). **04-05 Task 3 `<action>`:** add one sentence: "With the region check ordered first, deleting only the `verify:self-upgrade` literal fires the region assertion before the total floor is evaluated."
-2. **04-01 Task 3 `<action>`:** "Compute `msg := brewPointerMessage(inst)` once at the top of the branch; `fmt.Fprintln(out, msg)` under `opts.Check`, `fmt.Errorf("upgrade: %s", msg)` otherwise — one call site by construction."
-3. **04-02 Task 1 Edit 5:** append "…including the `atomic_write` mention in the trailing comment at line 592, so the `atomic_write == 0` gate is satisfied."
-
-## Risk Assessment
-
-**LOW-to-MEDIUM.** Cycle 1's six HIGHs are all verifiably closed by measurement, not by plan-text assertion; the executable gates are RED today against the current tree and GREEN only after the intended work. The single remaining MEDIUM is a self-inconsistency *inside a self-test protocol* — the worst case is Task 3 of 04-05 reporting a confusing failure and the executor reordering two checks, not a silent vacuous gate. No new brittle-count-for-brittle-count substitutions were introduced: the two surviving numeric floors (`cosign verify-blob` ≥ 5, literals ≥ 7) are anchored on real quantities with recorded baselines, and everything else moved to region-scoped or per-token set-membership assertions. After the three suggestions land, this plan set is ready to execute.
+That thread was picked up and finished by the orchestrator rather than left dangling — see
+"04-03 gate achievability" below. It resolves clean.
 
 ---
 
 ## Consensus Summary
 
-Both lanes independently re-derived every load-bearing number and both reached the same verdict on the
-cycle-1 fixes: **the numeric-floor and vacuous-gate defect class is genuinely closed.** Cycle 1's dominant
-failure mode — a floor already satisfied before the task meant to raise it — does not recur in any of the
-surviving floors. Both lanes measured the same baselines, and the orchestrator reproduced all of them:
-
-| Claim under verification | Plan's stated baseline | Measured | Floor | RED today? |
-|---|---|---|---|---|
-| `rg -c '^\s*cosign verify-blob' Taskfile.yml` | 4 real invocations / 10 unanchored lines | **4** (`:1492`, `:1494`, `:2541`, `:3087`); unanchored **10** | `-ge 5` | **yes** |
-| identity literals across five files | 6 | **6** (`Taskfile.yml:2545`, `:3091`, `README.md:60`, `docs/RELEASE.md:63`, `SECURITY.md:36`, `docs/RELEASE-PROCEDURES.md:239`) | `-ge 7` | **yes** |
-| identity literals in the `verify:self-upgrade` region | 0 | **0** | `>= 1` | **yes** |
-| `--- PASS: TestTaskfile` | 5 | **5** | `-ge 5` | preservation gate |
-| `--- PASS: TestWorkflowRunBodiesInvokeTask` | 1 | **1** | `-eq 1` | preservation gate |
-| `--- PASS: TestHomebrewCask` | 5 | **5** | `-ge 5` | preservation gate |
-| `.planning/todos/pending/` | 10 → 8 → 7 | **10** | consistent | n/a |
-
-The five named cycle-2 verification targets all hold in executable PLAN.md content:
-
-- **`04-05` T1** — floor `-ge 5` against a measured baseline of 4. Exceeds. The anchored matcher
-  (`^\s*cosign verify-blob`) isolates real shell invocations rather than the 10 lines the unanchored
-  pattern matches.
-- **`04-05` T2** — scan set is genuinely five files, floor is genuinely 7 against a measured 6, and the
-  region-scoped requirement is present. Both lanes confirmed the region probe shares Task 1's own
-  delimiters (`verify:self-upgrade:` → `verify:gatekeeper:`), so the "second independent matcher" hole is
-  closed. **But see the HIGH below on check ordering** — the region assertion is unreachable in the one
-  scenario it exists to catch.
-- **`04-02` T2** — the vacuous `rg -q 'ok|PASS'` is gone; replaced by two independent count-asserted
-  named-PASS gates (`04-02-PLAN.md:286`).
-- **`04-06` T2** — `trap restore_and_cleanup EXIT INT TERM` is mandated before the first mutating byte
-  (`04-06-PLAN.md:217`, `:233`), both escape hatches are gone, and a positive receipt replaces the
-  all-negative check. **But see the HIGH below** — the gate carrying that fix is structurally unparseable.
-- **`04-01` T1** — root-preserving parent walk via `filepath.Dir` with `parent == dir` termination
-  (`04-01-PLAN.md:241`), backstopped by a paired source gate (`strings.Split` absent AND `filepath.Dir`
-  present, `:331`) and `filepath.IsAbs` assertions in every detected row. `EvalSymlinks` contract
-  reconciled to one rule (error ⇒ not detected) across action, T-04-03 and `must_haves.truths`.
-
-The three dimensions the internal checker skipped are covered and clean:
-
-- **Research resolution** — `04-RESEARCH.md`'s two open questions are dispositioned. OQ1 (linuxbrew
-  Caskroom coverage) is resolved via D-04R and honored by 8 detected rows in `04-01` and the criterion-3
-  amendment in `04-03`. OQ2 (cask-vs-formula message branch) is resolved as "no branch needed"; no formula
-  branch appears anywhere in the plans. The Architectural Responsibility Map is honored — detection lives
-  in `internal/upgrade`, the refusal branch in `Run()`, the CLI stays a thin wrapper, sentinel removal
-  stays in `.goreleaser.yaml`/`Taskfile.yml`, and no new dependency is introduced.
-- **Nyquist compliance** — 16 map rows for 16 tasks (3+3+2+2+3+3), and **all 16 tasks carry an automated
-  verify**. Sampling continuity holds trivially; there is no run of even one task without automated
-  coverage, let alone three. *However*, the automated commands themselves diverge (see MEDIUM below), and
-  two of them are structurally unreachable (see HIGH below).
-- **Architectural tier compliance** — no tier violation found by either lane.
-
-**No new brittle-count-for-brittle-count substitution was introduced.** The two surviving numeric floors are
-anchored on the real quantity with a recorded measured baseline; everything else moved to region-scoped or
-per-token set-membership assertions. That specific anti-pattern the cycle-2 mandate warned about did not
-materialize.
-
-The remaining risk is concentrated almost entirely in **`04-06`, the real-workstation acceptance plan**, plus
-one self-inconsistency in `04-05`'s mutation protocol.
+**Single-lane caveat.** With OpenCode unavailable, there is no second independent model to agree or
+disagree with Codex. Nothing below is a two-reviewer consensus. In its place, every Codex finding was
+re-derived from the live repo by the orchestrating agent; a finding is marked **CONFIRMED** only where
+that independent measurement reproduced it, and the measurement is shown.
 
 ### Agreed Strengths
 
-- Every floor both lanes re-derived matched the plan's stated baseline exactly. The baselines are honest
-  measurements, not inherited numbers — the plans even record *why* the cycle-1 count of "4" was a different
-  quantity from the orchestrator's flag-occurrence count (`04-05-PLAN.md:239-269`).
-- The `04-01` detector insertion point is correct against real code: `Options` exposes the four injectable
-  seams at `internal/upgrade/upgrade.go:69`, and network resolution begins at `:88`, so a detector branch
-  above that point genuinely proves zero-network refusal.
-- The identity scan set is now complete for every published/executed restatement in the repository. Cycle 1's
-  three-file list missed `SECURITY.md:36` and `docs/RELEASE-PROCEDURES.md:239`, which made the plan's own
-  must-have ("**every** identity literal published or executed by this repository") false as written. Both
-  are now in scope.
-- `04-06`'s blocking precondition (halt if a codegraph cask is already installed) matches the repository's
-  own rehearsal posture at `Taskfile.yml:1671`, and correctly abandons the unimplementable "reinstall the
-  recorded prior version" promise rather than papering over it.
-- Residual limitations are named rather than claimed away: the boundary-case-parity framing replacing the
-  language-equivalence overclaim, the third independent pointer-message literal in `internal/cli/upgrade.go`
-  that `brewPointerMessage` cannot reach because it is unexported, and the unproved end-to-end leg in
-  `04-06`.
+Codex-reported, orchestrator-confirmed:
+
+- **All eleven cycle-2 repairs land, and every one measures what it claims.** This is the substantive
+  result of the cycle: the four HIGHs and seven actionable non-HIGHs are closed, not merely narrated.
+- **No numeric floor was raised or lowered anywhere this cycle.** Counting comparison operators across
+  the whole revision diff: added `-ge 5`×1, `-ge 4`×3, `-ge 3`×1, `-ge 2`×5, `-ge 1`×4, `-eq 7`×2,
+  `-eq 2`×4, `-eq 1`×14, `-eq 0`×11; removed `-ge 5`×1, `-ge 3`×1, `-ge 2`×2, `-ge 1`×2, `-eq 7`×1,
+  `-eq 2`×1, `-eq 1`×11, `-eq 0`×7. No threshold moved. The tempting-but-wrong repair was not taken.
+- **HIGH #4 (Mutation 3) is fixed by changing the mutation, not the floor** — the single most important
+  result of this cycle, since Mutation 3 is the designated proof that cycle-1 HIGH #2 closed.
+- Every do-not-regress item survived: measured baselines, region requirement, named-PASS baselines,
+  root-preserving walk, single `EvalSymlinks` contract, the pre-mutation trap with both escape hatches
+  removed, the three flagged assumptions with no-silent-drop equality, the three descriptor-less
+  prohibitions, the `T-04-01` breadcrumb, `<assumption_delta_decision>`, unrenumbered `T-04-01`…`T-04-22`,
+  and the "Artifacts this phase produces" section in all six plans.
 
 ### Agreed Concerns
 
-Both lanes independently reached "revisions required." No finding below is a re-litigation of a cycle-1
-finding that was properly closed.
+**C3-1 — HIGH — 04-06 Task 1 mutates the maintainer's workstation with no restoration trap in force,
+and three artifacts assert the opposite.** CONFIRMED by independent measurement.
 
-**HIGH — `04-06-PLAN.md` Tasks 2 and 3 have unclosed `<automated>` tags.** *(NEW; orchestrator-measured,
-missed by both lanes.)* Precise scan across all six plans and all structural tags:
+`04-06-PLAN.md:176` has Task 1 run `brew tap seanb4t/tap`, then `brew trust --tap seanb4t/tap`, then
+`brew install codegraph`. `04-06-PLAN.md:196` closes the action with *"Leave the install in place for
+Task 2. Do not uninstall in this task."* Task 1 contains no `trap`, no cleanup function and no
+enclosing script — the earliest trap in the plan is Task 2's, at `04-06-PLAN.md:262` ("Install the EXIT
+trap now — before the first mutating byte"), inside a *different task's* script. Task 1's three
+mutations therefore all precede every trap the plan installs, across a task boundary. An interruption,
+a harness failure, an executor stop, or Task 2 simply never running leaves an added tap, changed trust
+state, an installed cask and freshly written man pages on a real workstation with nothing to undo them.
 
-```
-$ for tag in automated human-check verify acceptance_criteria action done read_first files name; do
-    for f in .planning/phases/04-*/04-0*-PLAN.md; do
-      o=$(rg -o -e "^\s*<$tag>" $f | wc -l); c=$(rg -o -e "</$tag>\s*$" $f | wc -l)
-      [ "$o" != "$c" ] && echo "IMBALANCE <$tag> $(basename $f): open=$o close=$c"
-    done; done
-IMBALANCE <automated> 04-06-PLAN.md: open=3 close=1
-```
+This is not merely an uncovered window — three artifacts affirmatively claim it is covered:
 
-Opens at `04-06-PLAN.md:164`, `:268`, `:356`; only `:164`'s is closed. `:268` runs straight into
-`<human-check>` and `:356` runs straight into `<human-check>` with no `</automated>` between them. Cycle 1's
-version of this file was balanced (3 open / 3 close at `dbdc68f^`), and every other plan in the phase — and
-all five phase-3 plans — is balanced. **The revision introduced this.**
+- `04-06-PLAN.md:23` (`must_haves.truths`): "restored by an EXIT trap installed before the first
+  mutating byte" — false for Task 1's tap/trust/install, which are the *actual* first mutating bytes.
+- `04-06-PLAN.md:505` (T-04-19 mitigation 2): "the whole mutating sequence runs inside ONE script with
+  `trap restore_and_cleanup EXIT INT TERM` installed BEFORE the first mutating byte" — the mutating
+  sequence spans two tasks and only the second one is inside that script.
+- `04-VALIDATION.md:98` (manual row): "All mutating steps run inside one script whose EXIT trap is
+  installed before the first mutating byte" — same claim, same falsity.
 
-The consequence is precisely inverted from the intent: the two gates affected are *the two the revision added
-to close cycle-1 findings #15 and #7*. An executor extracting `<automated>…</automated>` either finds no
-command for those tasks (the gate silently does not run) or greedily swallows the `<human-check>` prose and
-`</verify>` into the shell command. Either way the positive restore-receipt assertion and the per-ID
-disposition assertion — the two most safety-critical gates in the phase — are unreachable. This downgrades
-cycle-1 findings **#7 (the `04-06` instance) and #15 to PARTIALLY RESOLVED**: the corrected text exists, but
-not in a parseable executable position.
+Severity is HIGH for the same reason cycle-1 finding #4 and cycle-2 C2-2/C2-3 were: this is the plan's
+own workstation-safety guarantee, it is stated as fact in a threat-model mitigation and a validation
+row, and the gate that would notice (Task 2's receipt assertion at `04-06-PLAN.md:352`) only ever runs
+if Task 2 runs — precisely the case where nothing went wrong. It is a guard that cannot fire in the
+scenario it exists for.
 
-*Fix:* add `</automated>` at the end of the command on `04-06-PLAN.md:268` and `:356`.
+Two admissible shapes: merge Tasks 1 and 2 into one trapped script (the shape T-04-19 already claims),
+or install the trap in Task 1 before `brew tap` and hand the armed state to Task 2. Either way the three
+assertions above must be brought back into agreement with the structure. Narrowing the claims without
+closing the window is *not* sufficient here, because the residue is on a real maintainer machine.
 
-**HIGH — `04-06` does not restore a pre-existing tap.** *(NEW; Codex.)* Task 1 explicitly records
-`brew tap | rg seanb4t` "(tolerating no match)" as a baseline **and restoration target**
-(`04-06-PLAN.md:137-139`), but the trap's step (c) unconditionally runs `brew untap seanb4t/tap`
-(`:230-231`). A maintainer who already had the tap ends in a different state than they started, and Task 2's
-own acceptance criterion — "the four restoration probes … each match their Task 1 baseline values"
-(`:295-297`) — fails by construction. *Measured on this host today: no `seanb4t` tap present, so the defect
-does not fire here right now; it is a durable plan defect, not a live one.*
+**C3-2 — MEDIUM — 04-02's Step 5d reinstall-freshness assertion is pre-satisfied by the first install's
+own output.** CONFIRMED by independent measurement, with an added mechanism note.
 
-*Fix:* record whether the tap pre-existed and untap only if this run added it; carry that state in the
-restore receipt.
+`04-02-PLAN.md:280-300` deletes the sentinel leg of the rehearsal's post-reinstall idempotency check
+(`Taskfile.yml:2072`) and replaces it with "at least one `codegraph*.1` newer than
+`MAN_BASELINE_MARKER`", where that marker is created at *exactly one* point — immediately before the
+**first** `brew install --cask` in Step 4 — and explicitly **reused**: the plan says "Create no second
+marker" and "never create a second marker", citing cycle-1 LOW.
 
-**HIGH — `04-06`'s cleanup can delete pre-existing man pages.** *(NEW; Codex.)* Task 1 records
-`ls "$(brew --prefix)/share/man/man1/" | rg -c '^codegraph'` "(tolerating zero)" as a baseline probe
-(`04-06-PLAN.md:139`), but the trap's `brew uninstall --cask codegraph` fires the cask's uninstall hook,
-which is `Dir.glob((man_dir/"codegraph*.1").to_s).each { |f| FileUtils.rm_f(f) }` at `.goreleaser.yaml:621`
-— an unconditional glob removal over the *shared* man directory. It deletes pages this run never created.
-This is not hypothetical: `03-EVIDENCE.md` records orphaned `codegraph*.1` pages as a real prior state on
-this project (the "30 orphaned" claim `04-02` Task 3 is amending), and the cask precondition only excludes a
-*cask*, not orphaned pages. *Measured on this host today: 0 matching pages, so again a durable defect rather
-than a live one.*
+For Step 5's own fresh-count assertion the single marker is correct and RED-able: a genuinely stale page
+predating the rehearsal is older than the marker. For Step 5d it is not. Pages written by the *first*
+install are already newer than the pre-install marker, so if the reinstall writes nothing they remain
+and the assertion passes anyway. The plan's stated justification — "Reusing the pre-install marker is
+strictly stronger for the reinstall case, because a reinstall rewrites the pages and so they are newer
+than the pre-install marker too" — assumes the very property under test.
 
-*Fix:* either halt when any `codegraph*.1` page exists before acceptance, or preserve and restore every
-matching page byte-for-byte with modes and mtimes. The final count probe alone cannot distinguish
-"restored" from "deleted the maintainer's".
+Mechanism note the orchestrator adds: the assertion is not *unconditionally* vacuous, because
+`brew reinstall --cask` runs the uninstall hook first and `.goreleaser.yaml:621` is an unconditional
+`Dir.glob((man_dir/"codegraph*.1")).each { FileUtils.rm_f }`, so on today's hook the pages *are* cleared
+before the reinstall writes. That makes the check's ability to fire **contingent on an unstated
+assumption about a hook this very phase is editing** — the exact `84d1gfpywd` shape. The fix is small and
+mechanical: create a second marker immediately before `brew reinstall` and scope the Step 5d comparison
+to it, keeping the single pre-install marker for Step 5. That requires amending 04-02's explicit
+"never create a second marker" instruction, which is why it cannot be left to the executor.
 
-**HIGH — `04-05` Task 3's Mutation 3 acceptance criterion is unsatisfiable as written.** *(NEW; OpenCode,
-severity escalated from MEDIUM by the orchestrator — rationale below.)* Task 2's `<action>` applies the
-extractor's checks in a fixed order (`04-05-PLAN.md:337-354`): step **1** is `t.Fatalf` if the TOTAL is below
-7; step **3** is `t.Fatalf` if no literal falls inside the `verify:self-upgrade` region. Mutation 3 deletes
-*only* the region literal, taking the total from 7 to 6 — so **step 1 fires first and step 3 is never
-reached**. Yet Task 3's acceptance criterion demands the opposite (`:459`):
+**C3-3 — LOW — `brew trust` state is mutated but is not in the baseline and is never restored.**
+CONFIRMED.
 
-> Mutation 3 must show the REGION-SCOPED assertion firing, not the total floor — if the total floor is what
-> fired, the guard has not been recalibrated correctly.
-
-Escalated to HIGH because Mutation 3 *is* the designated proof that cycle-1 HIGH #2 was actually closed —
-without it, the recalibration is asserted rather than demonstrated — and because the obvious repair an
-executor would reach for under a failing criterion (lower the total floor to 6 so the region check runs) is
-exactly the pre-satisfied-floor defect cycle 1 filed. The plan-text fix is one paragraph and does not have
-that hazard.
-
-*Fix:* reorder Task 2's checks so the region-scoped assertion precedes the total floor, and add a sentence to
-Task 3 noting that with that ordering, deleting the region literal fires the region assertion first.
-
-**MEDIUM — the promised man-page size fallback is unimplementable as specified.** *(NEW; Codex.)*
-`04-02-PLAN.md:153` specifies `man_pages_before` as a Hash mapping each path to `File.mtime` — mtime only.
-`:179-183` then says a page "whose SIZE changed" should count as fresh, as the stated mitigation for coarse
-mtime granularity. There is no baseline size to compare against, so the residual the plan claims to handle
-is not handled. *Fix:* store `{mtime:, size:}` and compare both, or delete the size-fallback claim.
-
-**MEDIUM — `trap restore_and_cleanup EXIT INT TERM` can invoke cleanup twice.** *(NEW; Codex.)* A trapped
-`INT` or `TERM` runs the handler and, because the handler does not exit, the later shell exit runs it again.
-That contradicts the plan's own instruction at `04-06-PLAN.md:237-238` ("Do not also call the trap function
-directly — a double restoration would report a confusing second verdict"), and a second
-`brew uninstall`/`brew untap` would obscure a successful first restoration in the receipt. *Fix:* make
-`restore_and_cleanup` idempotent with a guard flag, and have the signal legs disable the trap before running
-cleanup and then exit.
-
-**MEDIUM — `04-VALIDATION.md` rows are weaker subsets of the plan commands they map to.** *(NEW; Codex,
-reproduced by the orchestrator; OpenCode disagreed — see Divergent Views.)* Four rows drop legs that exist in
-the corresponding task:
-
-| Row | Leg present in PLAN.md but absent from VALIDATION.md |
-|---|---|
-| `04-02-02` (`:47` vs `04-02-PLAN.md:286`) | `test "$(rg -c -e 'CASK-REHEARSE-EVIDENCE schema=3' Taskfile.yml)" -eq 2` |
-| `04-03-01` (`:49` vs `04-03-PLAN.md:192`) | `test "$(rg … -e 'Cellar' .planning/ROADMAP.md \| wc -l)" -ge 4` — the vacuity guard that stops the first leg passing by deleting every `Cellar` mention |
-| `04-04-02` (`:52` vs `04-04-PLAN.md:200`) | `test "$(rg -c -e 'brew trust' docs/RELEASE.md)" -ge 2` |
-| `04-06-03` (`:58` vs `04-06-PLAN.md:356`) | the `for t in 'Leg 1' 'Leg 2' 'Leg 3'` presence loop and the `-F` per-ID presence loop |
-| `04-05-03` (`:55` vs `04-05-PLAN.md:453`) | the `\| rg -q '^ok'` leg and the `todos/pending == 7` leg |
-
-The `04-03-01` omission is the sharpest: it drops a deliberately-added vacuity guard, so the VALIDATION row
-can pass on a ROADMAP with every `Cellar` mention deleted. *Fix:* synchronize each row with its task command,
-or state explicitly why a row is a deliberately reduced sampling gate.
-
-**MEDIUM — `04-05` Task 3's `<automated>` still uses the `go test … | rg -q '^ok'` vacuity shape.**
-*(NEW; orchestrator.)* `04-05-PLAN.md:453` runs `go test ./internal/upgrade/... 2>&1 | rg -q -e '^ok'`. This
-is the same class as cycle-1 HIGH #6: `^ok` proves the package compiled and nothing failed, not that the two
-new `TestCosignIdentityPolicy*` tests ran. The strong assertion — `rg -c '^--- PASS: TestCosignIdentityPolicy'`
-reports 2 — exists, but only in `<acceptance_criteria>` prose (`:463-464`), not in the executable command
-`/gsd-execute-phase` runs. *Fix:* promote the named-PASS count into the `<automated>` block.
-
-**LOW — `04-05`'s two-`mktemp` rationale is inverted.** *(NEW; Codex.)* `04-05-PLAN.md:143-145` says "Both
-directories must exist before the trap is installed, so a failure between the two `mktemp` calls cannot leak
-one of them." The opposite holds: if the second `mktemp` fails, `DL_DIR` exists with no trap installed and
-leaks. *Fix:* install cleanup immediately after the first `mktemp`, then add the second directory to the
-state it cleans.
-
-**LOW — `04-01` Task 3's action implies two `brewPointerMessage` call sites; its criterion enforces one.**
-*(NEW; OpenCode.)* Task 1 places `fmt.Errorf("upgrade: %s", brewPointerMessage(inst))` in `upgrade.go`
-(`04-01-PLAN.md:280`) and Task 3 adds a `--check` fork printing "the string returned by
-`brewPointerMessage(inst)`" (`:481`) — read literally, two call sites — while the acceptance criterion
-requires `rg -c 'brewPointerMessage' internal/upgrade/upgrade.go` to be exactly 1 (`:512`). *Fix:* state the
-shape in the action: compute `msg := brewPointerMessage(inst)` once, branch on it.
-
-**LOW — `04-02` Task 1's deletion range excludes an `atomic_write` mention its own gate requires removed.**
-*(NEW; OpenCode.)* The action scopes deletion to `.goreleaser.yaml:570-588` and says "Delete nothing above
-line 570" (`04-02-PLAN.md:140`), but `atomic_write` occurs twice in the file — `:579` (inside the range) and
-`:592` (a trailing comment, outside it) — while the acceptance criterion requires
-`rg -c 'atomic_write' .goreleaser.yaml` to report 0 (`:199`). Self-correcting via the failing gate, but the
-edit should own the `:592` mention explicitly.
+`04-06-PLAN.md:176` runs `brew trust --tap seanb4t/tap`. The baseline file specified at
+`04-06-PLAN.md:165` carries exactly four keys — `TAP_PREEXISTING`, `CASK_PREEXISTING`, `MAN_PAGES_BEFORE`,
+`BREW_PREFIX` — none about trust, and the trap at `04-06-PLAN.md:288` restores tap presence only. The
+residue is narrow: when `TAP_PREEXISTING=no` the trap untaps and trust goes with the tap; the leak occurs
+only on a machine where the maintainer already had `seanb4t/tap` but had not trusted it. In that case
+the run persistently changes Homebrew trust state and `04-06-PLAN.md:23`'s "the machine is left in the
+state it started in" is false. Either record and restore trust state, or add a third blocking
+precondition (tap must be pre-trusted or absent) and narrow the truth accordingly. Confirm the exact
+untrust command against the installed Homebrew before prescribing one.
 
 ### Divergent Views
 
-- **Do `04-VALIDATION.md` rows match their plan tasks?** OpenCode spot-checked four rows (`04-01-02`,
-  `04-02-02`, `04-05-01`, `04-06-02`) and reported "identical commands in both documents." Codex checked
-  four different rows and found each to be a strict subset. **Adjudicated in Codex's favor by direct
-  measurement** — the orchestrator diffed all 16 rows and reproduced Codex's four divergences plus one more
-  (`04-05-03`). OpenCode's sample happened to land on rows that do match; `04-02-02` is not one of them (it
-  drops the `schema=3` leg). Recorded as an actionable MEDIUM.
-- **Overall risk.** Codex rated **HIGH**, driven entirely by the `04-06` real-workstation state-restoration
-  defects. OpenCode rated **LOW-to-MEDIUM**, having not examined the tap/man-page restoration paths against
-  the cask's actual uninstall hook. The orchestrator's independent check of `.goreleaser.yaml:621` supports
-  Codex's reading of the mechanism; the mitigating fact OpenCode did not have is that this host currently has
-  no `seanb4t` tap, no codegraph cask and zero `codegraph*.1` pages, so neither defect fires *today*. Both
-  are durable plan defects that must be fixed before `04-06` executes on any machine, but neither is an
-  imminent hazard on this one.
-- **Severity of the `04-05` Mutation-3 ordering defect.** OpenCode filed it MEDIUM ("a self-inconsistency
-  inside a self-test protocol"). The orchestrator escalated it to HIGH because it disables the designated
-  proof that cycle-1 HIGH #2 was closed and because its naive repair reinstates that exact HIGH. Codex did
-  not find it.
+None available — a second lane did not complete. Where a cycle-2 divergence would normally be resolved
+by cross-lane comparison, this cycle substitutes orchestrator re-measurement, which is a weaker
+instrument: it shares this agent's blind spots by construction. Two of the three findings above
+originate from Codex alone and were confirmed, not independently discovered.
+
+---
+
+## Cycle-2 disposition verification (independently measured)
+
+Every claim re-derived from the live repo at `63ac13e`. Structure re-confirmed unchanged: 6 plans,
+4 waves, 16 tasks, 16 `<automated>` blocks, 16 VALIDATION rows.
+
+| # | Cycle-2 finding | Verdict | Measurement |
+|---|---|---|---|
+| HIGH 1 | Unclosed `<automated>` tags in `04-06` | **CLOSED** | Anchored `rg -c '^\s*<automated>'` vs `rg -c '</automated>\s*$'` → 3/3, 3/3, 2/2, 2/2, 3/3, 3/3. `verify plan-structure` deliberately not used — it returns `valid:true` either way |
+| HIGH 2 | Unconditional `brew untap` | **CLOSED** | Probe runs before the first tap (`:159`, required at `:221-222`); trap untaps only on `TAP_PREEXISTING=no` (`:288-290`); gate at `:352` is bidirectional (`yes⇒left-in-place`, `no⇒untapped`) **and** re-probes the machine: `brew tap \| rg -c '^seanb4t/tap$'` `-eq` `rg -c '^TAP_PREEXISTING=yes$' "$B"` |
+| HIGH 3 | Cleanup deletes pre-existing man pages | **CLOSED** | `:128` is a real blocking `<precondition>` that HALTs on nonzero; `:224` requires `MAN_PAGES_BEFORE=0` specifically; `:393-394` states the final zero-probe is meaningful *because* the baseline is provably zero. `.goreleaser.yaml:621` confirmed as the unconditional glob |
+| HIGH 4 | `04-05` Mutation 3 unsatisfiable | **CLOSED — the critical one** | (a) total-preserving: relocation into `verify:gatekeeper`, not deletion (`:464-478`); target ordering verified — `verify:self-upgrade:` at `Taskfile.yml:2554`, `verify:gatekeeper:` at `:2751`, so the relocated pair lands outside the sliced region while staying in the file; the extractor's stated parse contract (`:319`) does not exclude `#`-prefixed lines, so the total genuinely stays 7. (b) SUMMARY must record the observed count as **7**, and a recorded 6 explicitly fails the criterion (`:515-522`). (c) lowering the floor to 6 is forbidden in **both** Task 2's action (`:383`) and Task 3's criterion (`:521`) |
+| C2-2 | `04-02` size fallback unimplementable | **CLOSED** | `{mtime:, size:}` two-key snapshot at `:162`; three-way freshness at `:171`; `File\.size` `-ge 2` leg present in the `<automated>` at `:213`. RED today — live `File.size` count in `.goreleaser.yaml` is **0** |
+| C2-4 | Trap double-invokes on INT/TERM | **CLOSED** | Idempotency guard at `:267`; separate per-signal registration with disarm-then-exit at `:298-306`, exit codes 130/143 at `:301`; `RESTORE_INVOCATIONS=1` asserted `-eq 1` in the `<automated>` at `:352` |
+| C2-x | Five VALIDATION rows resynced | **CLOSED** | 16 rows total. `04-02-01` carries the size leg; `04-02-02` `schema=3`; `04-03-01` the `-ge 4` vacuity guard; `04-04-02` `brew trust`; `04-05-03` the three-mutation replacement; `04-06-02`/`04-06-03` resynced |
+| C2-5 | `04-05:453` `rg -q '^ok'` vacuity | **CLOSED** | Replaced by `--- PASS: TestCosignIdentityPolicy` `-eq 2`, promoted into the executable `<automated>` at `:507`. Vacuity re-confirmed live on this package: `go test ./internal/upgrade/ -run '^TestCosignIdentityPolicy'` exits **0** printing `[no tests to run]` |
+| C2-6 | `mktemp` ordering inverted | **CLOSED** | `04-05:161-165` prescribes create-`DL_DIR` → install-trap → create-`SIG_DIR`, with `${SIG_DIR:-}` tolerance and the rationale required in a comment |
+| C2-1 | `04-01` two `brewPointerMessage` call sites | **CLOSED** | Task 3's action at `04-01:498` binds `msg := brewPointerMessage(inst)` once at the top of the branch and rewrites Task 1's `fmt.Errorf` to consume the binding; the criterion at `:537` confirms the intended shape rather than discovering it through failure |
+| C2-3 | `04-02` Edit 5 must own `.goreleaser.yaml:592` | **CLOSED** | Trailing `atomic_write` comment confirmed at `.goreleaser.yaml:592`; live file-wide count is **2**, and the `<automated>` at `04-02:213` requires `-eq 0`, so the gate is RED until both are removed |
+
+### Do-not-regress list — all confirmed holding
+
+| Item | Measurement |
+|---|---|
+| Cosign floor 5 vs measured baseline 4 | Live `rg -c '^\s*cosign verify-blob' Taskfile.yml` = **4**; gate `-ge 5` → RED today |
+| Identity floor 7 vs measured 6 across five files | `<measured_baseline>` table at `04-05:257-278` reproduced: `Taskfile.yml` ×2 (`:2544`, `:3090`), `README.md:59`, `docs/RELEASE.md:62`, `SECURITY.md:35`, `docs/RELEASE-PROCEDURES.md:238` = **6**; Task 1 adds the 7th |
+| Region requirement — 0 literals in `verify:self-upgrade` today | Confirmed: no `--certificate-identity-regexp` between `Taskfile.yml:2554` and `:2751` |
+| Named-PASS baselines 5/1/5 | Live: `TestTaskfile*` = **5**, `TestWorkflowRunBodiesInvokeTask` = **1**, `TestHomebrewCask*` = **5** |
+| Root-preserving `filepath.Dir` walk | `04-01:253-254`; paired source gate (`strings.Split` absent, `filepath.Dir` present) retained |
+| Single `EvalSymlinks` contract (error ⇒ not detected) | `04-01:235` returns immediately on error; T-04-03 mitigation agrees; two executing rows (dangling symlink, symlink loop) |
+| Pre-mutation trap with both escape hatches removed | `04-06:352` asserts `command -v brew` first and fails loudly; no `CODEGRAPH_CASK_PREEXISTING` short-circuit remains anywhere in the plan |
+| `04-01` 3 flagged assumptions + no-silent-drop equality | `<flagged_assumptions>` table carries 3 rows with per-row "Closed by"; equality line reads `3 == 0 + 3` |
+| 3 descriptor-less `must_haves.prohibitions` | `04-01:38-41` — exactly 3, no descriptors |
+| `T-04-01` canon-referral breadcrumb | `04-01:148-152` and `:181` |
+| `<assumption_delta_decision>` block | `04-01:111-129`, decision `promote`, no accepted debt |
+| Threat IDs unrenumbered | `T-04-01`…`T-04-22` contiguous across the six plans, none reused or shifted |
+| "Artifacts this phase produces" in all 6 plans | Present in `04-01`…`04-06` |
+
+### `84d1gfpywd` hunt — guards that cannot fire
+
+All 16 `<automated>` blocks were read and their targets measured live. Results:
+
+- **No `-run PATTERN` gate is proved by exit status alone.** All six test gates count a named `--- PASS:`
+  line. The vacuity is real on this package (measured above), so this matters.
+- **No pre-satisfied "prove new work" floor.** Every floor meant to go GREEN on this phase's work is RED
+  today: cosign `-ge 5` (live 4); identity `-ge 7` (live 6); `File.size` `-ge 2` (live 0);
+  `fresh_man_pages` `-ge 2` (live 0); `FRESH_MAN_PAGE_COUNT` `-ge 3` (live 0); `schema=3` `-eq 2`
+  (live 0); `SENTINEL` `-eq 0` (live 16); `codegraph-brew-install` `-eq 0` (live 2); `atomic_write`
+  `-eq 0` (live 2); Cellar-without-Caskroom `-eq 0` (live 6 in ROADMAP, 3 in REQ+PROJ); Phase-4 checkbox
+  with `Caskroom` `-eq 1` (live 0); `Caskroom` in REQ+PROJ `-ge 3` (live 0); `#19121` `-ge 1` (live 0);
+  `brew upgrade codegraph` across README+RELEASE `-eq 2` (live 1); `TestCosignIdentityPolicy` `-eq 2`
+  (live 0). The three *preservation* floors that are pre-satisfied by design — `system_command … man`
+  `-eq 1`, `brew trust` `-ge 2`, and the named-PASS 5/1/5 — are anti-regression assertions, not
+  proof-of-work, and are correctly used as such.
+- **No `rg -c` is counting lines where occurrences are meant.** The two remaining count floors are
+  anchored (`^\s*cosign verify-blob`) or set-scoped; everything else became region-scoped or per-token.
+- **The multi-token loops prove N distinct tokens.** `04-06:461` replaced the multi-`-e … -ge 3` shape
+  with three explicit loops, each iteration carrying `|| { echo …; exit 1; }`, plus `-F` fixed-string
+  matching for the requirement IDs and a per-ID disposition-row `-eq 1`. A shell `for` whose body
+  cannot fail was the trap here; it is not present.
+- **No floor is probed through a second independent matcher.** The region-scoped literal requirement is
+  probed through the *same* slice the production ordering assertion uses (`04-05:128-130`).
+- **No brittle count was swapped for a higher one** — see the operator diff above.
+
+**Todo-count arithmetic re-derived:** live `.planning/todos/pending/` = **10**. `04-02` Task 4 moves 2
+(`stale-pages`, `strand-the-phase-4-sentinel`) → gate `-eq 8` ✓. `04-05` Task 3 moves 1
+(`no-signature-check`) → gate `-eq 7` ✓. The `add-golangci-lint` todo captured at `ffad9ee`, *before*
+this revision, is correctly absorbed.
+
+**04-03 gate achievability** (the thread OpenCode died on, finished here): ROADMAP carries 7 `Cellar`
+lines, 6 of them without `Caskroom` (`:91`, `:97`, `:211`, `:212`, `:216`, `:218`; `:226` already reads
+"Caskroom/Cellar"). 04-03's Edits 1, 2, 4, 5 and 6 cover exactly those six, so leg 1 (`-eq 0`) is
+reachable. Leg 2 (`-ge 4`) survives because Edits 1, 2, 5 and Criterion 3 are each instructed to name
+**both** trees, and `:226` retains its pair — 5 lines keep the word, against a floor of 4. Reachable,
+though with only one line of margin; the plan text pins the four "name both trees" edits, so the margin
+is specified rather than accidental. No finding.
+
+---
 
 ## Verification coverage
 
 `plan_review.source_grounding` is `true` and `drift-guard authority` resolves to **`intel`**, but
-`.planning/intel/API-SURFACE.md` carries `symbolCount: 0, stale: true` and self-declares *"api-map.json has
-no entries (intel extraction is regex/JS-only or not yet populated). Treat absence here as 'unknown', not
-'does not exist'."* This is a **Go** repository, so per the workflow's own definitions the `intel` adapter
-**cannot** check these symbols: every row below is **UNCHECKABLE → INFO**, never MISSING. Each is backed by a
-direct ripgrep or Read confirmation instead. Symbols declared under each plan's "Artifacts this phase
-produces" section are excluded (they do not exist yet by design).
+`.planning/intel/API-SURFACE.md` carries `symbolCount: 0, stale: true` and self-declares *"api-map.json
+has no entries (intel extraction is regex/JS-only or not yet populated). Treat absence here as
+'unknown', not 'does not exist'."* This is a **Go** repository, so by the workflow's own definitions the
+`intel` adapter **cannot** check these symbols: every row below is **UNCHECKABLE → INFO**, never MISSING.
+Each is backed by a direct ripgrep or Read confirmation. Symbols declared under each plan's "Artifacts
+this phase produces" section are excluded — they do not exist yet by design.
 
 | Symbol / artifact | Kind | Cited by | Adapter verdict | Direct confirmation |
 |---|---|---|---|---|
-| `resolveLatest` | func field | 04-01 | UNCHECKABLE (intel empty; Go) | CONFIRMED `internal/upgrade/upgrade.go` (5 refs) |
-| `atomicSwap` | func | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/swap.go` (5 refs) |
-| `checkWritable` | func | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/swap.go` (3 refs) |
-| `releaseAssetName` | func | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/upgrade.go` (3 refs) |
-| `releaseWorkflowRefPattern` | var | 04-05 | UNCHECKABLE | CONFIRMED `internal/upgrade/verify.go` (3 refs) |
-| `upgradeRunFunc` | var | 04-01, 04-04 | UNCHECKABLE | CONFIRMED `internal/cli/install.go` |
-| `newUpgradeCmd` | func | 04-04 | UNCHECKABLE | CONFIRMED `internal/cli/root.go` |
-| `TestTaskfileGatesFailLoud` / `_EmptyFileIsError` | test | 04-05 | UNCHECKABLE | CONFIRMED — 5 `TestTaskfile*` PASS measured |
+| `Options.resolveLatest` / `.download` / `.verify` / `.swap` | struct fields | 04-01 | UNCHECKABLE (intel empty; Go) | CONFIRMED `internal/upgrade/upgrade.go:68-71` — the plan's spelling matches the real field names (the `*Func` names are the *types*, `:39-42`) |
+| `resolveLatest` | func field | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/upgrade.go` (9), `release.go` (6) |
+| `atomicSwap` | func | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/swap.go` (5) |
+| `checkWritable` | func | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/swap.go` (3) |
+| `releaseAssetName` | func | 04-01 | UNCHECKABLE | CONFIRMED `internal/upgrade/upgrade.go` (3) |
+| `releaseWorkflowRefPattern` | var | 04-05 | UNCHECKABLE | CONFIRMED `internal/upgrade/verify.go` (3) |
+| `upgradeRunFunc` | var | 04-01, 04-04 | UNCHECKABLE | CONFIRMED `internal/cli/upgrade.go` (3), `install.go` (1) |
+| `newUpgradeCmd` | func | 04-04 | UNCHECKABLE | CONFIRMED `internal/cli/upgrade.go` (2), `root.go` (1) |
+| `TestTaskfileGatesFailLoud_EmptyFileIsError` | test | 04-05 | UNCHECKABLE | CONFIRMED `internal/upgrade/taskfile_shape_test.go`; 5 `TestTaskfile*` PASS measured |
 | `TestWorkflowRunBodiesInvokeTask` | test | 04-02 | UNCHECKABLE | CONFIRMED — 1 PASS measured |
 | `TestHomebrewCask*` | test | 04-02 | UNCHECKABLE | CONFIRMED — 5 PASS measured |
-| `TestGoreleaserPinParity` | test | 04-02 (as the mis-scope being corrected) | UNCHECKABLE | CONFIRMED — sole `^TestGoreleaser` match |
-| `.goreleaser.yaml` cask hooks (`:551`, `:579`, `:621`, `:624`) | config | 04-02, 04-06 | UNCHECKABLE (non-JS) | CONFIRMED by Read |
+| `TestGoreleaserPinParity` | test | 04-02 | UNCHECKABLE | CONFIRMED — 1 PASS, sole `^TestGoreleaser` match |
+| `.goreleaser.yaml` cask hooks (`:592` comment, `:620-621` man glob) | config | 04-02, 04-06 | UNCHECKABLE (non-JS) | CONFIRMED by Read |
 | `Taskfile.yml:1671` rehearsal refusal | config | 04-06 | UNCHECKABLE | CONFIRMED |
-| `Taskfile.yml` cosign invocations `:1492`, `:1494`, `:2541`, `:3087` | config | 04-05 | UNCHECKABLE | CONFIRMED (4 anchored) |
-| identity literals ×6 across 5 files | config/docs | 04-05 | UNCHECKABLE | CONFIRMED (all six flag→literal pairs) |
+| `Taskfile.yml` cosign invocations | config | 04-05 | UNCHECKABLE | CONFIRMED — 4 anchored |
+| `verify:self-upgrade` `:2554` / `verify:gatekeeper` `:2751` / `verify:notarized-suite` / `verify:release-assets` / `release:rehearse-cask` | Taskfile targets | 04-02, 04-05 | UNCHECKABLE | CONFIRMED — each present exactly once, and `self-upgrade` precedes `gatekeeper` (load-bearing for Mutation 3) |
+| identity literals ×6 across 5 files | config/docs | 04-05 | UNCHECKABLE | CONFIRMED — all six flag→literal pairs |
+| `Taskfile.yml:2072` reinstall idempotency check | config | 04-02 | UNCHECKABLE | CONFIRMED by Read |
 | `.planning/todos/pending/` (10 items) | file-path | 04-02, 04-05 | UNCHECKABLE | CONFIRMED — 10 today; 10→8→7 arithmetic consistent |
-| `brewInstall`, `detectBrewManaged`, `brewPointerMessage`, `internal/upgrade/brew.go` | artifact | 04-01 | **EXCLUDED** — declared under "Artifacts this phase produces" | n/a |
-| `TestDetectBrewManaged`, `TestDetectBrewManaged_RealInstall`, `TestUpgradeRun_RefusesBrewManagedCask`, `TestCosignIdentityPolicy*`, `04-EVIDENCE.md` | artifact | 04-01, 04-05, 04-06 | **EXCLUDED** — produced by this phase | n/a |
+| `brewInstall`, `detectBrewManaged`, `brewPointerMessage`, `internal/upgrade/brew.go` | artifact | 04-01 | **EXCLUDED** — "Artifacts this phase produces" | n/a |
+| `TestDetectBrewManaged`, `TestDetectBrewManaged_RealInstall`, `TestUpgradeRun_RefusesBrewManagedCask`, `TestUpgradeCommand_HelpDocumentsBrewRefusalAndExitCodes`, `TestCosignIdentityPolicy*`, `extractCosignIdentityLiterals`, `cosignIdentityLiteral`, `04-EVIDENCE.md` | artifact | 04-01, 04-04, 04-05, 04-06 | **EXCLUDED** — produced by this phase | n/a |
 
 No symbol is reported MISSING. Coverage is complete for every non-excluded symbol the plans cite.
+
+---
+
+## Convergence status
+
+| Cycle | HIGH | Actionable non-HIGH | Total |
+|---|---|---|---|
+| 1 | 6 | 13 | 19 |
+| 2 | 4 | 7 | 11 |
+| 3 | 1 | 2 | 3 |
+
+All 11 cycle-2 findings are closed and verified by measurement; no cycle-2 finding survives. The three
+open items are newly surfaced in cycle 3: one HIGH (C3-1) plus two actionable non-HIGH (C3-2, C3-3), all
+three confined to plans `04-02` and `04-06` and none touching the detection algorithm, the drift guard,
+or any numeric floor. Cycle 3 was the final scheduled convergence cycle, so this outcome escalates to
+the maintainer rather than looping again.
