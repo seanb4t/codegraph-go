@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 4
-current_phase_name: "`codegraph upgrade` × Homebrew"
+current_phase: 04
+current_phase_name: codegraph-upgrade-homebrew
 status: executing
 stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-last_updated: "2026-08-11T16:29:32.726Z"
-last_activity: 2026-08-10
-last_activity_desc: Phase 03 UAT closed — 21/21 passed, 0 issues
+last_updated: "2026-08-11T16:57:56.968Z"
+last_activity: 2026-08-11
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
   completed_phases: 3
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 04 — `codegraph upgrade` × Homebrew
+**Current focus:** Phase 04 — codegraph-upgrade-homebrew
 
 ## Current Position
 
-Phase: 4 — `codegraph upgrade` × Homebrew
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-10 — Phase 03 complete, transitioned to Phase 4
+Phase: 04 (codegraph-upgrade-homebrew) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 04
+Last activity: 2026-08-11 — Phase 04 execution started
 
 Progress: [....] 3/4 phases complete (75%)
 

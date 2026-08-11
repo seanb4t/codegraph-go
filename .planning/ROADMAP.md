@@ -218,14 +218,14 @@ Plans:
   3. **Amended 2026-08-11 (D-01, D-04R, plan 04-03):** Detection fires on a resolved-symlink Caskroom or Cellar layout under Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew — the linuxbrew leg now covers BOTH shapes, because the prior scoping rested on "Homebrew on Linux does not support casks", which is false for the current release line: Homebrew PR #19121 allows `binary`/`zap`-only casks to install on Linux, and Homebrew 6.0.0 shipped four further Linux-cask items — and does **not** fire on a non-brew binary sitting at a path that merely contains the string `Cellar`. The false-positive case is an executing test, not a comment, because a path-prefix guess is the exact shape of gate this repo keeps finding cannot fire. codegraph's own cask declares `binaries: [codegraph]` with no `app`/`pkg`/`zap` stanza, exactly the shape PR #19121 covers, and the false-positive case is now specifically a matching path shape with no Homebrew install receipt above it (UPGR-02)
   4. A non-brew install on a machine where `brew` is absent from `PATH` upgrades normally, so the detection can never turn `codegraph upgrade` into a hard dependency on Homebrew being present (UPGR-02)
 
-**Plans**: 6 plans
+**Plans**: 3/6 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — tracer: `internal/upgrade/brew.go` resolves symlinks, matches the Caskroom/Cellar shape, requires Homebrew's own install receipt, and `Run()` refuses before any network call — proved by the seam assertion, plus the full prefix/tree table and the `--check` step-aside
-- [ ] 04-02-PLAN.md — remove the Phase-3 sentinel from both cask hooks and every rehearsal assertion (D-02), close UF-5 with an mtime-baseline man-page assertion, and correct `03-EVIDENCE.md`'s false stranding claim
-- [ ] 04-03-PLAN.md — amend ROADMAP criteria 1–3, the Phase-4 checkbox item, the milestone-ordering bullet, Phase 3's Notes, REQUIREMENTS UPGR-01/02 and PROJECT.md (D-01, D-04R, D-08, D-09)
+- [x] 04-01-PLAN.md — tracer: `internal/upgrade/brew.go` resolves symlinks, matches the Caskroom/Cellar shape, requires Homebrew's own install receipt, and `Run()` refuses before any network call — proved by the seam assertion, plus the full prefix/tree table and the `--check` step-aside
+- [x] 04-02-PLAN.md — remove the Phase-3 sentinel from both cask hooks and every rehearsal assertion (D-02), close UF-5 with an mtime-baseline man-page assertion, and correct `03-EVIDENCE.md`'s false stranding claim
+- [x] 04-03-PLAN.md — amend ROADMAP criteria 1–3, the Phase-4 checkbox item, the milestone-ordering bullet, Phase 3's Notes, REQUIREMENTS UPGR-01/02 and PROJECT.md (D-01, D-04R, D-08, D-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -246,7 +246,7 @@ Plans:
 | 1. Cross-Compile Spike & `goreleaser release` Migration | v0.5.0 | 6/6 | Complete    | 2026-08-08 |
 | 2. Apple Signing & Notarization | v0.5.0 | 7/7 | Complete    | 2026-08-09 |
 | 3. Homebrew Tap & Cask | v0.5.0 | 5/5 | Complete    | 2026-08-10 |
-| 4. `codegraph upgrade` × Homebrew | v0.5.0 | 0/6 | Not started | - |
+| 4. `codegraph upgrade` × Homebrew | v0.5.0 | 3/6 | In Progress|  |
 | 999.2. tmux e2e/UAT test harness | Backlog | 0/0 | Not started | - |
 | 999.4. CheckRegression positivity guard | Backlog | 0/0 | Not started | - |
 
