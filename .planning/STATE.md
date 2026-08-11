@@ -4,9 +4,9 @@ milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
 current_phase: 4
 current_phase_name: "`codegraph upgrade` × Homebrew"
-status: planning
-stopped_at: Phase 4 planned — 6 plans across 4 waves, checker passed
-last_updated: "2026-08-11T12:24:31.009Z"
+status: executing
+stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
+last_updated: "2026-08-11T16:29:32.726Z"
 last_activity: 2026-08-10
 last_activity_desc: Phase 03 UAT closed — 21/21 passed, 0 issues
 progress:
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 4 — `codegraph upgrade` × Homebrew
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-10 — Phase 03 complete, transitioned to Phase 4
 
 Progress: [....] 3/4 phases complete (75%)
@@ -318,8 +318,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-11T12:24:30.998Z
-Stopped at: Phase 4 planned — 6 plans across 4 waves, checker passed
+Last session: 2026-08-11T16:29:32.715Z
+Stopped at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
