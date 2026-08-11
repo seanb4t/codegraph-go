@@ -491,3 +491,36 @@ checked for existence; their absence is intended and is not a finding.
 - **One naming adjacency, not a defect.** 04-05 introduces `SELF-UPGRADE-VERIFY-EVIDENCE` while
   `SELF-UPGRADE-EVIDENCE` already exists at `Taskfile.yml:2735` in the same target. Neither string
   contains the other, so counting gates on either name stay unambiguous.
+
+---
+
+## Orchestrator verification of cycle-1 measured counts (2026-08-11)
+
+The convergence orchestrator independently re-measured the three counts the cycle-1
+findings rest on, because each one is load-bearing for a HIGH. Two confirmed, one did not
+reproduce. Recorded here so a replan does not inherit an unverified number.
+
+| Claim | Cycle-1 finding said | Orchestrator measured | Verdict |
+|---|---|---|---|
+| `cosign verify-blob` in `Taskfile.yml` | 10 lines / 4 invocations | 10 matching lines; **4** real shell invocations (`rg -n '^\s*cosign verify-blob' Taskfile.yml`) — the other 6 are comments and `echo` strings | **CONFIRMED** |
+| `--certificate-identity-regexp` occurrences | "exactly 4 today, equal to 04-05's `t.Fatalf` floor" | **2** in `Taskfile.yml` (lines 2544, 3090); **6** repo-wide excluding `.planning/` (adds `README.md:59`, `SECURITY.md:35`, `docs/RELEASE-PROCEDURES.md:238`, `docs/RELEASE.md:62`) | **NOT REPRODUCED** |
+| `go test -run` empty-match vacuity | `ok … [no tests to run]`, exit 0 | identical: `go test ./internal/upgrade/ -run '^TestZZZDefinitelyNoSuchTest$'` → `ok … [no tests to run]`, exit 0 | **CONFIRMED** |
+
+**Consequence for the `04-05` identity-literal HIGH.** The finding's *shape* — a `t.Fatalf`
+floor that is already satisfied before the task that is supposed to raise it — is a real
+and recurring failure mode in this repository (rule `84d1gfpywd`, and the sixth recorded
+vacuous-pass instance in `xkbc8m36hm` was exactly a floor probed through the wrong
+matcher). But the specific number "4" could not be reproduced by counting flag
+occurrences at either scope.
+
+The likely explanation is that `04-05`'s extractor counts *identity literal values* rather
+than `--certificate-identity-regexp` flag instances — a different quantity. **The replan
+must re-derive this count from what `04-05`'s extractor actually parses, and state the
+measured baseline explicitly, rather than adopting "4" from this review.** Do not treat
+the finding as refuted either: verify the floor against the extractor's own output.
+
+*Method note: the first orchestrator attempt used `rg -o '…' | wc -l`, which counts every
+mention including comments, and produced a wrong invocation count of 10. The corrected
+count anchors on `^\s*` to isolate real invocations. This is the same `rg -c` counts-lines-
+not-occurrences hazard the cycle-1 findings flag elsewhere — encountered live while
+checking them.*
