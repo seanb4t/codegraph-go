@@ -60,3 +60,40 @@ Prove the fix RED-then-GREEN per this repository's standing rule: a
 tampered/unsigned prior-release binary must be observed failing the new
 verification step before the fix, and the real (correctly signed) prior
 release must still pass after it.
+
+## Resolution (04-05, honest about what is and is not proved)
+
+`verify:self-upgrade` now downloads the prior release's `.sigstore.json`
+bundle into its own `SIG_DIR` (mirroring `verify:notarized-suite`'s
+two-temp-dirs discipline) and runs `cosign verify-blob` — same issuer and
+`--certificate-identity-regexp` flags `verify:release-assets` and
+`verify:notarized-suite` already use — strictly before `chmod +x`. A
+region-scoped ordering assertion (byte offset of `cosign verify-blob`
+within `verify:self-upgrade` is strictly less than the offset of
+`chmod +x`) proves that structurally.
+
+A new drift guard,
+`TestCosignIdentityPolicyBoundaryParityWithCompiledPattern`, proves all
+seven identity-regexp restatements across five files (`Taskfile.yml` ×3,
+`README.md`, `docs/RELEASE.md`, `SECURITY.md`,
+`docs/RELEASE-PROCEDURES.md`) exhibit selected boundary-case behavioural
+parity with the compiled `releaseWorkflowRefPattern`, including a
+region-scoped requirement pinning that at least one literal lives inside
+`verify:self-upgrade` itself. This guard was demonstrated RED three times
+against confirmed-applied mutations — a semantic loosening (branch refs
+accepted), an emptied file list (the total floor), and a total-preserving
+relocation of the new literal out of `verify:self-upgrade` into
+`verify:gatekeeper` (the region-scoped check, which no count-based floor
+can detect) — and reverted byte-clean after each.
+
+**What is NOT proved, stated plainly rather than papered over:** the
+end-to-end RED-then-GREEN this todo originally asked for — a tampered or
+unsigned prior-release binary observed actually failing
+`cosign verify-blob` inside a real `verify:self-upgrade` run — requires a
+real published release and network access, and was not executed in this
+session. The cosign step is wired and its ordering is asserted
+structurally; the drift guard is demonstrated RED against synthetic
+mutations, not against a real signature failure. The next natural
+`post-release-verify.yml` run on a real tag is what first exercises this
+path end to end; a broken bundle download or a mismatched identity would
+surface there.
