@@ -289,3 +289,60 @@ Both remaining items are **cheap, local, and additive**: two per-key `test` legs
 directory totals plus their two VALIDATION mirrors. Neither touches the detection logic, the
 threat model, the trapped-script architecture, or any safety mechanism. Both lanes and the
 orchestrator agree the phase is otherwise ready to execute.
+
+---
+
+## Convergence close-out (2026-08-11)
+
+Loop ran **6 cycles** (3 default + 3 maintainer-authorized). Trajectory of unresolved
+findings: **19 → 11 → 3 → (review died on session limit) → 2 → 0 HIGH**.
+
+Cycle 6 applied the final two MEDIUMs and proved both against fixtures:
+
+| Fix | Defect | Proof |
+|---|---|---|
+| A | `-eq 2` over a `(BEFORE\|AFTER)` alternation counts lines matching *either* key — two `BEFORE` lines and no `AFTER` gave cardinality 2 **and** distinctness 1, so both legs passed with the after-hash never recorded | Replaced by two per-key `-eq 1` legs; distinctness leg untouched. Fixture (a) two-BEFORE/no-AFTER: old **GREEN**, new **RED** |
+| B | `ls todos/pending \| wc -l` totals couple both gates to any unrelated `/gsd-capture` (this branch demonstrates one in `ffad9ee`) | Replaced by per-name absent-from-`pending`/present-once-in-`completed` assertions. Decoupling proved: adding an unrelated todo leaves both GREEN where the old totals would each go RED |
+
+**Correction to the orchestrator's own cycle-5 brief, on the record.** The orchestrator
+reported the `todos/pending -eq 7` gate as guaranteed-RED at execution. **That was wrong.**
+Wave ordering makes the arithmetic correct — `04-02` is wave 1 (10 → 8), `04-05` is wave 3
+(8 → 7) — and the orchestrator had compared a *post-state* gate against the *current
+pre-state*. Codex independently made the identical mistake and rated it HIGH. The cycle-5
+review agent caught both and downgraded it to MEDIUM on fragility grounds, which is the
+disposition cycle 6 acted on. Recorded because the same scope error — measuring a claim
+at a different point than it is asserted — is the shape of three separate defects in this
+phase.
+
+### One item flagged and deliberately NOT closed
+
+`04-VALIDATION.md` row `04-03-02` was reported by the cycle-6 planner as a weaker subset of
+`04-03`'s task command, dropping a positive-count vacuity guard — the same subset-drift
+species as cycle 2's C2-5. It was outside cycle 6's two-fix scope and left untouched.
+
+**The orchestrator could not reproduce the specific shape by grep and is recording it as
+FLAGGED-BUT-UNCONFIRMED rather than asserting or refuting it.** Plan↔row byte-identity is
+12/15; three other rows differ cosmetically (`04-01-01`, `04-04-01` drop a `2>&1`;
+`04-05-01` carries a semantically equivalent shorter `node -e`). Settle `04-03-02` by
+diffing the row against `04-03`'s Task 2 gate directly before execution.
+
+### Standing tooling gaps observed during this loop — report upstream, do not patch locally
+
+1. **`gsd-tools verify plan-structure` returns `valid: true` on a plan with unbalanced
+   `<automated>` tags.** Confirmed on `04-06-PLAN.md` at 3 opens / 1 close. Three gates in
+   sequence — the structure validator, the plan-checker, and the planner's self-check —
+   passed two unparseable commands. Anchored counting (`^\s*<automated>` vs
+   `</automated>\s*$`) is the only reliable check; unanchored counts include prose mentions
+   inside disposition tables and misled every party here at least once (39 vs 15 at close).
+2. **The `opencode` review lane reports `ok: true, stubbed: false` while its child process
+   is already dead.** In cycle 3 it was killed twice by `[spawn error: ETIMEDOUT]` (~25 min,
+   ~12 min); raising `GSD_REVIEW_TIMEOUT_MS` did not extend the run, so the adapter's own
+   spawn timeout is what fires. The only diagnostic is `gsd-review-opencode.err`. A caller
+   trusting the `ok` field counts a dead lane as consensus. (It recovered in cycle 5 —
+   ~3.5 min, zero-byte `.err`, genuine output.)
+3. **The internal `gsd-plan-checker` (Haiku) returned PASS twice on materially wrong
+   premises** — once claiming "no RESEARCH.md for phase 4" (55,737 bytes present) and
+   "Nyquist not applicable" (`workflow.nyquist_validation` is `true`, VALIDATION.md
+   present), skipping 3 of 12 dimensions; and misreporting `04-05`'s floor as 5 over a
+   4-file set when the plan says 7 over five files. Its task table also summed to 17 while
+   its total said 16.
