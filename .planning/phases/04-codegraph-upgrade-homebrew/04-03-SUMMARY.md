@@ -130,6 +130,13 @@ None - no external service configuration required.
 - `.planning/STATE.md:191`'s stale mirror is an explicitly recorded, deliberate exclusion (tool-owned generated artifact); the next tool-driven state write will carry PROJECT.md's corrected text forward
 - No blockers for 04-04/04-05/04-06
 
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/04-codegraph-upgrade-homebrew/04-03-SUMMARY.md`
+- FOUND: `acfa7ab` (Task 1 commit)
+- FOUND: `fafc6b9` (Task 2 commit)
+- FOUND: `8e42c6f` (SUMMARY commit)
+
 ---
 *Phase: 04-codegraph-upgrade-homebrew*
 *Completed: 2026-08-11*
