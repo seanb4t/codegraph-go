@@ -27,6 +27,10 @@ var resourcesFS embed.FS
 // hand-typed URI list exists anywhere else in this package.
 var resourceURIFor = map[string]string{
 	"explore.md": "codegraph://tools/explore",
+	"node.md":    "codegraph://tools/node",
+	"search.md":  "codegraph://tools/search",
+	"callers.md": "codegraph://tools/callers",
+	"callees.md": "codegraph://tools/callees",
 }
 
 // resourceDescriptionFor returns the Description a registered resource
@@ -34,14 +38,22 @@ var resourceURIFor = map[string]string{
 // It always calls back into the tool's own Description — via
 // exploreTool() or companionTool(stem) — rather than a hand-typed copy,
 // so a resources/list payload's description can never drift from
-// tools.go. Panics on a stem with no known source, a build-time
-// invariant rather than a runtime condition — mirroring companionTool's
-// and companionHandler's existing panic-on-unknown-name convention.
+// tools.go. A stem matching one of companionNames resolves through
+// companionTool(stem), since D-09's URI naming already uses the short
+// companion name as both the map key and the tool lookup key. Panics on
+// a stem with no known source, a build-time invariant rather than a
+// runtime condition — mirroring companionTool's and companionHandler's
+// existing panic-on-unknown-name convention.
 func resourceDescriptionFor(stem string) string {
 	switch stem {
 	case "explore":
 		return exploreTool().Description
 	default:
+		for _, name := range companionNames {
+			if stem == name {
+				return companionTool(stem).Description
+			}
+		}
 		panic("mcp: resourceDescriptionFor: unknown resource stem " + stem)
 	}
 }
