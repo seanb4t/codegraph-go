@@ -93,11 +93,14 @@ Archived: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md) · re
 
 **Notes**: `Server.AddResource` is stable in the pinned `modelcontextprotocol/go-sdk@v1.7.0`; no new module dependency is needed anywhere in this milestone. Resource content is `go:embed`'d markdown under `internal/mcp/`, and the drift guard extends the existing `tools_schema_drift_test.go` / `instructions_contract_test.go` patterns rather than introducing a new mechanism. Resource `subscribe`/`listChanged` is explicitly out of scope — the tool roster is static per-process today.
 
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 5`)
+- [ ] 05-01-PLAN.md — Tracer: `codegraph://tools/explore` registered, listed, read and wire-observed end-to-end; 25 frozen transcripts re-captured under one named cause
+- [ ] 05-02-PLAN.md — The remaining 9 resource files: 7 per-tool fact-sheets plus the `CODEGRAPH_MCP_TOOLS` filter and index-state behavior docs
+- [ ] 05-03-PLAN.md — Claims drift guard: bidirectional tool/file set equality and numeric, count, env-var and host-fact claim pinning, each demonstrated RED
+- [ ] 05-04-PLAN.md — Wire fan-out: a read scenario per advertised URI, the unindexed catalog, the unknown-URI error shape, and the oracle re-proved non-vacuous
 
 ### Phase 6: Agent Skill Package — SKILL.md & SessionStart Nudge
 
