@@ -520,13 +520,24 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // than os.Getenv) + 2 scenarios (phase 5 plan 01's RSRC-01/02/03 wire
 // proof: resources-list and resources-read-explore, the first
 // resources/list and resources/read scenarios in this corpus, anchored
-// by assertResourceCacheControl's cacheScope:"private" check) = 31. A
-// shrinking count is the failure mode this constant exists to catch.
+// by assertResourceCacheControl's cacheScope:"private" check) + 9
+// scenarios (phase 5 plan 04 Task 1's remaining per-URI resources/read
+// coverage: one wire read scenario for each of the 9 resource URIs not
+// already covered by plan 05-01's resources-read-explore tracer, every
+// one Index: false — cheapest scenarios in the corpus and each
+// independently proving RSRC-03's criterion 2 property that
+// resources/read serves content in a never-indexed repository) + 2
+// scenarios (phase 5 plan 04 Task 2: resources-list-no-index, the full
+// 10-entry catalog advertised with no index present, paired with the
+// pre-existing toolslist-no-index transcript as criterion 2's proof;
+// and resources-read-unknown, the -32602 unregistered-URI error shape,
+// T-05-02's mitigation observed on the wire) = 42. A shrinking count is
+// the failure mode this constant exists to catch.
 //
 // Note that toolslist-allowlist was RENAMED to toolslist-narrowed in the
 // same change, not removed — a rename moves a .golden file's name without
 // moving this count.
-const ExpectedScenarioCount = 31
+const ExpectedScenarioCount = 42
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -1228,6 +1239,146 @@ func Scenarios() []Scenario {
 				resourceReadRequest(2, "codegraph://tools/explore"),
 			},
 			ExpectTools: 8,
+		},
+
+		// --- MCP Resources: remaining per-URI resources/read coverage (9)
+		// — plan 05-04 Task 1. Each reads exactly one of the nine resource
+		// URIs not already covered by plan 05-01's resources-read-explore
+		// tracer above.
+		//
+		// Index: false is a deliberate double-duty choice on this whole
+		// group, not a cost shortcut: skipping `codegraph init` makes
+		// these the cheapest scenarios in the corpus, and at the same
+		// time each one independently proves criterion 2's property that
+		// resources/read serves content in a repository that has never
+		// been indexed. The indexed read path is already frozen by
+		// resources-read-explore (Index: true) above, so both index
+		// states are covered across the corpus rather than in a single
+		// scenario.
+		//
+		// Each scenario carries exactly one async request and it is
+		// last — a VERIFIED constraint, not caution: go-sdk dispatches
+		// every call except "initialize" through jsonrpc2.Async(ctx)
+		// ($(go env GOMODCACHE)/github.com/modelcontextprotocol/go-sdk@v1.7.0/mcp/server.go:1910-1915),
+		// so two resources/read requests in one scenario would race each
+		// other exactly as two tools/call requests already do — the same
+		// class as the toolslist-repeat ordering flake still open as a
+		// MAJOR todo in STATE.md. Do not batch reads to save scenarios. ---
+		{
+			Name:  "resources-read-node",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/node"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-search",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/search"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-callers",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/callers"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-callees",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/callees"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-impact",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/impact"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-files",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/files"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-status",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/status"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-tools-filter",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools-filter"),
+			},
+			ExpectTools: 0,
+		},
+		{
+			Name:  "resources-read-index-state",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://index-state"),
+			},
+			ExpectTools: 0,
+		},
+
+		// --- MCP Resources: unindexed catalog + unknown-URI error shape
+		// (2) — plan 05-04 Task 2. ---
+		{
+			// Paired with toolslist-no-index (same on-disk state, Index:
+			// false): that transcript already freezes the empty tool
+			// list; this one freezes the complete ten-entry resource
+			// catalog on the same wire, from the same server, in the
+			// same condition — together the two are criterion 2's proof
+			// that an agent in a repository with no index sees zero
+			// tools and the full resource catalog.
+			Name:  "resources-list-no-index",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourcesListRequest(2),
+			},
+			ExpectTools: 0,
+		},
+		{
+			// codegraph://tools/does-not-exist is never registered under
+			// any URI — go-sdk's readResource returns the SAME
+			// ResourceNotFoundError for an unregistered URI and for a
+			// registered one whose handler could not find it
+			// (server.go:1020-1025), so this response discloses nothing
+			// about what is registered. See the anchor in anchors.go for
+			// the -32602 code assertion (T-05-02).
+			Name:  "resources-read-unknown",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/does-not-exist"),
+			},
+			ExpectTools: 0,
 		},
 	}
 }

@@ -858,6 +858,214 @@ internal/mcp/resources/impact.md`; `git status --porcelain -- internal/` and `gi
 
 ---
 
+## A note on numbering (05-04-PLAN Task 3)
+
+05-04-PLAN's own Task 3 text was written against an assumption that these two mutations would be
+numbered 9 and 10, and its acceptance criteria literally check `rg -c '^## Mutation' … returns 10`
+with the capability-off proof named `## Mutation 9`. By the time this task actually ran,
+05-03-PLAN's own Task 3 had already appended Mutations 7, 8, and 9 above (the tool-rename/GUARD-02
+proof and the two GUARD-01 code/prose-side proofs) — nine mutations existed, not eight, and slot 9
+was already taken. Rather than renumber or overwrite an already-committed, already-reverted
+mutation record, the two mutations below continue the sequence as Mutations 10 and 11. This is
+recorded here plainly rather than silently reconciled, matching 05-03-PLAN's own precedent for the
+identical situation (see "A note on numbering (05-03-PLAN Task 3)" above): the plan's literal
+acceptance-criteria commands were written against a stale assumption and do not hold against the
+actual, current file; the corrected verification command is `rg -c '^## Mutation'
+test/wireoracle/MUTATION-PROOF.md` returning **11**, with the capability-off/RSRC-03-capability
+proof at `## Mutation 10` and the registration-gating/RSRC-03-structural proof at `## Mutation 11`.
+Both mutations named in 05-04-PLAN's success criteria (criterion 3's non-vacuity re-proof,
+criterion 3's RSRC-03 index-independence proof) are demonstrated below regardless of the number
+attached to each.
+
+---
+
+## Mutation 10 — the resources capability, explicit zero value removed (05-04-PLAN Task 3, D-11/T-05-03)
+
+**Requirement:** criterion 5's "the oracle re-proved non-vacuous" — demonstrate what
+`Resources: &mcp.ResourceCapabilities{}`'s EXPLICIT zero value in `BuildServer`'s
+`mcp.ServerCapabilities` literal prevents, mirroring Mutation 5's capability-off proof for
+`Tools.ListChanged` and D-11's own stated rationale for never leaving a capability's presence to
+SDK inference.
+
+**Edit:** `internal/mcp/server.go`, `BuildServer`'s capability construction:
+
+```diff
+ 		Capabilities: &mcp.ServerCapabilities{
+-			// RSRC-03/D-11 extension: explicit zero value, not omission.
+-			// go-sdk's capabilities() (server.go:645-653) would otherwise
+-			// auto-populate caps.Resources with ListChanged: true purely
+-			// because s.resources.len() > 0 once registerResources below
+-			// runs — this phase implements neither listChanged nor
+-			// subscribe, so the explicit zero value is what keeps the
+-			// advertised capability truthful, mirroring D-11's own
+-			// rationale for Tools above.
+-			Resources: &mcp.ResourceCapabilities{},
+-			Tools:     &mcp.ToolCapabilities{ListChanged: true},
++			Tools: &mcp.ToolCapabilities{ListChanged: true},
+ 		},
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go` showed exactly this hunk (the
+`Resources:` field and its doc comment deleted, `Tools:` left unchanged); `go build ./...` exited
+0.
+
+**Nothing removed from the wire — a strictly more interesting failure than absence:** this does NOT
+remove `capabilities.resources` from the wire. go-sdk's own `capabilities()` method
+(`server.go:645-653`) auto-populates `caps.Resources` with `ListChanged: true` once any resource is
+registered — which `registerResources` still does unconditionally, since this mutation does not
+touch its call site. So the advertised capability silently CHANGES rather than disappears: it
+becomes a promise of `listChanged` support this server does not implement. This is the concrete,
+observed justification for D-11's rule that a capability is never left to SDK inference.
+
+**Gate that went red:** `TestFrozenTranscriptsMatch` failed on every one of the 38 scenarios whose
+`initialize`/`server/discover` response carries a `capabilities` object — the same 38 = 42 total
+scenarios minus the 4 with no `capabilities` object at all (`edge-call-before-initialize`,
+`modern-listen-catalog-change`, `modern-meta-invalid-params`, `modern-meta-unsupported-version`),
+confirmed by exact count against the full scenario list. Measured blast radius: **38**.
+
+**`go test ./test/wireoracle/... -count=1`'s verbatim failure** (one representative instance kept,
+the remaining 37 named):
+
+```
+--- FAIL: TestFrozenTranscriptsMatch (4.43s)
+    --- FAIL: TestFrozenTranscriptsMatch/handshake-explore (0.63s)
+        oracle_test.go:130: scenario "handshake-explore": normalized transcript differs at line 1:
+             got: "...{\"capabilities\":{\"resources\":{\"listChanged\":true},\"tools\":{\"listChanged\":true}},...\"protocolVersion\":\"2025-11-25\",...}"
+            want: "...{\"capabilities\":{\"resources\":{},\"tools\":{\"listChanged\":true}},...\"protocolVersion\":\"2025-11-25\",...}"
+    [... 37 more scenarios FAIL identically on this same collateral diff: toolslist-default,
+    toolslist-narrowed, toolslist-filter-empty, toolslist-no-index, toolslist-repeat, call-node,
+    call-search, call-callers, call-callees, call-impact, call-files, call-status,
+    error-unknown-method, error-unknown-tool, error-malformed-args, error-confinement-reject,
+    edge-call-before-initialize is NOT in this list (no capabilities object), legacy-2025-11-25,
+    legacy-2025-06-18, legacy-2025-03-26, legacy-2024-11-05, legacy-unsupported-2026-07-28,
+    legacy-omitted-version, modern-discover-explore, index-appears-mid-session,
+    resources-list, resources-read-explore, resources-read-node, resources-read-search,
+    resources-read-callers, resources-read-callees, resources-read-impact, resources-read-files,
+    resources-read-status, resources-read-tools-filter, resources-read-index-state,
+    resources-list-no-index, resources-read-unknown ...]
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/wireoracle	22.072s
+```
+
+**The observed wire value:** every failing scenario's `got` shows `"capabilities":{"resources":
+{"listChanged":true},...}` where the frozen `want` shows `"capabilities":{"resources":{},...}` —
+exactly the SDK-inferred `ListChanged: true` the "nothing removed" paragraph above predicted,
+confirmed on the wire rather than asserted from reading `server.go`.
+
+**Revert confirmation:** the `Resources: &mcp.ResourceCapabilities{}` field and its doc comment were
+restored via `git checkout -- internal/mcp/server.go`; `git status --porcelain -- internal/` and
+`git diff --exit-code -- internal/` both showed nothing changed; `go build ./...` exited 0; `go test
+./test/wireoracle/... -count=1` exited 0 (all 42 scenarios); `go test ./internal/mcp/... -count=1`
+exited 0.
+
+---
+
+## Mutation 11 — resource registration moved inside `if hasIndex` (05-04-PLAN Task 3, RSRC-03)
+
+**Requirement:** proves RSRC-03 (resources register unconditionally, independent of index state) is
+a STRUCTURAL property of `registerResources`'s call-site position, not an incidental one — the
+asymmetry this mutation produces (9 `Index: false` resource scenarios red, the 2 `Index: true`
+resource scenarios green) is what demonstrates that, not just that removing the call site breaks
+something.
+
+**Edit:** `internal/mcp/server.go`, `BuildServer` — moves the `registerResources(s)` call from its
+position immediately after `mcp.NewServer(...)` (unconditional) into the `if hasIndex {` block that
+gates `registerTools`:
+
+```diff
+@@ construction, immediately after mcp.NewServer(...) @@
+-	// RSRC-03: registerResources runs unconditionally, immediately after
+-	// construction and BEFORE the `if hasIndex {` tool-registration branch
+-	// below — this call site's position outside that branch is the
+-	// structural property that makes resources available even in an
+-	// unindexed repository, mirroring how Capabilities.Tools above is set
+-	// regardless of hasIndex.
+-	registerResources(s)
+-
+ 	// One gitmeta.CachingDetector per SERVER, not per handler or per call
+@@ later, at the existing hasIndex gate @@
+ 	if hasIndex {
++		registerResources(s)
+ 		toolCount.Store(int64(registerTools(s, companions, repoPath, startPath, detector)))
+ 	}
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go` showed exactly these two hunks (the
+unconditional call site and its doc comment deleted; a bare `registerResources(s)` call added as
+the first statement inside the existing `if hasIndex {` block); `go build ./...` exited 0.
+
+**Gate that went red, and the gate that stayed green:** `go test ./test/wireoracle/... -count=1`:
+
+```
+--- FAIL: TestFrozenTranscriptsMatch (4.49s)
+    --- FAIL: TestFrozenTranscriptsMatch/resources-read-node (0.02s)
+        oracle_test.go:130: scenario "resources-read-node": normalized transcript differs at line 2:
+             got: "{\"jsonrpc\":\"2.0\",\"id\":2,\"error\":{\"code\":-32602,\"message\":\"Resource not found\",\"data\":{\"uri\":\"codegraph://tools/node\"}}}"
+            want: "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"private\",\"contents\":[{\"uri\":\"codegraph://tools/node\",...\"text\":\"# codegraph_node\\n\\n...\"}]}}"
+    [... 7 more Index: false read scenarios FAIL identically on the same -32602 "Resource not
+    found" collateral: resources-read-search, resources-read-callers, resources-read-callees,
+    resources-read-impact, resources-read-files, resources-read-status,
+    resources-read-tools-filter, resources-read-index-state]
+    --- FAIL: TestFrozenTranscriptsMatch/resources-list-no-index (0.01s)
+        oracle_test.go:130: scenario "resources-list-no-index": normalized transcript differs at line 2:
+             got: "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"private\",\"resources\":[]}}"
+            want: "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"private\",\"resources\":[{...10 entries...}]}}"
+--- FAIL: TestEveryAdvertisedResourceURIHasASuccessfulReadScenario (0.37s)
+    oracle_test.go:1000: no scenario provides a successful resources/read for: [codegraph://index-state
+    codegraph://tools-filter codegraph://tools/callees codegraph://tools/callers
+    codegraph://tools/files codegraph://tools/impact codegraph://tools/node codegraph://tools/search
+    codegraph://tools/status]
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/wireoracle	22.072s
+```
+
+**Scenarios that went RED (10):** `resources-read-node`, `resources-read-search`,
+`resources-read-callers`, `resources-read-callees`, `resources-read-impact`,
+`resources-read-files`, `resources-read-status`, `resources-read-tools-filter`,
+`resources-read-index-state` — all 9 `Index: false` resource read scenarios — plus
+`resources-list-no-index` (the full-catalog-with-no-index scenario). Every one of these 10 shares
+`Index: false` (10 total). `TestEveryAdvertisedResourceURIHasASuccessfulReadScenario` also went red,
+naming the same 9 URIs as having no successful wire read.
+
+**Scenarios that stayed GREEN (2):** `resources-list` and `resources-read-explore` — both
+`Index: true`. Their capture runs `codegraph init` before `serve --mcp` starts, so `hasIndex` is
+true at construction time and `registerResources` still runs from its new position inside the
+`if hasIndex {` block.
+
+**The precise asymmetry this demonstrates:** every scenario that failed is `Index: false`; every
+resource scenario that stayed green is `Index: true`. This is not "resources broke" — it is
+specifically "resources now depend on index state," which is exactly RSRC-03's negation. The
+9-red/2-green split is deterministic and structural, not incidental: it tracks `Index:` on the
+scenario one-for-one, which is the proof that the guard is measuring index-independence
+specifically, not merely that resources exist somewhere in the corpus.
+
+**Same property caught at the unit tier:** `go test ./internal/mcp/... -run
+TestResourcesRegisterWithoutIndex -count=1 -v` also goes red under this mutation:
+
+```
+=== RUN   TestResourcesRegisterWithoutIndex
+    resources_test.go:123: resources/list without an index = [], want the same URI set as with an
+    index [codegraph://index-state codegraph://tools-filter codegraph://tools/callees
+    codegraph://tools/callers codegraph://tools/explore codegraph://tools/files
+    codegraph://tools/impact codegraph://tools/node codegraph://tools/search
+    codegraph://tools/status]
+--- FAIL: TestResourcesRegisterWithoutIndex (0.05s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.335s
+```
+
+RSRC-03's index-independence property is therefore caught at both the unit tier (in-process,
+`BuildServer(false, ...)`, no subprocess) and the wire tier (a real spawned `serve --mcp`) —
+independent proofs of the same structural claim.
+
+**Revert confirmation:** the `registerResources(s)` call was moved back to its unconditional
+position via `git checkout -- internal/mcp/server.go`; `git status --porcelain -- internal/` and
+`git diff --exit-code -- internal/` both showed nothing changed; `go build ./...` exited 0; `go test
+./test/wireoracle/... -count=1` exited 0 (all 42 scenarios); `go test ./internal/mcp/... -count=1`
+exited 0.
+
+---
+
 ## Non-vacuity proof for the remaining GUARD-01 checkers (05-03-PLAN Task 3)
 
 The count checker (`TestResourceCountClaimsMatchSourceSets`/`countClaimsIn`), the env-var checker
@@ -912,3 +1120,13 @@ cleanliness check ran.
 
 All four mutations were reverted; the tree was confirmed clean (`git status --porcelain` empty)
 before this document and `COVERAGE-BASELINE.md` were written and staged.
+
+---
+
+## Closing statement (05-04-PLAN Task 3)
+
+`git status --porcelain -- internal/` was checked after Mutations 10 and 11 above were reverted and
+before this section and `COVERAGE-BASELINE.md`'s finalization were committed — the same sequencing
+discipline 05-03-PLAN's own "Closing statement" set. Both mutations were reverted; `go build ./...`,
+`go test ./internal/mcp/... -count=1`, `go test ./test/wireoracle/... -count=1`, and `go test
+./... -count=1` all passed on the reverted, committed tree.
