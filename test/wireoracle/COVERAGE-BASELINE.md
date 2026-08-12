@@ -1,7 +1,7 @@
 # Wire Oracle Coverage Baseline
 
 **Originally captured:** 2026-08-05 (Phase 1, `01-protocol-scoping-the-sdk-independent-wire-oracle`)
-**Last updated:** 2026-08-12 (Phase 5 plan 05-01 — MCP Resources capability turned on)
+**Last updated:** 2026-08-12 (Phase 5 plan 05-02 — full 10-resource catalog)
 **Scenario count:** 31 (`test/wireoracle.ExpectedScenarioCount`)
 
 This is the human-readable index of the complete, frozen scenario set the wire oracle
@@ -62,6 +62,14 @@ tests above — are authoritative.
   corpus, anchored by `assertResourceCacheControl` pinning `cacheScope: "private"`. Plan 05-04
   extends this category further with the remaining 9 tool/behavior-doc resources this phase adds —
   a reader mid-phase should not read the table below as the category's final shape.
+- **Phase 5** (`05-mcp-resources-capability-claims-drift-guard`, plan 05-02, 2026-08-12) fanned
+  out from the tracer slice to the full 10-resource catalog (7 more per-tool fact-sheets plus the 2
+  behavior docs, `tools-filter.md`/`index-state.md`). The scenario **set** did not change size (no
+  scenario added or removed); this plan moved exactly ONE transcript, `resources-list.golden`,
+  under one named cause: `resources/list`'s advertised set grew from the tracer's 1 entry
+  (`codegraph://tools/explore`) to all 10 registered URIs, since this plan's `registerResources`
+  call now iterates 10 embedded files instead of 1. `resources-read-explore.golden` came back
+  byte-identical, since `codegraph://tools/explore`'s own content and description did not change.
 
 ## The complete scenario set, grouped by coverage category
 
@@ -155,16 +163,20 @@ four protocol revisions the server recognizes, plus the revision Phase 3 impleme
 |---|---|
 | `index-appears-mid-session` | A server started with NO index present advertises zero tools on its first `tools/list`; a REAL `codegraph init` subprocess then runs against the server's own working directory mid-session (via `InitAfterRequest`, a response-observed wait, never a sleep); the SAME live connection's second `tools/list` advertises the full catalog — no restart, no reconnect. Proves SPEC-05's per-request re-check (`internal/mcp/server.go`'s `recheckCatalog`). |
 
-### MCP Resources (2) — plan 05-01
+### MCP Resources (2) — plans 05-01, 05-02
 
-The tracer slice for the MCP Resources capability (RSRC-01/02/03): the first `resources/list` and
-`resources/read` wire coverage this corpus carries, over the one resource this plan registers
-(`codegraph://tools/explore`). Plan 05-04 extends this category with the remaining 9
-tool/behavior-doc resources this phase adds — this table is not the category's final shape.
+`resources/list` and `resources/read` wire coverage. Plan 05-01's tracer slice registered the
+first resource (`codegraph://tools/explore`) and captured both scenarios below. Plan 05-02 fanned
+out to the full 10-resource catalog (7 more per-tool fact-sheets plus the 2 behavior docs), which
+changed `resources-list`'s advertised set from 1 entry to 10 — the scenario's ONE named re-freeze
+cause for this plan, with `resources-read-explore` coming back byte-identical since
+`codegraph://tools/explore`'s own content did not change. Plan 05-04 extends this category further
+with `resources/read` wire coverage for the remaining 9 URIs — this table is not the category's
+final shape.
 
 | Scenario | Covers |
 |---|---|
-| `resources-list` | `initialize` → `resources/list`, index present. Advertises `codegraph://tools/explore` with `mimeType: text/markdown`, anchored by `assertResourceCacheControl` pinning `cacheScope: "private"`, `ttlMs: 0`. |
+| `resources-list` | `initialize` → `resources/list`, index present. Advertises all 10 registered resource URIs (8 per-tool fact-sheets + `codegraph://tools-filter` + `codegraph://index-state`) with `mimeType: text/markdown`, anchored by `assertResourceCacheControl` pinning `cacheScope: "private"`, `ttlMs: 0`. |
 | `resources-read-explore` | `initialize` → `resources/read` on `codegraph://tools/explore`, index present. Returns non-empty `text/markdown` content, anchored by the same `assertResourceCacheControl` check. |
 
 ## Total

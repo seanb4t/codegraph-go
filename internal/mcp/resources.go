@@ -34,6 +34,21 @@ var resourceURIFor = map[string]string{
 	"impact.md":  "codegraph://tools/impact",
 	"files.md":   "codegraph://tools/files",
 	"status.md":  "codegraph://tools/status",
+	// D-10: the two behavior-doc URIs deliberately do NOT encode the env
+	// var name (CODEGRAPH_MCP_TOOLS is D-06's slated-for-removal detail) —
+	// they name what the doc is about, not its current implementation.
+	"tools-filter.md": "codegraph://tools-filter",
+	"index-state.md":  "codegraph://index-state",
+}
+
+// resourceDescriptionLiteralFor holds the Description for the 2
+// behavior-doc stems (tools-filter, index-state), which — unlike the 8
+// per-tool stems — have no *mcp.Tool of their own to derive a
+// Description from; a one-line hand-typed summary is the only option
+// for these two (05-01-SUMMARY.md's "Created by LATER plans" note).
+var resourceDescriptionLiteralFor = map[string]string{
+	"tools-filter": "How CODEGRAPH_MCP_TOOLS narrows the registered companion tool set",
+	"index-state":  "Preconditions for tool registration based on .codegraph/ index presence",
 }
 
 // resourceDescriptionFor returns the Description a registered resource
@@ -52,6 +67,9 @@ func resourceDescriptionFor(stem string) string {
 	case "explore":
 		return exploreTool().Description
 	default:
+		if desc, ok := resourceDescriptionLiteralFor[stem]; ok {
+			return desc
+		}
 		for _, name := range companionNames {
 			if stem == name {
 				return companionTool(stem).Description
