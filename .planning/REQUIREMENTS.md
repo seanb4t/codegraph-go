@@ -17,8 +17,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Claims Drift Guard
 
-- [ ] **GUARD-01**: Every tool count, default value, and env var name stated in resources/skill/instructions is derived from source constants or checked by an automated test — no hand-typed fact goes unguarded
-- [ ] **GUARD-02**: Adding, removing, or renaming a tool fails a test if resource content wasn't updated to match
+- [x] **GUARD-01**: Every tool count, default value, and env var name stated in resources/skill/instructions is derived from source constants or checked by an automated test — no hand-typed fact goes unguarded
+- [x] **GUARD-02**: Adding, removing, or renaming a tool fails a test if resource content wasn't updated to match
 
 ### SKILL.md Authoring
 
@@ -80,8 +80,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RSRC-01 | Phase 5 | Complete |
 | RSRC-02 | Phase 5 | Complete |
 | RSRC-03 | Phase 5 | Complete |
-| GUARD-01 | Phase 5 | Pending |
-| GUARD-02 | Phase 5 | Pending |
+| GUARD-01 | Phase 5 | Complete |
+| GUARD-02 | Phase 5 | Complete |
 | SKILL-01 | Phase 6 | Pending |
 | SKILL-02 | Phase 6 | Pending |
 | SKILL-03 | Phase 6 | Pending |
