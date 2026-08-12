@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-08-12T01:19:00.063Z"
 last_activity: 2026-08-11
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 04 — codegraph-upgrade-homebrew
+**Current focus:** Phase 5 — MCP Resources Capability & Claims Drift Guard
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-08-11 — Milestone v0.10.0 started
+Phase: 5 of 8 (MCP Resources Capability & Claims Drift Guard) — 1st of 4 phases in v0.10.0
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-12 — v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped
+
+Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
 ## Performance Metrics
 
@@ -56,7 +58,7 @@ Last activity: 2026-08-11 — Milestone v0.10.0 started
 | 4 | 3 | - | - |
 | 5 | 1 | - | - |
 
-**Recent Trend:** Roadmap created 2026-08-08; no execution data yet.
+**Recent Trend:** v0.10.0 roadmap created 2026-08-12; no execution data yet for this milestone.
 
 *Updated after each plan completion*
 
@@ -339,35 +341,52 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-11T16:29:32.715Z
-Stopped at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-  NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
+Last session: 2026-08-12
+Stopped at: v0.10.0 roadmap created — Phases 5-8, all 16 v1 requirements mapped, no orphans
+  NEXT: `/gsd-plan-phase 5` — MCP Resources Capability & Claims Drift Guard
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
-    - `GO-2026-5932` is accepted-unmitigated in `goreleaser`'s own binary. This milestone
-      touches `goreleaser` directly, so it may be revisited **on evidence** — and the
-      GoReleaser Pro fallback would make it unmeasurable rather than merely unfixed.
+    - **Phase numbering continues rather than restarting.** v0.5.0 ended at Phase 4, so
+      v0.10.0 runs Phases 5-8. v0.5.0 itself restarted at 1; this milestone deliberately
+      does not. Phase directories under `.planning/phases/` will be `05-*` … `08-*`.
 
-    - The residual darwin release-path concern is partly closed: both darwin arches built,
-      signed and SBOM'd on the real macOS runner during v0.3.0's release. What is still
-      unexercised is `goreleaser release` (not `build`) on that runner class, plus
-      zig-cross-to-linux **from** a macOS host — which is exactly REL-05.
-  PHASE 1 CARRY-INS:
+    - **The stale `instructions` string is the milestone's origin incident, not background.**
+      `internal/agents/instructions.go:17-18` defers full tool guidance to "the MCP
+      initialize response (Phase 3)" — a hand-off never built, which misdirected a real
+      debug session on 2026-08-08. Phase 8 retires it, and WIRE-03 makes "names only what
+      already exists" the acceptance condition rather than a review note.
 
-    - Phase 1's published release is deliberately un-notarized, and is Phase 2's RED baseline
-      for SIGN-03. Do not delete or overwrite that asset before Phase 2 has recorded the
-      `rejected` result against it.
+    - **SUMMARY.md's suggested ordering was deliberately inverted in one place.** Research
+      sequenced the `instructions` rewrite (its Phase 6) BEFORE install distribution (its
+      Phase 7). This roadmap puts the rewrite last, after install. WIRE-02 governs the
+      marker block `codegraph install` writes; landing the rewrite first would have that
+      block name a skill install does not yet place — a fresh broken promise of exactly the
+      kind being retired.
 
-    - `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` anchors the cosign SAN to
-      `.github/workflows/release.yml@refs/tags/v[0-9]*`. Collapsing jobs is fine; renaming the
-      workflow file or changing the tag trigger is not.
+    - **Wire-oracle re-capture is folded into Phase 5, not a separate phase.** Turning on
+      `capabilities.resources` changes the `initialize` result on the wire, so the frozen
+      transcripts go red the moment the capability is live. Re-freezing belongs to that same
+      deliberate unit per `MUTATION-PROOF.md`; splitting it would leave main red across a
+      phase boundary. Phase 8 carries its own re-freeze for the instructions string.
 
-    - `release.yml` carries a deliberate comment that no GoReleaser Pro directive is used.
-      Reversing that is a recorded decision, not a silent config change.
-  NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
+    - **Phase 7 is the risk concentration.** Writing new artifact types into agent-owned
+      directories is the shape that produced v1.0 Phase 5's two reproduced data-loss
+      Criticals and Phase 6's swallowed-I/O-error findings. Reuse `internal/fsatomic` and
+      the existing `AgentTarget`/`recordFile` machinery; do not invent new file-safety
+      primitives. Deep review warranted.
+
+    - **Zero new Go module dependencies are expected anywhere in this milestone.**
+      `Server.AddResource` is stable in the already-pinned `modelcontextprotocol/go-sdk@v1.7.0`;
+      everything else is embedded markdown, JSON, and shell.
+
+    - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and
+      AGENT-04…07 (multi-agent skill/hooks porting) are tracked in REQUIREMENTS.md's v2
+      section and mapped to no phase. The guard is the fallback if skill + resources + nudge
+      prove insufficient, and that evidence does not exist yet.
+  NOTE: no `v0.10.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md
+Resume file: .planning/ROADMAP.md
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first phase with `/gsd-plan-phase 5`

@@ -77,28 +77,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RSRC-01 | TBD | Pending |
-| RSRC-02 | TBD | Pending |
-| RSRC-03 | TBD | Pending |
-| GUARD-01 | TBD | Pending |
-| GUARD-02 | TBD | Pending |
-| SKILL-01 | TBD | Pending |
-| SKILL-02 | TBD | Pending |
-| SKILL-03 | TBD | Pending |
-| NUDGE-01 | TBD | Pending |
-| NUDGE-02 | TBD | Pending |
-| WIRE-01 | TBD | Pending |
-| WIRE-02 | TBD | Pending |
-| WIRE-03 | TBD | Pending |
-| AGENT-01 | TBD | Pending |
-| AGENT-02 | TBD | Pending |
-| AGENT-03 | TBD | Pending |
+| RSRC-01 | Phase 5 | Pending |
+| RSRC-02 | Phase 5 | Pending |
+| RSRC-03 | Phase 5 | Pending |
+| GUARD-01 | Phase 5 | Pending |
+| GUARD-02 | Phase 5 | Pending |
+| SKILL-01 | Phase 6 | Pending |
+| SKILL-02 | Phase 6 | Pending |
+| SKILL-03 | Phase 6 | Pending |
+| NUDGE-01 | Phase 6 | Pending |
+| NUDGE-02 | Phase 6 | Pending |
+| WIRE-01 | Phase 8 | Pending |
+| WIRE-02 | Phase 8 | Pending |
+| WIRE-03 | Phase 8 | Pending |
+| AGENT-01 | Phase 7 | Pending |
+| AGENT-02 | Phase 7 | Pending |
+| AGENT-03 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 16 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 16 ⚠️
+- Mapped to phases: 16 ✓
+- Unmapped: 0
+
+**Per-phase distribution:**
+
+| Phase | Requirements | Count |
+|-------|--------------|-------|
+| Phase 5 — MCP Resources Capability & Claims Drift Guard | RSRC-01, RSRC-02, RSRC-03, GUARD-01, GUARD-02 | 5 |
+| Phase 6 — Agent Skill Package (SKILL.md & SessionStart Nudge) | SKILL-01, SKILL-02, SKILL-03, NUDGE-01, NUDGE-02 | 5 |
+| Phase 7 — `codegraph install` Skill + Hooks Distribution | AGENT-01, AGENT-02, AGENT-03 | 3 |
+| Phase 8 — Instructions & Marker-Block Rewrite | WIRE-01, WIRE-02, WIRE-03 | 3 |
+
+v2 requirements (GUARD-HOOK-01/02, AGENT-04…07) are deliberately unmapped — deferred, not orphaned.
 
 ---
 *Requirements defined: 2026-08-12*
-*Last updated: 2026-08-12 after initial definition, informed by 4-agent research (STACK/FEATURES/ARCHITECTURE/PITFALLS) and SUMMARY.md's 8-phase suggested structure*
+*Last updated: 2026-08-12 after roadmap creation — all 16 v1 requirements mapped across Phases 5-8. Phase numbering continues from v0.5.0 (which ended at Phase 4). SUMMARY.md's 7 non-deferred suggested phases were compressed to 4 at `standard` granularity: wire-oracle re-capture and the claims drift guard fold into the resources phase (same change, same commit unit), the SessionStart nudge folds into skill authoring (one installed package), and the `instructions` rewrite moves after install distribution rather than before it, so the marker block never names a skill install has not yet placed.*
