@@ -72,7 +72,7 @@ Archived: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md) · re
 - **`v0.10.0` carries no git tag.** release-please is the sole tag authority (D-06R), and a `v0.10.0` tag would match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline.
 
 - [x] **Phase 5: MCP Resources Capability & Claims Drift Guard** - The server documents itself: `resources/list` + `resources/read` serve tool-by-tool reference over the wire in any repo, indexed or not, with every stated fact derived from source or pinned by a test that can fire (completed 2026-08-12)
-- [ ] **Phase 6: Agent Skill Package — SKILL.md & SessionStart Nudge** - An agent with the skill installed picks `codegraph_explore` over grep on a where-is-X prompt, shown by transcript diff, and learns codegraph exists at session start in an indexed repo — and only there
+- [x] **Phase 6: Agent Skill Package — SKILL.md & SessionStart Nudge** - An agent with the skill installed picks `codegraph_explore` over grep on a where-is-X prompt, shown by transcript diff, and learns codegraph exists at session start in an indexed repo — and only there (completed 2026-08-12)
 - [ ] **Phase 7: `codegraph install` Skill + Hooks Distribution (Claude Code)** - Installing codegraph installs the skill package too, versioned with the binary and refreshed by `upgrade`; uninstall removes exactly what it wrote and nothing a user authored
 - [ ] **Phase 8: Instructions & Marker-Block Rewrite** - Everything codegraph tells an agent about itself is true on the day it is read — the "Phase 3" deferral is gone, and each surface names only capabilities that already shipped
 
@@ -191,7 +191,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 5. MCP Resources Capability & Claims Drift Guard | 4/4 | Complete    | 2026-08-12 |
-| 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 4/4 | In Progress|  |
+| 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 4/4 | Complete    | 2026-08-12 |
 | 7. `codegraph install` Skill + Hooks Distribution | 0/TBD | Not started | - |
 | 8. Instructions & Marker-Block Rewrite | 0/TBD | Not started | - |
 

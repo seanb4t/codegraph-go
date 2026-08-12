@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 06
-current_phase_name: agent-skill-package-skill-md-sessionstart-nudge
-status: executing
+current_phase: 7
+current_phase_name: "`codegraph install` Skill + Hooks Distribution (Claude Code)"
+status: planning
 stopped_at: Phase 6 context gathered
-last_updated: "2026-08-12T22:20:56.025Z"
+last_updated: "2026-08-12T23:58:33.963Z"
 last_activity: 2026-08-12
 last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 4
-  percent: 25
+  completed_plans: 8
+  percent: 50
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 ## Current Position
 
-Phase: 06 (agent-skill-package-skill-md-sessionstart-nudge) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 06
-Last activity: 2026-08-12 — Phase 06 execution started
+Phase: 7 — `codegraph install` Skill + Hooks Distribution (Claude Code)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-12 — Phase 06 complete, transitioned to Phase 7
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
@@ -39,7 +39,7 @@ Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 28
+- Total plans completed: 32
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 | 03 | 5 | - | - |
 | 04 | 6 | - | - |
 | 05 | 4 | - | - |
+| 06 | 4 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 

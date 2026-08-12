@@ -22,14 +22,14 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### SKILL.md Authoring
 
-- [ ] **SKILL-01**: SKILL.md leads with a decision table ("which tool for which question") before any tool catalog
-- [ ] **SKILL-02**: SKILL.md includes 2-3 worked examples, including the class of misdirection incident (2026-08-08 debug session) that motivated this milestone
-- [ ] **SKILL-03**: An agent given a fresh session, the skill installed, and a "where is X" prompt selects `codegraph_explore` over grep/find/Read — verified by transcript diff, not asserted
+- [x] **SKILL-01**: SKILL.md leads with a decision table ("which tool for which question") before any tool catalog
+- [x] **SKILL-02**: SKILL.md includes 2-3 worked examples, including the class of misdirection incident (2026-08-08 debug session) that motivated this milestone
+- [x] **SKILL-03**: An agent given a fresh session, the skill installed, and a "where is X" prompt selects `codegraph_explore` over grep/find/Read — verified by transcript diff, not asserted
 
 ### SessionStart Nudge
 
-- [ ] **NUDGE-01**: On session start in a `.codegraph/`-indexed repo, the agent receives a one-time, low-noise nudge toward codegraph tools (file-existence check only, no MCP round-trip)
-- [ ] **NUDGE-02**: The nudge never fires, and adds no overhead, in a repo without `.codegraph/`
+- [x] **NUDGE-01**: On session start in a `.codegraph/`-indexed repo, the agent receives a one-time, low-noise nudge toward codegraph tools (file-existence check only, no MCP round-trip)
+- [x] **NUDGE-02**: The nudge never fires, and adds no overhead, in a repo without `.codegraph/`
 
 ### Instructions Rewrite
 
@@ -82,11 +82,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RSRC-03 | Phase 5 | Complete |
 | GUARD-01 | Phase 5 | Complete |
 | GUARD-02 | Phase 5 | Complete |
-| SKILL-01 | Phase 6 | Pending |
-| SKILL-02 | Phase 6 | Pending |
-| SKILL-03 | Phase 6 | Pending |
-| NUDGE-01 | Phase 6 | Pending |
-| NUDGE-02 | Phase 6 | Pending |
+| SKILL-01 | Phase 6 | Complete |
+| SKILL-02 | Phase 6 | Complete |
+| SKILL-03 | Phase 6 | Complete |
+| NUDGE-01 | Phase 6 | Complete |
+| NUDGE-02 | Phase 6 | Complete |
 | WIRE-01 | Phase 8 | Pending |
 | WIRE-02 | Phase 8 | Pending |
 | WIRE-03 | Phase 8 | Pending |
