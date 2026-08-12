@@ -5,10 +5,10 @@ milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 6
 current_phase_name: Agent Skill Package — SKILL.md & SessionStart Nudge
 status: planning
-stopped_at: Phase 5 context gathered
+stopped_at: Phase 5 complete, ready to plan Phase 6
 last_updated: "2026-08-12T19:58:49.283Z"
 last_activity: 2026-08-12
-last_activity_desc: "v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped"
+last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
 progress:
   total_phases: 4
   completed_phases: 1
@@ -279,6 +279,7 @@ Carried forward:
 - GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling. goreleaser's binary reaches golang.org/x/crypto/openpgp (110 vulnerable symbols) via pipe/ko then google/ko then sigstore/cosign/oci then sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The new advisory tool-vuln job is now the only thing surfacing it — reported, not resolved. This is why D-04 was superseded from blocking to advisory.
 - Phase 2 HALTED at plan 02-04 Task 2: no Apple Developer ID Application certificate and no App Store Connect API key on this host (keychain holds only an Apple Configurator identity; of the five MACOS_* variables are set). Plans 02-06 and 02-07 are blocked_by 02-04.
 - TOOLING (not blocking work): 'gsd-tools query state.sync' counts a SUMMARY with 'status: halted' as a completed plan. It set progress.completed_plans to 11 (6 from phase 1 + all 5 phase-2 summaries) although 02-04 is halted, so STATE now disagrees with ROADMAP, which correctly reads 4/7. Sync also reported changing the body progress bar to 17% but left it reading '0/4 phases complete (0%)'. Not hand-edited per the planning-artifacts rule (tool-owned file); same treatment as the state.advance-plan gap already recorded above. Also note: 'gsd-tools query state.sync' MUTATES when invoked with no args - it has no dry-run probe mode, same hazard class as generate-claude-md.
+- **CR-01 (Phase 5 code review, `internal/mcp/server.go:225-349`): `pendingWriter`'s "pending response" counter is corrupted by server-initiated notifications, defeating the stdin-EOF-race fix it exists to provide.** The counter increments only on accepted client requests but decrements on every stdout `Write()` call, including notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that a prior phase's SPEC-09 work routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable via the vendored go-sdk's shared write path, not merely theoretical. Predates Phase 5 (introduced in `13f2875`, "protocol currency"); Phase 5 only added unrelated resource-registration code to this file. See `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md` (CR-01) for the full trace and a proposed fix (track pending-by-id, or distinguish response frames from notification frames before decrementing). Not fixed in Phase 5 — out of its declared scope (RSRC-01…03, GUARD-01…02) — needs its own tracking issue/plan.
 
 ### Quick Tasks Completed
 
@@ -346,8 +347,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-12T16:35:40.899Z
-Stopped at: Phase 5 context gathered
+Last session: 2026-08-12T19:58:49.283Z
+Stopped at: Phase 5 complete, ready to plan Phase 6
   NEXT: `/gsd-plan-phase 5` — MCP Resources Capability & Claims Drift Guard
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
