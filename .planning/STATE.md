@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 6
-current_phase_name: Agent Skill Package — SKILL.md & SessionStart Nudge
+current_phase: 06
+current_phase_name: agent-skill-package-skill-md-sessionstart-nudge
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-08-12T22:19:10.958Z"
+last_updated: "2026-08-12T22:20:56.025Z"
 last_activity: 2026-08-12
 last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
 progress:
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 05 — mcp-resources-capability-claims-drift-guard
+**Current focus:** Phase 06 — agent-skill-package-skill-md-sessionstart-nudge
 
 ## Current Position
 
-Phase: 6 — Agent Skill Package — SKILL.md & SessionStart Nudge
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-12 — Phase 05 complete, transitioned to Phase 6
+Phase: 06 (agent-skill-package-skill-md-sessionstart-nudge) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 06
+Last activity: 2026-08-12 — Phase 06 execution started
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
