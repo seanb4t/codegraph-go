@@ -130,10 +130,17 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 06-01-PLAN.md — SessionStart nudge package: script, `.claude/settings.json` registration, Phase-7 embed fragment, executed-in-both-trees behavioural test (NUDGE-01, NUDGE-02)
 - [ ] 06-02-PLAN.md — SKILL.md structural contract as a guard test, then the skill skeleton: frontmatter, decision table, skip condition, resource-URI pointers (SKILL-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-03-PLAN.md — the three worked examples, the example-count and nudge-text guards, and demonstrated-red mutation proofs for every Phase-6 gate (SKILL-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-04-PLAN.md — live-session rehearsal and committed verification artifacts (SKILL-03, plus the live half of NUDGE-01/02)
 
 ### Phase 7: `codegraph install` Skill + Hooks Distribution (Claude Code)

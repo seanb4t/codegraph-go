@@ -4,15 +4,15 @@ milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 6
 current_phase_name: Agent Skill Package — SKILL.md & SessionStart Nudge
-status: planning
+status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-08-12T21:43:45.101Z"
+last_updated: "2026-08-12T22:19:10.958Z"
 last_activity: 2026-08-12
 last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 4
+  total_plans: 8
   completed_plans: 4
   percent: 25
 ---
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 6 — Agent Skill Package — SKILL.md & SessionStart Nudge
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-12 — Phase 05 complete, transitioned to Phase 6
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
