@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5.0
-milestone_name: macOS Distribution & Homebrew
-status: Awaiting next milestone
-stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-last_updated: "2026-08-12T00:55:38.369Z"
+milestone: v0.10.0
+milestone_name: Agent Onboarding Skill & MCP Resources
+status: planning
+last_updated: "2026-08-12T01:19:00.063Z"
 last_activity: 2026-08-11
-last_activity_desc: Phase 04 execution started
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 24
-  completed_plans: 24
-  percent: 100
-current_phase: 04
-current_phase_name: codegraph-upgrade-homebrew
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 ## Current Position
 
-Phase: Milestone v0.5.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-11 — Milestone v0.5.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-11 — Milestone v0.10.0 started
 
 ## Performance Metrics
 

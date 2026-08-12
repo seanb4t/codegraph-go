@@ -51,6 +51,20 @@ The artifact line at v1.0's close was `v0.2.0` (signed, SBOM'd, SLSA-attested, c
 
 </details>
 
+## Current Milestone: v0.10.0 Agent Onboarding Skill & MCP Resources
+
+**Goal:** Give agent harnesses (Claude Code, Cursor, Codex, Gemini, etc.) a thin, high-signal skill/plugin that teaches WHEN and HOW to use codegraph's tools — leading with a decision procedure, not a tool catalog — while pushing detailed reference content out of the skill and into resources served by the MCP server itself, backed by session/prompt hooks that nudge and guard toward codegraph tools over grep/find.
+
+**Target features:**
+- A SKILL.md (and/or Claude Code plugin) authored per current skill-authoring best practices (researched fresh, not memory) — decision-procedure-first ("which tool for which question"), 2-3 worked examples, minimal tool catalog
+- MCP server gains a Resources capability (`resources/list` + `resources/read` via `modelcontextprotocol/go-sdk`) serving detailed reference content (tool-by-tool docs, `CODEGRAPH_MCP_TOOLS` semantics, index-state preconditions) that the skill points to instead of embedding
+- Rewritten `instructions` wire-string and `codegraph install` marker block, correctly deferring to the skill + resources instead of the stale "Phase 3" promise `internal/agents/instructions.go` currently makes
+- SessionStart hook injecting a short codegraph-availability nudge, plus a PreToolUse/UserPromptSubmit guard that redirects grep/find/Read on where-is-X questions toward `codegraph_explore` in `.codegraph/`-indexed repos — shipped as part of the plugin/skill package (hooks.json + scripts), installed by `codegraph install`
+- Distribution decision: does `codegraph install` write the skill/hooks into the target agent's skills directory (versioned with the binary, updated by `codegraph upgrade`), or ship in-repo for manual install?
+- Guard the claims: any tool counts/defaults/flags named in the skill, resources, or hooks must be derived or gated by a test, never hand-typed prose nothing verifies
+
+Builds directly on the pending todo `2026-08-08-author-a-codegraph-usage-skill-for-agents.md`, which records the incident (a stale `instructions` string that actively misdirected a debug session) that motivated this milestone.
+
 ## Shipped Milestone: v0.5.0 macOS Distribution & Homebrew
 
 **Shipped 2026-08-11, released as `v0.9.0`.** Full scope, phase detail and the milestone
@@ -135,7 +149,7 @@ stapling-impossibility findings remain live constraints for DIST-06.
 
 ### Active
 
-**No active milestone.** v0.5.0 shipped 2026-08-11; run `/gsd-new-milestone` to scope the next one, which will define a fresh `REQUIREMENTS.md` (the v0.5.0 one is archived at `milestones/v0.5.0-REQUIREMENTS.md`).
+**v0.10.0 — Agent Onboarding Skill & MCP Resources** (started 2026-08-12): defining requirements now. See "Current Milestone" above.
 
 Remaining backlog (see `ROADMAP.md` → Backlog, preserved across the milestone close):
 
@@ -232,4 +246,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-08-12 after the **v0.5.0 milestone close** — macOS Distribution & Homebrew shipped 2026-08-11 and released as `v0.9.0`, 4 phases / 24 plans / 18 requirements, all four phases' requirements moved to Validated and four new Key Decisions recorded. Phase 4's `leg3_executed=no` residual closed by measurement on 2026-08-12 (real brew-installed v0.9.0 refusing correctly). Prior entry: 2026-08-11 after v0.5.0 Phase 4 completed 4/4 verified*
+*Last updated: 2026-08-12 — milestone v0.10.0 (Agent Onboarding Skill & MCP Resources) started; defining requirements. Prior entry: 2026-08-12 after the **v0.5.0 milestone close** — macOS Distribution & Homebrew shipped 2026-08-11 and released as `v0.9.0`, 4 phases / 24 plans / 18 requirements, all four phases' requirements moved to Validated and four new Key Decisions recorded. Phase 4's `leg3_executed=no` residual closed by measurement on 2026-08-12 (real brew-installed v0.9.0 refusing correctly).*
