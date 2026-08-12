@@ -232,6 +232,26 @@ func Anchors() []Anchor {
 				assertResourceCacheControl(t, "resources-read-explore", stdout)
 			},
 		},
+		{
+			// -32602, not -32002: SEP-2164 made invalid-params the default
+			// error code for a resource-not-found in go-sdk v1.7.0, this
+			// repository's other two unknown-target error scenarios
+			// (error-unknown-tool, error-malformed-args) already freeze
+			// -32602, and a transcript showing -32002 would mean the
+			// deprecated MCPGODEBUG=customresnotfounderrcode=1 compatibility
+			// flag leaked into the capture environment. The SDK also
+			// deliberately returns this SAME error for an unregistered URI
+			// and for a registered one whose handler could not find it
+			// (server.go:1020-1025) — the client learns nothing about server
+			// configuration from the failure. This is T-05-02's mitigation
+			// observed on the wire, not asserted from source.
+			Scenario: "resources-read-unknown",
+			Name:     "error.code == invalid-params (-32602), unregistered resource URI (T-05-02)",
+			Assert: func(t *testing.T, stdout []byte) {
+				t.Helper()
+				assertErrorCode(t, "resources-read-unknown", stdout, 2, codeInvalidParams)
+			},
+		},
 	}
 }
 

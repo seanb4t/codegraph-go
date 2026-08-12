@@ -526,13 +526,18 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // already covered by plan 05-01's resources-read-explore tracer, every
 // one Index: false — cheapest scenarios in the corpus and each
 // independently proving RSRC-03's criterion 2 property that
-// resources/read serves content in a never-indexed repository) = 40. A
-// shrinking count is the failure mode this constant exists to catch.
+// resources/read serves content in a never-indexed repository) + 2
+// scenarios (phase 5 plan 04 Task 2: resources-list-no-index, the full
+// 10-entry catalog advertised with no index present, paired with the
+// pre-existing toolslist-no-index transcript as criterion 2's proof;
+// and resources-read-unknown, the -32602 unregistered-URI error shape,
+// T-05-02's mitigation observed on the wire) = 42. A shrinking count is
+// the failure mode this constant exists to catch.
 //
 // Note that toolslist-allowlist was RENAMED to toolslist-narrowed in the
 // same change, not removed — a rename moves a .golden file's name without
 // moving this count.
-const ExpectedScenarioCount = 40
+const ExpectedScenarioCount = 42
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -1337,6 +1342,41 @@ func Scenarios() []Scenario {
 			Requests: []map[string]any{
 				initializeRequest(1),
 				resourceReadRequest(2, "codegraph://index-state"),
+			},
+			ExpectTools: 0,
+		},
+
+		// --- MCP Resources: unindexed catalog + unknown-URI error shape
+		// (2) — plan 05-04 Task 2. ---
+		{
+			// Paired with toolslist-no-index (same on-disk state, Index:
+			// false): that transcript already freezes the empty tool
+			// list; this one freezes the complete ten-entry resource
+			// catalog on the same wire, from the same server, in the
+			// same condition — together the two are criterion 2's proof
+			// that an agent in a repository with no index sees zero
+			// tools and the full resource catalog.
+			Name:  "resources-list-no-index",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourcesListRequest(2),
+			},
+			ExpectTools: 0,
+		},
+		{
+			// codegraph://tools/does-not-exist is never registered under
+			// any URI — go-sdk's readResource returns the SAME
+			// ResourceNotFoundError for an unregistered URI and for a
+			// registered one whose handler could not find it
+			// (server.go:1020-1025), so this response discloses nothing
+			// about what is registered. See the anchor in anchors.go for
+			// the -32602 code assertion (T-05-02).
+			Name:  "resources-read-unknown",
+			Index: false,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/does-not-exist"),
 			},
 			ExpectTools: 0,
 		},
