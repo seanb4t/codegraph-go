@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 05
-current_phase_name: mcp-resources-capability-claims-drift-guard
-status: executing
+current_phase: 6
+current_phase_name: Agent Skill Package — SKILL.md & SessionStart Nudge
+status: planning
 stopped_at: Phase 5 context gathered
-last_updated: "2026-08-12T17:33:06.743Z"
+last_updated: "2026-08-12T19:58:49.283Z"
 last_activity: 2026-08-12
 last_activity_desc: "v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 4
+  percent: 25
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 ## Current Position
 
-Phase: 05 (mcp-resources-capability-claims-drift-guard) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 05
-Last activity: 2026-08-12 — Phase 05 execution started
+Phase: 6 — Agent Skill Package — SKILL.md & SessionStart Nudge
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-12 — Phase 05 complete, transitioned to Phase 6
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
@@ -39,7 +39,7 @@ Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 24
+- Total plans completed: 28
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 | 02 | 7 | - | - |
 | 03 | 5 | - | - |
 | 04 | 6 | - | - |
+| 05 | 4 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 
