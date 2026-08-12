@@ -93,12 +93,12 @@ Archived: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md) · re
 
 **Notes**: `Server.AddResource` is stable in the pinned `modelcontextprotocol/go-sdk@v1.7.0`; no new module dependency is needed anywhere in this milestone. Resource content is `go:embed`'d markdown under `internal/mcp/`, and the drift guard extends the existing `tools_schema_drift_test.go` / `instructions_contract_test.go` patterns rather than introducing a new mechanism. Resource `subscribe`/`listChanged` is explicitly out of scope — the tool roster is static per-process today.
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Tracer: `codegraph://tools/explore` registered, listed, read and wire-observed end-to-end; 25 frozen transcripts re-captured under one named cause
+- [x] 05-01-PLAN.md — Tracer: `codegraph://tools/explore` registered, listed, read and wire-observed end-to-end; 25 frozen transcripts re-captured under one named cause
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -180,7 +180,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 5. MCP Resources Capability & Claims Drift Guard | 0/TBD | Not started | - |
+| 5. MCP Resources Capability & Claims Drift Guard | 1/4 | In Progress|  |
 | 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 0/TBD | Not started | - |
 | 7. `codegraph install` Skill + Hooks Distribution | 0/TBD | Not started | - |
 | 8. Instructions & Marker-Block Rewrite | 0/TBD | Not started | - |

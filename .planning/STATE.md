@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 5
-current_phase_name: 1st of 4 phases in v0.10.0
+current_phase: 05
+current_phase_name: mcp-resources-capability-claims-drift-guard
 status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-08-12T17:15:28.673Z"
+last_updated: "2026-08-12T17:33:06.743Z"
 last_activity: 2026-08-12
 last_activity_desc: "v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped"
 progress:
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 5 — MCP Resources Capability & Claims Drift Guard
+**Current focus:** Phase 05 — mcp-resources-capability-claims-drift-guard
 
 ## Current Position
 
-Phase: 5 of 8 (MCP Resources Capability & Claims Drift Guard) — 1st of 4 phases in v0.10.0
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-12 — v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped
+Phase: 05 (mcp-resources-capability-claims-drift-guard) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 05
+Last activity: 2026-08-12 — Phase 05 execution started
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
