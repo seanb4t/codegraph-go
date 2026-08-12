@@ -1230,6 +1230,7 @@ func TestCheckCrossParsersFailLoudly(t *testing.T) {
 type workflowRunStep struct {
 	Name string `yaml:"name"`
 	Run  string `yaml:"run"`
+	Uses string `yaml:"uses"`
 }
 
 type workflowJobYAML struct {
@@ -2258,4 +2259,230 @@ func TestCosignIdentityPolicyBoundaryParity_ZeroLiteralsIsError(t *testing.T) {
 	if unmatched != 1 {
 		t.Fatalf("extractCosignIdentityLiterals(flag with no quoted literal): unmatched = %d, want 1", unmatched)
 	}
+}
+
+// --- quick 260811-s5o: cosign-installer coverage guard ---------------------
+//
+// Release v0.9.0, post-release-verify.yml run 31549287269: the self-upgrade
+// job invoked `task verify:self-upgrade`, which declares a `command -v
+// cosign` precondition (Taskfile.yml, added by phase 4 plan 04-05) — but the
+// job never installed cosign, so the precondition failed closed exactly as
+// designed ("task: cosign not found ... precondition not met"). The
+// precondition was correct; the installer was missing. This guard derives,
+// at runtime, every Taskfile target with a `command -v cosign` precondition
+// and every job in post-release-verify.yml, then asserts each job that
+// invokes such a target installs cosign via sigstore/cosign-installer
+// exactly once, pinned to one uniform SHA+version comment across the whole
+// file — so the next Taskfile target that grows a cosign precondition
+// cannot silently ship the same defect.
+
+// parseCosignRequiringTaskTargets decodes Taskfile source src with the real
+// YAML decoder (reusing gatekeeperTaskfileRoot) and returns the set of task
+// names whose preconditions: list contains an entry whose sh: equals
+// "command -v cosign" after strings.TrimSpace. Returns a non-nil error when
+// src fails to parse as YAML, when tasks: is empty, or when zero targets
+// match — never a usable empty map on any of those misses (the CR-01 defect
+// class every parser in this file guards against).
+func parseCosignRequiringTaskTargets(src string) (map[string]bool, error) {
+	var root gatekeeperTaskfileRoot
+	if err := yaml.Unmarshal([]byte(src), &root); err != nil {
+		return nil, fmt.Errorf("parseCosignRequiringTaskTargets: %w", err)
+	}
+	if len(root.Tasks) == 0 {
+		return nil, fmt.Errorf("parseCosignRequiringTaskTargets: no tasks: found in Taskfile source")
+	}
+	targets := make(map[string]bool)
+	for name, task := range root.Tasks {
+		for _, p := range task.Preconditions {
+			if strings.TrimSpace(p.Sh) == "command -v cosign" {
+				targets[name] = true
+				break
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("parseCosignRequiringTaskTargets: zero task targets declare a 'command -v cosign' precondition")
+	}
+	return targets, nil
+}
+
+// parseWorkflowJobsAllSteps decodes workflow YAML source src with the real
+// YAML decoder (reusing workflowFileYAML) and returns every job's full,
+// ordered step list keyed by job id. Returns a non-nil error when src fails
+// to parse as YAML or declares zero jobs: — never a usable empty map on
+// either miss.
+func parseWorkflowJobsAllSteps(src string) (map[string][]workflowRunStep, error) {
+	var wf workflowFileYAML
+	if err := yaml.Unmarshal([]byte(src), &wf); err != nil {
+		return nil, fmt.Errorf("parseWorkflowJobsAllSteps: %w", err)
+	}
+	if len(wf.Jobs) == 0 {
+		return nil, fmt.Errorf("parseWorkflowJobsAllSteps: no jobs: found in workflow source")
+	}
+	result := make(map[string][]workflowRunStep, len(wf.Jobs))
+	for id, job := range wf.Jobs {
+		result[id] = job.Steps
+	}
+	return result, nil
+}
+
+// cosignGuardTaskCallLineRe is a capturing variant of taskCallLineRe, used
+// only by taskTargetsInRunBody below, to recover WHICH target a run: body
+// invokes rather than merely confirming the `task <target>` shape.
+var cosignGuardTaskCallLineRe = regexp.MustCompile(`^task\s+([A-Za-z0-9:_.-]+)$`)
+
+// taskTargetsInRunBody runs stripRunBodyNoise first (so a `#`-prefixed
+// comment line can never masquerade as an invocation — this file's existing
+// house rule), then returns every task target invoked by a `task <target>`
+// line in body. Pure helper, no error return.
+func taskTargetsInRunBody(body string) []string {
+	stripped := stripRunBodyNoise(body)
+	if stripped == "" {
+		return nil
+	}
+	var targets []string
+	for _, line := range strings.Split(stripped, "\n") {
+		if m := cosignGuardTaskCallLineRe.FindStringSubmatch(line); m != nil {
+			targets = append(targets, m[1])
+		}
+	}
+	return targets
+}
+
+// cosignInstallerPinRe matches a sigstore/cosign-installer `uses:` line
+// pinned to a 40-hex commit SHA with a trailing `# vX.Y.Z` version comment,
+// checked against RAW source rather than the YAML-decoded step (the YAML
+// decoder strips the trailing comment, so pin-shape must be read from raw
+// text — exactly as this package already does for
+// actions/attest-build-provenance in release_workflow_shape_test.go). The
+// (?m) flag is required for `$` to match end-of-LINE rather than only
+// end-of-text, since this regex is matched with FindAllStringSubmatch
+// against a multi-line file with more than one occurrence.
+var cosignInstallerPinRe = regexp.MustCompile(`(?m)uses:\s*(sigstore/cosign-installer@[0-9a-f]{40})\s+#\s*(v\d+\.\d+\.\d+)\s*$`)
+
+// TestCosignRequiringJobsInstallCosign is quick 260811-s5o's guard: it is
+// the test that would have caught release v0.9.0 run 31549287269's
+// self-upgrade failure ("task: cosign not found ... precondition not met")
+// before it ever reached CI. It derives, at runtime — never from a
+// hardcoded job or target list — every Taskfile target with a
+// `command -v cosign` precondition and every job in
+// post-release-verify.yml, then asserts an EXACT installer-step count of 1
+// for every job that invokes a cosign-requiring target, plus pin uniformity
+// across the whole file. A "no job is missing an installer" style
+// negative-only assertion would pass vacuously the moment its anchor
+// stopped matching (repo rule 84d1gfpywd) — this guard never states the
+// property that way.
+func TestCosignRequiringJobsInstallCosign(t *testing.T) {
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", taskfilePath, err)
+	}
+	cosignTargets, err := parseCosignRequiringTaskTargets(string(taskfileData))
+	if err != nil {
+		t.Fatalf("parseCosignRequiringTaskTargets: %v", err)
+	}
+
+	workflowData, err := os.ReadFile(postReleaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", postReleaseWorkflowPath, err)
+	}
+	workflowSrc := string(workflowData)
+	jobs, err := parseWorkflowJobsAllSteps(workflowSrc)
+	if err != nil {
+		t.Fatalf("parseWorkflowJobsAllSteps: %v", err)
+	}
+
+	jobIDs := make([]string, 0, len(jobs))
+	for id := range jobs {
+		jobIDs = append(jobIDs, id)
+	}
+	sort.Strings(jobIDs)
+
+	totalInstallerSteps := 0
+	cosignRequiringJobCount := 0
+	for _, jobID := range jobIDs {
+		steps := jobs[jobID]
+
+		requiringTargets := make(map[string]bool)
+		for _, step := range steps {
+			for _, target := range taskTargetsInRunBody(step.Run) {
+				if cosignTargets[target] {
+					requiringTargets[target] = true
+				}
+			}
+		}
+
+		installerCount := 0
+		for _, step := range steps {
+			if strings.HasPrefix(step.Uses, "sigstore/cosign-installer@") {
+				installerCount++
+			}
+		}
+		totalInstallerSteps += installerCount
+
+		if len(requiringTargets) == 0 {
+			continue
+		}
+		cosignRequiringJobCount++
+
+		requiredList := make([]string, 0, len(requiringTargets))
+		for target := range requiringTargets {
+			requiredList = append(requiredList, target)
+		}
+		sort.Strings(requiredList)
+
+		t.Logf("job %q invokes cosign-requiring target(s) %v, installer step count=%d", jobID, requiredList, installerCount)
+
+		if installerCount != 1 {
+			t.Errorf("job %q invokes cosign-requiring target(s) %v but declares %d sigstore/cosign-installer step(s) (want exactly 1) — a job whose run: body invokes a task target with a 'command -v cosign' precondition must install cosign exactly once", jobID, requiredList, installerCount)
+		}
+	}
+
+	if cosignRequiringJobCount == 0 {
+		t.Fatalf("derived cosign-requiring job set is empty — a broken run-body parse must go red, never pass silently")
+	}
+
+	pinMatches := cosignInstallerPinRe.FindAllStringSubmatch(workflowSrc, -1)
+	if len(pinMatches) != totalInstallerSteps {
+		t.Errorf("%s: found %d sigstore/cosign-installer pin(s) matching the SHA+version-comment shape via raw-source regex, but %d installer step(s) via YAML decode — an unpinned, branch-pinned, or comment-less installer step decodes as a step but matches no pin line", postReleaseWorkflowPath, len(pinMatches), totalInstallerSteps)
+	}
+
+	shas := make(map[string]bool)
+	versions := make(map[string]bool)
+	for _, m := range pinMatches {
+		shas[m[1]] = true
+		versions[m[2]] = true
+	}
+	if len(shas) != 1 {
+		t.Errorf("%s: found %d distinct sigstore/cosign-installer SHA pin(s), want exactly 1: %v", postReleaseWorkflowPath, len(shas), shas)
+	}
+	if len(versions) != 1 {
+		t.Errorf("%s: found %d distinct sigstore/cosign-installer version comment(s), want exactly 1: %v", postReleaseWorkflowPath, len(versions), versions)
+	}
+}
+
+// TestCosignInstallerGuardParsersFailLoudly is the non-vacuity companion to
+// TestCosignRequiringJobsInstallCosign, modelled on this file's other
+// ..._FailLoudly / ..._MissingTargetIsError tests: every parser it exercises
+// must return a non-nil error on a broken or unmatching input, never a
+// usable empty zero value that would let the guard above pass silently.
+func TestCosignInstallerGuardParsersFailLoudly(t *testing.T) {
+	t.Run("parseCosignRequiringTaskTargets empty source", func(t *testing.T) {
+		if _, err := parseCosignRequiringTaskTargets(""); err == nil {
+			t.Fatalf("parseCosignRequiringTaskTargets(\"\"): expected a non-nil error, got nil")
+		}
+	})
+
+	t.Run("parseCosignRequiringTaskTargets no cosign preconditions", func(t *testing.T) {
+		synthetic := "tasks:\n  build:\n    preconditions:\n      - sh: '[ -n \"${TAG:-}\" ]'\n        msg: \"TAG not set\"\n"
+		if _, err := parseCosignRequiringTaskTargets(synthetic); err == nil {
+			t.Fatalf("parseCosignRequiringTaskTargets(no cosign precondition): expected a non-nil error, got nil")
+		}
+	})
+
+	t.Run("parseWorkflowJobsAllSteps empty source", func(t *testing.T) {
+		if _, err := parseWorkflowJobsAllSteps(""); err == nil {
+			t.Fatalf("parseWorkflowJobsAllSteps(\"\"): expected a non-nil error, got nil")
+		}
+	})
 }
