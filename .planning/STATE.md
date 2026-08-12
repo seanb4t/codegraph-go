@@ -4,15 +4,15 @@ milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 5
 current_phase_name: 1st of 4 phases in v0.10.0
-status: planning
+status: executing
 stopped_at: Phase 5 context gathered
-last_updated: "2026-08-12T16:35:40.908Z"
+last_updated: "2026-08-12T17:15:28.673Z"
 last_activity: 2026-08-12
 last_activity_desc: "v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 5 of 8 (MCP Resources Capability & Claims Drift Guard) — 1st of 4 phases in v0.10.0
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-12 — v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete

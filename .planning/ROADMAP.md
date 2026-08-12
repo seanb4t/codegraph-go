@@ -96,10 +96,20 @@ Archived: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md) · re
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 05-01-PLAN.md — Tracer: `codegraph://tools/explore` registered, listed, read and wire-observed end-to-end; 25 frozen transcripts re-captured under one named cause
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-02-PLAN.md — The remaining 9 resource files: 7 per-tool fact-sheets plus the `CODEGRAPH_MCP_TOOLS` filter and index-state behavior docs
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-03-PLAN.md — Claims drift guard: bidirectional tool/file set equality and numeric, count, env-var and host-fact claim pinning, each demonstrated RED
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 05-04-PLAN.md — Wire fan-out: a read scenario per advertised URI, the unindexed catalog, the unknown-URI error shape, and the oracle re-proved non-vacuous
 
 ### Phase 6: Agent Skill Package — SKILL.md & SessionStart Nudge
