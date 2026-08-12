@@ -192,7 +192,11 @@ URI not yet covered (9 of them, each `Index: false` and therefore also proving c
 never-indexed-repository property independently), the full 10-entry catalog with no index
 (`resources-list-no-index`, paired with the pre-existing `toolslist-no-index` transcript), and the
 `-32602` unregistered-URI error shape (`resources-read-unknown`). The error-shape scenario is kept
-in this category, not in "Error shapes" above, so the resources surface reads as one block.
+in this category, not in "Error shapes" above, so the resources surface reads as one block. A
+post-execution code-review fix (WR-01, `internal/mcp/resources/index-state.md`'s prose narrowed to
+name its four actual re-check trigger methods) moved `resources-read-index-state`'s bytes a fourth
+time — one line, the resource's own embedded text — with no scenario or `ExpectedScenarioCount`
+change.
 
 | Scenario | Covers |
 |---|---|
