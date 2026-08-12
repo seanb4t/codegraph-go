@@ -127,7 +127,7 @@ Plans:
 
 **Notes**: The SKILL.md is portable across Claude Code / Cursor / Codex CLI / opencode with zero changes (shared `agentskills.io` frontmatter); the `hooks.json` is not — schemas diverge per agent, which is why distribution is Claude-Code-only in v1 (Phase 7) and porting is v2 (AGENT-04…07). Frontmatter `description` is the only field always in context, so it must be trigger-shaped ("use when the user asks …"), not a summary. Every factual claim in the skill body is subject to the Phase-5 GUARD-01 discipline — the guard covers skill, resources, and instructions alike, not resources alone.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -137,7 +137,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 06-03-PLAN.md — the three worked examples, the example-count and nudge-text guards, and demonstrated-red mutation proofs for every Phase-6 gate (SKILL-02)
+- [x] 06-03-PLAN.md — the three worked examples, the example-count and nudge-text guards, and demonstrated-red mutation proofs for every Phase-6 gate (SKILL-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -191,7 +191,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 5. MCP Resources Capability & Claims Drift Guard | 4/4 | Complete    | 2026-08-12 |
-| 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 2/4 | In Progress|  |
+| 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 3/4 | In Progress|  |
 | 7. `codegraph install` Skill + Hooks Distribution | 0/TBD | Not started | - |
 | 8. Instructions & Marker-Block Rewrite | 0/TBD | Not started | - |
 
