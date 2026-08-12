@@ -31,6 +31,9 @@ var resourceURIFor = map[string]string{
 	"search.md":  "codegraph://tools/search",
 	"callers.md": "codegraph://tools/callers",
 	"callees.md": "codegraph://tools/callees",
+	"impact.md":  "codegraph://tools/impact",
+	"files.md":   "codegraph://tools/files",
+	"status.md":  "codegraph://tools/status",
 }
 
 // resourceDescriptionFor returns the Description a registered resource
