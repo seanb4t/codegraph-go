@@ -2,10 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 04
-status: "Phase 4 shipped — PR #55"
+status: Awaiting next milestone
 stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-last_updated: "2026-08-12T00:27:48.794Z"
+last_updated: "2026-08-12T00:55:38.369Z"
 last_activity: 2026-08-11
 last_activity_desc: Phase 04 execution started
 progress:
@@ -14,6 +13,7 @@ progress:
   total_plans: 24
   completed_plans: 24
   percent: 100
+current_phase: 04
 current_phase_name: codegraph-upgrade-homebrew
 ---
 
@@ -28,12 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 ## Current Position
 
-Phase: 04
-Plan: Not started
-Status: Phase 4 shipped — PR #55
-Last activity: 2026-08-11 - Completed quick task 260811-s5o: cosign installer for self-upgrade job
-
-Progress: [....] 3/4 phases complete (75%)
+Phase: Milestone v0.5.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-11 — Milestone v0.5.0 completed and archived
 
 ## Performance Metrics
 
@@ -290,6 +288,32 @@ v1.0's quick tasks are archived; their directories remain under `.planning/quick
 
 ## Deferred Items
 
+Items acknowledged and deferred at v0.5.0 milestone close on 2026-08-12 (8 open artifacts, none blocking):
+
+| Category | Item | Status |
+|----------|------|--------|
+| debug | knowledge-base | open, status unknown — investigate or archive |
+| todo | 2026-08-07 — wire-oracle toolsList repeat-response ordering flake | pending [mcp]; matches the documented load-dependent flake pattern, passes isolated |
+| todo | 2026-08-08 — author a codegraph usage skill for agents | pending [agents] |
+| todo | 2026-08-09 — `dry-run-signed` additions-only diff guard passes vacuously | pending [release]; same negative-only-guard class as rule 84d1gfpywd |
+| todo | 2026-08-09 — post-release-verify event-aware conclusion guard has no regression assertion | pending [ci]; the guard held at 5 jobs / 5 occurrences this milestone, but nothing pins the 1:1 invariant |
+| todo | 2026-08-10 — add golangci-lint with gofmt and idiomatic Go linters | pending [ci] |
+| todo | 2026-08-10 — `brew trust` instructions recommend the broader tap grant with no security framing | pending [docs]; Phase 3 UF-2 |
+| todo | 2026-08-10 — tap App secret distinctness test is tautological and reads no workflow | pending [ci]; Phase 3 AR-01 |
+| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant |
+| seed | SEED-003 — markdown in the index | dormant |
+
+Closed during v0.5.0, no longer deferred:
+
+| Category | Item | Landed as |
+|----------|------|-----------|
+| seed | SEED-002 — homebrew installation path | `status: implemented` — consumed by Phases 1–4; tap published, cask installable, `codegraph upgrade` steps aside |
+| backlog | 999.5 — macOS Gatekeeper signing and notarization | promoted into v0.5.0 Phase 2 (SIGN-01…04) |
+
+Not deferred but worth carrying: `.planning/debug/perf-gate-throughput-regress.md` predates this
+milestone and is now backed by fresh data on issue #20 — the gate failed then passed on an inert
+diff at ~6.9% intra-run spread against a 10% budget.
+
 Items acknowledged and deferred at v1.0 milestone close on 2026-08-03, minus the two promoted into v0.3.0:
 
 | Category | Item | Status |
@@ -350,8 +374,4 @@ Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md
 
 ## Operator Next Steps
 
-- Review `.planning/ROADMAP.md` — 4 phases, requirement coverage 18/18
-- Confirm the REL-05 pass condition and the GoReleaser Pro fallback branch read correctly before Phase 1 is planned
-- Acquire the Phase-2 prerequisites early (Apple Developer ID Application certificate + App Store Connect API key as CI secrets) and the Phase-3 tap PAT scoped to `seanb4t/homebrew-tap` alone — both are external lead-time items, not implementation work
-- Decide the 999.3 / 999.6 Backlog bookkeeping question (strike vs. annotate as promoted); 999.5 has now been promoted into this milestone and its Backlog entry removed, with 999.2 and 999.4 preserved verbatim
-- `/gsd-plan-phase 1` to begin
+- Start the next milestone with /gsd-new-milestone
