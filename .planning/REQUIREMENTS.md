@@ -30,16 +30,16 @@
 
 - [x] **BREW-01**: A user can run `brew tap seanb4t/tap && brew install codegraph` on a clean machine and get a working binary
 - [x] **BREW-02**: The tap is published by GoReleaser's `homebrew_casks:` block on every release, authenticated by a token scoped to the tap repository alone
-- [ ] **BREW-03**: The cask installs shell completions for bash, zsh, and fish, generated from the binary at cask-build time
-- [ ] **BREW-04**: The cask installs man pages
-- [ ] **BREW-05**: The cask carries a mechanism exercising a real command, so a broken cask fails before a user hits it — `hooks.post.install` runs the installed binary's man-page generation and its `version --json` output, and raises (rolling back the install) if either the man pages are absent or the reported version disagrees with the cask's own declared version. **Amended 2026-08-10 (plan 03-04)**: previously specified a cask `test:` block. Measured unachievable, not merely inconvenient: Homebrew Casks carry no `test` stanza (`Cask::DSL.instance_methods(false)` on Homebrew 6.0.16 has no `test` method), `brew test` operates only on installed formulae ("Run the test method provided by an installed formula" — `brew test --help`), and the pinned GoReleaser v2.17.1 `HomebrewCask` struct (`pkg/config/config.go`) exposes no such field. The replacement mechanism — `hooks.post.install`'s two positive assertions (D-11) — was demonstrated RED against two independently confirmed-applied, byte-clean-reverted mutations (a binary that cannot execute; a binary that executes and reports the wrong version), see `03-EVIDENCE.md` §"BREW-05 — the install gate demonstrated RED"
+- [x] **BREW-03**: The cask installs shell completions for bash, zsh, and fish, generated from the binary at cask-build time
+- [x] **BREW-04**: The cask installs man pages
+- [x] **BREW-05**: The cask carries a mechanism exercising a real command, so a broken cask fails before a user hits it — `hooks.post.install` runs the installed binary's man-page generation and its `version --json` output, and raises (rolling back the install) if either the man pages are absent or the reported version disagrees with the cask's own declared version. **Amended 2026-08-10 (plan 03-04)**: previously specified a cask `test:` block. Measured unachievable, not merely inconvenient: Homebrew Casks carry no `test` stanza (`Cask::DSL.instance_methods(false)` on Homebrew 6.0.16 has no `test` method), `brew test` operates only on installed formulae ("Run the test method provided by an installed formula" — `brew test --help`), and the pinned GoReleaser v2.17.1 `HomebrewCask` struct (`pkg/config/config.go`) exposes no such field. The replacement mechanism — `hooks.post.install`'s two positive assertions (D-11) — was demonstrated RED against two independently confirmed-applied, byte-clean-reverted mutations (a binary that cannot execute; a binary that executes and reports the wrong version), see `03-EVIDENCE.md` §"BREW-05 — the install gate demonstrated RED"
 - [x] **BREW-06**: A failed tap push leaves an otherwise-good release intact, and re-running recovers without duplicate or orphaned assets
 
 ### Upgrade × Package Manager (UPGR)
 
-- [ ] **UPGR-01**: `codegraph upgrade` detects a Homebrew-managed install and refuses, pointing at `brew upgrade codegraph`, and never modifies the Cellar
-- [ ] **UPGR-02**: Brew detection resolves symlinks to the real install path rather than matching a hardcoded prefix, so it is correct on Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew
-- [ ] **UPGR-03**: `codegraph upgrade --check` still works under a brew-managed install — read-only, no mutation — and reports how to upgrade
+- [x] **UPGR-01**: `codegraph upgrade` detects a Homebrew-managed install and refuses, pointing at `brew upgrade codegraph`, and never modifies the Caskroom or the Cellar. **Amended 2026-08-11 (D-01, plan 04-03)**: previously named only "the Cellar" — the formula tree this project has never shipped into. It ships a cask via `homebrew_casks:`, so Caskroom is named as the tree that is actually mutated-against; Cellar is kept as the second covered shape for a future formula path (measured: `03-02-SUMMARY.md:128` records the sentinel resolving to `/opt/homebrew/Caskroom/codegraph/<version>`; `03-EVIDENCE.md:160` records `ls /opt/homebrew/Caskroom/codegraph`)
+- [x] **UPGR-02**: Brew detection resolves symlinks to the real install path rather than matching a hardcoded prefix, so it is correct on Apple Silicon `/opt/homebrew`, Intel `/usr/local`, a custom prefix, and linuxbrew, recognizing both the Caskroom and Cellar tree shapes at every prefix. **Amended 2026-08-11 (D-04R, plan 04-03)**: linuxbrew was previously scoped assuming Homebrew on Linux has no cask support; that premise was falsified by research the same day — Homebrew PR #19121 allows `binary`/`zap`-only casks to install on Linux, and Homebrew 6.0.0 shipped four further Linux-cask items — so linuxbrew detection now covers the Caskroom shape too, not Cellar alone
+- [x] **UPGR-03**: `codegraph upgrade --check` still works under a brew-managed install — read-only, no mutation — and reports how to upgrade
 
 ## v0.5.x Requirements
 
@@ -83,9 +83,9 @@ Deferred to a follow-up release. Tracked but not in this roadmap.
 | BREW-04 | Phase 3 | Complete |
 | BREW-05 | Phase 3 | Complete |
 | BREW-06 | Phase 3 | Complete |
-| UPGR-01 | Phase 4 | Pending |
-| UPGR-02 | Phase 4 | Pending |
-| UPGR-03 | Phase 4 | Pending |
+| UPGR-01 | Phase 4 | Complete |
+| UPGR-02 | Phase 4 | Complete |
+| UPGR-03 | Phase 4 | Complete |
 
 **Phase mapping:**
 

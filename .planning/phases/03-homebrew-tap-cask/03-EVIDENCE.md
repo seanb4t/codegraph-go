@@ -827,10 +827,27 @@ half. This is a real, previously-unrecorded asymmetry in the cask's cleanup
 story: **files a hook writes outside the Caskroom survive a failed install's
 rollback, and are only removed by a subsequent successful `brew uninstall`
 (confirmed below) — never by the failure path itself.** Phase 4, which reads
-the sentinel this same hook writes, should know that a failed-then-abandoned
-install can leave the sentinel behind with no cask installed to explain it.
+the sentinel this same hook writes, should know that only the man pages leak
+on a failed install — never the sentinel itself.
 The 30 stray pages were removed by hand (`rm`) before this section's install,
 not by any cask mechanism.
+
+> **Amendment (2026-08-10, corrected 2026-08-11):** the preceding sentence
+> originally claimed a failed install could strand the sentinel with no cask
+> installed to explain its presence. **That claim was false when written.** The
+> hook writes the sentinel at `.goreleaser.yaml:577-587`, strictly AFTER both
+> of BREW-05's raises — assertion one (man pages) at `:553-555` and assertion
+> two (version equality) at `:566-568` (line numbers as of Phase 3, before
+> Phase 4's edit below). A gate failure therefore raises before the sentinel
+> exists, so no failed install could ever strand it. This same section
+> already contradicted the claim 16 lines above: it records 30 orphaned man
+> pages surviving the rollback while `find … -iname
+> "*.codegraph-brew-install*"` (recorded earlier in this document, at the
+> start of this section) returned nothing. What genuinely leaks is the man
+> pages, and only the man pages — the asymmetry finding above stays true and
+> is the real, useful result of this section. **Phase 4 (D-02) removed the
+> sentinel outright**, so this correction is now also moot: there is no
+> sentinel left to strand or not strand.
 
 ### `brew tap seanb4t/tap` — resolves
 
@@ -1035,9 +1052,18 @@ ls: /opt/homebrew/bin/codegraph: No such file or directory
 All 30 man pages and the sentinel are gone; the binary is gone. **The
 asymmetry is specifically that a FAILED install's rollback does not reach
 the uninstall hook — a SUCCESSFUL uninstall does, correctly, every time.**
-Both halves are now recorded, for Phase 4's benefit: the failure path can
-leave the sentinel behind with nothing installed to explain it; the success
-path never does.
+Both halves are now recorded, for Phase 4's benefit: the failure path leaks
+only the man pages, never the sentinel; the success path leaks neither.
+
+> **Amendment (2026-08-10, corrected 2026-08-11):** the preceding sentence
+> originally claimed the failure path could strand the sentinel with nothing
+> installed to explain its presence. **That claim was false when written** —
+> see the corrected passage and its citations (`.goreleaser.yaml:553-555`,
+> `:566-568`, `:577-587`) earlier in this document. The sentinel write
+> strictly follows both of BREW-05's raises, so a gate failure cannot strand
+> it; only man pages (written before assertion one evaluates) leak on a
+> failed install. **Phase 4 (D-02) removed the sentinel outright**, so this
+> correction is now also moot.
 
 ```
 $ brew untap seanb4t/tap

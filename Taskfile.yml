@@ -1735,7 +1735,7 @@ tasks:
           fi
           rm -rf "${REHEARSE_DIR}" "${GORELEASER_DIR}" "${ZIG_CACHE_ROOT}"
           if [ "${OUTCOME}" != "pass" ]; then
-            echo "CASK-REHEARSE-EVIDENCE schema=1 snapshot_version=${SNAPSHOT_VERSION:-unknown} cask_sha256=${CASK_SHA256:-unknown} url_mechanism=${URL_MECHANISM:-none} man_page_count=${MAN_PAGE_COUNT:-0} reported_version=${REPORTED_VERSION:-unknown} outcome=fail"
+            echo "CASK-REHEARSE-EVIDENCE schema=3 snapshot_version=${SNAPSHOT_VERSION:-unknown} cask_sha256=${CASK_SHA256:-unknown} url_mechanism=${URL_MECHANISM:-none} man_page_count=${MAN_PAGE_COUNT:-0} fresh_man_pages=${FRESH_MAN_PAGE_COUNT:-0} completion_count=${COMPLETION_COUNT:-0} reported_version=${REPORTED_VERSION:-unknown} outcome=fail"
           fi
         }
         trap cleanup EXIT
@@ -1903,6 +1903,13 @@ tasks:
         brew tap "${TAP_NAME}" "file://${LOCAL_TAP_SRC}"
         TAP_CLONE_DIR="$(brew --repo "${TAP_NAME}")"
 
+        # UF-5 (T-04-05, review cycle 3 MEDIUM): a freshness marker created
+        # immediately before the FIRST install, read ONLY by Step 5's
+        # find -newer check below. Step 5d (further down) creates and
+        # reads its own separate reinstall-freshness marker — one
+        # creation point, one freshness consumer per marker, never
+        # shared.
+        MAN_BASELINE_MARKER="$(mktemp)"
         set +e
         INSTALL_OUT="$(brew install --cask "${TAP_NAME}/codegraph" 2>&1)"
         INSTALL_EXIT=$?
@@ -1969,6 +1976,22 @@ tasks:
           exit 1
         fi
 
+        # UF-5 (T-04-05): independent rehearsal-side confirmation that the
+        # man pages above are FRESH — this install's own output, not
+        # residue a prior failed install left behind (03-EVIDENCE.md
+        # measured 30 such orphans surviving Homebrew's own rollback). The
+        # same belt-and-braces relationship this rehearsal already has
+        # with BREW-05's raises, now extended to the .goreleaser.yaml hook's
+        # own man_pages_before/fresh_man_pages comparison. MAN_BASELINE_MARKER
+        # is read HERE and nowhere else.
+        FRESH_MAN_PAGE_COUNT="$(find "${MAN_DIR}" -maxdepth 1 -type f -name 'codegraph*.1' -newer "${MAN_BASELINE_MARKER}" | wc -l | tr -d ' ')"
+        if [ "${FRESH_MAN_PAGE_COUNT}" -eq 0 ]; then
+          echo "::error::0 of ${MAN_PAGE_COUNT} codegraph*.1 page(s) in ${MAN_DIR} are newer than the pre-install baseline marker — the post-install hook's man-page generation did not produce or rewrite anything fresh (UF-5)"
+          exit 1
+        fi
+        echo "fresh man pages (newer than pre-install baseline): ${FRESH_MAN_PAGE_COUNT}/${MAN_PAGE_COUNT}"
+        rm -f "${MAN_BASELINE_MARKER}"
+
         INSTALLED_BIN="$(brew --prefix)/bin/codegraph"
         if [ ! -x "${INSTALLED_BIN}" ]; then
           echo "::error::${INSTALLED_BIN} is not executable after brew install --cask"
@@ -1992,42 +2015,13 @@ tasks:
         fi
         echo "installed binary reports (JSON, v-stripped): ${REPORTED_VERSION_STRIPPED}"
 
-        # --- Step 5b (D-11/D-08, schema=2): the Phase-4 sentinel,
-        # positively asserted rather than assumed from a green hook exit
-        # — a hook that ran and wrote nothing must be caught here even if
-        # brew's own exit code was 0. Located by resolving INSTALLED_BIN
-        # THROUGH SYMLINKS via python3 (already a precondition dependency;
-        # macOS's own /usr/bin/readlink has no GNU -f flag), never by
-        # matching a path prefix — the same mechanism the hook itself
-        # uses (D-08). OK accumulates across every assertion below rather
-        # than exiting on the first failure, so a single RED run can
-        # surface every new behavior's failure at once (this repo's own
-        # release:dry-run-signed idiom).
+        # --- Step 5b removed (D-02): the Phase-4 sentinel no longer
+        # exists to assert against — Phase 4's detection is structural.
+        # OK still accumulates across every assertion below rather than
+        # exiting on the first failure, so a single RED run can surface
+        # every new behavior's failure at once (this repo's own
+        # release:dry-run-signed idiom); Steps 5c, 5d, 6b and 7 all use it.
         OK=1
-        REAL_BIN="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "${INSTALLED_BIN}")"
-        REAL_BIN_DIR="$(dirname "${REAL_BIN}")"
-        SENTINEL_PATH="${REAL_BIN_DIR}/.codegraph-brew-install"
-        echo "resolved installed-binary directory (real, symlink-resolved): ${REAL_BIN_DIR}"
-        SENTINEL_VERDICT="absent"
-        if [ ! -f "${SENTINEL_PATH}" ]; then
-          echo "::error::${SENTINEL_PATH} does not exist after brew install --cask — the post-install hook did not write the Phase-4 sentinel (D-08)"
-          OK=0
-        else
-          SENTINEL_VERDICT="present"
-          SENTINEL_FIRST_LINE="$(head -n1 "${SENTINEL_PATH}")"
-          if [ "${SENTINEL_FIRST_LINE}" != "schema=1" ]; then
-            echo "::error::${SENTINEL_PATH} first line is '${SENTINEL_FIRST_LINE}', want schema=1"
-            OK=0
-          fi
-          for key in cask_token cask_version homebrew_prefix man_dir man_page_count installed_at; do
-            if ! grep -q "^${key}=" "${SENTINEL_PATH}"; then
-              echo "::error::${SENTINEL_PATH} is missing the ${key} key"
-              OK=0
-            fi
-          done
-          echo "sentinel contents:"
-          cat "${SENTINEL_PATH}"
-        fi
 
         # --- Step 5c (BREW-03, D-06): completion files under Homebrew's
         # own completion directories — a hard assertion now that
@@ -2057,9 +2051,17 @@ tasks:
 
         # --- Step 5d: idempotency (D-11's action text) — Homebrew re-runs
         # post.install on both reinstall and upgrade, and every step the
-        # hook takes (directory creation, page generation, sentinel write)
-        # must tolerate running again over an existing install.
+        # hook takes (directory creation, page generation) must tolerate
+        # running again over an existing install. MAN_REINSTALL_MARKER is
+        # created HERE, immediately before the reinstall invocation, and
+        # is read ONLY by this step's freshness check below (review cycle
+        # 3, MEDIUM): reusing MAN_BASELINE_MARKER (the pre-FIRST-install
+        # marker) would leave this check pre-satisfied by pages the FIRST
+        # install already wrote, whether or not the reinstall wrote
+        # anything — a marker created immediately before THIS reinstall
+        # removes that dependence entirely.
         echo "==> brew reinstall --cask ${TAP_NAME}/codegraph (idempotency)"
+        MAN_REINSTALL_MARKER="$(mktemp)"
         set +e
         REINSTALL_OUT="$(brew reinstall --cask "${TAP_NAME}/codegraph" 2>&1)"
         REINSTALL_EXIT=$?
@@ -2069,11 +2071,17 @@ tasks:
           echo "::error::brew reinstall --cask exited ${REINSTALL_EXIT} — the hook is not idempotent"
           OK=0
         fi
-        if [ ! -f "${MAN_DIR}/codegraph.1" ] || [ ! -f "${SENTINEL_PATH}" ]; then
-          echo "::error::man pages or sentinel missing after reinstall — the hook's directory-creation/write steps are not idempotent"
+        if [ ! -f "${MAN_DIR}/codegraph.1" ]; then
+          echo "::error::man page missing after reinstall — the hook's directory-creation/write steps are not idempotent"
           OK=0
         fi
-        echo "SECOND-INSTALL-EVIDENCE exit=${REINSTALL_EXIT}"
+        REINSTALL_FRESH_MAN_PAGE_COUNT="$(find "${MAN_DIR}" -maxdepth 1 -type f -name 'codegraph*.1' -newer "${MAN_REINSTALL_MARKER}" | wc -l | tr -d ' ')"
+        if [ "${REINSTALL_FRESH_MAN_PAGE_COUNT}" -eq 0 ]; then
+          echo "::error::0 codegraph*.1 page(s) in ${MAN_DIR} are newer than the pre-reinstall marker — brew reinstall --cask wrote nothing (UF-5 idempotency check)"
+          OK=0
+        fi
+        echo "SECOND-INSTALL-EVIDENCE exit=${REINSTALL_EXIT} fresh=${REINSTALL_FRESH_MAN_PAGE_COUNT}"
+        rm -f "${MAN_REINSTALL_MARKER}"
 
         # --- Step 6: uninstall now (also registered in the trap for the
         # failure path above).
@@ -2088,11 +2096,7 @@ tasks:
           echo "::error::${MAN_DIR}/codegraph.1 still exists after brew uninstall --cask — hooks.post.uninstall did not remove the man pages this cask wrote (D-07)"
           OK=0
         fi
-        if [ -f "${SENTINEL_PATH}" ]; then
-          echo "::error::${SENTINEL_PATH} still exists after brew uninstall --cask — hooks.post.uninstall did not remove the sentinel (D-08/D-07)"
-          OK=0
-        fi
-        echo "post-uninstall verdict: man pages absent=$([ ! -f "${MAN_DIR}/codegraph.1" ] && echo true || echo false), sentinel absent=$([ ! -f "${SENTINEL_PATH}" ] && echo true || echo false)"
+        echo "post-uninstall verdict: man pages absent=$([ ! -f "${MAN_DIR}/codegraph.1" ] && echo true || echo false)"
 
         # --- Step 7 (Task 1 acceptance criterion): a deliberate local
         # perturbation proving D-11's version-equality assertion can
@@ -2208,11 +2212,12 @@ tasks:
 
         OUTCOME="pass"
         # --- Step 8: machine-parseable evidence, SIGN04-PUBLISH-EVIDENCE
-        # convention — schema=2 (widened from schema=1 with the sentinel,
-        # completions count, and post-uninstall verdicts), fixed key
-        # order, on the pass path here and on the fail path in the trap
-        # above.
-        echo "CASK-REHEARSE-EVIDENCE schema=2 snapshot_version=${SNAPSHOT_VERSION} cask_sha256=${CASK_SHA256} url_mechanism=${URL_MECHANISM} man_page_count=${MAN_PAGE_COUNT} sentinel=${SENTINEL_VERDICT} completion_count=${COMPLETION_COUNT} reported_version=${REPORTED_VERSION} outcome=pass"
+        # convention — schema=3 (D-02: dropped the removed marker's
+        # `sentinel=` field, added `fresh_man_pages=` for the UF-5
+        # freshness re-check; schema=1/2's pass/fail mismatch is also
+        # resolved here rather than carried forward), fixed key order, on
+        # the pass path here and on the fail path in the trap above.
+        echo "CASK-REHEARSE-EVIDENCE schema=3 snapshot_version=${SNAPSHOT_VERSION} cask_sha256=${CASK_SHA256} url_mechanism=${URL_MECHANISM} man_page_count=${MAN_PAGE_COUNT} fresh_man_pages=${FRESH_MAN_PAGE_COUNT} completion_count=${COMPLETION_COUNT} reported_version=${REPORTED_VERSION} outcome=pass"
 
         echo "release:rehearse-cask: PASS"
 
@@ -2575,6 +2580,8 @@ tasks:
         msg: "gh CLI not found. This target assumes the runner image ships it (matching GitHub-hosted runner images); locally: brew install gh / apt install gh."
       - sh: command -v jq
         msg: "jq not found. This target parses gh api output with it. CI runner images ship it; locally: brew install jq."
+      - sh: command -v cosign
+        msg: "cosign not found. This target verifies the downloaded prior release binary's cosign bundle with it BEFORE making the file executable. CI installs it via sigstore/cosign-installer; locally: brew install cosign."
     cmds:
       - |
         set -euo pipefail
@@ -2704,16 +2711,71 @@ tasks:
 
         # --- 2. Download the prior release's raw asset for
         # GOOS/GOARCH — a genuinely shipped binary, which is the whole
-        # point of the claim.
+        # point of the claim. TWO SEPARATE temp dirs (DL_DIR for the binary,
+        # SIG_DIR for its cosign bundle) — the same two-temp-dirs discipline
+        # verify:release-assets and verify:notarized-suite already use, so
+        # the sidecar never lands next to the binary it signs.
+        #
+        # Ordering is load-bearing, not stylistic (review cycle 2, LOW): the
+        # trap is installed IMMEDIATELY after the FIRST mktemp, before the
+        # SECOND directory is created. The naive reading — create both
+        # directories, then install one trap — is the one that leaks: if the
+        # second mktemp fails under `set -e`, DL_DIR is left on disk with no
+        # trap installed to remove it. cleanup() references SIG_DIR via
+        # ${SIG_DIR:-} so it is safe to run before that variable is set.
         DL_DIR="$(mktemp -d)"
-        trap 'rm -rf "${DL_DIR}"' EXIT
+        cleanup() { rm -rf "${DL_DIR}" "${SIG_DIR:-}"; }
+        trap cleanup EXIT
+        SIG_DIR="$(mktemp -d)"
 
         PRIOR_ASSET="codegraph_${PRIOR_TAG}_${GOOS}_${GOARCH}"
+        PRIOR_SIG_NAME="${PRIOR_ASSET}.sigstore.json"
         gh release download "${PRIOR_TAG}" --repo "${REPO}" --dir "${DL_DIR}" \
           --pattern "${PRIOR_ASSET}"
         PRIOR_BIN="${DL_DIR}/${PRIOR_ASSET}"
+
+        # gh release download can exit 0 having matched nothing — this
+        # repository's own v0.5.1 post-release break. Hard-fail by name,
+        # naming the expected bundle filename, rather than letting cosign
+        # fail confusingly against an absent file.
+        gh release download "${PRIOR_TAG}" --repo "${REPO}" --dir "${SIG_DIR}" \
+          --pattern "${PRIOR_SIG_NAME}"
+        PRIOR_SIG="${SIG_DIR}/${PRIOR_SIG_NAME}"
+        if [ ! -f "${PRIOR_SIG}" ]; then
+          echo "::error::cosign bundle ${PRIOR_SIG_NAME} was not downloaded — cannot verify the prior release binary before it is executed"
+          exit 1
+        fi
+
+        # --- VERIFY BEFORE EXECUTING (T-04-15), the identical ordering
+        # constraint verify:notarized-suite already enforces for the same
+        # reason: cosign verify-blob runs BEFORE chmod +x, with the SAME
+        # issuer and certificate-identity flags verify:release-assets and
+        # verify:notarized-suite already use — never a looser pattern, which
+        # would prove less than the published instruction claims. This
+        # target's ordering is independent of any sibling CI job:
+        # post-release-verify.yml's self-upgrade job deliberately carries no
+        # `needs: verify-supply-chain` (a reporting-independence choice), so
+        # execution safety must live inside this target, not depend on a
+        # sibling job finishing first.
+        cosign verify-blob \
+          --bundle "${PRIOR_SIG}" \
+          --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+          --certificate-identity-regexp \
+            '^https://github\.com/seanb4t/codegraph-go/\.github/workflows/release\.ya?ml@refs/tags/v[0-9][^[:space:]]*$' \
+          "${PRIOR_BIN}"
+        echo "SELF-UPGRADE-VERIFY-EVIDENCE prior_tag=${PRIOR_TAG} bundle=${PRIOR_SIG_NAME} verdict=verified"
+
+        # --- Only NOW does the file become executable.
         chmod +x "${PRIOR_BIN}"
         PRIOR_SHA256="$(sha256_of "${PRIOR_BIN}")"
+
+        # --- Belt-and-braces: hard-fail BY NAME, before execution, if the
+        # file is missing or not executable after download+chmod — the same
+        # re-check verify:notarized-suite carries.
+        if [ ! -f "${PRIOR_BIN}" ] || [ ! -x "${PRIOR_BIN}" ]; then
+          echo "::error::${PRIOR_BIN} is missing or not executable after download+chmod — refusing to execute a file that cannot be the verified prior release binary"
+          exit 1
+        fi
 
         # --- 3. Run the real codegraph upgrade invocation against it, with
         # $TAG EXPLICIT as the positional version argument — an

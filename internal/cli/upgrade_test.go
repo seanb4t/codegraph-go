@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/upgrade"
@@ -81,5 +82,36 @@ func TestUpgradeCommand_NoArgsDefaultsToLatest(t *testing.T) {
 	}
 	if gotOpts.Version != "" {
 		t.Errorf("Options.Version = %q, want empty", gotOpts.Version)
+	}
+}
+
+// TestUpgradeCommand_HelpDocumentsBrewRefusalAndExitCodes asserts `--help`
+// (cmd.Long) names the Homebrew refusal, the pointer command, and both exit
+// behaviours (D-07, D-10), and offers no override for the refusal (D-06).
+// Positive assertions run first — an absence-only test would pass against
+// an empty Long, so the positive assertions are what make the negative
+// assertions meaningful (repo rule 84d1gfpywd).
+func TestUpgradeCommand_HelpDocumentsBrewRefusalAndExitCodes(t *testing.T) {
+	long := newUpgradeCmd().Long
+
+	required := []string{
+		"brew upgrade codegraph",  // the pointer command, verbatim (D-07)
+		"Homebrew-managed install", // names what is detected/refused
+		"exits\nnon-zero",          // bare-refusal exit behaviour (D-05, D-10)
+		"exits\nzero",              // --check exit behaviour (D-09, D-10)
+	}
+	for _, want := range required {
+		if !strings.Contains(long, want) {
+			t.Errorf("Long missing required substring %q; got:\n%s", want, long)
+		}
+	}
+
+	// Only meaningful because the positive assertions above already proved
+	// Long is non-empty and on-topic.
+	forbidden := []string{"--force", "override", "bypass"}
+	for _, absent := range forbidden {
+		if strings.Contains(long, absent) {
+			t.Errorf("Long unexpectedly offers an override via %q; got:\n%s", absent, long)
+		}
 	}
 }

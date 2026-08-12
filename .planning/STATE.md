@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.5.0
 milestone_name: macOS Distribution & Homebrew
-current_phase: 03
-current_phase_name: homebrew-tap-cask
-status: executing
-stopped_at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
-last_updated: "2026-08-10T13:20:58.891Z"
-last_activity: 2026-08-10
-last_activity_desc: Phase 03 execution started
+current_phase: 04
+status: "Phase 4 shipped — PR #55"
+stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
+last_updated: "2026-08-11T23:37:59.483Z"
+last_activity: 2026-08-11
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 18
-  completed_plans: 13
-  percent: 50
+  completed_phases: 4
+  total_plans: 24
+  completed_plans: 24
+  percent: 100
+current_phase_name: codegraph-upgrade-homebrew
+last_activity_desc: Phase 04 execution started
 ---
 
 # Project State
@@ -24,22 +24,22 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 03 — homebrew-tap-cask
+**Current focus:** Phase 04 — codegraph-upgrade-homebrew
 
 ## Current Position
 
-Phase: 03 (homebrew-tap-cask) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 03
-Last activity: 2026-08-10 — Phase 03 execution started
+Phase: 04
+Plan: Not started
+Status: Phase 4 shipped — PR #55
+Last activity: 2026-08-11
 
-Progress: [....] 0/4 phases complete ([██████████] 100%)
+Progress: [....] 3/4 phases complete (75%)
 
 ## Performance Metrics
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 13
+- Total plans completed: 24
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -49,8 +49,8 @@ Progress: [....] 0/4 phases complete ([██████████] 100%)
 |-------|-------|-------|----------|
 | 1 | 6 | - | - |
 | 02 | 7 | - | - |
-| 3 | 0 | - | - |
-| 4 | 0 | - | - |
+| 03 | 5 | - | - |
+| 04 | 6 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 
@@ -244,7 +244,7 @@ Standing decisions that outlive v1.0:
 
 ### Pending Todos
 
-2 pending — `/gsd-capture --list` to review.
+10 pending — `/gsd-capture --list` to review.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
@@ -318,8 +318,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-10T13:11:06.675Z
-Stopped at: Phase 3 planned — 5 plans across 4 waves, checker passed; execution deliberately not started
+Last session: 2026-08-11T16:29:32.715Z
+Stopped at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
   NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -345,7 +345,7 @@ Stopped at: Phase 3 planned — 5 plans across 4 waves, checker passed; executio
       Reversing that is a recorded decision, not a silent config change.
   NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/03-homebrew-tap-cask/03-01-PLAN.md
+Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md
 
 ## Operator Next Steps
 

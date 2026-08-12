@@ -448,7 +448,9 @@ release:
 #     emits an `auto_updates` stanza in this pinned version — not
 #     settable through this pipe. codegraph's own self-updater
 #     (`codegraph upgrade`) is unrelated to this cask-level claim, and
-#     Phase 4 teaches it to refuse when brew-managed (D-08's sentinel).
+#     Phase 4 teaches it to refuse under a brew-managed install, detected
+#     structurally from the resolved install path plus Homebrew's own
+#     install receipt (D-02/D-03) — no marker file is written or read.
 #   - depends_on (macOS minimum): NOT asserted. HomebrewCaskDependency
 #     (pkg/config/config.go) carries only Cask/Formula fields with an
 #     explicit `// TODO: support macos, arch` comment — this pinned
@@ -542,6 +544,21 @@ homebrew_casks:
           binary = "#{HOMEBREW_PREFIX}/bin/codegraph"
           man_dir = "#{HOMEBREW_PREFIX}/share/man/man1"
 
+          # UF-5 fix (review cycles 1-2): a per-path freshness BASELINE,
+          # not a wall-clock guess. A "one second before the hook started"
+          # oracle carries a one-second window in which a page written by
+          # a PREVIOUS run counts as fresh, and it is additionally
+          # sensitive to filesystem timestamp precision and to clock
+          # adjustment; a before/after snapshot of the exact
+          # `codegraph*.1` set has no wall-clock slack at all. Records
+          # BOTH mtime AND size per path — mtime alone cannot detect a
+          # same-tick rewrite (see the residual note below the freshness
+          # check). Missing pages are simply absent from the Hash — their
+          # absence is what makes a newly-created page detectable.
+          man_pages_before = Dir.glob("#{man_dir}/codegraph*.1").each_with_object({}) do |p, h|
+            h[p] = { mtime: File.mtime(p), size: File.size(p) }
+          end
+
           # Assertion one (D-11): the man generation produced something.
           # Reads the directory rather than trusting the exit status alone
           # — a binary that ran and wrote nothing would otherwise pass
@@ -552,6 +569,42 @@ homebrew_casks:
           man_pages = Dir.glob("#{man_dir}/codegraph*.1")
           if man_pages.length <= 1
             raise "codegraph cask post-install: expected more than 1 man page under #{man_dir}, found #{man_pages.length}"
+          end
+
+          # Assertion one-and-a-half, UF-5 (T-04-05): the pages this run
+          # produced are actually FRESH, not residue from a prior failed
+          # install (03-EVIDENCE.md:815-833 measured 30 such orphans —
+          # Homebrew's rollback purges the Caskroom but never runs the
+          # uninstall hook that would have cleaned this shared directory).
+          # A page is fresh when it is absent from man_pages_before (newly
+          # created by this run), its mtime advanced past the baseline
+          # (rewritten by this run), or its size differs from the baseline
+          # (rewritten within the same timestamp tick — the
+          # coarse-granularity case, only detectable because the baseline
+          # also recorded size). Freshness rather than growth is
+          # deliberate and load-bearing: a `brew reinstall` rewrites the
+          # SAME pages, so a count-grew assertion would break Step 5d's
+          # idempotency rehearsal, while this comparison passes on
+          # reinstall (rewritten pages advance past their own baseline)
+          # and still fails the case UF-5 named: a binary that ran, exited
+          # 0, and wrote nothing over a directory of residue.
+          #
+          # Residual, stated rather than hidden: if a filesystem's mtime
+          # granularity is coarse enough that a rewrite within the same
+          # tick leaves the mtime byte-identical AND the rewritten content
+          # happens to be the same length, a pure-rewrite reinstall could
+          # read as not-fresh — a rewrite byte-identical in both length
+          # and timestamp is indistinguishable from no rewrite at all, and
+          # no metadata comparison can close that. The rehearsal's
+          # independent `find -newer` probe against a real marker file
+          # (Taskfile.yml's release:rehearse-cask) is the second,
+          # independent check of the same property.
+          fresh_man_pages = man_pages.select do |p|
+            before = man_pages_before[p]
+            before.nil? || File.mtime(p) > before[:mtime] || File.size(p) != before[:size]
+          end
+          if fresh_man_pages.empty?
+            raise "codegraph cask post-install: 0 of #{man_pages.length} codegraph*.1 page(s) under #{man_dir} are fresh (before=#{man_pages_before.length}, total=#{man_pages.length}, fresh=#{fresh_man_pages.length}) — the binary ran but produced no new or rewritten man pages"
           end
 
           # Assertion two (D-11): it is the right artifact. Equality on
@@ -567,58 +620,22 @@ homebrew_casks:
             raise "codegraph cask post-install: installed binary reports version #{reported_version.inspect}, cask declares #{declared_version.inspect}"
           end
 
-          # The Phase-4 sentinel (D-08). Located by RESOLVING #{binary}
-          # THROUGH SYMLINKS (Pathname#realpath) — never by matching a
-          # path prefix — so detection is correct under /opt/homebrew,
-          # /usr/local, a custom prefix, and linuxbrew alike. This is a
-          # cross-phase contract: internal/upgrade reads this file's
-          # location and format in Phase 4; changing either leaves
-          # already-installed users undetectable until they reinstall.
-          real_bin_dir = Pathname.new(binary).realpath.dirname
-          sentinel = real_bin_dir/".codegraph-brew-install"
-          sentinel.atomic_write(<<~SENTINEL)
-            schema=1
-            cask_token=#{token}
-            cask_version=#{version}
-            homebrew_prefix=#{HOMEBREW_PREFIX}
-            man_dir=#{man_dir}
-            man_page_count=#{man_pages.length}
-            installed_at=#{Time.now.utc.iso8601}
-          SENTINEL
-
           # Idempotency: every step above tolerates re-running over an
           # existing install. `codegraph man`'s own os.MkdirAll is
-          # create-if-absent, doc.GenManTree overwrites each page, and
-          # Pathname#atomic_write always overwrites rather than appending
-          # (extend/pathname.rb:105-108) — Homebrew re-runs this hook on
+          # create-if-absent and doc.GenManTree overwrites each page — and
+          # a `brew reinstall` rewriting those pages is exactly the case
+          # the freshness assertion above is designed to still pass: each
+          # rewritten page's mtime (or size, for a same-tick rewrite)
+          # advances past its own baseline. Homebrew re-runs this hook on
           # both reinstall and upgrade.
         uninstall: |
           # D-07: symmetric with post.install — brew does not track files
-          # a hook writes, so they must be removed explicitly. Both
-          # removals are force-style (FileUtils.rm_f: no error on an
-          # already-absent file — Homebrew removes the Caskroom versioned
-          # directory itself as part of the same uninstall, so the
-          # sentinel may legitimately be gone before this hook runs) via
-          # explicit statements, never a chained `&&` list. The
+          # a hook writes, so they must be removed explicitly, via an
+          # explicit statement rather than a chained `&&` list. The
           # declarative `uninstall: delete:`/`zap: trash:` stanzas were
           # rejected: these are artifacts THIS CASK generated, not user
-          # data.
-          #
-          # staged_path — NOT a re-resolved #{HOMEBREW_PREFIX}/bin/codegraph
-          # symlink — locates the sentinel here: by the time
-          # uninstall_postflight artifacts run, Homebrew's own uninstall
-          # of the `binary "codegraph"` Symlinked artifact (declared
-          # earlier in this file, so it is uninstalled first —
-          # Cask::Installer#uninstall_artifacts iterates artifacts in
-          # declared order, installer.rb:642-687) has ALREADY removed
-          # that symlink; realpath-resolving it here would raise Errno::ENOENT.
-          # staged_path is Homebrew's own authoritative real-installation-
-          # directory value (token + version, dsl.rb:679-688 — not a
-          # hand-matched prefix) and, per A1 (03-01-SUMMARY.md), equals
-          # exactly the directory post.install's realpath resolution
-          # wrote into.
+          # data. Force-style removal (no error on an already-absent
+          # file) because the man pages may legitimately already be gone
+          # (e.g. a prior manual cleanup).
           man_dir = Pathname.new("#{HOMEBREW_PREFIX}/share/man/man1")
           Dir.glob((man_dir/"codegraph*.1").to_s).each { |f| FileUtils.rm_f(f) }
-
-          sentinel = Pathname.new(staged_path.to_s)/".codegraph-brew-install"
-          FileUtils.rm_f(sentinel)

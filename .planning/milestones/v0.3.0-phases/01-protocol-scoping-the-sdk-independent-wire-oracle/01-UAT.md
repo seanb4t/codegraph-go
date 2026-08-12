@@ -106,3 +106,21 @@ not lost at phase close (NOT a UAT test — no maintainer action required to pas
   in MUTATION-PROOF.md as input to Phase 2's SDK-04 audit. Extending the frozen set is
   still physically possible today but will be impossible once Phase 2 removes
   `mark3labs/mcp-go` from `go.mod`.
+
+  **Window closed — verified 2026-08-10 (`/gsd-audit-uat`).** `mark3labs` now has zero
+  references in `go.mod` **and** `go.sum`, so the condition this entry named as its own
+  expiry has fired. Extending the frozen 23-scenario suite to cover `exploreHandler`'s
+  missing-query error shape is no longer physically possible. This is therefore a
+  permanent, named coverage gap rather than outstanding work — recorded here so a future
+  reader does not attempt an action the entry itself predicted would become impossible.
+  No maintainer action required (this was already flagged above as *not* a UAT test).
+  status: resolved
+  resolved_at: 2026-08-10
+  resolution: "Not a gap and never was — the prose above labels it 'NOT a UAT test — no
+  maintainer action required to pass this phase'. It surfaced in /gsd-audit-uat only
+  because it was filed as a bullet inside the parsed `## Gaps` section, where
+  parseGapsItems reads every top-level bullet as a gap entry and a missing `status:`
+  falls through to category 'unknown'. Marked resolved (parseGapsItems skips a
+  case-insensitive `status: resolved`) rather than deleted, because the observation
+  itself is worth keeping. The mcp-go removal noted above independently closed the
+  window it described."

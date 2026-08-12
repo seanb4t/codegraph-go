@@ -43,3 +43,10 @@ __pycache__/
 
 # GSD run-scoped dispatch-isolation sentinel (ephemeral session state)
 .gsd/
+
+# Local secret-reference file consumed via `op run --env-file=.env`.
+# Holds 1Password `op://` references, never literal secrets — still never committed.
+.env
+
+# direnv local shell config (loads .env via dotenv_if_exists)
+.envrc
