@@ -602,6 +602,306 @@ extended after Phase 2 removes `mark3labs/mcp-go`).
 
 ---
 
+## A note on numbering (05-03-PLAN Task 3)
+
+05-03-PLAN's own Task 3 text was written against an assumption that "five mutations exist" and
+that the three mutations below would be numbered 6, 7, and 8. By the time this task actually ran,
+05-01-PLAN's own Task 3 had already appended Mutations 5 and 6 above (the SPEC-09 capability-off
+and acknowledgment-echo proofs) — six mutations existed, not five, and slot 6 was already taken.
+Rather than renumber or overwrite an already-committed, already-reverted mutation record, the three
+mutations below continue the sequence as Mutations 7, 8, and 9. This is recorded here plainly
+rather than silently reconciled: the plan's literal acceptance-criteria commands (`rg -c '^##
+Mutation' … returns 8`, and `rg -n '^## Mutation 6'` naming the tool-rename proof) were written
+against the stale assumption and do not hold against the actual, current file; the corrected
+verification commands are `rg -c '^## Mutation' test/wireoracle/MUTATION-PROOF.md` returning **9**,
+with the tool-rename/GUARD-02 proof at `## Mutation 7`, the code-side/GUARD-01 proof at `##
+Mutation 8`, and the prose-side/GUARD-01 proof at `## Mutation 9`. All three mutations named in
+05-03-PLAN's success criteria (GUARD-02 criterion 3, GUARD-01 criterion 4 with its asymmetry) are
+demonstrated below regardless of the number attached to each.
+
+---
+
+## Mutation 7 — a renamed tool, `status` to `health` (05-03-PLAN Task 3, GUARD-02)
+
+**Requirement:** GUARD-02 — a tool added, removed, or renamed without its resource file and URI
+moving with it must turn `TestResourceFileSetMatchesToolNames` red, in whichever direction the
+mismatch runs, naming both a missing and an orphaned stem from one mutation.
+
+**Edit:** three sites renamed the `status` companion to `health`, deliberately leaving
+`internal/mcp/resources/status.md` and `resourceURIFor` untouched — that omission IS the drift
+being demonstrated.
+
+`internal/mcp/server.go`, the `companionNames` slice:
+
+```diff
+-var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "status"}
++var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "health"}
+```
+
+`internal/mcp/tools.go`, `companionTool`'s matching case:
+
+```diff
+-	case "status":
++	case "health":
+ 		return &mcp.Tool{
+-			Name:        "codegraph_status",
++			Name:        "codegraph_health",
+ 			Description: "Report index health and counts",
+ 			Annotations: toolAnnotations(),
+ 		}
+```
+
+`internal/mcp/tools.go`, `companionHandler`'s matching case:
+
+```diff
+-	case "status":
++	case "health":
+ 		mcp.AddTool(s, tool, func(ctx context.Context, req *mcp.CallToolRequest, args StatusArgs) (*mcp.CallToolResult, any, error) {
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go internal/mcp/tools.go` showed exactly
+these three hunks; `go build ./...` exited 0.
+
+**Gate that went red — the named gate, run in isolation
+(`go test ./internal/mcp/... -run TestResourceFileSetMatchesToolNames -count=1 -v`):**
+
+```
+=== RUN   TestResourceFileSetMatchesToolNames
+=== RUN   TestResourceFileSetMatchesToolNames/file_set_matches_allToolNames_plus_behavior_docs
+    resources_schema_drift_test.go:146: resource file set drifted from the tool roster: missing [health] (a tool with no resource file), orphaned [status] (a resource file with no matching tool)
+=== RUN   TestResourceFileSetMatchesToolNames/resourceURIFor_keys_match_actual_filenames
+=== RUN   TestResourceFileSetMatchesToolNames/per-tool_URI_shape_(D-09)
+    resources_schema_drift_test.go:167: resourceURIFor has no entry for health.md
+=== RUN   TestResourceFileSetMatchesToolNames/behavior-doc_URI_shape_(D-10)
+=== RUN   TestResourceFileSetMatchesToolNames/tools-filter_prose_names_exactly_the_registered_companions
+    resources_schema_drift_test.go:212: tools-filter.md never mentions codegraph_health, but it is a registered companion tool the filter can narrow away
+    resources_schema_drift_test.go:224: tools-filter.md names codegraph_status, which is neither a registered companion tool nor codegraph_explore — a renamed or removed tool left behind in this doc's prose
+--- FAIL: TestResourceFileSetMatchesToolNames (0.00s)
+    --- FAIL: TestResourceFileSetMatchesToolNames/file_set_matches_allToolNames_plus_behavior_docs (0.00s)
+    --- PASS: TestResourceFileSetMatchesToolNames/resourceURIFor_keys_match_actual_filenames (0.00s)
+    --- FAIL: TestResourceFileSetMatchesToolNames/per-tool_URI_shape_(D-09) (0.00s)
+    --- PASS: TestResourceFileSetMatchesToolNames/behavior-doc_URI_shape_(D-10) (0.00s)
+    --- FAIL: TestResourceFileSetMatchesToolNames/tools-filter_prose_names_exactly_the_registered_companions (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.341s
+```
+
+The named gate fails naming **both directions from one mutation** — `missing [health]` and
+`orphaned [status]` in the same sub-test — which is what makes GUARD-02's structural check
+bidirectional rather than a one-way existence check. The per-tool URI shape sub-test and the
+tools-filter prose sub-test independently name the same drift a second and third way.
+
+**Other tests that also went red (more evidence, not the named gate):** running the full package
+(`go test ./internal/mcp/... -count=1`) with the mutation still applied additionally panics inside
+`registerResources` — `resourceDescriptionFor` still switches on `companionNames`, which no longer
+contains `"status"`, so any test that constructs a server via `BuildServer` (e.g.
+`TestHandlerErrorIsToolResultNotProtocolError`) fails with `panic: mcp: resourceDescriptionFor:
+unknown resource stem status`. This is corroborating evidence that the rename is structurally
+unsafe well beyond the one named gate, not a substitute for it.
+
+**Revert confirmation:** all three hunks were reverted with `git checkout -- internal/mcp/server.go
+internal/mcp/tools.go`; `git status --porcelain -- internal/` and `git diff --exit-code --
+internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0 (15.1s).
+
+---
+
+## Mutation 8 — a changed engine constant, code side only (05-03-PLAN Task 3, GUARD-01)
+
+**Requirement:** GUARD-01's code-side half — mutating `internal/query/validate.go`'s
+`defaultDepth` must turn `TestMCPToolSchemaNumericClaimsMatchEngineConstants` red, while
+`TestMCPResourceNumericClaimsMatchToolSchemas` — which never reads `validate.go` at all, only
+compares the resource markdown against the tool schema — must stay green, because both sides of
+THAT comparison (the schema's own claim, the resource's own claim) are unchanged by this edit.
+
+**Edit:** `internal/query/validate.go`:
+
+```diff
+-	defaultDepth = 2
++	defaultDepth = 4
+```
+
+**Confirmed applied:** `git diff -- internal/query/validate.go` showed exactly this one-line
+change; `go build ./...` exited 0.
+
+**Gate that went red, and the gate that stayed green — run together
+(`go test ./internal/mcp/... -run 'TestMCPToolSchemaNumericClaimsMatchEngineConstants|TestMCPResourceNumericClaimsMatchToolSchemas' -count=1 -v`):**
+
+```
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/explore
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/node
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/search
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callers
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callees
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/impact
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/files
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/status
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/tools-filter
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/index-state
+--- PASS: TestMCPResourceNumericClaimsMatchToolSchemas (0.00s)
+    [all 10 subtests PASS]
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callers
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callees
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_impact
+    tools_schema_drift_test.go:115: codegraph_impact advertises default 2 but internal/query.defaultDepth is 4 — MCP clients are being told the wrong value (description: "BFS depth (default 2, max 50)")
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_files
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_status
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_explore
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_node
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_search
+--- FAIL: TestMCPToolSchemaNumericClaimsMatchEngineConstants (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callers (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callees (0.00s)
+    --- FAIL: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_impact (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_files (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_status (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_explore (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_node (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_search (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.285s
+```
+
+**The precise asymmetry, recorded honestly rather than glossed:**
+`TestMCPToolSchemaNumericClaimsMatchEngineConstants` fired, because it compares `codegraph_impact`'s
+schema claim ("default 2", still literally in `tools.go`'s jsonschema tag) against the mutated
+`internal/query.defaultDepth` (now 4) — the two sides it compares moved apart.
+`TestMCPResourceNumericClaimsMatchToolSchemas` stayed green, because it compares
+`resources/impact.md`'s claim ("default 2") against `codegraph_impact`'s SCHEMA claim ("default
+2") — neither side of THAT comparison was touched by this mutation, since it never reads
+`validate.go`. This is exactly the coverage boundary
+`TestMCPResourceNumericClaimsMatchToolSchemas`'s own doc comment states: "Editing
+internal/query/validate.go alone fails the EXISTING schema test … not this one." Mutation 9 below
+is this mutation's mirror image, moving the OTHER side of the resource-vs-schema comparison
+instead.
+
+**Revert confirmation:** the constant was restored to `2`; `git checkout --
+internal/query/validate.go`; `git status --porcelain -- internal/` and `git diff --exit-code --
+internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0.
+
+---
+
+## Mutation 9 — a changed resource claim, prose side only (05-03-PLAN Task 3, GUARD-01)
+
+**Requirement:** GUARD-01's prose-side half — mutating `internal/mcp/resources/impact.md`'s stated
+BFS depth default, touching nothing else, must turn `TestMCPResourceNumericClaimsMatchToolSchemas`
+red while `TestMCPToolSchemaNumericClaimsMatchEngineConstants` — which never reads any `.md` file,
+only compares the tool schema against `internal/query`'s constants — stays green. The exact mirror
+image of Mutation 8.
+
+**Edit:** `internal/mcp/resources/impact.md`:
+
+```diff
+-- `depth` (integer, optional) — BFS depth (default 2, max 50).
++- `depth` (integer, optional) — BFS depth (default 9, max 50).
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/resources/impact.md` showed exactly this one-line
+change; `go build ./...` exited 0 (the mutated file is embedded via `//go:embed`, so a rebuild
+picked it up with no separate step).
+
+**Gate that went red, and the gate that stayed green — run together (same command as Mutation
+8):**
+
+```
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/explore
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/node
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/search
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callers
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callees
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/impact
+    resources_schema_drift_test.go:356: resources/impact.md's numeric claims map[default 9:1 max 50:1] do not match its tool schema's claims map[default 2:1 max 50:1]
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/files
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/status
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/tools-filter
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/index-state
+--- FAIL: TestMCPResourceNumericClaimsMatchToolSchemas (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/explore (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/node (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/search (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/callers (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/callees (0.00s)
+    --- FAIL: TestMCPResourceNumericClaimsMatchToolSchemas/impact (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/files (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/status (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/tools-filter (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/index-state (0.00s)
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_node
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_search
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callers
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callees
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_impact
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_files
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_status
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_explore
+--- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants (0.00s)
+    [all 8 subtests PASS]
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.304s
+```
+
+`resources/impact.md`'s claim moved to "default 9" while `codegraph_impact`'s schema claim stayed
+"default 2" (`tools.go`'s jsonschema tag untouched) — the resource-vs-schema comparison catches it,
+naming the `impact` stem and printing both multisets. `TestMCPToolSchemaNumericClaimsMatchEngineConstants`
+never reads `impact.md` at all, so it cannot see this edit and stays green — the schema claim
+("default 2") and `internal/query.defaultDepth` (still 2) remain in agreement.
+
+**Revert confirmation:** the file was restored to "default 2, max 50"; `git checkout --
+internal/mcp/resources/impact.md`; `git status --porcelain -- internal/` and `git diff --exit-code
+-- internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0.
+
+---
+
+## Non-vacuity proof for the remaining GUARD-01 checkers (05-03-PLAN Task 3)
+
+The count checker (`TestResourceCountClaimsMatchSourceSets`/`countClaimsIn`), the env-var checker
+(`TestResourceEnvVarNamesAreReal`), and the host-fact checker
+(`TestResourceContentCarriesNoHostFacts`/`hostFactsIn`) are deliberately proven by synthetic
+non-vacuity sub-tests (`TestResourceCountCheckerIsNotVacuous`,
+`TestResourceHostFactCheckerIsNotVacuous`) rather than by a fourth, fifth, and sixth real-tree
+mutation. This is the stronger form for these three, not a shortcut: a mutation proof is a
+one-time, point-in-time demonstration recorded in this document, while a synthetic non-vacuity
+sub-test asserts the checker's discriminating power on EVERY `go test ./internal/mcp/...` run,
+forever, including runs long after this document is written and possibly forgotten. This is the
+same honesty `instructions_contract_test.go`'s own doc comment applies to its literal anchors, and
+09-03-PLAN's own text asked for it to be stated here rather than left for a reviewer to discover.
+The env-var checker has no meaningful "wrong value" mutation to demonstrate against the real tree
+either — `allowlistEnvName` is a single hard-coded constant with only one real value in this
+codebase, so a mutation would only prove the checker can detect a typo it was never at risk of
+missing (its own extraction logic, not a comparison against a second derived source, is what
+`TestResourceEnvVarNamesAreReal` itself already exercises directly on the real tree, unmutated).
+
+`go test ./internal/mcp/... -run 'IsNotVacuous' -count=1 -v` confirms all named non-vacuity tests
+in this package pass, including the three above:
+
+```
+--- PASS: TestREADMEGateCheckerIsNotVacuous (0.00s)
+--- PASS: TestResourceStemSetDiffIsNotVacuous (0.00s)
+--- PASS: TestResourceCountCheckerIsNotVacuous (0.00s)
+--- PASS: TestResourceHostFactCheckerIsNotVacuous (0.00s)
+--- PASS: TestResourcesReadIsNotVacuous (0.05s)
+```
+
+---
+
+## Closing statement (05-03-PLAN Task 3)
+
+`git status --porcelain -- internal/` was checked after all three mutations above were reverted and
+before this section and `internal/mcp/resources_schema_drift_test.go` were committed — the
+cleanliness check's purpose is to prove no mutation residue survives, matching the sequencing
+discipline the original "Closing statement" above set for Phase 1's four mutations. All three
+mutations were reverted; `go build ./...`, `go test ./internal/mcp/... -count=1`, `go test
+./test/wireoracle/... -count=1`, and `go test ./... -count=1` all passed on the reverted,
+committed tree.
+
+---
+
 ## Closing statement
 
 `git status --porcelain` is checked AFTER `test/wireoracle/MUTATION-PROOF.md` and
