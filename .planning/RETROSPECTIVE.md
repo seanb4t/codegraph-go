@@ -77,17 +77,58 @@ A working Go rewrite of CodeGraph's core capabilities in a single static binary:
 
 ---
 
+## Milestone: v0.5.0 — macOS Distribution & Homebrew
+
+**Shipped:** 2026-08-11 (released as `v0.9.0` 2026-08-12)
+**Phases:** 4 | **Plans:** 24 | **Commits:** ~80 over 3 days | **Releases cut:** 6 (`v0.5.0` … `v0.9.0`)
+
+### What Was Built
+codegraph became *installable by convention* on macOS. The release pipeline moved from a per-platform `goreleaser build --single-target` matrix onto a single `goreleaser release` invocation — the only OSS path, since `release` refuses a `dist/` built elsewhere and both escape hatches are GoReleaser Pro — with both linux legs `zig cc`-cross-compiled from one macOS runner. GoReleaser now owns archives, checksums, signing and SBOMs declaratively, replacing hand-rolled shell loops. Apple Developer ID signing plus Quill-backed notarization moved `spctl` from `rejected` to `accepted` on both darwin arches. A `seanb4t/homebrew-tap` repository and `homebrew_casks:` block make `brew tap && brew install codegraph` work cold, with man pages and three-shell completions. `codegraph upgrade` detects a Homebrew-managed install structurally and steps aside rather than mutating a Caskroom the package manager owns.
+
+### What Worked
+- **Spiking the one unproven claim first, blocking, with a FAIL-bar written in advance.** The zig-cross question could have sunk the milestone at any point; instead it was answered on day one and passed on variation V1 at first dispatch. The V1–V5 variation list was written into the canary header *before* the first run specifically so that exhausting it would declare failure falsifiably rather than by argument. The costed GoReleaser Pro fallback was named up front and never needed.
+- **Cross-AI plan convergence on the highest-risk phase.** Phase 1 ran six review cycles (19 → 0 HIGH findings). Cycle 3 caught a *silent regression* — a test that pinned the broken SBOM template demonstrated-RED, which would have actively resisted correction — and it was found only because cycle 2's oracle was itself blind (it asserted filesystem basenames, identical under broken and correct configs).
+- **Asserting relationships instead of counts.** `verify:release-assets` classifies published assets by set equality both directions rather than against a fixed total; when Phase 2 later added two jobs to `post-release-verify`, the 1:1 guard invariant survived where `== 3` would have gone red on a correct change.
+- **Removing code paths instead of guarding them.** Phase 4's strongest mitigations are deletions: `Options.Force` is never read, `EvalSymlinks` errors fail closed with no fallback, and the self-authored install sentinel was replaced by Homebrew's own receipt.
+
+### What Was Inefficient
+- **Three phases shipped before their retroactive artifacts existed.** Phase 1 predated the security, Nyquist and API-coverage capabilities, so `01-SECURITY.md`, `01-UAT.md`, `COVERAGE.md` and a reconciled `01-VALIDATION.md` were all produced *after the fact* at milestone-close time. They came out accurate, but writing a coverage declaration for code that shipped four phases ago is strictly more expensive than writing it at plan time.
+- **The same defect class recurred three times**: a shared target gains a dependency and not every caller is swept. `binary_signs:` broke the pre-existing darwin canary; wave 1 pre-fixed the *new* canary and missed the *old* one; plan 04-05 fixed the `verify:self-upgrade` target and missed the workflow job that invokes it — surfacing only when v0.9.0's verification failed. Each fix was local; only the third produced a derived-property test.
+- **A milestone close was attempted while a quarter of the milestone sat unmerged.** `ALL_PHASES_VERIFIED` read `true` because it reads planning artifacts and never inspects git; `internal/upgrade/brew.go` did not exist on `main`. Caught at pre-flight, but only by an explicit check that is not part of the gate.
+- **`[ci skip]` on a ship-note commit deadlocked a PR.** The ship workflow both requires pushing the note onto the PR branch and appends `[ci skip]`; on a repo with required status checks those instructions cannot both hold, and the PR blocked on checks that would never report.
+
+### Patterns Established
+- **Assert the relationship, not the cardinal.** Set equality over fixed totals; 1:1 invariants over counts; derived job lists over hardcoded ones.
+- **A query that does not match reality reports absence, not truth.** Four self-inflicted false signals in one session — `go test -run` printing `ok` on zero matches, `rg -c '\b17\b'` matching version strings, `task` echoing unexpanded `${VAR}` so an evidence-line count doubles, and a receipt glob searching the wrong tree level. Every one produced plausible output meaning something other than it appeared to.
+- **Distinguish debt that needs *work* from debt that needs *time*.** Three items closed by v0.9.0 simply existing. Recording them as "closing conditions" rather than tasks kept them out of a closure phase.
+- **Refuse the short-circuit and write the refusal down.** ASVS-L1 permits skipping the security auditor on a clean preliminary pass; it was refused for the fourth consecutive phase, and the refusal is recorded *inside* each SECURITY.md so a reader cannot mistake inherited depth for verified depth. Same discipline applied to carrying integration verdicts forward in the milestone audit.
+
+### Key Lessons
+1. **Following upstream documentation faithfully was the bug.** GoReleaser's own documented `signature: "${artifact}.sigstore.json"` idiom collapses all four platforms onto one filename for `formats: [binary]`, because `${artifact}` expands from Path but publishes under Name. Correct-looking, upstream-blessed, and silently destructive under `replace_existing_artifacts: true`.
+2. **A verification gate's trigger is a design decision with a long tail.** Choosing `workflow_run` + a validated `tag` input over `release: [published]` — because the latter fires before assets upload — is what let a one-step CI fix re-prove an already-published release months later without cutting a new version.
+3. **Repo inspection cannot settle account-side infrastructure state.** "The repo never references an arm64 runner" was recorded as "no arm64 runner exists"; three were already provisioned. Bound confidence by what the evidence can actually reach.
+4. **Zero findings is not the same as nothing to find.** Phase 1's security audit found no unregistered threats — and none of its six SUMMARYs carries a `## Threat Flags` section, so there was nothing to reconcile. Absence of reporting reads identically to absence of problems.
+
+### Cost Observations
+- Model mix: opus for planning/orchestration, sonnet for execution, haiku for checkers — with the standing caveat that haiku checker output required independent re-verification twice (a prior run claimed files absent that were present).
+- Sessions: milestone executed over ~4 days; the close itself (Phase 1 retro-artifacts + audit + release + a quick-task fix) ran in a single long session.
+- Notable: the most expensive single defect was not a code bug but a *coverage* one — Phase 1's missing artifacts cost a full retroactive pass at close time, which plan-time authoring would have avoided entirely.
+
+**Process gap noted:** v0.3.0 has no entry in this file. Its close skipped the retrospective step; the milestone record exists only in `MILESTONES.md` and `milestones/v0.3.0-*`.
+
 ## Cross-Milestone Trends
 
-| Metric | v0.1 | v1.0 |
-|--------|------|------|
-| Phases | 8 | 10 |
-| Plans | 66 | 72 |
-| Tasks | 142 | — |
-| Calendar days | — | 20 (2026-07-14 → 08-03) |
-| Commits | — | 594 |
-| Deep-review bugs caught (green suite missed) | Phases 4/6/7/8 — recurring, high-value | Every phase touching I/O, concurrency, or CI — 10/10 recurrence |
-| Release candidates to first clean release | 3 (rc.1 go.sum, rc.2 SLSA, rc.3 ✓) | n/a — release-please cut `v0.2.0` clean on the first live run |
-| Gates found unable to fire | — | 3 (cross-platform baseline, inverted `rg -qv`, 51.5%-stale baseline) |
+| Metric | v0.1 | v1.0 | v0.5.0 |
+|--------|------|------|--------|
+| Phases | 8 | 10 | 4 |
+| Plans | 66 | 72 | 24 |
+| Tasks | 142 | — | — |
+| Calendar days | — | 20 (2026-07-14 → 08-03) | 3 (2026-08-08 → 08-11) |
+| Commits | — | 594 | ~80 |
+| Releases cut during the milestone | 1 | 1 | 6 (`v0.5.0` … `v0.9.0`) |
+| Deep-review bugs caught (green suite missed) | Phases 4/6/7/8 — recurring, high-value | Every phase touching I/O, concurrency, or CI — 10/10 recurrence | 29 findings across 6 convergence cycles on Phase 1 alone; cycle 3 caught a test pinning a *broken* invariant |
+| Release candidates to first clean release | 3 (rc.1 go.sum, rc.2 SLSA, rc.3 ✓) | n/a — release-please cut `v0.2.0` clean on the first live run | n/a — but the first `post-release-verify` on v0.9.0 failed closed on a missing installer |
+| Gates found unable to fire | — | 3 (cross-platform baseline, inverted `rg -qv`, 51.5%-stale baseline) | 2 (a test pinning the broken SBOM template; `dry-run-signed` additions-only diff guard, still open) |
+| Self-inflicted false signals (query ≠ reality) | — | — | 4 in one session |
 
-*Trends to watch: (1) deep review on I/O/crypto/CI phases catches real defects every time — keep it a standing gate; v1.0 made it 10-for-10. (2) the first live release run finds what darwin-only + green CI cannot. (3) version/label claims need a human product check. (4) **New in v1.0 — the dominant defect class is no longer "the gate failed" but "the gate could not fail."** Three instances, each looking healthy while measuring nothing. Every new gate now has to be demonstrated RED against a confirmed-applied mutation before it is trusted. (5) **New — subagent judgment needs a deterministic gate downstream of it.** Two haiku agents reported success while skipping or misreading their own checks; both were caught only by the mechanical check that ran next.*
+*Trends to watch: (1) deep review on I/O/crypto/CI phases catches real defects every time — keep it a standing gate; v1.0 made it 10-for-10. (2) the first live release run finds what darwin-only + green CI cannot. (3) version/label claims need a human product check. (4) **New in v1.0 — the dominant defect class is no longer "the gate failed" but "the gate could not fail."** Three instances, each looking healthy while measuring nothing. Every new gate now has to be demonstrated RED against a confirmed-applied mutation before it is trusted. (5) **New — subagent judgment needs a deterministic gate downstream of it.** Two haiku agents reported success while skipping or misreading their own checks; both were caught only by the mechanical check that ran next. (6) **New in v0.5.0 — the "gate could not fail" class has a sibling: the *query* that could not find.** Four instances in one session, each reporting absence where the search, not the world, was wrong. (7) **New — planning-artifact debt compounds silently.** Phase 1 shipped before three capabilities existed and cost a full retroactive pass at close; the artifacts came out accurate but strictly more expensive than plan-time authoring. (8) **New — verified ≠ landed.** A milestone close was attempted with a quarter of the milestone unmerged, because the readiness gate reads planning artifacts and never inspects git.*
