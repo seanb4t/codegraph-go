@@ -1,192 +1,198 @@
-# Stack Research: macOS Gatekeeper Notarization + Homebrew Distribution
+# Stack Research
 
-**Domain:** Go release engineering — GoReleaser-native macOS code signing/notarization and Homebrew tap publishing, layered onto an existing signed+attested pipeline
-**Researched:** 2026-08-07
-**Confidence:** HIGH on the Pro/OSS boundary and config schema (multiple independent official-doc fetches converged); MEDIUM on the single-runner zig-cross-from-macOS recommendation (well-documented pattern, not yet executed in this repo); LOW flagged explicitly where noted.
+**Domain:** Agent-onboarding skill/plugin + MCP Resources capability + enforcement hooks, for an existing Go MCP server/CLI (codegraph-go)
+**Researched:** 2026-08-12
+**Confidence:** MEDIUM (official docs for Claude Code/MCP spec/go-sdk are current and cross-checked; per-agent hook/skill claims for the 4 non-Claude roster members are single-search-pass and should be spot-checked against their live docs before the skill ships, especially Antigravity/Kiro which have moved fast in 2026)
 
-## Headline Answer to the Central Risk (Q1)
+This milestone adds **no new Go module dependencies**. Everything needed already exists in the repo's `go.mod` (`modelcontextprotocol/go-sdk@v1.7.0`) or is plain-text authoring (SKILL.md, hooks.json, shell scripts) that `codegraph install` writes to disk, exactly like it already writes the `<!-- CODEGRAPH_START -->` marker block. This file is about *format/schema*, not packages.
 
-**`goreleaser release --split` / `goreleaser continue --merge` is Pro-only, confirmed from the official docs page itself:** goreleaser.com/customization/partial/ states in its own words *"This capability is exclusively a Pro feature"* — corroborated independently by GoReleaser's own Pro marketing page (goreleaser.com/pro/) and Carlos Becker's (GoReleaser's creator) blog post announcing the feature in v1.12-pro. The **`prebuilt` builder** (importing binaries built outside GoReleaser into its `release` lifecycle) is **also confirmed Pro-only** (goreleaser.com/customization/builds/builders/prebuilt/: *"This feature is exclusively available with GoReleaser Pro"*). Together these close off both routes to "build per-platform on separate runners, then have one `goreleaser release` invocation assemble/publish them" without a paid license. **Confidence: HIGH** — stated in GoReleaser's own docs in nearly identical wording across three independent pages.
+## Recommended Stack
 
-**This does NOT force a Pro purchase.** There is a viable, well-precedented OSS path (detailed in Q1 below): run the **entire** `goreleaser release` invocation on a single **macOS** runner, with `zig cc` cross-compiling **both** linux legs (this repo already zig-cross-compiles linux/arm64 today, just from a Linux host — the pattern is host-independent). GoReleaser's own example repository (`goreleaser/example-zig-cgo`) demonstrates exactly this: CGo cross-compilation via zig from any host to any target. **Confidence: MEDIUM** — the pattern is officially documented and demonstrated, but has not been exercised in *this* repo's CGo/tree-sitter build, so Phase 1 execution should still smoke-test it before committing the CI restructure.
-
-## Recommended Stack (Additions Only)
-
-### Core Additions
+### Core Technologies (already in the repo — no version bump needed)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| GoReleaser (existing pin) | **v2.17.1** (unchanged — confirmed current: `gh api repos/goreleaser/goreleaser/releases/latest` returns `v2.17.1`, published 2026-07-26, on 2026-08-07) | Same binary, new subcommand (`release` instead of `build --single-target`) and two new config blocks | No version bump needed. `notarize.macos` (cross-platform) predates v2.1; `homebrew_casks` was introduced in v2.10; both are well inside v2.17.1. **Confidence: HIGH** (live GitHub API check + official docs version-since notes). |
-| `anchore/quill` (embedded in GoReleaser — **not a separate dependency to add**) | vendored by GoReleaser's `notarize.macos` pipe | Pure-Go, cross-platform Apple code signing + notarization submission, with no `codesign`/`xcrun`/Keychain dependency | This is the mechanism that makes notarization possible **without requiring a macOS runner for the signing step itself** — confirmed directly from GoReleaser's own docs: the cross-platform `notarize.macos` GitHub Actions example runs on `runs-on: ubuntu-latest` with `distribution: goreleaser` (the free/OSS distribution, not `goreleaser-pro`). Quill's own README lists its commands (`sign`, `notarize`, `sign-and-notarize`, `p12 attach-chain`, `describe`, `submission status/logs/list`) with **no `staple` command** — Apple's `stapler` only attaches tickets to `.app`/`.pkg`/`.dmg` containers, not bare Mach-O binaries, and quill does not attempt to work around that. **Confidence: HIGH** (goreleaser.com/customization/sign/notarize/ fetched twice via different tools, converged; quill's own README fetched directly from raw GitHub). |
-| `zig` (already a repo dependency for linux/arm64 cross) | pinned `0.15.1` (existing `mlugg/setup-zig@v2.2.1` step) | Extend zig-cross to **both** linux legs from a macOS host, so the entire `goreleaser release` runs on one runner | `CC="zig cc -target x86_64-linux-gnu"` / `aarch64-linux-gnu` works identically regardless of host OS — zig bundles its own libc/sysroots per target, it doesn't borrow the host's. GoReleaser's own `goreleaser/example-zig-cgo` repo demonstrates cross-compiling CGO Go binaries via zig from any host OS to any target. **Confidence: MEDIUM** — officially documented pattern with a working example repo, but this exact CGo/tree-sitter binary + this exact host/target pairing (macOS host → linux/amd64 AND linux/arm64) has not been built in this repo yet; treat as a Phase-1 spike, not a given. |
+| `github.com/modelcontextprotocol/go-sdk` | v1.7.0 (pinned, current in `go.mod`) | MCP Resources capability (`resources/list`/`resources/read`) | `(*mcp.Server).AddResource` / `AddResourceTemplate` are stable, documented API on the exact version this repo already runs — SPEC-05's `AddTool`/`RemoveTools` re-check pattern in `internal/mcp/server.go` extends directly to `AddResource`/`RemoveResources` with no new import |
+| Claude Code Agent Skills format (SKILL.md + YAML frontmatter) | current as of v2.1.21x-era docs (verify `claude --version` at ship time) | Teaches WHEN/HOW to use codegraph's tools | This is the format the milestone goal names explicitly, and — new finding this pass — is also the **same open standard** (agentskills.io) Cursor, Codex CLI, and Antigravity now read natively. One SKILL.md authored once is NOT Claude-Code-only |
+| Claude Code plugin `hooks/hooks.json` | current schema (`SessionStart`/`PreToolUse`/`UserPromptSubmit` events) | SessionStart nudge + PreToolUse/UserPromptSubmit guard toward `codegraph_explore` | Matches the milestone's named events exactly; `command`-type hooks are plain shell scripts, no runtime to bundle |
 
-### GoReleaser Config Additions (`.goreleaser.yaml`)
+### Format-only additions (no library — files `codegraph install` writes)
 
-**1. `notarize:` block (new top-level key) — cross-platform/OSS variant, NOT `macos_native`:**
+| Artifact | Location convention | Purpose | Why this shape |
+|----------|---------------------|---------|-----------------|
+| `SKILL.md` | `skills/codegraph/SKILL.md` (plugin) or `~/.claude/skills/codegraph/SKILL.md` (standalone fallback) | Decision-procedure-first tool guidance | Frontmatter `name`+`description` only (~100 tokens, always in context); body under ~1,500-2,000 words, decision table + 2-3 worked examples first, tool-by-tool catalog last or moved to a resource |
+| `hooks/hooks.json` | plugin root | SessionStart nudge, PreToolUse/UserPromptSubmit guard | `{"description": "...", "hooks": {"SessionStart": [...], "UserPromptSubmit": [...]}}` — plugin wrapper form, not the bare `settings.json` direct form |
+| `.claude-plugin/plugin.json` | plugin root's `.claude-plugin/` subdir ONLY | Plugin manifest (name/description/version/author) | Required if distributing as an installable plugin rather than a standalone `.claude/skills/` copy; unlocks `/codegraph:*` namespacing and `/plugin marketplace` distribution |
+| MCP `resources/list` + `resources/read` handlers | `internal/mcp/resources.go` (new file, same package) | Detailed reference content the skill points to instead of embedding (tool-by-tool docs, `CODEGRAPH_MCP_TOOLS` semantics, index-state preconditions) | Keeps SKILL.md lean; content lives server-side so it can be derived/tested (guarding the "never hand-type numbers into prose" requirement) rather than baked into two separate static text blobs |
 
-```yaml
-notarize:
-  macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids:
-        - codegraph-darwin-amd64
-        - codegraph-darwin-arm64
-      sign:
-        certificate: "{{.Env.MACOS_SIGN_P12}}"       # base64 P12, or a file path
-        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
-        # entitlements: omit — see Apple Tooling section; a bare Go CLI needs none
-      notarize:
-        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
-        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
-        key: "{{.Env.MACOS_NOTARY_KEY}}"              # base64 P8, or a file path
-        wait: true
-        timeout: 20m
+## MCP Resources — go-sdk v1.7.0 API surface
+
+The Go SDK's resource API (from `design/design.md` and `docs/server.md`, both current for the version this repo pins) is a direct structural parallel to the tool-registration seam `internal/mcp/server.go` already built for SPEC-05:
+
+```go
+type ResourceHandler func(context.Context, *ServerSession, *ReadResourceParams) (*ReadResourceResult, error)
+
+func (*Server) AddResource(*Resource, ResourceHandler)
+func (*Server) AddResourceTemplate(*ResourceTemplate, ResourceHandler)
+func (s *Server) RemoveResources(uris ...string)
+func (s *Server) RemoveResourceTemplates(uriTemplates ...string)
 ```
 
-Key facts (each independently confirmed from goreleaser.com/customization/sign/notarize/ and goreleaser.com/customization/notarize):
-- **Two variants exist**: `notarize.macos` (cross-platform, Quill-backed, **OSS**, any OS) and `notarize.macos_native` (native `codesign`+`xcrun notarytool`+`productsign`, **Pro-only**, macOS-only, needed for App Bundle/DMG/PKG). This repo ships a bare CLI binary, not an app bundle — `macos_native` buys nothing here even setting Pro aside. **Confidence: HIGH.**
-- `ids` filters which **build** ids get signed — confirmed to match this repo's existing `codegraph-darwin-amd64`/`codegraph-darwin-arm64` build ids.
-- The signed bytes **replace the build artifact in place and flow forward** into whatever consumes it next (archive, checksum, upload) — GoReleaser's own docs: *"Once the binaries are built, the notary step does everything in a single run. The signed binaries are then used from that point forward."* This means the raw darwin binary that `internal/upgrade` will eventually hash **is** the Apple-signed, notarized binary — not a separate unsigned copy. This is consistent with D-02 (format is still "raw binary, not an archive"), but is a real behavioral change worth flagging explicitly to the roadmap: today's binaries are `adhoc, linker-signed`/unsigned; after this change they will carry a real Apple Developer ID signature. **Confidence: HIGH** on the mechanism, this is an architectural implication for the roadmap to weigh, not a stack question to resolve here.
-- Does **not** require a macOS runner. Does **not** staple (see Apple Tooling section — this is a hard Apple platform constraint, not a GoReleaser gap).
+- **Static vs. templated URIs:** `AddResource` registers one fixed URI (e.g. `codegraph://docs/tools/explore`); `AddResourceTemplate` registers an RFC 6570 URI *pattern* (e.g. `codegraph://docs/tools/{name}`) served by one handler for every matching URI. A template with no accompanying `list`-style enumeration only ever appears in `resources/templates/list`, never in `resources/list` — this repo's reference content (fixed tool count, fixed doc set) is fully enumerable, so **prefer `AddResource` per document over a template** unless the doc set becomes dynamic.
+- **Content shape:** `ReadResourceResult.Contents []*ResourceContents{URI, MIMEType, Text}` for text (use `text/markdown` for the reference docs — matches SURF-06's existing MCP JSON→markdown conversion precedent) or `Blob` (base64) for binary; this milestone needs text only.
+- **Capabilities:** `ServerCapabilities.Resources` must be set **explicitly**, same as the existing D-11 finding for `Tools` in `server.go` (`Server.capabilities()` only advertises a capability key when it's non-nil) — omitting it silently drops `"resources"` from the `initialize` response's capabilities object, exactly the "did the feature register or not" ambiguity D-11 already fixed once for tools. Wire it in the same `BuildServer` construction block: `Capabilities: &mcp.ServerCapabilities{Tools: ..., Resources: &mcp.ResourceCapabilities{ListChanged: false}}` (`ListChanged` false is correct here — the doc set changes with the binary, not with index state, so there's no live-mutation case Phase 3's `AddTool`/`RemoveTools` re-check pattern needs to mirror).
+- **No new dependency, no new CGo, no new import boundary violation:** `AddResource`/`RemoveResources` live on the same `*mcp.Server` type `registerTools`/`unregisterTools` already hold; a `registerResources`/`unregisterResources` pair follows the identical shape and can sit in the same `internal/mcp` package without crossing D-08b's architest boundary.
 
-**2. `homebrew_casks:` block — NOT `brews:`.** `brews:` (formula-based, "hackyish... installed pre-compiled binaries" per GoReleaser's own words) has been soft-deprecated since v2.10 and its docs page is now titled "Homebrew Formulas (deprecated)". `homebrew_casks:` is the correct, current, non-deprecated block, also introduced in v2.10 (confirmed OSS — only `alternative_names`, the `app:` DMG option, `token_type` cross-SCM publishing, and PR `check_boxes` are Pro-gated sub-features; the base cask-publishing flow is free). **Confidence: HIGH** (goreleaser.com/customization/publish/homebrew_casks/, fetched directly).
+## MCP spec compliance (2026-07-28, the revision this server already targets)
 
-```yaml
-homebrew_casks:
-  - name: codegraph
-    ids:
-      - <archive id producing the zip, NOT the raw-binary archive id>
-    binaries:
-      - codegraph
-    repository:
-      owner: seanb4t
-      name: homebrew-tap
-      branch: main
-      # token: use a dedicated PAT env var, see Secrets below — GITHUB_TOKEN
-      # cannot write to a different repository.
-    commit_author:
-      name: fzy-release-please[bot]   # or a dedicated bot identity — match
-      email: ...                       # whatever release-please already uses, for consistency
-    commit_msg_template: "chore(cask): update codegraph to {{ .Tag }}"
-    url:
-      template: "https://github.com/seanb4t/codegraph-go/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+- `resources/list` and `resources/read` both support pagination (`nextCursor`) and the caching envelope (`ttlMs`, `cacheScope: "private"|"public"`) — this server already corrects `cacheScope` to `"private"` for `tools/list` and `server/discover` (D-09/D-03) because the tool catalog depends on local `.codegraph/` state; the new resources catalog does **not** have that dependency (reference docs are fixed per binary build, not per repo), so `resources/list`'s default `cacheScope: "public"` is actually correct here and should be left alone — do not blindly copy the D-09 correction.
+- `resources/templates/list` is a separate optional method; only implement it if `AddResourceTemplate` is actually used (see URI-shape guidance above — likely unnecessary for a fixed doc set).
+- Resource object fields available: `uri`, `name`, `title`, `description`, `mimeType`, `size`, `icons` — `title` (human-readable, distinct from the ID-like `name`) is new since `2024-11-05` and worth using for a friendlier resource listing (e.g. `name: "tools/explore"`, `title: "codegraph_explore reference"`).
+
+## Claude Code Skill authoring — current conventions (verified against `code.claude.com/docs`, `platform.claude.com/docs`, and the shipped `anthropics/claude-code` `plugin-dev` skills, which are the same convention this repo's own `plugin-dev:skill-development`/`hook-development` skills already surface)
+
+### SKILL.md frontmatter (only `description` is truly required; `name` strongly recommended)
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `name` | No (defaults to directory name) | Lowercase, hyphens, ≤64 chars, no "anthropic"/"claude" |
+| `description` | Recommended (de facto required — Claude reads *only* this to decide whether to trigger) | ≤1024 chars per the Agent Skills spec; Claude Code's own listing truncates the combined `description`+`when_to_use` at 1,536 chars. **Third person, imperative, front-load the trigger phrases**: `"This skill should be used when the user asks to 'X', 'Y', or mentions Z."` |
+| `when_to_use` | No | Extra trigger context, appended to `description`, counts toward the same 1,536-char cap |
+| `disable-model-invocation` | No | Set `true` for a skill only invokable via `/codegraph` — **not** the right choice here, since the whole point is Claude reaching for it unprompted |
+| `user-invocable` | No | Set `false` to hide from `/` menu but keep auto-loadable — worth considering if `/codegraph` as a manual command adds no value over auto-trigger |
+| `allowed-tools` / `disallowed-tools` | No | Pre-approve/restrict tools while the skill is active for the current turn only |
+
+### Progressive disclosure — the three levels (directly answers the milestone's "lead with decision procedure, minimal tool catalog" requirement)
+
+1. **Level 1 (always in context, ~100 tokens):** `name` + `description` only.
+2. **Level 2 (loaded on trigger, target <5k tokens / 1,500-2,000 words):** SKILL.md body. **This is where the decision-procedure-first structure goes** — a "which tool for which question" table plus 2-3 worked examples, per the todo's explicit design constraint. A full tool-by-tool catalog does NOT belong here at length.
+3. **Level 3 (loaded only if Claude reads it / calls a script, unlimited):** `references/`, `scripts/`, `assets/` bundled in the skill directory, OR — the milestone's actual design choice — **MCP resources served by the codegraph server itself**, fetched via `resources/read` rather than a bundled file. This is a legitimate Level-3 substitute: it keeps the reference content live/derivable (satisfying "guard the claims" — the resource handler can read the same `companionNames`/`allToolNames()` this repo already treats as source of truth, rather than hand-typed prose) instead of a static file that drifts from the binary the way `internal/agents/instructions.go`'s stale "Phase 3" promise already did once.
+
+### Common mistake this milestone must specifically avoid (per Anthropic's own docs and the todo's stated failure mode)
+
+> "Most skills fail for one reason: the description reads like documentation instead of matching what you actually type." — the description is a **trigger router**, not a summary. It must contain the literal phrases an agent's own prompt-matching would see in a task like "where is X defined" / "how does Y work" — the exact failure class the 2026-08-08 debug session hit.
+
+## Claude Code hooks.json — schema for SessionStart / PreToolUse / UserPromptSubmit
+
+Plugin-form `hooks/hooks.json` (the shape `codegraph install` should write, distinct from the direct `settings.json` form):
+
+```json
+{
+  "description": "codegraph availability nudge + grep/find redirect guard",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-nudge.sh", "timeout": 5 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/redirect-guard.sh" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Bash|Read",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/redirect-guard.sh" }
+        ]
+      }
+    ]
+  }
+}
 ```
 
-- **Token scope**: the workflow's default `GITHUB_TOKEN` is scoped to the triggering repo only and **cannot** push to `seanb4t/homebrew-tap`. Every independent source (GoReleaser docs, DNSControl's own GoReleaser writeup, multiple community how-tos) agrees: this requires a **separate PAT** — a fine-grained token scoped to just `homebrew-tap` with "Contents: Read and Write", or a classic token with `repo` scope — stored as a repo secret (commonly named `HOMEBREW_TAP_TOKEN` or similar) and passed via `repository.token` in the cask block, or as the `GITHUB_TOKEN` env var GoReleaser reads by default for the *publish* step specifically (GoReleaser lets you override per-pipe). **Confidence: HIGH** (converged across GoReleaser's own docs and three independent community sources).
-- **Binary vs. archive input**: `homebrew_casks` does **not** mandate a zip/tar archive — it can point `url.template` at any downloadable artifact, and Homebrew Cask's own staging mechanism unpacks common archive extensions automatically; a raw binary URL also works if the `binary` artifact stanza is used, which is what GoReleaser generates by default via the `binaries:` key above. **Given this repo's D-02 constraint, the cleanest shape is still to feed `homebrew_casks` from a *second*, zip-formatted `archives:` entry** (see below) rather than the raw-binary one — keeps the raw-binary asset's name/shape contract (`internal/upgrade.releaseAssetName()`) completely untouched by anything brew-related. **Confidence: MEDIUM** (documented behavior, but the "point brew straight at the raw binary vs. a zip" choice is an architecture decision for the roadmap, not something GoReleaser forces either way).
-- **Signing note from the docs themselves**: *"casks are supposed to be signed"* — GoReleaser's own homebrew_casks docs page explicitly calls out that unsigned casks either need an `xattr`-based quarantine-removal post-install hook (which the docs themselves warn "Apple may disable... without notice") or proper `sign`/notarization. **This repo doing real notarization via `notarize.macos` is exactly what avoids needing that hack** — a direct synergy between the two new blocks, not a coincidence. **Confidence: HIGH.**
+- `SessionStart` matcher values: `startup`, `resume`, `clear`, `compact`, `fork` — filters on how the session began, not on repo state; the `.codegraph/`-exists gate belongs **inside** the script, not the matcher (the script should be a fast, silent no-op when no index resolves — mirroring `hasIndex`'s own MCP-03 zero-tools rule so the hook never nags a repo with no index).
+- `PreToolUse`/`PostToolUse` matcher is a regex over `tool_name` (`Bash`, `Grep`, `Read`, or `Edit|Write`-style alternation) — this is the mechanism for "guard grep/find/Read on where-is-X questions."
+- `UserPromptSubmit` has **no matcher support at all** — it fires on every prompt submission, unconditionally; any "is this a where-is-X question" filtering has to happen inside the hook script itself (e.g. a cheap keyword/regex check against the prompt text passed on stdin), not in the hooks.json matcher field.
+- Hook input arrives as JSON on stdin (`tool_name`, `tool_input` for `PreToolUse`; `user_prompt` for `UserPromptSubmit`); a `PreToolUse` hook can return `hookSpecificOutput.permissionDecision: "ask"|"deny"|"allow"` plus `additionalContext` — this is the mechanism for a genuine *guard* (not just a nudge) that surfaces `codegraph_explore` as the better option before letting a matched `Grep`/`Bash grep` call through.
+- `${CLAUDE_PLUGIN_ROOT}` is the load-bearing path variable for any bundled script reference — installed plugins are copied into a cache directory, so a hard-coded or relative path outside the plugin root breaks silently.
 
-**3. Second `archives:` entry (new — today's single entry is dead `formats: [binary]`).** GoReleaser supports multiple `archives:` blocks distinguished by `id`, each filtered by `ids:` (which *builds* it packages) — confirmed directly from the official archives schema doc, including the exact "split archives by build id" pattern GoReleaser recommends when you need per-format variants of the same builds:
+## Plugin structure & distribution — the milestone's real design decision
 
-```yaml
-archives:
-  - id: raw-binary               # existing, unchanged in shape/name_template — D-02
-    ids: [codegraph-linux-amd64, codegraph-linux-arm64, codegraph-darwin-amd64, codegraph-darwin-arm64]
-    formats: [binary]
-    name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
-  - id: zip-archive               # new — feeds browser download + homebrew_casks
-    ids: [codegraph-linux-amd64, codegraph-linux-arm64, codegraph-darwin-amd64, codegraph-darwin-arm64]
-    formats: [zip]
-    name_template: "{{ .ProjectName }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}_archive"
+Full plugin layout (only `plugin.json` goes inside `.claude-plugin/`; everything else is plugin-root-level):
+
 ```
-**Confidence: HIGH** for the multi-archive mechanism itself (official schema doc, "Splitting Archives by Build" example fetched verbatim); the exact `name_template` values above are illustrative — the *raw-binary* one MUST byte-match today's `internal/upgrade.releaseAssetName()` contract exactly, which is an implementation detail for the plan phase, not something this research can finalize from docs alone.
+codegraph-plugin/
+├── .claude-plugin/
+│   └── plugin.json          # name, description, version, author
+├── skills/
+│   └── codegraph/
+│       └── SKILL.md         # decision-procedure-first guidance
+├── hooks/
+│   └── hooks.json           # SessionStart nudge + PreToolUse/UserPromptSubmit guard
+└── scripts/
+    ├── session-nudge.sh
+    └── redirect-guard.sh
+```
 
-**4. `checksum:` block wakes up (already present, currently dead per the file's own header comment).** Under `goreleaser build`, it never runs; under `goreleaser release`, it does. It duplicates `release.yml`'s hand-rolled `sha256sum codegraph_* > ..._checksums.txt` step — **that hand-rolled step must be deleted**, not run alongside GoReleaser's, to avoid two divergent checksum files. **Confidence: HIGH** on the duplication risk (both are visible directly in the files this research read); resolving *which one wins* is a Phase-1 implementation decision.
+**Distribution options, mapped onto the todo's open question:**
 
-**5. `release:` block — mode against release-please's pre-existing Release object.** Confirmed from the official release customization docs: *"If a release already exists in the target platform before running GoReleaser, the tool will not overwrite existing body text by default"* and GoReleaser *"can automatically replace existing artifacts if an upload fails due to a conflict."* This is exactly the disposition `release.yml`'s current hand-rolled `gh release view` / `gh release upload --clobber` logic already implements by hand (D-04: release-please owns the body, never regenerated). GoReleaser's default behavior needs no `mode: replace` override to preserve that invariant — only `skip_upload: false` (default) so it actually uploads assets. **Confidence: MEDIUM** — docs confirm the default-safe behavior in words, but the exact interaction with a Release object created by a *different* tool (release-please, not a prior GoReleaser run) should be smoke-tested against a real prerelease tag before trusting it in Phase-1 execution.
+| Option | Mechanism | Fit for `codegraph install` |
+|--------|-----------|------------------------------|
+| Standalone skill only | `codegraph install` writes `SKILL.md` directly into `~/.claude/skills/codegraph/` (personal) or `.claude/skills/codegraph/` (project) | Simplest; matches the existing `AgentTarget` write-a-file pattern exactly (same shape as the `codegraphInstructionsBlock` marker injection today), but **gets no hooks** — Claude Code's hooks system for a *standalone, non-plugin* skill is limited to hooks declared in the skill/agent's own frontmatter (a narrower mechanism than `hooks/hooks.json`), which cannot express `PreToolUse` tool-name matching cleanly |
+| Full plugin (`.claude-plugin/plugin.json` + `skills/` + `hooks/`) written to a fixed local directory, self-registered via project `.claude/settings.json`'s `extraKnownMarketplaces`/`enabledPlugins` | `codegraph install` writes the whole plugin tree under (e.g.) `~/.codegraph/claude-plugin/` and adds an `extraKnownMarketplaces` (pointing at that local directory, source type `"directory"` or a local git repo) + `enabledPlugins` entry to the target's `.claude/settings.json` | **Closes the milestone's stated design goal** (versioned with the binary, updated by `codegraph upgrade` — since `codegraph install`/`upgrade` already own writing agent config files, this is a natural extension of the existing `AgentTarget` pattern, not a new mechanism) AND is the only path that gets the hooks capability at all |
+| In-repo, manual `--plugin-dir` load | Ship the plugin directory in the codegraph-go repo itself, document `claude --plugin-dir ./path/to/plugin` | Lowest engineering risk, but explicitly the option the todo calls "leaves install's output still deferring to something thin" — does not close the hand-off |
 
-### What NOT to Add (Q5)
+**Recommendation:** the full-plugin route is the only one that satisfies both "hooks work" and "distribution is versioned with the binary, updated by `codegraph upgrade`" — the two things the milestone goal names explicitly. It composes cleanly with the existing `AgentTarget` registry: Claude Code's target implementation gains a second write (plugin tree + `settings.json` entries) alongside its existing MCP-config write and `codegraphInstructionsBlock` marker injection, with the same idempotent install→uninstall round-trip discipline this repo already holds every other `AgentTarget` to.
 
-| Avoid | Why | Instead |
-|-------|-----|---------|
-| `notarize.macos_native` | Pro-only (confirmed: "exclusively available with GoReleaser Pro, since v2.8"), requires a macOS runner + real Keychain, and only adds value for App Bundles/DMG/PKG — this repo ships a bare CLI binary | `notarize.macos` (cross-platform/Quill, OSS, works on any runner) |
-| `brews:` (Homebrew Formula block) | Soft-deprecated since v2.10, docs page itself now titled "(deprecated)"; formulas are meant to build-from-source, which is semantically wrong for a pre-built signed binary anyway | `homebrew_casks:` |
-| GoReleaser's own `signs:` block (cosign integration) | Would create a **second**, differently-scoped signing flow alongside the existing hand-rolled `cosign sign-blob --bundle` step in `release.yml`'s `assemble` job — two signature sources for the same binary is confusing at best, and `internal/upgrade`'s `defaultVerify` is pinned to the existing per-binary `.sigstore.json` shape/identity (`releaseWorkflowRefPattern`). Do not let GoReleaser sign anything cosign-related. | Keep the existing hand-rolled `cosign sign-blob` step in the `assemble` job, run it on GoReleaser's `release`-produced binaries exactly as it runs on today's `build`-produced ones |
-| GoReleaser's `sboms:` block | Duplicates the existing `syft` step already wired into `assemble` | Keep existing `syft` step |
-| GoReleaser's built-in SLSA/provenance features (none exist as a first-class block, but don't reach for third-party GoReleaser plugins that claim to) | The existing `slsa-framework/slsa-github-generator` generic-generator job is already correct and independent of the build tool | No change needed here at all |
-| `prebuilt` builder / `--split`/`--merge`/`--prepare`/`continue --merge` | All confirmed Pro-only | Single-runner `goreleaser release` (see Headline Answer) |
-| homebrew-core | Already decided against by the maintainer (own tap) — external review queue, no schedule control | `seanb4t/homebrew-tap` |
-| `gon` / `mitchellh/gon` | Predates GoReleaser's native `notarize.macos` integration (quill absorbed and superseded gon's use case); adding it would be a redundant, unmaintained-adjacent extra dependency doing what `notarize:` now does natively | GoReleaser's built-in `notarize.macos` |
-| Windows `.exe`/scoop packaging | Native Windows support was explicitly dropped this project (v0.4.0, #29) | N/A — not in scope |
+## Other agent harnesses — this is emphatically NOT Claude-Code-only
 
-## Apple Tooling (Q4)
+This is the most consequential finding of this research pass, and it corrects an assumption embedded in this repo's own comments (`hermes.go`: "Hermes has no AGENTS.md-equivalent instructions convention"; `antigravity.go`/`kiro.go`: "Writes no instructions file of its own" / "Writes NO instructions file") — those were accurate for *instruction files* as of the Phase 6 research (v0.4/v0.5 era) but **skills and hooks are a materially different, newer surface**, and at least two of the three "no instructions" agents have since shipped one or both:
 
-**One-time, human, Apple Developer Portal setup (not CI-automated, done once by the maintainer who already holds the Developer Program membership per the milestone context):**
-1. Create/export a **"Developer ID Application"** certificate (the correct type for signing a distributed-outside-App-Store binary; "Developer ID Installer" is for `.pkg` installers, not relevant to a bare binary or zip) as a `.p12` file with its private key, base64-encode it → `MACOS_SIGN_P12` secret.
-2. Create an **App Store Connect API key** (Users and Access → Keys → App Store Connect API, "Developer" role is sufficient for notarization) → download the `.p8` file, base64-encode → `MACOS_NOTARY_KEY` secret; note its Key ID → `MACOS_NOTARY_KEY_ID`; note the account's Issuer ID (UUID, shown on the same Keys page) → `MACOS_NOTARY_ISSUER_ID`.
-   **Confidence: MEDIUM** — this is standard, widely-documented Apple Developer Portal process (multiple independent how-to sources agree on the steps), not verified live against Apple's actual current UI in this research pass; UI particulars can shift and should be confirmed by the maintainer during Phase-1 execution rather than assumed from docs.
+| Agent | Skills (Agent Skills open standard, SKILL.md) | Hooks | Notes |
+|-------|-----------------------------------------------|-------|-------|
+| **Claude Code** | Yes — canonical implementation | Yes — `hooks.json`, PascalCase events (`SessionStart`, `PreToolUse`, `UserPromptSubmit`, ...) | This milestone's primary target |
+| **Cursor** | Yes — `.cursor/skills/` or `.agents/skills/`, same `SKILL.md` shape | Yes — `hooks.json`, but **camelCase** events (`sessionStart`, `preToolUse`, `beforeShellExecution`, `afterFileEdit`, `stop`) — schema is NOT drop-in compatible with Claude Code's | A second, real hooks target if this milestone's scope grows — but the event *names* differ, so the hook scripts (which read stdin JSON) likely still port, only `hooks.json` itself needs a per-agent variant |
+| **Codex CLI** | Yes — `.agents/skills/` (repo) / `~/.agents/skills` (global), same open standard | Yes — `hooks.json` or inline `[hooks]` TOML in `config.toml`, PascalCase events closely matching Claude Code's set (`SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStart/Stop`, `PreCompact`/`PostCompact`) | Requires **explicit hook trust** (hash-pinned review) before a non-managed hook runs — a `codegraph install`-written hook will sit untrusted until the user reviews it in `/hooks`; document this rather than assume it "just works" |
+| **opencode** | Yes — native `skill` tool auto-discovers `SKILL.md`; critically, it *also reads `.claude/skills/` directly* as a documented Claude Code compatibility fallback | No `hooks.json` at all — instead an **in-process TypeScript/JS plugin system** (`opencode.json` `plugins[]`, `ctx.tool.hook(...)`, `ctx.session.hook(...)`) — structurally incompatible with a shell-script hooks approach | The skill can likely be shared **verbatim** via the `.claude/skills/` fallback path with zero opencode-specific work; hooks would need a bespoke JS plugin, out of scope for a "thin" milestone |
+| **Gemini CLI** | Not found as a native mechanism (extensions use `contextFileName`/`GEMINI.md` instead) | Yes — `hooks/hooks.json` inside an extension directory (schema not fully captured this pass — low confidence, verify before implementing) | Lower priority; would need an extension package, not a skill |
+| **Hermes** | Not found | Not found | Still appears to have no equivalent mechanism — the existing `hermesTarget` comment is likely still accurate here specifically |
+| **Antigravity** | **Yes, newly confirmed** — `.agents/skills/` (workspace) or `~/.gemini/config/skills/` (global), explicitly the same open Agent Skills standard, progressive disclosure documented | **Yes, newly confirmed** — `hooks.json` in `.agents/` or `~/.gemini/config/`, but event set differs: `PreToolUse`/`PostToolUse`/`PreInvocation`/`PostInvocation`/`Stop` — **no `SessionStart`, no `UserPromptSubmit`** | This repo's `antigravityTarget` comment ("Writes no instructions file... shares `~/.gemini/GEMINI.md`") predates this — Antigravity has since grown a real skills+hooks system separate from the shared GEMINI.md context file. Re-verify against a live Antigravity install before relying on this |
+| **Kiro** | Docs list "Skills" as a first-class feature (alongside Hooks, Custom Agents) in Kiro's own feature comparison, though the SKILL.md schema specifics weren't captured this pass — MEDIUM confidence it exists, LOW confidence on exact shape | **Yes, newly confirmed** — `.kiro/hooks/*.json`, schema closely resembling Claude Code's: `PostFileSave`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `SessionStart`, `Stop`, plus Kiro-specific `PreTaskExec`/`PostTaskExec` | Same correction as Antigravity — `kiroTarget`'s "Writes NO instructions file" comment is about the *marker-fenced instructions block* mechanism specifically and is still true for that; it does not mean Kiro lacks skills/hooks entirely |
 
-**GitHub Actions secrets required (all net-new to this repo):**
+**Implication for scope:** the milestone's stated goal ("Give agent harnesses... a thin, high-signal skill") is achievable for Claude Code, Cursor, Codex CLI, and (via the `.claude/skills/` fallback, free) opencode using **one shared SKILL.md** with zero or near-zero per-agent variation, since all four converge on the same open standard. Hooks are more fragmented — three different schemas observed (Claude Code/Codex PascalCase-with-`SessionStart`+`UserPromptSubmit`; Cursor camelCase; Antigravity PascalCase-without-those-two-events) — so a single hooks.json cannot be shared verbatim across agents even though the underlying shell scripts likely can. **Recommend scoping this milestone's hooks deliverable to Claude Code only** (as the todo's target already implies) and treating "port hooks.json to Cursor/Codex/Antigravity/Kiro" as a documented follow-up rather than in-scope now — each is a small, mechanical, per-agent hooks.json translation of the same two scripts, not new design work.
 
-| Secret | Contents | Used by |
-|--------|----------|---------|
-| `MACOS_SIGN_P12` | base64 of the Developer ID Application `.p12` | `notarize.macos.sign.certificate` |
-| `MACOS_SIGN_PASSWORD` | password protecting the `.p12` | `notarize.macos.sign.password` |
-| `MACOS_NOTARY_KEY` | base64 of the App Store Connect `.p8` key | `notarize.macos.notarize.key` |
-| `MACOS_NOTARY_KEY_ID` | that key's ID | `notarize.macos.notarize.key_id` |
-| `MACOS_NOTARY_ISSUER_ID` | App Store Connect issuer UUID | `notarize.macos.notarize.issuer_id` |
-| (name TBD, e.g. `HOMEBREW_TAP_TOKEN`) | fine-grained PAT scoped to `seanb4t/homebrew-tap`, Contents: Read+Write | `homebrew_casks[].repository.token` |
+## What NOT to Use
 
-None of these are macOS-Keychain-dependent — because `notarize.macos` is the Quill cross-platform path, this whole set of secrets works whether the job runs on `ubuntu-latest` or `macos-latest`. **Confidence: HIGH** (directly from GoReleaser's own docs example, which itself runs on `ubuntu-latest`).
-
-**Stapling — the hard constraint, confirmed independently, not just asserted by the milestone context:**
-- Apple's `stapler` tool only attaches notarization tickets to `.app` bundles, `.pkg` installers, and `.dmg` disk images — never to a bare executable or a `.zip`. This is an **Apple platform constraint**, not a GoReleaser limitation.
-- Quill's command surface (`sign`, `notarize`, `sign-and-notarize`, `submission {list,logs,status}`, `describe`, `extract certificates`, `p12 {attach-chain,describe}` — enumerated from its own README) confirms it never attempts stapling; it only submits to Apple's Notary API and reports status.
-- **Practical consequence for this milestone:** even after `notarize.macos` succeeds, the raw binary (and a zip containing it) can only pass a *Gatekeeper online check* (querying Apple's servers for the ticket at first launch) — never an offline staple check. This matches, and independently confirms, the milestone context's own framing: *"stapling requires a container... an offline machine falls back to an online Gatekeeper check that fails."* Getting real offline-capable stapling would require packaging as `.pkg` or `.dmg`, which routes straight back into `notarize.macos_native` — **Pro-only**. **Confidence: HIGH** on the stapling mechanics (Apple platform fact + quill's own documented command surface); this is a hard boundary the roadmap needs to accept, not something more research resolves.
-
-**Hardened runtime / entitlements for a CGo network-I/O CLI:**
-- Apple's notary service **requires** hardened runtime + a secure (Developer-ID) timestamp on the signature to accept any submission at all — this is non-negotiable, confirmed by multiple independent sources (Apple's own notarization docs referenced across community how-tos, and GoReleaser's `sign.options`/quill's own signing default). `notarize.macos` handles this automatically as part of `sign-and-notarize` — no manual `--options=runtime` flag needed in this repo's config.
-- **Networking is unaffected by hardened runtime** — none of the hardened-runtime restrictions relate to network access; a CLI doing HTTPS calls (this repo's `codegraph upgrade` self-update path) needs no special entitlement for that.
-- **JIT/dynamic-code entitlements (`allow-jit`, `allow-unsigned-executable-memory`) are not needed** — those exist for runtimes that generate and execute code at runtime (e.g. V8/Electron). A statically-linked Go binary with a CGo tree-sitter parser does ahead-of-time compilation only; tree-sitter's C scanners are compiled in, not JIT-generated. **No `entitlements:` file is needed for this binary** — leave `sign.entitlements` unset. **Confidence: MEDIUM** — this reasoning is sound and consistent with widely-reported successful notarization of plain Go CLI tools, but no source directly confirms "CGo-with-tree-sitter specifically notarizes clean with zero entitlements" — flagged as a real risk to smoke-test in Phase 1 (build, `quill sign-and-notarize` locally or in CI, then `codesign -dvv` + `spctl -a -vv -t exec` on the result) before assuming it.
-- **A separate, older risk class exists and is worth naming explicitly**: historical Go toolchain issues (`golang/go#30488`, `golang/go#34986`, and multiple "signature of the binary is invalid" notarization failures reported for Go binaries) were tied to Go's linker producing Mach-O structures the notary service's signature validator rejected. These reports mostly predate current Go toolchain versions and mostly concern `-buildmode=c-shared` (a different build mode than this repo's plain executable build) or missing the full Apple certificate chain (which quill's `p12 attach-chain` / embedded Apple-cert-chain handling addresses directly). **This repo's darwin binaries already accept `codesign` today** (measured fact from the milestone context: `adhoc, linker-signed` on arm64) — a real Developer-ID re-sign is a strictly smaller ask than getting *any* signature to validate at all, which already works. **Confidence: LOW-MEDIUM** on "this will notarize clean on the first try" — genuinely worth a Phase-1 spike rather than an assumption, given this is exactly the kind of "measure, don't recall" trap this repo's standing rule exists for.
-
-## Integration Points
-
-| File | Change |
-|------|--------|
-| `.goreleaser.yaml` | Add `notarize:` (macos, cross-platform variant) block; add `homebrew_casks:` block; add second `archives:` entry (zip format) alongside the existing raw-binary one; the existing `checksum:` block needs no change but will now actually execute — remove the header comments documenting it as dead, since under `release` it is live |
-| `.github/workflows/release.yml` | Collapse the 2-job matrix (`build` on 2 runner classes) + `assemble` + `provenance` shape so the **build+archive+notarize+homebrew_casks+GH-release-upload** work happens in **one job on one macOS runner**, running `goreleaser release --clean` (not `--split`, not `--single-target`) with `CC`/`CXX` env set for **both** linux legs via zig (in addition to today's linux/arm64-only zig use) and no CC override for the two native darwin legs. The existing `assemble` job's hand-rolled `sha256sum` step must be deleted (GoReleaser's `checksum:` now produces it). The existing `cosign sign-blob`/`syft` steps stay, but move to run **after** `goreleaser release` produces artifacts (either as a later step in the same job over `dist/`, or a downstream job consuming `dist/` — GoReleaser's `release` writes `dist/artifacts.json` exactly like `build` does today, so the existing "locate binary via artifacts.json with a `find` fallback" logic in "Rename to release-asset contract name" likely needs re-pointing at the new dist layout, not rewriting from scratch). The `provenance` job (SLSA generic generator) is unaffected in shape — it still consumes a base64 checksums blob, now sourced from GoReleaser's own `checksum:` output file instead of the hand-rolled one. New secrets (`MACOS_SIGN_P12`, `MACOS_SIGN_PASSWORD`, `MACOS_NOTARY_KEY`, `MACOS_NOTARY_KEY_ID`, `MACOS_NOTARY_ISSUER_ID`, tap PAT) must be added to the job's `env:`. |
-| `Taskfile.yml` | If there's a local `task release:check`/equivalent dry-run target that currently calls `goreleaser build --single-target`, it should gain (or get replaced by) a `goreleaser release --skip=publish` (or `--snapshot`) dry-run target so contributors can validate the new blocks locally without secrets — `notarize.macos.enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'` already makes notarization a no-op (falls back to quill's ad-hoc-signing-only snapshot behavior) when secrets aren't present, which is exactly the pattern quill's own README recommends for this. |
-| `internal/upgrade` | No code change implied by this research alone — but the roadmap should explicitly verify the raw-binary `archives:` entry's `name_template` still produces byte-identical filenames to `internal/upgrade.releaseAssetName()`'s contract, since that logic is what's at risk of drifting when the pipeline moves off the current hand-rolled "Rename to release-asset contract name" shell step. |
-
-## Alternatives Considered
-
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|--------------------------|
-| `notarize.macos` (cross-platform/Quill, OSS) | `notarize.macos_native` (Pro) | If this project ever ships a `.app`/`.pkg`/`.dmg` (e.g. a future GUI), native notarization + real stapling becomes necessary and is worth the Pro license at that point — not for a bare CLI binary today |
-| Single macOS runner running the whole `goreleaser release` with zig-cross for both linux legs | GoReleaser Pro `--split`/`--merge` (native multi-runner) | If GoReleaser Pro is ever purchased for other reasons (e.g. Windows native signing, nightly builds, faster parallel builds), revisit — it's the more "designed for this" mechanism and would let linux legs stay on cheaper/faster linux runners instead of consolidating everything onto macOS |
-| `homebrew_casks:` | `brews:` (formula) | Never, for this project — formula is meant for build-from-source and is the deprecated path; no scenario in this project favors it |
-| Own tap (`seanb4t/homebrew-tap`) | homebrew-core | Already decided against (PROJECT.md Key Decisions) — revisit only once adoption independently justifies the review-queue cost |
-| GoReleaser's embedded quill (via `notarize.macos`) | Standalone `anchore/quill` CLI invoked as a build hook (the pattern quill's own README shows, and what predates the native GoReleaser integration) | Only if `notarize.macos`'s config surface turns out to be missing something quill's raw CLI exposes — unlikely given `notarize.macos` is a thin wrapper over the same library, but worth knowing this exists as an escape hatch |
+| Avoid | Why | Use Instead |
+|-------|-----|--------------|
+| Bundling the full tool-by-tool reference as SKILL.md body text | Blows the ~1,500-2,000 word / <5k token Level-2 budget and duplicates content that can drift from the binary (the exact `instructions.go` failure this milestone exists to fix) | Serve it via the new MCP `resources/list`/`resources/read` capability; SKILL.md links to it |
+| Hand-typing tool counts/defaults/flag names into SKILL.md or the resource content | This repo has already had two wire-contract-drift incidents from exactly this pattern (SURF-01's "default 5", the `instructions` visibility claim) — a skill is explicitly called out in the todo as "a third such surface" | Derive resource content from the same `companionNames`/`allToolNames()`/`ResolveCompanions` functions `internal/mcp/server.go` already treats as source of truth, and gate it with a test the way `instructions_contract_test.go` does |
+| A single cross-agent `hooks.json` | Cursor uses camelCase event names, Antigravity's event set omits `SessionStart`/`UserPromptSubmit` entirely — no shared schema exists across the roster today | One `hooks.json` per agent that has the mechanism, sharing the same underlying shell scripts |
+| Writing the plugin as a bundled Node/Python runtime component | Violates the repo's stated single-static-binary / no-bundled-runtime constraint | Plain `SKILL.md` (markdown), `hooks.json` (JSON), and POSIX shell scripts only — no interpreter dependency beyond what's already assumed present (`sh`) |
+| Treating `AddResourceTemplate` as the default resource-registration path | Adds URI-template parsing complexity for a doc set (8 tools + a handful of concept pages) that is fully known and static at server-build time | `AddResource` per document, one call per doc, mirroring `registerTools`' explicit-loop style already in this file |
 
 ## Version Compatibility
 
-| Package A | Compatible With | Notes |
-|-----------|------------------|-------|
-| `goreleaser@v2.17.1` | `notarize.macos` (cross-platform) | Feature predates v2.1; fully supported at pinned version — no upgrade needed |
-| `goreleaser@v2.17.1` | `homebrew_casks` | Introduced v2.10; fully supported at pinned version — no upgrade needed. `pull_request.token` (separate PR-only token) ships in **v2.18, not yet released** as of this research — not usable yet; not needed for a direct-commit-to-`main` tap workflow anyway |
-| `zig 0.15.1` (existing `mlugg/setup-zig@v2.2.1` pin) | cross-compiling CGo to linux/amd64 **and** linux/arm64 from a macOS host | No version-specific incompatibility found; this is the same zig version already validated (per Phase-8/Phase-10 research) for linux/arm64 cross from a Linux host — extending its target set doesn't change its version requirements |
-| `goreleaser-action@v7.2.3` (existing pin) | `distribution: goreleaser` (not `goreleaser-pro`) | Unchanged — the OSS distribution string is exactly what the notarize/homebrew_casks docs' own working examples use |
+| Package/Format | Compatible With | Notes |
+|-----------------|------------------|-------|
+| `modelcontextprotocol/go-sdk@v1.7.0` | MCP spec `2026-07-28` (already the server's declared/asserted protocol version per VRFY-02) | `AddResource`/`AddResourceTemplate` are part of the stable public API surface documented in the SDK's own `design/design.md` and `docs/server.md` — not an experimental/unstable feature gated behind a build tag |
+| Claude Code Agent Skills frontmatter | Agent Skills open spec (agentskills.io) — 6-field cap (`name`, `description`, `when_to_use`, `disable-model-invocation`, `user-invocable`, `allowed-tools`/`disallowed-tools`) when authoring for cross-tool portability | Claude Code accepts all 6 plus Claude-Code-only extras (dynamic context injection via `` !`cmd` `` in body) — **do not use Claude-Code-only frontmatter fields** if the same SKILL.md is meant to be read by Cursor/Codex/Antigravity via their shared-standard support, or verify each target's frontmatter allowlist doesn't reject the extra keys (opencode, for instance, explicitly documents only 5 recognized fields and the behavior on an unrecognized key is unverified this pass) |
+| Claude Code plugin `hooks/hooks.json` | Claude Code CLI/IDE/Desktop/web — all surfaces fire the same hook events per current docs | Distinct schema from Cursor's `hooks.json` (camelCase) and Antigravity's (different event set) — do not assume portability without translation |
 
 ## Sources
 
-- `/websites/goreleaser` (Context7, HIGH confidence — official docs mirror, cross-checked against live goreleaser.com fetches) — archives schema, sign pipe, GitHub Actions notarize example, split/merge/continue/publish --merge commands
-- https://goreleaser.com/customization/partial/ (web fetch, HIGH confidence, primary source) — split/merge Pro-only statement, verbatim
-- https://goreleaser.com/pro/ , Carlos Becker's "GoReleaser Split and Merge" post (web search, MEDIUM-HIGH, corroborating) — Pro-only status cross-check
-- https://goreleaser.com/customization/builds/builders/prebuilt/ (web fetch, HIGH, primary source) — prebuilt builder Pro-only statement, verbatim
-- https://goreleaser.com/customization/sign/notarize/ (web fetch x3 with different targeted prompts, HIGH, primary source) — notarize.macos vs macos_native config keys, secrets shape, OS requirements, stapling absence
-- https://goreleaser.com/customization/notarize (Context7 mirror, HIGH) — full YAML example, GitHub Actions example showing `runs-on: ubuntu-latest` + `distribution: goreleaser` for the cross-platform path
-- https://github.com/anchore/quill README + llms.txt (fetched directly via raw.githubusercontent.com, HIGH, primary source) — command surface confirming no `staple` command; sign/notarize env var names; snapshot ad-hoc-signing pattern
-- https://anchore.com/blog/meet-quill-a-cross-platform-code-signing-tool-for-macos/ (web search, MEDIUM, corroborating) — rationale for quill's pure-Go cross-platform design vs. gon's shell-out-to-codesign approach
-- https://goreleaser.com/customization/publish/homebrew_casks/ (web fetch, HIGH, primary source) — full key list, OSS-vs-Pro sub-feature split, since-v2.10 note, `token_type`/`pull_request.token` version gating
-- https://goreleaser.com/deprecations/ + community migration issue threads (web search, MEDIUM) — brews→homebrew_casks deprecation timeline
-- https://goreleaser.com/customization/package/archives (Context7 mirror, HIGH, primary source) — multiple archives blocks by id, "Splitting Archives by Build" pattern, format list including `binary`
-- https://goreleaser.com/customization/release (Context7 mirror, HIGH, primary source) — release mode defaults against a pre-existing Release object, disable/skip_upload keys
-- `gh api repos/goreleaser/goreleaser/releases/latest` (executed locally, HIGH — direct GitHub API call, 2026-08-07) — confirms v2.17.1 is current
-- https://github.com/goreleaser/example-zig-cgo (web search result, MEDIUM — official GoReleaser org example repo, not independently cloned/built in this research pass) — zig cross-compiling CGo from any host to any target
-- Multiple community sources on homebrew tap PAT scoping (DNSControl docs, mcginniscommawill.com, dev.to how-tos) (web search, MEDIUM, cross-corroborating but non-primary) — GITHUB_TOKEN repo-scoping limitation, PAT requirement
-- Apple hardened runtime / entitlements community sources (developer.apple.com forum threads, multiple Go-notarization blog posts) (web search, LOW-MEDIUM, non-primary, cross-corroborating on the "no special entitlements for plain Go CLI" conclusion but not CGo-tree-sitter-specific) — flagged explicitly as needing a Phase-1 empirical check, not treated as settled fact
+- `code.claude.com/docs/en/skills` (web/exa, MEDIUM confidence, official) — SKILL.md frontmatter reference, progressive disclosure levels, dynamic context injection
+- `platform.claude.com/docs/en/agents-and-tools/agent-skills/overview` (web/exa, MEDIUM confidence, official) — required fields, 3-level loading table with token costs
+- `github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/skill-development/SKILL.md` and `.../hook-development/SKILL.md` (web/exa, MEDIUM confidence, official first-party source — this is literally the skill this repo's own `plugin-dev:skill-development`/`hook-development` skills surface) — writing-style rules (third person, imperative), hooks.json plugin-wrapper format, event/matcher reference
+- `code.claude.com/docs/en/hooks` and `code.claude.com/docs/en/plugins-reference` (web/exa, MEDIUM confidence, official) — full hook event table, matcher field-per-event table, plugin directory structure, `.claude-plugin/plugin.json` schema, marketplace.json schema
+- `code.claude.com/docs/en/plugins` and `code.claude.com/docs/en/plugin-marketplaces` (web/exa, MEDIUM confidence, official) — plugin quickstart, `extraKnownMarketplaces`/`enabledPlugins` project-scope self-registration mechanism
+- `modelcontextprotocol.io/specification/2026-07-28/server/resources` (web/exa, MEDIUM confidence, official spec — this is the exact protocol revision codegraph-go's server already targets) — resources/list, resources/read, resources/templates/list wire shapes, caching envelope
+- `modelcontextprotocol/go-sdk` `design/design.md` and `docs/server.md` via Context7 (docs/context7, MEDIUM confidence, official repo source) — `AddResource`/`AddResourceTemplate`/`ResourceHandler`/`RemoveResources` API, `Example_resources` full worked example, `ServerCapabilities.Resources` explicit-set requirement (parallel to this repo's own D-11 finding for `Tools`)
+- `cursor.com/docs/skills`, `cursor.com/docs/rules` (web/exa, MEDIUM confidence, official) — Agent Skills standard support, `.cursor/skills`/`.agents/skills` locations, camelCase hooks.json event names
+- `developers.openai.com/codex/skills`, `.../codex/hooks`, `.../codex/config-reference` (web/exa, MEDIUM confidence, official) — `.agents/skills` locations, PascalCase hooks.json/inline-TOML schema, hook-trust review requirement
+- `opencode.ai/docs/skills/`, `opencode.ai/docs/rules/`, `opencode.ai/v2/docs/build/plugins` (web/exa, MEDIUM confidence, official) — native `skill` tool, `.claude/skills/` compatibility fallback (load-bearing finding for zero-cost opencode support), in-process plugin/hook system as the non-hooks.json alternative
+- `github.com/google-gemini/gemini-cli/blob/main/docs/extensions/reference.md` and `writing-extensions.md` (web/exa, LOW-MEDIUM confidence, official repo docs but hooks.json schema not fully traced this pass) — `gemini-extension.json` manifest, `hooks/hooks.json` existence confirmed but shape not captured
+- `kiro.dev/docs/hooks/`, `kiro.dev/docs/steering/`, `kiro.dev/docs/getting-started/first-project/` (web/exa, MEDIUM confidence, official, dated 2026-08-06 — very current) — `.kiro/hooks/*.json` schema with PascalCase events including `SessionStart`/`UserPromptSubmit`, "Skills" named as a first-class feature
+- `antigravity.google/docs/hooks`, `antigravity.google/docs/skills`, `antigravity.google/docs/rules-workflows` (web/exa, MEDIUM confidence, official) — confirmed Agent Skills standard support at `.agents/skills/`, `hooks.json` schema with `PreToolUse`/`PostToolUse`/`PreInvocation`/`PostInvocation`/`Stop` (notably missing `SessionStart`/`UserPromptSubmit`)
+- `internal/agents/hermes.go`, `internal/agents/antigravity.go`, `internal/agents/kiro.go` (codebase, this repo — ground truth for current per-agent implementation and the Phase 6 research comments this pass partially corrects)
 
 ---
-*Stack research for: macOS Gatekeeper notarization + Homebrew tap distribution (v0.5.0 milestone)*
-*Researched: 2026-08-07*
+*Stack research for: Agent-onboarding skill/plugin + MCP Resources + hooks (codegraph-go v0.10.0 milestone)*
+*Researched: 2026-08-12*

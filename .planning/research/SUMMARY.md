@@ -1,176 +1,200 @@
 # Project Research Summary
 
-**Project:** CodeGraph Go — milestone v0.5.0 "macOS Distribution & Homebrew"
-**Domain:** Release engineering — Apple Gatekeeper notarization + Homebrew distribution, added to an existing signed/attested Go release pipeline
-**Researched:** 2026-08-07
-**Confidence:** MEDIUM-HIGH
-
-> **Orchestrator note (#222 self-heal).** The synthesizer agent fabricated a write restriction and returned this document inline instead of writing it. The orchestrator persisted it, reconciled the three cross-document tensions itself, and folded in two maintainer decisions taken after the researchers returned. Content is the synthesizer's; the reconciliations and the Decisions Taken section are the orchestrator's.
+**Project:** codegraph-go (v0.10.0 milestone: Agent Onboarding Skill & MCP Resources)
+**Domain:** Agent-education UX for a code-graph MCP server via SKILL.md, MCP Resources capability, SessionStart/PreToolUse hooks
+**Researched:** 2026-08-12
+**Confidence:** HIGH (grounded in official specs, wire-oracle tests, archtest patterns, and this repo's own documented incident history)
 
 ## Executive Summary
 
-This milestone adds two macOS distribution capabilities — Gatekeeper-acceptable notarized binaries and a Homebrew tap — to a release pipeline that already ships cosign keyless signatures, syft SPDX SBOMs, and SLSA3 provenance, all verified end-to-end on a real release. The work is release engineering, not product engineering: almost every risk lives in the interaction between the new capabilities and the proven pipeline, not in the new capabilities themselves.
+The v0.10.0 milestone adds a self-teaching agent-onboarding UX layer to codegraph-go by combining three complementary mechanisms: an Agent Skills SKILL.md (decision-procedure-first, not catalog-first), an MCP Resources capability serving reference content, and soft enforcement hooks. This is not three separate features — it is one cohesive UX designed to solve a specific, documented problem: an agent that has read documentation but still reaches for grep first when it should use `codegraph_explore`.
 
-Four researchers converged independently on the same recommended shape: migrate `release.yml` from a per-platform `goreleaser build --single-target` matrix to a **single `goreleaser release` invocation on one `macos-latest` runner**, with `zig cc` cross-compiling both Linux legs from the macOS host; wire GoReleaser's OSS `notarize.macos` (Quill-backed) to the darwin binaries; publish a `.zip` archive **alongside** the existing raw-binary archive via a second `archives:` entry keyed by `id`; publish the tap through `homebrew_casks:`; and teach `codegraph upgrade` to detect a Homebrew-managed install and refuse.
+The recommended approach is to build in phases: (1) MCP Resources capability + hand-authored reference markdown, (2) SKILL.md with worked examples and a decision table, (3) rewrite the `instructions` wire-string to defer correctly, (4) SessionStart soft nudge, (5) claims-guarded-by-tests discipline across all three surfaces, then (6) PreToolUse guard hook, and finally (7) `codegraph install` distribution. This ordering is not arbitrary — resources must exist before the skill points to them, and the `instructions` string must never name something that doesn't exist (the exact bug this milestone was invented to fix).
 
-The dominant risk is narrow and now well-identified. The single-runner question that PROJECT.md flagged as unconfirmed is **answered negatively**: both `release --split`/`continue --merge` and the `prebuilt` builder are GoReleaser Pro, and `goreleaser release` refuses to consume a `dist/` produced elsewhere. That makes the single-macOS-runner path a hard constraint rather than a preference — and reduces the open question to one empirical unknown: whether `zig cc` cross-compiles this repo's CGo tree-sitter dependency to **linux/amd64 and linux/arm64 from a macOS host**. Today only linux/arm64 is zig-crossed, and from a Linux host. That spike is the milestone's highest-leverage risk and belongs in the first phase.
+**Critical risk:** This milestone must not repeat the documented "Phase 3" broken promise (instructions string named a capability that never shipped) or the "SURF-01" drift pattern (hand-typed claims diverging from code). Every numeric claim, tool count, and default value in skill/resources/instructions must be either derived from source constants or gated by an automated test. The highest-implementation risk is the new skill-directory and hooks.json install/uninstall safety across 8 agent targets — this mirrors v1.0 Phase 5's githooks data-loss bugs and Phase 6's swallowed-I/O-errors findings. Reuse the existing `internal/fsatomic` and marker-fence discipline, never invent new file-safety primitives.
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new Go dependencies. Every addition is release-pipeline configuration plus CI secrets. GoReleaser v2.17.1 (already pinned in `go.tool.mod` and both workflows) ships everything needed in its OSS distribution.
+No new Go module dependencies are needed. Everything required already exists in `go.mod` (`modelcontextprotocol/go-sdk@v1.7.0`) or is plain-text/JSON authoring:
 
-**Core additions:**
-- **`notarize.macos`** (GoReleaser OSS, Quill-backed): notarizes darwin binaries. Cross-platform — GoReleaser's own example runs it on `ubuntu-latest`; no macOS runner and no Keychain required. `notarize.macos_native` is the Pro/macOS-only variant and buys nothing here, since codegraph ships a bare CLI rather than an app bundle.
-- **`homebrew_casks:`** (GoReleaser OSS since v2.10): publishes the tap. `brews:` is deprecated.
-- **A second `archives:` entry keyed by `id`**: adds a `.zip` for the browser-download and cask paths. Multiple archives blocks are natively supported, so the existing raw-binary archive is untouched.
-- **`binary_signs:`** rather than `signs:` with `artifacts: binary` — the v2.2+ pipe built specifically for the raw-binary-plus-archive shape.
-- **`zig cc`** extended to both Linux legs (already used for linux/arm64). `goreleaser/example-zig-cgo` is the official demonstration of the CGo-cross pattern.
+**Core technologies:**
+- **Agent Skills open standard (SKILL.md + frontmatter)** — A SKILL.md file authored once can be consumed by Claude Code, Cursor, Codex CLI, opencode, and Antigravity via the shared `agentskills.io` standard. This is a genuine multi-agent surface, not Claude-Code-only. Frontmatter has 6 fields; only `description` is load-bearing (it's the only thing always in context, so it must be trigger-first: "use when the user asks X, Y, Z" — not a summary of what the tool does). Body must stay under ~500 lines / <5k tokens, with decision procedure (table) and 2-3 worked examples first, tool catalog second or moved to resources.
 
-**Six new CI secrets:** Developer ID certificate (base64 P12) + its password; App Store Connect API key, issuer ID, and key ID; and a Homebrew tap PAT. The default `GITHUB_TOKEN` **cannot** write cross-repo, so the tap push needs a dedicated PAT scoped to `seanb4t/homebrew-tap` only.
+- **MCP Resources API (go-sdk v1.7.0)** — The `Server.AddResource(resource, handler)` / `AddResourceTemplate(template, handler)` API is already stable in the pinned SDK version. For a static doc set (8 tools + a handful of concept pages), use `AddResource` per document, one call per doc. Register unconditionally at server startup (not gated on `.codegraph/` existing — reference content is useful whether or not an index resolves). Content is served verbatim as `text/markdown` per the resource's `MIMEType` field.
 
-**What NOT to add:** nothing that duplicates cosign, syft, or SLSA — those keep their current wiring and identities. No `gon`. No GoReleaser Pro. No `.pkg`/`.dmg` builder (see the stapling finding).
+- **Claude Code plugin `hooks/hooks.json`** — PascalCase events (`SessionStart`, `PreToolUse`, `UserPromptSubmit`), matcher field per-event (tool name for PreToolUse, startup/resume for SessionStart, no matcher for UserPromptSubmit), command-type hooks as plain shell scripts. Distribution: write via `codegraph install` into `~/.claude/hooks/hooks.json` or `.claude/hooks/hooks.json` (location scope reuses existing global/local distinction). The single-highest-risk finding: a separate hooks.json schema exists for Cursor (camelCase), Codex CLI (PascalCase, different event set), Antigravity (missing SessionStart/UserPromptSubmit), and Kiro — no one schema works across all 8 agents. **Scope hooks delivery to Claude Code only for v1; port to other agents as a documented follow-up.**
+
+**Multi-agent findings (corrects v0.4/v0.5 assumptions):**
+- Claude Code: Skills ✓, Hooks ✓ (PascalCase, `SessionStart`/`PreToolUse`/`UserPromptSubmit`)
+- Cursor: Skills ✓ (same `.cursor/skills/` standard), Hooks ✓ (camelCase, different event set)
+- Codex CLI: Skills ✓ (`.agents/skills/`), Hooks ✓ (PascalCase, requires trust review, different event set)
+- opencode: Skills ✓ (reads `.claude/skills/` as fallback), no hooks
+- Antigravity: Skills ✓ (newly confirmed, `.agents/skills/`), Hooks ✓ (different event set: no `SessionStart`/`UserPromptSubmit`)
+- Kiro: Skills ✓, Hooks ✓ (PascalCase, `PreTaskExec`/`PostTaskExec` additions)
+- Gemini: Skills unclear, Hooks ✓ (schema not fully verified)
+- Hermes: Neither confirmed
+
+**The SKILL.md is genuinely portable across Claude/Cursor/Codex/opencode with zero changes.** Hooks are not — each agent needs its own `hooks.json` translation.
 
 ### Expected Features
 
-**Table stakes:**
-- Darwin binaries that pass `spctl -a -vv -t exec` on a genuinely quarantined download, reporting `source=Notarized Developer ID`.
-- `brew tap seanb4t/tap && brew install codegraph` working on a clean machine.
-- `codegraph upgrade` refusing under a Homebrew-managed install with a pointer to `brew upgrade codegraph`. **This is Homebrew policy, not hygiene** — the Acceptable Formulae rules require self-update behaviour to be disabled.
+**Must have (table stakes) — Phase 1:**
+1. **MCP Resources capability** — Serves tool-by-tool usage docs, `CODEGRAPH_MCP_TOOLS` semantics, index-state preconditions. This is the missing "Phase 3" hand-off, and everything else in this milestone points at it.
+2. **SKILL.md decision-procedure-first content** — A crisp table ("which tool for which question?") + 2-3 worked examples (including the actual 2026-08-08 misdirection scenario), tool catalog moved to resources. Not a catalog masquerading as a decision procedure.
+3. **Rewritten `instructions` wire-string** — Short, correct, points at skill + resources instead of the broken "Phase 3" promise.
+4. **SessionStart soft nudge** — Cheap (one-shot, `.codegraph/`-gated file-existence check, not MCP round-trip), no false-positive surface (fires once, never blocks).
+5. **Claims guarded by tests** — Every numeric claim (tool count, default value, env var name) in skill/resources/instructions is either derived from code constants or checked by an automated test. No hand-typed facts without a gate.
 
-**Deferrable:** shell completions shipped in the cask; full offline-staplable distribution.
+**Should have (competitive) — Phase 2:**
+1. **PreToolUse guard redirecting narrow, high-confidence grep-as-code-search patterns** — Not aggressive (default soft-warn, not hard-deny), triggers only on "looks like where-is-X", scoped to first binary in pipe (echo | grep bar passes through), never blocks Read. Paired with false-positive corpus test AND true-positive corpus test.
+2. **`codegraph install` writing skill+hooks into target agent directories** — Versioned with the binary, refreshed by `codegraph upgrade`. Uses shared helper pattern reusing existing `internal/fsatomic`.
 
-**Anti-features:** auto-submitting to homebrew-core; a GUI installer; a `.pkg` writing outside the prefix; an updater that silently mutates the Cellar.
-
-**Precedent.** GoReleaser's own project dogfoods exactly the target shape — `notarize.macos` + `homebrew_casks`, **no staple step**. `gh` and `lazygit` both solve the self-updater-vs-package-manager conflict at compile time via a build-time ldflag; that trick does not transfer directly to a cask (casks ship precompiled binaries rather than building per-install), so the cask-compatible analogue is a `homebrew_casks.hooks.post.install` sentinel file. `atuin` explicitly rejects self-replacing updaters under a package manager.
-
-**Brew detection must resolve symlinks to the real Cellar path, not guess the prefix.** `google-gemini/gemini-cli` PR #14727 is a real, documented false-positive regression from prefix-guessing; the fix that shipped there queries `brew --prefix` live and resolves symlinks. Apple Silicon `/opt/homebrew` vs Intel `/usr/local` vs custom prefixes vs linuxbrew vs migrated systems are all real variants.
+**Defer (v2+):**
+1. **Resource `subscribe`/`listChanged`** — Only needed once tool roster changes mid-session; static per-process today.
+2. **Auto-redirect argument rewriting** — Adds false-positive risk with incremental UX gain; defer until evidence shows soft-warn insufficient.
+3. **Hook telemetry** — Explicitly out of scope; conflicts with zero-passive-phone-home claim.
 
 ### Architecture Approach
 
-**Before:** four parallel `goreleaser build --single-target --clean` matrix jobs, then an assemble job layering cosign, syft, a hand-rolled `sha256sum`, and SLSA subject collection.
+The architecture fits cleanly into existing codebase with minimal new packages and zero new import boundaries violated:
 
-**After:** one `macos-latest` job running the whole `goreleaser release`, with GoReleaser owning archive, checksum, sign, and SBOM natively, and `zig cc` cross-compiling both Linux legs.
+**MCP layer (new, minimal):**
+- `internal/mcp/resources.go` — New file in existing package. Registers resources via `AddResource`/`AddResourceTemplate`. Resource catalog derived from `companionNames`/`allToolNames()`.
+- `internal/mcp/resourcedocs/*.md` — Hand-authored reference markdown, `go:embed`'d. One file per resource.
+- `internal/mcp/resources_contract_test.go` — Drift guard (mirrors existing `instructions_contract_test.go`). Two checks: numeric-claim pinning, tool-name cross-check.
 
-**Artifact flow and its correctness invariant.** GoReleaser's pipe ordering runs `notarize` **before** `archive`/`checksum`/`sign`/`sbom`, so nothing signs pre-notarization bytes while shipping post-notarization ones. That ordering is correctness-safe *by design* — but per this repo's standing rule it must become a **measured acceptance gate** (sha256 diffed at each stage), not a property trusted from documentation.
+**Agent distribution layer (new, minimal):**
+- `internal/agents/skillfiles.go` — Shared helper reusing existing `atomicWriteFile`/`recordFile` machinery.
+- `internal/agents/skillfiles/<target>/...` — Embedded directory trees (SKILL.md + hooks.json + scripts), one per supporting agent.
 
-**Dual-asset topology.** The raw binary (`codegraph_<tag>_<goos>_<goarch>`, no extension) is consumed by `internal/upgrade.releaseAssetName()` and must remain byte-unchanged — decision D-02 survives intact. The `.zip` serves browser downloads and the cask. Distinct name templates keep the two from colliding.
+**Wire-oracle regression (critical, one-step re-capture):**
+- Add `resources/list`/`resources/read` scenarios to `scenarios.go`, re-run capture tool, accept diff as one deliberate unit per `MUTATION-PROOF.md`.
 
-**The checksums collision is already latent, not hypothetical.** `.goreleaser.yaml`'s currently-dead `checksum:` block and `release.yml`'s hand-rolled `sha256sum` step both emit `codegraph_<tag>_checksums.txt`. The moment `goreleaser release` runs, both wake up and race. **Resolution is deletion of the hand-rolled step in the same change** — not reconciliation of two writers.
-
-**New component:** `seanb4t/homebrew-tap`, a separate repository GoReleaser pushes to. Failure mid-release must not corrupt an otherwise-good release; a deliberate tap-push failure should prove the rest is unaffected and a re-run should recover without duplication.
+**`instructions` wire-string rewrite (last, not first):**
+- Rewrite to defer to skill + resources. **Must not merge before those actually exist.** Extend `instructions_contract_test.go` with fourth anchor.
 
 ### Critical Pitfalls
 
-1. **`goreleaser release` cannot consume a pre-built `dist/`** from other runners; `--split`/`--merge` and `prebuilt` are Pro-only. Falsifies the matrix-then-release architecture outright.
-2. **`notarytool` Accepted ≠ `spctl` pass.** The notary ticket may not cover the final bytes as shipped. Documented repeatedly in Apple's own forums, including recent Tahoe-era threads.
-3. **Four checks that feel like verification but are not:** a green CI step; `codesign -dvv` passing (**it passes on adhoc-signed binaries too — this repo's darwin/arm64 already passes it today while `spctl` says `rejected`**); `notarytool history` showing Accepted; `spctl` run on a file that was never quarantined. The single trustworthy check is forcing a real `com.apple.quarantine` xattr on the **actually-published asset** and running `spctl -a -vv -t exec`, expecting `source=Notarized Developer ID`.
-4. **Stapling a bare Mach-O or a `.zip` is impossible.** Apple's `stapler` attaches tickets only to `.app`/`.pkg`/`.dmg`; Quill has no staple command at all. Platform constraint, not a tooling gap.
-5. **Checksums-file collision** (above) — latent in the repo today.
-6. **cosign/SLSA byte divergence** if the pipeline re-touches a raw binary after signing. Invariant: build → notarize → cosign-sign → upload, byte-unchanged thereafter.
-7. **Hardened Runtime entitlements** are likely a non-issue for a statically-linked CGo binary (C compiled in, not `dlopen()`-loaded), but this is reasoning, not measurement — verify by running the full CLI/MCP suite against a notarized binary.
-8. **Tap-push race:** a formula published before the GitHub Release asset exists points at a 404.
+1. **The skill is inert** — reads well but doesn't change agent behavior
+   - *Avoid:* Lead with decision table. Validate via fresh-session transcript diff on where-is-X prompt.
+
+2. **MCP Resources drift from tool behavior** — repeats SURF-01
+   - *Avoid:* Every numeric claim derived from code at test time. Extend wire-oracle to `resources/*`. Add `resources_contract_test.go`.
+
+3. **PreToolUse guard fires false positives** — grep-is-not-always-wrong problem
+   - *Avoid:* Scope narrowly (first-binary-only, never block Read). Soft-warn default. Test against legitimate grep corpus.
+
+4. **PreToolUse guard too passive** — never actually fires
+   - *Avoid:* Require both false-positive AND true-positive corpus tests before shipping.
+
+5. **Install/uninstall corrupts new artifact types** — mirrors v1.0 Phase 5 data-loss
+   - *Avoid:* Extend `AgentTarget` contract with shared tested helper. Per-agent round-trip tests asserting byte-invariance.
+
+6. **Instructions string repeats Phase 3 broken-promise** — the bug this milestone was invented to fix
+   - *Avoid:* Gate rewrite behind actual existence (test assertion). **Sequence: resources + skill verified working BEFORE rewrite.**
 
 ## Implications for Roadmap
 
-### Phase 1: De-risking Spike & `goreleaser release` Restructure
+Suggested 8-phase structure with critical-path sequencing:
 
-Prove `zig cc` cross-compiles this repo's CGo tree-sitter dependency to linux/amd64 **and** linux/arm64 from a macOS host, and that the resulting binaries run on real Linux. Then perform the mechanical `build` → `release` migration: consolidate to one macOS runner, delete the hand-rolled `sha256sum` step, adopt `binary_signs:`, and **re-prove every existing supply-chain claim under the new mechanism** — `cosign verify-blob`, `slsa-verifier verify-artifact`, and a real `codegraph upgrade` self-upgrade against published assets. Zero new user-facing capability; the deliverable is that nothing regressed.
+### Phase 1: MCP Resources Capability
+Resources must exist before skill points to them. Everything depends on this.
+- Delivers: `resources.go`, `resourcedocs/*.md`, catalog derived from source constants
+- Research flags: None — official stable API
 
-Owns pitfalls 1, 5, 6.
+### Phase 2: Wire-Oracle Re-Capture
+Resources capability adds `capabilities.resources` — must capture as one deliberate commit before using resources elsewhere.
+- Delivers: Updated scenarios, re-captured `.golden` transcripts
+- Research flags: None — proven pattern in repo
 
-### Phase 2: Apple Notarization
+### Phase 3: Resources Claims Drift Guard
+Must ship same phase as resources, not follow-up. Ungated resources worse than none.
+- Delivers: `resources_contract_test.go` with numeric-claim + tool-name checks
+- Research flags: None — extends existing `tools_schema_drift_test.go` pattern
 
-Wire `notarize.macos` with the Developer ID certificate and App Store Connect API key. Acceptance is the forced-quarantine `spctl` check against the real published asset — explicitly **not** any of the four false-positive checks in pitfall 3. Demonstrate the gate RED first: it must fail against the current un-notarized binary before it is trusted to pass against the notarized one. Verify the notarize-before-sign ordering by diffing sha256 at each stage rather than trusting the documented pipe order.
+### Phase 4: SKILL.md Authoring
+Can parallelize with 1–3 (disjoint package), but cannot ship until resources exist.
+- Delivers: Decision-procedure-first skill, 2-3 worked examples, transcript-diff verification
+- Research flags: Behavior verification (transcript diff) is non-standard — add to acceptance criteria
 
-Owns pitfalls 2, 3, 7.
+### Phase 5: SessionStart Soft Nudge Hook
+Low-risk, high-value. Cheap file-existence check, cannot false-positive.
+- Delivers: `hooks.json` + `session-nudge.sh`, passing hook tests
+- Research flags: None — documented in official Claude Code docs
 
-### Phase 3: Archives & Homebrew Tap
+### Phase 6: Rewrite `instructions` Wire-String
+Must happen last, after resources + skill verified working. Never name something that doesn't exist.
+- Delivers: Updated `instructions` constant, updated marker block, extended `instructions_contract_test.go`
+- Research flags: None — mirrors existing pattern
 
-Add the second `archives:` entry producing `.zip`, create `seanb4t/homebrew-tap`, and wire `homebrew_casks:` with a least-privilege PAT. Acceptance is a real `brew tap && brew install` on a clean machine — plus a deliberately failed tap push proving the rest of the release is unaffected and a re-run recovers without duplication.
+### Phase 7: `codegraph install` Skill + Hooks Distribution
+The real distribution decision. Bundles via `go:embed`, versioned with binary, refreshed by `upgrade`.
+- Delivers: `skillfiles.go` helper, per-target install/uninstall, per-agent round-trip tests (all 8 agents)
+- Research flags: **Highest-risk phase given v1.0 Phase 5–6 install/uninstall history.** Recommend deep-review pass.
 
-Owns pitfalls 4 (accepted, documented) and 8.
-
-### Phase 4: `codegraph upgrade` Brew Detection
-
-Detect a Homebrew-managed install by resolving symlinks to the real Cellar path (or a cask post-install sentinel), never by prefix-guessing. Refuse with a pointer to `brew upgrade codegraph`. Development can start in parallel with Phase 3, but final acceptance must run against the real tap from Phase 3.
+### Phase 8: PreToolUse Guard Hook (P2, post-validation)
+Ship after skill+resources+nudge proven sufficient. Friction-adding fallback, not first lever.
+- Delivers: `redirect-guard.sh`, false-positive + true-positive corpus tests, soft-warn default
+- Research flags: Guard heuristics domain-specific — recommend corpus-building + rehearsal in phase plan
 
 ### Phase Ordering Rationale
 
-Risk is front-loaded deliberately. The zig-cross spike gates everything — if it fails, the entire chosen architecture is unreachable in OSS GoReleaser and the milestone must be rescoped, so it must be answered before any restructuring work is committed. Phase 1 then changes the *mechanism* without changing the *product*, which makes any regression attributable to the migration alone rather than tangled with new capability. Notarization precedes archives because the cask must ship notarized bytes. Brew detection comes last because its only honest acceptance test needs a real tap to exist.
-
-### Research Flags
-
-- **Zig-cross-linux-from-macOS with CGo tree-sitter is unproven in this repo.** Single highest-leverage risk. Spike before committing to the restructure.
-- **Hardened Runtime applicability to this specific static-CGo build is inference, not measurement.** Verify empirically.
-- **GoReleaser's `release:` pipe behaviour against a Release object release-please already created** is documented in prose but was not smoke-tested against a real tag in this pass. D-06R means release-please creates the tag and Release first; GoReleaser must upload into it rather than create a competing one.
-- **The `xattr` quarantine-flag encoding** used in the RED-check script is community-documented rather than from a canonical Apple source. A real browser download should remain the primary check, with the scripted xattr as the automatable proxy.
-
-## Decisions Taken (post-research, maintainer)
-
-Two questions the research raised were put to the maintainer and answered before roadmapping:
-
-1. **Notarization bar: online-only, gap documented.** Ship `notarize.macos` on a `.zip`; Gatekeeper passes via online ticket lookup. Offline first launch remains a **documented known limitation**, matching what GoReleaser itself ships for its own CLI. No GoReleaser Pro licence, no hand-built `.app` wrapper. Stapling is deliberately deferred, not forgotten.
-2. **`homebrew_casks:` confirmed, correcting `brews:`.** PROJECT.md's recorded decision ("formula published by GoReleaser's `brews:` block") was falsified by three independent researchers and has been corrected.
+1. Resources before skill — skill references resource URIs
+2. Wire-oracle re-capture before downstream — one deliberate commit, keeps test suite green
+3. Drift guard same phase as resources — ungated resources repeat known bugs
+4. Skill parallels 1–3 — disjoint package, no upstream dependency until resources exist
+5. Nudge before instructions — instructions points to both; need both working before rewriting pointer
+6. Instructions rewrite last — never name something that doesn't exist
+7. Install distribution after skill stabilizes — avoids shipping moving targets through install
+8. Guard hook after Phase 1–7 validation — friction-adding fallback; only add if evidence shows nudge insufficient
 
 ## Confidence Assessment
 
-| Area | Level | Basis | Gaps |
-|------|-------|-------|------|
-| GoReleaser Pro/OSS boundary (split/merge, prebuilt, notarize variants, dmg) | HIGH | STACK fetched the boundary three separate ways and corroborated against the maintainer's own blog and GitHub issue #2320; PITFALLS reached the same conclusion independently. ARCHITECTURE self-rated this MEDIUM as a single-pass fetch — the independent corroboration raises the combined confidence to HIGH rather than averaging down | None material |
-| Stack config schema and secrets shape | HIGH | Official GoReleaser docs, multiple fetches, versions confirmed live via `gh api` on 2026-08-07 | Apple Developer Portal UI not verified live |
-| Stapling constraint (`.zip` and bare Mach-O cannot be stapled) | HIGH | Apple's own documentation, Quill's command surface, and GoReleaser's docs — three independent researchers reached it separately | None material |
-| `brews:` deprecated → `homebrew_casks:` | HIGH | GoReleaser PR #5780 and deprecation docs, Homebrew/brew PR #20291 with maintainers' direct statements, plus GoReleaser's own dogfooded config | None material |
-| Repo-internal facts (release.yml, .goreleaser.yaml, Taskfile.yml, internal/upgrade) | HIGH | Direct file reads with line citations | None |
-| Notarization false-positive check family | HIGH | Multiple independent Apple Developer Forum threads on the exact Accepted-but-rejected shape, including recent ones | Predictions not yet observed here; phase-specific RED tests required |
-| Single-runner zig-cross recommendation | MEDIUM | Logically sound, consistent with this repo's existing zig-cross precedent, and officially demonstrated in `goreleaser/example-zig-cgo` — but that example was not cloned or built, and the macOS-host variant is unexercised here | **The milestone's primary spike** |
-| Hardened Runtime applicability | MEDIUM | Mechanism well-documented; applicability to this static-CGo build is inference | Requires empirical check |
-| Homebrew tap PAT scope, brew detection | MEDIUM-HIGH | Official Homebrew docs HIGH; PAT scoping corroborated across several non-primary sources | Detection untested against a real Homebrew layout |
+| Area | Confidence | Notes |
+|------|------------|-------|
+| Stack | **HIGH** | Official go-sdk API verified against vendored source; SKILL.md standard cross-checked across multiple agents; hooks.json schema confirmed for Claude Code; multi-agent findings from live documentation |
+| Features | **HIGH** | Table stakes/anti-features grounded in official Anthropic docs + this repo's PROJECT.md incident log; prior-art hooks (Pare, jCodeMunch) cross-checked; ecosystem consensus on resources vs tools |
+| Architecture | **HIGH** | Every recommendation anchored to actual codebase files; wire-oracle re-capture discipline direct from project's MUTATION-PROOF.md; archtest patterns verified |
+| Pitfalls | **HIGH** | Grounded in this repo's documented incident history (MCP-01, SURF-01, Phase 3 promise, v1.0 Phase 5–6 install/uninstall bugs). Not theoretical — already shipped and paid down |
+
+**Overall confidence:** **HIGH**
 
 ### Gaps to Address
 
-1. Zig-cross-linux-from-macOS with CGo tree-sitter — **Phase 1, blocking.**
-2. Real Gatekeeper validation via forced quarantine on the published asset — **Phase 2, acceptance gate.**
-3. Notarize-before-sign ordering verified by sha256 diff at each stage — **Phase 2.**
-4. GoReleaser `release:` behaviour against a release-please-created Release — **Phase 1.**
-5. Brew-managed Cellar layout detection against a real install — **Phase 4.**
+1. **Per-agent hooks.json schema differences** — Cursor (camelCase), Codex/Antigravity (different event sets), Kiro (new events). Scope to Claude Code v1; document per-agent porting as P2.
+
+2. **Behavioral verification methodology** — Skill-authoring phase must include fresh-session transcript-diff test proving grep → codegraph_explore redirect. Standard guidance doesn't emphasize this; add to acceptance criteria.
+
+3. **Guard heuristics corpus definition** — Define what constitutes realistic "where-is-X" prompt corpus vs legitimate "non-where-is-X grep" corpus in Phase 8 plan, not during implementation.
+
+4. **opencode/Gemini/Hermes skills scope** — Antigravity + Kiro confirmed; others unclear. Document v1 scope before Phase 4.
+
+5. **Multi-agent SKILL.md portability test** — Load SKILL.md in each client's skill UI in Phase 4 before shipping, not follow-up.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-- GoReleaser official docs: `/customization/partial/` (split/merge Pro-only, verbatim), `/customization/builds/builders/prebuilt/` (prebuilt Pro-only, verbatim), `/customization/sign/notarize/`, `/customization/publish/homebrew_casks/`, `/customization/package/archives`, `/customization/release`, `/customization/sign/binary_sign/`, `/cmd/goreleaser_release/`, `/resources/errors/dirty/`
-- goreleaser/goreleaser issue #2320 — `release` cannot consume a pre-existing `dist/`; no `--skip-build` exists
-- goreleaser/goreleaser PR #5780 — introduced `homebrew_casks`, deprecated `brews`
-- `github.com/goreleaser/goreleaser/.goreleaser.yaml` (main) — the project's own dogfooded notarize + cask config, no staple step
-- Carlos Becker (GoReleaser maintainer), "GoReleaser Split and Merge" — maintainer-authored, directly authoritative on Pro status
-- `github.com/anchore/quill` README + llms.txt (raw.githubusercontent.com) — command surface confirming no `staple` command
-- Apple: `developer.apple.com/documentation/security/customizing-the-notarization-workflow` and `.../notarizing-macos-software-before-distribution` — staple-ability constraints
-- Homebrew: `docs.brew.sh/Acceptable-Formulae` (self-update policy), `docs.brew.sh/Adding-Software-to-Homebrew`, `docs.brew.sh/Formula-Cookbook`, `docs.brew.sh/FAQ`
-- Homebrew/brew PR #20291 — maintainers' direct statements on formula-vs-cask for precompiled binaries
-- `cli/cli` (issues #6949, #10242, #2141; PRs #70784, #4247; its macOS install documentation) and `jesseduffield/lazygit` (its updater package and user-config gate, PR #189) — build-time updater-disable precedent. **External repositories, cited for precedent only** — no file in this repo is implied
-- `google-gemini/gemini-cli` PR #14727 — real false-positive brew-detection bug and its `brew --prefix` + symlink-resolution fix
-- `gh api repos/goreleaser/goreleaser/releases/latest` executed locally 2026-08-07 — confirms v2.17.1 current
-- This repo, read directly 2026-08-07: `.goreleaser.yaml`, `.github/workflows/release.yml`, `Taskfile.yml`, `internal/upgrade/upgrade.go`, `internal/upgrade/verify.go`, `internal/upgrade/release.go`, `internal/upgrade/swap.go`, `.planning/PROJECT.md`
+- **Official MCP spec** (`modelcontextprotocol.io/specification/2026-07-28`) — resources wire shapes, capabilities
+- **go-sdk v1.7.0 source** (vendored) — `AddResource` API, `ServerCapabilities.Resources` auto-derivation
+- **Claude Code official docs** (`code.claude.com/docs/`) — SKILL.md, hooks.json, plugins
+- **Anthropic engineering blog** ("Equipping agents for the real world with Agent Skills") — best practices, why catalogs fail
+- **This repo's own documents** — PROJECT.md (incident log), scoping todo, test patterns
 
 ### Secondary (MEDIUM confidence)
 
-- Apple Developer Forums threads 128497, 794080, 817887, 767998, 706638, 706379, 689337, 651808, 723397, 673889, 119445, 814080 — Accepted-but-rejected family, Team ID mismatch, `com.apple.provenance` behaviour, entitlement traps. Forum posts rather than official docs, but several are from Apple DTS engineers and are internally consistent across threads
-- The Eclectic Light Company: "How notarization works", "Notarization: the hardened runtime", "Building and notarizing command tools as Universal binaries" — independent, widely cited, cross-corroborated with Apple docs
-- `goreleaser/example-zig-cgo` — official GoReleaser org example; **not cloned or built in this pass**
-- goreleaser/goreleaser issue #1120 — documented parallel-tap-push race
-- Homebrew/discussions #664, Homebrew/brew issue #16044 — real prefix-detection edge cases on migrated systems
-- Kayla McArthur, "Apple Codesigning In Depth: Part I" — codesign vs spctl distinction, ad-hoc signature behaviour
-- `devenjarvis/lathe`, `dash0-cli` brew-tap-migration (2026-06), `derailed/k9s` packaging, atuin docs/forum — real shipping configs and a dated formula→cask migration
-- Community tap/PAT setup writeups (DNSControl docs, mcginniscommawill.com, dev.to, bindplane.com, engineered.at) — used only to confirm mechanical config shape, never for judgment calls
+- **Cross-agent skills/hooks research** — Cursor, Codex, Antigravity, Kiro live docs
+- **Prior-art hooks** — Pare, jCodeMunch GitHub implementations
+- **MCP ecosystem guidance** — WorkOS, DVNC, llmbestpractices articles
 
-### Tertiary (LOW confidence)
+### Tertiary (LOW–MEDIUM confidence)
 
-- Community writeups on unsigned-CLI user-facing symptoms (donatstudios.com, ctxloom.dev, NJannasch/vibecockpit PR #24) — cross-checked against each other and Apple Forums, but non-primary
-- Hand-rolled `.pkg` staple pipelines (octet-stream.net, scriptingosx.com) — relevant only if the deferred stapling decision is ever revisited
-- General "no special entitlements for a plain Go CLI" blog consensus — **not CGo-tree-sitter-specific**; explicitly flagged as needing an empirical Phase-2 check rather than treated as settled
-- The `xattr` quarantine-flag encoding used in the RED-check script — community-documented, not canonical Apple; a real browser download stays the primary check
+- **Gemini/Hermes skills/hooks** — docs not fully traced; re-verify before Phase 7 scope
+- **opencode plugin details** — SKILL.md fallback confirmed; in-process system details incomplete
 
 ---
-*Synthesized from STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md — researched 2026-08-07*
+
+*Research completed: 2026-08-12*
+*Ready for roadmap: yes*
