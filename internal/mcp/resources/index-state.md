@@ -6,7 +6,8 @@ working directory. An unindexed repository advertises zero tools, while
 
 ## Live re-check
 
-The catalog is re-checked on every request. An index created part-way
+The catalog is re-checked before every `initialize`, `tools/list`,
+`tools/call`, and `server/discover` request. An index created part-way
 through a session appears without a client restart or reconnect.
 
 ## Resources are unaffected
