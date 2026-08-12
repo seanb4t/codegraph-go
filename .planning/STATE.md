@@ -5,8 +5,9 @@ milestone_name: macOS Distribution & Homebrew
 current_phase: 04
 status: "Phase 4 shipped — PR #55"
 stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-last_updated: "2026-08-11T23:37:59.483Z"
+last_updated: "2026-08-12T00:27:48.794Z"
 last_activity: 2026-08-11
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
   completed_phases: 4
@@ -14,7 +15,6 @@ progress:
   completed_plans: 24
   percent: 100
 current_phase_name: codegraph-upgrade-homebrew
-last_activity_desc: Phase 04 execution started
 ---
 
 # Project State
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 Phase: 04
 Plan: Not started
 Status: Phase 4 shipped — PR #55
-Last activity: 2026-08-11
+Last activity: 2026-08-11 - Completed quick task 260811-s5o: cosign installer for self-upgrade job
 
 Progress: [....] 3/4 phases complete (75%)
 
@@ -286,6 +286,7 @@ v1.0's quick tasks are archived; their directories remain under `.planning/quick
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260807-gho | Drop native Windows support — WSL2 only | 2026-08-07 | 085b7a3 | [260807-gho-drop-native-windows-support-wsl2-only](./quick/260807-gho-drop-native-windows-support-wsl2-only/) |
+| 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
 
 ## Deferred Items
 
