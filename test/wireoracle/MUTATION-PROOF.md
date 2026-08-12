@@ -1130,3 +1130,281 @@ before this section and `COVERAGE-BASELINE.md`'s finalization were committed —
 discipline 05-03-PLAN's own "Closing statement" set. Both mutations were reverted; `go build ./...`,
 `go test ./internal/mcp/... -count=1`, `go test ./test/wireoracle/... -count=1`, and `go test
 ./... -count=1` all passed on the reverted, committed tree.
+
+---
+
+## A note on numbering (06-03-PLAN Task 3)
+
+`grep -c '^## Mutation' test/wireoracle/MUTATION-PROOF.md` was run before appending anything below,
+per this plan's own explicit instruction not to assume a number from the plan text — 05-03-PLAN's
+own summary records that exact assumption failing once already. The count returned **11**, with the
+highest existing heading `## Mutation 11 — resource registration moved inside \`if hasIndex\`
+(05-04-PLAN Task 3, RSRC-03)`. The five mutations below continue the sequence as Mutations 12
+through 16.
+
+---
+
+## Mutation 12 — a renamed companion tool, `node` to `peek` (06-03-PLAN Task 3, T-06-05)
+
+**Requirement:** GUARD-01 extended to SKILL.md — a tool renamed at its source without SKILL.md's
+own text moving with it must turn `TestSkillNamesOnlyRealTools` red, naming the now-unregistered
+token SKILL.md still carries.
+
+**Edit:** three sites renamed the `node` companion to `peek`, deliberately leaving
+`.claude/skills/codegraph/SKILL.md` untouched (it still names `codegraph_node` three times, in the
+decision table, the full-reference list, and nowhere else) — that omission IS the drift being
+demonstrated.
+
+`internal/mcp/server.go`, the `companionNames` slice:
+
+```diff
+-var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "status"}
++var companionNames = []string{"peek", "search", "callers", "callees", "impact", "files", "status"}
+```
+
+`internal/mcp/tools.go`, `companionTool`'s matching case:
+
+```diff
+-	case "node":
++	case "peek":
+ 		return &mcp.Tool{
+-			Name:        "codegraph_node",
++			Name:        "codegraph_peek",
+ 			Description: "Show a symbol's signature, calls, and callers, or a line-numbered file read",
+```
+
+`internal/mcp/tools.go`, `companionHandler`'s matching case:
+
+```diff
+-	case "node":
++	case "peek":
+ 		mcp.AddTool(s, tool, func(ctx context.Context, req *mcp.CallToolRequest, args NodeArgs) (*mcp.CallToolResult, any, error) {
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go internal/mcp/tools.go` showed exactly
+these three hunks; `go build ./...` exited 0.
+
+**Gate that went red — the named gate, run in isolation
+(`go test ./internal/mcp/... -run TestSkillNamesOnlyRealTools -count=1 -v`):**
+
+```
+=== RUN   TestSkillNamesOnlyRealTools
+    skill_claims_drift_test.go:310: ../../.claude/skills/codegraph/SKILL.md names codegraph_node, which is not a member of allToolNames() — a renamed or removed tool left behind in the skill
+    skill_claims_drift_test.go:310: ../../.claude/skills/codegraph/SKILL.md names codegraph_node, which is not a member of allToolNames() — a renamed or removed tool left behind in the skill
+    skill_claims_drift_test.go:310: ../../.claude/skills/codegraph/SKILL.md names codegraph_node, which is not a member of allToolNames() — a renamed or removed tool left behind in the skill
+--- FAIL: TestSkillNamesOnlyRealTools (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.345s
+```
+
+The gate fires once per occurrence of `codegraph_node` in SKILL.md (three sites: the decision
+table, the full-reference list entry, and the closing "8 tools" sentence's list) — the same
+"skill is the third surface" bug class T-06-05 names, this time demonstrated on the real tree
+rather than only asserted.
+
+**Revert confirmation:** all three hunks were reverted with `git checkout -- internal/mcp/server.go
+internal/mcp/tools.go`; `git status --porcelain -- internal/` and `git diff --exit-code --
+internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0 (4.6s).
+
+---
+
+## Mutation 13 — a dead resource URI in SKILL.md's full-reference pointer (06-03-PLAN Task 3, T-06-05)
+
+**Requirement:** GUARD-01 extended to SKILL.md — a `codegraph://` URI pointing at a resource stem
+the server does not serve must turn `TestSkillResourceURIsResolve` red, and this entry additionally
+records which OTHER SKILL.md guards stayed green from the same one-line edit, per 05-03-PLAN's own
+asymmetry-recording discipline (Mutation 9's note applies the same practice here).
+
+**Edit:** `.claude/skills/codegraph/SKILL.md`'s full-reference pointer for `codegraph_status`:
+
+```diff
+-- `codegraph_status` → `codegraph://tools/status`
++- `codegraph_status` → `codegraph://tools/healthcheck`
+```
+
+**Confirmed applied:** `git diff -- .claude/skills/codegraph/SKILL.md` showed exactly this hunk.
+
+**Gate that went red — the named gate
+(`go test ./internal/mcp/... -run TestSkillResourceURIsResolve -count=1 -v`):**
+
+```
+=== RUN   TestSkillResourceURIsResolve
+    skill_claims_drift_test.go:337: ../../.claude/skills/codegraph/SKILL.md names codegraph://tools/healthcheck, which is not a value in resourceURIFor — the skill points at a resource the server does not serve
+--- FAIL: TestSkillResourceURIsResolve (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.298s
+```
+
+**Guards that stayed green from the same edit (asymmetry, recorded per 05-03-PLAN's discipline):**
+running the full `TestSkill*` family with the mutation still applied
+(`go test ./internal/mcp/... -run TestSkill -count=1 -v`) showed every other test passing —
+`TestSkillFrontmatterIsSpecCompliant`, `TestSkillLeadsWithDecisionTable`,
+`TestSkillStaysWithinBudget`, `TestSkillNamesOnlyRealTools` (the tool NAME `codegraph_status` is
+still real; only the URI text next to it broke), `TestSkillDefersNumericFactsToResources`,
+`TestSkillCountClaimsMatchSourceSets`, `TestSkillEnvVarNamesAreReal`, `TestSkillCarriesNoHostFacts`,
+`TestSkillNamesTheFilterWhenItNamesCompanions`, `TestSkillCarriesExactlyThreeWorkedExamples`, and
+both non-vacuity tests. This is the expected asymmetry: a broken resource pointer is a narrower
+defect than a broken tool name, and only the one checker built to catch exactly that shape fired.
+
+**Revert confirmation:** the hunk was reverted with `git checkout -- .claude/skills/codegraph/SKILL.md`;
+`git diff --exit-code -- .claude/skills/codegraph/SKILL.md` showed nothing changed; `go test
+./internal/mcp/... -run TestSkill -count=1` exited 0.
+
+---
+
+## Mutation 14 — the `resume` matcher changed in the go:embed fragment, not the live registration (06-03-PLAN Task 3, D-04/A2)
+
+**Requirement:** the fragment/registration parity guard (`internal/agents/hookpackage_test.go`'s
+`TestHookRegistrationMatchesFragmentAndScript`) must turn red when `.claude/hooks/hooks.json`
+(Phase 7's `go:embed` source) drifts from `.claude/settings.json` (what this repository actually
+runs), naming both files. 06-01-PLAN's own summary records having exercised "a targeted one-field
+mutation to `hooks.json`" during that plan's own execution, but that run is not itself recorded in
+this document and its target field is not specified in the summary text — this entry runs it fresh
+against the field 06-03-PLAN names explicitly (the `resume` matcher) rather than relying on an
+unspecified prior claim.
+
+**Edit:** `.claude/hooks/hooks.json`'s second `SessionStart` entry:
+
+```diff
+       {
+-        "matcher": "resume",
++        "matcher": "clear",
+         "hooks": [
+```
+
+**Confirmed applied:** `git diff -- .claude/hooks/hooks.json` showed exactly this hunk.
+
+**Gate that went red — the named gate
+(`go test ./internal/agents/... -run 'TestHookRegistrationMatchesFragmentAndScript$' -count=1 -v`):**
+
+```
+=== RUN   TestHookRegistrationMatchesFragmentAndScript
+    hookpackage_test.go:344: hooks.SessionStart differs between ../../.claude/settings.json and ../../.claude/hooks/hooks.json — Phase 7 would embed a fragment that differs from what actually runs here.
+        settings.json: []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"startup"}, map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"resume"}}
+        hooks.json:    []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"startup"}, map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"clear"}}
+--- FAIL: TestHookRegistrationMatchesFragmentAndScript (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.091s
+```
+
+The failure names both `../../.claude/settings.json` and `../../.claude/hooks/hooks.json` in its
+message and prints the full decoded block from each side, exactly the "names both files" property
+the plan requires.
+
+**Revert confirmation:** the hunk was reverted with `git checkout -- .claude/hooks/hooks.json`;
+`git diff --exit-code -- .claude/hooks/hooks.json` showed nothing changed; `go test
+./internal/agents/... -count=1` exited 0.
+
+---
+
+## Mutation 15 — one character changed in the nudge message (06-03-PLAN Task 3, D-06/NUDGE-01)
+
+**Requirement:** `TestSessionNudgeBehavesPerIndexPresence`'s byte-equality assertion must go red on
+a single-character change to the emitted text, proving the check is a byte-equality comparison and
+not a substring/prefix check that a near-miss could slip past.
+
+**Edit:** `.claude/hooks/session-nudge.sh`'s `printf` argument, trailing "questions" → "question"
+(dropped one character):
+
+```diff
+-  printf '%s\n' 'This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.'
++  printf '%s\n' 'This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.'
+```
+
+**Confirmed applied:** `git diff -- .claude/hooks/session-nudge.sh` showed exactly this hunk.
+
+**Gate that went red — the named gate
+(`go test ./internal/agents/... -run TestSessionNudgeBehavesPerIndexPresence -count=1 -v`):**
+
+```
+=== RUN   TestSessionNudgeBehavesPerIndexPresence
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/codegraph_dir_present,_env_set
+    hookpackage_test.go:188: stdout = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.\n", want "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.\n"
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/no_codegraph_entry_at_all,_env_set
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_a_regular_file,_env_set
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_an_empty_directory,_env_set
+    hookpackage_test.go:188: stdout = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.\n", want "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.\n"
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/env_unset,_cmd.Dir_indexed
+    hookpackage_test.go:188: stdout = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.\n", want "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.\n"
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/env_unset,_cmd.Dir_unindexed
+--- FAIL: TestSessionNudgeBehavesPerIndexPresence (0.06s)
+    --- FAIL: TestSessionNudgeBehavesPerIndexPresence/codegraph_dir_present,_env_set (0.03s)
+    --- PASS: TestSessionNudgeBehavesPerIndexPresence/no_codegraph_entry_at_all,_env_set (0.01s)
+    --- PASS: TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_a_regular_file,_env_set (0.01s)
+    --- FAIL: TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_an_empty_directory,_env_set (0.01s)
+    --- FAIL: TestSessionNudgeBehavesPerIndexPresence/env_unset,_cmd.Dir_indexed (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.124s
+```
+
+The two sub-cases where `.codegraph/` is absent still pass unaffected (no output expected either
+way), and every sub-case where the nudge fires fails on the exact byte mismatch — confirming the
+assertion is byte-equality, not a substring check that a dropped character could pass silently.
+
+**Revert confirmation:** the hunk was reverted with `git checkout -- .claude/hooks/session-nudge.sh`;
+`git diff --exit-code -- .claude/hooks/session-nudge.sh` showed nothing changed; `go test
+./internal/agents/... -count=1` exited 0.
+
+---
+
+## Mutation 16 — the nudge script renamed on disk (06-03-PLAN Task 3, NUDGE-01/T-06-07)
+
+**Requirement:** `TestHookRegistrationMatchesFragmentAndScript`'s command-path resolution assertion
+must go red when the script a registration names no longer exists on disk — the check that a
+silently-disabled nudge fails the build instead of failing quietly, per the plan's own framing.
+
+**Edit:** `.claude/hooks/session-nudge.sh` renamed to `.claude/hooks/session-nudge-renamed.sh` via
+`mv` (a filesystem rename, not a source edit — there is no diff to show; `ls .claude/hooks/`
+confirmed the script was absent under its registered name and present under the new one).
+
+**Gate that went red — the named gate
+(`go test ./internal/agents/... -run 'TestHookRegistrationMatchesFragmentAndScript$' -count=1 -v`):**
+
+```
+=== RUN   TestHookRegistrationMatchesFragmentAndScript
+    hookpackage_test.go:377: command path "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh" (resolved "../../.claude/hooks/session-nudge.sh") does not exist: stat ../../.claude/hooks/session-nudge.sh: no such file or directory
+--- FAIL: TestHookRegistrationMatchesFragmentAndScript (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.053s
+```
+
+This is the failure mode the plan calls out explicitly: a renamed or deleted script does not make
+the nudge silently stop firing with nothing noticing — it fails the build.
+
+**Revert confirmation:** the file was renamed back with `mv .claude/hooks/session-nudge-renamed.sh
+.claude/hooks/session-nudge.sh`; `git status --porcelain -- .claude/` showed nothing changed (the
+file was never staged or committed under the renamed name, so there is no git-tracked residue to
+revert); `go test ./internal/agents/... -count=1` exited 0.
+
+---
+
+## Closing statement (06-03-PLAN Task 3)
+
+`git status --porcelain` was checked after all five mutations above were reverted and before this
+section was written and staged — the same cleanliness-proves-no-residue discipline every prior
+Closing statement in this document set. All five mutations were reverted; the tree showed no diff
+(`git diff --exit-code` exited 0) before this document's edits were staged.
+
+`go test ./... -count=1` was then run on the reverted tree TWICE (once to verify the reverted tree
+directly, once again to satisfy this task's own `<verify>` block). `internal/daemon` failed each
+time, but on a DIFFERENT named test each run —
+`TestRunWatchdogCancelsRunOnSimulatedReparent` the first time, `TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock`
+the second — both plain timeouts inside the same package under the same full-suite concurrent load.
+This is the load-dependent condition this repository's own `STATE.md` already documents (GitHub
+issue #17, "Daemon extreme-load tail (ACCEPTED, not a gap)" — orphaned-goroutine root cause fixed in
+Phase 4, one plain-timeout failure still observed under pathological workstation load, 52/52 real
+CI runs clean on the actual runner class); a different test name surfacing each run is consistent
+with a load-timing race rather than a deterministic regression this plan's changes introduced — none
+of this task's five mutations touch `internal/daemon` or anything it imports. Both named tests were
+re-run in isolation and both passed:
+`go test ./internal/daemon/... -run TestRunWatchdogCancelsRunOnSimulatedReparent -count=1 -v` passed
+in 1.06s; `go test ./internal/daemon/... -run TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock
+-count=1 -v` passed in 5.17s — both matching STATE.md's own description of this condition exactly
+("fails under full-suite load, passes isolated"). This was identified as the documented pre-existing
+condition, not absorbed as a new failure, per this plan's own acceptance criteria. Every other
+package in both `go test ./... -count=1` runs passed, including `internal/mcp` (4.1-4.6s),
+`internal/agents` (0.4s, part of the passing set), and `test/wireoracle` (36.9-38.7s).
+
+`grep -c '^## Mutation' test/wireoracle/MUTATION-PROOF.md` on the committed file returns **16** —
+the pre-task count of 11 plus the 5 entries appended by this task.

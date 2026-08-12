@@ -52,6 +52,64 @@ const skillBodyMaxLines = 500
 // skill's frontmatter description field.
 const skillDescriptionMaxChars = 1024
 
+// skillWorkedExampleCount is D-05's locked worked-example count (06-CONTEXT.md:
+// "Three worked examples, in this order") — a locked user decision, not a
+// value derivable from code. Recorded as a named constant, with this doc
+// comment stating its source, so the number cannot be mistaken for a
+// source-derived one the way every other checker in this file compares
+// against a real value.
+const skillWorkedExampleCount = 3
+
+// nudgeScriptPath reaches the SessionStart nudge script 06-01 shipped, from
+// internal/mcp. This file's checks on its content are the SECOND layer over
+// the nudge text: internal/agents/hookpackage_test.go's nudgeLine constant
+// pins the emitted bytes exactly (the FIRST layer, proving nothing about
+// their honesty); the checks here pin the same text against the live tool
+// roster (allToolNames()) and the real environment-variable name
+// (allowlistEnvName), so a future edit to the message cannot pass both
+// layers while naming something that does not exist.
+const nudgeScriptPath = "../../.claude/hooks/session-nudge.sh"
+
+// workedExampleHeadingRe matches a level-3 markdown heading line, anchored
+// to the start of a line via the (?m) multiline flag. The trailing space in
+// the pattern is what excludes a level-4 ("#### ") heading from matching.
+var workedExampleHeadingRe = regexp.MustCompile(`(?m)^### `)
+
+// countSkillWorkedExamples locates the worked-examples "## " section — the
+// first "## " heading whose text contains "example" case-insensitively —
+// bounds it at the next "## " heading or the end of the document, and
+// counts workedExampleHeadingRe matches strictly within those bounds. The
+// bounding matters: an unbounded count would silently absorb a "### "
+// heading added to any other section later (e.g. a future reference or
+// troubleshooting section with its own sub-headings), overcounting what the
+// worked-examples section itself actually carries. Returns 0 if no
+// worked-examples heading is found at all.
+func countSkillWorkedExamples(body string) int {
+	lines := strings.Split(body, "\n")
+
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, "## ") && strings.Contains(strings.ToLower(line), "example") {
+			start = i
+			break
+		}
+	}
+	if start == -1 {
+		return 0
+	}
+
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "## ") {
+			end = i
+			break
+		}
+	}
+
+	section := strings.Join(lines[start+1:end], "\n")
+	return len(workedExampleHeadingRe.FindAllString(section, -1))
+}
+
 // resourceURIRe matches a codegraph:// resource URI. The character class
 // deliberately excludes trailing punctuation (a period, comma, or closing
 // paren at the end of a sentence) so a URI mentioned at the end of prose
@@ -394,6 +452,27 @@ func TestSkillNamesTheFilterWhenItNamesCompanions(t *testing.T) {
 	}
 }
 
+// TestSkillCarriesExactlyThreeWorkedExamples is SKILL-02's count gate:
+// countSkillWorkedExamples's real-file verdict must equal
+// skillWorkedExampleCount exactly. Boundary behaviour is what matters here,
+// not just the passing case — see TestSkillWorkedExampleCounterIsNotVacuous
+// for the synthetic 2/3/4-example discrimination this depends on, and this
+// plan's own summary for the verbatim failure text observed at both real
+// boundaries (one example deleted, one duplicated).
+func TestSkillCarriesExactlyThreeWorkedExamples(t *testing.T) {
+	data, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", skillPath, err)
+	}
+	_, body, err := splitSkillFrontmatter(string(data))
+	if err != nil {
+		t.Fatalf("splitSkillFrontmatter(%s): %v", skillPath, err)
+	}
+	if got := countSkillWorkedExamples(body); got != skillWorkedExampleCount {
+		t.Errorf("%s carries %d worked example(s), want %d (D-05 in 06-CONTEXT.md locks the count at three)", skillPath, got, skillWorkedExampleCount)
+	}
+}
+
 // TestSkillStructureCheckersAreNotVacuous proves the three NEW helpers this
 // file declares — splitSkillFrontmatter, skillFrontmatterField,
 // decisionTablePrecedesSecondSection — and the new resourceURIRe pattern
@@ -515,4 +594,102 @@ func TestSkillStructureCheckersAreNotVacuous(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestSkillWorkedExampleCounterIsNotVacuous proves countSkillWorkedExamples
+// discriminates on synthetic inputs, never touching the real SKILL.md: the
+// 0/1/2/3/4-heading counts, a heading placed outside the worked-examples
+// section (must not be counted), and a level-4 heading (must not be
+// mistaken for a level-3 one).
+func TestSkillWorkedExampleCounterIsNotVacuous(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want int
+	}{
+		{"zero examples", "## Worked examples\n\nNo sub-headings here.\n\n## Full reference\n", 0},
+		{"one example", "## Worked examples\n\n### First\n\nBody.\n\n## Full reference\n", 1},
+		{"two examples", "## Worked examples\n\n### First\n\n### Second\n\n## Full reference\n", 2},
+		{"three examples", "## Worked examples\n\n### First\n\n### Second\n\n### Third\n\n## Full reference\n", 3},
+		{"four examples", "## Worked examples\n\n### First\n\n### Second\n\n### Third\n\n### Fourth\n\n## Full reference\n", 4},
+		{
+			"heading outside the worked-examples section is not counted",
+			"## Before\n\n### Not an example\n\n## Worked examples\n\n### First\n\n## Full reference\n",
+			1,
+		},
+		{
+			"a #### heading is not counted as ###",
+			"## Worked examples\n\n### First\n\n#### Not a worked example\n\n## Full reference\n",
+			1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := countSkillWorkedExamples(tc.body)
+			if got != tc.want {
+				t.Errorf("countSkillWorkedExamples(%q) = %d, want %d", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNudgeTextNamesOnlyRealTools is GUARD-01's tool-name half for the
+// nudge script: every codegraph_<name> token the emitted text carries must
+// resolve against allToolNames(), same as TestSkillNamesOnlyRealTools does
+// for SKILL.md. Additionally asserts docNamesCompanionsWithoutTheFilter
+// returns nil for the script's text — the nudge names only
+// codegraph_explore, the one tool no filter can remove, so it makes no
+// claim CODEGRAPH_MCP_TOOLS could falsify.
+func TestNudgeTextNamesOnlyRealTools(t *testing.T) {
+	data, err := os.ReadFile(nudgeScriptPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", nudgeScriptPath, err)
+	}
+	doc := string(data)
+
+	known := make(map[string]bool, len(allToolNames()))
+	for _, name := range allToolNames() {
+		known[name] = true
+	}
+
+	matches := toolNameTokenRe.FindAllString(doc, -1)
+	if len(matches) == 0 {
+		t.Fatal("found zero codegraph_<name> tokens in the nudge script — this test would verify nothing")
+	}
+	for _, m := range matches {
+		if !known[m] {
+			t.Errorf("%s names %s, which is not a member of allToolNames() — a renamed or removed tool left behind in the nudge text", nudgeScriptPath, m)
+		}
+	}
+
+	if err := docNamesCompanionsWithoutTheFilter(doc); err != nil {
+		t.Errorf("%s %v", nudgeScriptPath, err)
+	}
+}
+
+// TestNudgeTextCarriesNoUnpinnedFacts is GUARD-01's remaining half for the
+// nudge script: no host-specific path, no default-or-max numeric claim, no
+// count claim, and the only CODEGRAPH_-prefixed token permitted (if any) is
+// allowlistEnvName.
+func TestNudgeTextCarriesNoUnpinnedFacts(t *testing.T) {
+	data, err := os.ReadFile(nudgeScriptPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", nudgeScriptPath, err)
+	}
+	doc := string(data)
+
+	if found := hostFactsIn(doc); len(found) > 0 {
+		t.Errorf("%s carries host-specific path(s) %v — no agent-facing file may interpolate machine-specific filesystem layout", nudgeScriptPath, found)
+	}
+	if claims := numericClaimsMultiset(doc); len(claims) != 0 {
+		t.Errorf("%s states numeric claim(s) %v — no default or maximum belongs in the nudge text", nudgeScriptPath, claims)
+	}
+	if claims := countClaimsIn(doc); len(claims) != 0 {
+		t.Errorf("%s states count claim(s) %v — no tool/companion count belongs in the nudge text", nudgeScriptPath, claims)
+	}
+	for _, m := range envVarTokenRe.FindAllString(doc, -1) {
+		if m != allowlistEnvName {
+			t.Errorf("%s names environment variable %q, which is not %s", nudgeScriptPath, m, allowlistEnvName)
+		}
+	}
 }
