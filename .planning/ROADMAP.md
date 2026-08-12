@@ -127,11 +127,14 @@ Plans:
 
 **Notes**: The SKILL.md is portable across Claude Code / Cursor / Codex CLI / opencode with zero changes (shared `agentskills.io` frontmatter); the `hooks.json` is not — schemas diverge per agent, which is why distribution is Claude-Code-only in v1 (Phase 7) and porting is v2 (AGENT-04…07). Frontmatter `description` is the only field always in context, so it must be trigger-shaped ("use when the user asks …"), not a summary. Every factual claim in the skill body is subject to the Phase-5 GUARD-01 discipline — the guard covers skill, resources, and instructions alike, not resources alone.
 
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 6`)
+- [ ] 06-01-PLAN.md — SessionStart nudge package: script, `.claude/settings.json` registration, Phase-7 embed fragment, executed-in-both-trees behavioural test (NUDGE-01, NUDGE-02)
+- [ ] 06-02-PLAN.md — SKILL.md structural contract as a guard test, then the skill skeleton: frontmatter, decision table, skip condition, resource-URI pointers (SKILL-01)
+- [ ] 06-03-PLAN.md — the three worked examples, the example-count and nudge-text guards, and demonstrated-red mutation proofs for every Phase-6 gate (SKILL-02)
+- [ ] 06-04-PLAN.md — live-session rehearsal and committed verification artifacts (SKILL-03, plus the live half of NUDGE-01/02)
 
 ### Phase 7: `codegraph install` Skill + Hooks Distribution (Claude Code)
 
