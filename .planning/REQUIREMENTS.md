@@ -11,9 +11,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### MCP Resources Capability
 
-- [ ] **RSRC-01**: Agent client can call `resources/list` and see one resource for each of the 8 tools plus `CODEGRAPH_MCP_TOOLS` semantics and index-state preconditions
-- [ ] **RSRC-02**: Agent client can call `resources/read` on any listed resource URI and receive the full reference doc as `text/markdown`
-- [ ] **RSRC-03**: Resources register unconditionally at server startup — available even when zero index-gated tools are visible, so an unindexed repo can still teach an agent how the tools work
+- [x] **RSRC-01**: Agent client can call `resources/list` and see one resource for each of the 8 tools plus `CODEGRAPH_MCP_TOOLS` semantics and index-state preconditions
+- [x] **RSRC-02**: Agent client can call `resources/read` on any listed resource URI and receive the full reference doc as `text/markdown`
+- [x] **RSRC-03**: Resources register unconditionally at server startup — available even when zero index-gated tools are visible, so an unindexed repo can still teach an agent how the tools work
 
 ### Claims Drift Guard
 
@@ -77,9 +77,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| RSRC-01 | Phase 5 | Pending |
-| RSRC-02 | Phase 5 | Pending |
-| RSRC-03 | Phase 5 | Pending |
+| RSRC-01 | Phase 5 | Complete |
+| RSRC-02 | Phase 5 | Complete |
+| RSRC-03 | Phase 5 | Complete |
 | GUARD-01 | Phase 5 | Pending |
 | GUARD-02 | Phase 5 | Pending |
 | SKILL-01 | Phase 6 | Pending |
@@ -95,6 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AGENT-03 | Phase 7 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 16 total
 - Mapped to phases: 16 ✓
 - Unmapped: 0
