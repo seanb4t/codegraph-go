@@ -179,3 +179,13 @@ None - no external service configuration required.
 ---
 *Phase: 05-mcp-resources-capability-claims-drift-guard*
 *Completed: 2026-08-12*
+
+## Self-Check: PASSED
+
+- FOUND: `testdata/wireoracle/transcripts/resources-read-node.golden`
+- FOUND: `testdata/wireoracle/transcripts/resources-list-no-index.golden`
+- FOUND: `testdata/wireoracle/transcripts/resources-read-unknown.golden`
+- FOUND commit `92a8281` (Task 1, test)
+- FOUND commit `a2cc1e9` (Task 2, test)
+- FOUND commit `44f479c` (Task 3, test)
+- FOUND commit `ddb4370` (docs: SUMMARY.md)
