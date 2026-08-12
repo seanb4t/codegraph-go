@@ -216,6 +216,22 @@ func Anchors() []Anchor {
 				assertToolsListChangedCapability(t, "modern-discover-explore", stdout, 1)
 			},
 		},
+		{
+			Scenario: "resources-list",
+			Name:     "resources/list cache control: cacheScope == \"private\", ttlMs == 0",
+			Assert: func(t *testing.T, stdout []byte) {
+				t.Helper()
+				assertResourceCacheControl(t, "resources-list", stdout)
+			},
+		},
+		{
+			Scenario: "resources-read-explore",
+			Name:     "resources/read cache control: cacheScope == \"private\", ttlMs == 0",
+			Assert: func(t *testing.T, stdout []byte) {
+				t.Helper()
+				assertResourceCacheControl(t, "resources-read-explore", stdout)
+			},
+		},
 	}
 }
 
@@ -265,6 +281,50 @@ func assertDiscoverCacheControl(t *testing.T, scenario string, stdout []byte) {
 		return
 	}
 	t.Fatalf("scenario %q: no id=1 result found in captured stdout — a missing response must never read as a pass", scenario)
+}
+
+// assertResourceCacheControl is assertDiscoverCacheControl's direct
+// sibling for the resources method family (plan 05-01 Task 3): it decodes
+// only the id=2 response frame's result.cacheScope and result.ttlMs — id=2
+// because both resources-list and resources-read-explore send
+// initializeRequest(1) then their one async request as id 2, unlike
+// modern-discover-explore's sessionless id=1 discover call — and fails
+// naming the scenario and quoting the observed line unless cacheScope is
+// "private" and ttlMs is absent or zero. This pins server.go's
+// "resources/list", "resources/read" cacheScope case (Task 1) on the wire,
+// so it cannot silently revert to the SDK's "public" default. Fails if no
+// id=2 result line is found at all — a missing response must never read
+// as a pass.
+func assertResourceCacheControl(t *testing.T, scenario string, stdout []byte) {
+	t.Helper()
+
+	for _, line := range bytes.Split(stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any `json:"id"`
+			Result *struct {
+				CacheScope string `json:"cacheScope"`
+				TTLMs      int    `json:"ttlMs"`
+			} `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != 2 || frame.Result == nil {
+			continue
+		}
+		if frame.Result.CacheScope != discoverCacheScopePrivate {
+			t.Fatalf("scenario %q: result.cacheScope = %q, want %q: %q", scenario, frame.Result.CacheScope, discoverCacheScopePrivate, line)
+		}
+		if frame.Result.TTLMs != discoverCacheScopeTTLMs {
+			t.Fatalf("scenario %q: result.ttlMs = %d, want %d: %q", scenario, frame.Result.TTLMs, discoverCacheScopeTTLMs, line)
+		}
+		return
+	}
+	t.Fatalf("scenario %q: no id=2 result found in captured stdout — a missing response must never read as a pass", scenario)
 }
 
 // assertErrorCode decodes only the top-level error.code field of the
