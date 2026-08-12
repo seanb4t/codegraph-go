@@ -100,6 +100,29 @@ func toolCallRequest(id int, name string, arguments any) map[string]any {
 	}
 }
 
+// resourcesListRequest returns a bare "resources/list" request with the
+// given id — resourcesListRequest/toolsListRequest's sibling.
+func resourcesListRequest(id int) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "resources/list",
+	}
+}
+
+// resourceReadRequest returns a "resources/read" request naming a URI —
+// toolCallRequest's sibling for the resources method family.
+func resourceReadRequest(id int, uri string) map[string]any {
+	return map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"method":  "resources/read",
+		"params": map[string]any{
+			"uri": uri,
+		},
+	}
+}
+
 // modernProtocolVersion is a package-local, hand-authored literal
 // (D-06/VRFY-01) holding the `2026-07-28` revision — never read from an
 // SDK constant, mirroring handshakeExploreProtocolVersion below and
@@ -494,13 +517,16 @@ func initializeRequestOmittingVersion(id int) map[string]any {
 // opt-in allowlist to an opt-out narrowing filter: the SET-but-EMPTY value,
 // the only wire shape that distinguishes a set variable from an unset one,
 // and therefore the frozen proof that the server reads os.LookupEnv rather
-// than os.Getenv) = 29. A shrinking count is the failure mode this constant
-// exists to catch.
+// than os.Getenv) + 2 scenarios (phase 5 plan 01's RSRC-01/02/03 wire
+// proof: resources-list and resources-read-explore, the first
+// resources/list and resources/read scenarios in this corpus, anchored
+// by assertResourceCacheControl's cacheScope:"private" check) = 31. A
+// shrinking count is the failure mode this constant exists to catch.
 //
 // Note that toolslist-allowlist was RENAMED to toolslist-narrowed in the
 // same change, not removed — a rename moves a .golden file's name without
 // moving this count.
-const ExpectedScenarioCount = 29
+const ExpectedScenarioCount = 31
 
 func Scenarios() []Scenario {
 	return []Scenario{
@@ -1173,6 +1199,35 @@ func Scenarios() []Scenario {
 			// session line instead (assertNoSessionLine), never a real
 			// tool count.
 			ExpectTools: 0,
+		},
+
+		// --- MCP Resources (2) — plan 05-01. Both scenarios carry
+		// exactly one async request and it is last — a VERIFIED
+		// constraint, not the [ASSUMED] one 05-RESEARCH.md A2 recorded:
+		// go-sdk dispatches every call except "initialize" through
+		// jsonrpc2.Async(ctx) (server.go:1910-1915), so resources/list
+		// and resources/read race each other and race any request queued
+		// after them exactly as tools/call does — the same worker-pool
+		// ordering constraint documented above Scenarios() for
+		// tools/call, and the same class of flake already open as a
+		// MAJOR todo in STATE.md for toolslist-repeat. ---
+		{
+			Name:  "resources-list",
+			Index: true,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourcesListRequest(2),
+			},
+			ExpectTools: 8,
+		},
+		{
+			Name:  "resources-read-explore",
+			Index: true,
+			Requests: []map[string]any{
+				initializeRequest(1),
+				resourceReadRequest(2, "codegraph://tools/explore"),
+			},
+			ExpectTools: 8,
 		},
 	}
 }
