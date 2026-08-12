@@ -5,8 +5,8 @@ milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 6
 current_phase_name: Agent Skill Package — SKILL.md & SessionStart Nudge
 status: planning
-stopped_at: Phase 5 complete, ready to plan Phase 6
-last_updated: "2026-08-12T19:58:49.283Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-08-12T21:43:45.101Z"
 last_activity: 2026-08-12
 last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
 progress:
@@ -347,8 +347,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-12T19:58:49.283Z
-Stopped at: Phase 5 complete, ready to plan Phase 6
+Last session: 2026-08-12T21:43:45.090Z
+Stopped at: Phase 6 context gathered
   NEXT: `/gsd-plan-phase 5` — MCP Resources Capability & Claims Drift Guard
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -391,7 +391,7 @@ Stopped at: Phase 5 complete, ready to plan Phase 6
       prove insufficient, and that evidence does not exist yet.
   NOTE: no `v0.10.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/05-mcp-resources-capability-claims-drift-guard/05-CONTEXT.md
+Resume file: .planning/phases/06-agent-skill-package-skill-md-sessionstart-nudge/06-CONTEXT.md
 
 ## Operator Next Steps
 
