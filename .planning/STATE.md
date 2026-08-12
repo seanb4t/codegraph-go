@@ -2,9 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
+current_phase: 5
+current_phase_name: 1st of 4 phases in v0.10.0
 status: planning
-last_updated: "2026-08-12T01:19:00.063Z"
-last_activity: 2026-08-11
+stopped_at: Phase 5 context gathered
+last_updated: "2026-08-12T16:35:40.908Z"
+last_activity: 2026-08-12
+last_activity_desc: "v0.10.0 roadmap created: 4 phases (5-8), 16/16 v1 requirements mapped"
 progress:
   total_phases: 4
   completed_phases: 0
@@ -341,8 +345,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-12
-Stopped at: v0.10.0 roadmap created — Phases 5-8, all 16 v1 requirements mapped, no orphans
+Last session: 2026-08-12T16:35:40.899Z
+Stopped at: Phase 5 context gathered
   NEXT: `/gsd-plan-phase 5` — MCP Resources Capability & Claims Drift Guard
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -385,7 +389,7 @@ Stopped at: v0.10.0 roadmap created — Phases 5-8, all 16 v1 requirements mappe
       prove insufficient, and that evidence does not exist yet.
   NOTE: no `v0.10.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/ROADMAP.md
+Resume file: .planning/phases/05-mcp-resources-capability-claims-drift-guard/05-CONTEXT.md
 
 ## Operator Next Steps
 
