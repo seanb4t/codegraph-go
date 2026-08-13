@@ -1,10 +1,13 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // readmePath is the repository README, reached from internal/mcp. Mirrors
@@ -31,6 +34,13 @@ const allowlistEnvName = "CODEGRAPH_MCP_TOOLS"
 // allowlist gate — a fix for one wire-contract defect must not silently
 // introduce another.
 const instructionsMaxBytes = 600
+
+// resourcesAnchor is WIRE-03's resources half — the literal substring the
+// rewritten instructions const must carry so a client is pointed at
+// resources/list for tool-by-tool reference docs (D-03: generic phrasing,
+// no codegraph:// URI enumerated inside the wire-budget-constrained
+// const).
+const resourcesAnchor = "resources/list"
 
 // TestInstructionsNamesTheNarrowingFilter pins the wire contract against
 // the behavior it describes. The instructions constant ships to every MCP
@@ -93,6 +103,7 @@ func TestInstructionsDescribesEveryVisibilityMechanism(t *testing.T) {
 		{"the default tool surface", "default"},
 		{"the CODEGRAPH_MCP_TOOLS narrowing filter", allowlistEnvName},
 		{"the missing-index remedy (MCP-03)", "codegraph init"},
+		{"the resources reference surface", resourcesAnchor},
 	}
 
 	for _, m := range mechanisms {
@@ -118,6 +129,114 @@ func TestInstructionsStaysWithinWireBudget(t *testing.T) {
 	}
 	if strings.TrimSpace(instructions) == "" {
 		t.Errorf("instructions is empty; every client would receive no guidance at all")
+	}
+}
+
+// resourcesClaimResolves is WIRE-03's resources-half checker: it proves the
+// claim carried by resourcesAnchor is not merely present in claim, but
+// actually resolves against a live capability — at least one resource is
+// advertised, and reading the first advertised URI returns non-empty
+// content. Every input is a parameter (never package state, never a live
+// session opened internally) specifically so Task 3's non-vacuity table
+// test can drive it with synthetic inputs. There is no t.Skip branch
+// anywhere in this checker or its caller — absence of the claim is a
+// failure, not a skip (the exact vacuous-pass hole this guard exists to
+// close).
+func resourcesClaimResolves(claim string, uris []string, read func(string) ([]byte, error)) error {
+	if !strings.Contains(claim, resourcesAnchor) {
+		return fmt.Errorf("claim %q never mentions %q, so a client reading it has no way to learn resources/list exists", claim, resourcesAnchor)
+	}
+	if len(uris) == 0 {
+		return fmt.Errorf("claim %q names %q, but resources/list advertised zero resources — the claim does not resolve", claim, resourcesAnchor)
+	}
+	content, err := read(uris[0])
+	if err != nil {
+		return fmt.Errorf("claim %q names %q, but reading advertised URI %q failed: %w", claim, resourcesAnchor, uris[0], err)
+	}
+	if len(content) == 0 {
+		return fmt.Errorf("claim %q names %q, but reading advertised URI %q returned empty content", claim, resourcesAnchor, uris[0])
+	}
+	return nil
+}
+
+// TestInstructionsResourcesClaimIsResolvable is WIRE-03's resources-half
+// live proof: it builds a server over an indexed fixture, opens a session
+// via newTestSession, and drives resourcesClaimResolves against a REAL
+// ListResources/ReadResource round-trip — never a hardcoded URI list (see
+// resources_test.go's identical pattern, this package's own precedent).
+func TestInstructionsResourcesClaimIsResolvable(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	companions, _ := ResolveCompanions("", false)
+	s := BuildServer(true, companions, dir, dir)
+
+	session, cleanup := newTestSession(t, s)
+	defer cleanup()
+
+	listRes, err := session.ListResources(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListResources: %v", err)
+	}
+	uris := make([]string, len(listRes.Resources))
+	for i, r := range listRes.Resources {
+		uris[i] = r.URI
+	}
+
+	read := func(uri string) ([]byte, error) {
+		res, err := session.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri})
+		if err != nil {
+			return nil, err
+		}
+		if len(res.Contents) == 0 {
+			return nil, fmt.Errorf("ReadResource(%q) returned no Contents elements", uri)
+		}
+		return []byte(res.Contents[0].Text), nil
+	}
+
+	if err := resourcesClaimResolves(instructions, uris, read); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestInstructionsCarriesNoWireContractViolation is T-08-01's mitigation:
+// the instructions const must stay pure ASCII (so len() and rune count
+// agree, per the WIRE-01/encoding edge resolution) and must never carry an
+// absolute-path token — const's own compile-time-literal nature already
+// makes runtime interpolation a compile error, but a future const->var
+// downgrade that admits a host path would otherwise ship silently into 38
+// committed wire-oracle transcripts.
+func TestInstructionsCarriesNoWireContractViolation(t *testing.T) {
+	for i := 0; i < len(instructions); i++ {
+		if instructions[i] >= 0x80 {
+			t.Fatalf("instructions byte %d is 0x%02x, non-ASCII (>= 0x80); the WIRE-01/encoding edge requires pure ASCII so len() (bytes) and rune count always agree. instructions = %q", i, instructions[i], instructions)
+		}
+	}
+	for _, token := range []string{"/Users/", "/home/", "/private/", `C:\`} {
+		if strings.Contains(instructions, token) {
+			t.Fatalf("instructions contains %q, an absolute-path token that would publish the capturing host's filesystem layout into every committed wire-oracle transcript (T-03-19). instructions = %q", token, instructions)
+		}
+	}
+}
+
+// TestInstructionsReachesTheWireVerbatim is the end-to-end proof that the
+// instructions const actually reaches a real client rather than merely
+// existing in the package: it opens a session via newTestSession and
+// asserts session.InitializeResult().Instructions equals the const
+// byte-for-byte.
+func TestInstructionsReachesTheWireVerbatim(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	companions, _ := ResolveCompanions("", false)
+	s := BuildServer(true, companions, dir, dir)
+
+	session, cleanup := newTestSession(t, s)
+	defer cleanup()
+
+	got := session.InitializeResult().Instructions
+	if got != instructions {
+		t.Fatalf("session.InitializeResult().Instructions = %q, want the instructions const verbatim %q", got, instructions)
 	}
 }
 
