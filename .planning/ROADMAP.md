@@ -157,12 +157,12 @@ Plans:
 
 **Notes**: Highest-risk phase of the milestone; a deep-review pass is warranted. Reuse `internal/fsatomic` and the existing `AgentTarget` / `recordFile` machinery — do not invent new file-safety primitives. Scope is Claude Code only: per-agent `hooks.json` schemas differ (Cursor camelCase, Codex CLI and Antigravity carry different event sets, Antigravity has no `SessionStart`/`UserPromptSubmit` at all), and porting is deferred to v2 as AGENT-04…07 rather than guessed at here.
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 07-01-PLAN.md — Tracer: one `install` writes the embedded SKILL.md, executable nudge script, and SessionStart registration into Claude Code's real read locations, idempotently (AGENT-01)
+- [x] 07-01-PLAN.md — Tracer: one `install` writes the embedded SKILL.md, executable nudge script, and SessionStart registration into Claude Code's real read locations, idempotently (AGENT-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -205,7 +205,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 5. MCP Resources Capability & Claims Drift Guard | 4/4 | Complete    | 2026-08-12 |
 | 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 4/4 | Complete    | 2026-08-12 |
-| 7. `codegraph install` Skill + Hooks Distribution | 0/TBD | Not started | - |
+| 7. `codegraph install` Skill + Hooks Distribution | 1/4 | In Progress|  |
 | 8. Instructions & Marker-Block Rewrite | 0/TBD | Not started | - |
 
 4 milestones shipped. v0.10.0 scoped: 4 phases, 16 requirements, 0/4 phases complete (0%).

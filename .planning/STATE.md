@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 7
-current_phase_name: "`codegraph install` Skill + Hooks Distribution (Claude Code)"
+current_phase: 07
+current_phase_name: codegraph install Skill + Hooks Distribution (Claude Code)
 status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-08-13T15:59:50.711Z"
-last_activity: 2026-08-12
-last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
+last_updated: "2026-08-13T16:00:44.354Z"
+last_activity: 2026-08-13
+last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 2
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-08)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 06 — agent-skill-package-skill-md-sessionstart-nudge
+**Current focus:** Phase 07 — codegraph install Skill + Hooks Distribution (Claude Code)
 
 ## Current Position
 
-Phase: 7 — `codegraph install` Skill + Hooks Distribution (Claude Code)
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-12 — Phase 06 complete, transitioned to Phase 7
+Phase: 07 (codegraph install Skill + Hooks Distribution (Claude Code)) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 07
+Last activity: 2026-08-13 — Phase 07 execution started
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 
