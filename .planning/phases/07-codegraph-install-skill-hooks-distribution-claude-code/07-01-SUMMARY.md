@@ -171,6 +171,13 @@ None - no external service configuration required.
 - Plan 03 (manifest/version observability) and Plan 04 (upgrade auto-refresh) both depend on `claudeassets` and the location-aware path helpers established here; both are now unblocked.
 - `writeHookEntry` currently only supports the "add/replace codegraph's own blocks" direction Install needs — Plan 02 will need the mirror removal (locate-by-command, strip-if-empties, delete-key-if-empties) analogous to `removeMcpEntry`.
 
+## Self-Check: PASSED
+
+- FOUND: claudeassets.go
+- FOUND: internal/agents/claude_skillpackage_test.go
+- FOUND: .planning/phases/07-codegraph-install-skill-hooks-distribution-claude-code/07-01-SUMMARY.md
+- FOUND commits: c4d7006, 2dc7184, f829987, fc9d943
+
 ---
 *Phase: 07-codegraph-install-skill-hooks-distribution-claude-code*
 *Completed: 2026-08-13*
