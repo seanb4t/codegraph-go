@@ -76,20 +76,24 @@ const nudgeScriptPath = "../../.claude/hooks/session-nudge.sh"
 var workedExampleHeadingRe = regexp.MustCompile(`(?m)^### `)
 
 // countSkillWorkedExamples locates the worked-examples "## " section — the
-// first "## " heading whose text contains "example" case-insensitively —
-// bounds it at the next "## " heading or the end of the document, and
-// counts workedExampleHeadingRe matches strictly within those bounds. The
-// bounding matters: an unbounded count would silently absorb a "### "
-// heading added to any other section later (e.g. a future reference or
-// troubleshooting section with its own sub-headings), overcounting what the
-// worked-examples section itself actually carries. Returns 0 if no
+// first "## " heading whose text starts with "worked example"
+// case-insensitively (e.g. "## Worked examples") — bounds it at the next
+// "## " heading or the end of the document, and counts
+// workedExampleHeadingRe matches strictly within those bounds. The anchor is
+// a prefix match, not a bare substring-contains-"example" match, precisely
+// so an unrelated heading such as "## Bad examples of misrouted queries"
+// added before the real worked-examples section cannot be mistaken for it.
+// The bounding matters too: an unbounded count would silently absorb a
+// "### " heading added to any other section later (e.g. a future reference
+// or troubleshooting section with its own sub-headings), overcounting what
+// the worked-examples section itself actually carries. Returns 0 if no
 // worked-examples heading is found at all.
 func countSkillWorkedExamples(body string) int {
 	lines := strings.Split(body, "\n")
 
 	start := -1
 	for i, line := range lines {
-		if strings.HasPrefix(line, "## ") && strings.Contains(strings.ToLower(line), "example") {
+		if strings.HasPrefix(strings.ToLower(line), "## worked example") {
 			start = i
 			break
 		}
