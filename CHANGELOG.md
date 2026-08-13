@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/seanb4t/codegraph-go/compare/v0.9.0...v0.10.0) (2026-08-13)
+
+
+### Features
+
+* **agents:** ship MCP resources, Claude Code skill onboarding, and self-describing instructions (v0.10.0) ([#60](https://github.com/seanb4t/codegraph-go/issues/60)) ([963cd93](https://github.com/seanb4t/codegraph-go/commit/963cd93067d3a8d87bcce5e899f1d4ec9947b2fc))
+
 ## [0.9.0](https://github.com/seanb4t/codegraph-go/compare/v0.8.0...v0.9.0) (2026-08-12)
 
 
