@@ -80,43 +80,52 @@ Deferred to a future milestone. Tracked but not in this roadmap.
 
 ## Traceability
 
-Which phases cover which requirements. Populated during roadmap creation.
+Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ATTR-01 | TBD | Pending |
-| ATTR-02 | TBD | Pending |
-| ATTR-03 | TBD | Pending |
-| DOCS-01 | TBD | Pending |
-| DOCS-02 | TBD | Pending |
-| DOCS-03 | TBD | Pending |
-| DOCS-04 | TBD | Pending |
-| PROC-01 | TBD | Pending |
-| PROC-02 | TBD | Pending |
-| PROC-03 | TBD | Pending |
-| CODE-01 | TBD | Pending |
-| CODE-02 | TBD | Pending |
-| CODE-03 | TBD | Pending |
-| FIXT-01 | TBD | Pending |
-| FIXT-02 | TBD | Pending |
-| FIXT-03 | TBD | Pending |
-| FIXT-04 | TBD | Pending |
-| FIXT-05 | TBD | Pending |
-| FIXT-06 | TBD | Pending |
-| FIXT-07 | TBD | Pending |
-| BENCH-01 | TBD | Pending |
-| BENCH-02 | TBD | Pending |
-| BENCH-03 | TBD | Pending |
-| MEM-01 | TBD | Pending |
-| MEM-02 | TBD | Pending |
+| ATTR-01 | Phase 4 | Pending |
+| ATTR-02 | Phase 4 | Pending |
+| ATTR-03 | Phase 4 | Pending |
+| DOCS-01 | Phase 4 | Pending |
+| DOCS-02 | Phase 4 | Pending |
+| DOCS-03 | Phase 4 | Pending |
+| DOCS-04 | Phase 4 | Pending |
+| PROC-01 | Phase 5 | Pending |
+| PROC-02 | Phase 5 | Pending |
+| PROC-03 | Phase 5 | Pending |
+| CODE-01 | Phase 5 | Pending |
+| CODE-02 | Phase 2 | Pending |
+| CODE-03 | Phase 5 | Pending |
+| FIXT-01 | Phase 1 | Pending |
+| FIXT-02 | Phase 1 | Pending |
+| FIXT-03 | Phase 3 | Pending |
+| FIXT-04 | Phase 2 | Pending |
+| FIXT-05 | Phase 2 | Pending |
+| FIXT-06 | Phase 2 | Pending |
+| FIXT-07 | Phase 3 | Pending |
+| BENCH-01 | Phase 6 | Pending |
+| BENCH-02 | Phase 6 | Pending |
+| BENCH-03 | Phase 6 | Pending |
+| MEM-01 | Phase 6 | Pending |
+| MEM-02 | Phase 6 | Pending |
+
+**Phase index:**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 1 | Corpus Selection by Measurement | FIXT-01, FIXT-02 |
+| 2 | Golden Harness Re-authoring & Re-freeze | CODE-02, FIXT-04, FIXT-05, FIXT-06 |
+| 3 | Non-Vacuity Proof & Unconditional CI Execution | FIXT-03, FIXT-07 |
+| 4 | Attribution & Documentation Sweep | ATTR-01, ATTR-02, ATTR-03, DOCS-01, DOCS-02, DOCS-03, DOCS-04 |
+| 5 | Process, CI & In-Tree Sweep | PROC-01, PROC-02, PROC-03, CODE-01, CODE-03 |
+| 6 | Benchmark De-coupling & Memory Sweep | BENCH-01, BENCH-02, BENCH-03, MEM-01, MEM-02 |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️ (populated by roadmap creation)
+- Mapped to phases: 25
+- Unmapped: 0 ✓ (every v1 requirement maps to exactly one phase)
 
 ---
 *Requirements defined: 2026-08-13*
-*Last updated: 2026-08-13 after initial definition for milestone v0.11.0*
-</content>
-</invoke>
+*Last updated: 2026-08-13 — traceability populated by roadmap creation (6 phases)*
