@@ -1,5 +1,31 @@
 # Milestones
 
+## v0.10.0 Agent Onboarding Skill & MCP Resources (Shipped: 2026-08-13)
+
+**Phases completed:** 4 phases, 15 plans, 34 tasks
+
+**Known verification overrides:** 7 (pre-existing todos/seeds acknowledged and deferred, none blocking this milestone's own requirements — see STATE.md → Deferred Items). One further audit item, a "knowledge-base [unknown]" debug-session flag, was closed as a false positive (a reference index file, not an open investigation) rather than deferred.
+
+**Key accomplishments:**
+
+- Registered `codegraph://tools/explore` as a live MCP Resource end-to-end — embedded markdown, `go-sdk` capability, `cacheScope: private`, unit tests, and a re-frozen 31-scenario wire-oracle corpus — proving the whole Resources architecture on one URI before horizontal expansion.
+- Fanned out from the proven tracer slice to the full 10-resource catalog — seven more per-tool fact-sheets (node/search/callers/callees/impact/files/status) plus two behavior docs (tools-filter, index-state) — and re-froze the `resources-list` wire transcript under one named cause.
+- Bidirectional GUARD-02 set-equality test plus GUARD-01 numeric/count/env-var claim-pinning tests for the full 10-resource catalog, each proven to discriminate by a synthetic non-vacuity sub-test and/or a demonstrated-red real-tree mutation.
+- Froze wire reads for the remaining 9 resource URIs, the unindexed-catalog and unknown-URI error scenarios, a structural URI-coverage guard, and two demonstrated-red-then-reverted mutations proving the oracle non-vacuous and RSRC-03 structural — closing the phase's full-corpus wire coverage at exactly 42 scenarios.
+- A working, dogfooded Claude Code SessionStart hook in this repo's own `.claude/`: a 12-line POSIX script gated by one directory-existence check, registered where Claude Code actually reads project hooks (`.claude/settings.json`, not a bare `hooks.json`), with a byte-equal versioned fragment for Phase 7's future `go:embed`.
+- Wrote SKILL-01's structural contract as 11 executable Go tests before authoring `.claude/skills/codegraph/SKILL.md`, extending Phase 5's GUARD-01 claims-drift checkers to a third agent-facing surface.
+- Added SKILL-02's three worked examples to SKILL.md (the first reproducing the 2026-08-08 misdirection incident verbatim from its resolved debug log), extended the drift guard with a bounded worked-example counter and second-layer nudge-text checks, and demonstrated five new mutations red against the real tree — bringing this phase's total to 16 proven guards.
+- Ran the mandatory human-verify checkpoint via three genuinely fresh Claude Code sessions in separate Herdr panes, captured raw-transcript evidence for SKILL-03 and NUDGE-01/02, and filed it honestly — including two real gaps the rehearsal actually found rather than a clean-pass fiction.
+- `codegraph install` now writes the binary's own embedded Claude Code skill package — SKILL.md, an executable session-nudge.sh, and a command-string-scoped SessionStart hooks merge into settings.json — at both `--location` scopes, proven idempotent and boundary-safe by 6 new tests.
+- `codegraph uninstall` now removes exactly the three artifacts Phase 7's install wrote — byte-invariant against unrelated sibling content, never recursive on the skill directory — and both settings.json readers (hooks merge and AutoAllow permission) share one fail-loud posture so a single `install --auto-allow` can no longer protect and destroy the same file.
+- A sidecar `.codegraph-manifest.json` next to SKILL.md now records the installing binary's version and a sha256 hash for every artifact `install` wrote, is idempotent-to-latest across re-runs, silently restores hand-edited content on the next install with no prompt or warning, and is discoverable at both `--location` scopes via two fixed `os.Stat` calls — closing AGENT-03 and, along the way, fixing a real duplicate-hook-block bug the plan's own risk register anticipated.
+- Task 1 — post-swap refresh (D-06).
+- Rewrote the MCP `instructions` wire const (server.go) to name `resources/list` and a Claude-Code-scoped `codegraph skill` pointer, backed by two new derive-from-source resolvability guards proven non-vacuous — 554 of 600 bytes, all 5 anchors present.
+- Added a resources/list + resources/read bullet to the shared `codegraphInstructionsBlock` and a `blockNamesUnshippedCapability` honesty guard proving the block never names a skill for any of its 4 shared agent targets, replacing the stale "Phase 3" MCP-initialize deferral in the doc comment.
+- Re-captured 38 of 42 frozen wire-oracle transcripts against a freshly built binary so every `initialize`/`server/discover` result carries plan 08-01's rewritten `instructions` string byte-identically, with the reviewed diff attributed to one named cause and the pre-existing `toolslist-repeat` ordering flake explicitly ruled out.
+
+---
+
 ## v0.5.0 macOS Distribution & Homebrew (Shipped: 2026-08-11)
 
 **Phases completed:** 4 phases, 24 plans, 59 tasks

@@ -602,6 +602,514 @@ extended after Phase 2 removes `mark3labs/mcp-go`).
 
 ---
 
+## A note on numbering (05-03-PLAN Task 3)
+
+05-03-PLAN's own Task 3 text was written against an assumption that "five mutations exist" and
+that the three mutations below would be numbered 6, 7, and 8. By the time this task actually ran,
+05-01-PLAN's own Task 3 had already appended Mutations 5 and 6 above (the SPEC-09 capability-off
+and acknowledgment-echo proofs) — six mutations existed, not five, and slot 6 was already taken.
+Rather than renumber or overwrite an already-committed, already-reverted mutation record, the three
+mutations below continue the sequence as Mutations 7, 8, and 9. This is recorded here plainly
+rather than silently reconciled: the plan's literal acceptance-criteria commands (`rg -c '^##
+Mutation' … returns 8`, and `rg -n '^## Mutation 6'` naming the tool-rename proof) were written
+against the stale assumption and do not hold against the actual, current file; the corrected
+verification commands are `rg -c '^## Mutation' test/wireoracle/MUTATION-PROOF.md` returning **9**,
+with the tool-rename/GUARD-02 proof at `## Mutation 7`, the code-side/GUARD-01 proof at `##
+Mutation 8`, and the prose-side/GUARD-01 proof at `## Mutation 9`. All three mutations named in
+05-03-PLAN's success criteria (GUARD-02 criterion 3, GUARD-01 criterion 4 with its asymmetry) are
+demonstrated below regardless of the number attached to each.
+
+---
+
+## Mutation 7 — a renamed tool, `status` to `health` (05-03-PLAN Task 3, GUARD-02)
+
+**Requirement:** GUARD-02 — a tool added, removed, or renamed without its resource file and URI
+moving with it must turn `TestResourceFileSetMatchesToolNames` red, in whichever direction the
+mismatch runs, naming both a missing and an orphaned stem from one mutation.
+
+**Edit:** three sites renamed the `status` companion to `health`, deliberately leaving
+`internal/mcp/resources/status.md` and `resourceURIFor` untouched — that omission IS the drift
+being demonstrated.
+
+`internal/mcp/server.go`, the `companionNames` slice:
+
+```diff
+-var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "status"}
++var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "health"}
+```
+
+`internal/mcp/tools.go`, `companionTool`'s matching case:
+
+```diff
+-	case "status":
++	case "health":
+ 		return &mcp.Tool{
+-			Name:        "codegraph_status",
++			Name:        "codegraph_health",
+ 			Description: "Report index health and counts",
+ 			Annotations: toolAnnotations(),
+ 		}
+```
+
+`internal/mcp/tools.go`, `companionHandler`'s matching case:
+
+```diff
+-	case "status":
++	case "health":
+ 		mcp.AddTool(s, tool, func(ctx context.Context, req *mcp.CallToolRequest, args StatusArgs) (*mcp.CallToolResult, any, error) {
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go internal/mcp/tools.go` showed exactly
+these three hunks; `go build ./...` exited 0.
+
+**Gate that went red — the named gate, run in isolation
+(`go test ./internal/mcp/... -run TestResourceFileSetMatchesToolNames -count=1 -v`):**
+
+```
+=== RUN   TestResourceFileSetMatchesToolNames
+=== RUN   TestResourceFileSetMatchesToolNames/file_set_matches_allToolNames_plus_behavior_docs
+    resources_schema_drift_test.go:146: resource file set drifted from the tool roster: missing [health] (a tool with no resource file), orphaned [status] (a resource file with no matching tool)
+=== RUN   TestResourceFileSetMatchesToolNames/resourceURIFor_keys_match_actual_filenames
+=== RUN   TestResourceFileSetMatchesToolNames/per-tool_URI_shape_(D-09)
+    resources_schema_drift_test.go:167: resourceURIFor has no entry for health.md
+=== RUN   TestResourceFileSetMatchesToolNames/behavior-doc_URI_shape_(D-10)
+=== RUN   TestResourceFileSetMatchesToolNames/tools-filter_prose_names_exactly_the_registered_companions
+    resources_schema_drift_test.go:212: tools-filter.md never mentions codegraph_health, but it is a registered companion tool the filter can narrow away
+    resources_schema_drift_test.go:224: tools-filter.md names codegraph_status, which is neither a registered companion tool nor codegraph_explore — a renamed or removed tool left behind in this doc's prose
+--- FAIL: TestResourceFileSetMatchesToolNames (0.00s)
+    --- FAIL: TestResourceFileSetMatchesToolNames/file_set_matches_allToolNames_plus_behavior_docs (0.00s)
+    --- PASS: TestResourceFileSetMatchesToolNames/resourceURIFor_keys_match_actual_filenames (0.00s)
+    --- FAIL: TestResourceFileSetMatchesToolNames/per-tool_URI_shape_(D-09) (0.00s)
+    --- PASS: TestResourceFileSetMatchesToolNames/behavior-doc_URI_shape_(D-10) (0.00s)
+    --- FAIL: TestResourceFileSetMatchesToolNames/tools-filter_prose_names_exactly_the_registered_companions (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.341s
+```
+
+The named gate fails naming **both directions from one mutation** — `missing [health]` and
+`orphaned [status]` in the same sub-test — which is what makes GUARD-02's structural check
+bidirectional rather than a one-way existence check. The per-tool URI shape sub-test and the
+tools-filter prose sub-test independently name the same drift a second and third way.
+
+**Other tests that also went red (more evidence, not the named gate):** running the full package
+(`go test ./internal/mcp/... -count=1`) with the mutation still applied additionally panics inside
+`registerResources` — `resourceDescriptionFor` still switches on `companionNames`, which no longer
+contains `"status"`, so any test that constructs a server via `BuildServer` (e.g.
+`TestHandlerErrorIsToolResultNotProtocolError`) fails with `panic: mcp: resourceDescriptionFor:
+unknown resource stem status`. This is corroborating evidence that the rename is structurally
+unsafe well beyond the one named gate, not a substitute for it.
+
+**Revert confirmation:** all three hunks were reverted with `git checkout -- internal/mcp/server.go
+internal/mcp/tools.go`; `git status --porcelain -- internal/` and `git diff --exit-code --
+internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0 (15.1s).
+
+---
+
+## Mutation 8 — a changed engine constant, code side only (05-03-PLAN Task 3, GUARD-01)
+
+**Requirement:** GUARD-01's code-side half — mutating `internal/query/validate.go`'s
+`defaultDepth` must turn `TestMCPToolSchemaNumericClaimsMatchEngineConstants` red, while
+`TestMCPResourceNumericClaimsMatchToolSchemas` — which never reads `validate.go` at all, only
+compares the resource markdown against the tool schema — must stay green, because both sides of
+THAT comparison (the schema's own claim, the resource's own claim) are unchanged by this edit.
+
+**Edit:** `internal/query/validate.go`:
+
+```diff
+-	defaultDepth = 2
++	defaultDepth = 4
+```
+
+**Confirmed applied:** `git diff -- internal/query/validate.go` showed exactly this one-line
+change; `go build ./...` exited 0.
+
+**Gate that went red, and the gate that stayed green — run together
+(`go test ./internal/mcp/... -run 'TestMCPToolSchemaNumericClaimsMatchEngineConstants|TestMCPResourceNumericClaimsMatchToolSchemas' -count=1 -v`):**
+
+```
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/explore
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/node
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/search
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callers
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callees
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/impact
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/files
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/status
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/tools-filter
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/index-state
+--- PASS: TestMCPResourceNumericClaimsMatchToolSchemas (0.00s)
+    [all 10 subtests PASS]
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callers
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callees
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_impact
+    tools_schema_drift_test.go:115: codegraph_impact advertises default 2 but internal/query.defaultDepth is 4 — MCP clients are being told the wrong value (description: "BFS depth (default 2, max 50)")
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_files
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_status
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_explore
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_node
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_search
+--- FAIL: TestMCPToolSchemaNumericClaimsMatchEngineConstants (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callers (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callees (0.00s)
+    --- FAIL: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_impact (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_files (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_status (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_explore (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_node (0.00s)
+    --- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_search (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.285s
+```
+
+**The precise asymmetry, recorded honestly rather than glossed:**
+`TestMCPToolSchemaNumericClaimsMatchEngineConstants` fired, because it compares `codegraph_impact`'s
+schema claim ("default 2", still literally in `tools.go`'s jsonschema tag) against the mutated
+`internal/query.defaultDepth` (now 4) — the two sides it compares moved apart.
+`TestMCPResourceNumericClaimsMatchToolSchemas` stayed green, because it compares
+`resources/impact.md`'s claim ("default 2") against `codegraph_impact`'s SCHEMA claim ("default
+2") — neither side of THAT comparison was touched by this mutation, since it never reads
+`validate.go`. This is exactly the coverage boundary
+`TestMCPResourceNumericClaimsMatchToolSchemas`'s own doc comment states: "Editing
+internal/query/validate.go alone fails the EXISTING schema test … not this one." Mutation 9 below
+is this mutation's mirror image, moving the OTHER side of the resource-vs-schema comparison
+instead.
+
+**Revert confirmation:** the constant was restored to `2`; `git checkout --
+internal/query/validate.go`; `git status --porcelain -- internal/` and `git diff --exit-code --
+internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0.
+
+---
+
+## Mutation 9 — a changed resource claim, prose side only (05-03-PLAN Task 3, GUARD-01)
+
+**Requirement:** GUARD-01's prose-side half — mutating `internal/mcp/resources/impact.md`'s stated
+BFS depth default, touching nothing else, must turn `TestMCPResourceNumericClaimsMatchToolSchemas`
+red while `TestMCPToolSchemaNumericClaimsMatchEngineConstants` — which never reads any `.md` file,
+only compares the tool schema against `internal/query`'s constants — stays green. The exact mirror
+image of Mutation 8.
+
+**Edit:** `internal/mcp/resources/impact.md`:
+
+```diff
+-- `depth` (integer, optional) — BFS depth (default 2, max 50).
++- `depth` (integer, optional) — BFS depth (default 9, max 50).
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/resources/impact.md` showed exactly this one-line
+change; `go build ./...` exited 0 (the mutated file is embedded via `//go:embed`, so a rebuild
+picked it up with no separate step).
+
+**Gate that went red, and the gate that stayed green — run together (same command as Mutation
+8):**
+
+```
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/explore
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/node
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/search
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callers
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/callees
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/impact
+    resources_schema_drift_test.go:356: resources/impact.md's numeric claims map[default 9:1 max 50:1] do not match its tool schema's claims map[default 2:1 max 50:1]
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/files
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/status
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/tools-filter
+=== RUN   TestMCPResourceNumericClaimsMatchToolSchemas/index-state
+--- FAIL: TestMCPResourceNumericClaimsMatchToolSchemas (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/explore (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/node (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/search (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/callers (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/callees (0.00s)
+    --- FAIL: TestMCPResourceNumericClaimsMatchToolSchemas/impact (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/files (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/status (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/tools-filter (0.00s)
+    --- PASS: TestMCPResourceNumericClaimsMatchToolSchemas/index-state (0.00s)
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_node
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_search
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callers
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_callees
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_impact
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_files
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_status
+=== RUN   TestMCPToolSchemaNumericClaimsMatchEngineConstants/codegraph_explore
+--- PASS: TestMCPToolSchemaNumericClaimsMatchEngineConstants (0.00s)
+    [all 8 subtests PASS]
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.304s
+```
+
+`resources/impact.md`'s claim moved to "default 9" while `codegraph_impact`'s schema claim stayed
+"default 2" (`tools.go`'s jsonschema tag untouched) — the resource-vs-schema comparison catches it,
+naming the `impact` stem and printing both multisets. `TestMCPToolSchemaNumericClaimsMatchEngineConstants`
+never reads `impact.md` at all, so it cannot see this edit and stays green — the schema claim
+("default 2") and `internal/query.defaultDepth` (still 2) remain in agreement.
+
+**Revert confirmation:** the file was restored to "default 2, max 50"; `git checkout --
+internal/mcp/resources/impact.md`; `git status --porcelain -- internal/` and `git diff --exit-code
+-- internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0.
+
+---
+
+## A note on numbering (05-04-PLAN Task 3)
+
+05-04-PLAN's own Task 3 text was written against an assumption that these two mutations would be
+numbered 9 and 10, and its acceptance criteria literally check `rg -c '^## Mutation' … returns 10`
+with the capability-off proof named `## Mutation 9`. By the time this task actually ran,
+05-03-PLAN's own Task 3 had already appended Mutations 7, 8, and 9 above (the tool-rename/GUARD-02
+proof and the two GUARD-01 code/prose-side proofs) — nine mutations existed, not eight, and slot 9
+was already taken. Rather than renumber or overwrite an already-committed, already-reverted
+mutation record, the two mutations below continue the sequence as Mutations 10 and 11. This is
+recorded here plainly rather than silently reconciled, matching 05-03-PLAN's own precedent for the
+identical situation (see "A note on numbering (05-03-PLAN Task 3)" above): the plan's literal
+acceptance-criteria commands were written against a stale assumption and do not hold against the
+actual, current file; the corrected verification command is `rg -c '^## Mutation'
+test/wireoracle/MUTATION-PROOF.md` returning **11**, with the capability-off/RSRC-03-capability
+proof at `## Mutation 10` and the registration-gating/RSRC-03-structural proof at `## Mutation 11`.
+Both mutations named in 05-04-PLAN's success criteria (criterion 3's non-vacuity re-proof,
+criterion 3's RSRC-03 index-independence proof) are demonstrated below regardless of the number
+attached to each.
+
+---
+
+## Mutation 10 — the resources capability, explicit zero value removed (05-04-PLAN Task 3, D-11/T-05-03)
+
+**Requirement:** criterion 5's "the oracle re-proved non-vacuous" — demonstrate what
+`Resources: &mcp.ResourceCapabilities{}`'s EXPLICIT zero value in `BuildServer`'s
+`mcp.ServerCapabilities` literal prevents, mirroring Mutation 5's capability-off proof for
+`Tools.ListChanged` and D-11's own stated rationale for never leaving a capability's presence to
+SDK inference.
+
+**Edit:** `internal/mcp/server.go`, `BuildServer`'s capability construction:
+
+```diff
+ 		Capabilities: &mcp.ServerCapabilities{
+-			// RSRC-03/D-11 extension: explicit zero value, not omission.
+-			// go-sdk's capabilities() (server.go:645-653) would otherwise
+-			// auto-populate caps.Resources with ListChanged: true purely
+-			// because s.resources.len() > 0 once registerResources below
+-			// runs — this phase implements neither listChanged nor
+-			// subscribe, so the explicit zero value is what keeps the
+-			// advertised capability truthful, mirroring D-11's own
+-			// rationale for Tools above.
+-			Resources: &mcp.ResourceCapabilities{},
+-			Tools:     &mcp.ToolCapabilities{ListChanged: true},
++			Tools: &mcp.ToolCapabilities{ListChanged: true},
+ 		},
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go` showed exactly this hunk (the
+`Resources:` field and its doc comment deleted, `Tools:` left unchanged); `go build ./...` exited
+0.
+
+**Nothing removed from the wire — a strictly more interesting failure than absence:** this does NOT
+remove `capabilities.resources` from the wire. go-sdk's own `capabilities()` method
+(`server.go:645-653`) auto-populates `caps.Resources` with `ListChanged: true` once any resource is
+registered — which `registerResources` still does unconditionally, since this mutation does not
+touch its call site. So the advertised capability silently CHANGES rather than disappears: it
+becomes a promise of `listChanged` support this server does not implement. This is the concrete,
+observed justification for D-11's rule that a capability is never left to SDK inference.
+
+**Gate that went red:** `TestFrozenTranscriptsMatch` failed on every one of the 38 scenarios whose
+`initialize`/`server/discover` response carries a `capabilities` object — the same 38 = 42 total
+scenarios minus the 4 with no `capabilities` object at all (`edge-call-before-initialize`,
+`modern-listen-catalog-change`, `modern-meta-invalid-params`, `modern-meta-unsupported-version`),
+confirmed by exact count against the full scenario list. Measured blast radius: **38**.
+
+**`go test ./test/wireoracle/... -count=1`'s verbatim failure** (one representative instance kept,
+the remaining 37 named):
+
+```
+--- FAIL: TestFrozenTranscriptsMatch (4.43s)
+    --- FAIL: TestFrozenTranscriptsMatch/handshake-explore (0.63s)
+        oracle_test.go:130: scenario "handshake-explore": normalized transcript differs at line 1:
+             got: "...{\"capabilities\":{\"resources\":{\"listChanged\":true},\"tools\":{\"listChanged\":true}},...\"protocolVersion\":\"2025-11-25\",...}"
+            want: "...{\"capabilities\":{\"resources\":{},\"tools\":{\"listChanged\":true}},...\"protocolVersion\":\"2025-11-25\",...}"
+    [... 37 more scenarios FAIL identically on this same collateral diff: toolslist-default,
+    toolslist-narrowed, toolslist-filter-empty, toolslist-no-index, toolslist-repeat, call-node,
+    call-search, call-callers, call-callees, call-impact, call-files, call-status,
+    error-unknown-method, error-unknown-tool, error-malformed-args, error-confinement-reject,
+    edge-call-before-initialize is NOT in this list (no capabilities object), legacy-2025-11-25,
+    legacy-2025-06-18, legacy-2025-03-26, legacy-2024-11-05, legacy-unsupported-2026-07-28,
+    legacy-omitted-version, modern-discover-explore, index-appears-mid-session,
+    resources-list, resources-read-explore, resources-read-node, resources-read-search,
+    resources-read-callers, resources-read-callees, resources-read-impact, resources-read-files,
+    resources-read-status, resources-read-tools-filter, resources-read-index-state,
+    resources-list-no-index, resources-read-unknown ...]
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/wireoracle	22.072s
+```
+
+**The observed wire value:** every failing scenario's `got` shows `"capabilities":{"resources":
+{"listChanged":true},...}` where the frozen `want` shows `"capabilities":{"resources":{},...}` —
+exactly the SDK-inferred `ListChanged: true` the "nothing removed" paragraph above predicted,
+confirmed on the wire rather than asserted from reading `server.go`.
+
+**Revert confirmation:** the `Resources: &mcp.ResourceCapabilities{}` field and its doc comment were
+restored via `git checkout -- internal/mcp/server.go`; `git status --porcelain -- internal/` and
+`git diff --exit-code -- internal/` both showed nothing changed; `go build ./...` exited 0; `go test
+./test/wireoracle/... -count=1` exited 0 (all 42 scenarios); `go test ./internal/mcp/... -count=1`
+exited 0.
+
+---
+
+## Mutation 11 — resource registration moved inside `if hasIndex` (05-04-PLAN Task 3, RSRC-03)
+
+**Requirement:** proves RSRC-03 (resources register unconditionally, independent of index state) is
+a STRUCTURAL property of `registerResources`'s call-site position, not an incidental one — the
+asymmetry this mutation produces (9 `Index: false` resource scenarios red, the 2 `Index: true`
+resource scenarios green) is what demonstrates that, not just that removing the call site breaks
+something.
+
+**Edit:** `internal/mcp/server.go`, `BuildServer` — moves the `registerResources(s)` call from its
+position immediately after `mcp.NewServer(...)` (unconditional) into the `if hasIndex {` block that
+gates `registerTools`:
+
+```diff
+@@ construction, immediately after mcp.NewServer(...) @@
+-	// RSRC-03: registerResources runs unconditionally, immediately after
+-	// construction and BEFORE the `if hasIndex {` tool-registration branch
+-	// below — this call site's position outside that branch is the
+-	// structural property that makes resources available even in an
+-	// unindexed repository, mirroring how Capabilities.Tools above is set
+-	// regardless of hasIndex.
+-	registerResources(s)
+-
+ 	// One gitmeta.CachingDetector per SERVER, not per handler or per call
+@@ later, at the existing hasIndex gate @@
+ 	if hasIndex {
++		registerResources(s)
+ 		toolCount.Store(int64(registerTools(s, companions, repoPath, startPath, detector)))
+ 	}
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go` showed exactly these two hunks (the
+unconditional call site and its doc comment deleted; a bare `registerResources(s)` call added as
+the first statement inside the existing `if hasIndex {` block); `go build ./...` exited 0.
+
+**Gate that went red, and the gate that stayed green:** `go test ./test/wireoracle/... -count=1`:
+
+```
+--- FAIL: TestFrozenTranscriptsMatch (4.49s)
+    --- FAIL: TestFrozenTranscriptsMatch/resources-read-node (0.02s)
+        oracle_test.go:130: scenario "resources-read-node": normalized transcript differs at line 2:
+             got: "{\"jsonrpc\":\"2.0\",\"id\":2,\"error\":{\"code\":-32602,\"message\":\"Resource not found\",\"data\":{\"uri\":\"codegraph://tools/node\"}}}"
+            want: "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"private\",\"contents\":[{\"uri\":\"codegraph://tools/node\",...\"text\":\"# codegraph_node\\n\\n...\"}]}}"
+    [... 7 more Index: false read scenarios FAIL identically on the same -32602 "Resource not
+    found" collateral: resources-read-search, resources-read-callers, resources-read-callees,
+    resources-read-impact, resources-read-files, resources-read-status,
+    resources-read-tools-filter, resources-read-index-state]
+    --- FAIL: TestFrozenTranscriptsMatch/resources-list-no-index (0.01s)
+        oracle_test.go:130: scenario "resources-list-no-index": normalized transcript differs at line 2:
+             got: "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"private\",\"resources\":[]}}"
+            want: "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"ttlMs\":0,\"cacheScope\":\"private\",\"resources\":[{...10 entries...}]}}"
+--- FAIL: TestEveryAdvertisedResourceURIHasASuccessfulReadScenario (0.37s)
+    oracle_test.go:1000: no scenario provides a successful resources/read for: [codegraph://index-state
+    codegraph://tools-filter codegraph://tools/callees codegraph://tools/callers
+    codegraph://tools/files codegraph://tools/impact codegraph://tools/node codegraph://tools/search
+    codegraph://tools/status]
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/wireoracle	22.072s
+```
+
+**Scenarios that went RED (10):** `resources-read-node`, `resources-read-search`,
+`resources-read-callers`, `resources-read-callees`, `resources-read-impact`,
+`resources-read-files`, `resources-read-status`, `resources-read-tools-filter`,
+`resources-read-index-state` — all 9 `Index: false` resource read scenarios — plus
+`resources-list-no-index` (the full-catalog-with-no-index scenario). Every one of these 10 shares
+`Index: false` (10 total). `TestEveryAdvertisedResourceURIHasASuccessfulReadScenario` also went red,
+naming the same 9 URIs as having no successful wire read.
+
+**Scenarios that stayed GREEN (2):** `resources-list` and `resources-read-explore` — both
+`Index: true`. Their capture runs `codegraph init` before `serve --mcp` starts, so `hasIndex` is
+true at construction time and `registerResources` still runs from its new position inside the
+`if hasIndex {` block.
+
+**The precise asymmetry this demonstrates:** every scenario that failed is `Index: false`; every
+resource scenario that stayed green is `Index: true`. This is not "resources broke" — it is
+specifically "resources now depend on index state," which is exactly RSRC-03's negation. The
+9-red/2-green split is deterministic and structural, not incidental: it tracks `Index:` on the
+scenario one-for-one, which is the proof that the guard is measuring index-independence
+specifically, not merely that resources exist somewhere in the corpus.
+
+**Same property caught at the unit tier:** `go test ./internal/mcp/... -run
+TestResourcesRegisterWithoutIndex -count=1 -v` also goes red under this mutation:
+
+```
+=== RUN   TestResourcesRegisterWithoutIndex
+    resources_test.go:123: resources/list without an index = [], want the same URI set as with an
+    index [codegraph://index-state codegraph://tools-filter codegraph://tools/callees
+    codegraph://tools/callers codegraph://tools/explore codegraph://tools/files
+    codegraph://tools/impact codegraph://tools/node codegraph://tools/search
+    codegraph://tools/status]
+--- FAIL: TestResourcesRegisterWithoutIndex (0.05s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.335s
+```
+
+RSRC-03's index-independence property is therefore caught at both the unit tier (in-process,
+`BuildServer(false, ...)`, no subprocess) and the wire tier (a real spawned `serve --mcp`) —
+independent proofs of the same structural claim.
+
+**Revert confirmation:** the `registerResources(s)` call was moved back to its unconditional
+position via `git checkout -- internal/mcp/server.go`; `git status --porcelain -- internal/` and
+`git diff --exit-code -- internal/` both showed nothing changed; `go build ./...` exited 0; `go test
+./test/wireoracle/... -count=1` exited 0 (all 42 scenarios); `go test ./internal/mcp/... -count=1`
+exited 0.
+
+---
+
+## Non-vacuity proof for the remaining GUARD-01 checkers (05-03-PLAN Task 3)
+
+The count checker (`TestResourceCountClaimsMatchSourceSets`/`countClaimsIn`), the env-var checker
+(`TestResourceEnvVarNamesAreReal`), and the host-fact checker
+(`TestResourceContentCarriesNoHostFacts`/`hostFactsIn`) are deliberately proven by synthetic
+non-vacuity sub-tests (`TestResourceCountCheckerIsNotVacuous`,
+`TestResourceHostFactCheckerIsNotVacuous`) rather than by a fourth, fifth, and sixth real-tree
+mutation. This is the stronger form for these three, not a shortcut: a mutation proof is a
+one-time, point-in-time demonstration recorded in this document, while a synthetic non-vacuity
+sub-test asserts the checker's discriminating power on EVERY `go test ./internal/mcp/...` run,
+forever, including runs long after this document is written and possibly forgotten. This is the
+same honesty `instructions_contract_test.go`'s own doc comment applies to its literal anchors, and
+09-03-PLAN's own text asked for it to be stated here rather than left for a reviewer to discover.
+The env-var checker has no meaningful "wrong value" mutation to demonstrate against the real tree
+either — `allowlistEnvName` is a single hard-coded constant with only one real value in this
+codebase, so a mutation would only prove the checker can detect a typo it was never at risk of
+missing (its own extraction logic, not a comparison against a second derived source, is what
+`TestResourceEnvVarNamesAreReal` itself already exercises directly on the real tree, unmutated).
+
+`go test ./internal/mcp/... -run 'IsNotVacuous' -count=1 -v` confirms all named non-vacuity tests
+in this package pass, including the three above:
+
+```
+--- PASS: TestREADMEGateCheckerIsNotVacuous (0.00s)
+--- PASS: TestResourceStemSetDiffIsNotVacuous (0.00s)
+--- PASS: TestResourceCountCheckerIsNotVacuous (0.00s)
+--- PASS: TestResourceHostFactCheckerIsNotVacuous (0.00s)
+--- PASS: TestResourcesReadIsNotVacuous (0.05s)
+```
+
+---
+
+## Closing statement (05-03-PLAN Task 3)
+
+`git status --porcelain -- internal/` was checked after all three mutations above were reverted and
+before this section and `internal/mcp/resources_schema_drift_test.go` were committed — the
+cleanliness check's purpose is to prove no mutation residue survives, matching the sequencing
+discipline the original "Closing statement" above set for Phase 1's four mutations. All three
+mutations were reverted; `go build ./...`, `go test ./internal/mcp/... -count=1`, `go test
+./test/wireoracle/... -count=1`, and `go test ./... -count=1` all passed on the reverted,
+committed tree.
+
+---
+
 ## Closing statement
 
 `git status --porcelain` is checked AFTER `test/wireoracle/MUTATION-PROOF.md` and
@@ -612,3 +1120,291 @@ cleanliness check ran.
 
 All four mutations were reverted; the tree was confirmed clean (`git status --porcelain` empty)
 before this document and `COVERAGE-BASELINE.md` were written and staged.
+
+---
+
+## Closing statement (05-04-PLAN Task 3)
+
+`git status --porcelain -- internal/` was checked after Mutations 10 and 11 above were reverted and
+before this section and `COVERAGE-BASELINE.md`'s finalization were committed — the same sequencing
+discipline 05-03-PLAN's own "Closing statement" set. Both mutations were reverted; `go build ./...`,
+`go test ./internal/mcp/... -count=1`, `go test ./test/wireoracle/... -count=1`, and `go test
+./... -count=1` all passed on the reverted, committed tree.
+
+---
+
+## A note on numbering (06-03-PLAN Task 3)
+
+`grep -c '^## Mutation' test/wireoracle/MUTATION-PROOF.md` was run before appending anything below,
+per this plan's own explicit instruction not to assume a number from the plan text — 05-03-PLAN's
+own summary records that exact assumption failing once already. The count returned **11**, with the
+highest existing heading `## Mutation 11 — resource registration moved inside \`if hasIndex\`
+(05-04-PLAN Task 3, RSRC-03)`. The five mutations below continue the sequence as Mutations 12
+through 16.
+
+---
+
+## Mutation 12 — a renamed companion tool, `node` to `peek` (06-03-PLAN Task 3, T-06-05)
+
+**Requirement:** GUARD-01 extended to SKILL.md — a tool renamed at its source without SKILL.md's
+own text moving with it must turn `TestSkillNamesOnlyRealTools` red, naming the now-unregistered
+token SKILL.md still carries.
+
+**Edit:** three sites renamed the `node` companion to `peek`, deliberately leaving
+`.claude/skills/codegraph/SKILL.md` untouched (it still names `codegraph_node` three times, in the
+decision table, the full-reference list, and nowhere else) — that omission IS the drift being
+demonstrated.
+
+`internal/mcp/server.go`, the `companionNames` slice:
+
+```diff
+-var companionNames = []string{"node", "search", "callers", "callees", "impact", "files", "status"}
++var companionNames = []string{"peek", "search", "callers", "callees", "impact", "files", "status"}
+```
+
+`internal/mcp/tools.go`, `companionTool`'s matching case:
+
+```diff
+-	case "node":
++	case "peek":
+ 		return &mcp.Tool{
+-			Name:        "codegraph_node",
++			Name:        "codegraph_peek",
+ 			Description: "Show a symbol's signature, calls, and callers, or a line-numbered file read",
+```
+
+`internal/mcp/tools.go`, `companionHandler`'s matching case:
+
+```diff
+-	case "node":
++	case "peek":
+ 		mcp.AddTool(s, tool, func(ctx context.Context, req *mcp.CallToolRequest, args NodeArgs) (*mcp.CallToolResult, any, error) {
+```
+
+**Confirmed applied:** `git diff -- internal/mcp/server.go internal/mcp/tools.go` showed exactly
+these three hunks; `go build ./...` exited 0.
+
+**Gate that went red — the named gate, run in isolation
+(`go test ./internal/mcp/... -run TestSkillNamesOnlyRealTools -count=1 -v`):**
+
+```
+=== RUN   TestSkillNamesOnlyRealTools
+    skill_claims_drift_test.go:310: ../../.claude/skills/codegraph/SKILL.md names codegraph_node, which is not a member of allToolNames() — a renamed or removed tool left behind in the skill
+    skill_claims_drift_test.go:310: ../../.claude/skills/codegraph/SKILL.md names codegraph_node, which is not a member of allToolNames() — a renamed or removed tool left behind in the skill
+    skill_claims_drift_test.go:310: ../../.claude/skills/codegraph/SKILL.md names codegraph_node, which is not a member of allToolNames() — a renamed or removed tool left behind in the skill
+--- FAIL: TestSkillNamesOnlyRealTools (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.345s
+```
+
+The gate fires once per occurrence of `codegraph_node` in SKILL.md (three sites: the decision
+table, the full-reference list entry, and the closing "8 tools" sentence's list) — the same
+"skill is the third surface" bug class T-06-05 names, this time demonstrated on the real tree
+rather than only asserted.
+
+**Revert confirmation:** all three hunks were reverted with `git checkout -- internal/mcp/server.go
+internal/mcp/tools.go`; `git status --porcelain -- internal/` and `git diff --exit-code --
+internal/` both showed nothing changed; `go build ./...` exited 0; `go test ./internal/mcp/...
+-count=1` exited 0 (4.6s).
+
+---
+
+## Mutation 13 — a dead resource URI in SKILL.md's full-reference pointer (06-03-PLAN Task 3, T-06-05)
+
+**Requirement:** GUARD-01 extended to SKILL.md — a `codegraph://` URI pointing at a resource stem
+the server does not serve must turn `TestSkillResourceURIsResolve` red, and this entry additionally
+records which OTHER SKILL.md guards stayed green from the same one-line edit, per 05-03-PLAN's own
+asymmetry-recording discipline (Mutation 9's note applies the same practice here).
+
+**Edit:** `.claude/skills/codegraph/SKILL.md`'s full-reference pointer for `codegraph_status`:
+
+```diff
+-- `codegraph_status` → `codegraph://tools/status`
++- `codegraph_status` → `codegraph://tools/healthcheck`
+```
+
+**Confirmed applied:** `git diff -- .claude/skills/codegraph/SKILL.md` showed exactly this hunk.
+
+**Gate that went red — the named gate
+(`go test ./internal/mcp/... -run TestSkillResourceURIsResolve -count=1 -v`):**
+
+```
+=== RUN   TestSkillResourceURIsResolve
+    skill_claims_drift_test.go:337: ../../.claude/skills/codegraph/SKILL.md names codegraph://tools/healthcheck, which is not a value in resourceURIFor — the skill points at a resource the server does not serve
+--- FAIL: TestSkillResourceURIsResolve (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/mcp	0.298s
+```
+
+**Guards that stayed green from the same edit (asymmetry, recorded per 05-03-PLAN's discipline):**
+running the full `TestSkill*` family with the mutation still applied
+(`go test ./internal/mcp/... -run TestSkill -count=1 -v`) showed every other test passing —
+`TestSkillFrontmatterIsSpecCompliant`, `TestSkillLeadsWithDecisionTable`,
+`TestSkillStaysWithinBudget`, `TestSkillNamesOnlyRealTools` (the tool NAME `codegraph_status` is
+still real; only the URI text next to it broke), `TestSkillDefersNumericFactsToResources`,
+`TestSkillCountClaimsMatchSourceSets`, `TestSkillEnvVarNamesAreReal`, `TestSkillCarriesNoHostFacts`,
+`TestSkillNamesTheFilterWhenItNamesCompanions`, `TestSkillCarriesExactlyThreeWorkedExamples`, and
+both non-vacuity tests. This is the expected asymmetry: a broken resource pointer is a narrower
+defect than a broken tool name, and only the one checker built to catch exactly that shape fired.
+
+**Revert confirmation:** the hunk was reverted with `git checkout -- .claude/skills/codegraph/SKILL.md`;
+`git diff --exit-code -- .claude/skills/codegraph/SKILL.md` showed nothing changed; `go test
+./internal/mcp/... -run TestSkill -count=1` exited 0.
+
+---
+
+## Mutation 14 — the `resume` matcher changed in the go:embed fragment, not the live registration (06-03-PLAN Task 3, D-04/A2)
+
+**Requirement:** the fragment/registration parity guard (`internal/agents/hookpackage_test.go`'s
+`TestHookRegistrationMatchesFragmentAndScript`) must turn red when `.claude/hooks/hooks.json`
+(Phase 7's `go:embed` source) drifts from `.claude/settings.json` (what this repository actually
+runs), naming both files. 06-01-PLAN's own summary records having exercised "a targeted one-field
+mutation to `hooks.json`" during that plan's own execution, but that run is not itself recorded in
+this document and its target field is not specified in the summary text — this entry runs it fresh
+against the field 06-03-PLAN names explicitly (the `resume` matcher) rather than relying on an
+unspecified prior claim.
+
+**Edit:** `.claude/hooks/hooks.json`'s second `SessionStart` entry:
+
+```diff
+       {
+-        "matcher": "resume",
++        "matcher": "clear",
+         "hooks": [
+```
+
+**Confirmed applied:** `git diff -- .claude/hooks/hooks.json` showed exactly this hunk.
+
+**Gate that went red — the named gate
+(`go test ./internal/agents/... -run 'TestHookRegistrationMatchesFragmentAndScript$' -count=1 -v`):**
+
+```
+=== RUN   TestHookRegistrationMatchesFragmentAndScript
+    hookpackage_test.go:344: hooks.SessionStart differs between ../../.claude/settings.json and ../../.claude/hooks/hooks.json — Phase 7 would embed a fragment that differs from what actually runs here.
+        settings.json: []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"startup"}, map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"resume"}}
+        hooks.json:    []interface {}{map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"startup"}, map[string]interface {}{"hooks":[]interface {}{map[string]interface {}{"command":"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh", "type":"command"}}, "matcher":"clear"}}
+--- FAIL: TestHookRegistrationMatchesFragmentAndScript (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.091s
+```
+
+The failure names both `../../.claude/settings.json` and `../../.claude/hooks/hooks.json` in its
+message and prints the full decoded block from each side, exactly the "names both files" property
+the plan requires.
+
+**Revert confirmation:** the hunk was reverted with `git checkout -- .claude/hooks/hooks.json`;
+`git diff --exit-code -- .claude/hooks/hooks.json` showed nothing changed; `go test
+./internal/agents/... -count=1` exited 0.
+
+---
+
+## Mutation 15 — one character changed in the nudge message (06-03-PLAN Task 3, D-06/NUDGE-01)
+
+**Requirement:** `TestSessionNudgeBehavesPerIndexPresence`'s byte-equality assertion must go red on
+a single-character change to the emitted text, proving the check is a byte-equality comparison and
+not a substring/prefix check that a near-miss could slip past.
+
+**Edit:** `.claude/hooks/session-nudge.sh`'s `printf` argument, trailing "questions" → "question"
+(dropped one character):
+
+```diff
+-  printf '%s\n' 'This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.'
++  printf '%s\n' 'This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.'
+```
+
+**Confirmed applied:** `git diff -- .claude/hooks/session-nudge.sh` showed exactly this hunk.
+
+**Gate that went red — the named gate
+(`go test ./internal/agents/... -run TestSessionNudgeBehavesPerIndexPresence -count=1 -v`):**
+
+```
+=== RUN   TestSessionNudgeBehavesPerIndexPresence
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/codegraph_dir_present,_env_set
+    hookpackage_test.go:188: stdout = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.\n", want "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.\n"
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/no_codegraph_entry_at_all,_env_set
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_a_regular_file,_env_set
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_an_empty_directory,_env_set
+    hookpackage_test.go:188: stdout = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.\n", want "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.\n"
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/env_unset,_cmd.Dir_indexed
+    hookpackage_test.go:188: stdout = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y question.\n", want "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions.\n"
+=== RUN   TestSessionNudgeBehavesPerIndexPresence/env_unset,_cmd.Dir_unindexed
+--- FAIL: TestSessionNudgeBehavesPerIndexPresence (0.06s)
+    --- FAIL: TestSessionNudgeBehavesPerIndexPresence/codegraph_dir_present,_env_set (0.03s)
+    --- PASS: TestSessionNudgeBehavesPerIndexPresence/no_codegraph_entry_at_all,_env_set (0.01s)
+    --- PASS: TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_a_regular_file,_env_set (0.01s)
+    --- FAIL: TestSessionNudgeBehavesPerIndexPresence/codegraph_present_as_an_empty_directory,_env_set (0.01s)
+    --- FAIL: TestSessionNudgeBehavesPerIndexPresence/env_unset,_cmd.Dir_indexed (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.124s
+```
+
+The two sub-cases where `.codegraph/` is absent still pass unaffected (no output expected either
+way), and every sub-case where the nudge fires fails on the exact byte mismatch — confirming the
+assertion is byte-equality, not a substring check that a dropped character could pass silently.
+
+**Revert confirmation:** the hunk was reverted with `git checkout -- .claude/hooks/session-nudge.sh`;
+`git diff --exit-code -- .claude/hooks/session-nudge.sh` showed nothing changed; `go test
+./internal/agents/... -count=1` exited 0.
+
+---
+
+## Mutation 16 — the nudge script renamed on disk (06-03-PLAN Task 3, NUDGE-01/T-06-07)
+
+**Requirement:** `TestHookRegistrationMatchesFragmentAndScript`'s command-path resolution assertion
+must go red when the script a registration names no longer exists on disk — the check that a
+silently-disabled nudge fails the build instead of failing quietly, per the plan's own framing.
+
+**Edit:** `.claude/hooks/session-nudge.sh` renamed to `.claude/hooks/session-nudge-renamed.sh` via
+`mv` (a filesystem rename, not a source edit — there is no diff to show; `ls .claude/hooks/`
+confirmed the script was absent under its registered name and present under the new one).
+
+**Gate that went red — the named gate
+(`go test ./internal/agents/... -run 'TestHookRegistrationMatchesFragmentAndScript$' -count=1 -v`):**
+
+```
+=== RUN   TestHookRegistrationMatchesFragmentAndScript
+    hookpackage_test.go:377: command path "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-nudge.sh" (resolved "../../.claude/hooks/session-nudge.sh") does not exist: stat ../../.claude/hooks/session-nudge.sh: no such file or directory
+--- FAIL: TestHookRegistrationMatchesFragmentAndScript (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/agents	0.053s
+```
+
+This is the failure mode the plan calls out explicitly: a renamed or deleted script does not make
+the nudge silently stop firing with nothing noticing — it fails the build.
+
+**Revert confirmation:** the file was renamed back with `mv .claude/hooks/session-nudge-renamed.sh
+.claude/hooks/session-nudge.sh`; `git status --porcelain -- .claude/` showed nothing changed (the
+file was never staged or committed under the renamed name, so there is no git-tracked residue to
+revert); `go test ./internal/agents/... -count=1` exited 0.
+
+---
+
+## Closing statement (06-03-PLAN Task 3)
+
+`git status --porcelain` was checked after all five mutations above were reverted and before this
+section was written and staged — the same cleanliness-proves-no-residue discipline every prior
+Closing statement in this document set. All five mutations were reverted; the tree showed no diff
+(`git diff --exit-code` exited 0) before this document's edits were staged.
+
+`go test ./... -count=1` was then run on the reverted tree TWICE (once to verify the reverted tree
+directly, once again to satisfy this task's own `<verify>` block). `internal/daemon` failed each
+time, but on a DIFFERENT named test each run —
+`TestRunWatchdogCancelsRunOnSimulatedReparent` the first time, `TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock`
+the second — both plain timeouts inside the same package under the same full-suite concurrent load.
+This is the load-dependent condition this repository's own `STATE.md` already documents (GitHub
+issue #17, "Daemon extreme-load tail (ACCEPTED, not a gap)" — orphaned-goroutine root cause fixed in
+Phase 4, one plain-timeout failure still observed under pathological workstation load, 52/52 real
+CI runs clean on the actual runner class); a different test name surfacing each run is consistent
+with a load-timing race rather than a deterministic regression this plan's changes introduced — none
+of this task's five mutations touch `internal/daemon` or anything it imports. Both named tests were
+re-run in isolation and both passed:
+`go test ./internal/daemon/... -run TestRunWatchdogCancelsRunOnSimulatedReparent -count=1 -v` passed
+in 1.06s; `go test ./internal/daemon/... -run TestDaemonRunWaitsForInFlightFlushBeforeReleasingLock
+-count=1 -v` passed in 5.17s — both matching STATE.md's own description of this condition exactly
+("fails under full-suite load, passes isolated"). This was identified as the documented pre-existing
+condition, not absorbed as a new failure, per this plan's own acceptance criteria. Every other
+package in both `go test ./... -count=1` runs passed, including `internal/mcp` (4.1-4.6s),
+`internal/agents` (0.4s, part of the passing set), and `test/wireoracle` (36.9-38.7s).
+
+`grep -c '^## Mutation' test/wireoracle/MUTATION-PROOF.md` on the committed file returns **16** —
+the pre-task count of 11 plus the 5 entries appended by this task.

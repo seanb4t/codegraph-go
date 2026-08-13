@@ -42,6 +42,18 @@ func recordAction(result *WriteResult, path string, action FileAction, err error
 // or block install/uninstall (V5, T-06-01). A genuine I/O error other
 // than "file does not exist" (e.g. a permission failure) is surfaced to
 // the caller alongside the empty-map fallback.
+//
+// This permissive fallback remains the deliberate posture for every
+// caller except claudeSettingsPath's two AutoAllow steps: writeMcpEntry/
+// removeMcpEntry (operating on .mcp.json and ~/.claude.json), plus every
+// other agent target's config path across the other seven agents. Only
+// addClaudeAllowPermission and removeClaudeAllowPermission moved to
+// readJSONFileStrict (Plan 02 Task 3), because — and only because —
+// claudeSettingsPath(loc) is also where Plan 01's writeHookEntry/
+// removeHookEntry now merge, and those two already read it strictly. A
+// single file must not have two contradictory read postures depending on
+// which step reaches it first; every other file this package edits has
+// exactly one writer-side step, so this divergence does not apply there.
 func readJSONFile(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -125,6 +137,366 @@ func jsonDeepEqual(a, b any) bool {
 	default:
 		return a == b
 	}
+}
+
+// readJSONFileStrict parses path as a JSON object like readJSONFile, but
+// distinguishes three outcomes instead of readJSONFile's two: absent file
+// (empty map, existed=false, nil error), a genuine read failure (nil map,
+// existed=false, the wrapped error), and a present-but-undecodable file —
+// including one that is valid JSON but not an object, or empty (nil map,
+// existed=true, an error naming path). This is deliberately the opposite
+// posture from readJSONFile's documented empty-map fallback (above) — that
+// fallback is correct for the MCP-entry/CLAUDE.md paths it already
+// governs, and wrong for this phase's own read-error/malformed-file
+// invariant (roadmap success criterion 4): a malformed or unreadable
+// settings.json must make the caller write nothing, not silently proceed
+// as if the file were empty. Modeled on internal/githooks/githooks.go's
+// skip-and-accumulate read switch (CR-01/CR-02); readJSONFile itself is
+// unmodified — every existing caller keeps its permissive fallback.
+func readJSONFileStrict(path string) (map[string]any, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{}, false, nil
+		}
+		return nil, false, fmt.Errorf("could not read existing file: %w", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, true, fmt.Errorf("%s: existing file is not valid JSON — fix or remove it manually: %w", path, err)
+	}
+	if out == nil {
+		out = map[string]any{}
+	}
+	return out, true, nil
+}
+
+// writeHookEntry is the array-scoped analog of writeMcpEntry for
+// hooks.<event>, an array of independent {matcher, hooks[]} blocks rather
+// than a single named map key (RESEARCH Pitfall 1). It reads path via
+// readJSONFileStrict and returns the error unwritten if the read failed —
+// a malformed or unreadable settings.json is left byte-untouched, never
+// silently proceeded past. Ownership of a block is determined SOLELY by
+// exact command-string match within the block's own hooks[] sub-array
+// against ownCommands, never by the block's matcher value or shape: a user
+// may legitimately register their own unrelated block under the same
+// matcher (e.g. "startup") — RESEARCH Pitfall 1.
+//
+// A hand-edited codegraph-owned block therefore stops matching by command
+// identity and is treated as unowned — codegraph's fresh block gets
+// appended alongside it rather than overwriting it in place, producing a
+// duplicate matcher entry. This is a deliberate, accepted tradeoff: a
+// matcher-and-shape recovery heuristic was tried and reverted (Plan 03
+// Task 3 → this revert) after security review found it let codegraph
+// silently claim ownership of — and overwrite — any unrelated single-
+// command hook a user placed under the same matcher name, whenever a
+// codegraph manifest happened to be present at that location. Duplication
+// is untidy; silently destroying content codegraph never wrote is not an
+// acceptable trade to avoid it.
+//
+// If the owned partition already jsonDeepEquals the normalized ownBlocks,
+// nothing is written (ActionUnchanged); otherwise the array is rebuilt as
+// the unowned blocks in their original relative order followed by
+// ownBlocks. Every unrelated event key and every unowned block under the
+// same event is carried through untouched.
+func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
+	existing, existedBefore, err := readJSONFileStrict(path)
+	if err != nil {
+		return FileResult{}, err
+	}
+
+	hooks, _ := existing["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+	}
+	events, _ := hooks[event].([]any)
+
+	isOwned := func(block any) bool {
+		obj, ok := block.(map[string]any)
+		if !ok {
+			return false
+		}
+		blockHooks, ok := obj["hooks"].([]any)
+		if !ok {
+			return false
+		}
+		for _, h := range blockHooks {
+			hObj, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			cmd, _ := hObj["command"].(string)
+			for _, own := range ownCommands {
+				if cmd == own {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	var owned, unowned []any
+	for _, b := range events {
+		if isOwned(b) {
+			owned = append(owned, b)
+		} else {
+			unowned = append(unowned, b)
+		}
+	}
+
+	normalized, err := normalizeJSON(ownBlocks)
+	if err != nil {
+		return FileResult{}, err
+	}
+	normalizedOwn, _ := normalized.([]any)
+
+	if jsonDeepEqual(owned, normalizedOwn) {
+		return FileResult{Path: path, Action: ActionUnchanged}, nil
+	}
+
+	newEvents := append(append([]any{}, unowned...), normalizedOwn...)
+	hooks[event] = newEvents
+	existing["hooks"] = hooks
+
+	if err := writeJSONFile(path, existing); err != nil {
+		return FileResult{}, err
+	}
+	action := ActionCreated
+	if existedBefore {
+		action = ActionUpdated
+	}
+	return FileResult{Path: path, Action: action}, nil
+}
+
+// atomicWriteExecutableFile writes content to path via fsatomic.WriteFile
+// and then marks it owner-executable. fsatomic.WriteFile preserves an
+// existing file's mode but defaults a brand-new file to 0644 (not
+// executable), so a script written through the unmodified primitive would
+// silently fail to run under Claude Code's SessionStart dispatch
+// (RESEARCH Pitfall 3, NUDGE-01 regression risk). internal/fsatomic is
+// not modified — this is an additive wrapper, not a new file-safety
+// primitive.
+func atomicWriteExecutableFile(path, content string) error {
+	if err := fsatomic.WriteFile(path, content); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o755)
+}
+
+// writeEmbeddedFile writes content to path — funnelled through
+// atomicWriteFile or atomicWriteExecutableFile — only if the file's
+// current bytes differ from content. This is what makes the non-JSON
+// artifacts (SKILL.md, session-nudge.sh) raw-byte idempotent (D-07):
+// re-running install against unchanged embedded content is a true no-op,
+// never a rewrite with identical bytes.
+//
+// For an executable artifact, byte-identity alone is not enough to
+// short-circuit: the content comparison says nothing about the file's
+// mode, so a lost executable bit (chmod -x, a backup/restore cycle, an AV
+// quarantine round-trip) would otherwise never self-heal once content
+// pinned to the embedded version — the SessionStart hook would then
+// silently stop running with no error anywhere (code review CR-02). When
+// content matches but the executable bit is missing, chmod in place
+// without a full rewrite and report ActionUpdated.
+func writeEmbeddedFile(path, content string, executable bool) (FileResult, error) {
+	existed := fileExists(path)
+	if existed {
+		current, err := os.ReadFile(path)
+		if err != nil {
+			return FileResult{}, err
+		}
+		if string(current) == content {
+			if !executable {
+				return FileResult{Path: path, Action: ActionUnchanged}, nil
+			}
+			info, statErr := os.Stat(path)
+			if statErr != nil {
+				return FileResult{}, statErr
+			}
+			if info.Mode()&0o111 != 0 {
+				return FileResult{Path: path, Action: ActionUnchanged}, nil
+			}
+			if err := os.Chmod(path, 0o755); err != nil {
+				return FileResult{}, err
+			}
+			return FileResult{Path: path, Action: ActionUpdated}, nil
+		}
+	}
+
+	var writeErr error
+	if executable {
+		writeErr = atomicWriteExecutableFile(path, content)
+	} else {
+		writeErr = atomicWriteFile(path, content)
+	}
+	if writeErr != nil {
+		return FileResult{}, writeErr
+	}
+
+	action := ActionCreated
+	if existed {
+		action = ActionUpdated
+	}
+	return FileResult{Path: path, Action: action}, nil
+}
+
+// removeHookEntry is the array-scoped removal analog of writeHookEntry,
+// mirroring removeMcpEntry's keep-clean discipline for hooks.<event>
+// (Plan 02 Task 1). It reads path via readJSONFileStrict and returns the
+// error unwritten if the read failed — a malformed or unreadable
+// settings.json is left byte-untouched on uninstall too, the same
+// fail-loud posture writeHookEntry established for install. Ownership is
+// identified purely by exact command-string match inside a block's own
+// hooks[] sub-array against ownCommands, never by matcher value (T-07-04)
+// — a user's own block sharing codegraph's matcher (e.g. "startup") is
+// never touched.
+//
+// A block that mixes codegraph's own hook entry with an unrelated one in
+// the same hooks[] sub-array has only codegraph's entry stripped; the
+// block itself survives with the unrelated entry intact. Only when
+// removing codegraph's entry would empty the sub-array does the whole
+// block go. Once every block is resolved, the same keep-clean cascade
+// removeMcpEntry already establishes applies here too: an emptied event
+// array deletes the event key, an emptied hooks object deletes the
+// top-level hooks key, and an emptied settings object deletes the file
+// entirely — mirroring "the file never existed before install" for the
+// uninstall direction. Reports ActionNotFound (never an error) when
+// there is no hooks object, no such event, or nothing owned to remove —
+// matching the pre-existing D-08 invariant.
+func removeHookEntry(path, event string, ownCommands []string) (FileResult, error) {
+	existing, _, err := readJSONFileStrict(path)
+	if err != nil {
+		return FileResult{}, err
+	}
+
+	hooks, ok := existing["hooks"].(map[string]any)
+	if !ok {
+		return FileResult{Path: path, Action: ActionNotFound}, nil
+	}
+	events, ok := hooks[event].([]any)
+	if !ok {
+		return FileResult{Path: path, Action: ActionNotFound}, nil
+	}
+
+	isOwnCommand := func(cmd string) bool {
+		for _, own := range ownCommands {
+			if cmd == own {
+				return true
+			}
+		}
+		return false
+	}
+
+	var anyRemoved bool
+	var kept []any
+	for _, b := range events {
+		obj, ok := b.(map[string]any)
+		if !ok {
+			kept = append(kept, b)
+			continue
+		}
+		blockHooks, ok := obj["hooks"].([]any)
+		if !ok {
+			kept = append(kept, b)
+			continue
+		}
+
+		var survivingHooks []any
+		blockChanged := false
+		for _, h := range blockHooks {
+			hObj, ok := h.(map[string]any)
+			if !ok {
+				survivingHooks = append(survivingHooks, h)
+				continue
+			}
+			cmd, _ := hObj["command"].(string)
+			if isOwnCommand(cmd) {
+				blockChanged = true
+				anyRemoved = true
+				continue
+			}
+			survivingHooks = append(survivingHooks, h)
+		}
+
+		if !blockChanged {
+			kept = append(kept, b)
+			continue
+		}
+		if len(survivingHooks) == 0 {
+			// The whole block was codegraph's own — drop it entirely.
+			continue
+		}
+		newObj := make(map[string]any, len(obj))
+		for k, v := range obj {
+			newObj[k] = v
+		}
+		newObj["hooks"] = survivingHooks
+		kept = append(kept, newObj)
+	}
+
+	if !anyRemoved {
+		return FileResult{Path: path, Action: ActionNotFound}, nil
+	}
+
+	if len(kept) == 0 {
+		delete(hooks, event)
+	} else {
+		hooks[event] = kept
+	}
+	if len(hooks) == 0 {
+		delete(existing, "hooks")
+	} else {
+		existing["hooks"] = hooks
+	}
+
+	if len(existing) == 0 {
+		if err := os.Remove(path); err != nil {
+			return FileResult{}, err
+		}
+		return FileResult{Path: path, Action: ActionRemoved}, nil
+	}
+	if err := writeJSONFile(path, existing); err != nil {
+		return FileResult{}, err
+	}
+	return FileResult{Path: path, Action: ActionRemoved}, nil
+}
+
+// removeEmbeddedFile removes path if it exists, reporting ActionRemoved.
+// Reports ActionNotFound (never an error) when path does not exist,
+// matching the pre-existing D-08 invariant; any other os.Remove error is
+// surfaced unwrapped for the caller to attach path context to via
+// recordFile.
+func removeEmbeddedFile(path string) (FileResult, error) {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return FileResult{Path: path, Action: ActionNotFound}, nil
+		}
+		return FileResult{}, err
+	}
+	return FileResult{Path: path, Action: ActionRemoved}, nil
+}
+
+// removeSkillDirIfEmpty removes dir only when it is already empty.
+// os.Remove on a directory succeeds solely under that condition and
+// fails otherwise with a platform-specific "not empty" error (ENOTEMPTY
+// on Unix, a different code on Windows) — rather than matching that
+// value, this confirms directly by re-reading dir: if entries remain,
+// the failure was exactly the expected one and is a deliberate no-op, so
+// a user-authored file (or Phase 6's own verification/ subdirectory)
+// keeps the directory alive. Never a recursive delete — the directory is
+// codegraph-named but not codegraph-exclusive, and losing a user's file
+// there is irreversible while leaving an empty directory behind is not
+// (this plan's must_haves.prohibitions).
+func removeSkillDirIfEmpty(dir string) error {
+	err := os.Remove(dir)
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr == nil && len(entries) > 0 {
+		return nil
+	}
+	return err
 }
 
 // writeMcpEntry reads path's existing JSON, sets mcpServers.codegraph to

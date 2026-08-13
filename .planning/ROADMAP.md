@@ -6,6 +6,8 @@ CodeGraph Go is a ground-up Go rewrite of TypeScript CodeGraph — a drop-in, TS
 
 **v0.5.0 (macOS Distribution & Homebrew) shipped 2026-08-11.** The binary is now *installable by convention* on macOS. `spctl -a -vv -t exec` returns **accepted** on both darwin arches, and `brew tap seanb4t/tap && brew install codegraph` works on a clean machine. The release pipeline moved onto a single `goreleaser release` invocation — whose `notarize:` and `homebrew_casks:` blocks never execute under the `goreleaser build --single-target` matrix the pipeline had always used — with both Linux legs `zig cc` cross-compiled from one macOS runner. That cross-compilation was the milestone's single unproven claim; it was spiked first, blocking, and **passed on variation V1 at first dispatch**, so the costed GoReleaser Pro fallback was never bought. `codegraph upgrade` now detects a Homebrew-managed install and steps aside rather than mutating a Caskroom the package manager owns.
 
+**v0.10.0 (Agent Onboarding Skill & MCP Resources) shipped 2026-08-13.** Every prior milestone made the tools better; none of them made an agent *use* the tools. The binary was fast, correct, signed, and installable — and an agent with codegraph configured still reached for grep first, because the only thing the server ever told it about itself was a marker block and a wire-level `instructions` string that deferred full tool guidance to "the MCP initialize response (Phase 3)" — a hand-off that was never built. That stale promise actively misdirected a real debug session on 2026-08-08, which is the incident this milestone existed to close. The fix landed as three surfaces that reinforce each other: the server serves its own reference documentation over **MCP Resources**, a **SKILL.md** teaches the decision procedure (*which question goes to which tool*) and points at those resources instead of restating them, and a **SessionStart nudge** makes codegraph's availability visible at the moment it matters. `codegraph install` ships the skill package versioned with the binary, and the `instructions` string was rewritten last, so it names only things that already exist.
+
 **Versioning note:** "v1.0" is a *planning-milestone* name, never a release version. The shipped artifact line reached `v0.2.0` at v1.0's close and has since advanced through `v0.3.0`, `v0.4.0` and — across v0.5.0 — `v0.5.0` … `v0.9.0`, each computed by release-please from Conventional Commits; there is deliberately no `v1.0.0` tag (maintainer directive D-06R, 2026-07-29). Milestone labels track the release line but carry **no git tag**: release-please remains the sole tag authority, pinned by `TestGsdTagCreationIsDisabled`. A hand-created `v*` tag would additionally match `release.yml`'s `push: tags: "v[0-9]*"` trigger and falsely fire the release pipeline. The milestone record lives in `MILESTONES.md` + `milestones/`. (`milestone-v0.1` exists only because it predates release-please.)
 
 ## Milestones
@@ -14,7 +16,8 @@ CodeGraph Go is a ground-up Go rewrite of TypeScript CodeGraph — a drop-in, TS
 - ✅ **v1.0 — Drop-in Parity & Human UX** — Phases 1–10 (shipped 2026-08-03) — behavioral + surface parity with TS 1.3.1, human TUI, automated signed releases, local build tooling
 - ✅ **v0.3.0 — MCP Protocol Currency** — Phases 1–5 (shipped 2026-08-06) — official Go SDK adoption, `2026-07-28` spec compliance without breaking Legacy clients, a wire-level verification oracle, tool-modfile vulnerability coverage
 - ✅ **v0.5.0 — macOS Distribution & Homebrew** — Phases 1–4 (shipped 2026-08-11) — `goreleaser release` migration with zig cross-compilation, Apple notarization, a Homebrew tap and cask, and an `upgrade` that steps aside under brew. Promoted backlog 999.5, consumed SEED-002. Full detail: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md)
-- 📋 **Later** — unscoped. Candidates: the Backlog items below (999.2 tmux TTY harness, 999.4 CheckRegression guard), the v0.5.x deferrals (DIST-06 stapled offline-safe container, BREW-07 homebrew-core), Team Scale (central server, CI-distributed indexes), MRTR/elicitation (MRTR-01), annotations (embeddings/communities/export), local Svelte web UI (SEED-001)
+- ✅ **v0.10.0 — Agent Onboarding Skill & MCP Resources** — Phases 5–8 (shipped 2026-08-13) — the server documents itself over MCP Resources, a decision-procedure-first SKILL.md plus a SessionStart nudge teach agents when to reach for it, `codegraph install` ships that package with the binary, and the stale `instructions` promise was retired last. Consumed the 2026-08-08 skill todo. Full detail: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · requirements: [`milestones/v0.10.0-REQUIREMENTS.md`](./milestones/v0.10.0-REQUIREMENTS.md)
+- 📋 **Later** — unscoped. Candidates: v0.10.0's own v2 deferrals (the PreToolUse guard hook GUARD-HOOK-01/02, multi-agent skill+hooks porting AGENT-04…07), the Backlog items below (999.2 tmux TTY harness, 999.4 CheckRegression guard), the v0.5.x deferrals (DIST-06 stapled offline-safe container, BREW-07 homebrew-core), Team Scale (central server, CI-distributed indexes), MRTR/elicitation (MRTR-01), annotations (embeddings/communities/export), local Svelte web UI (SEED-001)
 
 ## Phases
 
@@ -51,9 +54,21 @@ Archived: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md) · re
 
 </details>
 
+<details>
+<summary>✅ v0.10.0 Agent Onboarding Skill & MCP Resources (Phases 5–8) — SHIPPED 2026-08-13</summary>
+
+- [x] Phase 5: MCP Resources Capability & Claims Drift Guard (4/4 plans) — RSRC-01…03, GUARD-01…02
+- [x] Phase 6: Agent Skill Package — SKILL.md & SessionStart Nudge (4/4 plans) — SKILL-01…03, NUDGE-01…02
+- [x] Phase 7: `codegraph install` Skill + Hooks Distribution (Claude Code) (4/4 plans) — AGENT-01…03
+- [x] Phase 8: Instructions & Marker-Block Rewrite (3/3 plans) — WIRE-01…03
+
+Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · requirements: [`milestones/v0.10.0-REQUIREMENTS.md`](./milestones/v0.10.0-REQUIREMENTS.md)
+
+</details>
+
 ## Progress
 
-4 milestones shipped. Next milestone unscoped — run `/gsd-new-milestone` to define it.
+5 milestones shipped. No active milestone — run `/gsd-new-milestone` to define one.
 
 ## Backlog
 

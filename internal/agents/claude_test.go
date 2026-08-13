@@ -106,14 +106,26 @@ func TestClaude_GlobalInstall_AutoAllowAddsPermissionOnceIdempotent(t *testing.T
 	}
 }
 
-func TestClaude_Install_NoAutoAllow_NoSettingsWrite(t *testing.T) {
+// TestClaude_Install_NoAutoAllow_NoPermissionsWrite pins AutoAllow's own
+// scope after Phase 7: it gates only the permissions.allow entry.
+// settings.json itself is now written unconditionally (D-01 — the
+// skill/hooks package follows --location with no --auto-allow
+// special-casing), to carry the SessionStart hooks registration.
+func TestClaude_Install_NoAutoAllow_NoPermissionsWrite(t *testing.T) {
 	home := fakeHome(t)
 	c := claudeTarget{}
 	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
 
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
-	if fileExists(settingsPath) {
-		t.Fatalf("settings.json should not be written without AutoAllow")
+	if !fileExists(settingsPath) {
+		t.Fatalf("settings.json should exist — Phase 7 writes the SessionStart hooks registration unconditionally")
+	}
+	existing, err := readJSONFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings.json: %v", err)
+	}
+	if _, ok := existing["permissions"]; ok {
+		t.Fatalf("permissions should not be written without AutoAllow: %#v", existing["permissions"])
 	}
 }
 

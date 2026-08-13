@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -185,5 +186,98 @@ func TestInstructionsBlock_ExactMarkerText(t *testing.T) {
 	}
 	if codegraphSectionEnd != "<!-- CODEGRAPH_END -->" {
 		t.Fatalf("codegraphSectionEnd = %q, want the exact TS marker text", codegraphSectionEnd)
+	}
+}
+
+// blockNamesUnshippedCapability is WIRE-02/D-04's honesty checker: the
+// marker block is shared across all 4 marker-block agent targets (Claude,
+// Codex, opencode, Gemini), but only Claude Code ever receives the
+// embedded skill package (Phase 7, AGENT-01, v1-scoped). A block naming a
+// skill would send the other 3 targets after a file install never wrote
+// for them.
+//
+// It takes the block string as a parameter and never reads
+// codegraphInstructionsBlock from package scope — so it stays
+// table-testable against synthetic inputs (Task 2) and so a doc comment
+// that discusses this very rule cannot make the gate vacuous by accident:
+// the checker inspects the const's VALUE, never this source file's bytes.
+func blockNamesUnshippedCapability(block string) error {
+	if !strings.Contains(block, "codegraph_explore") {
+		return fmt.Errorf("marker block %q never mentions codegraph_explore, so an agent reading it has no pointer to the MCP tool that answers most code questions in one call", block)
+	}
+	if !strings.Contains(block, "resources/list") {
+		return fmt.Errorf("marker block %q never mentions resources/list, so an agent reading it has no pointer to the per-tool reference docs (WIRE-02)", block)
+	}
+	if strings.Contains(strings.ToLower(block), "skill") {
+		return fmt.Errorf("marker block %q names a skill, but 3 of its 4 targets (Codex, opencode, Gemini) never receive one (D-04) — this block is shared across all 4 and must stay skill-agnostic", block)
+	}
+	return nil
+}
+
+// TestInstructionsBlockNamesOnlyShippedCapabilities applies
+// blockNamesUnshippedCapability to the real codegraphInstructionsBlock
+// const value — the direct proof of ROADMAP success criterion 2. RED
+// before the resources/list bullet is added to the block body.
+func TestInstructionsBlockNamesOnlyShippedCapabilities(t *testing.T) {
+	if err := blockNamesUnshippedCapability(codegraphInstructionsBlock); err != nil {
+		t.Fatalf("codegraphInstructionsBlock %v", err)
+	}
+}
+
+// TestInstructionsBlockGuardIsNotVacuous proves
+// blockNamesUnshippedCapability actually discriminates, across all three
+// failure classes plus their passing neighbours — including a mixed-case
+// skill row, since a case-sensitive check would let "Skill"/"SKILL"
+// through. Without this, a checker that returned nil unconditionally
+// would pass TestInstructionsBlockNamesOnlyShippedCapabilities forever
+// and prove nothing (T-08-06).
+func TestInstructionsBlockGuardIsNotVacuous(t *testing.T) {
+	cases := []struct {
+		name    string
+		block   string
+		wantErr bool
+	}{
+		{
+			name:    "explore + resources/list, no skill word",
+			block:   "Use codegraph_explore first. Call resources/list for more.",
+			wantErr: false,
+		},
+		{
+			name:    "same block plus a sentence naming an installed skill file",
+			block:   "Use codegraph_explore first. Call resources/list for more. See the installed skill file at .claude/skills/codegraph/SKILL.md.",
+			wantErr: true,
+		},
+		{
+			name:    "same block, skill word in mixed case",
+			block:   "Use codegraph_explore first. Call resources/list for more. See the installed Skill file.",
+			wantErr: true,
+		},
+		{
+			name:    "resources/list present, codegraph_explore missing",
+			block:   "Call resources/list for more.",
+			wantErr: true,
+		},
+		{
+			name:    "codegraph_explore present, resources/list missing",
+			block:   "Use codegraph_explore first.",
+			wantErr: true,
+		},
+		{
+			name:    "empty block",
+			block:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := blockNamesUnshippedCapability(tc.block)
+			if tc.wantErr && err == nil {
+				t.Fatalf("blockNamesUnshippedCapability(%q) = nil, want an error", tc.block)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("blockNamesUnshippedCapability(%q) = %v, want nil", tc.block, err)
+			}
+		})
 	}
 }

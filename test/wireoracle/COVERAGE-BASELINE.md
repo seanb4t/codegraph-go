@@ -1,15 +1,15 @@
 # Wire Oracle Coverage Baseline
 
 **Originally captured:** 2026-08-05 (Phase 1, `01-protocol-scoping-the-sdk-independent-wire-oracle`)
-**Last updated:** 2026-08-08 (debug session `mcp-server-one-tool-only` — the `CODEGRAPH_MCP_TOOLS` inversion)
-**Scenario count:** 29 (`test/wireoracle.ExpectedScenarioCount`)
+**Last updated:** 2026-08-12 (Phase 5 plan 05-04 — remaining wire coverage for the full 10-resource catalog)
+**Scenario count:** 42 (`test/wireoracle.ExpectedScenarioCount`)
 
 This is the human-readable index of the complete, frozen scenario set the wire oracle
 (`test/wireoracle`) captures against the real `codegraph` binary. It is **not** a second source of
 truth — the structural guarantees it describes already live in code, enforced on every `go test
-./test/wireoracle/...` run by four tests:
+./test/wireoracle/...` run by five tests:
 
-- `TestScenarioCountIsExact` — the count below is exactly 29, enforced with equality, never a lower
+- `TestScenarioCountIsExact` — the count below is exactly 42, enforced with equality, never a lower
   bound.
 - `TestTranscriptSetMatchesScenarioSet` — every scenario named below has exactly one
   `testdata/wireoracle/transcripts/<name>.golden` file, and no orphaned file exists.
@@ -17,6 +17,9 @@ truth — the structural guarantees it describes already live in code, enforced 
   MCP tools has a scenario proving a successful `tools/call`.
 - `TestLegacyEraBaselineIsDocumented` (plan 01-05) — the six-era Legacy handshake baseline below is
   exactly 6 scenarios, and the four supported revisions negotiate to themselves.
+- `TestEveryAdvertisedResourceURIHasASuccessfulReadScenario` (plan 05-04) — every resource URI a
+  live `resources-list` capture advertises has a scenario proving a successful `resources/read`,
+  derived from the capture rather than a hand-typed list.
 
 This file exists so a human (or a later phase's planner) can see the complete set at a glance
 without reading `scenarios.go`; if this file and the code ever disagree, the code — and the four
@@ -49,6 +52,40 @@ tests above — are authoritative.
   added `toolslist-filter-empty` (28 → 29), renamed `toolslist-allowlist` to `toolslist-narrowed`
   (no count change), and moved the frozen bytes of most transcripts in the corpus — see the
   tool-visibility table below.
+- **Phase 5** (`05-mcp-resources-capability-claims-drift-guard`, plan 05-01, 2026-08-12) turned
+  `capabilities.resources` on for the first time — the MCP Resources capability's tracer slice,
+  registering one resource (`codegraph://tools/explore`). This moved 25 of the 29 existing
+  transcripts (every one that carries a `capabilities` object), under one named cause:
+  `capabilities.resources` now appears in every `initialize`/`server/discover` result, emitted
+  before `tools` because Go's `encoding/json` marshals `ServerCapabilities`' fields in declaration
+  order. The 4 scenarios carrying no `capabilities` object (`edge-call-before-initialize`,
+  `modern-listen-catalog-change`, `modern-meta-invalid-params`, `modern-meta-unsupported-version`)
+  came back byte-identical. It also added 2 new scenarios (29 → 31): `resources-list` and
+  `resources-read-explore`, the first `resources/list`/`resources/read` wire coverage in this
+  corpus, anchored by `assertResourceCacheControl` pinning `cacheScope: "private"`. Plan 05-04
+  extends this category further with the remaining 9 tool/behavior-doc resources this phase adds —
+  a reader mid-phase should not read the table below as the category's final shape.
+- **Phase 5** (`05-mcp-resources-capability-claims-drift-guard`, plan 05-02, 2026-08-12) fanned
+  out from the tracer slice to the full 10-resource catalog (7 more per-tool fact-sheets plus the 2
+  behavior docs, `tools-filter.md`/`index-state.md`). The scenario **set** did not change size (no
+  scenario added or removed); this plan moved exactly ONE transcript, `resources-list.golden`,
+  under one named cause: `resources/list`'s advertised set grew from the tracer's 1 entry
+  (`codegraph://tools/explore`) to all 10 registered URIs, since this plan's `registerResources`
+  call now iterates 10 embedded files instead of 1. `resources-read-explore.golden` came back
+  byte-identical, since `codegraph://tools/explore`'s own content and description did not change.
+- **Phase 5** (`05-mcp-resources-capability-claims-drift-guard`, plan 05-04, 2026-08-12) closed out
+  the remaining `resources/read` wire coverage: one wire read scenario for each of the 9 resource
+  URIs not already covered by plan 05-01's tracer (`resources-read-node/search/callers/callees/
+  impact/files/status/tools-filter/index-state`), every one `Index: false` and therefore also
+  independently proving criterion 2's never-indexed-repository property (29 → 40, Task 1). It then
+  added `resources-list-no-index` (the full 10-entry catalog with no index, paired with the
+  pre-existing `toolslist-no-index` transcript as criterion 2's proof) and `resources-read-unknown`
+  (the `-32602` unregistered-URI error shape, T-05-02's mitigation observed on the wire) (40 → 42,
+  Task 2). No pre-existing transcript moved a byte across either task — every change was a new file.
+  Task 3 re-proved the oracle non-vacuous (Mutation 10, the resources capability's explicit zero
+  value removed) and proved RSRC-03's index-independence structurally (Mutation 11, resource
+  registration moved inside `if hasIndex`), both confirmed-applied, observed red, and reverted
+  byte-clean.
 
 ## The complete scenario set, grouped by coverage category
 
@@ -142,12 +179,47 @@ four protocol revisions the server recognizes, plus the revision Phase 3 impleme
 |---|---|
 | `index-appears-mid-session` | A server started with NO index present advertises zero tools on its first `tools/list`; a REAL `codegraph init` subprocess then runs against the server's own working directory mid-session (via `InitAfterRequest`, a response-observed wait, never a sleep); the SAME live connection's second `tools/list` advertises the full catalog — no restart, no reconnect. Proves SPEC-05's per-request re-check (`internal/mcp/server.go`'s `recheckCatalog`). |
 
+### MCP Resources (13) — plans 05-01, 05-02, 05-04
+
+`resources/list` and `resources/read` wire coverage — the complete, final shape of this category.
+Plan 05-01's tracer slice registered the first resource (`codegraph://tools/explore`) and captured
+`resources-list`/`resources-read-explore`. Plan 05-02 fanned out to the full 10-resource catalog (7
+more per-tool fact-sheets plus the 2 behavior docs), which changed `resources-list`'s advertised set
+from 1 entry to 10 — the scenario's ONE named re-freeze cause for that plan, with
+`resources-read-explore` coming back byte-identical since `codegraph://tools/explore`'s own content
+did not change. Plan 05-04 closed out the remaining wire coverage: one `resources/read` scenario per
+URI not yet covered (9 of them, each `Index: false` and therefore also proving criterion 2's
+never-indexed-repository property independently), the full 10-entry catalog with no index
+(`resources-list-no-index`, paired with the pre-existing `toolslist-no-index` transcript), and the
+`-32602` unregistered-URI error shape (`resources-read-unknown`). The error-shape scenario is kept
+in this category, not in "Error shapes" above, so the resources surface reads as one block. A
+post-execution code-review fix (WR-01, `internal/mcp/resources/index-state.md`'s prose narrowed to
+name its four actual re-check trigger methods) moved `resources-read-index-state`'s bytes a fourth
+time — one line, the resource's own embedded text — with no scenario or `ExpectedScenarioCount`
+change.
+
+| Scenario | Covers |
+|---|---|
+| `resources-list` | `initialize` → `resources/list`, index present. Advertises all 10 registered resource URIs (8 per-tool fact-sheets + `codegraph://tools-filter` + `codegraph://index-state`) with `mimeType: text/markdown`, anchored by `assertResourceCacheControl` pinning `cacheScope: "private"`, `ttlMs: 0`. |
+| `resources-read-explore` | `initialize` → `resources/read` on `codegraph://tools/explore`, index present. Returns non-empty `text/markdown` content, anchored by the same `assertResourceCacheControl` check. |
+| `resources-read-node` | `initialize` → `resources/read` on `codegraph://tools/node`, no index. Returns non-empty `text/markdown`; independently proves criterion 2 (never-indexed repository). |
+| `resources-read-search` | `initialize` → `resources/read` on `codegraph://tools/search`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-callers` | `initialize` → `resources/read` on `codegraph://tools/callers`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-callees` | `initialize` → `resources/read` on `codegraph://tools/callees`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-impact` | `initialize` → `resources/read` on `codegraph://tools/impact`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-files` | `initialize` → `resources/read` on `codegraph://tools/files`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-status` | `initialize` → `resources/read` on `codegraph://tools/status`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-tools-filter` | `initialize` → `resources/read` on `codegraph://tools-filter`, no index. Same proof shape as `resources-read-node`. |
+| `resources-read-index-state` | `initialize` → `resources/read` on `codegraph://index-state`, no index. Same proof shape as `resources-read-node`. |
+| `resources-list-no-index` | `initialize` → `resources/list`, no index. Advertises the full 10-entry catalog with zero tools registered — paired with `toolslist-no-index` (same on-disk state) as criterion 2's proof that a never-indexed repository sees zero tools and the complete resource catalog on the same wire. |
+| `resources-read-unknown` | `initialize` → `resources/read` on `codegraph://tools/does-not-exist` (never registered), no index. `-32602` invalid-params — T-05-02's mitigation observed on the wire: an unregistered URI and a registered-but-unfound one return the identical error, disclosing nothing about server configuration. |
+
 ## Total
 
 1 (tracer) + 5 (tools/list) + 7 (tools/call) + 4 (error shapes) + 1 (statelessness edge)
 + 6 (six-era Legacy baseline) + 1 (Modern discover tracer) + 2 (Modern `_meta` failures)
-+ 1 (dynamic tool catalog) + 1 (live catalog-change notification) = **29**, matching
-`ExpectedScenarioCount`.
++ 1 (dynamic tool catalog) + 1 (live catalog-change notification) + 13 (MCP Resources) = **42**,
+matching `ExpectedScenarioCount`.
 
 ## The original 23 mark3labs captures cannot be re-captured against that backend again
 

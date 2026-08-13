@@ -1,43 +1,43 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.5.0
-milestone_name: macOS Distribution & Homebrew
+milestone: v0.10.0
+milestone_name: Agent Onboarding Skill & MCP Resources
 status: Awaiting next milestone
-stopped_at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-last_updated: "2026-08-12T00:55:38.369Z"
-last_activity: 2026-08-11
-last_activity_desc: Phase 04 execution started
+stopped_at: Phase 8 context gathered
+last_updated: "2026-08-13T20:59:25.342Z"
+last_activity: 2026-08-13
+last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 4
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 15
+  completed_plans: 15
   percent: 100
-current_phase: 04
-current_phase_name: codegraph-upgrade-homebrew
+current_phase: 08
+current_phase_name: instructions-marker-block-rewrite
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-08)
+See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 04 — codegraph-upgrade-homebrew
+**Current focus:** Planning next milestone — run `/gsd-new-milestone`
 
 ## Current Position
 
-Phase: Milestone v0.5.0 complete
+Phase: Milestone v0.10.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-11 — Milestone v0.5.0 completed and archived
+Last activity: 2026-08-13 — Milestone v0.10.0 completed and archived
 
 ## Performance Metrics
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 24
+- Total plans completed: 39
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -49,6 +49,10 @@ Last activity: 2026-08-11 — Milestone v0.5.0 completed and archived
 | 02 | 7 | - | - |
 | 03 | 5 | - | - |
 | 04 | 6 | - | - |
+| 05 | 4 | - | - |
+| 06 | 4 | - | - |
+| 07 | 4 | - | - |
+| 08 | 3 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 
@@ -60,7 +64,7 @@ Last activity: 2026-08-11 — Milestone v0.5.0 completed and archived
 | 4 | 3 | - | - |
 | 5 | 1 | - | - |
 
-**Recent Trend:** Roadmap created 2026-08-08; no execution data yet.
+**Recent Trend:** v0.10.0 roadmap created 2026-08-12; no execution data yet for this milestone.
 
 *Updated after each plan completion*
 
@@ -276,6 +280,9 @@ Carried forward:
 - GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling. goreleaser's binary reaches golang.org/x/crypto/openpgp (110 vulnerable symbols) via pipe/ko then google/ko then sigstore/cosign/oci then sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The new advisory tool-vuln job is now the only thing surfacing it — reported, not resolved. This is why D-04 was superseded from blocking to advisory.
 - Phase 2 HALTED at plan 02-04 Task 2: no Apple Developer ID Application certificate and no App Store Connect API key on this host (keychain holds only an Apple Configurator identity; of the five MACOS_* variables are set). Plans 02-06 and 02-07 are blocked_by 02-04.
 - TOOLING (not blocking work): 'gsd-tools query state.sync' counts a SUMMARY with 'status: halted' as a completed plan. It set progress.completed_plans to 11 (6 from phase 1 + all 5 phase-2 summaries) although 02-04 is halted, so STATE now disagrees with ROADMAP, which correctly reads 4/7. Sync also reported changing the body progress bar to 17% but left it reading '0/4 phases complete (0%)'. Not hand-edited per the planning-artifacts rule (tool-owned file); same treatment as the state.advance-plan gap already recorded above. Also note: 'gsd-tools query state.sync' MUTATES when invoked with no args - it has no dry-run probe mode, same hazard class as generate-claude-md.
+- **CR-01 (Phase 5 code review, `internal/mcp/server.go:225-349`): `pendingWriter`'s "pending response" counter is corrupted by server-initiated notifications, defeating the stdin-EOF-race fix it exists to provide.** The counter increments only on accepted client requests but decrements on every stdout `Write()` call, including notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that a prior phase's SPEC-09 work routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable via the vendored go-sdk's shared write path, not merely theoretical. Predates Phase 5 (introduced in `13f2875`, "protocol currency"); Phase 5 only added unrelated resource-registration code to this file. See `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md` (CR-01) for the full trace and a proposed fix (track pending-by-id, or distinguish response frames from notification frames before decrementing). Not fixed in Phase 5 — out of its declared scope (RSRC-01…03, GUARD-01…02) — needs its own tracking issue/plan.
+- **NUDGE-01 resume-matcher (RESOLVED 2026-08-13, not a gap — NUDGE-01 holds on the resume path).** The Phase 6 rehearsal reported that the SessionStart `resume` matcher "does not observably fire" and recorded it as a real, reproducible gap. That finding was a false negative produced by an invalid oracle, and is retracted. A seven-probe single-variable ladder (`.planning/debug/resolved/resume-matcher-not-firing.md`) showed the matcher fires: a probe hook that logs its own stdin records `source=resume` on `claude --resume`, and a resumed session quotes the nudge line verbatim. Claude Code suppresses a SessionStart hook's context injection *and* its transcript record when the output is byte-identical to context already injected that session; `session-nudge.sh` emits one constant line for every source, so its resume dispatch is always the suppressed case. Two probes differing only in per-source vs constant output isolate this as the sole variable. Ruled out by their own probes: `${CLAUDE_PROJECT_DIR}` expansion, `.claude/hooks/hooks.json` shadowing (that file is not read by Claude Code, as `hookpackage_test.go` already documents), and project-scoped settings being ignored on resume. **Transferable correction: transcript grep is not a valid oracle for SessionStart dispatch** — it is blind to any hook whose output is empty or duplicated, including under `startup`. Guarded by `TestNudgeLiveSessionEvidenceRetractsResumeFailureClaim` and `TestSessionStartRegistersBothDocumentedEntryPoints` in `internal/agents/hookpackage_test.go`.
+- **Project-skill discovery non-listing (RESOLVED 2026-08-13 — discovery was never broken; a narrower real defect was found and fixed).** The Phase 6 rehearsal reported that a genuinely fresh session's skill-listing system reminder "did not name `codegraph` at all," confirmed by grepping that session's raw transcript. That finding is retracted: it was a false negative. The captured session's transcript (`c4b8f662-07d5-4549-ba5d-be3f7ba795d2.jsonl`) contains an `attachment` record of `"type":"skill_listing"` whose content includes `\n- codegraph\n`, at the end of the personal-skill block — exactly where a project-scoped `.claude/skills/` entry belongs. **What was actually wrong:** the entry is degraded, not absent — it renders as a bare `- codegraph` with no colon and no description, so a grep keyed on `codegraph:` or on the description text matches nothing. **Root cause (environment, not this repo's authoring):** Claude Code renders the catalog into an attachment capped near 45,000 characters (measured 44,976–45,014 across four independent sessions, admitting **exactly 173** descriptions in every one) and emits every entry past the cap as a bare name; this operator's ~238-skill installation saturates the cap, and project-scoped skills are appended after all personal and plugin skills, so this repository's entry is degraded by construction. Proven not to be a file property: a probe skill whose description was byte-identical to a working skill's rendered bare in the same listing where the original rendered with its description; a probe with every non-ASCII character stripped was still degraded. **Fix on our side:** cut the frontmatter description from 299 to 110 characters so it competes for the leftover budget (verified admitted at 65 and 100 chars, degraded at 130+), guarded by `TestSkillDescriptionSurvivesSkillListingCap` in `internal/mcp/skill_claims_drift_test.go`. Note no length *guarantees* admission — headroom depends on the operator's installed-skill count, which this repository does not control. Retracted at source in `SKILL-03-rehearsal.md` and `NUDGE-live-session.md`. **Transferable correction — the second instance of this exact failure in one rehearsal (see the NUDGE-01 entry above): a transcript grep is a claim about the grep, not about the product.** Before recording an absence from a transcript, prove the same search can find the thing when it is present. Full probe ladder in `.planning/debug/resolved/skill-discovery-not-listing.md`.
 
 ### Quick Tasks Completed
 
@@ -287,6 +294,19 @@ v1.0's quick tasks are archived; their directories remain under `.planning/quick
 | 260811-s5o | Install cosign in post-release-verify's self-upgrade job (v0.9.0 self-upgrade proof failed closed on a missing installer) | 2026-08-11 | 6135785 | [260811-s5o-add-sha-pinned-sigstore-cosign-installer](./quick/260811-s5o-add-sha-pinned-sigstore-cosign-installer/) |
 
 ## Deferred Items
+
+Items acknowledged and deferred at v0.10.0 milestone close on 2026-08-13 (7 open artifacts: 6 todos + 2 seeds, none blocking v0.10.0's own requirements; an 8th item the audit flagged — a "knowledge-base [unknown]" debug session — was closed as a false positive rather than deferred: `.planning/debug/knowledge-base.md` is the resolved-session reference index `gsd-debugger` consults for known-pattern hypotheses, not an open investigation, and it has no `status:` frontmatter for the audit scanner to key on):
+
+| Category | Item | Status |
+|----------|------|--------|
+| todo | 2026-08-07 — wire-oracle toolsList repeat-response ordering flake | pending [mcp] |
+| todo | 2026-08-09 — dry-run-signed additions-only diff guard passes vacuously | pending [release] |
+| todo | 2026-08-09 — post-release-verify event-aware conclusion guard has no regression assertion | pending [ci] |
+| todo | 2026-08-10 — add golangci-lint with gofmt and idiomatic Go linters | pending [ci] |
+| todo | 2026-08-10 — brew trust instructions recommend broader tap grant with no security framing | pending [docs] |
+| todo | 2026-08-10 — tap App secret distinctness test is tautological and reads no workflow | pending [ci] |
+| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant |
+| seed | SEED-003 — markdown in the index | dormant |
 
 Items acknowledged and deferred at v0.5.0 milestone close on 2026-08-12 (8 open artifacts, none blocking):
 
@@ -343,35 +363,18 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-11T16:29:32.715Z
-Stopped at: Phase 4 plans converged — 6 cross-AI review cycles, 0 HIGH remaining, 2 MEDIUM closed in cycle 6
-  NEXT: `/gsd-plan-phase 1` — Cross-Compile Spike & `goreleaser release` Migration
-  CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
-
-    - `GO-2026-5932` is accepted-unmitigated in `goreleaser`'s own binary. This milestone
-      touches `goreleaser` directly, so it may be revisited **on evidence** — and the
-      GoReleaser Pro fallback would make it unmeasurable rather than merely unfixed.
-
-    - The residual darwin release-path concern is partly closed: both darwin arches built,
-      signed and SBOM'd on the real macOS runner during v0.3.0's release. What is still
-      unexercised is `goreleaser release` (not `build`) on that runner class, plus
-      zig-cross-to-linux **from** a macOS host — which is exactly REL-05.
-  PHASE 1 CARRY-INS:
-
-    - Phase 1's published release is deliberately un-notarized, and is Phase 2's RED baseline
-      for SIGN-03. Do not delete or overwrite that asset before Phase 2 has recorded the
-      `rejected` result against it.
-
-    - `internal/upgrade/verify.go`'s `releaseWorkflowRefPattern` anchors the cosign SAN to
-      `.github/workflows/release.yml@refs/tags/v[0-9]*`. Collapsing jobs is fine; renaming the
-      workflow file or changing the tag trigger is not.
-
-    - `release.yml` carries a deliberate comment that no GoReleaser Pro directive is used.
-      Reversing that is a recorded decision, not a silent config change.
-  NOTE: no `v0.5.0` git tag will be created — release-please owns tagging (D-06R), and such a
-  tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/04-codegraph-upgrade-homebrew/04-01-PLAN.md
+Last session: 2026-08-13T21:05:33.000Z
+Stopped at: v0.10.0 milestone closed and archived; PR #60 open against main, awaiting human review/merge
+  NEXT: review and merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60), then `/gsd-new-milestone`
+  CARRY-OVER:
+    - **This milestone lived entirely on `gsd/v0.10.0-agent-onboarding-skill-mcp-resources`** (branching_strategy: milestone) and was never incrementally merged — 153 commits ahead of `main`, pushed and opened as PR #60 at close time. Nothing from v0.10.0 is on `main` until that PR merges.
+    - **PR #60 title (`feat(agents): ...`) is the release decision** — this repo is squash-merge-only with `squash_merge_commit_title: PR_TITLE`, so merging it is what triggers release-please's version bump. Do not retitle without intent.
+    - **No `v0.10.0` git tag was created** — release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+    - **8 audit-open items handled at close:** 7 acknowledged/deferred (6 pre-existing todos + 2 dormant seeds, see Deferred Items below), 1 closed as a false positive (`knowledge-base` debug-session flag — it's the resolved-session reference index, not an open investigation).
+    - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and AGENT-04…07 (multi-agent skill/hooks porting) are tracked in `milestones/v0.10.0-REQUIREMENTS.md`'s v2 section, mapped to no phase — the fallback if skill+resources+nudge prove insufficient, and that evidence doesn't exist yet.
+Resume file: none — milestone closed
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60) once CI is green — this is the only remaining step to land v0.10.0 on `main`
+- Start the next milestone with `/gsd-new-milestone`

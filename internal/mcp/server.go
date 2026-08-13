@@ -53,7 +53,7 @@ const version = "0.1.0"
 // since the value is JSON-encoded into every one of those transcripts and
 // an embedded newline would become an escape sequence that makes each such
 // diff harder to read.
-const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. Every tool accepts an optional path argument; omitting it uses this server's own working directory. All eight tools register by default and appear automatically once an index exists, with no client restart required; an empty tool list means this repository has no index yet, so run codegraph init. Setting CODEGRAPH_MCP_TOOLS narrows the surface to the companions it names."
+const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs; in Claude Code, codegraph install also adds the codegraph skill."
 
 // companionNames is the fixed vocabulary of the 7 tools CODEGRAPH_MCP_TOOLS
 // may narrow the surface to — codegraph_explore is not in this list because
@@ -523,10 +523,27 @@ func BuildServer(hasIndex bool, companions map[string]bool, repoPath, startPath 
 	// implement. HasTools is deliberately left unset — it is deprecated.
 	s := mcp.NewServer(&mcp.Implementation{Name: "codegraph", Version: version}, &mcp.ServerOptions{
 		Capabilities: &mcp.ServerCapabilities{
-			Tools: &mcp.ToolCapabilities{ListChanged: true},
+			// RSRC-03/D-11 extension: explicit zero value, not omission.
+			// go-sdk's capabilities() (server.go:645-653) would otherwise
+			// auto-populate caps.Resources with ListChanged: true purely
+			// because s.resources.len() > 0 once registerResources below
+			// runs — this phase implements neither listChanged nor
+			// subscribe, so the explicit zero value is what keeps the
+			// advertised capability truthful, mirroring D-11's own
+			// rationale for Tools above.
+			Resources: &mcp.ResourceCapabilities{},
+			Tools:     &mcp.ToolCapabilities{ListChanged: true},
 		},
 		Instructions: instructions,
 	})
+
+	// RSRC-03: registerResources runs unconditionally, immediately after
+	// construction and BEFORE the `if hasIndex {` tool-registration branch
+	// below — this call site's position outside that branch is the
+	// structural property that makes resources available even in an
+	// unindexed repository, mirroring how Capabilities.Tools above is set
+	// regardless of hasIndex.
+	registerResources(s)
 
 	// One gitmeta.CachingDetector per SERVER, not per handler or per call
 	// (D-13, corrected). openEngine builds a FRESH query.Engine on every
@@ -742,6 +759,33 @@ func BuildServer(hasIndex bool, companions map[string]bool, repoPath, startPath 
 				// correct.
 				if discoverRes, ok := res.(*mcp.DiscoverResult); ok {
 					discoverRes.CacheScope = "private"
+				}
+			case "resources/list", "resources/read":
+				// cacheScope for resources is a decision, resolved here
+				// rather than defaulted (05-RESEARCH.md Open Question 1).
+				// go-sdk's setDefaultCacheableValues (protocol.go:1195-1197)
+				// writes "public" unconditionally, and this middleware's
+				// method-literal switch never saw resources methods before
+				// this case. "private" is chosen over the SDK default for
+				// three reasons: it keeps every codegraph response on the
+				// wire uniform, so a reviewer never has to remember which
+				// method families differ; STATE.md's standing decision
+				// holds ttlMs: 0 and cacheScope: "private" to be two
+				// halves of one correctness property rather than
+				// independent options, and resources inherit the ttlMs: 0
+				// half already; and "public" is fail-open for a future
+				// resource whose content is repository-dependent, whereas
+				// "private" is fail-safe and costs one case. This extends
+				// the same two in-code decisions the "tools/list" and
+				// "server/discover" cases above already made — those are
+				// in-code decision IDs in a different numbering space from
+				// 05-CONTEXT.md's own D-NN decisions, hence naming this
+				// file rather than a D-NN tag here.
+				switch r := res.(type) {
+				case *mcp.ListResourcesResult:
+					r.CacheScope = "private"
+				case *mcp.ReadResourceResult:
+					r.CacheScope = "private"
 				}
 			}
 			return res, err

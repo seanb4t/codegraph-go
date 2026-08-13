@@ -852,6 +852,155 @@ func TestEveryRegisteredToolHasASuccessfulCallScenario(t *testing.T) {
 	}
 }
 
+// resourceURIsFromCapture captures scenarioName and decodes only
+// result.resources[].uri out of the response bearing wantID, sorted —
+// toolNamesFromCapture's sibling for the resources method family.
+func resourceURIsFromCapture(t *testing.T, scenarioName string, wantID float64) []string {
+	t.Helper()
+	tr, _ := mustCaptureScenario(t, scenarioName)
+
+	for _, line := range bytes.Split(tr.Stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != wantID {
+			continue
+		}
+		var res struct {
+			Resources []struct {
+				URI string `json:"uri"`
+			} `json:"resources"`
+		}
+		if err := json.Unmarshal(frame.Result, &res); err != nil {
+			t.Fatalf("scenario %q: decode resources/list result.resources[].uri: %v; raw line: %q", scenarioName, err, line)
+		}
+		uris := make([]string, len(res.Resources))
+		for i, r := range res.Resources {
+			uris[i] = r.URI
+		}
+		sort.Strings(uris)
+		return uris
+	}
+	t.Fatalf("scenario %q: no resources/list response (id=%v) found in captured stdout", scenarioName, wantID)
+	return nil
+}
+
+// findResourceReadRequest scans sc's static Requests (not captured output)
+// for its one resources/read request (every scenario in Scenarios() carries
+// at most one, per the concurrency ordering constraint documented above
+// Scenarios()) and returns its request id and target URI —
+// findToolCallRequest's sibling for the resources method family.
+func findResourceReadRequest(sc Scenario) (id float64, uri string, ok bool) {
+	for _, req := range sc.Requests {
+		method, _ := req["method"].(string)
+		if method != "resources/read" {
+			continue
+		}
+		params, _ := req["params"].(map[string]any)
+		u, _ := params["uri"].(string)
+		reqID, idOK := idAsFloat64(req["id"])
+		if !idOK {
+			continue
+		}
+		return reqID, u, true
+	}
+	return 0, "", false
+}
+
+// successfulResourceRead decodes result.contents out of stdout's response
+// bearing wantID, returning true only when that response exists and its
+// first contents entry carries a non-empty Text and mimeType
+// "text/markdown" — isSuccessfulToolCall's sibling for the resources
+// method family.
+func successfulResourceRead(stdout []byte, wantID float64) bool {
+	for _, line := range bytes.Split(stdout, []byte("\n")) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var frame struct {
+			ID     any             `json:"id"`
+			Result json.RawMessage `json:"result"`
+		}
+		if err := json.Unmarshal(line, &frame); err != nil {
+			continue
+		}
+		idf, ok := idAsFloat64(frame.ID)
+		if !ok || idf != wantID || len(frame.Result) == 0 {
+			continue
+		}
+		var res struct {
+			Contents []struct {
+				Text     string `json:"text"`
+				MIMEType string `json:"mimeType"`
+			} `json:"contents"`
+		}
+		if err := json.Unmarshal(frame.Result, &res); err != nil {
+			return false
+		}
+		if len(res.Contents) == 0 {
+			return false
+		}
+		return res.Contents[0].Text != "" && res.Contents[0].MIMEType == "text/markdown"
+	}
+	return false
+}
+
+// TestEveryAdvertisedResourceURIHasASuccessfulReadScenario is
+// TestEveryRegisteredToolHasASuccessfulCallScenario's structural sibling for
+// resources: it derives the required URI set from a LIVE capture of
+// resources-list (never a hand-typed list), so an eleventh resource added in
+// a future phase turns this red until it also has a wire read scenario. It
+// fails immediately if that set is empty or smaller than the ten this phase
+// ships, so the test cannot pass vacuously against a broken capture. It then
+// walks Scenarios(), finds each scenario containing a resources/read
+// request, captures it, and deletes a URI from the remaining set only when
+// its response frame carries a successful non-empty text/markdown read —
+// failing, naming exactly which URIs have no successful wire read, in the
+// same shape TestEveryRegisteredToolHasASuccessfulCallScenario uses.
+// resources-read-unknown's URI (codegraph://tools/does-not-exist) is
+// deliberately not in the advertised set, so it is naturally excluded from
+// satisfying anything here without any special-case code.
+func TestEveryAdvertisedResourceURIHasASuccessfulReadScenario(t *testing.T) {
+	advertised := resourceURIsFromCapture(t, "resources-list", 2)
+	if len(advertised) < 10 {
+		t.Fatalf("resources-list: advertised %d resource URIs, want at least 10: %v", len(advertised), advertised)
+	}
+
+	remaining := make(map[string]bool, len(advertised))
+	for _, uri := range advertised {
+		remaining[uri] = true
+	}
+
+	for _, sc := range Scenarios() {
+		reqID, uri, ok := findResourceReadRequest(sc)
+		if !ok || !remaining[uri] {
+			continue
+		}
+
+		tr, _ := mustCaptureScenario(t, sc.Name)
+		if successfulResourceRead(tr.Stdout, reqID) {
+			delete(remaining, uri)
+		}
+	}
+
+	if len(remaining) > 0 {
+		uris := make([]string, 0, len(remaining))
+		for uri := range remaining {
+			uris = append(uris, uri)
+		}
+		sort.Strings(uris)
+		t.Fatalf("no scenario provides a successful resources/read for: %v", uris)
+	}
+}
+
 // legacyEraExpectedCount is the size of the multi-era Legacy baseline
 // approved at 01-05-PLAN's Task 1 blocking checkpoint (selection:
 // six-era) -- the four protocol revisions today's server recognizes, plus

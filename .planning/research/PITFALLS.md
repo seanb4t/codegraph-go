@@ -1,162 +1,149 @@
-# Pitfalls Research — macOS Notarization + Homebrew Distribution
+# Pitfalls Research
 
-**Domain:** Adding Apple notarization and a Homebrew tap to an existing signed/attested Go release pipeline (GoReleaser + cosign + SLSA3 + release-please)
-**Researched:** 2026-08-07
-**Confidence:** MEDIUM-HIGH overall (Apple/Homebrew/GoReleaser official docs and issue trackers are HIGH confidence; some integration-specific predictions are MEDIUM — this repo's own `.goreleaser.yaml`/`release.yml` are the ground truth, read directly, so those claims are HIGH by construction)
-
-This file assumes the reader has `.planning/PROJECT.md`, `.goreleaser.yaml`, and `.github/workflows/release.yml` open. Every pitfall below is framed as: **what goes wrong → how to detect it → how to prevent it → which phase owns it**, per this repo's standing rule that a gate is not trusted until demonstrated RED against a confirmed-applied mutation.
-
----
+**Domain:** Adding a self-teaching agent skill/plugin, an MCP Resources capability, and enforcement hooks to an existing mature CLI+MCP tool (codegraph-go v0.10.0)
+**Researched:** 2026-08-12
+**Confidence:** HIGH (grounded directly in this repo's own documented incident history and existing enforcement machinery — `internal/mcp/instructions_contract_test.go`, `test/wireoracle/`, `internal/agents/` `AgentTarget` registry, `internal/cli/archtest/`, and PROJECT.md's Key Decisions log of prior gate failures)
 
 ## Critical Pitfalls
 
-### Pitfall 1: `goreleaser release` cannot consume dist/ artifacts built on other runners — the single-runner conflict is real, not hypothetical
+### Pitfall 1: The skill is inert — an agent that has read it still reaches for grep first
 
 **What goes wrong:**
-`goreleaser release` "expects to wholly manage the `dist` directory, returning an error if it exists" (confirmed via GoReleaser's own GitHub issue tracker). There is no `--use-existing-dist` / `--skip-build` flag in OSS. The only mechanism GoReleaser ships for building on separate runners and combining results into one release is **Split & Merge** (`goreleaser release --split` / `goreleaser continue --merge`), and that is explicitly, exclusively a **GoReleaser Pro** feature per the official docs ("This feature is exclusively available with GoReleaser Pro"). This directly falsifies the implicit assumption in today's `release.yml` design (native-darwin-on-macOS + zig-cross-linux-on-Linux, merged in a downstream `assemble` job) that a plain `goreleaser release` invocation could simply replace the current `build --single-target` + hand-rolled assemble step. It cannot, as OSS, across two runner classes.
+The skill ships, is discoverable, reads well in isolation — and changes nothing. Agents keep defaulting to `grep`/`find`/`Read` for where-is-X and how-does-Y-work questions because the skill was written as a tool catalog ("codegraph has 8 tools: explore, search, node...") rather than a decision procedure, so it never actually out-competes the agent's own strong prior toward grep. This is the exact failure mode the scoping todo names verbatim: *"an agent that has read the skill and still reaches for grep first."*
 
-**Why it happens:** The current pipeline's per-runner `goreleaser build --single-target` pattern was deliberately chosen (per `.goreleaser.yaml`'s own header comment) to avoid GoReleaser Pro dependencies. Migrating to `goreleaser release` while assuming the same two-runner-class topology "just works" is exactly the kind of unverified assumption PROJECT.md itself flagged ("must be confirmed, not assumed") — and this research confirms the assumption was right to be suspicious of.
+**Why it happens:**
+Tool descriptions and reference docs feel like the "complete" content to write, so authors front-load them. But an agent doesn't fail to use codegraph because it lacks facts about codegraph — it fails because grep is the path of least resistance and nothing has made the alternative path *cheaper to reach for* in the moment a where-is-X question appears. A catalog answers "what exists"; only a decision procedure answers "what do I do right now."
 
-**How to avoid:** Run the entire `goreleaser release` invocation on a single runner. Given darwin must build natively (the recorded libresolv/DNS finding), that runner must be `macos-latest`/Namespace macOS, with `zig cc` cross-compiling both linux/amd64 and linux/arm64 from the same host — exactly the "likely resolution" PROJECT.md already named. This eliminates the merge problem entirely: one `goreleaser release` process builds all 4 targets, archives, checksums, signs (if quill or a macOS-native path is used for cosign too — cosign itself doesn't care about host OS), notarizes, and publishes, without ever needing Pro's split/merge.
+**How to avoid:**
+- Lead the skill body with a short decision table ("which tool for which question"), not a tool list. The todo itself specifies this: 2-3 worked examples plus a crisp table is "the most valuable part"; tool-by-tool reference is "the least valuable part."
+- Validate against behavior, not against skill content review. A skill that reads well is not evidence it changes behavior — run real onboarding-style transcripts (a fresh agent session, a where-is-X prompt, no other context) before and after shipping the skill and diff tool-call choice. This is the same "green means nothing if the gate could not have failed" standing rule this repo already applies elsewhere (PROJECT.md's Key Decisions table) — apply it to the skill's own effectiveness, not just to code.
+- Keep the worked examples adversarial: pick prompts phrased exactly the way a user would ask them ("where is the auth check", "how does X call Y"), not phrased to make codegraph_explore the obvious answer.
 
-**Warning signs:** A plan that still shows `build` as a per-runner matrix job feeding an `assemble` job, but relabels the assemble step's `goreleaser build --single-target` as `goreleaser release`. That shape cannot work — `release` refuses a pre-populated `dist/`.
+**Warning signs:**
+- The skill file's word count on tool descriptions exceeds its word count on the decision procedure.
+- No transcript-based verification step exists in the phase plan — only "skill reviewed" or "skill written per best practices."
+- The skill was authored by pattern-matching an existing SKILL.md rather than fresh research (the todo explicitly warns against this: "do not write this from memory").
 
-**Detection (RED-demonstrable):** Write a throwaway workflow that runs `goreleaser build --single-target` on `namespace-profile-linux-amd64-4x8` to populate `dist/`, uploads it as an artifact, downloads it into a second job, and then runs `goreleaser release --clean` in that second job. This MUST fail with GoReleaser's dirty/existing-dist error. Confirming this failure, live, is the RED proof that the two-runner-class + `release` combination cannot work in OSS before any phase plan is written around it.
-
-**Phase to address:** The `goreleaser release` migration phase — this is the enabling/blocking decision every other feature in the milestone (notarize, archives, brews) depends on. Must be resolved before notarization or brews work begins.
-
----
-
-### Pitfall 2: Notarization "succeeds" (Accepted) while `spctl` still rejects the binary — a real, documented failure family, not a hypothetical
-
-**What goes wrong:** `notarytool submit` returning `Accepted` is not proof the shipped artifact will pass Gatekeeper. Apple Developer Forums document multiple real cases of `notarytool history` showing successful notarization, `stapler` reporting success, and `spctl -a -vv -t exec` still rejecting the artifact with "Unnotarized Developer ID" or similar. One documented root cause: the notary ticket did not cover all the Mach-O images actually present in the shipped artifact (e.g. a nested binary, a nested dylib, or — relevant here — a binary added to an archive *after* the notarized artifact was built), so Gatekeeper's post-hoc ticket lookup finds no matching record for what's actually on disk.
-
-**Why it happens:** Notarization is a request to notarize *exactly the bytes submitted*. If the pipeline notarizes binary A, then repackages/re-signs/rebuilds anything downstream (re-archiving, adding a README to the zip, GoReleaser regenerating the archive after signing instead of before), the bytes Gatekeeper checks are no longer the bytes Apple has a ticket for. This is an ordering bug (see Pitfall 6), and it produces exactly this symptom.
-
-**How to avoid:** Notarize the *final* artifact shape — the archive/container that will actually be distributed, built in its final form, with nothing added or modified afterward. Verify by running `spctl -a -vv -t exec` against the literal file that will be uploaded to the GitHub Release, not against an intermediate build artifact.
-
-**Warning signs:** `notarytool history` shows Accepted, but this check was run against a local build artifact in `dist/`, not against the file downloaded from the published GitHub Release.
-
-**Detection (RED-demonstrable):** On a genuinely quarantined copy of the actual published release asset (see Pitfall 3 for how to force real quarantine), run `spctl -a -vv -t exec <path>` and require `accepted` with `source=Notarized Developer ID` in the output. Anything else — including a `notarytool` history entry of Accepted — is not sufficient evidence.
-
-**Phase to address:** Notarization phase, as the phase's own verification gate (not a side check — this should be the phase's primary UAT criterion, matching PROJECT.md's own framing: "The bar is `spctl -a -vv -t exec` returning `accepted` on a file actually carrying `com.apple.quarantine` — not on the pipeline being wired").
-
-**Confidence:** HIGH (multiple corroborating Apple Developer Forum threads on this exact failure shape, cross-referenced).
+**Phase to address:**
+Skill-authoring phase — build the transcript-diff verification into that phase's acceptance criteria, not as a follow-up.
 
 ---
 
-### Pitfall 3: The "wired up but cannot fire" trap, applied to notarization — four specific checks that feel like verification and are not
+### Pitfall 2: MCP Resources drift from tool behavior because nothing gates the two staying in sync
 
-This is the single highest-priority section given this repo's documented history (retracted fictitious perf regression, inverted `rg -qv` gate, stale perf baseline, degenerate-input `CheckRegression` pass, drifted `requiredCheckNames` fixture, two passthrough tests). Notarization has its own version of every one of these failure shapes.
+**What goes wrong:**
+The new `resources/list`/`resources/read` capability serves detailed reference content — tool-by-tool docs, `CODEGRAPH_MCP_TOOLS` semantics, index-state preconditions. Those resources are hand-authored prose, separate from the actual tool registration logic in `internal/mcp/tools.go` and the `instructions` constant in `internal/mcp/server.go`. The moment either changes (a tool added/removed, a default flipped, a precondition altered) the resource content silently goes stale — exactly the class of bug this project has already shipped twice: SURF-01's "default 5" surviving after the constant became 2, and the `instructions` string blaming index state for a symptom it structurally cannot cause. A resource is a *third* independent surface making the same class of claim the `instructions` string and README already made and got wrong.
 
-**Checks that FEEL like verification but are NOT:**
+**Why it happens:**
+Resources are new server-side content with no existing test harness pointed at them. The project's wire oracle (`test/wireoracle/`) freezes JSON-RPC transcripts including `tools/list` and `initialize`, but a fresh `resources/list`/`resources/read` capability starts with zero scenarios in that oracle and zero coverage in `instructions_contract_test.go`-style claim-derivation tests. Prose is cheap to write and easy to forget to update; a hand-typed tool count or flag default in a resource body is indistinguishable, at commit time, from one that's still correct.
 
-1. **A green CI step.** GoReleaser's `notarize:` block can be configured (or accidentally end up configured, e.g. via a missing/empty secret) to skip notarization silently and still exit 0 — the step shows green whether or not notarization actually ran. A green `notarize` job step proves the *command* didn't error; it proves nothing about whether Apple's notary service was ever contacted.
-2. **`codesign -dvv` passing.** This validates that *a* signature is present and its certificate chain is valid — it passes identically for an ad-hoc signature (no Developer ID, no notarization possible) and for a properly Developer-ID-signed, notarized binary. Multiple sources confirm this explicitly: passing `codesign` verification "does not indicate notarization status." Never treat this as evidence of notarization.
-3. **`notarytool` history/submission status showing `Accepted`.** As Pitfall 2 demonstrates, this is necessary but not sufficient — it proves Apple accepted *some* submission, not that the ticket covers the bytes actually shipped, and not that stapling (where applicable) succeeded.
-4. **`spctl` on a file that was never quarantined.** This is the most insidious one, because it is the *exact same command* as the correct check, run on the wrong file. Gatekeeper's full assessment path (the one that actually rejects unnotarized software for end users) is triggered by the `com.apple.quarantine` extended attribute, which is set by browsers, `curl -O` with certain flags is used with, Safari/Chrome downloads, AirDrop, and Mail — but NOT by a local build artifact freshly produced by `goreleaser build`, NOT by `git clone`, and NOT by the real `codegraph upgrade` path (per PROJECT.md's own measurement: "a binary fetched by the real `codegraph upgrade` path was measured to carry only `com.apple.provenance`"). Running `spctl -a -vv -t exec` on such a file exercises a much weaker code path and can return `accepted` even for software that would be rejected for a real end user. One source states this plainly: "Gatekeeper signature checks are performed only to files with the Quarantine attribute, not to every file."
+**How to avoid:**
+- Apply the exact discipline `instructions_contract_test.go` already established for the `instructions` string to every resource body: derive claims from source (tool registry length, `CODEGRAPH_MCP_TOOLS` behavior, actual default), never hand-type them into prose. If a resource says "8 tools," that number must come from `len(registeredTools)` or equivalent at test time, not be typed as a literal.
+- Extend the wire oracle's frozen-transcript coverage to `resources/list` and `resources/read`, following the same pattern already used for `tools/list`: capture real transcripts, freeze them, diff on change. This makes a resource content drift show up as a red test, not as a silently-wrong document an agent reads mid-session.
+- Add a single automated cross-check that resource content and `tools/list` output agree on tool names/count — a small "claims that must match reality" test, mirroring `instructions_contract_test.go`'s `strings.Contains(instructions, allowlistEnvName)` pattern but pointed at resource bodies.
+- Do not let the skill *also* embed the same facts a resource states. Every fact should have exactly one source of truth (skill points to resource, resource derives from code) — duplicating a fact across skill + resource + instructions string is what created the AND-gate-of-three failure PROJECT.md documents for MCP-01 ("remove any one and it is caught in seconds" was true only because there were three independent copies to disagree).
 
-**The ONE trustworthy check:**
+**Warning signs:**
+- A resource file contains a bare number, flag name, or default value with no `//go:generate`, no derived-constant reference, and no test asserting it.
+- `resources/list`/`resources/read` has zero entries in `test/wireoracle/scenarios.go`.
+- A PR changes tool registration (`internal/mcp/tools.go`) without a corresponding diff in resource content or a failing test forcing one.
 
-```bash
-# Force a real quarantine attribute, matching what a browser download sets
-# (com.apple.quarantine's value format: <flags>;<timestamp-hex>;<agent>;<uuid>)
-xattr -w com.apple.quarantine "0081;$(printf '%x' "$(date +%s)");Safari;$(uuidgen)" <path-to-downloaded-asset>
-
-# Now run the assessment Gatekeeper actually performs on a downloaded file
-spctl -a -vv -t exec <path-to-downloaded-asset>
-```
-
-Expect: `<path>: accepted` and `source=Notarized Developer ID` on the second line. Any other `source=` value (e.g. `source=Unnotarized Developer ID`, or a rejection) means the release is not actually trustworthy for real users, regardless of what CI reported.
-
-Do this against the literal file downloaded from the real, published GitHub Release URL (or at minimum an artifact with a genuinely synthesized quarantine attribute, as above) — never against a local `dist/` build artifact.
-
-**Phase to address:** Notarization phase. This exact sequence (force quarantine → `spctl`) should be the phase's acceptance gate, run by a human or a scripted macOS runner step against the real published asset — and per this repo's standing rule, the phase is not done until this has been shown to move `rejected` → `accepted` on a genuinely quarantined download, not merely asserted.
-
-**Confidence:** HIGH for the mechanism (official Apple documentation on quarantine + spctl behavior, cross-referenced across multiple independent sources); the exact `xattr` flag/timestamp encoding is MEDIUM confidence (community-documented format, not from a single canonical Apple source) — verify the synthesized attribute actually reproduces browser-download behavior before relying on it as the sole gate, or use a real browser download as the primary check and the `xattr` trick only as a fast local iteration aid.
+**Phase to address:**
+The MCP Resources phase itself — the derivation/gating mechanism must ship in the same phase as the resources, not as a follow-up, because an ungated resource is worse than no resource (it's a second `instructions`-string incident waiting to happen, and the project has already had two occurrences of this exact bug class).
 
 ---
 
-### Pitfall 4: Stapling a bare Mach-O binary is impossible — this forces the archive-vs-raw-binary asset split, it isn't optional polish
+### Pitfall 3: The guard hook false-positive-blocks legitimate grep/find/Read use
 
-**What goes wrong:** Apple's notary service can notarize a bare executable (by wrapping it in a zip for submission), but **stapling requires a container** — a `.app` bundle, `.pkg` installer, or `.dmg` disk image. Per Apple's own guidance (multiple corroborating sources): "Tickets can't be stapled to single-file Mach-O executables, but they can be stapled to Installer packages containing them." GoReleaser's own docs are explicit about a related trap: "Do not use this method if you create App Bundles. App Bundles in which only the binary is signed/notarized are deemed damaged by macOS" — i.e. signing/notarizing the inner binary is not a substitute for signing/notarizing the container itself.
+**What goes wrong:**
+A PreToolUse/UserPromptSubmit guard meant to redirect grep/find toward `codegraph_explore` fires on cases where grep is actually the right tool — searching for a literal string/config key, grepping inside a single already-open file, searching non-code text (logs, CHANGELOGs, generated data), or operating in a directory with no `.codegraph/` index at all. A hook that blocks or nags on these cases trains the user/agent to route around it (disable it, ignore its output, or, worse, an agent burns a turn negotiating with its own hook instead of doing the task) — the opposite of the intended effect.
 
-**Why it matters here specifically:** This is exactly the constraint PROJECT.md already identified as "the real design call" — a bare Mach-O notarized-but-not-stapled binary falls back to Apple's online ticket lookup at Gatekeeper-check time, which **fails on an offline machine or when Apple's OCSP/notary lookup service is unreachable**. This is why the milestone's own Key Decisions committed to "archives alongside raw binaries" rather than trying to notarize+staple the raw binary that `internal/upgrade` needs to remain byte-unchanged.
+**Why it happens:**
+"Nudge toward codegraph for where-is-X questions" is a semantic judgment call being implemented as a syntactic hook (tool-name + maybe argument pattern matching on `grep`/`find`/`Read`). Hooks don't have the judgment a skill's decision procedure provides; they only see the tool call, not the intent behind it. A hook author under time pressure will reach for "grep call in a `.codegraph/`-indexed repo == block/nudge," which conflates "grep is being used" with "grep is being used for a where-is-X code-navigation question," and those are not the same event.
 
-**How to avoid:** Notarize and staple the **archive** (zip is the simplest container GoReleaser natively supports for a CLI binary; `.dmg`/`.pkg` are also viable but add build complexity with little benefit for a CLI tool) as the browser-download / Homebrew-facing asset. Never attempt to staple the raw binary that `internal/upgrade` consumes — that asset stays exactly as it is today (unnotarized-at-the-file-level is fine, because `internal/upgrade` never triggers a Gatekeeper quarantine check in the first place, per PROJECT.md's own `com.apple.provenance`-only measurement).
+**How to avoid:**
+- Scope the guard's trigger surface narrowly and conservatively: fire only on clear where-is-X/how-does-Y-work signal (heuristics on the *prompt* text via UserPromptSubmit, not blanket PreToolUse interception of every grep call) rather than trying to classify every grep invocation's intent from the tool call alone.
+- Make the default posture a *nudge* (inject context, suggest an alternative) not a *block* (deny the tool call), unless there is very high confidence — this project's own MCP tool visibility already defaults to permissive (all 8 tools visible by default, narrowing is opt-in per D-05/MCP-01's supersession) which is the established posture to mirror: default open, narrow only on explicit signal.
+- Gracefully no-op, not warn/error, when `.codegraph/` doesn't exist or the MCP server isn't reachable — a hook that produces friction in an unindexed repo (where codegraph literally cannot help) actively contradicts the "reduce friction toward the better tool" goal. Detect absence cheaply (file-existence check for `.codegraph/`) and short-circuit before any nudge/guard logic runs.
+- Test the guard against a corpus of real, legitimate grep/find/Read calls captured from this project's own session history (or a synthetic set covering: string literal search, single-file grep, non-code text search, no-index repo, `.codegraph/` present but stale) and assert zero false positives on that corpus before shipping — this is the practical equivalent of a wire-oracle transcript freeze, but for hook decisions instead of MCP frames.
 
-**Warning signs:** A plan step that says "staple the binary" (singular, bare) instead of "staple the archive." Also watch for `xcrun stapler staple` being invoked directly on a `codegraph_<tag>_darwin_arm64` raw-binary asset — this will fail (stapler returns an error for non-container inputs) or, worse, silently produce a container that still fails offline Gatekeeper checks if some tooling wraps it in a technically-valid-but-wrong container shape.
+**Warning signs:**
+- The guard's matching logic is a bare tool-name check (`if tool == "Grep"`) with no context signal beyond "an index exists."
+- No test corpus of legitimate grep/find/Read calls exists to run the guard against before shipping.
+- The guard's failure mode on missing `.codegraph/` or unreachable MCP server is anything other than silent no-op (an error, a loud warning, a block).
 
-**Detection (RED-demonstrable):** Run `xcrun stapler staple <raw-binary-path>` on the actual raw binary GoReleaser/`release.yml` produces and confirm it errors (this proves the constraint is real, not assumed) before designing the archive path. Then run `xcrun stapler validate <archive-path>` on the actual zip that will ship and confirm it succeeds.
-
-**Phase to address:** Notarization phase, in coordination with the archives phase (they are two views of the same asset-shape decision, per PROJECT.md's own Key Decision rationale).
-
-**Confidence:** HIGH (GoReleaser official docs + multiple independent Apple-developer-community sources agree on this exact constraint).
-
----
-
-### Pitfall 5: The checksums-file collision is not hypothetical — it is already latent in this repo's own config
-
-**What goes wrong:** `.goreleaser.yaml`'s `checksum:` block (currently documented as dead config) is:
-
-```yaml
-checksum:
-  name_template: "{{ .ProjectName }}_{{ .Tag }}_checksums.txt"
-```
-
-which resolves to `codegraph_v0.5.0_checksums.txt`. `release.yml`'s `assemble` job independently, by hand, produces:
-
-```bash
-sha256sum codegraph_* > "codegraph_${TAG}_checksums.txt"
-```
-
-which resolves to the **identical filename**. The moment `goreleaser release` actually runs its `checksum:` pipe (which it will, once the migration from `build` to `release` lands — this is precisely the "two blocks that have never executed wake up" risk PROJECT.md names), there will be two independent processes writing a file with the same name into the same release: GoReleaser's own checksums covering whatever `archives:`/binaries GoReleaser itself produced, and (if the hand-rolled step is not removed) the old shell step's checksums covering the renamed assets it finds on disk. Depending on execution order and whether `gh release upload ... --clobber` runs before or after GoReleaser's own publish step, one silently overwrites the other, or GoReleaser's own publish step fails outright on a duplicate asset name.
-
-**Why it happens:** This is a direct consequence of migrating one component (the checksum mechanism) of a pipeline that has two independent implementations of the same responsibility, without deleting the now-redundant one. It's the textbook "gate that cannot fire" shape this repo keeps rediscovering — except here the risk isn't a test silently never running, it's an artifact silently being overwritten with a **different, undocumented set of covered files** than the one that was actually attested/signed.
-
-**How to avoid:** When the `goreleaser release` migration lands, the hand-rolled `sha256sum codegraph_* > ...` step in `release.yml`'s `assemble` job (or its successor) must be deleted, not left to run alongside GoReleaser's own `checksum:` pipe. Decide, explicitly, whether GoReleaser's cosign/SLSA integration signs GoReleaser's own checksums file or continues the current per-binary-signing scheme (see Pitfall 6) — do not let both checksum generators exist simultaneously even transiently, because a partial migration where GoReleaser produces `checksum:` output *and* the old shell step also runs is the exact shape where "last writer wins" silently determines what the SLSA provenance and cosign identities actually cover.
-
-**Detection (RED-demonstrable):** After the migration, download the actual `codegraph_<tag>_checksums.txt` from the published release and diff its line count/content against the full asset list (`gh release view <tag> --json assets`). Every published binary and archive must have exactly one entry; a missing or duplicated entry proves the collision occurred.
-
-**Phase to address:** The `goreleaser release` migration phase, as an explicit removal task tracked alongside the archives/checksum-block-goes-live risk PROJECT.md already flags.
-
-**Confidence:** HIGH — this is derived directly from reading this repo's own `.goreleaser.yaml` and `release.yml`, not from external sources.
+**Phase to address:**
+Hooks phase — the false-positive corpus test must be a phase acceptance gate, not a nice-to-have, given this repo's standing rule that green-without-a-real-fail-condition proves nothing.
 
 ---
 
-### Pitfall 6: `internal/upgrade`'s cosign verification contract can silently stop matching what's actually shipped
+### Pitfall 4: The guard hook is too passive — it exists but never actually fires
 
-**What goes wrong:** `internal/upgrade`'s `defaultVerify` hashes the **downloaded raw binary itself** (`sha256.Sum256(binary)`) and verifies a per-binary `.sigstore.json` bundle produced by `cosign sign-blob` in the `assemble` job — this is explicit in `release.yml`'s own comments ("internal/upgrade's defaultVerify hashes the DOWNLOADED BINARY ITSELF ... cosign MUST sign each binary individually"). Once `goreleaser release` is live with `archives:` and `notarize:` blocks, there is a real risk of introducing a step, anywhere in the new pipeline, that re-derives, re-copies, or re-names the raw binary asset *after* cosign has already signed it — for example, if a future refactor accidentally has GoReleaser's own `archives:` pipe repackage the binary from a different intermediate `dist/` path than the one cosign actually hashed, or if notarization is (incorrectly, per Pitfall 4) attempted against the raw binary and that process rewrites the file's signature bytes (codesign always rewrites the Mach-O when it signs), producing a binary whose bytes no longer match what cosign attested.
+**What goes wrong:**
+The opposite failure: the guard is written defensively enough (per Pitfall 3) that its trigger conditions are so narrow it essentially never activates. It ships, is documented as installed, and produces zero measurable change in tool selection — indistinguishable from Pitfall 1's inert skill, except now there are two inert mechanisms instead of one, and the SessionStart nudge on its own becomes the *entire* behavior-change budget, which the scoping todo already establishes is insufficient on its own (the skill's whole reason to exist is that passive documentation didn't work).
 
-**Symptom:** `codegraph upgrade` starts failing with a hash-mismatch or signature-verification error for every user on a specific platform, but the release itself "looks" successful — the GitHub Release page has assets, cosign's own log shows `Verified OK` (because cosign verified the version of the file *it* was given at signing time, which may not be the version that ended up published).
+**Why it happens:**
+Overcorrecting from Pitfall 3 (too aggressive) without a positive test proving the guard *does* fire on the cases it's meant to catch. Teams that add a false-positive test suite often stop there and never add the mirror-image true-positive suite, so "never blocks legitimate use" quietly becomes "never blocks anything."
 
-**Why it's easy to miss:** The `cosign verify-blob` and SLSA verification steps this repo already runs check that a signature/attestation is internally consistent — they don't independently confirm that the *specific bytes at the public download URL* are the ones that were hashed, unless the verification step re-downloads the released asset (not a local `dist/` copy) before verifying, which is what the existing `TestVerifyReleaseE2E` does today (per PROJECT.md: "executing against a real artifact"). Any new pipeline step inserted between "binary built" and "binary published" that touches the binary's bytes — including codesign for notarization, if mistakenly applied to the raw asset — breaks this invariant.
+**How to avoid:**
+- Require both suites: a false-positive corpus (Pitfall 3) AND a true-positive corpus — a set of realistic where-is-X/how-does-Y prompts that MUST trigger the nudge/guard, run as an explicit test with an assertion that it fires, not just that it doesn't misfire.
+- Instrument the guard (even minimally — a debug log line, a counter) during a manual rehearsal period so its actual fire rate on a full session can be checked against expectation before calling the phase done.
+- Treat "guard exists in hooks.json and is syntactically valid" as zero evidence of anything — same standing rule this repo already applies to gates ("a gate is not trusted until demonstrated RED against a confirmed-applied mutation"). Demonstrate the guard actually intercepting a real grep call in a rehearsal session, not just unit-tested in isolation.
 
-**How to avoid:** Keep an explicit, auditable ordering invariant: raw binary is built → cosign signs the raw binary → raw binary is uploaded, byte-for-byte, unchanged. Notarization/codesigning/stapling happen only on the **separate archive artifact**, never on the raw binary that `internal/upgrade` consumes. Do not let GoReleaser's `archives:` block be configured to "archive" by re-copying/re-touching the same file path cosign already signed — verify GoReleaser's archive step reads from the already-built, already-signed binary without modification (it should, since `archives:` operates on already-built artifacts, but this must be confirmed for this repo's specific build-id/archive-id wiring once configured, not assumed).
+**Warning signs:**
+- Only a false-positive/non-firing test suite exists; no true-positive/must-fire suite.
+- The guard's trigger regex/heuristic was tightened repeatedly during development (each tightening in response to a false positive) with no corresponding check that true positives still pass.
 
-**Detection (RED-demonstrable):** Extend the existing `TestVerifyReleaseE2E` (or add a sibling test) that, after a real release, downloads the raw binary asset AND independently downloads the archive asset for the same platform, and asserts the raw binary's bytes inside the archive (if extracted) are byte-identical to the standalone raw-binary asset. A divergence here is exactly the symptom this pitfall predicts, and should be demonstrated impossible (or fixed) before the phase is considered done, not assumed safe because cosign's own step reported success.
-
-**Phase to address:** Split across the `goreleaser release` migration phase (ordering) and the notarization phase (must notarize the archive only, never re-touch the raw binary) — call out explicitly as an acceptance criterion in whichever phase finalizes the archive-building step.
-
-**Confidence:** MEDIUM — the specific failure mechanism (codesign rewrites Mach-O bytes) is HIGH confidence (universally documented codesign behavior), but whether this repo's eventual GoReleaser config actually risks it depends on implementation details not yet written; flagged as a design constraint to verify against, not a confirmed bug.
+**Phase to address:**
+Hooks phase, same acceptance gate as Pitfall 3 — the two test suites (must-not-fire, must-fire) should ship together.
 
 ---
 
-### Pitfall 7: Hardened runtime entitlements — likely a non-issue for this specific CGo binary, but must be verified, not assumed
+### Pitfall 5: Install/uninstall corrupts or silently drops the NEW file types (skill dirs, hooks.json) because the existing `AgentTarget` abstraction was built for a narrower shape
 
-**What goes wrong (if it applies):** macOS's Hardened Runtime enables library validation by default, which "only allows processes to load code signed by Apple or with the same Team ID as the executable." A binary that `dlopen()`s an unsigned or differently-signed shared library at runtime will fail with a code-signing-related mmap/load error under Hardened Runtime unless `com.apple.security.cs.disable-library-validation` is set — and setting that entitlement itself has a documented downside ("Disabling library validation makes it harder to pass Gatekeeper" per Apple Developer Forum reports of it interfering with notarization in some configurations).
+**What goes wrong:**
+`internal/agents/`'s existing `AgentTarget` interface (`Install`/`Uninstall`/`Detect`/`DescribePaths`) was designed and hardened for exactly two artifact shapes: an MCP config JSON/JSONC/TOML/YAML entry, and a marker-fenced instructions-file injection (`<!-- CODEGRAPH_START/END -->`) into 4 of the 8 agents' instruction files. Skill directories (a directory tree: `SKILL.md` + supporting files) and `hooks.json` (a structured config file with its own schema per agent, some agents using `hooks.json`, others embedding hooks in settings, others not supporting hooks at all) are a *third and fourth* artifact shape this interface has never had to express. Bolting them on as ad-hoc special cases per agent — rather than extending the interface's contract — reproduces this project's own documented history of exactly this kind of gap: "swallowed I/O errors," "Antigravity migration data-loss," and "Hermes CRLF idempotency" were all found in v1.0 Phase 6's deep review of the *existing*, narrower two-shape install/uninstall subsystem. A new, less-tested third/fourth shape is higher risk, not lower.
 
-**Why this is likely NOT a live issue for codegraph-go specifically:** Per this repo's own architecture (STACK.md / CLAUDE.md), `tree-sitter/go-tree-sitter` and its grammar modules are linked via **CGo at compile time** — the C code is compiled and statically linked into the single Go binary, not loaded via `dlopen()` at runtime. A statically-linked CGo binary has no runtime dynamic-library-loading behavior for tree-sitter itself, so Hardened Runtime's library-validation restriction should not be triggered by it. This should hold for Pebble (pure Go), fsnotify (pure Go), and the MCP/CLI stack (pure Go) as well — none of them dlopen anything at runtime.
+**Why it happens:**
+The temptation is to treat "write a skill directory" and "write hooks.json" as simple file-copy operations outside the `AgentTarget` abstraction, since they don't fit the existing `Install(loc, opts) WriteResult` / marker-fence model cleanly. But that's precisely how idempotency, byte-invariant round-trips, and safe co-existence with user-owned content got hardened for the existing two shapes — through iterated deep review, not through initial design. Skipping that same rigor for the new shapes because they're "just files" reproduces the bugs the existing subsystem already paid down.
 
-**Where it could still bite:** If the Go runtime itself dynamically loads any system library at startup (e.g. certain cgo-linked networking/DNS paths, or `net` package's use of the system resolver via `libresolv`/`libSystem` on darwin — notably, this repo's own release.yml comments already flag libresolv/DNS as a live darwin-specific concern in a different context, i.e. cross-compilation, not hardened runtime, but it's the same subsystem). Hardened Runtime's library validation applies specifically to *bundle-signed dependent libraries*, not to the OS's own system frameworks (Apple-signed libraries always pass library validation under any Team ID) — so this risk is low but not exactly zero without an actual test.
+**How to avoid:**
+- Extend the `AgentTarget` interface's contract (or add a sibling interface with the same guarantees: idempotent install, byte-invariant uninstall restoring pre-install state, `DescribePaths` coverage, never destroying content it could not read+parse) to cover skill-directory and hooks.json writes, rather than writing bespoke one-off code per agent for these two new shapes.
+- Directory writes (skills) introduce a failure mode the existing file-based shapes don't have: partial writes on interrupt (some files in the skill dir written, others not) and orphaned files on uninstall if the skill's file manifest changes between versions. Design for this explicitly — write to a temp location and atomic-rename the directory into place (this project already has `internal/fsatomic` for exactly this atomic-write pattern from the githooks work; reuse it, don't reinvent it), and have uninstall delete by a manifest the install step wrote, not by "delete everything under this directory name" (which would delete user-added files if a user ever drops something into the skill directory).
+- `hooks.json` (or its per-agent equivalent) is very likely to be a file some agents already use for the *user's own* hooks, unrelated to codegraph. Apply the same "no Install/Remove sequence ever destroys content it could not read+parse" invariant the githooks work (v1.0 Phase 5) converged on after two rounds of reproduced data-loss Criticals — this is directly transferable prior art from this same codebase, not a hypothetical.
+- Test each of the 8 agents' conventions individually and explicitly for the new shapes, the same way `claude_test.go`, `cursor_test.go`, etc. already do for MCP config + instructions. Do not assume a convention that works for one agent (e.g., Claude Code's `.claude/skills/<name>/SKILL.md` + `.claude/settings.json` hooks) transfers unmodified to another (Cursor, Codex, opencode, Gemini, Hermes, Antigravity, Kiro) — this project's own registry exists specifically because Cursor needs `--path`, Antigravity omits `type`, Gemini uses a root-level file, Codex is global-only, and opencode needs comment-preserving JSONC. Skills/hooks conventions across 8 clients are unlikely to be more uniform than MCP config conventions already proved to be.
+- Decide explicitly, per agent, whether it supports skills/hooks at all (some of the 8 may not have an equivalent concept) and make `SupportsLocation`-style capability reporting cover skills/hooks, not just MCP config location — silently no-op'ing "install" for an agent with no skill concept is correct; silently writing something malformed is not.
 
-**How to avoid:** Do not add `com.apple.security.cs.disable-library-validation` speculatively. Sign with default Hardened Runtime options (`--options=runtime`) and run the binary end-to-end (all CLI commands, `serve --mcp`, indexing a real repo) on the actual notarized+signed artifact before assuming entitlements are unnecessary.
+**Warning signs:**
+- Skill-dir/hooks.json writes happen through ad-hoc `os.WriteFile`/`os.MkdirAll` calls scattered outside the `internal/agents` package, rather than through the same interface and test pattern as the existing two artifact shapes.
+- No per-agent test file exists for skill/hooks install-uninstall round-trip (mirroring `claude_test.go`, `cursor_test.go`, etc.).
+- Uninstall for skills deletes by directory name rather than by an install-time-written manifest.
+- No test asserts byte-invariance of *unrelated* content in a shared file (e.g., a user's own hooks alongside codegraph's) across an install→uninstall round trip — the exact property the existing marker-fence tests already assert for instructions files.
 
-**Detection (RED-demonstrable):** After signing with Hardened Runtime enabled and no special entitlements, run the full existing CLI/MCP integration test suite against the signed macOS binary (not just `spctl`/notarization checks — an actual functional smoke test). A load failure (typically manifesting as a crash on startup with a codesign/dyld error in `Console.app` or stderr, not a Gatekeeper rejection) is the signal that an entitlement is actually needed; absence of a crash across the full command surface is the evidence entitlements are not needed, not an assumption.
+**Phase to address:**
+Distribution phase (the "does `codegraph install` write the skill/hooks..." decision named in PROJECT.md's Current Milestone section) — this is the single highest-risk piece of this milestone given the repo's own incident history in this exact subsystem, and should get its own deep-review pass the way githooks (v1.0 Phase 5) and the original agent registry (v1.0 Phase... /main agent work) both did, not be folded silently into the skill-authoring phase as an afterthought.
 
-**Phase to address:** Notarization phase, as a functional-smoke-test acceptance criterion alongside the `spctl` gate.
+---
 
-**Confidence:** MEDIUM — the general Hardened Runtime mechanism is HIGH confidence (well-documented Apple behavior), but whether it applies to this specific binary is an inference from this repo's known architecture, not something directly tested by this research pass.
+### Pitfall 6: The rewritten `instructions` string and marker block repeat the exact "Phase 3" broken-promise pattern that motivated this milestone
+
+**What goes wrong:**
+`internal/agents/instructions.go` currently states the marker block "explicitly defers full tool guidance to the MCP initialize response (Phase 3)" — a promise Phase 3 (v0.3.0) never fulfilled. If the v0.10.0 rewrite defers to the skill/resources ("see the codegraph skill for usage guidance") without those artifacts actually existing and being installed together, atomically, in the same release, this project ships the identical bug a third time: a claim of guidance existing somewhere else, unverified.
+
+**Why it happens:**
+Sequencing risk: the instructions-string rewrite, the skill authoring, and the resources capability are three separate pieces of work that could land in different PRs/phases. If the instructions string is rewritten (or the marker block updated) before the skill/resources it points to are actually shipped and installed, there's a window — however short — where the defer-to claim is false again, and if that window isn't closed by a single atomic release, it risks becoming permanent the way Phase 3's promise did.
+
+**How to avoid:**
+- Gate the instructions-string/marker-block rewrite behind the existence of the thing it points to, at the same commit/PR granularity `instructions_contract_test.go` already enforces for other claims — e.g., a test asserting that if the instructions string references a resource URI or a skill name, that resource/skill actually exists and is served/installed.
+- Do not merge the "point to skill+resources" rewrite in a phase before the skill+resources phase completes. Sequence explicitly: resources capability and skill both shippable and verified working end-to-end BEFORE the instructions string stops carrying the old (even if stale) self-contained content.
+- Add the new claim to `instructions_contract_test.go`'s existing pattern (it already asserts specific mechanisms are named in the string) — assert the skill/resource pointer resolves to something real, not just that the string contains expected substrings.
+
+**Warning signs:**
+- The instructions string is edited to say "see the codegraph skill" in a PR that does not also ship a working, installable skill.
+- No test connects the instructions string's pointer-language to the actual existence of the resource/skill it points to.
+
+**Phase to address:**
+Whichever phase rewrites `internal/agents/instructions.go` and `internal/mcp/server.go`'s `instructions` constant — must be sequenced last, after skill + resources are both verified working, not first.
 
 ---
 
@@ -164,101 +151,80 @@ which resolves to the **identical filename**. The moment `goreleaser release` ac
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|-----------------|------------------|
-| Leaving the hand-rolled `sha256sum` step in `release.yml` "just in case" while also enabling GoReleaser's `checksum:` block | Feels like a safety net during migration | Two checksum files/generators racing (Pitfall 5) — silently changes what's actually attested | Never past the migration PR that flips `build` → `release`; delete in the same change |
-| Notarizing all 4 build targets (including Linux) because it's easier than conditionalizing the `notarize:` block per-OS | Simpler GoReleaser config, one code path | Wasted CI time and unpredictable notarization-API latency on binaries that will never be Gatekeeper-checked (a documented real-world GoReleaser gotcha) | Never — gate `notarize:` to darwin build IDs only from the start |
-| Skipping the "force real quarantine + spctl" check in favor of trusting `notarytool` history during early iteration | Faster local dev loop | Exactly the false-positive shape of Pitfall 3 — a maintainer can convince themselves it works when it doesn't | Acceptable ONLY as a fast local iteration signal, never as the phase's actual acceptance gate |
-| Using a personal Apple ID / ad-hoc signing during development instead of the real Developer ID cert | No secrets management needed locally | `codesign -dvv` passes identically for ad-hoc and Developer-ID-signed binaries (Pitfall 3, item 2) — easy to forget which one CI actually uses | Fine for pure local dev signing sanity checks; never for anything claiming to validate the release pipeline |
+| Ship the skill without a transcript-diff behavior test, relying on "reads well" review | Faster to ship | Repeats Pitfall 1 silently — no signal the skill does anything until a future debug session surfaces it, same as the original `instructions` incident | Never for the initial ship; acceptable only as a fast-follow if the transcript test is already scheduled within the same milestone |
+| Hand-type tool counts/flag defaults into resource prose instead of deriving them | Faster initial authoring | Repeats the SURF-01 / `instructions`-blame-index-state bug class a third time | Never — this repo has already paid for this mistake twice and the todo explicitly names it as a guard-the-claims requirement |
+| Write skill-dir/hooks.json installers as one-off code outside `internal/agents`'s tested interface pattern | Avoids extending a stable interface | Reproduces the exact bug class (swallowed I/O errors, migration data-loss, delayed-deletion) already found and fixed in the existing narrower install/uninstall subsystem | Never for the primary 8-agent roster; a very short-lived spike/prototype for one agent only, before the interface extension, is fine |
+| Ship the guard hook with only a false-positive suite, no true-positive suite | Half the test-writing effort | Guard silently never fires (Pitfall 4), and nobody notices because "doesn't block anything" looks like success | Never — both suites are cheap relative to the cost of a silently inert hook |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|-------------|-----------------|-------------------|
-| GoReleaser `release` ↔ release-please | Letting GoReleaser's own `release:` publisher create/manage the GitHub Release (title, body, changelog) when release-please already created it with its own changelog body | Configure GoReleaser to skip GitHub Release creation/changelog entirely (`release.disable: true` or `--skip=publish` for the release-object step while still using GoReleaser for build/archive/sign/notarize/checksum), reusing this repo's existing pattern of `gh release upload ... --clobber` against the release-please-created Release, exactly as `release.yml` does today for assets |
-| GoReleaser `release` ↔ multi-runner build topology | Assuming `goreleaser release` can consume `dist/` artifacts assembled from separate `build` jobs on different runner classes, the way `build --single-target` currently is assembled | Confirmed impossible in OSS (Pitfall 1) — restructure to a single macOS runner using `zig cc` for both linux legs, or explicitly budget for GoReleaser Pro's Split & Merge |
-| GoReleaser `brews:` ↔ tap repo | Publishing the formula (tap push) before the corresponding GitHub Release assets finish uploading, so `brew install` immediately after a release momentarily 404s on the download URL | GoReleaser's own publish ordering runs `release` (asset upload) before `brews:` (tap push) within a single `goreleaser release` invocation by design — but if brews publishing is ever split into a separate job/step (e.g. for token-scoping reasons), it MUST be sequenced strictly after asset upload completes and be verified, not assumed sequential |
-| GoReleaser `brews:` ↔ parallel formula builds | Multiple brew formula uploads to the same tap repo racing each other (documented GoReleaser issue: "the 2nd upload always fails ... only one of the formulas being uploaded and committed") | Not directly applicable here (one formula, `codegraph`) unless a `-bin`/cask-style second formula is ever added later — if it is, this race is a known, documented GoReleaser bug to watch for |
-| `internal/upgrade` ↔ Homebrew Cellar | Letting `codegraph upgrade` self-replace the binary at the symlinked `/opt/homebrew/bin/codegraph` (or `/usr/local/bin`) path, silently diverging from what `brew`'s Cellar manifest records as installed | Per Homebrew's own Acceptable Formulae policy, self-update MUST be disabled when the tool is a formula (this repo's committed decision — `codegraph upgrade` refuses under a brew-managed install) — verify detection resolves symlinks to a real `Cellar/codegraph/<version>` path, not a path-prefix string match (see Pitfall 8) |
-| cosign/SLSA verification ↔ notarization | Assuming notarization "does something" for the cosign/SLSA-verified raw-binary path | It does nothing — notarization and Gatekeeper are Apple-specific, cosign/SLSA are supply-chain provenance for a different threat model and a different consumer (`internal/upgrade`, not Gatekeeper). PROJECT.md itself already states this ("cosign is a *different* mechanism and does nothing for Gatekeeper") — do not let a notarization PR description imply it strengthens the existing attestation chain, it's orthogonal |
+|--------------|-----------------|-------------------|
+| MCP Resources capability (`modelcontextprotocol/go-sdk`) | Adding `resources/list`/`resources/read` handlers without adding corresponding wire-oracle transcript scenarios, leaving a whole capability outside the frozen-transcript regression net that already covers `tools/list`/`initialize` | Add `resources/*` scenarios to `test/wireoracle/scenarios.go` in the same phase the capability ships, following the existing capture-then-freeze pattern |
+| Claude Code / Cursor / other client hook systems (SessionStart, PreToolUse, UserPromptSubmit) | Assuming one hook schema/config-file convention works across all 8 roster agents, the same false assumption the original agent-config work had to correct for (Cursor `--path`, Antigravity no-`type`, Gemini root-level file, Codex global-only) | Research each agent's actual hook/skill convention individually before implementing, the same way the existing `AgentTarget` registry required per-agent research; do not extrapolate from Claude Code's convention to the other 7 |
+| Existing `internal/agents` marker-fence mechanism (`<!-- CODEGRAPH_START/END -->`) | Introducing a second, differently-shaped marker/manifest convention for skill-dir and hooks.json content instead of reusing the hardened marker-fence + `internal/fsatomic` machinery already proven safe against the "delayed user-content deletion" bug class | Reuse `internal/fsatomic` and the marker-fence pattern (or an explicit install-time manifest for directory content) rather than inventing new file-safety primitives for the new artifact shapes |
+
+## Performance Traps
+
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|-----------------|
+| SessionStart nudge does synchronous filesystem/MCP-server probing on every session start | Perceptible session-start latency, especially in large monorepos or when the MCP server is cold | Make the `.codegraph/`-exists check a cheap `os.Stat`, not an MCP round-trip; never block session start on server availability | Noticeable once probing involves a network/IPC round-trip rather than a local stat, or once it runs in every session regardless of repo size |
+| Guard hook runs on every single tool call (PreToolUse on all tools) rather than scoping to grep/find/Read | Adds per-tool-call latency/overhead across the entire session, not just the tool calls it cares about | Scope the hook's event/matcher as narrowly as the mechanism allows (specific tool names, or UserPromptSubmit text heuristics) rather than a blanket PreToolUse handler that inspects every call | Becomes measurable in long sessions with many tool calls, especially if the hook shells out or does non-trivial work per invocation |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Storing the Developer ID Application `.p12` and App Store Connect API key as long-lived GitHub Actions secrets without rotation tracking | A leaked/stale secret silently breaks notarization (submission rejected) or, worse, is usable by anyone with repo-secret access to notarize arbitrary binaries under this identity | Track cert/key expiry explicitly (Apple Developer certs typically expire annually); add an explicit CI failure mode check (notarization step failing with an identity/auth error, not a build error) to the release runbook so cert rotation is caught fast, not discovered on a broken release |
-| Assuming a Team ID mismatch "can't happen" because there's only one Apple Developer Program membership | If the App Store Connect API key or the Developer ID cert is ever regenerated under a different team context (e.g. after an Apple account restructuring), notarization fails with an opaque "Team is not yet configured for notarization" error that looks like an infra issue, not an identity issue | When notarization first fails post-setup, check team configuration/API-key-team association before assuming a pipeline bug — per Apple's own forum guidance, this specific error class routes to Developer Programs Support, not a technical fix |
-| Treating a brew-detection bypass (a user manually placing the binary at a Homebrew-looking path without actually being brew-managed) as out of scope | Low severity, but a false-positive "refuse to upgrade" for a non-brew user who happens to have `/opt/homebrew/bin` in PATH is a real usability regression, and a false-negative (fails to detect a real brew install) lets `codegraph upgrade` corrupt the Cellar | Detect via resolving the running binary's real path (`os.Executable()` + `filepath.EvalSymlinks`) and checking whether it resolves into an actual `Cellar/<formula>/<version>/bin/` structure — not a bare prefix string match (see Pitfall 8) |
+| Guard/hook scripts installed into agent config directories with world-writable permissions or without validating they're not clobbering a user's own script of the same name | A malicious or buggy write could corrupt or be overwritten by unrelated tooling; silent overwrite of user content (this project's documented recurring bug class) | Reuse `internal/fsatomic` atomic-write patterns and explicit collision detection (read-before-write, same invariant githooks Phase 5 converged on) for any new hook script files |
+| Resources capability exposing internal implementation details (file paths, internal env var names beyond `CODEGRAPH_MCP_TOOLS`, config internals) beyond what's needed for agent guidance | Unintended information disclosure to any MCP client that connects, since resources are readable by any authenticated session the same as tools | Scope resource content to genuinely agent-facing guidance (mirroring what the `instructions` string already exposes), not raw internal config dumps |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-------------------|
-| `codegraph upgrade` under Homebrew prints a generic "refused" message | User doesn't know what to do next | Match PROJECT.md's own committed UX: explicitly point at `brew upgrade codegraph` |
-| A user downloads the raw binary from GitHub Releases via browser (triggering quarantine) instead of the archive | Binary fails Gatekeeper on first run even though the pipeline is fully correct, because the raw binary was never notarized/stapled (only the archive was, by design — Pitfall 4) | Release notes / README must clearly steer browser-downloaders to the archive (`.zip`) asset, not the raw binary, for interactive/GUI use; the raw binary remains correctly intended only for `codegraph upgrade`'s non-browser fetch path |
-| `brew install codegraph` succeeds but the binary silently fails at first run due to an untested Hardened Runtime interaction (Pitfall 7) | Worse than a `curl`-downloaded failure, because Homebrew users have a strong trust prior that `brew install` "just works" | Full functional smoke test (not just `spctl`) against the exact bottle/binary Homebrew would install, before considering the notarization phase done |
+| SessionStart nudge fires every session, even for users who've long since internalized codegraph usage | Nag fatigue — users learn to ignore or disable codegraph's hooks entirely, defeating even the cases where the nudge would have helped | Make the nudge minimal/one-line and cheap to ignore, and consider making it conditional on a repo not yet having a codegraph-tool call in the session, rather than unconditional every time |
+| Guard hook's redirect message is generic ("use codegraph instead") rather than actionable | User/agent doesn't know how to comply, tries once, gets frustrated, disables the hook | Redirect message should name the specific tool and give a one-line usage example inline, mirroring the skill's own worked-example approach — consistency between hook messaging and skill content matters |
+| Distribution ships skill/hooks silently as part of `codegraph install`/`upgrade` with no visible confirmation of what was added | User has no way to discover what changed in their agent config, undermining trust in an already file-write-heavy install subsystem | Surface skill/hooks additions in `install`'s existing output/summary the same way MCP config and instructions-file writes are already reported per `DescribePaths` |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Notarization pipeline green:** Often missing the forced-quarantine `spctl` check against the actual published archive — verify with `xattr -w com.apple.quarantine ...` + `spctl -a -vv -t exec` on the real downloaded asset, not a local `dist/` file (Pitfall 3)
-- [ ] **`goreleaser release` migration "complete":** Often missing removal of the now-redundant hand-rolled checksum step, leaving two checksum generators racing (Pitfall 5) — verify by diffing the published checksums file's line count against the real asset list
-- [ ] **Homebrew tap "working":** Often verified only by a manual `brew install` run once, right after a release, when GitHub's CDN/API is warm — verify by testing `brew install` cold, some time after a release, and after a formula update from a *second* subsequent release (catches livecheck/version-bump edge cases)
-- [ ] **`codegraph upgrade` brew-refusal "tested":** Often tested only against a hand-constructed fake path (e.g. an env var or a literal `/opt/homebrew/` string check) rather than a real `brew install` followed by running the actual binary — verify against a genuine `brew tap` + `brew install` on a real machine, per PROJECT.md's own stated bar ("Detection must be tested against a real brew-managed layout, not a path-prefix guess")
-- [ ] **Archive asset "notarized":** Often means "the binary inside the archive was signed" — verify the *archive itself* was submitted to and accepted by `notarytool`, and that `xcrun stapler validate` succeeds on the archive, not just that `codesign --verify` succeeds on the inner binary (Pitfall 4)
-- [ ] **cosign/SLSA verification "still passes" post-migration:** Often re-run only against local build output, not against the actual published release — extend `TestVerifyReleaseE2E`-style checks to run after every future `goreleaser release`-based release, not just the first one during development (Pitfall 6)
+- [ ] **Skill authored and reads well:** Often missing a behavior-verification step — verify with a real fresh-session transcript diff showing tool-choice change on a where-is-X prompt, not just a content review
+- [ ] **MCP Resources capability implemented:** Often missing wire-oracle coverage — verify `resources/list`/`resources/read` have frozen transcript scenarios in `test/wireoracle/scenarios.go`, same as every other capability
+- [ ] **Resource content written:** Often missing claim derivation — verify every tool count/flag default/precondition stated in resource bodies traces to a test or generated constant, not hand-typed prose
+- [ ] **Guard hook installed and passes its own tests:** Often missing the true-positive suite — verify a must-fire corpus exists alongside the must-not-fire corpus, and both are demonstrated (not just written)
+- [ ] **Skill/hooks distribution via `codegraph install`:** Often missing per-agent-of-8 test coverage and atomic-write safety — verify each of the 8 `AgentTarget` implementations has explicit install/uninstall round-trip tests for the new artifact shapes, mirroring `claude_test.go`/`cursor_test.go` for the existing ones
+- [ ] **`instructions` string / marker block rewritten to point at skill+resources:** Often missing sequencing — verify the pointed-to skill/resources actually exist and are installed in the SAME release, not a promise for a future phase (the exact bug this milestone exists to fix)
+- [ ] **`CODEGRAPH_MCP_TOOLS` documented in the new skill/resources:** Often still missing from README/`serve --help` per the original incident — verify this milestone actually closes that gap in all three places (skill, resource, and the pre-existing surfaces named in the scoping todo), not just the new ones
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|----------------|------------------|
-| Checksums collision published in a real release (Pitfall 5) | MEDIUM | Delete the wrong checksums asset via `gh release delete-asset`, regenerate the correct one from the actual published binaries, re-upload, and re-run SLSA provenance if the base64-subjects hash changed (may require a follow-up patch release if `internal/upgrade`'s verify path depends on it) |
-| Notarized-but-not-stapled release shipped, offline users failing Gatekeeper (Pitfall 4) | LOW–MEDIUM | Notarization tickets remain valid; staple after the fact with `xcrun stapler staple` against the already-notarized archive and re-upload the asset — no need to re-notarize |
-| Brew formula pointing at a since-deleted or renamed asset (tap/release race, or a force-pushed formula) | LOW | Regenerate and re-push the formula from the current release's real checksums/URLs; `brew update` picks up the corrected tap on the next run — but any user who already ran `brew install` during the broken window needs to `brew reinstall` |
-| `codegraph upgrade` false-positive brew-refusal shipped (blocks a legitimate non-brew user) | LOW | Patch release with corrected detection logic; document a manual override/workaround in the interim (e.g. a documented flag or direct binary replacement instructions) |
-| Developer ID cert expired mid-release-cycle, notarization pipeline broken until renewed | MEDIUM (external dependency on Apple's cert issuance turnaround) | Fall back to shipping unnotarized archives temporarily (raw binaries + cosign/SLSA path is entirely unaffected and continues to work for `codegraph upgrade` users) while the cert is renewed; communicate the temporary Gatekeeper-friction to browser-downloading users |
+| Inert skill (Pitfall 1) shipped and discovered later via a debug session | LOW | Rewrite the skill body leading with the decision procedure; add the transcript-diff test retroactively; no data/format migration involved |
+| Resource content drifted from tool reality (Pitfall 2) | MEDIUM | Add the derivation/gating test that should have shipped with the resource; audit all existing resource content for hand-typed claims and replace with derived values; no user-facing breakage, just a trust repair |
+| Guard hook shipped too aggressive, users disabling it (Pitfall 3) | LOW-MEDIUM | Narrow the trigger heuristic, add the false-positive corpus test, re-release; users who disabled it need a changelog note explaining the fix to re-enable |
+| Skill-dir/hooks.json install corrupted user content on one or more of the 8 agents (Pitfall 5) | HIGH | This is the costliest recovery in this milestone's scope — mirrors the "delayed user-content deletion" Critical found in githooks Phase 5: requires forensic reconstruction of what was destroyed, a fixed install/uninstall round-trip with regression tests per agent, and likely a `codegraph doctor`-style repair path for already-affected installs |
+| Instructions string points at nonexistent skill/resources (Pitfall 6) | LOW | Revert the pointer-language change or fast-follow-ship the missing skill/resources; this is a documentation-accuracy fix, not a data-safety issue |
 
 ## Pitfall-to-Phase Mapping
 
-| Pitfall | Prevention Phase | Verification (RED-demonstrable) |
-|---------|-------------------|-----------------------------------|
-| 1. Single-runner conflict / Pro-only split-merge | `goreleaser release` migration phase | Reproduce the dist-exists error live with a two-job pattern before committing to final runner topology; confirms single-macOS-runner + zig-cc-for-linux is required |
-| 2. Notarization Accepted but `spctl` rejects | Notarization phase | `spctl -a -vv -t exec` on the real published archive after forcing quarantine, expect `accepted` + `source=Notarized Developer ID` |
-| 3. "Wired up but cannot fire" false-positive checks | Notarization phase (acceptance gate, not a side check) | The forced-quarantine `spctl` sequence is the phase's UAT criterion; every other check (codesign -dvv, notarytool history, green CI) explicitly documented as insufficient in the phase's own verification notes |
-| 4. Stapling requires a container | Notarization phase + Archives phase (shared decision) | `xcrun stapler staple` on the raw binary must fail (proves constraint); `xcrun stapler validate` on the shipped archive must succeed |
-| 5. Checksums-file collision | `goreleaser release` migration phase | Diff published checksums file's covered-file list against `gh release view --json assets` after first real release under the new pipeline |
-| 6. cosign/SLSA-attested bytes diverge from published bytes | `goreleaser release` migration phase + Notarization phase | Extend `TestVerifyReleaseE2E` to assert raw-binary bytes are untouched between cosign-signing time and publish time, run against every future release, not just once |
-| 7. Hardened Runtime entitlements | Notarization phase | Full CLI/MCP functional smoke test against the actual signed+notarized binary with default (no extra entitlement) Hardened Runtime options; a dyld/codesign crash is the signal an entitlement is needed |
-| 8. Brew-managed-install detection fragility (see Integration Gotchas) | `codegraph upgrade` brew-detection phase | Test against a real `brew tap` + `brew install` on a real machine (Apple Silicon `/opt/homebrew` at minimum; Intel `/usr/local` and linuxbrew as available), resolving symlinks to a real Cellar path rather than string-matching a prefix |
-| Self-update-vs-Cellar conflict (Homebrew policy) | `codegraph upgrade` brew-detection phase | Confirm `brew audit --new --formula codegraph` does not flag self-update behavior — Homebrew's own Acceptable-Formulae audit explicitly checks for this policy area |
-| Tap push racing release asset publish | Homebrew tap phase | Verify GoReleaser's own within-run publish ordering (`release` before `brews`) is preserved if brews publishing is ever separated into its own job; add a real cold `brew install` test run some time after a release, not immediately after, to catch propagation-timing issues |
+| Pitfall | Prevention Phase | Verification |
+|---------|-------------------|----------------|
+| 1. Inert skill | Skill-authoring phase | Fresh-session transcript diff on a where-is-X prompt shows codegraph_explore chosen over grep, captured as a repeatable test/rehearsal artifact |
+| 2. Resources drift from tool reality | MCP Resources phase | New wire-oracle scenarios for `resources/*`; a claim-derivation test (mirroring `instructions_contract_test.go`) covering every stated tool count/default/precondition in resource bodies |
+| 3. Guard too aggressive | Hooks phase | False-positive corpus test (legitimate grep/find/Read calls) passes with zero blocks/nudges |
+| 4. Guard too passive | Hooks phase | True-positive corpus test (realistic where-is-X prompts) passes with the guard demonstrably firing |
+| 5. Install/uninstall corrupts new artifact shapes across 8 agents | Distribution phase | Per-agent (all 8) install→uninstall round-trip tests for skill-dir and hooks.json, asserting byte-invariance of unrelated/pre-existing content, atomic writes via `internal/fsatomic`, and manifest-based (not directory-name-based) uninstall |
+| 6. Instructions string points at nonexistent skill/resources | Final rewrite phase (sequenced last) | Test asserting the instructions string's pointer-language resolves to an actually-shipped, actually-installed skill/resource; phase ordering itself (resources+skill before the rewrite) enforced by planning, not just code |
 
 ## Sources
 
-- [Notarization successful but spctl … | Apple Developer Forums (thread 128497)](https://developer.apple.com/forums/thread/128497) — MEDIUM-HIGH; documents Accepted-but-rejected family, notary ticket missing Mach-O images
-- [Gatekeeper rejects notarized app | Apple Developer Forums (thread 794080)](https://developer.apple.com/forums/thread/794080) — MEDIUM-HIGH
-- [spctl --type install rejects notarized .pkg on macOS 26 Tahoe | Apple Developer Forums (thread 817887)](https://developer.apple.com/forums/thread/817887) — MEDIUM; recent (Tahoe-era) corroboration the failure family is still live
-- [App Fails spctl After signing and notarization | Apple Developer Forums (thread 767998)](https://developer.apple.com/forums/thread/767998) — MEDIUM
-- [Notarize macOS Applications – GoReleaser official docs](https://goreleaser.com/customization/sign/notarize/) — HIGH; App-Bundle-inner-binary-only trap, native vs quill methods, requires macOS runner for native path
-- [Notarized MacOS application blocked by Gatekeeper when downloaded | Apple Developer Forums (thread 706638)](https://developer.apple.com/forums/thread/706638) — MEDIUM
-- [Apple Codesigning In Depth: Part I — Kayla McArthur](https://kayla.is/posts/codesigning-part-i/) — MEDIUM; codesign vs spctl distinction, ad-hoc signature behavior
-- [macOS distribution gist — rsms](https://gist.github.com/rsms/929c9c2fec231f0cf843a1a746a416f5) — MEDIUM; community-compiled but cross-corroborated with official sources
-- [Split & Merge – GoReleaser official docs](https://goreleaser.com/customization/general/partial/) — HIGH; confirms Pro-only, explains split/merge mechanics
-- [GoReleaser Split and Merge — Carlos Becker (GoReleaser maintainer's own blog)](https://carlosbecker.com/posts/goreleaser-split-merge/) — HIGH; maintainer-authored, directly authoritative
-- [Release Merged Builds / Using Existing Builds During Release · Issue #2320 · goreleaser/goreleaser](https://github.com/goreleaser/goreleaser/issues/2320) — HIGH; official GitHub issue confirming `release` cannot consume pre-existing `dist/`, no `--skip-build` flag exists
-- [Multiple brew formulas fail to upload to the same repository · Issue #1120 · goreleaser/goreleaser](https://github.com/goreleaser/goreleaser/issues/1120) — MEDIUM-HIGH; documented parallel-tap-push race
-- [Git is in a dirty state – GoReleaser official error docs](https://goreleaser.com/resources/errors/dirty/) — HIGH
-- [goreleaser release CLI reference – GoReleaser official docs](https://goreleaser.com/cmd/goreleaser_release/) — HIGH; `--skip` valid values including `notarize`, `homebrew`
-- [Homebrew Documentation: Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) — HIGH; official self-update policy, directly relevant to `codegraph upgrade` brew-refusal decision
-- [Homebrew Documentation: Adding Software to Homebrew](https://docs.brew.sh/Adding-Software-to-Homebrew) — HIGH; `brew audit --new` requirement
-- [M1 Mac has reverted HOMEBREW_PREFIX to /usr/local · Discussion #664 · Homebrew/discussions](https://github.com/Homebrew/discussions/discussions/664) — MEDIUM; real-world prefix-detection edge cases (migrated systems, symlink confusion)
-- [HOMEBREW_PREFIX error when use `brew` symlink · Issue #16044 · Homebrew/brew](https://github.com/Homebrew/brew/issues/16044) — MEDIUM
-- [How notarization works – The Eclectic Light Company](https://eclecticlight.co/2020/08/28/how-notarization-works/) — MEDIUM-HIGH; independent technical writer, cross-corroborated with Apple docs, widely cited in the macOS dev community
-- [Notarization: the hardened runtime – The Eclectic Light Company](https://eclecticlight.co/2021/01/07/notarization-the-hardened-runtime/) — MEDIUM-HIGH
-- [Disable library validation entitlements makes app fail GateKeeper | Apple Developer Forums (thread 673889)](https://developer.apple.com/forums/thread/673889) — MEDIUM
-- [Notarization says I'm not member of my team | Apple Developer Forums (thread 119445)](https://developer.apple.com/forums/thread/119445) — MEDIUM; Team ID mismatch symptom class
-- [Error 7000 "Team is not yet configured for notarization" | Apple Developer Forums (thread 814080)](https://developer.apple.com/forums/thread/814080) — MEDIUM
-- [Building and notarizing command tools as Universal binaries – The Eclectic Light Company](https://eclecticlight.co/2020/08/27/building-and-notarizing-command-tools-as-universal-binaries/) — MEDIUM-HIGH; directly relevant CLI-tool (not .app) notarization guidance
-- [Possible to notarize only a single … | Apple Developer Forums (thread 131610)](https://developer.apple.com/forums/thread/131610) — MEDIUM; confirms notarize-the-container-not-the-binary requirement, stapling-to-single-Mach-O impossibility
-- `.goreleaser.yaml` and `.github/workflows/release.yml` (this repo, read directly 2026-08-07) — HIGH; ground truth for the checksums-collision and asset-naming findings
+- `/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/PROJECT.md` (primary/HIGH confidence — this repo's own documented incident history: MCP-01's AND-gate-of-three failure, the retracted 10.6% perf claim, the 51.5%-stale benchmark baseline, the v1.0 Phase 5 githooks data-loss Criticals, the v1.0 Phase 6 install/uninstall swallowed-I/O-errors and Antigravity migration data-loss findings)
+- `/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/todos/pending/2026-08-08-author-a-codegraph-usage-skill-for-agents.md` (primary/HIGH confidence — the scoping todo naming the exact incident, the "agent that reads the skill and still greps first" failure mode, and the guard-the-claims requirement)
+- `/Volumes/Code/github.com/seanb4t/codegraph-go/internal/mcp/instructions_contract_test.go` (code inspection/HIGH confidence — existing pattern for claim-derivation testing to extend to resources)
+- `/Volumes/Code/github.com/seanb4t/codegraph-go/internal/agents/types.go`, `claude.go` (code inspection/HIGH confidence — `AgentTarget` interface's current two-artifact-shape scope, showing skill-dir/hooks.json are genuinely new territory)
+- `/Volumes/Code/github.com/seanb4t/codegraph-go/test/wireoracle/oracle_test.go` (code inspection/HIGH confidence — existing frozen-transcript oracle pattern to extend to `resources/*`)
 
 ---
-*Pitfalls research for: macOS Gatekeeper notarization + Homebrew tap distribution, added to an existing signed/attested Go release pipeline*
-*Researched: 2026-08-07*
+*Pitfalls research for: codegraph-go v0.10.0 — Agent Onboarding Skill & MCP Resources*
+*Researched: 2026-08-12*

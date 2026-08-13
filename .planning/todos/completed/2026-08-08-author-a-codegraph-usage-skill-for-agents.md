@@ -1,14 +1,17 @@
+completed: 2026-08-12
 ---
 created: 2026-08-09T01:26:19.374Z
 title: Author a codegraph usage skill for agents
 area: agents
 severity: major
 files:
+
   - internal/agents/instructions.go:17-18
   - internal/mcp/server.go:56
   - README.md:91-93
   - internal/cli/install.go
   - internal/mcp/tools.go
+
 ---
 
 ## Problem
@@ -30,14 +33,19 @@ neither end carries usage guidance. An agent has nowhere to learn:
 - When to reach for `codegraph explore` INSTEAD of grep/rg/Read — the single
   highest-value behavior, and the one the current guidance states as a bare
   assertion with no worked example.
+
 - What each of the 8 tools is actually for, and which to pick for a given
   question (`explore` vs `search` vs `node`; `callers`/`callees` vs `impact`).
+
 - That `codegraph explore` works as a shell command even when the MCP server is
   absent — the documented fallback, currently buried.
+
 - How to read explore's output (verbatim source + call paths, including
   dynamic-dispatch hops grep cannot follow) and why that beats a text search.
+
 - The `.codegraph/`-exists precondition, and what zero tools vs. a partial tool
   list actually mean.
+
 - `CODEGRAPH_MCP_TOOLS` — which appears in ZERO user-facing surfaces today: not
   README, not `serve --help` (Short only, no Long/Example), not docs/.
 
@@ -61,9 +69,11 @@ TBD in detail, but the shape is constrained by work already in flight:
    opt-in allowlist to an opt-out narrowing filter, and rewrites both the
    `instructions` string and README.md:91-93. Authoring the skill first would
    document a contract that is actively being replaced.
+
 2. **Research current skill-authoring conventions** rather than pattern-matching
    an existing SKILL.md — use the `skill-creator` / `skill-development` guidance
    and verify against current docs.
+
 3. **Decide the distribution question, which is the real design decision here:**
    does `codegraph install` WRITE the skill into the target agent's skills
    directory (making it versioned with the binary and updated by `codegraph
@@ -74,10 +84,12 @@ TBD in detail, but the shape is constrained by work already in flight:
    constraint from an earlier phase decision (see y4er47xm4e:
    `agents-go-must-not-change`, bare `serve --mcp` = zero-config flip) — that
    constraint needs to be re-examined, not silently violated.
+
 4. **Lead with the decision procedure, not a tool catalog.** The failure mode to
    design against is an agent that has read the skill and still reaches for grep
    first. A tool-by-tool reference is the least valuable part; a crisp
    "which tool for which question" table plus 2-3 worked examples is the most.
+
 5. **Guard the claims.** The `mcp-server-one-tool-only` session established that
    this repo has now had TWO occurrences of wire-contract claims drifting from
    behavior with no gate comparing them (SURF-01's "default 5" after the
