@@ -114,8 +114,8 @@ tests assume, not just that the script behaves correctly when invoked directly.
 
 ## Follow-up (not closed by this phase)
 
-Two items surfaced by this rehearsal. The first is now **resolved and was not a gap**; the second
-remains open:
+Two items surfaced by this rehearsal. **Both are now resolved, and both turned out to be false
+negatives produced by the same invalid oracle — a grep of a session transcript:**
 
 1. ~~**Resume-matcher non-firing.**~~ **RESOLVED 2026-08-13 — not a defect.** The `resume` matcher
    fires; Claude Code suppresses the injection and the transcript record because the shipped
@@ -124,10 +124,24 @@ remains open:
    `.planning/debug/resolved/resume-matcher-not-firing.md` for the probe ladder. The lasting
    correction is to the *method*, not the code: transcript grep is not a valid oracle for
    SessionStart dispatch.
-2. **Skill-discovery non-listing.** `.claude/skills/codegraph/SKILL.md` was not surfaced in a
-   freshly started session's skill catalog despite being correctly placed and committed (see
-   `SKILL-03-rehearsal.md`'s Verdict section for detail). Needs investigation into why a
-   newly-added project skill isn't picked up by a genuinely fresh session's skill discovery.
+2. ~~**Skill-discovery non-listing.**~~ **RESOLVED 2026-08-13 — discovery was never broken.** This
+   previously read that `.claude/skills/codegraph/SKILL.md` "was not surfaced in a freshly started
+   session's skill catalog despite being correctly placed and committed." False. The captured
+   session's transcript contains a `"type":"skill_listing"` attachment that includes `- codegraph`,
+   at the end of the personal-skill block where a project-scoped entry belongs. The entry is
+   *degraded*, not absent: Claude Code caps the rendered catalog near 45,000 characters (exactly
+   173 descriptions admitted across four measured sessions) and emits everything past the cap as a
+   bare name with no description — and this operator's ~238-skill installation saturates it, with
+   project-scoped skills appended last. A grep keyed on `codegraph:` or on the description text
+   cannot match a bare name, so the oracle returned a false negative. Fixed on our side by cutting
+   the description to 110 characters so it competes for the leftover budget; retracted in
+   `SKILL-03-rehearsal.md`. See `.planning/debug/resolved/skill-discovery-not-listing.md`.
 
-Both are recorded in `.planning/STATE.md` as open follow-up items for this milestone rather than
-silently dropped.
+**Shared lesson, now twice-earned in one rehearsal.** Both findings were transcript-grep false
+negatives: the first was blind to a *suppressed* hook dispatch, the second to a *degraded* catalog
+entry. In each case the grep's silence was read as the product's silence. A transcript is the
+runtime's own rendering, not the world — before recording an absence from one, prove the same
+search can find the thing when it is present, or use an oracle outside the transcript entirely.
+
+Both are recorded in `.planning/STATE.md`, with their resolutions rather than the original
+findings, so the retractions stay legible instead of being silently dropped.

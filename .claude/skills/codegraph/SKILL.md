@@ -1,6 +1,6 @@
 ---
 name: codegraph
-description: Use when the user asks where a symbol is defined, how a function or method works, what calls or is called by a symbol, or what breaks if a signature changes in a repository with a .codegraph/ index — routes those questions to codegraph's call and symbol graph instead of grep, find, or file reads.
+description: Use when asked where X is defined, how Y works, what calls X, or what changing X breaks in a .codegraph/ repo.
 ---
 
 ## Which tool for which question

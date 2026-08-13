@@ -52,6 +52,33 @@ const skillBodyMaxLines = 500
 // skill's frontmatter description field.
 const skillDescriptionMaxChars = 1024
 
+// skillDescriptionListingMaxChars is the operative ceiling, far below
+// agentskills.io's 1024: Claude Code renders the whole available-skills
+// catalog into a capped attachment (observed clamping at ~45,000 characters
+// across four independent sessions, each admitting exactly 173 descriptions),
+// and every entry past the cap is degraded to a BARE NAME with no description
+// at all. A skill listed without its description carries zero trigger signal,
+// which is strictly worse than a terse one.
+//
+// This repository's skill is at the back of that queue by construction:
+// project-scoped .claude/skills/ entries are appended after every personal and
+// plugin skill, so on an operator installation carrying many skills the
+// codegraph entry is exactly the kind that loses its description. That is not
+// hypothetical — see .planning/debug/resolved/skill-discovery-not-listing.md,
+// where it happened on a 238-skill installation and was misread as the skill
+// not being discovered at all.
+//
+// 120 is the tightest bound the measurements support. On a saturated 238-skill
+// installation, probe skills sharing the leftover budget were admitted at 65
+// and 100 characters and degraded to bare names at 130, 160, 200, and 250; the
+// real 297-character description was degraded in 100% of observed sessions and
+// was admitted immediately when shortened to 65 in an otherwise byte-identical
+// environment. No length GUARANTEES admission — the leftover budget is a
+// function of the operator's installed-skill count, which this repository does
+// not control — so treat this as the discipline that maximizes survival odds
+// and doubles as trigger-clarity pressure, not as a promise.
+const skillDescriptionListingMaxChars = 120
+
 // skillWorkedExampleCount is D-05's locked worked-example count (06-CONTEXT.md:
 // "Three worked examples, in this order") — a locked user decision, not a
 // value derivable from code. Recorded as a named constant, with this doc
@@ -246,6 +273,42 @@ func TestSkillFrontmatterIsSpecCompliant(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(description), "when") {
 		t.Errorf("%s frontmatter description never contains \"when\" — the description is the ONLY part of the skill always resident in context, so it must be trigger-shaped (state when to use the skill), not merely a summary of what it does", skillPath)
+	}
+}
+
+// TestSkillDescriptionSurvivesSkillListingCap pins the description short
+// enough to compete for the leftover room in Claude Code's capped skill
+// listing. See skillDescriptionListingMaxChars for the measurements; the
+// short version is that agentskills.io's 1024-character maximum is not the
+// binding constraint, the renderer's catalog cap is, and losing the
+// description entirely costs more than every word this bound removes.
+//
+// The bound is checked against the same description the spec-compliance test
+// reads, so the two cannot drift apart, and it is asserted as strictly
+// tighter than skillDescriptionMaxChars so this test can never silently
+// become a restatement of the looser gate.
+func TestSkillDescriptionSurvivesSkillListingCap(t *testing.T) {
+	if skillDescriptionListingMaxChars >= skillDescriptionMaxChars {
+		t.Fatalf("skillDescriptionListingMaxChars (%d) must be strictly tighter than skillDescriptionMaxChars (%d), otherwise this test verifies nothing beyond TestSkillFrontmatterIsSpecCompliant", skillDescriptionListingMaxChars, skillDescriptionMaxChars)
+	}
+
+	data, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", skillPath, err)
+	}
+	front, _, err := splitSkillFrontmatter(string(data))
+	if err != nil {
+		t.Fatalf("splitSkillFrontmatter(%s): %v", skillPath, err)
+	}
+	description, ok := skillFrontmatterField(front, "description")
+	if !ok {
+		t.Fatalf("%s frontmatter has no description field", skillPath)
+	}
+	if description == "" {
+		t.Fatalf("%s frontmatter description is empty — an empty description trivially satisfies a maximum-length bound while reproducing the exact defect this test exists to prevent (a catalog entry with no trigger signal)", skillPath)
+	}
+	if len(description) > skillDescriptionListingMaxChars {
+		t.Errorf("%s frontmatter description is %d characters, over the %d-character skill-listing budget; Claude Code degrades entries past its ~45,000-character catalog cap to bare names with no description, and a project-scoped skill is appended last so it is degraded first (see .planning/debug/resolved/skill-discovery-not-listing.md)", skillPath, len(description), skillDescriptionListingMaxChars)
 	}
 }
 

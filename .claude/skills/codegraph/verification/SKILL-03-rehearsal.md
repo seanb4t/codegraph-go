@@ -61,10 +61,42 @@ from the session used for the Part A nudge rehearsal (see `NUDGE-live-session.md
 **Prompt used** (names no tool): *"How does the daemon decide when to trigger a re-sync of the
 graph store?"*
 
-**Whether the skill triggered:** No. The session's own skill catalog (inspected directly in its
-transcript, not inferred) does not list the `codegraph` skill at all, despite
-`.claude/skills/codegraph/SKILL.md` being correctly placed and committed. See **Verdict** for why
-this matters.
+**Whether the skill was listed:**
+
+> **Retraction (2026-08-13).** This line previously read: *"No. The session's own skill catalog
+> (inspected directly in its transcript, not inferred) does not list the `codegraph` skill at all,
+> despite `.claude/skills/codegraph/SKILL.md` being correctly placed and committed."* **That was
+> false.** The skill WAS listed. The captured session's transcript
+> (`c4b8f662-07d5-4549-ba5d-be3f7ba795d2.jsonl`) contains an `attachment` record of
+> `"type":"skill_listing"` whose content includes, verbatim, `\n- codegraph\n` — positioned at the
+> end of the personal-skill block, exactly where a project-scoped `.claude/skills/` entry belongs.
+> Project-skill discovery worked in the very session this finding was written from.
+>
+> **What was actually wrong, and why the original claim missed it:** the entry is *degraded*, not
+> absent. It renders as a bare `- codegraph` with **no colon and no description**, unlike the 173
+> entries that carry `- name: description`. The rehearsal's oracle was a grep of the transcript,
+> and every natural spelling of that grep — `codegraph:`, or any fragment of the description text —
+> matches nothing against a bare name. The oracle could not distinguish "absent from the catalog"
+> from "present but stripped of its description," and reported the first.
+>
+> **Root cause of the degradation (environment, not this repository's authoring).** Claude Code
+> renders the skill catalog into an attachment capped near 45,000 characters (measured
+> 44,976–45,014 across four independent sessions, admitting **exactly 173** descriptions in every
+> one) and emits every entry that does not fit as a bare name. This operator's installation carries
+> ~238 skills, saturating the cap; project-scoped skills are appended after all personal and plugin
+> skills, so this repository's entry competes for the leftover budget last and loses by
+> construction. Proven not to be a property of the file: a probe skill whose description was
+> byte-identical to a working skill's rendered **bare in the same listing** where the original
+> rendered with its description. Full probe ladder in
+> `.planning/debug/resolved/skill-discovery-not-listing.md`.
+>
+> **Consequence for this rehearsal, unchanged in substance:** an entry with no description carries
+> no trigger signal, so the skill was still semantically undiscoverable to the captured session.
+> The Verdict's caveat therefore stands on its merits — but for this reason, not for the
+> now-retracted "discovery is broken" reason.
+
+**Yes — listed, but degraded to a bare name with no description**, hence carrying no trigger
+signal. See **Verdict** for what that means for SKILL-03's attribution.
 
 **First code-search action:** the session's transcript tool-call sequence, in order, was
 `ToolSearch` and `mcp__engram__list_memory` (both mandated by an unrelated, pre-existing global
@@ -83,16 +115,25 @@ action, and it is `codegraph_explore` — not grep, find, or a file read.
 **SKILL-03's literal criterion is met by this transcript:** the first code-search action for a
 where-is-X-class prompt was `codegraph_explore`, not grep/find/Read.
 
-**Open caveat, recorded honestly rather than glossed over:** the newly-authored
-`.claude/skills/codegraph/SKILL.md` was not surfaced to the captured session at all — its
-skill-listing system reminder never named `codegraph`. Two other, independent, pre-existing
-mechanisms already in context are each independently sufficient to explain the correct tool
-choice: the operator's global `~/.claude/CLAUDE.md` CodeGraph section, and the codegraph MCP
-server's own `instructions` string (rewritten as part of the 2026-08-08 fix to say "try
-codegraph_explore first for a where-is-X or how-does-Y-work question"). This rehearsal therefore
-cannot cleanly attribute the correct routing to the phase's own artifact — it demonstrates the
-desired *outcome*, not that this specific *skill* caused it. The skill-discovery gap itself is a
-real finding, tracked as follow-up (see `NUDGE-live-session.md`'s closing note and STATE.md).
+**Open caveat, recorded honestly rather than glossed over** (corrected 2026-08-13; the original
+text asserted the skill "was not surfaced to the captured session at all — its skill-listing
+system reminder never named `codegraph`", which is false — see the retraction above): the
+newly-authored `.claude/skills/codegraph/SKILL.md` *was* listed in the captured session, but as a
+bare `- codegraph` with its description dropped by Claude Code's ~45,000-character catalog cap, so
+it reached the session carrying no trigger signal. Two other, independent, pre-existing mechanisms
+already in context are each independently sufficient to explain the correct tool choice: the
+operator's global `~/.claude/CLAUDE.md` CodeGraph section, and the codegraph MCP server's own
+`instructions` string (rewritten as part of the 2026-08-08 fix to say "try codegraph_explore first
+for a where-is-X or how-does-Y-work question"). This rehearsal therefore cannot cleanly attribute
+the correct routing to the phase's own artifact — it demonstrates the desired *outcome*, not that
+this specific *skill* caused it. That limitation is unchanged by the retraction; only its cause is.
+
+**Standing caution about this artifact's method.** The retracted claim above is the second false
+negative this phase's live rehearsals produced by grepping a transcript (the first was the
+resume-matcher finding in `NUDGE-live-session.md`). Both times the mechanism was working and the
+grep was blind to how the runtime actually renders it. Before recording "X did not happen" from a
+transcript search, demonstrate that the same search *can* find X when X does happen — otherwise
+the finding is a claim about the grep, not about the product.
 
 **Standing note — not re-run by CI:** this artifact is a one-off, human-run review, not a
 continuously enforced gate. This repository has no harness for driving a real agent session from
