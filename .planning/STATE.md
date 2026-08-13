@@ -4,15 +4,15 @@ milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 8
 current_phase_name: Instructions & Marker-Block Rewrite
-status: planning
+status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T19:31:09.855Z"
+last_updated: "2026-08-13T20:06:05.769Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 12
+  total_plans: 15
   completed_plans: 12
   percent: 75
 ---
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-13)
 
 Phase: 8 — Instructions & Marker-Block Rewrite
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-13 — Phase 07 complete, transitioned to Phase 8
 
 Progress: [███████████████░░░░░] 75% — 3/4 phases complete
