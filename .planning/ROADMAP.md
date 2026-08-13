@@ -74,7 +74,7 @@ Archived: [`milestones/v0.5.0-ROADMAP.md`](./milestones/v0.5.0-ROADMAP.md) · re
 - [x] **Phase 5: MCP Resources Capability & Claims Drift Guard** - The server documents itself: `resources/list` + `resources/read` serve tool-by-tool reference over the wire in any repo, indexed or not, with every stated fact derived from source or pinned by a test that can fire (completed 2026-08-12)
 - [x] **Phase 6: Agent Skill Package — SKILL.md & SessionStart Nudge** - An agent with the skill installed picks `codegraph_explore` over grep on a where-is-X prompt, shown by transcript diff, and learns codegraph exists at session start in an indexed repo — and only there (completed 2026-08-12)
 - [x] **Phase 7: `codegraph install` Skill + Hooks Distribution (Claude Code)** - Installing codegraph installs the skill package too, versioned with the binary and refreshed by `upgrade`; uninstall removes exactly what it wrote and nothing a user authored (completed 2026-08-13)
-- [ ] **Phase 8: Instructions & Marker-Block Rewrite** - Everything codegraph tells an agent about itself is true on the day it is read — the "Phase 3" deferral is gone, and each surface names only capabilities that already shipped
+- [x] **Phase 8: Instructions & Marker-Block Rewrite** - Everything codegraph tells an agent about itself is true on the day it is read — the "Phase 3" deferral is gone, and each surface names only capabilities that already shipped (completed 2026-08-13)
 
 ## Phase Details
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 5. MCP Resources Capability & Claims Drift Guard | 4/4 | Complete    | 2026-08-12 |
 | 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 4/4 | Complete    | 2026-08-12 |
 | 7. `codegraph install` Skill + Hooks Distribution | 4/4 | Complete    | 2026-08-13 |
-| 8. Instructions & Marker-Block Rewrite | 3/3 | In Progress|  |
+| 8. Instructions & Marker-Block Rewrite | 3/3 | Complete    | 2026-08-13 |
 
 4 milestones shipped. v0.10.0 scoped: 4 phases, 16 requirements, 0/4 phases complete (0%).
 

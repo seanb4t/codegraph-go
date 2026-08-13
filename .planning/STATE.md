@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 08
-current_phase_name: instructions-marker-block-rewrite
-status: executing
+status: completed
 stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T20:07:11.984Z"
+last_updated: "2026-08-13T20:49:52.735Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 12
-  percent: 75
+  completed_plans: 15
+  percent: 100
+current_phase_name: instructions-marker-block-rewrite
 ---
 
 # Project State
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-13)
 
 ## Current Position
 
-Phase: 08 (instructions-marker-block-rewrite) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 08
-Last activity: 2026-08-13 — Phase 08 execution started
+Phase: 08
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-08-13 — Phase 08 complete
 
 Progress: [███████████████░░░░░] 75% — 3/4 phases complete
 
@@ -39,7 +39,7 @@ Progress: [███████████████░░░░░] 75% —
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 36
+- Total plans completed: 39
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -54,6 +54,7 @@ Progress: [███████████████░░░░░] 75% —
 | 05 | 4 | - | - |
 | 06 | 4 | - | - |
 | 07 | 4 | - | - |
+| 08 | 3 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 
