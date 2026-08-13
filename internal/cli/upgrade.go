@@ -126,7 +126,18 @@ func newUpgradeCmd() *cobra.Command {
 				return nil
 			}
 
-			return refreshInstalledSkillsFunc(target, cmd.OutOrStdout())
+			if refreshErr := refreshInstalledSkillsFunc(target, cmd.OutOrStdout()); refreshErr != nil {
+				// D-07: the swap already succeeded and is independently
+				// verified/atomic — a refresh failure is reported as a
+				// separate warning, not as a failed upgrade. Conflating a
+				// config-file write hiccup with "your upgrade didn't work"
+				// would be actively misleading when the binary genuinely
+				// did update, and would likely send the user to re-run
+				// upgrade rather than the one command that actually fixes
+				// it, so the warning names that command explicitly.
+				fmt.Fprintf(cmd.OutOrStdout(), "warning: codegraph upgrade succeeded, but refreshing the installed agent skill package failed: %v\nRun `codegraph install` to refresh it manually.\n", refreshErr)
+			}
+			return nil
 		},
 	}
 

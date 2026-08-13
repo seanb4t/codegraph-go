@@ -250,3 +250,71 @@ func TestRefreshInstalledSkills_OnlyPreviouslyConfiguredLocations(t *testing.T) 
 		}
 	})
 }
+
+// TestUpgradeCommand_RefreshFailureIsWarningNotError asserts D-07: when the
+// swap succeeds but the refresh seam fails, upgrade still returns nil (the
+// swap genuinely worked) and prints a warning naming `codegraph install` as
+// the command to re-run.
+func TestUpgradeCommand_RefreshFailureIsWarningNotError(t *testing.T) {
+	origRun := upgradeRunFunc
+	upgradeRunFunc = func(currentVersion, targetPath string, opts upgrade.Options) error {
+		return nil
+	}
+	t.Cleanup(func() { upgradeRunFunc = origRun })
+
+	origRefresh := refreshInstalledSkillsFunc
+	refreshInstalledSkillsFunc = func(execPath string, out io.Writer) error {
+		return errors.New("refresh boom")
+	}
+	t.Cleanup(func() { refreshInstalledSkillsFunc = origRefresh })
+
+	stdout, _, err := execCmd("upgrade")
+	if err != nil {
+		t.Fatalf("upgrade returned error = %v, want nil (swap succeeded)", err)
+	}
+	if !strings.Contains(stdout, "codegraph install") {
+		t.Errorf("output missing %q; got:\n%s", "codegraph install", stdout)
+	}
+}
+
+// TestUpgradeCommand_RefreshSuccessPrintsNoWarning proves the warning
+// assertion above discriminates rather than matching incidental text: when
+// both seams succeed, no warning line appears.
+func TestUpgradeCommand_RefreshSuccessPrintsNoWarning(t *testing.T) {
+	origRun := upgradeRunFunc
+	upgradeRunFunc = func(currentVersion, targetPath string, opts upgrade.Options) error {
+		return nil
+	}
+	t.Cleanup(func() { upgradeRunFunc = origRun })
+
+	origRefresh := refreshInstalledSkillsFunc
+	refreshInstalledSkillsFunc = func(execPath string, out io.Writer) error {
+		return nil
+	}
+	t.Cleanup(func() { refreshInstalledSkillsFunc = origRefresh })
+
+	stdout, _, err := execCmd("upgrade")
+	if err != nil {
+		t.Fatalf("upgrade returned error = %v, want nil", err)
+	}
+	if strings.Contains(stdout, "warning") {
+		t.Errorf("unexpected warning text in output:\n%s", stdout)
+	}
+}
+
+// TestUpgradeCommand_SwapFailureReturnsSwapError asserts the swap-failure
+// path is untouched by the refresh concern: the sentinel error surfaces
+// unwrapped, so errors.Is against it still holds.
+func TestUpgradeCommand_SwapFailureReturnsSwapError(t *testing.T) {
+	sentinel := errors.New("swap failed")
+	origRun := upgradeRunFunc
+	upgradeRunFunc = func(currentVersion, targetPath string, opts upgrade.Options) error {
+		return sentinel
+	}
+	t.Cleanup(func() { upgradeRunFunc = origRun })
+
+	_, _, err := execCmd("upgrade")
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("upgrade error = %v, want sentinel %v via errors.Is", err, sentinel)
+	}
+}
