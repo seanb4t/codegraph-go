@@ -286,6 +286,88 @@ func TestInstructionsReachesTheWireVerbatim(t *testing.T) {
 	}
 }
 
+// TestInstructionsClaimGuardsAreNotVacuous proves resourcesClaimResolves
+// and skillClaimResolves actually discriminate, over synthetic inputs —
+// never a live session or a real embedded asset, so this exercises the
+// checkers' own logic rather than the resources registry or claudeassets.
+// Without this, a checker that returned nil unconditionally would keep
+// TestInstructionsResourcesClaimIsResolvable and
+// TestInstructionsSkillClaimIsResolvable green forever while proving
+// nothing — the same failure class named in SURF-01
+// (tools_schema_drift_test.go) and T-08-02 above.
+func TestInstructionsClaimGuardsAreNotVacuous(t *testing.T) {
+	t.Run("resourcesClaimResolves", func(t *testing.T) {
+		readOK := func(string) ([]byte, error) { return []byte("content"), nil }
+		readEmpty := func(string) ([]byte, error) { return nil, nil }
+		readErr := func(string) ([]byte, error) { return nil, fmt.Errorf("boom") }
+
+		claimWithAnchor := "call " + resourcesAnchor + " for docs"
+		claimWithoutAnchor := "call something else for docs"
+
+		cases := []struct {
+			name    string
+			claim   string
+			uris    []string
+			read    func(string) ([]byte, error)
+			wantErr bool
+		}{
+			{"claim missing anchor, non-empty URIs", claimWithoutAnchor, []string{"codegraph://tools/explore"}, readOK, true},
+			{"claim present, empty URI slice", claimWithAnchor, nil, readOK, true},
+			{"claim present, one URI reading empty", claimWithAnchor, []string{"codegraph://tools/explore"}, readEmpty, true},
+			{"claim present, one URI reading non-empty", claimWithAnchor, []string{"codegraph://tools/explore"}, readOK, false},
+			{"claim present, several URIs all readable", claimWithAnchor, []string{"codegraph://tools/explore", "codegraph://tools/node"}, readOK, false},
+			{"claim present, read returns an error", claimWithAnchor, []string{"codegraph://tools/explore"}, readErr, true},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				err := resourcesClaimResolves(tc.claim, tc.uris, tc.read)
+				if tc.wantErr && err == nil {
+					t.Fatalf("resourcesClaimResolves(%q, %v, ...) = nil, want an error", tc.claim, tc.uris)
+				}
+				if !tc.wantErr && err != nil {
+					t.Fatalf("resourcesClaimResolves(%q, %v, ...) = %v, want nil", tc.claim, tc.uris, err)
+				}
+			})
+		}
+	})
+
+	t.Run("skillClaimResolves", func(t *testing.T) {
+		readOK := func() ([]byte, error) { return []byte("real skill content"), nil }
+		readErr := func() ([]byte, error) { return nil, fmt.Errorf("boom") }
+		readNil := func() ([]byte, error) { return nil, nil }
+		readWhitespace := func() ([]byte, error) { return []byte("   \n\t  "), nil }
+
+		claimWithAnchor := "see the " + skillAnchor
+		claimWithoutAnchor := "see something else"
+
+		cases := []struct {
+			name    string
+			claim   string
+			read    func() ([]byte, error)
+			wantErr bool
+		}{
+			{"claim missing anchor, readable content", claimWithoutAnchor, readOK, true},
+			{"claim present, read returns an error", claimWithAnchor, readErr, true},
+			{"claim present, read returns empty bytes", claimWithAnchor, readNil, true},
+			{"claim present, read returns whitespace-only bytes", claimWithAnchor, readWhitespace, true},
+			{"claim present, read returns real content", claimWithAnchor, readOK, false},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				err := skillClaimResolves(tc.claim, tc.read)
+				if tc.wantErr && err == nil {
+					t.Fatalf("skillClaimResolves(%q, ...) = nil, want an error", tc.claim)
+				}
+				if !tc.wantErr && err != nil {
+					t.Fatalf("skillClaimResolves(%q, ...) = %v, want nil", tc.claim, err)
+				}
+			})
+		}
+	})
+}
+
 // docNamesCompanionsWithoutTheFilter is the checker
 // TestREADMEDocumentsToolVisibilityGate applies to the real README and
 // TestREADMEGateCheckerIsNotVacuous applies to synthetic inputs. Extracted
