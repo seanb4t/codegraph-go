@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 8
-current_phase_name: Instructions & Marker-Block Rewrite
+current_phase: 08
+current_phase_name: instructions-marker-block-rewrite
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T20:06:05.769Z"
+last_updated: "2026-08-13T20:07:11.984Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 07 execution started
 progress:
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 8 — Instructions & Marker-Block Rewrite
+**Current focus:** Phase 08 — instructions-marker-block-rewrite
 
 ## Current Position
 
-Phase: 8 — Instructions & Marker-Block Rewrite
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-13 — Phase 07 complete, transitioned to Phase 8
+Phase: 08 (instructions-marker-block-rewrite) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 08
+Last activity: 2026-08-13 — Phase 08 execution started
 
 Progress: [███████████████░░░░░] 75% — 3/4 phases complete
 

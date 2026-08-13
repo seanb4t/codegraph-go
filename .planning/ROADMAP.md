@@ -190,17 +190,17 @@ Plans:
 
 **Notes**: Closes the pending todo `2026-08-08-author-a-codegraph-usage-skill-for-agents.md` and the never-completed hand-off at `internal/agents/instructions.go:17-18`. The marker fences (`<!-- CODEGRAPH_START/END -->`) are a byte-exact cross-implementation contract with TS CodeGraph and must not change — only the content between them. `instructions_contract_test.go` gains a fourth anchor.
 
-**Plans**: 3 plans
+**Plans**: 3/3 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — Tracer: rewrite the wire `instructions` const to name `resources/list` and the Claude-Code-scoped codegraph skill, with derive-from-source resolvability guards proven non-vacuous (WIRE-01, WIRE-03)
+- [x] 08-01-PLAN.md — Tracer: rewrite the wire `instructions` const to name `resources/list` and the Claude-Code-scoped codegraph skill, with derive-from-source resolvability guards proven non-vacuous (WIRE-01, WIRE-03)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md — Marker block gains the reference-docs pointer, names no skill for the 3 targets that never receive one, and the stale MCP-initialize deferral leaves the doc comment (WIRE-02, WIRE-03)
-- [ ] 08-03-PLAN.md — Re-freeze the 38 wire-oracle transcripts carrying the rewritten `instructions` string, one reviewed-diff pass with the cause attributed (WIRE-01)
+- [x] 08-02-PLAN.md — Marker block gains the reference-docs pointer, names no skill for the 3 targets that never receive one, and the stale MCP-initialize deferral leaves the doc comment (WIRE-02, WIRE-03)
+- [x] 08-03-PLAN.md — Re-freeze the 38 wire-oracle transcripts carrying the rewritten `instructions` string, one reviewed-diff pass with the cause attributed (WIRE-01)
 
 ## Progress
 
@@ -212,7 +212,7 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 5. MCP Resources Capability & Claims Drift Guard | 4/4 | Complete    | 2026-08-12 |
 | 6. Agent Skill Package — SKILL.md & SessionStart Nudge | 4/4 | Complete    | 2026-08-12 |
 | 7. `codegraph install` Skill + Hooks Distribution | 4/4 | Complete    | 2026-08-13 |
-| 8. Instructions & Marker-Block Rewrite | 0/3 | Not started | - |
+| 8. Instructions & Marker-Block Rewrite | 3/3 | In Progress|  |
 
 4 milestones shipped. v0.10.0 scoped: 4 phases, 16 requirements, 0/4 phases complete (0%).
 
