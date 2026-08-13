@@ -160,3 +160,49 @@ func TestClaude_SettingsReadFailureMatrixIsNotVacuous(t *testing.T) {
 		}
 	})
 }
+
+// TestClaude_AutoAllowSharesStrictReadPosture proves Plan 02 Task 3's
+// unification: addClaudeAllowPermission and removeClaudeAllowPermission
+// share the same fail-loud read posture as the hooks step on
+// claudeSettingsPath, so a single `codegraph install --auto-allow` can
+// never both protect (the hooks step refusing to touch a malformed file)
+// and destroy (the permission step overwriting it with only codegraph's
+// own content) the same settings.json.
+func TestClaude_AutoAllowSharesStrictReadPosture(t *testing.T) {
+	t.Run("install with --auto-allow against malformed settings.json leaves it untouched", func(t *testing.T) {
+		home := fakeHome(t)
+		settingsPath := filepath.Join(home, ".claude", "settings.json")
+		fixture := malformedSettingsJSON
+		writeFile(t, settingsPath, fixture)
+
+		c := claudeTarget{}
+		result := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", AutoAllow: true})
+
+		if len(result.Errors) == 0 {
+			t.Fatalf("expected Install with AutoAllow against malformed settings.json to return errors, got none: %+v", result)
+		}
+		got := readFile(t, settingsPath)
+		if got != fixture {
+			t.Fatalf("settings.json bytes changed despite the surfaced error:\nbefore=%q\nafter=%q", fixture, got)
+		}
+	})
+
+	t.Run("uninstall after a prior --auto-allow install, against malformed settings.json, leaves it untouched", func(t *testing.T) {
+		home := fakeHome(t)
+		settingsPath := filepath.Join(home, ".claude", "settings.json")
+		c := claudeTarget{}
+		c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph", AutoAllow: true})
+
+		fixture := malformedSettingsJSON
+		writeFile(t, settingsPath, fixture)
+
+		result := c.Uninstall(LocationGlobal)
+		if len(result.Errors) == 0 {
+			t.Fatalf("expected Uninstall against malformed settings.json to return errors, got none: %+v", result)
+		}
+		got := readFile(t, settingsPath)
+		if got != fixture {
+			t.Fatalf("settings.json bytes changed despite the surfaced error:\nbefore=%q\nafter=%q", fixture, got)
+		}
+	})
+}
