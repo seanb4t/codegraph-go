@@ -84,20 +84,28 @@ coverage:
         status: pass
     human_judgment: false
   - id: D15
-    description: "A hand-edited artifact (SKILL.md or a codegraph-owned hook block) is silently overwritten on the next install — no prompt, no warning, no Notes entry — and a missing manifest is treated identically to drifted, never as 'leave it alone'"
+    description: "A hand-edited SKILL.md is silently overwritten on the next install — no prompt, no warning, no Notes entry — and a missing manifest is treated identically to drifted, never as 'leave it alone'"
     requirement: AGENT-03
     verification:
       - kind: unit
         ref: "internal/agents/claude_skillpackage_test.go#TestClaude_Install_SilentlyOverwritesHandEditedSkill"
         status: pass
       - kind: unit
-        ref: "internal/agents/claude_skillpackage_test.go#TestClaude_Install_SilentlyOverwritesHandEditedHookBlock"
-        status: pass
-      - kind: unit
         ref: "internal/agents/claude_skillpackage_test.go#TestClaude_Install_MissingManifestIsTreatedAsDrifted"
         status: pass
       - kind: unit
         ref: "internal/agents/claude_skillpackage_test.go#TestClaude_Install_DriftIsDetectableFromTheManifest"
+        status: pass
+    human_judgment: false
+  - id: D15a
+    description: "CORRECTED post-merge (see Post-Hoc Correction below): a hand-edited codegraph-owned hook block is NOT silently overwritten — it duplicates into a second matcher entry on the next install, and an unrelated user hook sharing the same matcher name is never claimed as codegraph's own, even when a manifest exists at that location"
+    requirement: AGENT-02
+    verification:
+      - kind: unit
+        ref: "internal/agents/claude_skillpackage_test.go#TestClaude_Install_HandEditedHookBlockDuplicatesRatherThanOverwritesUnrelated"
+        status: pass
+      - kind: unit
+        ref: "internal/agents/claude_skillpackage_test.go#TestClaude_Install_NeverClaimsOwnershipOfUnrelatedHookUnderSameMatcher"
         status: pass
     human_judgment: false
   - id: D16
