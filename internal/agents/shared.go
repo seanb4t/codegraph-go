@@ -171,60 +171,35 @@ func readJSONFileStrict(path string) (map[string]any, bool, error) {
 	return out, true, nil
 }
 
-// blockMatchers returns the distinct "matcher" values present in blocks,
-// in first-seen order — used to build writeHookEntry's recoveryMatchers
-// argument from the freshly computed ownBlocks (Plan 03 Task 3).
-func blockMatchers(blocks []any) []string {
-	var matchers []string
-	seen := map[string]bool{}
-	for _, b := range blocks {
-		obj, ok := b.(map[string]any)
-		if !ok {
-			continue
-		}
-		m, ok := obj["matcher"].(string)
-		if !ok || seen[m] {
-			continue
-		}
-		seen[m] = true
-		matchers = append(matchers, m)
-	}
-	return matchers
-}
-
 // writeHookEntry is the array-scoped analog of writeMcpEntry for
 // hooks.<event>, an array of independent {matcher, hooks[]} blocks rather
 // than a single named map key (RESEARCH Pitfall 1). It reads path via
 // readJSONFileStrict and returns the error unwritten if the read failed —
 // a malformed or unreadable settings.json is left byte-untouched, never
-// silently proceeded past. Ownership of a block is primarily determined by
+// silently proceeded past. Ownership of a block is determined SOLELY by
 // exact command-string match within the block's own hooks[] sub-array
-// against ownCommands, never by the block's matcher value alone: a user
+// against ownCommands, never by the block's matcher value or shape: a user
 // may legitimately register their own unrelated block under the same
 // matcher (e.g. "startup") — RESEARCH Pitfall 1.
 //
-// recoveryMatchers is a narrow, deliberately gated exception to that rule
-// (Plan 03 Task 3, D-05): the caller passes it non-empty only when a
-// manifest already exists for this location (i.e. codegraph configured it
-// before), listing exactly the matchers codegraph's own ownBlocks use. A
-// block whose command no longer matches ownCommands — because it was
-// hand-edited — but whose matcher is in recoveryMatchers AND whose hooks[]
-// sub-array has the single-command shape every codegraph-authored block
-// always has, is still treated as owned. Without this, a hand-edited
-// command would stop matching by string identity and get silently
-// re-appended as a second block under the same matcher, corrupting the
-// exactly-one-owned-block-per-matcher invariant every other test in this
-// package assumes — that regression only becomes possible once
-// recoveryMatchers is empty (a location codegraph never configured before,
-// where Pitfall 1's protection must still hold, and does: recoveryMatchers
-// being empty disables this branch entirely).
+// A hand-edited codegraph-owned block therefore stops matching by command
+// identity and is treated as unowned — codegraph's fresh block gets
+// appended alongside it rather than overwriting it in place, producing a
+// duplicate matcher entry. This is a deliberate, accepted tradeoff: a
+// matcher-and-shape recovery heuristic was tried and reverted (Plan 03
+// Task 3 → this revert) after security review found it let codegraph
+// silently claim ownership of — and overwrite — any unrelated single-
+// command hook a user placed under the same matcher name, whenever a
+// codegraph manifest happened to be present at that location. Duplication
+// is untidy; silently destroying content codegraph never wrote is not an
+// acceptable trade to avoid it.
 //
 // If the owned partition already jsonDeepEquals the normalized ownBlocks,
 // nothing is written (ActionUnchanged); otherwise the array is rebuilt as
 // the unowned blocks in their original relative order followed by
 // ownBlocks. Every unrelated event key and every unowned block under the
 // same event is carried through untouched.
-func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string, recoveryMatchers []string) (FileResult, error) {
+func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
 	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
@@ -254,19 +229,6 @@ func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string, r
 			for _, own := range ownCommands {
 				if cmd == own {
 					return true
-				}
-			}
-		}
-		if len(recoveryMatchers) > 0 && len(blockHooks) == 1 {
-			matcher, _ := obj["matcher"].(string)
-			for _, m := range recoveryMatchers {
-				if matcher != m {
-					continue
-				}
-				if hObj, ok := blockHooks[0].(map[string]any); ok {
-					if t, _ := hObj["type"].(string); t == "command" {
-						return true
-					}
 				}
 			}
 		}

@@ -1000,15 +1000,21 @@ func TestClaude_Install_SilentlyOverwritesHandEditedSkill(t *testing.T) {
 	}
 }
 
-// TestClaude_Install_SilentlyOverwritesHandEditedHookBlock: install,
-// hand-edit codegraph's own SessionStart block's command in settings.json,
-// install again. codegraph's block is restored to the correct command, and
-// any unrelated block in the same file is still untouched. Exercises
-// writeHookEntry's ownership matching against a block whose command no
-// longer matches (RESEARCH Pitfall/Plan 03 Task 3) — asserts the exact
-// expected SessionStart length so a duplicate-append regression fails
-// rather than passing on a "codegraph's block is present somewhere" check.
-func TestClaude_Install_SilentlyOverwritesHandEditedHookBlock(t *testing.T) {
+// TestClaude_Install_HandEditedHookBlockDuplicatesRatherThanOverwritesUnrelated:
+// install, hand-edit codegraph's own "startup" block's command in
+// settings.json, install again. codegraph no longer recognizes the edited
+// block as its own (command-string identity is the ONLY ownership signal —
+// RESEARCH Pitfall 1) and appends a fresh, correct startup+resume pair
+// alongside it rather than overwriting it: SessionStart ends with 3
+// entries — the hand-edited one untouched, plus codegraph's own two. Any
+// unrelated block under a DIFFERENT event key is also still untouched.
+// This is the accepted, deliberate tradeoff: a matcher-and-shape recovery
+// heuristic was tried and reverted after security review found it let
+// codegraph silently claim — and overwrite — an unrelated hook that merely
+// shared a matcher name (see TestClaude_Install_NeverClaimsOwnershipOfUnrelatedHookUnderSameMatcher).
+// Duplication is untidy; silent data loss on content codegraph never wrote
+// is not an acceptable trade to avoid it.
+func TestClaude_Install_HandEditedHookBlockDuplicatesRatherThanOverwritesUnrelated(t *testing.T) {
 	home := fakeHome(t)
 	c := claudeTarget{}
 	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
@@ -1079,10 +1085,10 @@ func TestClaude_Install_SilentlyOverwritesHandEditedHookBlock(t *testing.T) {
 	}
 
 	sessionStartAfter, ok := hooksAfter["SessionStart"].([]any)
-	if !ok || len(sessionStartAfter) != 2 {
-		t.Fatalf("expected exactly 2 SessionStart entries (startup+resume, no duplicate), got %d: %#v", len(sessionStartAfter), hooksAfter["SessionStart"])
+	if !ok || len(sessionStartAfter) != 3 {
+		t.Fatalf("expected exactly 3 SessionStart entries (hand-edited startup preserved + fresh startup+resume appended), got %d: %#v", len(sessionStartAfter), hooksAfter["SessionStart"])
 	}
-	gotMatchers := map[string]string{}
+	var sawGarbage, sawStartup, sawResume bool
 	for _, e := range sessionStartAfter {
 		entry := e.(map[string]any)
 		matcher, _ := entry["matcher"].(string)
@@ -1092,13 +1098,128 @@ func TestClaude_Install_SilentlyOverwritesHandEditedHookBlock(t *testing.T) {
 		}
 		hookObj, _ := entries[0].(map[string]any)
 		cmd, _ := hookObj["command"].(string)
-		gotMatchers[matcher] = cmd
+		switch {
+		case matcher == "startup" && cmd == "/hand-edited/garbage-path.sh":
+			sawGarbage = true
+		case matcher == "startup" && cmd == wantCommand:
+			sawStartup = true
+		case matcher == "resume" && cmd == wantCommand:
+			sawResume = true
+		default:
+			t.Fatalf("unexpected SessionStart entry: matcher=%q command=%q", matcher, cmd)
+		}
 	}
-	if gotMatchers["startup"] != wantCommand {
-		t.Fatalf("startup command = %q, want %q (hand edit was not restored)", gotMatchers["startup"], wantCommand)
+	if !sawGarbage {
+		t.Fatalf("hand-edited startup block was removed, not preserved as unowned")
 	}
-	if gotMatchers["resume"] != wantCommand {
-		t.Fatalf("resume command = %q, want %q", gotMatchers["resume"], wantCommand)
+	if !sawStartup || !sawResume {
+		t.Fatalf("codegraph's own startup+resume blocks were not appended: sawStartup=%v sawResume=%v", sawStartup, sawResume)
+	}
+}
+
+// TestClaude_Install_NeverClaimsOwnershipOfUnrelatedHookUnderSameMatcher is
+// the direct regression test for the vulnerability the reverted recovery
+// path introduced: an unrelated, single-command hook a user placed under
+// the SAME matcher name codegraph uses ("startup"), at a location where a
+// codegraph manifest already exists (i.e. codegraph "previously
+// configured" this location — the exact precondition the reverted
+// recovery path gated on), must survive install byte-for-byte untouched.
+// codegraph's own startup+resume blocks are added alongside it, never
+// merged into or replacing it — ownership is by exact command-string
+// match only, never by matcher name or block shape (RESEARCH Pitfall 1).
+func TestClaude_Install_NeverClaimsOwnershipOfUnrelatedHookUnderSameMatcher(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+
+	// First install establishes a manifest at this location — the
+	// precondition the reverted recovery path required before it would
+	// treat a same-matcher block as owned by shape alone. Then uninstall
+	// codegraph's own hooks (but the manifest itself is a separate
+	// artifact from the SessionStart registration — the scenario under
+	// test is "manifest present, but the matcher slot now holds someone
+	// else's unrelated hook", which arises whenever a user hand-edits
+	// settings.json without touching the manifest file).
+	first := c.Install(LocationGlobal, opts)
+	if len(first.Errors) != 0 {
+		t.Fatalf("first Install returned errors: %v", first.Errors)
+	}
+	manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+	if _, present, err := readManifest(manifestPath); err != nil || !present {
+		t.Fatalf("manifest not present after first install (present=%v err=%v) — precondition for this test not met", present, err)
+	}
+
+	// Replace codegraph's SessionStart registration entirely with a single
+	// unrelated hook under the "startup" matcher — the manifest is left
+	// exactly as the first install wrote it.
+	unrelatedCommand := "/opt/some-other-tool/on-startup.sh"
+	settingsContent := `{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {"type": "command", "command": "` + unrelatedCommand + `"}
+        ]
+      }
+    ]
+  }
+}
+`
+	writeFile(t, settingsPath, settingsContent)
+
+	second := c.Install(LocationGlobal, opts)
+	if len(second.Errors) != 0 {
+		t.Fatalf("second Install returned errors: %v", second.Errors)
+	}
+
+	var after map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, settingsPath)), &after); err != nil {
+		t.Fatalf("unmarshal post-install settings.json: %v", err)
+	}
+	hooksAfter := after["hooks"].(map[string]any)
+	sessionStartAfter, ok := hooksAfter["SessionStart"].([]any)
+	if !ok {
+		t.Fatalf("SessionStart missing after install: %#v", hooksAfter)
+	}
+
+	wantCommand, err := claudeHookCommand(LocationGlobal)
+	if err != nil {
+		t.Fatalf("claudeHookCommand: %v", err)
+	}
+
+	var sawUnrelatedUntouched, sawStartup, sawResume bool
+	unrelatedStartupCount := 0
+	for _, e := range sessionStartAfter {
+		entry := e.(map[string]any)
+		matcher, _ := entry["matcher"].(string)
+		entries, _ := entry["hooks"].([]any)
+		if len(entries) != 1 {
+			t.Fatalf("SessionStart entry %q has unexpected hooks count: %#v", matcher, entry)
+		}
+		hookObj, _ := entries[0].(map[string]any)
+		cmd, _ := hookObj["command"].(string)
+		switch {
+		case matcher == "startup" && cmd == unrelatedCommand:
+			sawUnrelatedUntouched = true
+			unrelatedStartupCount++
+		case matcher == "startup" && cmd == wantCommand:
+			sawStartup = true
+		case matcher == "resume" && cmd == wantCommand:
+			sawResume = true
+		default:
+			t.Fatalf("unexpected SessionStart entry: matcher=%q command=%q", matcher, cmd)
+		}
+	}
+	if !sawUnrelatedUntouched {
+		t.Fatalf("unrelated hook under the \"startup\" matcher was overwritten — ownership was claimed by matcher/shape instead of command identity: %#v", sessionStartAfter)
+	}
+	if unrelatedStartupCount != 1 {
+		t.Fatalf("unrelated \"startup\" hook count = %d, want exactly 1 (must not be duplicated or merged)", unrelatedStartupCount)
+	}
+	if !sawStartup || !sawResume {
+		t.Fatalf("codegraph's own startup+resume blocks were not added alongside the unrelated hook: sawStartup=%v sawResume=%v, entries=%#v", sawStartup, sawResume, sessionStartAfter)
 	}
 }
 

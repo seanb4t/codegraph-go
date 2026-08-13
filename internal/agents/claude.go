@@ -366,18 +366,6 @@ func (claudeTarget) Detect(loc Location) DetectionResult {
 func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	var result WriteResult
 
-	// Plan 03 Task 3 (D-05): whether this location was previously
-	// configured by codegraph (a manifest already exists), read before
-	// any of this call's own writes so it reflects the prior run's state,
-	// not this one's. Gates writeHookEntry's hand-edit recovery fallback
-	// below — see blockMatchers/writeHookEntry's own doc comments.
-	var previouslyConfigured bool
-	if manifestPathForLoc, mpErr := claudeManifestPath(loc); mpErr == nil {
-		if _, present, _ := readManifest(manifestPathForLoc); present {
-			previouslyConfigured = true
-		}
-	}
-
 	// Pitfall 3: migrate a legacy ./.claude.json local entry into
 	// ./.mcp.json before writing the correct entry.
 	if loc == LocationLocal {
@@ -472,11 +460,7 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		} else {
 			sessionStartBlocks = blocks
 			haveSessionStart = true
-			var recoveryMatchers []string
-			if previouslyConfigured {
-				recoveryMatchers = blockMatchers(blocks)
-			}
-			fr, werr := writeHookEntry(settingsPath, "SessionStart", blocks, ownCommands, recoveryMatchers)
+			fr, werr := writeHookEntry(settingsPath, "SessionStart", blocks, ownCommands)
 			recordFile(&result, settingsPath, fr, werr)
 		}
 	}
