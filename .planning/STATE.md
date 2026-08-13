@@ -2,10 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 08
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T20:49:52.735Z"
+last_updated: "2026-08-13T20:59:25.342Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 07 execution started
 progress:
@@ -14,6 +13,7 @@ progress:
   total_plans: 15
   completed_plans: 15
   percent: 100
+current_phase: 08
 current_phase_name: instructions-marker-block-rewrite
 ---
 
@@ -28,12 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-13)
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-08-13 — Phase 08 complete
-
-Progress: [███████████████░░░░░] 75% — 3/4 phases complete
+Phase: Milestone v0.10.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-13 — Milestone v0.10.0 completed and archived
 
 ## Performance Metrics
 
@@ -297,6 +295,19 @@ v1.0's quick tasks are archived; their directories remain under `.planning/quick
 
 ## Deferred Items
 
+Items acknowledged and deferred at v0.10.0 milestone close on 2026-08-13 (7 open artifacts: 6 todos + 2 seeds, none blocking v0.10.0's own requirements; an 8th item the audit flagged — a "knowledge-base [unknown]" debug session — was closed as a false positive rather than deferred: `.planning/debug/knowledge-base.md` is the resolved-session reference index `gsd-debugger` consults for known-pattern hypotheses, not an open investigation, and it has no `status:` frontmatter for the audit scanner to key on):
+
+| Category | Item | Status |
+|----------|------|--------|
+| todo | 2026-08-07 — wire-oracle toolsList repeat-response ordering flake | pending [mcp] |
+| todo | 2026-08-09 — dry-run-signed additions-only diff guard passes vacuously | pending [release] |
+| todo | 2026-08-09 — post-release-verify event-aware conclusion guard has no regression assertion | pending [ci] |
+| todo | 2026-08-10 — add golangci-lint with gofmt and idiomatic Go linters | pending [ci] |
+| todo | 2026-08-10 — brew trust instructions recommend broader tap grant with no security framing | pending [docs] |
+| todo | 2026-08-10 — tap App secret distinctness test is tautological and reads no workflow | pending [ci] |
+| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant |
+| seed | SEED-003 — markdown in the index | dormant |
+
 Items acknowledged and deferred at v0.5.0 milestone close on 2026-08-12 (8 open artifacts, none blocking):
 
 | Category | Item | Status |
@@ -394,4 +405,4 @@ Resume file: .planning/phases/08-instructions-marker-block-rewrite/08-CONTEXT.md
 
 ## Operator Next Steps
 
-- Discuss Phase 8 with `/gsd-discuss-phase 8` — Instructions & Marker-Block Rewrite (final phase of v0.10.0)
+- Start the next milestone with /gsd-new-milestone
