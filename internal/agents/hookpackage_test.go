@@ -2,6 +2,7 @@ package agents
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,34 +43,44 @@ const claudeHooksFragmentPath = "../../.claude/hooks/hooks.json"
 const nudgeLine = "This repo has a codegraph index — prefer codegraph_explore / `codegraph explore` over grep for where-is-X / how-does-Y questions."
 
 // runSessionNudge runs the shipped nudge script against dir. When useEnv is
-// true, dir is passed via CLAUDE_PROJECT_DIR and the process's own working
+// true, dir is passed via CLAUDE_PROJECT_DIR (with any inherited
+// CLAUDE_PROJECT_DIR entry filtered out first, mirroring the useEnv==false
+// branch below, so the override is deterministic regardless of what the
+// invoking process happens to carry) and the process's own working
 // directory is left at the test's cwd (so the script must resolve the path
 // from the env var, not cwd). When useEnv is false, CLAUDE_PROJECT_DIR is
 // stripped from the environment entirely and cmd.Dir is set to dir instead,
 // exercising the "unset env, resolve against own working directory"
-// boundary. Returns stdout, stderr, and the process exit code separately.
-// t.Fatalf's on any error that is not an *exec.ExitError (a non-zero exit
-// is a normal, inspectable outcome here — anything else, e.g. the binary
-// not existing, is a harness-level failure the caller did not ask about).
-func runSessionNudge(t *testing.T, dir string, useEnv bool) (stdout, stderr string, exitCode int) {
+// boundary. Returns stdout, stderr, the process exit code, and an error for
+// any failure that is not an *exec.ExitError (a non-zero exit is a normal,
+// inspectable outcome here — anything else, e.g. the binary not existing, is
+// a harness-level failure the caller did not ask about). This function does
+// NOT call t.Fatalf itself: per the testing package's documented contract,
+// FailNow/Fatal/Fatalf must be called from the goroutine running the test
+// function, not from other goroutines spawned during the test (this helper
+// is also called from spawned goroutines in the concurrency subtest below).
+// Callers running on the test's own goroutine may t.Fatalf on a non-nil
+// error immediately; callers in a spawned goroutine must capture the error
+// and report it back to the goroutine that owns t.
+func runSessionNudge(t *testing.T, dir string, useEnv bool) (stdout, stderr string, exitCode int, err error) {
 	t.Helper()
 
-	scriptPath, err := filepath.Abs(sessionNudgeScriptPath)
-	if err != nil {
-		t.Fatalf("resolve script path: %v", err)
+	scriptPath, absErr := filepath.Abs(sessionNudgeScriptPath)
+	if absErr != nil {
+		return "", "", 0, fmt.Errorf("resolve script path: %w", absErr)
 	}
 
 	cmd := exec.Command(scriptPath)
-	if useEnv {
-		cmd.Env = append(os.Environ(), "CLAUDE_PROJECT_DIR="+dir)
-	} else {
-		var env []string
-		for _, kv := range os.Environ() {
-			if strings.HasPrefix(kv, "CLAUDE_PROJECT_DIR=") {
-				continue
-			}
-			env = append(env, kv)
+	var env []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "CLAUDE_PROJECT_DIR=") {
+			continue
 		}
+		env = append(env, kv)
+	}
+	if useEnv {
+		cmd.Env = append(env, "CLAUDE_PROJECT_DIR="+dir)
+	} else {
 		cmd.Env = env
 		cmd.Dir = dir
 	}
@@ -83,13 +94,13 @@ func runSessionNudge(t *testing.T, dir string, useEnv bool) (stdout, stderr stri
 	stderr = errBuf.String()
 
 	if runErr == nil {
-		return stdout, stderr, 0
+		return stdout, stderr, 0, nil
 	}
 	exitErr, ok := runErr.(*exec.ExitError)
 	if !ok {
-		t.Fatalf("runSessionNudge(%s): unexpected error (not an exit error): %v", dir, runErr)
+		return stdout, stderr, 0, fmt.Errorf("runSessionNudge(%s): unexpected error (not an exit error): %w", dir, runErr)
 	}
-	return stdout, stderr, exitErr.ExitCode()
+	return stdout, stderr, exitErr.ExitCode(), nil
 }
 
 // TestSessionNudgeBehavesPerIndexPresence is table-driven per NUDGE-01/02:
@@ -183,7 +194,10 @@ func TestSessionNudgeBehavesPerIndexPresence(t *testing.T) {
 			dir := t.TempDir()
 			tc.setup(t, dir)
 
-			stdout, stderr, exitCode := runSessionNudge(t, dir, tc.useEnv)
+			stdout, stderr, exitCode, err := runSessionNudge(t, dir, tc.useEnv)
+			if err != nil {
+				t.Fatalf("runSessionNudge: %v", err)
+			}
 			if stdout != tc.wantStdout {
 				t.Errorf("stdout = %q, want %q", stdout, tc.wantStdout)
 			}
@@ -210,7 +224,10 @@ func TestSessionNudgeOutputIsPinnedAndStateless(t *testing.T) {
 			t.Fatalf("mkdir .codegraph: %v", err)
 		}
 
-		stdout, _, exitCode := runSessionNudge(t, dir, true)
+		stdout, _, exitCode, err := runSessionNudge(t, dir, true)
+		if err != nil {
+			t.Fatalf("runSessionNudge: %v", err)
+		}
 		want := nudgeLine + "\n"
 		if stdout != want {
 			t.Fatalf("stdout not byte-equal:\ngot=%q\nwant=%q", stdout, want)
@@ -238,21 +255,33 @@ func TestSessionNudgeOutputIsPinnedAndStateless(t *testing.T) {
 		results := make([]struct {
 			stdout string
 			exit   int
+			err    error
 		}, n)
 		var wg sync.WaitGroup
 		for i := 0; i < n; i++ {
 			wg.Add(1)
 			go func(i int) {
 				defer wg.Done()
-				stdout, _, exit := runSessionNudge(t, dir, true)
+				// Capture the error rather than calling t.Fatalf here: per
+				// the testing package's documented contract, Fatal/FailNow
+				// must be called from the goroutine running the test
+				// function, not from a goroutine spawned during the test.
+				// The main test goroutine reports failures below, after
+				// wg.Wait().
+				stdout, _, exit, err := runSessionNudge(t, dir, true)
 				results[i].stdout = stdout
 				results[i].exit = exit
+				results[i].err = err
 			}(i)
 		}
 		wg.Wait()
 
 		want := nudgeLine + "\n"
 		for i, r := range results {
+			if r.err != nil {
+				t.Errorf("goroutine %d: runSessionNudge: %v", i, r.err)
+				continue
+			}
 			if r.stdout != want {
 				t.Errorf("goroutine %d: stdout = %q, want %q", i, r.stdout, want)
 			}
@@ -278,7 +307,10 @@ func TestSessionNudgeOutputIsPinnedAndStateless(t *testing.T) {
 		if err := os.Mkdir(filepath.Join(dir, ".codegraph"), 0o755); err != nil {
 			t.Fatalf("mkdir .codegraph: %v", err)
 		}
-		stdout, _, _ := runSessionNudge(t, dir, true)
+		stdout, _, _, err := runSessionNudge(t, dir, true)
+		if err != nil {
+			t.Fatalf("runSessionNudge: %v", err)
+		}
 		wrong := "this is not the nudge line\n"
 		if stdout == wrong {
 			t.Fatalf("deliberately wrong expectation matched real output — assertion is vacuous")
