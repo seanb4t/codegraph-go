@@ -292,6 +292,165 @@ func writeEmbeddedFile(path, content string, executable bool) (FileResult, error
 	return FileResult{Path: path, Action: action}, nil
 }
 
+// removeHookEntry is the array-scoped removal analog of writeHookEntry,
+// mirroring removeMcpEntry's keep-clean discipline for hooks.<event>
+// (Plan 02 Task 1). It reads path via readJSONFileStrict and returns the
+// error unwritten if the read failed — a malformed or unreadable
+// settings.json is left byte-untouched on uninstall too, the same
+// fail-loud posture writeHookEntry established for install. Ownership is
+// identified purely by exact command-string match inside a block's own
+// hooks[] sub-array against ownCommands, never by matcher value (T-07-04)
+// — a user's own block sharing codegraph's matcher (e.g. "startup") is
+// never touched.
+//
+// A block that mixes codegraph's own hook entry with an unrelated one in
+// the same hooks[] sub-array has only codegraph's entry stripped; the
+// block itself survives with the unrelated entry intact. Only when
+// removing codegraph's entry would empty the sub-array does the whole
+// block go. Once every block is resolved, the same keep-clean cascade
+// removeMcpEntry already establishes applies here too: an emptied event
+// array deletes the event key, an emptied hooks object deletes the
+// top-level hooks key, and an emptied settings object deletes the file
+// entirely — mirroring "the file never existed before install" for the
+// uninstall direction. Reports ActionNotFound (never an error) when
+// there is no hooks object, no such event, or nothing owned to remove —
+// matching the pre-existing D-08 invariant.
+func removeHookEntry(path, event string, ownCommands []string) (FileResult, error) {
+	existing, _, err := readJSONFileStrict(path)
+	if err != nil {
+		return FileResult{}, err
+	}
+
+	hooks, ok := existing["hooks"].(map[string]any)
+	if !ok {
+		return FileResult{Path: path, Action: ActionNotFound}, nil
+	}
+	events, ok := hooks[event].([]any)
+	if !ok {
+		return FileResult{Path: path, Action: ActionNotFound}, nil
+	}
+
+	isOwnCommand := func(cmd string) bool {
+		for _, own := range ownCommands {
+			if cmd == own {
+				return true
+			}
+		}
+		return false
+	}
+
+	var anyRemoved bool
+	var kept []any
+	for _, b := range events {
+		obj, ok := b.(map[string]any)
+		if !ok {
+			kept = append(kept, b)
+			continue
+		}
+		blockHooks, ok := obj["hooks"].([]any)
+		if !ok {
+			kept = append(kept, b)
+			continue
+		}
+
+		var survivingHooks []any
+		blockChanged := false
+		for _, h := range blockHooks {
+			hObj, ok := h.(map[string]any)
+			if !ok {
+				survivingHooks = append(survivingHooks, h)
+				continue
+			}
+			cmd, _ := hObj["command"].(string)
+			if isOwnCommand(cmd) {
+				blockChanged = true
+				anyRemoved = true
+				continue
+			}
+			survivingHooks = append(survivingHooks, h)
+		}
+
+		if !blockChanged {
+			kept = append(kept, b)
+			continue
+		}
+		if len(survivingHooks) == 0 {
+			// The whole block was codegraph's own — drop it entirely.
+			continue
+		}
+		newObj := make(map[string]any, len(obj))
+		for k, v := range obj {
+			newObj[k] = v
+		}
+		newObj["hooks"] = survivingHooks
+		kept = append(kept, newObj)
+	}
+
+	if !anyRemoved {
+		return FileResult{Path: path, Action: ActionNotFound}, nil
+	}
+
+	if len(kept) == 0 {
+		delete(hooks, event)
+	} else {
+		hooks[event] = kept
+	}
+	if len(hooks) == 0 {
+		delete(existing, "hooks")
+	} else {
+		existing["hooks"] = hooks
+	}
+
+	if len(existing) == 0 {
+		if err := os.Remove(path); err != nil {
+			return FileResult{}, err
+		}
+		return FileResult{Path: path, Action: ActionRemoved}, nil
+	}
+	if err := writeJSONFile(path, existing); err != nil {
+		return FileResult{}, err
+	}
+	return FileResult{Path: path, Action: ActionRemoved}, nil
+}
+
+// removeEmbeddedFile removes path if it exists, reporting ActionRemoved.
+// Reports ActionNotFound (never an error) when path does not exist,
+// matching the pre-existing D-08 invariant; any other os.Remove error is
+// surfaced unwrapped for the caller to attach path context to via
+// recordFile.
+func removeEmbeddedFile(path string) (FileResult, error) {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return FileResult{Path: path, Action: ActionNotFound}, nil
+		}
+		return FileResult{}, err
+	}
+	return FileResult{Path: path, Action: ActionRemoved}, nil
+}
+
+// removeSkillDirIfEmpty removes dir only when it is already empty.
+// os.Remove on a directory succeeds solely under that condition and
+// fails otherwise with a platform-specific "not empty" error (ENOTEMPTY
+// on Unix, a different code on Windows) — rather than matching that
+// value, this confirms directly by re-reading dir: if entries remain,
+// the failure was exactly the expected one and is a deliberate no-op, so
+// a user-authored file (or Phase 6's own verification/ subdirectory)
+// keeps the directory alive. Never a recursive delete — the directory is
+// codegraph-named but not codegraph-exclusive, and losing a user's file
+// there is irreversible while leaving an empty directory behind is not
+// (this plan's must_haves.prohibitions).
+func removeSkillDirIfEmpty(dir string) error {
+	err := os.Remove(dir)
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr == nil && len(entries) > 0 {
+		return nil
+	}
+	return err
+}
+
 // writeMcpEntry reads path's existing JSON, sets mcpServers.codegraph to
 // buildEntry()'s (normalized) result, and writes back only if it
 // differs from what's already there — every sibling key under both the
