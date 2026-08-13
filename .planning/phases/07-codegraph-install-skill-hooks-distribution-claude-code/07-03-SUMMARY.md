@@ -198,5 +198,35 @@ None - no external service configuration required.
 - FOUND commits: b1cf342, 7508ef9, b8a4b6c
 
 ---
+
+## Post-Hoc Correction (orchestrator, after wave merge)
+
+The "narrow, gated recovery path" (`blockMatchers`/`recoveryMatchers`) documented above as
+the fix for deviation #1 was **reverted** immediately after this wave merged, in commit
+`242ec0a`. A background security review — independently traced and confirmed against the
+actual code, not taken on faith — found it let codegraph silently claim and overwrite an
+**unrelated** user hook that merely shared a matcher name (e.g. `"startup"`), whenever a
+codegraph manifest happened to be present at that location. This is exactly the RESEARCH
+Pitfall 1 scenario the plan's own `<action>` text said to avoid ("fix it... rather than by
+loosening ownership to matcher value") — the fix as implemented loosened ownership to
+matcher value (plus shape), contradicting that instruction.
+
+Confirmed RED against the vulnerable code (via `git stash` of just the two production files)
+before reverting, per this phase's own established discipline. Ownership is now, again,
+determined solely by exact command-string match. The tradeoff: a hand-edited codegraph-owned
+block duplicates into a second matcher entry on the next install rather than being silently
+restored in place — untidy, never destructive.
+
+`TestClaude_Install_SilentlyOverwritesHandEditedHookBlock` (the test this deviation's
+verification cited) was renamed to `TestClaude_Install_HandEditedHookBlockDuplicatesRatherThanOverwritesUnrelated`
+and its assertions updated to expect duplication, not restoration. A new regression test,
+`TestClaude_Install_NeverClaimsOwnershipOfUnrelatedHookUnderSameMatcher`, directly proves the
+vulnerable scenario is now safe.
+
+`Decisions Made`'s first bullet and deviation #1 above are preserved as an accurate record of
+what was actually implemented and why at the time — this section is the correction, not a
+rewrite of that history.
+
+---
 *Phase: 07-codegraph-install-skill-hooks-distribution-claude-code*
 *Completed: 2026-08-13*
