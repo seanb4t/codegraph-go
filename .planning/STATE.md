@@ -363,46 +363,18 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-13T19:31:09.844Z
-Stopped at: Phase 8 context gathered
-  NEXT: `/gsd-discuss-phase 8` — Instructions & Marker-Block Rewrite
-  CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
-
-    - **Phase 7 shipped with one real vulnerability found and fixed mid-execution.** A
-      background security review caught a matcher+shape hook-ownership recovery heuristic
-      that could silently overwrite an unrelated user hook sharing a matcher name — reverted
-      same-day (commit `242ec0a`). A subsequent deep code review found 2 CRITICAL + 4
-      WARNING findings; 2 CRITICALs + 2 WARNINGs fixed with regression tests (`c2ea00f`), 2
-      WARNINGs left as documented follow-up debt in `07-REVIEW.md`. New durable pattern
-      recorded in PROJECT.md's Key Decisions: ownership of a shared-array entry must be
-      exact-identity, never shape/position.
-
-    - **The stale `instructions` string is Phase 8's origin incident, not background.**
-      `internal/agents/instructions.go:17-18` defers full tool guidance to "the MCP
-      initialize response (Phase 3)" — a hand-off never built, which misdirected a real
-      debug session on 2026-08-08. Phase 8 retires it, and WIRE-03 makes "names only what
-      already exists" the acceptance condition rather than a review note.
-
-    - **Phase 8 depends on Phase 7's marker block content, now shipped.** WIRE-02 governs
-      the marker block `codegraph install` writes; Phase 7's `go:embed`'d skill/hooks
-      package is the thing that block must now accurately describe — the last dependency
-      Phase 8 was waiting on is closed.
-
-    - **Phase 8 carries its own wire-oracle re-freeze** for the `instructions` string,
-      mirroring Phase 5's re-freeze discipline for `capabilities.resources` — turning on the
-      rewritten string changes the `initialize` result on the wire.
-
-    - **This is the milestone's last phase.** Phase 8 (Instructions & Marker-Block Rewrite)
-      is the 4th of 4 phases (5-8). Completing it closes v0.10.0.
-
-    - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and
-      AGENT-04…07 (multi-agent skill/hooks porting) are tracked in REQUIREMENTS.md's v2
-      section and mapped to no phase. The guard is the fallback if skill + resources + nudge
-      prove insufficient, and that evidence does not exist yet.
-  NOTE: no `v0.10.0` git tag will be created — release-please owns tagging (D-06R), and such a
-  tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: .planning/phases/08-instructions-marker-block-rewrite/08-CONTEXT.md
+Last session: 2026-08-13T21:05:33.000Z
+Stopped at: v0.10.0 milestone closed and archived; PR #60 open against main, awaiting human review/merge
+  NEXT: review and merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60), then `/gsd-new-milestone`
+  CARRY-OVER:
+    - **This milestone lived entirely on `gsd/v0.10.0-agent-onboarding-skill-mcp-resources`** (branching_strategy: milestone) and was never incrementally merged — 153 commits ahead of `main`, pushed and opened as PR #60 at close time. Nothing from v0.10.0 is on `main` until that PR merges.
+    - **PR #60 title (`feat(agents): ...`) is the release decision** — this repo is squash-merge-only with `squash_merge_commit_title: PR_TITLE`, so merging it is what triggers release-please's version bump. Do not retitle without intent.
+    - **No `v0.10.0` git tag was created** — release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+    - **8 audit-open items handled at close:** 7 acknowledged/deferred (6 pre-existing todos + 2 dormant seeds, see Deferred Items below), 1 closed as a false positive (`knowledge-base` debug-session flag — it's the resolved-session reference index, not an open investigation).
+    - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and AGENT-04…07 (multi-agent skill/hooks porting) are tracked in `milestones/v0.10.0-REQUIREMENTS.md`'s v2 section, mapped to no phase — the fallback if skill+resources+nudge prove insufficient, and that evidence doesn't exist yet.
+Resume file: none — milestone closed
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60) once CI is green — this is the only remaining step to land v0.10.0 on `main`
+- Start the next milestone with `/gsd-new-milestone`
