@@ -160,10 +160,20 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 07-01-PLAN.md — Tracer: one `install` writes the embedded SKILL.md, executable nudge script, and SessionStart registration into Claude Code's real read locations, idempotently (AGENT-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07-02-PLAN.md — Uninstall removes exactly what install wrote, plus the {install, uninstall} × {read-error, malformed} matrix and one shared read posture for `.claude/settings.json` (AGENT-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07-03-PLAN.md — Sidecar `.codegraph-manifest.json` recording binary version + per-artifact content hashes, with D-05 drift handling (AGENT-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 07-04-PLAN.md — `codegraph upgrade` re-invokes `Install()` for every previously-configured location after a successful swap; refresh failure warns rather than failing the upgrade (AGENT-03)
 
 ### Phase 8: Instructions & Marker-Block Rewrite

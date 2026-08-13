@@ -4,15 +4,15 @@ milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 7
 current_phase_name: "`codegraph install` Skill + Hooks Distribution (Claude Code)"
-status: planning
+status: executing
 stopped_at: Phase 7 context gathered
-last_updated: "2026-08-13T15:21:47.695Z"
+last_updated: "2026-08-13T15:59:50.711Z"
 last_activity: 2026-08-12
 last_activity_desc: "Phase 5 (MCP Resources Capability & Claims Drift Guard) executed and verified: 5/5 requirements, 4 plans, 42/42 wire-oracle scenarios"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 8
+  total_plans: 12
   completed_plans: 8
   percent: 50
 ---
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-08)
 
 Phase: 7 — `codegraph install` Skill + Hooks Distribution (Claude Code)
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-08-12 — Phase 06 complete, transitioned to Phase 7
 
 Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
