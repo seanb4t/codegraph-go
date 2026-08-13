@@ -2,44 +2,44 @@
 gsd_state_version: 1.0
 milestone: v0.10.0
 milestone_name: Agent Onboarding Skill & MCP Resources
-current_phase: 07
-current_phase_name: codegraph install Skill + Hooks Distribution (Claude Code)
-status: executing
+current_phase: 8
+current_phase_name: Instructions & Marker-Block Rewrite
+status: planning
 stopped_at: Phase 7 context gathered
-last_updated: "2026-08-13T16:00:44.354Z"
+last_updated: "2026-08-13T18:34:57.192Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 07 execution started
 progress:
   total_phases: 4
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 12
-  completed_plans: 8
-  percent: 50
+  completed_plans: 12
+  percent: 75
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-08)
+See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 07 — codegraph install Skill + Hooks Distribution (Claude Code)
+**Current focus:** Phase 8 — Instructions & Marker-Block Rewrite
 
 ## Current Position
 
-Phase: 07 (codegraph install Skill + Hooks Distribution (Claude Code)) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 07
-Last activity: 2026-08-13 — Phase 07 execution started
+Phase: 8 — Instructions & Marker-Block Rewrite
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-08-13 — Phase 07 complete, transitioned to Phase 8
 
-Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
+Progress: [███████████████░░░░░] 75% — 3/4 phases complete
 
 ## Performance Metrics
 
 **Velocity (v0.5.0):**
 
-- Total plans completed: 32
+- Total plans completed: 36
 - Average duration: — min
 - Total execution time: 0.0 hours
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0% — 0/4 phases complete
 | 04 | 6 | - | - |
 | 05 | 4 | - | - |
 | 06 | 4 | - | - |
+| 07 | 4 | - | - |
 
 **By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
 
@@ -350,43 +351,37 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-13T15:21:47.684Z
-Stopped at: Phase 7 context gathered
-  NEXT: `/gsd-plan-phase 5` — MCP Resources Capability & Claims Drift Guard
+Last session: 2026-08-13T18:34:57Z
+Stopped at: Phase 7 complete, transitioned to Phase 8
+  NEXT: `/gsd-discuss-phase 8` — Instructions & Marker-Block Rewrite
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
-    - **Phase numbering continues rather than restarting.** v0.5.0 ended at Phase 4, so
-      v0.10.0 runs Phases 5-8. v0.5.0 itself restarted at 1; this milestone deliberately
-      does not. Phase directories under `.planning/phases/` will be `05-*` … `08-*`.
+    - **Phase 7 shipped with one real vulnerability found and fixed mid-execution.** A
+      background security review caught a matcher+shape hook-ownership recovery heuristic
+      that could silently overwrite an unrelated user hook sharing a matcher name — reverted
+      same-day (commit `242ec0a`). A subsequent deep code review found 2 CRITICAL + 4
+      WARNING findings; 2 CRITICALs + 2 WARNINGs fixed with regression tests (`c2ea00f`), 2
+      WARNINGs left as documented follow-up debt in `07-REVIEW.md`. New durable pattern
+      recorded in PROJECT.md's Key Decisions: ownership of a shared-array entry must be
+      exact-identity, never shape/position.
 
-    - **The stale `instructions` string is the milestone's origin incident, not background.**
+    - **The stale `instructions` string is Phase 8's origin incident, not background.**
       `internal/agents/instructions.go:17-18` defers full tool guidance to "the MCP
       initialize response (Phase 3)" — a hand-off never built, which misdirected a real
       debug session on 2026-08-08. Phase 8 retires it, and WIRE-03 makes "names only what
       already exists" the acceptance condition rather than a review note.
 
-    - **SUMMARY.md's suggested ordering was deliberately inverted in one place.** Research
-      sequenced the `instructions` rewrite (its Phase 6) BEFORE install distribution (its
-      Phase 7). This roadmap puts the rewrite last, after install. WIRE-02 governs the
-      marker block `codegraph install` writes; landing the rewrite first would have that
-      block name a skill install does not yet place — a fresh broken promise of exactly the
-      kind being retired.
+    - **Phase 8 depends on Phase 7's marker block content, now shipped.** WIRE-02 governs
+      the marker block `codegraph install` writes; Phase 7's `go:embed`'d skill/hooks
+      package is the thing that block must now accurately describe — the last dependency
+      Phase 8 was waiting on is closed.
 
-    - **Wire-oracle re-capture is folded into Phase 5, not a separate phase.** Turning on
-      `capabilities.resources` changes the `initialize` result on the wire, so the frozen
-      transcripts go red the moment the capability is live. Re-freezing belongs to that same
-      deliberate unit per `MUTATION-PROOF.md`; splitting it would leave main red across a
-      phase boundary. Phase 8 carries its own re-freeze for the instructions string.
+    - **Phase 8 carries its own wire-oracle re-freeze** for the `instructions` string,
+      mirroring Phase 5's re-freeze discipline for `capabilities.resources` — turning on the
+      rewritten string changes the `initialize` result on the wire.
 
-    - **Phase 7 is the risk concentration.** Writing new artifact types into agent-owned
-      directories is the shape that produced v1.0 Phase 5's two reproduced data-loss
-      Criticals and Phase 6's swallowed-I/O-error findings. Reuse `internal/fsatomic` and
-      the existing `AgentTarget`/`recordFile` machinery; do not invent new file-safety
-      primitives. Deep review warranted.
-
-    - **Zero new Go module dependencies are expected anywhere in this milestone.**
-      `Server.AddResource` is stable in the already-pinned `modelcontextprotocol/go-sdk@v1.7.0`;
-      everything else is embedded markdown, JSON, and shell.
+    - **This is the milestone's last phase.** Phase 8 (Instructions & Marker-Block Rewrite)
+      is the 4th of 4 phases (5-8). Completing it closes v0.10.0.
 
     - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and
       AGENT-04…07 (multi-agent skill/hooks porting) are tracked in REQUIREMENTS.md's v2
@@ -394,8 +389,8 @@ Stopped at: Phase 7 context gathered
       prove insufficient, and that evidence does not exist yet.
   NOTE: no `v0.10.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: /Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/07-codegraph-install-skill-hooks-distribution-claude-code/07-CONTEXT.md
+Resume file: None
 
 ## Operator Next Steps
 
-- Plan the first phase with `/gsd-plan-phase 5`
+- Discuss Phase 8 with `/gsd-discuss-phase 8` — Instructions & Marker-Block Rewrite (final phase of v0.10.0)
