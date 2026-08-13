@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.10.0
-milestone_name: Agent Onboarding Skill & MCP Resources
-status: Awaiting next milestone
-stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T20:59:25.342Z"
+milestone: v0.11.0
+milestone_name: Standalone Project Identity
+status: planning
+last_updated: "2026-08-13T21:37:18.222Z"
 last_activity: 2026-08-13
-last_activity_desc: Phase 07 execution started
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
-  percent: 100
-current_phase: 08
-current_phase_name: instructions-marker-block-rewrite
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-08-13)
 
 ## Current Position
 
-Phase: Milestone v0.10.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-13 — Milestone v0.10.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-13 — Milestone v0.11.0 started
 
 ## Performance Metrics
 
@@ -367,11 +363,13 @@ Last session: 2026-08-13T21:05:33.000Z
 Stopped at: v0.10.0 milestone closed and archived; PR #60 open against main, awaiting human review/merge
   NEXT: review and merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60), then `/gsd-new-milestone`
   CARRY-OVER:
+
     - **This milestone lived entirely on `gsd/v0.10.0-agent-onboarding-skill-mcp-resources`** (branching_strategy: milestone) and was never incrementally merged — 153 commits ahead of `main`, pushed and opened as PR #60 at close time. Nothing from v0.10.0 is on `main` until that PR merges.
     - **PR #60 title (`feat(agents): ...`) is the release decision** — this repo is squash-merge-only with `squash_merge_commit_title: PR_TITLE`, so merging it is what triggers release-please's version bump. Do not retitle without intent.
     - **No `v0.10.0` git tag was created** — release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
     - **8 audit-open items handled at close:** 7 acknowledged/deferred (6 pre-existing todos + 2 dormant seeds, see Deferred Items below), 1 closed as a false positive (`knowledge-base` debug-session flag — it's the resolved-session reference index, not an open investigation).
     - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and AGENT-04…07 (multi-agent skill/hooks porting) are tracked in `milestones/v0.10.0-REQUIREMENTS.md`'s v2 section, mapped to no phase — the fallback if skill+resources+nudge prove insufficient, and that evidence doesn't exist yet.
+
 Resume file: none — milestone closed
 
 ## Operator Next Steps
