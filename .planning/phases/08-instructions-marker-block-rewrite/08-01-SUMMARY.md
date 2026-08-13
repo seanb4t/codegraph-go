@@ -212,6 +212,15 @@ None during this plan's own scope. For context (not a blocker for this plan): `g
 - `internal/mcp`'s `instructions` const and its full guard suite are complete and green; ready for 08-02 (marker-block rewrite, `internal/agents/instructions.go`) and 08-03 (wire-oracle re-capture, which depends on this plan's final const value being frozen — it now is).
 - `test/wireoracle`'s `TestFrozenTranscriptsMatch` is in an expected red state for the 38 scenarios carrying the `instructions` string until 08-03 re-freezes them — not a regression to chase before then.
 
+## Self-Check: PASSED
+
+- FOUND: `internal/mcp/server.go`
+- FOUND: `internal/mcp/instructions_contract_test.go`
+- FOUND: `.planning/phases/08-instructions-marker-block-rewrite/08-01-SUMMARY.md`
+- FOUND commit: `fddeb18` (Task 1)
+- FOUND commit: `b8a19d0` (Task 2)
+- FOUND commit: `f80803f` (Task 3)
+
 ---
 *Phase: 08-instructions-marker-block-rewrite*
 *Completed: 2026-08-13*
