@@ -73,16 +73,18 @@ graph store?"*
 > Project-skill discovery worked in the very session this finding was written from.
 >
 > **What was actually wrong, and why the original claim missed it:** the entry is *degraded*, not
-> absent. It renders as a bare `- codegraph` with **no colon and no description**, unlike the 173
+> absent. It renders as a bare `- codegraph` with **no colon and no description**, unlike the
 > entries that carry `- name: description`. The rehearsal's oracle was a grep of the transcript,
 > and every natural spelling of that grep — `codegraph:`, or any fragment of the description text —
 > matches nothing against a bare name. The oracle could not distinguish "absent from the catalog"
 > from "present but stripped of its description," and reported the first.
 >
 > **Root cause of the degradation (environment, not this repository's authoring).** Claude Code
-> renders the skill catalog into an attachment capped near 45,000 characters (measured
-> 44,976–45,014 across four independent sessions, admitting **exactly 173** descriptions in every
-> one) and emits every entry that does not fit as a bare name. This operator's installation carries
+> renders the skill catalog into a size-capped attachment and emits every entry that does not fit
+> as a bare name. On this operator's installation at the time, that cap sat near 45,000 characters
+> (measured 44,976–45,014 across four independent sessions, admitting 173 descriptions in each).
+> **Those figures are a measurement, not an invariant — see the Method note below before reusing
+> them.** This operator's installation carries
 > ~238 skills, saturating the cap; project-scoped skills are appended after all personal and plugin
 > skills, so this repository's entry competes for the leftover budget last and loses by
 > construction. Proven not to be a property of the file: a probe skill whose description was
@@ -127,6 +129,64 @@ operator's global `~/.claude/CLAUDE.md` CodeGraph section, and the codegraph MCP
 for a where-is-X or how-does-Y-work question"). This rehearsal therefore cannot cleanly attribute
 the correct routing to the phase's own artifact — it demonstrates the desired *outcome*, not that
 this specific *skill* caused it. That limitation is unchanged by the retraction; only its cause is.
+
+## Method note (2026-08-13): the cap is not a constant, and most ways of checking it are wrong
+
+Added after a **third** false "the skill is not listed" report in this repository
+(`.planning/debug/resolved/codegraph-skill-not-listed.md`). Pinned by
+`TestSkillListingEvidenceRecordsBudgetIsNotFixed` in `internal/mcp/skill_claims_drift_test.go`.
+
+**The budget varies; it is not a property of Claude Code.** It tracks the `skillListingBudgetFraction`
+setting times the model's **context window**, exactly as that setting's own schema text says
+("Fraction of the context window (in characters) reserved for the skill listing"). Measured on one
+machine on one day, same installed skill set:
+
+| Model | `skillListingBudgetFraction` | Rendered listing | Entries degraded to bare |
+|---|---|---|---|
+| `claude-sonnet-5` | pre-change value | 44,990 / 44,993 / 45,002 chars | 61–67 of 233–238 |
+| `claude-sonnet-5` | `0.03` | 59,681 chars | **0 of 232** |
+| `claude-haiku-4-5` | `0.03` | 23,984 chars | 85 of 232 |
+
+The tier boundary coincides exactly with the settings file's mtime. At `0.03` on a large-context
+model the budget exceeds the full catalog, so **nothing is truncated at all** and the 59,681 figure
+is the listing's complete size rather than a clamp. Do not quote a character count or an admitted-
+description count from this repository as though it were universal — quote the mechanism instead.
+The `skillDescriptionListingMaxChars = 120` bound still stands, because it must hold at the
+*default* fraction on an ordinary machine, which this operator's setting no longer represents.
+
+**Two oracles that look correct and are not.** A `skill_listing` attachment carries an `isInitial`
+boolean and a `skillCount`. Both traps below are invisible in the rendered text, because every
+variant is delivered under the byte-identical header `The following skills are available for use
+with the Skill tool:`.
+
+1. **A single-skill `delta` is not the catalog.** When a skill becomes newly available mid-session,
+   Claude Code emits a further `skill_listing` attachment with `isInitial: false` and
+   `skillCount: 1`. The most recent such block in a session is therefore usually a one-entry delta.
+   Reading it as the catalog reports every other skill as missing. This is exactly what produced
+   the third false report: the block read listed one unrelated skill, 3.4 seconds after a resume.
+2. **A resumed session replays a stale catalog.** `SessionStart:resume` does **not** recompute the
+   listing. The session replays the `isInitial: true` attachment recorded when the conversation
+   *first started*, which predates any fix made since — in the reported case by 13 hours, spanning
+   both the description fix and the settings change. Restarting the binary is not sufficient; if it
+   resumes a conversation, the observation is structurally incapable of seeing the fix.
+
+**The only valid check.** Start a genuinely new conversation (not `--resume`, not `--continue`),
+then read the `isInitial: true` attachment from that session's own transcript JSONL and classify
+each entry against the attachment's own `names` array — not with a regex, which mis-parses plugin
+names that legitimately contain a colon (`engram:curating-spine`). And record which of "absent",
+"present but bare", and "present with description" was observed: they are three different
+diagnoses pointing at three different subsystems, and reporting the wrong one sends the next reader
+to the wrong place. Absence has never actually been observed in this repository — every
+investigation that reported it found a bare or delta-rendered entry instead.
+
+**Two instruments, not one.** The third report was closed by a *second, disjoint* oracle rather
+than by a tighter version of the first. The investigation's own decisive probe read a transcript
+file it selected, parsed with a script it wrote, from a session it launched — a chain in which one
+wrong assumption anywhere reproduces the very failures this note documents. The confirmation came
+from outside that chain: a separate fresh `claude` process, started by a different actor through a
+different mechanism, asked with **no tools** what its *own* injected context showed. It quoted the
+description byte-for-byte. Prefer an oracle that shares no link with the one that produced the
+finding; a second look through the same instrument is not a second opinion.
 
 **Standing caution about this artifact's method.** The retracted claim above is the second false
 negative this phase's live rehearsals produced by grepping a transcript (the first was the

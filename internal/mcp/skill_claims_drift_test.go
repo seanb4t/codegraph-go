@@ -54,11 +54,26 @@ const skillDescriptionMaxChars = 1024
 
 // skillDescriptionListingMaxChars is the operative ceiling, far below
 // agentskills.io's 1024: Claude Code renders the whole available-skills
-// catalog into a capped attachment (observed clamping at ~45,000 characters
-// across four independent sessions, each admitting exactly 173 descriptions),
-// and every entry past the cap is degraded to a BARE NAME with no description
-// at all. A skill listed without its description carries zero trigger signal,
-// which is strictly worse than a terse one.
+// catalog into a size-capped attachment, and every entry past the cap is
+// degraded to a BARE NAME with no description at all. A skill listed without
+// its description carries zero trigger signal, which is strictly worse than a
+// terse one.
+//
+// The cap is NOT a fixed number. It tracks the skillListingBudgetFraction
+// setting times the model's context window, per that setting's own schema
+// text. Measured on one installation on 2026-08-13: ~45,000 characters on
+// claude-sonnet-5 at the then-current fraction (61-67 of ~235 entries
+// degraded), 59,681 on the same model at fraction 0.03 (ZERO degraded — the
+// budget exceeded the whole catalog, so the listing was not truncated at all),
+// and 23,984 on claude-haiku-4-5 at that same 0.03 (85 of 232 degraded). An
+// earlier revision of this comment stated ~45,000/173 as an invariant; that
+// was one operator's reading at one setting on one model, and reusing it as a
+// constant mis-predicts on any other. See the Method note in
+// skillListingEvidencePath.
+//
+// This bound therefore targets the DEFAULT fraction on an ordinary machine,
+// which is the configuration this repository's skill must survive — not the
+// raised fraction the operator who found this bug happens to run.
 //
 // This repository's skill is at the back of that queue by construction:
 // project-scoped .claude/skills/ entries are appended after every personal and
@@ -308,7 +323,90 @@ func TestSkillDescriptionSurvivesSkillListingCap(t *testing.T) {
 		t.Fatalf("%s frontmatter description is empty — an empty description trivially satisfies a maximum-length bound while reproducing the exact defect this test exists to prevent (a catalog entry with no trigger signal)", skillPath)
 	}
 	if len(description) > skillDescriptionListingMaxChars {
-		t.Errorf("%s frontmatter description is %d characters, over the %d-character skill-listing budget; Claude Code degrades entries past its ~45,000-character catalog cap to bare names with no description, and a project-scoped skill is appended last so it is degraded first (see .planning/debug/resolved/skill-discovery-not-listing.md)", skillPath, len(description), skillDescriptionListingMaxChars)
+		t.Errorf("%s frontmatter description is %d characters, over the %d-character skill-listing budget; Claude Code degrades entries past its catalog cap (skillListingBudgetFraction x the model's context window) to bare names with no description, and a project-scoped skill is appended last so it is degraded first (see .planning/debug/resolved/skill-discovery-not-listing.md)", skillPath, len(description), skillDescriptionListingMaxChars)
+	}
+}
+
+// skillListingEvidencePath is the SKILL-03 evidence artifact of record. An
+// audit reading it decides what the skill-listing cap is and how to verify a
+// change to it, so a falsehood here propagates into the next investigation —
+// which is precisely what happened twice (see
+// TestSkillListingEvidenceRecordsBudgetIsNotFixed).
+const skillListingEvidencePath = "../../.claude/skills/codegraph/verification/SKILL-03-rehearsal.md"
+
+// skillListingFixedCapClaims are the phrasings that assert the catalog cap as
+// an INVARIANT. Each was measured on one machine, at one
+// skillListingBudgetFraction, on one model, and then written down as though it
+// were a property of Claude Code. Direct measurement on 2026-08-13 refutes all
+// of them: the same installation rendered 23,984 characters on
+// claude-haiku-4-5, ~45,000 on claude-sonnet-5 at the pre-change fraction, and
+// ~59,700 on claude-sonnet-5 at skillListingBudgetFraction 0.03 — where ZERO
+// of 232 entries were degraded, versus 61-67 before. The budget tracks the
+// fraction times the model's context window, exactly as the setting's own
+// schema text says.
+var skillListingFixedCapClaims = []string{
+	"admitting **exactly 173** descriptions in every",
+	"unlike the 173",
+}
+
+// skillListingOracleTraps are the observation mistakes that produced the false
+// "the skill is not listed at all" report on 2026-08-13, the third instance of
+// the same class in this repository. Both are properties of the ATTACHMENT
+// SCHEMA rather than of any skill: a skill_listing attachment carries an
+// isInitial flag and a skillCount, and Claude Code emits single-skill DELTA
+// listings under the byte-identical system-reminder header the full catalog
+// uses. So "the most recent skills block in my context" is not "the catalog,"
+// and a RESUMED session replays the isInitial listing recorded when the
+// conversation first started — which predates any fix made since.
+var skillListingOracleTraps = []string{
+	"isInitial", // the flag that separates the catalog from a delta
+	"delta",     // single-skill listings rendered under the same header
+	"resume",    // a resumed session replays a stale catalog
+}
+
+// TestSkillListingEvidenceRecordsBudgetIsNotFixed keeps the SKILL-03 artifact
+// honest about the two things that misled every prior reader of it.
+//
+// First, the cap is not a constant. The artifact previously stated a fixed
+// ~45,000 characters admitting exactly 173 descriptions, which reads as a
+// property of the runtime; it is a single operator's measurement at a single
+// setting on a single model. This investigation's own first probe forced
+// --model haiku, got a 23,984-character budget, saw codegraph rendered bare,
+// and briefly concluded the fix had failed.
+//
+// Second, and the reason this test exists at all: verifying this class of fix
+// requires reading the right artifact. Twice now a correct mechanism has been
+// reported broken because the oracle could not see it. The artifact must name
+// the isInitial flag, the delta listings that share the catalog's header, and
+// the fact that a resumed session replays a stale catalog — or the next reader
+// re-derives "the skill is not listed" from the same evidence for a third time.
+func TestSkillListingEvidenceRecordsBudgetIsNotFixed(t *testing.T) {
+	data, err := os.ReadFile(skillListingEvidencePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", skillListingEvidencePath, err)
+	}
+	evidence := string(data)
+	lower := strings.ToLower(evidence)
+
+	for _, claim := range skillListingFixedCapClaims {
+		if strings.Contains(evidence, claim) {
+			t.Errorf("%s still asserts the catalog cap as an invariant via %q — measured 23,984 chars on claude-haiku-4-5 and ~59,700 on claude-sonnet-5 at skillListingBudgetFraction 0.03 (0 of 232 entries degraded) on the same installation the ~45,000/173 figures came from; the budget is the fraction times the model's context window", skillListingEvidencePath, claim)
+		}
+	}
+
+	// Removing the false invariant is not enough. Without the replacement
+	// model recorded, the next reader measures ~45,000 once and writes the
+	// same constant back down.
+	for _, want := range []string{"skilllistingbudgetfraction", "context window"} {
+		if !strings.Contains(lower, want) {
+			t.Errorf("%s does not mention %q — the correction must record WHAT the budget varies with, or the retracted constant is re-derivable from a single measurement", skillListingEvidencePath, want)
+		}
+	}
+
+	for _, want := range skillListingOracleTraps {
+		if !strings.Contains(lower, strings.ToLower(want)) {
+			t.Errorf("%s does not mention %q — verifying a skill-listing fix requires reading an isInitial=true listing from a NON-resumed session; a single-skill delta and a replayed stale catalog both look like absence, and each has already produced a false report in this repository", skillListingEvidencePath, want)
+		}
 	}
 }
 
