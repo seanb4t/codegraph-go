@@ -157,11 +157,14 @@ Plans:
 
 **Notes**: Highest-risk phase of the milestone; a deep-review pass is warranted. Reuse `internal/fsatomic` and the existing `AgentTarget` / `recordFile` machinery — do not invent new file-safety primitives. Scope is Claude Code only: per-agent `hooks.json` schemas differ (Cursor camelCase, Codex CLI and Antigravity carry different event sets, Antigravity has no `SessionStart`/`UserPromptSubmit` at all), and porting is deferred to v2 as AGENT-04…07 rather than guessed at here.
 
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 7`)
+- [ ] 07-01-PLAN.md — Tracer: one `install` writes the embedded SKILL.md, executable nudge script, and SessionStart registration into Claude Code's real read locations, idempotently (AGENT-01)
+- [ ] 07-02-PLAN.md — Uninstall removes exactly what install wrote, plus the {install, uninstall} × {read-error, malformed} matrix and one shared read posture for `.claude/settings.json` (AGENT-02)
+- [ ] 07-03-PLAN.md — Sidecar `.codegraph-manifest.json` recording binary version + per-artifact content hashes, with D-05 drift handling (AGENT-03)
+- [ ] 07-04-PLAN.md — `codegraph upgrade` re-invokes `Install()` for every previously-configured location after a successful swap; refresh failure warns rather than failing the upgrade (AGENT-03)
 
 ### Phase 8: Instructions & Marker-Block Rewrite
 
