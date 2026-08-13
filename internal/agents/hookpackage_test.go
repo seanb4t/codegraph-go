@@ -540,3 +540,110 @@ func TestClaudeInstallPreservesHooksBlock(t *testing.T) {
 		t.Fatalf("hooks block changed after removeClaudeAllowPermission:\nbefore=%#v\nafter=%#v", originalHooks, afterRemove["hooks"])
 	}
 }
+
+// nudgeLiveSessionEvidencePath is the Phase 6 live-session evidence artifact
+// for NUDGE-01/02. Same missing-file-is-a-regression convention as
+// sessionNudgeScriptPath: this file is the milestone's record of whether the
+// hook runtime actually behaves as registered, so its absence is a loud
+// failure rather than a t.Skip.
+const nudgeLiveSessionEvidencePath = "../../.claude/skills/codegraph/verification/NUDGE-live-session.md"
+
+// retractedResumeClaims are assertions the 2026-08-12 rehearsal recorded that
+// the resume-matcher-not-firing debug session disproved. The rehearsal's
+// oracle was a grep of the resumed session's transcript for SessionStart hook
+// events; that oracle cannot observe a dispatch whose output Claude Code
+// suppresses as a duplicate, so it returned a false negative and the artifact
+// hardened it into a "real, reproducible gap". A seven-probe single-variable
+// ladder showed the resume matcher does fire: with per-source hook output the
+// dispatch is both recorded and injected, and only a byte-identical repeat of
+// already-injected text is dropped. session-nudge.sh emits one constant line
+// for every source, so its resume dispatch is always the suppressed case.
+//
+// These strings are pinned so the retraction cannot be silently reverted, and
+// so a future reader cannot re-derive "the resume matcher is dead" from this
+// artifact and delete the registration that
+// TestSessionStartRegistersBothDocumentedEntryPoints protects.
+var retractedResumeClaims = []string{
+	"## Resume nudge (`resume` matcher) — did not fire",
+	"**Result: no nudge text, and no `SessionStart:resume` hook event of any kind, appeared anywhere.**",
+	"**This is a real, reproducible gap, not a rehearsal methodology error:**",
+	"1. **Resume-matcher non-firing.**",
+}
+
+// TestNudgeLiveSessionEvidenceRetractsResumeFailureClaim fails while the
+// live-session artifact still asserts the disproved finding, and requires it
+// to name the mechanism that actually explains the observation. The artifact
+// is the milestone's evidence of record: an audit reading it decides whether
+// NUDGE-01 holds on the resume path, so a falsehood here propagates.
+func TestNudgeLiveSessionEvidenceRetractsResumeFailureClaim(t *testing.T) {
+	data, err := os.ReadFile(nudgeLiveSessionEvidencePath)
+	if err != nil {
+		t.Fatalf("read %s: %v", nudgeLiveSessionEvidencePath, err)
+	}
+	evidence := string(data)
+
+	for _, claim := range retractedResumeClaims {
+		if strings.Contains(evidence, claim) {
+			t.Errorf("%s still carries the retracted claim %q — the resume matcher does fire; its output is suppressed only when byte-identical to context already injected", nudgeLiveSessionEvidencePath, claim)
+		}
+	}
+
+	// Retraction alone is not enough: removing the claim without recording
+	// why would leave the next reader to re-derive the same wrong conclusion
+	// from the same transcript evidence. Require the mechanism by name.
+	required := []string{
+		"identical", // the dedup condition
+		"suppress",  // what the runtime does with it
+		"probe.log", // the execution-side oracle that proved dispatch
+	}
+	for _, want := range required {
+		if !strings.Contains(strings.ToLower(evidence), want) {
+			t.Errorf("%s does not mention %q — the retraction must record the mechanism (identical output is suppressed) and the oracle that proved dispatch, or the false finding is re-derivable", nudgeLiveSessionEvidencePath, want)
+		}
+	}
+}
+
+// TestSessionStartRegistersBothDocumentedEntryPoints pins the matcher SET,
+// which TestHookRegistrationMatchesFragmentAndScript does not: that test
+// walks whatever entries exist and checks each command resolves to an
+// executable, so deleting the entire `resume` entry from settings.json AND
+// hooks.json leaves it green (the two blocks stay equal, and the surviving
+// startup command still resolves). D-07 requires both entry points, and the
+// now-retracted "resume never fires" finding makes deleting one an actively
+// attractive edit — this is the assertion that stops it.
+func TestSessionStartRegistersBothDocumentedEntryPoints(t *testing.T) {
+	for _, path := range []string{claudeSettingsFilePath, claudeHooksFragmentPath} {
+		entries, ok := sessionStartBlock(t, path).([]any)
+		if !ok {
+			t.Fatalf("%s: hooks.SessionStart is not an array", path)
+		}
+
+		got := map[string]int{}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				t.Fatalf("%s: SessionStart entry is not an object: %#v", path, e)
+			}
+			matcher, ok := entry["matcher"].(string)
+			if !ok {
+				t.Fatalf("%s: SessionStart entry has no string matcher (a matcher-less entry is a catch-all and would change dispatch semantics): %#v", path, entry)
+			}
+			got[matcher]++
+		}
+
+		for _, want := range []string{"startup", "resume"} {
+			switch got[want] {
+			case 1: // exactly one entry owns this entry point
+			case 0:
+				t.Errorf("%s: hooks.SessionStart has no %q matcher — D-07 requires the nudge on both documented entry points", path, want)
+			default:
+				t.Errorf("%s: hooks.SessionStart registers the %q matcher %d times; duplicates dispatch the script more than once per session", path, want, got[want])
+			}
+		}
+		for matcher := range got {
+			if matcher != "startup" && matcher != "resume" {
+				t.Errorf("%s: hooks.SessionStart registers unexpected matcher %q — widening the matcher set changes when the nudge fires and is not covered by the live-session evidence", path, matcher)
+			}
+		}
+	}
+}
