@@ -223,3 +223,61 @@ func TestInstructionsBlockNamesOnlyShippedCapabilities(t *testing.T) {
 		t.Fatalf("codegraphInstructionsBlock %v", err)
 	}
 }
+
+// TestInstructionsBlockGuardIsNotVacuous proves
+// blockNamesUnshippedCapability actually discriminates, across all three
+// failure classes plus their passing neighbours — including a mixed-case
+// skill row, since a case-sensitive check would let "Skill"/"SKILL"
+// through. Without this, a checker that returned nil unconditionally
+// would pass TestInstructionsBlockNamesOnlyShippedCapabilities forever
+// and prove nothing (T-08-06).
+func TestInstructionsBlockGuardIsNotVacuous(t *testing.T) {
+	cases := []struct {
+		name    string
+		block   string
+		wantErr bool
+	}{
+		{
+			name:    "explore + resources/list, no skill word",
+			block:   "Use codegraph_explore first. Call resources/list for more.",
+			wantErr: false,
+		},
+		{
+			name:    "same block plus a sentence naming an installed skill file",
+			block:   "Use codegraph_explore first. Call resources/list for more. See the installed skill file at .claude/skills/codegraph/SKILL.md.",
+			wantErr: true,
+		},
+		{
+			name:    "same block, skill word in mixed case",
+			block:   "Use codegraph_explore first. Call resources/list for more. See the installed Skill file.",
+			wantErr: true,
+		},
+		{
+			name:    "resources/list present, codegraph_explore missing",
+			block:   "Call resources/list for more.",
+			wantErr: true,
+		},
+		{
+			name:    "codegraph_explore present, resources/list missing",
+			block:   "Use codegraph_explore first.",
+			wantErr: true,
+		},
+		{
+			name:    "empty block",
+			block:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := blockNamesUnshippedCapability(tc.block)
+			if tc.wantErr && err == nil {
+				t.Fatalf("blockNamesUnshippedCapability(%q) = nil, want an error", tc.block)
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("blockNamesUnshippedCapability(%q) = %v, want nil", tc.block, err)
+			}
+		})
+	}
+}
