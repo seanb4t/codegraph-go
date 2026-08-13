@@ -33,9 +33,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Instructions Rewrite
 
-- [ ] **WIRE-01**: The MCP `initialize` instructions string correctly defers to the skill + resources instead of the stale "Phase 3" promise in `internal/agents/instructions.go`
+- [x] **WIRE-01**: The MCP `initialize` instructions string correctly defers to the skill + resources instead of the stale "Phase 3" promise in `internal/agents/instructions.go`
 - [ ] **WIRE-02**: The `codegraph install` marker block matches the rewritten instructions and promises nothing not yet shipped
-- [ ] **WIRE-03**: This rewrite ships only after RSRC and SKILL are verified working — never names something that doesn't exist yet
+- [x] **WIRE-03**: This rewrite ships only after RSRC and SKILL are verified working — never names something that doesn't exist yet
 
 ### Install Distribution (Claude Code only, v1)
 
@@ -87,9 +87,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SKILL-03 | Phase 6 | Complete |
 | NUDGE-01 | Phase 6 | Complete |
 | NUDGE-02 | Phase 6 | Complete |
-| WIRE-01 | Phase 8 | Pending |
+| WIRE-01 | Phase 8 | Complete |
 | WIRE-02 | Phase 8 | Pending |
-| WIRE-03 | Phase 8 | Pending |
+| WIRE-03 | Phase 8 | Complete |
 | AGENT-01 | Phase 7 | Complete |
 | AGENT-02 | Phase 7 | Complete |
 | AGENT-03 | Phase 7 | Complete |
