@@ -5,8 +5,8 @@ milestone_name: Agent Onboarding Skill & MCP Resources
 current_phase: 8
 current_phase_name: Instructions & Marker-Block Rewrite
 status: planning
-stopped_at: Phase 7 context gathered
-last_updated: "2026-08-13T18:34:57.192Z"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-08-13T19:31:09.855Z"
 last_activity: 2026-08-13
 last_activity_desc: Phase 07 execution started
 progress:
@@ -351,8 +351,8 @@ Carried forward from the v0.1 close and **closed during v1.0**:
 
 ## Session Continuity
 
-Last session: 2026-08-13T18:34:57Z
-Stopped at: Phase 7 complete, transitioned to Phase 8
+Last session: 2026-08-13T19:31:09.844Z
+Stopped at: Phase 8 context gathered
   NEXT: `/gsd-discuss-phase 8` — Instructions & Marker-Block Rewrite
   CARRY-OVER: see Blockers/Concerns above. Newly relevant to this milestone:
 
@@ -389,7 +389,7 @@ Stopped at: Phase 7 complete, transitioned to Phase 8
       prove insufficient, and that evidence does not exist yet.
   NOTE: no `v0.10.0` git tag will be created — release-please owns tagging (D-06R), and such a
   tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-Resume file: None
+Resume file: .planning/phases/08-instructions-marker-block-rewrite/08-CONTEXT.md
 
 ## Operator Next Steps
 
