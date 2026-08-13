@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
+	"github.com/seanb4t/codegraph-go/internal/version"
 )
 
 // claudeAllowToken is the permission entry Claude's settings.json needs so
@@ -405,6 +406,23 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// package (SKILL.md, executable session-nudge.sh, SessionStart
 	// registration) — follows --location with no special-casing (D-01),
 	// funnelled through recordFile like every step above (CR-01).
+	//
+	// The three content values are captured here (skillMDContent,
+	// scriptContent, sessionStartBlocks) so Plan 03's manifest step below
+	// can hash exactly what this Install call intended to write, rather
+	// than re-reading the files back from disk — re-reading would make
+	// the manifest record what survived the write instead of what
+	// codegraph wrote, which would make D-05's drift check permanently
+	// self-satisfying.
+	var (
+		skillMDContent     []byte
+		haveSkillMDContent bool
+		scriptContent      []byte
+		haveScriptContent  bool
+		sessionStartBlocks []any
+		haveSessionStart   bool
+	)
+
 	if skillFilePath, err := claudeSkillFilePath(loc); err != nil {
 		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill file path: %w", err))
 	} else {
@@ -412,6 +430,8 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if rerr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillFilePath, rerr))
 		} else {
+			skillMDContent = content
+			haveSkillMDContent = true
 			fr, werr := writeEmbeddedFile(skillFilePath, string(content), false)
 			recordFile(&result, skillFilePath, fr, werr)
 		}
@@ -424,6 +444,8 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if rerr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", scriptPath, rerr))
 		} else {
+			scriptContent = content
+			haveScriptContent = true
 			fr, werr := writeEmbeddedFile(scriptPath, string(content), true)
 			recordFile(&result, scriptPath, fr, werr)
 		}
@@ -436,8 +458,37 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 		} else {
+			sessionStartBlocks = blocks
+			haveSessionStart = true
 			fr, werr := writeHookEntry(settingsPath, "SessionStart", blocks, ownCommands)
 			recordFile(&result, settingsPath, fr, werr)
+		}
+	}
+
+	// Plan 03 (D-03/D-04): write the sidecar manifest describing exactly
+	// what the three steps above intended to write. Only proceeds if all
+	// three artifacts' content resolved — a manifest recording a hash for
+	// content that was never actually available would be worse than no
+	// manifest at all.
+	if manifestPath, err := claudeManifestPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude manifest path: %w", err))
+	} else if haveSkillMDContent && haveScriptContent && haveSessionStart {
+		hooksHash, herr := hashOwnedHookBlocks(sessionStartBlocks)
+		if herr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", manifestPath, herr))
+		} else {
+			m := skillManifest{
+				SchemaVersion:    manifestSchemaVersion,
+				CodegraphVersion: version.Info().Version,
+				Location:         string(loc),
+				Files: map[string]string{
+					manifestKeySkillMD:   hashContent(skillMDContent),
+					manifestKeyScript:    hashContent(scriptContent),
+					manifestKeyHooksFrag: hooksHash,
+				},
+			}
+			fr, werr := writeManifest(manifestPath, m)
+			recordFile(&result, manifestPath, fr, werr)
 		}
 	}
 
@@ -472,6 +523,17 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 	} else {
 		fr, err := removeClaudeAllowPermission(settingsPath)
 		recordFile(&result, settingsPath, fr, err)
+	}
+
+	// Plan 03: remove the sidecar manifest before the SKILL.md removal
+	// below, so the removeSkillDirIfEmpty sweep that follows SKILL.md's
+	// removal sees an already manifest-free directory. A manifest that
+	// does not exist reports ActionNotFound and is not an error (D-08).
+	if manifestPath, err := claudeManifestPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude manifest path: %w", err))
+	} else {
+		fr, rerr := removeEmbeddedFile(manifestPath)
+		recordFile(&result, manifestPath, fr, rerr)
 	}
 
 	// Plan 02: remove exactly the three artifacts Phase 7's Install wrote
@@ -531,6 +593,9 @@ func (claudeTarget) DescribePaths(loc Location) []string {
 		paths = append(paths, p)
 	}
 	if p, err := claudeHooksScriptPath(loc); err == nil {
+		paths = append(paths, p)
+	}
+	if p, err := claudeManifestPath(loc); err == nil {
 		paths = append(paths, p)
 	}
 	return paths

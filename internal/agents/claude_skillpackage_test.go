@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	claudeassets "github.com/seanb4t/codegraph-go"
+	"github.com/seanb4t/codegraph-go/internal/version"
 )
 
 // TestClaude_Install_WritesSkillPackage_EndToEnd is Task 1's tracer proof
@@ -775,23 +776,177 @@ func TestClaude_Uninstall_NeverInstalledIsNotFound(t *testing.T) {
 	}
 }
 
-// TestClaude_DescribePaths_FiveDistinctPathsNoDuplicates: after this
-// plan, DescribePaths(LocationGlobal) must list all five files codegraph
-// touches (MCP config, instructions, settings.json, SKILL.md, hooks
-// script) with no duplicate entries — settingsPath is already listed for
-// the AutoAllow permission step and must not be double-counted for the
-// new hooks step.
-func TestClaude_DescribePaths_FiveDistinctPathsNoDuplicates(t *testing.T) {
+// TestClaude_DescribePaths_NoDuplicates: DescribePaths(LocationGlobal)
+// lists every file codegraph touches (MCP config, instructions,
+// settings.json, SKILL.md, hooks script, manifest) with no duplicate
+// entries — settingsPath is already listed for the AutoAllow permission
+// step and must not be double-counted for the hooks step. The exact
+// six-path count is pinned by TestClaude_DescribePaths_IncludesManifest
+// (Plan 03), which supersedes this test's original five-path assertion
+// now that the manifest step (D-03) adds a sixth path.
+func TestClaude_DescribePaths_NoDuplicates(t *testing.T) {
 	c := claudeTarget{}
 	paths := c.DescribePaths(LocationGlobal)
-	if len(paths) != 5 {
-		t.Fatalf("expected exactly 5 paths, got %d: %v", len(paths), paths)
-	}
 	seen := map[string]bool{}
 	for _, p := range paths {
 		if seen[p] {
 			t.Fatalf("duplicate path in DescribePaths: %s (%v)", p, paths)
 		}
 		seen[p] = true
+	}
+}
+
+// TestClaude_Install_WritesManifest is Plan 03 Task 2's central proof:
+// after a global install, <home>/.claude/skills/codegraph/.codegraph-
+// manifest.json exists, records version.Info().Version, records location
+// as "global", and its three file hashes each equal the hash of the
+// corresponding artifact as actually written to disk.
+func TestClaude_Install_WritesManifest(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+
+	result := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	if len(result.Errors) != 0 {
+		t.Fatalf("Install returned errors: %v", result.Errors)
+	}
+
+	manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+	m, present, err := readManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("readManifest: %v", err)
+	}
+	if !present {
+		t.Fatalf("manifest not present after install")
+	}
+	if m.CodegraphVersion != version.Info().Version {
+		t.Fatalf("CodegraphVersion = %q, want %q", m.CodegraphVersion, version.Info().Version)
+	}
+	if m.Location != string(LocationGlobal) {
+		t.Fatalf("Location = %q, want %q", m.Location, LocationGlobal)
+	}
+
+	skillPath := filepath.Join(home, ".claude", "skills", "codegraph", "SKILL.md")
+	scriptPath := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+
+	wantSkillHash := hashContent([]byte(readFile(t, skillPath)))
+	wantScriptHash := hashContent([]byte(readFile(t, scriptPath)))
+	if m.Files[manifestKeySkillMD] != wantSkillHash {
+		t.Fatalf("SKILL.md hash = %q, want %q", m.Files[manifestKeySkillMD], wantSkillHash)
+	}
+	if m.Files[manifestKeyScript] != wantScriptHash {
+		t.Fatalf("script hash = %q, want %q", m.Files[manifestKeyScript], wantScriptHash)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, settingsPath)), &decoded); err != nil {
+		t.Fatalf("unmarshal settings.json: %v", err)
+	}
+	hooks, _ := decoded["hooks"].(map[string]any)
+	sessionStart, _ := hooks["SessionStart"].([]any)
+	wantHooksHash, err := hashOwnedHookBlocks(sessionStart)
+	if err != nil {
+		t.Fatalf("hashOwnedHookBlocks: %v", err)
+	}
+	if m.Files[manifestKeyHooksFrag] != wantHooksHash {
+		t.Fatalf("hooks fragment hash = %q, want %q", m.Files[manifestKeyHooksFrag], wantHooksHash)
+	}
+}
+
+// TestClaude_Install_ManifestIsIdempotent: a second install leaves the
+// manifest's raw bytes identical — including installed_at.
+func TestClaude_Install_ManifestIsIdempotent(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	first := c.Install(LocationGlobal, opts)
+	if len(first.Errors) != 0 {
+		t.Fatalf("first Install returned errors: %v", first.Errors)
+	}
+	manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+	before := readFile(t, manifestPath)
+
+	second := c.Install(LocationGlobal, opts)
+	if len(second.Errors) != 0 {
+		t.Fatalf("second Install returned errors: %v", second.Errors)
+	}
+	after := readFile(t, manifestPath)
+	if before != after {
+		t.Fatalf("manifest bytes changed on re-run:\nbefore=%q\nafter=%q", before, after)
+	}
+
+	var action FileAction
+	found := false
+	for _, fr := range second.Files {
+		if fr.Path == manifestPath {
+			action = fr.Action
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no FileResult for manifest path on second install")
+	}
+	if action != ActionUnchanged {
+		t.Fatalf("second install manifest action = %q, want %q", action, ActionUnchanged)
+	}
+}
+
+// TestClaude_Uninstall_RemovesManifest: the manifest is removed, and the
+// skill directory is then removed because removing SKILL.md and the
+// manifest leaves it empty.
+func TestClaude_Uninstall_RemovesManifest(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+	skillDir := filepath.Join(home, ".claude", "skills", "codegraph")
+	if !fileExists(manifestPath) {
+		t.Fatalf("manifest not written by install")
+	}
+
+	result := c.Uninstall(LocationGlobal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("Uninstall returned errors: %v", result.Errors)
+	}
+
+	if _, err := os.Stat(manifestPath); !os.IsNotExist(err) {
+		t.Fatalf("manifest still present after uninstall (err=%v)", err)
+	}
+	if _, err := os.Stat(skillDir); !os.IsNotExist(err) {
+		t.Fatalf("skill dir still present after uninstall (err=%v)", err)
+	}
+}
+
+// TestClaude_DescribePaths_IncludesManifest: the manifest path appears in
+// DescribePaths(loc) for both locations, with no duplicate entries.
+func TestClaude_DescribePaths_IncludesManifest(t *testing.T) {
+	c := claudeTarget{}
+	for _, loc := range []Location{LocationGlobal, LocationLocal} {
+		paths := c.DescribePaths(loc)
+		manifestPath, err := claudeManifestPath(loc)
+		if err != nil {
+			t.Fatalf("claudeManifestPath(%s): %v", loc, err)
+		}
+		found := 0
+		for _, p := range paths {
+			if p == manifestPath {
+				found++
+			}
+		}
+		if found != 1 {
+			t.Fatalf("DescribePaths(%s) contains manifest path %d times, want 1: %v", loc, found, paths)
+		}
+		seen := map[string]bool{}
+		for _, p := range paths {
+			if seen[p] {
+				t.Fatalf("DescribePaths(%s) has duplicate entry %s: %v", loc, p, paths)
+			}
+			seen[p] = true
+		}
+		if len(paths) != 6 {
+			t.Fatalf("DescribePaths(%s) expected 6 paths, got %d: %v", loc, len(paths), paths)
+		}
 	}
 }
