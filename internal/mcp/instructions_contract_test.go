@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
 // readmePath is the repository README, reached from internal/mcp. Mirrors
@@ -41,6 +43,15 @@ const instructionsMaxBytes = 600
 // no codegraph:// URI enumerated inside the wire-budget-constrained
 // const).
 const resourcesAnchor = "resources/list"
+
+// skillAnchor is WIRE-03's skill half — the literal substring the rewritten
+// instructions const must carry so a client is pointed at the Claude Code
+// codegraph skill. Scoped to Claude Code deliberately (08-RESEARCH.md
+// Pitfall 1, resolution 1): Phase 7 shipped the skill for Claude Code only,
+// so an unscoped claim reaching a Codex/opencode/Gemini/Cursor/Kiro/
+// Hermes/Antigravity client would be a new unbacked promise inside the
+// phase that exists to retire them.
+const skillAnchor = "codegraph skill"
 
 // TestInstructionsNamesTheNarrowingFilter pins the wire contract against
 // the behavior it describes. The instructions constant ships to every MCP
@@ -104,6 +115,7 @@ func TestInstructionsDescribesEveryVisibilityMechanism(t *testing.T) {
 		{"the CODEGRAPH_MCP_TOOLS narrowing filter", allowlistEnvName},
 		{"the missing-index remedy (MCP-03)", "codegraph init"},
 		{"the resources reference surface", resourcesAnchor},
+		{"the Claude Code skill pointer", skillAnchor},
 	}
 
 	for _, m := range mechanisms {
@@ -196,6 +208,40 @@ func TestInstructionsResourcesClaimIsResolvable(t *testing.T) {
 
 	if err := resourcesClaimResolves(instructions, uris, read); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// skillClaimResolves is WIRE-03's skill-half checker: it proves the claim
+// carried by skillAnchor is not merely present in claim, but actually
+// resolves against real content — read() (in production,
+// claudeassets.SkillMarkdown, the exact bytes internal/agents/claude.go's
+// Install writes) must succeed and return non-empty content after
+// TrimSpace. read is a parameter (never claudeassets called directly here)
+// so Task 3's non-vacuity table test can drive it with synthetic closures.
+// No t.Skip branch — absence of the claim is a failure, not a skip.
+func skillClaimResolves(claim string, read func() ([]byte, error)) error {
+	if !strings.Contains(claim, skillAnchor) {
+		return fmt.Errorf("claim %q never mentions %q, so a client reading it has no way to learn the codegraph skill exists", claim, skillAnchor)
+	}
+	content, err := read()
+	if err != nil {
+		return fmt.Errorf("claim %q names %q, but reading its content failed: %w", claim, skillAnchor, err)
+	}
+	if len(strings.TrimSpace(string(content))) == 0 {
+		return fmt.Errorf("claim %q names %q, but its content is empty (or whitespace-only) after TrimSpace", claim, skillAnchor)
+	}
+	return nil
+}
+
+// TestInstructionsSkillClaimIsResolvable is WIRE-03's skill-half live
+// proof: it wires skillClaimResolves to claudeassets.SkillMarkdown, the
+// exact same source internal/agents/claude.go's Install already reads and
+// writes — never a second hand-typed path (SURF-01 drift vector). On
+// failure the message names claudeassets.SkillMarkdownPath so a CI failure
+// says which artifact went missing.
+func TestInstructionsSkillClaimIsResolvable(t *testing.T) {
+	if err := skillClaimResolves(instructions, claudeassets.SkillMarkdown); err != nil {
+		t.Fatalf("%v (source: %s)", err, claudeassets.SkillMarkdownPath)
 	}
 }
 

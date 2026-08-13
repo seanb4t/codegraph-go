@@ -53,7 +53,7 @@ const version = "0.1.0"
 // since the value is JSON-encoded into every one of those transcripts and
 // an embedded newline would become an escape sequence that makes each such
 // diff harder to read.
-const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs."
+const instructions = "codegraph indexes this repository's code into a call and symbol graph; try codegraph_explore first for a where-is-X or how-does-Y-work question, since it returns verbatim source plus call paths in one call. All eight tools register by default once an index exists, with no client restart required; an empty tool list means no index yet, so run codegraph init. CODEGRAPH_MCP_TOOLS narrows that default surface to the companions it names. Call resources/list for tool-by-tool reference docs; in Claude Code, codegraph install also adds the codegraph skill."
 
 // companionNames is the fixed vocabulary of the 7 tools CODEGRAPH_MCP_TOOLS
 // may narrow the surface to — codegraph_explore is not in this list because
