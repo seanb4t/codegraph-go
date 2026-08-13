@@ -246,13 +246,19 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 }
 
 // addClaudeAllowPermission appends claudeAllowToken to permissions.allow in
-// path's JSON if absent, idempotently (D-05).
+// path's JSON if absent, idempotently (D-05). Reads through
+// readJSONFileStrict, not readJSONFile: this function writes back to
+// claudeSettingsPath(loc), the same file Plan 01's hooks step
+// (writeHookEntry) merges into, so it must share that step's fail-loud
+// read posture (Plan 02 Task 3). Leaving this on the permissive fallback
+// would mean one Install call has two contradictory postures toward one
+// file — the hooks step refusing to touch an unparseable settings.json
+// while this step overwrites it with only codegraph's own content.
 func addClaudeAllowPermission(path string) (FileResult, error) {
-	existing, err := readJSONFile(path)
+	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
 	}
-	existedBefore := fileExists(path)
 	permissions, _ := existing["permissions"].(map[string]any)
 	if permissions == nil {
 		permissions = map[string]any{}
@@ -278,9 +284,14 @@ func addClaudeAllowPermission(path string) (FileResult, error) {
 
 // removeClaudeAllowPermission removes claudeAllowToken from
 // permissions.allow in path's JSON if present, leaving every other allow
-// entry and unrelated key untouched (D-05, T-06-02-01).
+// entry and unrelated key untouched (D-05, T-06-02-01). Reads through
+// readJSONFileStrict for the same reason addClaudeAllowPermission does
+// (Plan 02 Task 3) — the hooks removal step on this same file
+// (removeHookEntry) already uses the strict reader, and a malformed or
+// unreadable settings.json must make every step touching it refuse to
+// write, not just some of them.
 func removeClaudeAllowPermission(path string) (FileResult, error) {
-	existing, err := readJSONFile(path)
+	existing, _, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
 	}
@@ -450,6 +461,45 @@ func (claudeTarget) Uninstall(loc Location) WriteResult {
 		recordFile(&result, settingsPath, fr, err)
 	}
 
+	// Plan 02: remove exactly the three artifacts Phase 7's Install wrote
+	// — the skill file, the executable script, and codegraph's own
+	// SessionStart blocks — each funnelled through recordFile like every
+	// step above (CR-01). Never a recursive directory delete: the skill
+	// directory is only removed once emptying codegraph's own file
+	// leaves nothing else behind (this plan's must_haves.prohibitions).
+	if skillFilePath, err := claudeSkillFilePath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude skill file path: %w", err))
+	} else {
+		fr, rerr := removeEmbeddedFile(skillFilePath)
+		recordFile(&result, skillFilePath, fr, rerr)
+		if rerr == nil {
+			if skillDir, derr := claudeSkillDirPath(loc); derr == nil {
+				if cerr := removeSkillDirIfEmpty(skillDir); cerr != nil {
+					result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillDir, cerr))
+				}
+			}
+		}
+	}
+
+	if scriptPath, err := claudeHooksScriptPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude hooks script path: %w", err))
+	} else {
+		fr, rerr := removeEmbeddedFile(scriptPath)
+		recordFile(&result, scriptPath, fr, rerr)
+	}
+
+	if settingsPath, err := claudeSettingsPath(loc); err != nil {
+		result.Errors = append(result.Errors, fmt.Errorf("resolve claude settings path: %w", err))
+	} else {
+		_, ownCommands, berr := claudeSessionStartBlocks(loc)
+		if berr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
+		} else {
+			fr, werr := removeHookEntry(settingsPath, "SessionStart", ownCommands)
+			recordFile(&result, settingsPath, fr, werr)
+		}
+	}
+
 	return result
 }
 
@@ -462,6 +512,12 @@ func (claudeTarget) DescribePaths(loc Location) []string {
 		paths = append(paths, p)
 	}
 	if p, err := claudeSettingsPath(loc); err == nil {
+		paths = append(paths, p)
+	}
+	if p, err := claudeSkillFilePath(loc); err == nil {
+		paths = append(paths, p)
+	}
+	if p, err := claudeHooksScriptPath(loc); err == nil {
 		paths = append(paths, p)
 	}
 	return paths

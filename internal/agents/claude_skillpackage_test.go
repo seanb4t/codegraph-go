@@ -495,3 +495,303 @@ func TestClaudeAssets_EmbedsNoVerificationTranscripts(t *testing.T) {
 		t.Fatalf("real verification dir %s is empty — this test would pass vacuously even if a directory pattern were substituted for explicit file patterns", verificationDir)
 	}
 }
+
+// TestClaude_SkillPackageRoundTripIsByteInvariant is Plan 02 Task 1's
+// central proof: an install→uninstall round trip against a settings.json
+// that already carries an unrelated SessionStart block sharing
+// codegraph's own "startup" matcher, an unrelated PreToolUse event, and
+// an unrelated top-level key restores the file to exactly its pre-install
+// bytes (jsonDeepEqual), and both the SKILL.md and the session-nudge.sh
+// codegraph wrote are gone.
+func TestClaude_SkillPackageRoundTripIsByteInvariant(t *testing.T) {
+	home := fakeHome(t)
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	pre := `{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {"type": "command", "command": "/some/other/unrelated-script.sh"}
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "/some/pretooluse-guard.sh"}
+        ]
+      }
+    ]
+  },
+  "someUnrelatedTopLevelKey": true
+}
+`
+	writeFile(t, settingsPath, pre)
+
+	c := claudeTarget{}
+	installResult := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	if len(installResult.Errors) != 0 {
+		t.Fatalf("Install returned errors: %v", installResult.Errors)
+	}
+	uninstallResult := c.Uninstall(LocationGlobal)
+	if len(uninstallResult.Errors) != 0 {
+		t.Fatalf("Uninstall returned errors: %v", uninstallResult.Errors)
+	}
+
+	var gotObj, wantObj map[string]any
+	got := readFile(t, settingsPath)
+	if err := json.Unmarshal([]byte(got), &gotObj); err != nil {
+		t.Fatalf("post-round-trip settings.json not valid JSON: %v", err)
+	}
+	if err := json.Unmarshal([]byte(pre), &wantObj); err != nil {
+		t.Fatalf("bad fixture: %v", err)
+	}
+	if !jsonDeepEqual(gotObj, wantObj) {
+		t.Fatalf("round trip not byte-invariant:\ngot=%s\nwant=%s", got, pre)
+	}
+
+	skillPath := filepath.Join(home, ".claude", "skills", "codegraph", "SKILL.md")
+	if fileExists(skillPath) {
+		t.Fatalf("SKILL.md still present after uninstall")
+	}
+	scriptPath := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
+	if fileExists(scriptPath) {
+		t.Fatalf("session-nudge.sh still present after uninstall")
+	}
+}
+
+// TestClaude_Uninstall_RemovesOnlyOwnBlockUnderSharedMatcher: with
+// codegraph's own block and an unrelated block both registered under
+// matcher "startup", uninstall removes exactly codegraph's block and
+// leaves the unrelated one — ownership is identified by command string,
+// never by matcher value (T-07-04).
+func TestClaude_Uninstall_RemovesOnlyOwnBlockUnderSharedMatcher(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, settingsPath)), &decoded); err != nil {
+		t.Fatalf("unmarshal settings.json: %v", err)
+	}
+	hooks := decoded["hooks"].(map[string]any)
+	sessionStart := hooks["SessionStart"].([]any)
+	sessionStart = append(sessionStart, map[string]any{
+		"matcher": "startup",
+		"hooks": []any{
+			map[string]any{"type": "command", "command": "/some/other/unrelated-script.sh"},
+		},
+	})
+	hooks["SessionStart"] = sessionStart
+	decoded["hooks"] = hooks
+	out, err := json.MarshalIndent(decoded, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	writeFile(t, settingsPath, string(out)+"\n")
+
+	result := c.Uninstall(LocationGlobal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("Uninstall returned errors: %v", result.Errors)
+	}
+
+	var after map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, settingsPath)), &after); err != nil {
+		t.Fatalf("unmarshal post-uninstall settings.json: %v", err)
+	}
+	hooksAfter, ok := after["hooks"].(map[string]any)
+	if !ok {
+		t.Fatalf("hooks missing entirely after uninstall: %#v", after)
+	}
+	sessionStartAfter, ok := hooksAfter["SessionStart"].([]any)
+	if !ok || len(sessionStartAfter) != 1 {
+		t.Fatalf("expected exactly 1 surviving SessionStart entry, got %#v", hooksAfter["SessionStart"])
+	}
+	entry, ok := sessionStartAfter[0].(map[string]any)
+	if !ok || entry["matcher"] != "startup" {
+		t.Fatalf("surviving entry has wrong matcher: %#v", sessionStartAfter[0])
+	}
+	entries, ok := entry["hooks"].([]any)
+	if !ok || len(entries) != 1 {
+		t.Fatalf("surviving entry has unexpected hooks count: %#v", entry)
+	}
+	hookObj, ok := entries[0].(map[string]any)
+	if !ok || hookObj["command"] != "/some/other/unrelated-script.sh" {
+		t.Fatalf("wrong surviving command: %#v", entries[0])
+	}
+}
+
+// TestClaude_Uninstall_KeepsEmptyParentsClean proves the keep-clean
+// cascade: removing codegraph's own SessionStart blocks deletes the
+// SessionStart key when it empties, then deletes the hooks key when
+// that empties too, and deletes settings.json entirely when that leaves
+// the whole object empty — but an unrelated event under hooks keeps the
+// hooks key (and the file) alive.
+func TestClaude_Uninstall_KeepsEmptyParentsClean(t *testing.T) {
+	t.Run("SessionStart, hooks, and the file itself are all removed when codegraph's blocks are the only content", func(t *testing.T) {
+		home := fakeHome(t)
+		c := claudeTarget{}
+		c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+		settingsPath := filepath.Join(home, ".claude", "settings.json")
+		result := c.Uninstall(LocationGlobal)
+		if len(result.Errors) != 0 {
+			t.Fatalf("Uninstall returned errors: %v", result.Errors)
+		}
+
+		if fileExists(settingsPath) {
+			t.Fatalf("settings.json should have been removed entirely: %s", readFile(t, settingsPath))
+		}
+	})
+
+	t.Run("hooks key survives when an unrelated event remains, SessionStart key is removed", func(t *testing.T) {
+		home := fakeHome(t)
+		c := claudeTarget{}
+		c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+		settingsPath := filepath.Join(home, ".claude", "settings.json")
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(readFile(t, settingsPath)), &decoded); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		hooks := decoded["hooks"].(map[string]any)
+		hooks["PreToolUse"] = []any{
+			map[string]any{
+				"matcher": "Bash",
+				"hooks":   []any{map[string]any{"type": "command", "command": "/unrelated-guard.sh"}},
+			},
+		}
+		decoded["hooks"] = hooks
+		out, err := json.MarshalIndent(decoded, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		writeFile(t, settingsPath, string(out)+"\n")
+
+		result := c.Uninstall(LocationGlobal)
+		if len(result.Errors) != 0 {
+			t.Fatalf("Uninstall returned errors: %v", result.Errors)
+		}
+
+		var after map[string]any
+		if err := json.Unmarshal([]byte(readFile(t, settingsPath)), &after); err != nil {
+			t.Fatalf("unmarshal post-uninstall: %v", err)
+		}
+		hooksAfter, ok := after["hooks"].(map[string]any)
+		if !ok {
+			t.Fatalf("hooks key removed even though PreToolUse should have kept it alive: %#v", after)
+		}
+		if _, ok := hooksAfter["SessionStart"]; ok {
+			t.Fatalf("SessionStart key should have been removed: %#v", hooksAfter)
+		}
+		preToolUse, ok := hooksAfter["PreToolUse"].([]any)
+		if !ok || len(preToolUse) != 1 {
+			t.Fatalf("unrelated PreToolUse event lost: %#v", hooksAfter["PreToolUse"])
+		}
+	})
+}
+
+// TestClaude_Uninstall_PreservesUserFileInSkillDir proves uninstall never
+// recursively deletes the skill directory: a user-authored file placed
+// next to the installed SKILL.md survives uninstall and keeps the
+// directory alive; once that user file is gone, a fresh install+uninstall
+// removes the now-empty directory (must_haves.prohibitions — no recursive
+// delete anywhere in this phase).
+func TestClaude_Uninstall_PreservesUserFileInSkillDir(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	skillDir := filepath.Join(home, ".claude", "skills", "codegraph")
+	userFile := filepath.Join(skillDir, "user-notes.md")
+	writeFile(t, userFile, "these are my own notes\n")
+
+	result := c.Uninstall(LocationGlobal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("Uninstall returned errors: %v", result.Errors)
+	}
+
+	if !fileExists(userFile) {
+		t.Fatalf("user-authored file was removed by uninstall")
+	}
+	if !fileExists(skillDir) {
+		t.Fatalf("skill directory was removed while a user file still lives in it")
+	}
+
+	if err := os.Remove(userFile); err != nil {
+		t.Fatalf("remove user file: %v", err)
+	}
+	c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+	result2 := c.Uninstall(LocationGlobal)
+	if len(result2.Errors) != 0 {
+		t.Fatalf("second Uninstall returned errors: %v", result2.Errors)
+	}
+	if fileExists(skillDir) {
+		t.Fatalf("skill directory should have been removed once empty")
+	}
+}
+
+// TestClaude_Uninstall_NeverInstalledIsNotFound: uninstall against a
+// clean fake home reports ActionNotFound for every new artifact, no
+// Errors, and creates no files — matching the pre-existing D-08
+// invariant (types.go) for the three artifacts this phase adds.
+func TestClaude_Uninstall_NeverInstalledIsNotFound(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+
+	result := c.Uninstall(LocationGlobal)
+	if len(result.Errors) != 0 {
+		t.Fatalf("Uninstall on a never-installed target returned errors: %v", result.Errors)
+	}
+
+	skillPath := filepath.Join(home, ".claude", "skills", "codegraph", "SKILL.md")
+	scriptPath := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+
+	wantNotFound := map[string]bool{
+		skillPath:    false,
+		scriptPath:   false,
+		settingsPath: false,
+	}
+	for _, fr := range result.Files {
+		if _, ok := wantNotFound[fr.Path]; ok {
+			if fr.Action != ActionNotFound {
+				t.Fatalf("%s: action = %q, want %q", fr.Path, fr.Action, ActionNotFound)
+			}
+			wantNotFound[fr.Path] = true
+		}
+	}
+	for path, found := range wantNotFound {
+		if !found {
+			t.Fatalf("no FileResult reported for %s", path)
+		}
+	}
+
+	if fileExists(skillPath) || fileExists(scriptPath) || fileExists(settingsPath) {
+		t.Fatalf("uninstall against never-installed target created files")
+	}
+}
+
+// TestClaude_DescribePaths_FiveDistinctPathsNoDuplicates: after this
+// plan, DescribePaths(LocationGlobal) must list all five files codegraph
+// touches (MCP config, instructions, settings.json, SKILL.md, hooks
+// script) with no duplicate entries — settingsPath is already listed for
+// the AutoAllow permission step and must not be double-counted for the
+// new hooks step.
+func TestClaude_DescribePaths_FiveDistinctPathsNoDuplicates(t *testing.T) {
+	c := claudeTarget{}
+	paths := c.DescribePaths(LocationGlobal)
+	if len(paths) != 5 {
+		t.Fatalf("expected exactly 5 paths, got %d: %v", len(paths), paths)
+	}
+	seen := map[string]bool{}
+	for _, p := range paths {
+		if seen[p] {
+			t.Fatalf("duplicate path in DescribePaths: %s (%v)", p, paths)
+		}
+		seen[p] = true
+	}
+}
