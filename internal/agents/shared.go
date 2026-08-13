@@ -42,6 +42,18 @@ func recordAction(result *WriteResult, path string, action FileAction, err error
 // or block install/uninstall (V5, T-06-01). A genuine I/O error other
 // than "file does not exist" (e.g. a permission failure) is surfaced to
 // the caller alongside the empty-map fallback.
+//
+// This permissive fallback remains the deliberate posture for every
+// caller except claudeSettingsPath's two AutoAllow steps: writeMcpEntry/
+// removeMcpEntry (operating on .mcp.json and ~/.claude.json), plus every
+// other agent target's config path across the other seven agents. Only
+// addClaudeAllowPermission and removeClaudeAllowPermission moved to
+// readJSONFileStrict (Plan 02 Task 3), because — and only because —
+// claudeSettingsPath(loc) is also where Plan 01's writeHookEntry/
+// removeHookEntry now merge, and those two already read it strictly. A
+// single file must not have two contradictory read postures depending on
+// which step reaches it first; every other file this package edits has
+// exactly one writer-side step, so this divergence does not apply there.
 func readJSONFile(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

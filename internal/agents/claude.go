@@ -246,13 +246,19 @@ func claudeSessionStartBlocks(loc Location) ([]any, []string, error) {
 }
 
 // addClaudeAllowPermission appends claudeAllowToken to permissions.allow in
-// path's JSON if absent, idempotently (D-05).
+// path's JSON if absent, idempotently (D-05). Reads through
+// readJSONFileStrict, not readJSONFile: this function writes back to
+// claudeSettingsPath(loc), the same file Plan 01's hooks step
+// (writeHookEntry) merges into, so it must share that step's fail-loud
+// read posture (Plan 02 Task 3). Leaving this on the permissive fallback
+// would mean one Install call has two contradictory postures toward one
+// file — the hooks step refusing to touch an unparseable settings.json
+// while this step overwrites it with only codegraph's own content.
 func addClaudeAllowPermission(path string) (FileResult, error) {
-	existing, err := readJSONFile(path)
+	existing, existedBefore, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
 	}
-	existedBefore := fileExists(path)
 	permissions, _ := existing["permissions"].(map[string]any)
 	if permissions == nil {
 		permissions = map[string]any{}
@@ -278,9 +284,14 @@ func addClaudeAllowPermission(path string) (FileResult, error) {
 
 // removeClaudeAllowPermission removes claudeAllowToken from
 // permissions.allow in path's JSON if present, leaving every other allow
-// entry and unrelated key untouched (D-05, T-06-02-01).
+// entry and unrelated key untouched (D-05, T-06-02-01). Reads through
+// readJSONFileStrict for the same reason addClaudeAllowPermission does
+// (Plan 02 Task 3) — the hooks removal step on this same file
+// (removeHookEntry) already uses the strict reader, and a malformed or
+// unreadable settings.json must make every step touching it refuse to
+// write, not just some of them.
 func removeClaudeAllowPermission(path string) (FileResult, error) {
-	existing, err := readJSONFile(path)
+	existing, _, err := readJSONFileStrict(path)
 	if err != nil {
 		return FileResult{}, err
 	}
