@@ -289,6 +289,15 @@ func atomicWriteExecutableFile(path, content string) error {
 // artifacts (SKILL.md, session-nudge.sh) raw-byte idempotent (D-07):
 // re-running install against unchanged embedded content is a true no-op,
 // never a rewrite with identical bytes.
+//
+// For an executable artifact, byte-identity alone is not enough to
+// short-circuit: the content comparison says nothing about the file's
+// mode, so a lost executable bit (chmod -x, a backup/restore cycle, an AV
+// quarantine round-trip) would otherwise never self-heal once content
+// pinned to the embedded version — the SessionStart hook would then
+// silently stop running with no error anywhere (code review CR-02). When
+// content matches but the executable bit is missing, chmod in place
+// without a full rewrite and report ActionUpdated.
 func writeEmbeddedFile(path, content string, executable bool) (FileResult, error) {
 	existed := fileExists(path)
 	if existed {
@@ -297,7 +306,20 @@ func writeEmbeddedFile(path, content string, executable bool) (FileResult, error
 			return FileResult{}, err
 		}
 		if string(current) == content {
-			return FileResult{Path: path, Action: ActionUnchanged}, nil
+			if !executable {
+				return FileResult{Path: path, Action: ActionUnchanged}, nil
+			}
+			info, statErr := os.Stat(path)
+			if statErr != nil {
+				return FileResult{}, statErr
+			}
+			if info.Mode()&0o111 != 0 {
+				return FileResult{Path: path, Action: ActionUnchanged}, nil
+			}
+			if err := os.Chmod(path, 0o755); err != nil {
+				return FileResult{}, err
+			}
+			return FileResult{Path: path, Action: ActionUpdated}, nil
 		}
 	}
 

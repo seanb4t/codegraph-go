@@ -413,7 +413,11 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 	// than re-reading the files back from disk — re-reading would make
 	// the manifest record what survived the write instead of what
 	// codegraph wrote, which would make D-05's drift check permanently
-	// self-satisfying.
+	// self-satisfying. Each have* flag is set only after ITS OWN write
+	// succeeds (werr == nil), never merely on content resolution — a
+	// manifest recording a hash for an artifact whose disk write just
+	// failed would assert success that never happened (code review CR-01).
+	// Errors still surface via recordFile/result.Errors either way.
 	var (
 		skillMDContent     []byte
 		haveSkillMDContent bool
@@ -430,10 +434,12 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if rerr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", skillFilePath, rerr))
 		} else {
-			skillMDContent = content
-			haveSkillMDContent = true
 			fr, werr := writeEmbeddedFile(skillFilePath, string(content), false)
 			recordFile(&result, skillFilePath, fr, werr)
+			if werr == nil {
+				skillMDContent = content
+				haveSkillMDContent = true
+			}
 		}
 	}
 
@@ -444,10 +450,12 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if rerr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", scriptPath, rerr))
 		} else {
-			scriptContent = content
-			haveScriptContent = true
 			fr, werr := writeEmbeddedFile(scriptPath, string(content), true)
 			recordFile(&result, scriptPath, fr, werr)
+			if werr == nil {
+				scriptContent = content
+				haveScriptContent = true
+			}
 		}
 	}
 
@@ -458,10 +466,12 @@ func (claudeTarget) Install(loc Location, opts InstallOptions) WriteResult {
 		if berr != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", settingsPath, berr))
 		} else {
-			sessionStartBlocks = blocks
-			haveSessionStart = true
 			fr, werr := writeHookEntry(settingsPath, "SessionStart", blocks, ownCommands)
 			recordFile(&result, settingsPath, fr, werr)
+			if werr == nil {
+				sessionStartBlocks = blocks
+				haveSessionStart = true
+			}
 		}
 	}
 

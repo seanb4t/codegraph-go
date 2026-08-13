@@ -320,3 +320,90 @@ func TestManifest_WriteIsIdempotentAndPreservesTimestamp(t *testing.T) {
 		t.Fatalf("manifest mtime changed on unchanged re-write: before=%v after=%v", infoBefore.ModTime(), infoAfter.ModTime())
 	}
 }
+
+// TestWriteManifest_SelfHealsCorruptedExistingManifest is the regression
+// test for code review WR-01: a corrupted/undecodable manifest on disk
+// must not permanently block writeManifest. Unlike settings.json (shared,
+// partially user-owned — refusing to touch malformed content is correct
+// there), the manifest is wholly codegraph-owned with no third-party
+// content to protect, so it self-heals the same way SKILL.md does on
+// content drift (D-05).
+func TestWriteManifest_SelfHealsCorruptedExistingManifest(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".codegraph-manifest.json")
+	if err := os.WriteFile(path, []byte("{not valid json"), 0o644); err != nil {
+		t.Fatalf("seed corrupted manifest: %v", err)
+	}
+
+	m := skillManifest{
+		SchemaVersion:    manifestSchemaVersion,
+		CodegraphVersion: "v0.10.0",
+		Location:         string(LocationGlobal),
+		Files: map[string]string{
+			manifestKeySkillMD:   "sha256:aaaa",
+			manifestKeyScript:    "sha256:bbbb",
+			manifestKeyHooksFrag: "sha256:cccc",
+		},
+	}
+	fr, err := writeManifest(path, m)
+	if err != nil {
+		t.Fatalf("writeManifest over corrupted manifest returned an error instead of self-healing: %v", err)
+	}
+	if fr.Action != ActionCreated {
+		t.Fatalf("writeManifest action = %q, want %q (self-heal treats a corrupted manifest as absent)", fr.Action, ActionCreated)
+	}
+
+	got, present, err := readManifest(path)
+	if err != nil {
+		t.Fatalf("readManifest after self-heal: %v", err)
+	}
+	if !present {
+		t.Fatalf("manifest not present after self-heal write")
+	}
+	if got.CodegraphVersion != m.CodegraphVersion {
+		t.Fatalf("healed manifest CodegraphVersion = %q, want %q", got.CodegraphVersion, m.CodegraphVersion)
+	}
+}
+
+// TestConfiguredSkillLocations_IncludesLocationWithCorruptedManifest is
+// the regression test for code review WR-04: a location whose manifest
+// exists but fails to parse is proof codegraph configured it before —
+// exactly as much proof as a readable manifest — and must not be silently
+// dropped from the list codegraph upgrade's refresh step consumes. A
+// prior version treated "corrupted" identically to "never configured,"
+// so a corrupted manifest would silently stop that location from ever
+// being refreshed again, with no warning anywhere.
+func TestConfiguredSkillLocations_IncludesLocationWithCorruptedManifest(t *testing.T) {
+	home := fakeHome(t)
+	manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("mkdir skill dir: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte("{not valid json"), 0o644); err != nil {
+		t.Fatalf("seed corrupted manifest: %v", err)
+	}
+
+	locs := ConfiguredSkillLocations(Claude)
+	found := false
+	for _, loc := range locs {
+		if loc == LocationGlobal {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("ConfiguredSkillLocations dropped a location with a corrupted-but-present manifest: got %v", locs)
+	}
+}
+
+// TestConfiguredSkillLocations_ExcludesGenuinelyAbsentLocation is the
+// guard-the-guard companion to the corrupted-manifest case above: a
+// location with no manifest file at all (never configured) must still be
+// excluded — the WR-04 fix must not degrade into including every
+// location unconditionally.
+func TestConfiguredSkillLocations_ExcludesGenuinelyAbsentLocation(t *testing.T) {
+	fakeHome(t)
+	locs := ConfiguredSkillLocations(Claude)
+	if len(locs) != 0 {
+		t.Fatalf("ConfiguredSkillLocations with no manifest anywhere = %v, want empty", locs)
+	}
+}

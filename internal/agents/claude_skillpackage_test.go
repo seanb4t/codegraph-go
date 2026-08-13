@@ -1299,3 +1299,73 @@ func TestClaude_Install_DriftIsDetectableFromTheManifest(t *testing.T) {
 		t.Fatalf("manifest's stored hash matched the drifted content's hash — drift signal is not usable")
 	}
 }
+
+// TestClaude_Install_ManifestNotWrittenOnPartialWriteFailure is the
+// regression test for code review CR-01: SKILL.md and session-nudge.sh
+// write successfully, but the SessionStart hooks step fails because
+// settings.json is pre-seeded with malformed JSON (readJSONFileStrict
+// refuses to touch it). The manifest must NOT be written — recording a
+// hash for the hooks fragment that was never actually written to disk
+// would assert success that never happened. A prior version of this code
+// gated the manifest write on content *resolution* rather than write
+// *success*, so it wrote a manifest anyway; this proves that regression
+// cannot recur.
+func TestClaude_Install_ManifestNotWrittenOnPartialWriteFailure(t *testing.T) {
+	home := fakeHome(t)
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, settingsPath, malformedSettingsJSON)
+
+	c := claudeTarget{}
+	result := c.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})
+
+	if len(result.Errors) == 0 {
+		t.Fatalf("expected result.Errors to be non-empty (malformed settings.json), got none")
+	}
+
+	skillPath := filepath.Join(home, ".claude", "skills", "codegraph", "SKILL.md")
+	if !fileExists(skillPath) {
+		t.Fatalf("SKILL.md should have been written despite the hooks-step failure — precondition for this test not met")
+	}
+
+	manifestPath := filepath.Join(home, ".claude", "skills", "codegraph", ".codegraph-manifest.json")
+	if fileExists(manifestPath) {
+		t.Fatalf("manifest was written despite a partial write failure — it now falsely asserts the hooks fragment was written when it was not")
+	}
+}
+
+// TestClaude_Install_RestoresLostExecutableBitWithoutContentChange is the
+// regression test for code review CR-02: session-nudge.sh's content
+// already matches the embedded version, but its executable bit has been
+// stripped (simulating a chmod, backup/restore, or AV quarantine round-
+// trip). A prior version of writeEmbeddedFile's idempotency short-circuit
+// compared only file bytes, so it returned ActionUnchanged and never
+// called chmod — the SessionStart hook would then silently fail to run,
+// forever, since content never differs from the embedded version again.
+func TestClaude_Install_RestoresLostExecutableBitWithoutContentChange(t *testing.T) {
+	home := fakeHome(t)
+	c := claudeTarget{}
+	opts := InstallOptions{ExecPath: "/usr/local/bin/codegraph"}
+
+	first := c.Install(LocationGlobal, opts)
+	if len(first.Errors) != 0 {
+		t.Fatalf("first Install returned errors: %v", first.Errors)
+	}
+
+	scriptPath := filepath.Join(home, ".claude", "hooks", "session-nudge.sh")
+	if err := os.Chmod(scriptPath, 0o644); err != nil {
+		t.Fatalf("chmod scriptPath to 0o644: %v", err)
+	}
+
+	second := c.Install(LocationGlobal, opts)
+	if len(second.Errors) != 0 {
+		t.Fatalf("second Install returned errors: %v", second.Errors)
+	}
+
+	info, err := os.Stat(scriptPath)
+	if err != nil {
+		t.Fatalf("stat scriptPath: %v", err)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Fatalf("session-nudge.sh executable bit was not restored: mode = %v", info.Mode())
+	}
+}

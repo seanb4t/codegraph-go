@@ -124,10 +124,21 @@ func stringMapEqual(a, b map[string]string) bool {
 // would make a second `install` produce a different file and break
 // AGENT-01's idempotency. installed_at's honest meaning is "when this
 // content was installed," not "when install last ran."
+//
+// A corrupted or unreadable existing manifest is self-healed by
+// overwriting, not treated as a blocking error: unlike settings.json
+// (which this package only partially owns, so refusing to touch malformed
+// content protects a third party's data), the manifest is a wholly
+// codegraph-owned dot-prefixed sidecar with nothing to protect — the same
+// category as SKILL.md/session-nudge.sh, both of which silently restore
+// on drift per D-05 (code review WR-01). Leaving it permanently blocked
+// would make every future install/upgrade report a spurious failure until
+// a human manually deletes the file.
 func writeManifest(path string, m skillManifest) (FileResult, error) {
 	existing, existedBefore, err := readManifest(path)
 	if err != nil {
-		return FileResult{}, err
+		existing = skillManifest{}
+		existedBefore = false
 	}
 	if existedBefore &&
 		existing.SchemaVersion == m.SchemaVersion &&
@@ -152,13 +163,21 @@ func writeManifest(path string, m skillManifest) (FileResult, error) {
 	return FileResult{Path: path, Action: action}, nil
 }
 
-// ConfiguredSkillLocations reports exactly the locations that currently
-// carry a readable codegraph manifest for id, by probing the two fixed
-// candidate manifest paths — never by walking the filesystem. Exported
-// because Plan 04's CLI-layer upgrade refresh needs it. Returns nil for
-// any target id other than Claude, since this phase is Claude-only by
-// scope: discovery is two stat calls for a phase deliberately narrowed to
-// one agent, and anything more general is unneeded generality here.
+// ConfiguredSkillLocations reports every location that carries evidence of
+// a prior codegraph install for id — a readable manifest, OR one that
+// exists but failed to parse — by probing the two fixed candidate
+// manifest paths, never by walking the filesystem. A present-but-corrupted
+// manifest is proof the location was configured before, exactly as much
+// proof as a readable one; excluding it would let a corrupted manifest
+// silently drop that location from every future `codegraph upgrade`
+// refresh with no warning anywhere (code review WR-04), even though
+// writeManifest self-heals a corrupted manifest the moment Install() next
+// runs there. Only a genuinely absent manifest (no error, not present)
+// means "never configured" and is excluded. Exported because Plan 04's
+// CLI-layer upgrade refresh needs it. Returns nil for any target id other
+// than Claude, since this phase is Claude-only by scope: discovery is two
+// stat calls for a phase deliberately narrowed to one agent, and anything
+// more general is unneeded generality here.
 func ConfiguredSkillLocations(id TargetID) []Location {
 	if id != Claude {
 		return nil
@@ -169,8 +188,8 @@ func ConfiguredSkillLocations(id TargetID) []Location {
 		if err != nil {
 			continue
 		}
-		_, present, err := readManifest(path)
-		if err != nil || !present {
+		_, present, rerr := readManifest(path)
+		if rerr == nil && !present {
 			continue
 		}
 		locs = append(locs, loc)
