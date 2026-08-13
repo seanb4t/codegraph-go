@@ -149,6 +149,19 @@ func claudeSkillFilePath(loc Location) (string, error) {
 	return filepath.Join(dir, "SKILL.md"), nil
 }
 
+// claudeManifestPath is claudeSkillDirPath(loc) joined with the sidecar
+// manifest filename (D-03). The dot prefix keeps the file out of any
+// future recursive skill-content scan and signals "codegraph-internal, not
+// skill content" the same way .codegraph/ itself is dot-prefixed at the
+// project root.
+func claudeManifestPath(loc Location) (string, error) {
+	dir, err := claudeSkillDirPath(loc)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, ".codegraph-manifest.json"), nil
+}
+
 // claudeHooksScriptPath resolves to where Phase 7 installs the
 // SessionStart nudge script: .claude/hooks/session-nudge.sh for local,
 // <home>/.claude/hooks/session-nudge.sh for global.
