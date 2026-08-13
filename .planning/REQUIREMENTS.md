@@ -39,7 +39,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Install Distribution (Claude Code only, v1)
 
-- [ ] **AGENT-01**: `codegraph install` writes SKILL.md + hooks.json into Claude Code's skills/hooks directories, byte-identical and idempotent across install→uninstall round-trips
+- [x] **AGENT-01**: `codegraph install` writes SKILL.md + hooks.json into Claude Code's skills/hooks directories, byte-identical and idempotent across install→uninstall round-trips
 - [ ] **AGENT-02**: `codegraph uninstall` cleanly removes the skill+hooks files it installed without touching user-authored content
 - [ ] **AGENT-03**: The skill/hooks package is versioned with the binary and refreshed by `codegraph upgrade`
 
@@ -90,7 +90,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIRE-01 | Phase 8 | Pending |
 | WIRE-02 | Phase 8 | Pending |
 | WIRE-03 | Phase 8 | Pending |
-| AGENT-01 | Phase 7 | Pending |
+| AGENT-01 | Phase 7 | Complete |
 | AGENT-02 | Phase 7 | Pending |
 | AGENT-03 | Phase 7 | Pending |
 

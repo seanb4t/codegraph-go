@@ -127,6 +127,171 @@ func jsonDeepEqual(a, b any) bool {
 	}
 }
 
+// readJSONFileStrict parses path as a JSON object like readJSONFile, but
+// distinguishes three outcomes instead of readJSONFile's two: absent file
+// (empty map, existed=false, nil error), a genuine read failure (nil map,
+// existed=false, the wrapped error), and a present-but-undecodable file —
+// including one that is valid JSON but not an object, or empty (nil map,
+// existed=true, an error naming path). This is deliberately the opposite
+// posture from readJSONFile's documented empty-map fallback (above) — that
+// fallback is correct for the MCP-entry/CLAUDE.md paths it already
+// governs, and wrong for this phase's own read-error/malformed-file
+// invariant (roadmap success criterion 4): a malformed or unreadable
+// settings.json must make the caller write nothing, not silently proceed
+// as if the file were empty. Modeled on internal/githooks/githooks.go's
+// skip-and-accumulate read switch (CR-01/CR-02); readJSONFile itself is
+// unmodified — every existing caller keeps its permissive fallback.
+func readJSONFileStrict(path string) (map[string]any, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{}, false, nil
+		}
+		return nil, false, fmt.Errorf("could not read existing file: %w", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, true, fmt.Errorf("%s: existing file is not valid JSON — fix or remove it manually: %w", path, err)
+	}
+	if out == nil {
+		out = map[string]any{}
+	}
+	return out, true, nil
+}
+
+// writeHookEntry is the array-scoped analog of writeMcpEntry for
+// hooks.<event>, an array of independent {matcher, hooks[]} blocks rather
+// than a single named map key (RESEARCH Pitfall 1). It reads path via
+// readJSONFileStrict and returns the error unwritten if the read failed —
+// a malformed or unreadable settings.json is left byte-untouched, never
+// silently proceeded past. Ownership of a block is determined by exact
+// command-string match within the block's own hooks[] sub-array against
+// ownCommands, never by the block's matcher value alone: a user may
+// legitimately register their own unrelated block under the same matcher
+// (e.g. "startup"). If the owned partition already jsonDeepEquals the
+// normalized ownBlocks, nothing is written (ActionUnchanged); otherwise
+// the array is rebuilt as the unowned blocks in their original relative
+// order followed by ownBlocks. Every unrelated event key and every
+// unowned block under the same event is carried through untouched.
+func writeHookEntry(path, event string, ownBlocks []any, ownCommands []string) (FileResult, error) {
+	existing, existedBefore, err := readJSONFileStrict(path)
+	if err != nil {
+		return FileResult{}, err
+	}
+
+	hooks, _ := existing["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+	}
+	events, _ := hooks[event].([]any)
+
+	isOwned := func(block any) bool {
+		obj, ok := block.(map[string]any)
+		if !ok {
+			return false
+		}
+		blockHooks, ok := obj["hooks"].([]any)
+		if !ok {
+			return false
+		}
+		for _, h := range blockHooks {
+			hObj, ok := h.(map[string]any)
+			if !ok {
+				continue
+			}
+			cmd, _ := hObj["command"].(string)
+			for _, own := range ownCommands {
+				if cmd == own {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	var owned, unowned []any
+	for _, b := range events {
+		if isOwned(b) {
+			owned = append(owned, b)
+		} else {
+			unowned = append(unowned, b)
+		}
+	}
+
+	normalized, err := normalizeJSON(ownBlocks)
+	if err != nil {
+		return FileResult{}, err
+	}
+	normalizedOwn, _ := normalized.([]any)
+
+	if jsonDeepEqual(owned, normalizedOwn) {
+		return FileResult{Path: path, Action: ActionUnchanged}, nil
+	}
+
+	newEvents := append(append([]any{}, unowned...), normalizedOwn...)
+	hooks[event] = newEvents
+	existing["hooks"] = hooks
+
+	if err := writeJSONFile(path, existing); err != nil {
+		return FileResult{}, err
+	}
+	action := ActionCreated
+	if existedBefore {
+		action = ActionUpdated
+	}
+	return FileResult{Path: path, Action: action}, nil
+}
+
+// atomicWriteExecutableFile writes content to path via fsatomic.WriteFile
+// and then marks it owner-executable. fsatomic.WriteFile preserves an
+// existing file's mode but defaults a brand-new file to 0644 (not
+// executable), so a script written through the unmodified primitive would
+// silently fail to run under Claude Code's SessionStart dispatch
+// (RESEARCH Pitfall 3, NUDGE-01 regression risk). internal/fsatomic is
+// not modified — this is an additive wrapper, not a new file-safety
+// primitive.
+func atomicWriteExecutableFile(path, content string) error {
+	if err := fsatomic.WriteFile(path, content); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o755)
+}
+
+// writeEmbeddedFile writes content to path — funnelled through
+// atomicWriteFile or atomicWriteExecutableFile — only if the file's
+// current bytes differ from content. This is what makes the non-JSON
+// artifacts (SKILL.md, session-nudge.sh) raw-byte idempotent (D-07):
+// re-running install against unchanged embedded content is a true no-op,
+// never a rewrite with identical bytes.
+func writeEmbeddedFile(path, content string, executable bool) (FileResult, error) {
+	existed := fileExists(path)
+	if existed {
+		current, err := os.ReadFile(path)
+		if err != nil {
+			return FileResult{}, err
+		}
+		if string(current) == content {
+			return FileResult{Path: path, Action: ActionUnchanged}, nil
+		}
+	}
+
+	var writeErr error
+	if executable {
+		writeErr = atomicWriteExecutableFile(path, content)
+	} else {
+		writeErr = atomicWriteFile(path, content)
+	}
+	if writeErr != nil {
+		return FileResult{}, writeErr
+	}
+
+	action := ActionCreated
+	if existed {
+		action = ActionUpdated
+	}
+	return FileResult{Path: path, Action: action}, nil
+}
+
 // writeMcpEntry reads path's existing JSON, sets mcpServers.codegraph to
 // buildEntry()'s (normalized) result, and writes back only if it
 // differs from what's already there — every sibling key under both the
