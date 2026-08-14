@@ -1,7 +1,7 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-08-14T02:04:59Z
+reviewed_at: 2026-08-14T13:59:13Z
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -1130,3 +1130,292 @@ HIGH, partially — its library design is fixed, its executable surface is unass
 remaining HIGH is a missing implementation task in a single plan, not a design defect: it is the
 smallest and most localized state this phase has been in across three cycles, and the fix is
 additive to `01-05-PLAN.md` alone.
+
+---
+
+# Cross-AI Plan Review — Phase 1, CONVERGENCE CYCLE 4 (USER-AUTHORISED EXTRA CYCLE)
+
+Reviewed at `d05eb54`. Reviewer: Codex (prompt-fed, source-grounded, repo access confirmed).
+Orchestrator ran an independent sweep of the same surfaces before reading the reviewer's output,
+plus a scoped second sweep over 01-01/01-02/01-03/01-07.
+
+Prior cycles: cycle 1 (`2166174`) 8 HIGH / 17 actionable; cycle 2 (`bce629b`) 4 HIGH / 8 actionable;
+cycle 3 (`17e8a24`) 1 HIGH / 5 actionable. Plans revised at `d05eb54`.
+
+## Codex Review
+
+## Summary
+
+The plans are substantially converged and generally trace the repository correctly: the status path, four render surfaces, wire-oracle target, existing Namespace cache, and workflow task-body guard all match the source. However, cycle 4 still contains two execution-blocking verification defects. Both are cross-plan sequencing errors introduced around the new `select` mode. The phase is not ready for execution until they are corrected.
+
+## Consumed-but-not-created sweep
+
+| Surface checked | Producers | Consumers | Result |
+|---|---|---|---|
+| `tools/corpora -mode root` | 01-04 Task 2 | 01-04 fetch/root checks | Clean |
+| `-mode entries` and `-locked` | 01-04 Task 2 | 01-04 through 01-07 | Clean |
+| `-mode measure` | 01-05 Task 2 | 01-05 through 01-07 | Clean |
+| `-mode select` | 01-05 Task 2 | 01-05 and 01-06 | **Mismatch in 01-05 verification state; see HIGH-1** |
+| `-mode kinds` | 01-05 Task 2 | 01-05 and 01-06 | Clean |
+| Flags `-repos`, `-scope`, `-out`, `-prune` | 01-05 Task 2 | 01-05 through 01-07 | Clean |
+| `--all-kinds` | 01-02 Task 2 | 01-02 and measurement path | Clean |
+| `corpora:fetch`, `fetch-one`, `assert-one`, `assert` | 01-04 Task 3 | 01-04, 01-06, 01-07 | Clean; created before consumption |
+| `corpora:measure` | 01-05 Task 2 | 01-06 and 01-07 | Clean |
+| `corpora:verify`, `corpora:drift` | 01-07 Task 2 | CI/corpora workflow in 01-07 | Clean |
+| Selection JSON fields `minEdgesPerKind`, `lockedSet`, `eligible` | 01-05 `select` contract | 01-06 verification | Structurally clean |
+| `observations.json` / `selection.json` ownership | 01-05 / 01-06 | 01-06 and 01-07 | Clean |
+| `/tmp/proposed.json` | 01-06 verification command at line 360 | Earlier command at line 342 | **Consumed before creation; HIGH-2** |
+| Wire transcript capture flags `-bin`, `-fixture`, `-scenario` | Existing capture command | 01-03 | Clean; source declares all three at `test/wireoracle/cmd/wireoracle/main.go:20-27` |
+| Workflow bare-task bodies | Existing guard plus 01-07 fixture update | 01-07 workflow | Clean; guard mechanism confirmed at `internal/upgrade/taskfile_shape_test.go:1335-1375` |
+
+No later-wave artifact consumption was found beyond the verification-order defects below. The plan dependency graph itself is correctly ordered.
+
+## Concerns
+
+- **HIGH — 01-05’s new `select` verification cannot succeed in the state that plan creates.**
+
+  Task 2 creates only `/tmp/obs1.json` and `/tmp/obs2.json` using non-default `-out` paths at `01-05-PLAN.md:395-407`. The plan explicitly says non-default `-out` does not write the committed observations document at `01-05-PLAN.md:294-302`. Nevertheless, the next commands invoke `go run ./tools/corpora -mode select` without an observations-path argument at `01-05-PLAN.md:410-411`, so it reads the default `corpora/observations.json`, which this task has not created.
+
+  Even if it were changed to read `/tmp/obs1.json`, the success expectation remains contradictory: `SelectLockedSet` requires every priority language to have a non-zero count at `01-05-PLAN.md:209-214`, while the smoke record contains exactly one repository measured at `01-05-PLAN.md:395-407`. A single first manifest entry cannot cover Go, Java, C#, Python, and TS/JS. Under the mode’s declared contract, `select` must exit non-zero for that incomplete observation universe, but the verification expects valid JSON.
+
+  This is the fourth-cycle instance of the priority defect class: the command now exists, but its required input state is not created before consumption.
+
+- **HIGH — 01-06 reads `/tmp/proposed.json` before generating it.**
+
+  The threshold verification opens `/tmp/proposed.json` at `01-06-PLAN.md:338-344`. The command that creates the file does not run until the following verification block at `01-06-PLAN.md:360-366`.
+
+  On a clean executor this fails with file-not-found. On a reused environment it is worse: a stale `/tmp/proposed.json` could let the first threshold check validate the committed selection against an eligibility universe from an earlier run. That undermines the plan’s central claim that the eligibility universe is independently recomputed from current observations.
+
+  The later block does correctly compare the recomputed thresholds and locked set, but it does not rescue the preceding failed or stale-input check.
+
+## Suggestions
+
+- For **HIGH-1**, edit 01-05 Task 2 so `select` is tested against a purpose-built observations fixture containing:
+
+  - all five priority languages;
+  - every `RankEdges` kind;
+  - at least one valid satisfying subset.
+
+  Add a flag such as `-observations <path>` if `-out` is intentionally measure-output-only, or explicitly define `-out` as the input path for `select` too. Then:
+
+  - use the complete fixture for the successful stdout-contract checks;
+  - keep the one-real-corpus smoke test for `measure`;
+  - add a separate verification that the one-corpus record makes `select` exit non-zero and name the uncovered languages/kinds.
+
+  Do not generate the committed `corpora/observations.json` early merely to make this verification pass; that would blur the ownership and wave boundary established for 01-06.
+
+- For **HIGH-2**, move:
+
+  ```sh
+  go run ./tools/corpora -mode select > /tmp/proposed.json
+  ```
+
+  before every command that reads `/tmp/proposed.json`. Prefer one verification block that:
+
+  1. removes or atomically replaces the temporary file;
+  2. runs `select`;
+  3. validates its exact three-key schema;
+  4. recomputes threshold expectations using that same freshly generated file;
+  5. compares thresholds and locked set to `selection.json`.
+
+  This eliminates both missing-file and stale-file behavior.
+
+## Risk Assessment
+
+**HIGH.** The implementation design is mostly coherent, but two mandatory verification sequences are impossible or order-dependent as written. One directly repeats the consumed-input defect class emphasized for convergence cycle 4; the other can accidentally consume stale temporary evidence.
+
+**Verdict: not ready for `/gsd-execute-phase`.** Make the two plan-only corrections above, then execution should be reconsidered.
+
+---
+
+## Orchestrator adjudication — cycle 4
+
+The reviewer ran with repo access (no `[reviewed-without-repo-access]` marker) and its two HIGHs
+were both reproduced independently by the orchestrator before its output was read. A second scoped
+sweep covered 01-01, 01-02, 01-03 and 01-07, which the reviewer treated more lightly.
+
+### Independent consumed-but-not-created sweep (orchestrator)
+
+Mechanical, over all seven plans at `d05eb54`:
+
+| Surface | Referenced | Created | Result |
+|---|---|---|---|
+| `-mode root` | 01-04 | 01-04 Task 2 | clean |
+| `-mode entries` | 01-04, 01-05 | 01-04 Task 2 | clean |
+| `-mode measure` | 01-05, 01-06, 01-07 | 01-05 Task 2 | clean |
+| `-mode select` | 01-05, 01-06 | 01-05 Task 2 | mode created — **input state not created**, see H-4.1 |
+| `-mode kinds` | 01-05, 01-06 | 01-05 Task 2 | clean; `query.RankEdges` confirmed at `internal/query/rwr.go:21` with exactly 9 members, and `internal/query/rwr_test.go:25` already pins the count |
+| `-locked` | 01-04:316 | 01-04 Task 2 | clean |
+| `-repos` `-scope` `-out` `-prune` | 01-05, 01-07 | 01-05 Task 2 (`:278-308`, `:350`, `:366`) | clean |
+| `--all-kinds` | 01-02 | 01-02 Task 2 | clean |
+| `task corpora:fetch` / `fetch-one` / `assert-one` / `assert` | 01-04, 01-05, 01-06, 01-07 | 01-04 Task 3 (wave 1) | clean — created strictly before every consumer |
+| `task corpora:measure` | 01-05, 01-06, 01-07 | 01-05 Task 2 (wave 3) | clean |
+| `task corpora:verify` / `corpora:drift` | 01-07 only | 01-07 Task 2 (wave 5) | clean |
+| `task lint:actions` | 01-07 | pre-existing, `Taskfile.yml:3225` | clean |
+| stdout keys `minEdgesPerKind` / `lockedSet` / `eligible` | 01-06:342-344, :362-365 | 01-05:286-291, :333-337 | shape clean; **ordering broken**, see H-4.2 |
+| `corpora/observations.json` | 01-06, 01-07 | first written at 01-05:499 (wave 3, default `-out`) | see H-4.1 |
+| `corpora/selection.json` | 01-06, 01-07 | 01-06 Task 2 (wave 4), hand-authored | clean |
+| wireoracle `-bin` / `-fixture` / `-scenario` | 01-03 | pre-existing, `test/wireoracle/cmd/wireoracle/main.go` | clean |
+
+The mode/flag/target registry blocks reproduced verbatim in all seven plans
+(`01-01:305-310` … `01-07:573-578`) agree with each other and with the producers above. **The
+enumerated-token half of the class is clean for the first cycle in four.** What is not clean is the
+class's next form: a command that exists, invoked in a state its input does not yet exist in.
+
+### Current HIGH concerns
+
+**H-4.1 (NEW, introduced at `d05eb54`) — 01-05 Task 2's `-mode select` verifies cannot pass, on two
+independent grounds.**
+
+`01-05-PLAN.md:410-411` run `go run ./tools/corpora -mode select` and pipe stdout into `python3
+json.load`. At that point in task order:
+
+1. *The input file does not exist.* Every measure invocation in that verify block redirects to a
+   scratch path — `-out /tmp/obs1.json` (`:395`), `/tmp/obs2.json` (`:407`), `/tmp/obs3.json`
+   (`:408`), `/tmp/obs4.json` (`:412`) — and `:294-299` states that a non-default `-out` also
+   suppresses the document write. Nothing writes the default `corpora/observations.json` until
+   Task 3's verify at `:499`. `corpora/` does not exist in the tree today. Task 1's own behavior
+   block settles what happens then: "`LoadObservations` and `LoadSelection` on a missing file
+   return an error naming the path — never an empty document" (`:156-157`). So `select` exits
+   non-zero with empty stdout and the `json.load` fails.
+2. *Even given an observations file, the assertion is unsatisfiable at this wave.* `SelectLockedSet`
+   requires every `PriorityLanguages` member to have a non-zero file count (`:209-213`), and
+   `PriorityLanguages` is five languages (`:183`). `01-05:418` insists — correctly — that the smoke
+   path measure exactly the one corpus it fetched. One repository cannot supply Go, Java, C#, Python
+   and TS/JS, so `select` must take its declared no-qualifying-subset branch (`:288`, `:338-339`)
+   and exit non-zero. That branch is 01-06's HALT trigger; here it is fed to a contract assertion.
+
+Compounding both: the behavior block never says **which** observations file `select` reads, or
+whether it honours `-out`. `-out` is defined as the file `measure` "read-modify-write"s (`:294`),
+and `select` "writes no file" (`:340`), so an executor has no declared way to point `select` at a
+scratch fixture even if they diagnose the problem.
+
+*Fix (01-05 Task 2 only):* declare `select`'s input path explicitly — either that it honours `-out`
+as a read path, or a separate `-observations <path>` flag — then split the verify into (a) a
+synthetic multi-language fixture that exercises the success contract, and (b) an assertion that the
+one-real-corpus record makes `select` exit non-zero naming the uncovered languages. Do **not** write
+the committed `corpora/observations.json` early to make this pass: that would move wave-4 evidence
+into wave 3 and blur the ownership boundary 01-05 and 01-06 were split to protect.
+
+**H-4.2 (NEW, introduced at `d05eb54`) — 01-06 Task 2 reads `/tmp/proposed.json` one verify block
+before the command that writes it.**
+
+`01-06-PLAN.md:342` does `proposed=json.load(open('/tmp/proposed.json'))` and `:343-344` derives the
+whole `ELIGIBLE` universe from it. The only producer is `:360`, `go run ./tools/corpora -mode select
+> /tmp/proposed.json`, in the *next* `<automated>` block. `git diff 17e8a24 d05eb54` confirms line
+342 is new in this revision; this is not inherited.
+
+On a clean executor the first block dies with `FileNotFoundError`. On a reused machine the failure
+mode is worse and silent: a stale `/tmp/proposed.json` from an earlier attempt supplies the
+eligibility universe, and `:344`'s cross-check (`set(ELIGIBLE)==set(proposed['eligible'])`) compares
+the stale file against itself, so it cannot detect the substitution. The threshold recomputation at
+`:350-358` — the criterion at `:396` that is the whole point of making selection deterministic —
+would then validate the committed selection against a universe from a previous run.
+
+*Fix (01-06 Task 2 only):* merge `:338-359` and `:360-366` into one block that `rm -f`s the path,
+runs `select` into it, validates the three-key schema, and only then recomputes thresholds and
+compares against `corpora/selection.json`.
+
+### Current actionable non-HIGH concerns
+
+- **MEDIUM — `01-04:323` still asserts a count where `01-04:336` demands set equality.** The verify
+  is `assert len(e)==9, ('… an exact count, not a lower bound', len(e))`; the criterion it backs
+  says "EXACTLY the nine seeded repositories — **set equality against the enumerated list, not a
+  count** and not a lower bound", with six lines of rationale (`:338-347`) explaining why a count is
+  insufficient. Cycle 3 asked for `>= 9` → set equality; the revision delivered `>= 9` → `== 9`.
+  Swapping one seeded repository for another still passes. *Fix:* assert
+  `{x['repo'] for x in e} == {…the nine names…}` in `01-04:323`.
+
+- **MEDIUM — `01-07:476` is unsatisfiable under this repository's action-pinning convention, and
+  satisfying it literally would un-pin two actions.** The criterion reads "the workflow contains
+  exactly one 40-character hex string, the cache action pin, and no corpus SHA". The same plan's
+  step list mandates Checkout (`:389`) and Set up Go (`:390`), and every `uses:` in
+  `.github/workflows/` is SHA-pinned — `actions/checkout@df4cb1c0…` and
+  `actions/setup-go@924ae3a1…` at `ci.yml:51,54`, zero unpinned references repo-wide. The new
+  workflow will carry three 40-hex strings. In a project whose stated core value is a verifiable
+  supply chain, an executor taking this criterion literally un-pins two actions. *Fix:* reword to
+  "no 40-hex string other than the pinned action refs — in particular no corpus SHA", or make it a
+  `grep -cE '[0-9a-f]{40}' … returns 3`.
+
+- **MEDIUM — `01-07:435`'s path-filter verify cannot fail, which is the vacuous-guard shape this
+  phase exists to eliminate.** The command is `for p in …; do grep -q "$p" … || echo "MISSING PATH
+  FILTER: $p"; done; echo "path filter checked"` — a miss prints a line and the loop exits 0
+  regardless, then an unconditional `echo` seals it. Criterion `:471` ("the measuring algorithm
+  cannot change without this job running") has no failing command behind it. *Fix:* collect misses
+  and `exit 1`, or drop the `|| echo` and let `grep -q` fail the block.
+
+- **MEDIUM — `01-06:337`'s idempotence check tests working-tree cleanliness, not idempotence, and
+  fails for an unrelated reason.** `task corpora:measure && task corpora:measure && git diff --quiet
+  -- corpora/observations.json docs/CORPUS-MEASUREMENT.md`: with no commit argument `git diff`
+  compares the worktree to the index, and Task 2's own action (`:328`) has already regenerated both
+  files relative to what Task 1 committed. The block therefore exits non-zero whether or not
+  regeneration is idempotent. (Were the files instead untracked at that moment, it would pass
+  vacuously — `git diff` ignores untracked paths.) *Fix:* capture `cksum` / `sha256sum` of both
+  files after the first `task corpora:measure` and compare after the second.
+
+- **LOW — `| tail -N` on `go test` masks the exit status the paired criteria assert.** A pipeline's
+  status is `tail`'s. `01-03:234` is `go test -count=1 ./... 2>&1 | tail -20` while `01-03:243`
+  claims "`go test ./...` exits 0"; the same pairing appears at `01-07:444` and, less critically, at
+  `01-01:160,162`, `01-02:155`, `01-03:150,151,232,233`, `01-07:246,247,324,325,326,430,431`.
+  `01-02:156,287` and `01-07:321-323` are the correctly-shaped counterexamples. *Fix:* at minimum
+  un-pipe the two full-suite gates, or prefix with `set -o pipefail`.
+
+- **LOW — `01-07:331` and `:332`'s Taskfile greps are fragile against text the plans instruct the
+  executor to write.** `Taskfile.yml` contains zero occurrences of `prune` and zero of
+  `selection.json` today, so both start satisfiable, and no other plan adds either to a Taskfile
+  target body — `-prune` is a tool flag (`01-05:366`), not a task argument. The risk is
+  self-inflicted: `01-07:307` ("which is exactly why this target must never pass it") and
+  `01-05:390` ("record in its description … that it never writes the curated selection file") both
+  invite the executor to write the reasoning into a `desc:`, and a `desc:` is not a comment.
+  `:332` carries a `planner-discipline-allow` escape; `:331` does not. *Fix:* scope both greps to
+  the target body, or extend `:331`'s allowance to match `:332`'s.
+
+### Dispositions — raised and NOT counted
+
+- **`$BASE_SHA` in `01-03:152` and criteria `:158-160`.** Not an undefined variable: `01-03:136-141`
+  instructs the executor to capture `git rev-parse HEAD` into the SUMMARY before any edit and use
+  that recorded SHA as the diff base, and each criterion restates the provenance inline. Incorporated
+  into action and acceptance_criteria — RESOLVED.
+- **`01-01:170`'s pre/post timing halt rule with no baseline command.** The criterion is explicitly
+  "(cost, **recorded not asserted**)" and the action carries the before/after instruction. RESOLVED.
+- **`01-02:227`'s `assert 0 in d.values()` as an environmental assertion.** Grounded in the phase's
+  own load-bearing premise — this repository's idiomatic Go produces zero `overrides` and zero
+  `type_of` (FIXT-01 criterion 3, `01-06:25`). Not a latent flake.
+- **`nscloud-cache-action`'s `path:` input having no precedent in this tree.** `01-07:424-427`
+  already names it as "one first-use unknown to confirm on the real run rather than assert" with a
+  `<human-check>` behind it. RESOLVED by explicit deferral.
+- **01-04's fetch protocol and concurrency verify.** Traced end to end. The claim → stage → check →
+  promote sequence at `01-04:421-461` is internally consistent: step 4 rules out an existing
+  destination before the claim, so step 7's `mv` cannot nest; both claim-refused branches terminate;
+  step 8's cleanup obligation is what `01-04:492`'s parent-directory snapshot actually tests, and a
+  `mktemp -d` staging directory under that parent is visible to it where a `$D.lock` / `$D.*` probe
+  would not be. `wait` with no operands returns 0, so the losing racer's non-zero exit correctly does
+  not fail the block. No finding.
+- **Wave ordering.** No plan consumes an artifact produced by a later wave. `corpora:assert`'s
+  placement in 01-04 (wave 1) rather than 01-07 (wave 5), for 01-06 (wave 4), is correct and is
+  argued in place at `01-07:285-288`.
+
+### Trajectory
+
+25 → 12 → 6 → **8** (2 HIGH + 6 actionable).
+
+The rise is not a regression in the plans' substance. The enumerated consumed-but-not-created
+surface — modes, flags, task targets, JSON keys — is **clean for the first time in four cycles**,
+and nothing any plan argues has been overturned. What this cycle bought is a different, narrower
+class: the token exists, but the *state* it needs does not yet exist at the point of invocation
+(H-4.1, H-4.2), plus five verification-formulation defects that the previous three cycles' focus on
+existence never looked for. Both HIGHs are confined to a single task in a single plan each, and
+both fixes are local edits to a verify block with no cross-plan coordination.
+
+### Convergence verdict
+
+```
+CYCLE_SUMMARY: current_high=2 current_actionable=6
+```
+
+Cycle-1 HIGHs still open: **0 of 8.** Cycle-2 HIGHs still open: **0 of 4.** Cycle-3's HIGH: **closed**
+— `-mode select` now has a real creating task at `01-05:286-291`, `:323-341`, `:427-429`. Both HIGHs
+above are new at `d05eb54`, making this the fourth consecutive revision to introduce a defect while
+closing the prior cycle's. Consistent with the previous three cycles, the phase is **not ready for
+`/gsd-execute-phase`** as it stands; the two HIGH fixes touch `01-05-PLAN.md` Task 2 and
+`01-06-PLAN.md` Task 2 only.
