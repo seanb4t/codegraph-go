@@ -42,6 +42,12 @@ Re-author the golden suite so it reads as codegraph-go's own behavioral regressi
 
 - **D-08:** `tools/bench/realcorpus`'s pinned `colbymchenry-codegraph` Entry **stays in place**, unchanged. It is bench tooling, not the golden harness; Phase 6 (Benchmark De-coupling) owns its reconciliation with the benchmark rewrite (BENCH-01/BENCH-02 retire the head-to-head numbers it feeds). Phase 2's sweep covers the harness, not the benchmark. Anything Phase 6 must then do with `realcorpus` is noted, not done here. — **Reversibility:** reversible — leaves an intact bench manifest Phase 6 edits deliberately.
 
+### Assertion philosophy & corpus target (from research fork, ruled 2026-08-14)
+
+- **D-09:** Tests assert **named behavioral properties of live output directly** — structural-beats-lexical, overloaded-symbol dedup, weakly-connected-cluster handling, multi-word query behavior — and the re-frozen goldens exist as **regression snapshots**, not the primary oracle. A failing test says *what* broke; a golden diff only says *something* changed. Goldens are evidence, not the assertion. — **Reversibility:** costly — rewrites the suite's assertion style, not just its names.
+
+- **D-10:** The renamed behavioral tests resolve corpora **through `internal/corpora` (`Entry.Dir`, the pinned SHA-bearing path from Phase 1)** — never hardcoded SHAs, never a user env override as the default. The tests are hermetic: they run against the same pinned trees the fetch target and CI cache provide. This is what makes Phase 3's FIXT-03 ("runs against the fetched corpora on every CI run") achievable. — **Reversibility:** reversible — changes test fixture resolution, not product behavior.
+
 ### Claude's Discretion
 
 - The exact new per-test/per-file names within the behavioral vocabulary (D-02 records the word-level rule; the planner picks concrete identifiers).
