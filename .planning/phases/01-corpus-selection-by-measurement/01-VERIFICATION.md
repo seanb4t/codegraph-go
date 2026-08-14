@@ -1,10 +1,15 @@
 ---
 phase: 01-corpus-selection-by-measurement
 verified: 2026-08-14T00:00:00Z
-status: human_needed
-score: 4/5 truths verified (1 present, behavior-unverified)
-behavior_unverified: 1
+status: passed
+score: 5/5 truths verified
+behavior_unverified: 0
 overrides_applied: 0
+human_validation:
+  - truth: "Criterion 4 (FIXT-02): running `task corpora:fetch` twice from clean produces the same tree."
+    performed: "2026-08-14 by the orchestrator in a clean scratch CODEGRAPH_CORPUS_DIR (mktemp). Run 1 fetched all 4 locked corpora; root wiped; run 2 re-fetched cold."
+    result: "4/4 identical — HEAD and HEAD^{tree} byte-identical across both cold runs (hugo, guava, requests, serilog). Reproducibility confirmed with real network fetches at pinned SHAs. D-12 CODEGRAPH_CORPUS_DIR override also exercised."
+  - note: "Verifier-flagged gap (instantiates attribution) fixed during human validation: instantiates=1877 re-attributed to pydantic/pydantic in corpora/selection.json + docs/CORPUS-MEASUREMENT.md; guava's manifest note corrected to its measured 1053 (commits a5ddc57, 0ee8775). Coverage guard re-verified green after both."
 behavior_unverified_items:
   - truth: "Criterion 4 (FIXT-02): running `task corpora:fetch` twice from clean produces the same tree."
     test: "From a clean machine/worktree (empty corpus root), run `task corpora:fetch`, delete the corpus root, run it again, and `git rev-parse HEAD^{tree}`-compare the two fetched trees."
