@@ -5,8 +5,8 @@ milestone_name: Standalone Project Identity
 current_phase: 2
 current_phase_name: Golden Harness Re-authoring & Re-freeze
 status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-08-14T20:03:37.185Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-08-14T21:02:21.255Z"
 last_activity: 2026-08-14
 last_activity_desc: Phase 1 execution started
 progress:
@@ -228,8 +228,8 @@ against a 10% budget. Relevant to BENCH-02.
 
 ## Session Continuity
 
-Last session: 2026-08-14T00:19:20.551Z
-Stopped at: Phase 1 context gathered
+Last session: 2026-08-14T21:02:21.239Z
+Stopped at: Phase 2 context gathered
   NEXT: `/gsd-plan-phase 1` (Corpus Selection by Measurement — blocking spike)
   CARRY-OVER:
 
@@ -239,7 +239,7 @@ Stopped at: Phase 1 context gathered
     - **No `v0.11.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
     - **`.planning/` and `CHANGELOG.md` are out of scope for the sweep** — the first would falsify project history and break GSD's scope-sensitive parsers, the second is release-please-owned.
 
-Resume file: .planning/phases/01-corpus-selection-by-measurement/01-CONTEXT.md
+Resume file: .planning/phases/02-golden-harness-re-authoring-re-freeze/02-CONTEXT.md
 
 ## Operator Next Steps
 
