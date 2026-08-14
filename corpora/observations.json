@@ -2,6 +2,59 @@
   "schemaVersion": 1,
   "manifestPath": "corpora/manifest.json",
   "observations": {
+    "JamesNK/Newtonsoft.Json@09bb545d72969ad7fb4ea07db0d5c34f4fc07877": {
+      "repo": "JamesNK/Newtonsoft.Json",
+      "sha": "09bb545d72969ad7fb4ea07db0d5c34f4fc07877",
+      "license": "MIT",
+      "language": "csharp",
+      "trackedFiles": 1170,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 11735,
+        "edgesByKind": {
+          "calls": 2975,
+          "contains": 7293,
+          "embeds": 8,
+          "extends": 151,
+          "implements": 55,
+          "imports": 0,
+          "instantiates": 262,
+          "overrides": 70,
+          "references": 29,
+          "returns": 172,
+          "type_of": 720
+        },
+        "fileCount": 945,
+        "filesByLanguage": {
+          "csharp": 945
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "csharp"
+        ],
+        "nodeCount": 8238,
+        "nodesByKind": {
+          "file": 945,
+          "interface": 51,
+          "method": 5642,
+          "struct": 1600
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    },
     "gohugoio/hugo@0805c734a41b75403e3970e0070227916b6845d2": {
       "repo": "gohugoio/hugo",
       "sha": "0805c734a41b75403e3970e0070227916b6845d2",
@@ -55,6 +108,122 @@
           "struct": 974,
           "type_alias": 201,
           "variable": 376
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    },
+    "google/guava@94f39958baf7ad51ddf9c70e406ed6b188194daa": {
+      "repo": "google/guava",
+      "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
+      "license": "Apache-2.0",
+      "language": "java",
+      "trackedFiles": 3317,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 155080,
+        "edgesByKind": {
+          "calls": 58812,
+          "contains": 56641,
+          "embeds": 139,
+          "extends": 2531,
+          "implements": 735,
+          "imports": 0,
+          "instantiates": 1053,
+          "overrides": 4658,
+          "references": 13063,
+          "returns": 5591,
+          "type_of": 11857
+        },
+        "fileCount": 3233,
+        "filesByLanguage": {
+          "java": 3229,
+          "javascript": 2,
+          "kotlin": 2
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "java",
+          "javascript",
+          "kotlin"
+        ],
+        "nodeCount": 59874,
+        "nodesByKind": {
+          "file": 3233,
+          "interface": 452,
+          "method": 49956,
+          "struct": 6233
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    },
+    "nestjs/nest@a112f3fbd4bda2d2f8a12498f9ae53ac84df2504": {
+      "repo": "nestjs/nest",
+      "sha": "a112f3fbd4bda2d2f8a12498f9ae53ac84df2504",
+      "license": "MIT",
+      "language": "typescript",
+      "trackedFiles": 2137,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 7913,
+        "edgesByKind": {
+          "calls": 1675,
+          "contains": 5550,
+          "embeds": 11,
+          "extends": 123,
+          "implements": 24,
+          "imports": 0,
+          "instantiates": 169,
+          "overrides": 86,
+          "references": 162,
+          "returns": 92,
+          "type_of": 21
+        },
+        "fileCount": 1735,
+        "filesByLanguage": {
+          "javascript": 51,
+          "typescript": 1684
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "javascript",
+          "typescript"
+        ],
+        "nodeCount": 7543,
+        "nodesByKind": {
+          "constant": 200,
+          "file": 1735,
+          "function": 321,
+          "interface": 315,
+          "method": 2951,
+          "route": 258,
+          "struct": 1487,
+          "type_alias": 276
         },
         "pendingChanges": {
           "added": 0,

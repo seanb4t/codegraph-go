@@ -11,34 +11,55 @@ Do NOT hand-edit this file.
 
 ## Locked Set
 
+- JamesNK/Newtonsoft.Json (MIT, 1170 tracked files)
 - gohugoio/hugo (Apache-2.0, 2547 tracked files)
+- google/guava (Apache-2.0, 3317 tracked files)
+- nestjs/nest (MIT, 2137 tracked files)
 
 ## Per-Kind Coverage
 
 | Kind | Threshold | Supplying Repository | Measured Count |
 |------|-----------|---------------------|---------------|
-| calls | (not set) | gohugoio/hugo | 6212 |
-| extends | (not set) | gohugoio/hugo | 131 |
+| calls | (not set) | google/guava | 58812 |
+| extends | (not set) | google/guava | 2531 |
 | implements | (not set) | gohugoio/hugo | 1018 |
 | imports | (not set) | gohugoio/hugo | 2160 |
-| instantiates | (not set) | gohugoio/hugo | 636 |
-| overrides | (not set) | gohugoio/hugo | 24 |
-| references | (not set) | gohugoio/hugo | 1189 |
-| returns | (not set) | gohugoio/hugo | 1096 |
-| type_of | (not set) | gohugoio/hugo | 17 |
+| instantiates | (not set) | google/guava | 1053 |
+| overrides | (not set) | google/guava | 4658 |
+| references | (not set) | google/guava | 13063 |
+| returns | (not set) | google/guava | 5591 |
+| type_of | (not set) | google/guava | 11857 |
 
 ## Per-Language File Counts
 
 | Language | Total Files | Supplying Repositories |
 |----------|-------------|----------------------|
 | go | 889 (PASS) | gohugoio/hugo |
-| java | 0 (FAIL) | (none) |
-| csharp | 0 (FAIL) | (none) |
+| java | 3229 (PASS) | google/guava |
+| csharp | 945 (PASS) | JamesNK/Newtonsoft.Json |
 | python | 0 (FAIL) | (none) |
-| tsjs | 25 (PASS) | gohugoio/hugo |
+| tsjs | 1762 (PASS) | gohugoio/hugo, google/guava, nestjs/nest |
 
 ## All Measured Candidates
 
+### JamesNK/Newtonsoft.Json (09bb545d)
+
+- **License:** MIT
+- **Tracked files:** 1170
+- **Edges by kind:**
+  - calls: 2975
+  - contains: 7293
+  - embeds: 8
+  - extends: 151
+  - implements: 55
+  - imports: 0
+  - instantiates: 262
+  - overrides: 70
+  - references: 29
+  - returns: 172
+  - type_of: 720
+- **Files by language:**
+  - csharp: 945
 ### gohugoio/hugo (0805c734)
 
 - **License:** Apache-2.0
@@ -59,4 +80,43 @@ Do NOT hand-edit this file.
   - c: 4
   - go: 889
   - javascript: 25
+### google/guava (94f39958)
+
+- **License:** Apache-2.0
+- **Tracked files:** 3317
+- **Edges by kind:**
+  - calls: 58812
+  - contains: 56641
+  - embeds: 139
+  - extends: 2531
+  - implements: 735
+  - imports: 0
+  - instantiates: 1053
+  - overrides: 4658
+  - references: 13063
+  - returns: 5591
+  - type_of: 11857
+- **Files by language:**
+  - java: 3229
+  - javascript: 2
+  - kotlin: 2
+### nestjs/nest (a112f3fb)
+
+- **License:** MIT
+- **Tracked files:** 2137
+- **Edges by kind:**
+  - calls: 1675
+  - contains: 5550
+  - embeds: 11
+  - extends: 123
+  - implements: 24
+  - imports: 0
+  - instantiates: 169
+  - overrides: 86
+  - references: 162
+  - returns: 92
+  - type_of: 21
+- **Files by language:**
+  - javascript: 51
+  - typescript: 1684
 
