@@ -88,7 +88,7 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 - **Out of scope by construction:** `.planning/` archives and `CHANGELOG.md`. The first is an append-only record of what actually happened and is parsed by scope-sensitive tooling; the second is release-please-owned and hand-editing it breaks the tool that both writes and re-reads it.
 - **`v0.11.0` carries no git tag.** release-please is the sole tag authority (D-06R). The label is a prediction that holds if this milestone lands `feat:` commits; a fixes-only outcome cuts a patch version instead. No phase schedules a `git tag` step.
 
-- [ ] **Phase 1: Corpus Selection by Measurement** - The project knows from recorded measurement, not assumption, which third-party repositories at which commits its golden suite exercises — and can fetch that tree reproducibly without vendoring it
+- [x] **Phase 1: Corpus Selection by Measurement** - The project knows from recorded measurement, not assumption, which third-party repositories at which commits its golden suite exercises — and can fetch that tree reproducibly without vendoring it (completed 2026-08-14)
 - [ ] **Phase 2: Golden Harness Re-authoring & Re-freeze** - The golden suite reads as codegraph-go's own regression suite: named for what it asserts, frozen from codegraph-go's own output, with the origin-driving capture path gone
 - [ ] **Phase 3: Non-Vacuity Proof & Unconditional CI Execution** - The re-baselined suite is trusted because it has been watched fail, and CI cannot silently stop running it
 - [ ] **Phase 4: Attribution & Documentation Sweep** - A reader finds the origin acknowledged once, legally and in the past tense, and meets no comparison framing anywhere else in the project's documentation
@@ -117,25 +117,25 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Tracer: `edgesByKind` tally and un-suppressed `filesByLanguage` on the `status --json` contract
-- [ ] 01-04-PLAN.md — Corpora manifest as sole pin authority, strict validation, atomic out-of-tree fetch
+- [x] 01-01-PLAN.md — Tracer: `edgesByKind` tally and un-suppressed `filesByLanguage` on the `status --json` contract
+- [x] 01-04-PLAN.md — Corpora manifest as sole pin authority, strict validation, atomic out-of-tree fetch
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Dense `--all-kinds` opt-in derived from `RankEdges`, across all four status render surfaces
+- [x] 01-02-PLAN.md — Dense `--all-kinds` opt-in derived from `RankEdges`, across all four status render surfaces
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Re-freeze `call-status.golden`; assert MCP sparsity and `--json` key presence
-- [ ] 01-05-PLAN.md — Measurement record pipeline: typed record, in-process measure mode, generated prose
+- [x] 01-03-PLAN.md — Re-freeze `call-status.golden`; assert MCP sparsity and `--json` key presence
+- [x] 01-05-PLAN.md — Measurement record pipeline: typed record, in-process measure mode, generated prose
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-06-PLAN.md — The spike: score candidates, freeze the per-kind threshold, lock the corpus set
+- [x] 01-06-PLAN.md — The spike: score candidates, freeze the per-kind threshold, lock the corpus set
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-07-PLAN.md — Coverage drift guard and CI wiring: per-corpus cache, miss falls through to a real fetch
+- [x] 01-07-PLAN.md — Coverage drift guard and CI wiring: per-corpus cache, miss falls through to a real fetch
 
 ### Phase 2: Golden Harness Re-authoring & Re-freeze
 
@@ -228,7 +228,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Corpus Selection by Measurement | 0/7 | Not started | - |
+| 1. Corpus Selection by Measurement | 7/7 | Complete    | 2026-08-14 |
 | 2. Golden Harness Re-authoring & Re-freeze | 0/? | Not started | - |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 0/? | Not started | - |
 | 4. Attribution & Documentation Sweep | 0/? | Not started | - |
