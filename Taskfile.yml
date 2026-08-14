@@ -3577,6 +3577,32 @@ tasks:
         done
         echo "corpora:fetch: fetched or confirmed ${fetched}/${want} locked corpora"
 
+  corpora:measure:
+    desc: >-
+      Regenerates the measurement record and the generated human-readable
+      document (D-07): rebuilds corpora/observations.json and, only when
+      no selection has been recorded yet, renders docs/CORPUS-MEASUREMENT.md
+      as a pure observation report. It UPSERTS by default (keyed repo@sha,
+      never fully reconstructs), applies corpora.StripVolatile's superset
+      policy so no host-local path or per-machine value is committed
+      (FIXT-01), and NEVER writes corpora/selection.json — that curated
+      policy file has no write path from the generator at all, by design.
+      Plan 01-07's drift job calls this target to prove re-measuring the
+      committed record reproduces it byte-identically. Pass -mode select
+      to compute the threshold/locked-set proposal from the observations.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — corpora:measure runs tools/corpora via `go run`."
+      - sh: command -v git
+        msg: "git not found — corpora:measure shells out to git for tracked-file counts."
+    cmds:
+      - |
+        set -euo pipefail
+        # Default locked scope: measure every locked corpus, upsert into the
+        # committed observations file, regenerate the prose document. Pass
+        # explicit flags for a bounded candidate search (e.g. -repos org/name).
+        go run ./tools/corpora -mode measure
+
   diag:cpu:
     desc: >-
       CPU/memory/storage topology diagnostic (10-04-PLAN, Rule 2 deviation
