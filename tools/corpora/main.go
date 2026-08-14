@@ -24,7 +24,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -249,11 +248,12 @@ func runMeasure(stdout, stderr io.Writer, reposFlag, scope, out string, prune bo
 	// document. This is what keeps the smoke verifies in this plan from
 	// regenerating the committed document from a one-entry scratch file.
 	if out == defaultObservationsPath {
-		sel, selErr := corpora.LoadSelection("corpora/selection.json")
-		if selErr != nil && !errors.Is(selErr, os.ErrNotExist) {
+		sel, selErr := loadSelectionOrZero()
+		if selErr != nil {
 			// A real read error (permission, malformed JSON) is a failure;
 			// a missing selection file is expected during this plan and
-			// early Plan 01-06 — proceed with a zero-value Selection.
+			// early Plan 01-06 — loadSelectionOrZero returns the zero
+			// Selection in that case, so selErr here is a genuine failure.
 			fmt.Fprintf(stderr, "tools/corpora: load selection for prose: %v\n", selErr)
 			return 1
 		}

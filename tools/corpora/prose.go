@@ -8,13 +8,39 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
 	"github.com/seanb4t/codegraph-go/internal/corpora"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
+
+// selectionDocPath is the curated policy document this tooling READS for
+// prose rendering but never writes. Its existence is the whole reason the
+// record is two files (see internal/corpora/record.go's package doc).
+// The literal path is deliberately named here, in prose.go, and nowhere
+// else in the tool — keeping the write-only prohibition greppable.
+const selectionDocPath = "corpora/selection.json"
+
+// loadSelectionOrZero reads the curated selection for prose rendering. A
+// missing file (the state during this plan and early Plan 01-06) is not
+// an error: it returns a zero-value Selection so the document degrades
+// honestly to an observations-only report. A genuine read failure
+// (permission, malformed JSON) is returned so the caller fails loudly
+// rather than silently rendering against an empty or wrong selection.
+func loadSelectionOrZero() (corpora.Selection, error) {
+	sel, err := corpora.LoadSelection(selectionDocPath)
+	if err == nil {
+		return sel, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return corpora.Selection{}, nil
+	}
+	return corpora.Selection{}, err
+}
 
 // statusNumeric reads status[section] as a map[string]any and coerces
 // every value to int64, tolerating the JSON-decoded float64 shape. It is
