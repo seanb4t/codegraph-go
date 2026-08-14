@@ -1,6 +1,6 @@
-// testdata/golden/golden_parity_test.go
+// testdata/golden/behavioral_test.go
 //
-// TestGoldenParity is the acceptance gate for MCP-04 / success criterion 4:
+// TestCorpusBehavior_Go is the acceptance gate for MCP-04 / success criterion 4:
 // it indexes the real weft source tree via the production indexer.Run
 // pipeline, drives internal/query.Engine for the golden corpus's exact
 // captured commands (or their nearest lexical-matching equivalent, per the
@@ -61,7 +61,7 @@ import (
 // pinnedWeftCommit is the weft-go corpus's capture-time HEAD, per
 // testdata/golden/README.md's D-06a provenance table. resolveWeftCorpus
 // verifies a resolved checkout is pinned exactly here before any diff
-// runs — a green TestGoldenParity always means either "diffed against the
+// runs — a green TestCorpusBehavior_Go always means either "diffed against the
 // real pinned corpus" or "skipped", never a silent diff against a drifted
 // tree (T-03-09-Repro).
 const pinnedWeftCommit = "f89ae3ea4e4c37509f7302fd4e37986212a72079"
@@ -439,7 +439,7 @@ func loadGoldenOutput(t *testing.T, name string) string {
 // loadGoldenFixtureIn is loadGoldenFixture generalized to any corpus
 // directory under corpus/ (plan 17, D-02) — loadGoldenFixture itself is
 // left untouched (hard-coded to "weft-go") to avoid touching
-// TestGoldenParity above; this is a pure additive extension.
+// TestCorpusBehavior_Go above; this is a pure additive extension.
 func loadGoldenFixtureIn[T any](t *testing.T, corpus, name string) T {
 	t.Helper()
 
@@ -698,11 +698,11 @@ func exploreSelectedFiles(output string) map[string]bool {
 	return set
 }
 
-// TestGoldenParity is MCP-04's acceptance gate: it proves the Go query
+// TestCorpusBehavior_Go is MCP-04's acceptance gate: it proves the Go query
 // engine's output shapes match the TS CodeGraph v1.3.1 golden corpus for
 // all seven captured tools (query/callers/callees/impact/status/explore/
 // node) after the D-05 normalizations documented at the top of this file.
-func TestGoldenParity(t *testing.T) {
+func TestCorpusBehavior_Go(t *testing.T) {
 	weftDir := resolveWeftCorpus(t)
 	engine := buildWeftEngine(t, weftDir)
 
@@ -1107,7 +1107,7 @@ func TestGoldenParity(t *testing.T) {
 // D-02 Behavioral Parity Harness (plan 17, TEST-01/EXPL-02..05/NODE-01..04)
 // ============================================================================
 //
-// TestGoldenBehavioral* extends TestGoldenParity above (which only ever
+// TestCorpusBehavior* extends TestCorpusBehavior_Go above (which only ever
 // drove the --max-files 1 / -f TEMPLATE-parity baseline commands) to the
 // NEW behavioral surfaces plans 03-16 built: multi-word explore ranking
 // (EXPL-01/02/03/04) and multi-def node enumeration (NODE-01/02), diffed
@@ -1173,11 +1173,11 @@ func TestGoldenParity(t *testing.T) {
 //     comparisons below are Location-SET based (order-independent), never
 //     slice-position based.
 
-// TestGoldenBehavioralSyntheticParity runs the FULL D-02 oracle against
+// TestCorpusBehaviorSynthetic runs the FULL D-02 oracle against
 // the synthetic-parity corpus (D-03) — the one corpus co-designed to be
 // tractable for byte/structural-level assertions, always available
 // in-repo (no network/external checkout).
-func TestGoldenBehavioralSyntheticParity(t *testing.T) {
+func TestCorpusBehaviorSynthetic(t *testing.T) {
 	const corpus = "synthetic-parity"
 	eng := buildEngineAt(t, syntheticParitySrc(t))
 
@@ -1289,7 +1289,7 @@ func TestGoldenBehavioralSyntheticParity(t *testing.T) {
 	})
 }
 
-// TestGoldenBehavioralRealCorpora runs the SHAPE-only tier of the D-02
+// TestCorpusBehaviorLockedCorpora runs the SHAPE-only tier of the D-02
 // oracle against weft-go and colbymchenry-codegraph — external,
 // real-world corpora where AD-01/AD-02/AD-03's stemming-precision and
 // extraction-coverage gaps make exact candidate-set/count comparison
@@ -1298,7 +1298,7 @@ func TestGoldenBehavioralSyntheticParity(t *testing.T) {
 // TEMPLATE wording is TS-verbatim, and output is non-empty/well-shaped —
 // a real, if weaker, parity signal on corpora this harness cannot fully
 // control.
-func TestGoldenBehavioralRealCorpora(t *testing.T) {
+func TestCorpusBehaviorLockedCorpora(t *testing.T) {
 	t.Run("weft-go", func(t *testing.T) {
 		weftDir := resolveWeftGoCorpusLoose(t)
 		eng := buildEngineAt(t, weftDir)

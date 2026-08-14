@@ -1,20 +1,20 @@
-// testdata/golden/parity_tsjs_test.go
+// testdata/golden/behavioral_tsjs_test.go
 //
-// TestGoldenParity_TSJS is LANG-05's D-12 acceptance gate for TypeScript,
+// TestCorpusBehavior_TSJS is LANG-05's D-12 acceptance gate for TypeScript,
 // TSX, and JavaScript.
 //
 // D-12 asks for the same byte/shape diff against captured TS CodeGraph
-// v1.3.x golden output that golden_parity_test.go's TestGoldenParity uses
+// v1.3.x golden output that behavioral_test.go's TestCorpusBehavior_Go uses
 // for Go (resolveWeftCorpus's pinned-commit-checkout + corpus/weft-go/*.json
 // pattern). Capturing that fixture requires a working local install of the
 // live TS CodeGraph v1.3.x CLI; per 05-RESEARCH.md's "Environment
 // Availability" table, that CLI was not available in this environment (same
-// finding as parity_java_test.go's/parity_csharp_test.go's/
-// parity_python_test.go's own D-12 fallback). RESEARCH documents the
+// finding as behavioral_java_test.go's/behavioral_csharp_test.go's/
+// behavioral_python_test.go's own D-12 fallback). RESEARCH documents the
 // sanctioned fallback for exactly this situation: "read the parity target's
 // SOURCE as a specification rather than a live golden-output oracle" plus a
 // self-consistency check against this project's own repeated runs. This
-// file implements that fallback (mirroring parity_python_test.go verbatim
+// file implements that fallback (mirroring behavioral_python_test.go verbatim
 // in structure) rather than skipping D-12 entirely.
 //
 // It self-skips (t.Skip, never t.Fatal) when no TS/JS validation corpus is
@@ -71,7 +71,7 @@ func resolveTSJSCorpus(t *testing.T) string {
 	return ""
 }
 
-// TestGoldenParity_TSJS validates, against a real (Claude's Discretion,
+// TestCorpusBehavior_TSJS validates, against a real (Claude's Discretion,
 // user-configured) TypeScript/TSX/JavaScript repository:
 //
 //  1. Shape coverage — every node/edge kind tsextract/types.go documents
@@ -88,7 +88,7 @@ func resolveTSJSCorpus(t *testing.T) string {
 //  3. Determinism (D-01a, project-wide) — a second from-scratch run over
 //     the same corpus yields byte-identical aggregate node/edge/file
 //     counts.
-func TestGoldenParity_TSJS(t *testing.T) {
+func TestCorpusBehavior_TSJS(t *testing.T) {
 	corpusDir := resolveTSJSCorpus(t)
 
 	storeDir1 := t.TempDir()

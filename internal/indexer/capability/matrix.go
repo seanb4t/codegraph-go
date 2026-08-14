@@ -110,7 +110,7 @@ var matrix = map[string]CapabilityEntry{
 		Routing:    CoverageFull,
 		Gaps: []string{
 			"Same-package qualified call qualifiers are disambiguated from local-variable receivers via a PascalCase/camelCase naming-convention heuristic (no local-variable type table is tracked).",
-			"No live TS CodeGraph v1.3.x CLI or curated Java corpus was available in this environment; TestGoldenParity_Java validates via the documented source-as-specification plus self-consistency fallback rather than a byte/shape diff against captured TS output.",
+			"No live TS CodeGraph v1.3.x CLI or curated Java corpus was available in this environment; TestCorpusBehavior_Java validates via the documented source-as-specification plus self-consistency fallback rather than a byte/shape diff against captured TS output.",
 		},
 	},
 	"csharp": {
@@ -121,7 +121,7 @@ var matrix = map[string]CapabilityEntry{
 		Gaps: []string{
 			"A bare using-imported cross-namespace call or inheritance reference — C#'s dominant idiom — is an accepted, documented gap: only fully-qualified cross-namespace references and same-namespace references resolve, since no global symbol table is built at parse time.",
 			"partial class/struct/record/interface fragments share one node keyed by (qualifiedName, namespace) with a deterministic sentinel FilePath/StartLine, rather than a resolve.go-coordinated first-fragment-by-path tie-break (Pitfall 5, scheme-b variant).",
-			"No live TS CodeGraph v1.3.x CLI or curated C# corpus was available in this environment; TestGoldenParity_CSharp validates via the same source-as-specification plus self-consistency fallback as Java.",
+			"No live TS CodeGraph v1.3.x CLI or curated C# corpus was available in this environment; TestCorpusBehavior_CSharp validates via the same source-as-specification plus self-consistency fallback as Java.",
 		},
 	},
 	"python": {
@@ -133,7 +133,7 @@ var matrix = map[string]CapabilityEntry{
 			"pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.",
 			"A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.",
 			"Wildcard from-imports (`from x import *`) are not resolved.",
-			"No live TS CodeGraph v1.3.x CLI or curated Python golden corpus is committed to this repo; TestGoldenParity_Python self-skips by default (it was smoke-tested this session against a real 168-file corpus, see 05-06-SUMMARY.md).",
+			"No live TS CodeGraph v1.3.x CLI or curated Python golden corpus is committed to this repo; TestCorpusBehavior_Python self-skips by default (it was smoke-tested this session against a real 168-file corpus, see 05-06-SUMMARY.md).",
 		},
 	},
 	"typescript": {
@@ -144,7 +144,7 @@ var matrix = map[string]CapabilityEntry{
 		Gaps: []string{
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
-			"No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestGoldenParity_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).",
+			"No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestCorpusBehavior_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).",
 		},
 	},
 	"tsx": {
@@ -155,7 +155,7 @@ var matrix = map[string]CapabilityEntry{
 		Gaps: []string{
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
-			"No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestGoldenParity_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).",
+			"No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestCorpusBehavior_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).",
 		},
 	},
 	"javascript": {
@@ -167,7 +167,7 @@ var matrix = map[string]CapabilityEntry{
 			"JavaScript's own grammar has no interface_declaration node and no implements clause — class heritage is extends-only, so RefKindEmbeds refs never resolve to an interface target and never promote to an implements edge for pure-JavaScript files.",
 			"A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.",
 			"Directory-style imports and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.",
-			"No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestGoldenParity_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).",
+			"No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestCorpusBehavior_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).",
 		},
 	},
 

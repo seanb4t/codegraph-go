@@ -4,7 +4,7 @@ package corpora
 // the package has none here, and a coverage guard that skips over a missing
 // or malformed document is a guard that passes vacuously, exactly the defect
 // class the reference functions resolveWeftCorpus and resolveColbymchenryCorpus
-// (in testdata/golden/golden_parity_test.go) both exhibit with their
+// (in testdata/golden/behavioral_test.go) both exhibit with their
 // `if err != nil { t.FatalAndSkip(...) }` bodies. Those two use skip because a
 // missing fetchable corpus must not fail `go test ./...` on an offline
 // machine; this guard's documents are COMMITTED, so a missing one is a real,

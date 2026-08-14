@@ -1,18 +1,18 @@
-// testdata/golden/parity_csharp_test.go
+// testdata/golden/behavioral_csharp_test.go
 //
-// TestGoldenParity_CSharp is LANG-03's D-12 acceptance gate for C#.
+// TestCorpusBehavior_CSharp is LANG-03's D-12 acceptance gate for C#.
 //
 // D-12 asks for the same byte/shape diff against captured TS CodeGraph
-// v1.3.x golden output that golden_parity_test.go's TestGoldenParity uses
+// v1.3.x golden output that behavioral_test.go's TestCorpusBehavior_Go uses
 // for Go (resolveWeftCorpus's pinned-commit-checkout + corpus/weft-go/*.json
 // pattern). Capturing that fixture requires a working local install of the
 // live TS CodeGraph v1.3.x CLI; per 05-RESEARCH.md's "Environment
 // Availability" table, that CLI was not available in this environment (same
-// finding as parity_java_test.go's own D-12 fallback). RESEARCH documents
+// finding as behavioral_java_test.go's own D-12 fallback). RESEARCH documents
 // the sanctioned fallback for exactly this situation: "read the parity
 // target's SOURCE as a specification rather than a live golden-output
 // oracle" plus a self-consistency check against this project's own repeated
-// runs. This file implements that fallback (mirroring parity_java_test.go
+// runs. This file implements that fallback (mirroring behavioral_java_test.go
 // verbatim in structure) rather than skipping D-12 entirely.
 //
 // It self-skips (t.Skip, never t.Fatal) when no C# validation corpus is
@@ -75,7 +75,7 @@ func resolveCSharpCorpus(t *testing.T) string {
 	return ""
 }
 
-// TestGoldenParity_CSharp validates, against a real (Claude's Discretion,
+// TestCorpusBehavior_CSharp validates, against a real (Claude's Discretion,
 // user-configured) C# repository:
 //
 //  1. Shape coverage — every node/edge kind csharpextract/types.go
@@ -93,7 +93,7 @@ func resolveCSharpCorpus(t *testing.T) string {
 //     prove at the unit/fixture level; here it is proven again against
 //     WHATEVER real corpus is configured, including any partial-class
 //     scaffolding it happens to contain.
-func TestGoldenParity_CSharp(t *testing.T) {
+func TestCorpusBehavior_CSharp(t *testing.T) {
 	corpusDir := resolveCSharpCorpus(t)
 
 	storeDir1 := t.TempDir()
