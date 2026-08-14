@@ -12,11 +12,24 @@ import (
 //
 //   - RenderStatusText — the CLI's padded-column layout ("Index Statistics:"
 //     / "  Files:     1,234" / padEnd(15) breakdowns), ported from
-//     bin/codegraph.js ~900-985 (D-09). Called ONLY by internal/cli.
+//     bin/codegraph.js ~900-985 (D-09). Section order: Index Statistics: /
+//     Nodes by Kind: / Edges by Kind: / Files by Language: / advisories.
+//     Called ONLY by internal/cli.
 //   - RenderStatusMarkdown — the MCP's bolded-key bullet layout
 //     ("**CodeGraph Status**" / "**Files indexed:** N" / "- kind: count"
-//     bullets), ported from mcp/tools.js ~3890-3945. Called ONLY by
-//     internal/mcp.
+//     bullets), ported from mcp/tools.js ~3890-3945. Section order:
+//     stats fields / **Nodes by Kind:** / **Edges by Kind:** /
+//     **Languages:** / advisories. Called ONLY by internal/mcp.
+//
+// v0.11.0 Phase 1 (D-01/D-02/D-04) added the Edges by Kind: /
+// **Edges by Kind:** section to both renderers, always via edgeCounts
+// (never sortedCounts, which would drop the explicit zeros D-04 requires
+// dense mode to carry). Density itself is NOT a renderer parameter — both
+// renderers unconditionally call edgeCounts(r.EdgesByKind); whether that
+// map is the raw sparse tally or DenseEdgesByKind(r)'s dense form is
+// decided upstream of these renderers, by the caller (internal/cli/status.go's
+// --all-kinds flag for the CLI; internal/mcp never opts in, so the MCP
+// surface stays sparse by construction — D-05).
 //
 // They share the same StatusResult data (STAT-01/02/03) but NOT a
 // renderer — TS deliberately ships two shapes for the same data, and
@@ -87,6 +100,53 @@ func sortedCounts(m map[string]int64) []kindCount {
 		if v > 0 {
 			out = append(out, kindCount{Key: k, Count: v})
 		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
+
+// DenseEdgesByKind returns a NEW map carrying every RankEdges (rwr.go)
+// member with an explicit value — r.EdgesByKind's count where present, an
+// explicit 0 where absent — so "absent" (unmeasured) and "measured zero"
+// are never confusable (D-04). The key set is DERIVED by ranging over
+// RankEdges, never hand-listed: a future 10th ranked edge kind is picked
+// up automatically instead of needing a matching edit here. Any entry in
+// r.EdgesByKind whose key is NOT a RankEdges member (an unranked kind,
+// e.g. "contains") is copied across unchanged, so the result is the union
+// of RankEdges and r.EdgesByKind's keys — an unranked kind is never
+// silently dropped. r.EdgesByKind itself is never mutated.
+func DenseEdgesByKind(r StatusResult) map[string]int64 {
+	out := make(map[string]int64, len(RankEdges))
+	for k := range RankEdges {
+		out[k] = r.EdgesByKind[k]
+	}
+	for k, v := range r.EdgesByKind {
+		if _, ranked := out[k]; !ranked {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// edgeCounts sorts m by count DESCENDING, breaking ties on the key
+// ascending — the identical comparison sortedCounts uses — but, unlike
+// sortedCounts, does NOT drop zero-valued entries. It is a separate
+// helper rather than a parameter on sortedCounts because the zero-filter
+// is correct for NodesByKind/FilesByLanguage and wrong for a dense
+// EdgesByKind, and the ascending-key tiebreak is what keeps a nine-way
+// tie at zero deterministically ordered for the byte-frozen wire-oracle
+// transcript (testdata/wireoracle/transcripts/call-status.golden) —
+// without it, re-freezing that transcript would be a flake generator
+// rather than an oracle.
+func edgeCounts(m map[string]int64) []kindCount {
+	out := make([]kindCount, 0, len(m))
+	for k, v := range m {
+		out = append(out, kindCount{Key: k, Count: v})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Count != out[j].Count {
@@ -184,6 +244,7 @@ func RenderStatusText(r StatusResult, projectPath string) string {
 	writeStatLine(&b, "Backend", r.Backend)
 
 	writeBreakdownText(&b, "Nodes by Kind:", sortedCounts(r.NodesByKind))
+	writeBreakdownText(&b, "Edges by Kind:", edgeCounts(r.EdgesByKind))
 	writeBreakdownText(&b, "Files by Language:", sortedCounts(r.FilesByLanguage))
 
 	writeStatusAdvisories(&b, r, "Pending Changes:", "Reindex recommended:")
@@ -237,6 +298,7 @@ func RenderStatusMarkdown(r StatusResult) string {
 	fmt.Fprintf(&b, "**Backend:** %s\n", r.Backend)
 
 	writeBreakdownMarkdown(&b, "**Nodes by Kind:**", sortedCounts(r.NodesByKind))
+	writeBreakdownMarkdown(&b, "**Edges by Kind:**", edgeCounts(r.EdgesByKind))
 	writeBreakdownMarkdown(&b, "**Languages:**", sortedCounts(r.FilesByLanguage))
 
 	writeStatusAdvisories(&b, r, "**Pending Changes:**", "**Reindex recommended:**")
