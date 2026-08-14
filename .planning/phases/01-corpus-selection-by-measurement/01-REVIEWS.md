@@ -826,3 +826,307 @@ CYCLE 2 — current_high=4  current_actionable=8
 Cycle-1 HIGHs still open: **0 of 8.** All four HIGHs above were introduced by the cycle-1 fixes
 themselves. The phase is converging on substance and regressing on internal consistency; the remedy
 is a targeted consistency pass over the four contradictions, not a redesign.
+
+---
+
+# Cross-AI Plan Review — Phase 1, CONVERGENCE CYCLE 3 (FINAL)
+
+<!-- cycle: 3
+     reviewers: [codex]
+     reviewed_at: 2026-08-14T13:29:25Z
+     plans_reviewed_at_commit: 3c118c4 ("docs(01): resolve cycle-2 review findings — observation upsert, edge vocabulary, non-circular selection, wave ordering")
+     prior_cycles: 2166174 + 26f894e (cycle 1), bce629b (cycle 2)
+     plans_reviewed: 01-01-PLAN.md … 01-07-PLAN.md -->
+
+Reviewed at `3c118c4`, against the cycle-2 review recorded above. The reviewer was given both
+prior cycles, the settled-context list (the locked transcript-flag decision, `nscloud-cache-action`,
+the `intel` 0-symbol extractor, the deliberate `internal/corpora` / `realcorpus` separation, 01-06's
+intentional HALT-and-escalate, and the deliberate observations-upsert / selection-single-owner
+asymmetry), the five specific fixes applied at `3c118c4`, and was instructed to hunt for knock-on
+contradictions those fixes introduced elsewhere — the failure mode cycle 2 exhibited.
+
+## Codex Review (cycle 3)
+
+### Summary
+
+The revision resolves **three of cycle 2's four HIGH findings and all eight of its actionable
+lower-severity findings** in executable plan content — task actions, behavior blocks, verify
+commands, acceptance criteria, must_haves and threat-model rows, not prose acknowledgement. The
+fourth HIGH (threshold/selection circularity) is resolved *as library design* but only PARTIALLY as
+executable plan content: the cure introduced a new consumption-before-definition gap of exactly the
+class cycle 2's own H4 named. Three further consistency defects — two of them stale pre-revision
+text the edit left behind — remain actionable.
+
+### Cycle-2 finding disposition
+
+All twelve cycle-2 findings (4 HIGH + 8 actionable) are listed so none is silently dropped.
+
+| Cycle-2 finding | Status | Current plan evidence |
+|---|---|---|
+| HIGH — incremental measurement overwrites observations | **RESOLVED** | Upsert keyed by `repo@sha` as a must_haves truth at `01-05-PLAN.md:25`; read-modify-write specified in the behavior block at `:288-291` and required in the action at `:318-323`; `TestMeasureUpsertsWithoutDroppingPriorEntries` and `TestMeasureLockedScopeRetainsUnlockedObservations` named at `:338-342`; accumulation pinned as an acceptance criterion at `:371`. The opposite-direction half is reconciled explicitly at `01-07-PLAN.md:296-306` — locked-scope re-measure recomputes the same keys while an out-of-scope rejected candidate is neither re-measured nor removed, so `corpora:drift`'s clean-diff and D-17's keep-every-candidate hold together, and `-prune` is forbidden there by name. |
+| HIGH — exact-nine-key checks contradict unranked kinds | **RESOLVED** | Every `len(...) == 9` is gone. Membership-plus-positive-extra semantics replace it at `01-05-PLAN.md:356-360` and `01-06-PLAN.md:204-208`; the acceptance criterion at `01-06-PLAN.md:231` names the rejected `== 9` design and why. Agrees with the real vocabulary: `contains` at `internal/indexer/resolve.go:191` and the nine-member `query.RankEdges` at `internal/query/rwr.go:21-31`. |
+| HIGH — threshold computation circular with locked-set selection | **PARTIAL** | The circularity and the `best == 1` boundary are both genuinely fixed *in library design*: `ComputeThresholds(obs, eligible)` sources `best` from all measured eligible candidates with `min(max(2, best/2), best)` at `01-05-PLAN.md:184-200`; `SelectLockedSet` enumerates by increasing cardinality under a total tie-break at `:205-213`; five named tests at `:231-236`. **But the executable half is unimplemented — see New defects (c).** |
+| HIGH — `corpora:assert` consumed a wave before defined | **RESOLVED** | Created in wave 1 by `01-04-PLAN.md:448-455`, declared in that plan's `provides` at `:45`, and `01-07-PLAN.md:284-287` now explicitly states it is NOT defined there and names why the earlier placement broke 01-06. |
+| MEDIUM — concurrent promotion is check-then-act | **PARTIAL** | An atomic `mkdir "<dir>.lock"` claim with three enumerated branches at `01-04-PLAN.md:419-439`, plus a real two-process concurrency verify at `:472` and a behavior criterion at `:483`. **But the surrounding text was not reconciled — see New defects (e).** |
+| MEDIUM — `-out` used but never declared | **RESOLVED** | Declared with its default in the behavior block at `01-05-PLAN.md:282-284`, required in the action at `:324`, pinned as an acceptance criterion at `:372`. |
+| MEDIUM — `git diff --quiet <path>` exits 128 on an absent path | **RESOLVED** | Both sites now carry an existence guard and say why it is not cosmetic: `01-05-PLAN.md:378` and `01-06-PLAN.md:236`; the threat row at `01-05-PLAN.md:481` records it too. |
+| MEDIUM — a verify command that asserts nothing | **RESOLVED** | `git diff --stat` replaced by two regenerations followed by `git diff --quiet --` at `01-06-PLAN.md:335`. |
+| MEDIUM — shared artifact list stale in both directions | **RESOLVED** | The obsolete `TestMeasureRegenerationPreservesSelection` is gone; all six previously-omitted tests are present; `TestMeasureReposScopeMeasuresExactlyNamed` is now actually instructed at `01-05-PLAN.md:342`. The block is byte-identical across all seven plans (verified by hash). 01-05 Task 2 now names its six tests in its action at `:338-343`. |
+| LOW — 01-06 Task 1 `<files>` incomplete | **RESOLVED** | All three paths named at `01-06-PLAN.md:146`. |
+| LOW — `CheckCoverage` responsibilities exceed its signature | **RESOLVED** | Loading reassigned to the caller in the must_haves truth at `01-07-PLAN.md:25` and restated in the behavior block at `:185-188`, which names the earlier draft's misattribution; the acceptance criterion at `:256` pins "`CheckCoverage` itself performs no I/O". |
+| LOW — rejected-candidate supplier case untested | **RESOLVED** | Behavior line at `01-07-PLAN.md:178`, `TestCoverageRejectsRejectedCandidateAsSupplier` at `:229-232`, and it is in the shared test inventory. |
+
+**11 of 12 fully resolved as plan content; 1 partial. None merely acknowledged.**
+
+### New defects introduced by 3c118c4
+
+Checked per the five fixes applied at that commit.
+
+#### (a) Upsert-keyed-by-`repo@sha` observation lifecycle — NO REGRESSION
+
+Flag and field vocabulary agrees across all seven plans: `-repos`, `-scope`, `-out`, `-prune`,
+`observations`, `lockedSet`, and repository-at-SHA identities are used identically wherever they
+appear. 01-05 writes only in-scope keys and preserves the rest; 01-06 depends on that accumulation;
+01-07 re-measures locked keys without pruning. The three-way composition is argued in place at
+`01-07-PLAN.md:296-306`, not merely asserted.
+
+#### (b) RankEdges-membership replacing `len(...) == 9` — NO CONTRADICTION, one robustness gap
+
+The exact-length regression is fully gone and no plan disagrees with another about the semantics.
+Carried below as an actionable LOW: the *Python* verify blocks still hand-restate the nine members
+(`01-05-PLAN.md:358`, `01-06-PLAN.md:206`, `01-06-PLAN.md:340`) while `query.RankEdges`
+(`internal/query/rwr.go:21-31`) is named throughout as the sole authority — and 01-05's own Go-side
+acceptance criterion (`01-05-PLAN.md:249`) greps to prove the nine strings are NOT restated in
+`internal/corpora/record.go`. The prohibition is scoped to Go source, so this is a drift vector
+rather than a contradiction, but it is the one place a tenth ranked kind could be added while every
+check stayed green.
+
+#### (c) HIGH — non-circular `ComputeThresholds` plus `tools/corpora -mode select`: the mode is consumed but never created
+
+The library half landed. The **executable** half did not.
+
+- `01-05-PLAN.md:181-213` (Task 1) creates `ComputeThresholds` and `SelectLockedSet` in
+  `internal/corpora/record.go`.
+- `01-05-PLAN.md:259` (Task 2) extends `tools/corpora/main.go` with `measure` **only** — its
+  must_haves artifact entry says exactly that: `provides: "-mode measure with -repos/-scope"`
+  (`01-05-PLAN.md:38`). Task 3 adds only prose rendering.
+- `01-04-PLAN.md:312` creates the dispatch and says it supports **two** modes, `root` and `entries`.
+- No task in any of the seven plans instructs an executor to add a `select` mode.
+
+Yet `01-06-PLAN.md:260` mandates computing the threshold and locked set with
+`go run ./tools/corpora -mode select`, `:354-358` pipes its stdout to a file and parses
+`minEdgesPerKind` and `lockedSet` out of it, `:390` makes byte-equality with that output an
+acceptance criterion — *the single criterion the plan says proves the set is the global optimum
+rather than merely a satisfying one* — and `:391` makes its non-zero exit the HALT trigger.
+
+This is cycle-2 H4's defect class reintroduced at a new seam by the fix for cycle-2 H3. Two further
+gaps ride on it, both invisible to `/gsd-execute-phase`:
+
+1. **The stdout contract is unspecified.** `01-06-PLAN.md:355-357` assumes a JSON object with
+   `minEdgesPerKind` and `lockedSet` keys. No behavior block anywhere declares it.
+2. **The `eligible` universe is undefined at the CLI layer.** Both library functions take
+   `eligible []string`; `01-05-PLAN.md:185-186` glosses it as "every candidate with an
+   observation, regardless of lock state", but nothing says how `-mode select` derives it — and
+   `01-06-PLAN.md:344-346`'s independent Python recomputation uses `obs.values()`, i.e. *all*
+   observations. If the Go mode's eligibility ever differs from "all observations", that verify
+   and the mode disagree by construction.
+
+Listing `select` in the shared artifact inventory (`01-05-PLAN.md:549` and its six identical
+copies) does not instruct anyone to build it: that block is a bill of materials, not a task.
+`/gsd-execute-phase` can complete every 01-05 task, mark the plan done, and reach 01-06 wave 4 with
+the command it is required to run absent.
+
+**Plan change required.** Give `01-05` Task 2 (or a new Task 4) a `select` mode: action, behavior
+block declaring the stdout JSON shape and the eligible-universe derivation, the non-zero
+unsatisfiable-kinds exit, at least one test, and an acceptance criterion. Add it to the
+`tools/corpora/main.go` artifact `provides` string at `01-05-PLAN.md:38`.
+
+#### (d) Moving `corpora:assert` from wave 5 to wave 1 — NO REGRESSION
+
+Consistent everywhere: defined at `01-04-PLAN.md:448-455`, in that plan's `provides` at `:45` and
+its behavior criteria at `:476,484`; consumed at `01-06-PLAN.md:383,397,554`; explicitly
+not-redefined at `01-07-PLAN.md:284-287` and consumed by the CI workflow step at `:407`. The shared
+Taskfile-target inventory lists it identically in all seven plans. The empty-locked-set refusal
+(`01-04-PLAN.md:476`) correctly covers the wave-1 state in which nothing is locked yet.
+
+#### (e) MEDIUM — the atomic `mkdir` claim is not internally singular, and its downstream text is stale
+
+Two incompatible sequences are given for the same operation:
+
+- The numbered action reads stage (`01-04-PLAN.md:411-415`) → integrity-check the staged tree
+  (`:417-418`) → **then** step 7's claim (`:419`).
+- Step 7's own claim-acquired branch reads claim → **"stage, integrity-check the staged tree,
+  `mv`"** (`:429-431`).
+
+The difference is not cosmetic: claim-before-network serializes the whole shallow fetch across
+processes, while claim-after-staging parallelizes transfer and serializes only promotion. Step 7's
+claim-refused branch ("discard the staged copy", `:433`) presupposes the *second* ordering, which
+step 5 contradicts.
+
+Compounding it, two downstream passages still describe the superseded design:
+
+- Threat row **T-01-04-04** (`01-04-PLAN.md:514`): "A racer that finds the destination already
+  present validates it and discards its own copy rather than renaming over it." The claim
+  mechanism is absent, and so is the new third branch — a loser finding the destination **absent
+  or failing** now exits NON-ZERO naming the claim path (`:435-439`).
+- Success criterion (`01-04-PLAN.md:618`): "Staging is unique per invocation and the concurrent
+  loser validates-and-discards" — same stale framing, and it is the plan's own summary of what
+  the task achieved.
+
+This is precisely the pre-revision-text-left-behind class the regression hunt was asked to find.
+
+**Plan change required.** Pick one exact sequence and write it once; update T-01-04-04 and the
+success criterion to describe the claim protocol including the non-zero third branch.
+
+### Remaining concerns
+
+- **HIGH — `-mode select` has no implementation task** (defect (c) above). 01-06 cannot pass its
+  own acceptance criterion at `01-06-PLAN.md:390`, and the "independently re-derived optimum"
+  guarantee — the entire point of the cycle-2 H3 fix — is unverifiable as planned.
+- **MEDIUM — the atomic fetch protocol gives two incompatible orderings and leaves two stale
+  descriptions** (defect (e) above): `01-04-PLAN.md:411-418` vs `:429-431`, plus `:514` and `:618`.
+- **MEDIUM — dead pre-revision text contradicts the upsert lifecycle.** `01-05-PLAN.md:90` still
+  reads "**`corpora/observations.json`** — generated. Fully reconstructed by `task corpora:measure`."
+  Full reconstruction at the default `locked` scope is *exactly* the design cycle-2 H1 proved
+  broken, and it contradicts this plan's own must_haves truth at `01-05-PLAN.md:25` ("never deletes
+  an entry outside its scope") and its Task 2 behavior at `:288-291`. The authoritative statements
+  are correct; this one is leftover narrative in the objective — the first thing an executor reads.
+  **Change needed:** reword `:90` to "upserted by `task corpora:measure`, keyed by `repo@sha`".
+- **LOW — the Python verify blocks hand-restate the nine `RankEdges` members** at
+  `01-05-PLAN.md:358`, `01-06-PLAN.md:206` and `01-06-PLAN.md:340`, while `query.RankEdges`
+  (`internal/query/rwr.go:21-31`) is named plan-wide as the authority and `01-05-PLAN.md:249`
+  greps to forbid restating them in Go. A tenth ranked kind would be omitted from observations and
+  thresholds with every one of these checks still green. **Change needed:** derive the set in the
+  verify (e.g. a `tools/corpora` mode that emits the ranked kinds), or add an acceptance criterion
+  asserting the Python literal equals `query.RankEdges`.
+- **LOW — `-out` does not scope the second artifact it claims to.** `01-05-PLAN.md:283-284` says
+  `-out` "exists so a smoke run can write to a scratch path without touching the committed record",
+  but the immediately preceding bullet (`:285-287`) says `-mode measure` always writes
+  `docs/CORPUS-MEASUREMENT.md` — which is itself a committed record. Once Task 3 wires the renderer
+  in (`:433-435`), the Task 2 verify commands that pass `-out /tmp/obs1.json` (`:353,365,366,367`)
+  regenerate the committed document from a one-entry scratch file. Benign in first-pass task order,
+  not benign on any re-run or phase-level re-verification. **Change needed:** either state that the
+  document write is skipped when `-out` is non-default, or add a companion doc-path flag, and
+  reword `:283-284` to match.
+- **LOW — the concurrency verify does not check the leftover it advertises.** `01-04-PLAN.md:472`
+  echoes "no leftover claim or staging" but tests only `test ! -d "$D.lock"` and
+  `test -z "$(ls -d "$D".* 2>/dev/null)"` — and `$D.lock` is itself matched by `$D.*`, so the two
+  are redundant with each other. Staging is a `mktemp -d` under the destination's **parent**
+  (`01-04-PLAN.md:411`), i.e. `<parent>/tmp.XXXXXX`, which neither test can see. The step-8
+  "remove the staging directory on every exit path" guarantee is therefore unverified.
+  **Change needed:** snapshot the parent directory's entries before and after and assert equality
+  apart from the destination.
+
+### Overturned rejections
+
+**None.** Every argued disposition re-checked this cycle holds: the two-file ownership split over a
+merge (`01-05-PLAN.md:95-96`), the deliberate `internal/corpora` / `tools/bench/realcorpus`
+separation with its Phase 6 handoff, the removal of the synthetic fallback, 01-06's HALT-and-escalate
+with its two now-distinct conditions, the non-blocking fetch loser (`01-04-PLAN.md:437-439` — a
+build tool that waits can deadlock a CI job), and the deliberate observations-upsert /
+selection-single-owner asymmetry, which `01-05-PLAN.md:26` now defends on the correct grounds:
+both sides of an observation merge are machine-produced and keyed `repo@sha`, so re-measuring a key
+recomputes it wholly and a pin bump makes a new key rather than staling an old one.
+
+### Risk assessment
+
+**MEDIUM.** Substantially converged from cycle 2: eleven of twelve findings closed as executable
+plan content, the four HIGH-severity internal contradictions reduced to one, and — importantly —
+the revision introduced **no new cross-plan contradiction** in four of the five areas it touched.
+The single remaining HIGH is a missing implementation task, not a design flaw: the algorithm, its
+tests and its verification are all specified; only the CLI seam that exposes them was never
+assigned to a task. That is a bounded, additive fix to one plan. The three text-consistency
+findings are localized, and two of them are stale sentences rather than live specifications.
+
+### Verification coverage (cycle 3)
+
+Every finding recorded above was re-checked against plan text and repository source before being
+counted:
+
+| # | Finding | Verified at |
+|---|---------|-------------|
+| 1 | `-mode select` consumed, never created | Consumed: `01-06-PLAN.md:260,354,390,391`. Creation searched for and absent: `01-04-PLAN.md:312` ("two modes"), `01-05-PLAN.md:38,259,298` (measure only), `01-05-PLAN.md:392` (prose only). The only mention outside 01-06 is the shared inventory line naming `root`, `entries`, `measure`, `select` — identical in all seven plans. Independently found by both the reviewer and the orchestrator pass. |
+| 2 | Fetch-protocol ordering ambiguity | `01-04-PLAN.md:411-418` (stage then check) vs `:429-431` (claim then stage then check); loser branch `:433` presupposes the latter |
+| 3 | Stale racer text | `01-04-PLAN.md:514` (T-01-04-04) and `:618` (success criterion) vs the three-branch protocol at `:427-439` |
+| 4 | "Fully reconstructed" contradicts upsert | `01-05-PLAN.md:90` vs `:25` and `:288-291` |
+| 5 | Hand-restated nine kinds in Python | `01-05-PLAN.md:358`, `01-06-PLAN.md:206,340` vs `internal/query/rwr.go:21-31` and the Go-side prohibition at `01-05-PLAN.md:216-217,249` |
+| 6 | `-out` does not scope the document | `01-05-PLAN.md:283-284` vs `:285-287`; verify sites `:353,365,366,367`; renderer wired at `:433-435` |
+| 7 | Unverified staging leftover | `01-04-PLAN.md:472` (the two tests) vs `:411` (staging is `mktemp -d` under the parent) |
+
+Cross-cutting sweeps that came back CLEAN: the `artifacts_this_phase_produces` block is byte-identical
+across all seven plans (SHA-1 `3abd502f…`); `corpora/manifest.json`, `corpora/observations.json` and
+`corpora/selection.json` are named uniformly; no `len(...) == 9` survives anywhere; every
+`git diff --quiet` against a possibly-absent path carries its existence guard; and the wave graph
+(`01-01`/`01-04` → `01-02` → `01-03`/`01-05` → `01-06` → `01-07`) has no target, flag, function or
+mode consumed earlier than its defining wave — with the single exception recorded as finding 1.
+
+No `REVIEWED-WITHOUT-REPO-ACCESS` marker was emitted; the reviewer cited repository `file:line`
+evidence throughout and its citations were spot-checked against the tree.
+
+---
+
+## Consensus Summary (cycle 3)
+
+One prompt-fed source-grounded reviewer (Codex) ran this cycle, cross-checked by an independent
+orchestrator verification pass over the same plan text and repository. **Both independently and
+first identified the `-mode select` gap as the cycle's only HIGH** — the strongest available signal
+that it is real rather than an artifact of one reviewer's reading. The orchestrator pass
+additionally contributed the "Fully reconstructed" stale-text finding, the `-out`/document-scope
+finding, and the unverified-staging-leftover finding; the reviewer contributed the fetch-ordering
+ambiguity and its two stale downstream passages, and the hand-restated-`RankEdges` robustness gap.
+
+### Agreed strengths
+
+- **The regression rate dropped sharply.** Cycle 2's revision introduced four HIGHs at four
+  separate seams. This one introduced one, in the single area where the fix required a new
+  executable surface — and left the other four areas it touched contradiction-free.
+- **The fixes are argued in place, not merely applied.** Each superseded design is named and
+  forbidden where it used to live: the circular threshold universe (`01-06-PLAN.md:263-268`), the
+  `== 9` check (`01-06-PLAN.md:231`), the truncate-and-rebuild write (`01-05-PLAN.md:318-323`), the
+  wave-5 placement of `corpora:assert` (`01-07-PLAN.md:284-287`), and both earlier promotion
+  protocols (`01-04-PLAN.md:419-425`). A future reader cannot reintroduce them by accident.
+- **The `min(max(2, best/2), best)` clamp is the right shape of fix.** It makes every derived
+  threshold satisfiable *by construction* rather than testing for the bad case, and the plan says
+  honestly that `best == 1` yields a threshold of `1` — D-14's tightening being arithmetically
+  unavailable there — instead of inventing a bar nothing can clear.
+- **The upsert/clean-diff composition is reasoned, not asserted.** `01-07-PLAN.md:296-306`
+  demonstrates why D-17's keep-every-candidate and `corpora:drift`'s clean-diff hold together, and
+  identifies `repo@sha` keying as the property the whole argument rests on.
+
+### Agreed concerns
+
+One: **`tools/corpora -mode select` is consumed by 01-06 and created by nobody.** It carries the
+acceptance criterion that the entire cycle-2 H3 fix exists to make checkable, so its absence
+silently removes the optimality proof rather than failing loudly. The remedy is additive and bounded
+— one mode, one behavior block, one test, one acceptance criterion, in 01-05.
+
+The recurring theme, now in its third cycle, is unchanged and worth naming plainly: **each revision
+fixes the named defects and leaves one new seam where a plan consumes something no plan produces.**
+Cycle 1 → 01-05's smoke test; cycle 2 → `corpora:assert`; cycle 3 → `-mode select`. The structural
+remedy is not another review cycle but a mechanical cross-plan check before execution: for every
+executable token a verify block or acceptance criterion names — Taskfile target, CLI mode, flag,
+exported function — assert some earlier-or-equal-wave task's action creates it.
+
+### Divergent views
+
+None material — one prompt-fed reviewer. Two adjudications worth recording:
+
+- The reviewer rated the hand-restated `RANK={...}` Python literals MEDIUM. The orchestrator
+  **downgraded** them to LOW: the plans' no-restatement prohibition (`01-05-PLAN.md:216-217`) is
+  explicitly scoped to `internal/corpora/record.go`, so this is a future-proofing gap rather than a
+  contradiction with a stated contract, and nothing in Phase 1 adds a tenth ranked kind.
+- The reviewer folded the fetch-ordering ambiguity and its stale downstream text into one MEDIUM;
+  the orchestrator agrees and counts them as one finding, since a single edit to 01-04 Task 3
+  resolves both.
+
+### Convergence verdict
+
+```
+CYCLE_SUMMARY: current_high=1 current_actionable=5
+```
+
+Cycle-1 HIGHs still open: **0 of 8.** Cycle-2 HIGHs still open: **1 of 4** (the threshold/selection
+HIGH, partially — its library design is fixed, its executable surface is unassigned). The one
+remaining HIGH is a missing implementation task in a single plan, not a design defect: it is the
+smallest and most localized state this phase has been in across three cycles, and the fix is
+additive to `01-05-PLAN.md` alone.
