@@ -1,0 +1,171 @@
+# Corpora drift guard — D-08's expensive half (FIXT-01/FIXT-02).
+#
+# THE PROPERTY AT RISK: whether the pinned LOCKED corpora still produce the
+# committed measurement. The cheap half (task corpora:verify) reconciles the
+# three committed documents against each other on every test run with no
+# fetching or indexing; this workflow proves the OTHER direction — that
+# re-running the measurement against the REAL pinned corpora reproduces the
+# recorded numbers byte-identically. A drift job re-measures at the default
+# locked scope and diffs observations.json + CORPUS-MEASUREMENT.md against
+# the committed record.
+#
+# WHY THIS RUNS ON A MEASUREMENT-AFFECTING PATH CHANGE, NOT EVERY PR.
+# D-08 splits the cost by trigger: the cheap reconciliation runs on every CI
+# run; this expensive re-index-and-diff leg runs only when something that can
+# change a measurement changes. The path filter below MUST cover every input
+# to a measurement, not only the manifest. An earlier draft filtered on the
+# manifest alone, which would let the measuring algorithm itself change — a
+# new edge kind emitted by the indexer, a change to the dense derivation —
+# without the expensive job ever running. That is the same class of blind
+# spot the phase exists to close, so the filter is widened deliberately to
+# cover the indexer, the query status/render surface, the corpora tooling and
+# Taskfile (which defines every job body).
+#
+# WHY THE PUSH TRIGGER, NOT ONLY PR. A PR-only filter proves nothing about
+# the state of the default branch after merge, and the drift this job detects
+# is exactly the kind that appears once several PRs have landed against the
+# same pinned corpora.
+#
+# CACHING — THE ESTABLISHED MECHANISM (D-06, locked v1.0 Phase 10). This
+# workflow uses namespacelabs/nscloud-cache-action at the SAME pinned commit
+# as the nine existing call sites across ci.yml and bench.yml. No second
+# caching mechanism is introduced. That action has NO key input — it mounts a
+# persistent NVMe volume with no upload/download phase — so D-13's required
+# content-addressing is delivered by the corpus DESTINATION PATH, which
+# embeds the pinned SHA (corpora.Entry.Dir, Plan 01-04): each corpus occupies
+# its own content-addressed subdirectory, a pin bump produces a NEW path
+# absent from the volume by construction and therefore fetched, and there is
+# consequently NO prefix-fallback matching to disable because there are no
+# keys. D-13's "10 GB per-repo ceiling with LRU eviction" premise described
+# GitHub's cache service and is retired here — this runs on a Namespace
+# volume, which is why the runner class below is load-bearing.
+#
+# TRUST POSTURE (T-01-07-01). release.yml:113-120 withholds the cache action
+# from the release job because it holds id-token: write and "a release build
+# should not read from a mutable cache any PR on any branch can populate"
+# (finding S2; T-01-29). This job is on the SAFE side of that line: it
+# requests contents: read only, holds no id-token: write, signs nothing and
+# publishes nothing — the same trust posture as ci.yml's test job, which
+# already reads this same volume in six places. The control that makes a
+# mutable volume acceptable: every restored tree is verified on ALL FOUR
+# integrity parts before indexing — .git present, HEAD equal to the pin,
+# git status --porcelain --ignored EMPTY, tree object resolving. Commit
+# identity alone is explicitly insufficient; the drift leg is a second
+# independent control.
+#
+# The fetch step and the assertion step are BOTH UNCONDITIONAL — neither is
+# gated on the cache-hit output. A cache MISS must fall through to a REAL
+# fetch with a non-zero corpus count, never to a skipped job (FIXT-02
+# criterion 5; rule 84d1gfpywd). The fetch target is idempotent: it runs the
+# four-part integrity check on an existing destination and skips only a
+# corpus that passes all four, so making it unconditional removes the only
+# code path on which a cache anomaly could result in nothing fetching.
+name: corpora
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "corpora/**"
+      - "internal/corpora/**"
+      - "tools/corpora/**"
+      - "internal/indexer/**"
+      - "internal/query/status.go"
+      - "internal/query/render_status.go"
+      - "Taskfile.yml"
+      - ".github/workflows/corpora.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "corpora/**"
+      - "internal/corpora/**"
+      - "tools/corpora/**"
+      - "internal/indexer/**"
+      - "internal/query/status.go"
+      - "internal/query/render_status.go"
+      - "Taskfile.yml"
+      - ".github/workflows/corpora.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  corpora:
+    name: corpora (fetch, assert, re-measure, diff)
+    runs-on: namespace-profile-linux-amd64-4x8
+    # The runner class is load-bearing: the Namespace cache action requires a
+    # cache volume attached to the job and does NOT function on a standard
+    # runner. This is the same runner class as ci.yml's test job.
+    #
+    # CODEGRAPH_CORPUS_DIR is declared ONCE, at job level, and is referenced
+    # by the cache step's path and — through the environment — by every task
+    # invocation, so the corpus root has exactly one definition and cannot
+    # drift between what is cached and what is written. This is the override
+    # seam D-12 designed.
+    #
+    # DWARF-PATH DEVIATION (Rule 3, recorded in 01-07-SUMMARY.md): the plan
+    # mandated "under the runner's temporary directory", but the `runner`
+    # context is only available at STEP-level env, not job-level env
+    # (actionlint rejects `${{ runner.temp }}` at jobs.<id>.env, and the plan
+    # itself mandates `task lint:actions` exits 0). The job-level value is
+    # therefore a directory SIBLING of the working tree, `github.workspace`'s
+    # parent joined with a fixed name — this context IS available at job
+    # level. It still satisfies D-12: corpora land OUTSIDE the git working
+    # tree (the checkout sits at `github.workspace`, the corpus root at its
+    # parent).
+    #
+    # FIRST-USE UNKNOWN, confirmed on the real first dispatch rather than
+    # asserted here: whether the Namespace cache volume can MOUNT this chosen
+    # path. If the first dispatch shows it cannot, the fix is a one-line
+    # change to the job-level value below — do NOT switch caching mechanisms.
+    env:
+      CODEGRAPH_CORPUS_DIR: "${{ github.workspace }}/../codegraph-corpora"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache corpora volume
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        id: cache-corpora
+        with:
+          # path-based cache: the corpus root at the job-level value, NOT a
+          # cache-mode auto-detect (there is no 'go' here because that would
+          # cache Go's module cache under a different path). The action has
+          # NO key input — content-addressing comes from the SHA-bearing
+          # destination path per corpus (corpora.Entry.Dir). A pin bump
+          # produces a new path absent from the volume by construction, and
+          # the volume itself persists across the job's own writes (no
+          # upload/download phase, so this action has no cache-save
+          # counterpart). There is consequently no prefix-fallback matching
+          # to disable because there are no keys.
+          path: ${{ env.CODEGRAPH_CORPUS_DIR }}
+      # fail-on-cache-miss is intentionally NOT set — its default of false
+      # is exactly what FIXT-02 criterion 5 requires: a miss must fall
+      # through to the unconditional fetch below, never cause a skipped job.
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Fetch corpora at pinned SHAs
+        # UNCONDITIONAL — deliberately NOT gated on steps.cache-corpora.hit.
+        # The fetch target is idempotent (it runs the four-part integrity
+        # check on an existing destination and skips only a corpus that
+        # passes all four), so making it unconditional removes the only path
+        # by which a cache anomaly could result in nothing fetching —
+        # precisely the skip FIXT-02 criterion 5 forbids. A later reader must
+        # NOT reintroduce a condition here.
+        run: task corpora:fetch
+
+      - name: Assert corpora present at pinned SHAs
+        # UNCONDITIONAL for the same reason as the fetch step above.
+        run: task corpora:assert
+
+      - name: Re-measure and diff against the committed record
+        run: task corpora:drift
