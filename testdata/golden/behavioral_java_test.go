@@ -9,7 +9,7 @@
 // Availability" table, that CLI was not available in this environment ("a
 // time-sensitive, one-shot capture that may no longer be runnable" —
 // testdata/golden/README.md). RESEARCH documents the sanctioned fallback
-// for exactly this situation: "read the parity target's SOURCE as a
+// for exactly this situation: "read the reference target's SOURCE as a
 // specification rather than a live golden-output oracle" plus a
 // self-consistency check against this project's own repeated runs. This
 // file implements that fallback rather than skipping D-12 entirely.

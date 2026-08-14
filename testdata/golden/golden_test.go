@@ -5,7 +5,7 @@
 //
 // This test does not validate fixture *content* against a live TS install —
 // it only guards that a future re-capture didn't forget to strip volatile
-// fields, which would silently reintroduce spurious parity failures in
+// fields, which would silently reintroduce spurious failures in
 // later phases.
 package golden
 
@@ -160,7 +160,7 @@ func TestGoSideFixturesRegenerated(t *testing.T) {
 			if len(data) == 0 {
 				t.Fatalf("%s is empty", path)
 			}
-			// goldenCapture (golden_parity_test.go, same package) mirrors
+			// goldenCapture (behavioral_test.go, same package) mirrors
 			// gocapture/main.go's own envelope shape.
 			var parsed goldenCapture
 			if err := json.Unmarshal(data, &parsed); err != nil {

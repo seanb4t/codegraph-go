@@ -8,7 +8,7 @@
 // live TS CodeGraph v1.3.x CLI; per 05-RESEARCH.md's "Environment
 // Availability" table, that CLI was not available in this environment (same
 // finding as behavioral_java_test.go's own D-12 fallback). RESEARCH documents
-// the sanctioned fallback for exactly this situation: "read the parity
+// the sanctioned fallback for exactly this situation: "read the reference
 // target's SOURCE as a specification rather than a live golden-output
 // oracle" plus a self-consistency check against this project's own repeated
 // runs. This file implements that fallback (mirroring behavioral_java_test.go

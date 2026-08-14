@@ -34,8 +34,8 @@ type goldenCapture struct {
 // corpusSpec is one corpus's regeneration recipe: how to resolve its
 // source tree, plus the symbol/query parameters for its behavioral
 // fixtures. An empty baselineSymbol means "this corpus has no baseline"
-// (only synthetic-parity, per README.md: "behavioral-only, no baseline
-// status/query/callers/callees/impact/explore/node fixtures").
+// (the behavioral corpus is behavioral-only, with no baseline
+// status/query/callers/callees/impact/explore/node fixtures).
 type corpusSpec struct {
 	name string
 

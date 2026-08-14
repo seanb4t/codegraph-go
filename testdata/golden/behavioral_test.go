@@ -36,7 +36,7 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
-// mbShapeRE pins D-07's MB-rendering contract at the parity layer, where
+// mbShapeRE pins D-07's MB-rendering contract, where
 // dbSizeBytes comes from a real corpus index rather than a synthetic
 // fixture value: fmt.Sprintf("%.2f MB", bytes/1024/1024).
 var mbShapeRE = regexp.MustCompile(`^\d+\.\d{2} MB$`)
@@ -346,7 +346,7 @@ func loadGoldenOutputIn(t *testing.T, corpus, name string) string {
 
 // goldenFixtureExistsIn reports whether corpus/<corpus>/<name> exists —
 // used to skip a subtest cleanly (not fail) when a corpus has no golden
-// fixture of that kind (e.g. synthetic-parity has no baseline
+// fixture of that kind (e.g. the behavioral corpus has no baseline
 // explore.json/node.json — README.md: "behavioral-only... no
 // baseline... fixtures").
 func goldenFixtureExistsIn(corpus, name string) bool {
@@ -724,7 +724,7 @@ func TestCorpusBehavior_Go(t *testing.T) {
 // Allowed-divergence notes (retained from the D-02 harness):
 //
 //   - AD-04 (file-selection breadth + blast-radius bullet scope): even on
-//     synthetic-parity (the corpus purpose-built and validated for this),
+//     the behavioral corpus (purpose-built and validated for this),
 //     Go's RWR-selected file set and blast-radius bullet set diverge from
 //     TS's historical output in both directions: TS pulls in ledger/ledger.go
 //     via a broader partial "account" token match that Go's tokenizer does
@@ -740,116 +740,134 @@ func TestCorpusBehavior_Go(t *testing.T) {
 //     comparisons below are Location-SET based (order-independent), never
 //     slice-position based.
 
-// TestCorpusBehaviorSynthetic runs the D-02 oracle against the behavioral
-// corpus (D-03) — the committed, always-in-repo corpus co-designed to be
-// tractable for property assertions. In this wave (02-02) it reads the
-// moved go-* goldens as regression snapshots; Task 3 re-authors it as a
-// CASES.json-driven property assertion test.
+// TestCorpusBehaviorSynthetic asserts the four named behavioral properties
+// (D-09) of live Go engine output, driven by corpus/behavioral/CASES.json.
+// Each case in the case map carries a query + assertion mode; the test
+// derives symbols/files/query/assertion from data, not from a Go literal
+// table (D-04). The go-* goldens remain committed as regression snapshots
+// but are NOT the primary oracle — a failing test names which behavior
+// broke, not merely "a golden diff appeared".
 func TestCorpusBehaviorSynthetic(t *testing.T) {
+	cases := loadBehavioralCases(t)
 	eng := buildEngineAt(t, syntheticParitySrc(t))
 
-	t.Run("node-multi", func(t *testing.T) {
-		// Symbol/query per CASES.json case a: "Validate" has exactly 2
-		// real defs (accounts/validate.go + orders/validate.go, D-03).
-		got, err := eng.Node("Validate", "", nil)
-		if err != nil {
-			t.Fatalf("Node(Validate, \"\"): %v", err)
-		}
-		want := loadBehavioralFixture(t, "go-node-multi.json")
+	for _, tc := range cases {
+		t.Run(tc.ID+"-"+tc.Name, func(t *testing.T) {
+			switch tc.Assertion {
+			case "overloaded-defs-distinct":
+				// Case (a): Node("Validate") returns exactly 2 distinct
+				// definitions whose locations are accounts/validate.go
+				// and orders/validate.go (overloaded dedup stays distinct).
+				got, err := eng.Node(tc.Symbol, "", nil)
+				if err != nil {
+					t.Fatalf("Node(%q, \"\"): %v", tc.Symbol, err)
+				}
+				blocks := parseNodeMultiDefBlocks(got)
+				locs := locationSet(blocks)
+				if len(locs) != 2 {
+					t.Errorf("Node(%q): got %d defs, want 2 (locations: %v)", tc.Symbol, len(locs), locs)
+				}
+				for _, wantFile := range tc.Files {
+					found := false
+					for loc := range locs {
+						if strings.HasPrefix(loc, wantFile+":") {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("Node(%q): missing expected def in %s (got locations: %v)", tc.Symbol, wantFile, locs)
+					}
+				}
+				// Verify the header template matches the exact def count.
+				wantHeader := fmt.Sprintf("**2 definitions named %q**\nReturning 2 in full — pick the one you need (no Read required).\n\n", tc.Symbol)
+				if !strings.HasPrefix(got, wantHeader) {
+					t.Errorf("Node(%q) header mismatch:\ngot prefix: %q\nwant: %q", tc.Symbol, firstNChars(got, len(wantHeader)+20), wantHeader)
+				}
+				headerCount := nodeMultiDefCount(t, got)
+				if headerCount != 2 {
+					t.Errorf("Node(%q) header def count = %d, want 2", tc.Symbol, headerCount)
+				}
 
-		// Header wording is deterministic (pure enumeration, no ranking
-		// involved) — assert the FULL template, including the exact
-		// def/return counts (2/2, no overflow clause), since this
-		// corpus's def count is small and unambiguous.
-		wantHeader := "**2 definitions named \"Validate\"**\nReturning 2 in full — pick the one you need (no Read required).\n\n"
-		if !strings.HasPrefix(got, wantHeader) {
-			t.Errorf("Node(Validate) header mismatch:\ngot prefix:  %q\nwant prefix: %q", firstNChars(got, len(wantHeader)+20), wantHeader)
-		}
-		if !strings.HasPrefix(want, wantHeader) {
-			t.Fatalf("golden node-multi.json header does not match the expected literal — golden fixture may have changed shape:\n%q", firstNChars(want, len(wantHeader)+20))
-		}
+			case "multi-word-tokenization":
+				// Case (b): Explore("user account") surfaces
+				// UserAccountManager and selects accounts/manager.go
+				// (camelCase multi-word tokenization).
+				got, err := eng.Explore(tc.Query, 0)
+				if err != nil {
+					t.Fatalf("Explore(%q, 0): %v", tc.Query, err)
+				}
+				wantHeader := fmt.Sprintf("**Exploration: %s**\n\n", tc.Query)
+				if !strings.HasPrefix(got, wantHeader) {
+					t.Errorf("Explore(%q) header mismatch:\ngot prefix: %q\nwant: %q", tc.Query, firstNChars(got, len(wantHeader)+20), wantHeader)
+				}
+				gotFiles := exploreSelectedFiles(got)
+				if !gotFiles[tc.Files[0]] {
+					t.Errorf("Explore(%q) selected files = %v, want %q among them", tc.Query, gotFiles, tc.Files[0])
+				}
+				if !strings.Contains(got, tc.Symbol) {
+					t.Errorf("Explore(%q) output does not mention %q", tc.Query, tc.Symbol)
+				}
 
-		// Def SET equality, order-independent (Assumption A3) — both
-		// defs must be present on both sides at the exact same
-		// (file:line), since this is pure deterministic enumeration.
-		gotBlocks, wantBlocks := parseNodeMultiDefBlocks(got), parseNodeMultiDefBlocks(want)
-		gotLocs, wantLocs := locationSet(gotBlocks), locationSet(wantBlocks)
-		if len(gotLocs) != len(wantLocs) {
-			t.Errorf("Node(Validate) def count = %d, want %d (locations: got=%v want=%v)", len(gotLocs), len(wantLocs), gotLocs, wantLocs)
-		}
-		for loc := range wantLocs {
-			if !gotLocs[loc] {
-				t.Errorf("Node(Validate) missing expected def at %s (got locations: %v)", loc, gotLocs)
+			case "cluster-surfaces-connected-non-test":
+				// Case (c): Explore("user account") surfaces the
+				// structurally-connected non-test symbols (recoverAccount)
+				// over the zero-inbound TestAccountRecovery. The output
+				// carries a "tests: recovery/recovery_test.go" clause
+				// for the connected symbol.
+				got, err := eng.Explore(tc.Query, 0)
+				if err != nil {
+					t.Fatalf("Explore(%q, 0): %v", tc.Query, err)
+				}
+				for _, connected := range tc.Connected {
+					if !strings.Contains(got, connected) {
+						t.Errorf("Explore(%q): expected %q to be surfaced (structurally-connected non-test symbol), got:\n%s", tc.Query, connected, got)
+					}
+				}
+				// The weakly-connected Test* symbol must not be promoted.
+				// However, its file may appear in the "tests:" clause of
+				// a connected symbol. Check the test file is not SELECTED
+				// as its own rendered section (via the **`file`** pattern).
+				if strings.Contains(got, "**`recovery/recovery_test.go`**") {
+					t.Errorf("Explore(%q): the weakly-connected Test*-only file must not be selected/rendered (H15 hard test exclusion)", tc.Query)
+				}
+				if !strings.Contains(got, "tests:") || !strings.Contains(got, "recovery_test.go") {
+					t.Errorf("Explore(%q) output missing recovery_test.go tests: clause:\n%s", tc.Query, got)
+				}
+
+			case "structural-surfaces-zero-lexical-match":
+				// Case (d): Explore("account balance") must (a) select
+				// ledger/ledger.go, (b) surface GetBalance (the partial-
+				// lexical structural bridge), and (c) surface
+				// ReconcileLedger (zero lexical match) via structural
+				// expansion. The property is SURFACING (present and
+				// reachable), not strict ranking above the isolated
+				// AccountBalanceHelper — matching the authoritative
+				// TestExploreStructuralBeatsLexical contract
+				// (internal/query/explore_test.go:144-183).
+				got, err := eng.Explore(tc.Query, 5)
+				if err != nil {
+					t.Fatalf("Explore(%q, 5): %v", tc.Query, err)
+				}
+				for _, wantFile := range tc.Files {
+					if !strings.Contains(got, wantFile) {
+						t.Errorf("Explore(%q): expected file %q to be selected, got:\n%s", tc.Query, wantFile, got)
+					}
+				}
+				if !strings.Contains(got, "GetBalance") {
+					t.Errorf("Explore(%q): expected GetBalance (the structural bridge into ReconcileLedger) to be surfaced despite its lower raw gather score", tc.Query)
+				}
+				if !strings.Contains(got, "ReconcileLedger") {
+					t.Errorf("Explore(%q): expected ReconcileLedger (zero lexical match) to be surfaced via structural expansion", tc.Query)
+				}
+				// DO NOT assert ranking above AccountBalanceHelper under
+				// this RWR formulation; assert surfacing only.
+
+			default:
+				t.Fatalf("unknown assertion mode %q in CASES.json case %s", tc.Assertion, tc.ID)
 			}
-		}
-
-		// Per-def Calls trail: D-05b subset (Go's RefKindCalls-only
-		// extraction must never report a call the golden lacks; it may
-		// legitimately report fewer, e.g. the golden's "errEmptyOrder"
-		// entry, which is a variable reference TS's trail includes and
-		// Go's calls-only trail correctly omits).
-		gotByLoc, wantByLoc := blockByLocation(gotBlocks), blockByLocation(wantBlocks)
-		for loc, wantBlock := range wantByLoc {
-			gotBlock, ok := gotByLoc[loc]
-			if !ok {
-				continue // already reported above
-			}
-			assertNameFileLineSubset(t, fmt.Sprintf("Node(Validate)@%s Calls trail", loc), gotBlock.Calls, wantBlock.Calls)
-		}
-	})
-
-	t.Run("explore-multi", func(t *testing.T) {
-		// Query per README.md's per-corpus table: "user account"
-		// tokenizes to match UserAccountManager (D-03 case b).
-		got, err := eng.Explore("user account", 0)
-		if err != nil {
-			t.Fatalf("Explore(user account, 0): %v", err)
-		}
-		want := loadBehavioralFixture(t, "go-explore-multi.json")
-
-		// Header wording is TS-verbatim and deterministic.
-		wantHeader := "**Exploration: user account**\n\n"
-		if !strings.HasPrefix(got, wantHeader) {
-			t.Errorf("Explore(user account) header mismatch:\ngot prefix: %q\nwant: %q", firstNChars(got, len(wantHeader)+20), wantHeader)
-		}
-
-		// Disclaimer blockquote is a static string (D-05a) — byte-
-		// identical on both sides regardless of query/ranking.
-		gotDisclaimer := extractDisclaimer(t, got)
-		wantDisclaimer := extractDisclaimer(t, want)
-		if gotDisclaimer != wantDisclaimer {
-			t.Errorf("Explore(user account) disclaimer diverges (must be verbatim):\ngot:  %q\nwant: %q", gotDisclaimer, wantDisclaimer)
-		}
-
-		// AD-04: core-symbol/file membership, not full set equality.
-		// UserAccountManager (case b's target) and recoverAccount (case
-		// c's structurally-connected symbol) must both be surfaced by
-		// Go, and their owning files must be among Go's selected files
-		// — the specific behaviors this corpus was purpose-built to
-		// prove (EXPL-01 multi-word tokenization, EXPL-03's gate
-		// preferring the structurally-connected non-test symbol).
-		gotFiles := exploreSelectedFiles(got)
-		for _, wantFile := range []string{"accounts/manager.go", "recovery/recovery.go"} {
-			if !gotFiles[wantFile] {
-				t.Errorf("Explore(user account) selected files = %v, want %q among them (AD-04 core-file membership)", gotFiles, wantFile)
-			}
-		}
-		if !strings.Contains(got, "UserAccountManager") {
-			t.Error("Explore(user account) output does not mention UserAccountManager (D-03 case b target)")
-		}
-		if !strings.Contains(got, "recoverAccount") {
-			t.Error("Explore(user account) output does not mention recoverAccount (D-03 case c target)")
-		}
-		// EXPL-03/EXPL-04: recoverAccount is covered by
-		// recovery_test.go — both sides must render the "tests:"
-		// clause for it (not the "no covering tests" warning).
-		if !strings.Contains(want, "tests: `recovery/recovery_test.go`") {
-			t.Fatalf("golden explore-multi.json does not contain the expected recoverAccount tests: clause — golden fixture may have changed shape")
-		}
-		if !strings.Contains(got, "tests:") || !strings.Contains(got, "recovery_test.go") {
-			t.Errorf("Explore(user account) output missing recoverAccount's tests: clause (EXPL-03/04):\n%s", got)
-		}
-	})
+		})
+	}
 }
 
 // TestCorpusBehaviorLockedCorpora scaffold — reserved for 02-03 locked-corpus
@@ -956,7 +974,7 @@ func newGoldenSession(t *testing.T, s *mcp.Server) *mcp.ClientSession {
 		_ = s.Run(ctx, serverTransport)
 	}()
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-golden-parity-test", Version: "0.0.0"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-behavioral-test", Version: "0.0.0"}, nil)
 	session, err := client.Connect(ctx, clientTransport, nil)
 	if err != nil {
 		t.Fatalf("client Connect: %v", err)
@@ -1056,7 +1074,7 @@ func TestExploreCLIMatchesMCP(t *testing.T) {
 		sourceFunc func(t *testing.T) string
 		query      string
 	}{
-		{"synthetic-parity", syntheticParitySrc, "user account"},
+		{"behavioral", syntheticParitySrc, "user account"},
 	}
 
 	for _, tc := range cases {
@@ -1092,8 +1110,8 @@ func TestNodeCLIMatchesMCP(t *testing.T) {
 		sourceFunc func(t *testing.T) string
 		symbol     string
 	}{
-		{"synthetic-parity", syntheticParitySrc, "Validate"},   // multi-def (2)
-		{"synthetic-parity", syntheticParitySrc, "AuditEntry"}, // single-def
+		{"behavioral", syntheticParitySrc, "Validate"},   // multi-def (2)
+		{"behavioral", syntheticParitySrc, "AuditEntry"}, // single-def
 	}
 
 	for _, tc := range cases {
