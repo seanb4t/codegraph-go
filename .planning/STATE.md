@@ -4,11 +4,11 @@ milestone: v0.11.0
 milestone_name: Standalone Project Identity
 current_phase: 1
 current_phase_name: Corpus Selection by Measurement
-status: roadmap-complete
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-08-14T01:58:46.471Z"
-last_activity: 2026-08-13
-last_activity_desc: v0.11.0 roadmap created
+last_updated: "2026-08-14T14:54:05.569Z"
+last_activity: 2026-08-14
+last_activity_desc: Phase 1 execution started
 progress:
   total_phases: 6
   completed_phases: 0
@@ -24,15 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** v0.11.0 Standalone Project Identity — roadmap created, 6 phases, 25 requirements. Next: `/gsd-plan-phase 1`.
+**Current focus:** Phase 1 — Corpus Selection by Measurement
 
 ## Current Position
 
-Phase: 1 of 6 — Corpus Selection by Measurement (not started)
-Plan: —
-Status: Roadmap complete, awaiting phase planning
+Phase: 1 (Corpus Selection by Measurement) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 1
 Progress: 0/6 phases complete (0%)
-Last activity: 2026-08-13 — v0.11.0 roadmap created
+Last activity: 2026-08-14 — Phase 1 execution started
 
 ## Performance Metrics
 
