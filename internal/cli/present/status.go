@@ -70,6 +70,27 @@ func sortedCounts(m map[string]int64) []kindCount {
 	return out
 }
 
+// edgeCounts sorts m by count DESCENDING, breaking ties on the key
+// ascending — byte-for-byte identical to internal/query's unexported
+// edgeCounts. Unlike sortedCounts above, it does NOT drop zero-valued
+// entries: a dense EdgesByKind (built by query.DenseEdgesByKind and
+// applied upstream in internal/cli/status.go's --all-kinds branch, D-04)
+// must render its explicit zeros on the TTY path exactly as it does on
+// the piped path.
+func edgeCounts(m map[string]int64) []kindCount {
+	out := make([]kindCount, 0, len(m))
+	for k, v := range m {
+		out = append(out, kindCount{Key: k, Count: v})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out
+}
+
 // statLabelWidth/breakdownKeyWidth mirror internal/query's column widths
 // (D-09) so the pretty layout keeps the same alignment as the plain form.
 const (
@@ -115,11 +136,20 @@ func writeStatusAdvisories(b *strings.Builder, r query.StatusResult, staleLabel,
 // RenderStatus writes a lipgloss-styled rendering of r to w, walking the
 // SAME section order as query.RenderStatusText (header → Project →
 // worktree warning when present → Index Statistics → Nodes by Kind →
-// Files by Language → advisories) with headerStyle/labelStyle/sectionStyle
-// applied as structural chrome only (D-01/D-02). r is consumed read-only:
-// counts, sort order, and wording are never re-derived here — only
-// styling is added. Callers gate this behind ChoosePresentation (D-03);
-// RenderStatus itself never reads a TTY/env value.
+// Edges by Kind → Files by Language → advisories) with
+// headerStyle/labelStyle/sectionStyle applied as structural chrome only
+// (D-01/D-02). r is consumed read-only: counts, sort order, and wording
+// are never re-derived here — only styling is added. Callers gate this
+// behind ChoosePresentation (D-03); RenderStatus itself never reads a
+// TTY/env value.
+//
+// v0.11.0 Phase 1 (D-01/D-04) added a new breakdown section between Nodes
+// by Kind and Files by Language, matching query.RenderStatusText's
+// addition. r.EdgesByKind may already be dense
+// (internal/cli/status.go applies --all-kinds's densification before
+// choosing this renderer or the piped one) — this file's edgeCounts,
+// like sortedCounts, never re-derives that decision; it only renders
+// whatever map it is given.
 func RenderStatus(r query.StatusResult, projectPath string, w io.Writer) error {
 	var b strings.Builder
 	b.WriteString(headerStyle.Render("CodeGraph Status") + "\n\n")
@@ -152,6 +182,7 @@ func RenderStatus(r query.StatusResult, projectPath string, w io.Writer) error {
 	writeStatLine(&b, "Backend", r.Backend)
 
 	writeBreakdownText(&b, "Nodes by Kind:", sortedCounts(r.NodesByKind))
+	writeBreakdownText(&b, "Edges by Kind:", edgeCounts(r.EdgesByKind))
 	writeBreakdownText(&b, "Files by Language:", sortedCounts(r.FilesByLanguage))
 
 	writeStatusAdvisories(&b, r, "Pending Changes:", "Reindex recommended:")

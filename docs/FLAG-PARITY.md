@@ -137,6 +137,7 @@ divergence in `**`-style patterns only, not a missing flag.
 |---|---|---|
 | — | `-p`/`--path` | `Go-only` (needed since Go's status resolves an explicit repo root; harmless addition) |
 | `-j`/`--json` | `-j`/`--json` | `present` |
+| — | `--all-kinds` (no short) | `Go-only` (v0.11.0 Phase 1, D-04: opts the `edgesByKind` breakdown into the dense form — every `RANK_EDGES` kind, including explicit zeros; TS has no `edgesByKind` measurement at all, so this is net-new Go surface, not a divergence from a TS flag) |
 
 ## `node`
 
