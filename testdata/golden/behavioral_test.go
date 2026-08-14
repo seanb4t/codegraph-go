@@ -1,41 +1,20 @@
 // testdata/golden/behavioral_test.go
 //
-// TestCorpusBehavior_Go is the acceptance gate for MCP-04 / success criterion 4:
-// it indexes the real weft source tree via the production indexer.Run
-// pipeline, drives internal/query.Engine for the golden corpus's exact
-// captured commands (or their nearest lexical-matching equivalent, per the
-// D-06 no-FTS/no-embeddings divergence — see the "explore" subtest), and
-// diffs the results against testdata/golden/corpus/weft-go/*.json.
+// This file holds the behavioral harness: it runs the production
+// indexer.Run pipeline over the committed, always-in-repo behavioral corpus
+// (corpus/behavioral, D-03), drives internal/query.Engine for the traced
+// behavioral surfaces (explore, node), and asserts NAMED behavioral
+// properties of the live output in the D-09 style — overloaded-def
+// enumeration, multi-word tokenization, the file-relevance gate's
+// connected-non-test preference, and structural-surfacing. Goldens (the
+// go-*.json fixtures) remain committed as regression snapshots but are NOT
+// the primary oracle: a failing test names which behavior broke, not merely
+// "a golden diff appeared".
 //
-// Per D-05, parity here means output-shape / key-name / semantic-structure
-// parity, NOT byte-identical values. Four divergences are explicitly
-// normalized (documented inline at each comparison site):
-//
-//	D-05a (ignore id)      — Phase-2 node ids (<kind>:sha256) differ from
-//	                         TS's (<kind>:md5); compare stable fields
-//	                         (name/kind/filePath/startLine) instead.
-//	D-05b (edge dedup/     — callers/callees/impact lists may differ in
-//	       scope)            multiplicity or in scope (this harness also
-//	                         discovered internal/query's buildReverseAdjacency
-//	                         deliberately scopes to goextract.RefKindCalls
-//	                         only, per 03-04's decision, which is narrower
-//	                         than TS's callee/reference vocabulary) — our
-//	                         results must always be a SUBSET of the golden's,
-//	                         never contain something TS's ground truth
-//	                         lacks (that would indicate a real bug, not a
-//	                         documented divergence).
-//	D-05c (status remap)   — status.go's own doc comment is the
-//	                         authoritative TS-key-to-Go/Pebble-analog
-//	                         mapping table this file's "status" subtest
-//	                         mirrors.
-//	D-05d (no score)       — query/status never render a "score" key
-//	                         (D-06 — no FTS5/BM25 ranking).
-//
-// This file resolves the weft corpus source tree — pinned at commit
-// f89ae3ea4e4c37509f7302fd4e37986212a72079 (README.md) — via
-// CODEGRAPH_WEFT_CORPUS or a conventional sibling checkout, and SKIPS
-// loudly (not silently) when it is absent or at the wrong commit, so
-// `go test ./...` stays green everywhere (T-03-09-Repro).
+// The TS-era capture path and the external, network-fetched corpora this
+// harness formerly diffed against are gone as of this phase (FIXT-04); the
+// behavioral corpus is the sole committed, in-repo source. TestCorpusBehavior_Go
+// is the "go" matrix gate and stays green as a pure property test over it.
 package golden
 
 import (
@@ -44,7 +23,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -57,14 +35,6 @@ import (
 	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
-
-// pinnedWeftCommit is the weft-go corpus's capture-time HEAD, per
-// testdata/golden/README.md's D-06a provenance table. resolveWeftCorpus
-// verifies a resolved checkout is pinned exactly here before any diff
-// runs — a green TestCorpusBehavior_Go always means either "diffed against the
-// real pinned corpus" or "skipped", never a silent diff against a drifted
-// tree (T-03-09-Repro).
-const pinnedWeftCommit = "f89ae3ea4e4c37509f7302fd4e37986212a72079"
 
 // mbShapeRE pins D-07's MB-rendering contract at the parity layer, where
 // dbSizeBytes comes from a real corpus index rather than a synthetic
@@ -100,104 +70,21 @@ func findVolatileKeysExcept(v interface{}, path string, except ...string) []stri
 	return kept
 }
 
-// corpusCandidate is one place resolveWeftCorpus looks for a weft
-// checkout, paired with a human-readable label for skip/failure messages.
-type corpusCandidate struct {
-	path   string
-	source string
-}
-
-// resolveWeftCorpus locates a local checkout of github.com/seanb4t/weft
-// pinned at pinnedWeftCommit: first CODEGRAPH_WEFT_CORPUS, then the
-// conventional sibling checkout (../weft next to this repo's root,
-// matching capture.sh's own WEFT_REPO default). It t.Skip()s with a clear,
-// actionable message — never fails — when the corpus is absent or at the
-// wrong commit.
-func resolveWeftCorpus(t *testing.T) string {
-	t.Helper()
-
-	var candidates []corpusCandidate
-	if env := os.Getenv("CODEGRAPH_WEFT_CORPUS"); env != "" {
-		candidates = append(candidates, corpusCandidate{path: env, source: "CODEGRAPH_WEFT_CORPUS"})
-	}
-	if repoRoot, err := filepath.Abs(filepath.Join("..", "..")); err == nil {
-		candidates = append(candidates, corpusCandidate{
-			path:   filepath.Join(filepath.Dir(repoRoot), "weft"),
-			source: "sibling checkout (../weft)",
-		})
-	}
-
-	var reasons []string
-	for _, c := range candidates {
-		info, err := os.Stat(c.path)
-		if err != nil || !info.IsDir() {
-			reasons = append(reasons, fmt.Sprintf("%s at %s: not a directory (%v)", c.source, c.path, err))
-			continue
-		}
-		head, err := gitHead(c.path)
-		if err != nil {
-			reasons = append(reasons, fmt.Sprintf("%s at %s: git rev-parse HEAD failed: %v", c.source, c.path, err))
-			continue
-		}
-		if head != pinnedWeftCommit {
-			reasons = append(reasons, fmt.Sprintf("%s at %s: at commit %s, want pinned %s", c.source, c.path, head, pinnedWeftCommit))
-			continue
-		}
-		return c.path
-	}
-
-	t.Skipf(
-		"weft corpus unavailable at the pinned commit %s (tried: %s) — "+
-			"to run this test, either set CODEGRAPH_WEFT_CORPUS=/path/to/weft "+
-			"(checked out at %s), or clone https://github.com/seanb4t/weft "+
-			"next to this repo's parent directory as ../weft and check out "+
-			"that commit",
-		pinnedWeftCommit, strings.Join(reasons, "; "), pinnedWeftCommit,
-	)
-	return ""
-}
-
-// gitHead shells out to `git -C dir rev-parse HEAD` — the simplest
-// reliable way to resolve a checkout's current commit without pulling in
-// a go-git dependency for a test-only corpus-verification step.
-func gitHead(dir string) (string, error) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// buildWeftEngine runs the real indexer.Run pipeline against a COPY of
-// weftDir (never mutating the pinned checkout itself — buildIndexedFixture
-// copies into a fresh t.TempDir()) and opens the result via OpenAt, so
-// Explore/Node's fresh-from-disk source reads are confined to the copy and
-// Status()'s dbSizeBytes measures the SAME store the test actually built
-// (CR-02 — see buildEngineAt's doc comment for the bug this replaced).
-func buildWeftEngine(t *testing.T, weftDir string) *query.Engine {
-	t.Helper()
-	return buildEngineAt(t, weftDir)
-}
-
-// buildEngineAt is buildWeftEngine's corpus-agnostic sibling (plan 17,
+// buildEngineAt is the shared corpus-agnostic engine builder (plan 17,
 // TEST-01/D-02): it copies sourceDir into a fresh t.TempDir() and indexes
-// it on disk at <dst>/.codegraph/store (via buildIndexedFixture — the
-// SAME helper TestExploreCLIMatchesMCP/TestNodeCLIMatchesMCP already use
-// against this same weft-go corpus, so this is not a new cost class), then
+// it on disk at <dst>/.codegraph/store (via buildIndexedFixture), then
 // opens it via OpenAt exactly as production does. Used by the D-02
-// behavioral parity harness below to build a live Go engine over each of
-// the three golden corpora (synthetic-parity, weft-go,
-// colbymchenry-codegraph).
+// behavioral harness to build a live Go engine over a corpus source tree.
 //
 // ★ CR-02 fix: this USED TO run indexer.Run directly into a bare
 // t.TempDir() and wrap it via NewWithRoot(reader, sourceDir) — an Engine
-// whose repoRoot (sourceDir, e.g. the pinned weft checkout) had NOTHING to
+// whose repoRoot (sourceDir, e.g. a developer checkout) had NOTHING to
 // do with the store the test actually built (a sibling, unrelated temp
 // dir). Status()'s dbSizeBytes derives its directory from
 // repoRoot+".codegraph/store" purely by convention (status.go), so that
 // assertion measured whatever HAPPENED to exist at
 // <sourceDir>/.codegraph/store — on the reviewer's machine, a stale
-// developer-created ../weft/.codegraph/store from an old `codegraph init`,
+// developer-created sibling `.codegraph/store` from an old `codegraph init`,
 // invisible pollution that made the assertion pass locally while failing
 // on any clean checkout (`dbSizeBytes = 0, want a positive integer`).
 // Opening through OpenAt(dst) makes repoRoot the SAME directory the store
@@ -218,7 +105,7 @@ func buildEngineAt(t *testing.T, sourceDir string) *query.Engine {
 
 // syntheticParitySrc resolves the committed, in-repo synthetic-parity
 // corpus source tree (D-03) — always available, no network/external
-// checkout required, unlike weft-go/colbymchenry-codegraph.
+// checkout required.
 func syntheticParitySrc(t *testing.T) string {
 	t.Helper()
 
@@ -232,44 +119,6 @@ func syntheticParitySrc(t *testing.T) string {
 	return src
 }
 
-// resolveWeftGoCorpusLoose is a looser sibling of resolveWeftCorpus for
-// the behavioral (D-02) harness below: it does NOT require the pinned
-// commit (weft-go's behavioral fixtures were captured against whatever
-// $WEFT_REPO HEAD was checked out at capture time — README.md), only that
-// a checkout exists at all. t.Skip()s (not Fatal) when unavailable.
-func resolveWeftGoCorpusLoose(t *testing.T) string {
-	t.Helper()
-
-	repo := os.Getenv("WEFT_REPO")
-	if repo == "" {
-		if repoRoot, err := filepath.Abs(filepath.Join("..", "..")); err == nil {
-			repo = filepath.Join(filepath.Dir(repoRoot), "weft")
-		}
-	}
-	if info, err := os.Stat(repo); err != nil || !info.IsDir() {
-		t.Skipf("weft-go corpus unavailable at %s — set WEFT_REPO=/path/to/weft to run this subtest", repo)
-	}
-	return repo
-}
-
-// resolveColbymchenryCorpus clones colbymchenry/codegraph fresh to a temp
-// dir, mirroring capture.sh's own pattern (its source is never committed
-// to this repo — README.md's Corpus table). t.Skip()s (never Fatal) on
-// any clone failure — this corpus requires network access, which must
-// never make `go test ./...` fail on an offline machine or in a
-// network-sandboxed CI runner.
-func resolveColbymchenryCorpus(t *testing.T) string {
-	t.Helper()
-
-	tmpRoot := t.TempDir()
-	cmd := exec.Command("git", "clone", "--depth", "1", "--quiet",
-		"https://github.com/colbymchenry/codegraph.git", tmpRoot)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("colbymchenry-codegraph corpus unavailable (git clone failed, likely no network access): %v: %s", err, string(out))
-	}
-	return tmpRoot
-}
-
 // copyDir recursively copies src into dst, mirroring
 // internal/mcp/server_test.go's copyFixture helper (unexported there,
 // reimplemented here since this file lives in the external golden
@@ -280,8 +129,8 @@ func resolveColbymchenryCorpus(t *testing.T) string {
 // WR-03 (02-REVIEW-2.md): skips any ".codegraph" directory entirely,
 // rather than copying it verbatim. buildIndexedFixture's whole purpose is
 // building a store the test itself indexes from a KNOWN, empty starting
-// point — but src is often a real developer checkout (e.g. corpus/
-// synthetic-parity/src, or a sibling $WEFT_REPO clone), and a stray
+// point — but src is often a real developer checkout (e.g.
+// corpus/behavioral/src), and a stray
 // `codegraph init` run against it at any point in that machine's history
 // leaves a live Pebble store sitting right there in the source tree.
 // indexer.Run MERGES into an existing store rather than replacing it
@@ -398,26 +247,6 @@ func TestBuildIndexedFixtureIgnoresInheritedStore(t *testing.T) {
 	}
 }
 
-// loadGoldenFixture decodes a corpus/weft-go/<name> JSON fixture into T.
-// Several golden fixtures (callers.json/callees.json/impact.json) decode
-// directly into the matching internal/query result types, because those
-// types were deliberately designed (03-04) to mirror the golden shape
-// field-for-field — no separate parsing struct needed.
-func loadGoldenFixture[T any](t *testing.T, name string) T {
-	t.Helper()
-
-	path := filepath.Join("corpus", "weft-go", name)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read golden fixture %s: %v", path, err)
-	}
-	var v T
-	if err := json.Unmarshal(data, &v); err != nil {
-		t.Fatalf("unmarshal golden fixture %s: %v", path, err)
-	}
-	return v
-}
-
 // goldenCapture mirrors the explore.json/node.json wrapper shape:
 // {"command": "...", "output": "<markdown text>"}.
 type goldenCapture struct {
@@ -425,21 +254,8 @@ type goldenCapture struct {
 	Output  string `json:"output"`
 }
 
-// loadGoldenOutput loads a wrapped-markdown fixture's "output" field.
-func loadGoldenOutput(t *testing.T, name string) string {
-	t.Helper()
-
-	capture := loadGoldenFixture[goldenCapture](t, name)
-	if capture.Output == "" {
-		t.Fatalf("golden fixture %s has an empty output field", name)
-	}
-	return capture.Output
-}
-
-// loadGoldenFixtureIn is loadGoldenFixture generalized to any corpus
-// directory under corpus/ (plan 17, D-02) — loadGoldenFixture itself is
-// left untouched (hard-coded to "weft-go") to avoid touching
-// TestCorpusBehavior_Go above; this is a pure additive extension.
+// loadGoldenFixtureIn decodes a golden/behavioral corpus JSON fixture from
+// a named corpus directory under corpus/ (plan 17, D-02).
 func loadGoldenFixtureIn[T any](t *testing.T, corpus, name string) T {
 	t.Helper()
 
@@ -698,13 +514,16 @@ func exploreSelectedFiles(output string) map[string]bool {
 	return set
 }
 
-// TestCorpusBehavior_Go is MCP-04's acceptance gate: it proves the Go query
-// engine's output shapes match the TS CodeGraph v1.3.1 golden corpus for
-// all seven captured tools (query/callers/callees/impact/status/explore/
-// node) after the D-05 normalizations documented at the top of this file.
+// TestCorpusBehavior_Go is the "go" matrix gate's live-Go property test.
+// It runs the real indexer + query.Engine over the committed, always-in-repo
+// behavioral corpus (D-03) and asserts the Go-truthful properties of its
+// LIVE output in the D-09 style — named behavioral properties of live
+// engine output, not byte-diffs against a frozen TS golden. The TS-era
+// capture path and external corpora that TestCorpusBehavior_Go formerly
+// diffed against are gone as of this phase (FIXT-04); the status.json
+// key-loop inheritance from probe-01 is retired with them.
 func TestCorpusBehavior_Go(t *testing.T) {
-	weftDir := resolveWeftCorpus(t)
-	engine := buildWeftEngine(t, weftDir)
+	engine := buildEngineAt(t, syntheticParitySrc(t))
 
 	t.Run("status", func(t *testing.T) {
 		got, err := engine.Status(context.Background())
@@ -731,16 +550,12 @@ func TestCorpusBehavior_Go(t *testing.T) {
 		if got.PendingChanges != (query.PendingChanges{}) {
 			t.Errorf("status.PendingChanges = %+v, want the zero value (Phase-4 sync placeholder)", got.PendingChanges)
 		}
-		// D-05: languages/nodesByKind reflect whichever LanguageSpecs are
-		// registered and have discoverable files in weft — weft also has
-		// yaml files the TS extractor parsed that internal/indexer does
-		// not (yet); its committed .py files (05-06) and its three
-		// .js/.mjs/.cjs files (05-07, this plan — all three register under
-		// the single "javascript" LanguageSpec ID) ARE now extracted.
-		wantLanguages := []string{"go", "javascript", "python"}
+		// The behavioral corpus is Go-only (D-03), so the registered
+		// language set is exactly {"go"}.
+		wantLanguages := []string{"go"}
 		gotJoined, wantJoined := strings.Join(got.Languages, ","), strings.Join(wantLanguages, ",")
 		if gotJoined != wantJoined {
-			t.Errorf("status.Languages = %v, want %v (D-05 Go+JS+Python extraction)", got.Languages, wantLanguages)
+			t.Errorf("status.Languages = %v, want %v (Go-only corpus)", got.Languages, wantLanguages)
 		}
 
 		raw, err := query.MarshalStatusJSON(got)
@@ -760,17 +575,11 @@ func TestCorpusBehavior_Go(t *testing.T) {
 			t.Error(`status --json unexpectedly includes "score" — D-05d: no FTS5/BM25 ranking exists`)
 		}
 
-		// edgesByKind and filesByLanguage are NEWLY EMITTED as of
-		// v0.11.0 Phase 1 (FIXT-01, D-02/D-03) — asserted here as
-		// positive presence checks against OUR OWN status --json output,
-		// never against the frozen third-party golden fixture (which
-		// predates both keys; do not add them to the frozen-fixture key
-		// loop below, the same asymmetry dbSizeBytes's comment already
-		// documents). filesByLanguage was previously suppressed
-		// (`json:"-"`) to match an output shape the project no longer
-		// owes anyone — that Compatibility constraint was formally
-		// retired 2026-08-13, and un-suppressing it here is intentional,
-		// not an accidental revert.
+		// edgesByKind and filesByLanguage are emitted as of v0.11.0
+		// Phase 1 (FIXT-01, D-02/D-03) — asserted here as positive
+		// presence checks against OUR OWN status --json output (D-09
+		// property style: the key must be present, an object, and
+		// non-empty, not merely equal to a frozen byte string).
 		rawEdgesByKind, ok := decoded["edgesByKind"]
 		if !ok {
 			t.Fatal(`our status --json output is missing "edgesByKind" (FIXT-01)`)
@@ -810,13 +619,10 @@ func TestCorpusBehavior_Go(t *testing.T) {
 
 		// D-08: dbSizeBytes is exempted from the volatility check HERE,
 		// at this call site only — the shared volatileKeys map in
-		// golden_test.go is deliberately left untouched, because it
-		// still governs the FROZEN TS oracle fixtures in corpus/*/*.json
-		// and must keep failing if a TS golden ever re-includes
-		// dbSizeBytes. That is a wholly separate concern from OUR OWN
-		// status --json output, which now intentionally carries the key
-		// (Pebble has no dbPath-file analog, so a directory byte sum is
-		// the Go-truthful reading — see status.go's decision table). The
+		// golden_test.go is deliberately left untouched. Our OWN status
+		// --json output intentionally carries the key (Pebble has no
+		// dbPath-file analog, so a directory byte sum is the
+		// Go-truthful reading — see status.go's decision table). The
 		// plausibility assertions immediately below replace the blanket
 		// "must be absent" check for this one key.
 		if volatile := findVolatileKeysExcept(decoded, "our status.json", "dbSizeBytes"); len(volatile) > 0 {
@@ -826,9 +632,7 @@ func TestCorpusBehavior_Go(t *testing.T) {
 		// D-08 plausibility assertions: presence, integer type, > 0, and a
 		// well-formed MB rendering — never cross-run byte stability
 		// (Pebble's LSM compaction makes the on-disk total genuinely
-		// nondeterministic across identical reindexes, a STRONGER version
-		// of the SQLite WAL/page-fragmentation rationale that made the
-		// frozen TS golden strip this key in the first place).
+		// nondeterministic across identical reindexes).
 		rawSize, present := decoded["dbSizeBytes"]
 		if !present {
 			t.Fatal(`our status --json output is missing "dbSizeBytes" (STAT-01)`)
@@ -844,329 +648,31 @@ func TestCorpusBehavior_Go(t *testing.T) {
 		if !mbShapeRE.MatchString(mbRendering) {
 			t.Errorf("dbSizeBytes MB rendering %q does not match %s (D-07)", mbRendering, mbShapeRE.String())
 		}
-
-		// This list asserts against the FROZEN TS golden fixture (golden,
-		// below), not our own output (decoded, above) — deliberately does
-		// NOT include "dbSizeBytes": the golden's own capture.sh strips it
-		// (testdata/golden/README.md's volatile-fields table) and that
-		// strip is correctly untouched by D-08. Our output carries the
-		// key (asserted above); the golden's does not (asymmetry by
-		// design, not an oversight).
-		golden := loadGoldenFixture[map[string]interface{}](t, "status.json")
-		for _, key := range []string{"initialized", "version", "fileCount", "nodeCount", "edgeCount", "backend", "nodesByKind", "languages", "pendingChanges", "worktreeMismatch", "index"} {
-			if _, ok := golden[key]; !ok {
-				t.Errorf("golden status.json unexpectedly missing key %q that the D-05c mapping table assumes exists", key)
-			}
-		}
-	})
-
-	t.Run("query", func(t *testing.T) {
-		nodes, err := engine.Query("main", "", 5)
-		if err != nil {
-			t.Fatalf("Query(main): %v", err)
-		}
-		raw, err := query.MarshalQueryJSON(nodes)
-		if err != nil {
-			t.Fatalf("MarshalQueryJSON: %v", err)
-		}
-		var ours []map[string]interface{}
-		if err := json.Unmarshal(raw, &ours); err != nil {
-			t.Fatalf("unmarshal our query JSON: %v", err)
-		}
-		if volatile := findVolatileKeys(ours, "our query.json"); len(volatile) > 0 {
-			t.Errorf("our query --json output contains volatile field(s) that must never be emitted: %v", volatile)
-		}
-
-		golden := loadGoldenFixture[[]map[string]interface{}](t, "query.json")
-		if len(ours) == 0 || len(golden) == 0 {
-			t.Fatalf("query(main): got %d of our own results, %d golden results — expected both non-empty", len(ours), len(golden))
-		}
-
-		// D-05a: ignore id (Phase-2 SHA-256 ids vs TS's md5 ids) — strip
-		// it from both sides before comparing envelope key shape.
-		stripID := func(env map[string]interface{}) map[string]interface{} {
-			node, _ := env["node"].(map[string]interface{})
-			delete(node, "id")
-			return node
-		}
-		wantKeys := sortedKeys(stripID(golden[0]))
-		gotKeys := sortedKeys(stripID(ours[0]))
-		if strings.Join(gotKeys, ",") != strings.Join(wantKeys, ",") {
-			t.Errorf("query.json node envelope key shape mismatch (D-05a id ignored):\ngot:  %v\nwant: %v", gotKeys, wantKeys)
-		}
-
-		// D-06 (query/search/explore is pure lexical name/qualifiedName
-		// matching, no FTS5) means the two engines' overall match sets
-		// for term "main" differ (TS's FTS also matches docstring text
-		// mentioning "main@origin"). The exact-name match "main"
-		// (function) is the one record both a substring matcher and an
-		// FTS5 matcher are guaranteed to surface — its stable fields
-		// must agree verbatim, since it's the same source at the same
-		// pinned commit.
-		findMain := func(envs []map[string]interface{}) map[string]interface{} {
-			for _, env := range envs {
-				node, _ := env["node"].(map[string]interface{})
-				if node["name"] == "main" && node["kind"] == "function" {
-					return node
-				}
-			}
-			return nil
-		}
-		oursMain, goldenMain := findMain(ours), findMain(golden)
-		if oursMain == nil || goldenMain == nil {
-			t.Fatalf("query(main): could not find the exact-match \"main\" function record on both sides (ours found=%v, golden found=%v)", oursMain != nil, goldenMain != nil)
-		}
-		for _, field := range []string{"kind", "name", "qualifiedName", "filePath", "language", "startLine", "endLine", "isExported"} {
-			if oursMain[field] != goldenMain[field] {
-				t.Errorf("query(main) main-function record field %q: got %v, want %v", field, oursMain[field], goldenMain[field])
-			}
-		}
-	})
-
-	t.Run("callers", func(t *testing.T) {
-		got, err := engine.Callers("mergeStyle", 5)
-		if err != nil {
-			t.Fatalf("Callers(mergeStyle): %v", err)
-		}
-		golden := loadGoldenFixture[query.CallersResult](t, "callers.json")
-
-		if got.Symbol != golden.Symbol {
-			t.Errorf("callers.Symbol = %q, want %q", got.Symbol, golden.Symbol)
-		}
-		assertSubset(t, "Callers(mergeStyle)", toLocSet(got.Callers), toLocSet(golden.Callers))
-	})
-
-	t.Run("callees", func(t *testing.T) {
-		got, err := engine.Callees("mergeStyle", 5)
-		if err != nil {
-			t.Fatalf("Callees(mergeStyle): %v", err)
-		}
-		golden := loadGoldenFixture[query.CalleesResult](t, "callees.json")
-
-		if got.Symbol != golden.Symbol {
-			t.Errorf("callees.Symbol = %q, want %q", got.Symbol, golden.Symbol)
-		}
-		// D-05b: this is the strictest subset case in the corpus — TS's
-		// callees traversal for mergeStyle includes two returned
-		// constants (mergeStyleMergeCommit/mergeStyleSquashOrRebase)
-		// and an interface type reference (Runner) that are not
-		// `calls` edges; internal/query's buildReverseAdjacency and
-		// Callees deliberately scope forward/reverse traversal to
-		// goextract.RefKindCalls only (03-04's decision), so our
-		// result is a genuine, documented subset — {JJ, Hardf} — never
-		// a superset.
-		assertSubset(t, "Callees(mergeStyle)", toLocSet(got.Callees), toLocSet(golden.Callees))
-	})
-
-	t.Run("impact", func(t *testing.T) {
-		// Drive with the golden's own captured depth (2), not our
-		// engine's own defaultDepth (5) — D-05 parity compares the
-		// golden's exact command, not our own default.
-		got, err := engine.Impact("mergeStyle", 2)
-		if err != nil {
-			t.Fatalf("Impact(mergeStyle, depth=2): %v", err)
-		}
-		golden := loadGoldenFixture[query.ImpactResult](t, "impact.json")
-
-		if got.Symbol != golden.Symbol {
-			t.Errorf("impact.Symbol = %q, want %q", got.Symbol, golden.Symbol)
-		}
-		if got.Depth != golden.Depth {
-			t.Errorf("impact.Depth = %d, want %d", got.Depth, golden.Depth)
-		}
-		if got.NodeCount != len(got.Affected) {
-			t.Errorf("impact.NodeCount = %d, len(Affected) = %d — NodeCount must equal the visited-node count including the symbol itself", got.NodeCount, len(got.Affected))
-		}
-
-		assertSubset(t, "Impact(mergeStyle).Affected", toLocSet(got.Affected), toLocSet(golden.Affected))
-
-		// RESEARCH Open Question 1, closed: nodeCount/edgeCount
-		// semantics are (a) NodeCount = count of distinct visited
-		// nodes including the symbol itself, (b) EdgeCount = count of
-		// reverse edges inspected while expanding each depth's
-		// frontier (including edges into already-visited nodes) — see
-		// traverse.go's Impact doc comment. Absolute counts on this
-		// corpus diverge from the golden's (4/3 here vs golden's 5/4)
-		// not because the semantics disagree but because of a real
-		// internal/indexer extraction gap this harness discovered:
-		// `finish.AddCommand(a.newFinishOpenCmd(), a.newFinishReconcileCmd())`
-		// — a method call passed directly as another call's argument —
-		// is not resolved into a `calls` edge from newFinishCmd, so
-		// newFinishCmd (golden's 5th affected entry) never enters our
-		// BFS frontier. Documented in SUMMARY.md as a finding for a
-		// future Phase 2 fix; asserted here as a tolerant (<=)
-		// relationship rather than hidden behind a widened normalizer.
-		if got.NodeCount > golden.NodeCount {
-			t.Errorf("impact.NodeCount = %d, want <= golden's %d (our BFS must never find MORE than TS's ground truth)", got.NodeCount, golden.NodeCount)
-		}
-		if got.EdgeCount > golden.EdgeCount {
-			t.Errorf("impact.EdgeCount = %d, want <= golden's %d", got.EdgeCount, golden.EdgeCount)
-		}
-		t.Logf("impact(mergeStyle, depth=2): nodeCount=%d (golden %d), edgeCount=%d (golden %d)", got.NodeCount, golden.NodeCount, got.EdgeCount, golden.EdgeCount)
-	})
-
-	t.Run("explore", func(t *testing.T) {
-		// GREEN reconciliation: RED drove Explore with the golden's
-		// literal captured query term ("main function") and found it
-		// produces zero matches — D-06 (query/search/explore is pure
-		// name/qualifiedName substring matching, no FTS5/embeddings)
-		// means a two-word phrase never matches as a literal substring
-		// of any single node's name/qualifiedName. This normalizes to
-		// the single-token substitute "mergeStyle", which both (a)
-		// actually exercises Explore's D-05a template against real
-		// weft data, and (b) lets the blast-radius bullet be diffed
-		// against the callers already proven to match exactly above.
-		got, err := engine.Explore("mergeStyle", 1)
-		if err != nil {
-			t.Fatalf("Explore(mergeStyle, 1): %v", err)
-		}
-
-		if !strings.HasPrefix(got, "**Exploration: mergeStyle**\n\n") {
-			t.Errorf("Explore output missing the D-05a header:\n%s", got)
-		}
-		if !strings.Contains(got, "**Blast radius") {
-			t.Errorf("Explore output missing the D-05a blast-radius section:\n%s", got)
-		}
-		if !strings.Contains(got, "**Source Code**") {
-			t.Errorf("Explore output missing the D-05a Source Code section:\n%s", got)
-		}
-
-		// The blast-radius bullet's caller count (3) exactly matches
-		// the callers.json/Callers(mergeStyle) subtest above — no
-		// scope divergence for THIS relationship, unlike callees.
-		wantBullet := "- `mergeStyle` (internal/cli/finish.go:378) — 3 callers in `internal/cli/finish.go`; tests: `internal/cli/finish_test.go`"
-		if !strings.Contains(got, wantBullet) {
-			t.Errorf("Explore output missing the expected blast-radius bullet %q in:\n%s", wantBullet, got)
-		}
-
-		// D-05a: the verbatim-source disclaimer paragraph is copied
-		// from the golden — must be byte-identical, not paraphrased.
-		// internal/query/render_markdown_test.go already proves this
-		// against a synthetic fixture (03-06); this re-proves it here
-		// against the real production code path (real weft-go indexer
-		// + real disk read), closing the loop MCP-04 requires.
-		gotDisclaimer := extractDisclaimer(t, got)
-		wantDisclaimer := extractDisclaimer(t, loadGoldenOutput(t, "explore.json"))
-		if gotDisclaimer != wantDisclaimer {
-			t.Errorf("Explore disclaimer diverges from the golden's (D-05a must be verbatim):\ngot:  %q\nwant: %q", gotDisclaimer, wantDisclaimer)
-		}
-
-		// D-05a: source is read fresh from disk, byte-for-byte — verify
-		// the rendered fenced block's first line matches what's on
-		// disk right now, at the pinned commit.
-		raw, err := os.ReadFile(filepath.Join(weftDir, "internal/cli/finish.go"))
-		if err != nil {
-			t.Fatalf("read finish.go directly: %v", err)
-		}
-		firstLine := strings.SplitN(string(raw), "\n", 2)[0]
-		wantFirstSourceLine := "1\t" + firstLine
-		if !strings.Contains(got, wantFirstSourceLine) {
-			t.Errorf("Explore output missing the expected first source line %q", wantFirstSourceLine)
-		}
-	})
-
-	t.Run("node", func(t *testing.T) {
-		got, err := engine.Node("mergeStyle", "internal/cli/finish.go", nil)
-		if err != nil {
-			t.Fatalf("Node(mergeStyle, internal/cli/finish.go): %v", err)
-		}
-
-		// D-05b: location/signature are byte-identical to the golden's
-		// for this pinned-commit symbol — same source, same commit.
-		wantHeader := "**mergeStyle** (function)\n\n**Location:** internal/cli/finish.go:378\n**Signature:** `(r run.Runner, epic string) (string, error)`\n"
-		if !strings.HasPrefix(got, wantHeader) {
-			t.Errorf("Node(mergeStyle) header mismatch:\ngot:  %q\nwant prefix: %q", got, wantHeader)
-		}
-
-		gotCalls := parseTrailLine(got, "**Calls →**")
-		gotCalledBy := parseTrailLine(got, "**Called by ←**")
-		golden := loadGoldenOutput(t, "node.json")
-		wantCalls := parseTrailLine(golden, "**Calls →**")
-		wantCalledBy := parseTrailLine(golden, "**Called by ←**")
-
-		// "Called by" mirrors Callers(mergeStyle), which matched
-		// exactly above — assert equality here too.
-		if !nameFileLineSetsEqual(gotCalledBy, wantCalledBy) {
-			t.Errorf("Node(mergeStyle) \"Called by\" set mismatch:\ngot:  %v\nwant: %v", gotCalledBy, wantCalledBy)
-		}
-		// "Calls" mirrors Callees(mergeStyle) — a documented subset
-		// (D-05b): our RefKindCalls-only extraction must never report
-		// a call the golden's ground truth lacks.
-		for tup := range gotCalls {
-			if !wantCalls[tup] {
-				t.Errorf("Node(mergeStyle) \"Calls\" set includes %v, which the golden node.json does not (possible false positive)", tup)
-			}
-		}
-		if len(gotCalls) == 0 {
-			t.Error(`Node(mergeStyle) "Calls" set is empty, want at least JJ/Hardf`)
-		}
 	})
 }
 
 // ============================================================================
-// D-02 Behavioral Parity Harness (plan 17, TEST-01/EXPL-02..05/NODE-01..04)
+// Behavioral harness — property assertions over live Go engine output
 // ============================================================================
 //
-// TestCorpusBehavior* extends TestCorpusBehavior_Go above (which only ever
-// drove the --max-files 1 / -f TEMPLATE-parity baseline commands) to the
-// NEW behavioral surfaces plans 03-16 built: multi-word explore ranking
-// (EXPL-01/02/03/04) and multi-def node enumeration (NODE-01/02), diffed
-// against the frozen TS 1.3.1 golden fixtures captured in plan 01
-// (explore-multi.json/node-multi.json per corpus) under D-02's oracle:
-// ordering + set membership + warning presence + header text + budget
-// counts, after canonicalizing volatile bits — NOT blanket byte-identity.
+// TestCorpusBehavior* exercises the query.Engine against the committed,
+// always-in-repo behavioral corpus (D-03), asserting named behavioral
+// properties of live output in the D-09 style rather than byte-diffing a
+// frozen TS golden.
 //
-// The live TS 1.3.1 install this phase's earlier plans read from is gone
-// as of this plan (01-CONTEXT.md's own frozen-ground-truth policy, and
-// README.md's "Re-running the capture" section already anticipated this)
-// — these tests diff the Go engine's LIVE output against the
-// ALREADY-COMMITTED TS fixtures, never against a live TS process.
+// Allowed-divergence notes (retained from the D-02 harness):
 //
-// Allowed-divergence list (D-02's explicit requirement — every divergence
-// below is a REAL, discovered gap from building this harness, not a
-// hypothetical; asserted around, never silently ignored):
-//
-//   - AD-01 (stemming precision, colbymchenry-codegraph): H9's stem
-//     grouping (internal/query/gather.go stemTerm()) is a lightweight
-//     suffix-stripper, NOT TS's deferred getStemVariants() FTS-prefix
-//     expansion (01-16-SUMMARY.md decision log). On colbymchenry-codegraph,
-//     TS's "generated file detection" query surfaces "detect"-named
-//     installer functions (TS stems "detection"->"detect" and matches
-//     broadly); Go's tokenizer does not stem as aggressively and instead
-//     surfaces isGeneratedFile/generated-detection.ts — a query-intent-
-//     correct but TS-divergent candidate set. Real corpora explore-multi
-//     assertions below check SHAPE (valid header, non-empty output, no
-//     crash), not candidate-set equality.
-//   - AD-02 (extraction-coverage gap, TS/JS object-literal methods):
-//     colbymchenry-codegraph's "resolve" (TS golden: 27 defs) is mostly
-//     implemented via object-literal method-shorthand properties
-//     (`const fooResolver = { resolve(ref) {...} }`), not `class`-declared
-//     methods. internal/indexer/tsextract's method capture is scoped to
-//     class declarations (the priority-4 D-09 extractor plans) and does
-//     not walk object-literal method shorthand, so Go's Node("resolve")
-//     on this corpus returns zero defs (a hard error, not a smaller
-//     count). The colbymchenry-codegraph node-multi subtest below uses
-//     "searchNodes" (the same symbol capture.sh's capture_repo baseline
-//     already uses for this corpus) to still exercise the multi-surface
-//     node path here without hitting this gap head-on.
-//   - AD-03 (extraction-coverage gap, count-level, weft-go): weft-go's
-//     "Run" has 10 TS-golden defs vs Go's own count on re-run (see
-//     go-node-multi.json) — a genuine extraction-coverage delta this plan
-//     did NOT root-cause (out of scope: this plan builds the harness, not
-//     the extractors). The weft-go node-multi subtest asserts the header
-//     TEMPLATE (regex-shaped, byte-identical wording) and shape, not
-//     exact def-count equality.
 //   - AD-04 (file-selection breadth + blast-radius bullet scope): even on
 //     synthetic-parity (the corpus purpose-built and validated for this),
 //     Go's RWR-selected file set and blast-radius bullet set diverge from
-//     TS's in both directions: TS pulls in ledger/ledger.go via a
-//     broader partial "account" token match that Go's tokenizer does not
-//     apply (Go's 3-file selection is a subset of TS's 4), and Go renders
+//     TS's historical output in both directions: TS pulls in ledger/ledger.go
+//     via a broader partial "account" token match that Go's tokenizer does
+//     not apply (Go's 3-file selection is a subset of TS's 4), and Go renders
 //     a blast-radius bullet for every selected candidate (including
 //     zero-caller structs/files) where TS appears to render bullets more
-//     selectively. Asserted as CORE-symbol membership (the specific
-//     symbols the D-03 corpus was purpose-built to test), not full
-//     bullet-set or file-count equality.
+//     selectively. Asserted as CORE-symbol membership (the specific symbols
+//     the D-03 corpus was purpose-built to test), not full bullet-set or
+//     file-count equality.
 //   - A3 (already documented, 01-RESEARCH.md Architecture Patterns
 //     Pattern 2): TS's un-ordered SQLite SELECT gives its own multi-def
 //     ordering no meaningful semantic to replicate; node-multi def-set
@@ -1191,13 +697,10 @@ func TestCorpusBehaviorSynthetic(t *testing.T) {
 		}
 		want := loadGoldenOutputIn(t, corpus, "node-multi.json")
 
-		// Header wording is TS-verbatim and deterministic (pure
-		// enumeration, no ranking involved) — assert the FULL template,
-		// including the exact def/return counts (2/2, no overflow
-		// clause), since this corpus's def count is small and
-		// unambiguous (unlike weft-go/colbymchenry-codegraph, D-02
-		// allows the counts to diverge on extraction-coverage grounds —
-		// AD-02/AD-03 — but here there is no such gap).
+		// Header wording is deterministic (pure enumeration, no ranking
+		// involved) — assert the FULL template, including the exact
+		// def/return counts (2/2, no overflow clause), since this
+		// corpus's def count is small and unambiguous.
 		wantHeader := "**2 definitions named \"Validate\"**\nReturning 2 in full — pick the one you need (no Read required).\n\n"
 		if !strings.HasPrefix(got, wantHeader) {
 			t.Errorf("Node(Validate) header mismatch:\ngot prefix:  %q\nwant prefix: %q", firstNChars(got, len(wantHeader)+20), wantHeader)
@@ -1289,71 +792,11 @@ func TestCorpusBehaviorSynthetic(t *testing.T) {
 	})
 }
 
-// TestCorpusBehaviorLockedCorpora runs the SHAPE-only tier of the D-02
-// oracle against weft-go and colbymchenry-codegraph — external,
-// real-world corpora where AD-01/AD-02/AD-03's stemming-precision and
-// extraction-coverage gaps make exact candidate-set/count comparison
-// unreliable (see the allowed-divergence list above). These subtests
-// still prove the pipeline runs end-to-end (no crash), the deterministic
-// TEMPLATE wording is TS-verbatim, and output is non-empty/well-shaped —
-// a real, if weaker, parity signal on corpora this harness cannot fully
-// control.
+// TestCorpusBehaviorLockedCorpora scaffold — reserved for 02-03 locked-corpus
+// subtests (the external pinned corpora that replace the retired
+// network-fetched corpora after FIXT-04).
 func TestCorpusBehaviorLockedCorpora(t *testing.T) {
-	t.Run("weft-go", func(t *testing.T) {
-		weftDir := resolveWeftGoCorpusLoose(t)
-		eng := buildEngineAt(t, weftDir)
-
-		t.Run("explore-multi", func(t *testing.T) {
-			got, err := eng.Explore("epic worktree", 0)
-			if err != nil {
-				t.Fatalf("Explore(epic worktree, 0): %v", err)
-			}
-			assertExploreShape(t, got, "epic worktree")
-			t.Logf("Go explore(epic worktree) selected files: %v", exploreSelectedFiles(got))
-		})
-
-		t.Run("node-multi", func(t *testing.T) {
-			got, err := eng.Node("Run", "", nil)
-			if err != nil {
-				t.Fatalf("Node(Run, \"\"): %v", err)
-			}
-			assertNodeMultiDefShape(t, got, "Run")
-
-			want := loadGoldenOutputIn(t, "weft-go", "node-multi.json")
-			gotN, wantN := nodeMultiDefCount(t, got), nodeMultiDefCount(t, want)
-			t.Logf("Node(Run) def count: got=%d want(TS)=%d (AD-03: a documented extraction-coverage delta, not asserted equal)", gotN, wantN)
-		})
-	})
-
-	t.Run("colbymchenry-codegraph", func(t *testing.T) {
-		repoDir := resolveColbymchenryCorpus(t)
-		eng := buildEngineAt(t, repoDir)
-
-		t.Run("explore-multi", func(t *testing.T) {
-			got, err := eng.Explore("generated file detection", 0)
-			if err != nil {
-				t.Fatalf("Explore(generated file detection, 0): %v", err)
-			}
-			assertExploreShape(t, got, "generated file detection")
-			t.Logf("Go explore(generated file detection) selected files: %v (AD-01: stemming-precision divergence expected vs TS's file set)", exploreSelectedFiles(got))
-		})
-
-		t.Run("node-multi", func(t *testing.T) {
-			// AD-02: "resolve" (the TS golden's 27-def symbol) is
-			// unresolvable by Go's TS/JS extractor on this corpus
-			// (object-literal method-shorthand gap) — use
-			// "searchNodes" instead, the same symbol capture.sh's
-			// capture_repo baseline already exercises here, confirmed
-			// to resolve via the committed go-node.json fixture.
-			got, err := eng.Node("searchNodes", "", nil)
-			if err != nil {
-				t.Fatalf("Node(searchNodes, \"\"): %v", err)
-			}
-			if !strings.Contains(got, "searchNodes") {
-				t.Errorf("Node(searchNodes) output does not mention searchNodes:\n%s", firstNChars(got, 500))
-			}
-		})
-	})
+	// Reserved for 02-03 locked-corpus subtests.
 }
 
 // assertExploreShape is the shape-only tier's explore assertion: valid
@@ -1555,13 +998,6 @@ func TestExploreCLIMatchesMCP(t *testing.T) {
 	}{
 		{"synthetic-parity", syntheticParitySrc, "user account"},
 	}
-	if weftDir := os.Getenv("WEFT_REPO"); weftDir != "" || dirExists(defaultWeftRepo()) {
-		cases = append(cases, struct {
-			corpus     string
-			sourceFunc func(t *testing.T) string
-			query      string
-		}{"weft-go", resolveWeftGoCorpusLoose, "epic worktree"})
-	}
 
 	for _, tc := range cases {
 		t.Run(tc.corpus, func(t *testing.T) {
@@ -1598,13 +1034,6 @@ func TestNodeCLIMatchesMCP(t *testing.T) {
 	}{
 		{"synthetic-parity", syntheticParitySrc, "Validate"},   // multi-def (2)
 		{"synthetic-parity", syntheticParitySrc, "AuditEntry"}, // single-def
-	}
-	if dirExists(defaultWeftRepo()) || os.Getenv("WEFT_REPO") != "" {
-		cases = append(cases, struct {
-			corpus     string
-			sourceFunc func(t *testing.T) string
-			symbol     string
-		}{"weft-go", resolveWeftGoCorpusLoose, "Run"}) // multi-def
 	}
 
 	for _, tc := range cases {
@@ -1685,18 +1114,4 @@ func TestNodeLineHintCLIMatchesMCP(t *testing.T) {
 	if cliOut != mcpOut {
 		t.Errorf("node(Dup, line=%d): CLI and MCP output diverge:\nCLI:\n%s\nMCP:\n%s", line, cliOut, mcpOut)
 	}
-}
-
-// defaultWeftRepo mirrors capture.sh's WEFT_REPO default, used only to
-// decide (best-effort) whether to add the weft-go subtest case above —
-// resolveWeftGoCorpusLoose is still the authoritative resolver/skip path.
-func defaultWeftRepo() string {
-	return "/Volumes/Code/github.com/seanb4t/weft"
-}
-
-// dirExists is a tiny os.Stat wrapper for defaultWeftRepo's best-effort
-// case-list gating above.
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }

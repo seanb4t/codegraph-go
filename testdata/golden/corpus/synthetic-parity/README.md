@@ -2,11 +2,9 @@
 
 A small, purpose-built Go source tree (per D-03/D-06) that deliberately
 exercises the exact v0.1 blind spots `explore`/`node` behavioral parity
-(Phase 1) is validated against, distinct from the pinned real-world corpora
-(`corpus/weft-go/`, `corpus/colbymchenry-codegraph/`). This directory
-contains only the source tree; captured TS 1.3.1 golden outputs (D-01) live
-alongside it as `explore*.json`/`node*.json` — see `testdata/golden/README.md`
-for the frozen-ground-truth policy. **No expected output is hand-authored
+(Phase 1) is validated against. This directory contains only the source
+tree; captured TS 1.3.1 golden outputs (D-01) live alongside it as
+`explore*.json`/`node*.json`. **No expected output is hand-authored
 here** — outputs are captured from the live TS 1.3.1 oracle only.
 
 Indexable at `src/` (contains its own `go.mod`, module `synthetic-parity`):

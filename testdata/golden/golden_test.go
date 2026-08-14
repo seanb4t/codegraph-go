@@ -1,12 +1,12 @@
-// Package golden contains a fast smoke test asserting the D-06 golden
-// fixtures (TS CodeGraph v1.3.1 schema DDL + golden JSON tool outputs) exist,
+// Package golden contains a fast smoke test asserting the golden fixtures
+// (the legacy schema DDL + the committed golden JSON tool outputs) exist,
 // parse, and remain stripped of the non-deterministic fields identified in
 // 01-RESEARCH.md's Pitfall 1 (FTS `score` floats, `*_at`/`*At` timestamps).
 //
 // This test does not validate fixture *content* against a live TS install —
-// it only guards that a future re-capture (via capture.sh) didn't forget to
-// strip volatile fields, which would silently reintroduce spurious parity
-// failures in Phases 3/4/7.
+// it only guards that a future re-capture didn't forget to strip volatile
+// fields, which would silently reintroduce spurious parity failures in
+// later phases.
 package golden
 
 import (
@@ -17,10 +17,10 @@ import (
 	"testing"
 )
 
-// volatileKeys are the exact JSON key names capture.sh strips because they
-// are non-deterministic across reindex runs (Pitfall 1) or machine-local
-// (projectPath/indexPath are normalized rather than removed, so they are not
-// checked here).
+// volatileKeys are the exact JSON key names the capture path stripped
+// because they are non-deterministic across reindex runs (Pitfall 1) or
+// machine-local (projectPath/indexPath are normalized rather than removed,
+// so they are not checked here).
 var volatileKeys = map[string]bool{
 	"score":       true,
 	"lastIndexed": true,
@@ -28,8 +28,9 @@ var volatileKeys = map[string]bool{
 }
 
 // isVolatileKey reports whether a JSON key matches one of the volatile
-// patterns capture.sh strips: the exact keys in volatileKeys, or any key
-// ending in "_at" or "At" (updatedAt, indexed_at, applied_at, modified_at, ...).
+// patterns the capture path strips: the exact keys in volatileKeys, or any
+// key ending in "_at" or "At" (updatedAt, indexed_at, applied_at,
+// modified_at, ...).
 func isVolatileKey(key string) bool {
 	if volatileKeys[key] {
 		return true
@@ -133,7 +134,7 @@ func TestGoldenFixturesExist(t *testing.T) {
 				continue
 			}
 			if volatile := findVolatileKeys(parsed, m); len(volatile) > 0 {
-				t.Errorf("%s: contains volatile field(s) that should have been stripped by capture.sh: %v", m, volatile)
+				t.Errorf("%s: contains volatile field(s) that should have been stripped: %v", m, volatile)
 			}
 		}
 	})
@@ -144,9 +145,8 @@ func TestGoldenFixturesExist(t *testing.T) {
 // produced by `go run ./testdata/golden/gocapture` running the CURRENT Go
 // explore/node pipeline against the re-indexed corpora) must exist and be
 // non-empty for synthetic-parity, the one corpus always available in-repo
-// (no network/external checkout dependency, unlike weft-go/
-// colbymchenry-codegraph — see gocapture/main.go's corpusSpec.resolveSource
-// docs). This guards against F5 silently going stale again the way the
+// (no network/external checkout dependency). This guards against F5
+// silently going stale again the way the
 // PRE-plan-17 explore.json/node.json fixtures did after the D-09 re-index
 // (01-15-SUMMARY.md) — a future contributor who changes the explore/node
 // pipeline without re-running gocapture will at least not have a MISSING

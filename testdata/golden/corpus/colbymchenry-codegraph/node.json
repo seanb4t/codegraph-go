@@ -1,4 +1,0 @@
-{
-  "command": "node \"searchNodes\" -p colbymchenry-codegraph -f src/db/queries.ts",
-  "output": "**searchNodes** (method)\n\n**Location:** src/db/queries.ts:987\n**Signature:** `(query: string, options: SearchOptions = {}): SearchResult[]`\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** parseQuery (src/search/query-parser.ts:66), searchNodesFTS (src/db/queries.ts:1201), searchAllByFilters (src/db/queries.ts:1112), searchNodesLike (src/db/queries.ts:1270), searchNodesFuzzy (src/db/queries.ts:1142), all (scripts/agent-eval/parse-arms.mjs:96), prepare (src/db/sqlite-adapter.ts:63), has (src/resolution/lru-cache.ts:42), rowToNode (src/db/queries.ts:131), kindBonus (src/search/query-utils.ts:388), scorePathRelevance (src/search/query-utils.ts:221), nameMatchBonus (src/search/query-utils.ts:343), +2 more\n**Called by ←** findRelevantContext (src/context/index.ts:432)\n"
-}

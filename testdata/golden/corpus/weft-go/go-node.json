@@ -1,4 +1,0 @@
-{
-  "command": "node \"mergeStyle\" -p weft-go -f internal/cli/finish.go",
-  "output": "**mergeStyle** (function)\n\n**Location:** internal/cli/finish.go:378\n**Signature:** `(r run.Runner, epic string) (string, error)`\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** JJ (internal/run/run.go:50), Hardf (internal/exit/exit.go:50)\n**Called by ←** newFinishReconcileCmd (internal/cli/finish.go:443), TestMergeStyleDetectsTrueMergeVsSquash (internal/cli/finish_test.go:384), TestMergeStyleSurfacesNonZeroExit (internal/cli/finish_test.go:666)\n"
-}

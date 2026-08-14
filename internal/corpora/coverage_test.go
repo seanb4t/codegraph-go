@@ -3,12 +3,11 @@ package corpora
 // The tests in this file DELIBERATELY never call the testing.T skip methods —
 // the package has none here, and a coverage guard that skips over a missing
 // or malformed document is a guard that passes vacuously, exactly the defect
-// class the reference functions resolveWeftCorpus and resolveColbymchenryCorpus
-// (in testdata/golden/behavioral_test.go) both exhibit with their
-// `if err != nil { t.FatalAndSkip(...) }` bodies. Those two use skip because a
-// missing fetchable corpus must not fail `go test ./...` on an offline
-// machine; this guard's documents are COMMITTED, so a missing one is a real,
-// loud failure, never a reason to go green.
+// class the old network-fetched corpus resolvers both exhibited with their
+// `if err != nil { t.FatalAndSkip(...) }` bodies. Those resolvers used skip
+// because a missing fetchable corpus must not fail `go test ./...` on an
+// offline machine; this guard's documents are COMMITTED, so a missing one
+// is a real, loud failure, never a reason to go green.
 
 import (
 	"path/filepath"

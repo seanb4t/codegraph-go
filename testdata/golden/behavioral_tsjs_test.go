@@ -3,10 +3,9 @@
 // TestCorpusBehavior_TSJS is LANG-05's D-12 acceptance gate for TypeScript,
 // TSX, and JavaScript.
 //
-// D-12 asks for the same byte/shape diff against captured TS CodeGraph
-// v1.3.x golden output that behavioral_test.go's TestCorpusBehavior_Go uses
-// for Go (resolveWeftCorpus's pinned-commit-checkout + corpus/weft-go/*.json
-// pattern). Capturing that fixture requires a working local install of the
+// D-12 asks for the same shape validation against live Go engine output
+// that behavioral_test.go's TestCorpusBehavior_Go uses for the behavioral
+// corpus. Capturing that fixture requires a working local install of the
 // live TS CodeGraph v1.3.x CLI; per 05-RESEARCH.md's "Environment
 // Availability" table, that CLI was not available in this environment (same
 // finding as behavioral_java_test.go's/behavioral_csharp_test.go's/
@@ -18,10 +17,9 @@
 // in structure) rather than skipping D-12 entirely.
 //
 // It self-skips (t.Skip, never t.Fatal) when no TS/JS validation corpus is
-// configured, exactly mirroring resolveWeftCorpus's/resolveJavaCorpus's/
-// resolveCSharpCorpus's/resolvePythonCorpus's "loud skip, never a silent
-// pass or a hard CI failure" discipline (T-03-09-Repro), so `go test ./...`
-// stays green everywhere this corpus isn't checked out.
+// configured -- the "loud skip, never a silent pass or a hard CI failure"
+// discipline (T-03-09-Repro), so `go test ./...` stays green everywhere
+// this corpus isn't checked out.
 package golden
 
 import (
@@ -38,8 +36,7 @@ import (
 // CODEGRAPH_TSJS_CORPUS, then a conventional sibling checkout
 // (../tsjs-corpus next to this repo's root). It t.Skip()s with a clear,
 // actionable message — never fails — when no corpus is configured,
-// mirroring resolveJavaCorpus/resolveCSharpCorpus/resolvePythonCorpus/
-// resolveWeftCorpus.
+// mirroring resolveJavaCorpus/resolveCSharpCorpus/resolvePythonCorpus.
 func resolveTSJSCorpus(t *testing.T) string {
 	t.Helper()
 

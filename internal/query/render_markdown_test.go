@@ -23,7 +23,7 @@ type goldenCapture struct {
 func loadGoldenOutput(t *testing.T, name string) string {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "testdata", "golden", "corpus", "weft-go", name)
+	path := filepath.Join("..", "..", "testdata", "golden", "corpus", "synthetic-parity", name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden fixture %s: %v", path, err)
@@ -204,9 +204,9 @@ func TestExplore(t *testing.T) {
 		}
 
 		gotDisclaimer := extractDisclaimer(t, got)
-		wantDisclaimer := extractDisclaimer(t, loadGoldenOutput(t, "explore.json"))
+		wantDisclaimer := extractDisclaimer(t, loadGoldenOutput(t, "go-explore-multi.json"))
 		if gotDisclaimer != wantDisclaimer {
-			t.Fatalf("Explore disclaimer diverges from the golden explore.json disclaimer (D-05a — must be verbatim, not paraphrased):\ngot:  %q\nwant: %q", gotDisclaimer, wantDisclaimer)
+			t.Fatalf("Explore disclaimer diverges from the golden go-explore-multi.json disclaimer (D-05a — must be verbatim, not paraphrased):\ngot:  %q\nwant: %q", gotDisclaimer, wantDisclaimer)
 		}
 
 		wantFileHeader := fmt.Sprintf("**`%s`** — Alpha(function)\n\n```go\n1\t", alpha.FilePath)
