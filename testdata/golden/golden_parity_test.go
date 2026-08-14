@@ -759,6 +759,55 @@ func TestGoldenParity(t *testing.T) {
 		if _, ok := decoded["score"]; ok {
 			t.Error(`status --json unexpectedly includes "score" — D-05d: no FTS5/BM25 ranking exists`)
 		}
+
+		// edgesByKind and filesByLanguage are NEWLY EMITTED as of
+		// v0.11.0 Phase 1 (FIXT-01, D-02/D-03) — asserted here as
+		// positive presence checks against OUR OWN status --json output,
+		// never against the frozen third-party golden fixture (which
+		// predates both keys; do not add them to the frozen-fixture key
+		// loop below, the same asymmetry dbSizeBytes's comment already
+		// documents). filesByLanguage was previously suppressed
+		// (`json:"-"`) to match an output shape the project no longer
+		// owes anyone — that Compatibility constraint was formally
+		// retired 2026-08-13, and un-suppressing it here is intentional,
+		// not an accidental revert.
+		rawEdgesByKind, ok := decoded["edgesByKind"]
+		if !ok {
+			t.Fatal(`our status --json output is missing "edgesByKind" (FIXT-01)`)
+		}
+		edgesByKind, ok := rawEdgesByKind.(map[string]interface{})
+		if !ok {
+			t.Fatalf("edgesByKind = %v (%T), want a JSON object", rawEdgesByKind, rawEdgesByKind)
+		}
+		if len(edgesByKind) == 0 {
+			t.Error("edgesByKind is present but empty — sparse mode must still report the kinds it measured")
+		}
+		for kind, rawCount := range edgesByKind {
+			count, ok := rawCount.(float64)
+			if !ok || count != float64(int64(count)) || count <= 0 {
+				t.Errorf("edgesByKind[%q] = %v, want a positive integer", kind, rawCount)
+			}
+		}
+
+		rawFilesByLanguage, ok := decoded["filesByLanguage"]
+		if !ok {
+			t.Fatal(`our status --json output is missing "filesByLanguage" (FIXT-01)`)
+		}
+		filesByLanguage, ok := rawFilesByLanguage.(map[string]interface{})
+		if !ok {
+			t.Fatalf("filesByLanguage = %v (%T), want a JSON object", rawFilesByLanguage, rawFilesByLanguage)
+		}
+		gotFilesByLanguageKeys := make([]string, 0, len(filesByLanguage))
+		for k := range filesByLanguage {
+			gotFilesByLanguageKeys = append(gotFilesByLanguageKeys, k)
+		}
+		sort.Strings(gotFilesByLanguageKeys)
+		wantFilesByLanguageKeys := append([]string(nil), got.Languages...)
+		sort.Strings(wantFilesByLanguageKeys)
+		if strings.Join(gotFilesByLanguageKeys, ",") != strings.Join(wantFilesByLanguageKeys, ",") {
+			t.Errorf("filesByLanguage key set = %v, want it to equal status.Languages = %v — both are derived from the same scan and disagreement means one derivation broke", gotFilesByLanguageKeys, wantFilesByLanguageKeys)
+		}
+
 		// D-08: dbSizeBytes is exempted from the volatility check HERE,
 		// at this call site only — the shared volatileKeys map in
 		// golden_test.go is deliberately left untouched, because it

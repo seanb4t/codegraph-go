@@ -39,6 +39,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -258,6 +259,137 @@ func TestStatusMarkdownOutput(t *testing.T) {
 	}
 	if !strings.Contains(text, "**CodeGraph Status**") {
 		t.Fatalf("codegraph_status output missing expected marker %q, got: %q", "**CodeGraph Status**", text)
+	}
+}
+
+// parseEdgesByKindMarkdown extracts the "- <kind>: <count>" bullet rows
+// under the "**Edges by Kind:**" header in RenderStatusMarkdown's output
+// (query/render_status.go's writeBreakdownMarkdown shape) into a plain
+// map, so TestStatusMarkdownStaysSparse can assert against parsed values
+// rather than substring-matching the rendered text. t.Fatal's if the
+// header is absent — a missing section is a test bug, not a legitimate
+// empty-map reading.
+func parseEdgesByKindMarkdown(t *testing.T, text string) map[string]int64 {
+	t.Helper()
+
+	const header = "**Edges by Kind:**"
+	lines := strings.Split(text, "\n")
+	start := -1
+	for i, line := range lines {
+		if line == header {
+			start = i + 1
+			break
+		}
+	}
+	if start == -1 {
+		t.Fatalf("markdown output has no %q section: %q", header, text)
+	}
+
+	out := map[string]int64{}
+	for _, line := range lines[start:] {
+		if !strings.HasPrefix(line, "- ") {
+			break
+		}
+		rest := strings.TrimPrefix(line, "- ")
+		kind, countStr, ok := strings.Cut(rest, ": ")
+		if !ok {
+			t.Fatalf("malformed Edges by Kind bullet %q", line)
+		}
+		count, err := strconv.ParseInt(strings.ReplaceAll(countStr, ",", ""), 10, 64)
+		if err != nil {
+			t.Fatalf("malformed Edges by Kind count in %q: %v", line, err)
+		}
+		out[kind] = count
+	}
+	return out
+}
+
+// positiveEdgeCounts filters m to its strictly-positive-count entries —
+// the independent, ground-truth definition of "the fixture's own measured
+// edge-kind set" that TestStatusMarkdownStaysSparse compares the parsed
+// MCP output against.
+func positiveEdgeCounts(m map[string]int64) map[string]int64 {
+	out := map[string]int64{}
+	for k, v := range m {
+		if v > 0 {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// TestStatusMarkdownStaysSparse asserts D-05's MCP-stays-sparse guarantee
+// through the real BuildServer call path, not through query.RenderStatusMarkdown
+// or query.DenseEdgesByKind in isolation: codegraph_status and
+// codegraph://status are both argument-less, so they cannot opt into
+// density the way `codegraph status --all-kinds` does (internal/cli/status.go
+// is the ONLY call site that ever calls DenseEdgesByKind), and a
+// renderer-level test would not prove the MCP handler itself never
+// densifies before rendering. The sparse invariant asserted here is
+// SEMANTIC, not incidental to today's small fixture:
+//
+//  1. every rendered row's count is strictly greater than zero — no
+//     zero-valued row is ever rendered by the sparse path;
+//  2. the rendered kind SET equals EXACTLY the fixture's own positive-count
+//     edgesByKind set, obtained by calling Engine.Status directly against
+//     the same fixture and filtering to positive counts — proving in both
+//     directions that no absent kind was synthesized and no present kind
+//     was dropped.
+//
+// Deliberately NOT asserted: that the row count is fewer than
+// len(query.RankEdges). That bound is an incidental property of this
+// small fixture's edge mix, not what "sparse" means — a legitimate
+// fixture with all 9 RankEdges kinds present at positive counts is still
+// perfectly sparse, and asserting a row-count ceiling would silently fail
+// the day the fixture grows to cover more kinds.
+func TestStatusMarkdownStaysSparse(t *testing.T) {
+	dir := copyFixture(t)
+	indexFixture(t, dir)
+
+	s := BuildServer(true, map[string]bool{"status": true}, dir, dir)
+
+	result := callTool(t, s, "codegraph_status", map[string]any{})
+	if result.IsError {
+		t.Fatalf("codegraph_status returned an error result: %+v", result)
+	}
+	text := resultText(t, result)
+
+	rendered := parseEdgesByKindMarkdown(t, text)
+	for kind, count := range rendered {
+		if count <= 0 {
+			t.Errorf("rendered Edges by Kind row %q has non-positive count %d — sparse mode must never render a zero-valued row", kind, count)
+		}
+	}
+
+	eng, closer, err := query.OpenAt(dir)
+	if err != nil {
+		t.Fatalf("query.OpenAt: %v", err)
+	}
+	defer closer.Close()
+
+	got, err := eng.Status(context.Background())
+	if err != nil {
+		t.Fatalf("Engine.Status: %v", err)
+	}
+	want := positiveEdgeCounts(got.EdgesByKind)
+
+	if len(rendered) != len(want) {
+		t.Fatalf("rendered Edges by Kind has %d kinds, fixture's own positive-count set has %d\nrendered: %v\nwant:     %v", len(rendered), len(want), rendered, want)
+	}
+	for kind, count := range want {
+		rc, ok := rendered[kind]
+		if !ok {
+			t.Errorf("fixture measured a positive count for kind %q but it is absent from the rendered MCP output", kind)
+			continue
+		}
+		if rc != count {
+			t.Errorf("kind %q: rendered count %d != fixture-measured count %d", kind, rc, count)
+		}
+	}
+	for kind := range rendered {
+		if _, ok := want[kind]; !ok {
+			t.Errorf("kind %q is rendered by the MCP output but was not a positive-count kind in the fixture's own measured status", kind)
+		}
 	}
 }
 
