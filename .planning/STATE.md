@@ -6,13 +6,13 @@ current_phase: 1
 current_phase_name: Corpus Selection by Measurement
 status: roadmap-complete
 stopped_at: Phase 1 context gathered
-last_updated: "2026-08-14T00:19:20.560Z"
+last_updated: "2026-08-14T01:58:46.471Z"
 last_activity: 2026-08-13
 last_activity_desc: v0.11.0 roadmap created
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 7
   completed_plans: 0
   percent: 0
 ---

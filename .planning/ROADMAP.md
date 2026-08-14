@@ -115,13 +115,26 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 **Plans**: 7 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 01-01-PLAN.md — Tracer: `edgesByKind` tally and un-suppressed `filesByLanguage` on the `status --json` contract
-- [ ] 01-02-PLAN.md — Dense `--all-kinds` opt-in derived from `RankEdges`, across all four status render surfaces
-- [ ] 01-03-PLAN.md — Re-freeze `call-status.golden`; assert MCP sparsity and `--json` key presence
 - [ ] 01-04-PLAN.md — Corpora manifest as sole pin authority, strict validation, atomic out-of-tree fetch
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 01-02-PLAN.md — Dense `--all-kinds` opt-in derived from `RankEdges`, across all four status render surfaces
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 01-03-PLAN.md — Re-freeze `call-status.golden`; assert MCP sparsity and `--json` key presence
 - [ ] 01-05-PLAN.md — Measurement record pipeline: typed record, in-process measure mode, generated prose
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-06-PLAN.md — The spike: score candidates, freeze the per-kind threshold, lock the corpus set
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 01-07-PLAN.md — Coverage drift guard and CI wiring: per-corpus cache, miss falls through to a real fetch
 
 ### Phase 2: Golden Harness Re-authoring & Re-freeze
