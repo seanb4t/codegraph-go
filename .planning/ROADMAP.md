@@ -112,7 +112,17 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 
 **Notes**: Every candidate must be MIT or Apache-2.0. Fetch-at-pinned-SHA was chosen over vendoring specifically to avoid adding redistribution obligations to the `NOTICE` file this milestone is trimming. The shortlist to measure — gohugoio/hugo, nestjs/nest, google/guava, apache/arrow — is a starting point, not a decision; the spike may keep, drop, or add to it based on what it measures.
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+
+- [ ] 01-01-PLAN.md — Tracer: `edgesByKind` tally and un-suppressed `filesByLanguage` on the `status --json` contract
+- [ ] 01-02-PLAN.md — Dense `--all-kinds` opt-in derived from `RankEdges`, across all four status render surfaces
+- [ ] 01-03-PLAN.md — Re-freeze `call-status.golden`; assert MCP sparsity and `--json` key presence
+- [ ] 01-04-PLAN.md — Corpora manifest as sole pin authority, strict validation, atomic out-of-tree fetch
+- [ ] 01-05-PLAN.md — Measurement record pipeline: typed record, in-process measure mode, generated prose
+- [ ] 01-06-PLAN.md — The spike: score candidates, freeze the per-kind threshold, lock the corpus set
+- [ ] 01-07-PLAN.md — Coverage drift guard and CI wiring: per-corpus cache, miss falls through to a real fetch
 
 ### Phase 2: Golden Harness Re-authoring & Re-freeze
 
@@ -205,7 +215,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Corpus Selection by Measurement | 0/? | Not started | - |
+| 1. Corpus Selection by Measurement | 0/7 | Not started | - |
 | 2. Golden Harness Re-authoring & Re-freeze | 0/? | Not started | - |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 0/? | Not started | - |
 | 4. Attribution & Documentation Sweep | 0/? | Not started | - |
