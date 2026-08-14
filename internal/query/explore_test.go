@@ -30,19 +30,18 @@ func TestExploreRejectsEmptyQuery(t *testing.T) {
 	}
 }
 
-// copySyntheticParityFixture copies testdata/golden/corpus/synthetic-parity/src
-// (D-03's purpose-built behavioral corpus — see its own README's case map)
-// into a fresh t.TempDir(), mirroring engine_test.go's copyFixture, but
-// SKIPS the corpus's own committed .codegraph/ directory: this plan's
+// copySyntheticParityFixture copies the behavioral corpus source tree from
+// corpus/behavioral/src (D-03) into a fresh t.TempDir(), mirroring
+// engine_test.go's copyFixture, but SKIPS .codegraph/ directories:
 // tests build a fresh index via indexFixture (indexer.Run) against the
 // CURRENT extractors/schema, rather than trusting a possibly-stale
 // committed Pebble store.
 func copySyntheticParityFixture(t *testing.T) string {
 	t.Helper()
 
-	src, err := filepath.Abs(filepath.Join("..", "..", "testdata", "golden", "corpus", "synthetic-parity", "src"))
+	src, err := filepath.Abs(filepath.Join("..", "..", "corpus", "behavioral", "src"))
 	if err != nil {
-		t.Fatalf("resolve synthetic-parity fixture path: %v", err)
+		t.Fatalf("resolve behavioral corpus fixture path: %v", err)
 	}
 	dst := t.TempDir()
 

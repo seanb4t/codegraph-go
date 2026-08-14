@@ -23,7 +23,7 @@ type goldenCapture struct {
 func loadGoldenOutput(t *testing.T, name string) string {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "testdata", "golden", "corpus", "synthetic-parity", name)
+	path := filepath.Join("..", "..", "corpus", "behavioral", name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden fixture %s: %v", path, err)

@@ -67,7 +67,7 @@ func main() {
 	corpusDir := filepath.Join(goldenDir, "corpus")
 
 	specs := []corpusSpec{
-		syntheticParitySpec(goldenDir),
+		behavioralCorpusSpec(goldenDir),
 	}
 
 	failures := 0
@@ -182,17 +182,19 @@ func writeCapture(path, command, output string) error {
 	return nil
 }
 
-// syntheticParitySpec mirrors the behavioral corpus handling: committed
-// in-repo source, behavioral-only (no capture_repo baseline —
-// baselineSymbol left empty).
-func syntheticParitySpec(goldenDir string) corpusSpec {
-	src := filepath.Join(goldenDir, "corpus", "synthetic-parity", "src")
+// behavioralCorpusSpec handles the committed, in-repo behavioral corpus
+// at corpus/behavioral/src (D-03). Uses a two-hop filepath.Dir walk from
+// gocapture's own location under testdata/golden/gocapture to reach the
+// repo root, resolving to corpus/behavioral/src.
+func behavioralCorpusSpec(goldenDir string) corpusSpec {
+	repoRoot := filepath.Dir(filepath.Dir(goldenDir)) // testdata/golden -> testdata -> repo root
+	src := filepath.Join(repoRoot, "corpus", "behavioral", "src")
 	return corpusSpec{
-		name: "synthetic-parity",
+		name: "behavioral",
 		resolveSource: func() (string, string) {
 			info, err := os.Stat(src)
 			if err != nil || !info.IsDir() {
-				return "", fmt.Sprintf("synthetic-parity source not found at %s", src)
+				return "", fmt.Sprintf("behavioral corpus source not found at %s", src)
 			}
 			return src, ""
 		},

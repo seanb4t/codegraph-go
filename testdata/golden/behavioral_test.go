@@ -70,6 +70,68 @@ func findVolatileKeysExcept(v interface{}, path string, except ...string) []stri
 	return kept
 }
 
+// behavioralCase is one entry in corpus/behavioral/CASES.json's case map.
+type behavioralCase struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	What      string   `json:"what"`
+	Symbol    string   `json:"symbol"`
+	ZeroEdge  string   `json:"zero_edge,omitempty"`
+	Connected []string `json:"connected,omitempty"`
+	Files     []string `json:"files"`
+	Query     string   `json:"query"`
+	Assertion string   `json:"assertion"`
+	Command   string   `json:"command"`
+}
+
+// behavioralCases is the top-level CASES.json envelope.
+type behavioralCasesDoc struct {
+	Cases []behavioralCase `json:"cases"`
+}
+
+// loadBehavioralCases reads corpus/behavioral/CASES.json and returns its
+// case list. It Fatals on any I/O or parse error (the corpus is committed
+// in-repo, so a missing or malformed CASES.json is a real failure, never
+// a skip).
+func loadBehavioralCases(t *testing.T) []behavioralCase {
+	t.Helper()
+
+	path := filepath.Join("..", "..", "corpus", "behavioral", "CASES.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read CASES.json: %v", err)
+	}
+	var doc behavioralCasesDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("unmarshal CASES.json: %v", err)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("CASES.json has an empty case list")
+	}
+	return doc.Cases
+}
+
+// loadBehavioralFixture reads a golden envelope from corpus/behavioral/<name>
+// and returns its output field. The path is resolved from testdata/golden/
+// working directory up to the repo root via two ".." hops.
+func loadBehavioralFixture(t *testing.T, name string) string {
+	t.Helper()
+
+	path := filepath.Join("..", "..", "corpus", "behavioral", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read behavioral golden %s: %v", path, err)
+	}
+	var capture goldenCapture
+	if err := json.Unmarshal(data, &capture); err != nil {
+		t.Fatalf("unmarshal behavioral golden %s: %v", path, err)
+	}
+	if capture.Output == "" {
+		t.Fatalf("behavioral golden %s has an empty output field", path)
+	}
+	return capture.Output
+}
+
 // buildEngineAt is the shared corpus-agnostic engine builder (plan 17,
 // TEST-01/D-02): it copies sourceDir into a fresh t.TempDir() and indexes
 // it on disk at <dst>/.codegraph/store (via buildIndexedFixture), then
@@ -103,18 +165,17 @@ func buildEngineAt(t *testing.T, sourceDir string) *query.Engine {
 	return eng
 }
 
-// syntheticParitySrc resolves the committed, in-repo synthetic-parity
-// corpus source tree (D-03) — always available, no network/external
-// checkout required.
+// syntheticParitySrc resolves the committed, in-repo behavioral corpus
+// source tree at corpus/behavioral/src (D-03).
 func syntheticParitySrc(t *testing.T) string {
 	t.Helper()
 
-	src, err := filepath.Abs(filepath.Join("corpus", "synthetic-parity", "src"))
+	src, err := filepath.Abs(filepath.Join("..", "..", "corpus", "behavioral", "src"))
 	if err != nil {
-		t.Fatalf("resolve synthetic-parity source path: %v", err)
+		t.Fatalf("resolve behavioral corpus source path: %v", err)
 	}
 	if info, err := os.Stat(src); err != nil || !info.IsDir() {
-		t.Fatalf("synthetic-parity source not found at %s (err=%v) — see corpus/synthetic-parity/README.md", src, err)
+		t.Fatalf("behavioral corpus source not found at %s (err=%v)", src, err)
 	}
 	return src
 }
@@ -679,23 +740,22 @@ func TestCorpusBehavior_Go(t *testing.T) {
 //     comparisons below are Location-SET based (order-independent), never
 //     slice-position based.
 
-// TestCorpusBehaviorSynthetic runs the FULL D-02 oracle against
-// the synthetic-parity corpus (D-03) — the one corpus co-designed to be
-// tractable for byte/structural-level assertions, always available
-// in-repo (no network/external checkout).
+// TestCorpusBehaviorSynthetic runs the D-02 oracle against the behavioral
+// corpus (D-03) — the committed, always-in-repo corpus co-designed to be
+// tractable for property assertions. In this wave (02-02) it reads the
+// moved go-* goldens as regression snapshots; Task 3 re-authors it as a
+// CASES.json-driven property assertion test.
 func TestCorpusBehaviorSynthetic(t *testing.T) {
-	const corpus = "synthetic-parity"
 	eng := buildEngineAt(t, syntheticParitySrc(t))
 
 	t.Run("node-multi", func(t *testing.T) {
-		// Symbol/query per README.md's per-corpus table: "Validate" has
-		// exactly 2 real defs (accounts/validate.go + orders/validate.go,
-		// D-03 case a).
+		// Symbol/query per CASES.json case a: "Validate" has exactly 2
+		// real defs (accounts/validate.go + orders/validate.go, D-03).
 		got, err := eng.Node("Validate", "", nil)
 		if err != nil {
 			t.Fatalf("Node(Validate, \"\"): %v", err)
 		}
-		want := loadGoldenOutputIn(t, corpus, "node-multi.json")
+		want := loadBehavioralFixture(t, "go-node-multi.json")
 
 		// Header wording is deterministic (pure enumeration, no ranking
 		// involved) — assert the FULL template, including the exact
@@ -745,7 +805,7 @@ func TestCorpusBehaviorSynthetic(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Explore(user account, 0): %v", err)
 		}
-		want := loadGoldenOutputIn(t, corpus, "explore-multi.json")
+		want := loadBehavioralFixture(t, "go-explore-multi.json")
 
 		// Header wording is TS-verbatim and deterministic.
 		wantHeader := "**Exploration: user account**\n\n"

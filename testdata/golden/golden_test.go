@@ -88,12 +88,11 @@ func TestGoldenFixturesExist(t *testing.T) {
 	})
 
 	t.Run("at least one corpus JSON fixture exists and parses", func(t *testing.T) {
-		matches, err := filepath.Glob(filepath.Join("corpus", "*", "*.json"))
-		if err != nil {
-			t.Fatalf("glob corpus/*/*.json: %v", err)
-		}
+		localMatches, _ := filepath.Glob(filepath.Join("corpus", "*", "*.json"))
+		behavioralMatches, _ := filepath.Glob(filepath.Join("..", "..", "corpus", "behavioral", "*.json"))
+		matches := append(localMatches, behavioralMatches...)
 		if len(matches) == 0 {
-			t.Fatal("no corpus/*/*.json fixtures found")
+			t.Fatal("no corpus JSON fixtures found")
 		}
 
 		for _, m := range matches {
@@ -114,12 +113,11 @@ func TestGoldenFixturesExist(t *testing.T) {
 	})
 
 	t.Run("corpus JSON fixtures are stripped of volatile fields", func(t *testing.T) {
-		matches, err := filepath.Glob(filepath.Join("corpus", "*", "*.json"))
-		if err != nil {
-			t.Fatalf("glob corpus/*/*.json: %v", err)
-		}
+		localMatches, _ := filepath.Glob(filepath.Join("corpus", "*", "*.json"))
+		behavioralMatches, _ := filepath.Glob(filepath.Join("..", "..", "corpus", "behavioral", "*.json"))
+		matches := append(localMatches, behavioralMatches...)
 		if len(matches) == 0 {
-			t.Fatal("no corpus/*/*.json fixtures found")
+			t.Fatal("no corpus JSON fixtures found")
 		}
 
 		for _, m := range matches {
@@ -140,13 +138,12 @@ func TestGoldenFixturesExist(t *testing.T) {
 	})
 }
 
-// TestGoSideFixturesRegenerated pins F5 (plan 17, 01-RESEARCH.md §A): the
-// Go-side EXPECTED fixtures (go-explore-multi.json/go-node-multi.json,
-// produced by `go run ./testdata/golden/gocapture` running the CURRENT Go
-// explore/node pipeline against the re-indexed corpora) must exist and be
-// non-empty for synthetic-parity, the one corpus always available in-repo
-// (no network/external checkout dependency). This guards against F5
-// silently going stale again the way the
+// TestGoSideFixturesRegenerated pins F5 (plan 17): the Go-side EXPECTED
+// fixtures (go-explore-multi.json/go-node-multi.json, produced by
+// `go run ./testdata/golden/gocapture` running the CURRENT Go explore/node
+// pipeline against the re-indexed corpora) must exist and be non-empty for
+// the behavioral corpus (corpus/behavioral/, always available in-repo).
+// This guards against F5 silently going stale again the way the
 // PRE-plan-17 explore.json/node.json fixtures did after the D-09 re-index
 // (01-15-SUMMARY.md) — a future contributor who changes the explore/node
 // pipeline without re-running gocapture will at least not have a MISSING
@@ -155,7 +152,7 @@ func TestGoldenFixturesExist(t *testing.T) {
 func TestGoSideFixturesRegenerated(t *testing.T) {
 	for _, name := range []string{"go-explore-multi.json", "go-node-multi.json"} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join("corpus", "synthetic-parity", name)
+			path := filepath.Join("..", "..", "corpus", "behavioral", name)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				t.Fatalf("%s: %v (run `go run ./testdata/golden/gocapture` to regenerate — F5, plan 17)", path, err)

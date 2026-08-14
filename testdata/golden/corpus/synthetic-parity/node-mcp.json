@@ -1,4 +1,0 @@
-{
-  "command": "mcp codegraph_node symbol=\"Validate\" -p synthetic-parity",
-  "output": "**2 definitions named \"Validate\"**\nReturning 2 in full — pick the one you need (no Read required).\n\n**Validate** (function)\n\n**Location:** accounts/validate.go:10\n**Signature:** `(m *UserAccountManager) error`\n\n```go\n10\tfunc Validate(m *UserAccountManager) error {\n11\t\treturn validateBalance(m.Balance)\n12\t}\n```\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** validateBalance (accounts/validate.go:14), UserAccountManager (accounts/manager.go:7)\n\n---\n\n**Validate** (function)\n\n**Location:** orders/validate.go:10\n**Signature:** `(orderID string) error`\n\n```go\n10\tfunc Validate(orderID string) error {\n11\t\tif orderID == \"\" {\n12\t\t\treturn errEmptyOrder\n13\t\t}\n14\t\treturn nil\n15\t}\n```\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** errEmptyOrder (orders/validate.go:17)"
-}
