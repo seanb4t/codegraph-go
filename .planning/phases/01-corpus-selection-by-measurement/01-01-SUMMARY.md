@@ -168,6 +168,14 @@ None - no external service configuration required.
 - Plan 01-02 (per CONTEXT.md D-02/D-04) can now build the dense-mode `--all-kinds` flag and the human-text/MCP-markdown "Edges by Kind:" sections on top of this data layer without needing any further `Engine.Status` changes.
 - No blockers. The one open item worth a future phase's attention (explicitly flagged in `Status()`'s own doc comment, not a defect): the new edge scan is unconditional and adds real cost on every `status` call; a future phase could choose to stamp a per-kind aggregate into `Meta` at index time to avoid it, which this plan deliberately did not take on (D-01 scope).
 
+## Self-Check: PASSED
+
+- FOUND: `internal/query/status_edges_test.go`
+- FOUND: `.planning/phases/01-corpus-selection-by-measurement/01-01-SUMMARY.md`
+- FOUND: commit `fa55d28` (Task 1)
+- FOUND: commit `6226b51` (Task 2)
+- FOUND: commit `81950f9` (this SUMMARY)
+
 ---
 *Phase: 01-corpus-selection-by-measurement*
 *Completed: 2026-08-14*
