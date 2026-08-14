@@ -455,3 +455,74 @@ Source-grounding of the review itself: Codex cited 20+ distinct `file:line` loca
 `testdata/`, and `.github/workflows/`; spot-checks of `internal/query/rwr.go:21`,
 `internal/query/status.go:202` and `test/wireoracle/scenarios.go:752` matched the claims. No
 `REVIEWED-WITHOUT-REPO-ACCESS` marker was emitted.
+
+
+---
+
+## Verification coverage (source-grounding pass, cycle 1)
+
+Run by the plan-review-convergence orchestrator, 2026-08-14, against plans at `f85f9c7`.
+
+### Adapter substitution — disclosed, not silent
+
+`gsd-tools drift-guard authority --raw` resolved the effective authority to **`intel`**.
+The `intel` adapter was **NOT** used. It is regex/JS-only and `gsd-tools intel api-surface`
+regenerated `.planning/intel/API-SURFACE.md` with `symbolCount: 0` against this Go tree — the
+fifth recorded occurrence of that result in this repo. Under `intel`, every Go symbol would
+resolve `UNCHECKABLE`, producing a pass in which nothing was actually checked: the vacuous-gate
+shape rule `84d1gfpywd` forbids.
+
+**Adapter actually used: `grep`** (ripgrep over the real tree, plus the repo's own `.codegraph`
+index). Under `grep`, signature mismatches cannot be asserted, so no signature claim below is
+reported as VERIFIED or MISSING — signatures are `UNCHECKABLE` by construction of the adapter.
+
+### Excluded from verification (declared new artifacts)
+
+All symbols listed under each plan's "Artifacts this phase produces" section were excluded, per
+the source-grounding contract — these are created by this phase, not references to existing code.
+All 7 plans carry that section. Excluded set includes `internal/corpora/*`, `tools/corpora/*`,
+`corpora/manifest.json`, `corpora/measurements.json`, `docs/CORPUS-MEASUREMENT.md`,
+`.github/workflows/corpora.yml`, `query.DenseEdgesByKind`, `query.StatusResult.EdgesByKind`,
+and all `Test*` names introduced by this phase.
+
+### Existing file paths — 20 cited, 20 VERIFIED, 0 MISSING
+
+`internal/query/status.go` · `internal/query/render_status.go` · `internal/query/rwr.go` ·
+`internal/query/rwr_test.go` · `internal/query/expand.go` · `internal/cli/status.go` ·
+`internal/cli/present/status.go` · `internal/agents/opencode.go` · `internal/graphstore/keys.go` ·
+`internal/indexer/resolve.go` · `internal/mcp/tools.go` · `internal/mcp/markdown_test.go` ·
+`testdata/golden/gocapture/main.go` · `testdata/golden/golden_parity_test.go` ·
+`test/wireoracle/cmd/wireoracle/main.go` · `testdata/wireoracle/transcripts/call-status.golden` ·
+`internal/upgrade/taskfile_shape_test.go` · `.github/workflows/linux-cross-canary.yml` ·
+`.github/workflows/ci.yml` · `Taskfile.yml`
+
+### Existing Go symbols — 21 cited, 21 VERIFIED, 0 MISSING, 0 AMBIGUOUS
+
+`RankEdges` · `StatusResult` · `RenderStatusText` · `RenderStatusMarkdown` · `sortedCounts` ·
+`IterateEdges` · `FilesByLanguage` · `NodesByKind` · `TestRankEdges` · `ExpectedScenarioCount` ·
+`TestWorkflowRunBodiesInvokeTask` · `inScopeJobs` · `synthesizeOverrides` · `emitTypeOfRef` ·
+`pinnedWeftCommit` · `resolveWeftCorpus` · `resolveColbymchenryCorpus` · `edgeKey` ·
+`GetEdgeCount` · `newStatusCmd` · `TestFrozenTranscriptsMatch`
+
+### INFO — reported, not blocking
+
+| Item | Verdict | Note |
+|---|---|---|
+| `gocapture/main.go` (01-05:203) | INFO | Prose shorthand. The full path `testdata/golden/gocapture/main.go` is VERIFIED and is cited in full elsewhere in the same plan. No action required. |
+| All Go signatures | UNCHECKABLE | The `grep` adapter cannot assert signatures. Never treated as verified. |
+
+### Finding raised BY this pass (not a drift verdict)
+
+Following `resolveWeftCorpus` to its first definition site surfaced
+**`tools/bench/realcorpus/manifest.go`** — an existing pinned-SHA corpus manifest
+(`Entry{Name, SourceURL, Tag, CommitSHA, License, SelectionRule, QueryTerms, EnvVar, SiblingDir}`,
+`Corpora()`, `Entry.Resolve()`, `ErrNeedsClone`), consumed by `tools/bench/runner/main.go`, with
+three pinned entries. Both `01-RESEARCH.md` and `01-PATTERNS.md` assert no such manifest exists;
+`01-PATTERNS.md` files it under "No Analog Found."
+
+This is a **planning finding, not a symbol-drift verdict**, and is carried into the replan rather
+than recorded here as a coverage result. Full detail in the replan payload.
+
+**Methodological note:** this pass's own first sweep also verified that "No Analog Found" row as
+standing. It was caught only by following a symbol to where it actually lives, not by searching for
+the concept. Two agents plus one orchestrator narrowed identically on the same expected name.
