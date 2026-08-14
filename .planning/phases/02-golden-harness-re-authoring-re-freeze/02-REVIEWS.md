@@ -58,4 +58,30 @@ None between reviewers this cycle (single grounded reviewer + independent source
 
 Cycle 2. All five cycle-1 HIGHs and all seven actionables are fully resolved in the revised plans. However, the revision introduced **two new HIGH, source-verified knock-on defects** that would break execution if followed literally: (1) 02-02's framing gate contradicts the byte-identical moved goldens whose `command` field still embeds `-p synthetic-parity`, making 02-02's own verify fail and the 02-04 checkpoint grep false-flag the legitimate framing retirement; and (2) 02-03's behavioral outDir formula is the one-hop off-by-one (resolving to `testdata/corpus/behavioral`), contradicting the repo-root path 02-02 correctly established. Recommend a focused revision of 02-02's gate scoping and 02-03's outDir formula (`/gsd-plan-phase 2 --reviews`) before execution; no cycle-1 item needs re-examination.
 
-CYCLE_SUMMARY: current_high=2 current_actionable=0
+### Convergence cycle 3 (post-revision review — configured-final cycle)
+
+Cycle 2 (commit `0279431`) raised **2 HIGH** findings (both source-verified knock-on defects). Plans were revised at `b521194`. This cycle re-checks both HIGHs against the revised `PLAN.md` text, and checks the revision for new knock-on contradictions before the phase proceeds to execution.
+
+#### Cycle-2 findings — RESOLVED (verified in revised plan text, not merely acknowledged)
+
+| Cycle-2 finding | Disposition now | Where resolved |
+|---|---|---|
+| HIGH 1 — framing gate contradicts byte-identical moved goldens (`-p synthetic-parity` in `command` field), and 02-04 checkpoint grep false-flags the first re-capture's removal line | RESOLVED | 02-02 must_haves truths 46-47 scope the framing gate to identifiers/paths/names + authored data (module line, CASES.json), PARKS the moved goldens' embedded command-field byte explicitly OUT of the gate (byte-identical move cannot legally change it), and defer its retirement to 02-04, with the recurrence rule "a framing gate checks identifiers/paths/names; a golden-content gate checks the re-frozen output; never conflate." Task 2 verify (line 221) greps only go.mod + CASES.json + file NAMES (`find corpus/behavioral -iname '*synthetic*'`), never golden bytes — no false flag. 02-04 Task 2 action (133) + checkpoint step 4 (165) are scoped to ADDED (`^+`) lines only and explicitly name the `^-` `-p synthetic-parity` removal as the intended retirement, not a violation. |
+| HIGH 2 — 02-03 Task 1 reintroduced the one-hop behavioral outDir off-by-one (`filepath.Dir(goldenDir)` → `testdata/corpus/behavioral`) | RESOLVED | 02-03 Task 1 action (line 122) now uses `filepath.Dir(filepath.Dir(goldenDir))` (TWO hops), explicitly names H2-2 as the same defect class as cycle-1 H2, and matches 02-02's repo-root correction; acceptance (line 146) asserts `-d corpus/behavioral && ! -e testdata/corpus/behavioral`. The locked-corpus outDir under `testdata/golden/corpus/<slug>` (one hop) is correct and deliberately different, matching the reader tests. |
+
+Both cycle-2 HIGHs are incorporated into the plan text (task/action/acceptance_criteria + explicit reasoning), not merely acknowledged. **None re-counted.**
+
+#### NEW defects from this revision? — none found
+
+The committed-final revision does not introduce a knock-on:
+- **Framing-gate scoping (02-02):** the parked `-p synthetic-parity` byte in `corpus/behavioral/go-{explore,node}-multi.json` is loaded only as a secondary regression cross-check (02-02 Task 3), never byte-diffed as a primary oracle between 02-02 and 02-04, so no test turns red on it in the window before the re-freeze retires it. The gate's `find -iname '*synthetic*'` matches file names only, which the moved goldens (`go-explore-multi.json`, `go-node-multi.json`) do not carry.
+- **Two-hop path (02-03):** the behavioral outDir now uses the same two-hop formula 02-02 established; no one-hop residual remains on the behavioral side. The one-hop form survives only in the locked-corpus path where it is correct (readers live under `testdata/golden/corpus`).
+- **Added-lines-only checkpoint grep (02-04):** both the grep in Task 2 action (133) and the human checkpoint (165) restrict to `^+` lines and treat `^-` removal lines as the intended retirement. No remaining false-flag source on the framing retirement.
+
+No remaining actionable MEDIUM/LOW finding is visible that the latest `PLAN.md` files neither incorporate nor explicitly defer/reject.
+
+### Convergence verdict
+
+Cycle 3. Both cycle-2 HIGHs — the framing-gate/golden-content contradiction and the reintroduced one-hop behavioral outDir defect — are fully resolved in the revised PLAN.md text at `b521194`, with explicit scoping (identifiers/paths/names + authored data, parking the moved goldens' command-field byte and retiring it at 02-04's re-freeze) and the corrected two-hop formula (accompanied by a concrete `-d corpus/behavioral && ! -e testdata/corpus/behavioral` acceptance). This revision introduces no new knock-on defect across 02-01→02-04, and no actionable MEDIUM/LOW concern remains unresolved and invisible to /gsd-execute-phase. The phase's two-diff attribution discipline, hermetic fail-loud locked-corpus resolution, and the non-vacuous byte-identity guard are intact. Converged as configured-final: the phase may proceed to execution.
+
+CYCLE_SUMMARY: current_high=0 current_actionable=0
