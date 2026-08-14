@@ -3603,6 +3603,62 @@ tasks:
         # explicit flags for a bounded candidate search (e.g. -repos org/name).
         go run ./tools/corpora -mode measure
 
+  corpora:verify:
+    desc: >-
+      D-08's CHEAP half of the corpora drift guard: reconciles the three
+      COMMITTED documents — corpora/manifest.json, corpora/observations.json
+      and corpora/selection.json — against each other through the
+      internal/corpora coverage guard (CheckCoverage). Requires no fetched
+      corpora and no indexing, so it is safe on EVERY CI run as its own named
+      step. The cached-result-defeating -count=1 flag is MANDATORY: without it
+      Go's test cache would let a mutated committed document slip through on a
+      stale green result.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — corpora:verify runs go test over ./internal/corpora."
+    cmds:
+      - go test -count=1 ./internal/corpora/...
+
+  corpora:drift:
+    desc: >-
+      D-08's EXPENSIVE half of the corpora drift guard: proves the pinned
+      LOCKED corpora still produce the committed measurement. Fetches and
+      asserts every locked corpus, re-runs task corpora:measure at the
+      DEFAULT locked scope (which never deletes out-of-scope observation
+      entries), then requires the working tree to be clean for the two
+      GENERATED files corpora/observations.json and docs/CORPUS-MEASUREMENT.md.
+      A difference means the pinned corpora no longer produce the recorded
+      numbers. The diff NEVER covers the curated selection policy file the
+      measure step cannot write, so nothing under test can correlate with it.
+      The clean-diff demand composes with the upsert lifecycle because
+      observations are keyed by repo@sha: a pin bump creates a NEW key rather
+      than staling an old one, and the entry-deletion flag (which would remove
+      out-of-scope entries and break the diff) is deliberately never passed.
+      Invoked by the corpora workflow's drift leg, which runs only when a
+      measurement-affecting path changes.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — corpora:drift re-runs tools/corpora via `go run`."
+      - sh: command -v git
+        msg: "git not found — corpora:drift computes the drift diff with git."
+    cmds:
+      - |
+        set -euo pipefail
+        task corpora:fetch
+        task corpora:assert
+        task corpora:measure
+        # The measure step UPSERTS at the locked scope (never passing the
+        # out-of-scope deletion flag), so measured-but-unlocked observations
+        # are neither re-measured nor removed and never appear in this diff.
+        changed=$(git diff --name-only -- corpora/observations.json docs/CORPUS-MEASUREMENT.md)
+        if [ -n "$changed" ]; then
+          echo "::error::corpora:drift: re-measuring the locked corpora changed committed files — the pinned corpora no longer produce the recorded numbers"
+          printf '%s\n' "$changed"
+          git diff -- corpora/observations.json docs/CORPUS-MEASUREMENT.md | head -100
+          exit 1
+        fi
+        echo "corpora:drift: locked corpora re-measure byte-identical to the committed record"
+
   diag:cpu:
     desc: >-
       CPU/memory/storage topology diagnostic (10-04-PLAN, Rule 2 deviation
