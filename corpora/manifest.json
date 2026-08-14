@@ -6,8 +6,8 @@
       "sha": "0805c734a41b75403e3970e0070227916b6845d2",
       "license": "Apache-2.0",
       "language": "go",
-      "locked": false,
-      "note": "Closes the Go priority-4 coverage gap. Roadmap shortlist."
+      "locked": true,
+      "note": "LOCKED (01-06): closes the Go priority-4 coverage gap and supplies TS/JS via its 25 javascript tracked files, which is how this minimum-cardinality set covers all five priority languages. Roadmap shortlist."
     },
     {
       "repo": "nestjs/nest",
@@ -22,8 +22,8 @@
       "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
       "license": "Apache-2.0",
       "language": "java",
-      "locked": false,
-      "note": "Closes the Java priority-4 coverage gap. Roadmap shortlist; also nominated for overrides and type_of coverage via its forwarding-class hierarchy and explicit field typing."
+      "locked": true,
+      "note": "LOCKED (01-06): closes the Java priority-4 coverage gap and is the sole supplier of the highest-kind bars — overrides=4658, type_of=11857, calls=58812, references=13063, returns=5591, extends=2531, instantiates=1877. Roadmap shortlist."
     },
     {
       "repo": "JamesNK/Newtonsoft.Json",
@@ -38,8 +38,8 @@
       "sha": "49b5339ce85385dc52d4d8e8f2b8308becf23506",
       "license": "Apache-2.0",
       "language": "csharp",
-      "locked": false,
-      "note": "C# fallback candidate, in case JamesNK/Newtonsoft.Json misses a coverage bar."
+      "locked": true,
+      "note": "LOCKED (01-06): supplies the C# priority-4 non-zero floor. Minimum-cardinality set selected serilog over JamesNK/Newtonsoft.Json because the two tied on kind coverage (serilog C# files=216 vs 684; serilog tracked files=284 vs 1170) and the tie-break is total tracked files ascending."
     },
     {
       "repo": "tiangolo/fastapi",
@@ -62,8 +62,8 @@
       "sha": "8068356288978c4f54661ae6f95afe0e0831885e",
       "license": "Apache-2.0",
       "language": "python",
-      "locked": false,
-      "note": "Python fallback candidate, in case tiangolo/fastapi and pydantic/pydantic both miss a coverage bar."
+      "locked": true,
+      "note": "LOCKED (01-06): supplies the Python priority-4 non-zero floor. Minimum-cardinality set selected requests (tracked files=130) over fastapi (3137) and pydantic (814) via the total-tracked-files-ascending tie-break; its measured python file count is non-zero."
     },
     {
       "repo": "apache/arrow",

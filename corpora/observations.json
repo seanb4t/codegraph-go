@@ -232,6 +232,222 @@
         },
         "version": "1"
       }
+    },
+    "psf/requests@8068356288978c4f54661ae6f95afe0e0831885e": {
+      "repo": "psf/requests",
+      "sha": "8068356288978c4f54661ae6f95afe0e0831885e",
+      "license": "Apache-2.0",
+      "language": "python",
+      "trackedFiles": 130,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 1009,
+        "edgesByKind": {
+          "calls": 166,
+          "contains": 734,
+          "extends": 38,
+          "implements": 0,
+          "imports": 0,
+          "instantiates": 32,
+          "overrides": 11,
+          "references": 20,
+          "returns": 6,
+          "type_of": 2
+        },
+        "fileCount": 37,
+        "filesByLanguage": {
+          "python": 37
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "python"
+        ],
+        "nodeCount": 771,
+        "nodesByKind": {
+          "file": 37,
+          "function": 140,
+          "method": 502,
+          "struct": 92
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    },
+    "pydantic/pydantic@02c5c975fa9f1bf4f094834487786d3148987fee": {
+      "repo": "pydantic/pydantic",
+      "sha": "02c5c975fa9f1bf4f094834487786d3148987fee",
+      "license": "MIT",
+      "language": "python",
+      "trackedFiles": 814,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 20362,
+        "edgesByKind": {
+          "calls": 4050,
+          "contains": 11928,
+          "extends": 553,
+          "implements": 18,
+          "imports": 0,
+          "instantiates": 1877,
+          "overrides": 137,
+          "references": 1001,
+          "returns": 147,
+          "type_of": 651
+        },
+        "fileCount": 568,
+        "filesByLanguage": {
+          "javascript": 5,
+          "python": 432,
+          "rust": 131
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "javascript",
+          "python",
+          "rust"
+        ],
+        "nodeCount": 12621,
+        "nodesByKind": {
+          "file": 568,
+          "function": 5429,
+          "interface": 26,
+          "method": 3530,
+          "struct": 3068
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    },
+    "serilog/serilog@49b5339ce85385dc52d4d8e8f2b8308becf23506": {
+      "repo": "serilog/serilog",
+      "sha": "49b5339ce85385dc52d4d8e8f2b8308becf23506",
+      "license": "Apache-2.0",
+      "language": "csharp",
+      "trackedFiles": 284,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 1693,
+        "edgesByKind": {
+          "calls": 387,
+          "contains": 1227,
+          "extends": 17,
+          "implements": 2,
+          "imports": 0,
+          "instantiates": 12,
+          "overrides": 12,
+          "references": 3,
+          "returns": 15,
+          "type_of": 18
+        },
+        "fileCount": 216,
+        "filesByLanguage": {
+          "csharp": 216
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "csharp"
+        ],
+        "nodeCount": 1442,
+        "nodesByKind": {
+          "file": 216,
+          "interface": 15,
+          "method": 969,
+          "struct": 242
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    },
+    "tiangolo/fastapi@a1fa70d4237d50aae6586a0d9b229df583463d21": {
+      "repo": "tiangolo/fastapi",
+      "sha": "a1fa70d4237d50aae6586a0d9b229df583463d21",
+      "license": "MIT",
+      "language": "python",
+      "trackedFiles": 3137,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 7933,
+        "edgesByKind": {
+          "calls": 1942,
+          "contains": 5316,
+          "extends": 105,
+          "implements": 0,
+          "imports": 0,
+          "instantiates": 227,
+          "overrides": 33,
+          "references": 193,
+          "returns": 62,
+          "type_of": 55
+        },
+        "fileCount": 1140,
+        "filesByLanguage": {
+          "javascript": 4,
+          "python": 1136
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "javascript",
+          "python"
+        ],
+        "nodeCount": 7546,
+        "nodesByKind": {
+          "file": 1140,
+          "function": 4299,
+          "method": 335,
+          "route": 1090,
+          "struct": 682
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
     }
   }
 }
