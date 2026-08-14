@@ -23,7 +23,7 @@
       "license": "Apache-2.0",
       "language": "java",
       "locked": true,
-      "note": "LOCKED (01-06): closes the Java priority-4 coverage gap and is the sole supplier of the highest-kind bars — overrides=4658, type_of=11857, calls=58812, references=13063, returns=5591, extends=2531, instantiates=1877. Roadmap shortlist."
+      "note": "LOCKED (01-06): closes the Java priority-4 coverage gap and is the sole supplier of the highest-kind bars — overrides=4658, type_of=11857, calls=58812, references=13063, returns=5591, extends=2531, instantiates=1053. Roadmap shortlist."
     },
     {
       "repo": "JamesNK/Newtonsoft.Json",
