@@ -135,7 +135,7 @@ Standing decisions that outlive every milestone:
 
 ### Pending Todos
 
-7 pending — `/gsd-capture --list` to review. All predate v0.11.0 and none block it.
+8 pending — `/gsd-capture --list` to review. One (`bench pinnedAt`) surfaced during v0.11.0 Phase 1 but is out of scope there; the rest predate v0.11.0 and none block it.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
@@ -145,6 +145,7 @@ Standing decisions that outlive every milestone:
 | 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
 | 2026-08-10 | docs | — | `brew trust` instructions recommend broader tap grant with no security framing |
 | 2026-08-10 | ci | — | Tap App secret distinctness test is tautological and reads no workflow |
+| 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces; latent in the benchmark path, reconciles when Phase 6 (Benchmark De-coupling) touches `realcorpus` |
 | — | mcp | major | CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications (see Blockers/Concerns) |
 
 Resolved and filed to `.planning/todos/completed/`:
