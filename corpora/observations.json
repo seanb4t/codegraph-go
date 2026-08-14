@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "manifestPath": "corpora/manifest.json",
+  "observations": {
+    "gohugoio/hugo@0805c734a41b75403e3970e0070227916b6845d2": {
+      "repo": "gohugoio/hugo",
+      "sha": "0805c734a41b75403e3970e0070227916b6845d2",
+      "license": "Apache-2.0",
+      "language": "go",
+      "trackedFiles": 2547,
+      "status": {
+        "backend": "pebble",
+        "edgeCount": 23351,
+        "edgesByKind": {
+          "calls": 6212,
+          "contains": 10713,
+          "embeds": 155,
+          "extends": 131,
+          "implements": 1018,
+          "imports": 2160,
+          "instantiates": 636,
+          "overrides": 24,
+          "references": 1189,
+          "returns": 1096,
+          "type_of": 17
+        },
+        "fileCount": 918,
+        "filesByLanguage": {
+          "c": 4,
+          "go": 889,
+          "javascript": 25
+        },
+        "index": {
+          "builtWithExtractionVersion": 1,
+          "builtWithVersion": "1",
+          "currentExtractionVersion": 1,
+          "pendingRefs": 0,
+          "reindexRecommended": false,
+          "state": "complete"
+        },
+        "initialized": true,
+        "languages": [
+          "c",
+          "go",
+          "javascript"
+        ],
+        "nodeCount": 11814,
+        "nodesByKind": {
+          "constant": 686,
+          "file": 918,
+          "function": 4014,
+          "interface": 326,
+          "method": 4136,
+          "package": 183,
+          "struct": 974,
+          "type_alias": 201,
+          "variable": 376
+        },
+        "pendingChanges": {
+          "added": 0,
+          "modified": 0,
+          "removed": 0
+        },
+        "version": "1"
+      }
+    }
+  }
+}
