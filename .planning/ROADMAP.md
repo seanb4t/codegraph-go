@@ -239,7 +239,20 @@ Plans:
 
 **Notes**: Workflows carrying the vocabulary include `ci`, `release`, `bench`, `post-release-verify`, `linux-cross-canary`, `require-issue-link` and `auto-close-unsolicited-prs`. `bench.yml`'s own de-coupling is Phase 6's; this phase touches only its framing. The naive-regex failure mode is real and named in the requirements: a find-and-replace over "TypeScript" breaks `tsextract` and de-lists a supported language.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1** *(parallel — zero file overlap)*
+
+- [ ] 05-01-PLAN.md — Tracer: `codegraph migrate` removal end-to-end — CLI registration, `internal/migrate` package + cli files, `modernc` deps via `go mod tidy`, graphstore cursor API (GetMigration/PutMigration/migrationRecordName + fakes), ts-* fixtures + `TestGoldenFixturesExist` subtests, README row, golden README bullet, nodeid citation (CODE-03)
+- [ ] 05-02-PLAN.md — Issue templates (PROC-01) + PR templates (PROC-02): parity/migrate framing swept, format gate and issue-approval policy intact (PROC-01, PROC-02)
+- [ ] 05-03-PLAN.md — Workflow sweep (PROC-03): step-name/comment/JS-prose rewords incl. corpora.yml golden step + the two inline-JS parity sentences + bench.yml framing, zero job-name edits, actionlint + TestWorkflowRunBodies green (PROC-03)
+- [ ] 05-05-PLAN.md — CODE-01 remainder: agents/installer, cli rows, githooks/gitmeta/watch, indexer/corpora rows, mcp prose-only stale filenames, schema graph.proto↔pb.go lockstep, tool bench manifest stale cites, `.claude/CLAUDE.md` core-value sweep (D-10) (CODE-01)
+
+**Wave 2** *(blocked on Wave 1 — the query census rides after the migrate cut removes the stubs)*
+
+- [ ] 05-04-PLAN.md — CODE-01 flagship: internal/query census row-by-row, cross stale-filename rows, syntheticParity identifier renames, capability-matrix `golden-parity` comments (CODE-01)
+- [ ] 05-06-PLAN.md — D-07 corpus: reword corpus/behavioral/src comments + the small attributed golden re-freeze (`task golden:regen`), scenario count unchanged (CODE-01)
 
 ### Phase 6: Benchmark De-coupling & Memory Sweep
 
