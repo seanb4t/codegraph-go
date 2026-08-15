@@ -32,6 +32,10 @@ Prove the re-baselined golden suite (Phase 2) is trusted because it has been wat
 
 - **D-03:** The golden suite runs in a **new job in the existing `corpora.yml` sibling workflow** (Phase 1). That workflow is already corpus-aware (fetch + assert + nscloud cache), path-filtered, and `contents: read` — the safe side of the repo's cache-trust line (`release.yml:115-120` excludes the cache from the `id-token: write` job). The golden job runs unconditionally (not gated on cache-hit), and a fetch or cache failure fails loudly rather than skipping. `ci.yml`'s general test job is left unchanged — the corpus concern stays in the corpus-aware workflow. — **Reversibility:** reversible — a workflow change.
 
+### CI reconciliation (OQ-1, ruled 2026-08-15)
+
+- **D-04:** The golden suite is **moved entirely out of `ci.yml`'s test job** and runs only in `corpora.yml`'s new golden job. `ci.yml`'s existing `test:golden` step now runs locked-corpus tests that FAIL LOUDLY on an empty corpus root (verified empirically by the researcher), so leaving it in place would be red on a fresh runner. D-03's "leave ci.yml unchanged" is honored in intent — the corpus concern stays in the corpus-aware workflow — by *removing* the corpus-dependent golden step from ci.yml rather than by duplicating the fetch/cache wiring into it or by adding a skip. A skip is exactly what FIXT-03 forbids. The corpus-aware golden job fetches corpora first, runs unconditionally, and fails loudly on fetch/cache failure. — **Reversibility:** reversible — moves a CI step between workflows, not behavior.
+
 ### Claude's Discretion
 
 - The exact expected-count value and how it's surfaced in the test output (constant vs derived display), provided the test self-asserts against it and the derivation is from the authoritative source.
