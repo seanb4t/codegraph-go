@@ -1,16 +1,12 @@
 # Golden fixtures and the behavioral corpus
 
-This directory holds the legacy schema ground truth and the golden test
-suite that guards it. The TS-era capture path and the external,
+This directory holds the golden test suite that guards the committed
+tool-output fixtures. The legacy capture path and the external,
 network-fetched corpora it once captured from are retired as of Phase 2
 (FIXT-04). The purpose-built
 behavioral corpus now lives at the repo root as `corpus/behavioral/`
 (D-03/D-04).
 
-- `ts-schema.sql` / `ts-schema.dump.sql` / `ts-version.txt` — the legacy
-  SQLite schema DDL + version record that Phase 7's one-way migration reader
-  treats as ground truth for reading a TS `.codegraph/` index. These are
-  never deleted or reworded.
 - `corpus/behavioral/**` (at the repo root, outside `testdata/`) — the
   committed, always-in-repo behavioral corpus: a small Go source tree
   (`src/`) whose four purpose-built cases exercise overloaded symbols,
@@ -56,30 +52,15 @@ the invariants live on in `golden_test.go`'s `TestGoldenFixturesExist`:
 guarantee as an automated invariant: it fails if a corpus JSON fixture
 re-introduces a raw `score` field or a `*_at`/`*At` timestamp key.
 
-## Historical bug note (Pitfall 2) — edge-dedup, issue #1034
+## Edge-identity design note — dedup grain
 
-`ts-schema.sql` contains:
-
-```sql
-CREATE UNIQUE INDEX idx_edges_identity
-  ON edges(source, target, kind, IFNULL(line, -1), IFNULL(col, -1));
-```
-
-This unique index is the TS project's fix for a real, historical bug
-(upstream issue #1034): an `INSERT OR IGNORE` into `edges` with **no**
-`UNIQUE` constraint to conflict on behaved like a plain `INSERT`, so two
-indexing/resolve passes over the same source could silently double-insert
-the same logical edge — inflating edge counts and polluting
-callers/impact results.
-
-**Why this matters for the Go port:** the Pebble edge key design
-(`e/<src>/<kind>/<dst>`, per D-03) does **not** include line/col in the key —
-meaning it dedupes at a coarser grain than the TS schema's unique index
-does. That is almost certainly the *desired* behavior for most edge kinds
-(repeated sync/resolve passes should be idempotent, not append-only), but
-it also means two structurally distinct call sites between the same
-(source, kind, target) triple will collide and overwrite in the new store,
-where TS's `(source, target, kind, line, col)` index would have kept them
-distinct. The edge-identity design should explicitly decide (and document)
-whether any edge kinds need line/col folded into the key to avoid losing
-multi-call-site information that TS's schema preserved.
+The Pebble edge key design (`e/<src>/<kind>/<dst>`, per D-03) does **not**
+include line/col in the key, so two structurally distinct call sites
+between the same (source, kind, target) triple collide and overwrite
+rather than accumulate. This is deliberate: repeated sync/resolve passes
+over the same source are idempotent rather than append-only, which avoids
+a class of historical double-insert bugs where re-running indexing over
+unchanged source silently inflated edge counts and polluted
+callers/impact results. Any edge kind that needs multi-call-site
+information preserved (rather than deduped) should fold line/col into the
+key explicitly, as a documented design decision.

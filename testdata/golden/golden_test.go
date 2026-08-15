@@ -1,11 +1,11 @@
-// Package golden contains a fast smoke test asserting the golden fixtures
-// (the legacy schema DDL + the committed golden JSON tool outputs) exist,
-// parse, and remain stripped of the non-deterministic fields identified in
-// 01-RESEARCH.md's Pitfall 1 (FTS `score` floats, `*_at`/`*At` timestamps).
+// Package golden contains a fast smoke test asserting the committed golden
+// JSON tool-output fixtures exist, parse, and remain stripped of the
+// non-deterministic fields identified in 01-RESEARCH.md's Pitfall 1 (FTS
+// `score` floats, `*_at`/`*At` timestamps).
 //
-// This test does not validate fixture *content* against a live TS install —
-// it only guards that a future re-capture didn't forget to strip volatile
-// fields, which would silently reintroduce spurious failures in
+// This test does not validate fixture *content* against a live reference
+// install — it only guards that a future re-capture didn't forget to strip
+// volatile fields, which would silently reintroduce spurious failures in
 // later phases.
 package golden
 
@@ -64,29 +64,6 @@ func findVolatileKeys(v interface{}, path string) []string {
 }
 
 func TestGoldenFixturesExist(t *testing.T) {
-	t.Run("ts-schema.sql exists and is non-empty", func(t *testing.T) {
-		info, err := os.Stat("ts-schema.sql")
-		if err != nil {
-			t.Fatalf("ts-schema.sql: %v", err)
-		}
-		if info.Size() == 0 {
-			t.Fatal("ts-schema.sql is empty")
-		}
-	})
-
-	t.Run("ts-version.txt exists, non-empty, and records a version", func(t *testing.T) {
-		data, err := os.ReadFile("ts-version.txt")
-		if err != nil {
-			t.Fatalf("ts-version.txt: %v", err)
-		}
-		if len(data) == 0 {
-			t.Fatal("ts-version.txt is empty")
-		}
-		if !strings.Contains(string(data), "codegraph_version=") {
-			t.Fatalf("ts-version.txt does not record a codegraph_version: %q", string(data))
-		}
-	})
-
 	t.Run("at least one corpus JSON fixture exists and parses", func(t *testing.T) {
 		localMatches, _ := filepath.Glob(filepath.Join("corpus", "*", "*.json"))
 		behavioralMatches, _ := filepath.Glob(filepath.Join("..", "..", "corpus", "behavioral", "*.json"))

@@ -134,7 +134,6 @@ list means something else entirely: this repo has no index yet, so run
 | `serve --mcp` | MCP server for agents |
 | `install` · `uninstall` · `githooks` | agent and git integration |
 | `daemon` · `status` · `unlock` | lifecycle |
-| `migrate` | import an existing TypeScript CodeGraph index |
 | `upgrade` · `version` | self-update |
 
 Every command has `--help`. Output is colorized on a TTY and byte-identical
