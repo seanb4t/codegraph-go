@@ -89,7 +89,7 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 - **`v0.11.0` carries no git tag.** release-please is the sole tag authority (D-06R). The label is a prediction that holds if this milestone lands `feat:` commits; a fixes-only outcome cuts a patch version instead. No phase schedules a `git tag` step.
 
 - [x] **Phase 1: Corpus Selection by Measurement** - The project knows from recorded measurement, not assumption, which third-party repositories at which commits its golden suite exercises — and can fetch that tree reproducibly without vendoring it (completed 2026-08-14)
-- [ ] **Phase 2: Golden Harness Re-authoring & Re-freeze** - The golden suite reads as codegraph-go's own regression suite: named for what it asserts, frozen from codegraph-go's own output, with the origin-driving capture path gone
+- [x] **Phase 2: Golden Harness Re-authoring & Re-freeze** - The golden suite reads as codegraph-go's own regression suite: named for what it asserts, frozen from codegraph-go's own output, with the origin-driving capture path gone (completed 2026-08-14)
 - [ ] **Phase 3: Non-Vacuity Proof & Unconditional CI Execution** - The re-baselined suite is trusted because it has been watched fail, and CI cannot silently stop running it
 - [ ] **Phase 4: Attribution & Documentation Sweep** - A reader finds the origin acknowledged once, legally and in the past tense, and meets no comparison framing anywhere else in the project's documentation
 - [ ] **Phase 5: Process, CI & In-Tree Sweep** - A contributor filing an issue or opening a PR, and an agent reading the source, meet a project described on its own terms — with `tsextract` and `codegraph migrate` intact
@@ -158,21 +158,21 @@ Plans:
 **Diff A — rename (changes no golden byte)**
 **Wave 1**
 
-- [ ] 02-01-PLAN.md — Rename golden harness identifiers to behavioral vocabulary, carrying the matrix/doc-mirror gates in one atomic diff (CODE-02 tracer)
+- [x] 02-01-PLAN.md — Rename golden harness identifiers to behavioral vocabulary, carrying the matrix/doc-mirror gates in one atomic diff (CODE-02 tracer)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 02-02-PLAN.md — Delete TS-era capture path + weft/colbymchenry corpora, move behavioral corpus to corpus/behavioral with CASES.json, re-author synthetic test to D-09 property assertions (FIXT-04, FIXT-05)
+- [x] 02-02-PLAN.md — Delete TS-era capture path + weft/colbymchenry corpora, move behavioral corpus to corpus/behavioral with CASES.json, re-author synthetic test to D-09 property assertions (FIXT-04, FIXT-05)
 
 **Diff B — re-freeze (changes no identifier)**
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 02-03-PLAN.md — Extend gocapture (locked-corpus + behavioral specs, temp-then-move, CLI+MCP), hermetic fail-loud locked-corpus resolution, golden:regen target, byte-identity guard (FIXT-06)
+- [x] 02-03-PLAN.md — Extend gocapture (locked-corpus + behavioral specs, temp-then-move, CLI+MCP), hermetic fail-loud locked-corpus resolution, golden:regen target, byte-identity guard (FIXT-06)
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 02-04-PLAN.md — Run the re-freeze capture, review single-cause attribution + zero identifier change, commit the reviewed diff (FIXT-06)
+- [x] 02-04-PLAN.md — Run the re-freeze capture, review single-cause attribution + zero identifier change, commit the reviewed diff (FIXT-06)
 
 **Goal**: The re-baselined golden suite is trusted because it has been watched fail, and CI cannot silently stop running it.
 **Depends on**: Phase 2. This phase is deliberately separate from the re-freeze — a re-baseline that authors its own proof in the same change certifies its own oracle.
@@ -247,7 +247,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Corpus Selection by Measurement | 7/7 | Complete    | 2026-08-14 |
-| 2. Golden Harness Re-authoring & Re-freeze | 0/4 | Not started | - |
+| 2. Golden Harness Re-authoring & Re-freeze | 4/4 | Complete    | 2026-08-14 |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 0/? | Not started | - |
 | 4. Attribution & Documentation Sweep | 0/? | Not started | - |
 | 5. Process, CI & In-Tree Sweep | 0/? | Not started | - |
