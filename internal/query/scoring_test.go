@@ -36,9 +36,6 @@ func (f *scoringFakeReader) GetFile(string) (*schema.File, error) {
 func (f *scoringFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("scoringFakeReader: GetMeta not implemented")
 }
-func (f *scoringFakeReader) GetMigration() ([]byte, error) {
-	return nil, errors.New("scoringFakeReader: GetMigration not implemented")
-}
 func (f *scoringFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("scoringFakeReader: IterateFiles not implemented")
 }

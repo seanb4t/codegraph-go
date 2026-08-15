@@ -192,17 +192,6 @@ func fileIndexEdgeKey(path, src, kind, dst string) []byte {
 	return appendSegment(buf, dst)
 }
 
-// migrationRecordName is the second well-known meta/ key name (07-02),
-// under which the migration-progress cursor blob lives — a sibling of
-// metaRecordName ("schema"), never the same key. metaKey(name) already
-// length-prefix-encodes an arbitrary name, so this second meta record is
-// representable with zero key-format change: no SchemaVersion bump, no new
-// namespace prefix, matching the file's own additive-namespace precedent
-// (see prefixFileIndex's doc comment above). The payload under this key is
-// an opaque []byte owned by internal/migrate/progress.go — graphstore does
-// not interpret it.
-const migrationRecordName = "migration"
-
 // metaKey encodes a store-wide metadata entry (e.g. schema version) under
 // the m/ namespace.
 func metaKey(name string) []byte {

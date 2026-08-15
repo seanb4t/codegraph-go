@@ -28,9 +28,6 @@ func (f *gatherFakeReader) GetFile(string) (*schema.File, error) {
 func (f *gatherFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("gatherFakeReader: GetMeta not implemented")
 }
-func (f *gatherFakeReader) GetMigration() ([]byte, error) {
-	return nil, errors.New("gatherFakeReader: GetMigration not implemented")
-}
 func (f *gatherFakeReader) IterateEdges(string) (graphstore.EdgeIterator, error) {
 	return nil, errors.New("gatherFakeReader: IterateEdges not implemented")
 }
