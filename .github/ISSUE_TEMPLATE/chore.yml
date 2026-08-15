@@ -53,7 +53,7 @@ body:
         - label: The release pipeline (`release.yml`, `.goreleaser.yaml`, signing)
         - label: The upgrade identity (`internal/upgrade/verify.go`)
         - label: The perf baseline (`tools/bench/baseline.json`)
-        - label: The graph schema or migration path
+        - label: The graph schema / meta-key layout
         - label: None of these
 
   - type: checkboxes
