@@ -136,3 +136,47 @@ FAIL
 **Byte-clean proof:** `ls -d <root>/gohugoio-hugo-a30c7459@0805c734a41b75403e3970e0070227916b6845d2` resolves; `go test -count=1 ./testdata/golden/... -run 'TestPriorityLanguagesResolveToLockedCorpus'` → `ok`, all 5 subtests (`go/java/csharp/python/tsjs`) PASS.
 
 **D-01 call result (re-mutated):** family (d) was previously specified-but-without-transcript (`01-07-SUMMARY.md:24` names it among the legs "specified to be demonstrated RED"); re-mutated this phase with full pasted output above.
+
+---
+
+## Family (e) — coverage guard
+
+**Test name:** `TestCorpusCoverageClaim` (reads the three real committed documents — `manifest.json`, `observations.json`, `selection.json` — and requires `CheckCoverage` to report zero failures).
+
+**Mutation applied:** In `corpora/selection.json`'s `minEdgesPerKind`, temporarily raised the `calls` threshold from `29406` to `999999` — one scalar in the committed document, set above the observed best for that kind (measured calls best = 58812, guava) so it is unsatisfiable by construction.
+
+**Pre-mutation gate:** `git diff --quiet -- corpora/selection.json` → exit 0 (clean).
+
+**Observed failure (pasted, `go test -count=1 ./internal/corpora/... -run 'TestCorpusCoverageClaim'`):**
+
+```
+--- FAIL: TestCorpusCoverageClaim (0.00s)
+    coverage_test.go:138: CheckCoverage(committed docs) reported failures:
+        kind calls derived count 58812 below threshold 999999
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/corpora	0.176s
+```
+
+The guard reports the `calls` kind "below threshold", naming the derived count (58812) and the mutated threshold (999999).
+
+**Revert:** `git checkout -- corpora/selection.json`.
+
+**Byte-clean proof:** `git diff --stat corpora/selection.json` empty after revert; `go test -count=1 ./internal/corpora/... -run 'TestCorpusCoverageClaim'` → `ok` (green).
+
+**D-01 call result (re-mutated):** family (e) was previously specified-but-without-transcript (`01-07-SUMMARY.md:24`: both `TestCorpusCoverageClaim` legs "specified to be demonstrated RED against a confirmed mutation … and reverted byte-clean"); re-mutated this phase with full pasted output above.
+
+---
+
+## Conclusion — FIXT-07 positive reading
+
+All **five** assertion families were red-demonstrated against the suite in its FINAL form, with one targeted mutation per family, the observed failure pasted, and a byte-clean revert recorded per family:
+
+| Family | Test red-demonstrated | Mutation | Observed RED (pasted above) | Revert | Green re-run |
+|---|---|---|---|---|---|
+| (a) behavioral properties | `TestCorpusBehaviorSynthetic/a-overloaded-same-named-symbols` | defs boundary `!= 2` → `!= 1` | `Node("Validate"): got 2 defs ...` | `git checkout -- testdata/golden/behavioral_test.go` | `-run TestCorpusBehaviorSynthetic` ok |
+| (b) golden byte-identity | `TestReFrozenGoldensValid` | delete `corpus/hugo/go-explore.json` | `25/26 goldens verified` naming the missing golden | `git checkout -- testdata/golden/corpus/hugo/go-explore.json` | `-run TestReFrozenGoldensValid` ok (26/26) |
+| (c) CLI==MCP trio | `TestExploreCLIMatchesMCP/behavioral` | MCP-side one-word query suffix, behavioral row only | `CLI and MCP output diverge (EXPL-05)` (locked rows green) | `git checkout -- testdata/golden/behavioral_test.go` | `-run '^TestExploreCLIMatchesMCP$'` ok |
+| (d) hermetic resolution | `TestPriorityLanguagesResolveToLockedCorpus/go,+tsjs` | rename hugo tree (EXIT-trap restore) | `lockedCorpusDir("go"): ... not found ... run 'task corpora:fetch'` (fail-NOT-skip) | EXIT trap `mv` restore | `-run TestPriorityLanguagesResolveToLockedCorpus` ok (5/5) |
+| (e) coverage guard | `TestCorpusCoverageClaim` | `calls` threshold 29406 → 999999 | `kind calls derived count 58812 below threshold 999999` | `git checkout -- corpora/selection.json` | `-run TestCorpusCoverageClaim` ok |
+
+**Suite ran 26/26 goldens, red in all five families observed** — the re-baselined golden suite is non-vacuous. Post-rehearsal working tree: `git status --porcelain` clean except this log artifact; the final commit carries no mutation byte in `testdata/golden/`, `corpus/`, `corpora/`, or `internal/`.
