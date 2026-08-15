@@ -310,6 +310,6 @@ func TestHermes_NoInstructionsFileWritten(t *testing.T) {
 	// Hermes has no AGENTS.md-equivalent instructions surface — assert no
 	// marker-fenced file was created anywhere under the fake home.
 	if fileExists(filepath.Join(home, ".hermes", "AGENTS.md")) {
-		t.Fatalf("hermes must NOT write an instructions file (parity regression)")
+		t.Fatalf("hermes must NOT write an instructions file (marker regression)")
 	}
 }

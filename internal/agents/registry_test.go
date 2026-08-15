@@ -179,7 +179,7 @@ func TestInstructionsBlock_HasMarkersAndCodegraphExploreReference(t *testing.T) 
 }
 
 func TestInstructionsBlock_ExactMarkerText(t *testing.T) {
-	// D-01a: hard cross-implementation parity contract — do not deviate
+	// D-01a: hard marker-byte contract — do not deviate
 	// from these exact strings.
 	if codegraphSectionStart != "<!-- CODEGRAPH_START -->" {
 		t.Fatalf("codegraphSectionStart = %q, want the exact TS marker text", codegraphSectionStart)

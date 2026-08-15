@@ -10,7 +10,7 @@ import (
 // entry at ~/.gemini/settings.json (global) / ./.gemini/settings.json
 // (local); marker-fenced instructions at ~/.gemini/GEMINI.md for global
 // but at the PROJECT ROOT ./GEMINI.md for local — NOT
-// ./.gemini/GEMINI.md (Corrected Per-Agent Parity Table).
+// ./.gemini/GEMINI.md (see the per-agent install-coverage table).
 type geminiTarget struct{}
 
 func init() {
