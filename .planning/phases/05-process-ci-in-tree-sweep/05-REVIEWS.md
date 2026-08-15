@@ -409,3 +409,65 @@ The plan correctly isolates the corpus-source rewording and its required golden 
 CYCLE_SUMMARY: current_high=4 current_actionable=6
 
 **Verdict: NOT CONVERGED — request changes.** The plans are structurally strong and source-accurate in their deletion boundaries and wave ordering, but verified census gaps on automatically-scanned surfaces mean the phase success criteria are not guaranteed: PROC-01 (`bug_report.yml:77` "Migrated from TypeScript CodeGraph" misclassified as census-clean, and 05-02's own verification cannot reach zero while edits to that file are forbidden), PROC-03 (`bench.yml` job name "head-to-head publish" :96 and step name "Run head-to-head benchmark" :127 retain comparison framing that the phase criterion demands removed), and CODE-01 (internal/query rows in engine.go:180/explore.go:211/files.go:25/worktree_notice.go:43/render_status_test.go:132 and internal/cli/githooks.go:15 are outside every plan's files_modified set). Several acceptance gates cannot pass as written (bench.yml `rg head-to-head` == 0, `.github/ISSUE_TEMPLATE` grep with bug_report untouched, `pr_template_policy.py --check || true`). A final classified retained-use inventory across internal/tools/test is needed so "nothing left referencing" is provable rather than asserted. Re-plan to close the four HIGH census gaps and the non-enforcing-verification class, then re-review.
+
+---
+
+## Convergence Cycle 2 Review (2026-08-15)
+
+Source-verified against the working tree at `dc8606c`. All four cycle-1 HIGH
+census gaps are resolved in PLAN text; the revision introduced **two NEW
+gate-blocking defects** (one empirically reproduced) and **two NEW actionable
+MEDIUM/LOW items**.
+
+### Cycle-1 finding dispositions
+
+| Cycle-1 finding | Disposition | Verification |
+|---|---|---|
+| H1 — `bug_report.yml:77` "Migrated from TypeScript CodeGraph" (PROC-01) | **RESOLVED** | bug_report.yml now in 05-02 `files_modified`, swept by task 1 (review H1); must_haves truth states bug_report is swept, not clean |
+| H2 — `bench.yml` job `:96` + step `:127` display names (PROC-03) | **RESOLVED** (gate is then broken — NEW HIGH 1) | 05-03 task-2 renames both to own-terms; acceptance greps `head-to-head` = 0. Verified bench.yml:96/:127 carry the old names today, so the rename target is real |
+| H3 — five `internal/query` rows (engine.go:180, explore.go:211, files.go:25, worktree_notice.go:43, render_status_test.go:132) | **RESOLVED** | all 5 files now in 05-04 `files_modified`, tasks check "VERIFIED present" |
+| H4 — `internal/cli/githooks.go:15` + `install_test.go` omitted (05-05) | **RESOLVED** | both added to files_modified and task scope (review H4) |
+| Retained-use inventory gate | **RESOLVED** | A3 gates in 05-04 (internal/query) and 05-05 (internal/tools/test) |
+| Pr-policy non-enforcing (`--check \|\| true`) | **RESOLVED** | 05-02 task-2 drives the real env interface (no `--check`, no `|| true`) |
+| 05-06 regen gate printed count without asserting | **RESOLVED** | 05-06 verify now asserts the exact allowed-path set, CASES forbidden |
+| JS-edit phrasing ("no `run:` changes" vs `with.script`) | **RESOLVED** | 05-03 truth now correctly distinguishes `with.script` action scripts, validated with `node --check` (A4) |
+| `.claude/CLAUDE.md` core-value + "One-way migration" line (D-10/D-04) | **RESOLVED** | 05-05 task-3 sweeps the migrate contract, the parity-command-surface, and the modernc rows |
+
+### NEW HIGH concern 1 — 05-03 task-2 automated bench verify can never pass (outer-shell quoting bug)
+
+The rewritten verify reads:
+
+```
+bash -c "set -e; c=$(rg -n -e 'head-to-head' -e 'vs TS' ... .github/workflows/bench.yml | wc -l | tr -d ' '); echo 'bench framing terms left: $c'; test \"'$c'\" = '0'; actionlint .github/workflows/bench.yml; ..."
+```
+
+When GSD executes the `<automated>` content, the outer double-quoted layer is parsed by the executor's own shell **before** the inner `bash -c` runs: `$(…)` and `$c` are expanded at the OUTER level — so the inner script receives an empty `$c` and `test"''" = '0'`. Running the exact content (both raw and wrapped) against the current tree (4 hits) and against a zero-hit simulation both exit 1. This is a **gate that can never go green**, even after the head-to-head renames are done. It is a fresh defect introduced in this revision (the cycle-1 verify form — a plain pipe to `grep -qx` — was correct). Fix: single-quote the outer and `test "$c" = "0"` (or keep the `… | grep -qx "0"` pipe).
+
+### NEW HIGH concern 2 — 05-05 (wave 1) task-3 verify scans `internal/indexer` including files owned by 05-04 (wave 2); cannot pass in wave order
+
+05-05's task-3 `rg -c -e "Go-parity" -e "golden-parity" ... internal/indexer` includes `internal/indexer/capability/matrix.go:18/:32` and `matrix_test.go:217/:221`, which still carry `golden-parity` comments today. The plan itself says those are "handled by 05-04" (wave-2 plan). Because wave 1 (05-05) runs before wave 2 (05-04), the verify as written **always sees n ≥ 4 and fails**. Options: scope 05-05's scan to its own file set (e.g. `--glob '!**/capability/**'` or explicit file list) or move the phase-wide allowed-ownership match into the wave-2 plan. As written it cannot pass.
+
+### NEW actionable MEDIUM/LOW
+
+1. **(MEDIUM) 05-05's `rg -n 'golden_parity_test.go|the original type project'` grooming typo**: acceptance criterion says `...|the original type project` — the origin phrase in manifest.go is "the original TS CodeGraph project…". The automated gate uses the correct phrase but the acceptance line has a typo (`type` vs. correct product name). Cosmetic wording, but it is a cross-doc inconsistency.
+2. **(MEDIUM) 05-03 JS-validation gate depends on PyYAML not declared.** The heredoc does `python3 - … <<PYEOF` importing `yaml`. On hosts without PyYAML (absent on this host), python writes nothing, the `*.mjs` loop iterates a literal glob, and `node --check` fails spuriously. Either declare PyYAML in `user_setup` or avoid the runtime dep (grep-based extraction).
+3. **(LOW) 05-01 task-2 `<name>` still reads "… and 8 fakes in one diff"** while the action/truth now correctly say 7 method stubs — the title was not brought into line with the count correction.
+4. **(LOW) 05-02 `CHANGED_FILES=$(printf "%.docs/x")` yields `ocs/x`, not a valid path** — the policy gate runs with a non-doc filename; the "docs-only change" exemption annotates verification intent but the actual string does not match any EXEMPT prefix. Low impact (the verify still passes on the template-body headings), but the analyze is off.
+
+### Cycle-2 Convergence verdict
+
+CYCLE_SUMMARY: current_high=2 current_actionable=4
+
+**Verdict: NOT CONVERGED on gate defects — request PLANNED corrections.** The
+four cycle-1 HIGH census gaps are all genuinely closed in the PLAN text, and the
+verification-class fixes (policy env-drive, regen assertion, JS `with.script`
+description, retained-use inventory gates, REQUIREMENTS.md row) are properly
+reflected. But the revision's own written verify blocks introduce: (1) a NEW
+never-green gate in 05-03 task-2 shown by shell-quoting (the `bash -c "…"` +
+`$(…)`/`$c` expands in the outer shell); and (2) a NEW cross-wave ownership
+mismatch — 05-05 (wave 1) scans `internal/indexer` including capability/matrix
+rows that are authored by 05-04 (wave 2), so its task-3 verify cannot go green
+in wave order. Both would hard-fail `/gsd-execute-phase`. Actionables: declare
+PyYAML for the JS node-check gate, and fix the "8 fakes" title, the
+`CHANGED_FILES="%.docs/x"` printf bug, and the acceptance-criteria typo
+(`the original type project`). Re-plan those two verify blocks, then re-review.
