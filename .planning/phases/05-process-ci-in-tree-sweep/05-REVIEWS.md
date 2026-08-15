@@ -471,3 +471,109 @@ in wave order. Both would hard-fail `/gsd-execute-phase`. Actionables: declare
 PyYAML for the JS node-check gate, and fix the "8 fakes" title, the
 `CHANGED_FILES="%.docs/x"` printf bug, and the acceptance-criteria typo
 (`the original type project`). Re-plan those two verify blocks, then re-review.
+
+---
+
+## Convergence Cycle 3 Review (2026-08-15)
+
+Source-verified and empirically reproduced against the working tree at `4ab8670`,
+the cycle-2 fix commit. Both cycle-2 HIGHs (bench-verify quoting, indexer
+wave-scoping) are genuinely closed, and all four cycle-2 actionables
+(PyYAML-free JS check, "7 fakes" title, literal `docs/RELEASE.md`, manifest
+phrase typo) landed — but the revision **introduces one NEW never-green verify
+gate and leaves one pre-existing sibling gate unflagged**, plus one resolves
+wrongly-deemed verification.
+
+### Cycle-2 finding dispositions
+
+| Cycle-2 finding | Disposition | Verification |
+|---|---|---|
+| HIGH 1 — 05-03 task-2 bench verify quoting (`bash -c "…"` + `$(…)`/`$c` outer expansion) | **RESOLVED** | verify is now `bash -c 'set -e; rg … \| wc -l \| tr -d " " \| grep -qx "0"; actionlint …'` — a pure pipeline, single-quoted, no shell variable. Empirically: simulated post-rename tree → pipeline GREEN; current tree (4 hits) → correctly RED (renames land first). |
+| HIGH 2 — 05-05 task-3 wave-1 scan includes capability/matrix rows owned by wave-2 05-04 | **RESOLVED** | verify now scans `… internal/indexer … --glob "!internal/indexer/capability/**"`, and the acceptance criterion names the H2-2 scoping. Empirically: the glob drops matrix.go:2 + matrix_test.go:2 hits; all 7 remaining non-capability hit-lines (record.go:104, graph.proto/pb.go Go-parity rows, markdown_test.go:28, pyextract/types.go:74, languages_python.go:39, phpextract/resolution_test.go:159) are each inside 05-05's own task-3 edit set, so the gate reaches 0 at its wave. |
+| Actionable — PyYAML-free JS check (05-03 task-1) | **FIXED in intent, BUT the fix is itself a broken never-green gate — NEW HIGH 1** | `import yaml` is gone, but the replacement Python heredoc introduces `'` into the single-quoted `bash -c '…'` wrapper (see below). |
+| Actionable — "8 fakes" → 05-01 task-2 title | **RESOLVED** | `<name>` reads "… and the 7 fakes in one diff". |
+| Actionable — `CHANGED_FILES="%.docs/x"` printf | **RESOLVED** | task-2 uses the literal `CHANGED_FILES="docs/RELEASE.md"`; task-3 omits it (script defaults to empty, ok). |
+| Actionable — "the original type project" typo | **RESOLVED** | action/acceptance now read "the original TS CodeGraph project". |
+
+### NEW HIGH concern 1 — 05-03 task-1 JS-validation gate can never pass (single-quote-in-single-quote, introduced this revision)
+
+The rewritten verify wraps the whole Python extractor in a single-quoted
+`bash -c '…'`, and the Python body calls `.replace('.yml','')` (lines 119 and
+123). Because the executor's shell parses the `<automated>` content before the
+inner `bash -c` runs (the same mechanism the cycle-2 HIGH-1 established), the
+`'` characters inside `replace('.yml','')` terminate the outer single-quoted
+string. Reproduced by tracing the verbatim block: the outer shell hands the
+inner `bash -c` `replace(.yml,)` (quotes eaten). Running that in a staged,
+fully-post-reword tree (0 framing hits) gives
+`SyntaxError: f-string: expecting '=', or '!', or ':', or '}'` then
+`extractor failed` then `exit 1`. **The gate is never green even after the
+reword lands.** Introduced by commit `4ab8670` ("PyYAML-free JS check"). Fix:
+use double-quoted literals in the Python (`replace(".yml","")`) — double quotes
+are safe inside the single-quoted span — or move the extractor out of the
+nested `bash -c '…'` entirely.
+
+### NEW HIGH concern 2 — 05-04 task-2 verify gate is a shell syntax error and can never pass (pre-existing, unflagged in cycles 1-2)
+
+05-04 task-2's verify contains the pattern `-e "TS's"` inside a single-quoted
+`bash -c '…'`. The apostrophe in `"TS's"` terminates the outer single-quoted
+span, producing `unexpected EOF while looking for matching "` — the whole gate
+fails to parse and never runs the intended check. Reproduced by `bash -x` on
+the verbatim block. This gate is present unchanged since `5e03a92` (cycle-2
+line 160) and both prior cycles missed it (they attributed the quoting defect
+only to 05-03 task-2). It is a gate that can never go green for
+`/gsd-execute-phase`. Fix: replace `-e "TS's"` with a regex that avoids an
+apostrophe in a single-quoted span (e.g. `-e "TS.s"`), or re-quote the span.
+
+### NEW actionable MEDIUM — 05-02 pr-template-policy gate asserts an invariant that the script documents as always true
+
+05-02 tasks 2 and 3 run
+`PR_BODY="…" AUTHOR_ASSOCIATION=OWNER CHANGED_FILES="docs/RELEASE.md" python3 scripts/pr_template_policy.py >/dev/null 2>&1 || { … exit 1; }`
+and claim this "proves the format gate … enforced." But `scripts/pr_template_policy.py:14-16`
+states "Exit status is always 0 — the workflow decides what to do with the
+verdict." Confirmed empirically: a `close` verdict (an untrusted author with
+no matching template headings) still returns exit 0, and the verdict is written
+to `$GITHUB_OUTPUT` (unset here) or stderr (discarded by `>/dev/null 2>&1`).
+So the gate is a tautology that never fails and verifies nothing about the
+templates. The cycle-2 "RESOLVED" disposition (env-drive with no `--check`/no
+`|| true`) was based on asserting an exit code that is invariant. Fix: capture
+the verdict — `GITHUB_OUTPUT=$(mktemp) … python3 …` then `grep -q 'action="?pass' "$f"`
+(or grab the stderr `pass:` line), or assert the surviving TEMPLATE_SIGNALS
+headings directly. The framing-only gates (`rg parity … = 0`, heading-presence)
+do enforce the phase goal; only this policy gate overclaims.
+
+### NEW actionable LOW — 05-05 must_haves truth tail is garbled
+
+05-05 line 68's schema truth ends "… D-03's comment text … is present but no
+od-parity")." — a truncated/typo'd phrase an executor must guess at while
+reading the frontmatter. Cosmetic; fix the sentence tail.
+
+### Also verified clean (no action needed)
+
+- All six plans' remaining `<automated>` verify blocks are single-quoted with
+  no stray inner apostrophes (05-01 tasks 1-3, 05-02 tasks 1/2/3 grep legs,
+  05-03 tasks 2-3, 05-04 tasks 1/3, 05-05 tasks 1-3, 05-06 tasks 1-2) — the
+  05-03 task-1 and 05-04 task-2 blocks above are the only two breakers found by
+  the full-plan scanner.
+- 05-01's `m/migration` grep tail is a no-op literal (matches nowhere) but the
+  real `GetMigration|PutMigration|migrationRecordName` alternatives cover the
+  symbols, so the gate is intact — not raised.
+- Cycle-2's four other actionables confirmed landed in text.
+
+### Convergence verdict
+
+CYCLE_SUMMARY: current_high=2 current_actionable=2
+
+**Verdict: NOT CONVERGED on gate defects — request PLANNED corrections.**
+Cycle-2's HIGHs and actionables are genuinely resolved and empirically
+confirmed (the bench-quoting pipeline is green on a simulated post-rename tree;
+the 05-05 wave-1 gate reaches zero at its wave). But two sibling never-green
+verify gates of the same shell-spanning class remain in these plans at
+`4ab8670` and would hard-fail `/gsd-execute-phase`: 05-03 task-1
+(its PyYAML-free rewrite now terminates the single-quoted `bash -c` via
+`replace('.yml','')`, reproduced as `replace(.yml,)` → Python SyntaxError →
+`exit 1` even post-edit) and 05-04 task-2 (pattern `-e "TS's"` breaks the
+single-quoted span → `unexpected EOF`, never parses; uncaught since cycle 2).
+One verification overclaims: 05-02's policy gate asserts an exit code the script
+documents as invariant (always 0), so it proves nothing about the verdict.
+Re-quote the two verify blocks (double-quoted literals / apostrophe-free
+regex) and make the policy gate capture `action=pass`, then re-review.
