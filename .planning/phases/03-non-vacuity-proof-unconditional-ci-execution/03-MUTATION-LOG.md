@@ -84,3 +84,55 @@ With corpora fetched, ONLY the behavioral row diverged ("CLI and MCP output dive
 **Revert:** `git checkout -- testdata/golden/behavioral_test.go`.
 
 **Byte-clean proof:** `git diff --stat testdata/golden/behavioral_test.go` empty after revert; `go test -count=1 ./testdata/golden/... -run '^TestExploreCLIMatchesMCP$'` → `ok` (green).
+
+---
+
+## Family (b) — golden byte-identity guard
+
+**Test name:** `TestReFrozenGoldensValid` (26-golden exact enumeration guard, `expectedGoCaptures`-derived).
+
+**Mutation applied:** Temporarily deleted the tracked golden `testdata/golden/corpus/hugo/go-explore.json` (moved aside to `/tmp/go-explore.json.muttmp`), so the expected-set enumeration found 25 of 26.
+
+**Pre-mutation gate:** `git diff --quiet -- testdata/golden/corpus/hugo/go-explore.json` → exit 0 (clean).
+
+**Observed failure (pasted, `go test -count=1 ./testdata/golden/... -run 'TestReFrozenGoldensValid'`):**
+
+```
+--- FAIL: TestReFrozenGoldensValid (0.01s)
+    --- FAIL: TestReFrozenGoldensValid/hugo/go-explore.json (0.00s)
+        golden_test.go:287: expected golden corpus/hugo/go-explore.json not found (run `task golden:regen` to regenerate): open corpus/hugo/go-explore.json: no such file or directory
+    golden_test.go:312: TestReFrozenGoldensValid: 25/26 goldens verified
+    golden_test.go:317: verified 25 of 26 expected goldens — the executed-and-verified count must EXACTLY equal the enumerated total (a count short by even one means a golden was dropped or a subtest loop never ran; missing entries must be regenerated via `task golden:regen`)
+FAIL
+```
+
+**Revert:** `git checkout -- testdata/golden/corpus/hugo/go-explore.json` (restored, 5002 bytes).
+
+**Byte-clean proof:** file exists again at its tracked path; `go test -count=1 ./testdata/golden/... -run 'TestReFrozenGoldensValid'` → `ok` (26/26 green).
+
+---
+
+## Family (d) — hermetic fail-loud resolution
+
+**Test name:** `TestPriorityLanguagesResolveToLockedCorpus` (5 priority languages; the `lockedCorpusDir` helper's `os.Stat` + `t.Fatalf` path).
+
+**Mutation applied:** Renamed the fetched hugo tree `<root>/gohugoio-hugo-a30c7459@0805c734a41b75403e3970e0070227916b6845d2` (the tree `go` and `tsjs` resolve to) to `<same>.muttmp`. The rename → run → restore ran in **ONE shell invocation guarded by an EXIT trap** (`trap 'mv "$orig.muttmp" "$orig"' EXIT`) restoring the exact original path on any exit — a pure `mv` rename, never a copy/delete (T-03-P2-02, T-03-P2-07).
+
+**Observed failure (pasted, `go test -count=1 ./testdata/golden/... -run 'TestPriorityLanguagesResolveToLockedCorpus'`):**
+
+```
+--- FAIL: TestPriorityLanguagesResolveToLockedCorpus (0.00s)
+    --- FAIL: TestPriorityLanguagesResolveToLockedCorpus/go (0.00s)
+        behavioral_test.go:1007: lockedCorpusDir("go"): locked tree directory /Users/sean/.cache/codegraph/corpora/gohugoio-hugo-a30c7459@0805c734a41b75403e3970e0070227916b6845d2 not found or not a directory: stat ...: no such file or directory; run 'task corpora:fetch'
+    --- FAIL: TestPriorityLanguagesResolveToLockedCorpus/tsjs (0.00s)
+        behavioral_test.go:1007: lockedCorpusDir("tsjs"): locked tree directory ... not found or not a directory: stat ...: no such file or directory; run 'task corpora:fetch'
+FAIL
+```
+
+`lockedCorpusDir` **t.Fatalf'd** naming the missing tree for both surfaces that resolve to hugo (`go`, `tsjs`) — **fail-NOT-skip**, the suite never falls back to `t.Skip` (D-10).
+
+**Revert:** the EXIT trap restored the exact original name (`mv "$orig.muttmp" "$orig"`) on shell exit; verified the original path exists again and the `.muttmp` path is gone.
+
+**Byte-clean proof:** `ls -d <root>/gohugoio-hugo-a30c7459@0805c734a41b75403e3970e0070227916b6845d2` resolves; `go test -count=1 ./testdata/golden/... -run 'TestPriorityLanguagesResolveToLockedCorpus'` → `ok`, all 5 subtests (`go/java/csharp/python/tsjs`) PASS.
+
+**D-01 call result (re-mutated):** family (d) was previously specified-but-without-transcript (`01-07-SUMMARY.md:24` names it among the legs "specified to be demonstrated RED"); re-mutated this phase with full pasted output above.
