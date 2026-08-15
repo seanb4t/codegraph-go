@@ -24,8 +24,8 @@ import (
 // Hidden: true (D-02) — deliberately NOT documented as a public,
 // interactive command the way `githooks` is. `man` exists purely as a
 // mechanism the cask hook invokes; a human never needs to run it
-// directly, so the FLAG-PARITY divergence footprint stays one documented
-// hidden command rather than a new public surface. This is the one place
+// directly, so its divergence footprint stays documented in this comment
+// rather than on a new public surface. This is the one place
 // this command's shape diverges from the internal/cli/githooks.go
 // precedent it otherwise mirrors (registration convention, doc-comment
 // decision-id citation) — githooks is NOT hidden.

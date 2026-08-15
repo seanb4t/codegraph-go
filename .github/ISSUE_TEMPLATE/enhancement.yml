@@ -74,5 +74,5 @@ body:
       options:
         - label: I searched existing issues and this is not a duplicate
           required: true
-        - label: I checked whether this is a documented divergence in docs/FLAG-PARITY.md
+        - label: I checked whether this is a documented divergence in `.planning/`
           required: true

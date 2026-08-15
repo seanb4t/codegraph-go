@@ -39,7 +39,7 @@ $
 - [ ] `CGO_ENABLED=1 go test ./...` passes locally
 - [ ] `CGO_ENABLED=1 go vet ./...` is clean
 - [ ] Docs updated if this changes a documented surface
-      (`docs/FLAG-PARITY.md`, `docs/LANGUAGE-CAPABILITY-MATRIX.md`, README)
+      (`docs/LANGUAGE-CAPABILITY-MATRIX.md`, README)
 
 ## Parity
 
