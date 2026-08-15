@@ -35,10 +35,17 @@ Sweep the contributor-facing and in-tree surfaces so a contributor filing an iss
 
 - **D-06:** The `.github` issue templates (5), PR template + 3 variants, and the workflow files (`ci`, `release`, `bench`, `post-release-verify`, `linux-cross-canary`, `require-issue-link`, `auto-close-unsolicited-prs`, and the Phase-3 `corpora.yml`) carry no comparison framing in job names, step names, and comments. Phase 4 already re-pointed the FLAG-PARITY links to `.planning/` — this phase sweeps the remaining framing prose ("ports observable behavior from another implementation", "parity decisions") in those same templates. `bench.yml`'s own de-coupling is Phase 6's; only its framing is swept here. — **Reversibility:** reversible — text edits.
 
+### Research open questions — resolved 2026-08-15
+
+- **D-07 (corpus-source framing):** The `corpus/behavioral/src/**` "synthetic-parity corpus" comments are **reworded in this phase, and the resulting golden re-freeze rides along** — a small, attributed re-freeze (not Phase 2's full re-baseline). The goldens embed the corpus, so rewording the corpus content forces a re-freeze; doing both in one phase keeps the corpus and its goldens consistent rather than leaving a stale frozen oracle. — **Reversibility:** costly — a re-freeze, however small.
+- **D-08 (ts-* fixtures):** The three `testdata/golden/ts-*` fixtures are **deleted** (they are TS-era fixtures tied to the dropped migrate capability). The `TestGoldenFixturesExist` subtests that hard-fail on their absence are updated to drop them. — **Reversibility:** one-way — recreates no fixture.
+- **D-09 (syntheticParity identifiers):** The `syntheticParity*` identifier family in `internal/query/explore_test.go` (`copySyntheticParityFixture`, `syntheticParityEngine`) is **renamed to behavioral names**, consistent with the Phase 2 rename. — **Reversibility:** reversible — identifier rename.
+- **D-10 (.claude/CLAUDE.md core-value text):** The `.claude/CLAUDE.md` "uninstall TS CodeGraph... migrate indexes... works the same or better" core-value text and the "parity command surface (… migrate)" line are **swept as competitive framing** (the maintainer ruled this text is the parity story being removed, not a binding constraint). — **Reversibility:** reversible — doc edit.
+
 ### Claude's Discretion
 
 - The exact rewording of each contributor-facing template, provided it is on codegraph-go's own terms and carries no comparison framing.
-- The exact new name for `syntheticParitySrc` (a behavioral name consistent with the Phase 2 rename).
+- The exact new name for `syntheticParitySrc` and the `syntheticParity*` identifiers (behavioral names consistent with the Phase 2 rename).
 - The order of the internal//tools//test/ comment sweep (which packages first).
 
 </decisions>
