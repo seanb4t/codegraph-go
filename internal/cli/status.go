@@ -13,7 +13,7 @@ import (
 
 // newStatusCmd builds `codegraph status` (QRY-09): reports index
 // health/counts by scanning the frozen graph (see query.StatusResult's
-// doc comment for the full TS-to-Go/Pebble key remapping table, D-05).
+// doc comment for the full field/key mapping table, D-05).
 // The human branch renders D-09's sectioned plain-text layout via
 // query.RenderStatusText (CodeGraph Status / Project: / the verbose
 // worktree warning when present / Index Statistics: / Nodes by Kind: /
@@ -25,7 +25,7 @@ import (
 // plain path.
 // --json emits query.MarshalStatusJSON's StatusResult shape.
 // That function body is UNCHANGED by this plan — it is shared with the
-// CLI --json contract and the golden-parity oracle (D-16/D-17).
+// CLI --json contract and the golden test suite (D-16/D-17).
 //
 // --all-kinds (v0.11.0 Phase 1, D-04) is CLI-ONLY. It densifies
 // result.EdgesByKind (the dense-derivation call below) once, before any

@@ -138,7 +138,7 @@ func TestServeWatchStartDeferred(t *testing.T) {
 // Pitfall 2: --no-watch must NOT silently skip watcher startup — it still
 // spawns the goroutine and routes noWatch through the SAME
 // watch.WatchDisabledReason check CODEGRAPH_NO_WATCH=1 would, printing the
-// verbatim D-12/D-13 TS-parity disabled message to the provided stderr
+// documented D-12/D-13 disabled message to the provided stderr
 // writer rather than swallowing it via an early return.
 func TestServeWatchStartDisabledPrintsVerbatimMessage(t *testing.T) {
 	_, main := statusWorktreeMismatchFixture(t)
@@ -154,9 +154,9 @@ func TestServeWatchStartDisabledPrintsVerbatimMessage(t *testing.T) {
 
 	// IN-03 (round 5): pin the FULL verbatim D-12 line — "[CodeGraph MCP] "
 	// banner included — not just a reason substring: byte-identity with the
-	// TS string is the stated contract, so a regression dropping the banner
-	// or mangling the trailing guidance's punctuation must fail HERE, not
-	// slip past a partial match.
+	// documented message is the stated contract, so a regression dropping
+	// the banner or mangling the trailing guidance's punctuation must fail
+	// HERE, not slip past a partial match.
 	want := "[CodeGraph MCP] File watcher disabled — CODEGRAPH_NO_WATCH=1 is set. " +
 		"The graph will not auto-update; run `codegraph sync` " +
 		"(or install the git sync hooks via `codegraph init`) to refresh.\n"

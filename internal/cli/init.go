@@ -120,8 +120,8 @@ func printSummary(cmd *cobra.Command, stats indexer.Stats, quiet, verbose bool) 
 	}
 }
 
-// printWatchFallbackAdvisory is a non-interactive plain-text port of TS
-// offerWatchFallback (installer/index.js ~476-525, D-07), wired into init's
+// printWatchFallbackAdvisory is a non-interactive plain-text watch-fallback
+// advisory (D-07), wired into init's
 // success path and ONLY there this phase (D-08 — the already-initialized
 // early-return branch above is untouched). Gate-for-gate:
 //  1. watch.WatchDisabledReason == "" (watcher runs normally) -> print
@@ -129,8 +129,8 @@ func printSummary(cmd *cobra.Command, stats indexer.Stats, quiet, verbose bool) 
 //     trigger) — hooks are surfaced as a fallback, not an always-on feature.
 //  2. Reason non-empty -> warn, plus the frozen-index explanation line.
 //  3. Not a git repo -> point at `codegraph sync` and stop.
-//  4. Hooks already installed (any of the 3, TS isSyncHookInstalled's
-//     some() semantics) -> the already-installed info line and stop.
+//  4. Hooks already installed (any of the 3) -> the already-installed
+//     info line and stop.
 //  5. Otherwise -> point at `codegraph githooks install` (no auto-install
 //     without explicit user action in v1.0; the interactive select is
 //     Phase 7 territory).

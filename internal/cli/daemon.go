@@ -41,9 +41,9 @@ var daemonList = daemon.List
 // behavior, new name); `daemon stop [--all]` explicitly signals without
 // ever opening a picker. Neither the bare command nor `stop` ever calls
 // daemon.Run — only `daemon start` does (D-03, no silent auto-spawn).
-// Resolves the TS name collision noted in 07-CONTEXT.md D-01 (bare
-// `daemon` is a picker in TS; was a foreground server here before this
-// plan).
+// Resolves a naming ambiguity noted in 07-CONTEXT.md D-01: bare
+// `daemon` was a foreground server here before this plan; it is now
+// the interactive picker.
 func newDaemonCmd() *cobra.Command {
 	var path string
 
@@ -159,9 +159,8 @@ func newDaemonStartCmd() *cobra.Command {
 			// its own policy gate saw (already computed on the absolutized
 			// root) — never re-derived here, where a divergent root
 			// normalization could desynchronize it. The "[CodeGraph MCP]"
-			// banner serve.go keeps for verbatim TS parity (D-12) is
-			// deliberately dropped: this is the standalone daemon command,
-			// not the MCP server.
+			// banner serve.go keeps (D-12) is deliberately dropped here:
+			// this is the standalone daemon command, not the MCP server.
 			var disabled *watch.DisabledError
 			if errors.As(err, &disabled) {
 				fmt.Fprintf(cmd.ErrOrStderr(), "File watcher disabled — %s. "+
