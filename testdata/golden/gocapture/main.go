@@ -89,7 +89,7 @@ var lockedCorpusArgs = map[string]perCorpusArgs{
 		baselineSymbol:     "LoggerConfiguration",
 		baselineSymbolFile: "",
 		baselineQuery:      "configure logger",
-		multiSymbol:        "ILogger",
+		multiSymbol:        "LogEvent",
 		multiQuery:         "log configuration",
 	},
 	"requests": {

@@ -1,0 +1,4 @@
+{
+  "command": "node \"Session\" -p requests -f ",
+  "output": "**Session** (struct)\n\n**Location:** src/requests/sessions.py:395\n**Signature:** ``\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** \n**Called by ←** session (src/requests/sessions.py:908)\n"
+}

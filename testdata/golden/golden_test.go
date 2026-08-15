@@ -192,12 +192,54 @@ type expectedCorpusSet struct {
 
 var expectedGoCaptures = []expectedCorpusSet{
 	{
-		// Behavioral goldens exist in this plan (03); locked-corpus
-		// entries are added by 02-04 after the capture produces them.
 		slug: "behavioral",
 		files: []string{
 			"go-explore-multi.json",
 			"go-node-multi.json",
+		},
+	},
+	{
+		slug: "hugo",
+		files: []string{
+			"go-explore.json",
+			"go-node.json",
+			"go-explore-multi.json",
+			"go-node-multi.json",
+			"go-explore-mcp.json",
+			"go-node-mcp.json",
+		},
+	},
+	{
+		slug: "guava",
+		files: []string{
+			"go-explore.json",
+			"go-node.json",
+			"go-explore-multi.json",
+			"go-node-multi.json",
+			"go-explore-mcp.json",
+			"go-node-mcp.json",
+		},
+	},
+	{
+		slug: "serilog",
+		files: []string{
+			"go-explore.json",
+			"go-node.json",
+			"go-explore-multi.json",
+			"go-node-multi.json",
+			"go-explore-mcp.json",
+			"go-node-mcp.json",
+		},
+	},
+	{
+		slug: "requests",
+		files: []string{
+			"go-explore.json",
+			"go-node.json",
+			"go-explore-multi.json",
+			"go-node-multi.json",
+			"go-explore-mcp.json",
+			"go-node-mcp.json",
 		},
 	},
 }
