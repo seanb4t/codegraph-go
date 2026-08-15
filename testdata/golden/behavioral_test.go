@@ -857,6 +857,14 @@ func TestCorpusBehaviorSynthetic(t *testing.T) {
 	cases := loadBehavioralCases(t)
 	eng := buildEngineAt(t, syntheticParitySrc(t))
 
+	// executedCases is the EXECUTION-keyed counter (review finding #1): it
+	// is incremented inside the per-case closure, so it tracks how many
+	// cases actually RAN to completion, not how many the inventory says
+	// exist. After the loop it must exactly equal len(cases) — a loop that
+	// is annihilated (early return, skipped iteration) leaves it short and
+	// fails the positive assertion, so a zero-executed run is red by
+	// construction (rule 84d1gfpywd).
+	executedCases := 0
 	for _, tc := range cases {
 		t.Run(tc.ID+"-"+tc.Name, func(t *testing.T) {
 			switch tc.Assertion {
@@ -972,7 +980,13 @@ func TestCorpusBehaviorSynthetic(t *testing.T) {
 			default:
 				t.Fatalf("unknown assertion mode %q in CASES.json case %s", tc.Assertion, tc.ID)
 			}
+
+			executedCases++
 		})
+	}
+
+	if executedCases != len(cases) {
+		t.Fatalf("executed %d of %d behavioral cases — the executed count must EXACTLY equal the case total (a loop that never runs, or returns early before the per-case closure completes, cannot satisfy the positive claim; rule 84d1gfpywd)", executedCases, len(cases))
 	}
 }
 

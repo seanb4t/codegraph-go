@@ -244,6 +244,17 @@ var expectedGoCaptures = []expectedCorpusSet{
 	},
 }
 
+// ExpectedGoldenScenarioCount is the declared total the golden suite's
+// executed-scenario self-assertion must prove (D-02, wire-oracle
+// TestScenarioCountIsExact precedent): 26 goldens enumerated from
+// expectedGoCaptures (2 behavioral + 6 each for the four locked corpora)
+// plus the 4 behavioral property cases from corpus/behavioral/CASES.json
+// = 30. The constant is placed beside the authoritative derivation, never
+// derived from a hand-maintained literal — TestGoldenScenarioCountIsExact
+// proves it from the tables. A shrinking count is the failure mode this
+// constant exists to catch.
+const ExpectedGoldenScenarioCount = 30
+
 // TestReFrozenGoldensValid enumerates the EXPECTED golden set from the
 // gocapture spec table (not a glob), and for each expected golden:
 //  1. asserts the file EXISTS (missing expected golden fails the suite);
@@ -302,7 +313,45 @@ func TestReFrozenGoldensValid(t *testing.T) {
 	if expectedTotal == 0 {
 		t.Fatal("expected golden list is empty — guard ran over zero expected goldens (H5)")
 	}
-	if verified < expectedTotal {
-		t.Fatalf("verified %d of %d expected goldens — missing entries must be regenerated via `task golden:regen`", verified, expectedTotal)
+	if verified != expectedTotal {
+		t.Fatalf("verified %d of %d expected goldens — the executed-and-verified count must EXACTLY equal the enumerated total (a count short by even one means a golden was dropped or a subtest loop never ran; missing entries must be regenerated via `task golden:regen`)", verified, expectedTotal)
 	}
+}
+
+// TestGoldenScenarioCountIsExact is FIXT-03's central non-shrinkage guard
+// (D-02), mirroring the wire-oracle TestScenarioCountIsExact precedent:
+// the golden suite's scenario total, DERIVED from the authoritative tables
+// (the expectedGoCaptures file lists + loadBehavioralCases's committed
+// CASES.json), must equal ExpectedGoldenScenarioCount with EXACT equality —
+// never a lower bound, because a lower bound cannot detect a scenario
+// silently disappearing. The just-touching adjacency of the exact
+// coincidence (26 goldens + 4 cases lands exactly on 30) is enforced
+// individually on each leg before the combined check, and a zero on either
+// leg is fatal before the sum check so a suite that never derived a
+// scenario is red by construction.
+func TestGoldenScenarioCountIsExact(t *testing.T) {
+	goldenTotal := 0
+	for _, cs := range expectedGoCaptures {
+		goldenTotal += len(cs.files)
+	}
+	if goldenTotal == 0 {
+		t.Fatal("goldenTotal is 0 — expectedGoCaptures enumerates no goldens; the derivation cannot be trusted")
+	}
+	if goldenTotal != 26 {
+		t.Fatalf("goldenTotal = %d, want exactly 26 — either a golden silently disappeared from expectedGoCaptures or one was added without updating the derivation", goldenTotal)
+	}
+
+	caseTotal := len(loadBehavioralCases(t))
+	if caseTotal == 0 {
+		t.Fatal("caseTotal is 0 — loadBehavioralCases returned no cases; the derivation cannot be trusted")
+	}
+	if caseTotal != 4 {
+		t.Fatalf("caseTotal = %d, want exactly 4 — either a CASES.json case silently disappeared or one was added without updating the derivation", caseTotal)
+	}
+
+	total := goldenTotal + caseTotal
+	if total != ExpectedGoldenScenarioCount {
+		t.Fatalf("golden suite scenario total = %d, want exactly %d (ExpectedGoldenScenarioCount) — either a scenario silently disappeared or one was added without updating the constant beside expectedGoCaptures", total, ExpectedGoldenScenarioCount)
+	}
+	t.Logf("golden suite scenario count: goldens: %d/26, CASES cases: %d/4, total: %d/%d", goldenTotal, caseTotal, total, ExpectedGoldenScenarioCount)
 }
