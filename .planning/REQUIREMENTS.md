@@ -30,7 +30,7 @@
 
 - [ ] **CODE-01**: Code and doc comments across `internal/`, `tools/` and `test/` carry no comparison framing, with TypeScript-as-indexed-language uses (`internal/indexer/tsextract`, language registries, capability matrix) explicitly preserved
 - [x] **CODE-02**: Test and fixture identifiers no longer encode comparison framing — `parity_*_test.go` and `TestGoldenParity*` renamed or removed — and `go test ./...` plus `go test ./testdata/golden/...` both pass
-- [ ] **CODE-03**: `codegraph migrate` still imports a legacy `.codegraph/` SQLite index end-to-end; its help text, docs and comments describe it as a legacy-index import rather than a port or parity feature
+- [x] **CODE-03 — AMENDED (dropped, maintainer ruling 2026-08-15):** `codegraph migrate` is **removed entirely** — the command, the `internal/migrate` package (reader, translate, swap, validate, progress, batchwriter, tests, `migratetest` fixture, archtest), and the `modernc.org/sqlite` sole-use dependency. The migration path was parity framing (positioning the Go binary as a drop-in competitor to the TS original); the milestone's standalone-identity work removes that stance. A TS user installs the Go binary and re-indexes from source. Recorded deliberately, not silently dropped — the archived build phase `milestones/v0.1-phases/07-migration-tool` stays in history.
 
 ### Fixtures & goldens (FIXT)
 
@@ -96,7 +96,7 @@ Which phases cover which requirements.
 | PROC-03 | Phase 5 | Pending |
 | CODE-01 | Phase 5 | Pending |
 | CODE-02 | Phase 2 | Complete |
-| CODE-03 | Phase 5 | Pending |
+| CODE-03 | Phase 5 | **Removed** (maintainer ruling 2026-08-15 — migrate dropped, capability + `modernc.org/sqlite` dependency removed; was parity framing) |
 | FIXT-01 | Phase 1 | Complete |
 | FIXT-02 | Phase 1 | Complete |
 | FIXT-03 | Phase 3 | Pending |
