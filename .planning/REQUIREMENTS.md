@@ -71,7 +71,7 @@ Deferred to a future milestone. Tracked but not in this roadmap.
 |---------|--------|
 | Rewriting `.planning/` archives (`milestones/*`, shipped ROADMAP/REQUIREMENTS, phase dirs) | An append-only record of what actually happened. Rewriting it would falsify the project's own history, and GSD's scope-sensitive parsers key on those structures |
 | Rewriting `CHANGELOG.md` | release-please-owned generated file; hand-editing it breaks the tool that both writes and re-reads it |
-| Removing `codegraph migrate` | The origin project is a live dependency there, not framing. Removing comparison language must not remove a capability existing users depend on |
+| Removing `codegraph migrate` (SUPERSEDED 2026-08-15, maintainer ruling) | **Amended by CODE-03's maintainer ruling**: migrate is no longer out-of-scope-retained; the capability is deliberately dropped (parity framing), the `internal/migrate` package and the `modernc.org/sqlite` sole-use dependency are removed, and a TS user re-indexes from source. This row was a pre-ruling statement and now documents the supersession, matching CODE-03's amended text |
 | Renaming `internal/indexer/tsextract` or de-listing TypeScript as a supported language | TypeScript-the-indexed-language is product surface. Conflating it with TypeScript-the-origin-project would break real capability |
 | A vocabulary drift guard (VOCAB-01) | A term blocklist either goes vacuous (rule `84d1gfpywd`) or fights legitimate uses like `tsextract`. One-time sweep plus review discipline is the chosen posture |
 | Authoring `docs/CLI-REFERENCE.md` (DOCS-05) | This milestone deletes the comparison matrix; authoring a replacement reference is separate work with its own scope |
