@@ -88,7 +88,7 @@ jobs:
               '',
               `This PR adds or changes behavior (\`${title.split(':')[0]}:\`), and the issue${refs.length > 1 ? 's it references are' : ' it references is'} not marked approved.`,
               '',
-              'That is a process step, not a judgement on the idea. This project ports observable behavior from another implementation, so changes that look like clear improvements are sometimes deliberate parity decisions recorded in `.planning/`. Agreeing on the issue first is how that surfaces before you spend time on code.',
+              'That is a process step, not a judgement on the idea. Behavior-affecting changes are worked out against the project\'s recorded decisions in `.planning/`. Agreeing on the issue first is how that surfaces before you spend time on code.',
               '',
               '### What happens next',
               '',
