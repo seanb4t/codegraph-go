@@ -160,15 +160,107 @@ func TestGoSideFixturesRegenerated(t *testing.T) {
 			if len(data) == 0 {
 				t.Fatalf("%s is empty", path)
 			}
-			// goldenCapture (behavioral_test.go, same package) mirrors
-			// gocapture/main.go's own envelope shape.
 			var parsed goldenCapture
 			if err := json.Unmarshal(data, &parsed); err != nil {
-				t.Fatalf("%s: does not parse as JSON: %v", path, err)
+				t.Fatalf("%s: does not parse as golden capture: %v", path, err)
 			}
 			if parsed.Output == "" {
 				t.Fatalf("%s has an empty \"output\" field", path)
 			}
 		})
+	}
+}
+
+// ============================================================================
+// Re-frozen golden guard (02-03, FIXT-06)
+// ============================================================================
+//
+// TestReFrozenGoldensValid enumerates the EXPECTED golden set from the
+// gocapture spec table (the per-corpus expected filenames), requires each
+// to exist AND be non-empty AND carry the envelope marker AND parse, and
+// positively asserts the verified count (rule 84d1gfpywd). This guard
+// enumerates from an AUTHORITATIVE source — NEVER from filepath.Glob of
+// existing files — so a missing expected golden fails the suite.
+
+// expectedGoldenFiles defines the per-corpus expected golden filenames, in
+// the same structure as gocapture's spec table (one entry per corpus slug,
+// listing the 6 expected golden filenames per locked corpus).
+type expectedCorpusSet struct {
+	slug   string
+	files  []string
+}
+
+var expectedGoCaptures = []expectedCorpusSet{
+	{
+		// Behavioral goldens exist in this plan (03); locked-corpus
+		// entries are added by 02-04 after the capture produces them.
+		slug: "behavioral",
+		files: []string{
+			"go-explore-multi.json",
+			"go-node-multi.json",
+		},
+	},
+}
+
+// TestReFrozenGoldensValid enumerates the EXPECTED golden set from the
+// gocapture spec table (not a glob), and for each expected golden:
+//  1. asserts the file EXISTS (missing expected golden fails the suite);
+//  2. asserts it is non-empty and byte-prefixed with the `{` envelope marker;
+//  3. parses it as the goldenCapture{Command, Output} envelope and asserts a
+//     non-empty Output for command-invocation goldens;
+//  4. positively asserts a COUNT of goldens verified, so a guard that ran over
+//     zero expected goldens fails instead of passing vacuously (H5).
+func TestReFrozenGoldensValid(t *testing.T) {
+	expectedTotal := 0
+	verified := 0
+
+	for _, cs := range expectedGoCaptures {
+		for _, name := range cs.files {
+			expectedTotal++
+			t.Run(cs.slug+"/"+name, func(t *testing.T) {
+				// Resolve the golden path. Behavioral goldens live at
+				// repo-root corpus/behavioral/, locked goldens at
+				// testdata/golden/corpus/<slug>/.
+				var path string
+				if cs.slug == "behavioral" {
+					path = filepath.Join("..", "..", "corpus", "behavioral", name)
+				} else {
+					path = filepath.Join("corpus", cs.slug, name)
+				}
+
+				// 1. Assert file exists.
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatalf("expected golden %s not found (run `task golden:regen` to regenerate): %v", path, err)
+				}
+
+				// 2. Assert non-empty and marker.
+				if len(data) == 0 {
+					t.Fatalf("expected golden %s is empty", path)
+				}
+				if data[0] != '{' {
+					t.Fatalf("expected golden %s first byte is %q (want '{') — not a valid JSON envelope", path, data[0])
+				}
+
+				// 3. Parse and assert non-empty output.
+				var capture goldenCapture
+				if err := json.Unmarshal(data, &capture); err != nil {
+					t.Fatalf("expected golden %s does not parse as goldenCapture: %v", path, err)
+				}
+				if capture.Output == "" {
+					t.Fatalf("expected golden %s has an empty output field", path)
+				}
+
+				verified++
+			})
+		}
+	}
+
+	t.Logf("TestReFrozenGoldensValid: %d/%d goldens verified", verified, expectedTotal)
+	if expectedTotal == 0 {
+		t.Fatal("expected golden list is empty — guard ran over zero expected goldens (H5)")
+	}
+	if verified < expectedTotal {
+		t.Fatalf("verified %d of %d expected goldens — missing entries must be regenerated via `task golden:regen`", verified, expectedTotal)
 	}
 }

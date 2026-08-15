@@ -64,6 +64,20 @@ tasks:
     cmds:
       - go test ./testdata/golden/...
 
+  golden:regen:
+    desc: >-
+      Regenerate all Go-side golden fixtures (gocapture) — the reviewed
+      one-command re-freeze entrypoint (02-03, FIXT-06). Runs corpora fetch,
+      integrity assert, then gocapture. Every capture goes through
+      capture-to-temp-then-move (Pattern 2) and fails closed on a missing
+      mandatory source.
+    deps:
+      - corpora:fetch
+    cmds:
+      - task corpora:assert
+      - go run ./testdata/golden/gocapture
+
+
   test:integration:
     desc: >-
       Subprocess integration harness (test/integration) — already reached by
