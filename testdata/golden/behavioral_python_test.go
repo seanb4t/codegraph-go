@@ -1,79 +1,24 @@
 // testdata/golden/behavioral_python_test.go
 //
-// TestCorpusBehavior_Python is LANG-04's D-12 acceptance gate for Python.
+// TestCorpusBehavior_Python is LANG-04's D-12 acceptance gate for Python — now
+// resolved through the hermetic locked-corpus resolver (02-03, D-10) that loads
+// the manifest via internal/corpora and FAILS LOUDLY on an absent or
+// integrity-failed locked tree (t.Fatalf, never t.Skip).
 //
-// D-12 asks for the same shape validation against live Go engine output
-// that behavioral_test.go's TestCorpusBehavior_Go uses for the behavioral
-// corpus. Capturing that fixture requires a working local install of the
-// live TS CodeGraph v1.3.x CLI; per 05-RESEARCH.md's "Environment
-// Availability" table, that CLI was not available in this environment (same
-// finding as behavioral_java_test.go's/behavioral_csharp_test.go's own D-12
-// fallback). RESEARCH documents the sanctioned fallback for exactly this
-// situation: "read the reference target's SOURCE as a specification rather
-// than a live golden-output oracle" plus a self-consistency check against
-// this project's own repeated runs. This file implements that fallback
-// (mirroring behavioral_java_test.go/behavioral_csharp_test.go verbatim in
-// structure) rather than skipping D-12 entirely.
-//
-// It self-skips (t.Skip, never t.Fatal) when no Python validation corpus is
-// configured -- the "loud skip, never a silent pass or a hard CI
-// failure" discipline (T-03-09-Repro), so `go test ./...` stays green
-// everywhere this corpus isn't checked out.
-//
-// Per this plan's Task 2 action and RESEARCH Pitfall 3, inherited-method
-// call resolution (a subclass calling a method it inherits, never
-// overrides, from an imported base class) is explicitly OUT of this test's
-// scope — that lands with Wave 6's conformance-retry pass (RES-02), so a
-// higher unresolvedCount attributable to inherited-method calls on whatever
-// corpus is configured is expected here, not a regression.
+// The old env-var-based resolver (CODEGRAPH_PYTHON_CORPUS) and its sibling-
+// checkout fallback with t.Skip are retired — this test always runs against
+// the Phase-1-locked requests corpus when that corpus is present, and fails
+// loudly with an actionable message when it is not.
 package golden
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
-// resolvePythonCorpus locates a local checkout of a real, representative,
-// license-clean Python repository: first CODEGRAPH_PYTHON_CORPUS, then a
-// conventional sibling checkout (../python-corpus next to this repo's
-// root). It t.Skip()s with a clear, actionable message — never fails —
-// when no corpus is configured.
-func resolvePythonCorpus(t *testing.T) string {
-	t.Helper()
-
-	if env := os.Getenv("CODEGRAPH_PYTHON_CORPUS"); env != "" {
-		if info, err := os.Stat(env); err == nil && info.IsDir() {
-			return env
-		}
-		t.Skipf("CODEGRAPH_PYTHON_CORPUS=%s is not a directory", env)
-	}
-
-	if repoRoot, err := filepath.Abs(filepath.Join("..", "..")); err == nil {
-		candidate := filepath.Join(filepath.Dir(repoRoot), "python-corpus")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
-		}
-	}
-
-	t.Skip(
-		"no Python validation corpus configured — set CODEGRAPH_PYTHON_CORPUS=/path/to/a/real/python/repo " +
-			"to run this test (ideally one using multi-package cross-module imports and class inheritance, to " +
-			"exercise pyextract's dotted-module-path resolution and RefKindEmbeds base-class refs). A live TS " +
-			"CodeGraph v1.3.x CLI was unavailable in this environment to capture a byte-comparable golden " +
-			"fixture (05-RESEARCH.md Environment Availability); this test instead self-validates extraction/" +
-			"resolution SHAPE (non-zero node/edge kind coverage + deterministic rebuild) against whatever real " +
-			"Python repo is configured — RESEARCH's documented source-as-specification + self-consistency " +
-			"fallback for D-12 priority-4 validation when the live TS CLI oracle is not runnable.",
-	)
-	return ""
-}
-
-// TestCorpusBehavior_Python validates, against a real (Claude's Discretion,
-// user-configured) Python repository:
+// TestCorpusBehavior_Python validates, against the Phase-1-locked requests corpus:
 //
 //  1. Shape coverage — every node/edge kind pyextract/types.go documents
 //     (struct/function/method + calls/imports/embeds) actually appears with
@@ -81,14 +26,13 @@ func resolvePythonCorpus(t *testing.T) string {
 //     rather than silently producing an empty graph.
 //  2. Cross-file resolution — at least one "calls" edge resolves, proving
 //     Pass 2's per-language symbol index genuinely connects Python call
-//     sites to their declarations via the dotted-module-path ModuleKey
-//     (LANG-04's "full... cross-file resolution" bar), not just intra-file
-//     structural extraction.
+//     sites to their declarations (LANG-04's "full... cross-file resolution"
+//     bar), not just intra-file structural extraction.
 //  3. Determinism (D-01a, project-wide) — a second from-scratch run over
 //     the same corpus yields byte-identical aggregate node/edge/file
 //     counts.
 func TestCorpusBehavior_Python(t *testing.T) {
-	corpusDir := resolvePythonCorpus(t)
+	corpusDir := lockedCorpusDir(t, "python")
 
 	storeDir1 := t.TempDir()
 	stats1, err := indexer.Run(corpusDir, storeDir1, indexer.Options{Quiet: true})
@@ -96,7 +40,7 @@ func TestCorpusBehavior_Python(t *testing.T) {
 		t.Fatalf("indexer.Run (first pass): %v", err)
 	}
 	if stats1.Files == 0 {
-		t.Fatalf("indexer.Run found 0 files in the configured Python corpus %s", corpusDir)
+		t.Fatalf("indexer.Run found 0 files in the locked Python corpus %s", corpusDir)
 	}
 
 	store1, err := graphstore.Open(storeDir1)
@@ -141,20 +85,14 @@ func TestCorpusBehavior_Python(t *testing.T) {
 
 	// Shape check 1: a representative real Python repo MUST produce at
 	// least one node of each of pyextract's core kinds — a zero count here
-	// means extraction silently failed to fire on real source, not just an
-	// absence of that construct in whichever corpus is configured (a repo
-	// with zero classes or zero functions is not a representative Python
-	// corpus for this check).
+	// means extraction silently failed to fire on real source.
 	for _, kind := range []string{"struct", "function"} {
 		if nodeKindCounts[kind] == 0 {
 			t.Errorf("shape check: 0 %q nodes extracted from the Python corpus, want > 0", kind)
 		}
 	}
 	// Shape check 2: "calls" is the one edge kind LANG-04's full-resolution
-	// bar requires to be non-zero on a real, non-trivial repo (imports/
-	// embeds may legitimately be zero on an unusual single-module/
-	// no-inheritance corpus, but a representative real Python project
-	// always has cross-file or cross-class function/method calls).
+	// bar requires to be non-zero on a real, non-trivial repo.
 	if edgeKindCounts["calls"] == 0 {
 		t.Error(`shape check: 0 "calls" edges resolved from the Python corpus, want > 0`)
 	}

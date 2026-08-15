@@ -1,70 +1,24 @@
 // testdata/golden/behavioral_java_test.go
 //
-// TestCorpusBehavior_Java is LANG-02's D-12 acceptance gate for Java.
+// TestCorpusBehavior_Java is LANG-02's D-12 acceptance gate for Java — now
+// resolved through the hermetic locked-corpus resolver (02-03, D-10) that loads
+// the manifest via internal/corpora and FAILS LOUDLY on an absent or
+// integrity-failed locked tree (t.Fatalf, never t.Skip).
 //
-// D-12 asks for the same shape validation against live Go engine output
-// that behavioral_test.go's TestCorpusBehavior_Go uses for the behavioral
-// corpus. Capturing a Java fixture requires a working local install of the
-// live TS CodeGraph v1.3.x CLI; per 05-RESEARCH.md's "Environment
-// Availability" table, that CLI was not available in this environment ("a
-// time-sensitive, one-shot capture that may no longer be runnable" —
-// testdata/golden/README.md). RESEARCH documents the sanctioned fallback
-// for exactly this situation: "read the reference target's SOURCE as a
-// specification rather than a live golden-output oracle" plus a
-// self-consistency check against this project's own repeated runs. This
-// file implements that fallback rather than skipping D-12 entirely.
-//
-// It self-skips (t.Skip, never t.Fatal) when no Java validation corpus is
-// configured — the "loud skip, never a silent pass or a hard CI failure"
-// discipline (T-03-09-Repro), so `go test ./...` stays green everywhere
-// this corpus isn't checked out.
+// The old env-var-based resolver (CODEGRAPH_JAVA_CORPUS) and its sibling-
+// checkout fallback with t.Skip are retired — this test always runs against the
+// Phase-1-locked guava corpus when that corpus is present, and fails loudly
+// with an actionable message when it is not.
 package golden
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 )
 
-// resolveJavaCorpus locates a local checkout of a real, representative,
-// license-clean Java repository: first CODEGRAPH_JAVA_CORPUS, then a
-// conventional sibling checkout (../java-corpus next to this repo's root).
-// It t.Skip()s with a clear, actionable message — never fails — when no
-// corpus is configured.
-func resolveJavaCorpus(t *testing.T) string {
-	t.Helper()
-
-	if env := os.Getenv("CODEGRAPH_JAVA_CORPUS"); env != "" {
-		if info, err := os.Stat(env); err == nil && info.IsDir() {
-			return env
-		}
-		t.Skipf("CODEGRAPH_JAVA_CORPUS=%s is not a directory", env)
-	}
-
-	if repoRoot, err := filepath.Abs(filepath.Join("..", "..")); err == nil {
-		candidate := filepath.Join(filepath.Dir(repoRoot), "java-corpus")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
-		}
-	}
-
-	t.Skip(
-		"no Java validation corpus configured — set CODEGRAPH_JAVA_CORPUS=/path/to/a/real/java/repo " +
-			"to run this test. A live TS CodeGraph v1.3.x CLI was unavailable in this environment to " +
-			"capture a byte-comparable golden fixture (05-RESEARCH.md Environment Availability); this " +
-			"test instead self-validates extraction/resolution SHAPE (non-zero node/edge kind coverage " +
-			"+ deterministic rebuild) against whatever real Java repo is configured — RESEARCH's " +
-			"documented source-as-specification + self-consistency fallback for D-12 priority-4 " +
-			"validation when the live TS CLI oracle is not runnable.",
-	)
-	return ""
-}
-
-// TestCorpusBehavior_Java validates, against a real (Claude's Discretion,
-// user-configured) Java repository:
+// TestCorpusBehavior_Java validates, against the Phase-1-locked guava corpus:
 //
 //  1. Shape coverage — every node/edge kind javaextract/types.go documents
 //     (struct/interface/method + calls/imports/embeds) actually appears
@@ -78,7 +32,7 @@ func resolveJavaCorpus(t *testing.T) string {
 //     the same corpus yields byte-identical aggregate node/edge/file
 //     counts.
 func TestCorpusBehavior_Java(t *testing.T) {
-	corpusDir := resolveJavaCorpus(t)
+	corpusDir := lockedCorpusDir(t, "java")
 
 	storeDir1 := t.TempDir()
 	stats1, err := indexer.Run(corpusDir, storeDir1, indexer.Options{Quiet: true})
@@ -86,7 +40,7 @@ func TestCorpusBehavior_Java(t *testing.T) {
 		t.Fatalf("indexer.Run (first pass): %v", err)
 	}
 	if stats1.Files == 0 {
-		t.Fatalf("indexer.Run found 0 files in the configured Java corpus %s", corpusDir)
+		t.Fatalf("indexer.Run found 0 files in the locked Java corpus %s", corpusDir)
 	}
 
 	store1, err := graphstore.Open(storeDir1)

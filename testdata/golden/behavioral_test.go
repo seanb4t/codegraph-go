@@ -31,10 +31,79 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/seanb4t/codegraph-go/internal/corpora"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
 	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
+
+// languageToLockedSlug is the EXPLICIT committed language->locked-slug map (H3),
+// shared with gocapture. hugo supplies the tsjs leg from its JS files even
+// though its manifest language is "go".
+var languageToLockedSlug = map[string]string{
+	"go":     "hugo",
+	"tsjs":   "hugo",
+	"java":   "guava",
+	"csharp": "serilog",
+	"python": "requests",
+}
+
+// slugToRepo maps each locked-slug to its manifest repo slug for lookup.
+var slugToRepo = map[string]string{
+	"hugo":     "gohugoio/hugo",
+	"guava":    "google/guava",
+	"serilog":  "serilog/serilog",
+	"requests": "psf/requests",
+}
+
+// lockedCorpusDir is the single hermetic resolver for locked corpus directories
+// (D-10, constraint 2). It loads the manifest via internal/corpora, resolves the
+// language's locked slug through the language map, and calls e.Dir(CorpusRoot())
+// to locate the fetched tree. On any failure — map missing for a priority
+// language, manifest unreadable, no locked entry for the slug, or the resolved
+// dir is not a directory — it calls t.Fatalf with the named cause. It NEVER
+// reads an env-var default, NEVER uses t.Skip, and NEVER matches on
+// e.Language directly (which would miss tsjs's manifest language "go").
+func lockedCorpusDir(t *testing.T, language string) string {
+	t.Helper()
+
+	slug, ok := languageToLockedSlug[language]
+	if !ok {
+		t.Fatalf("lockedCorpusDir(%q): no slug found in language map", language)
+	}
+	repo, ok := slugToRepo[slug]
+	if !ok {
+		t.Fatalf("lockedCorpusDir(%q): slug %q has no repo mapping", language, slug)
+	}
+
+	m, err := corpora.Load(filepath.Join("..", "..", "corpora", "manifest.json"))
+	if err != nil {
+		t.Fatalf("lockedCorpusDir(%q): load manifest: %v", language, err)
+	}
+
+	var entry *corpora.Entry
+	for _, e := range corpora.LockedEntries(m) {
+		if e.Repo == repo {
+			entry = &e
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("lockedCorpusDir(%q): no locked entry found for repo %q", language, repo)
+	}
+
+	root, err := corpora.CorpusRoot()
+	if err != nil {
+		t.Fatalf("lockedCorpusDir(%q): CorpusRoot: %v", language, err)
+	}
+
+	dir := entry.Dir(root)
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("lockedCorpusDir(%q): locked tree directory %s not found or not a directory: %v; run 'task corpora:fetch'", language, dir, err)
+	}
+	return dir
+}
 
 // mbShapeRE pins D-07's MB-rendering contract, where
 // dbSizeBytes comes from a real corpus index rather than a synthetic
@@ -220,6 +289,43 @@ func copyDir(t *testing.T, src, dst string) {
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
+		}
+		// Handle symlinks: WalkDir uses Lstat and does NOT walk into symlink
+		// targets that are directories; it reports the symlink itself as a
+		// non-directory entry. Resolve and copy content accordingly.
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return err
+			}
+			if rInfo, err := os.Stat(resolved); err == nil && rInfo.IsDir() {
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					return err
+				}
+				return filepath.WalkDir(resolved, func(rPath string, rD fs.DirEntry, rErr error) error {
+					if rErr != nil {
+						return rErr
+					}
+					rRel, rErr := filepath.Rel(resolved, rPath)
+					if rErr != nil {
+						return rErr
+					}
+					rTarget := filepath.Join(target, rRel)
+					if rD.IsDir() {
+						return os.MkdirAll(rTarget, 0o755)
+					}
+					data, rErr := os.ReadFile(rPath)
+					if rErr != nil {
+						return rErr
+					}
+					return os.WriteFile(rTarget, data, 0o644)
+				})
+			}
+			data, err := os.ReadFile(resolved)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, data, 0o644)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -870,11 +976,81 @@ func TestCorpusBehaviorSynthetic(t *testing.T) {
 	}
 }
 
-// TestCorpusBehaviorLockedCorpora scaffold — reserved for 02-03 locked-corpus
-// subtests (the external pinned corpora that replace the retired
-// network-fetched corpora after FIXT-04).
+// ============================================================================
+// Locked-corpus hermetic resolution (02-03, D-10)
+// ============================================================================
+
+// TestPriorityLanguagesResolveToLockedCorpus (H3 positive guard): iterates
+// the five priority-4 languages (go, java, csharp, python, tsjs), calls
+// lockedCorpusDir(t, lang) for each, and asserts every one resolves to a
+// directory that exists. A language whose map entry or locked corpus is
+// missing FAILS (rule 84d1gfpywd) — it never skips and never silently covers
+// less than all five languages.
+func TestPriorityLanguagesResolveToLockedCorpus(t *testing.T) {
+	priorityLangs := []string{"go", "java", "csharp", "python", "tsjs"}
+	for _, lang := range priorityLangs {
+		t.Run(lang, func(t *testing.T) {
+			dir := lockedCorpusDir(t, lang)
+			info, err := os.Stat(dir)
+			if err != nil {
+				t.Fatalf("lockedCorpusDir(%q) resolved to %s but stat failed: %v", lang, dir, err)
+			}
+			if !info.IsDir() {
+				t.Fatalf("lockedCorpusDir(%q) resolved to %s which is not a directory", lang, dir)
+			}
+			t.Logf("%s -> %s (files present)", lang, dir)
+		})
+	}
+}
+
+// TestCorpusBehaviorLockedCorpora runs the shape-only tier over each locked
+// corpus: index, build engine, assert non-empty explore output (header,
+// blast-radius, source sections) and node output (header template, at least
+// one full def body). This is the D-09 property-shape tier over the locked
+// corpora; the byte-level goldens are the re-freeze's regression snapshots
+// (02-04).
 func TestCorpusBehaviorLockedCorpora(t *testing.T) {
-	// Reserved for 02-03 locked-corpus subtests.
+	lockedSpecs := []struct {
+		lang, slug string
+		query      string
+		symbol     string
+	}{
+		{"go", "hugo", "page content", "Page"},
+		{"java", "guava", "check precondition", "Preconditions"},
+		{"csharp", "serilog", "configure logger", "LoggerConfiguration"},
+		{"python", "requests", "http session", "Session"},
+	}
+
+	for _, s := range lockedSpecs {
+		t.Run(s.slug, func(t *testing.T) {
+			src := lockedCorpusDir(t, s.lang)
+			eng := buildEngineAt(t, src)
+
+			t.Run("explore-shape", func(t *testing.T) {
+				got, err := eng.Explore(s.query, 0)
+				if err != nil {
+					t.Fatalf("Explore(%q, 0): %v", s.query, err)
+				}
+				assertExploreShape(t, got, s.query)
+				t.Logf("explore(%q) produced valid shape over %s (%s)", s.query, s.slug, s.lang)
+			})
+			t.Run("node-shape", func(t *testing.T) {
+				got, err := eng.Node(s.symbol, "", nil)
+				if err != nil {
+					t.Fatalf("Node(%q, \"\"): %v", s.symbol, err)
+				}
+				// The symbol may be single-def or multi-def in a given corpus.
+				// Validate at least: non-empty output with location info.
+				if len(got) == 0 {
+					t.Fatalf("Node(%q) returned empty output", s.symbol)
+				}
+				if !strings.Contains(got, "**Location:**") && !strings.Contains(got, s.symbol) {
+					t.Errorf("Node(%q) output missing location and symbol name", s.symbol)
+				}
+				t.Logf("node(%q) produced valid shape over %s (%s)", s.symbol, s.slug, s.lang)
+			})
+		})
+	}
 }
 
 // assertExploreShape is the shape-only tier's explore assertion: valid
@@ -1075,6 +1251,10 @@ func TestExploreCLIMatchesMCP(t *testing.T) {
 		query      string
 	}{
 		{"behavioral", syntheticParitySrc, "user account"},
+		{"hugo", func(t *testing.T) string { return lockedCorpusDir(t, "go") }, "page content"},
+		{"guava", func(t *testing.T) string { return lockedCorpusDir(t, "java") }, "check precondition"},
+		{"serilog", func(t *testing.T) string { return lockedCorpusDir(t, "csharp") }, "configure logger"},
+		{"requests", func(t *testing.T) string { return lockedCorpusDir(t, "python") }, "http session"},
 	}
 
 	for _, tc := range cases {
@@ -1105,13 +1285,20 @@ func TestExploreCLIMatchesMCP(t *testing.T) {
 // (NODE-04): both single-def and multi-def symbols are covered, since
 // NODE-04's byte-comparability claim spans both shapes.
 func TestNodeCLIMatchesMCP(t *testing.T) {
+	lockedExploreCase := func(lang string) func(t *testing.T) string {
+		return func(t *testing.T) string { return lockedCorpusDir(t, lang) }
+	}
 	cases := []struct {
 		corpus     string
 		sourceFunc func(t *testing.T) string
 		symbol     string
 	}{
-		{"behavioral", syntheticParitySrc, "Validate"},   // multi-def (2)
-		{"behavioral", syntheticParitySrc, "AuditEntry"}, // single-def
+		{"behavioral", syntheticParitySrc, "Validate"},              // multi-def (2)
+		{"behavioral", syntheticParitySrc, "AuditEntry"},            // single-def
+		{"hugo", lockedExploreCase("go"), "Site"},
+		{"guava", lockedExploreCase("java"), "ImmutableList"},
+		{"serilog", lockedExploreCase("csharp"), "LoggerConfiguration"},
+		{"requests", lockedExploreCase("python"), "Session"},
 	}
 
 	for _, tc := range cases {

@@ -393,7 +393,9 @@ func writeCapture(path, command, output string) error {
 }
 
 // copyDir recursively copies src into dst, skipping ".codegraph" directories
-// so the destination starts clean for indexing.
+// so the destination starts clean for indexing. Handles symlinks: resolves
+// directory symlinks by walking their target, and copies file symlinks by
+// reading the resolved path's content.
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -409,6 +411,40 @@ func copyDir(src, dst string) error {
 		target := filepath.Join(dst, rel)
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
+		}
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return err
+			}
+			if rInfo, err := os.Stat(resolved); err == nil && rInfo.IsDir() {
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					return err
+				}
+				return filepath.WalkDir(resolved, func(rPath string, rD fs.DirEntry, rErr error) error {
+					if rErr != nil {
+						return rErr
+					}
+					rRel, rErr := filepath.Rel(resolved, rPath)
+					if rErr != nil {
+						return rErr
+					}
+					rTarget := filepath.Join(target, rRel)
+					if rD.IsDir() {
+						return os.MkdirAll(rTarget, 0o755)
+					}
+					data, rErr := os.ReadFile(rPath)
+					if rErr != nil {
+						return rErr
+					}
+					return os.WriteFile(rTarget, data, 0o644)
+				})
+			}
+			data, err := os.ReadFile(resolved)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, data, 0o644)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {

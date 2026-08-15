@@ -42,9 +42,9 @@ priority-4 [Java, C#, Python, TypeScript, TSX, JavaScript] + mainstream-6
 set is exact, no missing, no extra.
 
 **Requirement mapping:** priority-4 (`java`/`csharp`/`python`/`typescript`/`tsx`/`javascript`)
-= LANG-02..05, validated real-repo or (where no live TS CodeGraph v1.3.x
-CLI was available in this environment) source-as-specification +
-self-consistency per D-12. Mainstream-6 = LANG-06, documented-partial per
+= LANG-02..05, validated against Phase-1-locked corpora through hermetic
+internal/corpora resolution, failing loudly on absence (02-03, D-10).
+Mainstream-6 = LANG-06, documented-partial per
 D-04/D-11. Dispatch = RES-02/RES-03 (05-09). Routing = LANG-07 (05-12),
 covering the five priority frameworks only: Gin (Go), Spring (Java),
 ASP.NET (C#), Django/Flask/FastAPI (Python), Express/NestJS
@@ -63,39 +63,39 @@ since Phase 2/3 against the pinned `weft` golden-parity corpus
 ### `java`
 
 - Same-package qualified call qualifiers are disambiguated from local-variable receivers via a PascalCase/camelCase naming-convention heuristic (no local-variable type table is tracked).
-- No live TS CodeGraph v1.3.x CLI or curated Java corpus was available in this environment; TestCorpusBehavior_Java validates via the documented source-as-specification plus self-consistency fallback rather than a byte/shape diff against captured TS output.
+- TestCorpusBehavior_Java now resolves the Phase-1-locked guava corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.
 
 ### `csharp`
 
 - A bare using-imported cross-namespace call or inheritance reference — C#'s dominant idiom — is an accepted, documented gap: only fully-qualified cross-namespace references and same-namespace references resolve, since no global symbol table is built at parse time.
 - partial class/struct/record/interface fragments share one node keyed by (qualifiedName, namespace) with a deterministic sentinel FilePath/StartLine, rather than a resolve.go-coordinated first-fragment-by-path tie-break (Pitfall 5, scheme-b variant).
-- No live TS CodeGraph v1.3.x CLI or curated C# corpus was available in this environment; TestCorpusBehavior_CSharp validates via the same source-as-specification plus self-consistency fallback as Java.
+- TestCorpusBehavior_CSharp now resolves the Phase-1-locked serilog corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old source-as-specification self-consistency fallback is retired.
 
 ### `python`
 
 - pyextract emits no KindInterface nodes — Python has no declared-interface construct, so base-class RefKindEmbeds refs never promote to an implements edge; interface->implementation dispatch traversal does not apply to Python.
 - A plain unaliased `import foo.bar` populates no Imports entry (Python's own binding semantics bind only the top-level name); only an aliased plain import or a from-import populates Imports.
 - Wildcard from-imports (`from x import *`) are not resolved.
-- No live TS CodeGraph v1.3.x CLI or curated Python golden corpus is committed to this repo; TestCorpusBehavior_Python self-skips by default (it was smoke-tested this session against a real 168-file corpus, see 05-06-SUMMARY.md).
+- TestCorpusBehavior_Python now resolves the Phase-1-locked requests corpus through hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.
 
 ### `typescript`
 
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.
-- No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestCorpusBehavior_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).
+- TestCorpusBehavior_TSJS now resolves through the language map to the Phase-1-locked hugo corpus (whose 25 JS files supply the tsjs leg despite hugo's manifest language being "go") via hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.
 
 ### `tsx`
 
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports (`./utils` resolving to `utils/index.ts`) and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.
-- No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestCorpusBehavior_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).
+- TestCorpusBehavior_TSJS now resolves through the language map to the Phase-1-locked hugo corpus (whose 25 JS files supply the tsjs leg despite hugo's manifest language being "go") via hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.
 
 ### `javascript`
 
 - JavaScript's own grammar has no interface_declaration node and no implements clause — class heritage is extends-only, so RefKindEmbeds refs never resolve to an interface target and never promote to an implements edge for pure-JavaScript files.
 - A renamed default import (`import Renamed from './foo'`) is an accepted gap — a default import only resolves when the local binding text coincides with the target's own declared symbol name.
 - Directory-style imports and node_modules/package.json main/exports-map resolution are not implemented — only relative-specifier and tsconfig paths/baseUrl-aliased specifiers resolve.
-- No live TS CodeGraph v1.3.x CLI or curated TS/JS golden corpus is committed to this repo; TestCorpusBehavior_TSJS self-skips by default (it was smoke-tested this session against a real 13,464-file corpus, see 05-07-SUMMARY.md).
+- TestCorpusBehavior_TSJS now resolves through the language map to the Phase-1-locked hugo corpus (whose 25 JS files supply the tsjs leg despite hugo's manifest language being "go") via hermetic internal/corpora resolution and FAILS LOUDLY on absence (02-03, D-10) — the old self-skip source-as-specification fallback is retired.
 
 ### `rust`
 
