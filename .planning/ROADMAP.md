@@ -212,7 +212,14 @@ Plans:
 
 **Notes**: Deleting `flag_parity_test.go` removes a live drift guard. Its replacement (`DOCS-05`, a self-authored CLI reference with its own guard) is deliberately deferred to a later milestone — this is a knowing, recorded reduction in coverage, not an oversight. `docs/BENCHMARKS.md` belongs to Phase 6, not here, because its rewrite is coupled to removing the comparison runner.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+**Wave 1** *(all three parallel — zero file overlap)*
+
+- [ ] 04-01-PLAN.md — NOTICE attribution trim (tracer) + README Relationship removal / License clause / Performance + Status sweep; live license check (ATTR-01, ATTR-02, ATTR-03)
+- [ ] 04-02-PLAN.md — Delete docs/FLAG-PARITY.md + internal/cli/flag_parity_test.go and sweep all reference sites incl. the man.go:27 census correction (DOCS-02)
+- [ ] 04-03-PLAN.md — CONTRIBUTING + capability matrix reword; verify-only sweep of SECURITY/CoC/PARSER-DECISION and remaining docs/* with KEEP reasons recorded (DOCS-01, DOCS-03, DOCS-04)
 
 ### Phase 5: Process, CI & In-Tree Sweep
 
