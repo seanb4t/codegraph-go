@@ -215,11 +215,14 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-**Wave 1** *(all three parallel — zero file overlap)*
+**Wave 1** *(parallel — zero file overlap)*
 
-- [ ] 04-01-PLAN.md — NOTICE attribution trim (tracer) + README Relationship removal / License clause / Performance + Status sweep; live license check (ATTR-01, ATTR-02, ATTR-03)
-- [ ] 04-02-PLAN.md — Delete docs/FLAG-PARITY.md + internal/cli/flag_parity_test.go and sweep all reference sites incl. the man.go:27 census correction (DOCS-02)
+- [ ] 04-01-PLAN.md — NOTICE attribution trim (tracer) + README Relationship removal / License clause / Performance + Status sweep; live license check + LICENSE byte-identity (ATTR-01, ATTR-02, ATTR-03)
 - [ ] 04-03-PLAN.md — CONTRIBUTING + capability matrix reword; verify-only sweep of SECURITY/CoC/PARSER-DECISION and remaining docs/* with KEEP reasons recorded (DOCS-01, DOCS-03, DOCS-04)
+
+**Wave 2** *(blocked on Wave 1 — the phase-final gate re-asserts the other plans' end-state)*
+
+- [ ] 04-02-PLAN.md — Delete docs/FLAG-PARITY.md + internal/cli/flag_parity_test.go and sweep all reference sites incl. the man.go:27 census correction (DOCS-02) + the executable phase-final gate (13/13 positive count, cycle-1 review finding 3)
 
 ### Phase 5: Process, CI & In-Tree Sweep
 
