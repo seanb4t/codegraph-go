@@ -84,15 +84,13 @@ jobs:
         # code is checked by set -e before anything consumes it.
         run: task test:unit
 
-      # GOLDEN-01 (02-REVIEW-2.md): the go tool ignores any directory named
-      # "testdata" when expanding "./..." — `go list ./...` above therefore
-      # NEVER discovers testdata/golden, and every "full suite green" signal
-      # produced by the step above silently omits the golden parity suite
-      # (TestGoldenParity, the CLI==MCP byte-identity harness, the
-      # behavioral corpora, etc.). This step makes that reachable and
-      # explicit rather than a suite everyone believes runs but never does.
-      - name: Test golden parity suite (testdata/golden, NOT covered by go list ./...)
-        run: task test:golden
+      # GOLDEN-01 (02-REVIEW-2.md) + FIXT-03 (D-04): the go tool ignores any
+      # directory named "testdata" when expanding "./..." — `go list ./...`
+      # above therefore NEVER discovers testdata/golden. The golden suite
+      # used to run here, but its locked-corpus tests FAIL LOUDLY on an empty
+      # corpus root on a fresh runner, and a skip is exactly what FIXT-03
+      # forbids. It now runs ONLY in corpora.yml's `golden` job, where the
+      # pinned corpora are fetched and asserted first.
 
       # FIXT-01 (D-08 cheap half): the corpus coverage guard reconciles the
       # three COMMITTED documents (manifest, observations, selection) against

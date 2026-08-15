@@ -116,6 +116,7 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "tool-vuln"},
 	{Workflow: "release-please.yml", JobID: "pretag-gate"},
 	{Workflow: "corpora.yml", JobID: "corpora"},
+	{Workflow: "corpora.yml", JobID: "golden"},
 }
 
 // runBodyException is one literal, reasoned carve-out from the

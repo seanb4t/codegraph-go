@@ -64,6 +64,17 @@ name: corpora
 
 on:
   workflow_dispatch:
+  # MAINTENANCE RULE (FIXT-03, review finding #2): the path filter below MUST
+  # name the REAL transitive closure of golden-pipeline inputs — the packages
+  # that actually exist and feed the golden suite: the graphstore/parser/schema
+  # indexer surface (internal/graphstore/**, internal/parser/**,
+  # internal/schema/**), the query/cli/mcp surfaces (internal/query/**,
+  # internal/cli/**, internal/mcp/**), the CLI entrypoint (cmd/**), the golden
+  # fixtures and behavioral corpus themselves (testdata/golden/**,
+  # corpus/**), and the module definition (go.mod, go.sum). When a new golden
+  # input package is added, APPEND it here — a golden-only PR that the filter
+  # omits silently bypasses the golden job (T-03-P1-05). Never replace a real
+  # package with a plausible placeholder name.
   pull_request:
     paths:
       - "corpora/**"
@@ -72,6 +83,17 @@ on:
       - "internal/indexer/**"
       - "internal/query/status.go"
       - "internal/query/render_status.go"
+      - "internal/query/**"
+      - "internal/cli/**"
+      - "internal/mcp/**"
+      - "internal/graphstore/**"
+      - "internal/parser/**"
+      - "internal/schema/**"
+      - "cmd/**"
+      - "testdata/golden/**"
+      - "corpus/**"
+      - "go.mod"
+      - "go.sum"
       - "Taskfile.yml"
       - ".github/workflows/corpora.yml"
   push:
@@ -84,6 +106,17 @@ on:
       - "internal/indexer/**"
       - "internal/query/status.go"
       - "internal/query/render_status.go"
+      - "internal/query/**"
+      - "internal/cli/**"
+      - "internal/mcp/**"
+      - "internal/graphstore/**"
+      - "internal/parser/**"
+      - "internal/schema/**"
+      - "cmd/**"
+      - "testdata/golden/**"
+      - "corpus/**"
+      - "go.mod"
+      - "go.sum"
       - "Taskfile.yml"
       - ".github/workflows/corpora.yml"
 
@@ -169,3 +202,72 @@ jobs:
 
       - name: Re-measure and diff against the committed record
         run: task corpora:drift
+
+  # PARALLEL-VOLUME DECISION (FIXT-03, review finding #3): NO needs: entry is
+  # added between the corpora and golden jobs. Both jobs share the same
+  # nscloud cache volume path (CODEGRAPH_CORPUS_DIR), and the fetch driver's
+  # claim-lock + staged-promote already serializes concurrent fetchers of the
+  # same destination, so running the two jobs in parallel is safe. The first
+  # real parallel dispatch of BOTH jobs on this branch is the verification
+  # instrument for that claim — if a lock leak appears there, the RECORDED
+  # fallback is adding needs: [corpora] to this job. Do NOT couple the golden
+  # proof to the drift job's success in advance of that observation.
+  golden:
+    name: golden (fetch, assert, unconditional golden suite)
+    runs-on: namespace-profile-linux-amd64-4x8
+    # The runner class is load-bearing for the same reason as the corpora
+    # job above: the Namespace cache action requires a cache volume attached
+    # to the job and does NOT function on a standard runner.
+    #
+    # CODEGRAPH_CORPUS_DIR is declared ONCE, at job level, and referenced by
+    # the cache step's path and — through the environment — by every task
+    # invocation, so the corpus root has exactly one definition and cannot
+    # drift between what is cached and what is written (the same seam the
+    # corpora job above uses).
+    env:
+      CODEGRAPH_CORPUS_DIR: "${{ github.workspace }}/../codegraph-corpora"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Cache corpora volume
+        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
+        id: cache-corpora
+        with:
+          # path-based cache, same as the corpora job above: the corpus root
+          # at the job-level value. fail-on-cache-miss is intentionally NOT
+          # set — a miss falls through to the unconditional fetch below.
+          path: ${{ env.CODEGRAPH_CORPUS_DIR }}
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      - name: Fetch corpora at pinned SHAs
+        # UNCONDITIONAL (FIXT-03) — deliberately NOT gated on
+        # steps.cache-corpora.hit: a cache MISS falls through to a REAL
+        # fetch, never to a skipped job; a failing fetch fails this job
+        # loudly (T-03-P1-03). A later reader must NOT reintroduce a
+        # condition here.
+        run: task corpora:fetch
+
+      - name: Assert corpora present at pinned SHAs
+        # UNCONDITIONAL for the same reason as the fetch step above — the
+        # four-part integrity check runs on every restored tree before the
+        # suite consumes it, so a poisoned tree fails loudly and never feeds
+        # the goldens (T-03-P1-02).
+        run: task corpora:assert
+
+      - name: Run golden parity suite (testdata/golden)
+        # The golden suite executes ONLY here (D-04): ci.yml no longer runs
+        # it, so this unconditional job is the single place the corpus-aware
+        # workflow proves the byte-frozen goldens. The Taskfile test:golden
+        # target carries -count=1, defeating the go test cache so every run
+        # actually executes the suite against the fetched corpora
+        # (T-03-P1-06).
+        run: task test:golden

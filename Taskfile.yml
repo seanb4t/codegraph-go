@@ -60,9 +60,12 @@ tasks:
     desc: >-
       Golden parity suite (testdata/golden) — NOT covered by go list ./...
       (GOLDEN-01: the go tool ignores any directory named "testdata" when
-      expanding ./...), so this is its own explicit target.
+      expanding ./...), so this is its own explicit target. Runs with
+      -count=1 (FIXT-03, constraint 3) so the go test cache can never return
+      a stale PASS: every CI invocation actually executes the suite against
+      the current corpus tree.
     cmds:
-      - go test ./testdata/golden/...
+      - go test -count=1 ./testdata/golden/...
 
   golden:regen:
     desc: >-
