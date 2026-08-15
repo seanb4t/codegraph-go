@@ -91,7 +91,7 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 - [x] **Phase 1: Corpus Selection by Measurement** - The project knows from recorded measurement, not assumption, which third-party repositories at which commits its golden suite exercises — and can fetch that tree reproducibly without vendoring it (completed 2026-08-14)
 - [x] **Phase 2: Golden Harness Re-authoring & Re-freeze** - The golden suite reads as codegraph-go's own regression suite: named for what it asserts, frozen from codegraph-go's own output, with the origin-driving capture path gone (completed 2026-08-14)
 - [x] **Phase 3: Non-Vacuity Proof & Unconditional CI Execution** - The re-baselined suite is trusted because it has been watched fail, and CI cannot silently stop running it (completed 2026-08-15)
-- [ ] **Phase 4: Attribution & Documentation Sweep** - A reader finds the origin acknowledged once, legally and in the past tense, and meets no comparison framing anywhere else in the project's documentation
+- [x] **Phase 4: Attribution & Documentation Sweep** - A reader finds the origin acknowledged once, legally and in the past tense, and meets no comparison framing anywhere else in the project's documentation (completed 2026-08-15)
 - [ ] **Phase 5: Process, CI & In-Tree Sweep** - A contributor filing an issue or opening a PR, and an agent reading the source, meet a project described on its own terms — with `tsextract` and `codegraph migrate` intact
 - [ ] **Phase 6: Benchmark De-coupling & Memory Sweep** - The project publishes its own absolute performance numbers with no second implementation in the picture, and a fresh session recalls it as a project rather than a port
 
@@ -217,12 +217,12 @@ Plans:
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
 
-- [ ] 04-01-PLAN.md — NOTICE attribution trim (tracer) + README Relationship removal / License clause / Performance + Status sweep; live license check + LICENSE byte-identity (ATTR-01, ATTR-02, ATTR-03)
-- [ ] 04-03-PLAN.md — CONTRIBUTING + capability matrix reword; verify-only sweep of SECURITY/CoC/PARSER-DECISION and remaining docs/* with KEEP reasons recorded (DOCS-01, DOCS-03, DOCS-04)
+- [x] 04-01-PLAN.md — NOTICE attribution trim (tracer) + README Relationship removal / License clause / Performance + Status sweep; live license check + LICENSE byte-identity (ATTR-01, ATTR-02, ATTR-03)
+- [x] 04-03-PLAN.md — CONTRIBUTING + capability matrix reword; verify-only sweep of SECURITY/CoC/PARSER-DECISION and remaining docs/* with KEEP reasons recorded (DOCS-01, DOCS-03, DOCS-04)
 
 **Wave 2** *(blocked on Wave 1 — the phase-final gate re-asserts the other plans' end-state)*
 
-- [ ] 04-02-PLAN.md — Delete docs/FLAG-PARITY.md + internal/cli/flag_parity_test.go and sweep all reference sites incl. the man.go:27 census correction (DOCS-02) + the executable phase-final gate (13/13 positive count, cycle-1 review finding 3)
+- [x] 04-02-PLAN.md — Delete docs/FLAG-PARITY.md + internal/cli/flag_parity_test.go and sweep all reference sites incl. the man.go:27 census correction (DOCS-02) + the executable phase-final gate (13/13 positive count, cycle-1 review finding 3)
 
 ### Phase 5: Process, CI & In-Tree Sweep
 
@@ -268,7 +268,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 1. Corpus Selection by Measurement | 7/7 | Complete    | 2026-08-14 |
 | 2. Golden Harness Re-authoring & Re-freeze | 4/4 | Complete    | 2026-08-14 |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
-| 4. Attribution & Documentation Sweep | 0/? | Not started | - |
+| 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
 | 5. Process, CI & In-Tree Sweep | 0/? | Not started | - |
 | 6. Benchmark De-coupling & Memory Sweep | 0/? | Not started | - |
 

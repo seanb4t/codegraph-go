@@ -9,16 +9,16 @@
 
 ### Attribution (ATTR)
 
-- [ ] **ATTR-01**: A reader finds the origin acknowledgment in exactly one place — `NOTICE`, trimmed to the MIT copyright transcription plus one sentence of origin, with the drop-in / ported-heuristics / flag-parity argument removed
-- [ ] **ATTR-02**: README's `## Relationship to the original` section is gone; the only origin mention in README is one past-tense clause inside `## License` linking to `NOTICE`
-- [ ] **ATTR-03**: `LICENSE` stays verbatim MIT text and GitHub's license detection still reports `MIT` — verified live via `gh api repos/seanb4t/codegraph-go/license`, not assumed
+- [x] **ATTR-01**: A reader finds the origin acknowledgment in exactly one place — `NOTICE`, trimmed to the MIT copyright transcription plus one sentence of origin, with the drop-in / ported-heuristics / flag-parity argument removed
+- [x] **ATTR-02**: README's `## Relationship to the original` section is gone; the only origin mention in README is one past-tense clause inside `## License` linking to `NOTICE`
+- [x] **ATTR-03**: `LICENSE` stays verbatim MIT text and GitHub's license detection still reports `MIT` — verified live via `gh api repos/seanb4t/codegraph-go/license`, not assumed
 
 ### Documentation (DOCS)
 
-- [ ] **DOCS-01**: A reader of `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` or `PARSER-DECISION.md` encounters no comparison framing — no *parity*, *upstream*, *drop-in*, or "the original" positioning
-- [ ] **DOCS-02**: `docs/FLAG-PARITY.md` is deleted and `internal/cli/flag_parity_test.go` is removed with it, with nothing left in the tree referencing either
-- [ ] **DOCS-03**: `docs/LANGUAGE-CAPABILITY-MATRIX.md` describes codegraph-go's own per-language capability on its own terms, without reference to another implementation's coverage
-- [ ] **DOCS-04**: The remaining `docs/*` files (`RELEASE.md`, `RELEASE-PROCEDURES.md`, `MCP-2026-07-28-SCOPING.md`, `MCP-8-AGENT-AUDIT.md`) carry no retired framing
+- [x] **DOCS-01**: A reader of `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md` or `PARSER-DECISION.md` encounters no comparison framing — no *parity*, *upstream*, *drop-in*, or "the original" positioning
+- [x] **DOCS-02**: `docs/FLAG-PARITY.md` is deleted and `internal/cli/flag_parity_test.go` is removed with it, with nothing left in the tree referencing either
+- [x] **DOCS-03**: `docs/LANGUAGE-CAPABILITY-MATRIX.md` describes codegraph-go's own per-language capability on its own terms, without reference to another implementation's coverage
+- [x] **DOCS-04**: The remaining `docs/*` files (`RELEASE.md`, `RELEASE-PROCEDURES.md`, `MCP-2026-07-28-SCOPING.md`, `MCP-8-AGENT-AUDIT.md`) carry no retired framing
 
 ### Process & CI (PROC)
 
@@ -84,13 +84,13 @@ Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ATTR-01 | Phase 4 | Pending |
-| ATTR-02 | Phase 4 | Pending |
-| ATTR-03 | Phase 4 | Pending |
-| DOCS-01 | Phase 4 | Pending |
-| DOCS-02 | Phase 4 | Pending |
-| DOCS-03 | Phase 4 | Pending |
-| DOCS-04 | Phase 4 | Pending |
+| ATTR-01 | Phase 4 | Complete |
+| ATTR-02 | Phase 4 | Complete |
+| ATTR-03 | Phase 4 | Complete |
+| DOCS-01 | Phase 4 | Complete |
+| DOCS-02 | Phase 4 | Complete |
+| DOCS-03 | Phase 4 | Complete |
+| DOCS-04 | Phase 4 | Complete |
 | PROC-01 | Phase 5 | Pending |
 | PROC-02 | Phase 5 | Pending |
 | PROC-03 | Phase 5 | Pending |
