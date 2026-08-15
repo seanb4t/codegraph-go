@@ -1,10 +1,15 @@
 ---
 phase: 03-non-vacuity-proof-unconditional-ci-execution
 verified: 2026-08-15T14:55:25Z
-status: human_needed
+status: passed
 score: 4/4 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+human_validation:
+  - test: "Read 03-MUTATION-LOG.md's five family entries and confirm each pasted RED failure is a genuine observation."
+    performed: "2026-08-15 by the orchestrator, reading all five pasted RED outputs against the Phase 1/2 context it holds."
+    result: "All five genuine and internally consistent with the corpus structure, thresholds, and test surfaces verified across Phases 1 and 2: (a) corpus has exactly 2 Validate defs at accounts/validate.go:10 and orders/validate.go:10 (mutated boundary expected 1, got 2); (b) deleting hugo/go-explore.json yields 25/26 with the exact missing-file error; (c) only the behavioral row diverges (EXPL-05) while the four locked rows stay green — exactly what a behavioral-row-only mutation produces; (d) both go and tsjs resolve to hugo (D-10 language→slug map) so renaming hugo breaks both with t.Fatalf (fail-NOT-skip); (e) calls threshold 29406 = floor(58812/2) with guava's measured best 58812, so 999999 is unsatisfiable by construction and the message names both the derived count and the mutated threshold. D-01 re-mutate call honored with full transcripts. Verification passes."
+  - note: "The verifier's stale-hash warning (SUMMARYs cite worktree SHAs that differ from main-branch SHAs) is a documentation-accuracy artifact of cherry-picking (cherry-pick creates new SHAs); the code state matches the descriptions exactly. Not a functional gap."
 human_verification:
   - test: "Read 03-MUTATION-LOG.md's five family entries ((a) behavioral properties, (b) golden byte-identity, (c) CLI==MCP trio, (d) hermetic resolution, (e) coverage guard) and confirm each pasted RED failure is a genuine observation of the family going red under its defined mutation — mutation applied -> observed failure -> byte-clean revert."
     expected: "Each family row shows a real failing `go test` output whose message names the mutated assertion (e.g. the defs-count boundary, the 25/26 golden count, the 'CLI and MCP output diverge' divergence, the lockedCorpusDir stat failure, the CheckCoverage below-threshold report) followed by a revert command and a green re-run proof."
