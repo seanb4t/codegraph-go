@@ -303,3 +303,54 @@ Actionable MEDIUM/LOW concerns that the latest PLAN.md files neither incorporate
 **Verdict: PLANS APPROVED FOR EXECUTION with the 5 actionable non-HIGH items above.** No HIGH concerns remain unresolved. Items 1-3 are recommended for incorporation via `/gsd-plan-phase 4 --reviews` before or during execution; items 4-5 are optional tightenings that do not block.
 
 CYCLE_SUMMARY: current_high=0 current_actionable=5
+
+---
+
+# Cross-AI Plan Review — Phase 4 (Cycle 2)
+
+---
+reviewers: [codex]
+reviewed_at: 2026-08-15T16:28:07Z
+plans_reviewed: [04-01-PLAN.md, 04-02-PLAN.md, 04-03-PLAN.md]
+cycle: 2
+---
+
+## Cycle 2 — Convergence Review
+
+Cycle 1 (commit `36748f0`) raised 0 HIGH and 5 actionable non-HIGH items. Plans were revised at `e471e72`. This cycle re-reviews the three PLAN.md files against the settled context and the revision's stated fixes: camelCase pattern broadening, a new phase-final gate task in 04-02 (wave 2), the wave restructure (04-02 moved to wave 2 with `depends_on: [04-01, 04-03]`), a "divergence" drop-list addition, a LICENSE byte-identity check, and a README single-ownership clarification.
+
+### Cycle-1 Finding Resolution
+
+| # | Cycle-1 finding (severity) | Status | Where incorporated |
+|---|---------------------------|--------|--------------------|
+| 1 | 04-03 claims to verify README but no task includes it (MEDIUM) | **RESOLVED** | `04-03-PLAN.md:23` — the truth now explicitly delegates README verification to 04-01 ("this plan does NOT claim to verify README and does NOT re-edit it"); the phase-final gate (04-02 task 3) re-asserts the README end-state. |
+| 2 | DOCS-02 sweep grep misses camelCase artifact names (MEDIUM) | **RESOLVED for the specifically-named references** | `04-02-PLAN.md:153,156,179` — `TestFlagParityDocCoversRegisteredFlags` and `flagParityDocPath` (via `flagParity`) are now in the executable patterns and are verified caught against the live tree. A NEW residual spelling surfaced this cycle — see New Finding 1 below. |
+| 3 | No plan-owned executable phase-final gate (MEDIUM) | **RESOLVED** | `04-02-PLAN.md:165-204` — task 3 is an executable verify task with a positive-count 13/13 assertion (rule `84d1gfpywd`), runs in wave 2 after 04-01/04-03. Count math verified: sweep(1) + NOTICE greps(4) + README greps(3) + CONTRIBUTING(1) + matrix(1) + LICENSE diff(1) + live license(1) + full suite(1) = 13. |
+| 4 | 04-01 Status rewrite may retain "known divergences" (LOW) | **RESOLVED** | `04-01-PLAN.md:124,129,134` and `04-02-PLAN.md:182` — "divergence" added to the README drop grep; the action mandates a fully own-terms alternative. |
+| 5 | ATTR-03 has no local LICENSE byte-identity check (LOW) | **RESOLVED** | `04-01-PLAN.md:24,94,102` and `04-02-PLAN.md:185,191` — `git diff --exit-code HEAD -- LICENSE` added to the task-1 verify and the gate, with the gh-api-vs-working-tree distinction stated explicitly. |
+
+### Wave Restructure & Phase-Final Gate Review
+
+The wave metadata is internally consistent with the execution machinery:
+
+- 04-01 (wave 1, `depends_on: []`), 04-03 (wave 1, `depends_on: []`), 04-02 (wave 2, `depends_on: [04-01, 04-03]`).
+- No `files_modified` overlap within wave 1 (NOTICE/README vs CONTRIBUTING/matrix), and 04-02's files (deletion + `.github/*` + `internal/mcp/*` + `man.go`) do not overlap either wave-1 plan.
+- The GSD execute-phase workflow executes waves sequentially (the wave-safety check blocks wave 2 while any lower wave is incomplete) and merges each wave's worktrees to main before the next wave forks — so 04-02's task 2 full-tree sweep and task 3 gate run against a tree that already contains the 04-01 NOTICE/README and 04-03 CONTRIBUTING/matrix end-states. The cross-plan read of those files by the gate is therefore sound.
+- The 13/13 positive-count gate is fail-closed: each of the 13 assertions increments a counter, the script prints "phase-final gate: N/13 assertions passed", and exits non-zero unless N == 13. A gate that checked nothing cannot report success.
+- Census accuracy spot-verified against the live tree: NOTICE warning block (:3-10), fidelity guard (:48-50), deps (:52-69), README migrate row (:137), Full TSX row (:151), License section (:218-220), CONTRIBUTING parity count (2, matching the :93 positive control), README parity count (1, at :189).
+
+### New Findings (introduced or surfaced by this revision)
+
+1. **MEDIUM — the broadened identifier family omits the hyphenated `flag-parity` spelling from all three executable greps.** `04-02-PLAN.md` must_haves truth (:30) enumerates the full family as `FLAG-PARITY | flag_parity | flag-parity | flagParityDocPath | TestFlagParityDocCoversRegisteredFlags`, and the task-2 action (:136, edit #6) explicitly targets the phrase "flag-parity test" at `internal/mcp/instructions_contract_test.go:375` ("internal/cli's flag-parity test could only verify by hand"). But the three executable patterns — task-2 action sweep (:150), task-2 verify (:153), and the phase-final gate full-tree sweep (:179/:191) — are all `FLAG-PARITY|flag_parity|flagParity|TestFlagParityDocCoversRegisteredFlags`; none include `flag-parity`. Verified against the live tree: the :375 line is NOT matched by that pattern set. A missed edit #6 would therefore pass both the task-2 verify and the phase-final gate — directly contradicting the plan's own authority contract ("the positive-controlled grep is the authority", :31) and its done-criterion ("no mention of either deleted artifact in ANY identifier spelling", :162). **Fix:** add `-e 'flag-parity'` to the three patterns (safe — the only surviving hyphenated hit is the :375 comment being removed).
+2. **LOW — README License clause: the verify/gate hard-code a phrase the action explicitly leaves discretionary.** `04-01-PLAN.md:119` says "(exact wording at your discretion, but it must be one clause, past tense, and name NOTICE)", yet the task-2 verify (:129) and the phase-final gate (`04-02-PLAN.md:182`) require `rg -c "began as a Go rewrite of CodeGraph" README.md == 1`. A valid discretionary alternative wording (as explicitly permitted) would false-red both. **Fix:** either mandate the exact clause or loosen the grep (e.g., `rg -c "Go rewrite of CodeGraph" README.md == 1`).
+3. **LOW — README Status "parity" drop is phrase-scoped, not term-scoped.** The task-2 action (:124) requires the Status rewrite to "drop 'parity'/…", and README's only current `parity` occurrence is the stale :189 claim being removed — so a term-scoped grep is safe. But the task-2 verify (:129) and the gate (:182) only check the exact phrase "Behavioral parity". A newly-worded Status that retains "parity" in another phrase would pass both. **Fix:** add `\bparity\b` to the README drop grep (mirrors the gate's already-term-scoped CONTRIBUTING grep at :183).
+
+### Convergence verdict
+
+**Cycle 2.** The revision resolves 4 of 5 cycle-1 actionable items in full and resolves cycle-1 finding 2 for the specifically-named camelCase references. The wave restructure and the new 13/13 phase-final gate are internally consistent with the GSD execution machinery (sequential waves, merge-before-fork), and the gate's assertion math checks out. No HIGH concerns remain unresolved; the two cycle-1 HIGHs remain adjudicated settled-context false positives (NOTICE license-block retention and the README multiplier table are locked decisions / Phase-6 scope), and no new HIGH surfaced.
+
+Three actionable non-HIGH items remain, all tightenings to executable grep patterns: the hyphenated `flag-parity` spelling is missing from all three DOCS-02 sweep patterns (MEDIUM — the only substantive one), the README License clause verify is over-specific relative to the action's granted discretion (LOW), and the README Status "parity" drop is phrase-scoped rather than term-scoped (LOW).
+
+**Verdict: PLANS APPROVED FOR EXECUTION with the 3 actionable non-HIGH items above.** Item 1 (add `flag-parity` to the three sweep patterns) is recommended for incorporation before execution; items 2-3 are optional tightenings that do not block.
+
+CYCLE_SUMMARY: current_high=0 current_actionable=3
