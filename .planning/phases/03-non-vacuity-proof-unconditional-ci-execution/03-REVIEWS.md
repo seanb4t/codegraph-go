@@ -195,3 +195,39 @@ The revised plans are faithful to the settled non-vacancy design (D-02 wire orac
 NOT to be flagged for a third HIGH. Cycle 1's single HIGH (corpus precondition) and all six actionable MEDIUM/LOW findings are resolved in plan content with source-verified mechanisms; the revision introduced no HIGH and no behavior-level contradiction. Three document-level actionables remain (frontmatter scope completeness, a dangling verification precondition without a target, and a filter element in T-03-P1-05): each is a one-line correction that does not alter the mechanism or block the CI design. The phase is CONVERGED; the three items above should be folded into the plan in-place before execution, or as a trivial amendment commit.
 
 CYCLE_SUMMARY: current_high=0 current_actionable=3
+
+---
+
+# Cross-AI Plan Review — Phase 3 · Convergence Cycle 3 (FINAL)
+
+*Cycle 3 · v0.11.0 — Non-Vacuity Proof & Unconditional CI Execution*
+
+**Review prompt (cycle 3):** Plans stand at `98aa726`. Prior trajectory 7 → 3. Verify (1) cycle-2's three document-level findings are resolved in PLAN.md content, not merely acknowledged; (2) whether the revision introduced any NEW defect; (3) any remaining actionable invisible to /gsd-execute-phase. Reviewer: `codex` adapter (internal, source-grounded against `testdata/golden/*.go`, `internal/graphstore`, `internal/parser`, `internal/schema`, `.github/workflows/*.yml`, `corpora/*.json`).
+
+## Cycle-2 finding resolution (source-grounded)
+
+1. **NEW-A (frontmatter `files_modified` scope) — RESOLVED.** 03-01 frontmatter now lists `testdata/golden/behavioral_test.go` as the second entry, matching the artifact table's "exact executed-verified guard + executedCases assert — executedCases == 4" row which names `behavioral_test.go` as a live edit location. The frontmatter no longer contradicts the plan's own body.
+
+2. **NEW-B (dangling verification precondition) — RESOLVED.** 03-01's final `<verification>` line now carries the target it points at: "`task test:golden` run locally against the fetched corpora — green; **BEFORE this run** the executor executes the corpus precondition `task corpora:fetch` then `task corpora:assert` once (mirroring the 03-02 rehearsal precondition)". A clean machine's execution of the same target is no longer misattributable to a missing corpus — the fetch is now a stated gate of the same block that mandates the run.
+
+3. **LOW-C (T-03-P1-05 wording) — RESOLVED as listed, but see NEW defect below.** The threat-model row now names the full widened set (`+ internal/store/**, go.mod, go.sum`, plus the maintenance-rule comment). The row matches the action, acceptance, artifact, and success-criteria surfaces. **However**, the list it now matches contains a path that does not exist in the repo — see NEW-2.
+
+## New defect introduced / remaining actionable (source-verified)
+
+**NEW-2 (MEDIUM) — the widened path filter names a phantom package `internal/store/**`; the true transitive closure covers `internal/graphstore/**`, `internal/parser/**`, `internal/schema/**`, which the filter omits.** Source check: `internal/store` does not exist — `ls internal/` shows `graphstore, parser, schema, ...` and no `store`; no `.go` file imports `codegraph-go/internal/store`; a `find` for a `store` dir returns only index-format nested dirs, and no rename history (`git log --all -S 'internal/store'` is empty). The plan's own claim that the filter "covers every golden-suite input" is contradicted by the real import closure: `internal/query/engine.go:10` and `internal/query/gather.go:21-23` import `internal/graphstore` + `internal/schema`; `internal/indexer/{pipeline,languages_*}.go` import `internal/graphstore` (`pipeline.go:7`) and `internal/parser` (`languages_go.go:5-6`, `languages_csharp.go:12-13`). Those are exactly the layers whose changes can alter index/query output that the byte-frozen goldens and CLI==MCP parity depend on. The plan's acceptance criterion and artifact row mandate the filter literally contain `internal/store/**`, and T-03-P1-05 repeats it — the executor would add an inert, never-matching entry while the real storage/parser/schema surfaces stay untriggered. **Required plan change:** in 03-01 task-2 action, acceptance criterion, artifact table, T-03-P1-05, and success criteria, replace `internal/store/**` with `internal/graphstore/**` and add `internal/parser/**` and `internal/schema/**` (the actual transitive closure of suite inputs), or explicitly defer those three surfaces with a recorded rationale in the maintenance rule.
+
+### Not actions this cycle
+
+- The `calls: 29405` in 03-02 final verification `read_first` vs `29406` in live `corpora/selection.json` — mutation raises to 999999, load-bearing value unaffected (settled cycle 2).
+- Family-(d) EXIT-trap ordering (trap after `mv` in prose) — a single-shell script written from the guidance registers the trap first; marginal window (settled cycle 2).
+- `internal/indexer/**` is already in the pre-established filter — not part of the phantom question; graphstore/parser/schema are the surfaces the plan omits.
+
+## Consensus with prior cycles
+
+The three document-level cycle-2 items are genuinely closed. The scope contract now matches the artifact table; the dangling verification pointer has its fetch gate; the threat row names the set the executor will build. No settled decision (D-01, D-02, D-04, S3, `-count=1`, claim-lock, mutation log) is regressed. One NEW MEDIUM-grade defect is verified at source level and is small to fix in-plan: the transitive-closure filter list must point at packages that exist (`internal/graphstore/**`, `internal/parser/**`, `internal/schema/**`) instead of a phantom `internal/store/**`.
+
+## Convergence verdict
+
+**CONVERGED for execution — one MEDIUM document-level correction to fold in place before the executor touches the filter.** The plans at `98aa726` satisfy FIXT-03/FIXT-07's non-vacuity and unconditional-CI objective; cycle-2's three document-level findings are resolved in content; the new defect is a wrong filter entry that an executor transcribes literally, not a design wrong turn — it does not change the CI mechanism, threat posture, or count semantics. Executor instruction: in 03-01 task-2, write `internal/graphstore/**, internal/parser/**, internal/schema/**` (and the maintenance-rule note) rather than the phantom `internal/store/**`. Record the correction in the plan before, or as a trivial amendment to, execute-phase.
+
+CYCLE_SUMMARY: current_high=0 current_actionable=1
