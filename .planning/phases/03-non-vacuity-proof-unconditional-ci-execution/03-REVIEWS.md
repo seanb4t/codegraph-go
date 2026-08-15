@@ -135,3 +135,63 @@ Clear five-family mutation matrix; the re-mutation call removes ambiguity in ear
 **Deferred/closed this cycle:** Taskfile `test:golden` desc "Golden parity suite" is Phase 5-owned vocabulary (no Phase 3 change); the store `-count=1` mechanism, the D-04 removal, the exact-count derivation, the unconditional-cache-miss posture, and re-mutation of (d)/(e) are all settled.
 
 CYCLE_SUMMARY: current_high=1 current_actionable=6
+
+---
+
+# Cross-AI Plan Review — Phase 3 · Convergence Cycle 2
+
+*Cycle 2 · v0.11.0 — Non-Vacuity Proof & Unconditional CI Execution*
+
+**Review prompt (cycle 2):** Plans were revised at `0a15b9d` to incorporate cycle-1's 1 HIGH + 6 actionable. Verify each finding is resolved in PLAN.md content (not merely acknowledged), check the six fixes for knock-on contradictions, and surface any actionable still invisible to /gsd-execute-phase. Reviewer: `codex` adapter (internal review, source-grounded against `testdata/golden/*.go`, `Taskfile.yml`, `.github/workflows/*.yml`, `corpora/*.json`, `internal/corpora/*`, `internal/upgrade/*`, `test/wireoracle/*`).
+
+## Cycle-1 finding resolution (verified against source, not just reading the diff)
+
+### HIGH — 03-02 corpus precondition: RESOLVED
+
+FIXT-07 rehearsals had `user_setup: []` and no fetch, so a clean machine would fail on `lockedCorpusDir`'s `os.Stat` missing-tree `t.Fatalf` ([behavioral_test.go:101-104](.../behavioral_test.go:101-104)) instead of on the mutation. The revision adds an explicit PRE-CONDITION to every 03-02 task action: `task corpora:fetch` then `task corpora:assert` before any rehearsal, record the resolved `CODEGRAPH_CORPUS_DIR` in the log header, and STOP if either fails; family (c) is scoped to the behavioral row only (the `sourceFunc` table rows have a `corpus` field with first row `"behavioral"`, [behavioral_test.go:1248-1258](...)), and T-03-P2-05 records the threat. The re-run targets are feasible — `TestCorpusBehaviorSynthetic` builds only the in-repo synthetic engine ([behavioral_test.go:858](...)); `TestExploreCLIMatchesMCP` needs all four locked trees, now fetched. Acceptance criteria and `done` statements pick up the precondition. FIXT-07 rehearsal no longer fails for the wrong reason.
+
+### MEDIUM 1 — count keyed to execution (03-01): RESOLVED
+
+The fix is real, not token. `verified` was already accumulated inside each `t.Run` closure ([golden_test.go:296](...)); the plan upgrades the guard from `verified < expectedTotal` to exact `verified != expectedTotal` ([golden_test.go:305-307](...)) and adds an `executedCases` accumulator inside `TestCorpusBehaviorSynthetic`'s case-loop closure (sequential, non-parallel subtests, [behavioral_test.go:860-976](...)). Loop-annihilation therefore drives both counters to zero and fails exact equality; RED direction 3 (early-return before `executedCases++`) explicitly proves the executed leg independently of inventory, and T-03-P1-08 covers it. `TestReFrozenGoldensValid`'s stronger `!=` can never false-fail (verified cannot exceed expectedTotal by construction). The `TestGoldenScenarioCountIsExact` derivation (26 from `expectedGoCaptures`, verified 2+6+6+6+6=26; 4 from `len(loadBehavioralCases())`, verified 4 cases `a..d`) mirrors the wire-oracle ([oracle_test.go:161-166](...)).
+
+### MEDIUM 2 — path filter transitive closure: RESOLVED
+
+The fix goes beyond the review's bare ask: `internal/store/**`, `go.mod`, `go.sum` are added to BOTH path-filter blocks, and a maintenance-rule comment naming the required surfaces is mandatory (acceptance criterion line 147, artifact table, success criteria). Note the plan also adds `corpus/**` — the `corpus/behavioral/CASES.json` path the suite reads, distinct from the pre-existing `corpora/**`. The filter newly covers every golden-pipeline input.
+
+### MEDIUM 3 — parallel-volume no-`needs:`: RESOLVED
+
+The decision is now documented beside the job with grounding that exists in the code: `corpora:fetch-one` has a per-destination `${dest}.lock` claim and a staged-promote (`CORPUS_DIR_OVERRIDE="$stage"` then promote only after assert-one passes) ([Taskfile.yml:3458-3514](...)), so concurrent fetchers of the same destination are serialized. The plan records a real verification instrument (first parallel dispatch) and a `needs: [corpora]` fallback. T-03-P1-07 records the threat.
+
+### MEDIUM 4 — pre-mutation cleanliness gate: RESOLVED
+
+`git diff --quiet -- <file>` gates before every tracked-file mutation/revert across 03-02 tasks 1 (behavioral_test.go), 2 (golden file), and 3 (corpora/selection.json), with STOP-not-overwrite semantics and T-03-P2-06. This closes the "git checkout destroys an unknown prior edit" hole.
+
+### MEDIUM 5 — corpus `mv` restore failure-proofing: RESOLVED
+
+Family (d) runs rename → run → restore inside one shell invocation guarded by an EXIT trap restoring the exact `hugo@<sha>` path; acceptance verifies the directory is back by `ls` and a green re-run; T-03-P2-07. The trap is described after the `mv` in the prose — if executed exactly in that order, an abort between `mv` and trap registration is unguarded — but any single-shell script written from this guidance would register the trap first; the window is marginal, not a load-bearing gap.
+
+### LOW 6 — wording precision: RESOLVED
+
+03-01 truth now states the pre-Phase-3 guard was `verified < expectedTotal` and the exact `==`/`!=` shape belongs to the NEW test AND the upgraded guard; 03-02 family (a) is "INTENTIONALLY WRONG expected defs count", not "weakened"; family (c) is explicitly a shared-comparison-loop demonstration, not per-sibling. Taskfile `test:golden` desc remains Phase-5-owned and is noted in the plan's "Deferred this cycle".
+
+**All six prior findings and the prior HIGH are resolved in PLAN.md content, not merely acknowledged.**
+
+## New defects / knock-ons introduced by the revision
+
+**NEW-A (MEDIUM) — 03-01 frontmatter `files_modified` omits `testdata/golden/behavioral_test.go`.** The revision made `TestCorpusBehaviorSynthetic` a permanent modified file (03-01 task 1 adds `executedCases` + exact assertion there, and the artifact table lists the upgrade in `behavioral_test.go`), but the plan's `files_modified` frontmatter still lists only `golden_test.go` (no behavioral). This is a load-bearing scope contract for the executor's atomic-commit/deviant-detection; the plan contradicts its own artifact table. Add the file to the frontmatter.
+
+**NEW-B (LOW) — 03-01 final verification still carries the flagged precondition pointer.** Verification block states "task test:golden run locally against the fetched corpora — green (needs local corpora; see precondition)" — but 03-01 defines no corpus precondition (its `user_setup: []`), and it is the wave-1 plan, so no prior plan's fetch applies. A clean machine's execution of the same target fails on locked-corpus `t.Fatalf` — the exact misattribution class fixed for 03-02, left dangling at 03-01's gate. Either add the fetch+assert precondition to 03-01 (mirror 03-02) or drop/replace the local run line since the CI job is the real gate.
+
+**LOW-C (LOW) — threat-model row T-03-P1-05 lists the pre-widening filter.** The mitigation text cites only the original entries (`testdata/golden/**`, `corpus/**`, `internal/query/**`, `internal/cli/**`, `internal/mcp/**`, `cmd/**`) though the plan's action, acceptance, artifact, and success-criteria all mandate the transitive closure (`+ internal/store/**, go.mod, go.sum`). Update the row so the threat register matches the version the executor will build.
+
+**Not actions:** hardcoded `calls: 29405` in 03-02 read_first vs `29406` in a live `corpora/selection.json` — mutation raises to 999999, load-bearing value unaffected; family (d) trap-order nuance above.
+
+## Consensus with cycle 1
+
+The revised plans are faithful to the settled non-vacancy design (D-02 wire oracle, D-04 removal, unconditional fetch-first golden job, -count=1, re-mutated (d)/(e)) and the cycle-1 review. Nothing in the revision regresses an earlier settled decision; the six fixes are internal-consistent with the exception of the two document-level inconsistencies (NEW-A, LOW-C).
+
+## Convergence verdict
+
+NOT to be flagged for a third HIGH. Cycle 1's single HIGH (corpus precondition) and all six actionable MEDIUM/LOW findings are resolved in plan content with source-verified mechanisms; the revision introduced no HIGH and no behavior-level contradiction. Three document-level actionables remain (frontmatter scope completeness, a dangling verification precondition without a target, and a filter element in T-03-P1-05): each is a one-line correction that does not alter the mechanism or block the CI design. The phase is CONVERGED; the three items above should be folded into the plan in-place before execution, or as a trivial amendment commit.
+
+CYCLE_SUMMARY: current_high=0 current_actionable=3
