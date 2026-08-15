@@ -186,7 +186,16 @@ Plans:
 
 **Notes**: The scenario-count assertion is the positive half FIXT-03 requires; a non-failing exit is not evidence the suite ran. This repo already carries two negative-only guards that pass vacuously (rule `84d1gfpywd`; the `dry-run-signed` additions-only diff guard), and the wire-oracle's `ExpectedScenarioCount` is the working precedent for the shape that does not.
 
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Tracer: executed-scenario-count self-assertion (26 goldens + 4 CASES cases = 30, exact equality) + unconditional `golden` job in corpora.yml with widened path filter, inScopeJobs entry, -count=1, and the ci.yml D-04 removal (FIXT-03)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — FIXT-07 mutation rehearsals: all five assertion families demonstrated RED (mutation applied → observed failure → byte-clean revert) and recorded in 03-MUTATION-LOG.md (FIXT-07)
 
 ### Phase 4: Attribution & Documentation Sweep
 
