@@ -66,7 +66,7 @@ coverage:
     rationale: "The deliverable is the recorded RED evidence in 03-MUTATION-LOG.md. Automation re-runs the suite green (proving reversibility) but cannot re-derive that each family was OBSERVED red — a human must read the pasted failing output per family."
 
 # Metrics
-duration: 65min
+duration: 10min
 completed: 2026-08-15
 status: complete
 ---
@@ -77,9 +77,9 @@ status: complete
 
 ## Performance
 
-- **Duration:** ~65 min
+- **Duration:** ~10 min
 - **Started:** 2026-08-15T14:39:53Z
-- **Completed:** 2026-08-15T15:05:00Z
+- **Completed:** 2026-08-15T14:48:01Z
 - **Tasks:** 3
 - **Files modified:** 1 (03-MUTATION-LOG.md) + 1 created (this SUMMARY)
 
