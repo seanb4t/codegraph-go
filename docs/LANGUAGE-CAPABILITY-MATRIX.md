@@ -10,7 +10,7 @@ this table and the Go descriptor ever drift, `go test ./internal/indexer/capabil
 fails — this document cannot silently overclaim.
 
 **Coverage legend:** `full` = validated end-to-end (priority-4 via a
-corresponding golden-parity test in `testdata/golden/`, mainstream-tier via
+corresponding behavioral test in `testdata/golden/`, mainstream-tier via
 that axis's own dedicated test coverage); `partial` = works within an
 explicitly bounded, named scope (see that language's gaps below); `none` =
 does not apply or is not implemented (always paired with a named gap
@@ -56,8 +56,8 @@ ASP.NET (C#), Django/Flask/FastAPI (Python), Express/NestJS
 
 ### `go`
 
-No named gaps — Go is the reference implementation, validated end-to-end
-since Phase 2/3 against the pinned `weft` golden-parity corpus
+No named gaps — Go is fully covered, validated end-to-end against the
+pinned golden corpora
 (`testdata/golden/behavioral_test.go#TestCorpusBehavior_Go`).
 
 ### `java`
@@ -189,7 +189,7 @@ These apply across multiple languages and are not repeated per-row above:
   becomes a committed `"imports"` edge — regardless of language. This is
   orthogonal to `calls`/`embeds` resolution, which every extractor's own
   `Imports` map handles independently (and which the corresponding
-  golden-parity/self-consistency tests do prove resolves). First
+  behavioral/self-consistency tests do prove resolves). First
   documented in 05-05-SUMMARY.md (C#) and re-confirmed identically by
   05-07-SUMMARY.md (TS/JS); not fixed in Phase 5 — pre-existing, outside
   every individual language plan's own file scope (`resolve.go` is a
