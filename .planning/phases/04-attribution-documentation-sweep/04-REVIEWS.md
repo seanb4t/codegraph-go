@@ -354,3 +354,41 @@ Three actionable non-HIGH items remain, all tightenings to executable grep patte
 **Verdict: PLANS APPROVED FOR EXECUTION with the 3 actionable non-HIGH items above.** Item 1 (add `flag-parity` to the three sweep patterns) is recommended for incorporation before execution; items 2-3 are optional tightenings that do not block.
 
 CYCLE_SUMMARY: current_high=0 current_actionable=3
+
+---
+
+# Cross-AI Plan Review — Phase 4 (Cycle 3)
+
+---
+reviewers: [codex]
+reviewed_at: 2026-08-15T17:02:39Z
+plans_reviewed: [04-01-PLAN.md, 04-02-PLAN.md, 04-03-PLAN.md]
+cycle: 3
+---
+
+## Cycle 3 — Final Convergence Review
+
+Cycle 2 (commit `5524e9f`) raised 0 HIGH and 3 actionable non-HIGH items, all tightenings to executable grep patterns. Plans were revised at `1b584df`. This final cycle re-verifies that the 3 fixes landed correctly, that the exact-text License mandate agrees verbatim with its own grep (and with D-02), and that the fixes introduced nothing new. The phase proceeds to execution after this review.
+
+### Cycle-2 Finding Resolution
+
+| # | Cycle-2 finding (severity) | Status | Verification |
+|---|---------------------------|--------|--------------|
+| 1 | Hyphenated `flag-parity` missing from all three executable sweep patterns (MEDIUM) | **RESOLVED** | `04-02-PLAN.md:149,150,153,156,179,191,260` — every executable family pattern now includes `-e 'flag-parity'`. Verified the surviving `internal/mcp/instructions_contract_test.go:375` comment ("internal/cli's flag-parity test could only verify by hand") is the only in-tree hyphenated occurrence and is exactly edit #6's target (`:143`); the full-tree sweep's recorded `.planning/**` exclusion means the plans' own prose mentions cannot false-red. A missed edit #6 would now fail both the task-2 verify and the phase-final gate. |
+| 2 | README License clause verify/gate hard-code a phrase the action left discretionary (LOW) | **RESOLVED** | `04-01-PLAN.md:119` now mandates the EXACT clause, discretion removed. Red-wall check passed: the mandated text "This project began as a Go rewrite of CodeGraph; see [NOTICE](NOTICE)…" contains the grep `began as a Go rewrite of CodeGraph` verbatim, and D-02 (`04-CONTEXT.md:24`) records the same clause. Mandate, grep, and decision agree verbatim — no disagreement between the exact-text mandate and its own grep. |
+| 3 | README Status "parity" drop is phrase-scoped, not term-scoped (LOW) | **RESOLVED** | `04-01-PLAN.md:129,134` and `04-02-PLAN.md:182,191` — the README drop grep is now term-scoped `\bparity\b`. Verified safe against the live tree: README's only word-boundary `parity` is the stale `:189` "Behavioral parity …" claim the Status rewrite removes; no other `\bparity\b` match exists in README. |
+
+### Regression check — did the fixes introduce anything new?
+
+- **Gate integrity preserved.** The 13/13 positive-count gate (rule `84d1gfpywd`) still totals 13: sweep(1) + NOTICE(4) + README(3) + CONTRIBUTING(1) + matrix(1) + LICENSE diff(1) + live license(1) + full suite(1). The verify script at `04-02-PLAN.md:191` contains exactly 13 counter increments. The `flag-parity` broadening adds terms to the same single sweep assertion, not new assertions.
+- **Cross-file grep collisions:** the README License-clause grep (`began as a Go rewrite of CodeGraph`, scoped to `README.md`) and the NOTICE origin grep (`began as a ground-up Go rewrite`, scoped to `NOTICE`) are distinct phrases on distinct files; no overlap. Both mandates match their greps verbatim — the NOTICE origin sentence mandate in 04-01 task 1 equals D-01's recorded sentence (`04-CONTEXT.md:22`), so the same red-wall standard holds for NOTICE too.
+- **No residual old patterns:** no executable family pattern remains that lacks `flag-parity`; the only remaining "Behavioral parity" strings in the plans are quotations of the stale README text being removed (`04-01-PLAN.md:25,:124`), not requirements.
+- **Wave structure unchanged** by `1b584df` (grep/mandate text only): 04-01/04-03 wave 1 (`depends_on: []`), 04-02 wave 2 (`depends_on: [04-01, 04-03]`), so the phase-final gate still runs after the cross-plan end-states land.
+
+### Convergence verdict
+
+**Cycle 3 (final).** All three cycle-2 actionable items are verified resolved in the on-disk plans at `1b584df`: the hyphenated `flag-parity` spelling is in every executable sweep pattern; the README License clause is now an exact mandate that agrees verbatim with its own grep and with D-02 (no red wall — and the NOTICE origin sentence mandate passes the same verbatim check); the Status "parity" drop is term-scoped `\bparity\b`, verified safe against the live tree. The fixes introduced no new issues — the 13/13 gate count, wave ordering, and cross-plan grep scoping are all intact. Both prior-Codex-HIGH adjudications remain settled-context false positives (NOTICE license-block retention and the README multiplier table are locked decisions / Phase-6 scope) and are not re-counted.
+
+**Verdict: PLANS APPROVED FOR EXECUTION.** No HIGH concerns remain unresolved; no actionable MEDIUM/LOW concerns remain — all three cycle-2 items are incorporated. Convergence complete; the phase proceeds to execution.
+
+CYCLE_SUMMARY: current_high=0 current_actionable=0
