@@ -5,8 +5,8 @@ milestone_name: Standalone Project Identity
 current_phase: 5
 current_phase_name: Process, CI & In-Tree Sweep
 status: planning
-stopped_at: Phase 4 context gathered
-last_updated: "2026-08-15T18:42:08.782Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-08-15T19:11:06.921Z"
 last_activity: 2026-08-15
 last_activity_desc: Phase 3 execution started
 progress:
@@ -228,8 +228,8 @@ against a 10% budget. Relevant to BENCH-02.
 
 ## Session Continuity
 
-Last session: 2026-08-15T15:52:40.225Z
-Stopped at: Phase 4 context gathered
+Last session: 2026-08-15T19:11:06.908Z
+Stopped at: Phase 5 context gathered
   NEXT: `/gsd-plan-phase 1` (Corpus Selection by Measurement — blocking spike)
   CARRY-OVER:
 
@@ -239,7 +239,7 @@ Stopped at: Phase 4 context gathered
     - **No `v0.11.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
     - **`.planning/` and `CHANGELOG.md` are out of scope for the sweep** — the first would falsify project history and break GSD's scope-sensitive parsers, the second is release-please-owned.
 
-Resume file: .planning/phases/04-attribution-documentation-sweep/04-CONTEXT.md
+Resume file: .planning/phases/05-process-ci-in-tree-sweep/05-CONTEXT.md
 
 ## Operator Next Steps
 
