@@ -279,16 +279,16 @@ Plans:
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
 
-- [ ] 06-01-PLAN.md — Tracer: absolute-only single-subject measurement path end-to-end — drop the milestone-entangled corpus entry, replace the two-subject mode with `publish`, delete the comparison-binary flag and its PATH-lookup helper with their paired test edits, delete the six committed captures, re-author realcorpus/runner prose (BENCH-02)
-- [ ] 06-03-PLAN.md — `internal/bench` + `internal/corpora` comment-only framing sweep, then the FIXT-07 mutation rehearsal proving `CheckRegression` still fires RED on both the throughput and peak-RSS tolerances, byte-cleanly reverted and recorded in `06-MUTATION-LOG.md` (BENCH-02)
+- [ ] 06-01-PLAN.md — Tracer: absolute-only single-subject measurement path end-to-end — drop the milestone-entangled corpus entry, replace the two-subject mode with `publish`, delete the comparison-binary flag and its PATH-lookup helper with their paired test edits, delete the six committed captures, re-author realcorpus/runner prose, and author `tools/bench/publishcheck` as the pure-Go publish-JSON verifier (BENCH-02)
+- [ ] 06-03-PLAN.md — `internal/bench` + `internal/corpora` comment-only framing sweep, a new test driving `CheckRegression` with the COMMITTED `baseline.json`, then the FIXT-07 mutation rehearsal proving both oracles fire RED on the throughput and peak-RSS tolerances, byte-cleanly reverted and recorded in `06-MUTATION-LOG.md` (BENCH-02)
 
 **Wave 2** *(blocked on 06-01 — the workflow references the runner mode it creates)*
 
-- [ ] 06-02-PLAN.md — `bench.yml`: delete the comparison-invoking job, author the fresh absolute-numbers `publish` job carrying all four D-06 properties, move the dispatch choice and conditional with it; sweep `BASELINE.md` framing and the workflow-exception comment (BENCH-03)
+- [ ] 06-02-PLAN.md — `bench.yml`: author a publish-job-scoped structural verifier for all four D-06 properties, delete the comparison-invoking job, author the fresh absolute-numbers `publish` job, move the dispatch choice and conditional with it; sweep `BASELINE.md` framing and the workflow-exception comment (BENCH-03)
 
 **Wave 3** *(blocked on Waves 1–2 — the document publishes what the path measured)*
 
-- [ ] 06-04-PLAN.md — Measurement of record (`06-PUBLISH-RESULTS.json`), `docs/BENCHMARKS.md` rewritten from scratch with methodology, provenance and the regression-gate description, then the positive-controlled phase acceptance census (`06-CENSUS.md`) (BENCH-01, BENCH-02, BENCH-03)
+- [ ] 06-04-PLAN.md — Measurement of record (`06-PUBLISH-RESULTS.json`), `docs/BENCHMARKS.md` rewritten from scratch with methodology, mechanically generated data rows, provenance and the regression-gate description, a blocking decision gate resolving BENCH-03 into a recorded status, then the positive-controlled phase acceptance census (`06-CENSUS.md`) (BENCH-01, BENCH-02, BENCH-03)
 
 **Wave 4** *(the sweep describes the end state, so it rides after the code and docs land)*
 
