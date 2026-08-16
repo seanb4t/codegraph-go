@@ -1,6 +1,6 @@
 package accounts
 
-// UserAccountManager is case (b) of the synthetic-parity corpus: a
+// UserAccountManager is case (b) of the behavioral corpus: a
 // multi-word query like "explore user account" must tokenize this
 // CamelCase type name into User/Account/Manager (RESEARCH.md §1-2's two
 // tokenizers) and match it, once EXPL-01's multi-word `<query...>` lands.
