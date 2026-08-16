@@ -321,14 +321,12 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 		return bench.Metrics{}, fmt.Errorf("count corpus size: %w", err)
 	}
 
-	// Unmeasured warmup: both CLIs' `init` creates .codegraph/ and
-	// does an initial build. The Go CLI's `index --force` refuses to
-	// run without .codegraph/ already existing (ErrNotInitialized);
-	// running init first keeps both subjects on the same setup step
-	// before the measured, genuinely-from-scratch `index --force`
-	// rebuild below.
-	// Note: --quiet is intentionally NOT passed here — the TS CLI's
-	// `init` (unlike its `index`) has no --quiet flag, and runOnce
+	// Unmeasured warmup: `init` creates .codegraph/ and does an
+	// initial build. `index --force` refuses to run without
+	// .codegraph/ already existing (ErrNotInitialized); running init
+	// first sets up the measured, genuinely-from-scratch `index
+	// --force` rebuild below.
+	// Note: --quiet is intentionally NOT passed here — runOnce
 	// already discards the child's stdout/stderr (nil Cmd.Stdout/
 	// Stderr -> /dev/null), so suppressing output is unnecessary here.
 	if _, err := runOnce(binary, []string{"init", workDir}, workDir); err != nil {
@@ -904,10 +902,10 @@ var skipDirs = map[string]bool{
 // IsDir()==false from WalkDir's Lstat-based fs.DirEntry, which would
 // otherwise make copyFile try — and fail — to open it as a regular
 // file; skipping is simpler and safer than resolving link targets that
-// may point outside src). Used to give each (entry, subject) pair its
-// own isolated work directory so the Go binary's Pebble store and the
-// TS binary's SQLite store never collide, and so neither writes into a
-// resolved sibling-checkout source directory the operator owns.
+// may point outside src). Used to give each measured invocation its own
+// isolated work directory so the measured binary's own Pebble store
+// never lands in a resolved sibling-checkout source directory the
+// operator owns, and never collides with a prior run's state.
 func copyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

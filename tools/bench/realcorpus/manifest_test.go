@@ -6,11 +6,11 @@ import (
 )
 
 // TestCorporaProvenanceComplete asserts every manifest entry carries the
-// full provenance record the PERF-01 head-to-head benchmark's
-// reproducibility depends on (package doc; plan acceptance criterion:
-// "every manifest entry has a non-empty CommitSHA, License, and
-// SelectionRule field"). Tag is deliberately excluded — it may be empty
-// for a pin taken at a non-tagged commit.
+// full provenance record `publish`-mode's reproducibility depends on
+// (package doc; plan acceptance criterion: "every manifest entry has a
+// non-empty CommitSHA, License, and SelectionRule field"). Tag is
+// deliberately excluded — it may be empty for a pin taken at a
+// non-tagged commit.
 func TestCorporaProvenanceComplete(t *testing.T) {
 	corpora := Corpora()
 	if len(corpora) == 0 {

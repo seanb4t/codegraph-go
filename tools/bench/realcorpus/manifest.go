@@ -36,7 +36,7 @@ import (
 
 // Entry is one pinned real-repo benchmark input. Every field below (aside
 // from Tag, which may legitimately be empty for a pin taken at a
-// non-tagged commit) is required so a head-to-head number is always
+// non-tagged commit) is required so a published measurement is always
 // traceable back to an exact source, license, and file set — the same
 // discipline tools/spike/testdata/ATTRIBUTION.md established.
 type Entry struct {
