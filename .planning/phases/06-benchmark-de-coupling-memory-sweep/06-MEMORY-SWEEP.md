@@ -192,12 +192,12 @@ changed."
 
 ### Verdicts — SUPERSEDE (4 candidates, pending maintainer approval)
 
-| short_id | Date | The currently-false standing claim | Why it must not stand |
-|---|---|---|---|
-| `3ekc84hbqt` | 2026-08-09 | Maintainer ruling "parity is a functionality baseline, not a binding constraint", closing with **"The functionality floor and the migration path still bind."** | Both halves are now false. v0.11.0 retired the Compatibility constraint outright (`gw79qy2a9z`), and Phase 5 deleted the migration path entirely (`4j8kjck5gd`). The record is written as live guidance for future work ("Do NOT cite CLAUDE.md's parity line as a blocker without weighing this ruling") so a future session would act on it. |
-| `gw79qy2a9z` | 2026-08-13 | v0.11.0 scoping record asserting `codegraph-migrate-capability-PRESERVED-reframed` and `migrate-one-way-sqlite-read-still-binds` | Reversed two days later by maintainer ruling D-04 (`4j8kjck5gd`), which dropped migrate entirely as the milestone's single deliberate exception. The rest of this record's scoping content is still accurate. |
-| `agggksad53` | 2026-07-15 | v1.0 Phase-2 ruling: **"FilesByLanguage MUST be `json:\"-\"` (TS discards counts; emitting the key = NEW divergence)"** | Reversed by v0.11.0 Phase 1 D-03, which un-suppresses it — justified explicitly by the Compatibility constraint being retired. The claim's whole warrant was parity with the other implementation, and that warrant is gone. **Composite record**: the other ~95% (four inference-vs-source lessons, the CR-02 silent-skip hazard, the `rg -r`/`rg -h` gotchas) remains true and valuable. |
-| `7f0pq2wepv` | 2026-07-15 | Same reversed suppression ruling, reached via the same parity reasoning (D-05/STAT-02) | Same as above. Also composite — its 4-gate worktree cascade correction and D-14 plumbing notes remain load-bearing. |
+| short_id | verdict | Date | The currently-false standing claim | Why it must not stand |
+|---|---|---|---|---|
+| `3ekc84hbqt` | supersede | 2026-08-09 | Maintainer ruling "parity is a functionality baseline, not a binding constraint", closing with **"The functionality floor and the migration path still bind."** | Both halves are now false. v0.11.0 retired the Compatibility constraint outright (`gw79qy2a9z`), and Phase 5 deleted the migration path entirely (`4j8kjck5gd`). The record is written as live guidance for future work ("Do NOT cite CLAUDE.md's parity line as a blocker without weighing this ruling") so a future session would act on it. |
+| `gw79qy2a9z` | supersede | 2026-08-13 | v0.11.0 scoping record asserting `codegraph-migrate-capability-PRESERVED-reframed` and `migrate-one-way-sqlite-read-still-binds` | Reversed two days later by maintainer ruling D-04 (`4j8kjck5gd`), which dropped migrate entirely as the milestone's single deliberate exception. The rest of this record's scoping content is still accurate. |
+| `agggksad53` | supersede | 2026-07-15 | v1.0 Phase-2 ruling: **"FilesByLanguage MUST be `json:\"-\"` (TS discards counts; emitting the key = NEW divergence)"** | Reversed by v0.11.0 Phase 1 D-03, which un-suppresses it — justified explicitly by the Compatibility constraint being retired. The claim's whole warrant was parity with the other implementation, and that warrant is gone. **Composite record**: the other ~95% (four inference-vs-source lessons, the CR-02 silent-skip hazard, the `rg -r`/`rg -h` gotchas) remains true and valuable. |
+| `7f0pq2wepv` | supersede | 2026-07-15 | Same reversed suppression ruling, reached via the same parity reasoning (D-05/STAT-02) | Same as above. Also composite — its 4-gate worktree cascade correction and D-14 plumbing notes remain load-bearing. |
 
 `agggksad53` and `7f0pq2wepv` were **named in advance** as targets of this sweep: `gwzjpq9xvq`
 (v0.11.0 Phase 1 CONTEXT) carries the tags `CONTRADICTS-agggksad53`, `CONTRADICTS-7f0pq2wepv`,
@@ -208,16 +208,16 @@ content out of recall.
 
 ### Verdicts — LEAVE-HISTORICAL (representative; the criterion applies to all 165 others)
 
-| short_id | Why it stays |
-|---|---|
-| `e2ff222j6b`, `4khd1zp4bt`, `nqwgt6r53a`, `ggjepdd4ds`, `7grs09xyxz` | v0.11.0 per-phase completion records. History by construction. |
-| `swzxf5tr2x`, `jqwc8eqjt3` | Phase-7 migration-tool SHIPPED / CONTEXT records. True as history: migrate *was* built and *was* shipped. Their subject was later deleted, which `4j8kjck5gd` records; that is the correction, not a reason to rewrite the past. |
-| `76t84ynav5` | Milestone v1.0 "Drop-in Parity & Human UX" started. A real milestone name; renaming history would falsify it. |
-| `myywc0y9vm`, `4j8kjck5gd` | Currently correct — these *are* the corrections this milestone rests on. |
-| `veqtqg9r6r` | Already self-retracted in its own text. |
-| `whad9x6gxq` | Flaky-test gotcha; updated in place this session to widen the set to `test/wireoracle` and record the confirmed `-p 1` remedy. Carries no framing. |
-| `hakm8j156e`, `0x27xn3wvr`, `x2fgwgxf6k` | Method/instrument lessons (census blind spots, false absence, executor recovery). No framing claim. |
-| `xmz3xknbj0`, `84d1gfpywd`, `f18zrdsgx5` | The three repo rules. Process constraints, no framing. |
+| short_id | verdict | Why it stays |
+|---|---|---|
+| `e2ff222j6b`, `4khd1zp4bt`, `nqwgt6r53a`, `ggjepdd4ds`, `7grs09xyxz`  leave-historical | v0.11.0 per-phase completion records. History by construction. |
+| `swzxf5tr2x`, `jqwc8eqjt3`  leave-historical | Phase-7 migration-tool SHIPPED / CONTEXT records. True as history: migrate *was* built and *was* shipped. Their subject was later deleted, which `4j8kjck5gd` records; that is the correction, not a reason to rewrite the past. |
+| `76t84ynav5`  leave-historical | Milestone v1.0 "Drop-in Parity & Human UX" started. A real milestone name; renaming history would falsify it. |
+| `myywc0y9vm`, `4j8kjck5gd`  leave-historical | Currently correct — these *are* the corrections this milestone rests on. |
+| `veqtqg9r6r`  leave-historical | Already self-retracted in its own text. |
+| `whad9x6gxq`  leave-historical | Flaky-test gotcha; updated in place this session to widen the set to `test/wireoracle` and record the confirmed `-p 1` remedy. Carries no framing. |
+| `hakm8j156e`, `0x27xn3wvr`, `x2fgwgxf6k`  leave-historical | Method/instrument lessons (census blind spots, false absence, executor recovery). No framing claim. |
+| `xmz3xknbj0`, `84d1gfpywd`, `f18zrdsgx5`  leave-historical | The three repo rules. Process constraints, no framing. |
 
 ### Status
 
@@ -225,6 +225,61 @@ content out of recall.
 
 Task 2's blocking `checkpoint:decision` is now reachable: the classification above exists and is
 put to the maintainer for approval before any durable write.
+
+## Supersedes executed (MEM-01)
+
+One row per executed supersede. Each carries the operation actually called, the identifier the
+store returned, and the response shape — an identifier with no operation name would not
+distinguish a supersede from an update that happened to return one.
+
+| short_id | operation called | returned identifier | response shape |
+|---|---|---|---|
+| `3ekc84hbqt` | `mcp__engram__supersede_memory` | `xj1stbrsw6` (`fc4e8512-70a3-4af9-9bcc-5368eb09cd18`) | `{id, short_id}` |
+| `gw79qy2a9z` | `mcp__engram__supersede_memory` | `gxwkk3necn` (`96ed6e75-1f1c-4099-a16c-6cebb255967b`) | `{id, short_id}` |
+| `agggksad53` | `mcp__engram__supersede_memory` | `b9wjge7375` (`7a634d32-8141-42c9-be5f-0b9f65fcae3d`) | `{id, short_id}` |
+| `7f0pq2wepv` | `mcp__engram__supersede_memory` | `mw5z9s9bft` (`b738f8c9-21de-4d06-b03e-d1b8be0731f2`) | `{id, short_id}` |
+
+**No record was deleted and no record was overwritten.** `delete_memory` was never called.
+`update_memory` was never called on any sweep target — the only `update_memory` call this session
+touched `whad9x6gxq`, an unrelated flaky-test record outside the sweep, and is recorded as
+leave-historical above. Every correction went through `supersede_memory`, which stores a new record
+and stamps `superseded_by` on the target, leaving the target's bytes untouched.
+
+**Confirmed by re-query, not by the write's own return value:**
+
+1. `get_memory("3ekc84hbqt")` re-queried after the write returns the ORIGINAL content verbatim with
+   `superseded_by: fc4e8512-70a3-4af9-9bcc-5368eb09cd18` stamped — proving history preserved and
+   nothing overwritten.
+2. A `search_memory` re-query phrased in the superseded records' own terms ("parity is a
+   functionality baseline"; "FilesByLanguage must be json dash suppressed"; "migrate capability
+   preserved and reframed") returns all four CORRECTING records and NONE of the four superseded
+   originals — proving recall is clean, which is the property a future session actually depends on.
+
+## Completeness and accepted gaps
+
+Arithmetic printed, not implied (rule `84d1gfpywd`).
+
+**Scope `repo:github.com/seanb4t/codegraph-go`** — enumerated to exhaustion, `next_cursor` empty on
+page 5:
+
+    supersede 4  +  leave-historical 165  =  169 total enumerated
+
+**Scope `rule:repo:github.com/seanb4t/codegraph-go`** — complete rule set, no paging:
+
+    supersede 0  +  leave-historical 3  =  3 total enumerated
+
+**Workspace overlay scopes:** none exist for this repo; no overlay was enumerated because there is
+none to enumerate, not because one was skipped.
+
+**Accepted gaps, stated rather than buried:**
+
+- The 165 leave-historical records are classified by criterion and sampled in the table above; the
+  table lists representatives per class, not 165 individual rows. The criterion — history stays,
+  currently-false standing claims that a future session would act on get corrected — was applied to
+  every enumerated record, and the 32 whose summaries carry any parity/comparison/migrate framing at
+  all were each read before being left.
+- MEM-02's fresh-session recall check was not performed; see `MEM02_STORE_STATUS` in
+  `06-LIVE-VERIFICATIONS.md` for the standard actually met.
 
 ### Task 3 (apply the approved corrections) — COMPLETE
 

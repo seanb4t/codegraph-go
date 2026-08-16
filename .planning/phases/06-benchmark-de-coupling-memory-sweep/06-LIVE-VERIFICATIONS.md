@@ -67,3 +67,21 @@ bounded framing-word pattern set was enumerated and swept from `.claude/CLAUDE.m
 proven this task. A fresh session reading these three post-edit files would not encounter the
 retired framing this task exists to remove — but that is an inference from the census and diff,
 not the live observation the human-check calls for.
+
+## MEM-02 — store half
+
+`MEM02_STORE_STATUS=accepted-by-d15-evidence-standard`
+
+The fresh-session recall check was not performed — this orchestrator session cannot spawn an
+independently fresh session of itself, and a worktree-spawned executor carries no `mcp__engram__*`
+tools (engram is installed at user scope, not in this repo's `.mcp.json`), which is what halted
+06-06's first execution attempt.
+
+The sweep is therefore accepted on the D-15 evidence standard rather than claimed as
+fresh-session-demonstrated: the four corrections were applied by `supersede_memory`, and both the
+`superseded_by` stamp and the cleanliness of recall were confirmed by RE-QUERY after the writes
+(`get_memory` on a superseded target; `search_memory` phrased in the superseded records' own terms
+returning only the correcting records). See `## Supersedes executed (MEM-01)` in
+`06-MEMORY-SWEEP.md`.
+
+Marked by the standard actually met, not described as demonstrated.
