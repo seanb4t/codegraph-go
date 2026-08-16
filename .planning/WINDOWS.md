@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 10
 waived_count: 0
 fixed_count: 3
-total_count: 11
-last_updated: 2026-08-16T00:14:05.866Z
+total_count: 13
+last_updated: 2026-08-16T00:29:32.708Z
 ---
 
 # Broken Windows Ledger
@@ -26,6 +26,8 @@ last_updated: 2026-08-16T00:14:05.866Z
 | 9 | 05 | deviation | internal/cli/githooks_test.go | 50 | CODE-01 census gap: 'verbatim TS sync/git-hooks.js begin marker' comparison framing found outside plan 05-05's declared file scope (distinct file from internal/githooks/githooks_test.go, which was in scope and fixed) | open |  | 2026-08-16T00:14:03.772Z |  |
 | 10 | 05 | deviation | internal/mcp/tools.go | 369 | CODE-01 census gap: 'Go-vs-TS divergence: TS returns markdown from every MCP tool' and 'mirroring TS's' (:528) comparison framing found outside plan 05-05's declared file scope | open |  | 2026-08-16T00:14:04.811Z |  |
 | 11 | 05 | deviation | internal/agents/codex.go | 14 | CODE-01 census gap: 'TS integrates with' / 'mirrors TS's own toml.ts' (:17) comparison framing found outside plan 05-05's declared internal/agents file list (task 1 covered 10 named files; codex.go/opencode.go/claude.go were not among them) | open |  | 2026-08-16T00:14:05.866Z |  |
+| 12 | 05 | unrun-verify | internal/daemon/daemon_test.go | 352 | TestRunWatchdogCancelsRunOnSimulatedReparent is load-sensitive: passes isolated (1.4s) and as a lone package (64.7s, identical to pre-merge base 65.7s), but times out at 250s and FAILS inside 'go test ./...' alongside ~49 parallel packages. NOT caused by phase 5 — internal/daemon has zero diff and the internal/graphstore diff is deletions-only (zero added lines). The test asserts a wall-clock watchdog deadline a loaded runner cannot meet, making the full-suite gate non-deterministic. | open |  | 2026-08-16T00:28:48.387Z |  |
+| 13 | 05 | deviation | docs/RELEASE.md | 337 | PRE-EXISTING doc staleness (not phase-5 caused): the dependency paragraph states '27 direct requires' with '14 tree-sitter' leaving 'the remaining 13', but go.mod now has 32 direct requires (14 tree-sitter, 18 remaining). It also credits the MCP server to 'mark3labs/mcp-go' while go.mod actually requires 'modelcontextprotocol/go-sdk v1.7.0'. Phase 5 removed only the now-false modernc.org/sqlite migration-tool clause; the counts and the MCP attribution were already drifted and were deliberately NOT renumbered, since inventing a corrected figure inside independently-stale arithmetic would substitute one wrong number for another. | open |  | 2026-08-16T00:29:32.708Z |  |
 
 ````json
 [
@@ -159,6 +161,30 @@ last_updated: 2026-08-16T00:14:05.866Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-16T00:14:05.866Z",
+    "resolved_at": null
+  },
+  {
+    "id": 12,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "internal/daemon/daemon_test.go",
+    "line": 352,
+    "description": "TestRunWatchdogCancelsRunOnSimulatedReparent is load-sensitive: passes isolated (1.4s) and as a lone package (64.7s, identical to pre-merge base 65.7s), but times out at 250s and FAILS inside 'go test ./...' alongside ~49 parallel packages. NOT caused by phase 5 — internal/daemon has zero diff and the internal/graphstore diff is deletions-only (zero added lines). The test asserts a wall-clock watchdog deadline a loaded runner cannot meet, making the full-suite gate non-deterministic.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-16T00:28:48.387Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "docs/RELEASE.md",
+    "line": 337,
+    "description": "PRE-EXISTING doc staleness (not phase-5 caused): the dependency paragraph states '27 direct requires' with '14 tree-sitter' leaving 'the remaining 13', but go.mod now has 32 direct requires (14 tree-sitter, 18 remaining). It also credits the MCP server to 'mark3labs/mcp-go' while go.mod actually requires 'modelcontextprotocol/go-sdk v1.7.0'. Phase 5 removed only the now-false modernc.org/sqlite migration-tool clause; the counts and the MCP attribution were already drifted and were deliberately NOT renumbered, since inventing a corrected figure inside independently-stale arithmetic would substitute one wrong number for another.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-16T00:29:32.708Z",
     "resolved_at": null
   }
 ]
