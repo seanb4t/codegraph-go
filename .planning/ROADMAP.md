@@ -239,15 +239,15 @@ Plans:
 
 **Notes**: Workflows carrying the vocabulary include `ci`, `release`, `bench`, `post-release-verify`, `linux-cross-canary`, `require-issue-link` and `auto-close-unsolicited-prs`. `bench.yml`'s own de-coupling is Phase 6's; this phase touches only its framing. The naive-regex failure mode is real and named in the requirements: a find-and-replace over "TypeScript" breaks `tsextract` and de-lists a supported language.
 
-**Plans**: 6 plans
+**Plans**: 4/6 plans executed
 
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
 
-- [ ] 05-01-PLAN.md — Tracer: `codegraph migrate` removal end-to-end — CLI registration, `internal/migrate` package + cli files, `modernc` deps via `go mod tidy`, graphstore cursor API (GetMigration/PutMigration/migrationRecordName + fakes), ts-* fixtures + `TestGoldenFixturesExist` subtests, README row, golden README bullet, nodeid citation (CODE-03)
-- [ ] 05-02-PLAN.md — Issue templates (PROC-01) + PR templates (PROC-02): parity/migrate framing swept, format gate and issue-approval policy intact (PROC-01, PROC-02)
-- [ ] 05-03-PLAN.md — Workflow sweep (PROC-03): step-name/comment/JS-prose rewords incl. corpora.yml golden step + the two inline-JS parity sentences + bench.yml framing, zero job-name edits, actionlint + TestWorkflowRunBodies green (PROC-03)
-- [ ] 05-05-PLAN.md — CODE-01 remainder: agents/installer, cli rows, githooks/gitmeta/watch, indexer/corpora rows, mcp prose-only stale filenames, schema graph.proto↔pb.go lockstep, tool bench manifest stale cites, `.claude/CLAUDE.md` core-value sweep (D-10) (CODE-01)
+- [x] 05-01-PLAN.md — Tracer: `codegraph migrate` removal end-to-end — CLI registration, `internal/migrate` package + cli files, `modernc` deps via `go mod tidy`, graphstore cursor API (GetMigration/PutMigration/migrationRecordName + fakes), ts-* fixtures + `TestGoldenFixturesExist` subtests, README row, golden README bullet, nodeid citation (CODE-03)
+- [x] 05-02-PLAN.md — Issue templates (PROC-01) + PR templates (PROC-02): parity/migrate framing swept, format gate and issue-approval policy intact (PROC-01, PROC-02)
+- [x] 05-03-PLAN.md — Workflow sweep (PROC-03): step-name/comment/JS-prose rewords incl. corpora.yml golden step + the two inline-JS parity sentences + bench.yml framing, zero job-name edits, actionlint + TestWorkflowRunBodies green (PROC-03)
+- [x] 05-05-PLAN.md — CODE-01 remainder: agents/installer, cli rows, githooks/gitmeta/watch, indexer/corpora rows, mcp prose-only stale filenames, schema graph.proto↔pb.go lockstep, tool bench manifest stale cites, `.claude/CLAUDE.md` core-value sweep (D-10) (CODE-01)
 
 **Wave 2** *(blocked on Wave 1 — the query census rides after the migrate cut removes the stubs)*
 
@@ -282,7 +282,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 2. Golden Harness Re-authoring & Re-freeze | 4/4 | Complete    | 2026-08-14 |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
-| 5. Process, CI & In-Tree Sweep | 0/? | Not started | - |
+| 5. Process, CI & In-Tree Sweep | 4/6 | In Progress|  |
 | 6. Benchmark De-coupling & Memory Sweep | 0/? | Not started | - |
 
 5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
