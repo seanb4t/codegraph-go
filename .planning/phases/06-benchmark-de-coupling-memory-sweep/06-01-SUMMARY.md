@@ -187,6 +187,17 @@ status: complete
 - `tools/bench/runner -mode publish` and `tools/bench/publishcheck` are ready for 06-02 (CI wiring: `.github/workflows/bench.yml`'s `publish` job) and 06-04 (`docs/BENCHMARKS.md`, which reuses `publishcheck -emit-rows` as its single source of published numbers).
 - No blockers. `internal/bench` and `tools/bench/baseline.json` are untouched, so 06-03 (regression-mode prose sweep) starts from an unmodified base.
 
+## Self-Check: PASSED
+
+- FOUND: tools/bench/publishcheck/main.go
+- FOUND: tools/bench/publishcheck/main_test.go
+- FOUND: .planning/phases/06-benchmark-de-coupling-memory-sweep/06-01-PREPLAN-SHA.txt
+- FOUND: .planning/phases/06-benchmark-de-coupling-memory-sweep/06-01-SUMMARY.md
+- CONFIRMED-DELETED: tools/bench/headtohead-darwin-arm64-20260713-run1.json
+- FOUND commit: 16cfb4b
+- FOUND commit: 29a8a31
+- FOUND commit: 0e92384
+
 ---
 *Phase: 06-benchmark-de-coupling-memory-sweep*
 *Completed: 2026-08-16*
