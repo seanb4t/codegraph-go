@@ -41,13 +41,6 @@ $
 - [ ] Docs updated if this changes a documented surface
       (`docs/LANGUAGE-CAPABILITY-MATRIX.md`, README)
 
-## Parity
-
-- [ ] I checked whether TypeScript CodeGraph v1.3.1 has this behavior
-- [ ] If it does, this matches it — or the divergence is documented and explained below
-
-<!-- Divergence, if any: -->
-
 ## Compatibility
 
 - [ ] No change to the graph schema — or migration is handled and tested

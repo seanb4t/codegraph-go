@@ -16,8 +16,8 @@ body:
       label: What problem does this solve?
       description: >
         Describe the situation you are in, not the solution you have in mind.
-        The most useful reports here start with "I was trying to ..." and end
-        somewhere frustrating.
+        The most useful submissions here start with "I was trying to ..." and
+        end somewhere frustrating.
     validations:
       required: true
 
@@ -46,21 +46,20 @@ body:
         - Query / ranking
         - Sync / watcher / git hooks
         - Release, signing, or supply chain
-        - Migration from TypeScript CodeGraph
         - Other
     validations:
       required: true
 
   - type: textarea
-    id: parity
+    id: existing-coverage
     attributes:
-      label: Does TypeScript CodeGraph do this?
+      label: Is this covered by an existing command or tool today?
       description: >
-        This project ports
-        [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph).
-        If the original has this behavior, say so and name the command — parity
-        gaps are prioritized differently from net-new ideas. If you do not know,
-        say that; it is a fine answer.
+        Check `codegraph explore`, `codegraph node`, `codegraph status`, and
+        the other commands before filing — the closest existing match is often
+        part of the answer. Note whether the change would alter an output
+        shape an agent already consumes; that changes how carefully it gets
+        reviewed.
     validations:
       required: true
 
