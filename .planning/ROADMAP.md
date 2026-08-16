@@ -274,7 +274,7 @@ Plans:
 
 **Notes**: MEM-01/02 are verified by inspection, not by a test — the spine lives outside git and no CI gate can hold it. "Supersede, don't overwrite" is the point: the historical records are true statements about what happened and must survive; only records asserting the framing *in the present tense* are corrected. The head-to-head JSON captures already committed under `tools/bench/headtohead-*.json` are historical measurement records; whether they are removed or retained as dated artifacts is a scoping call for the phase plan, but `docs/BENCHMARKS.md` must not publish their multipliers either way. **Scoping call resolved (06-CONTEXT D-01):** the six captures are deleted; git history preserves them.
 
-**Plans**: 2/6 plans executed
+**Plans**: 3/6 plans executed
 
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
@@ -284,7 +284,7 @@ Plans:
 
 **Wave 2** *(blocked on 06-01 — the workflow references the runner mode it creates)*
 
-- [ ] 06-02-PLAN.md — `bench.yml`: author a publish-job-scoped structural verifier for all four D-06 properties, delete the comparison-invoking job, author the fresh absolute-numbers `publish` job, move the dispatch choice and conditional with it; sweep `BASELINE.md` framing and the workflow-exception comment (BENCH-03)
+- [x] 06-02-PLAN.md — `bench.yml`: author a publish-job-scoped structural verifier for all four D-06 properties, delete the comparison-invoking job, author the fresh absolute-numbers `publish` job, move the dispatch choice and conditional with it; sweep `BASELINE.md` framing and the workflow-exception comment (BENCH-03)
 
 **Wave 3** *(blocked on Waves 1–2 — the document publishes what the path measured)*
 
@@ -310,7 +310,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
 | 5. Process, CI & In-Tree Sweep | 8/8 | In Progress|  |
-| 6. Benchmark De-coupling & Memory Sweep | 2/6 | In Progress|  |
+| 6. Benchmark De-coupling & Memory Sweep | 3/6 | In Progress|  |
 
 5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
 
