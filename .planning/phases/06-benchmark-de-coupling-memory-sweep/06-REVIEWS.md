@@ -1,20 +1,402 @@
 ---
 phase: 6
 reviewers: [codex]
-reviewed_at: 2026-08-16T12:16:06Z
-review_cycle: 2
+reviewed_at: 2026-08-16T12:55:14Z
+review_cycle: 3
 plans_reviewed: [06-01-PLAN.md, 06-02-PLAN.md, 06-03-PLAN.md, 06-04-PLAN.md, 06-05-PLAN.md, 06-06-PLAN.md]
 ---
 
 # Cross-AI Plan Review — Phase 6
 
-> This file holds **two** convergence cycles. Cycle 2 (below) assesses the CURRENT plan text as
-> revised by commit `b3a9a47`. Cycle 1 is retained further down as audit history — its findings
-> are **not** current; consult it only to trace how a cycle-2 statement came to be.
+> This file holds **three** convergence cycles. Cycle 3 (immediately below) assesses the CURRENT
+> plan text as revised by commit `fd02272`, and is the **final automated cycle** before the
+> escalation gate. Cycles 2 and 1 are retained further down as audit history — their findings are
+> **not** current; consult them only to trace how a cycle-3 statement came to be.
 
 ---
 
-# Cycle 2 — assessment of the revised plans (`b3a9a47`)
+# Cycle 3 — FINAL automated cycle, assessment of the revised plans (`fd02272`)
+
+**Reviewer:** Codex (source-grounded, full repo access), cross-checked and extended by the
+orchestrating reviewer against the working tree at `fd02272`.
+
+## Consensus Summary — Cycle 3
+
+The cycle-2 replan did what it claimed. **All five claims the replan makes were independently
+verified against source and plan text, and all five hold.** The `TOLNAMED` gate that cycle 2 flagged
+as unsatisfiable is now asserted on `want error` plus the Go-mangled band-naming subtest names, and
+both are text the mutated path genuinely emits; `CATERR=0` survives a full verbatim `-v` paste
+because Go renders the category subtests' names with underscores while the negative grep searches
+space-separated phrases. The self-contradictory pre-plan-SHA guard is replaced by two properties
+that are mechanically true given the task ordering. The `.claude/CLAUDE.md` sweep is bounded by
+three criteria whose numbers all check out against the file as it stands today. The planner's own
+class fix C is real and completely applied — all nine sites now count with `wc -l`, and no new
+instance of the broken form was introduced. The three rejected findings are each legitimate and
+each recorded in a PLAN.md rather than only in a commit message.
+
+**Two new HIGHs survive, and both are the same defect class in new places — an assertion the correct
+path cannot satisfy.**
+
+- **HIGH 1 — 06-01.** Task 1 asserts an exact before/after `go test -list` delta over
+  `./tools/bench/...` whose allowed *added* set contains exactly three names, while the same task
+  creates the `tools/bench/publishcheck` package with its own test file, necessarily contributing at
+  least one more top-level `Test*` name to that package pattern.
+- **HIGH 2 — 06-03 and 06-04.** Both censuses assert a total of `0` over a scope that includes
+  `corpora/manifest.json`, whose line 10 carries `TS/JS` inside a `LOCKED (01-06)` corpus-language
+  note. That file is in no plan's `files_modified`, the text is the plans' own declared KEEP class,
+  and the two escapes an executor has — reword it, or add an exclusion — are both explicitly
+  prohibited. The sanctioned escape, "bound the pattern", is unavailable because the pattern is
+  hard-coded inside two `<automated>` blocks.
+
+Neither is a style defect. 06-01 and 06-03 are both `wave: 1`, and `06-02 → 06-04 → 06-05 → 06-06`
+chain off them, so between the two findings every plan in the phase is affected.
+
+The lesson this phase earned applies to both verbatim: **a positive assertion the correct path
+cannot satisfy is worse than no assertion at all**, because it fails on correct work and trains the
+executor to treat red as expected. Cycle 1's class fix B produced class fix C by exactly this
+mechanism; these two are the same shape one layer up — an exact *set*, and an over-broad *pattern*,
+rather than an exact *count*.
+
+Both fixes are small and local, and neither requires a locked decision to be re-opened.
+
+### Agreed Strengths
+
+- **The `TOLNAMED` rewrite is correct, not merely reworded.** `internal/bench/regression.go:113-126`
+  is unreachable once either tolerance is widened to `1.0`, so the plan's new prohibition
+  (`06-03-PLAN.md:49`) forbidding a criterion that demands `throughput regressed` / `peak RSS grew`
+  is exactly right, and the replacement assertion at `06-03-PLAN.md:448` names only
+  `want error` (emitted at `internal/bench/regression_test.go:511`) and the two band subtest names.
+- **The band names are reachable twice per family, by construction.** Task 2 pins the new test's
+  subtests as `committed baseline throughput 11% slower: exceeds band fails` and
+  `committed baseline peak RSS 16% larger: exceeds band fails` (`06-03-PLAN.md:286-290`), whose
+  Go-mangled forms *contain* the `throughput_11%_slower` / `peak_RSS_16%_larger` substrings the gate
+  greps for. The planner's dry-run figures (`WANT_ERROR_ASSERTIONS=4 THROUGHPUT_BAND_REDS=2
+  RSS_BAND_REDS=2`) fall out of this arithmetic exactly.
+- **The CATERR prose trap is closed explicitly.** `06-03-PLAN.md:429-432` instructs the executor not
+  to quote the three category phrases in the log's own prose, because the gate counts them over the
+  whole file — the one way a correct rehearsal could still have tripped it.
+- **Class fix C was applied beyond the nine named sites, as a reading discipline.** 06-04, 06-05 and
+  06-06 each carry an explicit "checked, not assumed" row (`06-04-PLAN.md:143`, `06-05-PLAN.md:113`,
+  `06-06-PLAN.md:123`) recording that their only surviving `rg -c` uses are `= "1"` comparisons
+  backed by a real match. That is the right way to record a negative.
+- **The three rejections are recorded where the executor will read them**, not only in git history:
+  `06-03-PLAN.md:144`, `06-05-PLAN.md:112`, `06-02-PLAN.md:283`.
+
+### Agreed Concerns
+
+Two concerns rise to HIGH — 06-01's exact test-surface delta, and the 06-03/06-04 census zero — both
+stated in full below. Four non-HIGH findings follow them (two MEDIUM, two LOW), each with the
+concrete PLAN.md change it needs.
+
+### Divergent Views
+
+Codex and the orchestrating reviewer agreed on HIGH 1 and on all five claim verdicts. HIGH 2 and the
+four non-HIGH findings came from the orchestrating reviewer's own measurements and were not in
+Codex's output; none contradicts anything Codex reported.
+
+**One cycle-2 statement is refuted, not merely superseded.** The cycle-2 coverage table below records
+*"Phase-6 census is reachable | Ran the full cycle-2 pattern set → 168 hits today, every one inside a
+declared sweep target."* Re-measured file-by-file this cycle, that is wrong for exactly one file:
+`corpora/manifest.json` holds one hit and is a declared sweep target of no plan. HIGH 2 is the
+consequence. The cycle-2 aggregate count was right; the "every one" claim was not checked
+per-file, and the aggregate hid it.
+
+Codex's line citations for `internal/bench/regression_test.go` and `regression.go` were each off by
+roughly two lines (`:509`/`:112`/`:120` against measured `:511`/`:113`/`:121`); the substance was
+correct and the measured numbers are used throughout this cycle.
+
+---
+
+## HIGH 1 (NEW) — 06-01's exact test-surface delta is unsatisfiable by its own Task 1
+
+**Where.** `06-01-PLAN.md:272` (before-snapshot), `06-01-PLAN.md:380-381` (the delta assertion),
+`06-01-PLAN.md:470` (the same statement in `<verification>`), `06-01-PLAN.md:86-93` (artifact
+register).
+
+**The contradiction, measured.**
+
+1. Task 1's action opens with *"Before touching a single file"* and captures
+   `go test -list '.*' ./tools/bench/... | rg '^Test' | sort` (`06-01-PLAN.md:263,272`). Measured
+   against the tree at `fd02272`, that before-set is **55 names** across four packages
+   (`go list ./tools/bench/...` → `cpudiag`, `gencorpus`, `realcorpus`, `runner`). It contains all
+   three names the plan expects to remove — `TestParseFlags_OverridesApply`,
+   `TestResolveTSBinary_EmptyWhenNotFound`, `TestResolveTSBinary_FindsOnPath` — so the *removed*
+   half of the assertion is sound.
+2. The **same task** creates `tools/bench/publishcheck/main.go` and
+   `tools/bench/publishcheck/main_test.go` (`06-01-PLAN.md:12-13`, `files_modified`;
+   `06-01-PLAN.md:241-254` specifies seven behaviours for that test file).
+   `tools/bench/publishcheck` is inside the `./tools/bench/...` package pattern, so its top-level
+   test names appear in the **after**-list at `06-01-PLAN.md:380`.
+3. `06-01-PLAN.md:371` independently requires `go test -run TestPublishCheck -v
+   ./tools/bench/publishcheck/...` to name the rejecting cases as RUN/PASS — which is only possible
+   if at least one top-level test whose name matches `TestPublishCheck` exists.
+4. But `06-01-PLAN.md:381` states: *"the added set MUST equal exactly `TestCorporaHasExactlyTwoEntries`,
+   `TestParseFlags_PublishOverridesApply`, `TestParseFlags_RejectsRetiredComparisonBinaryFlag`"* and
+   requires the executor to *"verify with `diff` against those two literal sorted lists."*
+
+A correct execution therefore produces an added set of **at least four** names and the `diff`
+against the three-name literal list is non-empty. The criterion fails on correct work.
+
+**Why HIGH rather than MEDIUM.** 06-01 is `wave: 1` with `depends_on: []`; 06-02 (`wave: 2`), 06-04
+(`wave: 3`), 06-05 (`wave: 4`) and 06-06 (`wave: 5`) chain off it. A gate that reddens on correct
+work at the head of the chain halts five of six plans, and the failure looks like a real
+regression — the executor's most likely response is to hunt for a test that "vanished for another
+reason" that does not exist, or to weaken the assertion ad hoc. That is precisely the outcome the
+phase's own lesson forbids.
+
+**The fix (small, entirely inside 06-01).**
+
+1. `06-01-PLAN.md:241` — name the publishcheck test symbol(s) explicitly in the `<behavior>` block.
+   Prefer **one** top-level `TestPublishCheck` carrying the seven cases as subtests: that adds
+   exactly one stable name to the delta while `-run TestPublishCheck -v` still names each case.
+2. `06-01-PLAN.md:381` — extend the allowed added set to the four-name literal list
+   (`TestCorporaHasExactlyTwoEntries`, `TestParseFlags_PublishOverridesApply`,
+   `TestParseFlags_RejectsRetiredComparisonBinaryFlag`, `TestPublishCheck`).
+3. `06-01-PLAN.md:470` — restate "three removals and three additions" as "three removals and four
+   additions" so `<verification>` agrees with the criterion.
+4. `06-01-PLAN.md:86-93` — add the concrete test symbol to the artifact register, which today lists
+   the publishcheck *files* but not the test symbol the delta assertion turns on.
+
+An acceptable alternative is to scope both snapshots to the packages that existed before the task
+(`./tools/bench/realcorpus/... ./tools/bench/runner/... ./tools/bench/cpudiag/...
+./tools/bench/gencorpus/...`), leaving the new package's surface to `06-01-PLAN.md:371`. The
+four-name list is preferable: it keeps the assertion over the whole `tools/bench` surface, which is
+what the criterion exists to police.
+
+---
+
+## HIGH 2 (NEW) — the retired-term census cannot reach zero in either 06-03 or 06-04: `corpora/manifest.json:10` is matched by `\bTS\b` and is in no plan's `files_modified`
+
+**Where.** `06-03-PLAN.md:224` (`BENCH_PKG_RETIRED_TERMS_TOTAL = 0`), `06-04-PLAN.md:494` and the
+matching criterion at `06-04-PLAN.md:501` (`PHASE6_CENSUS_TOTAL = 0`).
+
+**Measured.** Both censuses scope `corpora/manifest.json` and both include a bare `\bTS\b`
+alternation (06-04 additionally with `-i`). Running each pattern set verbatim against the tree at
+`fd02272`:
+
+```
+06-03 census over its full scope  (internal/bench/ internal/corpora/manifest.go corpora/manifest.json) → 7
+06-03 census over corpora/manifest.json alone                                                          → 1   (line 10)
+06-04 census over corpora/manifest.json alone, case-insensitive                                        → 1   (line 10)
+```
+
+The single hit is the substring `TS` inside `TS/JS` at `corpora/manifest.json:10`:
+
+> `"note": "LOCKED (01-06): closes the Go priority-4 coverage gap and supplies TS/JS via its 25
+> javascript tracked files, which is how this minimum-cardinality set covers all five priority
+> languages. Roadmap shortlist."`
+
+**Why a correct execution cannot clear it.**
+
+1. `corpora/manifest.json` appears in **no** plan's `files_modified` — checked across all six.
+   06-03's list carries `internal/corpora/manifest.go` (the Go file) but not the JSON.
+2. 06-03's declared reading and editing scope for that file is line **2**, the *top-level* `note`
+   (`06-03-PLAN.md:166`, `:220-221`). Line 10 is a *per-entry* note and is outside it. Line 2 is
+   already clean for every 06-03 pattern — measured.
+3. The flagged text is the plan's own **KEEP class**. `06-04-PLAN.md:448-449` already excludes
+   `internal/indexer/**` and `testdata/golden/**` as "TypeScript-the-indexed-language product
+   surface … Phase 5's recorded KEEP class". `TS/JS` in a corpus-language-coverage note is that
+   class exactly — it is not retired comparison framing.
+4. Both escapes are closed to the executor. `06-04-PLAN.md:45` prohibits rewording innocent
+   third-party prose *or* widening an exclusion to make the total read zero; `06-04-PLAN.md:451-452`
+   forbids adding an exclusion not on the list. The sanctioned remedy — `06-04-PLAN.md:454-455`,
+   *"If a pattern flags text that is genuinely innocent, the finding is about the pattern. Bound it
+   tighter"* — is unavailable at execution time, because the pattern is **hard-coded inside the
+   `<automated>` blocks** of two different plans, one of which (06-03) is `wave: 1` and
+   `autonomous: true`.
+
+So the executor of 06-03 hits a terminal gate that reads `1`, cannot legitimately reach `0`, and has
+no in-plan instruction covering the case. 06-04 then hits the same wall with a wider pattern set.
+
+**This also refutes a cycle-2 verification.** The cycle-2 coverage table recorded *"Phase-6 census is
+reachable | Ran the full cycle-2 pattern set → 168 hits today, every one inside a declared sweep
+target."* That is wrong for exactly one file: `corpora/manifest.json` is not a declared sweep target
+of any plan, and it holds one of those hits.
+
+**The fix (in PLAN.md, before execution — it cannot be done by the executor).**
+
+1. `06-03-PLAN.md:224` and `06-04-PLAN.md:494` — bound `\bTS\b` to the retired-framing senses the
+   sweep is actually about, e.g. `\bTS CodeGraph\b`, `\bGo-vs-TS\b`, `\bts-binary\b`, `\bTS binary\b`,
+   dropping the bare alternation. 06-03 already carries `\bGo-vs-TS\b` as a separate pattern, so its
+   bare `\bTS\b` is largely redundant; 06-04's `-i` additionally makes it match any lowercase `ts`
+   identifier that ever appears on the census surface, which is a standing false-positive generator.
+2. `06-04-PLAN.md:445-452` — record the bounding in `06-CENSUS.md` with the flagged text quoted, as
+   `06-04-PLAN.md:454-455` requires. That is the plan's own prescribed handling; it just has to be
+   pre-authorised rather than improvised.
+3. `06-03-PLAN.md:7-15` — while here, add `corpora/manifest.json` to `files_modified`, or state
+   explicitly that it is read-only to this plan. `06-03-PLAN.md:220-221` already contemplates editing
+   it (*"If `corpora/manifest.json`'s `note` needs a change, say so in the SUMMARY: it is committed
+   data, so the edit ships in the repo"*) while the frontmatter does not declare it — an executor
+   following the action would write a file the plan says it does not modify.
+
+---
+
+## Non-HIGH findings
+
+### MEDIUM 1 — 06-06's approved-set extraction is still file-wide while the executed-set extraction is section-bounded
+
+Cycle 2's MEDIUM 4 replaced the executed-set extractor with a section boundary
+(`awk '/^## Supersedes executed/{f=1;next} /^## /{f=0} f'`, `06-06-PLAN.md:321`), which is correct.
+The **approved**-set extractor on the same line was left file-wide:
+`rg -N '^\|' "$F" | rg -F '| supersede |'`.
+
+`06-06-PLAN.md:196` fixes the enumeration table's columns as
+`short_id | scope | durable content | verdict | reason`, so `| supersede |` is a verdict literal —
+but the extractor scans the whole document, including `## Supersedes executed (MEM-01)` (columns at
+`06-06-PLAN.md:292-295`) and `## Completeness and accepted gaps`. If any executed row or completeness
+row renders a bare `| supersede |` cell, that row's first-column `short_id` joins the approved set as
+a duplicate, `APPROVED_SUPERSEDE_IDS != APPROVED_UNIQUE`, and the task fails on correct work. The
+risk is modest — the executed table's third column is specified as "the operation name called", which
+in practice is `supersede_memory`, not `supersede` — but this is the identical failure mode the
+section-boundary fix was introduced to remove, left applied to only one of the two sets.
+
+**PLAN.md change needed:** at `06-06-PLAN.md:321`, bound the approved-set extraction to its own
+section with the same technique — `awk '/^## Engram enumeration/{f=1;next} /^## /{f=0} f' "$F"` piped
+into the existing `rg -F '| supersede |'`. (`^## ` does not match the `### ` per-scope subheadings, so
+the scope sections stay inside the window.) Record the extractor's raw line count in the SUMMARY
+alongside the executed set's, as `06-06-PLAN.md`'s own criterion already requires for the executed
+half.
+
+### MEDIUM 2 — two of the four counters in 06-03's replacement gate pass vacuously on a GREEN run (measured)
+
+`06-03-PLAN.md:448` asserts four numbers over `06-MUTATION-LOG.md`: `CATERR = 0`,
+`WANTERR >= 2`, `THROUGHPUT_BAND_REDS >= 2`, `RSS_BAND_REDS >= 2`. The rehearsal command at
+`06-03-PLAN.md:376` uses `-v`, and `-v` prints `=== RUN` and `--- PASS` lines for **every** subtest,
+not only failing ones.
+
+Ran the gate's own four counters against a verbatim `-v` paste of the **unmutated** tree at `fd02272`
+(`go test -count=1 -v -run 'TestCheckRegression' ./internal/bench/...`):
+
+```
+CATERR=0   THRU=2   RSSN=2   WANTERR=0
+```
+
+So `THROUGHPUT_BAND_REDS` and `RSS_BAND_REDS` are **already satisfied by a green run** — they measure
+that the subtests exist, not that either one went red. Only `WANTERR` discriminates: it is `0` on
+green and becomes `>= 2` only on the mutated path. The reachability note at `06-03-PLAN.md:449`
+("Family A's pasted `-v` output carries `throughput_11%_slower` on the table subtest's `=== RUN` and
+`--- FAIL` lines … so `>= 2` has headroom") is therefore true but describes the counters as evidence
+of a RED when they are not.
+
+The gate as a whole is **not** vacuous — `WANTERR` carries it, and `RED_BLOCKS_RECORDED >= 2`
+(`06-03-PLAN.md:439`) plus `COMMITTED_BASELINE_REDS_RECORDED` (`06-03-PLAN.md:446`) enforce
+two-family coverage — which is why this is MEDIUM and not HIGH. But rule `84d1gfpywd` is precisely
+about a positive assertion that can pass without the thing it names having happened, and two of these
+four can.
+
+**PLAN.md change needed:** at `06-03-PLAN.md:448`, tie the band counters to the RED rather than to the
+paste — count the band name only on `--- FAIL` lines, e.g.
+`THRU=$(rg -N -- '--- FAIL' "$LOG" | rg -o -F 'throughput_11%_slower' | wc -l | tr -d ' ')` and the
+same for `peak_RSS_16%_larger`, keeping `>= 2` (table + committed-baseline subtest per family). Then
+amend the reachability note at `06-03-PLAN.md:449` to record the measured green-run values above as
+the reason the counters were narrowed.
+
+### LOW 1 — 06-05's `CLAUDE_MD_CHANGED_LINES <= 24` ceiling is tighter than the task's own scope statement
+
+`06-05-PLAN.md:290-292` expects "roughly four changed lines" (7, 15, 17, 93) — eight diff lines,
+comfortably inside the 6..24 window, and the floor of 6 is exactly reachable since at least three
+distinct lines must change (measured: framing matches live at `.claude/CLAUDE.md:7`, `:15`, `:93`).
+But the same action also says "Re-sync the generated PROJECT block from the corrected PROJECT.md"
+(`06-05-PLAN.md:287`), and 06-05 edits `.planning/PROJECT.md` in the same task. The generated block
+spans `.claude/CLAUDE.md:1-19`; if the PROJECT.md corrections touch the Core Value paragraph (line 9)
+and more than one further constraint bullet, the re-sync alone can push past twelve changed lines and
+trip the ceiling on correct work.
+
+**PLAN.md change needed:** at `06-05-PLAN.md:290`, state the ceiling's basis — that 24 diff lines
+allows up to twelve changed lines, i.e. the four expected plus eight of slack for the PROJECT-block
+re-sync — and add a one-line instruction that if the re-sync legitimately exceeds it, the executor
+records the count and the reason rather than trimming the re-sync to fit the number.
+
+### LOW 2 — two of 06-06 Task 1's gates require literal phrases its `<action>` never asks for
+
+`06-06-PLAN.md:203` asserts `PAGES=$(rg -o -i 'pages enumerated' …); test "$PAGES" -ge 3` and
+`SCOPES=$(rg -o -i '^### .*(spine|rule:repo|overlay)' …)`. Both are counted over
+`06-MEMORY-SWEEP.md`, a file this same task authors — so a correct execution *can* satisfy them, but
+only by guessing the wording. The `<action>` asks the executor to "record the page count" and to
+write "one subsection per scope"; it never states that the literal phrase **"pages enumerated"** must
+appear three times, nor that the `###` headings must contain `spine` / `rule:repo` / `overlay`.
+
+This is the mildest form of the family this cycle is about: not unsatisfiable, but satisfiable only
+by accident. It is LOW because the whole file is executor-authored and a re-read of the criterion
+resolves it.
+
+**PLAN.md change needed:** in `06-06-PLAN.md`'s Task 1 `<action>`, state the two required literals
+directly — the per-scope subsection heading form (`### <scope> — spine` / `rule:repo` / `overlay`)
+and the phrase "pages enumerated: <n>" once per scope — so the executor writes them deliberately
+rather than reverse-engineering them from the gate.
+
+---
+
+## Risk Assessment — Cycle 3
+
+**MEDIUM until HIGH 1 and HIGH 2 are corrected; LOW afterward.**
+
+The verification architecture is now sound in design: every load-bearing gate in the six plans was
+traced to the file and line it asserts over, and with the two exceptions above each one both fails on
+a mutated tree and passes on a correct one. What remains is not architectural — it is two gates whose
+constants were not re-measured against the tree they will run on.
+
+Both HIGHs are narrow and fixable entirely inside PLAN.md: four edits in `06-01-PLAN.md` for HIGH 1,
+and one pattern-bounding edit in each of `06-03-PLAN.md:224` and `06-04-PLAN.md:494` (plus a
+`files_modified` correction) for HIGH 2. Neither requires new work, new tasks, or re-planning. But
+both sit on `wave: 1` plans, so both must be fixed *before* execution rather than caught during it —
+and neither is something the executor is permitted to fix for itself.
+
+The 16 locked decisions D-01..D-16 remain respected. **No finding in this cycle requires re-opening a
+locked decision**, and no finding is an escalation about one. In particular HIGH 2 is a pattern
+defect, not a challenge to D-08 or to the Phase-5 KEEP-class adjudication the plans correctly cite —
+it is the plans' own doctrine (`06-04-PLAN.md:454-455`, "the finding is about the pattern") applied
+one file further than the plans applied it themselves.
+
+---
+
+## Verification coverage — Cycle 3
+
+Codex ran with full repo access and produced `file:line`-grounded findings throughout; no
+`[reviewed-without-repo-access]` marker was present. The orchestrating reviewer independently
+re-executed or re-read every load-bearing claim below against the working tree at `fd02272` before
+accepting it. Where Codex's line numbers differed from measurement (it cited
+`internal/bench/regression_test.go:509` and `regression.go:112/120`), the measured values are used.
+
+| Claim | Source / command actually run | Verdict |
+|---|---|---|
+| Cycle-2 claim 1 — mutated path emits `want error`, not the tolerance strings | `internal/bench/regression.go:9,15,113-126`; `rg -n 'want error' internal/bench/regression_test.go` → **511** | **VERIFIED** — widening either constant to `1.0` makes 113-126 unreachable; the only emitted assertion is at `:511` |
+| Cycle-2 claim 1 — band subtest names are Go-mangled substrings the gate can grep | `internal/bench/regression_test.go:43,62` → `throughput 11% slower: exceeds band fails`, `peak RSS 16% larger: exceeds band fails`; `06-03-PLAN.md:286-290` pins the committed-baseline analogues | **VERIFIED** — `throughput_11%_slower` / `peak_RSS_16%_larger` are substrings of both pairs |
+| Cycle-2 claim 1 — the planner's dry-run figures are arithmetically consistent | 2 failing subtests per family × 2 families = `WANT_ERROR_ASSERTIONS=4`; table + committed-baseline per band = `THROUGHPUT_BAND_REDS=2`, `RSS_BAND_REDS=2` | **VERIFIED** — figures fall out of the specified test surface |
+| Cycle-2 claim 1 — `CATERR=0` holds against a full `-v` paste | Ran the gate's four counters over a verbatim `-v` paste of the unmutated tree: `CATERR=0 THRU=2 RSSN=2 WANTERR=0`; underscore rendering confirmed (`=== RUN TestCheckRegression/runner_mismatch_between_baseline_and_current_fails…`); error strings at `regression.go:74,94` print only on failure | **VERIFIED** — and the same measurement surfaced MEDIUM 2: `THRU`/`RSSN` are already 2 on green |
+| Tree is green at `fd02272` before any plan work | `go build ./...`, `go vet ./internal/bench/... ./tools/bench/...`, `go test -count=1 ./internal/bench/... ./tools/bench/...` | **CONFIRMED** — all green; the plans start from a clean baseline |
+| Cycle-2 claim 2 — HEAD-relative property is true by construction | `06-03-PLAN.md:334-336`; Task 2's `files_modified` adds only `internal/bench/baseline_gate_test.go` | **VERIFIED** |
+| Cycle-2 claim 2 — pre-plan-SHA property is comment-only-scoped | `06-03-PLAN.md:337-339` — `rg '^[+-][^+-]' \| rg -v '^[+-]\s*//' \| wc -l` over the four files | **VERIFIED** — no `git diff --quiet` "apart from" semantics remain |
+| Cycle-2 claim 3 — 25 headings | `rg '^#{1,6} ' .claude/CLAUDE.md \| wc -l` → **25** | **VERIFIED** |
+| Cycle-2 claim 3 — `>= 12` stack-block anchors | `rg -o -F -e 'The Parser Decision' -e 'cockroachdb/pebble' -e 'tree-sitter/go-tree-sitter' .claude/CLAUDE.md \| wc -l` → **16** | **VERIFIED** — floor holds with headroom |
+| Cycle-2 claim 3 — GSD marker count | `rg -o '<!-- GSD:[^>]*-->' .claude/CLAUDE.md \| wc -l` → **14** | **VERIFIED** |
+| Cycle-2 claim 3 — the 6..24 window is satisfiable | Framing matches live at `.claude/CLAUDE.md:7` (three on one line), `:15`, `:93`; plan also sweeps `:17`. 3 lines minimum → 6 diff lines; 4 expected → 8 | **VERIFIED at the floor** — ceiling caveat recorded as LOW 2 |
+| Cycle-2 claim 4 — all nine class-C sites converted to `wc -l` | `PINDIFF` `06-01:376`; `PERMDIFF` `06-02:341`; `FIXDIFF` `06-02:399,407`; `FIGDIFF` `06-02:410`; `NC` `06-03:224`; `CONTENT`/`NONCOMMENT` `06-03:231,338`; `TOLDIFF` `06-03:234`; `CATERR` `06-03:448` | **VERIFIED** — 9/9 |
+| Cycle-2 claim 4 — no NEW broken instance | `rg -n '\|\| true' 06-0*-PLAN.md` → 7 hits; every one is either prose describing the defect or a `= "1"` comparison against a real match | **VERIFIED** |
+| Cycle-2 claim 4 — 06-04/05/06 genuinely needed none | `06-04-PLAN.md:143`, `06-05-PLAN.md:113`, `06-06-PLAN.md:123`; their only `rg -c` uses are the `NOTICE` copyright `= "1"` checks | **VERIFIED** |
+| Class-C shape surviving at `06-03-PLAN.md:176` (baseline capture, not a gate) | Ran it verbatim → `metrics.go=51 regression.go=70 regression_test.go=70 rss.go=18` | **CONFIRMED SAFE** — all four non-zero, so the `±25%` comparison at `06-03:232` is well-defined; not raised as a finding |
+| Cycle-2 claim 5a — mutation-alternative rejection recorded in a PLAN.md | `06-03-PLAN.md:144`, and the prohibition it produced at `06-03-PLAN.md:47` (forbids editing the test table) | **VERIFIED** — legitimate and recorded where the executor reads it |
+| Cycle-2 claim 5b — `STACK.md` rejection is factually right | `rg -c -i 'parity' .planning/research/STACK.md` → **no match**; rejection recorded at `06-05-PLAN.md:112` | **VERIFIED** — Codex's original finding was false |
+| Cycle-2 claim 5c — Node step line numbers | `.github/workflows/bench.yml` → `- name:` at **117**, `uses: actions/setup-node@…` at **118**, `node-version:` at **120**; recorded at `06-02-PLAN.md:283` as `117-120` | **VERIFIED** — the LOW claim of `118-121` was wrong |
+| 06-02's `U_PINNED = 19` arithmetic still correct | `rg -o '^\s*uses: '` → 22, `'^\s*uses: \./'` → 2, `'uses: [^@[:space:]]+@[0-9a-f]{40}'` → **20**; `bench.yml:118` is the one pinned action removed, `bench.yml:123` is a `run:` step | **CONFIRMED** — 20 − 1 = 19, + 2 local = 21 total |
+| 06-02's Taskfile exact-set + floor | `BENCHTASKS=bench:regression:,`, `ALLTASKS=47` (floor 40) | **CONFIRMED** |
+| `\bcomparison\b` floors survive the sweep | `rg -c` → `tools/bench/BASELINE.md` **5** (floor 5, zero headroom — carried forward from cycle 2), `internal/bench/regression.go` **7** (floor 5) | **CONFIRMED** |
+| 06-04's three `docs/BENCHMARKS.md` headings are reachable | `rg -n '^## ' docs/BENCHMARKS.md` → `## 1. Methodology` (7), `## 2. Raw numbers` (89), `## 3. Regression gate (PERF-02, INDX-06)` (242); Task 2 renames §2 to `## 2. Absolute numbers` | **CONFIRMED** — `H=3` attainable |
+| **NEW HIGH — 06-01 added-set is exactly three** | `go test -list '.*' ./tools/bench/... \| rg '^Test' \| sort \| wc -l` → **55** across `cpudiag`/`gencorpus`/`realcorpus`/`runner`; Task 1 adds package `tools/bench/publishcheck` with `main_test.go` (`06-01-PLAN.md:12-13,241-254`) and requires `-run TestPublishCheck` to name cases (`06-01-PLAN.md:371`) | **REFUTED** — the added set must contain ≥ 4 names; `06-01-PLAN.md:381` and `:470` demand exactly 3 |
+| 06-01's *removed* set is sound | All three of `TestParseFlags_OverridesApply`, `TestResolveTSBinary_EmptyWhenNotFound`, `TestResolveTSBinary_FindsOnPath` present in the measured before-set | **CONFIRMED** |
+| No other exact-set assertion in 06-01/02/03 is unsatisfiable | `rg -n 'MUST equal exactly\|equal exactly' 06-01/02/03-PLAN.md` — only `06-01:381` and the Taskfile set, which measures true today | **CONFIRMED** |
+| **NEW HIGH — census zero over `corpora/manifest.json`** | Ran both pattern sets verbatim: 06-03's over its full scope → **7**, over `corpora/manifest.json` alone → **1** at line 10; 06-04's case-insensitive set over the same file → **1** at line 10. `rg -n 'corpora/manifest.json'` across all six plans' `files_modified` → **absent from every one** | **REFUTED** — `06-03:224` and `06-04:494` assert `= "0"`; the residual hit is `TS/JS` in a `LOCKED (01-06)` note the plans' own KEEP class protects |
+| Cycle-2's "every census hit is inside a declared sweep target" | Re-measured per-file rather than in aggregate | **NOT UPHELD** — true for every file except `corpora/manifest.json` |
+| 06-03 declares the file it may edit | `06-03-PLAN.md:166,220-221` contemplate editing `corpora/manifest.json`'s top-level note; `06-03-PLAN.md:7-15` `files_modified` lists `internal/corpora/manifest.go` but not the JSON | **REFUTED** — declared-artifact mismatch, folded into HIGH 2's fix |
+| 06-04's other exact-equality gates | `CENSUS_FILES_SCANNED` 26 (floor 12); `CENSUS_CRITICAL_PRESENT` **13/13**; positive control `POSCTRL_MULTILINE=5 POSCTRL_LINEBASED=3`; `## 3. Regression gate (PERF-02, INDX-06)` byte-exact at `docs/BENCHMARKS.md:242`; `EMITTED=2` matches the 3→2 corpus drop (`weft-go`, `cockroachdb-pebble` survive `tools/bench/realcorpus/manifest.go`) | **CONFIRMED** — all reachable |
+| 06-05's exact-equality gates | `MK=14`, `HD=25`, `STACKANCH=16`, `PV_LEN=208`, `STATE_MD_RETIRED_CORE_VALUE` phrases confined to `STATE.md:26`, `CM=0` with the bullet retained at `PROJECT.md:244`, `state.load` parses | **CONFIRMED** — plan is clean |
+| 06-05's re-sync does not break its own gate | The Licensing line re-synced from `PROJECT.md:246` imports "reimplementation", which is **not** in the `CLAUDE_MD_FRAMING_TOTAL` pattern set | **CONFIRMED** |
+| 06-06 status-token namespaces do not collide | `MEM02_STORE_STATUS=` is not a substring of `MEM02_FILES_STATUS=` (06-05), and neither matches `BENCH03_STATUS=` (06-04); all three count over the shared `06-LIVE-VERIFICATIONS.md` | **CONFIRMED** — the three "exactly one token" counts stay independent |
+| `NOTICE` copyright literal is byte-correct | `rg -c -F 'Copyright (c) 2026 Colby Mchenry' NOTICE` → **1**; the unusual "Mchenry" capitalisation is what the file contains and carries its own do-not-correct warning | **CONFIRMED** |
+
+---
+
+# Cycle 2 — audit history (superseded by Cycle 3 above)
 
 **Reviewer:** Codex (source-grounded, full repo access), cross-checked and extended by the
 orchestrating reviewer against the working tree at `6a2816b`.
@@ -77,7 +459,7 @@ Three HIGHs are **new in cycle 2** — two of them introduced by the class-fix r
 
 ---
 
-## HIGH 1 (NEW) — 06-03 Task 3's `TOLNAMED >= 2` gate cannot pass with the specified mutation
+## HIGH 1 (CYCLE 2 — RESOLVED in `fd02272`, re-verified in cycle 3) — 06-03 Task 3's `TOLNAMED >= 2` gate cannot pass with the specified mutation
 
 `06-03-PLAN.md:372` requires:
 
@@ -106,7 +488,7 @@ literal `CheckRegression() = nil, want error` — and keep `CATERR=0` as the wro
 If the intent is genuinely to see the tolerance named, the mutation must move the *current* values
 past the band instead of widening the constant, which is a different (and more invasive) rehearsal.
 
-## HIGH 2 (NEW) — 06-03 Task 2 carries a self-contradictory pre-plan-SHA guard
+## HIGH 2 (CYCLE 2 — RESOLVED in `fd02272`, re-verified in cycle 3) — 06-03 Task 2 carries a self-contradictory pre-plan-SHA guard
 
 `06-03-PLAN.md:296`:
 
@@ -120,7 +502,7 @@ mechanically impossible as written, and an executor that runs it verbatim halts 
 or keep the pre-plan anchor and filter the diff to comment-only hunks — the same shape Task 1 already
 uses at `06-03-PLAN.md:212`.
 
-## HIGH 3 (NEW) — 06-05's stack-block "re-sync" would replace ~119 lines of agent instructions and break the plan's own gate
+## HIGH 3 (CYCLE 2 — RESOLVED in `fd02272`, re-verified in cycle 3) — 06-05's stack-block "re-sync" would replace ~119 lines of agent instructions and break the plan's own gate
 
 `06-05-PLAN.md:161` gives the CLAUDE.md:93 occurrence this verdict rule:
 
@@ -242,7 +624,7 @@ two plans; none requires re-opening a locked decision. With them corrected the s
 
 ---
 
-# Cycle 1 — audit history (superseded by Cycle 2 above)
+# Cycle 1 — audit history (superseded by Cycles 2 and 3 above)
 
 ## Codex Review
 
