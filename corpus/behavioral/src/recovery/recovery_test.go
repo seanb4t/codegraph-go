@@ -2,7 +2,7 @@ package recovery
 
 import "testing"
 
-// TestAccountRecovery is case (c) of the synthetic-parity corpus: its name
+// TestAccountRecovery is case (c) of the behavioral corpus: its name
 // lexically matches a query like "account recovery" (it's a Test*-named
 // function in a weakly-connected cluster), but it has ZERO inbound graph
 // edges — nothing in the source graph calls it (only the go test runtime

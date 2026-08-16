@@ -3,7 +3,7 @@ package accounts
 import "errors"
 
 // Validate is one of two identically-named top-level definitions that make
-// up case (a) of the synthetic-parity corpus — see orders/validate.go for
+// up case (a) of the behavioral corpus — see orders/validate.go for
 // the duplicate. Different package, identical exported symbol name:
 // `node Validate` (once NODE-01 lands) must enumerate BOTH as distinct
 // definitions rather than resolving to just the lowest-Id one.
