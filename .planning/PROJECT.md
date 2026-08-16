@@ -69,7 +69,7 @@ The artifact line at v1.0's close was `v0.2.0` (signed, SBOM'd, SLSA-attested, c
 
 **Key context:**
 
-- **`codegraph migrate` stays as a capability**, reframed as importing a legacy SQLite index. Removing framing must not remove function.
+- **`codegraph migrate` was removed entirely** — maintainer ruling D-04 (2026-08-15) amended CODE-03 in Phase 5 to drop the command, the `internal/migrate` package, its fixture, and the sole-use `modernc.org/sqlite` dependency. This is the single, deliberate exception to "removing framing must not remove function": the migration path was itself the parity framing this milestone retires, so there is nothing to import from and users re-index from source. Everywhere else that rule still binds.
 - **`.planning/` is out of scope.** It is an append-only record of what actually happened; rewriting shipped milestone artifacts would falsify the project's own history and break GSD's scope-sensitive parsers. `CHANGELOG.md` is likewise out of scope (release-please-owned).
 - **TypeScript-the-indexed-language must survive** — `internal/indexer/tsextract`, the capability matrix, and every language-support table are product surface, not provenance. A naive find-and-replace breaks real capability.
 - **Re-authored corpora must exercise the same 9-kind `RANK_EDGES` set** the current ones do, or `explore`/`node` coverage silently narrows while the suite stays green.
