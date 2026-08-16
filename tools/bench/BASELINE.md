@@ -61,8 +61,8 @@ Silicon machine:
 | GitHub-hosted linux/amd64 runner | ~11,400 |
 
 A ~3x spread between two OSes on identical hardware, with the CI runner
-slower than both. On real corpora the head-to-head captures in this
-directory measure darwin/arm64 vs linux/amd64 CI **6.7x-148x** apart.
+slower than both. On real corpora the platform spread measured wider
+still: darwin/arm64 vs linux/amd64 CI measured **6.7x-148x** apart.
 
 The practical consequence: passing the `GOOS`/`GOARCH` guard is
 necessary but **not sufficient**. A baseline reblessed on a maintainer's
@@ -238,7 +238,7 @@ staleness, not a real Namespace throughput advantage of that magnitude.
 **Resolution:** `-scratch-fs`'s default flipped from `auto` (prefer
 tmpfs) to `disk`. `bench.yml`'s `rebless` job returned to `ubuntu-latest`
 (matching `ci.yml`'s still-unmoved perf gate — nothing needed to move on
-the gate side, since the gate was never migrated). `headtohead`
+the gate side, since the gate was never migrated). `publish`
 (PERF-01, non-gating, publish-only) deliberately **stays** on Namespace —
 it never needs to match `rebless`'s runner class, and Namespace measures
 meaningfully faster on this corpus, so leaving a non-gated job there

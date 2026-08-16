@@ -99,7 +99,7 @@ type inScopeJob struct {
 // inScopeJobs is the literal D-01/D-02 fixture: every job this guard binds,
 // by (workflow file, job ID). bench.yml and release.yml are deliberately
 // NOT here — both carry their own documented D-01 exceptions decided in
-// earlier plans of this phase (bench.yml's rebless/headtohead/diagnostic
+// earlier plans of this phase (bench.yml's rebless/publish/diagnostic
 // jobs' inline `go run ./tools/bench/runner` invocations, commented in-file
 // above the rebless job; release.yml's native build matrix, D-08).
 // Including either file here would fail this test for reasons the project
