@@ -56,9 +56,9 @@ var DefaultExploreBFSBounds = ExpandBFSBounds{
 // expandHierarchyKinds is H10's type-kind filter (class/interface/
 // struct/trait/protocol per RESEARCH §C.2). Reuses gather.go's
 // definitionKinds rather than re-declaring an identical map: this
-// codebase's Kind vocabulary already collapses that whole TS set onto
+// codebase's Kind vocabulary already collapses that whole documented set onto
 // exactly KindStruct/KindInterface/KindTypeAlias (see gather.go's
-// definitionKinds doc comment, D-02) — H10's slightly narrower TS
+// definitionKinds doc comment, D-02) — H10's slightly narrower documented
 // wording ("class/interface/struct/trait/protocol", no enum/type_alias)
 // still lands on the identical 3 Go Kind values, so a second map would
 // be a duplicate, not a distinct filter.

@@ -119,7 +119,7 @@ const centralFileMinTermHits = 1
 // mass tie-break). Fewer than centralFileCap files are returned when
 // fewer than that many qualify — the result is never padded.
 // Deterministic: eligible paths are sorted by mass descending, then by
-// path ascending (D-04 tie-break; TS's own Map/Set iteration order is
+// path ascending (D-04 tie-break; the documented Map/Set iteration order is
 // not reproducible in Go).
 func centralFileSelection(paths []string, fileGraphScore map[string]float64, fileTermHits map[string]int) map[string]bool {
 	var eligible []string
@@ -168,10 +168,10 @@ const fileSortMassEpsilonFraction = 0.01
 //
 // then !generated (node.go isGeneratedFile), then score (fileScores),
 // then node count (fileNodeCounts), then path ascending — the final
-// deterministic tie-break (D-04). TS files carry no stable "Id"; path is
-// the only natural per-file identity, so it is this port's documented
-// substitute for the node-level lowest-Id tail convention used elsewhere
-// in this codebase.
+// deterministic tie-break (D-04). Files carry no stable "Id" in the
+// documented design; path is the only natural per-file identity, so it
+// is this file's documented substitute for the node-level lowest-Id
+// tail convention used elsewhere in this codebase.
 //
 // sort.SliceStable so that any residual tie (all tiers AND the full tail
 // equal) preserves the caller's input order rather than reordering

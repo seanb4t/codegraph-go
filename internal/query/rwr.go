@@ -92,7 +92,7 @@ const (
 // Precondition (T-01-10, DoS): this function is O(iterations * len(edges))
 // and assumes nodeIDs/edges are ALREADY bounded by the caller — the
 // upstream subgraph-gathering caps (maxNodes=200 / GLUE_NODE_CAP=60,
-// ported in later plans) are enforced BEFORE this function is invoked,
+// implemented in later plans) are enforced BEFORE this function is invoked,
 // not inside it.
 func computeGraphRelevance(nodeIDs []string, edges []*schema.Edge, seedIDs map[string]bool) map[string]float64 {
 	out := make(map[string]float64)
