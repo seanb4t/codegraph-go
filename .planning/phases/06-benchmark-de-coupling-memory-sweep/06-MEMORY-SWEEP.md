@@ -226,40 +226,44 @@ content out of recall.
 Task 2's blocking `checkpoint:decision` is now reachable: the classification above exists and is
 put to the maintainer for approval before any durable write.
 
-### Task 3 (apply the approved corrections) — BLOCKED: supersede write gate denies this session
+### Task 3 (apply the approved corrections) — COMPLETE
 
-The maintainer approved all 4 supersedes at Task 2's blocking checkpoint. Applying them FAILED.
+The maintainer approved all 4 supersedes at Task 2's blocking checkpoint. All 4 are APPLIED.
 
-**Observed, verbatim:** `mcp__engram__supersede_memory` returns `not found: ["<target>"]` for every
-target attempted — `3ekc84hbqt` by short_id, the same record by full UUID
-(`0b573a5e-d768-4643-ad21-e37af3174e53`), and `gw79qy2a9z` as an independent probe. Three targets,
-three identical rejections. The probe call was rejected wholesale, so no partial or junk record was
-created.
+| Superseded | Correcting record | The claim that was corrected |
+|---|---|---|
+| `3ekc84hbqt` | `xj1stbrsw6` | "The functionality floor and the migration path still bind" — both halves false |
+| `gw79qy2a9z` | `gxwkk3necn` | migrate "PRESERVED-reframed" / "one-way sqlite read still binds" — reversed by D-04 |
+| `agggksad53` | `b9wjge7375` | `FilesByLanguage` MUST be `json:"-"` — reversed by v0.11.0 Phase 1 D-03 |
+| `7f0pq2wepv` | `mw5z9s9bft` | same suppression ruling, reached via the same parity reasoning |
 
-**Diagnosis.** Per the engram contract, a target that is not owned, does not exist, or has an
-ambiguous short id are all indistinguishable — all return 404. These records demonstrably EXIST:
-this session fetched `3ekc84hbqt` in full via `get_memory` moments earlier. So the cause is the
-remaining one: **supersede routes through the ownership WRITE gate, and this session's
-server-assigned actor is not the records' owner.** Every enumerated record carries
-`owner: sean@fuzzymagic.com`; this session authenticates as a different identity. Read access to a
-shared record is not write access to it.
+**Method.** Correction by supersede only — no `delete_memory`, no `update_memory`, no overwrite of
+any target, satisfying T-06-18's mitigation. Each correcting record restates the superseded
+record's still-true content verbatim before correcting the one reversed claim, so the composite
+records (`agggksad53`, `7f0pq2wepv`) lose nothing from recall: the four-errors-from-inference
+lesson, the CR-02 silent-skip trap, the 4-gate worktree cascade with its inverted gate 4, the
+`OpenAt` startPath plumbing, and the `rg -r`/`rg -h` traps all carry forward.
 
-**What was NOT done, deliberately.** `update_memory` is not blocked for this session (it succeeded
-earlier on `whad9x6gxq`, an unrelated in-place sharpening). It was NOT used as a workaround here.
-`update_memory` REPLACES content in place; 06-06's own threat model T-06-18 (Tampering, high) names
-"correction by supersede only" and "a prohibition on delete and overwrite" as the mitigation, for
-the express purpose of preserving what the project used to believe and when it changed. Substituting
-an overwrite would have produced a green-looking task while defeating the exact control the blocking
-checkpoint exists to enforce. The classification stands; the corrections are unapplied.
+**Verified two ways, not asserted:**
+1. `get_memory("3ekc84hbqt")` returns the original content intact with
+   `superseded_by: fc4e8512-70a3-4af9-9bcc-5368eb09cd18` stamped — history preserved, nothing
+   deleted or overwritten.
+2. A `search_memory` probe phrased in the superseded records' own terms ("parity is a functionality
+   baseline"; "FilesByLanguage must be json dash suppressed"; "migrate capability preserved and
+   reframed") returns all four CORRECTING records and none of the four superseded originals — the
+   property that actually matters, since recall is what a future session acts on.
+
+**A recorded false alarm, kept deliberately.** The first four supersede attempts failed with
+`not found: ["<id>"]` and were misdiagnosed in this artifact as an ownership write-gate denial,
+with the session wrongly believed to be authenticated as a non-owner. That was wrong. The real
+cause: `supersede_memory`'s `supersedes` parameter is a **string**, and an array was passed. The
+error echoed the array back verbatim — brackets and quotes included — which was the server
+correctly reporting that no record has the id `["3ekc84hbqt"]`. The maintainer corrected the
+identity claim, and reading the tool's actual schema found the real cause in one step. The lesson
+generalizes and is worth more than the incident: **a "not found" that echoes your argument back is
+reporting your argument, not the store's contents** — and a tool called without reading its schema
+is a guess, however plausible the resulting error story.
 
 **Status token:**
 
-`MEM01_STORE_STATUS=pending-supersede-write-gate-denied`
-
-**What resolves this:** a session authenticated as the records' owner (`sean@fuzzymagic.com`) runs
-the 4 approved supersedes. The classification table above is the complete input — each row names its
-target, its currently-false claim, and the ruling that reversed it. No re-enumeration is needed.
-
-**Consequence for the phase:** MEM-01's memory-store half is NOT satisfied. Per D-16 this is
-recorded as blocked, not complete. MEM-02's file half was closed by 06-05; MEM-01's file-facing work
-was closed by 06-05 and this phase's earlier plans. Only the durable-store correction remains open.
+`MEM01_STORE_STATUS=complete-4-superseded-0-deleted-0-overwritten`
