@@ -2,11 +2,14 @@
 // benchmark harness (PERF-01, INDX-06). Peak RSS is always measured
 // externally, via the OS-level rusage of a child process the caller
 // spawned (exec.Cmd.ProcessState.SysUsage()) — never via in-process Go
-// runtime memory statistics, which cannot be compared fairly against the
-// TS Node process (D-05). This package has no network or crypto surface
-// and does not shell out itself; callers own the exec.Cmd. Measurement
-// helpers never panic — they return (T, error) so a single bad run fails
-// its CI step loudly instead of crashing the whole gate.
+// runtime memory statistics: an externally observed child-process rusage
+// figure is the only peak-RSS number that stays comparable across runs
+// and machines, because an in-process Go runtime statistic measures the
+// harness rather than the subject (D-05). This package has no network or
+// crypto surface and does not shell out itself; callers own the
+// exec.Cmd. Measurement helpers never panic — they return (T, error) so
+// a single bad run fails its CI step loudly instead of crashing the
+// whole gate.
 package bench
 
 import (
