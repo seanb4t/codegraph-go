@@ -272,9 +272,31 @@ Plans:
   4. Every engram spine record for `repo:github.com/seanb4t/codegraph-go` whose durable content asserts retired framing has been superseded by a corrected record — none overwritten, none deleted, and no record of real history removed (MEM-01)
   5. A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense (MEM-02)
 
-**Notes**: MEM-01/02 are verified by inspection, not by a test — the spine lives outside git and no CI gate can hold it. "Supersede, don't overwrite" is the point: the historical records are true statements about what happened and must survive; only records asserting the framing *in the present tense* are corrected. The head-to-head JSON captures already committed under `tools/bench/headtohead-*.json` are historical measurement records; whether they are removed or retained as dated artifacts is a scoping call for the phase plan, but `docs/BENCHMARKS.md` must not publish their multipliers either way.
+**Notes**: MEM-01/02 are verified by inspection, not by a test — the spine lives outside git and no CI gate can hold it. "Supersede, don't overwrite" is the point: the historical records are true statements about what happened and must survive; only records asserting the framing *in the present tense* are corrected. The head-to-head JSON captures already committed under `tools/bench/headtohead-*.json` are historical measurement records; whether they are removed or retained as dated artifacts is a scoping call for the phase plan, but `docs/BENCHMARKS.md` must not publish their multipliers either way. **Scoping call resolved (06-CONTEXT D-01):** the six captures are deleted; git history preserves them.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1** *(parallel — zero file overlap)*
+
+- [ ] 06-01-PLAN.md — Tracer: absolute-only single-subject measurement path end-to-end — drop the milestone-entangled corpus entry, replace the two-subject mode with `publish`, delete the comparison-binary flag and its PATH-lookup helper with their paired test edits, delete the six committed captures, re-author realcorpus/runner prose (BENCH-02)
+- [ ] 06-03-PLAN.md — `internal/bench` + `internal/corpora` comment-only framing sweep, then the FIXT-07 mutation rehearsal proving `CheckRegression` still fires RED on both the throughput and peak-RSS tolerances, byte-cleanly reverted and recorded in `06-MUTATION-LOG.md` (BENCH-02)
+
+**Wave 2** *(blocked on 06-01 — the workflow references the runner mode it creates)*
+
+- [ ] 06-02-PLAN.md — `bench.yml`: delete the comparison-invoking job, author the fresh absolute-numbers `publish` job carrying all four D-06 properties, move the dispatch choice and conditional with it; sweep `BASELINE.md` framing and the workflow-exception comment (BENCH-03)
+
+**Wave 3** *(blocked on Waves 1–2 — the document publishes what the path measured)*
+
+- [ ] 06-04-PLAN.md — Measurement of record (`06-PUBLISH-RESULTS.json`), `docs/BENCHMARKS.md` rewritten from scratch with methodology, provenance and the regression-gate description, then the positive-controlled phase acceptance census (`06-CENSUS.md`) (BENCH-01, BENCH-02, BENCH-03)
+
+**Wave 4** *(the sweep describes the end state, so it rides after the code and docs land)*
+
+- [ ] 06-05-PLAN.md — Agent-facing framing files: enumerate every occurrence in `.claude/CLAUDE.md`, `.planning/PROJECT.md` and `.planning/STATE.md` with a per-occurrence verdict, then apply the sweep verdicts and re-sync the generated mirror blocks from their sources (MEM-02)
+
+**Wave 5** *(blocked on Wave 4 — the store should agree with the repo)*
+
+- [ ] 06-06-PLAN.md — Engram spine sweep: enumerate spine + rule + overlay scopes to exhaustion, classify every record by D-13's present-tense-or-forward-looking test, a blocking `checkpoint:decision` on the one-way classification, then execute the approved supersedes and close `06-MEMORY-SWEEP.md` (MEM-01, MEM-02)
 
 ## Progress
 
