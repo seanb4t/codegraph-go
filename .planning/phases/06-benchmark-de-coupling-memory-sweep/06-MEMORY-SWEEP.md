@@ -101,3 +101,54 @@ verification mechanism for that specific defect class.
 
 Do NOT edit any of the three files in this task — this document is the decision record Task 2
 executes.
+
+## Engram enumeration (D-14) — HALTED: precondition not met (06-06 Task 1)
+
+**Precondition named by 06-06-PLAN.md Task 1, verbatim:** "The executing session has engram MCP
+tools registered and callable — a read-only listing call against the repo spine scope returns a
+result rather than a tool-not-found error. This is the real precondition, NOT network reachability
+of the gateway host: engram is configured at user level and not in this repository's `.mcp.json`,
+so a session on a reachable network with no registered tools still cannot enumerate anything. If
+the tools are unavailable, HALT and surface a checkpoint. Do not substitute recall context, do not
+infer the population, and do not proceed to the checkpoint."
+
+**Check performed live, in this executing session, before any enumeration attempt:**
+
+1. This executor's own registered/callable tool surface was inspected directly (the complete
+   function list made available to this session for invocation). It contains exactly: `Read`,
+   `Write`, `Edit`, `Bash`, `Skill`, `mcp__context7__resolve-library-id`,
+   `mcp__context7__query-docs`, `mcp__plugin_context7_context7__resolve-library-id`,
+   `mcp__plugin_context7_context7__query-docs`. **No `mcp__engram__*` tool of any kind is present**
+   — not `list_memory`, not `search_memory`, not `get_memory`, not `list_rules`, not
+   `supersede_memory`.
+2. `${PROJECT_ROOT}/.mcp.json` was read in full this session (both the shared-checkout path and
+   this worktree's own copy, identical contents). It registers only two servers, `gsd-workflow`
+   and `gsd-browser`. No `engram` entry exists at the project scope — confirming RESEARCH.md
+   Pattern 6's LOW-confidence note that engram is not wired into this repo's own MCP config.
+3. `~/.claude/plugins/installed_plugins.json` was read this session and confirms `engram@engram`
+   IS installed, but at **user scope** (v0.13.0) — not project scope, and not passed through to
+   this worktree-spawned executor's tool surface. This is exactly the scenario the precondition
+   text names: a session can have a reachable engram gateway host and still have zero registered
+   tools to call against it, because tool registration and network reachability are different
+   preconditions, and this task's precondition is the former.
+4. **No `mcp__engram__*` call was attempted.** There is nothing named `mcp__engram__list_memory`
+   (or any sibling) in this session's callable surface to invoke — there is no tool-not-found
+   *error* to observe, because the tool does not exist in the surface to be called in the first
+   place. This is the unavailable case the precondition anticipates, not a distinct failure mode.
+
+**Result: PRECONDITION UNMET.** Per Task 1's own instruction, this task HALTS here. No
+enumeration, no classification, and no inference from recall context was performed for any of the
+three D-14 scopes (repo spine, `rule:repo:` scope, workspace overlays). Zero engram tool calls —
+read or write — were made in this session, before or after this check.
+
+**Disposition:** This plan (06-06) is NOT marked complete. Task 2's blocking
+`checkpoint:decision` (classification approval) is not reached, because Task 1 produced no
+classification for it to approve — proceeding to it would mean approving an empty or fabricated
+population, which the precondition text explicitly forbids ("do not proceed to the checkpoint").
+
+**What resolves this:** a subsequent execution of this task — either a fresh interactive session
+that carries the `mcp__engram__*` tool surface (the orchestrator's own session, per the
+maintainer-supplied context in this run's spawn prompt, which references specific engram
+`short_id`s it evidently can recall/read), or a re-spawned executor whose tool grant explicitly
+includes the `engram` MCP server. Until then, D-16 requires this sweep be recorded as blocked,
+not complete.
