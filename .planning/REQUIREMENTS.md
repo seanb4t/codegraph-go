@@ -36,11 +36,11 @@
 
 - [x] **FIXT-01**: Corpus selection is decided by measurement — a blocking Phase 1 spike indexes candidate third-party MIT / Apache-2.0 repositories and records actual per-kind edge counts and per-language file counts, locking a final set that collectively covers all 9 `RANK_EDGES` kinds (`calls`, `implements`, `imports`, `extends`, `overrides`, `references`, `instantiates`, `returns`, `type_of`) and the 5 priority-4 languages (Go, Java, C#, Python, TS/JS)
 - [x] **FIXT-02**: The locked corpora are fetched at exact pinned commit SHAs by a Taskfile target and restored from CI cache; no corpus source is vendored into the repository, and a re-fetch at the pinned SHA reproduces the same tree
-- [ ] **FIXT-03**: No golden test self-skips in CI — the suite runs against the fetched corpora on every CI run, a fetch or cache failure fails the job loudly rather than skipping, and the job carries a positive assertion that the suite actually executed (scenario count, not merely a non-failing exit)
+- [x] **FIXT-03**: No golden test self-skips in CI — the suite runs against the fetched corpora on every CI run, a fetch or cache failure fails the job loudly rather than skipping, and the job carries a positive assertion that the suite actually executed (scenario count, not merely a non-failing exit)
 - [x] **FIXT-04**: The `weft-go` and `colbymchenry-codegraph` corpora and their captured fixtures are removed, and `capture.sh` and `mcp-capture.mjs` are deleted in favor of the Go-side capture path (`testdata/golden/gocapture`)
 - [x] **FIXT-05**: The purpose-built behavioral corpus survives as `corpus/behavioral/` with its case map intact and its framing stripped — no targeted case (overloaded same-named symbols, multi-word queries, the `Test*`-heavy weakly-connected cluster, structural-beats-lexical ranking) is lost to the rename
 - [x] **FIXT-06**: Every golden is re-frozen from codegraph-go's own output against the locked corpora
-- [ ] **FIXT-07**: The re-baselined golden suite is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation per assertion family, proving it did not go vacuous
+- [x] **FIXT-07**: The re-baselined golden suite is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation per assertion family, proving it did not go vacuous
 
 ### Benchmarks (BENCH)
 
@@ -99,11 +99,11 @@ Which phases cover which requirements.
 | CODE-03 | Phase 5 | **Removed** (maintainer ruling 2026-08-15 — migrate dropped, capability + `modernc.org/sqlite` dependency removed; was parity framing) |
 | FIXT-01 | Phase 1 | Complete |
 | FIXT-02 | Phase 1 | Complete |
-| FIXT-03 | Phase 3 | Pending |
+| FIXT-03 | Phase 3 | Complete |
 | FIXT-04 | Phase 2 | Complete |
 | FIXT-05 | Phase 2 | Complete |
 | FIXT-06 | Phase 2 | Complete |
-| FIXT-07 | Phase 3 | Pending |
+| FIXT-07 | Phase 3 | Complete |
 | BENCH-01 | Phase 6 | Complete |
 | BENCH-02 | Phase 6 | Complete |
 | BENCH-03 | Phase 6 | Complete |

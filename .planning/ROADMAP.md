@@ -174,6 +174,8 @@ Plans:
 
 - [x] 02-04-PLAN.md — Run the re-freeze capture, review single-cause attribution + zero identifier change, commit the reviewed diff (FIXT-06)
 
+### Phase 3: Non-Vacuity Proof & Unconditional CI Execution
+
 **Goal**: The re-baselined golden suite is trusted because it has been watched fail, and CI cannot silently stop running it.
 **Depends on**: Phase 2. This phase is deliberately separate from the re-freeze — a re-baseline that authors its own proof in the same change certifies its own oracle.
 **Requirements**: FIXT-03, FIXT-07
@@ -186,16 +188,16 @@ Plans:
 
 **Notes**: The scenario-count assertion is the positive half FIXT-03 requires; a non-failing exit is not evidence the suite ran. This repo already carries two negative-only guards that pass vacuously (rule `84d1gfpywd`; the `dry-run-signed` additions-only diff guard), and the wire-oracle's `ExpectedScenarioCount` is the working precedent for the shape that does not.
 
-**Plans**: 2 plans
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Tracer: executed-scenario-count self-assertion (26 goldens + 4 CASES cases = 30, exact equality) + unconditional `golden` job in corpora.yml with widened path filter, inScopeJobs entry, -count=1, and the ci.yml D-04 removal (FIXT-03)
+- [x] 03-01-PLAN.md — Tracer: executed-scenario-count self-assertion (26 goldens + 4 CASES cases = 30, exact equality) + unconditional `golden` job in corpora.yml with widened path filter, inScopeJobs entry, -count=1, and the ci.yml D-04 removal (FIXT-03)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 03-02-PLAN.md — FIXT-07 mutation rehearsals: all five assertion families demonstrated RED (mutation applied → observed failure → byte-clean revert) and recorded in 03-MUTATION-LOG.md (FIXT-07)
+- [x] 03-02-PLAN.md — FIXT-07 mutation rehearsals: all five assertion families demonstrated RED (mutation applied → observed failure → byte-clean revert) and recorded in 03-MUTATION-LOG.md (FIXT-07)
 
 ### Phase 4: Attribution & Documentation Sweep
 
