@@ -1,60 +1,23 @@
 ---
 phase: 06-benchmark-de-coupling-memory-sweep
-verified: 2026-08-16T20:45:00Z
-status: gaps_found
-score: 2/5 requirements fully PASS, 3/5 PARTIAL (all three partials are honestly disclosed by the
-  phase's own artifacts; one of the three additionally carries a previously-undocumented
-  completeness gap found independently by this verification)
+verified: 2026-08-16T21:20:00Z
+status: human_needed
+score: 3/5 requirements fully PASS, 2/5 PARTIAL (both partials are honestly disclosed by the
+  phase's own status tokens and require a maintainer/live-session action outside this phase's
+  automatable scope)
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "MEM-01: every superseded record is issued through the plan's own designed acceptance
-      record, with the approved-vs-executed supersede sets reconciled by explicit diff and the
-      population's completeness stated arithmetically"
-    status: partial
-    reason: >
-      06-06-PLAN.md Task 3 mandates two named sections in 06-MEMORY-SWEEP.md
-      (`## Supersedes executed (MEM-01)` and `## Completeness and accepted gaps`) plus an explicit
-      approved==executed short_id set-equality reconciliation. None of the three exist in the
-      committed 06-MEMORY-SWEEP.md — confirmed by heading grep, zero hits for both. The underlying
-      work (4 supersedes, verified two ways: get_memory shows superseded_by stamped and intact;
-      search_memory returns only the correcting records) is real and well-evidenced in a
-      differently-shaped "### Task 3 (apply the approved corrections) — COMPLETE" subsection, but
-      the phase's own defined acceptance artifact for MEM-01 is incomplete.
-    artifacts:
-      - path: ".planning/phases/06-benchmark-de-coupling-memory-sweep/06-MEMORY-SWEEP.md"
-        issue: "Missing '## Supersedes executed (MEM-01)' and '## Completeness and accepted gaps'
-          headings; no printed approved/executed set-equality diff"
-    missing:
-      - "A '## Supersedes executed (MEM-01)' section, one row per executed supersede (short_id
-        first column, operation name, returned identifier, response shape, corrected content)"
-      - "A '## Completeness and accepted gaps' section stating per-scope totals and the
-        supersede-count + leave-historical-count = total arithmetic"
-      - "The approved-vs-executed short_id sets extracted and diffed with the count printed
-        (APPROVED_SUPERSEDE_IDS / EXECUTED_SUPERSEDE_IDS / SUPERSEDE_SET_EQUALITY)"
-  - truth: "MEM-02 store half: the standard actually met (a performed fresh-session recall, or the
-      accepted enumeration-plus-returned-identifier evidence) is recorded as an explicit status
-      token, never left to a reader's inference"
-    status: partial
-    reason: >
-      06-06-PLAN.md Task 3 mandates a '## MEM-02 — store half' section in
-      06-LIVE-VERIFICATIONS.md carrying exactly one of
-      `MEM02_STORE_STATUS=verified-fresh-session` or
-      `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard`. Neither the heading nor the token
-      exists anywhere in the committed 06-LIVE-VERIFICATIONS.md — confirmed by direct grep,
-      zero hits. This is the one item in the phase that is not merely partial-and-disclosed but
-      silently absent: the plan's own text states "what is not legitimate is claiming MEM-02
-      demonstrated when the standard actually met was D-15's" — and right now no standard is
-      recorded at all for the store half, so a reader cannot tell whether MEM-02's store half was
-      accepted-by-design or simply skipped.
-    artifacts:
-      - path: ".planning/phases/06-benchmark-de-coupling-memory-sweep/06-LIVE-VERIFICATIONS.md"
-        issue: "No '## MEM-02 — store half' section and no MEM02_STORE_STATUS token of either
-          value"
-    missing:
-      - "A '## MEM-02 — store half' section in 06-LIVE-VERIFICATIONS.md carrying
-        `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` (the applicable value, since a
-        fresh-session recall was not performed) per the plan's own two-token contract"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 2/5
+  gaps_closed:
+    - "MEM-01: '## Supersedes executed (MEM-01)' and '## Completeness and accepted gaps' sections
+      now exist in 06-MEMORY-SWEEP.md with printed approved/executed set-equality and per-scope
+      arithmetic (supersede + leave-historical = total)"
+    - "MEM-02 store half: '## MEM-02 — store half' section now exists in
+      06-LIVE-VERIFICATIONS.md carrying MEM02_STORE_STATUS=accepted-by-d15-evidence-standard"
+  gaps_remaining: []
+  regressions: []
 deferred: []
 human_verification:
   - test: "Start a genuinely fresh session in this repository and read the memory recall it
@@ -64,9 +27,11 @@ human_verification:
       replacement in the present tense, and nothing states a future obligation to another
       implementation's behaviour"
     why_human: "MEM-02's own success criterion is a live session's recall, not a static check. The
-      phase's own plans (06-05, 06-06) both declined to perform this and recorded the fact
-      explicitly rather than claiming it on silence — this verifier inherits the same limitation
-      and cannot spawn an independent fresh session to observe the recall itself."
+      phase's own artifacts (06-05, 06-06, and this closure commit) all decline to perform this and
+      record the fact explicitly (MEM02_FILES_STATUS=pending-fresh-session-not-performed,
+      MEM02_STORE_STATUS=accepted-by-d15-evidence-standard) rather than claiming it on silence —
+      this verifier inherits the same limitation and cannot spawn an independent fresh session to
+      observe the recall itself."
   - test: "Push branch gsd/v0.11.0-standalone-project-identity (or land it) and dispatch
       .github/workflows/bench.yml with job=publish; inspect the resulting run's job summary and
       the uploaded publish-results artifact"
@@ -75,9 +40,10 @@ human_verification:
       artifact uploads without if-no-files-found tripping; no step in the job installs or invokes
       any implementation other than the freshly-built Go binary"
     why_human: "BENCH-03 requires an actual bench.yml run. The branch is confirmed unpushed
-      (git ls-remote exits non-zero); no CI run exists for it. This is a maintainer action the
-      phase's own maintainer explicitly declined to perform in this session (checkpoint decision:
-      pending-no-ci-run, not dispatch-now)."
+      (git ls-remote --exit-code --heads origin gsd/v0.11.0-standalone-project-identity exits 2,
+      re-verified independently in this re-verification pass at commit d3b4f37); no CI run exists
+      for it. This is a maintainer action the phase's own maintainer explicitly declined to perform
+      in this session (checkpoint decision: pending-no-ci-run, not dispatch-now)."
 ---
 
 # Phase 6: Benchmark De-coupling & Memory Sweep Verification Report
@@ -86,22 +52,69 @@ human_verification:
 implementation in the picture, and an agent that starts a session afterward recalls codegraph-go
 as a project rather than as a port.
 
-**Verified:** 2026-08-16
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Verified:** 2026-08-16 (re-verification, second pass)
+**Status:** human_needed
+**Re-verification:** Yes — after gap closure at commit d3b4f37 (previous pass: 91354f7, gaps_found)
 
 ## Method
 
-Goal-backward verification against the codebase, not the SUMMARY narratives. Every claim below was
-independently re-checked with direct file reads, `git log`/`git show`, and fresh `rg -U`
-positive-controlled census invocations run by this verifier (not merely re-reading the phase's own
-census artifacts). Per the task brief, three items are treated as the deliberately-correct end
-state rather than gaps: BENCH-03 recorded pending (no CI run exists for an unpushed branch),
-MEM-02's file-half fresh-session check recorded pending, and the engram store's contents being
-unverifiable directly (outside git, no tool access here). One additional item — the missing
-MEM-02 store-half status token and the missing MEM-01 completeness sections in 06-06's own output
-— was found independently during this verification and is **not** one of the pre-cleared items; it
-is reported as a genuine gap below.
+This is a re-verification pass. Per the task brief, BENCH-01 and BENCH-02's prior VERIFIED
+findings and the BENCH-03 / MEM-02-file-half deferral assessments from the 91354f7 pass are
+accepted and spot-checked rather than fully re-derived (`git diff --stat 91354f7 d3b4f37` confirms
+the closure commit touched only `06-MEMORY-SWEEP.md` and `06-LIVE-VERIFICATIONS.md` — no code or
+`docs/BENCHMARKS.md` changed, so nothing underlying BENCH-01/BENCH-02 could have regressed). The
+primary work this pass: independently confirm or refute that commit d3b4f37 genuinely closes the
+one gap the prior pass found — 06-06-PLAN.md Task 3's missing artifact-contract sections — rather
+than merely satisfying its grep gate cosmetically.
+
+**The plan's own acceptance command (06-06-PLAN.md Task 3, `<automated>` block, verbatim) was run
+from the repo root and is the authority here:**
+
+```
+SUPERSEDE_VERDICTS=4 DELETE_OR_OVERWRITE_VERDICTS=0
+APPROVED_SECTION_RAW_LINES=122 EXECUTED_SECTION_RAW_LINES=28
+APPROVED_SUPERSEDE_IDS=4 APPROVED_UNIQUE=4 EXECUTED_SUPERSEDE_IDS=4 EXECUTED_UNIQUE=4
+SUPERSEDE_SET_EQUALITY=true
+MEM02_STORE_STATUS_TOKENS=1
+SWEEP_RECORD_CLOSED=true
+EXIT_CODE=0
+```
+
+This matches the expected shape exactly (4/4 supersede verdicts, 0 delete/overwrite, both raw-line
+counts > 0, approved and executed sets each size 4 with 4 unique IDs, set equality true, exactly
+one MEM02_STORE_STATUS token, gate closed).
+
+**Substantive-vs-cosmetic check beyond the gate itself**, per the task brief's explicit instruction
+not to stop at a green grep:
+
+- **`## Supersedes executed (MEM-01)` rows are real, not grep-shaped filler.** Each of the 4 rows
+  names the actual operation called (`mcp__engram__supersede_memory`), a returned identifier in
+  both short and full UUID form (e.g. `xj1stbrsw6` / `fc4e8512-70a3-4af9-9bcc-5368eb09cd18`), and
+  the response shape (`{id, short_id}`). This satisfies the plan's own bar — "a row with no
+  returned identifier is an unproven write" and "an identifier with no operation name does not
+  distinguish a supersede from an update" — both conditions are met by every row. The section also
+  independently re-states the two-way re-query proof (`get_memory` shows the original intact with
+  `superseded_by` stamped; `search_memory` on the superseded terms returns only the correcting
+  records), matching what the prior pass already found credible in 06-06-SUMMARY.md.
+- **`## Completeness and accepted gaps` prints real arithmetic, not implied totals.** The section
+  states `supersede 4  +  leave-historical 165  =  169 total enumerated` for the repo scope and
+  `supersede 0  +  leave-historical 3  =  3 total enumerated` for the rule scope, explicitly
+  invoking rule `84d1gfpywd` ("Arithmetic printed, not implied"). It also states the workspace
+  overlay scope was empty by non-existence, not by having been skipped, and names the two accepted
+  gaps (165 leave-historical records classified by criterion and sampled rather than individually
+  listed; MEM-02's fresh-session recall not performed) rather than burying them.
+- **`MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` is the honest token, not the weaker
+  choice dressed up.** The section states plainly that the fresh-session recall check was NOT
+  performed (an orchestrator session cannot spawn an independently fresh session of itself, and a
+  worktree-spawned executor carries no `mcp__engram__*` tools) and grounds the acceptance instead
+  in the same re-query evidence used for the MEM-01 rows. Choosing
+  `accepted-by-d15-evidence-standard` over `verified-fresh-session` here is correct behavior, not
+  a misrepresentation — the stronger token was not earned and the artifact does not claim it was.
+
+**Verdict on the closure: substantive, not cosmetic.** The gate's automated shape (`SUPERSEDE_SET_EQUALITY=true`,
+`MEM02_STORE_STATUS_TOKENS=1`) is backed by content that actually satisfies the underlying
+intent — named operations, real returned identifiers, printed per-scope arithmetic, and an honestly
+chosen (not inflated) status token. The gap the prior pass found is closed.
 
 ## Goal Achievement
 
@@ -109,117 +122,90 @@ is reported as a genuine gap below.
 
 | # | Requirement | Truth | Status | Evidence |
 |---|---|---|---|---|
-| 1 | BENCH-01 | `docs/BENCHMARKS.md` publishes absolute throughput/query-latency/peak-RSS figures with methodology and the regression-gate description, no head-to-head table | ✓ VERIFIED | Read the full file. §1 Methodology (median-of-5, OS-level `getrusage` peak RSS, pinned-SHA corpora), §2 two-row absolute table generated mechanically by `publishcheck -emit-rows` (byte-matched against `06-PUBLISH-RESULTS.json`), §3 regression gate (PERF-02/INDX-06). No comparison table, no ratio/multiplier, no second implementation named anywhere in the file (independent `rg` census, see below). |
-| 2 | BENCH-02 | `tools/bench` contains no comparison runner; `CheckRegression` against the committed `baseline.json` still fires on a real regression, demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation | ✓ VERIFIED | `ts-binary` occurs exactly once repo-wide, inside the intentional removal-proof test (`tools/bench/runner/main_test.go:503`); `headtohead` occurs zero times in `.github/workflows/bench.yml` or `tools/bench/`; the six `headtohead-*.json` captures are untracked (`git ls-files` → 0), recoverable from history (`git log -1` resolves at `2572a67`). `06-MUTATION-LOG.md` reviewed in full: two independent tolerance-constant mutations, each with a pre-mutation `git diff --quiet` gate, a pasted non-empty `git diff --stat` confirming the mutation applied, a pasted RED transcript naming the correct subtest in **both** `TestCheckRegression` (pre-existing table) and the new `TestCheckRegressionAgainstCommittedBaseline` (loads the real committed `baseline.json`), a byte-clean revert (`git diff --stat` empty), and a green re-run. No category-error RED in either family (the failure mode that would prove nothing). |
-| 3 | BENCH-03 | `bench.yml` runs and publishes the absolute numbers without invoking another implementation | ⚠️ PARTIAL — deliberately deferred | The `publish` job exists, is structurally verified against all four D-06 properties by `TestBenchPublishJobShape` (runner pinning, no-Taskfile exception, non-blocking publish-not-gate, artifact upload + `GITHUB_STEP_SUMMARY`), and `rebless` is proven untouched by a parsed-subtree fixture plus a SHA-256 run-body digest. But **no `bench.yml` run has actually executed the `publish` job** — the branch is confirmed unpushed (`git ls-remote --exit-code --heads origin gsd/v0.11.0-standalone-project-identity` → exit 2, re-verified independently by this report), `06-LIVE-VERIFICATIONS.md` carries exactly one `BENCH03_STATUS=pending-no-ci-run` token, no fabricated run URL exists, and the maintainer explicitly declined to push/dispatch at a blocking checkpoint. This is the correct honest state per the task brief, not a defect — but the roadmap's literal success criterion ("a `bench.yml` run publishes...") is not yet true. |
-| 4 | MEM-01 | Every engram spine record whose durable content asserts retired framing is superseded — none overwritten, none deleted | ⚠️ PARTIAL | Substance strongly evidenced: 169 records enumerated to exhaustion across 5 pages (`next_cursor` empty on the last); classification criterion applied and put to a blocking maintainer checkpoint; 4 supersedes approved and applied (`3ekc84hbqt→xj1stbrsw6`, `gw79qy2a9z→gxwkk3necn`, `agggksad53→b9wjge7375`, `7f0pq2wepv→mw5z9s9bft`); verified two ways per 06-06-SUMMARY.md (`get_memory` shows the original intact with `superseded_by` stamped; `search_memory` on the superseded records' own terms returns only the correcting records). The engram store itself lives outside git and is not independently checkable by this verifier — per the task brief, its unverifiability is not counted as a gap. **However**, 06-06-PLAN.md's own Task 3 acceptance criteria mandate a `## Supersedes executed (MEM-01)` section and a `## Completeness and accepted gaps` section in `06-MEMORY-SWEEP.md`, with an explicit approved-vs-executed short_id set-equality reconciliation. Neither section exists (confirmed by heading grep — zero hits for both). This is a genuine, previously-undocumented gap against the phase's own designed acceptance record, independent of the pre-cleared items. |
-| 5 | MEM-02 | A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense | ⚠️ PARTIAL | **File half:** independently re-verified clean. `.claude/CLAUDE.md`'s "ground-up Go rewrite" opener is gone; its Core Value line matches `.planning/PROJECT.md`'s byte-for-byte; the Compatibility/Licensing lines are re-synced and correctly retired; `.planning/STATE.md`'s Core value line now matches `.planning/PROJECT.md` verbatim (both read the clean pre-indexed-code-knowledge-graph statement). Live fresh-session recall check honestly recorded as `MEM02_FILES_STATUS=pending-fresh-session-not-performed` — not claimed on silence; this is the correct disclosed state per the task brief. **Store half:** the engram spine was swept (see MEM-01 above), but 06-06-PLAN.md's own Task 3 mandates a `## MEM-02 — store half` section in `06-LIVE-VERIFICATIONS.md` carrying exactly one of `MEM02_STORE_STATUS=verified-fresh-session` / `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard`. **Neither the heading nor the token exists anywhere in the committed file** (confirmed by direct grep — zero hits). Unlike the file-half token, which is present and honest, the store-half token is simply absent — the one item in this phase that reads as silently skipped rather than disclosed. |
+| 1 | BENCH-01 | `docs/BENCHMARKS.md` publishes absolute throughput/query-latency/peak-RSS figures with methodology and the regression-gate description, no head-to-head table | ✓ VERIFIED (spot-checked, unchanged since 91354f7) | `git diff --stat 91354f7 d3b4f37` confirms `docs/BENCHMARKS.md` untouched by the closure commit; file still present with no `headtohead` occurrences (independent `rg -o` re-check, 0 hits). |
+| 2 | BENCH-02 | `tools/bench` contains no comparison runner; `CheckRegression` against the committed `baseline.json` still fires on a real regression | ✓ VERIFIED (spot-checked, unchanged since 91354f7) | `git diff --stat 91354f7 d3b4f37` confirms `tools/bench/`, `.github/workflows/bench.yml` untouched by the closure commit; `headtohead` census re-run, 0 hits. Prior pass's mutation-log review stands — nothing in it could have regressed since no relevant file changed. |
+| 3 | BENCH-03 | `bench.yml` runs and publishes the absolute numbers without invoking another implementation | ⚠️ PARTIAL — deliberately deferred (unchanged) | `git ls-remote --exit-code --heads origin gsd/v0.11.0-standalone-project-identity` re-run this pass, exit 2 — branch still unpushed, no CI run exists. Correct disclosed state, not a defect; routed to human verification below. |
+| 4 | MEM-01 | Every engram spine record whose durable content asserts retired framing is superseded — none overwritten, none deleted — reconciled by the phase's own designed acceptance record | ✓ VERIFIED (gap closed) | The plan's own acceptance command (`SWEEP_RECORD_CLOSED=true`, full output above) passes. `## Supersedes executed (MEM-01)` and `## Completeness and accepted gaps` sections now exist in `06-MEMORY-SWEEP.md`, independently read in full: 4 named-operation rows with returned identifiers, printed per-scope arithmetic (`4 + 165 = 169`, `0 + 3 = 3`), and the approved/executed short_id sets verified set-equal by the gate's own diff (empty diff, `SUPERSEDE_SET_EQUALITY=true`). Substance judged real, not grep-shaped — see Method section above. |
+| 5 | MEM-02 | A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense | ⚠️ PARTIAL — store-half closure verified, file-half live check still deferred | **Store half (gap closed):** `## MEM-02 — store half` section now exists in `06-LIVE-VERIFICATIONS.md` with `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard`, independently read in full; the token is honestly chosen (fresh-session check explicitly stated as not performed, acceptance grounded in the same re-query evidence as MEM-01). **File half (unchanged from 91354f7, not part of this closure):** `MEM02_FILES_STATUS=pending-fresh-session-not-performed` still stands; no fresh session has been spawned to observe actual recall. Routed to human verification below. |
 
-**Score:** 2/5 requirements fully VERIFIED (BENCH-01, BENCH-02); 3/5 PARTIAL (BENCH-03, MEM-01,
-MEM-02) — all three partial for reasons rooted in the phase's own design (deferred CI dispatch,
-declined fresh-session check, unverifiable-outside-git store), but MEM-01 and MEM-02 additionally
-carry one real, independently-found completeness gap each (the missing 06-06 Task 3 record
-sections and the missing MEM02_STORE_STATUS token) that the phase's own artifacts do not disclose.
+**Score:** 3/5 requirements fully VERIFIED (BENCH-01, BENCH-02, MEM-01); 2/5 PARTIAL (BENCH-03,
+MEM-02) — both partials are for reasons rooted in the phase's own design (deferred CI dispatch,
+live fresh-session recall not spawnable by this verifier), each carrying an explicit, honest status
+token rather than a silent gap.
 
-### Independent Re-verification (spot checks run by this verifier, not copied from phase artifacts)
+### Deferred Items
 
-- **Positive control proven live** before trusting any zero: planted a wrapped-phrase fixture
-  (`// the retired harness invoked a second (TS\n// codegraph@1.3.1) binary here...`), multiline
-  `rg -U` returned 3, line-based `rg` returned 1 (3 > 1 > 0) — confirms the multiline instrument
-  catches what line-based misses, matching the same shape the phase's own census documents.
-- **Independent census over the bench surface** (`docs/BENCHMARKS.md`, `tools/bench/`,
-  `internal/bench/`, `internal/corpora/manifest.go`, `corpora/manifest.json`,
-  `.github/workflows/bench.yml`, `internal/upgrade/taskfile_shape_test.go`), excluding only the two
-  pre-authorised files, bounded pattern set (`head-to-head`, `headtohead`, `colbymchenry`,
-  `codegraph-ts`, `comparator`, `1.3.1`, `ts-binary`): **0 hits.**
-- `internal/migrate` does not exist on disk; `rg -n "migrate" internal/cli` returns zero hits — the
-  CLI registers no `migrate` command. Confirms CODE-03's Phase-5 removal, which `.planning/STATE.md`
-  and `.planning/PROJECT.md` now correctly describe.
-- `git show 61f7975` reviewed directly: the exact two stale lines the task brief named
-  (STATE.md:113, PROJECT.md:72, both previously claiming `codegraph migrate` "keeps working
-  end-to-end" / "stays as a capability") are corrected to state the maintainer-ruled removal, with
-  genuinely historical entries elsewhere in both files left untouched.
-- `.planning/phases/.../06-PUBLISH-RESULTS.json` byte-cross-checked against the data rows rendered
-  in `docs/BENCHMARKS.md` §2 — both rows (`cockroachdb-pebble`, `weft-go`) match exactly on every
-  published field.
-- Git history reviewed for the full phase: `70848f7` (tracking update) back through `899565a`,
-  `b4dd057`, `a69c4dd`, `f2460aa`, `1a3ab37` (merge), `61f7975` (the maintainer-approved
-  out-of-plan fix), `6e9c482` (the halt), plus the earlier wave commits — the narrative in
-  `06-MEMORY-SWEEP.md`'s "HALTED" / "RESUMED AND COMPLETED" sections matches the actual commit
-  sequence. Working tree is clean at HEAD (`70848f7`).
+None — no gap in this phase maps to work explicitly scheduled in a later milestone phase. BENCH-03
+and MEM-02's file-half live check are maintainer/session actions outside any phase's automatable
+scope, not deferred-to-a-later-phase items; they are routed to human verification instead.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `docs/BENCHMARKS.md` | Absolute-only rewrite | ✓ VERIFIED | Full rewrite confirmed; no comparison content |
-| `tools/bench/publishcheck/{main,main_test}.go` | Pure-Go publish-JSON verifier | ✓ VERIFIED | Exists, `TestPublishCheck` is the single top-level symbol with 7 subtests |
-| `tools/bench/runner/main.go` | `runPublish`, no `runHeadToHead`/`resolveTSBinary` | ✓ VERIFIED | Confirmed via census + build |
-| `.github/workflows/bench.yml` | `publish` job, no `headtohead` | ✓ VERIFIED | `publish:` present at line 97; zero `headtohead` hits |
-| `internal/upgrade/bench_workflow_shape_test.go` | D-06 structural verifier | ✓ VERIFIED (existence + plan-documented RED/GREEN cycle; not independently re-run by this verifier) | File exists; SUMMARY documents a genuine pre-existence RED and a post-GREEN discriminating perturbation |
-| `internal/bench/baseline_gate_test.go` | Drives gate with committed `baseline.json` | ✓ VERIFIED (existence + plan-documented mutation rehearsal reviewed in full) | File exists; `06-MUTATION-LOG.md` reviewed line-by-line, both oracles reddened correctly |
-| `06-MEMORY-SWEEP.md` | Full D-13/D-14 verdict record, MEM-01 completeness sections | ⚠️ INCOMPLETE | Present but missing two plan-mandated sections (see gap above) |
-| `06-LIVE-VERIFICATIONS.md` | BENCH-03 + MEM-02 (both halves) status tokens | ⚠️ INCOMPLETE | BENCH-03 and MEM-02 file-half tokens present and correct; MEM-02 store-half section/token entirely absent |
-| `.claude/CLAUDE.md`, `.planning/PROJECT.md`, `.planning/STATE.md` | Present-tense/forward-looking framing swept | ✓ VERIFIED | Independently re-read; matches the sweep record |
-| `.planning/STATE.md`, `.planning/PROJECT.md` (61f7975) | Stale migrate claims corrected | ✓ VERIFIED | `git show` reviewed directly |
+| `docs/BENCHMARKS.md` | Absolute-only rewrite | ✓ VERIFIED (unchanged) | Untouched by closure commit; no comparison content |
+| `tools/bench/publishcheck/{main,main_test}.go` | Pure-Go publish-JSON verifier | ✓ VERIFIED (unchanged) | Untouched by closure commit |
+| `.github/workflows/bench.yml` | `publish` job, no `headtohead` | ✓ VERIFIED (unchanged) | Untouched by closure commit; `publish:` present, zero `headtohead` hits |
+| `06-MEMORY-SWEEP.md` | Full D-13/D-14 verdict record, MEM-01 completeness sections | ✓ VERIFIED (gap closed) | `## Supersedes executed (MEM-01)` and `## Completeness and accepted gaps` now present with substantive rows and printed arithmetic |
+| `06-LIVE-VERIFICATIONS.md` | BENCH-03 + MEM-02 (both halves) status tokens | ✓ VERIFIED (gap closed) | `## MEM-02 — store half` section now present with honest `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` token; BENCH-03 and MEM-02 file-half tokens unchanged and still correct |
+| `.claude/CLAUDE.md`, `.planning/PROJECT.md`, `.planning/STATE.md` | Present-tense/forward-looking framing swept | ✓ VERIFIED (unchanged, spot-checked) | Untouched by closure commit |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |---|---|---|---|---|
-| `tools/bench/runner/main.go` (`runPublish`) | `internal/bench.Metrics` JSON on stdout | `measureSubject("go", ...)` | ✓ WIRED | Confirmed by `06-PUBLISH-RESULTS.json`'s shape and `docs/BENCHMARKS.md`'s rendered rows matching it |
-| `realcorpus.Corpora()` | `tools/bench/runner/main.go` | consumption at the publish loop | ✓ WIRED | Two-entry corpus (`weft-go`, `cockroachdb-pebble`) confirmed in both `manifest.go` and the emitted results |
-| `.github/workflows/bench.yml` `publish` job | `tools/bench/runner -mode publish` | inline `go run` invocation | ✓ WIRED (structurally proven; not live-run) | Confirmed via `bench_workflow_shape_test.go`'s assertions, reviewed in the SUMMARY; no independent CI run exists (BENCH-03 gap above) |
-| Approved MEM-01 supersedes | Executed engram writes | `supersede_memory` calls | ⚠️ WIRED but under-documented | Work is done (per 06-06-SUMMARY.md's two independent verifications), but the plan's own reconciliation record connecting "approved" to "executed" is missing from the committed artifact |
+| Approved MEM-01 supersedes | Executed engram writes | `supersede_memory` calls | ✓ WIRED (gap closed) | `## Supersedes executed (MEM-01)` now connects "approved" (Engram enumeration section) to "executed" (this section) with an explicit set-equality diff run by the plan's own gate — previously this reconciliation record was missing from the committed artifact; now present |
+| `.github/workflows/bench.yml` `publish` job | `tools/bench/runner -mode publish` | inline `go run` invocation | ✓ WIRED (structurally proven; not live-run, unchanged) | No independent CI run exists (BENCH-03 gap, routed to human verification) |
+
+### Probe / Acceptance Command Execution
+
+| Command | Source | Result | Status |
+|---|---|---|---|
+| 06-06-PLAN.md Task 3 `<automated>` gate (verbatim) | `.planning/phases/06-benchmark-de-coupling-memory-sweep/06-06-PLAN.md:370` | `SWEEP_RECORD_CLOSED=true`, exit 0, full output matches expected shape (see Method section) | PASS |
 
 ### Anti-Patterns Found
 
-No `TODO`/`FIXME`/`XXX`/`HACK`/`PLACEHOLDER` debt markers found in any file this phase modified
-(spot-checked `docs/BENCHMARKS.md`, `tools/bench/runner/main.go`, `tools/bench/publishcheck/*.go`,
-`internal/bench/*.go`, `.github/workflows/bench.yml`). No stub returns, no hardcoded-empty data
-flowing to a rendered surface. The phase's own census discipline (positive-controlled multiline
-`rg`, bounded patterns, per-exclusion citations) is unusually rigorous and was independently spot
-re-verified above rather than merely trusted.
+No `TODO`/`FIXME`/`XXX`/`HACK`/`PLACEHOLDER` debt markers found in the files touched by the closure
+commit (`06-MEMORY-SWEEP.md`, `06-LIVE-VERIFICATIONS.md`). No stub content, no grep-satisfying
+filler — see the substantive-vs-cosmetic assessment in Method above.
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Status | Evidence |
 |---|---|---|---|
-| BENCH-01 | 06-04 | ✓ SATISFIED | `docs/BENCHMARKS.md` |
-| BENCH-02 | 06-01, 06-02 (partial), 06-03 | ✓ SATISFIED | Runner removal + mutation rehearsal |
+| BENCH-01 | 06-04 | ✓ SATISFIED (unchanged) | `docs/BENCHMARKS.md` |
+| BENCH-02 | 06-01, 06-02 (partial), 06-03 | ✓ SATISFIED (unchanged) | Runner removal + mutation rehearsal |
 | BENCH-03 | 06-02, 06-04 | ⚠️ NOT YET SATISFIED (by design, disclosed) | No CI run exists |
-| MEM-01 | 06-06 | ⚠️ PARTIALLY SATISFIED | Substance done; own acceptance record incomplete |
-| MEM-02 | 06-05, 06-06 | ⚠️ PARTIALLY SATISFIED | File half clean, live check pending; store half token missing |
+| MEM-01 | 06-06 | ✓ SATISFIED (gap closed) | Complete acceptance record now present in `06-MEMORY-SWEEP.md` |
+| MEM-02 | 06-05, 06-06 | ⚠️ PARTIALLY SATISFIED | Store-half token now honestly recorded; file-half live check still pending |
 
 No orphaned requirements — all five BENCH/MEM requirements are claimed by a phase-6 plan.
 
 ## Gaps Summary
 
-Two categories of incompleteness, and they should be weighed differently:
+The one gap from the prior verification pass (91354f7) — 06-06's Task 3 missing its own
+plan-mandated artifact-contract sections in `06-MEMORY-SWEEP.md` and
+`06-LIVE-VERIFICATIONS.md` — is **closed** by commit d3b4f37. This was independently confirmed two
+ways: (1) running the plan's own acceptance gate verbatim, which passes cleanly
+(`SWEEP_RECORD_CLOSED=true`), and (2) reading the added sections in full to confirm they are
+substantive rather than shaped only to satisfy the grep — real operation names, real returned
+identifiers, printed per-scope arithmetic, and an honestly chosen (not inflated) MEM02 status
+token.
 
-1. **Deliberately deferred, honestly disclosed (not phase defects):** BENCH-03's CI run, and MEM-02's
-   file-half live fresh-session recall. Both are recorded with explicit status tokens
-   (`BENCH03_STATUS=pending-no-ci-run`, `MEM02_FILES_STATUS=pending-fresh-session-not-performed`),
-   both require a maintainer/session action outside this phase's own automatable scope, and both were
-   explicit checkpoint decisions the maintainer made deliberately. These are not gaps in execution —
-   they are the phase correctly declining to fabricate evidence it does not have.
+What remains, unchanged from the prior pass and not part of this closure's scope, are the two
+deliberately-deferred items that require an action outside any phase's automatable reach:
 
-2. **A genuine, previously-undocumented completeness gap, found independently by this
-   verification:** 06-06's Task 3 (the MEM-01 supersede-execution / MEM-02 store-half closure task)
-   did not produce two of its own plan-mandated artifacts — the `## Supersedes executed (MEM-01)` /
-   `## Completeness and accepted gaps` sections in `06-MEMORY-SWEEP.md`, and the
-   `## MEM-02 — store half` section with its `MEM02_STORE_STATUS` token in
-   `06-LIVE-VERIFICATIONS.md`. The underlying work (4 supersedes, verified two ways) is real and
-   substantively satisfies MEM-01's requirement text. But unlike every other partial item in this
-   phase, this one carries no disclosure token at all — nothing in the committed artifacts states
-   that these sections are missing. A closure plan should add them; this is bookkeeping, not
-   re-doing the memory-store work itself.
+1. **BENCH-03's CI run.** The branch is still unpushed; no `bench.yml` run has executed the
+   `publish` job. Routed to human verification.
+2. **MEM-02's file-half live fresh-session recall check.** No independently fresh session has been
+   spawned to observe actual startup recall. Routed to human verification.
 
-Everything else independently checked in this verification — the runner/CI/document rewrite, the
-mutation-rehearsal proof, the agent-facing framing sweep, and the STATE.md/PROJECT.md stale-claim
-fix — held up under direct re-inspection and matches what the SUMMARY files claim.
+Both are recorded with explicit, honest status tokens in the phase's own artifacts
+(`BENCH03_STATUS=pending-no-ci-run`, `MEM02_FILES_STATUS=pending-fresh-session-not-performed`), and
+both are maintainer/session actions the phase's own checkpoints explicitly declined to perform
+rather than silently omitted work.
 
 ---
 
-*Verified: 2026-08-16*
+*Verified: 2026-08-16 (re-verification)*
 *Verifier: Claude (gsd-verifier)*
