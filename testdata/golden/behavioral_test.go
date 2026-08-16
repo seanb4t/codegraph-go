@@ -112,11 +112,11 @@ var mbShapeRE = regexp.MustCompile(`^\d+\.\d{2} MB$`)
 
 // findVolatileKeysExcept wraps golden_test.go's findVolatileKeys (shared
 // with TestGoldenFixturesExist, which correctly continues to enforce that
-// the FROZEN TS oracle fixtures in corpus/*/*.json never re-include a
+// the frozen oracle fixtures in corpus/*/*.json never re-include a
 // volatile key such as dbSizeBytes) with a named exemption list, used
 // ONLY at this file's own-output call site. It never mutates the shared
 // volatileKeys map in golden_test.go — that map keeps governing the
-// frozen corpus fixtures, and must keep failing if a TS golden ever
+// frozen corpus fixtures, and must keep failing if a frozen golden ever
 // re-includes dbSizeBytes (D-08, RESEARCH Pitfall 2).
 func findVolatileKeysExcept(v interface{}, path string, except ...string) []string {
 	exempt := make(map[string]bool, len(except))
@@ -502,12 +502,12 @@ func toLocSet(locs []query.Location) map[locTuple]bool {
 }
 
 // assertSubset fails the test if got contains any entry absent from want
-// (a genuine false positive — our engine reporting something TS's ground
-// truth doesn't have), or if got is empty while want is not. It does NOT
-// require got == want: per D-05b, our engine may legitimately report
-// fewer distinct entries than TS (edge dedup, and the buildReverseAdjacency
-// RefKindCalls-only scoping discovered building this harness — see the
-// "callees" subtest).
+// (a genuine false positive — our engine reporting something the golden
+// corpus's ground truth doesn't have), or if got is empty while want is
+// not. It does NOT require got == want: per D-05b, this engine may
+// legitimately report fewer distinct entries than the golden corpus
+// (edge dedup, and the buildReverseAdjacency RefKindCalls-only scoping
+// discovered building this harness — see the "callees" subtest).
 func assertSubset(t *testing.T, label string, got, want map[locTuple]bool) {
 	t.Helper()
 
@@ -582,7 +582,7 @@ func nameFileLineSetsEqual(a, b map[nameFileLine]bool) bool {
 // assertNameFileLineSubset is nameFileLineSetsEqual's D-05b-style subset
 // sibling (mirrors assertSubset above, for the parseTrailLine shape): it
 // fails if got contains any entry absent from want (our narrower
-// RefKindCalls-only extraction reporting something TS's ground truth
+// RefKindCalls-only extraction reporting something the expected set
 // lacks), but tolerates got having FEWER entries than want.
 func assertNameFileLineSubset(t *testing.T, label string, got, want map[nameFileLine]bool) {
 	t.Helper()
@@ -614,9 +614,9 @@ type multiDefBlock struct {
 // RenderNodeMultiDef's "\n\n---\n\n" section separator) into its
 // per-definition blocks, extracting each one's Location and Calls trail.
 // Blocks are returned in RENDER order — callers that need an
-// order-independent comparison (Assumption A3: TS's un-ordered SQLite
-// SELECT has no meaningful tie-break semantic to replicate) should key
-// off Location as a set, not slice position.
+// order-independent comparison (Assumption A3: render order carries no
+// meaningful tie-break semantic) should key off Location as a set, not
+// slice position.
 func parseNodeMultiDefBlocks(output string) []multiDefBlock {
 	body := output
 	if idx := strings.Index(body, "\n\n**Other definitions**"); idx != -1 {
@@ -659,10 +659,10 @@ func blockByLocation(blocks []multiDefBlock) map[string]multiDefBlock {
 // nodeMultiDefHeaderPattern matches NODE-01/02's exact two-line header
 // template (RenderNodeMultiDef): "**N definitions named "X"**\nReturning
 // M in full[; K more listed below] — pick the one you need (no Read
-// required).\n" — byte-identical TS wording, N/X/M/K are captured as the
-// VARIABLE content D-02 does not require Go/TS equality on (definition
-// counts depend on extraction coverage, not on the template being
-// correct).
+// required).\n" — the wording is a fixed contract (rewording it silently
+// breaks NODE-01/02); N/X/M/K are the VARIABLE content D-02 does not
+// require equality on (definition counts depend on extraction coverage,
+// not on the template being correct).
 var nodeMultiDefHeaderPattern = regexp.MustCompile(
 	`^\*\*(\d+) definitions named "([^"]*)"\*\*\nReturning (\d+) in full(; \d+ more listed below)? — pick the one you need \(no Read required\)\.\n`)
 
@@ -685,7 +685,7 @@ func exploreSelectedFiles(output string) map[string]bool {
 // It runs the real indexer + query.Engine over the committed, always-in-repo
 // behavioral corpus (D-03) and asserts the Go-truthful properties of its
 // LIVE output in the D-09 style — named behavioral properties of live
-// engine output, not byte-diffs against a frozen TS golden. The TS-era
+// engine output, not byte-diffs against a frozen golden. The TS-era
 // capture path and external corpora that TestCorpusBehavior_Go formerly
 // diffed against are gone as of this phase (FIXT-04); the status.json
 // key-loop inheritance from probe-01 is retired with them.
@@ -699,9 +699,9 @@ func TestCorpusBehavior_Go(t *testing.T) {
 		}
 
 		// D-05c: status.go's own doc comment is the authoritative
-		// TS-key-to-Go/Pebble-analog mapping table; assert the
-		// Go-truthful values it documents (not byte-identical TS
-		// values, which don't exist for a Pebble backend).
+		// key-mapping table; assert the Go-truthful values it
+		// documents (values with no Pebble analog do not exist in
+		// this output).
 		if got.Backend != "pebble" {
 			t.Errorf("status.Backend = %q, want %q (D-05c backend remap)", got.Backend, "pebble")
 		}
@@ -825,26 +825,25 @@ func TestCorpusBehavior_Go(t *testing.T) {
 // TestCorpusBehavior* exercises the query.Engine against the committed,
 // always-in-repo behavioral corpus (D-03), asserting named behavioral
 // properties of live output in the D-09 style rather than byte-diffing a
-// frozen TS golden.
+// frozen golden.
 //
 // Allowed-divergence notes (retained from the D-02 harness):
 //
 //   - AD-04 (file-selection breadth + blast-radius bullet scope): even on
 //     the behavioral corpus (purpose-built and validated for this),
-//     Go's RWR-selected file set and blast-radius bullet set diverge from
-//     TS's historical output in both directions: TS pulls in ledger/ledger.go
-//     via a broader partial "account" token match that Go's tokenizer does
-//     not apply (Go's 3-file selection is a subset of TS's 4), and Go renders
-//     a blast-radius bullet for every selected candidate (including
-//     zero-caller structs/files) where TS appears to render bullets more
-//     selectively. Asserted as CORE-symbol membership (the specific symbols
-//     the D-03 corpus was purpose-built to test), not full bullet-set or
-//     file-count equality.
+//     Go's RWR-selected file set and blast-radius bullet set are known
+//     to differ from the historical expected sets in both directions:
+//     this tokenizer does not apply the broader partial "account" token
+//     match that would pull in ledger/ledger.go, and Go renders a
+//     blast-radius bullet for every selected candidate (including
+//     zero-caller structs/files). Asserted as CORE-symbol membership
+//     (the specific symbols the D-03 corpus was purpose-built to test),
+//     not full bullet-set or file-count equality.
 //   - A3 (already documented, 01-RESEARCH.md Architecture Patterns
-//     Pattern 2): TS's un-ordered SQLite SELECT gives its own multi-def
-//     ordering no meaningful semantic to replicate; node-multi def-set
-//     comparisons below are Location-SET based (order-independent), never
-//     slice-position based.
+//     Pattern 2): multi-def render order carries no meaningful semantic
+//     to replicate; node-multi def-set comparisons below are
+//     Location-SET based (order-independent), never slice-position
+//     based.
 
 // TestCorpusBehaviorSynthetic asserts the four named behavioral properties
 // (D-09) of live Go engine output, driven by corpus/behavioral/CASES.json.
