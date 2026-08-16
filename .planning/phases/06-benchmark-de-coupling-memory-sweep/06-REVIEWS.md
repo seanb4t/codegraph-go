@@ -1,11 +1,248 @@
 ---
 phase: 6
 reviewers: [codex]
-reviewed_at: 2026-08-16T11:40:21Z
+reviewed_at: 2026-08-16T12:16:06Z
+review_cycle: 2
 plans_reviewed: [06-01-PLAN.md, 06-02-PLAN.md, 06-03-PLAN.md, 06-04-PLAN.md, 06-05-PLAN.md, 06-06-PLAN.md]
 ---
 
 # Cross-AI Plan Review — Phase 6
+
+> This file holds **two** convergence cycles. Cycle 2 (below) assesses the CURRENT plan text as
+> revised by commit `b3a9a47`. Cycle 1 is retained further down as audit history — its findings
+> are **not** current; consult it only to trace how a cycle-2 statement came to be.
+
+---
+
+# Cycle 2 — assessment of the revised plans (`b3a9a47`)
+
+**Reviewer:** Codex (source-grounded, full repo access), cross-checked and extended by the
+orchestrating reviewer against the working tree at `6a2816b`.
+
+## Consensus Summary — Cycle 2
+
+The replan is a substantial, mostly successful convergence. All five cycle-1 HIGHs received real
+structural answers rather than prose patches: the D-06 checklist became one publish-job-scoped Go
+test, the committed `baseline.json` became a live test input whose own non-vacuity is demonstrated
+by the same mutation that reddens the pre-existing table, and BENCH-03 was separated from BENCH-01
+behind a blocking decision gate with a two-token ledger. The SHA-pin arithmetic is correct. The
+three HEAD-relative guard exemptions are each justified. No sound `rg -c` floor was over-corrected,
+and every floor the plans rely on is satisfiable against the current tree.
+
+What remains is concentrated in **verification correctness rather than intent**: three criteria are
+mechanically impossible or self-defeating as written, and several instruments are weaker than the
+claims resting on them.
+
+### Agreed Strengths
+
+- **06-02's publish-job scoping is real.** Every D-06 assertion in `<behavior>` (06-02-PLAN.md:140-184)
+  is anchored to the parsed `jobs.publish` subtree, including the upload step's OWN `with:` map. The
+  untouched `rebless` upload at `.github/workflows/bench.yml:274` — verified present, carrying
+  `if-no-files-found: error` — can no longer stand in for the publish job's guard. `key_links`
+  (06-02-PLAN.md:41) states the property explicitly, so an executor cannot read it as optional.
+- **06-03's HIGH 4 fix is genuine, not nominal.** `internal/bench/baseline_gate_test.go` reads
+  `../../tools/bench/baseline.json` from disk (06-03-PLAN.md:236-240) — not a temp copy — and Task 3
+  requires each mutation family to redden BOTH oracles (06-03-PLAN.md:329-343, 370). The committed
+  file at `tools/bench/baseline.json` carries populated `goos`/`goarch`/`runner`/`scratch_fs`, so the
+  four category guards in `internal/bench/regression.go:36-105` stay quiet for a frame-derived
+  current record and the numeric bands really are the thing under test.
+- **SHA-pin arithmetic is correct.** Measured on the working tree: `USES_TOTAL=22`, `USES_LOCAL=2`
+  (`./.github/actions/install-task` at `bench.yml:330` and `:380`), `USES_PINNED=20`. The edit deletes
+  exactly one pinned action (`actions/setup-node`, `bench.yml:118`), leaving 19 pinned + 2 local = 21.
+  The latent false failure cycle 1 flagged is genuinely fixed.
+- **The three HEAD-relative exemptions are each correct.** 06-05 Task 1 is the plan's first task, so
+  HEAD and the pre-plan SHA are the same commit; 06-03's FIXT-07 gates assert working-tree cleanliness
+  at an instant, which is what makes "the mutation applied" and "the revert was byte-clean" provable;
+  06-02's fixture check constrains Task 2's own uncommitted diff. None is the blind-window bug wearing
+  a rationale (one residual caveat at LOW-3 below).
+- **Class fix B was applied without over-correction.** Floors and line-oriented counts were correctly
+  left alone, and each is satisfiable today: `rg -c '\bcomparison\b' tools/bench/BASELINE.md` = 5 at
+  lines 39/87/97/120/297 — **disjoint from the two lines 06-02 Task 2 sweeps (64 and 241)**, so the
+  zero-headroom `>= 5` floor survives the sweep; `internal/bench/regression.go` = 7;
+  `TASKFILE_BENCH_TARGETS` = `bench:regression:,` exactly; `ALLTASKS` = 47 (floor 40); `GSD_MARKERS`
+  = 14; `SHAPETEST_FIXTURE_ENTRIES` = 10 (floor 10); both surviving corpus pins present.
+- **06-05's core-value equality gate executes correctly.** Run against the current tree the extraction
+  yields `PROJECT_CORE_VALUE_LEN=208` (floor 60) and a non-empty STATE side, and the Compatibility
+  bullet at `.planning/PROJECT.md:244` matches `^\- \*\*Compatibility\*\*` and contains
+  `codegraph migrate` exactly once — so the region-scoped criterion is both satisfiable and non-vacuous.
+- **The D-15 rejection is legitimate and adequately recorded.** Requiring post-sweep re-query evidence
+  would reopen a locked decision (`06-CONTEXT.md:166-172`). It is recorded three times over — in
+  `<edge_probe_coverage>`, in `<review_incorporation>`'s "Explicitly NOT applied" block, and now
+  mechanically as the `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` token. This is the right
+  shape: the risk is named, not denied.
+
+### Agreed Concerns
+
+Three HIGHs are **new in cycle 2** — two of them introduced by the class-fix restatements themselves.
+
+---
+
+## HIGH 1 (NEW) — 06-03 Task 3's `TOLNAMED >= 2` gate cannot pass with the specified mutation
+
+`06-03-PLAN.md:372` requires:
+
+```
+TOLNAMED=$(rg -o -e 'throughput regressed' -e 'peak RSS grew' 06-MUTATION-LOG.md | wc -l); test "$TOLNAMED" -ge 2
+```
+
+But the mutation widens `DefaultThroughputTolerance` / `DefaultRSSTolerance` to `1.0`
+(`06-03-PLAN.md:325`, `:341`), which makes `CheckRegression` return **`nil`**. Those two strings live
+only inside the error-construction branches at `internal/bench/regression.go:114` and `:124`, which
+the mutation suppresses by design. The observed RED is
+`CheckRegression() = nil, want error` — the assertion at `internal/bench/regression_test.go:512`.
+No tolerance-naming line can appear in verbatim output.
+
+The same defect is in the plan's prohibition at `06-03-PLAN.md:47` ("MUST NOT record a mutation family
+as demonstrated RED unless the observed failure names the tolerance being violated"). Read literally,
+the chosen mutation direction obliges the executor to **report a failed rehearsal**, or to hand-write
+the phrases as prose — which is exactly the certifying-your-own-result failure the FIXT-07 protocol
+exists to prevent.
+
+This was introduced *by* class fix B: the pre-revision form was the `CATERR` half alone; the positive
+companion is new and is mis-specified.
+
+**Fix:** assert what the specified mutation actually emits — the two failing subtest names plus the
+literal `CheckRegression() = nil, want error` — and keep `CATERR=0` as the wrong-RED disqualifier.
+If the intent is genuinely to see the tolerance named, the mutation must move the *current* values
+past the band instead of widening the constant, which is a different (and more invasive) rehearsal.
+
+## HIGH 2 (NEW) — 06-03 Task 2 carries a self-contradictory pre-plan-SHA guard
+
+`06-03-PLAN.md:296`:
+
+> `git diff --quiet "$BASE" -- internal/bench/regression.go internal/bench/regression_test.go internal/bench/metrics.go internal/bench/rss.go` exits 0 **apart from Task 1's committed comment sweep**
+
+Task 1 commits comment edits to exactly those four files (`06-03-PLAN.md:140`, `:166-192`). A plain
+`git diff --quiet "$BASE"` has no "apart from" semantics; it will exit 1 every time. The criterion is
+mechanically impossible as written, and an executor that runs it verbatim halts on a correct tree.
+
+**Fix:** either scope it HEAD-relative (Task 2 adds a file and edits none, which HEAD compares exactly),
+or keep the pre-plan anchor and filter the diff to comment-only hunks — the same shape Task 1 already
+uses at `06-03-PLAN.md:212`.
+
+## HIGH 3 (NEW) — 06-05's stack-block "re-sync" would replace ~119 lines of agent instructions and break the plan's own gate
+
+`06-05-PLAN.md:161` gives the CLAUDE.md:93 occurrence this verdict rule:
+
+> check whether this block still matches its named source (`.planning/research/STACK.md`). **If it is a
+> stale mirror, re-sync**; if the phrase is live in the source, sweep the source and re-sync
+
+Measured against the tree: **the phrase is NOT live in the source.** `rg -i parity
+.planning/research/STACK.md` returns nothing. But the block is not merely stale — the source has been
+**wholly replaced**. `.claude/CLAUDE.md` lines 21-141 mirror the original v1 tech-stack research
+(tree-sitter, Pebble, mcp-go, the Parser Decision), while the current
+`.planning/research/STACK.md` (198 lines) is the v0.11.0 *agent-onboarding skill/plugin + MCP Resources*
+research — an entirely different document. A `diff` of the two shares essentially nothing beyond the
+`### Core Technologies` heading.
+
+Executing the stated rule therefore:
+
+1. replaces ~119 lines of live agent instructions with unrelated content — far beyond a framing sweep,
+   and in tension with this plan's own prohibition against removing headings in `.claude/CLAUDE.md`
+   (`06-05-PLAN.md:44`);
+2. **breaks the plan's own acceptance gate**: `.planning/research/STACK.md:151` contains `drop-in`,
+   which is in the `CLAUDE_MD_FRAMING_TOTAL=0` pattern set (`06-05-PLAN.md:264`). The re-sync imports
+   the very framing the census forbids.
+
+Codex reported an adjacent MEDIUM here — that `.planning/research/STACK.md` belongs in
+`files_modified` — which is a **false finding**: nothing in that file needs editing. The real defect is
+that the re-sync branch is unexecutable.
+
+**Fix:** give CLAUDE.md:93 an explicit verdict in the plan rather than a conditional. The minimal
+correct action is to sweep the `parity` aside in `.claude/CLAUDE.md` in place, and record in
+`06-MEMORY-SWEEP.md` that the stack block has diverged wholesale from its named source and that a full
+regeneration is out of Phase 6's scope (a separate concern to raise, since the next regeneration will
+overwrite the block regardless). Add a `keep-divergent` verdict class or a stated exception; do not
+leave "re-sync" as the standing instruction.
+
+---
+
+### Actionable non-HIGH concerns
+
+- **MEDIUM 1 — BENCH-03's `closed-by-ci-run` token is accepted with no URL or run validation.**
+  06-04 Task 4's check (`06-04-PLAN.md:454`) counts the token and requires exactly one. The
+  acceptance text names `<url>` (`:459`) but nothing asserts a non-empty URL, a matching workflow, a
+  matching ref, or `conclusion == success`. A mis-selected closed option passes the machine check.
+  *Plan change:* on the closed branch, require a non-empty `https://github.com/.../actions/runs/<id>`
+  match and record `gh run view <id> --json conclusion,event,headBranch,url` output beneath the token.
+- **MEDIUM 2 — `TestBenchReblessJobShape` does not cover rebless's run bodies.** The fixture
+  (`06-02-PLAN.md:173-184`) covers `runs-on`, `env`, `if`, ordered step names, the upload `with:` map
+  and the absence of `permissions:` — but not the three load-bearing `run:` bodies in that job
+  (`bench.yml` ~194, ~220, ~276), which include the `-rebless` invocation the D-13/D-01 exception exists
+  to contain. A body could change while the fixture stays green, so the `must_haves` claim "The `rebless`
+  job's block ... unchanged by this edit" (`06-02-PLAN.md:29`) exceeds the instrument. The literal-fixture
+  choice over a before/after hash is defensible; its *coverage* is not yet sufficient.
+  *Plan change:* extend the fixture to normalised run bodies, or hash the canonical serialisation of the
+  whole parsed `jobs.rebless` subtree as the fixture value.
+- **MEDIUM 3 — 06-02's TDD RED does not discriminate publish-job scoping.** Task 1 is `tdd="true"` and
+  requires the verbatim RED to be pasted (`06-02-PLAN.md:201-207`), but the RED is produced by
+  `jobs.publish` being absent — a single missing-anchor failure that reddens every assertion at once.
+  It is therefore no evidence at all about the property cycle-1 HIGH 1/2/3 turned on: whether each
+  individual assertion is scoped to the publish job rather than reading the file globally. 06-03 holds
+  itself to a stricter standard (a mutation rehearsal) for exactly this reason.
+  *Plan change:* after GREEN, perturb one publish-job property in a scratch copy (e.g. delete the
+  publish job's `if-no-files-found`, leaving rebless's intact) and record that the named assertion
+  reddens — one discriminating observation, not a second protocol.
+- **MEDIUM 4 — 06-06 Task 3's executed-set extraction uses a fixed `rg -A400` window**
+  (`06-06-PLAN.md:312`). It fails in both directions: a long execution table is truncated (false set
+  mismatch), and a short one spills into `## Completeness and accepted gaps`, whose rows can also match
+  `^\| \`?[a-z0-9]{6,}\`? \|` (false extra ids). The set-equality check is the mechanism that closes
+  cycle-1's `06-06:248`, so its extractor should not be the weak link.
+  *Plan change:* bound the section at the next `^## ` heading (e.g. `awk '/^## Supersedes executed/{f=1;next}/^## /{f=0}f'`).
+- **LOW 1 — the publish job's action check is a SET, so duplicates survive** (`06-02-PLAN.md:164`). An
+  extra checkout or setup-go step passes. Not central to D-06; assert an ordered list or per-action counts.
+- **LOW 2 — the `both` dispatch option is not in the identifier family.** `bench.yml:73` keeps `both`
+  as a choice and the current job's `if:` at `:99` tests `inputs.job == 'both'`. 06-02's identifier list
+  (`:244-247`) names only the map key, the `default:`/`options:` entry and the `if:` conditional, and the
+  shape test asserts only "the scheduled-event term and the dispatch term naming this job id"
+  (`:146-147`). Drop `|| inputs.job == 'both'` and the `both` option silently becomes rebless-only —
+  the exact dead-dispatch-option failure `key_links` (`:38`) warns about.
+  *Plan change:* add `both` to the identifier family and to the `if:` assertion.
+- **LOW 3 — 06-02's HEAD-relative fixture guard has a residual blind window.** `FIXDIFF` +
+  `FIXPRESENT >= 10` (`06-02-PLAN.md:321`) catches a *gutted* fixture but not a *modified* one if the
+  executor commits Task 2's edit before running the gate. The exemption's rationale is sound; the
+  companion is one-sided.
+  *Plan change:* make the companion an exact entry-count equality against the pre-plan SHA extraction,
+  or state that the gate must run pre-commit.
+- **LOW 4 — `rg -c '^## ' docs/BENCHMARKS.md` cannot show which sections exist** (`06-04-PLAN.md:309`).
+  A heading count is consistent with any three headings. Assert the three heading texts instead.
+- **LOW 5 — line-reference drift in 06-02.** `:103` cites `internal/bench/regression.go:72` for the
+  cross-runner refusal (correct), while `:224` cites `:53` for the same claim — `:53` is the *platform*
+  mismatch message. `:216` cites the Node setup step at 117-120; it is at 118-121. Cosmetic, but these
+  are the `read_first` coordinates an executor navigates by.
+
+### Divergent Views
+
+Single-reviewer cycle; divergence is between Codex and the orchestrating reviewer's own verification:
+
+- Codex raised MEDIUM "`.planning/research/STACK.md` must be added to 06-05's `files_modified` because
+  the parity phrase is live at STACK.md:93". **Not upheld** — `rg -i parity .planning/research/STACK.md`
+  returns no match; STACK.md:93 is a different document's line. The underlying block *is* divergent, but
+  in a far more serious way (HIGH 3 above).
+- Codex rated the class-fix-A exemptions "conceptually valid" but flagged 06-03 Task 2 as mixing the
+  anchor with an inexpressible exception. Confirmed independently and promoted to HIGH 2.
+
+### Cycle-1 status roll-up
+
+| Cycle-1 HIGH | Cycle-2 status |
+|---|---|
+| HIGH 1 — D-06.1 never asserted | **RESOLVED** — exact `runs-on` + `CODEGRAPH_BENCH_RUNNER` on the publish subtree |
+| HIGH 2 — D-06.4 pre-satisfied workflow-wide | **RESOLVED** — upload `with:` map and step-summary assertion both publish-scoped |
+| HIGH 3 — D-06.3 rested on a comment | **RESOLVED** — all publish-job run bodies inspected structurally |
+| HIGH 4 — committed baseline never loaded | **RESOLVED** — loads the committed path; non-vacuity demonstrated by the shared mutation |
+| HIGH 5 — BENCH-03 closable in silence | **RESOLVED in design**; residual mechanical gap tracked as MEDIUM 1 |
+
+## Risk Assessment — Cycle 2
+
+**MEDIUM.** Architecture, wave ordering and instrument design are sound and materially better than
+cycle 1. Two acceptance criteria will halt a correct execution (HIGH 1, HIGH 2) and one instruction
+will damage `.claude/CLAUDE.md` if followed literally (HIGH 3). All three are localised text fixes in
+two plans; none requires re-opening a locked decision. With them corrected the set drops to
+**LOW-MEDIUM**.
+
+---
+
+# Cycle 1 — audit history (superseded by Cycle 2 above)
 
 ## Codex Review
 
@@ -338,3 +575,35 @@ HIGH was confirmed at its cited line; none were taken on the reviewer's word.
 
 Codex ran with repo access and produced `file:line`-grounded findings throughout; no
 `[reviewed-without-repo-access]` marker was present.
+
+---
+
+## Verification coverage — Cycle 2
+
+Codex ran with full repo access and produced `file:line`-grounded findings throughout; no
+`[reviewed-without-repo-access]` marker was present. The orchestrating reviewer independently
+re-executed or re-read every load-bearing claim below against the working tree at `6a2816b`
+before accepting it. One Codex finding was **not upheld**.
+
+| Claim | Source / command actually run | Verdict |
+|---|---|---|
+| SHA-pin arithmetic (expected 19) | `rg -o '^\s*uses: ' / '^\s*uses: \./' / 'uses: [^@[:space:]]+@[0-9a-f]{40}' .github/workflows/bench.yml` → 22 / 2 / 20; `bench.yml:118` is the deleted pinned action | CONFIRMED — 19 pinned + 2 local = 21 total after the edit |
+| Publish-job scoping is real | `06-02-PLAN.md:41,140-184,266` | CONFIRMED — every D-06 assertion anchored to the `jobs.publish` subtree |
+| `rebless` upload would pre-satisfy a file-wide check | `.github/workflows/bench.yml:270-274` | CONFIRMED present — and now provably out of scope |
+| Committed baseline genuinely loaded | `06-03-PLAN.md:236-240` (`../../tools/bench/baseline.json`), `tools/bench/baseline.json` (populated `goos`/`goarch`/`runner`/`scratch_fs`) | CONFIRMED — real file, category guards stay quiet for a frame-derived record |
+| Mutation reddens both oracles | `internal/bench/regression.go:9,15,114,124`; `internal/bench/regression_test.go:42-69,512` | CONFIRMED for the RED itself — **but** the emitted text is `CheckRegression() = nil, want error` (→ HIGH 1) |
+| Task 2 pre-plan diff is impossible | `06-03-PLAN.md:140,166-192,296` | CONFIRMED — Task 1 commits all four named files |
+| `\bcomparison\b >= 5` floor survives the sweep | `rg -n '\bcomparison\b' tools/bench/BASELINE.md` → lines 39/87/97/120/297; swept lines are 64 and 241 | CONFIRMED — disjoint; floor holds with zero headroom |
+| `internal/bench/regression.go` comparison floor | `rg -c` → 7 (floor 5) | CONFIRMED |
+| Taskfile exact-set + floor | `BENCHTASKS=bench:regression:,`, `ALLTASKS=47` (floor 40) | CONFIRMED |
+| Fixture-entry floor | `rg -o '^\s*\{Workflow:' internal/upgrade/taskfile_shape_test.go` → 10 (floor 10) | CONFIRMED — exactly at the floor |
+| GSD marker count | `rg -o '<!-- GSD:[^>]*-->' .claude/CLAUDE.md` → 14 | CONFIRMED |
+| Core-value extraction executes | 06-05's `PV`/`SV` commands run verbatim → `PV_LEN=208` (floor 60), `SV` non-empty | CONFIRMED — gate is satisfiable and non-vacuous |
+| Compatibility bullet region-scope | `rg '^\- \*\*Compatibility\*\*' .planning/PROJECT.md` matches `:244`; `codegraph migrate` in it = 1, in the file = 3 | CONFIRMED — file-wide ban would indeed be unsatisfiable |
+| Census surface + critical files | `rg -U --files <surface>` → 26 files today, 20 after 06-01 deletes the six captures; all 13 critical files present | CONFIRMED — floor 12 and `13/13` both hold |
+| Phase-6 census is reachable | Ran the full cycle-2 pattern set → 168 hits today, every one inside a declared sweep target | CONFIRMED — a zero is attainable |
+| Surviving corpus pins | `rg -o 'f89ae3ea…|dbdc1acb…' tools/bench/realcorpus/manifest.go` → 2; manifest has 3 entries today | CONFIRMED |
+| Codex: `.planning/research/STACK.md` needs editing | `rg -i parity .planning/research/STACK.md` → **no match** | **NOT UPHELD** — false finding; the real defect is the wholesale block divergence (HIGH 3) |
+| Stack block divergence | `diff` of `.claude/CLAUDE.md` lines 22-140 vs `.planning/research/STACK.md` | CONFIRMED — different documents; `STACK.md:151` contains `drop-in`, which would break `CLAUDE_MD_FRAMING_TOTAL=0` |
+| Three HEAD-relative exemptions | `06-05-PLAN.md:101`, `06-02-PLAN.md:321`, `06-03-PLAN.md:402-407` | CONFIRMED correct (one residual caveat → LOW 3) |
+| No sound `rg -c` floor over-corrected | Enumerated all 24 `rg -c` occurrences across the six plans | CONFIRMED — every remaining use is a floor, a line-oriented count, or a `|| true`-guarded restatement |
