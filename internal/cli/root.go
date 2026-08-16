@@ -9,7 +9,7 @@
 // githooks (phase 05) manages marker-fenced git sync hooks, and man
 // (Phase 3 D-01/D-02) is the hidden man-page generator the Homebrew
 // cask's post-install hook invokes — both are documented Go-only
-// surface extensions with no TS CodeGraph counterpart.
+// surface extensions.
 package cli
 
 import (
