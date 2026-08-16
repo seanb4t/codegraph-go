@@ -19,8 +19,20 @@ observed: "Session began after /clear and assembled startup context live. .claud
 
 ### 2. Fresh-session recall — store half (engram spine)
 expected: A genuinely fresh session's engram spine recall for `repo:github.com/seanb4t/codegraph-go` surfaces the four correcting records (xj1stbrsw6, gxwkk3necn, b9wjge7375, mw5z9s9bft) and none of the four superseded originals (3ekc84hbqt, gw79qy2a9z, agggksad53, 7f0pq2wepv). No recalled memory asserts a binding parity floor, functionality floor, or migration read contract.
-result: skipped
-reason: "User reported: I can't directly test this. The engram store is not queryable by the maintainer directly; the check requires MCP tool access. NOT converted to a pass — the human judgment this checkpoint asks for was not rendered."
+result: pass
+accepted_not_demonstrated: true
+reason: |
+  Two-step history, recorded rather than collapsed.
+  (1) Initially SKIPPED — "User reported: I can't directly test this." The engram store is not
+      queryable by the maintainer directly; the check requires MCP tool access. Deliberately NOT
+      converted to a pass at that time, because no human judgment had been rendered.
+  (2) Then ACCEPTED by maintainer ruling 2026-08-16, verbatim: "MEM-02 - accept it and move on."
+      That ruling IS the judgment this checkpoint was waiting on — rendered as ACCEPTANCE of the
+      substitute D-15 re-query evidence below, which is a weaker claim than observation.
+  What was NEVER done: no session that is both genuinely fresh AND carrying mcp__engram__* tools
+  has observed the spine's startup recall. MEM02_STORE_STATUS stays
+  accepted-by-d15-evidence-standard in 06-LIVE-VERIFICATIONS.md and was NOT upgraded.
+  See 06-VERIFICATION.md ## Acknowledged Gaps.
 agent_probe: |
   Performed in this session (which is itself a fresh post-/clear session), recorded as evidence
   rather than as a verdict:
@@ -184,10 +196,13 @@ coverage_id: 06-05/D3
 ## Summary
 
 total: 23
-passed: 22
+passed: 23
 issues: 0
 pending: 0
-skipped: 1
+skipped: 0
+
+<!-- 1 of the 23 passes (test 2) is an ACCEPTANCE by maintainer ruling, not a demonstration.
+     See its accepted_not_demonstrated flag and 06-VERIFICATION.md ## Acknowledged Gaps. -->
 blocked: 0
 
 ## Gaps

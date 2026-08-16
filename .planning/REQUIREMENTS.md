@@ -22,9 +22,9 @@
 
 ### Process & CI (PROC)
 
-- [ ] **PROC-01**: A contributor filing an issue sees no comparison framing in any of the 5 issue templates (`bug_report`, `chore`, `config`, `enhancement`, `feature_request`)
-- [ ] **PROC-02**: A contributor opening a PR sees none in `pull_request_template.md` or the 3 `PULL_REQUEST_TEMPLATE/*` variants
-- [ ] **PROC-03**: Workflow job names, step names and comments carry no retired framing, and every workflow still passes `actionlint` and its own required status checks
+- [x] **PROC-01**: A contributor filing an issue sees no comparison framing in any of the 5 issue templates (`bug_report`, `chore`, `config`, `enhancement`, `feature_request`)
+- [x] **PROC-02**: A contributor opening a PR sees none in `pull_request_template.md` or the 3 `PULL_REQUEST_TEMPLATE/*` variants
+- [x] **PROC-03**: Workflow job names, step names and comments carry no retired framing, and every workflow still passes `actionlint` and its own required status checks
 
 ### Code (CODE)
 
@@ -44,14 +44,14 @@
 
 ### Benchmarks (BENCH)
 
-- [ ] **BENCH-01**: `docs/BENCHMARKS.md` publishes absolute throughput / query latency / peak-RSS figures with methodology, and no head-to-head comparison table
+- [x] **BENCH-01**: `docs/BENCHMARKS.md` publishes absolute throughput / query latency / peak-RSS figures with methodology, and no head-to-head comparison table
 - [x] **BENCH-02**: The comparison runner is removed from `tools/bench`, and the regression gate (`internal/bench.CheckRegression` + committed `baseline.json`) still fires on a real regression
-- [ ] **BENCH-03**: `bench.yml` runs and publishes the absolute numbers without invoking another implementation
+- [x] **BENCH-03**: `bench.yml` runs and publishes the absolute numbers without invoking another implementation
 
 ### Memory (MEM)
 
-- [ ] **MEM-01**: Every engram spine record whose durable content asserts retired framing is superseded — not overwritten, not deleted — with a corrected record
-- [ ] **MEM-02**: A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense
+- [x] **MEM-01**: Every engram spine record whose durable content asserts retired framing is superseded — not overwritten, not deleted — with a corrected record
+- [x] **MEM-02**: A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense
 
 ## v2 Requirements
 
@@ -91,9 +91,9 @@ Which phases cover which requirements.
 | DOCS-02 | Phase 4 | Complete |
 | DOCS-03 | Phase 4 | Complete |
 | DOCS-04 | Phase 4 | Complete |
-| PROC-01 | Phase 5 | Pending |
-| PROC-02 | Phase 5 | Pending |
-| PROC-03 | Phase 5 | Pending |
+| PROC-01 | Phase 5 | Complete |
+| PROC-02 | Phase 5 | Complete |
+| PROC-03 | Phase 5 | Complete |
 | CODE-01 | Phase 5 | Complete |
 | CODE-02 | Phase 2 | Complete |
 | CODE-03 | Phase 5 | **Removed** (maintainer ruling 2026-08-15 — migrate dropped, capability + `modernc.org/sqlite` dependency removed; was parity framing) |
@@ -104,11 +104,11 @@ Which phases cover which requirements.
 | FIXT-05 | Phase 2 | Complete |
 | FIXT-06 | Phase 2 | Complete |
 | FIXT-07 | Phase 3 | Pending |
-| BENCH-01 | Phase 6 | Pending |
+| BENCH-01 | Phase 6 | Complete |
 | BENCH-02 | Phase 6 | Complete |
-| BENCH-03 | Phase 6 | Pending |
-| MEM-01 | Phase 6 | Pending |
-| MEM-02 | Phase 6 | Pending |
+| BENCH-03 | Phase 6 | Complete |
+| MEM-01 | Phase 6 | Complete |
+| MEM-02 | Phase 6 | Complete |
 
 **Phase index:**
 

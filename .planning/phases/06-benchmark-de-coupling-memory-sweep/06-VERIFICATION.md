@@ -1,10 +1,11 @@
 ---
 phase: 06-benchmark-de-coupling-memory-sweep
 verified: 2026-08-16T23:20:00Z
-status: human_needed
-score: 4/5 requirements fully VERIFIED; 1/5 (MEM-02) PARTIAL — its file half is now
-  live-verified, its store half remains accepted at the D-15 evidence standard by explicit
-  maintainer ruling and is the single outstanding human-verification item
+status: passed
+score: 5/5 requirements closed — 4/5 fully VERIFIED (BENCH-01, BENCH-02, BENCH-03, MEM-01); MEM-02's
+  file half live-verified and its store half ACCEPTED at the D-15 evidence standard by explicit
+  maintainer ruling (2026-08-16, "MEM-02 - accept it and move on") rather than demonstrated by a
+  fresh-session read. See ## Acknowledged Gaps.
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -28,20 +29,7 @@ re_verification:
       9f763cae17e372c5100d814d010a1a07f1de42a6, and bench.yml run 31973967130 exists and
       succeeded. BENCH-03 moves PARTIAL -> VERIFIED and is removed from human_verification."
 deferred: []
-human_verification:
-  - test: "Query the engram spine for repo:github.com/seanb4t/codegraph-go from a session that has
-      mcp__engram__* tools, and confirm the four correcting records (xj1stbrsw6, gxwkk3necn,
-      b9wjge7375, mw5z9s9bft) surface while none of the four superseded originals (3ekc84hbqt,
-      gw79qy2a9z, agggksad53, 7f0pq2wepv) do"
-    expected: "No recalled memory asserts a binding parity floor, a functionality baseline, or a
-      migration read contract in the present tense; the superseded originals remain retrievable by
-      id with superseded_by stamped, proving history was preserved rather than deleted"
-    why_human: "MEM-02's store half is verified by inspection, not by a test — the spine lives
-      outside git and no CI gate can hold it. UAT test 2 is recorded skipped, NOT passed: the
-      maintainer cannot query engram directly, so the human judgment this checkpoint asks for was
-      never rendered. Per explicit maintainer ruling, MEM02_STORE_STATUS stays at
-      accepted-by-d15-evidence-standard; the agent-run adversarial probe during UAT re-confirms
-      that same D-15 re-query evidence and is recorded as corroboration, never as an upgrade."
+human_verification: []
 ---
 
 # Phase 6: Benchmark De-coupling & Memory Sweep Verification Report
@@ -111,11 +99,13 @@ exactly one token.
 | 2 | BENCH-02 | `tools/bench` contains no comparison runner; `CheckRegression` against the committed `baseline.json` still fires on a real regression, demonstrated RED against a reverted mutation | ✓ VERIFIED (spot-checked, files unchanged) | `git diff --name-only d3b4f37 HEAD -- tools/bench .github/workflows/bench.yml internal/bench` → empty; nothing could have regressed. 0 `headtohead` hits. Prior pass's mutation-log review (`06-MUTATION-LOG.md`) stands. Corroborated by UAT tests 4–8, 15–17 (all pass). |
 | 3 | BENCH-03 | A `bench.yml` run publishes the absolute numbers without invoking another implementation anywhere in the job | ✓ VERIFIED (**was ⚠️ PARTIAL — prior assertion was stale**) | Run 31973967130 re-derived directly: `conclusion=success`, `event=workflow_dispatch`, `headBranch=gsd/v0.11.0-standalone-project-identity`. Publish job `success`; all 6 other jobs `skipped`. Artifact downloaded and read: exactly 2 records, repos `{weft-go, cockroachdb-pebble}`, both `"subject": "go"`, all five metrics positive, no comparison column / second subject / ratio. Full 13-step list read — no Node/npm/npx/pnpm/yarn step; full-log scan for `npm\|npx\|pnpm\|yarn\|node_modules` returns 0 against a positive-controlled instrument (49 `codegraph` hits in the same log). `if-no-files-found: error` configured at `bench.yml:154` and untripped. Corroborated by UAT test 3 (pass). |
 | 4 | MEM-01 | Every engram spine record whose durable content asserts retired framing is superseded by a corrected record — none overwritten, none deleted, no record of real history removed | ✓ VERIFIED | 06-06 Task 3's acceptance gate run verbatim passes (`SWEEP_RECORD_CLOSED=true`, exit 0): 4 supersede verdicts, 0 delete/overwrite, approved and executed short_id sets set-equal (empty `diff`), both sections non-empty. Substance judged real in the prior pass and unchanged since — named operations, real returned identifiers, printed per-scope arithmetic (`4 + 165 = 169`; `0 + 3 = 3`). |
-| 5 | MEM-02 | A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense | ⚠️ PARTIAL — file half VERIFIED, store half accepted at D-15 standard | **File half (newly closed):** UAT test 1 `pass` — a genuinely fresh post-`/clear` session assembled and read its own startup context and found no present-tense port/parity/drop-in framing. Independently re-derived: `CLAUDE_MD_FRAMING_TOTAL=0`, `STATE_MD_RETIRED_CORE_VALUE=0`, instrument positive-controlled against a planted wrapped fixture (returns 2 there, so the zero is real). `MEM02_FILES_STATUS` updated to `verified-fresh-session`. **Store half (unchanged by ruling):** `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` stays exactly as is. UAT test 2 is `skipped`, not passed — the maintainer cannot query engram directly, so the human judgment was never rendered. Routed to human verification below. |
+| 5 | MEM-02 | A session started after the sweep recalls no memory describing codegraph-go as a port or parity project in the present tense | ✓ CLOSED — file half VERIFIED, store half ACCEPTED by maintainer ruling (not demonstrated) | **File half (newly closed):** UAT test 1 `pass` — a genuinely fresh post-`/clear` session assembled and read its own startup context and found no present-tense port/parity/drop-in framing. Independently re-derived: `CLAUDE_MD_FRAMING_TOTAL=0`, `STATE_MD_RETIRED_CORE_VALUE=0`, instrument positive-controlled against a planted wrapped fixture (returns 2 there, so the zero is real). `MEM02_FILES_STATUS` updated to `verified-fresh-session`. **Store half (unchanged by ruling):** `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` stays exactly as is. UAT test 2 is `skipped`, not passed — the maintainer cannot query engram directly, so the human judgment was never rendered. Routed to human verification below. |
 
-**Score:** 4/5 requirements VERIFIED (BENCH-01, BENCH-02, BENCH-03, MEM-01); 1/5 PARTIAL (MEM-02),
-whose remaining half is a verified-by-inspection item the spine's out-of-git location makes
-unautomatable, carrying an explicit and deliberately un-upgraded status token.
+**Score:** 5/5 requirements closed. 4/5 VERIFIED by evidence (BENCH-01, BENCH-02, BENCH-03,
+MEM-01). MEM-02's file half is VERIFIED; its store half is CLOSED BY MAINTAINER ACCEPTANCE at the
+D-15 evidence standard (ruling 2026-08-16) — a verified-by-inspection item the spine's out-of-git
+location makes unautomatable, never observed from a fresh engram-tooled session, and carrying an
+explicit and deliberately un-upgraded status token. See `## Acknowledged Gaps`.
 
 ### Deferred Items
 
@@ -176,7 +166,7 @@ None — no gap in this phase maps to work explicitly scheduled in a later miles
 | BENCH-02 | 06-01, 06-02, 06-03 | ✓ SATISFIED | Comparison runner removed; `CheckRegression` proven RED against reverted mutations |
 | BENCH-03 | 06-02, 06-04 | ✓ SATISFIED (**newly closed**) | Live run 31973967130 |
 | MEM-01 | 06-06 | ✓ SATISFIED | 4/4 supersedes executed and reconciled set-equal; nothing deleted |
-| MEM-02 | 06-05, 06-06 | ⚠️ PARTIALLY SATISFIED | File half live-verified via UAT test 1; store half accepted at the D-15 evidence standard, human check outstanding |
+| MEM-02 | 06-05, 06-06 | ✓ SATISFIED (store half by acceptance) | File half live-verified via UAT test 1; store half closed by maintainer ruling 2026-08-16 at the D-15 evidence standard — accepted, not demonstrated. See `## Acknowledged Gaps` |
 
 No orphaned requirements — all five BENCH/MEM requirements are claimed by a phase-6 plan.
 
@@ -194,9 +184,40 @@ published — absolute per-corpus figures for both corpora with no second implem
 neither BENCH-03's requirement text nor Phase 6's Success Criterion 3 uses the word "table". The
 checklist phrasing was imprecise; the artifact is correct. Noted in `06-LIVE-VERIFICATIONS.md`.
 
-### Human Verification Required
+## Acknowledged Gaps
 
-#### 1. MEM-02 store half — engram spine recall
+### MEM-02 store half — accepted, not demonstrated
+
+**Maintainer ruling, 2026-08-16, verbatim: "MEM-02 - accept it and move on."**
+
+This closes the phase's last outstanding human-verification item by **acceptance at the D-15
+evidence standard**, not by the fresh-session observation the checkpoint originally asked for. The
+distinction is recorded rather than smoothed over, and the durable status token is deliberately
+left unchanged:
+
+- `MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` in `06-LIVE-VERIFICATIONS.md` **stays
+  exactly as is.** It was not upgraded to `verified-fresh-session` and must not be read as such.
+- **What was never done:** no session that is both (a) genuinely fresh and (b) carrying
+  `mcp__engram__*` tools has observed the spine's startup recall. Worktree-spawned executors carry
+  no engram tools (engram is installed at user scope, not in this repo's `.mcp.json`) — the
+  condition that halted 06-06's first execution attempt and that no phase artifact ever satisfied.
+- **What was done, and what the acceptance rests on:** the D-15 re-query evidence — four
+  corrections applied via `supersede_memory`, `get_memory("3ekc84hbqt")` returning the original
+  intact with `superseded_by` stamped (history preserved, nothing deleted or overwritten), and a
+  `search_memory` phrased in the superseded records' own vocabulary returning all four correcting
+  records and none of the four originals. Re-run independently during UAT and clean both times.
+- **UAT test 2 remains `skipped` in `06-UAT.md`**, with the agent-run probe attached as evidence.
+  It was deliberately not converted to a `pass` at the time, because no human judgment had been
+  rendered. This ruling *is* that judgment — rendered as acceptance of the substitute evidence,
+  which is a weaker claim than observation and is labelled as such here.
+
+**If this is ever revisited:** the cheapest discharge is a fresh session that runs the adversarial
+`search_memory` probe as its first action, before any other context accumulates. Nothing about the
+sweep needs redoing — only the observation.
+
+### Human Verification — discharged
+
+#### 1. MEM-02 store half — engram spine recall (ACCEPTED per ruling above)
 
 **Test:** From a session carrying `mcp__engram__*` tools, query the engram spine for
 `repo:github.com/seanb4t/codegraph-go` and confirm the four correcting records (`xj1stbrsw6`,
@@ -236,10 +257,16 @@ Two items that the prior pass routed to human verification are now closed:
    corroborated here by re-running the phase's own census gate with a positive-controlled
    instrument.
 
-What remains is a single human-verification item — MEM-02's store half — which the phase's own
-design (ROADMAP Phase 6 Notes: "MEM-01/02 are verified by inspection, not by a test") places
-outside any automatable gate, and which the maintainer has explicitly ruled stays at its current
-evidence standard.
+The third and last item — MEM-02's store half — is closed by **maintainer acceptance** rather than
+by observation: ruling of 2026-08-16, "MEM-02 - accept it and move on." The phase's own design
+(ROADMAP Phase 6 Notes: "MEM-01/02 are verified by inspection, not by a test") places it outside
+any automatable gate, and no session in this phase was ever both fresh and engram-tooled. The
+acceptance, what it rests on, and what was never demonstrated are recorded in full under
+`## Acknowledged Gaps` above; `MEM02_STORE_STATUS` is deliberately left at
+`accepted-by-d15-evidence-standard` so the artifact never reads stronger than the evidence.
+
+Phase 6 status is therefore `passed` — with that one requirement closed by an explicit, recorded
+judgment call rather than by a demonstration.
 
 ---
 

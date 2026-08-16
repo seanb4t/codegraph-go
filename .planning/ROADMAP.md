@@ -92,8 +92,8 @@ Archived: [`milestones/v0.10.0-ROADMAP.md`](./milestones/v0.10.0-ROADMAP.md) · 
 - [x] **Phase 2: Golden Harness Re-authoring & Re-freeze** - The golden suite reads as codegraph-go's own regression suite: named for what it asserts, frozen from codegraph-go's own output, with the origin-driving capture path gone (completed 2026-08-14)
 - [x] **Phase 3: Non-Vacuity Proof & Unconditional CI Execution** - The re-baselined suite is trusted because it has been watched fail, and CI cannot silently stop running it (completed 2026-08-15)
 - [x] **Phase 4: Attribution & Documentation Sweep** - A reader finds the origin acknowledged once, legally and in the past tense, and meets no comparison framing anywhere else in the project's documentation (completed 2026-08-15)
-- [ ] **Phase 5: Process, CI & In-Tree Sweep** - A contributor filing an issue or opening a PR, and an agent reading the source, meet a project described on its own terms — with `tsextract` intact and `codegraph migrate` removed (maintainer ruling 2026-08-15)
-- [ ] **Phase 6: Benchmark De-coupling & Memory Sweep** - The project publishes its own absolute performance numbers with no second implementation in the picture, and a fresh session recalls it as a project rather than a port
+- [x] **Phase 5: Process, CI & In-Tree Sweep** - A contributor filing an issue or opening a PR, and an agent reading the source, meet a project described on its own terms — with `tsextract` intact and `codegraph migrate` removed (maintainer ruling 2026-08-15) (completed 2026-08-16)
+- [x] **Phase 6: Benchmark De-coupling & Memory Sweep** - The project publishes its own absolute performance numbers with no second implementation in the picture, and a fresh session recalls it as a project rather than a port (completed 2026-08-16)
 
 ## Phase Details
 
@@ -309,10 +309,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 2. Golden Harness Re-authoring & Re-freeze | 4/4 | Complete    | 2026-08-14 |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
-| 5. Process, CI & In-Tree Sweep | 8/8 | In Progress|  |
-| 6. Benchmark De-coupling & Memory Sweep | 6/6 | In Progress|  |
+| 5. Process, CI & In-Tree Sweep | 8/8 | Complete    | 2026-08-16 |
+| 6. Benchmark De-coupling & Memory Sweep | 6/6 | Complete    | 2026-08-16 |
 
-5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
+5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 6/6 phases complete (100%).
 
 ## Backlog
 
