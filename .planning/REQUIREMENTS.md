@@ -45,7 +45,7 @@
 ### Benchmarks (BENCH)
 
 - [ ] **BENCH-01**: `docs/BENCHMARKS.md` publishes absolute throughput / query latency / peak-RSS figures with methodology, and no head-to-head comparison table
-- [ ] **BENCH-02**: The comparison runner is removed from `tools/bench`, and the regression gate (`internal/bench.CheckRegression` + committed `baseline.json`) still fires on a real regression
+- [x] **BENCH-02**: The comparison runner is removed from `tools/bench`, and the regression gate (`internal/bench.CheckRegression` + committed `baseline.json`) still fires on a real regression
 - [ ] **BENCH-03**: `bench.yml` runs and publishes the absolute numbers without invoking another implementation
 
 ### Memory (MEM)
@@ -105,7 +105,7 @@ Which phases cover which requirements.
 | FIXT-06 | Phase 2 | Complete |
 | FIXT-07 | Phase 3 | Pending |
 | BENCH-01 | Phase 6 | Pending |
-| BENCH-02 | Phase 6 | Pending |
+| BENCH-02 | Phase 6 | Complete |
 | BENCH-03 | Phase 6 | Pending |
 | MEM-01 | Phase 6 | Pending |
 | MEM-02 | Phase 6 | Pending |
