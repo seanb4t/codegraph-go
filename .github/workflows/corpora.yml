@@ -263,7 +263,7 @@ jobs:
         # the goldens (T-03-P1-02).
         run: task corpora:assert
 
-      - name: Run golden parity suite (testdata/golden)
+      - name: Run the golden suite (testdata/golden)
         # The golden suite executes ONLY here (D-04): ci.yml no longer runs
         # it, so this unconditional job is the single place the corpus-aware
         # workflow proves the byte-frozen goldens. The Taskfile test:golden
