@@ -15,7 +15,7 @@
 // Every entry below is populated from the ACTUAL coverage each language's
 // own plan SUMMARY reported (05-04..05-12), not from aspiration — a "full"
 // value is never claimed unless that plan's own SUMMARY (and, for
-// priority-4, a corresponding golden-parity test in testdata/golden)
+// priority-4, a corresponding behavioral golden fixture in testdata/golden)
 // backs it up. Gaps is deliberately not restricted to non-full axes only:
 // an otherwise-"full" axis may still carry a documented heuristic boundary
 // (e.g. Java's PascalCase/camelCase call-qualifier disambiguation) — D-11's
@@ -29,7 +29,7 @@ type Coverage string
 
 const (
 	// CoverageFull means this axis is validated end-to-end for this
-	// language: priority-4 languages via a corresponding golden-parity
+	// language: priority-4 languages via a corresponding behavioral golden
 	// test (testdata/golden), mainstream-tier languages via their own
 	// extraction/resolution test suite reaching the full bar for that
 	// specific axis (e.g. a mainstream language's Dispatch axis is "full"

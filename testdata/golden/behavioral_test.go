@@ -234,9 +234,9 @@ func buildEngineAt(t *testing.T, sourceDir string) *query.Engine {
 	return eng
 }
 
-// syntheticParitySrc resolves the committed, in-repo behavioral corpus
+// behavioralCorpusSrc resolves the committed, in-repo behavioral corpus
 // source tree at corpus/behavioral/src (D-03).
-func syntheticParitySrc(t *testing.T) string {
+func behavioralCorpusSrc(t *testing.T) string {
 	t.Helper()
 
 	src, err := filepath.Abs(filepath.Join("..", "..", "corpus", "behavioral", "src"))
@@ -690,7 +690,7 @@ func exploreSelectedFiles(output string) map[string]bool {
 // diffed against are gone as of this phase (FIXT-04); the status.json
 // key-loop inheritance from probe-01 is retired with them.
 func TestCorpusBehavior_Go(t *testing.T) {
-	engine := buildEngineAt(t, syntheticParitySrc(t))
+	engine := buildEngineAt(t, behavioralCorpusSrc(t))
 
 	t.Run("status", func(t *testing.T) {
 		got, err := engine.Status(context.Background())
@@ -855,7 +855,7 @@ func TestCorpusBehavior_Go(t *testing.T) {
 // broke, not merely "a golden diff appeared".
 func TestCorpusBehaviorSynthetic(t *testing.T) {
 	cases := loadBehavioralCases(t)
-	eng := buildEngineAt(t, syntheticParitySrc(t))
+	eng := buildEngineAt(t, behavioralCorpusSrc(t))
 
 	// executedCases is the EXECUTION-keyed counter (review finding #1): it
 	// is incremented inside the per-case closure, so it tracks how many
@@ -1264,7 +1264,7 @@ func TestExploreCLIMatchesMCP(t *testing.T) {
 		sourceFunc func(t *testing.T) string
 		query      string
 	}{
-		{"behavioral", syntheticParitySrc, "user account"},
+		{"behavioral", behavioralCorpusSrc, "user account"},
 		{"hugo", func(t *testing.T) string { return lockedCorpusDir(t, "go") }, "page content"},
 		{"guava", func(t *testing.T) string { return lockedCorpusDir(t, "java") }, "check precondition"},
 		{"serilog", func(t *testing.T) string { return lockedCorpusDir(t, "csharp") }, "configure logger"},
@@ -1307,8 +1307,8 @@ func TestNodeCLIMatchesMCP(t *testing.T) {
 		sourceFunc func(t *testing.T) string
 		symbol     string
 	}{
-		{"behavioral", syntheticParitySrc, "Validate"},              // multi-def (2)
-		{"behavioral", syntheticParitySrc, "AuditEntry"},            // single-def
+		{"behavioral", behavioralCorpusSrc, "Validate"},   // multi-def (2)
+		{"behavioral", behavioralCorpusSrc, "AuditEntry"}, // single-def
 		{"hugo", lockedExploreCase("go"), "Site"},
 		{"guava", lockedExploreCase("java"), "ImmutableList"},
 		{"serilog", lockedExploreCase("csharp"), "LoggerConfiguration"},
