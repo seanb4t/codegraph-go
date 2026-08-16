@@ -57,9 +57,8 @@ func newNodeCmd() *cobra.Command {
 
 			// Compact worktree notice (WORK-02, D-12) — printed AFTER the
 			// query succeeds (WR-05, see explore.go's call site for the full
-			// rationale: no TS precedent for this CLI placement; deliberate
-			// Go-side design; a failing query must not leave a bare notice
-			// on stdout).
+			// rationale). This placement is codegraph-go's own design call:
+			// a failing query must not leave a bare notice on stdout.
 			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return nil

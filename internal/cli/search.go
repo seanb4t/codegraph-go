@@ -52,8 +52,8 @@ func newSearchCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			// Compact worktree notice (WORK-02, D-12): lives strictly inside
 			// the human-output branch, AFTER the --json early return above —
-			// see explore.go's call site for the full rationale (no TS
-			// precedent for this CLI placement).
+			// see explore.go's call site for the full rationale. This
+			// placement is codegraph-go's own design call.
 			fmt.Fprint(out, query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			for _, l := range locs {
 				fmt.Fprintf(out, "%s (%s) %s:%d\n", l.Name, l.Kind, l.FilePath, l.StartLine)
