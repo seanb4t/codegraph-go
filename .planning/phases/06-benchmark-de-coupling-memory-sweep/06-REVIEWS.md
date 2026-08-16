@@ -1,23 +1,711 @@
 ---
 phase: 6
 reviewers: [codex]
-reviewed_at: 2026-08-16T14:00:14Z
-review_cycle: 4
+reviewed_at: 2026-08-16T14:42:36Z
+review_cycle: 5
 plans_reviewed: [06-01-PLAN.md, 06-02-PLAN.md, 06-03-PLAN.md, 06-04-PLAN.md, 06-05-PLAN.md, 06-06-PLAN.md]
 ---
 
 # Cross-AI Plan Review — Phase 6
 
-> This file holds **four** convergence cycles. Cycle 4 (immediately below) assesses the CURRENT
-> plan text as revised by commit `0b996e9`. It ran past the normal three-cycle escalation gate with
-> explicit user authorisation, because the finding trend was strongly converging (24 → 12 → 6).
-> Cycles 3, 2 and 1 are retained further down as audit history — their findings are **not** current,
-> and their HIGHs are relabelled RESOLVED where cycle 4 re-verified the closure. Consult them only
-> to trace how a cycle-4 statement came to be.
+> This file holds **five** convergence cycles. Cycle 5 (immediately below) is the **confirmation
+> pass**: it assesses the CURRENT plan text as revised by commit `0e2aeba` and tracked at `7eff0fa`.
+> Cycles 4, 3, 2 and 1 are retained further down as audit history — their findings are **not**
+> current, and their HIGHs are relabelled RESOLVED where a later cycle re-verified the closure.
+> Consult them only to trace how a cycle-5 statement came to be.
+>
+> **Finding trend across the loop: 24 → 12 → 6 → 2 → 4 (1 HIGH).**
 
 ---
 
-# Cycle 4 — post-escalation cycle, assessment of the revised plans (`0b996e9`)
+# Cycle 5 — confirmation pass, assessment of the current plans (`0e2aeba` / `7eff0fa`)
+
+**Reviewer:** Codex (source-grounded, full repo access), cross-checked and extended by the
+orchestrating reviewer with independent measurement against the working tree at `7eff0fa`, plus two
+supplementary audits (gate reachability; cross-plan structure).
+
+**Why a fifth cycle exists:** cycle 4 cleared all HIGHs and left two actionable findings, both closed
+at `0e2aeba`. This pass exists to confirm those closures against source rather than on assertion, and
+to check specifically whether the closure itself introduced a sixth instance of the phase's recurring
+defect class. The user has now spent two escalation decisions on this phase, so severity is
+calibrated tightly: **HIGH is reserved for a finding that would prevent the phase goal, create unsafe
+execution, or invalidate verification.** A clean result is a valid outcome, not a failure to look.
+
+## Verdict — Cycle 5
+
+**1 HIGH. 3 actionable non-HIGH (1 MEDIUM, 2 LOW).** All four cycle-4 claims reproduce exactly
+against source, and **the cycle-4 replan (`0e2aeba`) introduced nothing** — every line it changed is
+sound. But this pass found a **sixth instance of the recurring defect class** that pre-dates cycle 4
+and survived all four prior cycles: `06-01`'s own mandated removal-proof test must contain the
+literal `ts-binary`, which three separate `= 0` census gates forbid. It is demonstrated empirically
+below, not argued. None of the four findings requires re-opening any LOCKED decision D-01..D-16.
+
+The recurring defect class is *"an assertion the CORRECT path cannot satisfy"*. HIGH 1 is squarely
+that, and structurally identical to cycle 3's HIGH 2 (a KEEP-class occurrence in a file the gating
+plan cannot modify, matched by a pattern hard-coded inside an automated verify block, with no
+authorised escape). Of the three non-HIGH findings, two fail in the **opposite**, safer direction (a
+gate that is too permissive; a declaration that is merely incomplete); only MEDIUM 1 could redden
+correct work, and it has an explicit in-plan disambiguator a careful executor would follow.
+
+## Verification of the four cycle-4 claims — Cycle 5
+
+Every number below was re-measured by the orchestrator from the repo root, and independently by
+Codex. Both agreed on every figure.
+
+### Claim 1 — 06-05 MEDIUM 1: `reimplementation` adjudicated, gate NOT tightened — **VERIFIED**
+
+| Check | Result |
+|---|---|
+| `rg -n -i -e '\breimplementation\b' -e '\bport\b' .claude/CLAUDE.md` | exactly **2 lines** — `:17` (`- **Licensing**: Original is MIT — port with attribution`, the file's sole bare `port`, which the re-sync removes) and `:83` (`### Option C — Native pure-Go tree-sitter reimplementation…`, the parser-runtime sense) |
+| `:83` lies inside the `keep-divergent` stack block | block is `.claude/CLAUDE.md:21-141`; 83 ∈ [21,141]; the task may touch that block only at line 93 |
+| `\breimplementation\b` absent from `CLAUDE_MD_FRAMING_TOTAL` | gate set at `06-05-PLAN.md:357` is exactly `parity, drop-in, ported, rewrite of, TS CodeGraph, colbymchenry` — the term is **not** in it |
+| `PROJECT.md` Licensing bullet untouched | `git show 0e2aeba --stat` touched only `06-04-PLAN.md` and `06-05-PLAN.md`; `PROJECT.md:246` still carries the D-13 form |
+| Re-synced source text scores 0 against the framing gate | gate set over `sed -n '242p;246p' .planning/PROJECT.md` → **0** |
+| D-13 fidelity of the KEEP adjudication | `06-CONTEXT.md:152-158` — *"Records that describe what was decided or done at a point in time are true and **must survive untouched**"*. "the project this one began as a reimplementation of" is squarely that class. The adjudication is faithful, and re-authoring the bullet would indeed re-open D-13 (LOCKED) |
+
+**The two-row bookkeeping reconciles.** `06-05-PLAN.md:362` keeps Task 1's `sweep` row for line 17
+(accounting for what the edit REMOVED) and adds a `keep-historical` row (what it PUT THERE).
+`06-05-PLAN.md:374`'s downstream assertion is **directional** — *"every changed line maps to a row
+whose verdict was `sweep`"* — so an additional non-`sweep` row cannot break it. Task 1's row gate
+(`06-05-PLAN.md:211`) is `ROWS >= 10 && SWEEP >= 1 && KEEP >= 1 && DIV = 1`; the new row is appended
+by **Task 2**, after that gate has already run, and would in any case only raise `ROWS` and `KEEP`,
+both floors. `06-06`'s gates slice `## Engram enumeration` / `## Supersedes executed` with `awk` and
+use the disjoint verdict vocabulary `supersede` / `leave-historical`, so no downstream count can
+collide. **Downstream count collisions: 0.**
+
+### Claim 2 — 06-04 LOW 1: the last bare `\bTS\b` bounded — **VERIFIED**
+
+| Measurement | Claimed | Measured | |
+|---|---|---|---|
+| Bounded set, whole `docs/BENCHMARKS.md` | 52 | **52** | ✅ |
+| Old bare set (as at `a643713`), whole file | 48 | **48** | ✅ |
+| Bounded set over carry-forward ranges `:7-48` + `:213-300` | 7 hits / 6 lines at `:39 :42 :46 :215 :237(×2) :240` | **exactly that** | ✅ |
+| `TS/JS` indexed-language probe | bare 2 → bounded 0 | bare **2**, bounded **0** | ✅ |
+| Retired-sense probe "6/6" | 6/6 | reads as *6 of the 6 flagged lines caught*; all six are caught | ✅ |
+
+The seven hits, verbatim: `39:TS/Node`, `42:TS binary`, `46:TS-CodeGraph`, `215:head-to-head`,
+`237:head-to-head`, `237:TS-subject`, `240:head-to-head`.
+
+**The only surviving bare `\bTS\b` in the phase is the deliberate completeness FLOOR.** The sole
+executable occurrence is `06-04-PLAN.md:578` (`BARE_TS_RESIDUAL_LINES >= 1`). Every other occurrence
+across the six plans is prose inside a `<review_incorporation>` table — `06-01:207`, `06-03:160`,
+`06-04:151`, `06-04:587`, `06-05:121`. There is **no** bare `\bTS\b` zero gate anywhere in the phase.
+
+**Bounding does not silently lose coverage.** Dropping bare `\bTS\b` from the document gate does
+narrow absolute detection, but `06-04-PLAN.md:578`'s residual control re-runs the bare instrument
+over a surface whose **first** entry is `docs/BENCHMARKS.md`, and `:587` requires every residual line
+to be quoted and adjudicated in `06-CENSUS.md`. Detection is preserved through adjudication rather
+than through a gate that forbids the KEEP sense.
+
+**The expected residual survives the phase.** `06-04-PLAN.md:587` expects `corpora/manifest.json:10`
+as the residual line. Checked against source: that line is the **`gohugoio/hugo`** entry, marked
+`LOCKED (01-06)`, whose note reads *"supplies TS/JS via its 25 javascript tracked files"*. It is a
+Phase-1 corpus pin, **not** the `colbymchenry-codegraph` benchmark entry that 06-01 removes (that one
+lives in `tools/bench/realcorpus/manifest.go`). So `BARE_TS_RESIDUAL_LINES >= 1` stays reachable
+after 06-01 lands. This was the most plausible route to a sixth instance and it is closed.
+
+### Claim 3 — the self-surfaced fifth instance (§2.x restatement) — **VERIFIED, and sound**
+
+`docs/BENCHMARKS.md`'s heading structure confirms the split: `### Peak RSS is measured at the OS
+level, not in-process` spans `:30-49` (contains `:39 :42 :46`), and `### The one real, committed
+number: the synthetic regression baseline` spans `:213-241` (contains `:215 :237 :240`). All three of
+the latter are cross-references to the head-to-head table being deleted:
+
+```
+215: Unlike the head-to-head table above, `tools/bench/baseline.json` — the
+237: It is not a head-to-head number (there is no TS-subject equivalent captured
+240: live head-to-head run.
+```
+
+**The claim that §1 "already directs you to re-author" `:39 :42 :46` is substantiated, not merely
+asserted.** `06-04-PLAN.md:290-292` carries the literal instruction *"Do not justify it by contrast
+with another runtime."* — which is exactly what those three lines do (they justify the OS-level RSS
+measurement by contrast with Node / the TS binary). The restatement at `06-04-PLAN.md:325-345` names
+all six lines, states the measurement, and says precisely what "near-verbatim" preserves (the number,
+its rationale, its re-blessing procedure) and what it does not (pointers to a deleted table).
+
+**No criterion was weakened.** Every line removed by `0e2aeba` has a strictly stronger or equal
+successor: the old bare gate → the bounded gate; *"already reads on its own terms"* → the measured
+six-line restatement; Task 2's `<files>` list → the same list **plus** `06-MEMORY-SWEEP.md`; two
+acceptance bullets → expanded forms at `06-04:623` and `06-05:412`. Nothing was deleted without a
+replacement. Total diff: 60 insertions / 7 deletions across two files.
+
+### Claim 4 — expected-value literals and the sole-declarer claim — **VERIFIED**
+
+| Literal | Asserted | Measured today | |
+|---|---|---|---|
+| `GSD_MARKERS` | `= 14` | **14** | ✅ |
+| `CLAUDE_MD_HEADINGS` | `= 25` | **25** | ✅ |
+| `CLAUDE_MD_STACK_BLOCK_ANCHORS` | `>= 12` (16 today) | **16** (per-token 2 / 6 / 8) | ✅ |
+| `CLAUDE_MD_FRAMING_TOTAL` | `= 0`; 3 lines to clear | **5 hits on 3 lines** — `7:rewrite of`, `7:colbymchenry`, `7:ported`, `15:TS CodeGraph`, `93:parity` | ✅ |
+| `CLAUDE_MD_CHANGED_LINES` | `6..24` | 4 changed lines → 8 diff lines, in range; `06-05:366` adds a record-and-report escape for a legitimate overrun | reachable |
+
+**Sole-declarer claim confirmed, per file:** `06-01`, `06-02`, `06-03`, `06-04` and `06-06` contain
+**zero** references to `.claude/CLAUDE.md`; `06-05` has 50. Only `06-05-PLAN.md:7-13` declares the
+file. Nothing upstream can move any of these literals. This is the load-bearing half of the claim and
+it holds.
+
+**Source-before-mirror is reachable.** `PROJECT.md:5` (the source of `.claude/CLAUDE.md:7`) currently
+scores 3 hits — `rewrite of`, `colbymchenry`, `ported` — and Task 1 marks it `sweep`; Task 2 fixes the
+source first, then re-syncs. `PROJECT.md:242` and `:246` (the sources of `:15` and `:17`) already
+score **0**. Line 93's prescribed replacement (*"a bounded later refactor, not a blocker for
+shipping"*) also scores 0. So `CLAUDE_MD_FRAMING_TOTAL=0` is reachable **through** the authorised
+edits, not despite them.
+
+## Sixth-instance check — Cycle 5
+
+**The cycle-4 replan introduced no new instance — but a sixth instance EXISTS in the current plans
+and is reported as HIGH 1 below.** It lives in `06-01`, which `0e2aeba` did not touch, and it
+survived cycles 1-4 undetected. The distinction matters for attribution only; the finding is current
+and unresolved either way.
+
+The remainder of the census surface is clean. Evidence, stated per file rather than in aggregate:
+
+The phase census surface, measured today under the bounded (class-fix-D) set, with each nonzero file
+mapped to the plan that owns write authority for it:
+
+| File | Bounded census hits | Owning plan (wave) | Zero reachable? |
+|---|---:|---|---|
+| `docs/BENCHMARKS.md` | 47 | 06-04 (W3) — full rewrite | ✅ |
+| `tools/bench/runner/main.go` | 35 | 06-01 (W1) | ✅ |
+| `tools/bench/runner/main_test.go` | 5 | 06-01 (W1) | ✅ |
+| `tools/bench/realcorpus/manifest.go` | 12 | 06-01 (W1) | ✅ |
+| `tools/bench/realcorpus/manifest_test.go` | 5 | 06-01 (W1) | ✅ |
+| `.github/workflows/bench.yml` | 26 | 06-02 (W2) | ✅ |
+| `tools/bench/BASELINE.md` | 2 | 06-02 (W2) | ✅ |
+| `internal/upgrade/taskfile_shape_test.go` | 1 | 06-02 (W2) | ✅ |
+| `internal/bench/metrics.go` | 3 | 06-03 (W1) | ✅ |
+| `internal/bench/regression.go` | 2 | 06-03 (W1) | ✅ |
+| `internal/bench/rss.go` | 1 | 06-03 (W1) | ✅ |
+| `internal/corpora/manifest.go` | **0** | — | already clean |
+| **`corpora/manifest.json`** | **0** | — (declared KEEP, in no plan's `files_modified`) | ✅ **this is the cycle-3 HIGH 2 counterexample, and it is now 0** |
+| `tools/bench/headtohead-*.json` (6) | — | 06-01 (W1) — `git rm` | removed |
+
+Every file with a nonzero count has an owning plan with write authority. The one file that has **no**
+owner — `corpora/manifest.json`, the exact counterexample that made cycle 3's aggregate claim a HIGH —
+now scores **0** under the bounded set. `PHASE6_CENSUS_TOTAL = 0` is reachable by the correct path.
+
+Further reachability checks run this cycle:
+
+- **`CENSUS_CRITICAL_PRESENT=13/13`** — all thirteen named files exist today; 06-01 deletes only the
+  six `headtohead-*.json` captures, none of which is in the critical thirteen. `rg --files` was
+  confirmed to accept explicit file arguments (surface = 26 files, floor is `>= 12`).
+- **`U_PINNED = 19`** (`06-02-PLAN.md:351`) — measured today: `U_TOTAL=22`, `U_LOCAL=2`,
+  `U_PINNED=20`. The rewrite drops exactly one pinned action, `actions/setup-node` at
+  `bench.yml:118` (required, since `setup-node` is in the same gate's retired-terms set), giving
+  20 − 1 = **19**. The literal is derived, not guessed, and the companion assertion
+  `U_PINNED + U_LOCAL == U_TOTAL` makes it a set-consistency check rather than a bare count.
+- **`PRESENT[CommitSHA] >= 1`** — 0 in the current document, but the rewrite is directed to emit it
+  twice (`06-04-PLAN.md:293`, and the provenance block), and the CamelCase spelling is grounded in
+  the Go struct field at `tools/bench/realcorpus/manifest.go:57`. Reachable.
+- **`DIVERGENT_VERDICTS = 1`** — reachable, but see MEDIUM 1 below for the one residual ambiguity.
+
+## Findings — Cycle 5
+
+### HIGH 1 — the mandated removal-proof test must contain `ts-binary`, and three `= 0` census gates forbid it
+
+**This is the sixth instance of the phase's recurring defect class.** It reddens three gates across
+two plans on a fully correct execution, and neither plan's executor has an authorised escape.
+
+**The mandate.** `06-01-PLAN.md:34` (`must_have`) and `06-01-PLAN.md:243-246` (`<behavior>`) require,
+in `tools/bench/runner/main_test.go` (the file header at `:239`), a new test
+`TestParseFlags_RejectsRetiredComparisonBinaryFlag`:
+
+> *"`parseFlags` called with the retired comparison-binary flag returns a **non-nil** error, because
+> the flag is no longer registered. This is what proves the flag is gone rather than merely
+> undocumented."* — required by D-07 / rule `84d1gfpywd`.
+
+**The flag is `-ts-binary`** — named as such in `06-01-PLAN.md:113` (the deletion inventory:
+"`config.tsBinary` field and its `-ts-binary` flag") and `:337`, and live today at
+`tools/bench/runner/main.go:178`. Go's `flag` package identifies flags **by name**, so every faithful
+implementation — `parseFlags([]string{"-ts-binary", …})`, or `fs.Lookup("ts-binary") == nil` — leaves
+the literal string in `tools/bench/runner/main_test.go`. There is no substitute literal, and the plan
+itself forbids the alternative: `06-04-PLAN.md:539` — *"Never reword the innocent text."*
+
+**The three gates it reddens.** All three are `= 0` assertions whose surface includes
+`tools/bench/runner/` and whose pattern set matches `ts-binary`:
+
+| Gate | Location | Surface | Matching pattern |
+|---|---|---|---|
+| `RETIRED_RUNNER_SYMBOLS_TOTAL = 0` | `06-01-PLAN.md:398` | `tools/bench/runner/` | `-e 'ts-binary'` |
+| `BENCH_TRACER_SURFACE_TOTAL = 0` | `06-01-PLAN.md:489` (set at `:446-458`) | `tools/bench/realcorpus/` + `tools/bench/runner/` | `-e '\bts-binary\b'` |
+| `PHASE6_CENSUS_TOTAL = 0` | `06-04-PLAN.md:578` | `docs/BENCHMARKS.md tools/bench …` | `-e '\bts-binary\b'` |
+
+**Demonstrated, not argued.** A minimal faithful implementation of the mandated test was written to
+a scratch tree and both pattern sets run against it:
+
+```go
+func TestParseFlags_RejectsRetiredComparisonBinaryFlag(t *testing.T) {
+	if _, err := parseFlags([]string{"-ts-binary", "/custom/codegraph"}); err == nil {
+		t.Fatal("expected parseFlags to reject the retired flag")
+	}
+}
+```
+
+```
+06-01:398 RETIRED_RUNNER_SYMBOLS_TOTAL = 1     (asserted 0)
+06-04:578 / 06-01:489 bounded set     = 1     (asserted 0)
+```
+
+**Neither executor has an authorised escape.**
+
+- The 06-01 patterns are hard-coded inside `<acceptance_criteria>` shell snippets; an executor cannot
+  rewrite its own acceptance criterion. (`06-01-PLAN.md:490` anticipates *pattern narrowing* during
+  the task's step 2, but that provision governs the census the executor runs by hand, not the
+  literal gate text.)
+- The 06-04 pattern is inside an `<automated>` block, and `06-04-PLAN.md:526-527` states this
+  explicitly: *"the pattern lives inside an automated verify block the executor cannot legitimately
+  edit."* `06-04-PLAN.md:534-542` closes the exclusion list — *"Adding an exclusion that is not on
+  this list, or is not backed by a citation, is **forbidden**"* — and
+  `tools/bench/runner/main_test.go` is **not** in 06-04's `files_modified`, so 06-04 cannot fix the
+  source either.
+
+**This is exactly cycle 3's HIGH 2, one file over.** There, `corpora/manifest.json:10` held a
+KEEP-class `TS/JS` in a file no plan declared, matched by a hard-coded pattern in an automated block.
+Here, `tools/bench/runner/main_test.go` holds a KEEP-class `ts-binary` — *removal evidence*, the
+opposite of retired framing — matched by a hard-coded pattern in an automated block, in a file 06-04
+does not declare.
+
+**The planner caught the identical hazard one line over and fixed it.** `06-01-PLAN.md:260-265`
+forbids using `"ts"` as the publishcheck wrong-subject fixture value, in terms that describe this
+finding precisely:
+
+> *"`tools/bench` is inside 06-04's Phase-6 census surface, whose bounded pattern set counts a quoted
+> `"ts"` as retired subject framing; a fixture written the obvious way would make 06-04's
+> `PHASE6_CENSUS_TOTAL=0` unreachable through no fault of 06-04's executor."*
+
+The `-ts-binary` literal in the removal-proof test is the same hazard — and worse, because
+`"ts"` → `"other"` had a substitute literal and a flag name does not.
+
+**PLAN.md change needed.** Pre-authorise the narrowing in-plan at all three sites, exactly as class
+fix D was pre-authorised — this is D-04's own stated remedy (*"If a pattern flags text that is
+genuinely innocent, the finding is about the pattern. Bound it tighter and record the change with the
+flagged text quoted"*), so no LOCKED decision is re-opened:
+
+1. `06-01-PLAN.md:398` — exclude the single removal-proof assertion from
+   `RETIRED_RUNNER_SYMBOLS_TOTAL`'s surface (e.g. `-g '!main_test.go'` paired with a companion
+   assertion that `main_test.go` contains the rejection test), or bound `ts-binary` to its
+   *registration* sense.
+2. `06-01-PLAN.md:446-458` — same narrowing for `BENCH_TRACER_SURFACE_TOTAL`.
+3. `06-04-PLAN.md:578` — add `tools/bench/runner/main_test.go`'s rejection case to the
+   **pre-authorised** narrowing at `:526-527` and to the exclusion list at `:534-542`, with the
+   flagged text quoted and adjudicated in `06-CENSUS.md`, citing `06-01-PLAN.md:34` / D-07 /
+   rule `84d1gfpywd` as the source. Add a companion positive assertion so the exclusion cannot hide
+   a real regression: the excluded file must contain **exactly one** `ts-binary` occurrence, inside
+   `TestParseFlags_RejectsRetiredComparisonBinaryFlag`.
+
+Whichever form is chosen, apply it to **all three** sites — fixing one leaves the phase red at the
+other two.
+
+### MEDIUM 1 — 06-05 Task 1 does not say which row absorbs `.claude/CLAUDE.md:83`, and the natural reading reddens `DIVERGENT_VERDICTS = 1`
+
+**Evidence.** Task 1's enumeration (`06-05-PLAN.md:171-176`) runs a census over `.claude/CLAUDE.md`,
+`.planning/PROJECT.md` and `.planning/STATE.md` with a pattern set that explicitly **includes
+`reimplementation`**. Measured against the current tree, that census returns hits in
+`.claude/CLAUDE.md` on lines **7, 15, 17, 83, 93**. Line 83 is the parser-runtime
+`reimplementation`.
+
+`06-05-PLAN.md:30` requires *"Every occurrence found in the three files carries a recorded verdict…
+none was dropped silently"*, and `:202-203` specifies *"one table row per occurrence: file, line,
+quoted text, verdict, reason."* So `:83` takes a row. Its verdict cannot be `sweep` (the line is
+outside the task's sanctioned edit scope, and the plan's own prohibitions forbid re-authoring that
+block). It is not a past-tense record, so `keep-historical` is semantically wrong. The natural
+verdict is **`keep-divergent`** — and that drives `DIV` to 2, failing
+`test "$DIV" = "1"` at `06-05-PLAN.md:211` **on a correct execution**.
+
+**Why this is MEDIUM and not HIGH.** The correct path *is* available and *is* named:
+`06-05-PLAN.md:216` states *"exactly one row carries the `keep-divergent` verdict — the
+`.claude/CLAUDE.md` stack-block row… two fails (the class is being used as a catch-all)"*, and the
+pre-identified table at `:197` already demonstrates a **range** row (`lines 21-141`) absorbing
+in-block occurrences. An executor who reads `:216` will fold `:83` into that row. So the gate is
+reachable — this is an ambiguity that *could* redden, not an assertion that *must*.
+
+**Why it is still worth closing.** Line 93 is also inside 21-141 and gets its **own** row
+(`sweep IN PLACE`), so the block row demonstrably does not absorb every in-block occurrence — the
+executor must judge. And `0e2aeba` just made `reimplementation` highly salient in three places in
+06-05 **and** established a precedent of "a notable single occurrence gets its own appended row"
+(the new line-17 `keep-historical` row). Both changes raise, not lower, the chance an executor gives
+`:83` a dedicated row. `:83` is never mentioned in Task 1's context anywhere in the plan.
+
+**Also imprecise:** the new text at `06-05-PLAN.md:262-268` says Task 1 *"saw the term in
+`PROJECT.md` and never in the file it lands in"*. Task 1 **does** see `reimplementation` in
+`.claude/CLAUDE.md` — at `:83`. The claim is true only of the line-17 occurrence.
+
+**PLAN.md change needed.** In `06-05-PLAN.md`, add one clause to Task 1 — either in the verdict table
+at `:197` or in the acceptance criterion at `:216`:
+
+> `.claude/CLAUDE.md:83`'s `reimplementation` occurrence lies inside the `GSD:stack-*` block and is
+> accounted for by that block's single `keep-divergent` range row. It does **not** take its own row —
+> a second `keep-divergent` row would drive `DIVERGENT_VERDICTS` to 2 and redden a correct execution.
+> (Contrast line 93, which does take its own row because it is edited in place.)
+
+Optionally correct `:262-268` to say "never at the line it lands in".
+
+### LOW 1 — 06-04's required-heading assertion is aggregate, and passes a malformed document
+
+**Evidence.** `06-04-PLAN.md:364` states *"each named heading present exactly once"* but implements it
+as a single summed count:
+
+```sh
+H=$(rg -o -F -e '## 1. Methodology' -e '## 2. Absolute numbers' \
+     -e '## 3. Regression gate (PERF-02, INDX-06)' docs/BENCHMARKS.md | wc -l)
+TOP=$(rg '^## ' docs/BENCHMARKS.md | wc -l)
+test "$H" = "3" && test "$TOP" -ge 3
+```
+
+Reproduced counterexample (a three-line file: `## 1. Methodology` twice, `## 2. Absolute numbers`
+once, `## 3. Regression gate…` absent):
+
+```
+BENCHMARKS_REQUIRED_HEADINGS=3 BENCHMARKS_TOP_SECTIONS=3
+GATE_EXIT=0
+```
+
+A duplicated Methodology heading plus a **missing regression-gate section** passes. `BENCH-01`
+explicitly requires the rewritten document to carry the regression-gate description
+(`06-04-PLAN.md:340`).
+
+**Why LOW.** This fails in the *permissive* direction — malformed work passes — which is the opposite
+of the recurring defect class, and it is independently backstopped: `PRESENT[CheckRegression] >= 1`
+and `PRESENT[baseline.json] >= 1` in the same gate both require regression-gate content. The
+heading-identity claim is simply weaker than its own prose says. Note the irony: this is precisely
+the *"per file, never aggregate"* lesson, applied to headings.
+
+**PLAN.md change needed.** In `06-04-PLAN.md:364`, replace the summed `H` with three independent
+counts and require each to equal `1`:
+
+```sh
+for h in '## 1. Methodology' '## 2. Absolute numbers' '## 3. Regression gate (PERF-02, INDX-06)'; do
+  C=$(rg -o -F "$h" docs/BENCHMARKS.md | wc -l | tr -d ' ')
+  echo "HEADING[$h]=$C"; test "$C" = "1" || exit 1
+done
+```
+
+Retain `BENCHMARKS_TOP_SECTIONS >= 3` as the printed non-empty companion.
+
+### LOW 2 — `corpora/manifest.json` is in 06-03's `files_modified` but not in Task 1's `<files>`
+
+**Evidence.** `06-03-PLAN.md:14` lists `corpora/manifest.json` in `files_modified`, and
+`06-03-PLAN.md:237-243` explicitly authorises editing its top-level `note` at line 2 (*"If that value
+needs a change, make it and say so in the SUMMARY: it is committed data"*). But Task 1's `<files>` at
+`06-03-PLAN.md:174` omits it.
+
+This is the residue of the cycle-3 HIGH 2 fix, which reconciled the **frontmatter** but not the
+**task** element — and it is the same class of omission that `0e2aeba` closed for 06-05 Task 2
+(`06-MEMORY-SWEEP.md` added to `<files>`). Practical risk is low: the plan itself measures that
+line 2 is already clean for every pattern in the census, so the expected outcome is no edit at all.
+
+**PLAN.md change needed.** Append `, corpora/manifest.json` to `06-03-PLAN.md:174`'s `<files>`.
+
+### Noted, not actionable
+
+- **06-03 Task 3 transiently writes `internal/bench/regression.go`.** `06-03-PLAN.md:380` declares
+  only `06-MUTATION-LOG.md`, yet the action at `:389` applies two mutation families to
+  `internal/bench/regression.go` under a `trap … EXIT` restore. Net change is zero, the file is in
+  the plan's `files_modified` via Task 1, and the precondition at `:379` already names it. No
+  lost-write hazard; no change required.
+- **Wave-1 content coupling between 06-01 and 06-03.** `06-03-PLAN.md:32` states a truth in the past
+  tense of 06-01's completion, while both sit in wave 1 with `depends_on: []`. Not a write conflict
+  and not a blocked gate: the acceptance criterion is a SUMMARY statement (`:274`), no automated gate
+  reads `tools/bench/realcorpus`, `read_first` at `:182` already handles both orderings, and D-10
+  keeps the package name and path stable. Recorded so a later reviewer does not rediscover it as new.
+
+## Cross-plan structure — Cycle 5
+
+Audited independently this cycle; **all clean**.
+
+- **File ownership — zero same-wave write conflicts.** Waves: **W1** = 06-01, 06-03 · **W2** = 06-02
+  · **W3** = 06-04 · **W4** = 06-05 · **W5** = 06-06. The only wave-1 pair (06-01, 06-03) has
+  strictly disjoint file sets, so `ROADMAP.md:280`'s "parallel — zero file overlap" claim holds.
+  The two shared planning artifacts are strictly sequential across waves:
+  `06-MEMORY-SWEEP.md` (06-05 W4 creates → 06-06 W5 extends) and `06-LIVE-VERIFICATIONS.md`
+  (06-04 W3 creates → 06-05 W4 appends → 06-06 W5 appends).
+- **Wave / dependency ordering — correct.** Every consumer runs strictly later than its producer:
+  `06-CENSUS.md` (06-04 W3 → read by 06-05 W4), `06-PUBLISH-RESULTS.json` (intra-plan, gated by a
+  `<precondition>` at `06-04-PLAN.md:250`), `.github/workflows/bench.yml` (06-02 W2 → gated by
+  06-04 W3 at `:167`), `tools/bench/publishcheck` (built W1, consumed W3).
+  `06-06` correctly carries no `PREPLAN-SHA.txt` — it has no git tamper guard, and
+  `06-01-PLAN.md:95` registers the artifact as "one per plan, NN = 01..05" deliberately.
+- **Requirement coverage — complete.** Phase 6 scope per `REQUIREMENTS.md:122` / `ROADMAP.md:266` is
+  **BENCH-01, BENCH-02, BENCH-03, MEM-01, MEM-02**. BENCH-01 → 06-04; BENCH-02 → 06-01/06-03/06-04;
+  BENCH-03 → 06-02/06-04; MEM-01 → 06-06; MEM-02 → 06-05 (file half) + 06-06 (store half). No
+  uncovered requirement; no plan claims a requirement outside Phase 6 scope. All 16 LOCKED decisions
+  D-01..D-16 are referenced by at least one plan.
+- **Blocking checkpoints — exactly two, both intact.** `06-04-PLAN.md:371` (resolve BENCH-03 status,
+  guarding Task 4 via the precondition at `:423`) and `06-06-PLAN.md:247` (confirm supersede
+  classification, guarding Task 3 via the precondition at `:287`). The `a643713 → 0e2aeba` diff
+  contains no line matching `checkpoint`, `gate="blocking"`, `wave:`, `depends_on` or `autonomous`.
+- **Autonomous flags — unchanged.** `06-01 true · 06-02 true · 06-03 true · 06-04 false ·
+  06-05 true · 06-06 false`, byte-identical at `a643713` and `HEAD`. Both `false` values sit on
+  exactly the two plans carrying blocking checkpoints — the correct pairing.
+
+## Risk Assessment — Cycle 5
+
+**MEDIUM**, driven entirely by HIGH 1. Everything else is in good shape: the benchmark de-coupling,
+workflow rewrite, mutation-proof, one-way memory safeguards and cross-plan structure are sound and
+grounded in source; all four cycle-4 fixes reproduce exactly; and the census now reaches zero per
+file including `corpora/manifest.json`, the counterexample that made cycle 3's aggregate claim a
+HIGH.
+
+HIGH 1 is bounded and mechanical — a pattern narrowing at three named sites, using a remedy the plans
+already pre-authorise elsewhere — but it is genuinely blocking: on a correct execution the phase goes
+red at `06-01`'s own acceptance criteria and again at `06-04`'s automated census, with no authorised
+escape at either. Left unfixed it produces precisely the outcome this convergence loop exists to
+prevent: an executor who is doing the right thing sees red and is trained to discount it.
+
+Once HIGH 1 is closed at all three sites, residual risk is **LOW**. The three non-HIGH findings are
+small, local and independently backstopped; none blocks execution, and two of the three fail in the
+permissive rather than the correct-work-reddens direction.
+
+## Divergent views — Cycle 5
+
+Codex assessed the phase at **0 HIGH / 0 MEDIUM / 1 LOW** and explicitly concluded that no sixth
+instance was introduced. The orchestrator's supplementary gate-reachability audit found HIGH 1, which
+Codex missed. The disagreement is not interpretive — HIGH 1 is settled by measurement (the scratch
+probe above), and Codex's own reasoning would reach the same conclusion given the same probe. Recorded
+here rather than smoothed over, because it is the same failure mode cycle 3 documented: a
+reviewer's "all clear" that was an aggregate impression rather than a per-file check. Codex's LOW
+(the aggregate heading count) was independently reproduced by the orchestrator and is carried as
+LOW 1 above.
+
+## Codex Review — Cycle 5 (verbatim, source-grounded)
+
+## 1. Summary
+
+At HEAD `7eff0fa`, the six plans are coherent and executable against the current source. All four cycle-4 claims reproduce, the fixes in `0e2aeba` do not introduce a sixth correct-path-fails-red defect, and no HIGH or MEDIUM concern remains. I found one actionable LOW in an older heading-identity assertion: its aggregate count can pass with one required heading duplicated and another absent. Overall: **0 HIGH / 0 MEDIUM / 1 LOW**.
+
+## 2. Verification of the four cycle-4 claims
+
+### Claim 1 — `reimplementation` adjudication
+
+Command:
+
+```sh
+rg -n -i -e '\breimplementation\b' -e '\bport\b' .claude/CLAUDE.md
+```
+
+Result: exactly **2 lines**:
+
+- [`.claude/CLAUDE.md:17`](/Volumes/Code/github.com/seanb4t/codegraph-go/.claude/CLAUDE.md:17) — sole bare `port`, removed by the authorized re-sync.
+- [`.claude/CLAUDE.md:83`](/Volumes/Code/github.com/seanb4t/codegraph-go/.claude/CLAUDE.md:83) — parser-runtime `reimplementation`, outside the permitted stack-block edit at line 93.
+
+Bookkeeping is sound:
+
+- Task 1’s row gate runs before Task 2 and uses floors for `ROWS`, `SWEEP`, and `KEEP`; only `DIV=1` is exact, and the new row is `keep-historical`, not `keep-divergent` ([06-05-PLAN.md:211](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-05-PLAN.md:211)).
+- Task 2 explicitly retains the old line-17 `sweep` row and adds a separate post-edit `keep-historical` row ([06-05-PLAN.md:362](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-05-PLAN.md:362)).
+- The changed-line mapping remains against `sweep` rows ([06-05-PLAN.md:374](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-05-PLAN.md:374)).
+- Plan 06 bounds its counts to `## Engram enumeration`, so both D-12 rows are structurally excluded ([06-06-PLAN.md:222](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-06-PLAN.md:222), [06-06-PLAN.md:229](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-06-PLAN.md:229)).
+
+Downstream count collisions: **0**.
+
+Wrong-fix checks:
+
+```sh
+sed -n '357p' 06-05-PLAN.md | rg -o -F '\breimplementation\b' | wc -l
+git diff --quiet 0e2aeba^ HEAD -- .planning/PROJECT.md
+```
+
+Results: **0** gate occurrences; project diff exit **0**. The Licensing text remains intact at [PROJECT.md:246](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/PROJECT.md:246), as D-13 requires.
+
+**VERIFIED.**
+
+### Claim 2 — bounded `TS` gate
+
+I ran the exact bounded pattern set from [06-04-PLAN.md:355](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:355) over the specified ranges:
+
+```sh
+{ sed -n '7,48p' docs/BENCHMARKS.md
+  sed -n '213,300p' docs/BENCHMARKS.md
+} | rg -U -o -i <bounded-pattern-set> | wc -l
+```
+
+Result: **7 hits on 6 lines**:
+
+- `39`
+- `42`
+- `46`
+- `215`
+- `237` twice
+- `240`
+
+For the whole file:
+
+```sh
+rg -U -o -i <bounded-pattern-set> docs/BENCHMARKS.md | wc -l
+```
+
+Result: **52**.
+
+The exact pre-fix bare command was:
+
+```sh
+rg -U -o \
+  -e '\bTS\b' \
+  -e '\bhead-to-head\b' \
+  -e '\bheadtohead\b' \
+  -e '\bcolbymchenry\b' \
+  -e '\bcodegraph-ts\b' \
+  -e '\bcomparator\b' \
+  -e '\b1\.3\.1\b' \
+  -e '[0-9]+(\.[0-9]+)?[x×] (faster|slower|more|less)' \
+  docs/BENCHMARKS.md | wc -l
+```
+
+Result: **48**.
+
+Probe results:
+
+- Two-line `TS/JS` fixture: bare **2**, bounded **0**.
+- Five-line retired-sense fixture: bounded **6 hits on 5 lines**.
+
+Searching every plan for the exact executable literal `'\bTS\b'` finds only [06-04-PLAN.md:578](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:578), the deliberate `BARE_TS_RESIDUAL_LINES >= 1` completeness floor. Other occurrences are explanatory history, not gates.
+
+**VERIFIED.**
+
+### Claim 3 — §2.x restatement
+
+The same bounded range command reports the three §2.x lines exactly as claimed:
+
+- [docs/BENCHMARKS.md:215](/Volumes/Code/github.com/seanb4t/codegraph-go/docs/BENCHMARKS.md:215)
+- [docs/BENCHMARKS.md:237](/Volumes/Code/github.com/seanb4t/codegraph-go/docs/BENCHMARKS.md:237), two hits
+- [docs/BENCHMARKS.md:240](/Volumes/Code/github.com/seanb4t/codegraph-go/docs/BENCHMARKS.md:240)
+
+All three point to the table or live head-to-head run being removed. The revised action explicitly says to drop those clauses while preserving the number, rationale, and re-blessing procedure ([06-04-PLAN.md:324](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:324)-[338](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:338)).
+
+No criterion was weakened: the replacement gate detects **52** current matches versus the former gate’s **48**, while required-content and emitted-row assertions remain intact ([06-04-PLAN.md:355](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:355)-[363](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:363)).
+
+**VERIFIED.**
+
+### Claim 4 — expected literals and sole declarer
+
+Commands and results:
+
+```sh
+rg -o '<!-- GSD:[^>]*-->' .claude/CLAUDE.md | wc -l
+# 14
+
+rg '^#{1,6} ' .claude/CLAUDE.md | wc -l
+# 25
+
+rg -o -F \
+  -e 'The Parser Decision' \
+  -e 'cockroachdb/pebble' \
+  -e 'tree-sitter/go-tree-sitter' \
+  .claude/CLAUDE.md | wc -l
+# 16
+```
+
+Per-token anchor counts were **2**, **6**, and **8**, respectively.
+
+Frontmatter declaration search, per plan:
+
+| Plan | `.claude/CLAUDE.md` declarations |
+|---|---:|
+| 06-01 | 0 |
+| 06-02 | 0 |
+| 06-03 | 0 |
+| 06-04 | 0 |
+| 06-05 | 1 |
+| 06-06 | 0 |
+
+Thus only [06-05-PLAN.md:7](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-05-PLAN.md:7)-[13](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-05-PLAN.md:13) declares the file, and no later plan can invalidate the literals.
+
+**VERIFIED.**
+
+## 3. Strengths
+
+- The fresh workflow is guarded through a parsed `jobs.publish` subtree, including exact runner/env values, non-empty run bodies, publish-not-gate prohibitions, job-summary use, and upload settings ([06-02-PLAN.md:168](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-02-PLAN.md:168)-[206](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-02-PLAN.md:206)). These correspond to real load-bearing source properties at [bench.yml:98](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/bench.yml:98), [bench.yml:101](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/bench.yml:101), [bench.yml:151](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/bench.yml:151), and [bench.yml:158](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/bench.yml:158).
+
+- BENCH-02 drives the committed baseline through both numeric bands while copying the category-frame fields, correctly respecting the guard order in [regression.go:49](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/bench/regression.go:49)-[128](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/bench/regression.go:128). The test design and mutation non-vacuity proof are explicit at [06-03-PLAN.md:289](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-03-PLAN.md:289)-[336](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-03-PLAN.md:336).
+
+- Published rows are generated mechanically from the measurement JSON, covering every metric cell rather than spot-checking throughput ([06-04-PLAN.md:304](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:304)-[315](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:315)).
+
+- The memory operation is correctly split into read-only enumeration, a blocking classification checkpoint, and approved one-way supersedes, with an explicit halt if true supersede semantics are unavailable ([06-06-PLAN.md:247](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-06-PLAN.md:247)-[307](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-06-PLAN.md:307)). This respects D-13 and D-15 rather than quietly reopening them.
+
+## 4. Concerns
+
+No HIGH concerns. No MEDIUM concerns.
+
+- **LOW — The required-heading assertion is still aggregate.** [06-04-PLAN.md:364](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/06-benchmark-de-coupling-memory-sweep/06-04-PLAN.md:364) says each of the three headings is present exactly once, but sums all matches into `H=3`. I ran this counterexample:
+
+```text
+## 1. Methodology
+## 1. Methodology
+## 2. Absolute numbers
+```
+
+The full stated gate returned:
+
+```text
+BENCHMARKS_REQUIRED_HEADINGS=3 BENCHMARKS_TOP_SECTIONS=3
+FULL_GATE_EXIT=0
+```
+
+Thus a duplicated Methodology heading plus a missing Regression gate heading passes. This does not threaten the phase goal because the substantive gate content is independently asserted, but the heading-identity claim is weaker than stated.
+
+Exact PLAN change needed: in `06-04-PLAN.md:364`, replace aggregate `H=3` with three independent counts—one per required heading—and require each to equal `1`. Retain `TOP >= 3` as the non-empty companion.
+
+## 5. Sixth-instance check
+
+**No sixth instance was introduced.**
+
+Evidence:
+
+- The current `.claude/CLAUDE.md` framing gate has **5 hits on 3 lines**—7, 15, and 93—and Task 2 explicitly edits those lines. The authorized source text for lines 15 and 17 and the prescribed line-93 replacement each score **0** against that gate.
+- `reimplementation` is deliberately excluded because [CLAUDE.md:83](/Volumes/Code/github.com/seanb4t/codegraph-go/.claude/CLAUDE.md:83) must survive and the re-sync adds another KEEP-class use; adding it would recreate the defect.
+- The rewritten BENCHMARKS gate’s **7 hits on 6 carried-forward lines** are all explicitly handled by the action; none is a legitimate required survivor.
+- The only executable bare `\bTS\b` is a positive completeness floor, not a zero gate.
+- The LOW heading issue above is the opposite failure direction—a malformed document can pass—not an assertion that fails correct work.
+
+## 6. Risk Assessment
+
+**LOW.** The core benchmark, workflow, mutation, census, and one-way memory safeguards are sound, and all cycle-4 fixes reproduce against source. The sole actionable issue is a small heading-cardinality assertion that does not undermine BENCH-01’s substantive verification.
+
+
+## Verification coverage — Cycle 5
+
+Every claim in this cycle was checked against the working tree at `7eff0fa`. Commands were run twice
+— once by Codex with full repo access, once by the orchestrator — and agreed on every figure except
+where noted under *Divergent views*.
+
+**Files read in full or in the relevant region:** all six `06-0N-PLAN.md`; `06-CONTEXT.md`
+(D-01..D-16); `06-REVIEWS.md` cycles 1-4; `.planning/PROJECT.md`; `.planning/STATE.md`;
+`.planning/REQUIREMENTS.md`; `.planning/ROADMAP.md`; `.claude/CLAUDE.md`; `docs/BENCHMARKS.md`;
+`.github/workflows/bench.yml`; `corpora/manifest.json`; `tools/bench/realcorpus/manifest.go`;
+`tools/bench/runner/main.go`; `tools/bench/runner/main_test.go`; `internal/bench/{metrics,regression,rss}.go`;
+`internal/corpora/manifest.go`.
+
+**Measurements executed (not inferred):**
+
+- `rg -n -i -e '\breimplementation\b' -e '\bport\b' .claude/CLAUDE.md` → 2 lines (`:17`, `:83`)
+- bounded census over `docs/BENCHMARKS.md` → 52; old bare set → 48; carry-forward ranges → 7 hits / 6 lines
+- `TS/JS` probe → bare 2, bounded 0
+- `GSD_MARKERS` → 14; `CLAUDE_MD_HEADINGS` → 25; `CLAUDE_MD_STACK_BLOCK_ANCHORS` → 16;
+  `CLAUDE_MD_FRAMING_TOTAL` → 5 hits on lines 7/15/93
+- re-sync source text (`PROJECT.md:242`, `:246`) scored against the framing gate → 0
+- per-file bounded census over the whole Phase-6 surface (13 files, table above), including
+  `corpora/manifest.json` → 0
+- `CENSUS_CRITICAL_PRESENT` → 13/13; census surface → 26 files
+- `U_TOTAL` / `U_LOCAL` / `U_PINNED` over `bench.yml` → 22 / 2 / 20
+- heading-gate counterexample reproduced → `H=3`, `GATE_EXIT=0` with a required heading absent
+- **HIGH 1 probe**: minimal faithful `TestParseFlags_RejectsRetiredComparisonBinaryFlag` written to a
+  scratch tree; `06-01:398` set → **1**, `06-04:578` / `06-01:489` bounded set → **1**, both asserted `= 0`
+- `git show 0e2aeba --stat`; `git diff a643713 0e2aeba` (60 insertions / 7 deletions, two files;
+  no `checkpoint`, `gate="blocking"`, `wave:`, `depends_on` or `autonomous` line touched)
+
+**Coverage claims in this cycle are stated PER FILE.** The one place a prior cycle made an aggregate
+claim, it concealed a counterexample that was a HIGH (cycle 3, `corpora/manifest.json`). Two findings
+this cycle — HIGH 1 and LOW 1 — are themselves aggregate-vs-per-item defects, which is why the
+distinction is repeated here rather than assumed understood.
+
+**Not verified (out of scope for a plan review):** no plan was executed; no CI run was triggered;
+`06-MEMORY-SWEEP.md`, `06-CENSUS.md`, `06-LIVE-VERIFICATIONS.md` and `06-PUBLISH-RESULTS.json` do not
+exist yet, so gates over them were assessed for reachability by construction rather than measured.
+
+---
+
+
+# Cycle 4 — audit history (superseded by Cycle 5 above)
 
 **Reviewer:** Codex (source-grounded, full repo access), cross-checked and extended by the
 orchestrating reviewer against the working tree at `0b996e9`.
@@ -130,7 +818,7 @@ below are MEDIUM and LOW, both new, both absent from every PLAN.md.
 
 ## Non-HIGH findings — Cycle 4
 
-### MEDIUM 1 (NEW) — 06-05 Task 2's authorised Licensing re-sync introduces `reimplementation` into `.claude/CLAUDE.md`, and neither Task 1's enumeration nor the final gate sees it
+### MEDIUM 1 (CYCLE 4 — RESOLVED in `0e2aeba`, re-verified by measurement in cycle 5) — 06-05 Task 2's authorised Licensing re-sync introduces `reimplementation` into `.claude/CLAUDE.md`, and neither Task 1's enumeration nor the final gate sees it
 
 **Evidence.** `06-05-PLAN.md:246-249` authorises the re-sync explicitly: "Two CLAUDE.md occurrences
 (the Compatibility and Licensing constraints) are already stale mirrors of PROJECT.md text corrected
@@ -162,7 +850,7 @@ and **do not** rewrite PROJECT.md's Licensing bullet to be origin-neutral — th
 fifth instance of this phase's own defect class, and the second requires re-opening **D-13**
 (LOCKED), which protects point-in-time statements.
 
-### LOW 1 (NEW) — 06-04's stated rationale for the `>= 1` residual floor contradicts its own `docs/BENCHMARKS.md` gate
+### LOW 1 (CYCLE 4 — RESOLVED in `0e2aeba`, re-verified by measurement in cycle 5) — 06-04's stated rationale for the `>= 1` residual floor contradicts its own `docs/BENCHMARKS.md` gate
 
 **Evidence.** `06-04-PLAN.md:564` justifies the `BARE_TS_RESIDUAL_LINES >= 1` floor (rather than
 `= 1`) on the ground that "a rewritten `docs/BENCHMARKS.md` may legitimately name `TS/JS` as an
