@@ -71,6 +71,6 @@
 // NOT attempt to fully solve — where a reference cannot be resolved
 // deterministically, it is left unresolved rather than guessed at, and any
 // resulting under-resolution is expected to surface via the D-12
-// golden-parity diff (testdata/golden/parity_python_test.go) rather than
-// being silently masked.
+// behavioral golden diff (testdata/golden/behavioral_python_test.go)
+// rather than being silently masked.
 package pyextract

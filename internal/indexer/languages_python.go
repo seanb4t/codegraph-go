@@ -36,8 +36,8 @@ func (d pythonProjectDescriptor) ModulePath() string { return d.packageRoot }
 // smaller/older projects). A project deviating from both conventions (a
 // custom package-dir override in pyproject.toml's build-system table)
 // degrades gracefully to a slightly-wrong-but-still-deterministic dotted
-// path, self-detected via the D-12 golden-parity diff rather than a hard
-// failure.
+// path, self-detected via the D-12 behavioral golden diff (testdata/golden/behavioral_python_test.go)
+// rather than a hard failure.
 //
 // Returns an error if neither pyproject.toml nor setup.py exists at root —
 // the same "descriptor absent" signal Discover already contractually

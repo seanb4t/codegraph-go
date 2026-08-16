@@ -626,8 +626,8 @@ func isIntraModule(modulePath, importPath string) bool {
 }
 
 // lastPathSegment returns the final "/"-delimited segment of importPath,
-// the conventional default package name TS-parity behavior expects on the
-// synthetic package pseudo-node (RQ-1).
+// the conventional default package name for the synthetic package
+// pseudo-node (RQ-1).
 func lastPathSegment(importPath string) string {
 	if i := strings.LastIndexByte(importPath, '/'); i >= 0 {
 		return importPath[i+1:]

@@ -7,7 +7,7 @@ import (
 
 var idShape = regexp.MustCompile(`^[^:]*:[0-9a-f]{32}$`)
 
-// TestNodeID_Shape proves the id has the TS-parity <kind>:<32-hex> shape
+// TestNodeID_Shape proves the id has the documented <kind>:<32-hex> shape
 // and that the kind prefix is preserved verbatim.
 func TestNodeID_Shape(t *testing.T) {
 	id := NodeID("function", "mergeStyle", "internal/cli/finish.go")

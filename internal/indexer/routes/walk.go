@@ -12,7 +12,7 @@ import (
 // exact shape (05-PATTERNS.md §Per-file skip/error contract's sibling
 // discipline: an explicit stack, never Go-stack recursion over a
 // pathologically deep AST, T-02-04). visit returning false is not used by
-// any detector today (kept for parity with the pattern this mirrors, not
+// any detector today (kept consistent with the pattern this mirrors, not
 // dead-code-flagged since it documents the walk's own extensibility).
 func walkDescendants(root *tree_sitter.Node, visit func(*tree_sitter.Node) bool) {
 	stack := make([]*tree_sitter.Node, 0, 64)

@@ -101,7 +101,7 @@ func StripVolatile(m map[string]any) map[string]any {
 // exception, spanning THREE real per-file language IDs
 // (internal/indexer/languages_typescript.go registers "typescript" and
 // "javascript" as separate LanguageSpecs, and TSX source lands under
-// "tsx" — see testdata/golden/parity_tsjs_test.go's identical
+// "tsx" — see testdata/golden/behavioral_tsjs_test.go's identical
 // tsjsLanguages grouping) because REQUIREMENTS.md counts them as one
 // coverage target ("TS/JS").
 type LanguageGroup struct {
