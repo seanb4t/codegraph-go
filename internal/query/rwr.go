@@ -1,7 +1,7 @@
-// Package query — internal/query/rwr.go ports EXPL-02's load-bearing
-// algorithm: computeGraphRelevance, TS's Random-Walk-with-Restart (RWR)
-// relevance ranker (RESEARCH §3, mcp/tools.js:2321-2386 [VERIFIED: TS
-// 1.3.1 dist]). This file is pure — no graphstore.Reader dependency — so
+// Package query — internal/query/rwr.go implements EXPL-02's load-bearing
+// algorithm: computeGraphRelevance, the documented Random-Walk-with-Restart (RWR)
+// relevance ranker (RESEARCH §3, mcp/tools.js:2321-2386 [cited from the
+// frozen RESEARCH capture]). This file is pure — no graphstore.Reader dependency — so
 // it is fully unit-testable on synthetic in-memory subgraphs.
 package query
 

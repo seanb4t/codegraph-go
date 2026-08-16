@@ -40,11 +40,11 @@ func WorktreeNotice(m *gitmeta.Mismatch) string {
 
 // WorktreeWarningBlockquote wraps m.Warning() as a markdown blockquote —
 // "> ⚠ " prefixed onto the warning's first line, and every subsequent
-// "\n" rewritten to "\n> " — for MCP status only (D-12), matching TS's
-// mcp/tools.js construction. The CLI does NOT use this form: it prints
-// the warning through its own warn-style line (plan 02-07), because TS
-// ships two structurally different status renderings (D-17) and a
-// blockquote is meaningless outside markdown.
+// "\n" rewritten to "\n> " — for MCP status only (D-12), matching the
+// documented mcp/tools.js construction. The CLI does NOT use this form:
+// it prints the warning through its own warn-style line (plan 02-07),
+// because the documented design ships two structurally different status
+// renderings (D-17) and a blockquote is meaningless outside markdown.
 func WorktreeWarningBlockquote(m *gitmeta.Mismatch) string {
 	warning := m.Warning()
 	if warning == "" {

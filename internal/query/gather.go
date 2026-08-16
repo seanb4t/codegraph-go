@@ -1,10 +1,10 @@
-// Package query — internal/query/gather.go ports TS CodeGraph 1.3.1's
-// hybrid candidate-gathering heuristics H3-H6 (RESEARCH §C.2,
-// context/index.js:449-606 [VERIFIED: TS 1.3.1 dist — the constants
-// below are cited from the frozen 01-RESEARCH.md capture; the live dist
-// JS itself is no longer present on this machine, only its .d.ts type
-// declarations remain, so this port works from RESEARCH's pinned
-// constants rather than a fresh source read]): three independently-
+// Package query — internal/query/gather.go implements the hybrid
+// candidate-gathering heuristics H3-H6 (RESEARCH §C.2,
+// context/index.js:449-606 [cited from the frozen 01-RESEARCH.md
+// capture — the original source is no longer present on this machine,
+// only its .d.ts type declarations remain, so this file works from
+// RESEARCH's pinned constants rather than a fresh source read]): three
+// independently-
 // scored channels feeding explore's RWR candidate set, merged
 // max-score-wins. This REPLACES the naive lexical matchNodes as
 // explore's input construction (RESEARCH Pitfall 1) — a later plan (10)
@@ -81,18 +81,18 @@ const (
 	// +5*(termHits-1) (RESEARCH §C.2/H5, context/index.js:530-575).
 	channel3MultiTermBoost = 5.0
 
-	// channel3ImportKind mirrors TS's "import" node Kind for H5's
-	// exclusion rule. No priority-4 extractor in this repo currently
+	// channel3ImportKind matches the documented "import" node Kind for
+	// H5's exclusion rule. No priority-4 extractor in this repo currently
 	// emits an "import" Node.Kind (imports are captured as
 	// goextract.RefKindImports EDGES, not nodes — see
 	// internal/indexer/goextract/types.go), so this exclusion is
-	// presently a no-op against real indexes; ported verbatim for
-	// behavioral parity and so a future extractor never silently slips
-	// import-declaration nodes into the FTS channel.
+	// presently a no-op against real indexes; kept so a future extractor
+	// never silently slips import-declaration nodes into the FTS
+	// channel.
 	channel3ImportKind = "import"
 )
 
-// definitionKinds is H4's Channel-2 kind filter — TS's
+// definitionKinds is H4's Channel-2 kind filter — the documented
 // "class/interface/struct/trait/protocol/enum/type_alias" set. In this
 // codebase's Kind vocabulary, every priority-4 extractor already
 // collapses class/struct/trait/protocol/enum into goextract.KindStruct
@@ -100,7 +100,7 @@ const (
 // doc comments: "Reusing KindStruct rather than minting a new class kind
 // keeps struct/class-shaped downstream logic unified") — there is no
 // separate "class"/"enum"/"trait"/"protocol" Kind value anywhere in this
-// repo's extractors to have missed. So the full TS set maps onto exactly
+// repo's extractors to have missed. So the full documented set maps onto exactly
 // three Go Kind values: KindStruct + KindInterface + KindTypeAlias (a
 // documented D-02 consolidation, not a dropped kind).
 var definitionKinds = map[string]bool{
@@ -210,12 +210,13 @@ func titlecase(s string) string {
 // (near-exact match) scores near the full +10 bonus, a much longer name
 // scores less.
 //
-// Divergence (D-02, inherited from 01-03-SUMMARY.md): TS's stem-variant
-// expansion (getStemVariants) is NOT applied here — 01-03 deliberately
-// deferred stem-variant support from extractSymbolsFromQuery/
-// extractSearchTerms entirely (no stub parameter), so this channel
-// searches the literal titlecased symbol tokens only. A follow-on plan
-// can add stem expansion here once getStemVariants is ported.
+// Divergence (D-02, inherited from 01-03-SUMMARY.md): the documented
+// stem-variant expansion (getStemVariants) is NOT applied here — 01-03
+// deliberately deferred stem-variant support from
+// extractSymbolsFromQuery/extractSearchTerms entirely (no stub
+// parameter), so this channel searches the literal titlecased symbol
+// tokens only. A follow-on plan can add stem expansion here once
+// getStemVariants is implemented.
 func gatherChannel2(r graphstore.Reader, symbols []string) ([]gatherCandidate, error) {
 	if len(symbols) == 0 {
 		return nil, nil
@@ -454,8 +455,8 @@ func queryMentionsTestOrSpec(query string) bool {
 // applyTestFileDampening is H7 (RESEARCH §C.2, context/index.js:607-616):
 // multiplies every test-file candidate's score by testFileDampeningFactor
 // (0.3), UNLESS the query mentions test/spec (queryMentionsTestOrSpec) —
-// in which case NO candidate is dampened at all, matching TS's short-
-// circuit. exemptIDs (keyed by Node.Id) skips dampening for candidates
+// in which case NO candidate is dampened at all, per the documented
+// short-circuit. exemptIDs (keyed by Node.Id) skips dampening for candidates
 // H9's distinctive-identifier exact-match exemption has already flagged
 // (plan 10 Task 2, applyPostMergeRerankers) — nil/empty exemptIDs is a
 // no-op filter, so Task 1's tests (no exemption yet in play) pass nil.
@@ -496,7 +497,7 @@ func sharesDirectoryPrefix(dir, prefixDir string) bool {
 
 // applyCoreDirectoryBoost is H8 (RESEARCH §C.2, context/index.js:617-647):
 // finds the file with the most candidates in the set (a per-file
-// candidate-density proxy for TS's per-file graph-edge count — this pure
+// candidate-density proxy for the documented per-file graph-edge count — this pure
 // candidate-set function has no reader/graph access to count actual
 // edges, a documented substitution consistent with plan 07's base-score
 // defaults). If that file's count is >=3x the NEXT most-frequent
@@ -581,14 +582,15 @@ const (
 // stemTerm reduces a lowercase query term to a naive stem by stripping
 // the most common English inflectional suffixes (plural -s/-es/-ies,
 // verb -ing/-ed). This is a documented, deterministic, lightweight
-// substitute for TS's getStemVariants() (search/query-utils.js:129-175),
-// which 01-03 explicitly deferred porting (tokenize.go's
-// extractSearchTerms doc comment, D-02) — RESEARCH §C.2/H9 requires
-// terms be "stem-grouped" but does not pin a specific stemming algorithm,
-// only the grouping OUTCOME (near-duplicate inflections of the same root
-// count as one group). Not a full Porter-stemmer port; sufficient to
-// merge "handler"/"handlers"-shaped variants without over-engineering a
-// case RESEARCH doesn't cite a verbatim constant for.
+// substitute for the documented getStemVariants() algorithm
+// (search/query-utils.js:129-175), which 01-03 explicitly deferred
+// implementing (tokenize.go's extractSearchTerms doc comment, D-02) —
+// RESEARCH §C.2/H9 requires terms be "stem-grouped" but does not pin a
+// specific stemming algorithm, only the grouping OUTCOME (near-duplicate
+// inflections of the same root count as one group). Not a full
+// Porter-stemmer implementation; sufficient to merge
+// "handler"/"handlers"-shaped variants without over-engineering a case
+// RESEARCH doesn't cite an exact constant for.
 func stemTerm(term string) string {
 	t := strings.ToLower(term)
 	switch {
@@ -663,8 +665,8 @@ func applyMultiTermReRank(candidates []gatherCandidate, terms []string) {
 	}
 }
 
-// isDistinctiveIdentifier is a documented heuristic substitute for TS's
-// isDistinctiveIdentifier (search/query-utils.js — cited by RESEARCH
+// isDistinctiveIdentifier is a documented heuristic substitute for the
+// documented isDistinctiveIdentifier (search/query-utils.js — cited by RESEARCH
 // §C.2/H9 as gating the H9-exempts-H7 rule, but its exact algorithm was
 // not captured in RESEARCH's frozen citations and the TS dist JS is
 // unreadable on this machine — see the package doc comment). Captures
@@ -743,12 +745,12 @@ func applyPostMergeRerankers(candidates []gatherCandidate, query string, terms [
 	return candidates
 }
 
-// isTestFile is TS's file-PATH predicate (RESEARCH §5,
-// search/query-utils.js:300-332 [VERIFIED: TS 1.3.1 dist]) — NOT
-// traverse.go's isTestSymbol (a SYMBOL-name heuristic; that one is left
-// unwidened, this is ported as a separate function). Defined once, here,
-// so neither H7 (plan 10's test-file dampening) nor the relevance gate
-// (plan 14) duplicates it.
+// isTestFile is the documented file-PATH predicate (RESEARCH §5,
+// search/query-utils.js:300-332 [cited from the frozen RESEARCH
+// capture]) — NOT traverse.go's isTestSymbol (a SYMBOL-name heuristic;
+// that one is left unwidened, this is implemented as a separate
+// function). Defined once, here, so neither H7 (plan 10's test-file
+// dampening) nor the relevance gate (plan 14) duplicates it.
 func isTestFile(filePath string) bool {
 	if filePath == "" {
 		return false

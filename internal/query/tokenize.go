@@ -6,7 +6,7 @@ import (
 )
 
 // stopWords is the FTS-term stopword set consumed by extractSearchTerms —
-// ported verbatim from TS CodeGraph 1.3.1's search/query-utils.js
+// transcribed from the documented search/query-utils.js
 // (exports.STOP_WORDS, query-utils.js:102-120). This is a SEPARATE,
 // smaller list than commonWords (used by extractSymbolsFromQuery) — do
 // not conflate the two (RESEARCH Anti-Pattern "Conflating the two
@@ -42,7 +42,7 @@ var (
 )
 
 // commonWords is the identifier-noise filter consumed by
-// extractSymbolsFromQuery — ported verbatim from TS CodeGraph 1.3.1's
+// extractSymbolsFromQuery — transcribed from the documented
 // context/index.js (context/index.js:118-143). A distinct, larger list
 // than stopWords (used by extractSearchTerms) — do not reuse stopWords
 // here (RESEARCH Anti-Pattern "Conflating the two tokenizers").
@@ -83,10 +83,10 @@ var (
 	symbolLowercasePattern = regexp.MustCompile(`\b([a-z][a-z0-9]{2,})\b`)
 )
 
-// extractSearchTerms is TS CodeGraph 1.3.1's H2 tokenizer
+// extractSearchTerms implements the documented H2 tokenizer
 // (search/query-utils.js:189-242, extractSearchTerms) — EXPL-01's literal
 // "stopword-filtered" target, feeding the FTS gather channel (plan 07).
-// Ported verbatim: preserves camelCase/PascalCase and snake_case compound
+// Implements: preserves camelCase/PascalCase and snake_case compound
 // identifiers (>=3 chars, lowercased) alongside their split sub-words,
 // then drops any split word shorter than 3 chars or present in
 // stopWords. Tokens are returned in first-seen scan order (D-04
@@ -96,8 +96,8 @@ var (
 // empty slice — never a token set a downstream FTS gather could treat as
 // "match everything."
 //
-// Divergence (D-02): TS's getStemVariants() FTS-prefix stem expansion
-// (query-utils.js:129-175) is deliberately deferred, not ported here — a
+// Divergence (D-02): the documented getStemVariants() FTS-prefix stem
+// expansion (query-utils.js:129-175) is deliberately deferred, not implemented here — a
 // follow-on plan can add it when the FTS gather channel (plan 07) needs
 // it. This function has no stem-variant hook.
 func extractSearchTerms(query string) []string {
@@ -149,11 +149,11 @@ func extractSearchTerms(query string) []string {
 	return tokens
 }
 
-// extractSymbolsFromQuery is TS CodeGraph 1.3.1's H1 tokenizer
+// extractSymbolsFromQuery implements the documented H1 tokenizer
 // (context/index.js:64-145, extractSymbolsFromQuery) — feeds explore's
-// named-symbol seeding (plan 12, the +50 file score). Ported verbatim:
-// unions matches from 6 identifier-shape patterns, applied in TS's exact
-// order — CamelCase (>=2 chars), snake_case (>=3), SCREAMING_SNAKE,
+// named-symbol seeding (plan 12, the +50 file score). Implements:
+// unions matches from 6 identifier-shape patterns, applied in the
+// documented order — CamelCase (>=2 chars), snake_case (>=3), SCREAMING_SNAKE,
 // ALL_CAPS acronym (>=2), dot.notation (full path AND each part >=2),
 // plain lowercase (>=3) — then drops anything present (case-insensitive)
 // in commonWords, a SEPARATE, larger list than stopWords (do not reuse

@@ -22,8 +22,9 @@ type FilesOptions struct {
 	Filter string
 
 	// Dir narrows results to files whose path starts with this prefix —
-	// a plain strings.HasPrefix check (or "./"+Dir), matching TS 1.3.1's
-	// files --filter <dir> exactly (bin/codegraph.js:1348-1354). This is
+	// a plain strings.HasPrefix check (or "./"+Dir), implementing the
+	// documented files --filter <dir> semantics exactly
+	// (bin/codegraph.js:1348-1354). This is
 	// deliberately NOT a glob despite its CLI flag's <dir> placeholder
 	// text — see dirPrefixMatches. Empty applies no directory filter.
 	// Orthogonal to and composes (AND) with Filter (the language filter,
@@ -94,10 +95,10 @@ func validateFilesDepth(n int) error {
 
 // dirPrefixMatches reports whether path satisfies the --dir prefix filter
 // (SURF-02): a plain string-prefix match against path directly or against
-// path with a "./" prefix — matching TS 1.3.1's files --filter <dir>
-// exactly (bin/codegraph.js:1348-1354). Deliberately strings.HasPrefix
-// only, NOT filepath.Match/doublestar/regexp — TS's own implementation is
-// a prefix check, not a glob, despite the CLI flag's <dir> placeholder
+// path with a "./" prefix — implementing the documented files --filter
+// <dir> semantics exactly (bin/codegraph.js:1348-1354). Deliberately
+// strings.HasPrefix only, NOT filepath.Match/doublestar/regexp — the
+// documented behavior is a prefix check, not a glob, despite the CLI flag's <dir> placeholder
 // text (T-08-02-02: also the deliberate anti-ReDoS choice, O(n) with no
 // backtracking). An empty dir applies no filter.
 //

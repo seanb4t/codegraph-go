@@ -1,21 +1,20 @@
-// Package query — internal/query/seeding.go ports TS CodeGraph 1.3.1's
-// named-symbol seeding heuristic H13 (RESEARCH §C.2,
-// mcp/tools.js:2477-2562 [VERIFIED: TS 1.3.1 dist — cited from the frozen
-// 01-RESEARCH.md capture]): the stage that resolves the agent's named
+// Package query — internal/query/seeding.go implements the named-symbol
+// seeding heuristic H13 (RESEARCH §C.2, mcp/tools.js:2477-2562 [cited
+// from the frozen 01-RESEARCH.md capture]): the stage that resolves the agent's named
 // query symbols into RWR seeds and gives their files the dominant +50
 // score (plan 13, H14). Feeds directly off extractSymbolsFromQuery (H1,
 // tokenize.go) and computeGraphRelevance's seedIDs restart vector
 // (rwr.go).
 //
-// H13's rule set, ported verbatim from the RESEARCH §C.2 row:
+// H13's rule set, transcribed from the RESEARCH §C.2 row:
 //   - tokenize the query again (H1), keep only tokens >=3 chars, capped
 //     at the first 16 (in scan order)
 //   - resolve each token via a full-scan exact-name lookup (getNodesByName
 //     — NOT the FTS/gather channels H3-H6 use)
 //   - <=3 defs for a name: INJECT ALL of them into the RWR seed set; the
 //     "seed tier" (the subset plan 13's +50 named-seed file score keys
-//     off) is def0 (the D-04 lowest-Id def, substituting for TS's
-//     unordered SELECT per Assumption A3) plus any OTHER co-named def
+//     off) is def0 (the D-04 lowest-Id def, substituting for the
+//     documented unordered SELECT per Assumption A3) plus any OTHER co-named def
 //     whose caller count is >= 0.25*maxCallers among that name's defs
 //   - >3 defs for a name: only the disambiguated subset is injected (and
 //     IS the seed tier, no further split) — PascalCase type tokens from
@@ -24,12 +23,12 @@
 //     traverse.go's buildContainsIndex); if none corroborate, the single
 //     def with the greatest "body substance" wins
 //
-// Divergence (D-02, no verbatim TS source survives for these specifics —
-// the live TS dist is no longer readable on this machine, see gather.go's
+// Divergence (D-02, no verbatim source survives for these specifics —
+// the original source is no longer readable on this machine, see gather.go's
 // package doc comment for the same constraint): the RESEARCH capture pins
 // H13's constants and branch structure but not (a) the exact
-// "body-substance" measure TS uses to rank a large-overload def with no
-// corroborating type token, or (b) the exact mechanism TS uses to
+// "body-substance" measure the documented design uses to rank a large-overload def with no
+// corroborating type token, or (b) the exact mechanism it uses to
 // correlate a PascalCase type token with an overloaded def. This plan's
 // own, documented design:
 //   - body substance = a def's own line span (EndLine-StartLine+1) — a
@@ -151,7 +150,7 @@ func pascalCaseTypeTokens(query, projectName string) []string {
 
 // resolveDefsByName is H13's getNodesByName-equivalent: a full
 // IterateNodes() scan (NOT the FTS/gather channels of H3-H6) collecting
-// every node whose Name exactly equals name. TS's own SELECT has no
+// every node whose Name exactly equals name. The documented SELECT has no
 // ORDER BY (Assumption A3, RESEARCH); this substitutes the codebase-wide
 // D-04 lowest-Id-first convention as a deterministic, reproducible order.
 func resolveDefsByName(r graphstore.Reader, name string) ([]*schema.Node, error) {

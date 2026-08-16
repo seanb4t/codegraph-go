@@ -89,12 +89,13 @@ func (e *Engine) readSourceFile(relPath string) ([]byte, error) {
 	return os.ReadFile(abs)
 }
 
-// generatedFilePatterns is TS's GENERATED_PATTERNS list ported VERBATIM
-// (D-07, RESEARCH §7, extraction/generated-detection.js:27-82) — the
-// primary sort key for NODE-01's multi-def enumeration (generated files
-// last). Do not reorder, add, or drop entries without re-verifying
-// against the TS dist source; this is a byte-for-byte regex port, not an
-// approximation.
+// generatedFilePatterns is the documented GENERATED_PATTERNS list,
+// captured as a constant list (D-07, RESEARCH §7,
+// extraction/generated-detection.js:27-82) — the primary sort key for
+// NODE-01's multi-def enumeration (generated files last). Do not
+// reorder, add, or drop entries without re-verifying against the frozen
+// RESEARCH capture; this is a byte-for-byte transcription of the regex
+// set, not an approximation.
 var generatedFilePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\.pb\.go$`),
 	regexp.MustCompile(`\.pulsar\.go$`),
@@ -124,8 +125,8 @@ var generatedFilePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\.generated\.rs$`),
 }
 
-// isGeneratedFile reports whether filePath matches TS's generated-file
-// predicate (D-07) — used as NODE-01's multi-def sort's primary key so
+// isGeneratedFile reports whether filePath matches the documented
+// generated-file predicate (D-07) — used as NODE-01's multi-def sort's primary key so
 // hand-written definitions surface before generated/vendored duplicates
 // sharing the same symbol name.
 func isGeneratedFile(filePath string) bool {
@@ -142,10 +143,11 @@ func isGeneratedFile(filePath string) bool {
 // instead of resolving to a single winner (NODE-01, RESEARCH §6
 // findSymbolMatches). The result is sorted generated-files-last
 // (isGeneratedFile, primary key) then lowest-Id-first (secondary key —
-// a documented divergence from TS's implicit, non-deterministic row
-// order per RESEARCH Pattern 2: TS's own sort has no secondary
-// tie-break, so this is an intentional Go-side determinism
-// improvement, not a byte-for-byte TS port of the ordering).
+// a documented divergence from the documented implicit,
+// non-deterministic row order per RESEARCH Pattern 2: the documented
+// sort has no secondary tie-break, so this is an intentional Go-side
+// determinism improvement, not a byte-for-byte transcription of the
+// ordering).
 func (e *Engine) enumerateSymbolDefs(symbol string) ([]*schema.Node, error) {
 	it, err := e.reader.IterateNodes()
 	if err != nil {
@@ -342,10 +344,10 @@ func (e *Engine) Node(symbol, file string, line *int) (string, error) {
 
 	// NODE-03: narrow by substring file hint and/or line containment; a
 	// no-op when neither hint is set (narrowNodeMatches returns matches
-	// unchanged), preserving NODE-01/02 byte-parity for the plain
+	// unchanged), preserving NODE-01/02's identical behavior for the plain
 	// `node <symbol>` case. Also the fallback for a file hint that didn't
-	// exactly match anything above — TS's substring semantics rather than
-	// a hard "not found in file" error.
+	// exactly match anything above — the documented substring semantics
+	// rather than a hard "not found in file" error.
 	matches = narrowNodeMatches(matches, file, line)
 
 	if len(matches) == 1 {

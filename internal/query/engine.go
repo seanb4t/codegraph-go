@@ -176,9 +176,10 @@ func OpenAt(start string) (*Engine, io.Closer, error) {
 
 	eng := NewWithRoot(reader, dir)
 	// Pitfall 3: resolveStartPath (internal/cli/query.go) may hand OpenAt
-	// a RELATIVE --path value. Absolutizing here mirrors TS's own
-	// path.resolve(pathArg || process.cwd()) at its CLI entry point and
-	// ResolveCodegraphDir's own filepath.Abs call on the same input — a
+	// a RELATIVE --path value. Absolutizing here matches the documented
+	// path.resolve(pathArg || process.cwd()) behavior at the CLI entry
+	// point and ResolveCodegraphDir's own filepath.Abs call on the same
+	// input — a
 	// relative startPath would not be byte-comparable against
 	// EvalSymlinks-resolved paths downstream, breaking gate 2's equality
 	// check in gitmeta.DetectIndexMismatch.

@@ -1,4 +1,4 @@
-// Package query — internal/query/expand.go ports TS CodeGraph 1.3.1's
+// Package query — internal/query/expand.go implements the
 // subgraph-construction heuristics H10-H12 (RESEARCH §C.2, D-10): the
 // DoS-bounding stage (T-01-18) that turns explore's gathered candidate
 // set (H3-H6, gather.go) into the bounded subgraph computeGraphRelevance
@@ -29,10 +29,10 @@ import (
 )
 
 // H11's explore-override bounds and H12's cap (RESEARCH §C.2,
-// mcp/tools.js:2422-2427 / 2439-2467 [VERIFIED: TS 1.3.1 dist — cited
-// from the frozen RESEARCH capture]) — ported VERBATIM. These are
-// explore's OWN overrides of TS's more permissive library defaults; this
-// port carries only the override values, since explore is the only
+// mcp/tools.js:2422-2427 / 2439-2467 [cited from the frozen RESEARCH
+// capture]) are implemented here with the same override values. These
+// are explore's OWN overrides of the more permissive library defaults;
+// this file carries only the override values, since explore is the only
 // caller these primitives currently serve.
 const (
 	ExpandMaxNodes       = 200
