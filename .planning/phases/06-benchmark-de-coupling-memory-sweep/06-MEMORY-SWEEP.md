@@ -152,3 +152,76 @@ maintainer-supplied context in this run's spawn prompt, which references specifi
 `short_id`s it evidently can recall/read), or a re-spawned executor whose tool grant explicitly
 includes the `engram` MCP server. Until then, D-16 requires this sweep be recorded as blocked,
 not complete.
+
+---
+
+## Engram enumeration (D-14) — RESUMED AND COMPLETED by the orchestrator session
+
+The halt above stands as an accurate record of the executor's session. The orchestrator session
+DOES carry the `mcp__engram__*` tool surface, so it performed Task 1's enumeration directly, per
+the first of the two resolutions the halt names.
+
+### Population (enumerated to exhaustion, not inferred)
+
+Scope `repo:github.com/seanb4t/codegraph-go`, paged with `list_memory` until `next_cursor` came
+back empty — 5 pages, 4×40 + 1×9.
+
+| Measure | Value |
+|---|---|
+| Total records | **169** |
+| Pages to exhaustion | 5 (`next_cursor` empty on page 5) |
+| Date range | 2026-07-11 .. 2026-08-16 |
+| By category | decision 69, gotcha 82, convention 7, preference 2 (of the 160 captured to file) |
+| Records whose summary carries any parity/comparison/migrate framing | 32 |
+
+Scope `rule:repo:github.com/seanb4t/codegraph-go`: 3 rules (`xmz3xknbj0`, `84d1gfpywd`,
+`f18zrdsgx5`) — none carries retired framing; all three are process constraints (commit signing,
+positive-assertion guards, `[ci skip]` prohibition).
+
+### Classification criterion
+
+Per the plan: a record that HISTORICALLY described a then-true state is not wrong and is left as
+history. A record that asserts a CURRENTLY-FALSE fact **that a future session would act on** is
+what needs superseding. Per-phase completion records (`SHIPPED`/`COMPLETE`/`PLANNED`/`EXECUTED`)
+are history by construction and are left intact — rewriting them would falsify the project's own
+past, the same objection that puts `.planning/` archives out of scope.
+
+Correction is by **supersede only**. Nothing is deleted or overwritten; a superseded record stops
+surfacing in recall but stays fetchable by id, preserving "what we used to believe and when it
+changed."
+
+### Verdicts — SUPERSEDE (4 candidates, pending maintainer approval)
+
+| short_id | Date | The currently-false standing claim | Why it must not stand |
+|---|---|---|---|
+| `3ekc84hbqt` | 2026-08-09 | Maintainer ruling "parity is a functionality baseline, not a binding constraint", closing with **"The functionality floor and the migration path still bind."** | Both halves are now false. v0.11.0 retired the Compatibility constraint outright (`gw79qy2a9z`), and Phase 5 deleted the migration path entirely (`4j8kjck5gd`). The record is written as live guidance for future work ("Do NOT cite CLAUDE.md's parity line as a blocker without weighing this ruling") so a future session would act on it. |
+| `gw79qy2a9z` | 2026-08-13 | v0.11.0 scoping record asserting `codegraph-migrate-capability-PRESERVED-reframed` and `migrate-one-way-sqlite-read-still-binds` | Reversed two days later by maintainer ruling D-04 (`4j8kjck5gd`), which dropped migrate entirely as the milestone's single deliberate exception. The rest of this record's scoping content is still accurate. |
+| `agggksad53` | 2026-07-15 | v1.0 Phase-2 ruling: **"FilesByLanguage MUST be `json:\"-\"` (TS discards counts; emitting the key = NEW divergence)"** | Reversed by v0.11.0 Phase 1 D-03, which un-suppresses it — justified explicitly by the Compatibility constraint being retired. The claim's whole warrant was parity with the other implementation, and that warrant is gone. **Composite record**: the other ~95% (four inference-vs-source lessons, the CR-02 silent-skip hazard, the `rg -r`/`rg -h` gotchas) remains true and valuable. |
+| `7f0pq2wepv` | 2026-07-15 | Same reversed suppression ruling, reached via the same parity reasoning (D-05/STAT-02) | Same as above. Also composite — its 4-gate worktree cascade correction and D-14 plumbing notes remain load-bearing. |
+
+`agggksad53` and `7f0pq2wepv` were **named in advance** as targets of this sweep: `gwzjpq9xvq`
+(v0.11.0 Phase 1 CONTEXT) carries the tags `CONTRADICTS-agggksad53`, `CONTRADICTS-7f0pq2wepv`,
+`NOT-superseded-here-on-purpose`, `composite-records-other-content-still-true`, and
+`FLAGGED-AS-NAMED-TARGET-FOR-MEM-01-PHASE-6-SWEEP`. Phase 1 deliberately deferred them here rather
+than superseding them wholesale, precisely because a blanket supersede would drop still-true
+content out of recall.
+
+### Verdicts — LEAVE-HISTORICAL (representative; the criterion applies to all 165 others)
+
+| short_id | Why it stays |
+|---|---|
+| `e2ff222j6b`, `4khd1zp4bt`, `nqwgt6r53a`, `ggjepdd4ds`, `7grs09xyxz` | v0.11.0 per-phase completion records. History by construction. |
+| `swzxf5tr2x`, `jqwc8eqjt3` | Phase-7 migration-tool SHIPPED / CONTEXT records. True as history: migrate *was* built and *was* shipped. Their subject was later deleted, which `4j8kjck5gd` records; that is the correction, not a reason to rewrite the past. |
+| `76t84ynav5` | Milestone v1.0 "Drop-in Parity & Human UX" started. A real milestone name; renaming history would falsify it. |
+| `myywc0y9vm`, `4j8kjck5gd` | Currently correct — these *are* the corrections this milestone rests on. |
+| `veqtqg9r6r` | Already self-retracted in its own text. |
+| `whad9x6gxq` | Flaky-test gotcha; updated in place this session to widen the set to `test/wireoracle` and record the confirmed `-p 1` remedy. Carries no framing. |
+| `hakm8j156e`, `0x27xn3wvr`, `x2fgwgxf6k` | Method/instrument lessons (census blind spots, false absence, executor recovery). No framing claim. |
+| `xmz3xknbj0`, `84d1gfpywd`, `f18zrdsgx5` | The three repo rules. Process constraints, no framing. |
+
+### Status
+
+`MEM01_ENUMERATION_STATUS=complete-169-records-5-pages`
+
+Task 2's blocking `checkpoint:decision` is now reachable: the classification above exists and is
+put to the maintainer for approval before any durable write.
