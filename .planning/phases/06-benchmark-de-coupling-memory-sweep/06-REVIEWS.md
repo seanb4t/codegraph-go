@@ -1,24 +1,489 @@
 ---
 phase: 6
 reviewers: [codex]
-reviewed_at: 2026-08-16T14:42:36Z
-review_cycle: 5
+reviewed_at: 2026-08-16T18:22:00Z
+review_cycle: 6
 plans_reviewed: [06-01-PLAN.md, 06-02-PLAN.md, 06-03-PLAN.md, 06-04-PLAN.md, 06-05-PLAN.md, 06-06-PLAN.md]
 ---
 
 # Cross-AI Plan Review — Phase 6
 
-> This file holds **five** convergence cycles. Cycle 5 (immediately below) is the **confirmation
-> pass**: it assesses the CURRENT plan text as revised by commit `0e2aeba` and tracked at `7eff0fa`.
-> Cycles 4, 3, 2 and 1 are retained further down as audit history — their findings are **not**
-> current, and their HIGHs are relabelled RESOLVED where a later cycle re-verified the closure.
-> Consult them only to trace how a cycle-5 statement came to be.
+> This file holds **six** convergence cycles. Cycle 6 (immediately below) is the **confirmation
+> pass** after the cycle-5 exhaustive gate-reachability audit: it assesses the CURRENT plan text at
+> commit `0c78d3b`. Cycles 5, 4, 3, 2 and 1 are retained further down as audit history — their
+> findings are **not** current, and their HIGHs are relabelled RESOLVED where a later cycle
+> re-verified the closure. Consult them only to trace how a cycle-6 statement came to be.
 >
-> **Finding trend across the loop: 24 → 12 → 6 → 2 → 4 (1 HIGH).**
+> **Finding trend across the loop: 24 → 12 → 6 → 2 → 4 → 0.**
 
 ---
 
-# Cycle 5 — confirmation pass, assessment of the current plans (`0e2aeba` / `7eff0fa`)
+# Cycle 6 — confirmation pass, assessment of the current plans (`0c78d3b`)
+
+**Reviewer:** Codex (source-grounded, full repo access), cross-checked and independently extended by
+the orchestrating reviewer with its own measurement against the working tree at `0c78d3b`.
+
+**Verdict: the plans are sound. 0 HIGH, 0 actionable MEDIUM/LOW.**
+
+This is stated plainly because a clean result is the correct outcome here, not a failure to look
+hard enough. Every claim the cycle-5 replan makes was re-derived from source rather than accepted on
+assertion, using the plans' own verbatim gate commands; the one discrepancy either reviewer raised
+was itself run down and **refuted** (see *Refuted findings* below). No eighth instance of the phase's
+recurring defect class was found — not in the new exclusions, not in the repointed
+`.github/workflows/bench.yml:295`, and not in the audit's own companion assertions.
+
+## Independent verification log — per claim, per gate
+
+Every row below was executed by the orchestrating reviewer at `0c78d3b`, using the pattern verbatim
+from the plan site cited, not a paraphrase. Where an earlier sloppy paraphrase disagreed with the
+plan, that is recorded too — twice the paraphrase was wrong and the plan was right.
+
+### 1. HIGH 1 closure — glob anchoring and the companion assertions
+
+| Check | Method | Observed | Verdict |
+|---|---|---|---|
+| Anchored glob keeps `publishcheck/main_test.go` in the surface | built the post-execution tree in a scratch dir (both `main_test.go` files present), ran `rg --files -g '!tools/bench/runner/main_test.go' tools/bench` | `tools/bench/publishcheck/main_test.go` **retained** | claim CONFIRMED |
+| Unanchored glob drops it too | same tree, `rg --files -g '!main_test.go' tools/bench` | **no files retained** — both dropped | claim CONFIRMED; forbidding the short form at `06-01:609` and `06-04:592` is correct and load-bearing |
+| Why it is not visible on today's tree | `rg --files tools/bench \| rg main_test` | only `tools/bench/runner/main_test.go` exists | `publishcheck/main_test.go` is created by 06-01 (`06-01:13`, `:413`); the hazard is real only post-execution, which is exactly the tree the audit is required to evaluate against |
+| Companion baseline on a clean file | `TB`/`RT`/`OT` per `06-01:607` | `TB=1 RT=1 OT=0` → **exit 0** | passes on correct work |
+| Companion vs HOLE A — second `ts-binary` smuggled into the excluded file | appended `// ts-binary`, re-ran | `TB=2 RT=1 OT=0` → **exit 1** | companion genuinely REJECTS the hole |
+| Companion vs HOLE B — stale `runHeadToHead` hidden in the excluded file | appended `func x(){ runHeadToHead() }`, re-ran | `TB=1 RT=1 OT=1` → **exit 1** | companion genuinely REJECTS the hole |
+
+Both exclusions are bounded, not holes: each of the three sites (`06-01:607`, `06-01:659`,
+`06-04:638`) carries companions pinning the excluded scope's content, and the companions were
+verified to fail — not merely to pass — which is the only test that distinguishes a bound from a
+hole.
+
+### 2. The exhaustive gate-reachability audit — enumeration and re-verdicting
+
+**Per-plan enumeration, counted independently:**
+
+| Plan | Claimed | Distinct `GNN.x` rows measured | Raw row matches | Verdict |
+|---|---|---|---|---|
+| 06-01 | 16 | 16 (`G01.1`–`G01.16`) | 18 | matches — the 2 extra are `G01.1`/`G01.13` repeated in the four-UNSATISFIABLE summary table |
+| 06-02 | 21 | 21 (`G02.1`–`G02.21`) | 22 | matches — 1 repeat (`G02.1`) |
+| 06-03 | 24 | 24 | 24 | matches |
+| 06-04 | 25 | 25 (`G04.1`–`G04.25`) | 26 | matches — 1 repeat (`G04.19`) |
+| 06-05 | 21 | 21 | 21 | matches |
+| 06-06 | 15 | 15 | 15 | matches |
+| **Total** | **122** | **122** | 126 | **claim CONFIRMED** |
+
+A first pass counted 126 and looked like an over-count in the plans' favour; running the ids down
+showed all four extras are the same gates re-listed in the *four UNSATISFIABLE gates* summary table
+at `06-01:234-241`. The enumeration is exact.
+
+**Completeness of the enumeration — per zero-expectation gate.** The defect class lives in `= 0`
+gates over surfaces the phase itself writes to, so every such gate in all six plans was extracted by
+variable name and mapped back to an audit row:
+
+| Plan | `= 0` gate variables | All present in audit table? |
+|---|---|---|
+| 06-01 | `M`, `N`, `OT`, `PINDIFF`, `X` | yes |
+| 06-02 | `DIAGDIFF`, `FIGDIFF`, `FIXDIFF`, `PERMDIFF` | 3 of 4 as rows; `DIAGDIFF` recorded in `G02.1`'s fix column (see note) |
+| 06-03 | `CATERR`, `N`, `TOLDIFF`, `X` | yes |
+| 06-04 | `N`, `TOTAL`, `XOT` | yes |
+| 06-05 | `CM`, `M`, `N` | yes |
+| 06-06 | `DEL` | yes |
+
+*Note on `DIAGDIFF`, and why it is not a finding.* The audit's convention is that assertions the
+audit's **own fixes** introduce are recorded in the fixed gate's row rather than promoted to new
+numbered rows — the same treatment `TB`/`RT`/`OT` receive under `G01.1`, `G01.13` and `G04.19`. So
+the 122 count excludes the seven fix-companions by construction. This is consistent, disclosed at the
+fix sites, and — decisively — **every one of those seven companions was independently measured here
+and holds** (rows 1 and 3 of this log). No gate is left unverified, so there is no PLAN.md change to
+make; reporting this as actionable would be manufacturing a finding.
+
+**Independent re-verdicting of SATISFIABLE gates whose scope the phase writes to.** Two were chosen
+specifically because the audit records them at **zero headroom** — the least forgiving verdicts in
+the table, and the ones an under-measured basis would break first:
+
+| Gate | Audit's basis | Sloppy paraphrase | Gate's **verbatim** pattern | Verdict |
+|---|---|---|---|---|
+| `G02.16` `SHAPETEST_FIXTURE_ENTRIES >= 10` | "measured 10 — exactly at the floor" | `\{Workflow:` → **11** | `^\s*\{Workflow:` (per `06-02` `FIXNOW=`) → **10** | **audit CORRECT**; my 11 wrongly included the inline `bad := []runBodyException{{Workflow: …}}` at `taskfile_shape_test.go:1392` |
+| `G02.19` `comparison` in `BASELINE.md` `>= 5` | "measured 5, zero headroom, at `:39 :87 :97 :120 :297`" | `-i 'comparison'` → **6** | `\bcomparison\b` (per `06-02:457`) → **5**, at exactly `:39 :87 :97 :120 :297` | **audit CORRECT**; my 6th was `comparisons` at `BASELINE.md:260`, which the word boundary properly excludes |
+| `G02.13` `BASELINE_AND_SHAPETEST_RETIRED_TERMS_TOTAL = 0` | "3 hits, all in declared scope" | — | census family over both files → **3**, at `BASELINE.md:64`, `BASELINE.md:241`, `taskfile_shape_test.go:102` | **audit CORRECT**; all three are named in 06-02 Task 2's `<action>` |
+| `G04.20` `BARE_TS_RESIDUAL_LINES >= 1` | "`corpora/manifest.json:10`, plus the excluded `main_test.go` line" | — | `\bTS\b` over the census surface → **62** lines across 14 files; `corpora/manifest.json:10` carries `TS/JS` inside a `LOCKED (01-06)` note, and 06-03's only permitted edit to that file is line 2 (`06-03:52`) | **audit CORRECT**, and the floor is well protected — the KEEP-class line is explicitly un-editable |
+
+The audit survived adversarial re-verdicting on the two gates most likely to break. In both cases the
+audit's number was right and the looser pattern was wrong, which is the outcome that actually
+evidences a mechanically-derived basis rather than a reasoned one.
+
+### 3. The seventh instance — `bench.yml:295` measurements
+
+| Claim | Command | Observed | Verdict |
+|---|---|---|---|
+| 26 census hits over `bench.yml` | census family verbatim from `06-04:638` (`rg -U -o -i …`) | **26** | CONFIRMED |
+| 25 in-scope | hits at `:4 :5 :14` (header 1-14), `:42 :44 :46` (42-52), `:69 :71` (69-73), `:96 :99 :117 :122×2 :123×2 :130 :131 :134 :138 :140 :141 :146 :149 :156 :157` (96-158) | **25** | CONFIRMED |
+| exactly one out of scope, at `:295` | same run | **`295:headtohead`**, the only hit above 157 | CONFIRMED |
+| `:295` is a dangling reference | `sed -n '288,300p'`; job ids via `rg -n '^  [a-z][a-z0-9-]*:$'` | `:295` sits in the preamble comment of `cpu-diag-github` (job at `:313`) and names the `headtohead` job (`:96`) that 06-02 deletes | CONFIRMED — repointing, not excluding, is the right remedy, and matches the `BASELINE.md:241` / `taskfile_shape_test.go:102` precedent |
+| companion `DM=34` | `rg -o -e 'cpu-diag' -e 'scratch-fs-compare' -e 'disk-control' bench.yml \| wc -l` | **34** | CONFIRMED |
+| companion `CD=1` | `rg -o -F 'NOT a gate and NOT part of the'` | **1** | CONFIRMED |
+| companion `NB=1` | `rg -o -F 'ever touches baseline.json'` | **1** | CONFIRMED |
+| none of the 34 falls inside a region 06-02 edits | line numbers of all 34 filtered against 1-14, 42-52, 69-73, 96-158 | **in-region count = 0** | CONFIRMED — so `DIAG_JOB_DIFF_LINES=0` is reachable |
+
+One point worth recording for the executor, though it is not a defect: three of the 34 mentions sit
+at `bench.yml:74-76`, immediately below the `69-73` dispatch-inputs region and **inside the same
+`options:` list**. The authorised edit removes `- headtohead` at `:71` and repoints `default:` at
+`:69`; with `git diff -U0` that produces no `+`/`-` line at `:74-76`, so `DIAGDIFF=0` holds. It would
+only break if the executor reflowed the list — which the `<action>` does not ask for and the
+companion would catch by name. The bound is tight but correct, and the companion is precisely the
+instrument that makes the tightness safe.
+
+### 4. LOW 1 — the per-heading gate, reproduced
+
+Counterexample document (`## 1. Methodology` duplicated, regression-gate heading absent):
+
+| Form | Result |
+|---|---|
+| OLD summed gate (`H=3`) | `H=3` → **exit 0** — accepts the malformed document |
+| NEW per-heading gate (`06-04:384`) | `HEADING[## 1. Methodology]=2` → **exit 1**, and it **names the duplicated heading** |
+
+CONFIRMED exactly as claimed, including the naming behaviour. This is the phase's own *per item,
+never aggregate* rule correctly applied to headings.
+
+### 5. The three near-misses — genuine, not defects wearing a rationale
+
+`06-03`'s `TOLERANCE_DIFF_LINES = 0` (`G03.6`) was checked most closely, since it is the one whose
+regex admits comment text:
+
+- Lines in `internal/bench/regression.go` matching the gate's regex
+  (`DefaultThroughputTolerance|DefaultRSSTolerance|= 0\.`): **`5, 9, 11, 15, 22, 23, 113, 116, 121,
+  124`** — exactly the **ten** lines the audit names.
+- The `<action>`'s sweep target is `:37-48`. **None of the ten is inside it.** Verified by inspection
+  of `:33-52`, which is the platform-mismatch block.
+- `TOLERANCE_CONSTANTS_PRESENT` measures **2** today, matching the gate's `= 2` companion.
+
+So the gate is satisfiable on the correct path, the bound is by instruction (`06-03:241`, `:248`),
+and the gate itself is unchanged. **Bounding a pattern is not weakening a gate** — nothing was
+deleted here, and the companion `TOLERANCE_CONSTANTS_PRESENT = 2` keeps the constants pinned. This
+is a genuine near-miss correctly recorded rather than an unfixed defect.
+
+`G03.23` (`CRITICAL_ORACLE_CASES_PRESENT` scoped to `regression_test.go` while `baseline_gate_test.go`
+mirrors both names) and `G02.19`/`G02.16` (the two zero-headroom floors) are likewise genuine: each
+is satisfiable as written, each records *why* a plausible future edit would break it, and none
+requires a plan change now.
+
+### 6. Eighth-instance sweep — negative result
+
+The three surfaces most likely to carry a new instance were checked directly:
+
+- **The new exclusions** — bounded and hole-rejecting (section 1). The bare-`TS` residual control
+  (`G04.20`) still walks the excluded file, so the narrowing cannot hide a regression there.
+- **The repointed `bench.yml:295`** — the edit changes one job-id word; all four companion numbers
+  measured true, and zero of the 34 protected identifiers falls in an edited region (section 3).
+- **The audit's own companions** — all seven measured and holding (sections 1 and 3).
+
+Additionally, every file under the census surface carrying retired terms was mapped to the plan
+licensed to remove it. `internal/bench/regression_test.go:120`, `internal/bench/metrics.go:6` and
+`internal/bench/rss.go` are all inside `06-03`'s declared `files_modified` (`06-03:8-11`, `:192`),
+so no census hit is orphaned in a file no plan may touch — which is the exact shape all seven prior
+instances took.
+
+**No eighth instance found.**
+
+## Refuted findings
+
+Codex raised exactly one discrepancy, and flagged it non-actionable itself. It is nonetheless
+**refuted** rather than merely deprioritised:
+
+> Codex: "The repeated historical claim '26 total / 25 in scope / 1 outside' is off by one. The
+> actual current source yields 25/24/1."
+
+Run down: the plans' census pattern at `06-04:638` is `rg -U -o -i` — **case-insensitive**.
+`.github/workflows/bench.yml:146` carries `Head-to-head` with a capital H.
+
+| Pattern form | Hits over `bench.yml` |
+|---|---|
+| `rg -U -o -i` (the plans' verbatim form) | **26** |
+| `rg -U -o` (case-sensitive) | **25** |
+
+The 26th hit is `146:Head-to-head`, matched only with `-i`. Codex re-derived the pattern family
+without `-i` and undercounted by one. **The plans' 26/25/1 is correct as written**; no change is
+required, and the audit history should not be amended.
+
+## Strengths
+
+- **The exclusions are bounds, not holes, and this was proven by making them fail.** `06-01:607` and
+  `06-04:638` pair the path-anchored glob with `TB=1 / RT=1 / OT=0`; both constructed holes went red.
+  An exclusion whose companion has only ever been seen to pass is not evidence — these have been seen
+  to fail.
+- **The anchoring distinction is real and correctly directed.** Verified on a simulated
+  post-execution tree: anchored retains `tools/bench/publishcheck/main_test.go`, unanchored drops it.
+  Forbidding the short form **by name** at `06-01:609` and `06-04:592` is the right level of
+  specificity — a prose warning would not have survived an executor reaching for the obvious glob.
+- **The 122-gate audit is exact and its bases are genuinely measured.** Enumeration confirmed
+  per plan; and on the two zero-headroom gates the audit's numbers beat a looser independent
+  re-measurement, which is the signature of a mechanically-derived basis rather than a reasoned one.
+- **The seventh instance was fixed at its source, not excluded.** `bench.yml:295` names a job id
+  06-02 deletes; repointing it is correct, and the four-number companion (`DIAGDIFF=0 CD=1 NB=1
+  DM=34`) converts the authorisation into a bound rather than a licence.
+- **`G04.20` is the right kind of control.** A `>= 1` residual that still walks the excluded file
+  makes the exclusion self-policing, and its surviving source (`corpora/manifest.json:10`) is a
+  LOCKED KEEP-class line that no plan may edit — so the floor cannot be swept away by correct work.
+- **The standing rule at `06-01:405-410`** ("before adding or changing an expected-value gate,
+  evaluate it against the **post**-execution tree in its declared scope, per file, and record the
+  basis") is the correct generalisation of all seven instances, and is the durable fix.
+
+## Concerns
+
+**None.**
+
+Zero HIGH. Zero actionable MEDIUM/LOW. The plans are sound at `0c78d3b` and this loop has converged.
+
+## Suggestions
+
+**None.** No plan change is recommended. On a confirmation pass at this depth, a suggestion that is
+not backed by a reproduced failure is a cost, not a contribution.
+
+## Risk Assessment
+
+**LOW** for plan correctness.
+
+The residual risks are environmental and are already named in the plans, not defects to fix here:
+
+- Go and network-dependent checks need a writable build/temp environment (both reviewers hit sandbox
+  denials running `go test`; no test failure was observed, the command could not start).
+- `06-06` must halt unless the engram tools are actually registered and enumerable, exactly as D-16
+  requires — which the plan already gates as a blocking checkpoint.
+
+No LOCKED decision (D-01..D-16) needs re-opening.
+
+---
+
+
+## Verification coverage — Cycle 6 (source-grounding, per item)
+
+Stated per file / per gate, never as an aggregate — cycle 3 refuted an aggregate claim that
+concealed exactly one counterexample, and that counterexample was a HIGH.
+
+| # | Claim under test | Source touched | Executed? | Result |
+|---|---|---|---|---|
+| 1 | anchored vs unanchored glob | simulated post-execution tree (`runner/` + `publishcheck/` both present) | yes | anchored retains publishcheck; unanchored drops both — claim CONFIRMED |
+| 2 | companion rejects HOLE A (2nd `ts-binary`) | `06-01:607` predicate | yes | `TB=2` → exit 1 — REJECTS |
+| 3 | companion rejects HOLE B (stale `runHeadToHead`) | `06-01:607` predicate | yes | `OT=1` → exit 1 — REJECTS |
+| 4 | 122-gate enumeration, per plan | `06-01` `<gate_reachability_audit>` | yes | 16/21/24/25/21/15 = 122 CONFIRMED (126 raw − 4 summary repeats) |
+| 5 | every `= 0` gate mapped to an audit row | all six PLAN.md | yes | 20 variables; 19 as rows, `DIAGDIFF` in `G02.1`'s fix column per the audit's stated convention, and independently measured |
+| 6 | `G02.16` re-verdict (zero headroom) | `internal/upgrade/taskfile_shape_test.go` | yes | verbatim `^\s*\{Workflow:` → **10** — audit CORRECT |
+| 7 | `G02.19` re-verdict (zero headroom) | `tools/bench/BASELINE.md` | yes | verbatim `\bcomparison\b` → **5** at `:39 :87 :97 :120 :297` — audit CORRECT |
+| 8 | `G02.13` re-verdict | `BASELINE.md`, `taskfile_shape_test.go` | yes | 3 hits, all in declared scope — audit CORRECT |
+| 9 | `G04.20` re-verdict (`>= 1` floor) | census surface, `corpora/manifest.json:10` | yes | 62 residual lines / 14 files; KEEP-class line un-editable per `06-03:52` — audit CORRECT |
+| 10 | `bench.yml` 26 / 25 / 1 split | `.github/workflows/bench.yml` | yes | 26 total, 25 in-region, 1 at `:295` — CONFIRMED |
+| 11 | `:295` is a dangling reference | `bench.yml:288-300`, job ids | yes | preamble of `cpu-diag-github` (`:313`) naming deleted job `headtohead` (`:96`) — CONFIRMED |
+| 12 | companions `DM=34 / CD=1 / NB=1` | `bench.yml` | yes | 34 / 1 / 1 — CONFIRMED |
+| 13 | none of the 34 in an edited region | `bench.yml`, regions 1-14/42-52/69-73/96-158 | yes | in-region count **0** — CONFIRMED |
+| 14 | LOW 1 old gate accepts counterexample | `06-04:384` predecessor | yes | `H=3` → exit 0 — CONFIRMED |
+| 15 | LOW 1 new gate rejects and names it | `06-04:384` | yes | `HEADING[## 1. Methodology]=2` → exit 1 — CONFIRMED |
+| 16 | `TOLDIFF` near-miss genuine | `internal/bench/regression.go` | yes | 10 matching lines `5,9,11,15,22,23,113,116,121,124`; none in `:37-48` — CONFIRMED |
+| 17 | census hits all owned by some plan | `internal/bench/*`, census surface | yes | `regression_test.go:120`, `metrics.go:6`, `rss.go` all in `06-03` `files_modified` — no orphan |
+| 18 | Codex's 25/24/1 discrepancy | `bench.yml`, `-i` flag | yes | `-i` → 26, no `-i` → 25; 26th is `146:Head-to-head` — Codex REFUTED |
+
+Not executed: `go build` / `go vet` / `go test` (sandbox denied Go's temp build dir for both
+reviewers — no test failure was observed; the command could not start). This affects no finding
+above, all of which are lexical/structural gates evaluated directly.
+
+## Codex Review — Cycle 6 (verbatim, source-grounded)
+
+## Summary
+
+The six plans are sound at commit `0c78d3b`. I found no current HIGH, MEDIUM, or actionable LOW concerns and no eighth instance of the “correct execution cannot satisfy the assertion” defect class. The cycle-5 exclusions are narrowly scoped and companion-pinned, the 122-gate audit enumerates the claimed 16/21/24/25/21/15 gates exactly, the workflow dangling reference is correctly assigned to 06-02, and the tolerance-comment issue is genuinely a bounded near-miss. One audit-history measurement is off by one—25/24/1 workflow hits rather than 26/25/1—but no executable gate depends on that historical count.
+
+## Verification log
+
+### Repository and source access
+
+- `git rev-parse HEAD`
+  - Output: `0c78d3b4625cda09026ab3190f61adff01226ffa`
+  - Exit: 0
+- `git status --short`
+  - Output: empty
+  - Exit: 0
+- `codegraph explore ...`
+  - Failed because the read-only sandbox denied access to `.codegraph/store/LOCK`.
+  - I used read-only `rg`, `sed`, and git-object inspection instead.
+
+### 1. Exclusion and companion assertions
+
+Glob behavior:
+
+```text
+rg --files . -g '!tools/bench/runner/main_test.go' | ...main_test.go
+→ 5 other main_test.go files retained
+
+rg --files . -g '!main_test.go' | ...main_test.go
+→ 0 files retained
+```
+
+Thus the short glob is indeed unanchored and over-excludes, while the mandated full path only removes the runner test. This supports the warning in `06-01-PLAN.md:607` and `06-04-PLAN.md:638`.
+
+Companion predicates, exercised with synthesized stdin:
+
+```text
+CLEAN_COMPANION_EXIT=0 TB=1 RT=1 OT=0
+SECOND_FLAG_HOLE_EXIT=1 TB=2
+STALE_SYMBOL_HOLE_EXIT=1 OT=1
+```
+
+The companions genuinely reject both requested holes:
+
+- A second `ts-binary` fails `TB=1`.
+- A hidden `runHeadToHead` fails `OT=0`.
+
+The three exclusion sites all carry companions rather than bare exclusions:
+
+- `06-01-PLAN.md:607`
+- `06-01-PLAN.md:721`
+- `06-04-PLAN.md:638`
+
+The current tree does not yet contain `tools/bench/publishcheck/main_test.go`; it is created by 06-01. The repository-wide glob test nevertheless proves the exact glob semantics the plan relies on.
+
+### 2. Gate-reachability audit
+
+I independently bounded each per-plan audit subsection and counted its `GNN.*` rows:
+
+```text
+06-01 = 16
+06-02 = 21
+06-03 = 24
+06-04 = 25
+06-05 = 21
+06-06 = 15
+SUM   = 122
+```
+
+This exactly matches the declared audit at `06-01-PLAN.md:218-405`.
+
+A broader lexical scan found many more gate-bearing tokens—such as repeated `test`, `go test`, `diff`, and `rg -q` references—because the plans repeat gates in action, verification, acceptance, review-history, and threat-model prose. Inspection of the actual audit table confirmed it enumerates the distinct expected-value gates rather than every textual occurrence. I found no omitted executable gate form that creates a new unsatisfiable post-execution assertion.
+
+Sampled write-surface gates included:
+
+- Runner exclusion and companions: `06-01-PLAN.md:605-615`
+- Workflow census and diagnostic companion: `06-02-PLAN.md:406-408`
+- Tolerance-diff gate: `06-03-PLAN.md:296`
+- Phase census and exclusion companions: `06-04-PLAN.md:638-659`
+- Generated-file equality and bounds: `06-05-PLAN.md:332-353`
+- Approved/executed set equality: `06-06-PLAN.md:345-373`
+
+All sampled gates are satisfiable under their prescribed post-execution content.
+
+### 3. Workflow hit split and diagnostic population
+
+Using the exact retired-term pattern family over `.github/workflows/bench.yml`:
+
+```text
+TOTAL=25
+IN_DECLARED_EDIT_REGIONS=24
+OUTSIDE_DECLARED_EDIT_REGIONS=1
+```
+
+The sole outside hit is:
+
+```text
+295: # NOT a gate and NOT part of the rebless/headtohead flow — neither job
+```
+
+The diagnostic identifier population is:
+
+```text
+DIAG_MENTIONS=34
+```
+
+This confirms the substantive claim: exactly one dangling reference exists outside the ordinary rewrite regions, and the companion’s expected `DM=34` is correct. The source occurrence is at `.github/workflows/bench.yml:295`; its authorized repoint and companion are specified at `06-02-PLAN.md:350-376` and `06-02-PLAN.md:406-408`.
+
+The repeated historical claim “26 total / 25 in scope / 1 outside” is off by one. The actual current source yields 25/24/1. This does not affect execution because neither 25 nor 26 is an asserted post-edit value; the executable requirement is zero retired terms after the rewrite.
+
+### 4. Heading counterexample
+
+Counterexample:
+
+```markdown
+## 1. Methodology
+## 1. Methodology
+## 2. Absolute numbers
+```
+
+Observed:
+
+```text
+OLD_SUM_EXIT=0 OLD_SUM=3
+NEW_PER_HEADING_EXIT=1
+```
+
+The old summed gate accepts the malformed document. The new independent per-heading equality rejects it, as required by `06-04-PLAN.md:388-397`.
+
+### 5. Tolerance near-miss
+
+Actual matching locations in `internal/bench/regression.go`:
+
+```text
+5, 9, 11, 15, 22, 23, 113, 116, 121, 124
+```
+
+The authorized sweep range at lines 37–48 produced:
+
+```text
+TARGET_MATCH_EXIT=1
+```
+
+That means there are zero matches within the prescribed edit range. The source confirms the tolerance comments and constants lie outside it at `internal/bench/regression.go:5`, `:9`, `:11`, `:15`, `:22-23`, while the planned rewrite is constrained to `:37-48` by `06-03-PLAN.md:236-249`.
+
+This is genuinely a near-miss bounded by a precise instruction, not an unfixed contradiction.
+
+### 6. Targeted Go tests
+
+Attempted:
+
+```text
+go test -count=1 ./internal/bench/... ./internal/upgrade/... ./tools/bench/...
+```
+
+The sandbox blocked creation of Go’s temporary build directory:
+
+```text
+go: creating work dir: mkdir .../go-build...: operation not permitted
+```
+
+No test failure was observed; the test command could not start under the read-only permission profile.
+
+## Strengths
+
+- The exclusions are bounded and mechanically pinned. The exact-path glob plus `TB=1`, `RT=1`, and `OT=0` prevents the runner-test exclusion from becoming a hiding place (`06-01-PLAN.md:605-615`, `06-04-PLAN.md:638`).
+
+- The gate audit is genuinely per-gate. Its six sections contain exactly the claimed 122 rows, including post-execution reasoning for gates over files the phase itself edits (`06-01-PLAN.md:248-404`).
+
+- The workflow correction fixes a real dangling identifier at its source rather than excluding it. The diagnostic jobs retain a separately measured 34-identifier population (`.github/workflows/bench.yml:295`, `06-02-PLAN.md:350-376`, `:406-408`).
+
+- The heading assertion now enforces each required section independently. The reproduced counterexample distinguishes the new mechanism from the old aggregate check (`06-04-PLAN.md:388-397`).
+
+- The tolerance near-miss is explicitly scoped away from sensitive declarations and comparison branches. Actual source locations agree with the plan’s stated range (`internal/bench/regression.go:5-23`, `:113-124`; `06-03-PLAN.md:236-249`).
+
+- External one-way memory writes remain guarded by live tool discovery, exhaustive enumeration, and a blocking approval checkpoint. The plan does not pretend the unavailable/unregistered engram surface can be inferred (`06-06-PLAN.md:169-261`, `:295-324`).
+
+## Concerns
+
+None.
+
+Non-actionable verification note: the audit-history prose reports 26/25/1 workflow hits, while the current source measures 25/24/1. The sole outside-region hit and all executable expectations remain correct.
+
+## Suggestions
+
+None.
+
+## Risk Assessment
+
+**LOW** for plan correctness. The in-repo work is unusually well constrained, with positive controls, exact-set checks, post-execution reachability analysis, and explicit handling of irreversible operations.
+
+Execution still has two expected environmental risks rather than plan defects:
+
+- Go and network-dependent checks require a writable build/temp environment.
+- Plan 06-06 must halt unless the engram tools are actually registered and enumerable, exactly as D-16 requires.
+
+---
+# Cycle 5 — audit history (superseded by Cycle 6 above)
+
+> **Status: RESOLVED.** Cycle 5's single HIGH, its MEDIUM and its two LOWs were all closed at `0c78d3b`
+> and independently re-verified in Cycle 6 above. Retained to trace how Cycle 6's statements came to be.
+>
+> _Original heading: Cycle 5 — confirmation pass, assessment of the current plans (`0e2aeba` / `7eff0fa`)_
 
 **Reviewer:** Codex (source-grounded, full repo access), cross-checked and extended by the
 orchestrating reviewer with independent measurement against the working tree at `7eff0fa`, plus two
