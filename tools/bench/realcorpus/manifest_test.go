@@ -1,6 +1,9 @@
 package realcorpus
 
-import "testing"
+import (
+	"sort"
+	"testing"
+)
 
 // TestCorporaProvenanceComplete asserts every manifest entry carries the
 // full provenance record the PERF-01 head-to-head benchmark's
@@ -47,14 +50,11 @@ func TestCorporaProvenanceComplete(t *testing.T) {
 }
 
 // TestReferencesExistingGoldenCorpora asserts the manifest reuses the
-// same pinned commits testdata/golden/README.md's D-06a corpus table
-// already records for weft-go and colbymchenry-codegraph, rather than
-// introducing a second, drifting pin for the same repos.
+// same pinned commit testdata/golden/README.md's D-06a corpus table
+// already records for weft-go, rather than introducing a second,
+// drifting pin for the same repo.
 func TestReferencesExistingGoldenCorpora(t *testing.T) {
-	const (
-		weftPinnedCommit = "f89ae3ea4e4c37509f7302fd4e37986212a72079"
-		tscgPinnedCommit = "edb9f2f14cd7394a4d31f94ebc871531ef498ab0"
-	)
+	const weftPinnedCommit = "f89ae3ea4e4c37509f7302fd4e37986212a72079"
 
 	byName := make(map[string]Entry)
 	for _, e := range Corpora() {
@@ -68,12 +68,32 @@ func TestReferencesExistingGoldenCorpora(t *testing.T) {
 	if weft.CommitSHA != weftPinnedCommit {
 		t.Errorf("weft-go CommitSHA = %q, want the golden-corpus pin %q", weft.CommitSHA, weftPinnedCommit)
 	}
+}
 
-	tscg, ok := byName["colbymchenry-codegraph"]
-	if !ok {
-		t.Fatal("manifest missing colbymchenry-codegraph entry")
+// TestCorporaHasExactlyTwoEntries asserts the `publish`-mode manifest
+// carries exactly the two surviving entries — weft-go and
+// cockroachdb-pebble — after the third, comparison-era entry was
+// removed (BENCH-02).
+func TestCorporaHasExactlyTwoEntries(t *testing.T) {
+	corpora := Corpora()
+	if len(corpora) != 2 {
+		t.Fatalf("len(Corpora()) = %d, want 2", len(corpora))
 	}
-	if tscg.CommitSHA != tscgPinnedCommit {
-		t.Errorf("colbymchenry-codegraph CommitSHA = %q, want the golden-corpus pin %q", tscg.CommitSHA, tscgPinnedCommit)
+
+	got := make([]string, 0, len(corpora))
+	for _, e := range corpora {
+		got = append(got, e.Name)
+	}
+	sort.Strings(got)
+
+	want := []string{"cockroachdb-pebble", "weft-go"}
+	if len(got) != len(want) {
+		t.Fatalf("entry names = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("entry names = %v, want %v", got, want)
+			break
+		}
 	}
 }

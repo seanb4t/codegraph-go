@@ -1,15 +1,14 @@
 // Command runner is the codegraph benchmark harness: it drives the
-// freshly-built Go `codegraph` binary — and, in headtohead mode, the
-// installed TS `codegraph@1.3.1` binary too — through a shared, external
+// freshly-built Go `codegraph` binary through a shared, external
 // measurement path and reports internal/bench.Metrics.
 //
 // Two modes (-mode):
 //
-//   - headtohead: for each tools/bench/realcorpus entry, runs BOTH the
-//     Go and TS binaries over the real, pinned repo and prints raw
-//     per-repo/per-subject Metrics as JSON to stdout (PERF-01). This is
-//     a published comparison, not a gate — it never fails the process
-//     on its own.
+//   - publish: for each tools/bench/realcorpus entry, runs the Go
+//     binary over the real, pinned repo and prints raw per-repo,
+//     absolute Metrics as JSON to stdout — every record's subject is
+//     always "go". This is a published measurement, not a gate — it
+//     never fails the process on its own.
 //
 //   - regression: materializes the deterministic, network-free
 //     synthetic corpus (tools/bench/gencorpus) and runs ONLY the Go
@@ -26,13 +25,14 @@
 // defaultTrials) repeats the whole materialize+init+measure session N
 // times and medians each metric across sessions, because median-of-5
 // inside one session does not touch session-to-session variance — see
-// defaultTrials. Peak RSS is ALWAYS read
-// from the completed child process via bench.PeakRSSBytes — never via
-// this process's own in-process memory statistics, which cannot be
-// compared fairly against the TS Node process. Only fixed, pinned repo
-// paths or the generated corpus's own scratch directory are ever passed
-// as subprocess arguments (V5) — this tool never forwards
-// attacker-controlled input to either shelled-out binary.
+// defaultTrials. Peak RSS is ALWAYS read from the completed child
+// process via bench.PeakRSSBytes — never via this process's own
+// in-process memory statistics — because an externally-observed
+// child-process number is the only figure that stays comparable run to
+// run. Only fixed, pinned repo paths or the generated corpus's own
+// scratch directory are ever passed as subprocess arguments (V5) — this
+// tool never forwards attacker-controlled input to the shelled-out
+// binary.
 package main
 
 import (
@@ -75,9 +75,6 @@ const medianRuns = 5
 // -rebless path, wide enough to bake a tail value in as the new normal.
 //
 // Why 3 specifically:
-//   - It is the repo's already-ratified convention for its other perf
-//     mechanism (PERF-01 head-to-head is median-of-3); one number for
-//     both, rather than inventing a second.
 //   - It is the smallest N with a true median, so a single outlier
 //     session in either direction is rejected rather than averaged in.
 //   - Against a 10% budget and a measured ~1-3% session spread, rejecting
@@ -106,15 +103,6 @@ const regressionFileCount = 120000
 // FileCount >= 1 — see tools/bench/gencorpus/gen.go's generateGo.
 const regressionQueryTerm = "Fn0000_0000"
 
-// macOSHomebrewTSBinary is the conventional Apple-Silicon Homebrew
-// install path for the TS codegraph@1.3.1 CLI. It is used only as a
-// last-resort fallback when -ts-binary isn't set and "codegraph" isn't
-// on PATH (IN-02, Phase 8 re-review) — never as the flag's own default,
-// since that default previously broke silently on Linux and Intel
-// macOS. bench.yml always passes -ts-binary explicitly and is
-// unaffected either way.
-const macOSHomebrewTSBinary = "/opt/homebrew/bin/codegraph"
-
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "runner: %v\n", err)
@@ -126,7 +114,6 @@ func main() {
 type config struct {
 	mode         string
 	goBinary     string
-	tsBinary     string
 	baselinePath string
 	ceilingBytes int64
 	rebless      bool
@@ -153,17 +140,13 @@ func run(args []string) error {
 		cfg.goBinary = built
 	}
 
-	if cfg.mode == "headtohead" && cfg.tsBinary == "" {
-		cfg.tsBinary = resolveTSBinary()
-	}
-
 	switch cfg.mode {
-	case "headtohead":
-		return runHeadToHead(cfg)
+	case "publish":
+		return runPublish(cfg)
 	case "regression":
 		return runRegression(cfg)
 	default:
-		return fmt.Errorf("unknown -mode %q (want headtohead or regression)", cfg.mode)
+		return fmt.Errorf("unknown -mode %q (want publish or regression)", cfg.mode)
 	}
 }
 
@@ -173,9 +156,8 @@ func run(args []string) error {
 func parseFlags(args []string) (config, error) {
 	fs := flag.NewFlagSet("runner", flag.ContinueOnError)
 	var cfg config
-	fs.StringVar(&cfg.mode, "mode", "", "benchmark mode: headtohead or regression (required)")
+	fs.StringVar(&cfg.mode, "mode", "", "benchmark mode: publish or regression (required)")
 	fs.StringVar(&cfg.goBinary, "go-binary", "", "path to the Go codegraph binary; if empty, the runner builds one fresh from ./cmd/codegraph")
-	fs.StringVar(&cfg.tsBinary, "ts-binary", "", "path to the installed TS codegraph@1.3.1 binary (headtohead mode only); if empty, resolved via PATH lookup, falling back to the macOS Homebrew default")
 	fs.StringVar(&cfg.baselinePath, "baseline", filepath.Join("tools", "bench", "baseline.json"), "path to the committed regression baseline JSON (regression mode only)")
 	fs.Int64Var(&cfg.ceilingBytes, "ceiling-bytes", defaultCeilingBytes, "absolute peak-RSS ceiling in bytes (INDX-06, regression mode only); 0 disables the ceiling check")
 	fs.BoolVar(&cfg.rebless, "rebless", false, "regression mode only: overwrite -baseline with the freshly-measured metrics instead of gating against it — the ONLY path that writes baseline.json")
@@ -197,24 +179,6 @@ func parseFlags(args []string) (config, error) {
 		return config{}, fmt.Errorf("-trials must be >= 1, got %d", cfg.trials)
 	}
 	return cfg, nil
-}
-
-// resolveTSBinary finds the installed TS codegraph@1.3.1 binary when
-// -ts-binary wasn't set explicitly (IN-02, Phase 8 re-review): first via
-// a PATH lookup (portable across Linux/macOS/Windows and any install
-// method), falling back to the conventional Apple-Silicon Homebrew path
-// if that exists. If neither resolves, it returns "" and
-// measureSubject's existing "no binary configured for subject %q" error
-// path reports the failure clearly rather than silently trying an
-// unrunnable macOS-only default.
-func resolveTSBinary() string {
-	if p, err := exec.LookPath("codegraph"); err == nil {
-		return p
-	}
-	if info, err := os.Stat(macOSHomebrewTSBinary); err == nil && !info.IsDir() {
-		return macOSHomebrewTSBinary
-	}
-	return ""
 }
 
 // ---------------------------------------------------------------------
@@ -300,11 +264,11 @@ func medianInt64(v []int64) int64 {
 }
 
 // ---------------------------------------------------------------------
-// headtohead mode (PERF-01)
+// publish mode
 // ---------------------------------------------------------------------
 
-func runHeadToHead(cfg config) error {
-	scratchRoot, err := os.MkdirTemp("", "codegraph-bench-h2h-")
+func runPublish(cfg config) error {
+	scratchRoot, err := os.MkdirTemp("", "codegraph-bench-publish-")
 	if err != nil {
 		return fmt.Errorf("create scratch root: %w", err)
 	}
@@ -318,20 +282,12 @@ func runHeadToHead(cfg config) error {
 			continue
 		}
 
-		for _, subject := range []struct {
-			name   string
-			binary string
-		}{
-			{"go", cfg.goBinary},
-			{"ts", cfg.tsBinary},
-		} {
-			m, err := measureSubject(subject.name, subject.binary, entry, srcDir, scratchRoot, cfg.runner)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "runner: %s/%s: %v\n", entry.Name, subject.name, err)
-				continue
-			}
-			results = append(results, m)
+		m, err := measureSubject("go", cfg.goBinary, entry, srcDir, scratchRoot, cfg.runner)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "runner: %s/go: %v\n", entry.Name, err)
+			continue
 		}
+		results = append(results, m)
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -339,13 +295,12 @@ func runHeadToHead(cfg config) error {
 	return enc.Encode(results)
 }
 
-// measureSubject runs one binary (identified by subjectName, "go" or
-// "ts") over one realcorpus entry's source tree and returns its
-// bench.Metrics. It copies srcDir into an isolated per-subject work
-// directory first so the Go binary's Pebble store and the TS binary's
-// SQLite store never collide, and so neither binary's .codegraph/ is
-// ever written into the resolved source checkout itself (which, for a
-// sibling-checkout entry, is a real directory the operator owns).
+// measureSubject runs the Go binary (subjectName is always "go" in
+// publish mode) over one realcorpus entry's source tree and returns its
+// bench.Metrics. It copies srcDir into an isolated per-invocation work
+// directory first so the measured binary's own .codegraph/ store never
+// lands in the operator-owned resolved source checkout, nor collides
+// with a prior run's state.
 func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, scratchRoot, runner string) (bench.Metrics, error) {
 	if binary == "" {
 		return bench.Metrics{}, fmt.Errorf("no binary configured for subject %q", subjectName)
@@ -418,11 +373,11 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 		GOOS:    runtime.GOOS,
 		GOARCH:  runtime.GOARCH,
 		Runner:  runner,
-		// headtohead measures each (repo, subject) pair in exactly one
-		// session — it publishes raw numbers and never gates, so the
-		// multi-session median regression mode needs is not applied here.
-		// Recorded as 1 rather than left at 0 so published JSON states
-		// its own provenance instead of implying "unknown".
+		// publish mode measures each repo in exactly one session — it
+		// publishes raw numbers and never gates, so the multi-session
+		// median regression mode needs is not applied here. Recorded as
+		// 1 rather than left at 0 so published JSON states its own
+		// provenance instead of implying "unknown".
 		MedianOfTrials:       1,
 		FilesPerSec:          filesPerSec,
 		BytesPerSec:          bytesPerSec,
@@ -435,7 +390,7 @@ func measureSubject(subjectName, binary string, entry realcorpus.Entry, srcDir, 
 // resolveOrClone resolves entry to a local source path, shallow-cloning
 // it at exactly entry.CommitSHA into a cache directory under
 // scratchRoot when no local checkout is already available. This is the
-// one place in the runner that touches the network — headtohead mode
+// one place in the runner that touches the network — publish mode
 // only, never regression mode (D-04) — and it always pins to the exact
 // commit, never HEAD (V5).
 func resolveOrClone(entry realcorpus.Entry, scratchRoot string) (string, error) {
