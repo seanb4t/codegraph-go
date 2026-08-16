@@ -225,3 +225,41 @@ content out of recall.
 
 Task 2's blocking `checkpoint:decision` is now reachable: the classification above exists and is
 put to the maintainer for approval before any durable write.
+
+### Task 3 (apply the approved corrections) — BLOCKED: supersede write gate denies this session
+
+The maintainer approved all 4 supersedes at Task 2's blocking checkpoint. Applying them FAILED.
+
+**Observed, verbatim:** `mcp__engram__supersede_memory` returns `not found: ["<target>"]` for every
+target attempted — `3ekc84hbqt` by short_id, the same record by full UUID
+(`0b573a5e-d768-4643-ad21-e37af3174e53`), and `gw79qy2a9z` as an independent probe. Three targets,
+three identical rejections. The probe call was rejected wholesale, so no partial or junk record was
+created.
+
+**Diagnosis.** Per the engram contract, a target that is not owned, does not exist, or has an
+ambiguous short id are all indistinguishable — all return 404. These records demonstrably EXIST:
+this session fetched `3ekc84hbqt` in full via `get_memory` moments earlier. So the cause is the
+remaining one: **supersede routes through the ownership WRITE gate, and this session's
+server-assigned actor is not the records' owner.** Every enumerated record carries
+`owner: sean@fuzzymagic.com`; this session authenticates as a different identity. Read access to a
+shared record is not write access to it.
+
+**What was NOT done, deliberately.** `update_memory` is not blocked for this session (it succeeded
+earlier on `whad9x6gxq`, an unrelated in-place sharpening). It was NOT used as a workaround here.
+`update_memory` REPLACES content in place; 06-06's own threat model T-06-18 (Tampering, high) names
+"correction by supersede only" and "a prohibition on delete and overwrite" as the mitigation, for
+the express purpose of preserving what the project used to believe and when it changed. Substituting
+an overwrite would have produced a green-looking task while defeating the exact control the blocking
+checkpoint exists to enforce. The classification stands; the corrections are unapplied.
+
+**Status token:**
+
+`MEM01_STORE_STATUS=pending-supersede-write-gate-denied`
+
+**What resolves this:** a session authenticated as the records' owner (`sean@fuzzymagic.com`) runs
+the 4 approved supersedes. The classification table above is the complete input — each row names its
+target, its currently-false claim, and the ruling that reversed it. No re-enumeration is needed.
+
+**Consequence for the phase:** MEM-01's memory-store half is NOT satisfied. Per D-16 this is
+recorded as blocked, not complete. MEM-02's file half was closed by 06-05; MEM-01's file-facing work
+was closed by 06-05 and this phase's earlier plans. Only the durable-store correction remains open.
