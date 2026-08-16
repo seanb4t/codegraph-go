@@ -117,9 +117,12 @@ func TestCheckRegression(t *testing.T) {
 			// Regression test for the perf-gate-throughput-regress debug
 			// session: a baseline recorded on one GOOS/GOARCH must never be
 			// silently compared against a current run on a different one -
-			// this harness's own headtohead data shows 6.7x-148x throughput
-			// deltas between darwin/arm64 and linux/amd64 on identical code,
-			// so a cross-platform comparison is not noise, it's invalid.
+			// tools/bench/BASELINE.md's recorded investigation shows a
+			// stable, reproducible, entirely fictitious ~10.6% "regression"
+			// on the synthetic PERF-02/INDX-06 corpus that survived three
+			// rounds of triage before a platform mismatch was found to be
+			// the actual cause, so a cross-platform comparison is not
+			// noise, it's invalid.
 			// FilesPerSec/PeakRSSBytes are set identically on both sides so
 			// this case fails ONLY on the platform check, isolating it from
 			// the numeric-tolerance checks above.

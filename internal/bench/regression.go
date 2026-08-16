@@ -36,14 +36,16 @@ const DefaultRSSTolerance = 0.15
 func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
 	// Platform validity precedes numeric validity: comparing across
 	// GOOS/GOARCH is not a tolerance question, it is a category error.
-	// This harness's own head-to-head data (tools/bench/headtohead-*.json)
-	// measures 6.7x-148x throughput deltas between darwin/arm64 and
-	// linux/amd64 on IDENTICAL code, so a cross-platform delta carries no
-	// information about the code at all. Refusing loudly is strictly better
-	// than gating on a number that cannot mean anything — the alternative
-	// (what this function did before) silently reported a stable,
-	// reproducible, entirely fictitious "regression". An unset GOOS/GOARCH
-	// on BOTH sides still matches and is allowed, so callers that construct
+	// tools/bench/BASELINE.md's recorded investigation shows a stable,
+	// reproducible, entirely fictitious ~10.6% "regression" on the
+	// synthetic PERF-02/INDX-06 corpus that survived three rounds of
+	// triage before a platform mismatch was found to be the actual
+	// cause — a cross-platform delta on IDENTICAL code carries no
+	// information about the code at all. Refusing loudly is strictly
+	// better than gating on a number that cannot mean anything — the
+	// alternative (what this function did before) silently reported
+	// that same kind of fictitious regression. An unset GOOS/GOARCH on
+	// BOTH sides still matches and is allowed, so callers that construct
 	// Metrics without platform attribution (unit tests, pre-attribution
 	// baselines) are unaffected.
 	if baseline.GOOS != current.GOOS || baseline.GOARCH != current.GOARCH {
