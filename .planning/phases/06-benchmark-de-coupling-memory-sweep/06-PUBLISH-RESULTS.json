@@ -1,0 +1,30 @@
+[
+  {
+    "subject": "go",
+    "repo": "weft-go",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "runner": "",
+    "scratch_fs": "",
+    "median_of_trials": 1,
+    "files_per_sec": 2611.5139785949123,
+    "bytes_per_sec": 23178981.97589013,
+    "query_latency_median_ms": 47.385,
+    "peak_rss_bytes": 53182464,
+    "cold_start_ms": 8.127
+  },
+  {
+    "subject": "go",
+    "repo": "cockroachdb-pebble",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "runner": "",
+    "scratch_fs": "",
+    "median_of_trials": 1,
+    "files_per_sec": 2349.409258183227,
+    "bytes_per_sec": 37021648.266511716,
+    "query_latency_median_ms": 55.141,
+    "peak_rss_bytes": 172359680,
+    "cold_start_ms": 7.723
+  }
+]
