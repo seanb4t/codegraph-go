@@ -11,11 +11,11 @@ import (
 const codexTOMLTable = "mcp_servers.codegraph"
 
 // codexTarget implements AgentTarget for Codex CLI (D-05a, D-07). Global
-// scope only — Codex has no per-project config concept TS integrates with,
-// so SupportsLocation(LocationLocal) is false and Install/Uninstall at
+// scope only — Codex CLI has no per-project config concept, so
+// SupportsLocation(LocationLocal) is false and Install/Uninstall at
 // local are no-ops. Edits ~/.codex/config.toml via the hand-rolled
-// single-table splice in toml.go (mirrors TS's own toml.ts — no general
-// TOML dependency) and upserts a marker-fenced ~/.codex/AGENTS.md block,
+// single-table splice in toml.go (avoids taking a general TOML
+// dependency) and upserts a marker-fenced ~/.codex/AGENTS.md block,
 // one of only 4 of 8 targets that gets an instructions file.
 type codexTarget struct{}
 

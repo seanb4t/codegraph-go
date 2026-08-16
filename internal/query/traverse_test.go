@@ -777,7 +777,7 @@ func TestAffectedEmptyFilesReturnsEmptyResultNoError(t *testing.T) {
 
 // affectedDepthFixtureNodesEdges builds a three-hop reverse chain —
 // Target (the changed file's symbol) <- NonTestCaller <- TestSomething
-// <- TestGrand — to prove Affected's depth-bounded BFS and TS
+// <- TestGrand — to prove Affected's depth-bounded BFS and its
 // test-files-as-leaves pruning (SURF-04/D-05, RESEARCH Pitfall 2):
 // TestSomething is reachable only at depth>=2 (through the non-test
 // intermediary), and — because a test dependent is a LEAF — its own

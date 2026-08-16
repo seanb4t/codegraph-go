@@ -53,9 +53,9 @@ func newUninitCmd() *cobra.Command {
 			if err := os.RemoveAll(codegraphDir); err != nil {
 				return err
 			}
-			// D-06: best-effort git sync hook cleanup — mirrors TS
-			// bin/codegraph.js ~629-636's uninit cleanup. githooks.Remove
-			// degrades to an empty/Skipped result rather than an error on
+			// D-06: `codegraph uninit` removes the git sync hooks it
+			// installed, best-effort. githooks.Remove degrades to an
+			// empty/Skipped result rather than an error on
 			// a non-repo or no-hooks-installed target, so its outcome is
 			// never propagated up RunE — cleanup can never fail uninit.
 			// Per-hook write/delete failures are still surfaced as

@@ -365,9 +365,10 @@ func companionTool(name string) *mcp.Tool {
 // exactly one caller — the CLI --json path, whose consumer is a parser
 // (jq, scripts, CI) and which is also testdata/golden's shape oracle —
 // while each Render*Markdown function has exactly one caller — this
-// file, whose consumer is a language model, not a parser. This closes a
-// Go-vs-TS divergence: TS returns markdown from every MCP tool; our
-// JSON-shaped tools were the anomaly.
+// file, whose consumer is a language model, not a parser. The MCP tools
+// render markdown because their consumer is a language model, while the
+// CLI --json path marshals JSON because its consumer is a parser —
+// SURF-06/D-16 made the two consistent with their consumers.
 //
 // Six of the seven branches (every one except "status") additionally
 // prefix the compact worktree notice (query.WorktreeNotice,
@@ -525,10 +526,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			// codegraph_status is EXCLUDED from the compact notice
 			// (WORK-02/D-12): Engine.Status() already computes
 			// StatusResult.WorktreeMismatch, and RenderStatusMarkdown
-			// embeds it as its own verbose blockquote — mirroring TS's
-			// withWorktreeNotice, which excludes codegraph_status for
-			// exactly this reason (it carries its own verbose form
-			// instead of the compact one).
+			// embeds it as its own verbose blockquote (D-17), so a second
+			// compact prefix would duplicate it.
 			result, err := eng.Status(ctx)
 			if err != nil {
 				return nil, nil, err
