@@ -523,13 +523,13 @@ func isTestSymbol(n *schema.Node) bool {
 // bounded by clampAffectedDepth(depth) (SURF-04/D-05, CONTEXT D-05,
 // RESEARCH Pitfall 2) — NOT the single-hop lookup this used to be.
 // Mirrors Impact's frontier/next-frontier loop shape (traverse.go
-// above), but with TS 1.3.1's test-files-as-leaves pruning rule instead
+// above), but with the documented test-files-as-leaves pruning rule instead
 // of Impact's "expand everything": a dependent that passes isTestSymbol
 // is recorded as an affected test AND is a leaf — it is never queued
 // for further expansion, so its own dependents can never surface at any
 // depth. A non-test dependent is queued for the next hop and is never
 // itself recorded as an affected test. There is no golden oracle for
-// this command (D-07a); parity is structural, proved in
+// this command (D-07a); behavior is proved structurally in
 // traverse_test.go against seeded call chains.
 //
 // RES-02 (WR-04 — 08-REVIEW.md): each frontier node's dispatch siblings
@@ -622,7 +622,7 @@ func (e *Engine) Affected(files []string, depth int) (AffectedResult, error) {
 					}
 					visited[edge.Source] = true
 					if isTestSymbol(dep) {
-						// TS test-files-as-leaves semantics: record, but do
+						// documented test-files-as-leaves semantics: record, but do
 						// NOT queue for expansion — a test dependent's own
 						// dependents are never pulled into the BFS.
 						tests = append(tests, nodeLocation(dep))

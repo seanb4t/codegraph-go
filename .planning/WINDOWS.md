@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 10
+open_count: 11
 waived_count: 0
 fixed_count: 3
-total_count: 13
-last_updated: 2026-08-16T00:29:32.708Z
+total_count: 14
+last_updated: 2026-08-16T00:52:44.851Z
 ---
 
 # Broken Windows Ledger
@@ -28,6 +28,7 @@ last_updated: 2026-08-16T00:29:32.708Z
 | 11 | 05 | deviation | internal/agents/codex.go | 14 | CODE-01 census gap: 'TS integrates with' / 'mirrors TS's own toml.ts' (:17) comparison framing found outside plan 05-05's declared internal/agents file list (task 1 covered 10 named files; codex.go/opencode.go/claude.go were not among them) | open |  | 2026-08-16T00:14:05.866Z |  |
 | 12 | 05 | unrun-verify | internal/daemon/daemon_test.go | 352 | TestRunWatchdogCancelsRunOnSimulatedReparent is load-sensitive: passes isolated (1.4s) and as a lone package (64.7s, identical to pre-merge base 65.7s), but times out at 250s and FAILS inside 'go test ./...' alongside ~49 parallel packages. NOT caused by phase 5 — internal/daemon has zero diff and the internal/graphstore diff is deletions-only (zero added lines). The test asserts a wall-clock watchdog deadline a loaded runner cannot meet, making the full-suite gate non-deterministic. | open |  | 2026-08-16T00:28:48.387Z |  |
 | 13 | 05 | deviation | docs/RELEASE.md | 337 | PRE-EXISTING doc staleness (not phase-5 caused): the dependency paragraph states '27 direct requires' with '14 tree-sitter' leaving 'the remaining 13', but go.mod now has 32 direct requires (14 tree-sitter, 18 remaining). It also credits the MCP server to 'mark3labs/mcp-go' while go.mod actually requires 'modelcontextprotocol/go-sdk v1.7.0'. Phase 5 removed only the now-false modernc.org/sqlite migration-tool clause; the counts and the MCP attribution were already drifted and were deliberately NOT renumbered, since inventing a corrected figure inside independently-stale arithmetic would substitute one wrong number for another. | open |  | 2026-08-16T00:29:32.708Z |  |
+| 14 | 05 | deviation | internal/query/traverse_test.go | 780 | traverse_test.go:780 doc comment cites 'TS test-files-as-leaves pruning' — genuine CODE-01 comparison-framing hit, but traverse_test.go is not in 05-04's declared files_modified (only traverse.go is), so left unedited per scope discipline; a future sweep pass should fold this file into its edit set | open |  | 2026-08-16T00:52:44.851Z |  |
 
 ````json
 [
@@ -185,6 +186,18 @@ last_updated: 2026-08-16T00:29:32.708Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-16T00:29:32.708Z",
+    "resolved_at": null
+  },
+  {
+    "id": 14,
+    "kind": "deviation",
+    "phase": "05",
+    "file": "internal/query/traverse_test.go",
+    "line": 780,
+    "description": "traverse_test.go:780 doc comment cites 'TS test-files-as-leaves pruning' — genuine CODE-01 comparison-framing hit, but traverse_test.go is not in 05-04's declared files_modified (only traverse.go is), so left unedited per scope discipline; a future sweep pass should fold this file into its edit set",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-16T00:52:44.851Z",
     "resolved_at": null
   }
 ]

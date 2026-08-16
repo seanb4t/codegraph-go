@@ -214,11 +214,11 @@ func goldenTestFuncNames(t *testing.T) map[string]bool {
 
 // TestMatrix_FullPriority4EntriesHaveGoldenTest is the D-11/D-12 phase gate
 // (05-VALIDATION.md §Sampling Rate: "a 'full' entry in the matrix must have
-// a corresponding green golden-parity test"): every priority-4 language
+// a corresponding green behavioral golden test"): every priority-4 language
 // whose Resolution or Dispatch is "full" must have its mapped
 // testdata/golden test function actually declared — this test would fail
 // if a future edit marked a language "full" without ever wiring its
-// golden-parity harness, or renamed/removed that harness without updating
+// golden harness, or renamed/removed that harness without updating
 // the matrix.
 func TestMatrix_FullPriority4EntriesHaveGoldenTest(t *testing.T) {
 	declared := goldenTestFuncNames(t)

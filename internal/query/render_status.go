@@ -7,17 +7,17 @@ import (
 	"strings"
 )
 
-// TS ships TWO structurally different status renderings — this file
-// implements both (D-17):
+// This file implements two structurally different status renderings
+// (D-17):
 //
 //   - RenderStatusText — the CLI's padded-column layout ("Index Statistics:"
-//     / "  Files:     1,234" / padEnd(15) breakdowns), ported from
-//     bin/codegraph.js ~900-985 (D-09). Section order: Index Statistics: /
+//     / "  Files:     1,234" / padEnd(15) breakdowns), built to the
+//     documented CLI shape (D-09). Section order: Index Statistics: /
 //     Nodes by Kind: / Edges by Kind: / Files by Language: / advisories.
 //     Called ONLY by internal/cli.
 //   - RenderStatusMarkdown — the MCP's bolded-key bullet layout
 //     ("**CodeGraph Status**" / "**Files indexed:** N" / "- kind: count"
-//     bullets), ported from mcp/tools.js ~3890-3945. Section order:
+//     bullets), built to the documented MCP shape. Section order:
 //     stats fields / **Nodes by Kind:** / **Edges by Kind:** /
 //     **Languages:** / advisories. Called ONLY by internal/mcp.
 //
@@ -32,8 +32,9 @@ import (
 // surface stays sparse by construction — D-05).
 //
 // They share the same StatusResult data (STAT-01/02/03) but NOT a
-// renderer — TS deliberately ships two shapes for the same data, and
-// D-12's blockquote warning only makes sense against the markdown one. A
+// renderer — the documented design deliberately ships two shapes for the
+// same data, and D-12's blockquote warning only makes sense against the
+// markdown one. A
 // future reader collapsing these into a single renderer will break
 // TestRenderStatusMarkdownShape's "does not contain Index Statistics:"
 // assertion immediately (T-02-22).
@@ -53,16 +54,16 @@ type kindCount struct {
 	Count int64
 }
 
-// formatNumber is a fixed, en-US-style comma grouper (D-10). TS uses
-// n.toLocaleString(), which is LOCALE-DEPENDENT: "1,223" under an en-US
+// formatNumber is a fixed, en-US-style comma grouper (D-10). The
+// documented n.toLocaleString() behavior is LOCALE-DEPENDENT: "1,223" under an en-US
 // locale, "1.223" or "1 223" under others — and Go has no stdlib
 // equivalent. golang.org/x/text/message is explicitly REJECTED: it would
 // be a new dependency AND it re-introduces the exact locale variance this
 // helper exists to eliminate (Go's message.Printer is locale-neutral by
 // default and would still need explicit language.AmericanEnglish
-// configuration to match TS's CI behavior). This is a documented,
+// configuration to match the documented CI behavior). This is a documented,
 // intentional Phase-1 D-02 allowed divergence: codegraph-go pins en-US
-// grouping everywhere TS follows the host locale.
+// grouping everywhere the documented design follows the host locale.
 func formatNumber(n int64) string {
 	s := strconv.FormatInt(n, 10)
 	neg := strings.HasPrefix(s, "-")
@@ -82,15 +83,15 @@ func formatNumber(n int64) string {
 	return out
 }
 
-// formatMB renders bytes as a two-decimal MB value (D-07), matching TS's
-// (stats.dbSizeBytes / 1024 / 1024).toFixed(2).
+// formatMB renders bytes as a two-decimal MB value (D-07), matching the
+// documented (stats.dbSizeBytes / 1024 / 1024).toFixed(2) behavior.
 func formatMB(bytes int64) string {
 	return fmt.Sprintf("%.2f MB", float64(bytes)/1024/1024)
 }
 
 // sortedCounts filters m to count>0 entries and sorts them by count
-// DESCENDING, breaking ties on the key ascending. TS relies on
-// Object.entries insertion order for ties, which Go cannot reproduce
+// DESCENDING, breaking ties on the key ascending. The documented behavior
+// relies on Object.entries insertion order for ties, which Go cannot reproduce
 // (map iteration is deliberately randomized) — a key tiebreak is the
 // deterministic substitute, a documented minor divergence. Shared by both
 // renderers' Nodes-by-Kind and Files-by-Language/Languages breakdowns.
@@ -160,7 +161,7 @@ func edgeCounts(m map[string]int64) []kindCount {
 // statLabelWidth/breakdownKeyWidth are the CLI form's column widths
 // (D-09): a stat label ("Files:", "DB Size:") is left-padded to 11
 // columns before its value; a breakdown key is left-padded to 15 columns
-// before its count — TS's padEnd(15).
+// before its count — matching the documented padEnd(15) style.
 const (
 	statLabelWidth    = 11
 	breakdownKeyWidth = 15
@@ -188,8 +189,8 @@ func writeBreakdownText(b *strings.Builder, header string, counts []kindCount) {
 // NEVER by the added/modified/removed count breakdown, which stays an
 // inert all-zero placeholder per the REQUIREMENTS.md Out-of-Scope table:
 // computing exact counts would require re-running Sync's diff on every
-// status call. This substitution (TS branches on a real change-list
-// length; codegraph-go branches on the live stale bool) is the single
+// status call. This substitution (the documented design branches on a
+// real change-list length; codegraph-go branches on the live stale bool) is the single
 // most likely thing for a future reader to "fix" wrongly — it is not a
 // TODO, it is v1.0's deliberate bar.
 //
@@ -208,8 +209,8 @@ func writeStatusAdvisories(b *strings.Builder, r StatusResult, staleLabel, reind
 	}
 }
 
-// RenderStatusText renders StatusResult in TS's CLI padded-column shape
-// (D-09), ported from bin/codegraph.js ~900-985. Called ONLY by
+// RenderStatusText renders StatusResult in the documented CLI padded-column shape
+// (D-09), built to the documented bin/codegraph.js ~900-985 shape. Called ONLY by
 // internal/cli (plan 02-07) — see this file's header comment for why a
 // second, structurally different renderer exists for MCP.
 //
@@ -222,10 +223,10 @@ func writeStatusAdvisories(b *strings.Builder, r StatusResult, staleLabel, reind
 // Journal: is deliberately DROPPED — no Pebble analog exists, consistent
 // with the existing journalMode drop in StatusResult's decision table.
 // Backend: renders r.Backend (the Go-truthful "pebble"), never a
-// hardcoded TS string. TS's indexState (indexing/partial/failed) and
-// pendingRefs>0 warning branches are deliberately NOT ported: Go's
+// hardcoded string. The documented indexState (indexing/partial/failed) and
+// pendingRefs>0 warning branches are deliberately NOT implemented here: Go's
 // IndexHealth.State is only ever "complete"/"not_indexed" and PendingRefs
-// is hard-pinned to 0, so those branches could never fire — porting them
+// is hard-pinned to 0, so those branches could never fire — implementing them
 // would be dead code (RESEARCH Pitfall 4).
 func RenderStatusText(r StatusResult, projectPath string) string {
 	var b strings.Builder
@@ -262,8 +263,8 @@ func writeBreakdownMarkdown(b *strings.Builder, header string, counts []kindCoun
 	}
 }
 
-// RenderStatusMarkdown renders StatusResult in TS's MCP bolded-key
-// bullet-list shape (D-17), ported from mcp/tools.js ~3890-3945. Called
+// RenderStatusMarkdown renders StatusResult in the documented MCP bolded-key
+// bullet-list shape (D-17), built to the documented mcp/tools.js ~3890-3945 shape. Called
 // ONLY by internal/mcp (plan 02-06) — see this file's header comment for
 // why a second, structurally different renderer exists for the CLI
 // (RenderStatusText).
@@ -272,17 +273,17 @@ func writeBreakdownMarkdown(b *strings.Builder, header string, counts []kindCoun
 // (worktree_notice.go) rather than a second inline "\n" -> "\n> "
 // transform — one implementation, one place to be wrong (D-12).
 //
-// DROPPED, and why: TS's "**Journal mode:**" line has no Pebble analog
-// (same rationale as RenderStatusText); TS's "**Pending resolution:**" /
+// DROPPED, and why: the documented "**Journal mode:**" line has no Pebble analog
+// (same rationale as RenderStatusText); the documented "**Pending resolution:**" /
 // pendingRefs>0 branch is dead code here since PendingRefs is hard-pinned
-// to 0 (RESEARCH Pitfall 4); TS's "**Auto-sync disabled:**"
+// to 0 (RESEARCH Pitfall 4); the documented "**Auto-sync disabled:**"
 // (isWatcherDegraded) and per-file freshness (getPendingFiles) sections
 // both depend on a live watcher, which is Phase 3 (WATCH-01) — not Phase
 // 2 content, and are NOT stubbed here.
 //
-// Note TS labels the FilesByLanguage breakdown "**Languages:**" in this
+// Note the documented design labels the FilesByLanguage breakdown "**Languages:**" in this
 // form while its CLI labels the identical data "Files by Language:" —
-// each surface keeps its own TS-verbatim label.
+// each surface keeps its own documented label.
 func RenderStatusMarkdown(r StatusResult) string {
 	var b strings.Builder
 	b.WriteString("**CodeGraph Status**\n\n")

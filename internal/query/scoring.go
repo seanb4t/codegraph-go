@@ -1,9 +1,9 @@
-// Package query — internal/query/scoring.go ports TS CodeGraph 1.3.1's
-// per-file scoring, hard-exclusion, and change-surface buried-rescue
-// heuristics H14-H16 (RESEARCH §C.2, D-10): the stage that converts
-// node-level RWR mass (plan 06, rwr.go) plus the file candidate set into
-// the per-file "score" the relevance gate (H17, plan 14) filters/sorts
-// on. The live TS dist is no longer readable on this machine (see
+// Package query — internal/query/scoring.go implements the per-file
+// scoring, hard-exclusion, and change-surface buried-rescue heuristics
+// H14-H16 (RESEARCH §C.2, D-10): the stage that converts node-level RWR
+// mass (plan 06, rwr.go) plus the file candidate set into the per-file
+// "score" the relevance gate (H17, plan 14) filters/sorts on. The
+// original source is no longer readable on this machine (see
 // gather.go's package doc comment) — every constant below is cited from
 // the frozen 01-RESEARCH.md §C.2 capture, not re-derived from a fresh
 // source read:
@@ -40,7 +40,7 @@ import (
 // --- H14: per-file score tiers ---
 
 // H14's exact, cited constants (RESEARCH §C.2/H14, mcp/tools.js:2632-2647
-// [VERIFIED: TS 1.3.1 dist — cited from the frozen RESEARCH capture]):
+// [cited from the frozen RESEARCH capture]):
 // named-seed +50, entry (root/named) +10, connected-to-entry +3, other
 // +1; keep files with score >= 3.
 const (
@@ -167,8 +167,8 @@ func aggregateFileGraphScore(r graphstore.Reader, nodeIDs []string, rwrScores ma
 
 // --- H15: hard test/spec exclusion ---
 
-// isIconOrI18nFile is this plan's documented D-02 substitute for TS's
-// icon/i18n low-value-file component of H15 (RESEARCH §C.2/H15 cites the
+// isIconOrI18nFile is this plan's documented D-02 substitute for the
+// documented icon/i18n low-value-file component of H15 (RESEARCH §C.2/H15 cites the
 // RULE — "test/spec/icon/i18n" — but no further source detail on the
 // icon/i18n predicate's exact patterns survives the frozen capture, and
 // the live TS dist JS is unreadable on this machine, see gather.go's
@@ -226,8 +226,8 @@ func queryMentionsTest(query string) bool {
 // drops every low-value (isLowValueFile) file from fileScores UNLESS the
 // query mentions "test" (queryMentionsTest) AND at least 2 non-low-value
 // files remain in the candidate set — in which case NO file is dropped
-// at all (matching TS's short-circuit: the exemption is all-or-nothing,
-// not a partial keep). Mutates fileScores in place.
+// at all (matching the documented short-circuit: the exemption is
+// all-or-nothing, not a partial keep). Mutates fileScores in place.
 func applyHardTestExclusion(fileScores map[string]float64, query string) {
 	var lowValue []string
 	nonLowValueCount := 0
@@ -252,8 +252,8 @@ func applyHardTestExclusion(fileScores map[string]float64, query string) {
 // --- H16: change-surface buried-rescue ---
 
 // H16's exact, cited constants (RESEARCH §C.2/H16, mcp/tools.js:2574-2613,
-// 2733-2762 [VERIFIED: TS 1.3.1 dist — cited from the frozen RESEARCH
-// capture]): rescue a signature-type file only if genuinely buried
+// 2733-2762 [cited from the frozen RESEARCH capture]): rescue a
+// signature-type file only if genuinely buried
 // (fileGraphScore < maxGraph*0.06 AND termHits < 2); a rescued file is
 // force-kept with score = max(score, 45).
 const (

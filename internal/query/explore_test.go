@@ -30,13 +30,13 @@ func TestExploreRejectsEmptyQuery(t *testing.T) {
 	}
 }
 
-// copySyntheticParityFixture copies the behavioral corpus source tree from
+// copyBehavioralFixture copies the behavioral corpus source tree from
 // corpus/behavioral/src (D-03) into a fresh t.TempDir(), mirroring
 // engine_test.go's copyFixture, but SKIPS .codegraph/ directories:
 // tests build a fresh index via indexFixture (indexer.Run) against the
 // CURRENT extractors/schema, rather than trusting a possibly-stale
 // committed Pebble store.
-func copySyntheticParityFixture(t *testing.T) string {
+func copyBehavioralFixture(t *testing.T) string {
 	t.Helper()
 
 	src, err := filepath.Abs(filepath.Join("..", "..", "corpus", "behavioral", "src"))
@@ -67,18 +67,18 @@ func copySyntheticParityFixture(t *testing.T) string {
 		return os.WriteFile(target, data, 0o644)
 	})
 	if err != nil {
-		t.Fatalf("copy synthetic-parity fixture: %v", err)
+		t.Fatalf("copy behavioral fixture: %v", err)
 	}
 	return dst
 }
 
-// syntheticParityEngine copies+freshly-indexes the synthetic-parity corpus
+// behavioralEngine copies+freshly-indexes the behavioral corpus
 // and opens an Engine on it (mirroring nodeExploreFixture's shape,
 // render_markdown_test.go).
-func syntheticParityEngine(t *testing.T) *Engine {
+func behavioralEngine(t *testing.T) *Engine {
 	t.Helper()
 
-	dir := copySyntheticParityFixture(t)
+	dir := copyBehavioralFixture(t)
 	indexFixture(t, dir)
 
 	engine, closer, err := OpenAt(dir)
@@ -90,12 +90,12 @@ func syntheticParityEngine(t *testing.T) *Engine {
 }
 
 // TestExploreMultiWord pins EXPL-01 end-to-end: a 3-word query tokenizes
-// (H1/H2) and matches — case (b) of the synthetic-parity corpus, a
+// (H1/H2) and matches — case (b) of the behavioral corpus, a
 // CamelCase type name (UserAccountManager) a multi-word query must
 // tokenize into User/Account/Manager and match, not 0-match the way the
 // pre-EXPL-01 single-arg CLI bug would have forced a quoted single term.
 func TestExploreMultiWord(t *testing.T) {
-	engine := syntheticParityEngine(t)
+	engine := behavioralEngine(t)
 
 	got, err := engine.Explore("user account manager", 5)
 	if err != nil {
@@ -110,7 +110,7 @@ func TestExploreMultiWord(t *testing.T) {
 }
 
 // TestExploreTestNotTop pins EXPL-03's file-relevance gate: case (c) of
-// the synthetic-parity corpus — TestAccountRecovery lexically matches
+// the behavioral corpus — TestAccountRecovery lexically matches
 // "account recovery" but has ZERO inbound graph edges (nothing but the go
 // test runtime invokes it), while recoverAccount (recovery.go) is the
 // structurally-connected non-test symbol in the same cluster. H15's hard
@@ -118,7 +118,7 @@ func TestExploreMultiWord(t *testing.T) {
 // recovery_test.go entirely, so TestAccountRecovery never tops — or even
 // appears in — the results.
 func TestExploreTestNotTop(t *testing.T) {
-	engine := syntheticParityEngine(t)
+	engine := behavioralEngine(t)
 
 	got, err := engine.Explore("account recovery", 5)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestExploreTestNotTop(t *testing.T) {
 }
 
 // TestExploreStructuralBeatsLexical pins EXPL-02's core RWR property:
-// case (d) of the synthetic-parity corpus — AccountBalanceHelper is a
+// case (d) of the behavioral corpus — AccountBalanceHelper is a
 // full lexical match for "account balance" but is deliberately
 // graph-isolated (zero calls in/out), while GetBalance is only a PARTIAL
 // lexical match (names "balance" but not "account") yet is the real
@@ -164,7 +164,7 @@ func TestExploreTestNotTop(t *testing.T) {
 // selected as a matched candidate even though its raw gather/rerank score
 // trails the isolated full-match candidate (AccountBalanceHelper).
 func TestExploreStructuralBeatsLexical(t *testing.T) {
-	engine := syntheticParityEngine(t)
+	engine := behavioralEngine(t)
 
 	got, err := engine.Explore("account balance", 5)
 	if err != nil {

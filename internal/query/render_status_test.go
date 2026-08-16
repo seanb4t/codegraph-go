@@ -98,8 +98,8 @@ func TestSortedCounts(t *testing.T) {
 	}
 
 	// Tie-break: equal counts break on key ascending (deterministic despite
-	// randomized map iteration — TS relies on Object.entries insertion
-	// order, which Go cannot reproduce).
+	// randomized map iteration — the documented behavior relies on
+	// Object.entries insertion order, which Go cannot reproduce).
 	tie := map[string]int64{"zebra": 5, "alpha": 5}
 	gotTie := sortedCounts(tie)
 	if len(gotTie) != 2 || gotTie[0].Key != "alpha" || gotTie[1].Key != "zebra" {
@@ -129,7 +129,7 @@ func TestRenderStatusTextSections(t *testing.T) {
 	}
 }
 
-// --- Test 4 (D-09): Backend renders the Go-truthful value, not TS's string ---
+// --- Test 4 (D-09): Backend renders the Go-truthful value, not the hardcoded origin string ---
 
 func TestRenderStatusTextBackendFromField(t *testing.T) {
 	r := baseStatusResult()
@@ -140,7 +140,7 @@ func TestRenderStatusTextBackendFromField(t *testing.T) {
 		t.Errorf("RenderStatusText output missing r.Backend value %q\n--- output ---\n%s", r.Backend, out)
 	}
 	if strings.Contains(out, "node:sqlite") {
-		t.Errorf("RenderStatusText output contains TS's hardcoded backend string, want r.Backend only\n--- output ---\n%s", out)
+		t.Errorf("RenderStatusText output contains the hardcoded backend string, want r.Backend only\n--- output ---\n%s", out)
 	}
 }
 

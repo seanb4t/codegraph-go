@@ -1,8 +1,8 @@
-// Package query — internal/query/explore_gate.go ports TS CodeGraph
-// 1.3.1's final file selection+ordering stage of the explore pipeline:
-// H17 (the EXPL-03 relevance gate), H18 (the 5-tier file sort), and H19
-// (central-file selection). RESEARCH §C.2/§4 (cited, [VERIFIED: TS 1.3.1
-// dist]):
+// Package query — internal/query/explore_gate.go implements the final
+// file selection+ordering stage of the explore pipeline: H17 (the
+// EXPL-03 relevance gate), H18 (the 5-tier file sort), and H19
+// (central-file selection). RESEARCH §C.2/§4 (cited from the frozen
+// RESEARCH capture):
 //
 //   - H17 Relevance GATE — mcp/tools.js:2763-2783
 //   - H18 5-tier file sort — mcp/tools.js:2823-2863
@@ -10,10 +10,10 @@
 //
 // RESEARCH's single most emphasized pitfall for this stage: H17 is a
 // 5-way boolean OR, NOT a bare `fileGraphScore >= maxGraph*0.06`
-// threshold (D-08). A single-clause port under-selects files TS would
-// keep (e.g. a named-by-agent file with near-zero RWR mass). Every
-// clause below is ported independently-sufficient, exactly mirroring
-// TS's own `||` chain.
+// threshold (D-08). A single-clause implementation under-selects files
+// the full rule would keep (e.g. a named-by-agent file with near-zero
+// RWR mass). Every clause below is implemented as an
+// independently-sufficient check, preserving the full `||` chain.
 //
 // Division of labor / D-02 scoping note (same precedent as scoring.go):
 // RESEARCH's frozen citations pin H17-H19's constants and rule
@@ -119,7 +119,7 @@ const centralFileMinTermHits = 1
 // mass tie-break). Fewer than centralFileCap files are returned when
 // fewer than that many qualify — the result is never padded.
 // Deterministic: eligible paths are sorted by mass descending, then by
-// path ascending (D-04 tie-break; TS's own Map/Set iteration order is
+// path ascending (D-04 tie-break; the documented Map/Set iteration order is
 // not reproducible in Go).
 func centralFileSelection(paths []string, fileGraphScore map[string]float64, fileTermHits map[string]int) map[string]bool {
 	var eligible []string
@@ -168,10 +168,10 @@ const fileSortMassEpsilonFraction = 0.01
 //
 // then !generated (node.go isGeneratedFile), then score (fileScores),
 // then node count (fileNodeCounts), then path ascending — the final
-// deterministic tie-break (D-04). TS files carry no stable "Id"; path is
-// the only natural per-file identity, so it is this port's documented
-// substitute for the node-level lowest-Id tail convention used elsewhere
-// in this codebase.
+// deterministic tie-break (D-04). Files carry no stable "Id" in the
+// documented design; path is the only natural per-file identity, so it
+// is this file's documented substitute for the node-level lowest-Id
+// tail convention used elsewhere in this codebase.
 //
 // sort.SliceStable so that any residual tie (all tiers AND the full tail
 // equal) preserves the caller's input order rather than reordering
