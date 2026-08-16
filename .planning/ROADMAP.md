@@ -274,7 +274,7 @@ Plans:
 
 **Notes**: MEM-01/02 are verified by inspection, not by a test — the spine lives outside git and no CI gate can hold it. "Supersede, don't overwrite" is the point: the historical records are true statements about what happened and must survive; only records asserting the framing *in the present tense* are corrected. The head-to-head JSON captures already committed under `tools/bench/headtohead-*.json` are historical measurement records; whether they are removed or retained as dated artifacts is a scoping call for the phase plan, but `docs/BENCHMARKS.md` must not publish their multipliers either way. **Scoping call resolved (06-CONTEXT D-01):** the six captures are deleted; git history preserves them.
 
-**Plans**: 3/6 plans executed
+**Plans**: 4/6 plans executed
 
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
@@ -288,7 +288,7 @@ Plans:
 
 **Wave 3** *(blocked on Waves 1–2 — the document publishes what the path measured)*
 
-- [ ] 06-04-PLAN.md — Measurement of record (`06-PUBLISH-RESULTS.json`), `docs/BENCHMARKS.md` rewritten from scratch with methodology, mechanically generated data rows, provenance and the regression-gate description, a blocking decision gate resolving BENCH-03 into a recorded status, then the positive-controlled phase acceptance census (`06-CENSUS.md`) (BENCH-01, BENCH-02, BENCH-03)
+- [x] 06-04-PLAN.md — Measurement of record (`06-PUBLISH-RESULTS.json`), `docs/BENCHMARKS.md` rewritten from scratch with methodology, mechanically generated data rows, provenance and the regression-gate description, a blocking decision gate resolving BENCH-03 into a recorded status, then the positive-controlled phase acceptance census (`06-CENSUS.md`) (BENCH-01, BENCH-02, BENCH-03)
 
 **Wave 4** *(the sweep describes the end state, so it rides after the code and docs land)*
 
@@ -310,7 +310,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
 | 5. Process, CI & In-Tree Sweep | 8/8 | In Progress|  |
-| 6. Benchmark De-coupling & Memory Sweep | 3/6 | In Progress|  |
+| 6. Benchmark De-coupling & Memory Sweep | 4/6 | In Progress|  |
 
 5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
 
