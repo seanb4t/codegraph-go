@@ -239,7 +239,7 @@ Plans:
 
 **Notes**: Workflows carrying the vocabulary include `ci`, `release`, `bench`, `post-release-verify`, `linux-cross-canary`, `require-issue-link` and `auto-close-unsolicited-prs`. `bench.yml`'s own de-coupling is Phase 6's; this phase touches only its framing. The naive-regex failure mode is real and named in the requirements: a find-and-replace over "TypeScript" breaks `tsextract` and de-lists a supported language.
 
-**Plans**: 8 plans (6/6 original executed; 05-07 and 05-08 close the CODE-01 verification gap)
+**Plans**: 8/8 plans executed (6/6 original executed; 05-07 and 05-08 close the CODE-01 verification gap)
 
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
@@ -256,8 +256,8 @@ Plans:
 
 **Gap closure** *(criterion 4 / CODE-01 failed verification — 10 comment-only locations survived because both flagship censuses used line-based `rg`, which cannot see a phrase wrapped across a comment line break)*
 
-- [ ] 05-07-PLAN.md — CODE-01 gap closure wave 1: build and positive-control a wrap-tolerant (`rg -U`) census, then sweep internal/cli (search, node, files, uninit, serve, githooks_test), internal/mcp/tools.go, the fully-enumerated internal/agents package, and internal/query/traverse_test.go — byte contracts and technical citations mechanically asserted intact (CODE-01)
-- [ ] 05-08-PLAN.md — CODE-01 gap closure wave 2: sweep testdata/golden/behavioral_test.go's 19 locations, then run the phase acceptance census — a positive-controlled multiline census over internal/, tools/, test/, testdata/ recording a zero count with its instrument and exclusions on the record — plus positive product-surface assertions and the WINDOWS ledger reconciliation (CODE-01)
+- [x] 05-07-PLAN.md — CODE-01 gap closure wave 1: build and positive-control a wrap-tolerant (`rg -U`) census, then sweep internal/cli (search, node, files, uninit, serve, githooks_test), internal/mcp/tools.go, the fully-enumerated internal/agents package, and internal/query/traverse_test.go — byte contracts and technical citations mechanically asserted intact (CODE-01)
+- [x] 05-08-PLAN.md — CODE-01 gap closure wave 2: sweep testdata/golden/behavioral_test.go's 19 locations, then run the phase acceptance census — a positive-controlled multiline census over internal/, tools/, test/, testdata/ recording a zero count with its instrument and exclusions on the record — plus positive product-surface assertions and the WINDOWS ledger reconciliation (CODE-01)
 
 ### Phase 6: Benchmark De-coupling & Memory Sweep
 
@@ -287,7 +287,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 2. Golden Harness Re-authoring & Re-freeze | 4/4 | Complete    | 2026-08-14 |
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
-| 5. Process, CI & In-Tree Sweep | 6/6 | In Progress|  |
+| 5. Process, CI & In-Tree Sweep | 8/8 | In Progress|  |
 | 6. Benchmark De-coupling & Memory Sweep | 0/? | Not started | - |
 
 5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
