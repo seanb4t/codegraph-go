@@ -274,7 +274,7 @@ Plans:
 
 **Notes**: MEM-01/02 are verified by inspection, not by a test — the spine lives outside git and no CI gate can hold it. "Supersede, don't overwrite" is the point: the historical records are true statements about what happened and must survive; only records asserting the framing *in the present tense* are corrected. The head-to-head JSON captures already committed under `tools/bench/headtohead-*.json` are historical measurement records; whether they are removed or retained as dated artifacts is a scoping call for the phase plan, but `docs/BENCHMARKS.md` must not publish their multipliers either way. **Scoping call resolved (06-CONTEXT D-01):** the six captures are deleted; git history preserves them.
 
-**Plans**: 5/6 plans executed
+**Plans**: 6/6 plans executed
 
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
@@ -296,7 +296,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 — the store should agree with the repo)*
 
-- [ ] 06-06-PLAN.md — Engram spine sweep: enumerate spine + rule + overlay scopes to exhaustion, classify every record by D-13's present-tense-or-forward-looking test, a blocking `checkpoint:decision` on the one-way classification, then execute the approved supersedes and close `06-MEMORY-SWEEP.md` (MEM-01, MEM-02)
+- [x] 06-06-PLAN.md — Engram spine sweep: enumerate spine + rule + overlay scopes to exhaustion, classify every record by D-13's present-tense-or-forward-looking test, a blocking `checkpoint:decision` on the one-way classification, then execute the approved supersedes and close `06-MEMORY-SWEEP.md` (MEM-01, MEM-02)
 
 ## Progress
 
@@ -310,7 +310,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
 | 5. Process, CI & In-Tree Sweep | 8/8 | In Progress|  |
-| 6. Benchmark De-coupling & Memory Sweep | 5/6 | In Progress|  |
+| 6. Benchmark De-coupling & Memory Sweep | 6/6 | In Progress|  |
 
 5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
 
