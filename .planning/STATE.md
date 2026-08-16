@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.11.0
 milestone_name: Standalone Project Identity
-current_phase: 05
-current_phase_name: Process, CI & In-Tree Sweep
+current_phase: 06
+current_phase_name: benchmark-de-coupling-memory-sweep
 status: executing
 stopped_at: Phase 6 context gathered
-last_updated: "2026-08-16T15:25:06.137Z"
-last_activity: 2026-08-15
-last_activity_desc: Phase 3 execution started
+last_updated: "2026-08-16T15:28:20.499Z"
+last_activity: 2026-08-16
+last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 6
   completed_phases: 5
@@ -24,15 +24,15 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-13)
 
 **Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Phase 05 — Process, CI & In-Tree Sweep
+**Current focus:** Phase 06 — benchmark-de-coupling-memory-sweep
 
 ## Current Position
 
-Phase: 05 (Process, CI & In-Tree Sweep) — EXECUTING
+Phase: 06 (benchmark-de-coupling-memory-sweep) — EXECUTING
 Plan: 1 of 6
-Status: Ready to execute
+Status: Executing Phase 06
 Progress: 0/6 phases complete (0%)
-Last activity: 2026-08-15 — Phase 05 execution started
+Last activity: 2026-08-16 — Phase 06 execution started
 
 ## Performance Metrics
 

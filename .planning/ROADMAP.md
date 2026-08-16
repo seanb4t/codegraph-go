@@ -274,13 +274,13 @@ Plans:
 
 **Notes**: MEM-01/02 are verified by inspection, not by a test — the spine lives outside git and no CI gate can hold it. "Supersede, don't overwrite" is the point: the historical records are true statements about what happened and must survive; only records asserting the framing *in the present tense* are corrected. The head-to-head JSON captures already committed under `tools/bench/headtohead-*.json` are historical measurement records; whether they are removed or retained as dated artifacts is a scoping call for the phase plan, but `docs/BENCHMARKS.md` must not publish their multipliers either way. **Scoping call resolved (06-CONTEXT D-01):** the six captures are deleted; git history preserves them.
 
-**Plans**: 6 plans
+**Plans**: 2/6 plans executed
 
 Plans:
 **Wave 1** *(parallel — zero file overlap)*
 
-- [ ] 06-01-PLAN.md — Tracer: absolute-only single-subject measurement path end-to-end — drop the milestone-entangled corpus entry, replace the two-subject mode with `publish`, delete the comparison-binary flag and its PATH-lookup helper with their paired test edits, delete the six committed captures, re-author realcorpus/runner prose, and author `tools/bench/publishcheck` as the pure-Go publish-JSON verifier (BENCH-02)
-- [ ] 06-03-PLAN.md — `internal/bench` + `internal/corpora` comment-only framing sweep, a new test driving `CheckRegression` with the COMMITTED `baseline.json`, then the FIXT-07 mutation rehearsal proving both oracles fire RED on the throughput and peak-RSS tolerances, byte-cleanly reverted and recorded in `06-MUTATION-LOG.md` (BENCH-02)
+- [x] 06-01-PLAN.md — Tracer: absolute-only single-subject measurement path end-to-end — drop the milestone-entangled corpus entry, replace the two-subject mode with `publish`, delete the comparison-binary flag and its PATH-lookup helper with their paired test edits, delete the six committed captures, re-author realcorpus/runner prose, and author `tools/bench/publishcheck` as the pure-Go publish-JSON verifier (BENCH-02)
+- [x] 06-03-PLAN.md — `internal/bench` + `internal/corpora` comment-only framing sweep, a new test driving `CheckRegression` with the COMMITTED `baseline.json`, then the FIXT-07 mutation rehearsal proving both oracles fire RED on the throughput and peak-RSS tolerances, byte-cleanly reverted and recorded in `06-MUTATION-LOG.md` (BENCH-02)
 
 **Wave 2** *(blocked on 06-01 — the workflow references the runner mode it creates)*
 
@@ -310,7 +310,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. Phase 4 has no
 | 3. Non-Vacuity Proof & Unconditional CI Execution | 2/2 | Complete    | 2026-08-15 |
 | 4. Attribution & Documentation Sweep | 3/3 | Complete    | 2026-08-15 |
 | 5. Process, CI & In-Tree Sweep | 8/8 | In Progress|  |
-| 6. Benchmark De-coupling & Memory Sweep | 0/6 | Not started | - |
+| 6. Benchmark De-coupling & Memory Sweep | 2/6 | In Progress|  |
 
 5 milestones shipped. v0.11.0 scoped: 6 phases, 25 requirements, 0/6 phases complete (0%).
 
