@@ -44,3 +44,26 @@ then append a `closed-by-ci-run` entry here with the run URL and the verbatim
 BENCH-01 is unaffected by this status: the local publish-mode measurement committed in this plan's
 Task 1 (`.planning/phases/06-benchmark-de-coupling-memory-sweep/06-PUBLISH-RESULTS.json`) supplies
 BENCH-01's numbers independently of whether `bench.yml` has run.
+
+## MEM-02 — file half
+
+`MEM02_FILES_STATUS=pending-fresh-session-not-performed`
+
+**Reason:** the closest direct test of MEM-02's file half is starting a genuinely fresh session in
+this repository and reading the startup context it assembles (`.claude/CLAUDE.md` plus whatever
+the harness injects from `.planning/`) — this plan's own `<verify><human-check>` names it
+explicitly and states it "cannot be run by a test." This executor runs inside the single session
+that made the edits; it cannot spawn an independent fresh session of itself to observe what a new
+session's own context assembly would show, so the read was not performed. Per this plan's own
+reviewed design (06-05:215 — `workflow.human_verify_mode: end-of-phase` in this repo's config
+means `checkpoint:human-verify` tasks are not emitted here), the status token is recorded as
+explicitly pending rather than left silently unrecorded, so MEM-02's file half is never claimed as
+verified on silence.
+
+**What was performed, mechanically, in place of the fresh-session read:** every occurrence of the
+bounded framing-word pattern set was enumerated and swept from `.claude/CLAUDE.md`,
+`.planning/PROJECT.md` and `.planning/STATE.md` (see `06-MEMORY-SWEEP.md`), and
+`CLAUDE_MD_FRAMING_TOTAL=0` / `STATE_MD_RETIRED_CORE_VALUE=0` / `CORE_VALUE_EQUAL=true` are all
+proven this task. A fresh session reading these three post-edit files would not encounter the
+retired framing this task exists to remove — but that is an inference from the census and diff,
+not the live observation the human-check calls for.
