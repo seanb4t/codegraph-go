@@ -55,7 +55,7 @@ type DetectionResult struct {
 }
 
 // FileAction records what happened to one file during Install/Uninstall,
-// mirroring the TS parity oracle's per-file action enum (D-07, D-08).
+// using the same per-file action enum the marker contract defines (D-07, D-08).
 type FileAction string
 
 const (

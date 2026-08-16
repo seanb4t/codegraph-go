@@ -33,27 +33,27 @@ message Node {
   int32 end_col = 10;
 
   // signature is the extractor-rendered parameter/return signature string
-  // (e.g. "func(a int, b string) error"). Additive Go-parity field (D-03);
+  // (e.g. "func(a int, b string) error"). Additive schema field (D-03);
   // written by the Phase 2 goextract symbol pass.
   string signature = 11;
 
   // docstring is the leading comment/doc block attached to the symbol, as
-  // captured verbatim by the extractor. Additive Go-parity field (D-03);
+  // captured verbatim by the extractor. Additive schema field (D-03);
   // written by the Phase 2 goextract symbol pass.
   string docstring = 12;
 
   // visibility is the language-level access modifier ("public", "private",
-  // "package", etc.) as classified by the extractor. Additive Go-parity
+  // "package", etc.) as classified by the extractor. Additive schema
   // field (D-03); written by the Phase 2 goextract symbol pass.
   string visibility = 13;
 
   // is_exported reports whether the symbol crosses the package/module
-  // boundary (Go: identifier starts uppercase). Additive Go-parity field
+  // boundary (Go: identifier starts uppercase). Additive schema field
   // (D-03); written by the Phase 2 goextract symbol pass.
   bool is_exported = 14;
 
   // return_type is the extractor-rendered return type string, when the
-  // symbol kind has one (function/method). Additive Go-parity field
+  // symbol kind has one (function/method). Additive schema field
   // (D-03); written by the Phase 2 goextract symbol pass.
   string return_type = 15;
 
@@ -89,7 +89,7 @@ message Edge {
   string provenance = 6;
 
   // metadata is an open extension bag for edge-kind-specific extractor
-  // annotations that do not warrant their own field yet. Additive Go-parity
+  // annotations that do not warrant their own field yet. Additive schema
   // field (D-03).
   map<string, string> metadata = 7;
 

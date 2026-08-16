@@ -13,7 +13,7 @@
 // `git show e5da8e7:tools/spike/testdata/ATTRIBUTION.md`) and by this
 // project's own testdata/golden/README.md "Corpus (D-06a)" table, which
 // already pins two of these three entries (weft-go, colbymchenry-
-// codegraph) for the Phase-3 golden-parity oracle.
+// codegraph) for the Phase-3 golden test suite.
 //
 // This package performs no network I/O: Resolve only reports a local
 // checkout path when one already exists (via an env var override or the
@@ -70,8 +70,7 @@ type Entry struct {
 	QueryTerms []string
 	// EnvVar, if set, is checked first by Resolve: an operator can
 	// point it at an existing local checkout to skip cloning
-	// entirely. Mirrors testdata/golden's own CODEGRAPH_WEFT_CORPUS
-	// convention (see testdata/golden/golden_parity_test.go).
+	// entirely.
 	EnvVar string
 	// SiblingDir, if set, is a conventional local checkout path
 	// (relative to this repo's parent directory) Resolve checks
@@ -88,12 +87,11 @@ type Entry struct {
 func Corpora() []Entry {
 	return []Entry{
 		{
-			// Same pin testdata/golden/README.md's D-06a corpus table
-			// and testdata/golden/golden_parity_test.go's
-			// resolveWeftCorpus already use for the Phase-3 golden
-			// oracle — reusing it here keeps the project's set of
-			// pinned real repos small and consistent rather than
-			// introducing a fourth unrelated pin.
+			// Same commit pin testdata/golden/corpus/weft-go/ already
+			// uses for the golden test suite — reusing it here keeps
+			// the project's set of pinned real repos small and
+			// consistent rather than introducing a fourth unrelated
+			// pin.
 			Name:          "weft-go",
 			SourceURL:     "https://github.com/seanb4t/weft",
 			Tag:           "",
@@ -105,8 +103,7 @@ func Corpora() []Entry {
 			SiblingDir:    "weft",
 		},
 		{
-			// The original TS CodeGraph project this Go port
-			// replaces — multi-language (TS/JS/Python/Astro/YAML),
+			// A multi-language repo (TS/JS/Python/Astro/YAML) that
 			// exercises the tool surface broadly. Same pin
 			// testdata/golden/README.md's D-06a corpus table uses.
 			Name:          "colbymchenry-codegraph",
@@ -149,15 +146,13 @@ var ErrNeedsClone = errors.New("realcorpus: no local checkout found; shallow-clo
 
 // Resolve returns a local filesystem path containing e's source tree,
 // checked in this order:
-//  1. e.EnvVar, if set and pointing at an existing directory (operator
-//     override, mirrors CODEGRAPH_WEFT_CORPUS).
+//  1. e.EnvVar, if set and pointing at an existing directory (an
+//     operator override).
 //  2. e.SiblingDir, if set, resolved relative to this repo's parent
-//     directory (the "../weft next to this repo" convention already
-//     established by testdata/golden/golden_parity_test.go).
+//     directory (the "../weft next to this repo" convention).
 //
 // Resolve does not verify the checkout is actually pinned at
 // e.CommitSHA — callers that need that guarantee (as
-// golden_parity_test.go does for weft, and as
 // tools/bench/runner.resolveOrClone's pinnedAt check does for the
 // PERF-01 head-to-head benchmark, WR-02 Phase 8 re-review) should check
 // it themselves; this function's job is only path discovery, kept

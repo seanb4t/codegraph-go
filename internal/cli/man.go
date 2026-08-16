@@ -10,9 +10,8 @@ import (
 
 // newManCmd builds the hidden `codegraph man <dir>` command: it writes the
 // full Cobra command-tree man page set (doc.GenManTree — codegraph.1 plus
-// one page per registered subcommand) into an explicit output directory.
-// This is a Go-only surface extension (D-01) — TS CodeGraph has no
-// man-page generation of any kind. It exists specifically so the
+// one page per registered subcommand) into an explicit output directory
+// (D-01). It exists specifically so the
 // Homebrew cask's post-install hook
 // (.goreleaser.yaml homebrew_casks.hooks.post.install) can generate man
 // pages by running the INSTALLED binary at install time, rather than

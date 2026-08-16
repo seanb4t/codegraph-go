@@ -22,14 +22,14 @@ package mcp
 // by json.Marshal output). Both together are what the blind spot demands.
 //
 // ★ Do NOT extend TestExploreCLIMatchesMCP / TestNodeCLIMatchesMCP
-// (testdata/golden/golden_parity_test.go) to the 5 SURF-06 tools. That
+// (testdata/golden/behavioral_test.go) to the 5 SURF-06 tools. That
 // harness asserts CLI output == MCP output byte-for-byte, which SURF-06
 // makes INTENTIONALLY FALSE for callers/callees/impact/search/files: their
-// CLI --json path stays JSON (the golden-parity shape oracle), while MCP
+// CLI --json path stays JSON (the golden shape oracle), while MCP
 // becomes markdown. The CLI==MCP byte-identity invariant holds only for
 // explore/node, whose CLI surface has no --json mode at all
 // (internal/cli/{explore,node}.go: "Emits markdown text only — no --json,
-// per D-01b"). A future contributor "restoring parity" by making these 5
+// per D-01b"). A future contributor "restoring byte-identity" by making these 5
 // byte-identical to the CLI again would be reintroducing the
 // JSON-stuffed-into-an-MCP-text-block anti-pattern SURF-06 exists to
 // remove.

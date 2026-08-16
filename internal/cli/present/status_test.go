@@ -100,7 +100,7 @@ func TestRenderStatus_NumericFormatting(t *testing.T) {
 }
 
 // TestRenderStatus_WorktreeWarning asserts a WorktreeMismatch warning
-// appears — structural parity with the plain path.
+// appears — the same shape as the plain path.
 func TestRenderStatus_WorktreeWarning(t *testing.T) {
 	r := fixtureStatusResult()
 	r.WorktreeMismatch = &gitmeta.Mismatch{WorktreeRoot: "/a/main", IndexRoot: "/a/main/.claude/worktrees/probe"}

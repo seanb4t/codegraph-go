@@ -9,7 +9,7 @@ import (
 
 // hermesCliToolsetName is the entry appended to platform_toolsets.cli so
 // Hermes CLI profiles don't filter codegraph's tools out of normal
-// sessions (D-06, Corrected Per-Agent Parity Table).
+// sessions (D-06, see the per-agent install-coverage table).
 const hermesCliToolsetName = "mcp-codegraph"
 
 // hermesTarget implements AgentTarget for Hermes Agent (D-06, D-07).
@@ -18,8 +18,8 @@ const hermesCliToolsetName = "mcp-codegraph"
 // minimal-deps reasoning as Codex's TOML splice): a top-level
 // mcp_servers.codegraph block plus an indent-matched append to
 // platform_toolsets.cli. Hermes has no AGENTS.md-equivalent instructions
-// convention TS integrates with — never write one here (parity
-// regression, Pitfall 2).
+// convention Hermes has — never write one here (marker regression,
+// Pitfall 2).
 type hermesTarget struct{}
 
 func init() {

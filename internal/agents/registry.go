@@ -67,7 +67,7 @@ func DetectAll(loc Location) map[TargetID]DetectionResult {
 //   - "auto": only targets whose Detect(loc).Installed is true; if that
 //     detects zero targets, falls back to just the Claude target rather
 //     than installing nothing — least-surprise for a clean environment
-//     (RESEARCH.md recommendation, not a hard TS parity requirement)
+//     (RESEARCH.md recommendation, not a hard requirement)
 //   - anything else: a comma-separated list of TargetIDs, resolved to
 //     exactly those targets; an unknown id in the list is an error
 func ResolveTargetFlag(spec string, loc Location) ([]AgentTarget, error) {

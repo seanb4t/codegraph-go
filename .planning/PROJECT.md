@@ -2,11 +2,11 @@
 
 ## What This Is
 
-A ground-up Go rewrite of [CodeGraph](https://github.com/colbymchenry/codegraph) — the pre-indexed code knowledge graph for coding agents (Claude Code, Cursor, Codex, Gemini, etc.). One static Go binary replaces the TypeScript version's bundled-Node distribution, delivering the same agent-facing experience (CLI, MCP server, auto-sync) with better performance, a verifiable supply chain, and an architecture designed to grow into team-scale usage.
+A pre-indexed code knowledge graph for coding agents (Claude Code, Cursor, Codex, Gemini, etc.) — one static Go binary with a CLI, MCP server, and auto-sync, no bundled runtime to install or manage, built for performance, a verifiable supply chain, and an architecture designed to grow into team-scale usage. Originated as a ground-up Go rewrite of [CodeGraph](https://github.com/colbymchenry/codegraph) (MIT-licensed; ported with attribution).
 
 ## Core Value
 
-An agent user can uninstall TypeScript CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary.
+CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
 
 ## Current State
 

@@ -8,7 +8,7 @@ import (
 
 // kiroDisabledByDefaultNote is surfaced in WriteResult.Notes on every
 // Install call — Kiro IDE ships MCP support disabled by default even with
-// a valid config file present (Corrected Per-Agent Parity Table).
+// a valid config file present (see the per-agent install-coverage table).
 const kiroDisabledByDefaultNote = "Kiro IDE ships MCP support disabled by default — enable it in Settings (Kiro CLI users can skip this step)."
 
 // kiroTarget implements AgentTarget for Kiro (D-06). JSON-stdio entry at

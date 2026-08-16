@@ -12,9 +12,9 @@ import (
 // newGithooksCmd builds the `codegraph githooks` command tree: install /
 // remove / status, each taking an optional [path] resolved via the
 // package-level targetRoot (D-11), matching init/uninit/sync. This is a
-// Go-only surface extension over internal/githooks — TS 1.3.1 has no
-// standalone githooks command, only init/uninit call the equivalent
-// functions internally (D-01).
+// project-native command surface wrapping internal/githooks directly —
+// init/uninit also call the equivalent functions internally, but this
+// gives users a standalone entry point (D-01).
 func newGithooksCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "githooks",

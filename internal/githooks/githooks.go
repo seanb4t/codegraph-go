@@ -1,6 +1,6 @@
 // Package githooks manages CodeGraph's marker-fenced git sync hooks
-// (post-commit/post-merge/post-checkout) — a verbatim port of TS
-// sync/git-hooks.js (D-01/D-02). Every write funnels through
+// (post-commit/post-merge/post-checkout) — it implements the hooking
+// contract (D-01/D-02). Every write funnels through
 // internal/fsatomic.WriteFile (D-05); hooks-dir resolution and the
 // git-repo probe come from internal/gitmeta (IsGitRepo/HooksDir) — this
 // package never shells out to git directly.
@@ -19,21 +19,21 @@ import (
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 )
 
-// markerBegin/markerEnd are verbatim TS bytes (sync/git-hooks.js:58-59) —
-// a detection key, not documentation. Byte-identical markers mean hooks
-// installed by TS CodeGraph are recognized and managed by this binary.
+// markerBegin/markerEnd are the documented marker bytes — a detection
+// key, not documentation. Byte-identical markers mean hooks installed by
+// any earlier install are recognized and managed by this binary.
 const (
 	markerBegin = "# >>> codegraph sync hook >>>"
 	markerEnd   = "# <<< codegraph sync hook <<<"
 )
 
-// defaultSyncHooks is the fixed hook trio (TS DEFAULT_SYNC_HOOKS), always
-// processed in this order.
+// defaultSyncHooks is the fixed hook trio, always processed in this
+// order.
 var defaultSyncHooks = []string{"post-commit", "post-merge", "post-checkout"}
 
-// markerBlock returns the 8-line marker-fenced shell snippet, verbatim TS
-// bytes (sync/git-hooks.js:102-114) — do not reformat or "clean up" any
-// line, including the exact subshell-backgrounding invocation
+// markerBlock returns the 8-line marker-fenced shell snippet — these are
+// the documented marker bytes; do not reformat or "clean up" any line,
+// including the exact subshell-backgrounding invocation
 // `( codegraph sync >/dev/null 2>&1 & ) >/dev/null 2>&1` (Pitfall 5: a
 // single `&` can let git block on the backgrounded job).
 func markerBlock() string {
@@ -50,30 +50,29 @@ func markerBlock() string {
 }
 
 // stripMarkerBlock removes any codegraph marker block from content,
-// matching markers on the TRIMMED line (an indented marker still counts,
-// TS sync/git-hooks.js:116-134) so content outside the block — including
-// blank lines — is preserved verbatim. Content with no markers is returned
-// unchanged.
+// matching markers on the TRIMMED line (an indented marker still counts)
+// so content outside the block — including blank lines — is preserved
+// verbatim. Content with no markers is returned unchanged.
 //
 // The second return value is false when the marker pairing in content is
 // malformed: a begin marker with no matching end marker anywhere after it,
 // a second begin marker encountered while one is already open, or an end
-// marker with no open begin. TS's own stripMarkerBlock
-// (sync/git-hooks.js:116-134) treats an unterminated begin marker as
-// "block extends to EOF", silently dropping every line after it — a
-// genuine data-loss bug (CR-01). Rejecting a nested/re-entrant begin (and a
-// dangling end) is required to close a second-order variant of the same
-// bug: without it, a file left with a dangling begin marker followed later
-// by a second, well-formed begin/end pair would have a subsequent strip
-// falsely report ok==true and silently swallow everything between the
-// first dangling begin and the second block's end marker (see Install's
-// doc comment for how such a file shape can arise). D-02/D-03 lock
-// verbatim TS semantics for well-formed marker blocks, but that guarantee
-// does not extend to a malformed-input data-loss path; this is a
-// deliberate, documented Go-only divergence (same convention as Phase 3's
-// D-13 wording divergence), scoped narrowly to "don't destroy the user's
-// file" — callers must treat ok==false as "do not trust this strip" and
-// leave the file untouched rather than writing the truncated result back.
+// marker with no open begin. A naive strip that instead treats an
+// unterminated begin marker as "block extends to EOF" silently drops
+// every line after it — a genuine data-loss bug (CR-01). Rejecting a
+// nested/re-entrant begin (and a dangling end) is required to close a
+// second-order variant of the same bug: without it, a file left with a
+// dangling begin marker followed later by a second, well-formed
+// begin/end pair would have a subsequent strip falsely report ok==true
+// and silently swallow everything between the first dangling begin and
+// the second block's end marker (see Install's doc comment for how such
+// a file shape can arise). D-02/D-03 lock the documented marker-block
+// semantics for well-formed marker blocks, but that guarantee does not
+// extend to a malformed-input data-loss path; this is a deliberate,
+// documented divergence (same convention as Phase 3's D-13 wording
+// divergence), scoped narrowly to "don't destroy the user's file" —
+// callers must treat ok==false as "do not trust this strip" and leave
+// the file untouched rather than writing the truncated result back.
 func stripMarkerBlock(content string) (string, bool) {
 	lines := strings.Split(content, "\n")
 	var kept []string
@@ -113,9 +112,9 @@ func stripMarkerBlock(content string) (string, bool) {
 }
 
 // isEffectivelyEmpty reports whether every trimmed line in content is
-// blank or shebang-prefixed (TS sync/git-hooks.js:136-141) — the gate that
-// decides whether Remove deletes the hook file entirely rather than
-// leaving a bare shebang behind.
+// blank or shebang-prefixed — the gate that decides whether Remove
+// deletes the hook file entirely rather than leaving a bare shebang
+// behind.
 func isEffectivelyEmpty(content string) bool {
 	for _, l := range strings.Split(content, "\n") {
 		l = strings.TrimSpace(l)
@@ -161,8 +160,9 @@ type InstallResult struct {
 
 // RemoveResult reports the outcome of Remove. Removed lists the hooks that
 // had a codegraph block stripped (file deleted or rewritten). Uses the
-// Go-idiomatic field name Removed rather than TS's `{installed: removed}`
-// naming quirk (RESEARCH.md note on removeGitSyncHook's result shape).
+// field name Removed rather than an installed/removed naming pair that
+// would be ambiguous here (RESEARCH.md note on the hook removal result
+// shape).
 // Errors accumulates one entry per hook that failed its individual
 // delete/write (WR-01) — the loop still continues past a failure, but the
 // failure is no longer silently discarded.
@@ -174,7 +174,7 @@ type RemoveResult struct {
 }
 
 // HookStatus is one hook's install state, as reported by Status.
-// Installed means the file exists and contains the begin marker (TS-parity
+// Installed means the file exists and contains the begin marker (a
 // text-only check, D-03). Executable additionally reports whether the
 // file's exec bit is set (IN-03) — fsatomic.WriteFile's atomic rename and
 // the subsequent best-effort os.Chmod are two separate, non-atomic steps,
@@ -195,16 +195,16 @@ type StatusResult struct {
 }
 
 // Install writes the marker-fenced sync-hook block into each of
-// post-commit/post-merge/post-checkout, in that fixed order (verbatim port
-// of TS installGitSyncHook, sync/git-hooks.js:155-186, D-02/D-05). For each
+// post-commit/post-merge/post-checkout, in that fixed order (D-02/D-05). For each
 // hook file: any existing content has a prior codegraph block stripped and
 // trailing whitespace trimmed; if what remains is non-empty, the current
 // block is appended after a blank-line separator; otherwise (no existing
 // file, or an effectively-empty base) the file is seeded with
 // "#!/bin/sh\n" + block. This is strip-then-append-at-end, not in-place
 // replacement (Pitfall 2). Every write goes through fsatomic.WriteFile;
-// chmod 0755 is best-effort (Pitfall 4, TS swallows chmod errors too). In
-// a non-repo, returns Skipped "not a git repository" and writes nothing.
+// chmod 0755 is best-effort (Pitfall 4 — chmod errors are swallowed on
+// purpose). In a non-repo, returns Skipped "not a git repository" and
+// writes nothing.
 //
 // Malformed existing content (CR-01): if stripMarkerBlock reports the
 // existing hook file's marker pairing can't be trusted (unterminated
@@ -218,7 +218,7 @@ type StatusResult struct {
 // file is left byte-for-byte untouched — matching Remove's existing
 // ok==false handling.
 //
-// Note (verbatim TS quirk, confirmed against sync/git-hooks.js): the very
+// Note (a real installation quirk, not a bug): the very
 // first install of a fresh hook file seeds "#!/bin/sh\n"+block (no
 // blank-line separator), but the moment that file is read back on a
 // second install, the surviving "#!/bin/sh" line is treated as non-empty
@@ -226,8 +226,8 @@ type StatusResult struct {
 // (one blank line inserted). From that second install onward the
 // round-tripped form is a stable fixed point — re-installing again never
 // changes it. Only the very first-vs-second install transition adds that
-// one blank line; this is TS's real behavior, faithfully reproduced here,
-// not a Go-side bug.
+// one blank line; this is the documented behavior, faithfully reproduced
+// here, not a Go-side bug.
 //
 // Concurrency (WR-02): each individual hook write is atomic and
 // crash-safe via fsatomic.WriteFile, but the surrounding read-modify-write
@@ -299,15 +299,14 @@ func Install(ctx context.Context, projectRoot string) InstallResult {
 			errs = append(errs, fmt.Errorf("%s: %w", hook, err))
 			continue
 		}
-		_ = os.Chmod(file, 0o755) // best-effort, TS swallows chmod errors too (Pitfall 4)
+		_ = os.Chmod(file, 0o755) // best-effort, chmod errors are swallowed on purpose (Pitfall 4)
 		installed = append(installed, hook)
 	}
 	return InstallResult{Installed: installed, HooksDir: hooksDir, Errors: errs}
 }
 
 // Remove strips codegraph's marker block from each of
-// post-commit/post-merge/post-checkout (verbatim port of TS
-// removeGitSyncHook, sync/git-hooks.js:192-216, D-02/D-05). Only files
+// post-commit/post-merge/post-checkout (D-02/D-05). Only files
 // that actually contain the begin marker are touched — a hook never
 // installed by codegraph, or an absent file, is skipped with no error. If
 // the remainder after stripping is effectively empty (isEffectivelyEmpty),
@@ -395,20 +394,19 @@ func Remove(ctx context.Context, projectRoot string) RemoveResult {
 				errs = append(errs, fmt.Errorf("%s: %w", hook, err))
 				continue
 			}
-			_ = os.Chmod(file, 0o755) // best-effort, TS swallows chmod errors too (Pitfall 4)
+			_ = os.Chmod(file, 0o755) // best-effort, chmod errors are swallowed on purpose (Pitfall 4)
 		}
 		removed = append(removed, hook)
 	}
 	return RemoveResult{Removed: removed, HooksDir: hooksDir, Errors: errs}
 }
 
-// Status reports per-hook install state for all three sync hooks
-// (extends TS isSyncHookInstalled's aggregate some() with per-hook detail,
-// D-11). A hook is Installed when its file exists and contains the begin
-// marker — this includes hooks installed by TS CodeGraph itself, since the
-// markers are byte-identical (D-03). Executable additionally reports the
-// file's exec bit (IN-03, a Go-only robustness addition beyond TS parity —
-// TS's isSyncHookInstalled never checks executability). In a non-repo,
+// Status reports per-hook install state for all three sync hooks, with
+// per-hook detail (D-11). A hook is Installed when its file exists and
+// contains the begin marker — this includes hooks installed by any
+// earlier install, since the markers are byte-identical (D-03).
+// Executable additionally reports the file's exec bit (IN-03, a
+// robustness addition beyond the marker-text check). In a non-repo,
 // returns Skipped "not a git repository".
 func Status(ctx context.Context, projectRoot string) StatusResult {
 	hooksDir := gitmeta.HooksDir(ctx, projectRoot)

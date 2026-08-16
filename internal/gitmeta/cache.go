@@ -19,7 +19,7 @@ import (
 const maxCacheEntries = 1024
 
 // CachingDetector memoizes DetectIndexMismatch verdicts — POSITIVE and
-// NEGATIVE — keyed on TS's own cache key (startPath + "\x00" + indexRoot,
+// NEGATIVE — keyed on the documented cache key (startPath + "\x00" + indexRoot,
 // per D-13). Detection costs up to four git subprocesses (see
 // DetectIndexMismatch's doc comment); on a long-lived MCP server that would
 // otherwise re-pay that cost on every single tool call.

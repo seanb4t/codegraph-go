@@ -243,7 +243,7 @@ func TestAffectedFilter(t *testing.T) {
 	t.Run("matching glob narrows to test paths", func(t *testing.T) {
 		// filepath.Match's "*" does not cross a Separator, so the glob
 		// must account for the "pkga/" directory component — matching
-		// TS-parity glob semantics (filepath.Match, not a ** dependency).
+		// the filepath.Match glob semantics (not a ** dependency).
 		out, _, err := execCmd("affected", "pkga/pkga.go", "-p", dir, "--quiet", "--filter", "*/*_test.go")
 		if err != nil {
 			t.Fatalf("affected --filter */*_test.go: unexpected error: %v", err)

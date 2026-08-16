@@ -3,12 +3,13 @@ package agents
 import "strings"
 
 // spliceTOMLTable and stripTOMLTable are a hand-rolled, ~100-line TOML
-// single-table-block editor mirroring the TS parity oracle's own toml.ts
+// single-table-block editor that uses the same per-agent TOML-splicing
+// behavior the marker contract defines
 // (D-05a): a full TOML parser/serializer dependency is unjustified for
 // editing exactly one dotted-key table ("~50KB dependency for ~6 lines of
-// output" per TS's own file header) — mirror its text-splice strategy
-// instead of reaching for a general TOML library (minimal-deps
-// constraint). This file is used only by Codex's config.toml edit.
+// output") — a minimal text-splice strategy instead of reaching for a
+// general TOML library (minimal-deps constraint). This file is used only
+// by Codex's config.toml edit.
 
 // spliceTOMLTable returns content with the "[tableName]" block replaced
 // (or, if absent, appended) so it contains exactly header + bodyLines,

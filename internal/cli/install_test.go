@@ -325,8 +325,9 @@ func TestUninstall_NeverInstalledAgent_NoError(t *testing.T) {
 
 // TestUninstall_NoTargetDefaultsToAllWithoutPrompting asserts a plain
 // `uninstall` with no --target and no TTY operates on every registered
-// target without prompting (D-08's parity fallback — a destructive
-// reversal command defaults to "all", not an interactive picker).
+// target without prompting (D-08's destructive-reversal default — a
+// destructive reversal command defaults to "all", not an interactive
+// picker).
 func TestUninstall_NoTargetDefaultsToAllWithoutPrompting(t *testing.T) {
 	fakeHome(t)
 

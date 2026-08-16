@@ -19,12 +19,11 @@ import (
 	"time"
 )
 
-// gitTimeout bounds every git subprocess this package spawns. Ported from
-// TS sync/worktree.js's `timeout: 5000` (D-03): these calls run on
-// long-lived, latency-sensitive paths (a status/query call, an MCP tool
-// handler), where an unbounded git hang would otherwise trip the daemon's
-// 60s liveness watchdog and take down an otherwise-healthy process (TS
-// issue #1139).
+// gitTimeout bounds every git subprocess this package spawns, 5000ms
+// (D-03): these calls run on long-lived, latency-sensitive paths (a
+// status/query call, an MCP tool handler), where an unbounded git hang
+// would otherwise trip the daemon's 60s liveness watchdog and take down
+// an otherwise-healthy process (tracked as issue #1139).
 const gitTimeout = 5 * time.Second
 
 // WorktreeRoot returns the absolute, symlink-resolved toplevel of the git
@@ -83,10 +82,9 @@ func CommonDir(ctx context.Context, dir string) string {
 	return realpath(resolved)
 }
 
-// realpath mirrors TS's realpathSync-with-fallback: resolve p to an
-// absolute path, then attempt to resolve symlinks. On any error (p doesn't
-// exist, permission denied, etc.) fall back to the plain absolute path
-// rather than propagating the error (TS's `catch { return path.resolve(p) }`).
+// realpath resolves p to an absolute path, then attempts to resolve
+// symlinks. On any error (p doesn't exist, permission denied, etc.) fall
+// back to the plain absolute path rather than propagating the error.
 func realpath(p string) string {
 	abs, err := filepath.Abs(p)
 	if err != nil {
