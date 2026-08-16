@@ -23,7 +23,7 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-08-13)
 
-**Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
+**Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
 **Current focus:** Phase 06 — benchmark-de-coupling-memory-sweep
 
 ## Current Position
