@@ -26,7 +26,7 @@ import (
 //	---------------------------------|---------------------------------------------|----------
 //	initialized                      | true (Status only runs on an opened Engine) | Unchanged — same concept
 //	version                          | fmt.Sprintf("%d", schema.SchemaVersion)     | No codegraph-go release-version concept exists yet; schema version is the closest stable Go analog
-//	projectPath / indexPath          | "" (empty string, key kept)                 | Engine carries no path context in its read-only Reader-only design (files_modified excludes engine.go this plan) — trivially satisfies T-03-05-Leak by having nothing host-specific to leak, while keeping the key present for shape parity
+//	projectPath / indexPath          | "" (empty string, key kept)                 | Engine carries no path context in its read-only Reader-only design (files_modified excludes engine.go this plan) — trivially satisfies T-03-05-Leak by having nothing host-specific to leak, while keeping the key present for output shape stability
 //	fileCount / nodeCount / edgeCount | computed from IterateFiles/IterateNodes scans + Meta.EdgeCount | Unchanged concept, Go-sourced values
 //	backend                          | "pebble" (a literal Pebble identifier)      | D-05's explicit example remapping
 //	journalMode                      | dropped (key omitted)                       | No Pebble user-facing WAL/journal-mode analog (RESEARCH Open Question 2); D-05 permits dropping keys with no Go analog

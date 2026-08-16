@@ -41,7 +41,7 @@ const (
 
 	// defaultDepth is applied when a caller passes a non-positive depth
 	// (clampDepth's "0 means default" convention, matching the CLI flags'
-	// zero-value default). SURF-01/D-02: matches TS CodeGraph 1.3.1's
+	// zero-value default). SURF-01/D-02: is the documented
 	// impact default of 2 — changed here in the shared engine (not a
 	// per-surface CLI/MCP default) so codegraph impact and the
 	// codegraph_impact MCP tool inherit depth-2 together. MaxDepth's
@@ -58,7 +58,7 @@ const (
 	// defaultAffectedDepth is applied when a caller passes a non-positive
 	// depth to Affected (clampAffectedDepth's "0 means default"
 	// convention). SURF-04/D-05: deliberately distinct from defaultDepth
-	// — TS CodeGraph 1.3.1's `affected` command defaults to depth 5,
+	// — the documented `affected` command defaults to depth 5,
 	// while `impact` defaults to depth 2 (defaultDepth, SURF-01). A naive
 	// reuse of clampDepth/defaultDepth for affected would silently apply
 	// impact's smaller default. Shares MaxDepth as its ceiling.
@@ -80,7 +80,7 @@ func clampDepth(n int) int {
 
 // clampAffectedDepth mirrors clampDepth's shape but with
 // defaultAffectedDepth (5) instead of defaultDepth (2) — SURF-04/D-05
-// deliberately does NOT reuse clampDepth, so affected's TS-parity
+// deliberately does NOT reuse clampDepth, so affected's documented
 // default cannot be silently overwritten by impact's smaller one.
 // Shares MaxDepth as its ceiling.
 func clampAffectedDepth(n int) int {

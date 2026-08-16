@@ -441,7 +441,7 @@ func TestStatus(t *testing.T) {
 
 	t.Run("backend renders a Pebble-truthful value, not node-sqlite", func(t *testing.T) {
 		if got.Backend == "" || got.Backend == "node-sqlite" {
-			t.Fatalf("Status.Backend: got %q, want a non-empty, non-TS-SQLite value", got.Backend)
+			t.Fatalf("Status.Backend: got %q, want a non-empty, non-node-sqlite value", got.Backend)
 		}
 		if !strings.Contains(strings.ToLower(got.Backend), "pebble") {
 			t.Fatalf("Status.Backend: got %q, want it to identify Pebble", got.Backend)
@@ -551,7 +551,7 @@ func TestStatus(t *testing.T) {
 
 		// D-05: Languages must stay derived from FilesByLanguage (count >
 		// 0, sorted) — same order/shape as before this plan — so the
-		// golden JSON shape stays parity-stable.
+		// golden JSON shape stays stable under the golden suite.
 		var wantLanguages []string
 		for lang, count := range got.FilesByLanguage {
 			if count > 0 {
@@ -566,8 +566,8 @@ func TestStatus(t *testing.T) {
 
 	t.Run("filesByLanguage is present in the JSON shape (v0.11.0 Phase 1, D-03)", func(t *testing.T) {
 		// D-03: the Compatibility constraint that suppressed this key
-		// (json:"-", matching TS's own --json, which derives `languages`
-		// from this map and discards the counts) was formally retired
+		// (json:"-" — the JSON derives `languages` from this map and
+		// discards the counts, the project's own shape) was formally retired
 		// 2026-08-13 (engram record gw79qy2a9z). filesByLanguage is now
 		// un-suppressed, emitted alongside the new edgesByKind tally
 		// (FIXT-01).

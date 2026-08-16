@@ -388,7 +388,7 @@ func TestSearch(t *testing.T) {
 
 // TestQueryJSONShape pins query --json's element shape to the golden
 // query.json contract (D-05): a top-level array of {"node": {...}}
-// envelopes, no "score" key, and the three TS-only bool keys
+// envelopes, no "score" key, and the three documented bool keys
 // (isAsync/isStatic/isAbstract) present-and-false. Also proves
 // byte-reproducibility across two independent marshals (D-06).
 func TestQueryJSONShape(t *testing.T) {
@@ -429,12 +429,12 @@ func TestQueryJSONShape(t *testing.T) {
 			t.Fatalf(`envelope[%d]["node"] is not an object: %v`, i, nodeVal)
 		}
 		if _, present := nodeObj["score"]; present {
-			t.Fatalf(`envelope[%d]["node"] must not contain a "score" key (D-06 drops TS's volatile FTS5/BM25 score): %v`, i, nodeObj)
+			t.Fatalf(`envelope[%d]["node"] must not contain a "score" key (D-06 drops the documented volatile FTS5/BM25 score): %v`, i, nodeObj)
 		}
 		for _, key := range []string{"isAsync", "isStatic", "isAbstract"} {
 			v, present := nodeObj[key]
 			if !present {
-				t.Fatalf(`envelope[%d]["node"] missing TS-only bool key %q (D-05 shape parity)`, i, key)
+				t.Fatalf(`envelope[%d]["node"] missing JSON bool key %q (D-05 output shape contract)`, i, key)
 			}
 			if v != false {
 				t.Fatalf(`envelope[%d]["node"][%q] = %v, want false (Go has no async/static/abstract modifiers)`, i, key, v)

@@ -187,11 +187,11 @@ func (e *Engine) Search(term, kind string, limit int) ([]Location, error) {
 }
 
 // queryNodeJSON mirrors the golden query.json per-node shape (D-05):
-// camelCase keys matching the TS capture, including the three TS-only
-// boolean concepts (isAsync/isStatic/isAbstract) that have no Go analog —
-// rendered as literal false to keep JSON shape parity rather than
+// documented JSON key/camelCase shape, including the three boolean
+// concepts (isAsync/isStatic/isAbstract) that have no Go analog —
+// rendered as literal false to keep the JSON shape stable rather than
 // omitting the keys. There is deliberately no "score" key: D-06 drops
-// TS's FTS5/BM25 score entirely as non-deterministic/volatile.
+// the documented FTS5/BM25 score entirely as non-deterministic/volatile.
 type queryNodeJSON struct {
 	ID            string  `json:"id"`
 	Kind          string  `json:"kind"`
