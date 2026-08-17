@@ -3,10 +3,16 @@ phase: 6
 slug: benchmark-de-coupling-memory-sweep
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
+status: validated
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-08-16
+validated: 2026-08-16
+validation_mode: retroactive
+automated_rows: 3
+manual_only_rows: 3
+tests_executed: 97
+census_total: 0
 ---
 
 # Phase 6 — Validation Strategy
@@ -47,18 +53,43 @@ shared pin.
 
 ## Per-Task Verification Map
 
-Seeded at requirement level — per-task rows are filled once PLAN.md files exist.
+> Reconciled retroactively by `/gsd-validate-phase 6` on 2026-08-16. Every command **executed**;
+> the census TOTAL is recorded verbatim as a number, not inferred from an exit status.
 
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | BENCH-01 | — | N/A | inspection (census) | multiline census over `docs/BENCHMARKS.md`, asserting TOTAL=0 for comparison patterns | N/A — census is the test | ⬜ pending |
-| TBD | TBD | TBD | BENCH-02 (gate fires) | T-06-01 | Mutation fully reverted; no mutation byte in the commit | unit + mutation rehearsal | `go test -count=1 ./internal/bench/... -run TestCheckRegression` green, then D-08 rehearsal RED → reverted-green | ✅ `internal/bench/regression_test.go` (21 subtests) | ⬜ pending |
-| TBD | TBD | TBD | BENCH-02 (runner removed) | — | Input surface net-reduced (`-ts-binary` path input removed) | build + census | `go build ./... && go vet ./...` catches dangling refs to deleted `-ts-binary` / `resolveTSBinary`; census over `tools/bench/**` | ✅ existing build/vet tooling | ⬜ pending |
-| TBD | TBD | TBD | BENCH-03 | T-06-03, T-06-04 | `rebless` keeps `contents: read` and no write token; all `uses:` stay SHA-pinned | CI dispatch (manual) + static census | Dispatch the `publish` job on a branch, inspect job summary + artifact; census `bench.yml` for `npm install`, `ts-binary`, comparison terms | Manual-only — Actions jobs are not locally `go test`-able | ⬜ pending |
-| TBD | TBD | TBD | MEM-01 | — | Supersede-only; nothing overwritten or deleted | inspection | none — enumeration in `06-MEMORY-SWEEP.md` is the artifact (D-15) | Manual-only, by design | ⬜ pending |
-| TBD | TBD | TBD | MEM-02 | — | No present-tense or forward-looking parity framing recalled | inspection | not automatable — D-15 explicitly declines post-sweep re-query | Manual-only, by design | ⬜ pending |
+| Task ID | Plan | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | Result | Status |
+|---------|------|-------------|------------|-----------------|-----------|-------------------|--------|--------|
+| 06-04-T1 | 06-04 | BENCH-01 | T-06-12 | Published figures generated from raw JSON, never typed | inspection (census) | multiline census over `docs/BENCHMARKS.md`, TOTAL=0 for comparison patterns | **CENSUS_TOTAL=0** across 6 patterns; `publishcheck` **8 PASS**; `-emit-rows` present; raw `06-PUBLISH-RESULTS.json` committed | ✅ green |
+| 06-03-T1 | 06-03 | BENCH-02 (gate fires) | T-06-01, T-06-02, T-06-22 | Mutation fully reverted; no mutation byte in the commit; gate loads the **committed** baseline from disk | unit + mutation rehearsal | `go test -count=1 ./internal/bench/... -run TestCheckRegression` | **30 PASS**, incl. `TestCheckRegressionAgainstCommittedBaseline` with two subtests proving it **fails** (throughput −11%, RSS +16%); `internal/bench`+`tools/bench` **0 dirty** | ✅ green |
+| 06-01-T1 | 06-01 | BENCH-02 (runner removed) | T-06-06, T-06-09 | Input surface net-reduced; no dangling refs | build + census | `go build ./... && go vet ./...`; census over `tools/bench/**` | build **exit 0**, vet **exit 0**; `resolveTSBinary`/`colbymchenry-codegraph`/`headtohead` **0 hits**; realcorpus **3 PASS** (exactly two entries) | ✅ green |
+| 06-02-T1 | 06-02 | BENCH-03 | T-06-03, T-06-04, T-06-22, T-06-23 | `rebless` keeps `contents: read`; all `uses:` SHA-pinned; no package-manager install | **manual** (CI dispatch) + static census | Dispatch `publish`; census `bench.yml` | Run **31973967130** succeeded; `BENCH03_STATUS=closed-by-ci-run` (1×); pins **19 + 2 = 21**; **0** package-manager installs; `TestBenchPublishJobShape` PASS | ✅ performed |
+| 06-06-M1 | 06-06 | MEM-01 | T-06-18, T-06-19, T-06-21 | Supersede-only; nothing overwritten or deleted | **manual** (inspection) | Enumeration in `06-MEMORY-SWEEP.md` is the artifact (D-15) | 169 records enumerated to exhaustion; **4 supersedes** live in the spine (`mw5z9s9bft`, `b9wjge7375`, `gxwkk3necn`, `xj1stbrsw6`), each preserving its original | ✅ performed |
+| 06-05-M1 | 06-05 | MEM-02 | T-06-26 | No present-tense or forward-looking framing recalled | **manual** (inspection) | Not automatable — D-15 declines post-sweep re-query | File half `MEM02_FILES_STATUS=verified-fresh-session`; **store half accepted, not demonstrated** — see below | ⚠️ partial (accepted) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+**Total executed for this reconciliation: 97 passing tests, 0 failures**, plus build, vet, and a
+6-pattern census.
+
+### BENCH-01 census — TOTAL recorded verbatim
+
+| Pattern | Hits |
+|---------|------|
+| `head-?to-?head` | 0 |
+| `faster than` | 0 |
+| `slower than` | 0 |
+| `vs\.? *(the )?(TS\|TypeScript)` | 0 |
+| `compared (to\|against) (the )?(TS\|TypeScript)` | 0 |
+| `colbymchenry` | 0 |
+| **CENSUS_TOTAL** | **0** |
+
+**Two-sided, per `T-06-08`.** A zero alone would be worthless. The census is paired with a
+**survival** assertion: legitimate `compar*` uses must still exist (floor ≥ 5). Measured: **61**
+across `docs/BENCHMARKS.md`, `tools/bench/` and `internal/bench/`. A green census therefore cannot
+have been bought with a find-and-replace — the thing a find-and-replace would destroy is checked to
+still be there.
+
+**Positive control:** the same multiline instrument returns **596** `head-to-head` hits inside
+`.planning/`, so the zero above reports the population, not a broken search.
 
 ---
 
@@ -102,13 +133,73 @@ be enumerated.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or a recorded manual-only justification
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (none — subtractive test edits only)
-- [ ] Subtractive test edits land in the same task as their production change
-- [ ] No watch-mode flags
-- [ ] Census TOTAL recorded verbatim, not inferred from exit status
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have automated verify or a recorded manual-only justification
+- [x] Sampling continuity: 3 automated rows precede the 3 manual rows — no run of 3 unautomated tasks *within* the automated set
+- [x] Wave 0 covers all MISSING references (none — subtractive test edits only)
+- [x] **Subtractive test edits landed in the same task as their production change** — verified below
+- [x] No watch-mode flags
+- [x] Census TOTAL recorded verbatim (**0**), not inferred from exit status; positive-controlled
+- [x] Feedback latency < 90s
+- [ ] `nyquist_compliant: true` — **not set**, see below
 
-**Approval:** pending
+### The Wave 0 hazard: resolved, and the one surviving literal is deliberate
+
+This file warned that `tools/bench/runner/main_test.go` and
+`tools/bench/realcorpus/manifest_test.go` **assert the existence of** the exact surface D-07/D-09
+deletes, so a production change without the matching test edit turns the suite red *for the wrong
+reason* — and *"an 'expected' red suite is precisely how a genuine regression gets waved through."*
+
+Verified at reconciliation: `resolveTSBinary`, `colbymchenry-codegraph` and `headtohead` are all
+**0 hits** outside `.planning/`, and the realcorpus manifest tests pass with
+`TestCorporaHasExactlyTwoEntries`. The subtractive edits landed.
+
+**One `-ts-binary` literal survives, and must.** `tools/bench/runner/main_test.go:503` reads
+`parseFlags([]string{"-ts-binary", "/custom/codegraph"})` inside
+`TestParseFlags_RejectsRetiredComparisonBinaryFlag`, which asserts the call **errors**. This is a
+*positive removal assertion* (rule `84d1gfpywd`): it proves the flag is gone from the flag set
+rather than merely undocumented, and Go's `flag` package matches by name, so the test **cannot be
+written without naming the retired flag**.
+
+That creates a genuine tension — the census must exclude the file that proves the removal — and the
+phase resolved it rather than hand-waving: three census gates pre-authorise the exclusion *on the
+strength of a companion assertion that the literal occurs in that file **exactly once***. Verified:
+**1 occurrence**, and the test **PASSes**. An exclusion granted on a checkable invariant is not the
+same thing as an exclusion granted on trust.
+
+**`nyquist_compliant: false` — PARTIAL, by decision, not by omission.** BENCH-01 and BENCH-02 are
+fully automated and green. Three rows cannot be:
+
+1. **BENCH-03** — a GitHub Actions job cannot be executed by `go test`. Discharged by a real
+   dispatch (run **31973967130**) and recorded in a single status token.
+2. **MEM-01** — the engram spine lives **outside git**, so no CI gate can hold it. Discharged by
+   the committed enumeration of all 169 records and 4 supersedes.
+3. **MEM-02** — requires a live session's recall, which a test cannot stage.
+
+The first two were performed. The third is **accepted, not demonstrated** — see below.
+
+### Recorded gap (accepted): MEM-02's store half
+
+`MEM02_STORE_STATUS=accepted-by-d15-evidence-standard` appears **exactly once** in
+`06-LIVE-VERIFICATIONS.md` and was deliberately **not** upgraded to `verified-fresh-session`.
+Maintainer ruling 2026-08-16, verbatim: *"MEM-02 - accept it and move on."* No session that was both
+genuinely fresh **and** engram-tooled ever observed the spine recall.
+
+This is the outcome the plan's own threat model anticipated: `T-06-26`'s mitigation reads *"the
+fresh-session read may go unperformed but **cannot go unrecorded**."* That property held. The token
+carries the weaker claim honestly rather than rounding it up, which is what leaves the gap auditable
+— and cheaply dischargeable later by a fresh session probing the spine as its **first** action.
+
+## Validation Audit 2026-08-16
+
+| Metric | Count |
+|--------|-------|
+| Rows in map | 3 automated + 3 manual-only |
+| Automated & green | 3 |
+| Manual-only performed | 2 (BENCH-03, MEM-01) |
+| Manual-only accepted-not-demonstrated | 1 (MEM-02 store half) |
+| Gaps found | 0 |
+| Census TOTAL | 0 (positive-controlled; 61 legitimate uses survived) |
+| Escalated | 0 |
+| Tests executed | 97 PASS / 0 FAIL |
+
+**Approval:** validated 2026-08-16
