@@ -1,10 +1,15 @@
 ---
 phase: 2
 slug: golden-harness-re-authoring-re-freeze
-status: draft
+status: validated
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-08-14
+validated: 2026-08-16
+validation_mode: retroactive
+automated_rows: 5
+manual_only_rows: 1
+tests_executed: 79
 ---
 
 # Phase 2 — Validation Strategy
@@ -38,26 +43,37 @@ created: 2026-08-14
 
 ## Per-Task Verification Map
 
-> Task IDs assigned by the planner; seeded from the requirement→test map.
+> Reconciled retroactively by `/gsd-validate-phase 2` on 2026-08-16. Every declared command was
+> **executed**; static checks were positive-controlled before their zeros were accepted.
 
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | CODE-02 | — | N/A | static+test | `rg "parity" testdata/golden/` → empty (harness) + `go test -count=1 ./... && go test -count=1 ./testdata/golden/...` | rename diff | ⬜ pending |
-| TBD | TBD | TBD | FIXT-04 | T-02-01 | Do NOT touch `NOTICE`/README origin attribution (licence, not framing) | static | `rg -i "weft\|colbymchenry\|mcp-capture\|capture.sh" testdata/golden/` → empty (harness scope) | n/a | ⬜ pending |
-| TBD | TBD | TBD | FIXT-05 | — | N/A | unit+behavioral | `go test -count=1 ./testdata/golden/... -run TestCorpusBehavior` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | FIXT-06 | T-02-03 | capture-to-temp-then-move; non-empty + marker assertion before install | e2e re-baseline | byte-identity test over every re-frozen golden | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | FIXT-06 | T-02-04 | never index an unverified checkout — `task corpora:assert` (four-part) precedes gocapture reading locked trees | static | verify block runs `task corpora:assert` before capture | ❌ W0 | ⬜ pending |
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | Result | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|--------|--------|
+| 02-01-T1 | 02-01 | 1 | CODE-02 | — | N/A | static+test | `rg "parity" testdata/golden/` → empty (harness) + `go test -count=1 ./... && go test -count=1 ./testdata/golden/...` | **0 hits**; build green | ✅ green |
+| 02-02-T1 | 02-02 | 2 | FIXT-04 | T-02-01 | Do **not** touch `NOTICE`/README origin attribution (licence, not framing) | static | `rg -i "weft\|colbymchenry\|mcp-capture\|capture.sh" testdata/golden/` → empty (harness scope) | **0 hits** in scope; `NOTICE` retains 2 | ✅ green |
+| 02-02-T2 | 02-02 | 2 | FIXT-05 | — | Behavioral case map intact; no targeted case lost to the rename | unit+behavioral | `go test -count=1 ./testdata/golden/... -run TestCorpusBehavior` | **24 PASS** | ✅ green |
+| 02-03-T1 | 02-03 | 3 | FIXT-06 | T-02-03 | capture-to-temp-then-move; non-empty + `{` marker assertion before install | e2e re-baseline | `go test -count=1 ./testdata/golden/... -run TestReFrozenGoldensValid` | **26/26 goldens verified** | ✅ green |
+| 02-04-T1 | 02-04 | 4 | FIXT-06 | T-02-04 | Never index an unverified checkout — `task corpora:assert` (four-part) precedes gocapture reading locked trees | static | `golden:regen` invokes `corpora:assert` before capture | present & invoked; gocapture has **0** raw `CORPUS_*` env resolution | ✅ green |
+| 02-04-T2 | 02-04 | 4 | CODE-02 crit. 2 | — | Single-cause re-freeze diff | **manual** | Review judgment — see Manual-Only | performed | ✅ performed |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+**Full-package cross-check:** `go test -count=1 ./testdata/golden/...` → **79 PASS / 0 FAIL**.
+
+**Static-check integrity.** Both `rg` zeros above were positive-controlled before being accepted:
+the same patterns return 2,574 (`parity`) and 2 (`colbymchenry`, in `NOTICE`) hits outside the
+harness scope, confirming the instrument matches where matches should exist. An unchecked zero
+cannot distinguish absence from a misaimed search.
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `testdata/golden/gocapture/main.go` — locked-corpus + `corpus/behavioral/` capture specs (gocapture is a `main` program driven manually + guarded by existing `TestGoSideFixturesRegenerated`)
-- [ ] `corpus/behavioral/CASES.json` — the D-04 case map (a test data file, consumed by the re-authored corpus test)
-- [ ] `testdata/golden/behavioral_test.go` — re-authored successor to `golden_parity_test.go` reading `CASES.json` and the locked corpora
-- [ ] A byte-identity or non-empty assertion over every re-frozen golden so a bare/missing golden cannot read as satisfied
+All Wave 0 items complete — verified present in the tree at commit `3598bb2`.
+
+- [x] `testdata/golden/gocapture/main.go` — present; locked-corpus + `corpus/behavioral/` capture specs, guarded by `TestGoSideFixturesRegenerated` (2 references)
+- [x] `corpus/behavioral/CASES.json` — present; 4 cases, asserted exactly by `TestGoldenScenarioCountIsExact`
+- [x] `testdata/golden/behavioral_test.go` — present; `golden_parity_test.go` is **absent**, confirming the rename completed rather than duplicating
+- [x] A byte-identity / non-empty assertion over every re-frozen golden — delivered as `TestReFrozenGoldensValid`, which `os.ReadFile`s each enumerated golden and fatals on a missing or empty file, so a bare or absent golden **cannot** read as satisfied
 
 ---
 
@@ -71,12 +87,37 @@ created: 2026-08-14
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Every test command forces `-count=1`
-- [ ] Feedback latency < 30s on the per-task loop
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have automated verify or a documented manual-only rationale
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify (5 automated rows precede the single manual row)
+- [x] Wave 0 covers all MISSING references — all 4 items complete
+- [x] No watch-mode flags
+- [x] Every test command forces `-count=1`
+- [x] Feedback latency < 30s on the per-task loop
+- [x] Every declared command **executed**, not read; every static zero positive-controlled
+- [ ] `nyquist_compliant: true` — **not set**, see below
 
-**Approval:** pending
+**`nyquist_compliant: false` — PARTIAL, by decision, not by omission.** All four Phase 2
+requirements (CODE-02, FIXT-04, FIXT-05, FIXT-06) carry automated verification and all are green.
+The single manual-only row is **CODE-02 criterion 2** — *"the rename and the re-freeze land as
+separate reviewed diffs, each with every changed line attributable to one named cause."* That is a
+claim about how a diff was authored, not a behavior a test can observe: any automated check would
+either compare the two commits' file sets (which proves nothing about attribution) or go vacuous.
+It was performed as review judgment during 02-04 and is recorded in `02-04-SUMMARY.md`. The phase is
+PARTIAL for this reason alone.
+
+## Validation Audit 2026-08-16
+
+| Metric | Count |
+|--------|-------|
+| Rows in map | 6 |
+| Automated & green | 5 |
+| Manual-only (by design, performed) | 1 |
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Tests executed | 79 PASS / 0 FAIL |
+
+No phantom commands in this phase — every seeded `-run` pattern matched real tests, unlike Phase 1
+where two matched nothing while exiting 0.
+
+**Approval:** validated 2026-08-16
