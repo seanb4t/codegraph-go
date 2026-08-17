@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/seanb4t/codegraph-go/compare/v0.10.0...v0.11.0) (2026-08-17)
+
+
+### Features
+
+* v0.11.0 — Standalone Project Identity ([#63](https://github.com/seanb4t/codegraph-go/issues/63)) ([3b981cf](https://github.com/seanb4t/codegraph-go/commit/3b981cf5283fc85579b866b90423d6e0d59b3869))
+
 ## [0.10.0](https://github.com/seanb4t/codegraph-go/compare/v0.9.0...v0.10.0) (2026-08-13)
 
 
