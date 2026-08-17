@@ -2,37 +2,36 @@
 gsd_state_version: 1.0
 milestone: v0.11.0
 milestone_name: Standalone Project Identity
-current_phase: 6
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 6 complete — all phases complete
-last_updated: "2026-08-16T23:31:49.862Z"
+last_updated: "2026-08-17T00:51:41.383Z"
 last_activity: 2026-08-16
-last_activity_desc: Phase 6 complete
-state_head: 65956bc9c2721f0ab9a86678913734da82066af8
+last_activity_desc: Milestone v0.11.0 completed and archived
+state_head: 5a133f77fd51636369e89b1931304cbff8d950f9
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 30
   completed_plans: 30
   percent: 100
+current_phase: 6
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-13)
+See: .planning/PROJECT.md (updated 2026-08-16)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 06 — benchmark-de-coupling-memory-sweep
+**Current focus:** Planning next milestone — v0.11.0 shipped 2026-08-16; `REQUIREMENTS.md` is archived and milestone-scoped, so the next cycle starts fresh via `/gsd-new-milestone`.
 
 ## Current Position
 
-Phase: 6
-Plan: Not started
-Status: All phases complete
-Progress: 6/6 phases complete (100%)
-Last activity: 2026-08-16 — Phase 6 complete
+Phase: Milestone v0.11.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-08-16 — Milestone v0.11.0 completed and archived
 
 ## Performance Metrics
 
@@ -181,6 +180,25 @@ Nothing blocks v0.11.0. Carried forward from prior milestones:
 
 ## Deferred Items
 
+Items acknowledged and deferred at milestone close, most recent first.
+
+Acknowledged at the **v0.11.0 close (2026-08-16)** — suppressed at the next `audit-open` scan, not fixed. All 10 predate v0.11.0. Acknowledgment is verdict-preserving and **self-invalidating**: it never rewrites an artifact's own `status:`, and the suppression lapses the moment the artifact's observed state changes again (a reopened debug session, an edited deferred entry, a re-triggered seed resurfaces on its own and must be acknowledged again).
+
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| debug_sessions | knowledge-base | unknown | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-07-wire-oracle-toolslist-repeat-response-ordering-flake.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-09-dry-run-signed-additions-only-diff-guard-passes-vacuously.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-09-post-release-verify-event-aware-conclusion-guard-has-no-regression-assertion.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-10-add-golangci-lint-with-gofmt-and-idiomatic-go-linters.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-10-brew-trust-instructions-recommend-the-broader-tap-grant-with-no-security-framing.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-10-tap-app-secret-distinctness-test-is-tautological-and-reads-no-workflow.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| seeds | SEED-001-local-svelte-shadcn-graph-browsing-ui | dormant | 2026-08-17 | v0.11.0 |
+| seeds | SEED-003-markdown-in-the-index | dormant | 2026-08-17 | v0.11.0 |
+| deferred_items | 04/deferred-items.md: `internal/daemon` load-induced flake under full-suite parallel load | acknowledged | 2026-08-17 | v0.11.0 |
+
+The `deferred_items` entry was acknowledged by hand rather than through `audit-open acknowledge`: that file uses the heading-delimited (#3457) entry shape, which the CLI writer deliberately refuses rather than risk writing into the wrong entry. Its `- **Status:** acknowledged` bullet is exactly the marker the writer would have set — the entry's own `status:` field doubles as the marker for this category.
+
 Deferred at v0.11.0 scoping (2026-08-13) — recorded so the decisions stay visible:
 
 | Category | Item | Status |
@@ -243,5 +261,4 @@ Resume file: .planning/phases/06-benchmark-de-coupling-memory-sweep/06-CONTEXT.m
 
 ## Operator Next Steps
 
-- Confirm PR #60 is merged to `main` (lands v0.10.0)
-- `/gsd-plan-phase 1` — the blocking corpus-selection spike
+- Start the next milestone with /gsd-new-milestone

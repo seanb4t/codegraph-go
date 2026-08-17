@@ -5,6 +5,10 @@ planted: 2026-07-14
 planted_during: v0.1 (Initial Release) milestone
 trigger_when: when CLI-surface parity with TS CodeGraph is reached (the path to 1.0)
 scope: large
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
+  status: dormant
 ---
 
 # SEED-001: local Svelte + shadcn-svelte UI for browsing/viewing/querying the graph

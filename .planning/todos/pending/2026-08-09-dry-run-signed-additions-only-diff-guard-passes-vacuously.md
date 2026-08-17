@@ -4,9 +4,14 @@ title: release:dry-run-signed's additions-only diff guard passes vacuously when 
 area: release
 severity: medium
 files:
+
   - Taskfile.yml:586-605
   - Taskfile.yml:1085-1100
+
 threat_ref: T-02-08
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
 ---
 
 ## Problem
@@ -64,6 +69,7 @@ matters; assert the property directly:
   injection added **at least one** `--key=` line, and hard-fail if it added
   zero. That makes a non-matching anchor a loud error at the point of
   injection rather than a silent no-op discovered later as a hang.
+
 - Optionally retain the indentation-vs-`HEAD` comparison as a second, cheaper
   signal, but it is redundant once the positive assertion exists.
 

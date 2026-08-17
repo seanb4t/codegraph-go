@@ -4,11 +4,16 @@ title: Add golangci-lint with gofmt and idiomatic Go linters
 area: ci
 severity: minor
 files:
+
   - go.tool-lint.mod:24
   - Taskfile.yml:10
   - Taskfile.yml:3163
   - Taskfile.yml:3521
   - internal/query/files_status_test.go
+
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
 ---
 
 ## Problem
@@ -28,10 +33,12 @@ That is not hypothetical — it has produced three separate findings:
 1. **`internal/query/files_status_test.go` is unformatted right now.** A WR-01
    test block is indented one level too deep. Committed and clean in the working
    tree; introduced by `ea2b889` (a phase-08 commit) and never caught.
+
 2. `internal/indexer/resolve.go` carried a `gofmt -l` violation in
    `retryConformanceCalls` that was deferred at v0.1/05-12 as out-of-plan-scope,
    sat unfixed across milestones, and was eventually fixed by hand rather than by
    a gate (confirmed resolved 2026-08-10).
+
 3. During the same session an orchestrator wrote `gofmt -l <file> && echo "clean"`
    as its own check — which is itself vacuous, since `gofmt -l` exits 0 whether or
    not it lists files. It printed the filename **and** "clean".
@@ -49,6 +56,7 @@ modfiles deliberately, and `TestToolModfilesRemainIsolated` enforces the split:
 
 - `go.tool.mod` → build/release tooling (`task`, `goreleaser`, `govulncheck`),
   invoked via `GO_TOOL` (`Taskfile.yml:9`)
+
 - `go.tool-lint.mod` → linters. Currently pins only
   `github.com/rhysd/actionlint/cmd/actionlint` (go.tool-lint.mod:24), invoked via
   `GO_TOOL_LINT` (`Taskfile.yml:10`)
@@ -60,8 +68,10 @@ Sketch:
 1. `tool github.com/golangci/golangci-lint/v2/cmd/golangci-lint` in `go.tool-lint.mod`
 2. A `lint:go` target mirroring `lint:actions` (Taskfile.yml:3163):
    `{{.GO_TOOL_LINT}} golangci-lint run ./...`
+
 3. Add `lint:go` to the `lint` wrapper (Taskfile.yml:3521), and wire it into CI
    the same way `lint:actions` is
+
 4. A `.golangci.yml` enabling at minimum `gofmt` (or `gofumpt`), plus the
    idiomatic set the team wants
 
@@ -70,6 +80,7 @@ Sketch:
 - **Fix, don't suppress.** `task vet`'s own description records the precedent:
   "Findings surfaced on first run are fixed, not suppressed." Expect a first-run
   backlog; budget for it rather than blanket-`//nolint`-ing.
+
 - **Make the gate assert positively.** Per repo rule `84d1gfpywd`, do not write
   `gofmt -l X && echo ok` — that passes vacuously. `golangci-lint run` exits
   non-zero on findings, so the exit code is the verdict; if any wrapper script
