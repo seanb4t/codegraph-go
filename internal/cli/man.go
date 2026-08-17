@@ -10,9 +10,8 @@ import (
 
 // newManCmd builds the hidden `codegraph man <dir>` command: it writes the
 // full Cobra command-tree man page set (doc.GenManTree — codegraph.1 plus
-// one page per registered subcommand) into an explicit output directory.
-// This is a Go-only surface extension (D-01) — TS CodeGraph has no
-// man-page generation of any kind. It exists specifically so the
+// one page per registered subcommand) into an explicit output directory
+// (D-01). It exists specifically so the
 // Homebrew cask's post-install hook
 // (.goreleaser.yaml homebrew_casks.hooks.post.install) can generate man
 // pages by running the INSTALLED binary at install time, rather than
@@ -24,8 +23,8 @@ import (
 // Hidden: true (D-02) — deliberately NOT documented as a public,
 // interactive command the way `githooks` is. `man` exists purely as a
 // mechanism the cask hook invokes; a human never needs to run it
-// directly, so the FLAG-PARITY divergence footprint stays one documented
-// hidden command rather than a new public surface. This is the one place
+// directly, so its divergence footprint stays documented in this comment
+// rather than on a new public surface. This is the one place
 // this command's shape diverges from the internal/cli/githooks.go
 // precedent it otherwise mirrors (registration convention, doc-comment
 // decision-id citation) — githooks is NOT hidden.

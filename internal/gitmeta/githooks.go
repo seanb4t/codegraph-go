@@ -11,8 +11,7 @@ import (
 // the same exec contract as WorktreeRoot/CommonDir (gitTimeout, cmd.Dir,
 // cmd.Stdin nil) and degrades to false on any failure — missing git, a
 // non-repo path, a timeout, or a transient error all report "no signal"
-// rather than propagating an error (D-10, ported from TS sync/git-hooks.js
-// isGitRepo).
+// rather than propagating an error (D-10).
 func IsGitRepo(ctx context.Context, dir string) bool {
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()

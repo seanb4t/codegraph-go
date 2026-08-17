@@ -61,8 +61,3 @@ Numbers, with the environment stated:
 -->
 
 - [ ] I did **not** modify `tools/bench/baseline.json`
-
-## Parity
-
-- [ ] This does not diverge from TypeScript CodeGraph v1.3.1 — or the divergence
-      is deliberate, documented, and explained above

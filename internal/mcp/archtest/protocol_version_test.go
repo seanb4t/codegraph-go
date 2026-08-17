@@ -53,8 +53,8 @@
 // ./...` (and therefore a naive packages.Load(cfg, "./...")) silently skips
 // any directory literally named "testdata" (the Go tool's own documented
 // convention), so a scan that only passed "./..." would be structurally
-// blind to testdata/golden/golden_parity_test.go, one of the six known
-// pre-migration sites (GOLDEN-01's failure class). loadWholeModule passes
+// blind to testdata/golden/behavioral_test.go, one of the six known
+// scan-coverage sites (GOLDEN-01's failure class). loadWholeModule passes
 // that path as a second, explicit pattern for exactly this reason.
 //
 // Measurement (indicative only, not a threshold — a bare wall-clock number
@@ -247,7 +247,7 @@ func loadWholeModule(t *testing.T, overlay map[string][]byte) []*packages.Packag
 	if !foundGolden {
 		t.Fatalf("packages.Load did not resolve %s — go's \"./...\" (and modulePathPrefix+\"/...\") expansion "+
 			"skips any directory named testdata, so this guard must load it explicitly as a second pattern; "+
-			"without it, testdata/golden/golden_parity_test.go's protocol-version reference would be invisible "+
+			"without it, testdata/golden/behavioral_test.go's protocol-version reference would be invisible "+
 			"to this scan (GOLDEN-01's failure class)", goldenPackagePath)
 	}
 

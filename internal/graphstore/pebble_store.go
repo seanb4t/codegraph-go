@@ -275,13 +275,6 @@ func (r *pebbleReader) GetMeta() (*schema.Meta, error) {
 	return &m, nil
 }
 
-// GetMigration returns the migration-progress cursor blob (07-02) via
-// getRaw — a raw-bytes lookup, not proto.Unmarshal, since the payload is an
-// opaque blob owned by internal/migrate. Returns ErrNotFound if absent.
-func (r *pebbleReader) GetMigration() ([]byte, error) {
-	return getRaw(r.snap, metaKey(migrationRecordName))
-}
-
 func (r *pebbleReader) IterateEdges(srcPrefix string) (EdgeIterator, error) {
 	// srcPrefix == "" means "every edge" (D-04 — the reverse-adjacency
 	// builder's single full-namespace scan), not "edges whose source is

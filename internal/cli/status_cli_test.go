@@ -5,6 +5,9 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
+	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // TestStatusCmdSections drives the REAL `codegraph status` command — not a
@@ -96,6 +99,137 @@ func TestStatusCmdSections(t *testing.T) {
 		}
 		if !strings.Contains(out, "Index from:") {
 			t.Fatalf("status: expected an %q row, got: %q", "Index from:", out)
+		}
+	})
+}
+
+// zeroEdgeRowRE matches a rendered breakdown row whose count is literally
+// "0" (writeBreakdownText's "  <key padded to 15> <count>\n" shape) — used
+// to assert the SPARSE flagless default carries no zero rows.
+var zeroEdgeRowRE = regexp.MustCompile(`(?m)^\s+\S+\s+0\s*$`)
+
+// edgesByKindSection extracts the substring between "Edges by Kind:" and
+// the next section header ("Files by Language:") from human-text status
+// output, failing the test if either marker is missing or out of order.
+func edgesByKindSection(t *testing.T, out string) string {
+	t.Helper()
+	idxEdges := strings.Index(out, "Edges by Kind:")
+	idxFiles := strings.Index(out, "Files by Language:")
+	if idxEdges < 0 || idxFiles < 0 || idxFiles < idxEdges {
+		t.Fatalf("status: expected %q to appear before %q, got: %q", "Edges by Kind:", "Files by Language:", out)
+	}
+	return out[idxEdges:idxFiles]
+}
+
+// TestStatusCmdEdgesByKindSection drives the REAL `codegraph status`
+// command with no flag and asserts the Edges by Kind: section lists only
+// kinds the index actually contains — no zero rows (D-04's sparse
+// default).
+func TestStatusCmdEdgesByKindSection(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	out, _, err := execCmd("status", "-p", dir)
+	if err != nil {
+		t.Fatalf("status: unexpected error: %v", err)
+	}
+
+	section := edgesByKindSection(t, out)
+	if zeroEdgeRowRE.MatchString(section) {
+		t.Errorf("status (flagless): Edges by Kind: section contains a zero-valued row, want only kinds the index actually contains\n--- section ---\n%s", section)
+	}
+}
+
+// TestStatusCmdAllKindsFlag drives `codegraph status --all-kinds` and
+// asserts the Edges by Kind: section lists all nine RankEdges kinds,
+// including an explicit "0" row for a kind this fixture's idiomatic Go
+// source produces none of (overrides — the same trap FIXT-01 exists to
+// catch, per this repo's own v1.0 Phase 1 finding).
+func TestStatusCmdAllKindsFlag(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	out, _, err := execCmd("status", "-p", dir, "--all-kinds")
+	if err != nil {
+		t.Fatalf("status --all-kinds: unexpected error: %v", err)
+	}
+
+	section := edgesByKindSection(t, out)
+	for k := range query.RankEdges {
+		if !strings.Contains(section, k) {
+			t.Errorf("status --all-kinds: Edges by Kind: section missing RankEdges member %q\n--- section ---\n%s", k, section)
+		}
+	}
+
+	wantOverridesRow := regexp.MustCompile(`(?m)^\s+` + regexp.QuoteMeta(goextract.EdgeKindOverrides) + `\s+0\s*$`)
+	if !wantOverridesRow.MatchString(section) {
+		t.Errorf("status --all-kinds: expected an explicit-zero %q row, got:\n--- section ---\n%s", goextract.EdgeKindOverrides, section)
+	}
+
+	// The flag must not alter nodesByKind or filesByLanguage.
+	for _, unrelated := range []string{"Nodes by Kind:", "Files by Language:"} {
+		if !strings.Contains(out, unrelated) {
+			t.Errorf("status --all-kinds: expected unrelated section %q to still be present, got: %q", unrelated, out)
+		}
+	}
+}
+
+// TestStatusCmdJSONDense drives `codegraph status --json` (sparse) and
+// `codegraph status --json --all-kinds` (dense) and asserts both shapes.
+// The dense case compares the decoded edgesByKind key set against
+// query.RankEdges MEMBER BY MEMBER, in both directions — every RankEdges
+// member present in the decoded map, and every decoded key either a
+// RankEdges member or an unranked kind carrying a positive count. A
+// length comparison cannot establish this: dense mode preserves unranked
+// kinds, so the map is a superset, and a count of nine or more is
+// consistent with a missing ranked kind offset by an unranked one.
+func TestStatusCmdJSONDense(t *testing.T) {
+	dir := setupIndexedFixture(t)
+
+	t.Run("sparse --json carries no zero-valued entries", func(t *testing.T) {
+		out, _, err := execCmd("status", "-p", dir, "--json")
+		if err != nil {
+			t.Fatalf("status --json: unexpected error: %v", err)
+		}
+		var result struct {
+			EdgesByKind map[string]int64 `json:"edgesByKind"`
+		}
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("status --json: invalid JSON: %v\noutput: %s", err, out)
+		}
+		for k, v := range result.EdgesByKind {
+			if v <= 0 {
+				t.Errorf("status --json (sparse): edgesByKind[%q] = %d, want > 0 (sparse mode must never carry a zero or negative entry)", k, v)
+			}
+		}
+	})
+
+	t.Run("dense --json --all-kinds key set equals RankEdges member by member, both directions", func(t *testing.T) {
+		out, _, err := execCmd("status", "-p", dir, "--json", "--all-kinds")
+		if err != nil {
+			t.Fatalf("status --json --all-kinds: unexpected error: %v", err)
+		}
+		var result struct {
+			EdgesByKind map[string]int64 `json:"edgesByKind"`
+		}
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("status --json --all-kinds: invalid JSON: %v\noutput: %s", err, out)
+		}
+
+		for k := range query.RankEdges {
+			if _, ok := result.EdgesByKind[k]; !ok {
+				t.Errorf("status --json --all-kinds: edgesByKind missing RankEdges member %q", k)
+			}
+		}
+		hasExplicitZero := false
+		for k, v := range result.EdgesByKind {
+			if !query.RankEdges[k] && v <= 0 {
+				t.Errorf("status --json --all-kinds: edgesByKind has unranked key %q with non-positive count %d — every decoded key must be a RankEdges member or an unranked kind carrying a positive count", k, v)
+			}
+			if v == 0 {
+				hasExplicitZero = true
+			}
+		}
+		if !hasExplicitZero {
+			t.Errorf("status --json --all-kinds: edgesByKind carries no explicit zero, want at least one — dense mode must carry at least one explicit zero")
 		}
 	})
 }

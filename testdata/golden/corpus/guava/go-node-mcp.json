@@ -1,0 +1,4 @@
+{
+  "command": "MCP node \"Preconditions\" -p guava",
+  "output": "**4 definitions named \"Preconditions\"**\nReturning 2 in full; 2 more listed below — pick the one you need (no Read required).\n\n**Preconditions** (method)\n\n**Location:** guava/src/com/google/common/base/Preconditions.java:118\n**Signature:** `()`\n\n```go\n118\t  private Preconditions() {}\n```\n\n---\n\n**Preconditions** (method)\n\n**Location:** android/guava/src/com/google/common/base/Preconditions.java:118\n**Signature:** `()`\n\n```go\n118\t  private Preconditions() {}\n```\n\n**Other definitions**\n- `Preconditions` (struct) — guava/src/com/google/common/base/Preconditions.java:116\n- `Preconditions` (struct) — android/guava/src/com/google/common/base/Preconditions.java:116\n\n\u003e Need one of these in full? Call codegraph_node again with `file` (e.g. `\"Preconditions.java\"`) or `line` — do NOT Read it.\n"
+}

@@ -49,8 +49,8 @@ func initRepo(t *testing.T, dir string) string {
 	return dir
 }
 
-// TestMarkerBlock asserts markerBlock() produces the verbatim TS
-// sync/git-hooks.js block bytes (D-03): the begin marker, the exact
+// TestMarkerBlock asserts markerBlock() produces the documented
+// marker block bytes (D-03): the begin marker, the exact
 // subshell-backgrounding guard line (Pitfall 5 — never simplify this), and
 // the end marker, joined with "\n".
 func TestMarkerBlock(t *testing.T) {
@@ -134,7 +134,7 @@ func TestStripMarkerBlock_PreservesSurroundingContent(t *testing.T) {
 
 // TestStripMarkerBlock_UnterminatedBegin_ReturnsUnchanged is the CR-01
 // regression test: a begin marker with no matching end marker must not be
-// treated as "block extends to EOF" (TS's inherited data-loss bug) —
+// treated as "block extends to EOF" (a naive data-loss bug) —
 // stripMarkerBlock must report ok=false and hand back the content
 // untouched so callers know not to trust the strip.
 func TestStripMarkerBlock_UnterminatedBegin_ReturnsUnchanged(t *testing.T) {
@@ -240,7 +240,7 @@ func TestInstall_OverExistingUserHook_PreservesAndAppendsAfterBlankLine(t *testi
 // converges to a stable fixed point: once a hook file has round-tripped
 // through Install at least once, re-installing again produces
 // byte-identical output. This is verified from the SECOND install onward,
-// not the very first-vs-second transition — verbatim TS installGitSyncHook
+// not the very first-vs-second transition — Install
 // has a documented quirk (see the package-level note on Install) where the
 // from-scratch seed form ("#!/bin/sh\n"+block, no blank-line separator)
 // differs by exactly one blank line from the round-tripped form produced
@@ -270,8 +270,8 @@ func TestInstall_ReinstallOnUnmodifiedFile_ByteIdentical(t *testing.T) {
 	}
 }
 
-// TestInstall_PriorBlockReplaced_StripThenAppendAtEnd is a deliberate TS
-// parity test, not a bug to "simplify" to in-place replacement (Pitfall 2,
+// TestInstall_PriorBlockReplaced_StripThenAppendAtEnd is a deliberate
+// behavioral test, not a bug to "simplify" to in-place replacement (Pitfall 2,
 // D-02/D-12). Installing over a hook that has content BEFORE and AFTER a
 // prior codegraph block strips the old block wherever it sits and
 // re-appends the current block at end-of-file — the surviving content
@@ -595,11 +595,11 @@ func TestRemove_UnwritableHooksDir_AccumulatesErrors(t *testing.T) {
 	}
 }
 
-// TestRemove_TSInstalledBlock_DetectedAndRemovable pastes the verbatim TS
-// sync/git-hooks.js marker block bytes into a hook file (as if TS
-// CodeGraph, not this Go binary, had installed it) and asserts Status
+// TestRemove_TSInstalledBlock_DetectedAndRemovable pastes the documented
+// marker block bytes into a hook file (as if an earlier install, not
+// this run, had installed it) and asserts Status
 // detects it as installed and Remove successfully strips it — the D-12
-// cross-tool compatibility fixture (D-03).
+// cross-install compatibility fixture (D-03).
 func TestRemove_TSInstalledBlock_DetectedAndRemovable(t *testing.T) {
 	root := initRepo(t, filepath.Join(t.TempDir(), "repo"))
 	hooksDir := filepath.Join(root, ".git", "hooks")
@@ -626,7 +626,7 @@ func TestRemove_TSInstalledBlock_DetectedAndRemovable(t *testing.T) {
 	for _, h := range status.Hooks {
 		if h.Name == "post-commit" {
 			if !h.Installed {
-				t.Fatalf("Status: post-commit Installed = false, want true (TS-installed block must be detected)")
+				t.Fatalf("Status: post-commit Installed = false, want true (a block installed by an earlier install must be detected)")
 			}
 			found = true
 		}
@@ -643,7 +643,7 @@ func TestRemove_TSInstalledBlock_DetectedAndRemovable(t *testing.T) {
 		}
 	}
 	if !removed {
-		t.Fatalf("Remove did not remove the TS-installed post-commit block: %v", result.Removed)
+		t.Fatalf("Remove did not remove the marker-installed post-commit block: %v", result.Removed)
 	}
 }
 
@@ -681,7 +681,7 @@ func TestStatus_MixedInstalledState_ReportsPerHook(t *testing.T) {
 // subsequent best-effort os.Chmod(0755) are two separate steps, so a hook
 // file can end up with the marker text present but the exec bit unset
 // (e.g. an external `chmod -x`, or a crash between the two steps). Status
-// must report Installed=true (marker present, TS-parity check) but
+// must report Installed=true (marker present, marker-text check) but
 // Executable=false (Go-only addition) rather than silently claiming full
 // health.
 func TestStatus_MarkerPresentButNotExecutable_ReportsExecutableFalse(t *testing.T) {

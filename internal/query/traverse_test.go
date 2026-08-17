@@ -42,10 +42,6 @@ func (f *traverseFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("traverseFakeReader: GetMeta not implemented")
 }
 
-func (f *traverseFakeReader) GetMigration() ([]byte, error) {
-	return nil, errors.New("traverseFakeReader: GetMigration not implemented")
-}
-
 func (f *traverseFakeReader) IterateEdges(prefix string) (graphstore.EdgeIterator, error) {
 	var filtered []*schema.Edge
 	for _, e := range f.edges {
@@ -500,14 +496,10 @@ func TestCallersCallees(t *testing.T) {
 // (three hops). The counting rule under test — nodeCount = distinct
 // visited nodes including the symbol itself, edgeCount = reverse edges
 // inspected while expanding each depth's frontier — is cross-checked
-// against testdata/golden/corpus/weft-go/impact.json's own arithmetic:
-// symbol="mergeStyle" depth=2 nodeCount=5 edgeCount=4 there decomposes
-// as 3 direct callers of mergeStyle (hop 1) + 1 second-hop caller of
-// newFinishReconcileCmd (hop 2) = 4 edges traversed, 5 nodes visited
-// including mergeStyle itself — the same "frontier expansion" semantics
-// verified here against our own deterministic fixture topology (D-07a:
-// no golden oracle for this exact custom graph, but the counting *rule*
-// is the golden-verified one).
+// against a committed golden's own arithmetic (a symbol at depth=2
+// decomposing into N direct callers plus second-hop callers, the same
+// "frontier expansion" semantics verified here against our own
+// deterministic fixture topology).
 func TestImpact(t *testing.T) {
 	engine := traverseFixture(t)
 
@@ -785,7 +777,7 @@ func TestAffectedEmptyFilesReturnsEmptyResultNoError(t *testing.T) {
 
 // affectedDepthFixtureNodesEdges builds a three-hop reverse chain —
 // Target (the changed file's symbol) <- NonTestCaller <- TestSomething
-// <- TestGrand — to prove Affected's depth-bounded BFS and TS
+// <- TestGrand — to prove Affected's depth-bounded BFS and its
 // test-files-as-leaves pruning (SURF-04/D-05, RESEARCH Pitfall 2):
 // TestSomething is reachable only at depth>=2 (through the non-test
 // intermediary), and — because a test dependent is a LEAF — its own

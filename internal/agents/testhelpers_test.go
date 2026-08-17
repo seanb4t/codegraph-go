@@ -10,8 +10,8 @@ import (
 // package's targets consult — XDG_CONFIG_HOME for opencode, HERMES_HOME
 // for Hermes) at fresh subdirectories of one isolated t.TempDir(), so
 // every agent's global-scope test runs against a fake home rather than
-// the real developer machine — mirrors the TS parity oracle's per-test
-// os.homedir() mock. Returns the fake home root.
+// the real developer machine, mocking os.homedir() per test. Returns the
+// fake home root.
 func fakeHome(t *testing.T) string {
 	t.Helper()
 

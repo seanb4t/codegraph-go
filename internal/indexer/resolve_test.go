@@ -1030,8 +1030,6 @@ func (w *stubWriter) PutMeta(m *schema.Meta) error {
 	return nil
 }
 
-func (w *stubWriter) PutMigration(data []byte) error { return nil }
-
 func (w *stubWriter) DeleteFileSubgraph(path string) error { return nil }
 
 func (w *stubWriter) DeleteNode(id string) error { return nil }

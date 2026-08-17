@@ -64,8 +64,8 @@ func TestResolveSourcePathRejectsSymlinkEscape(t *testing.T) {
 	}
 }
 
-// TestIsGeneratedFile pins D-07's verbatim port of TS's GENERATED_PATTERNS
-// regex list (RESEARCH §7) — every pattern gets one matching and (where
+// TestIsGeneratedFile pins D-07's byte-for-byte transcription of the
+// documented GENERATED_PATTERNS regex list (RESEARCH §7) — every pattern gets one matching and (where
 // meaningful) one non-matching case, so a future edit that drops or
 // mistypes a pattern fails loudly here rather than silently degrading
 // NODE-01's generated-files-last sort.
@@ -125,9 +125,9 @@ func TestIsGeneratedFile(t *testing.T) {
 // TestNodeMultiDef pins NODE-01: enumerateSymbolDefs collects EVERY node
 // whose Name matches (a full scan, D-03's base), sorted generated-files-
 // last (D-07, primary key) with lowest-Id as the documented secondary
-// tie-break (RESEARCH Pattern 2 — TS's own row order is non-deterministic
+// tie-break (RESEARCH Pattern 2 — the documented row order is non-deterministic
 // across re-indexes, so this is an intentional Go-side determinism
-// improvement, not a byte-for-byte TS port).
+// improvement, not a byte-for-byte transcription).
 func TestNodeMultiDef(t *testing.T) {
 	t.Run("two same-named nodes in different non-generated files are both returned", func(t *testing.T) {
 		nodes := map[string]*schema.Node{

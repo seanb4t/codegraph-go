@@ -47,9 +47,10 @@ func initGitRepo(t *testing.T, dir string) string {
 	return dir
 }
 
-// markerBeginBytes is the verbatim TS sync/git-hooks.js begin marker
-// (D-03) — a local copy since internal/githooks doesn't export it; used
-// here only as a detection string for on-disk assertions.
+// markerBeginBytes is the documented marker begin bytes (D-03) — a
+// detection key, not documentation. A local copy since internal/githooks
+// doesn't export it; used here only as a detection string for on-disk
+// assertions.
 const markerBeginBytes = "# >>> codegraph sync hook >>>"
 
 // TestGithooksInstall_RealCobraTree drives `githooks install <repo>`

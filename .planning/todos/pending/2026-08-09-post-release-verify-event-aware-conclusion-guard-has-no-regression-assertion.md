@@ -4,10 +4,15 @@ title: post-release-verify.yml's event-aware conclusion guard has no test assert
 area: ci
 severity: high
 files:
+
   - .github/workflows/post-release-verify.yml:303
   - .github/workflows/post-release-verify.yml:408
   - internal/upgrade/release_workflow_shape_test.go:1369
+
 threat_ref: T-02-18
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
 ---
 
 ## Problem
@@ -28,6 +33,7 @@ verifies nothing and says so nowhere.
 
 - The verbatim disjunct is present on both new jobs
   (`post-release-verify.yml:303`, `:408`) and in fact on all five jobs (5/5).
+
 - The dry evaluation under both trigger events is recorded in
   `02-EVIDENCE.md:806` (`workflow_run`, run 31338004416) and `:841-855`
   (`workflow_dispatch`, run 31338409898 — all seven jobs ran, none skipped).
@@ -62,6 +68,7 @@ addition is small:
   silently lacks the guard; set-equality over job ids is the correct shape,
   consistent with `TestNotarizeMacosIdsCoverDarwinBuildIDs`'s exact-set
   discipline elsewhere in this package.
+
 - Include a non-vacuity companion, matching the pattern
   `TestAppleSecretsScopedToSingleReleaseJob_EmptyDocIsError`
   (`release_workflow_shape_test.go:1289`) already establishes: an empty or

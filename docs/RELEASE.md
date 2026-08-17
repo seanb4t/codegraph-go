@@ -355,8 +355,7 @@ auditing individually: the storage engine (`cockroachdb/pebble/v2`), the MCP
 server (`mark3labs/mcp-go`), the CLI framework (`spf13/cobra`), the file
 watcher (`fsnotify/fsnotify`), the release-verification client
 (`sigstore/sigstore-go`), a JSONC parser for agent-config editing
-(`tailscale/hujson`), a pure-Go SQLite reader confined to the one-shot
-migration tool (`modernc.org/sqlite`), protobuf codegen support
+(`tailscale/hujson`), protobuf codegen support
 (`google/protobuf`), a goroutine-leak test harness
 (`go.uber.org/goleak`), and a handful of `golang.org/x/*` toolchain
 packages.

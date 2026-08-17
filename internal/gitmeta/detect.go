@@ -4,7 +4,7 @@ import "context"
 
 // Mismatch describes a detected "borrowed index" situation: startPath lives
 // in one git working tree, but the resolved CodeGraph index belongs to a
-// different one. The json tags match TS's `--json` object shape
+// different one. The json tags match the documented `--json` object shape
 // (`{worktreeRoot, indexRoot}`) so plan 02-04 can embed this directly into
 // StatusResult.
 type Mismatch struct {
@@ -15,9 +15,9 @@ type Mismatch struct {
 // DetectIndexMismatch detects when startPath lives in one git working tree
 // but the resolved CodeGraph index (indexRoot) belongs to a DIFFERENT
 // working tree — the silent "worktree queries the main branch's graph"
-// correctness bug (WORK-01). Ported verbatim from TS sync/worktree.js's
-// detectWorktreeIndexMismatch (D-02), gate order and polarity preserved
-// exactly.
+// correctness bug (WORK-01). Implements the worktree/index-mismatch
+// detection semantics (D-02); gate order and polarity are load-bearing,
+// not incidental.
 //
 // Worst case this spawns four git subprocesses (two WorktreeRoot, two
 // CommonDir) — gates 1-3 each short-circuit before reaching CommonDir,
@@ -75,7 +75,7 @@ func DetectIndexMismatch(ctx context.Context, startPath, indexRoot string) *Mism
 	// "simplification" — see the fixture comments on newSubmoduleFixture /
 	// newNestedCloneFixture in detect_test.go's sibling fixtures_test.go,
 	// and CONTEXT.md D-02 / TS issues #1031, #1033.
-	// ★ WR-03, deliberate D-02 divergence from TS: TS's own gate 4
+	// ★ WR-03, a deliberate D-02 design choice: a naive gate 4
 	// (`if (worktreeCommon && indexCommon && worktreeCommon !== indexCommon)
 	// return null;`) falls THROUGH to reporting a mismatch whenever either
 	// CommonDir call fails (empty string) — CommonDir collapses every
@@ -86,10 +86,10 @@ func DetectIndexMismatch(ctx context.Context, startPath, indexRoot string) *Mism
 	// suppression and produce exactly the false-positive "nags users
 	// constantly" failure mode worktree.go's own doc comment (D-02) commits
 	// to never causing ("degrades to a safe zero value on ANY failure…
-	// report 'no signal' rather than an error"). Go therefore intentionally
-	// diverges here: an unavailable common dir on EITHER side degrades to
-	// "no signal" (no mismatch), matching gates 1-3's own philosophy,
-	// rather than replicating TS's narrow fail-open bug. Only a SHARED,
+	// report 'no signal' rather than an error"). This package therefore
+	// intentionally treats an unavailable common dir on EITHER side as
+	// degrading to "no signal" (no mismatch), matching gates 1-3's own
+	// philosophy, rather than that narrow fail-open bug. Only a SHARED,
 	// successfully-resolved common dir is treated as positive evidence of
 	// a genuine borrowed worktree.
 	worktreeCommon := CommonDir(ctx, worktreeRoot)

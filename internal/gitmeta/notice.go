@@ -4,8 +4,8 @@ package gitmeta
 // e2 9a a0, deliberately WITHOUT a trailing U+FE0F (ef b8 8f) variation
 // selector. This is the exact glyph internal/query/render_markdown.go's
 // staleBanner already uses — it is NOT the emoji-presentation "⚠️" variant
-// Phase 1's "no covering tests" warning uses. Byte-parity here is not
-// caught by the compiler; getting it wrong is a silent divergence from TS
+// Phase 1's "no covering tests" warning uses. Byte-matching here is not
+// caught by the compiler; getting it wrong is a silent regression
 // (D-11) that no test outside notice_test.go's explicit byte assertions
 // would catch.
 const warnGlyph = "⚠"
@@ -13,9 +13,9 @@ const warnGlyph = "⚠"
 // Warning renders the verbose, multi-line form of a detected mismatch,
 // used by `status` only (D-12). Returns "" on a nil receiver so callers
 // never need a nil guard — the same shape
-// internal/query/render_markdown.go's staleBanner uses. Ported verbatim
-// from TS sync/worktree.js's worktreeMismatchWarning (D-01/D-11); do not
-// paraphrase, including the quoted "codegraph init -i" advice.
+// internal/query/render_markdown.go's staleBanner uses. This is the
+// documented message text (D-01/D-11); do not paraphrase, including the
+// quoted "codegraph init -i" advice.
 func (m *Mismatch) Warning() string {
 	if m == nil {
 		return ""
@@ -30,8 +30,8 @@ func (m *Mismatch) Warning() string {
 
 // Notice renders the compact, single-line form of a detected mismatch,
 // prefixed onto the other seven read tools' output (D-12). Returns "" on a
-// nil receiver. Ported verbatim from TS sync/worktree.js's
-// worktreeMismatchNotice (D-01/D-11); do not paraphrase.
+// nil receiver. This is the documented message text (D-01/D-11); do
+// not paraphrase.
 func (m *Mismatch) Notice() string {
 	if m == nil {
 		return ""

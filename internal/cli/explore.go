@@ -53,17 +53,15 @@ func newExploreCmd() *cobra.Command {
 			// nothing to explain it; the other 6 non-status CLI commands —
 			// search/callers/callees/impact/files/query/affected — already
 			// print strictly after their own engine call succeeds), on
-			// stdout (TS's CLI warn() is console.log = stdout, matched here
-			// for parity). query.WorktreeNotice is nil-safe and returns ""
+			// stdout (deliberately placed alongside normal CLI output, not
+			// stderr). query.WorktreeNotice is nil-safe and returns ""
 			// when there is no mismatch, so a clean tree prints nothing.
 			//
-			// This CLI placement has NO TS precedent: TS never wires the
-			// compact notice into any command but `status` (verified: zero
-			// other call sites in mcp/tools.js's withWorktreeNotice or
-			// bin/codegraph.js). It is deliberate Go-side design, granted as
-			// Claude's Discretion (02-CONTEXT.md), chosen to mirror
-			// `status`'s own placement (project context, then the warning,
-			// then the output) across the other 8 read commands.
+			// This CLI placement extends the compact notice to all 9 read
+			// commands, not just `status`. It is deliberate design,
+			// granted as Claude's Discretion (02-CONTEXT.md), chosen to
+			// mirror `status`'s own placement (project context, then the
+			// warning, then the output) across the other 8 read commands.
 			fmt.Fprint(cmd.OutOrStdout(), query.WorktreeNotice(eng.WorktreeMismatch(cmd.Context())))
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return nil

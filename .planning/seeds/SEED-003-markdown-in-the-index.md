@@ -5,6 +5,10 @@ planted: 2026-08-10
 planted_during: v0.5.0 / phase 03-homebrew-tap-cask
 trigger_when: when relevant
 scope: unknown
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
+  status: dormant
 ---
 
 # SEED-003: Consider how to add markdown to the index

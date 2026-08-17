@@ -1,91 +1,121 @@
-// Command gocapture regenerates the Go-side EXPECTED fixtures (F5,
-// 01-RESEARCH.md §A) by running the CURRENT Go indexer + query.Engine
-// pipeline (plans 03-16: the full H1-H21 explore pipeline, D-09's 9-kind
-// RANK_EDGES set, NODE-01/02 multi-def enumeration) against the golden
-// corpora, and writing its output as go-*.json fixtures alongside the
-// FROZEN TS 1.3.1 oracle fixtures under testdata/golden/corpus/<name>/.
+// Command gocapture regenerates ALL Go-side EXPECTED fixtures (F5, 01-RESEARCH.md,
+// FIXT-06) by running the CURRENT Go indexer + query.Engine pipeline against both
+// the Phase-1-locked corpora (resolved through internal/corpora — never a
+// hardcoded SHA or path) and the committed behavioral corpus, writing its output
+// as go-*.json / go-*-mcp.json fixtures.
 //
-// This is NOT a converter and does NOT touch the TS-side oracle
-// (explore.json/node.json/explore-multi.json/node-multi.json/
-// explore-mcp.json/node-mcp.json remain byte-for-byte what capture.sh
-// captured from the live TS 1.3.1 install in plan 01 — that install is
-// now gone, per this phase's own frozen-ground-truth policy documented in
-// README.md's "Re-running the capture" section). go-*.json is Go's OWN
-// output: a regression baseline proving F5 is closed (the committed
-// explore/node fixtures went stale the moment the D-09 re-index (01-15)
-// landed under the OLD pre-pipeline-wiring Go code) and a snapshot future
-// re-runs of this tool can diff against to catch unintended behavior
-// drift in the ported pipeline itself.
-//
-// Each corpus is indexed fresh into a throwaway temp Pebble store (never
-// mutating the corpus's own checkout/.codegraph/ — mirrors
-// testdata/golden/golden_parity_test.go's buildWeftEngine pattern), then
-// driven with the SAME symbol/query parameters capture.sh uses for that
-// corpus (see README.md's "Per-corpus queries/symbols" table), so the
-// Go-side fixtures are a same-input, same-corpus counterpart to the TS
-// oracle the parity harness (golden_parity_test.go) diffs against.
-//
-// weft-go and colbymchenry-codegraph's source trees are not committed to
-// this repo (see README.md's Corpus table) — weft-go resolves via
-// WEFT_REPO (default: the local sibling checkout capture.sh also uses),
-// and colbymchenry-codegraph is cloned fresh to a temp dir, mirroring
-// capture.sh's own pattern. Either is skipped (with a clear warning, not
-// a silent no-op) if unavailable, so this tool degrades gracefully on a
-// machine without network access or the local weft checkout — exactly
-// like capture.sh itself already tolerates for its own TS-side capture.
+// The TS-era capture path, external network-fetched corpora, and the
+// skip-warn-on-missing contract are retired (FIXT-04, MED). gocapture is the
+// sole capture authority — it FAILS CLOSED on a missing mandatory source.
 //
 // Usage: go run ./testdata/golden/gocapture
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/seanb4t/codegraph-go/internal/corpora"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
+	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
-// goldenCapture mirrors capture.sh's wrap_text envelope shape
+// goldenCapture mirrors the wrap_text envelope shape
 // ({"command": ..., "output": ...}), so go-*.json fixtures are
-// structurally identical to their TS-side siblings and can be loaded with
-// the exact same loadGoldenOutput helper golden_parity_test.go already
-// has.
+// structurally identical to their siblings and can be loaded with
+// the loadGoldenOutputIn helper.
 type goldenCapture struct {
 	Command string `json:"command"`
 	Output  string `json:"output"`
 }
 
-// corpusSpec is one corpus's regeneration recipe: how to resolve its
-// source tree, plus the same symbol/query parameters capture.sh's
-// capture_repo (baseline)/capture_behavioral (multi) use for it. An empty
-// baselineSymbol means "this corpus has no capture_repo baseline" (only
-// synthetic-parity, per README.md: "behavioral-only, no baseline
-// status/query/callers/callees/impact/explore/node fixtures").
-type corpusSpec struct {
-	name string
+// languageToLockedSlug is the EXPLICIT committed language->locked-slug map (H3).
+// hugo supplies the tsjs leg from its JS files even though its manifest
+// language is "go". The map is shared by the gocapture resolver, the hermetic
+// test resolver (lockedCorpusDir), and the completeness guard.
+var languageToLockedSlug = map[string]string{
+	"go":     "hugo",
+	"tsjs":   "hugo",
+	"java":   "guava",
+	"csharp": "serilog",
+	"python": "requests",
+}
 
-	// resolveSource returns the corpus's indexable source directory, or
-	// ("", reason) if it cannot be resolved on this machine — reason is
-	// printed as a skip warning, never a hard failure (mirrors
-	// golden_parity_test.go's resolveWeftCorpus t.Skip pattern, adapted
-	// to a standalone tool that has no *testing.T to skip with).
-	resolveSource func() (string, string)
+// slugToRepo maps each locked-slug to its manifest repo slug for lookup.
+var slugToRepo = map[string]string{
+	"hugo":     "gohugoio/hugo",
+	"guava":    "google/guava",
+	"serilog":  "serilog/serilog",
+	"requests": "psf/requests",
+}
 
-	// baseline mirrors capture_repo's explore/node invocation
-	// (--max-files 1 / -f <file>) — empty baselineSymbol skips it.
+// perCorpusArgs holds the symbol/query parameters for one locked corpus.
+type perCorpusArgs struct {
 	baselineSymbol     string
 	baselineSymbolFile string
 	baselineQuery      string
+	multiSymbol        string
+	multiQuery         string
+}
 
-	// behavioral mirrors capture_behavioral's invocation (no
-	// --max-files, no -f).
-	multiSymbol string
-	multiQuery  string
+// lockedCorpusArgs defines the committed symbol/query values per locked corpus.
+// These produce the expected golden set per corpus: {explore, node, explore-multi,
+// node-multi, explore-mcp, node-mcp} — 6 goldens.
+var lockedCorpusArgs = map[string]perCorpusArgs{
+	"hugo": {
+		baselineSymbol:     "Page",
+		baselineSymbolFile: "",
+		baselineQuery:      "page content",
+		multiSymbol:        "Site",
+		multiQuery:         "page content template",
+	},
+	"guava": {
+		baselineSymbol:     "Preconditions",
+		baselineSymbolFile: "",
+		baselineQuery:      "check precondition",
+		multiSymbol:        "ImmutableList",
+		multiQuery:         "immutable collection",
+	},
+	"serilog": {
+		baselineSymbol:     "LoggerConfiguration",
+		baselineSymbolFile: "",
+		baselineQuery:      "configure logger",
+		multiSymbol:        "LogEvent",
+		multiQuery:         "log configuration",
+	},
+	"requests": {
+		baselineSymbol:     "Session",
+		baselineSymbolFile: "",
+		baselineQuery:      "http session",
+		multiSymbol:        "Request",
+		multiQuery:         "http request session",
+	},
+}
+
+// corpusSpec is one corpus's regeneration recipe: how to resolve its
+// source tree, the output directory for its goldens, and the symbol/query
+// parameters for its fixtures.
+type corpusSpec struct {
+	name string
+	// outDir returns the directory where this spec's golden fixtures are written.
+	outDir func() string
+	// resolveSource returns the corpus's indexable source directory, or an error
+	// if the source cannot be resolved (a hard failure — gocapture exits non-zero).
+	resolveSource func() (string, error)
+	baselineSymbol     string
+	baselineSymbolFile string
+	baselineQuery      string
+	multiSymbol        string
+	multiQuery         string
 }
 
 func main() {
@@ -94,17 +124,13 @@ func main() {
 		fatal("gocapture: runtime.Caller(0) failed to resolve this file's own path")
 	}
 	goldenDir := filepath.Dir(filepath.Dir(thisFile)) // .../testdata/golden
-	corpusDir := filepath.Join(goldenDir, "corpus")
+	repoRoot := filepath.Dir(filepath.Dir(goldenDir)) // ... (two hops to repo root)
 
-	specs := []corpusSpec{
-		weftGoSpec(),
-		colbymchenryCodegraphSpec(),
-		syntheticParitySpec(goldenDir),
-	}
+	specs := buildSpecs(goldenDir, repoRoot)
 
 	failures := 0
 	for _, spec := range specs {
-		if err := regenerateCorpus(spec, corpusDir); err != nil {
+		if err := regenerateCorpus(spec); err != nil {
 			fmt.Fprintf(os.Stderr, "gocapture: [%s] FAILED: %v\n", spec.name, err)
 			failures++
 		}
@@ -114,11 +140,73 @@ func main() {
 	}
 }
 
-func regenerateCorpus(spec corpusSpec, corpusDir string) error {
-	sourcePath, skipReason := spec.resolveSource()
+// buildSpecs constructs the full list of corpusSpecs: locked corpora first, then
+// the behavioral corpus. Locked corpora resolve through internal/corpora.
+func buildSpecs(goldenDir, repoRoot string) []corpusSpec {
+	corpusRoot, err := corpora.CorpusRoot()
+	if err != nil {
+		fatal(fmt.Sprintf("gocapture: CorpusRoot: %v", err))
+	}
+	m, err := corpora.Load(filepath.Join(repoRoot, "corpora", "manifest.json"))
+	if err != nil {
+		fatal(fmt.Sprintf("gocapture: load manifest: %v", err))
+	}
+	locked := corpora.LockedEntries(m)
+
+	// Build an index: repo slug -> locked Entry for fast lookup.
+	lockedByRepo := make(map[string]corpora.Entry, len(locked))
+	for _, e := range locked {
+		lockedByRepo[e.Repo] = e
+	}
+
+	var specs []corpusSpec
+
+	// Locked-corpus specs, one per slug in order.
+	slugOrder := []string{"hugo", "guava", "serilog", "requests"}
+	for _, slug := range slugOrder {
+		repo := slugToRepo[slug]
+		e, ok := lockedByRepo[repo]
+		if !ok {
+			fatal(fmt.Sprintf("gocapture: locked entry %q (slug=%q) not found in manifest", repo, slug))
+		}
+		args := lockedCorpusArgs[slug]
+		out := filepath.Join(goldenDir, "corpus", slug)
+		specs = append(specs, corpusSpec{
+			name: slug,
+			outDir: func() string {
+				return out
+			},
+			resolveSource: func() (string, error) {
+				return e.Dir(corpusRoot), nil
+			},
+			baselineSymbol:     args.baselineSymbol,
+			baselineSymbolFile: args.baselineSymbolFile,
+			baselineQuery:      args.baselineQuery,
+			multiSymbol:        args.multiSymbol,
+			multiQuery:         args.multiQuery,
+		})
+	}
+
+	// Behavioral corpus spec.
+	specs = append(specs, behavioralCorpusSpec(repoRoot))
+
+	return specs
+}
+
+// regenerateCorpus indexes the corpus source and writes all golden fixtures
+// (CLI and MCP surfaces). Fail-closed: any index or capture error returns
+// a non-nil error so main() exits non-zero.
+func regenerateCorpus(spec corpusSpec) error {
+	sourcePath, err := spec.resolveSource()
+	if err != nil {
+		return fmt.Errorf("resolve source: %w", err)
+	}
 	if sourcePath == "" {
-		fmt.Fprintf(os.Stderr, "gocapture: [%s] SKIPPED: %s\n", spec.name, skipReason)
-		return nil
+		return fmt.Errorf("resolve source returned an empty path with no error")
+	}
+	info, err := os.Stat(sourcePath)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("source path %s is not a directory or is inaccessible: %w", sourcePath, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "gocapture: [%s] indexing %s ...\n", spec.name, sourcePath)
@@ -145,11 +233,12 @@ func regenerateCorpus(spec corpusSpec, corpusDir string) error {
 	defer reader.Close()
 
 	eng := query.NewWithRoot(reader, sourcePath)
-	out := filepath.Join(corpusDir, spec.name)
+	out := spec.outDir()
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		return fmt.Errorf("MkdirAll(%s): %w", out, err)
 	}
 
+	// --- CLI-surface captures ---
 	if spec.baselineSymbol != "" {
 		exploreOut, err := eng.Explore(spec.baselineQuery, 1)
 		if err != nil {
@@ -170,15 +259,8 @@ func regenerateCorpus(spec corpusSpec, corpusDir string) error {
 		}
 	}
 
-	// The two "multi" invocations are best-effort/independent: a symbol
-	// TS's extractor resolves (e.g. colbymchenry-codegraph's "resolve",
-	// AD-02 in golden_parity_test.go) may not resolve under Go's own
-	// extraction-coverage scope (an already-documented, real gap — see
-	// AD-02's doc comment there). One failing must not silently discard
-	// the OTHER artifact that already succeeded, nor silently mask the
-	// gap — it is warned loudly and folded into this corpus's overall
-	// error return (main() still exits non-zero), just not fatal to the
-	// sibling artifact.
+	// Multi (best-effort) CLI captures. For locked-corpus specs, a missing
+	// golden is a hard error (folded into the corpus's overall error return).
 	var multiErr error
 
 	exploreMultiOut, err := eng.Explore(spec.multiQuery, 0)
@@ -192,7 +274,7 @@ func regenerateCorpus(spec corpusSpec, corpusDir string) error {
 
 	nodeMultiOut, err := eng.Node(spec.multiSymbol, "", nil)
 	if err != nil {
-		nodeErr := fmt.Errorf("Node(%q, \"\"): %w (see AD-02 in golden_parity_test.go if this is colbymchenry-codegraph's \"resolve\" — a documented TS/JS object-literal-method extraction-coverage gap, not a bug this tool should paper over)", spec.multiSymbol, err)
+		nodeErr := fmt.Errorf("Node(%q, \"\"): %w", spec.multiSymbol, err)
 		fmt.Fprintf(os.Stderr, "gocapture: [%s] WARNING: %v\n", spec.name, nodeErr)
 		if multiErr == nil {
 			multiErr = nodeErr
@@ -202,91 +284,274 @@ func regenerateCorpus(spec corpusSpec, corpusDir string) error {
 		return err
 	}
 
+	// --- MCP-surface captures ---
+	// Stage the corpus in a temp directory and index it so the MCP server
+	// (which uses query.OpenAt) can find a real store on disk.
+	mcpTmp, err := os.MkdirTemp("", "gocapture-mcp-*")
+	if err != nil {
+		return fmt.Errorf("MkdirTemp for MCP staging: %w", err)
+	}
+	defer os.RemoveAll(mcpTmp)
+
+	if err := copyDir(sourcePath, mcpTmp); err != nil {
+		return fmt.Errorf("copy corpus to MCP staging dir: %w", err)
+	}
+	mcpStoreDir := filepath.Join(mcpTmp, ".codegraph", "store")
+	if err := os.MkdirAll(mcpStoreDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir MCP store dir: %w", err)
+	}
+	if _, err := indexer.Run(mcpTmp, mcpStoreDir, indexer.Options{Quiet: true}); err != nil {
+		return fmt.Errorf("index MCP staging dir: %w", err)
+	}
+
+	if spec.baselineSymbol != "" {
+		mcpExploreOut, err := callExploreViaMCP(mcpTmp, spec.baselineQuery)
+		if err != nil {
+			return fmt.Errorf("MCP Explore(%q): %w", spec.baselineQuery, err)
+		}
+		if err := writeCapture(filepath.Join(out, "go-explore-mcp.json"),
+			fmt.Sprintf("MCP explore %q -p %s", spec.baselineQuery, spec.name), mcpExploreOut); err != nil {
+			return err
+		}
+
+		mcpNodeOut, err := callNodeViaMCP(mcpTmp, spec.baselineSymbol)
+		if err != nil {
+			return fmt.Errorf("MCP Node(%q): %w", spec.baselineSymbol, err)
+		}
+		if err := writeCapture(filepath.Join(out, "go-node-mcp.json"),
+			fmt.Sprintf("MCP node %q -p %s", spec.baselineSymbol, spec.name), mcpNodeOut); err != nil {
+			return err
+		}
+	}
+
 	fmt.Fprintf(os.Stderr, "gocapture: [%s] wrote go-*.json fixtures to %s\n", spec.name, out)
 	return multiErr
 }
 
+// writeCapture writes the capture envelope to path via capture-to-temp-then-move
+// (Pattern 2, carryover 01-03): writes to a temp path in the same directory,
+// asserts the temp is non-empty and byte-prefixed with the `{` marker, then
+// renames onto the committed path. Any failure (empty/marker-less/temp-create/
+// rename) returns an error — never leaves a bare golden on the committed path
+// and never partially writes.
 func writeCapture(path, command, output string) error {
 	data, err := json.MarshalIndent(goldenCapture{Command: command, Output: output}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "*.gocapture-tmp")
+	if err != nil {
+		return fmt.Errorf("CreateTemp in %s: %w", dir, err)
 	}
+	tmpPath := tmp.Name()
+
+	cleanupOK := false
+	defer func() {
+		if !cleanupOK {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write temp %s: %w", tmpPath, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp %s: %w", tmpPath, err)
+	}
+
+	// Assert the temp file is non-empty and carries the envelope marker.
+	fi, err := os.Stat(tmpPath)
+	if err != nil {
+		return fmt.Errorf("stat temp %s: %w", tmpPath, err)
+	}
+	if fi.Size() == 0 {
+		return fmt.Errorf("temp %s is empty — refusing to rename onto committed path", tmpPath)
+	}
+	marker := make([]byte, 1)
+	f, err := os.Open(tmpPath)
+	if err != nil {
+		return fmt.Errorf("open temp %s for marker check: %w", tmpPath, err)
+	}
+	if _, err := f.Read(marker); err != nil {
+		f.Close()
+		return fmt.Errorf("read marker from temp %s: %w", tmpPath, err)
+	}
+	f.Close()
+	if marker[0] != '{' {
+		return fmt.Errorf("temp %s first byte is %q (want '{') — not a valid JSON envelope", tmpPath, marker)
+	}
+
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("rename %s -> %s: %w", tmpPath, path, err)
+	}
+	cleanupOK = true
 	return nil
 }
 
-// weftGoSpec mirrors capture.sh's WEFT_REPO default and its
-// capture_repo("weft-go", ...)/capture_behavioral("weft-go", ...)
-// parameters (README.md's per-corpus table).
-func weftGoSpec() corpusSpec {
-	return corpusSpec{
-		name: "weft-go",
-		resolveSource: func() (string, string) {
-			repo := os.Getenv("WEFT_REPO")
-			if repo == "" {
-				repo = "/Volumes/Code/github.com/seanb4t/weft"
-			}
-			info, err := os.Stat(repo)
-			if err != nil || !info.IsDir() {
-				return "", fmt.Sprintf("WEFT_REPO not found at %s (set WEFT_REPO=/path/to/weft to regenerate this corpus's go-*.json fixtures)", repo)
-			}
-			return repo, ""
-		},
-		baselineSymbol:     "mergeStyle",
-		baselineSymbolFile: "internal/cli/finish.go",
-		baselineQuery:      "main function",
-		multiSymbol:        "Run",
-		multiQuery:         "epic worktree",
-	}
-}
-
-// colbymchenryCodegraphSpec mirrors capture.sh's fresh-clone-to-temp-dir
-// pattern for the TS CodeGraph repo itself (its source is never committed
-// to this repo — README.md's Corpus table).
-func colbymchenryCodegraphSpec() corpusSpec {
-	return corpusSpec{
-		name: "colbymchenry-codegraph",
-		resolveSource: func() (string, string) {
-			tmpRoot, err := os.MkdirTemp("", "gocapture-colbymchenry-*")
+// copyDir recursively copies src into dst, skipping ".codegraph" directories
+// so the destination starts clean for indexing. Handles symlinks: resolves
+// directory symlinks by walking their target, and copies file symlinks by
+// reading the resolved path's content.
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == ".codegraph" {
+			return fs.SkipDir
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			resolved, err := filepath.EvalSymlinks(path)
 			if err != nil {
-				return "", fmt.Sprintf("MkdirTemp: %v", err)
+				return err
 			}
-			cmd := exec.Command("git", "clone", "--depth", "1", "--quiet",
-				"https://github.com/colbymchenry/codegraph.git", tmpRoot)
-			if out, err := cmd.CombinedOutput(); err != nil {
-				os.RemoveAll(tmpRoot)
-				return "", fmt.Sprintf("git clone failed (no network access?): %v: %s", err, string(out))
+			if rInfo, err := os.Stat(resolved); err == nil && rInfo.IsDir() {
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					return err
+				}
+				return filepath.WalkDir(resolved, func(rPath string, rD fs.DirEntry, rErr error) error {
+					if rErr != nil {
+						return rErr
+					}
+					rRel, rErr := filepath.Rel(resolved, rPath)
+					if rErr != nil {
+						return rErr
+					}
+					rTarget := filepath.Join(target, rRel)
+					if rD.IsDir() {
+						return os.MkdirAll(rTarget, 0o755)
+					}
+					data, rErr := os.ReadFile(rPath)
+					if rErr != nil {
+						return rErr
+					}
+					return os.WriteFile(rTarget, data, 0o644)
+				})
 			}
-			return tmpRoot, ""
-		},
-		baselineSymbol:     "searchNodes",
-		baselineSymbolFile: "src/db/queries.ts",
-		baselineQuery:      "search nodes",
-		multiSymbol:        "resolve",
-		multiQuery:         "generated file detection",
-	}
+			data, err := os.ReadFile(resolved)
+			if err != nil {
+				return err
+			}
+			return os.WriteFile(target, data, 0o644)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
 }
 
-// syntheticParitySpec mirrors capture.sh's synthetic-parity handling:
-// committed in-repo source, behavioral-only (no capture_repo baseline —
-// baselineSymbol left empty).
-func syntheticParitySpec(goldenDir string) corpusSpec {
-	src := filepath.Join(goldenDir, "corpus", "synthetic-parity", "src")
+// behavioralCorpusSpec handles the committed, in-repo behavioral corpus
+// at corpus/behavioral/src (D-03). Uses a two-hop filepath.Dir walk from
+// gocapture's own location under testdata/golden/gocapture to reach the
+// repo root, resolving to corpus/behavioral/src.
+func behavioralCorpusSpec(repoRoot string) corpusSpec {
+	src := filepath.Join(repoRoot, "corpus", "behavioral", "src")
 	return corpusSpec{
-		name: "synthetic-parity",
-		resolveSource: func() (string, string) {
+		name: "behavioral",
+		outDir: func() string {
+			return filepath.Join(repoRoot, "corpus", "behavioral")
+		},
+		resolveSource: func() (string, error) {
 			info, err := os.Stat(src)
 			if err != nil || !info.IsDir() {
-				return "", fmt.Sprintf("synthetic-parity source not found at %s", src)
+				return "", fmt.Errorf("behavioral corpus source not found at %s: %w", src, err)
 			}
-			return src, ""
+			return src, nil
 		},
 		multiSymbol: "Validate",
 		multiQuery:  "user account",
 	}
+}
+
+// --- MCP helpers ---
+
+// callExploreViaMCP drives codegraph_explore through a real, in-process MCP
+// server (internalmcp.BuildServer) over in-memory transports.
+func callExploreViaMCP(repoDir, query string) (string, error) {
+	s := internalmcp.BuildServer(true, map[string]bool{}, repoDir, repoDir)
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	ctx := context.Background()
+	go func() {
+		_ = s.Run(ctx, serverTransport)
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-gocapture", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		return "", fmt.Errorf("client Connect: %w", err)
+	}
+	defer session.Close()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "codegraph_explore",
+		Arguments: map[string]any{"query": query},
+	})
+	if err != nil {
+		return "", fmt.Errorf("CallTool codegraph_explore(%q): %w", query, err)
+	}
+	if result.IsError {
+		return "", fmt.Errorf("codegraph_explore(%q) returned an error result", query)
+	}
+	return mcpResultText(result)
+}
+
+// callNodeViaMCP drives codegraph_node the same way callExploreViaMCP drives
+// codegraph_explore.
+func callNodeViaMCP(repoDir, symbol string) (string, error) {
+	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir, repoDir)
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+
+	ctx := context.Background()
+	go func() {
+		_ = s.Run(ctx, serverTransport)
+	}()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-gocapture", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		return "", fmt.Errorf("client Connect: %w", err)
+	}
+	defer session.Close()
+
+	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "codegraph_node",
+		Arguments: map[string]any{"symbol": symbol},
+	})
+	if err != nil {
+		return "", fmt.Errorf("CallTool codegraph_node(%q): %w", symbol, err)
+	}
+	if result.IsError {
+		return "", fmt.Errorf("codegraph_node(%q) returned an error result", symbol)
+	}
+	return mcpResultText(result)
+}
+
+// mcpResultText extracts the first text content block from a successful
+// CallTool result.
+func mcpResultText(result *mcp.CallToolResult) (string, error) {
+	if len(result.Content) == 0 {
+		return "", fmt.Errorf("CallTool result has no content")
+	}
+	text, ok := result.Content[0].(*mcp.TextContent)
+	if !ok {
+		return "", fmt.Errorf("CallTool result content[0] is not text: %+v", result.Content[0])
+	}
+	return text.Text, nil
 }
 
 func fatal(msg string) {

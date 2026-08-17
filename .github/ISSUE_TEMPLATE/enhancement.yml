@@ -60,10 +60,9 @@ body:
     attributes:
       label: Would this change existing behavior?
       description: >
-        Say so plainly if it would. This project holds behavioral parity with
-        TypeScript CodeGraph v1.3.1 as a goal, and output shapes are consumed by
-        agents — a "better" format can break someone's pipeline. Divergences can
-        still be accepted, but they get documented rather than made silently.
+        Say so plainly if it would. Output shapes are consumed by agents, so a
+        "better" format can break someone's pipeline. Divergences can still be
+        accepted, but they get documented rather than made silently.
     validations:
       required: true
 
@@ -74,5 +73,5 @@ body:
       options:
         - label: I searched existing issues and this is not a duplicate
           required: true
-        - label: I checked whether this is a documented divergence in docs/FLAG-PARITY.md
+        - label: I checked whether this is a documented divergence in `.planning/`
           required: true

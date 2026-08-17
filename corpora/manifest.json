@@ -1,0 +1,77 @@
+{
+  "note": "This file is the SOLE pin authority for v0.11.0 Phase 1's corpora (D-09): every candidate repository this phase measures or has measured is pinned once, here. A corpus commit SHA appearing anywhere else under corpora/, Taskfile.yml, internal/corpora/, or .github/workflows/ is a defect. Every license and commit SHA below was resolved LIVE via the GitHub API on 2026-08-14 — never recalled from memory (a README badge is not evidence). tools/bench/realcorpus/manifest.go is this repository's OTHER pinned-corpus manifest; see 01-04-PLAN.md's objective for why the two are separate rather than merged.",
+  "corpora": [
+    {
+      "repo": "gohugoio/hugo",
+      "sha": "0805c734a41b75403e3970e0070227916b6845d2",
+      "license": "Apache-2.0",
+      "language": "go",
+      "locked": true,
+      "note": "LOCKED (01-06): closes the Go priority-4 coverage gap and supplies TS/JS via its 25 javascript tracked files, which is how this minimum-cardinality set covers all five priority languages. Roadmap shortlist."
+    },
+    {
+      "repo": "nestjs/nest",
+      "sha": "a112f3fbd4bda2d2f8a12498f9ae53ac84df2504",
+      "license": "MIT",
+      "language": "typescript",
+      "locked": false,
+      "note": "Closes the TypeScript priority-4 coverage gap. Roadmap shortlist; also nominated for overrides coverage via its abstract-class lifecycle hooks."
+    },
+    {
+      "repo": "google/guava",
+      "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
+      "license": "Apache-2.0",
+      "language": "java",
+      "locked": true,
+      "note": "LOCKED (01-06): closes the Java priority-4 coverage gap and is the sole supplier of the highest-kind bars — overrides=4658, type_of=11857, calls=58812, references=13063, returns=5591, extends=2531, instantiates=1053. Roadmap shortlist."
+    },
+    {
+      "repo": "JamesNK/Newtonsoft.Json",
+      "sha": "09bb545d72969ad7fb4ea07db0d5c34f4fc07877",
+      "license": "MIT",
+      "language": "csharp",
+      "locked": false,
+      "note": "Closes the C# priority-4 coverage gap. Replaces apache/arrow, which contains no C# at all."
+    },
+    {
+      "repo": "serilog/serilog",
+      "sha": "49b5339ce85385dc52d4d8e8f2b8308becf23506",
+      "license": "Apache-2.0",
+      "language": "csharp",
+      "locked": true,
+      "note": "LOCKED (01-06): supplies the C# priority-4 non-zero floor. Minimum-cardinality set selected serilog over JamesNK/Newtonsoft.Json because the two tied on kind coverage (serilog C# files=216 vs 684; serilog tracked files=284 vs 1170) and the tie-break is total tracked files ascending."
+    },
+    {
+      "repo": "tiangolo/fastapi",
+      "sha": "a1fa70d4237d50aae6586a0d9b229df583463d21",
+      "license": "MIT",
+      "language": "python",
+      "locked": false,
+      "note": "Closes the Python coverage gap that opens once apache/arrow is dropped for D-10 whole-repo-scale reasons."
+    },
+    {
+      "repo": "pydantic/pydantic",
+      "sha": "02c5c975fa9f1bf4f094834487786d3148987fee",
+      "license": "MIT",
+      "language": "python",
+      "locked": false,
+      "note": "Python fallback candidate, in case tiangolo/fastapi misses a coverage bar."
+    },
+    {
+      "repo": "psf/requests",
+      "sha": "8068356288978c4f54661ae6f95afe0e0831885e",
+      "license": "Apache-2.0",
+      "language": "python",
+      "locked": true,
+      "note": "LOCKED (01-06): supplies the Python priority-4 non-zero floor. Minimum-cardinality set selected requests (tracked files=130) over fastapi (3137) and pydantic (814) via the total-tracked-files-ascending tie-break; its measured python file count is non-zero."
+    },
+    {
+      "repo": "apache/arrow",
+      "sha": "e611f48081ec927e18e5bcb72fbd071c15c76b08",
+      "license": "Apache-2.0",
+      "language": "mixed",
+      "locked": false,
+      "note": "REJECTED before measurement, per D-09/D-10: a corpus entry means a whole repository, always, and arrow's monorepo scale makes indexing the entire repository at a single pinned commit impractical for this phase's spike. JamesNK/Newtonsoft.Json was sought and confirmed live as the dedicated C# candidate this rejection required. Retained here, unlocked, as D-09 requires rejected candidates to be recorded rather than deleted; its measured-versus-rejected status lives in the measurement record (Plan 01-06)."
+    }
+  ]
+}

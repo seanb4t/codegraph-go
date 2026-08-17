@@ -1,0 +1,46 @@
+{
+  "cases": [
+    {
+      "id": "a",
+      "name": "overloaded-same-named-symbols",
+      "what": "Node(\"Validate\") returns exactly 2 distinct definitions across different packages",
+      "symbol": "Validate",
+      "files": ["accounts/validate.go", "orders/validate.go"],
+      "query": "Validate",
+      "assertion": "overloaded-defs-distinct",
+      "command": "node"
+    },
+    {
+      "id": "b",
+      "name": "multi-word-query",
+      "what": "Explore(\"user account\") surfaces UserAccountManager (camelCase multi-word tokenization)",
+      "symbol": "UserAccountManager",
+      "files": ["accounts/manager.go"],
+      "query": "user account",
+      "assertion": "multi-word-tokenization",
+      "command": "explore"
+    },
+    {
+      "id": "c",
+      "name": "test-heavy-weakly-connected-cluster",
+      "what": "Explore(\"user account\") surfaces the structurally-connected non-test symbols recoverAccount/validateRecovery over the zero-inbound TestAccountRecovery",
+      "symbol": "recoverAccount",
+      "zero_edge": "TestAccountRecovery",
+      "connected": ["recoverAccount", "validateRecovery"],
+      "files": ["recovery/recovery.go", "recovery/recovery_test.go"],
+      "query": "user account",
+      "assertion": "cluster-surfaces-connected-non-test",
+      "command": "explore"
+    },
+    {
+      "id": "d",
+      "name": "structural-beats-lexical",
+      "what": "Explore(\"account balance\") surfaces ReconcileLedger (zero lexical match) via structural expansion, with ledger/ledger.go selected and GetBalance as the partial-lexical bridge",
+      "symbol": "ReconcileLedger",
+      "files": ["ledger/ledger.go"],
+      "query": "account balance",
+      "assertion": "structural-surfaces-zero-lexical-match",
+      "command": "explore"
+    }
+  ]
+}

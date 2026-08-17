@@ -2,9 +2,9 @@ package agents
 
 // codegraphSectionStart and codegraphSectionEnd are the exact marker
 // fences every install/uninstall must reproduce byte-for-byte (D-01a).
-// This is a hard cross-implementation contract, not a fresh choice: a Go
-// uninstall must recognize a marker block a TS install wrote, and
-// vice-versa. Do not alter this text.
+// This is a hard, stable contract, not a fresh choice: an uninstall must
+// recognize the marker block an earlier install wrote, regardless of
+// which agent wrote it. Do not alter this text.
 const (
 	codegraphSectionStart = "<!-- CODEGRAPH_START -->"
 	codegraphSectionEnd   = "<!-- CODEGRAPH_END -->"
@@ -13,7 +13,7 @@ const (
 // codegraphInstructionsBlock is the short marker-fenced pointer block
 // install injects into the 4 of 8 agent targets that get an instructions
 // file (Claude, Codex, opencode, Gemini — see the 06-RESEARCH.md
-// Corrected Per-Agent Parity Table). It points agents at codegraph_explore
+// per-agent install-coverage table). It points agents at codegraph_explore
 // / `codegraph explore` and, generically, at resources/list for the
 // per-tool reference — this is deliberately SHORT, not the old full
 // playbook TS removed in #529/#704.

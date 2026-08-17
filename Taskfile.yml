@@ -60,9 +60,26 @@ tasks:
     desc: >-
       Golden parity suite (testdata/golden) — NOT covered by go list ./...
       (GOLDEN-01: the go tool ignores any directory named "testdata" when
-      expanding ./...), so this is its own explicit target.
+      expanding ./...), so this is its own explicit target. Runs with
+      -count=1 (FIXT-03, constraint 3) so the go test cache can never return
+      a stale PASS: every CI invocation actually executes the suite against
+      the current corpus tree.
     cmds:
-      - go test ./testdata/golden/...
+      - go test -count=1 ./testdata/golden/...
+
+  golden:regen:
+    desc: >-
+      Regenerate all Go-side golden fixtures (gocapture) — the reviewed
+      one-command re-freeze entrypoint (02-03, FIXT-06). Runs corpora fetch,
+      integrity assert, then gocapture. Every capture goes through
+      capture-to-temp-then-move (Pattern 2) and fails closed on a missing
+      mandatory source.
+    deps:
+      - corpora:fetch
+    cmds:
+      - task corpora:assert
+      - go run ./testdata/golden/gocapture
+
 
   test:integration:
     desc: >-
@@ -3264,6 +3281,400 @@ tasks:
         git diff --name-status -M -C "$mb" HEAD > "$CHANGED_LIST"
         git diff "$mb" HEAD -- go.mod > "$GOMOD_DIFF"
         go run ./tools/transcriptfreeze -changed-list "$CHANGED_LIST" -gomod-diff "$GOMOD_DIFF"
+
+  corpora:assert-one:
+    desc: >-
+      The four-part integrity check FIXT-02's reproducibility evidence and
+      corpora:fetch-one's promotion gate both rest on, defined exactly
+      once here and invoked by corpora:fetch-one and corpora:assert (via
+      `task`) rather than duplicated. Checks CORPUS_REPO/CORPUS_SHA's
+      manifest-resolved destination, or CORPUS_DIR_OVERRIDE when set
+      (corpora:fetch-one's internal use, to check a staging directory
+      before promotion). A destination is usable only when ALL FOUR
+      hold: a real .git directory exists, HEAD equals the pinned SHA
+      exactly, `git status --porcelain --ignored` is EMPTY, and `git
+      rev-parse HEAD^{tree}` resolves. HEAD alone is NOT sufficient: a
+      tree at the right commit with one modified tracked file, one
+      changed file mode, one retargeted symlink, or one injected
+      untracked file has the correct HEAD and the wrong contents —
+      tools/bench/runner/main.go:482's pinnedAt does exactly this weaker
+      HEAD-only check; this is deliberately stronger. Never prints a
+      success line without establishing all four facts (rule 84d1gfpywd).
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — corpora:assert-one shells out to git directly."
+      - sh: command -v jq
+        msg: "jq not found — corpora:assert-one resolves its destination from tools/corpora -mode entries JSON via jq."
+      - sh: command -v go
+        msg: "go not found — corpora:assert-one runs tools/corpora via `go run`."
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [ -z "${CORPUS_REPO:-}" ] || [ -z "${CORPUS_SHA:-}" ]; then
+          echo "::error::corpora:assert-one: CORPUS_REPO and CORPUS_SHA are both required (e.g. CORPUS_REPO=org/name CORPUS_SHA=<40-hex> task corpora:assert-one)"
+          exit 1
+        fi
+
+        # Re-validate independently at THIS interpolation point — the
+        # last line of defence before CORPUS_REPO/CORPUS_SHA reach a
+        # filesystem path or a manifest lookup. internal/corpora.Validate
+        # is the source of truth; this duplicates its allowlist on
+        # purpose, via shell pattern matching against a negated character
+        # class (never a substring search), with every expansion quoted.
+        if [ "${#CORPUS_SHA}" -ne 40 ]; then
+          echo "::error::corpora:assert-one: CORPUS_SHA is not exactly 40 characters"
+          exit 1
+        fi
+        case "$CORPUS_SHA" in
+          *[!0-9a-f]*)
+            echo "::error::corpora:assert-one: CORPUS_SHA contains a non-lowercase-hex character"
+            exit 1
+            ;;
+        esac
+        case "$CORPUS_REPO" in
+          *[!A-Za-z0-9._/-]*)
+            echo "::error::corpora:assert-one: CORPUS_REPO contains a disallowed character"
+            exit 1
+            ;;
+          /*|*/)
+            echo "::error::corpora:assert-one: CORPUS_REPO must not have a leading or trailing slash"
+            exit 1
+            ;;
+        esac
+        slash_count=$(printf '%s' "$CORPUS_REPO" | tr -cd '/' | wc -c | tr -d ' ')
+        if [ "$slash_count" -ne 1 ]; then
+          echo "::error::corpora:assert-one: CORPUS_REPO must contain exactly one slash"
+          exit 1
+        fi
+
+        if [ -n "${CORPUS_DIR_OVERRIDE:-}" ]; then
+          dest="$CORPUS_DIR_OVERRIDE"
+        else
+          entries=$(go run ./tools/corpora -mode entries)
+          dest=$(printf '%s' "$entries" | jq -r --arg repo "$CORPUS_REPO" --arg sha "$CORPUS_SHA" '.[] | select(.repo == $repo and .sha == $sha) | .dir')
+          if [ -z "$dest" ]; then
+            echo "::error::corpora:assert-one: no manifest entry found for repo=${CORPUS_REPO} sha=${CORPUS_SHA} — corpora is manifest-anchored (D-09); add or correct the entry in corpora/manifest.json first"
+            exit 1
+          fi
+        fi
+
+        if [ ! -d "${dest}/.git" ]; then
+          echo "::error::corpora:assert-one: part 1/4 FAILED — ${dest}/.git is not a real git directory (D-11)"
+          exit 1
+        fi
+        head=$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)
+        if [ "$head" != "$CORPUS_SHA" ]; then
+          echo "::error::corpora:assert-one: part 2/4 FAILED — HEAD (${head:-<none>}) at ${dest} does not equal the pinned SHA ${CORPUS_SHA}"
+          exit 1
+        fi
+        status=$(git -C "$dest" status --porcelain --ignored)
+        if [ -n "$status" ]; then
+          echo "::error::corpora:assert-one: part 3/4 FAILED — ${dest} has a correct HEAD but its working tree is not clean (modified/staged/untracked/ignored content since checkout):"
+          printf '%s\n' "$status" >&2
+          exit 1
+        fi
+        tree=$(git -C "$dest" rev-parse 'HEAD^{tree}')
+        if [ -z "$tree" ]; then
+          echo "::error::corpora:assert-one: part 4/4 FAILED — HEAD^{tree} did not resolve at ${dest}"
+          exit 1
+        fi
+        files=$(git -C "$dest" ls-files | wc -l | tr -d ' ')
+        echo "corpora:assert-one: ${CORPUS_REPO} OK at ${dest} — tracked files: ${files}, tree: ${tree}"
+
+  corpora:fetch-one:
+    desc: >-
+      Fetches exactly the manifest entry named by CORPUS_REPO/CORPUS_SHA
+      at a shallow depth into its collision-free destination, or confirms
+      it is already present and passing corpora:assert-one's four-part
+      check (idempotent, no force flag needed). Corpora land OUTSIDE this
+      working tree (D-12) and are never committed — corpora/manifest.json
+      is the sole pin authority (D-09). Promotion is claim (atomic mkdir)
+      -> stage (mktemp -d under the destination's parent) -> check (the
+      full four-part integrity check, on the staged tree) -> promote (mv
+      into a path that cannot already exist) — in that order, always,
+      because claiming before the network fetch serialises concurrent
+      fetches of the same entry rather than racing two transfers to
+      discard one. Never mv's onto an existing path under any branch — a
+      directory rename onto one that already exists nests rather than
+      failing.
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — corpora:fetch-one shells out to git directly."
+      - sh: command -v jq
+        msg: "jq not found — corpora:fetch-one resolves its destination from tools/corpora -mode entries JSON via jq."
+      - sh: command -v go
+        msg: "go not found — corpora:fetch-one runs tools/corpora via `go run`."
+    cmds:
+      - |
+        set -euo pipefail
+
+        if [ -z "${CORPUS_REPO:-}" ] || [ -z "${CORPUS_SHA:-}" ]; then
+          echo "::error::corpora:fetch-one: CORPUS_REPO and CORPUS_SHA are both required (e.g. CORPUS_REPO=org/name CORPUS_SHA=<40-hex> task corpora:fetch-one)"
+          exit 1
+        fi
+
+        # Re-validate independently at THIS interpolation point, before
+        # CORPUS_REPO/CORPUS_SHA are used to construct a git remote URL —
+        # the last line of defence (T-01-04-01). internal/corpora.Validate
+        # is the source of truth; this duplicates its allowlist via shell
+        # pattern matching against a negated character class, never a
+        # substring search, with every expansion quoted.
+        if [ "${#CORPUS_SHA}" -ne 40 ]; then
+          echo "::error::corpora:fetch-one: CORPUS_SHA is not exactly 40 characters"
+          exit 1
+        fi
+        case "$CORPUS_SHA" in
+          *[!0-9a-f]*)
+            echo "::error::corpora:fetch-one: CORPUS_SHA contains a non-lowercase-hex character"
+            exit 1
+            ;;
+        esac
+        case "$CORPUS_REPO" in
+          *[!A-Za-z0-9._/-]*)
+            echo "::error::corpora:fetch-one: CORPUS_REPO contains a disallowed character"
+            exit 1
+            ;;
+          /*|*/)
+            echo "::error::corpora:fetch-one: CORPUS_REPO must not have a leading or trailing slash"
+            exit 1
+            ;;
+        esac
+        slash_count=$(printf '%s' "$CORPUS_REPO" | tr -cd '/' | wc -c | tr -d ' ')
+        if [ "$slash_count" -ne 1 ]; then
+          echo "::error::corpora:fetch-one: CORPUS_REPO must contain exactly one slash"
+          exit 1
+        fi
+
+        # Resolve the destination FROM tools/corpora rather than
+        # re-deriving Entry.Dir's SHA-256 digest independently in bash.
+        entries=$(go run ./tools/corpora -mode entries)
+        dest=$(printf '%s' "$entries" | jq -r --arg repo "$CORPUS_REPO" --arg sha "$CORPUS_SHA" '.[] | select(.repo == $repo and .sha == $sha) | .dir')
+        if [ -z "$dest" ]; then
+          echo "::error::corpora:fetch-one: no manifest entry found for repo=${CORPUS_REPO} sha=${CORPUS_SHA} — corpora is manifest-anchored (D-09); add or correct the entry in corpora/manifest.json first"
+          exit 1
+        fi
+        mkdir -p "$(dirname "$dest")"
+
+        # Fast path: already fetched and verified — skip the network
+        # round-trip and the claim entirely.
+        if [ -d "$dest" ] && CORPUS_REPO="$CORPUS_REPO" CORPUS_SHA="$CORPUS_SHA" task corpora:assert-one >/dev/null 2>&1; then
+          echo "corpora:fetch-one: ${CORPUS_REPO} already present and verified at ${dest}"
+          exit 0
+        fi
+        if [ -d "$dest" ]; then
+          echo "::error::corpora:fetch-one: ${dest} exists but fails the integrity check — run 'CORPUS_REPO=${CORPUS_REPO} CORPUS_SHA=${CORPUS_SHA} task corpora:assert-one' for the specific failure. Refusing to silently re-fetch over a corrupt or tampered destination."
+          exit 1
+        fi
+
+        # Claim FIRST, then fetch — mkdir is atomic on POSIX and fails if
+        # the path already exists, so exactly one process ever holds it.
+        if ! mkdir "${dest}.lock" 2>/dev/null; then
+          if [ -d "$dest" ] && CORPUS_REPO="$CORPUS_REPO" CORPUS_SHA="$CORPUS_SHA" task corpora:assert-one >/dev/null 2>&1; then
+            echo "corpora:fetch-one: ${CORPUS_REPO} already fetched and verified at ${dest} (another process finished first)"
+            exit 0
+          fi
+          echo "::error::corpora:fetch-one: claim ${dest}.lock is held — a fetch of ${CORPUS_REPO} is in flight, or a previous run was interrupted and leaked its claim. Remove ${dest}.lock once no fetch of ${CORPUS_REPO} is running, then retry."
+          exit 1
+        fi
+
+        stage=""
+        cleanup() {
+          if [ -n "$stage" ] && [ -d "$stage" ]; then
+            rm -rf "$stage"
+          fi
+          rmdir "${dest}.lock" 2>/dev/null || true
+        }
+        trap cleanup EXIT
+
+        # Close the claim-then-check-existence race: between the fast
+        # path above and this claim, another process could have finished
+        # and promoted. Re-check now, while holding the exclusive claim.
+        if [ -d "$dest" ]; then
+          if CORPUS_REPO="$CORPUS_REPO" CORPUS_SHA="$CORPUS_SHA" task corpora:assert-one >/dev/null 2>&1; then
+            echo "corpora:fetch-one: ${CORPUS_REPO} already fetched and verified at ${dest} (raced with another process)"
+            exit 0
+          fi
+          echo "::error::corpora:fetch-one: ${dest} exists but fails the integrity check — refusing to silently re-fetch over a corrupt or tampered destination"
+          exit 1
+        fi
+
+        stage=$(mktemp -d "$(dirname "$dest")/tmp.XXXXXX")
+        git init --quiet "$stage"
+        git -C "$stage" remote add origin "https://github.com/${CORPUS_REPO}.git"
+        git -C "$stage" fetch --quiet --depth 1 origin "$CORPUS_SHA"
+        git -C "$stage" checkout --quiet FETCH_HEAD
+
+        if ! CORPUS_REPO="$CORPUS_REPO" CORPUS_SHA="$CORPUS_SHA" CORPUS_DIR_OVERRIDE="$stage" task corpora:assert-one; then
+          echo "::error::corpora:fetch-one: freshly staged ${CORPUS_REPO} failed the integrity check above — not promoted"
+          exit 1
+        fi
+
+        # dest cannot already exist: only the claim holder creates it, and
+        # we hold the claim.
+        mv "$stage" "$dest"
+        stage=""
+        echo "corpora:fetch-one: fetched ${CORPUS_REPO} to ${dest}"
+
+  corpora:assert:
+    desc: >-
+      The WHOLE-SET positive assertion (rule 84d1gfpywd): runs
+      corpora:assert-one's four-part integrity check for every LOCKED
+      corpus entry, then asserts the number it verified equals the
+      locked-set size — never merely that nothing failed. Consumed by
+      Plan 01-06 (wave 4); defined here, in wave 1, because it is a pure
+      loop over corpora:assert-one, which this plan already defines, and
+      a target defined a wave after its consumer could not pass its own
+      verification. Exits non-zero when the locked set is empty or any
+      corpus fails any part.
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — corpora:assert shells out to git directly (via corpora:assert-one)."
+      - sh: command -v jq
+        msg: "jq not found — corpora:assert resolves the locked set from tools/corpora -mode entries -locked JSON via jq."
+      - sh: command -v go
+        msg: "go not found — corpora:assert runs tools/corpora via `go run`."
+    cmds:
+      - |
+        set -euo pipefail
+        entries=$(go run ./tools/corpora -mode entries -locked)
+        want=$(printf '%s' "$entries" | jq 'length')
+        if [ "$want" -eq 0 ]; then
+          echo "::error::corpora:assert: the locked corpus set is empty — nothing to verify. Lock at least one entry in corpora/manifest.json (Plan 01-06) before running this target."
+          exit 1
+        fi
+        mapfile -t rows < <(printf '%s' "$entries" | jq -c '.[]')
+        verified=0
+        for row in "${rows[@]}"; do
+          repo=$(printf '%s' "$row" | jq -r '.repo')
+          sha=$(printf '%s' "$row" | jq -r '.sha')
+          CORPUS_REPO="$repo" CORPUS_SHA="$sha" task corpora:assert-one
+          verified=$((verified + 1))
+        done
+        if [ "$verified" -ne "$want" ]; then
+          echo "::error::corpora:assert: verified ${verified} of ${want} locked corpora — see errors above"
+          exit 1
+        fi
+        echo "corpora:assert: verified ${verified}/${want} locked corpora"
+
+  corpora:fetch:
+    desc: >-
+      Fetches (or confirms already fetched-and-verified) every LOCKED
+      corpus entry from corpora/manifest.json — the sole pin authority
+      (D-09) — into the out-of-tree corpus root (D-12). Corpora are
+      fetched at pinned SHAs only and are NEVER committed to this
+      repository. Exits non-zero with an error-annotated message when the
+      locked set is empty; never degrades to a silent no-op skip (rule
+      84d1gfpywd). Nothing is locked at this plan's completion, so the
+      empty-set refusal is what this plan verifies; Plan 01-06 locks the
+      set and makes the populated path live.
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — corpora:fetch shells out to git directly (via corpora:fetch-one)."
+      - sh: command -v jq
+        msg: "jq not found — corpora:fetch resolves the locked set from tools/corpora -mode entries -locked JSON via jq."
+      - sh: command -v go
+        msg: "go not found — corpora:fetch runs tools/corpora via `go run`."
+    cmds:
+      - |
+        set -euo pipefail
+        entries=$(go run ./tools/corpora -mode entries -locked)
+        want=$(printf '%s' "$entries" | jq 'length')
+        if [ "$want" -eq 0 ]; then
+          echo "::error::corpora:fetch: the locked corpus set is empty — nothing to fetch. Lock at least one entry in corpora/manifest.json (Plan 01-06) before running this target."
+          exit 1
+        fi
+        mapfile -t rows < <(printf '%s' "$entries" | jq -c '.[]')
+        fetched=0
+        for row in "${rows[@]}"; do
+          repo=$(printf '%s' "$row" | jq -r '.repo')
+          sha=$(printf '%s' "$row" | jq -r '.sha')
+          CORPUS_REPO="$repo" CORPUS_SHA="$sha" task corpora:fetch-one
+          fetched=$((fetched + 1))
+        done
+        echo "corpora:fetch: fetched or confirmed ${fetched}/${want} locked corpora"
+
+  corpora:measure:
+    desc: >-
+      Regenerates the measurement record and the generated human-readable
+      document (D-07): rebuilds corpora/observations.json and, only when
+      no selection has been recorded yet, renders docs/CORPUS-MEASUREMENT.md
+      as a pure observation report. It UPSERTS by default (keyed repo@sha,
+      never fully reconstructs), applies corpora.StripVolatile's superset
+      policy so no host-local path or per-machine value is committed
+      (FIXT-01), and NEVER writes corpora/selection.json — that curated
+      policy file has no write path from the generator at all, by design.
+      Plan 01-07's drift job calls this target to prove re-measuring the
+      committed record reproduces it byte-identically. Pass -mode select
+      to compute the threshold/locked-set proposal from the observations.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — corpora:measure runs tools/corpora via `go run`."
+      - sh: command -v git
+        msg: "git not found — corpora:measure shells out to git for tracked-file counts."
+    cmds:
+      - |
+        set -euo pipefail
+        # Default locked scope: measure every locked corpus, upsert into the
+        # committed observations file, regenerate the prose document. Pass
+        # explicit flags for a bounded candidate search (e.g. -repos org/name).
+        go run ./tools/corpora -mode measure
+
+  corpora:verify:
+    desc: >-
+      D-08's CHEAP half of the corpora drift guard: reconciles the three
+      COMMITTED documents — corpora/manifest.json, corpora/observations.json
+      and corpora/selection.json — against each other through the
+      internal/corpora coverage guard (CheckCoverage). Requires no fetched
+      corpora and no indexing, so it is safe on EVERY CI run as its own named
+      step. The cached-result-defeating -count=1 flag is MANDATORY: without it
+      Go's test cache would let a mutated committed document slip through on a
+      stale green result.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — corpora:verify runs go test over ./internal/corpora."
+    cmds:
+      - go test -count=1 ./internal/corpora/...
+
+  corpora:drift:
+    desc: >-
+      D-08's EXPENSIVE half of the corpora drift guard: proves the pinned
+      LOCKED corpora still produce the committed measurement. Fetches and
+      asserts every locked corpus, re-runs task corpora:measure at the
+      DEFAULT locked scope (which never deletes out-of-scope observation
+      entries), then requires the working tree to be clean for the two
+      GENERATED files corpora/observations.json and docs/CORPUS-MEASUREMENT.md.
+      A difference means the pinned corpora no longer produce the recorded
+      numbers. The diff NEVER covers the curated selection policy file the
+      measure step cannot write, so nothing under test can correlate with it.
+      The clean-diff demand composes with the upsert lifecycle because
+      observations are keyed by repo@sha: a pin bump creates a NEW key rather
+      than staling an old one, and the entry-deletion flag (which would remove
+      out-of-scope entries and break the diff) is deliberately never passed.
+      Invoked by the corpora workflow's drift leg, which runs only when a
+      measurement-affecting path changes.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — corpora:drift re-runs tools/corpora via `go run`."
+      - sh: command -v git
+        msg: "git not found — corpora:drift computes the drift diff with git."
+    cmds:
+      - |
+        set -euo pipefail
+        task corpora:fetch
+        task corpora:assert
+        task corpora:measure
+        # The measure step UPSERTS at the locked scope (never passing the
+        # out-of-scope deletion flag), so measured-but-unlocked observations
+        # are neither re-measured nor removed and never appear in this diff.
+        changed=$(git diff --name-only -- corpora/observations.json docs/CORPUS-MEASUREMENT.md)
+        if [ -n "$changed" ]; then
+          echo "::error::corpora:drift: re-measuring the locked corpora changed committed files — the pinned corpora no longer produce the recorded numbers"
+          printf '%s\n' "$changed"
+          git diff -- corpora/observations.json docs/CORPUS-MEASUREMENT.md | head -100
+          exit 1
+        fi
+        echo "corpora:drift: locked corpora re-measure byte-identical to the committed record"
 
   diag:cpu:
     desc: >-

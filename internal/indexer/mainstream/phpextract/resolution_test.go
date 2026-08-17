@@ -156,7 +156,7 @@ func indexAndExport(t *testing.T, root string) []byte {
 // fixture twice from scratch, into two entirely separate temp stores,
 // yields a byte-identical Export() stream after normalizing the one
 // volatile field — the mainstream-tier D-12 validation bar (a lighter
-// self-consistency check than priority-4's golden-parity harness, per
+// self-consistency check than priority-4's golden harness, per
 // 05-RESEARCH.md's "Validation Architecture").
 func TestSelfConsistency_DeterministicRebuild(t *testing.T) {
 	root := writePHPFixture(t, selfConsistencyFixture)

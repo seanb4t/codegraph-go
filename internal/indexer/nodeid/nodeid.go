@@ -33,9 +33,9 @@ func appendSegment(buf []byte, seg string) []byte {
 //
 // The preimage is hashed with SHA-256 — never MD5 or another
 // collision-prone hash (D-02a, T-02-05, ASVS V6) — and the digest is
-// hex-encoded and truncated to 32 characters, matching the TS-parity
-// <kind>:<32-hex> id shape (testdata/golden/ts-schema.dump.sql) while
-// retaining SHA-256's collision resistance for the truncated portion.
+// hex-encoded and truncated to 32 characters, matching the project's
+// <kind>:<32-hex> id shape while retaining SHA-256's collision
+// resistance for the truncated portion.
 //
 // The result is a pure function of its arguments: re-running NodeID on the
 // same tuple always yields the same id, which is how the resolver matches

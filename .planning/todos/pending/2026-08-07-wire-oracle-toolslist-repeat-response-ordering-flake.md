@@ -4,10 +4,15 @@ title: Wire oracle toolslist-repeat response ordering flake
 area: mcp
 severity: major
 files:
+
   - test/wireoracle/scenarios.go:559-573
   - test/wireoracle/oracle_test.go:130
   - test/wireoracle/oracle_test.go:291
   - .github/workflows/ci.yml:104-110
+
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
 ---
 
 ## Problem
@@ -85,16 +90,19 @@ Suggested order of work:
    concurrently with the rest of the suite, on Linux, ideally in a container
    matching the runner. A repro that only appears once in two CI runs is not
    yet a repro.
+
 2. **Split server from harness.** Determine whether the server emitted
    responses out of order, or the transcript reader consumed them out of
    order. These need different fixes and the current evidence does not
    distinguish them. Capturing raw stdio bytes with arrival timestamps,
    before normalization, separates the two.
+
 3. **Settle the ordering question at the source.** Read what the go-sdk
    actually guarantees for concurrent request handling. If it does not
    promise in-order responses for pipelined requests, the scenario's comment
    is the defect and the invariant must be re-stated (or enforced) rather
    than assumed.
+
 4. **Fix, then prove it RED first.** Per this repo's recurring lesson, any
    fix must be demonstrated against a test that fails before it and passes
    after — not merely wired up.

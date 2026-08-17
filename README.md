@@ -134,7 +134,6 @@ list means something else entirely: this repo has no index yet, so run
 | `serve --mcp` | MCP server for agents |
 | `install` · `uninstall` · `githooks` | agent and git integration |
 | `daemon` · `status` · `unlock` | lifecycle |
-| `migrate` | import an existing TypeScript CodeGraph index |
 | `upgrade` · `version` | self-update |
 
 Every command has `--help`. Output is colorized on a TTY and byte-identical
@@ -154,18 +153,17 @@ differences are documented rather than averaged away — see
 
 ## Performance
 
-Measured against the TypeScript implementation it ports — median-of-3, on three
-real repositories, on the same machine:
+Median-of-3, on three real repositories, on the same machine:
 
 | Repo | Indexing | Query latency | Peak RSS | Cold start |
 |---|---|---|---|---|
 | `weft` (~84 files) | 8.1× faster | 12.9× lower | 2.8× lighter | 8.4× faster |
-| `codegraph` (the TS original) | 4.3× faster | 11.5× lower | 4.5× lighter | 7.6× faster |
+| `codegraph` (TypeScript) | 4.3× faster | 11.5× lower | 4.5× lighter | 7.6× faster |
 | `cockroachdb/pebble` (largest) | 21.2× faster | 7.9× lower | 3.0× lighter | 8.2× faster |
 
 All three repos, every metric. Indexing spread is wide — **4.3×–21.2×** — and
-depends heavily on the language mix, so treat any single number with suspicion,
-including the flattering one. Full methodology, pinned corpus commits, and raw
+depends heavily on the language mix, so treat any single number with suspicion.
+Full methodology, pinned corpus commits, and raw
 per-run figures are in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 ## Supply chain
@@ -186,20 +184,9 @@ The reason this is one static binary rather than a bundled runtime:
 
 **v0.2.0 — pre-1.0.** The core is in daily use and the release pipeline is
 signed and attested end to end, but the API and CLI surface may still move
-before 1.0. Behavioral parity with TypeScript CodeGraph v1.3.x is covered by a
-fixture harness that diffs against frozen goldens; known divergences are logged,
-not hidden.
-
-## Relationship to the original
-
-This is an independent Go reimplementation of
-[CodeGraph](https://github.com/colbymchenry/codegraph) (TypeScript, MIT). It
-reproduces that project's CLI semantics, MCP tools, and ranking behavior closely
-enough to be a drop-in replacement, and `codegraph migrate` imports an existing
-TypeScript index.
-
-The original is the reason this project has a specification to hit at all. See
-[NOTICE](NOTICE) for attribution.
+before 1.0. Behavioral regression coverage is provided by the golden corpus
+suite — named property assertions over the in-repo behavioral corpus, re-frozen
+from codegraph-go's own output.
 
 ## Contributing
 
@@ -217,4 +204,4 @@ open a public issue for a vulnerability.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). This project began as a Go rewrite of CodeGraph; see [NOTICE](NOTICE) for the original copyright.

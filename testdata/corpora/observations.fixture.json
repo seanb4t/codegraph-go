@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "manifestPath": "corpora/manifest.json",
+  "observations": {
+    "fixture-org/go-corpus@abcdef0123abcdef0123abcdef0123abcdef0121": {
+      "repo": "fixture-org/go-corpus",
+      "sha": "abcdef0123abcdef0123abcdef0123abcdef0121",
+      "license": "MIT",
+      "language": "go",
+      "trackedFiles": 120,
+      "status": {
+        "backend": "pebble",
+        "version": "1",
+        "fileCount": 120,
+        "nodeCount": 4000,
+        "edgeCount": 2500,
+        "languages": ["go"],
+        "filesByLanguage": { "go": 120 },
+        "edgesByKind": {
+          "calls": 50,
+          "imports": 40,
+          "returns": 30,
+          "type_of": 20
+        },
+        "pendingChanges": { "added": 0, "modified": 0, "removed": 0 },
+        "index": { "state": "complete" }
+      }
+    },
+    "fixture-org/java-corpus@abcdef0123abcdef0123abcdef0123abcdef0122": {
+      "repo": "fixture-org/java-corpus",
+      "sha": "abcdef0123abcdef0123abcdef0123abcdef0122",
+      "license": "Apache-2.0",
+      "language": "java",
+      "trackedFiles": 90,
+      "status": {
+        "backend": "pebble",
+        "version": "1",
+        "fileCount": 90,
+        "nodeCount": 3000,
+        "edgeCount": 1800,
+        "languages": ["java"],
+        "filesByLanguage": { "java": 90 },
+        "edgesByKind": {
+          "implements": 15,
+          "extends": 10,
+          "overrides": 5
+        },
+        "pendingChanges": { "added": 0, "modified": 0, "removed": 0 },
+        "index": { "state": "complete" }
+      }
+    },
+    "fixture-org/csharp-corpus@abcdef0123abcdef0123abcdef0123abcdef0123": {
+      "repo": "fixture-org/csharp-corpus",
+      "sha": "abcdef0123abcdef0123abcdef0123abcdef0123",
+      "license": "MIT",
+      "language": "csharp",
+      "trackedFiles": 60,
+      "status": {
+        "backend": "pebble",
+        "version": "1",
+        "fileCount": 60,
+        "nodeCount": 2000,
+        "edgeCount": 1200,
+        "languages": ["csharp"],
+        "filesByLanguage": { "csharp": 60 },
+        "edgesByKind": {
+          "overrides": 8,
+          "instantiates": 12
+        },
+        "pendingChanges": { "added": 0, "modified": 0, "removed": 0 },
+        "index": { "state": "complete" }
+      }
+    },
+    "fixture-org/python-corpus@abcdef0123abcdef0123abcdef0123abcdef0124": {
+      "repo": "fixture-org/python-corpus",
+      "sha": "abcdef0123abcdef0123abcdef0123abcdef0124",
+      "license": "MIT",
+      "language": "python",
+      "trackedFiles": 70,
+      "status": {
+        "backend": "pebble",
+        "version": "1",
+        "fileCount": 70,
+        "nodeCount": 2200,
+        "edgeCount": 1400,
+        "languages": ["python"],
+        "filesByLanguage": { "python": 70 },
+        "edgesByKind": {
+          "references": 25
+        },
+        "pendingChanges": { "added": 0, "modified": 0, "removed": 0 },
+        "index": { "state": "complete" }
+      }
+    },
+    "fixture-org/tsjs-corpus@abcdef0123abcdef0123abcdef0123abcdef0125": {
+      "repo": "fixture-org/tsjs-corpus",
+      "sha": "abcdef0123abcdef0123abcdef0123abcdef0125",
+      "license": "MIT",
+      "language": "typescript",
+      "trackedFiles": 50,
+      "status": {
+        "backend": "pebble",
+        "version": "1",
+        "fileCount": 50,
+        "nodeCount": 1500,
+        "edgeCount": 900,
+        "languages": ["typescript"],
+        "filesByLanguage": { "typescript": 50 },
+        "edgesByKind": {
+          "type_of": 5
+        },
+        "pendingChanges": { "added": 0, "modified": 0, "removed": 0 },
+        "index": { "state": "complete" }
+      }
+    }
+  }
+}

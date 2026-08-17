@@ -23,7 +23,7 @@ type goldenCapture struct {
 func loadGoldenOutput(t *testing.T, name string) string {
 	t.Helper()
 
-	path := filepath.Join("..", "..", "testdata", "golden", "corpus", "weft-go", name)
+	path := filepath.Join("..", "..", "corpus", "behavioral", name)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read golden fixture %s: %v", path, err)
@@ -204,9 +204,9 @@ func TestExplore(t *testing.T) {
 		}
 
 		gotDisclaimer := extractDisclaimer(t, got)
-		wantDisclaimer := extractDisclaimer(t, loadGoldenOutput(t, "explore.json"))
+		wantDisclaimer := extractDisclaimer(t, loadGoldenOutput(t, "go-explore-multi.json"))
 		if gotDisclaimer != wantDisclaimer {
-			t.Fatalf("Explore disclaimer diverges from the golden explore.json disclaimer (D-05a — must be verbatim, not paraphrased):\ngot:  %q\nwant: %q", gotDisclaimer, wantDisclaimer)
+			t.Fatalf("Explore disclaimer diverges from the golden go-explore-multi.json disclaimer (D-05a — must be verbatim, not paraphrased):\ngot:  %q\nwant: %q", gotDisclaimer, wantDisclaimer)
 		}
 
 		wantFileHeader := fmt.Sprintf("**`%s`** — Alpha(function)\n\n```go\n1\t", alpha.FilePath)
@@ -233,10 +233,10 @@ func TestExplore(t *testing.T) {
 	t.Run("max-files caps the number of rendered file blocks", func(t *testing.T) {
 		engine, _ := nodeExploreFixture(t)
 
-		// "widget" (not "e") — the TS-parity tokenizers (H1/H2, plan 03)
-		// apply the same length-floor filtering real TS does, so a
-		// single-character query now tokenizes to nothing (matching real
-		// TS behavior, not the old lexical substring matcher's degenerate
+		// "widget" (not "e") — the H1/H2 tokenizer spec (plan 03)
+		// applies the same length-floor filtering the documented design does, so a
+		// single-character query now tokenizes to nothing (matching the
+		// documented behavior, not the old lexical substring matcher's degenerate
 		// "everything with an e in it" match). "widget" instead matches
 		// pkga's Widget struct AND structurally reaches pkgb.go (Run
 		// constructs a Widget{} and calls its Describe method), so the
@@ -388,7 +388,7 @@ func TestRenderNodeMultiDef(t *testing.T) {
 			t.Fatalf("RenderNodeMultiDef: unexpected error: %v", err)
 		}
 		if strings.Contains(got, "Trail") || strings.Contains(got, "Calls") || strings.Contains(got, "Called by") {
-			t.Fatalf("RenderNodeMultiDef: Trail/Calls/CalledBy lines must be omitted when both are empty (matches live TS golden captures):\n%s", got)
+			t.Fatalf("RenderNodeMultiDef: Trail/Calls/CalledBy lines must be omitted when both are empty (matches the golden captures):\n%s", got)
 		}
 	})
 }
@@ -397,8 +397,8 @@ func TestRenderNodeMultiDef(t *testing.T) {
 // (RESEARCH §5, verbatim): a root with >=1 direct caller and NO covering
 // test file ends with "; ⚠️ no covering tests found"; a root with covering
 // test files keeps the existing "; tests: ..." clause (no warning); a
-// root with ZERO callers gets NEITHER clause (mirrors TS's early-continue
-// before the callers/tests block is ever reached).
+// root with ZERO callers gets NEITHER clause (mirrors the documented
+// early-continue before the callers/tests block is ever reached).
 func TestNoCoveringTestsWarning(t *testing.T) {
 	root := &schema.Node{Name: "recoverAccount", Kind: "function", FilePath: "recovery/recovery.go", StartLine: 8}
 

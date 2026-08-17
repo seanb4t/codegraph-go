@@ -165,18 +165,18 @@ func TestMatrix_DocMirrorsDescriptor(t *testing.T) {
 }
 
 // goldenTestFuncsByLanguage maps a priority-4 language ID to the
-// golden-parity test function name testdata/golden/ must define for a
+// behavioral-suite test function name testdata/golden/ must define for a
 // "full" Resolution or Dispatch entry to be trustworthy (D-12: a "full"
-// entry in the matrix must have a corresponding green golden-parity
+// entry in the matrix must have a corresponding green behavioral-suite
 // test — 05-RESEARCH.md §Validation Architecture).
 var goldenTestFuncsByLanguage = map[string]string{
-	"go":         "TestGoldenParity",
-	"java":       "TestGoldenParity_Java",
-	"csharp":     "TestGoldenParity_CSharp",
-	"python":     "TestGoldenParity_Python",
-	"typescript": "TestGoldenParity_TSJS",
-	"tsx":        "TestGoldenParity_TSJS",
-	"javascript": "TestGoldenParity_TSJS",
+	"go":         "TestCorpusBehavior_Go",
+	"java":       "TestCorpusBehavior_Java",
+	"csharp":     "TestCorpusBehavior_CSharp",
+	"python":     "TestCorpusBehavior_Python",
+	"typescript": "TestCorpusBehavior_TSJS",
+	"tsx":        "TestCorpusBehavior_TSJS",
+	"javascript": "TestCorpusBehavior_TSJS",
 }
 
 // goldenTestFuncNames scans every *_test.go file directly under
@@ -214,11 +214,11 @@ func goldenTestFuncNames(t *testing.T) map[string]bool {
 
 // TestMatrix_FullPriority4EntriesHaveGoldenTest is the D-11/D-12 phase gate
 // (05-VALIDATION.md §Sampling Rate: "a 'full' entry in the matrix must have
-// a corresponding green golden-parity test"): every priority-4 language
+// a corresponding green behavioral golden test"): every priority-4 language
 // whose Resolution or Dispatch is "full" must have its mapped
 // testdata/golden test function actually declared — this test would fail
 // if a future edit marked a language "full" without ever wiring its
-// golden-parity harness, or renamed/removed that harness without updating
+// golden harness, or renamed/removed that harness without updating
 // the matrix.
 func TestMatrix_FullPriority4EntriesHaveGoldenTest(t *testing.T) {
 	declared := goldenTestFuncNames(t)

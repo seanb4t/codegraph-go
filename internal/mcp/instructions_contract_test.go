@@ -12,8 +12,7 @@ import (
 	claudeassets "github.com/seanb4t/codegraph-go"
 )
 
-// readmePath is the repository README, reached from internal/mcp. Mirrors
-// internal/cli/flag_parity_test.go's flagParityDocPath convention: a
+// readmePath is the repository README, reached from internal/mcp. A
 // relative path read directly, with a missing file treated as a loud
 // failure rather than a skip — a missing README is itself a regression,
 // not a "nothing to check" state.
@@ -372,7 +371,7 @@ func TestInstructionsClaimGuardsAreNotVacuous(t *testing.T) {
 // TestREADMEDocumentsToolVisibilityGate applies to the real README and
 // TestREADMEGateCheckerIsNotVacuous applies to synthetic inputs. Extracted
 // so the assertion itself is provably non-vacuous — the self-defeat
-// property internal/cli's flag-parity test could only verify by hand.
+// property a doc-drift guard could otherwise only verify by hand.
 //
 // The rule: a document may not enumerate the companion tools without also
 // naming the variable that can take them away. Naming codegraph_explore

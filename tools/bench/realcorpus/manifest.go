@@ -1,19 +1,19 @@
-// Package realcorpus is the pinned real-repo manifest for the PERF-01
-// head-to-head benchmark: the freshly-built Go `codegraph` binary vs the
-// installed TS `codegraph@1.3.1`, run over real, publicly available
-// source trees rather than the synthetic PERF-02/INDX-06 corpus
-// (tools/bench/gencorpus).
+// Package realcorpus is the pinned real-repo manifest for the `publish`
+// benchmark mode: the freshly-built Go `codegraph` binary, run over
+// real, publicly available source trees rather than the synthetic
+// PERF-02/INDX-06 corpus (tools/bench/gencorpus), to produce absolute
+// throughput / query-latency / peak-RSS numbers for publication.
 //
 // Every entry MUST carry a commit SHA — never just a branch or tag name
-// — so a published head-to-head number stays reproducible run-to-run and
+// — so a published measurement stays reproducible run-to-run and
 // machine-to-machine (CONTEXT.md D-04's reproducibility discipline,
 // extended from the synthetic corpus to real repos). This reuses the
 // exact provenance shape established by
 // tools/spike/testdata/ATTRIBUTION.md (recoverable via
 // `git show e5da8e7:tools/spike/testdata/ATTRIBUTION.md`) and by this
 // project's own testdata/golden/README.md "Corpus (D-06a)" table, which
-// already pins two of these three entries (weft-go, colbymchenry-
-// codegraph) for the Phase-3 golden-parity oracle.
+// already pins one of these two entries (weft-go) for the Phase-3
+// golden test suite.
 //
 // This package performs no network I/O: Resolve only reports a local
 // checkout path when one already exists (via an env var override or the
@@ -36,7 +36,7 @@ import (
 
 // Entry is one pinned real-repo benchmark input. Every field below (aside
 // from Tag, which may legitimately be empty for a pin taken at a
-// non-tagged commit) is required so a head-to-head number is always
+// non-tagged commit) is required so a published measurement is always
 // traceable back to an exact source, license, and file set — the same
 // discipline tools/spike/testdata/ATTRIBUTION.md established.
 type Entry struct {
@@ -51,9 +51,9 @@ type Entry struct {
 	// repo's default-branch HEAD at capture time rather than a
 	// tagged release — CommitSHA is authoritative either way.
 	Tag string
-	// CommitSHA is the exact pinned commit every head-to-head run
+	// CommitSHA is the exact pinned commit every `publish`-mode run
 	// MUST resolve to. This is the one field that makes a published
-	// number reproducible (see package doc).
+	// measurement reproducible (see package doc).
 	CommitSHA string
 	// License is the repo's SPDX-style license identifier at
 	// CommitSHA.
@@ -70,8 +70,7 @@ type Entry struct {
 	QueryTerms []string
 	// EnvVar, if set, is checked first by Resolve: an operator can
 	// point it at an existing local checkout to skip cloning
-	// entirely. Mirrors testdata/golden's own CODEGRAPH_WEFT_CORPUS
-	// convention (see testdata/golden/golden_parity_test.go).
+	// entirely.
 	EnvVar string
 	// SiblingDir, if set, is a conventional local checkout path
 	// (relative to this repo's parent directory) Resolve checks
@@ -79,21 +78,20 @@ type Entry struct {
 	SiblingDir string
 }
 
-// Corpora returns the fixed, pinned real-repo manifest for the PERF-01
-// head-to-head benchmark. Order is deliberate: compact-and-already-
-// vendored-adjacent first, multi-language second, larger-scale third
-// (per CONTEXT.md D-04's "plus a few larger real repos" + this plan's
-// "at least one larger real repo pinned by commit SHA to exercise
-// scale" acceptance criterion).
+// Corpora returns the fixed, pinned real-repo manifest for the `publish`
+// benchmark mode. Order is deliberate: compact-and-already-
+// vendored-adjacent first, larger-scale second (per CONTEXT.md D-04's
+// "plus a few larger real repos" + this plan's "at least one larger
+// real repo pinned by commit SHA to exercise scale" acceptance
+// criterion).
 func Corpora() []Entry {
 	return []Entry{
 		{
-			// Same pin testdata/golden/README.md's D-06a corpus table
-			// and testdata/golden/golden_parity_test.go's
-			// resolveWeftCorpus already use for the Phase-3 golden
-			// oracle — reusing it here keeps the project's set of
-			// pinned real repos small and consistent rather than
-			// introducing a fourth unrelated pin.
+			// Same commit pin testdata/golden/corpus/weft-go/ already
+			// uses for the golden test suite — reusing it here keeps
+			// the project's set of pinned real repos small and
+			// consistent rather than introducing a fourth unrelated
+			// pin.
 			Name:          "weft-go",
 			SourceURL:     "https://github.com/seanb4t/weft",
 			Tag:           "",
@@ -105,27 +103,20 @@ func Corpora() []Entry {
 			SiblingDir:    "weft",
 		},
 		{
-			// The original TS CodeGraph project this Go port
-			// replaces — multi-language (TS/JS/Python/Astro/YAML),
-			// exercises the tool surface broadly. Same pin
-			// testdata/golden/README.md's D-06a corpus table uses.
-			Name:          "colbymchenry-codegraph",
-			SourceURL:     "https://github.com/colbymchenry/codegraph",
-			Tag:           "",
-			CommitSHA:     "edb9f2f14cd7394a4d31f94ebc871531ef498ab0",
-			License:       "MIT",
-			SelectionRule: "entire repo at CommitSHA (multi-language: TS/JS/Python/Astro/YAML)",
-			QueryTerms:    []string{"ExtractionOrchestrator", "TreeSitterExtractor"},
-			EnvVar:        "CODEGRAPH_TSCG_CORPUS",
-			SiblingDir:    "codegraph-ts",
-		},
-		{
 			// A real, substantially larger Go codebase — this
 			// project's own Pebble storage dependency (see
 			// .claude/CLAUDE.md's Storage recommendation) — chosen to
-			// exercise PERF-01 at scale beyond weft-go's compact 84
-			// files, per this plan's "at least one larger real repo"
-			// acceptance criterion.
+			// exercise `publish` mode at scale beyond weft-go's compact 84
+			// files, per this plan's "at least one larger real repo
+			// pinned by commit SHA" acceptance criterion.
+			// Fetched at pinned SHA, never vendored: a fetch-only,
+			// never-vendored measurement corpus is a different
+			// redistribution question from internal/corpora's stricter
+			// MIT/Apache-2.0 golden-fixture bar (D-11), so this
+			// BSD-3-Clause entry stands on its own terms — the
+			// two-manifest split with internal/corpora is a recorded
+			// Phase-1 decision (01-04-PLAN.md,
+			// internal/corpora/manifest.go:6-15) and stays untouched.
 			Name:          "cockroachdb-pebble",
 			SourceURL:     "https://github.com/cockroachdb/pebble",
 			Tag:           "v2.1.6",
@@ -149,17 +140,15 @@ var ErrNeedsClone = errors.New("realcorpus: no local checkout found; shallow-clo
 
 // Resolve returns a local filesystem path containing e's source tree,
 // checked in this order:
-//  1. e.EnvVar, if set and pointing at an existing directory (operator
-//     override, mirrors CODEGRAPH_WEFT_CORPUS).
+//  1. e.EnvVar, if set and pointing at an existing directory (an
+//     operator override).
 //  2. e.SiblingDir, if set, resolved relative to this repo's parent
-//     directory (the "../weft next to this repo" convention already
-//     established by testdata/golden/golden_parity_test.go).
+//     directory (the "../weft next to this repo" convention).
 //
 // Resolve does not verify the checkout is actually pinned at
 // e.CommitSHA — callers that need that guarantee (as
-// golden_parity_test.go does for weft, and as
-// tools/bench/runner.resolveOrClone's pinnedAt check does for the
-// PERF-01 head-to-head benchmark, WR-02 Phase 8 re-review) should check
+// tools/bench/runner.resolveOrClone's pinnedAt check does for
+// `publish`-mode measurement, WR-02 Phase 8 re-review) should check
 // it themselves; this function's job is only path discovery, kept
 // deliberately simple so it has no network or git-plumbing surface of
 // its own beyond a single local `git rev-parse --show-toplevel` to

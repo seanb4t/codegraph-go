@@ -257,14 +257,14 @@ func TestFiles(t *testing.T) {
 			{"./-prefixed path matches an un-prefixed dir", "./internal/query/files.go", "internal/query", true},
 			{"non-matching prefix is excluded", "internal/query/files.go", "cmd/", false},
 			{"dir is not treated as a glob", "internal/query/files.go", "internal/q*", false},
-				// WR-01 regression: a sibling directory whose name is a
-				// literal string-prefix of dir (or vice versa) must NOT
-				// match -- the missing path-separator boundary check was
-				// the actual defect, distinct from the "not a glob" design.
-				{"WR-01: sibling directory sharing a string prefix is excluded", "pkgab/bar.go", "pkga", false},
-				{"WR-01: the same sibling collision without a trailing slash on dir", "pkgab/bar.go", "pkga/", false},
-				{"WR-01: the real directory still matches", "pkga/foo.go", "pkga", true},
-				{"WR-01: an exact-path match (no trailing separator) is a boundary match", "pkga", "pkga", true},
+			// WR-01 regression: a sibling directory whose name is a
+			// literal string-prefix of dir (or vice versa) must NOT
+			// match -- the missing path-separator boundary check was
+			// the actual defect, distinct from the "not a glob" design.
+			{"WR-01: sibling directory sharing a string prefix is excluded", "pkgab/bar.go", "pkga", false},
+			{"WR-01: the same sibling collision without a trailing slash on dir", "pkgab/bar.go", "pkga/", false},
+			{"WR-01: the real directory still matches", "pkga/foo.go", "pkga", true},
+			{"WR-01: an exact-path match (no trailing separator) is a boundary match", "pkga", "pkga", true},
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
@@ -441,7 +441,7 @@ func TestStatus(t *testing.T) {
 
 	t.Run("backend renders a Pebble-truthful value, not node-sqlite", func(t *testing.T) {
 		if got.Backend == "" || got.Backend == "node-sqlite" {
-			t.Fatalf("Status.Backend: got %q, want a non-empty, non-TS-SQLite value", got.Backend)
+			t.Fatalf("Status.Backend: got %q, want a non-empty, non-node-sqlite value", got.Backend)
 		}
 		if !strings.Contains(strings.ToLower(got.Backend), "pebble") {
 			t.Fatalf("Status.Backend: got %q, want it to identify Pebble", got.Backend)
@@ -551,7 +551,7 @@ func TestStatus(t *testing.T) {
 
 		// D-05: Languages must stay derived from FilesByLanguage (count >
 		// 0, sorted) — same order/shape as before this plan — so the
-		// golden JSON shape stays parity-stable.
+		// golden JSON shape stays stable under the golden suite.
 		var wantLanguages []string
 		for lang, count := range got.FilesByLanguage {
 			if count > 0 {
@@ -564,11 +564,13 @@ func TestStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("filesByLanguage is internal-only and absent from the JSON shape", func(t *testing.T) {
-		// D-05: TS's --json derives `languages` from filesByLanguage and
-		// discards the counts entirely — emitting a filesByLanguage key
-		// here would be a NEW Go-vs-TS divergence in the exact shape the
-		// golden oracle guards. The counts exist only to feed renderers.
+	t.Run("filesByLanguage is present in the JSON shape (v0.11.0 Phase 1, D-03)", func(t *testing.T) {
+		// D-03: the Compatibility constraint that suppressed this key
+		// (json:"-" — the JSON derives `languages` from this map and
+		// discards the counts, the project's own shape) was formally retired
+		// 2026-08-13 (engram record gw79qy2a9z). filesByLanguage is now
+		// un-suppressed, emitted alongside the new edgesByKind tally
+		// (FIXT-01).
 		raw, err := MarshalStatusJSON(got)
 		if err != nil {
 			t.Fatalf("MarshalStatusJSON: unexpected error: %v", err)
@@ -577,8 +579,16 @@ func TestStatus(t *testing.T) {
 		if err := json.Unmarshal(raw, &m); err != nil {
 			t.Fatalf("unmarshal status JSON: %v", err)
 		}
-		if _, present := m["filesByLanguage"]; present {
-			t.Fatal(`Status JSON unexpectedly contains "filesByLanguage" key (D-05: internal-only, json:"-")`)
+		raw2, present := m["filesByLanguage"]
+		if !present {
+			t.Fatal(`Status JSON missing "filesByLanguage" key (D-03: un-suppressed as of v0.11.0 Phase 1)`)
+		}
+		var decoded map[string]int64
+		if err := json.Unmarshal(raw2, &decoded); err != nil {
+			t.Fatalf("filesByLanguage did not decode as map[string]int64: %v (%s)", err, raw2)
+		}
+		if len(decoded) == 0 {
+			t.Fatal(`Status JSON "filesByLanguage" decoded to an empty map, want at least one language`)
 		}
 	})
 }

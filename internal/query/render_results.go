@@ -6,10 +6,10 @@
 // --json path AND is testdata/golden's shape oracle — e.g.
 // MarshalCallersJSON is called from both internal/cli/callers.go and
 // internal/mcp/tools.go. Mutating one of those bodies to emit markdown
-// would silently break the CLI contract and the golden parity harness
+// would silently break the CLI contract and the behavioral golden suite
 // simultaneously. So after this phase each helper family has exactly one
 // caller per surface: Marshal*JSON is called ONLY by internal/cli (the
-// --json contract and golden_parity_test.go's shape oracle); Render*
+// --json contract and behavioral_test.go's shape oracle); Render*
 // (this file) is called ONLY by internal/mcp (whose consumer is a
 // language model, not a parser — nothing unmarshals MCP text content).
 // That asymmetry is intentional, not an oversight — do not "helpfully"
@@ -84,7 +84,7 @@ func RenderCalleesMarkdown(r CalleesResult) string {
 // RenderImpactMarkdown renders an ImpactResult as markdown. Unlike the
 // other three Location-backed renderers, its header additionally carries
 // Depth/NodeCount/EdgeCount — the scalars ImpactResult has that have no
-// place in a per-row table — mirroring TS's own bolded-key style.
+// place in a per-row table — mirroring the documented bolded-key style.
 func RenderImpactMarkdown(r ImpactResult) string {
 	if len(r.Affected) == 0 {
 		return fmt.Sprintf("**Impact of `%s`** — depth %d, %d nodes, %d edges — no affected symbols found.\n", r.Symbol, r.Depth, r.NodeCount, r.EdgeCount)
@@ -119,7 +119,7 @@ func RenderSearchMarkdown(term string, locs []Location) string {
 // flat" default and the MCP files tool's own req.GetString("format", "")
 // default.
 //
-// Note: TS's MCP files tool defaults to the tree format; ours defaults to
+// Note: the documented MCP files tool defaults to the tree format; ours defaults to
 // flat. That is a PRE-EXISTING divergence, not introduced by this plan —
 // do not "fix" it here; it is Phase 8 SURF territory.
 func RenderFilesMarkdown(r FilesResult) string {

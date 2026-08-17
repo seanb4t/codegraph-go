@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "minEdgesPerKind": {
+    "calls": 29406,
+    "extends": 1265,
+    "implements": 509,
+    "imports": 1080,
+    "instantiates": 938,
+    "overrides": 2329,
+    "references": 6531,
+    "returns": 2795,
+    "type_of": 5928
+  },
+  "thresholdRationale": "Per-kind edge thresholds computed by corpora.ComputeThresholds from ALL eight measured eligible candidates (never from the locked subset), per the deterministic rule min(max(2, best/2), best) where best is that kind's highest observed count across the full measured universe. Each best value: calls=58812 (google/guava), extends=2531 (google/guava), implements=1018 (gohugoio/hugo), imports=2160 (gohugoio/hugo), instantiates=1877 (pydantic/pydantic), overrides=4658 (google/guava), references=13063 (google/guava), returns=5591 (google/guava), type_of=11857 (google/guava). Integer division: best/2 floors. The outer clamp max(2, best/2) then min(_, best) is what guarantees every threshold is satisfiable by construction — no kind derives a bar above its own best observed count, so thresholds can never be unsatisfiable, including a kind whose best is 1 (which yields threshold 1, not an impossible 2). D-14's tightening past the non-zero floor is arithmetically unavailable; no kind measured below 2, but the clamp is retained so the rule is uniform and a future single-edge kind would not deadlock. Thresholds are asserted by the locked set; each kind's threshold is <= its best observed count, so the achieved locked set supplies every one. No threshold required the 'best == 1' special case in this run. A kind whose measured count EQUALS its threshold passes — the comparison is at-least (>=), never strictly-greater, and Plan 01-07's guard pins this boundary. Thresholds come from the full eligible universe so selection never feeds the threshold it is judged by; re-running `go run ./tools/corpora -mode select` over the committed observations reproduces these values byte-identically, and Plan 01-06's verify recomputes them independently rather than reading the stored value. The five priority-4 languages deliberately keep the roadmap's non-zero file-count floor rather than a numeric threshold — D-14's threshold decision covered edge kinds only, and a language file-count bar was raised in the phase discussion and left deferred. The overrides and type_of kinds are covered by google/guava's measured 4658/11857 counts; this repository's own idiomatic Go source produces zero of both, so closing them on a named third-party corpus is the entire point of this spike and it is closed with recorded measurement, not expectation.",
+  "lockedSet": [
+    "gohugoio/hugo@0805c734a41b75403e3970e0070227916b6845d2",
+    "google/guava@94f39958baf7ad51ddf9c70e406ed6b188194daa",
+    "psf/requests@8068356288978c4f54661ae6f95afe0e0831885e",
+    "serilog/serilog@49b5339ce85385dc52d4d8e8f2b8308becf23506"
+  ],
+  "rejected": [
+    {
+      "repo": "apache/arrow",
+      "reason": "contains no C#, verified live against the repository language API; whole-repository pinning under D-10 would additionally require indexing tens of megabytes of C++ to reach its Python. Rejected before measurement."
+    },
+    {
+      "repo": "JamesNK/Newtonsoft.Json",
+      "reason": "measured (tracked files 1170) but not needed: supplies overrides=70, type_of=720, csharp, but adds no kind or language the locked set's smaller cardinality already covers; guava dominates every kind bar this entry could help and serilog supplies the C# non-zero floor at lower tracked-file cost."
+    },
+    {
+      "repo": "nestjs/nest",
+      "reason": "measured but not needed: supplies overrides=86, type_of=21, typescript files, but adds no kind or language at a higher total than the locked subset; TS/JS is supplied by gohugoio/hugo's javascript files, so nest is redundant for both cardinality and coverage."
+    },
+    {
+      "repo": "pydantic/pydantic",
+      "reason": "measured but not needed: supplies overrides=137, type_of=651, python=432 but adds no kind or language the locked set's smaller cardinality already covers; psf/requests supplies the Python non-zero floor at lower tracked-file cost."
+    },
+    {
+      "repo": "tiangolo/fastapi",
+      "reason": "measured but not needed: supplies overrides=33, type_of=55, python=1136 but adds no kind or language the locked set's smaller cardinality already covers; psf/requests supplies the Python non-zero floor at far lower tracked-file cost."
+    }
+  ],
+  "syntheticKinds": []
+}

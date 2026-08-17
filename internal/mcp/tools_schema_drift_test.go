@@ -33,12 +33,11 @@ var engineConstantFor = map[string]string{
 
 // TestMCPToolSchemaNumericClaimsMatchEngineConstants pins SURF-01's
 // demonstrated escape: Phase 8 changed internal/query's defaultDepth from 5
-// to 2 and updated the CLI help and docs/FLAG-PARITY.md, but
-// internal/mcp/tools.go kept advertising "BFS depth (default 5, max 50)" —
-// so MCP agent clients were told the wrong default for a whole phase.
-// internal/cli's TestFlagParityDocCoversRegisteredFlags structurally cannot
-// catch this: it walks the cobra command tree and never inspects MCP tool
-// schemas.
+// to 2 and updated the CLI help, but internal/mcp/tools.go kept advertising
+// "BFS depth (default 5, max 50)" — so MCP agent clients were told the
+// wrong default for a whole phase. A CLI-flag drift guard structurally
+// cannot catch this: it walks the cobra command tree and never inspects
+// MCP tool schemas.
 //
 // This test reads BOTH sides from their source of truth rather than
 // restating literals: the claimed VALUES come from calling

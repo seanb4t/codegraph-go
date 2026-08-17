@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
+	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
@@ -34,6 +35,14 @@ func fixtureStatusResult() query.StatusResult {
 			"go":     3,
 			"python": 1,
 		},
+		// Deliberately asymmetric, including an explicit zero (D-04's
+		// "measured zero" case) — exercises both the ordering tiebreak
+		// and zero-row rendering.
+		EdgesByKind: map[string]int64{
+			goextract.RefKindCalls:      5,
+			goextract.RefKindImports:    2,
+			goextract.EdgeKindOverrides: 0,
+		},
 	}
 }
 
@@ -58,7 +67,7 @@ func TestRenderStatus_SectionOrder(t *testing.T) {
 	}
 	stripped := stripANSI(buf.String())
 
-	sections := []string{"CodeGraph Status", "Index Statistics", "Nodes by Kind:", "Files by Language:"}
+	sections := []string{"CodeGraph Status", "Index Statistics", "Nodes by Kind:", "Edges by Kind:", "Files by Language:"}
 	last := -1
 	for _, section := range sections {
 		idx := strings.Index(stripped, section)
@@ -91,7 +100,7 @@ func TestRenderStatus_NumericFormatting(t *testing.T) {
 }
 
 // TestRenderStatus_WorktreeWarning asserts a WorktreeMismatch warning
-// appears — structural parity with the plain path.
+// appears — the same shape as the plain path.
 func TestRenderStatus_WorktreeWarning(t *testing.T) {
 	r := fixtureStatusResult()
 	r.WorktreeMismatch = &gitmeta.Mismatch{WorktreeRoot: "/a/main", IndexRoot: "/a/main/.claude/worktrees/probe"}
@@ -147,5 +156,85 @@ func TestRenderStatus_SanitizesControlChars(t *testing.T) {
 	}
 	if !strings.Contains(out, "/tmp/proj") {
 		t.Errorf("expected sanitized projectPath to survive in output, got:\n%q", out)
+	}
+}
+
+// TestRenderStatus_EdgesByKindSection asserts RenderStatus's styled
+// output carries an "Edges by Kind:" section (structural chrome only,
+// v0.11.0 Phase 1 D-01/D-04) including the fixture's explicit zero row —
+// a dense StatusResult renders explicit zeros on the TTY path just as it
+// does on the piped path.
+func TestRenderStatus_EdgesByKindSection(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderStatus(fixtureStatusResult(), "/tmp/proj", &buf); err != nil {
+		t.Fatalf("RenderStatus: %v", err)
+	}
+	stripped := stripANSI(buf.String())
+
+	if !strings.Contains(stripped, "Edges by Kind:") {
+		t.Fatalf("expected an %q section in ANSI-stripped output:\n%s", "Edges by Kind:", stripped)
+	}
+	for _, wantKey := range []string{goextract.RefKindCalls, goextract.RefKindImports, goextract.EdgeKindOverrides} {
+		if !strings.Contains(stripped, wantKey) {
+			t.Errorf("expected edge-kind row %q in ANSI-stripped output:\n%s", wantKey, stripped)
+		}
+	}
+	wantZeroRow := "  " + goextract.EdgeKindOverrides + strings.Repeat(" ", breakdownKeyWidth-len(goextract.EdgeKindOverrides)) + " 0"
+	if !strings.Contains(stripped, wantZeroRow) {
+		t.Errorf("expected the explicit-zero row %q in ANSI-stripped output:\n%s", wantZeroRow, stripped)
+	}
+}
+
+// TestRenderStatus_MatchesPipedSectionOrder renders the SAME fixture
+// through both present.RenderStatus and query.RenderStatusText, extracts
+// each renderer's live section-header sequence, and asserts the two
+// sequences are equal — a cross-renderer equality assertion, not two
+// independently maintained expectation lists, so a TTY user seeing
+// different sections than a piped/CI user cannot silently drift in
+// (deleting the writeBreakdownText("Edges by Kind:", ...) call from
+// RenderStatus turns this test red).
+func TestRenderStatus_MatchesPipedSectionOrder(t *testing.T) {
+	r := fixtureStatusResult()
+
+	var buf bytes.Buffer
+	if err := RenderStatus(r, "/tmp/proj", &buf); err != nil {
+		t.Fatalf("RenderStatus: %v", err)
+	}
+	ttyOut := stripANSI(buf.String())
+
+	pipedOut := query.RenderStatusText(r, "/tmp/proj")
+
+	headers := []string{"CodeGraph Status", "Index Statistics:", "Nodes by Kind:", "Edges by Kind:", "Files by Language:"}
+
+	sequenceOf := func(t *testing.T, out, label string) []string {
+		t.Helper()
+		var seq []string
+		var indices []int
+		for _, h := range headers {
+			idx := strings.Index(out, h)
+			if idx < 0 {
+				t.Fatalf("%s output missing section header %q:\n%s", label, h, out)
+			}
+			seq = append(seq, h)
+			indices = append(indices, idx)
+		}
+		for i := 1; i < len(indices); i++ {
+			if indices[i] <= indices[i-1] {
+				t.Fatalf("%s section headers out of order: %v at indices %v:\n%s", label, seq, indices, out)
+			}
+		}
+		return seq
+	}
+
+	ttySeq := sequenceOf(t, ttyOut, "present.RenderStatus (TTY)")
+	pipedSeq := sequenceOf(t, pipedOut, "query.RenderStatusText (piped)")
+
+	if len(ttySeq) != len(pipedSeq) {
+		t.Fatalf("section-header sequence length mismatch: TTY=%v piped=%v", ttySeq, pipedSeq)
+	}
+	for i := range ttySeq {
+		if ttySeq[i] != pipedSeq[i] {
+			t.Errorf("section-header sequence mismatch at position %d: TTY=%q piped=%q\nTTY sequence:   %v\npiped sequence: %v", i, ttySeq[i], pipedSeq[i], ttySeq, pipedSeq)
+		}
 	}
 }

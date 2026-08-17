@@ -1,47 +1,59 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.10.0
-milestone_name: Agent Onboarding Skill & MCP Resources
+milestone: v0.11.0
+milestone_name: Standalone Project Identity
 status: Awaiting next milestone
-stopped_at: Phase 8 context gathered
-last_updated: "2026-08-13T20:59:25.342Z"
-last_activity: 2026-08-13
-last_activity_desc: Phase 07 execution started
+stopped_at: Phase 6 complete — all phases complete
+last_updated: "2026-08-17T00:51:41.383Z"
+last_activity: 2026-08-16
+last_activity_desc: Milestone v0.11.0 completed and archived
+state_head: 5a133f77fd51636369e89b1931304cbff8d950f9
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 30
+  completed_plans: 30
   percent: 100
-current_phase: 08
-current_phase_name: instructions-marker-block-rewrite
+current_phase: 6
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-13)
+See: .planning/PROJECT.md (updated 2026-08-16)
 
-**Core value:** An agent user can uninstall TS CodeGraph, install the Go binary, migrate their indexes, and everything works the same or better — faster, from a single verifiably-built binary. **As of v1.0 this is delivered, not aspirational.**
-**Current focus:** Planning next milestone — run `/gsd-new-milestone`
+**Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
+**Current focus:** Planning next milestone — v0.11.0 shipped 2026-08-16; `REQUIREMENTS.md` is archived and milestone-scoped, so the next cycle starts fresh via `/gsd-new-milestone`.
 
 ## Current Position
 
-Phase: Milestone v0.10.0 complete
+Phase: Milestone v0.11.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-08-13 — Milestone v0.10.0 completed and archived
+Last activity: 2026-08-16 — Milestone v0.11.0 completed and archived
 
 ## Performance Metrics
 
-**Velocity (v0.5.0):**
+**Velocity (v0.11.0):**
 
-- Total plans completed: 39
-- Average duration: — min
-- Total execution time: 0.0 hours
+- Total plans completed: 30
+- No execution data yet for this milestone.
 
-**By Phase (v0.5.0):**
+**By Phase (v0.11.0):**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 1 | 7 | - | - |
+| 2 | 4 | - | - |
+| 3 | 2 | - | - |
+| 4 | 3 | - | - |
+| 05 | 8 | - | - |
+| 6 | 6 | - | - |
+
+**Velocity (v0.10.0 — archived, shipped 2026-08-13):** 4 phases, 15 plans, 34 tasks over 2 days.
+
+**Velocity (v0.5.0 — archived, shipped 2026-08-11):** 4 phases, 24 plans, 59 tasks over 3 days.
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
@@ -64,10 +76,6 @@ Last activity: 2026-08-13 — Milestone v0.10.0 completed and archived
 | 4 | 3 | - | - |
 | 5 | 1 | - | - |
 
-**Recent Trend:** v0.10.0 roadmap created 2026-08-12; no execution data yet for this milestone.
-
-*Updated after each plan completion*
-
 **By Phase (v1.0 — archived, milestone shipped 2026-08-03):**
 
 | Phase | Plans | Total | Avg/Plan |
@@ -85,208 +93,85 @@ Last activity: 2026-08-13 — Milestone v0.10.0 completed and archived
 
 v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8 phases — see `milestones/v0.1-*`). Note the standing reconciliation: "plans completed" counts SUMMARY files (66) while the old frontmatter `completed_plans` counted PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.
 
-**Per-Plan Metrics (v1.0 — archived):**
+**Per-plan metrics for v1.0, v0.3.0 and v0.5.0 are archived** with their milestones under `.planning/milestones/` and in each phase's own SUMMARY files; they were trimmed from this file at the v0.11.0 boundary to keep the live state readable. Nothing was deleted from the archives.
 
-| Plan | Duration | Tasks | Files |
-|------|----------|-------|-------|
-| Phase 01-behavioral-parity-explore-node P01 | 55min | 3 tasks | 30 files |
-| Phase 01 P02 | 5min | 1 tasks | 1 files |
-| Phase 01-behavioral-parity-explore-node P03 | 20min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P04 | 25min | 3 tasks | 4 files |
-| Phase 01-behavioral-parity-explore-node P05 | 19min | 2 tasks | 9 files |
-| Phase 01-behavioral-parity-explore-node P06 | 15min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P07 | 15min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P08 | 20min | 2 tasks | 4 files |
-| Phase 01-behavioral-parity-explore-node P09 | 24min | 2 tasks | 4 files |
-| Phase 01-behavioral-parity-explore-node P10 | 20min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P11 | 5min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P12 | 35min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P13 | 25min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node P14 | 12min | 2 tasks | 2 files |
-| Phase 01-behavioral-parity-explore-node PP15 | 12min | 2 tasks | 0 files |
-| Phase 01-behavioral-parity-explore-node P16 | 55min | 3 tasks | 5 files |
-| Phase 01-behavioral-parity-explore-node P17 | 25min | 3 tasks | 13 files |
-| Phase 02 P01 | 22min | 3 tasks | 8 files |
-| Phase 02 P02 | 28min | 3 tasks | 4 files |
-| Phase 02 P03 | 48min | 3 tasks | 2 files |
-| Phase 02 P04 | 35min | 3 tasks | 5 files |
-| Phase 02 P05 | 25min | 2 tasks | 2 files |
-| Phase 02 P06 | 25min | 3 tasks | 3 files |
-| Phase 02 P07 | 25min | 3 tasks | 10 files |
-| Phase 03 P01 | 4min | 2 tasks | 2 files |
-| Phase 03-watcher-on-mcp-default P02 | 9min | 2 tasks | 3 files |
-| Phase 03 P03 | 9min | 2 tasks | 2 files |
-| Phase 03-watcher-on-mcp-default P04 | 9min | 3 tasks | 3 files |
-| Phase 03-watcher-on-mcp-default P05 | 5min | 2 tasks | 1 files |
-| Phase 04 P01 | 4min | 2 tasks | 3 files |
-| Phase 04-output-hygiene P02 | 9min | 2 tasks | 2 files |
-| Phase 04-output-hygiene P03 | 8min | 2 tasks | 2 files |
-| Phase 05 P01 | 6min | 2 tasks | 3 files |
-| Phase 05 P02 | 3min | 2 tasks | 2 files |
-| Phase 05-git-sync-hooks P03 | 5min | 3 tasks | 2 files |
-| Phase 05 P04 | 6min | 2 tasks | 3 files |
-| Phase 05 P05 | 12min | 3 tasks | 4 files |
-| Phase 06 P01 | 15min | 3 tasks | 6 files |
-| Phase 06 P02 | 9min | 3 tasks | 8 files |
-| Phase 06 P03 | 4min | 2 tasks | 6 files |
-| Phase 07 P01 | 20min | 2 tasks | 5 files |
-| Phase 07 P02 | 6min | 2 tasks | 2 files |
-| Phase 07 P03 | 30min | 2 tasks | 6 files |
-| Phase 07 P04 | 12min | 2 tasks | 4 files |
-| Phase 07 P05 | 9min | 2 tasks | 2 files |
-| Phase 7 P06 | 13min | 2 tasks | 6 files |
-| Phase 07 P07 | 25min | 3 tasks | 5 files |
-| Phase 07 P08 | 15min | 2 tasks | 2 files |
-| Phase 08 P01 | 20min | 3 tasks | 3 files |
-| Phase 8 P2 | 6min | 2 tasks | 3 files |
-| Phase 08 P03 | 12min | 2 tasks | 9 files |
-| Phase 08 P04 | 6min | 2 tasks | 4 files |
-| Phase 08 P05 | 20min | 2 tasks | 2 files |
-| Phase 8 P06 | 25min | 2 tasks | 3 files |
-| Phase 08 P07 | 30min | 2 tasks | 1 files |
-| Phase 08 P08 | 14m | 2 tasks | 4 files |
-| Phase 08 P09 | 20min | 2 tasks | 2 files |
-| Phase 09 P01 | 40min | 2 tasks | 4 files |
-| Phase 09 P02 | 20min | 2 tasks | 2 files |
-| Phase 09-release-please-and-goreleaser P03 | 15min | 3 tasks | 3 files |
-| Phase 09-release-please-and-goreleaser P04 | 30min | 3 tasks | 3 files |
-| Phase 09 P05 | 15min | 1 tasks | 1 files |
-| Phase 09 P06 | 20min | 2 tasks | 0 files |
-| Phase 10 P01 | 45min | 3 tasks | 8 files |
-| Phase 10 P02 | unknown | 3 tasks | 5 files |
-| Phase 10 P03 | unknown | 2 tasks | 3 files |
-| Phase 10 P04 | ~16h (checkpoint-investigation dominated) | 3 tasks | 8 files |
-| Phase 10 P05 | 41min | 3 tasks | 4 files |
-| Phase 10 P06 | ~24min | 3 tasks | 5 files |
-| Phase 10 P07 | 55min | 3 tasks | 3 files |
-| Phase 02 P01 | ~2h | 3 tasks | 12 files |
-| Phase 02 P02 | 20min | 2 tasks | 4 files |
-| Phase 02 P03 | 35min | 2 tasks | 1 files |
-| Phase 02 P04 | ~1h | 3 tasks | 10 files |
-| Phase 02 P05 | 2h | 3 tasks | 24 files |
-| Phase 03-2026-07-28-spec-compliance P01 | 6min | 3 tasks | 4 files |
-| Phase 03 P02 | 2min | 2 tasks | 5 files |
-| Phase 03 P03 | 5min | 2 tasks | 4 files |
-| Phase 03 P04 | 6min | 2 tasks | 5 files |
-| Phase 03 P05 | 40min | 3 tasks | 27 files |
-| Phase 04 P02 | 119min | 3 tasks | 6 files |
-| Phase 04 P01 | 45min | 3 tasks | 3 files |
-| Phase 04 P03 | 40min | 2 tasks | 2 files |
-| Phase 05 P01 | 50min | 3 tasks | 6 files |
-| Phase 02 P07 | 90min | 3 tasks | 5 files |
+*Updated after each plan completion*
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions already made for v0.5.0, before any phase executes (full rationale in
-PROJECT.md -> Key Decisions, 2026-08-07):
+Decisions already made for v0.11.0, before any phase executes (full rationale in
+PROJECT.md → Current Milestone and ROADMAP.md → "Ordering is load-bearing"):
 
-- **Move to `goreleaser release`, not an extended build matrix** (maintainer directive, against recommendation). `notarize:` and `homebrew_casks:` execute only under `release`. Research the same day hardened rather than cleared the risk: `release` refuses a foreign `dist/`, and both `--split`/`--merge` and the `prebuilt` builder are Pro-only, so **one `macos-latest` runner with `zig cc` on both linux legs is the only OSS shape** — not merely the likely one.
-- **REL-05 is a blocking Phase-1 spike with a locked pass condition.** `zig cc` cross-compiles CGo tree-sitter to linux/amd64 **and** linux/arm64 from a macOS host, and the resulting binaries **run on real Linux**. A build exiting 0 is not a pass.
-- **GoReleaser Pro is costed and held as the fallback, not adopted.** On spike failure: buy Pro, reshape around `release --split`/`continue --merge`, and carry three named gate repairs as explicit added scope — `check:goreleaser`/DIST-01, `TestGoreleaserPinParity`, and `tool-vuln`/VULN-01-02-03 (which would turn `GO-2026-5932` from accepted-and-measured into unmeasurable).
-- **`homebrew_casks:`, not `brews:`** — `brews:` is deprecated as of GoReleaser v2.10, and Homebrew's own maintainers recommend casks for GoReleaser-precompiled binaries (Homebrew/brew #20291). Corrected before any planning was drawn over the falsified assumption.
-- **Archives *alongside* raw binaries.** Multiple `archives:` entries keyed by `id` are natively supported, so D-02/Finding 1 is preserved untouched rather than amended. `binary_signs:` replaces `signs: {artifacts: binary}` once both shapes coexist.
-- **The checksums collision is resolved by deletion, not reconciliation.** `.goreleaser.yaml`'s dead `checksum:` block and `release.yml`'s hand-rolled `sha256sum` step both emit `codegraph_<tag>_checksums.txt`; the hand-rolled step is deleted in the same change that makes the block live.
-- **Notarize but do not staple; document the offline gap.** `.zip` and bare Mach-O are both categorically unstaplable and Quill has no staple command. Gatekeeper passes via online ticket lookup; offline first launch is a documented known limitation, matching what GoReleaser ships for its own CLI.
-- **Four checks feel like verification and are not:** a green CI step; `codesign -dvv` (it already passes on the adhoc-signed darwin/arm64 binary `spctl` rejects); `notarytool history` showing Accepted; and `spctl` on a file that was never quarantined. The only trustworthy gate forces a real `com.apple.quarantine` xattr onto the actually-published asset.
-- **`codegraph upgrade` refuses under a brew-managed install,** detected by resolving symlinks to the real Cellar path — never a path-prefix guess.
+- **Corpus selection is decided by measurement, and it blocks everything downstream.** FIXT-01 is a Phase-1 spike that indexes candidate MIT/Apache-2.0 repositories and records real per-kind edge counts and per-language file counts before any set is locked. The trap it exists to catch is already in this repo's history: v1.0 Phase 1 established that codegraph-go's own idiomatic Go source produces **zero** `overrides` and `type_of` edges, so a corpus set can silently under-cover the 9-kind `RANK_EDGES` vocabulary while the whole suite stays green. Shortlist to measure (not locked): gohugoio/hugo, nestjs/nest, google/guava, apache/arrow.
+- **Fetch at pinned SHA with CI cache; never vendor corpus source.** Avoids repo bloat and avoids adding redistribution obligations to the very `NOTICE` file this milestone is trimming.
+- **The rename pass (CODE-02) and the re-freeze pass (FIXT-06) are separate reviewed diffs.** One diff containing both makes any regression un-attributable. The repo's discipline is one reviewed-diff pass with every changed transcript attributable to a single named cause (v0.3.0 Phase 3; v0.10.0 Phase 8). The identifier pass changes no golden byte; the re-freeze changes no identifier.
+- **FIXT-07 runs after FIXT-06 and in a different phase, never in the same plan.** A gate is not trusted until demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation. A re-baseline that authors its own proof in the same change certifies its own oracle.
+- **FIXT-03's "no self-skips" needs a positive assertion.** A negative-only guard passes vacuously — this repo already carries that class twice (rule `84d1gfpywd`; the `dry-run-signed` additions-only diff guard). The CI job must report and assert an executed-scenario count, on the `ExpectedScenarioCount` precedent from the wire oracle.
+- **The sweep removes framing, never capability — with one recorded exception.** `codegraph migrate` was the exception: maintainer ruling D-04 (2026-08-15) amended CODE-03 to remove it entirely in Phase 5 — the command, the `internal/migrate` package, its fixture, and the sole-use `modernc.org/sqlite` dependency. There is no migration path; a user of the prior implementation re-indexes from source. Everything else holds: `internal/indexer/tsextract`, the language registry and the capability matrix are product surface — TypeScript-the-indexed-language, not TypeScript-the-origin-project. Resolved term-by-term with recorded reasons, never by regex.
+- **No vocabulary drift guard (VOCAB-01), deliberately.** A term blocklist either goes vacuous or fights legitimate uses like `tsextract`. One-time sweep plus review discipline is the chosen posture, recorded in REQUIREMENTS.md → v2 so the decision stays visible.
+- **`docs/CLI-REFERENCE.md` (DOCS-05) is deferred.** This milestone *deletes* `docs/FLAG-PARITY.md` and its drift guard; authoring a self-authored replacement with its own guard is separate work. This is a knowing, recorded reduction in flag-documentation coverage.
+- **The engram memory sweep is last and is verified by inspection.** The spine lives outside git; no CI gate can hold it. MEM-01 supersedes rather than overwrites — nothing recording real history is deleted, only present-tense assertions of the retired framing are corrected.
+- **`.planning/` archives and `CHANGELOG.md` are out of scope.** The first is an append-only record parsed by scope-sensitive tooling; the second is release-please-owned and hand-editing it breaks the tool that both writes and re-reads it.
+- **`v0.11.0` is a prediction, not a tag.** release-please is the sole tag authority (D-06R); no phase schedules a `git tag` step.
 
-v1.0's decision log is archived with the milestone — per-phase decisions live in
-`milestones/v1.0-phases/*/`, and the durable product-level ones are summarized in
-PROJECT.md -> Key Decisions. The v0.3.0 log that follows is retained as carried context.
+Decisions from prior milestones are archived with them — per-phase decisions live in
+`milestones/*-phases/*/`, and the durable product-level ones are summarized in
+PROJECT.md → Key Decisions.
 
-Decisions already made for v0.3.0, before any phase executes:
-
-- **Adopt `github.com/modelcontextprotocol/go-sdk@v1.7.0`** (maintainer pre-decision, 2026-08-03). Evidence was one-sided: `mark3labs/mcp-go@v0.57.0` pins `LATEST_PROTOCOL_VERSION = "2025-11-25"`, has no `2026-07-28` support, no announced timeline, and one unclaimed tracking issue (#928); the official SDK shipped stable on 2026-07-27 with five-era negotiation (`2026-07-28` → `2024-11-05`) built in. **There is no decision-gate phase and no dated-defer branch** — the roadmap's SUMMARY-suggested Phase 3 (adopt-vs-defer) and Phase 4b (dated defer) are superseded.
-- **Verification precedes migration** (VRFY-04, hard sequencing constraint). An SDK's own client silently skips malformed stdout lines and cannot fail a purity test — established in v1.0 Phase 4. A harness written after the swap would describe the new behavior rather than test it.
-- **`ttlMs: 0` + `cacheScope: "private"` paired with a per-call `hasIndex` re-check** — two halves of one correctness property, not independent options. A long `ttlMs` is a true statement about the mechanism and a dangerous one about the promise.
-- **Legacy `initialize` support is NOT dropped.** Per the spec's own compatibility matrix, a Modern-only server hard-fails every still-Legacy client with no client-side fallback, and zero of the 8 roster clients have confirmed `2026-07-28` support. This is the single highest-consequence mistake available in this milestone.
-- **SPEC-09 is sequenced last, alone.** It is a long-lived-stream mechanism materially larger than the rest of the SPEC work and explicitly not required for correctness once `ttlMs: 0` ships, so it is isolated in Phase 5 where slipping it cannot block the milestone's core value.
-
-Decisions made during Phase 1 (completed 2026-08-05):
-
-- **VRFY-02 ships as an asserted pin, not an injection point.** `mark3labs/mcp-go` v0.56.0 decides the negotiated revision in the unexported `(*MCPServer).protocolVersion` and exposes no `WithProtocolVersion` option, so no caller can inject a repo-owned literal while it is the backend. ROADMAP criterion 3 was restated from "reads from" to "asserted against" to match REQUIREMENTS.md and the shipped mechanism; the stricter "reads from" property is carried to Phase 2. Recorded in `internal/mcp/protocol_version.go:9-22` so it cannot be mistaken for an injection point later.
-- **The unsupported-version scenario is frozen as an observed success, not an assumed error.** `mark3labs` v0.56.0 silently coerces an unrecognized `protocolVersion` to its own latest, and `UnsupportedProtocolVersionError` is client-side only. Freezing an error response there would have encoded a validation the server does not perform. The compensating control is VRFY-03's session line, which reports requested and negotiated separately.
-- **The session line panics on a nil writer; `io.Discard` is the only opt-out.** "Always on" is a construction property, not a calling convention — a future caller passing nil would otherwise silently disable the milestone's sole mismatch mitigation.
-- **A gate is not trusted until demonstrated RED** was applied literally: four one-time mutations against the real binary, plus the UAT-added session-line concurrency test, each observed red before being trusted.
-
-Standing decisions that outlive v1.0:
+Standing decisions that outlive every milestone:
 
 - Versions follow release-please + Conventional Commits; no version is ever forced (D-06R, maintainer directive 2026-07-29). There is deliberately no `v1.0.0` tag.
 - **release-please is the sole tag authority** (D-06R). No hand-created tags of any kind — including milestone markers. `milestone-v0.1` exists only because it predates release-please. If a planning tag is ever reintroduced, it must not match `release.yml`'s `push: tags: "v[0-9]*"` trigger.
 - The agent/MCP output path stays plain and parseable; all Charm styling is confined to the human path by a fail-closed ANSI-isolation archtest, not by convention.
 - CGo tree-sitter is the single documented CGo exception (DIST-05 / PARSER-DECISION.md).
 - `Taskfile.yml` is the single definition of every CI job body; `TestWorkflowRunBodiesInvokeTask` enforces it.
-- A gate is not trusted until it has been demonstrated RED against a confirmed-applied mutation.
-- [Phase ?]: 02-01: go-sdk's StdioTransport{} lacks a customization hook, so a real client-disconnect race (stdin closes before an in-flight response is written) required a custom IOTransport wrapper (stdinLingerReader/pendingWriter) in goSDKServer.ServeStdio().
-- [Phase ?]: 02-01: go-sdk defaults to the 2026-07-28 SEP-2575 server/discover handshake, never classic initialize, when both client and server are go-sdk v1.7.0 defaults — VRFY-03's session-line middleware only fires for classic initialize (in scope for this phase); internal/mcp's own tests now drive a raw jsonrpc handshake (sendRawInitialize) to exercise it.
-- [Phase ?]: 02-01: added a narrow, function-scoped HYG-02 archtest allowlist (internal/graphstore/archtest) for internal/mcp's now-necessary direct os.Stdout reference in ServeStdio() — the one legitimate transport-target write, not a diagnostic leak; proven scoped via a new self-test.
-- [Phase ?]: 02-02: reused mcpSDKModulePrefixes by index for the SDK-01 swap exemption rather than retyping module paths
-- [Phase ?]: SDK-04 closed: internal/mcp/error_mapping_test.go pins the error-to-wire mapping for handler-returned errors, schema-rejected missing arguments, undeclared arguments, and engine-level failures, demonstrated RED via a jsonrpc.Error mutation on codegraph_status's error path
-- [Phase ?]: 02-04: testdata/golden's t.Errorf/t.Fatalf count dropped 114->112 because go-sdk's Client.Connect atomically merges connect+handshake (mark3labs needed two separate fallible steps); no test assertion weakened, only setup-error-check plumbing shrank
-- [Phase ?]: 02-04: go mod tidy requires -e to proceed past a pre-existing, unrelated alex-pinkus/tree-sitter-swift test-dependency resolution quirk (reproduced against the untouched pre-task go.mod); result confirmed stable across two consecutive -e runs
-- [Phase ?]: 02-05: nine named causes for the go-sdk wire re-freeze; cause #9 (edge-call-before-initialize session-ordering rejection) was undiscovered by research, found at the checkpoint, and accepted by the maintainer as spec-correct
-- [Phase ?]: SPEC-04 discover cacheScope corrected to private via the AddReceivingMiddleware seam (D-03), mirroring D-09's tools/list fix
-- [Phase ?]: D-03 anti-regeneration guard becomes advisory, not blocking (option-advisory): the guard's own two-PR remedy is structurally unavailable in this repository; the reviewed-diff pass (D-06) is now the sole control, stated explicitly in Taskfile.yml and ci.yml so an advisory job is never mistaken for a gate.
-- [Phase ?]: SPEC-02 closed by assertion: -32602/-32022 frozen and anchored, zero server code added; the -32601 observation in 03-CONTEXT.md is go-sdk's own lexical version-string comparison, retracted in-file
-- [Phase ?]: SPEC-05: live tool catalog via one registerTools/unregisterTools seam driven by a pre-next() per-request re-check inside AddReceivingMiddleware; confinement stays anchored at construction-time repoPath, never widened
-- [Phase ?]: Wire-oracle: index-appears-mid-session drives a real codegraph init subprocess mid-capture, blocking on response-observed (not sleep) via a restructured Capture; ExpectedScenarioCount now 27
-- [Phase ?]: SPEC-07's instructions string ships identically to both initialize and server/discover via ServerOptions.Instructions; SPEC-06 covered by one added tools/call on legacy-2024-11-05 rather than a new scenario, a LOW-confidence sufficiency judgment recorded as such
-- [Phase ?]: Phase 3's reviewed-diff pass ran a consolidated fourth time in 03-05: 24 of 27 transcripts re-frozen, three additive causes named with counts, zero unattributed lines, oracle re-proved non-vacuous via Mutation 1 with a byte-clean revert
-- [Phase ?]: MAINT-01 (getppid -race) closed structurally via t.Cleanup-registered join-before-restore, proven by 0 races across 3 post-fix full-suite -race runs plus a disproof/reproof toggle test
-- [Phase ?]: MAINT-02 plain-timeout tail not reduced to a literal zero on this session's machine due to a discovered confound: multiple concurrent sibling Claude Code agents plus a live desktop GUI competing for CPU (confirmed via ps aux); GOMAXPROCS=4 (CI-runner-class approximation) is 8/8 clean, isolated runs always clean
-- [Phase ?]: 04-01: Tool-modfile vuln scan ships ADVISORY not blocking (D-04 superseded) — goreleaser's binary carries a real, permanently-unfixed, symbol-reachable GO-2026-5932 match (openpgp via cosign/rekor's PGP verifier); blocking would have been permanently red from first run
-- [Phase ?]: MAINT-03: aligned release.yml's GoReleaser pin upward to v2.17.1 (matching go.tool.mod), confirmed by git history that neither pin was deliberately moved away from the other
-- [Phase ?]: VULN-03: stance test re-derived from a divergence assertion to an agreement assertion after D-04's mid-phase supersession — tool-vuln and transcript-freeze are now both deliberately ADVISORY, not deliberately different
-- [Phase ?]: NoInitialize with Modern _meta on every request is required for the SPEC-09 proof scenario — a classic initialize would route the session onto go-sdk's Legacy no-opt-in notification channel and make the proof vacuous
-- [Phase ?]: Registered 4 anchors (not the plan's stated 5) matching the plan's own action-text description exactly; documented as a plan-text inconsistency, not an omission
-- [Phase ?]: SIGN-04 points 4-5 recorded with explicit scope-limit: verify:release-assets checks cosign/attestation bindings against linux/amd64 only; darwin/amd64 has no binding check anywhere in the pipeline
-- [Phase ?]: docs/RELEASE.md's reproducibility-posture claim corrected (not just closed): the darwin signature is not bit-for-bit reproducible even by the cert holder, since Apple's notarization embeds a per-operation trusted timestamp
+- **A gate is not trusted until it has been demonstrated RED against a confirmed-applied mutation.**
+- **A guard must carry a positive assertion that it did its work.** Negative-only guards pass vacuously (rule `84d1gfpywd`).
+- **Shared-array-entry ownership must be exact-identity, never shape/position** (hardened after the v0.10.0 hook-ownership vulnerability, commit `242ec0a`).
+- **A transcript grep is a claim about the grep, not about the product.** Before recording an absence from a transcript, prove the same search can find the thing when it is present (established twice in the v0.10.0 Phase 6 rehearsal).
 
 ### Pending Todos
 
-10 pending — `/gsd-capture --list` to review.
+8 pending — `/gsd-capture --list` to review. One (`bench pinnedAt`) surfaced during v0.11.0 Phase 1 but is out of scope there; the rest predate v0.11.0 and none block it.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
 | 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
-| 2026-08-08 | agents | major | Author a codegraph usage skill for agents — closes the never-completed hand-off at `internal/agents/instructions.go:17-18`, which defers full tool guidance to an MCP initialize response that never carried it |
+| 2026-08-09 | release | — | `dry-run-signed` additions-only diff guard passes vacuously |
+| 2026-08-09 | ci | — | post-release-verify event-aware conclusion guard has no regression assertion |
+| 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
+| 2026-08-10 | docs | — | `brew trust` instructions recommend broader tap grant with no security framing |
+| 2026-08-10 | ci | — | Tap App secret distinctness test is tautological and reads no workflow |
+| 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces; latent in the benchmark path, reconciles when Phase 6 (Benchmark De-coupling) touches `realcorpus` |
+| — | mcp | major | CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications (see Blockers/Concerns) |
 
-Three earlier todos were resolved during v1.0 and filed to
-`.planning/todos/completed/` at milestone close:
+Resolved and filed to `.planning/todos/completed/`:
 
 | Resolved | Area | Title |
 |----------|------|-------|
 | 2026-07-28 | docs | Document release procedures (maintainer runbook) — closed by 09-04's `docs/RELEASE-PROCEDURES.md` rewrite |
 | 2026-07-31 | perf | Bisect the indexer throughput regression — **REFUTED**; the regression did not exist (cross-platform baseline comparison) |
 | 2026-07-31 | perf | Rebless perf baseline on ubuntu-latest — **DONE**; gate green on main |
+| 2026-08-13 | agents | Author a codegraph usage skill for agents — closed by v0.10.0 Phases 6–8 |
 
 ### Blockers/Concerns
 
-v1.0's phase-scoped blockers are all resolved and archived with the milestone.
-Carried forward:
+Nothing blocks v0.11.0. Carried forward from prior milestones:
 
-- **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` (tool-modfile vulnerability scanning) and `999.6` (MCP `2026-07-28` impact assessment) were both promoted into v0.3.0 — 999.3 into Phase 4, 999.6's useful residue into Phase 1 — but all five `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. PROJECT.md's remaining-backlog list names only 999.2 / 999.4 / 999.5. Decide whether the two promoted entries should be struck from the Backlog or annotated as promoted; nothing was removed pending that call.
-- **Residual darwin release-path check.** `release.yml`'s goreleaser / cosign / SLSA steps have never executed on `namespace-profile-macos-6x14-tahoe`, because `release.yml` triggers only on `v[0-9]*` tag push. A permanent canary (`darwin-toolchain-canary.yml`) machine-proves that runner's availability and native Apple Silicon toolchain, so the residual gap is narrower than "the darwin leg" — but the goreleaser/signing/attestation path and a `codegraph upgrade` smoke test against the resulting macOS binary still want a human eye at the next real tag push.
-- **GoReleaser pin mismatch.** `ci.yml` uses v2.17.1; `release.yml` uses v2.17.0. Now scheduled as MAINT-03 in Phase 4.
-- **Client-side `tools/list` caching bugs are a known confound.** Real, primary-source GitHub issues exist against Claude Code itself (anthropics/claude-code #41123, #40025, #50515; claude-ai-mcp #45). These will be misdiagnosed as migration regressions unless documented as a known confound before Phase 2 ships.
-- **Open GitHub issues:** #13 daemon `-race` on the `getppid` test seam (→ MAINT-01, Phase 4) · #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity) · #17 `TestRunWatchdogCancelsRunOnSimulatedReparent` fails under full-suite load, passes isolated (→ MAINT-02, Phase 4).
-- **Advisory, unregistered surfaces** from the Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
-- **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing.
-- state.advance-plan failed: 'Cannot parse Current Plan or Total Plans in Phase from STATE.md' — Current Position still reads 'Plan: Not started' from the phase-planning step; likely needs orchestrator-side initialization to 'Plan: 1 of 5' before advance-plan can parse it. Not hand-edited per planning-artifacts rule (tool-owned file).
-- Daemon extreme-load tail (ACCEPTED, not a gap). Phase 4 fixed the structural cause of the rotating daemon flake set — orphaned goroutines surviving t.Fatalf's runtime.Goexit() — proven by zero DATA RACE under full-suite -race and 6/6 clean at GOMAXPROCS=4. Under pathological workstation load (~22 concurrent agent processes, load avg 6.3) one plain-timeout failure still appears. 52/52 real ci.yml runs back to 2026-07-13 show no daemon failure on the actual runner class, so CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06). Not scheduled for further work.
-- Daemon test feedback-latency tradeoff. Phase 4 raised the daemon test time budget to absorb contention: the package now runs ~65s clean at GOMAXPROCS=4 (was ~30s), and a failure under extreme load takes ~250s to surface instead of ~10s. Tolerance bought at the cost of feedback speed. Acceptable at CI concurrency; revisit if the daemon suite becomes a CI bottleneck.
-- GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling. goreleaser's binary reaches golang.org/x/crypto/openpgp (110 vulnerable symbols) via pipe/ko then google/ko then sigstore/cosign/oci then sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The new advisory tool-vuln job is now the only thing surfacing it — reported, not resolved. This is why D-04 was superseded from blocking to advisory.
-- Phase 2 HALTED at plan 02-04 Task 2: no Apple Developer ID Application certificate and no App Store Connect API key on this host (keychain holds only an Apple Configurator identity; of the five MACOS_* variables are set). Plans 02-06 and 02-07 are blocked_by 02-04.
-- TOOLING (not blocking work): 'gsd-tools query state.sync' counts a SUMMARY with 'status: halted' as a completed plan. It set progress.completed_plans to 11 (6 from phase 1 + all 5 phase-2 summaries) although 02-04 is halted, so STATE now disagrees with ROADMAP, which correctly reads 4/7. Sync also reported changing the body progress bar to 17% but left it reading '0/4 phases complete (0%)'. Not hand-edited per the planning-artifacts rule (tool-owned file); same treatment as the state.advance-plan gap already recorded above. Also note: 'gsd-tools query state.sync' MUTATES when invoked with no args - it has no dry-run probe mode, same hazard class as generate-claude-md.
-- **CR-01 (Phase 5 code review, `internal/mcp/server.go:225-349`): `pendingWriter`'s "pending response" counter is corrupted by server-initiated notifications, defeating the stdin-EOF-race fix it exists to provide.** The counter increments only on accepted client requests but decrements on every stdout `Write()` call, including notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that a prior phase's SPEC-09 work routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable via the vendored go-sdk's shared write path, not merely theoretical. Predates Phase 5 (introduced in `13f2875`, "protocol currency"); Phase 5 only added unrelated resource-registration code to this file. See `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md` (CR-01) for the full trace and a proposed fix (track pending-by-id, or distinguish response frames from notification frames before decrementing). Not fixed in Phase 5 — out of its declared scope (RSRC-01…03, GUARD-01…02) — needs its own tracking issue/plan.
-- **NUDGE-01 resume-matcher (RESOLVED 2026-08-13, not a gap — NUDGE-01 holds on the resume path).** The Phase 6 rehearsal reported that the SessionStart `resume` matcher "does not observably fire" and recorded it as a real, reproducible gap. That finding was a false negative produced by an invalid oracle, and is retracted. A seven-probe single-variable ladder (`.planning/debug/resolved/resume-matcher-not-firing.md`) showed the matcher fires: a probe hook that logs its own stdin records `source=resume` on `claude --resume`, and a resumed session quotes the nudge line verbatim. Claude Code suppresses a SessionStart hook's context injection *and* its transcript record when the output is byte-identical to context already injected that session; `session-nudge.sh` emits one constant line for every source, so its resume dispatch is always the suppressed case. Two probes differing only in per-source vs constant output isolate this as the sole variable. Ruled out by their own probes: `${CLAUDE_PROJECT_DIR}` expansion, `.claude/hooks/hooks.json` shadowing (that file is not read by Claude Code, as `hookpackage_test.go` already documents), and project-scoped settings being ignored on resume. **Transferable correction: transcript grep is not a valid oracle for SessionStart dispatch** — it is blind to any hook whose output is empty or duplicated, including under `startup`. Guarded by `TestNudgeLiveSessionEvidenceRetractsResumeFailureClaim` and `TestSessionStartRegistersBothDocumentedEntryPoints` in `internal/agents/hookpackage_test.go`.
-- **Project-skill discovery non-listing (RESOLVED 2026-08-13 — discovery was never broken; a narrower real defect was found and fixed).** The Phase 6 rehearsal reported that a genuinely fresh session's skill-listing system reminder "did not name `codegraph` at all," confirmed by grepping that session's raw transcript. That finding is retracted: it was a false negative. The captured session's transcript (`c4b8f662-07d5-4549-ba5d-be3f7ba795d2.jsonl`) contains an `attachment` record of `"type":"skill_listing"` whose content includes `\n- codegraph\n`, at the end of the personal-skill block — exactly where a project-scoped `.claude/skills/` entry belongs. **What was actually wrong:** the entry is degraded, not absent — it renders as a bare `- codegraph` with no colon and no description, so a grep keyed on `codegraph:` or on the description text matches nothing. **Root cause (environment, not this repo's authoring):** Claude Code renders the catalog into an attachment capped near 45,000 characters (measured 44,976–45,014 across four independent sessions, admitting **exactly 173** descriptions in every one) and emits every entry past the cap as a bare name; this operator's ~238-skill installation saturates the cap, and project-scoped skills are appended after all personal and plugin skills, so this repository's entry is degraded by construction. Proven not to be a file property: a probe skill whose description was byte-identical to a working skill's rendered bare in the same listing where the original rendered with its description; a probe with every non-ASCII character stripped was still degraded. **Fix on our side:** cut the frontmatter description from 299 to 110 characters so it competes for the leftover budget (verified admitted at 65 and 100 chars, degraded at 130+), guarded by `TestSkillDescriptionSurvivesSkillListingCap` in `internal/mcp/skill_claims_drift_test.go`. Note no length *guarantees* admission — headroom depends on the operator's installed-skill count, which this repository does not control. Retracted at source in `SKILL-03-rehearsal.md` and `NUDGE-live-session.md`. **Transferable correction — the second instance of this exact failure in one rehearsal (see the NUDGE-01 entry above): a transcript grep is a claim about the grep, not about the product.** Before recording an absence from a transcript, prove the same search can find the thing when it is present. Full probe ladder in `.planning/debug/resolved/skill-discovery-not-listing.md`.
+- **CR-01 (v0.10.0 Phase 5 code review, `internal/mcp/server.go:225-349`): `pendingWriter`'s "pending response" counter is corrupted by server-initiated notifications,** defeating the stdin-EOF-race fix it exists to provide. The counter increments only on accepted client requests but decrements on every stdout `Write()` call, including notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that SPEC-09 routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable, not merely theoretical. Predates v0.10.0 (introduced in `13f2875`). Full trace and proposed fix in `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md`. Needs its own tracking issue/plan.
+- **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` and `999.6` were both promoted into v0.3.0, but all five `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. Decide whether the promoted entries should be struck or annotated; nothing was removed pending that call. (`999.5` has since been consumed by v0.5.0 and is no longer in the Backlog; `999.2` and `999.4` remain.)
+- **Client-side `tools/list` caching bugs are a known confound.** Real, primary-source GitHub issues exist against Claude Code itself (anthropics/claude-code #41123, #40025, #50515; claude-ai-mcp #45).
+- **Open GitHub issues:** #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity — note this touches BENCH-02's surface).
+- **Advisory, unregistered surfaces** from the v1.0 Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
+- **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing. Native Windows support was dropped in `v0.4.0` (WSL2 only).
+- **GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling.** goreleaser's binary reaches `golang.org/x/crypto/openpgp` (110 vulnerable symbols) via pipe/ko → google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The advisory `tool-vuln` job surfaces it — reported, not resolved.
+- **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06). Not scheduled for further work. The associated feedback-latency tradeoff (daemon package ~65s clean at GOMAXPROCS=4, failures take ~250s to surface) is accepted at CI concurrency.
+- **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
+- **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
 
 ### Quick Tasks Completed
-
-v1.0's quick tasks are archived; their directories remain under `.planning/quick/`.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
@@ -295,7 +180,33 @@ v1.0's quick tasks are archived; their directories remain under `.planning/quick
 
 ## Deferred Items
 
-Items acknowledged and deferred at v0.10.0 milestone close on 2026-08-13 (7 open artifacts: 6 todos + 2 seeds, none blocking v0.10.0's own requirements; an 8th item the audit flagged — a "knowledge-base [unknown]" debug session — was closed as a false positive rather than deferred: `.planning/debug/knowledge-base.md` is the resolved-session reference index `gsd-debugger` consults for known-pattern hypotheses, not an open investigation, and it has no `status:` frontmatter for the audit scanner to key on):
+Items acknowledged and deferred at milestone close, most recent first.
+
+Acknowledged at the **v0.11.0 close (2026-08-16)** — suppressed at the next `audit-open` scan, not fixed. All 10 predate v0.11.0. Acknowledgment is verdict-preserving and **self-invalidating**: it never rewrites an artifact's own `status:`, and the suppression lapses the moment the artifact's observed state changes again (a reopened debug session, an edited deferred entry, a re-triggered seed resurfaces on its own and must be acknowledged again).
+
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| debug_sessions | knowledge-base | unknown | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-07-wire-oracle-toolslist-repeat-response-ordering-flake.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-09-dry-run-signed-additions-only-diff-guard-passes-vacuously.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-09-post-release-verify-event-aware-conclusion-guard-has-no-regression-assertion.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-10-add-golangci-lint-with-gofmt-and-idiomatic-go-linters.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-10-brew-trust-instructions-recommend-the-broader-tap-grant-with-no-security-framing.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| todos | 2026-08-10-tap-app-secret-distinctness-test-is-tautological-and-reads-no-workflow.md | (presence-only) | 2026-08-17 | v0.11.0 |
+| seeds | SEED-001-local-svelte-shadcn-graph-browsing-ui | dormant | 2026-08-17 | v0.11.0 |
+| seeds | SEED-003-markdown-in-the-index | dormant | 2026-08-17 | v0.11.0 |
+| deferred_items | 04/deferred-items.md: `internal/daemon` load-induced flake under full-suite parallel load | acknowledged | 2026-08-17 | v0.11.0 |
+
+The `deferred_items` entry was acknowledged by hand rather than through `audit-open acknowledge`: that file uses the heading-delimited (#3457) entry shape, which the CLI writer deliberately refuses rather than risk writing into the wrong entry. Its `- **Status:** acknowledged` bullet is exactly the marker the writer would have set — the entry's own `status:` field doubles as the marker for this category.
+
+Deferred at v0.11.0 scoping (2026-08-13) — recorded so the decisions stay visible:
+
+| Category | Item | Status |
+|----------|------|--------|
+| requirement | DOCS-05 — self-authored `docs/CLI-REFERENCE.md` with its own drift guard | v2; this milestone deletes `docs/FLAG-PARITY.md`, a later one authors the replacement |
+| requirement | VOCAB-01 — build-time vocabulary drift guard | v2, deliberately **declined** for this milestone (blocklist goes vacuous or fights `tsextract`) |
+
+Carried forward, acknowledged and deferred at v0.10.0 close on 2026-08-13:
 
 | Category | Item | Status |
 |----------|------|--------|
@@ -305,76 +216,49 @@ Items acknowledged and deferred at v0.10.0 milestone close on 2026-08-13 (7 open
 | todo | 2026-08-10 — add golangci-lint with gofmt and idiomatic Go linters | pending [ci] |
 | todo | 2026-08-10 — brew trust instructions recommend broader tap grant with no security framing | pending [docs] |
 | todo | 2026-08-10 — tap App secret distinctness test is tautological and reads no workflow | pending [ci] |
+| requirement | GUARD-HOOK-01/02 — PreToolUse guard hook | v2; the fallback if skill+resources+nudge prove insufficient, and that evidence does not exist yet |
+| requirement | AGENT-04…07 — multi-agent skill/hooks porting | v2; blocked on per-agent hook-schema differences across Cursor / Codex CLI / Antigravity |
 | seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant |
 | seed | SEED-003 — markdown in the index | dormant |
-
-Items acknowledged and deferred at v0.5.0 milestone close on 2026-08-12 (8 open artifacts, none blocking):
-
-| Category | Item | Status |
-|----------|------|--------|
-| debug | knowledge-base | open, status unknown — investigate or archive |
-| todo | 2026-08-07 — wire-oracle toolsList repeat-response ordering flake | pending [mcp]; matches the documented load-dependent flake pattern, passes isolated |
-| todo | 2026-08-08 — author a codegraph usage skill for agents | pending [agents] |
-| todo | 2026-08-09 — `dry-run-signed` additions-only diff guard passes vacuously | pending [release]; same negative-only-guard class as rule 84d1gfpywd |
-| todo | 2026-08-09 — post-release-verify event-aware conclusion guard has no regression assertion | pending [ci]; the guard held at 5 jobs / 5 occurrences this milestone, but nothing pins the 1:1 invariant |
-| todo | 2026-08-10 — add golangci-lint with gofmt and idiomatic Go linters | pending [ci] |
-| todo | 2026-08-10 — `brew trust` instructions recommend the broader tap grant with no security framing | pending [docs]; Phase 3 UF-2 |
-| todo | 2026-08-10 — tap App secret distinctness test is tautological and reads no workflow | pending [ci]; Phase 3 AR-01 |
-| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant |
-| seed | SEED-003 — markdown in the index | dormant |
-
-Closed during v0.5.0, no longer deferred:
-
-| Category | Item | Landed as |
-|----------|------|-----------|
-| seed | SEED-002 — homebrew installation path | `status: implemented` — consumed by Phases 1–4; tap published, cask installable, `codegraph upgrade` steps aside |
-| backlog | 999.5 — macOS Gatekeeper signing and notarization | promoted into v0.5.0 Phase 2 (SIGN-01…04) |
-
-Not deferred but worth carrying: `.planning/debug/perf-gate-throughput-regress.md` predates this
-milestone and is now backed by fresh data on issue #20 — the gate failed then passed on an inert
-diff at ~6.9% intra-run spread against a 10% budget.
-
-Items acknowledged and deferred at v1.0 milestone close on 2026-08-03, minus the two promoted into v0.3.0:
-
-| Category | Item | Status |
-|----------|------|--------|
-| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant; triggers now that parity has landed |
-| seed | SEED-002 — homebrew installation path | dormant |
-| backlog | 999.2 — tmux e2e/UAT test harness for the interactive TUI | in ROADMAP Backlog; deliberately NOT in v0.3.0 (its failure shape rhymes with VRFY-01, but it is the TUI surface and a different harness) |
+| backlog | 999.2 — tmux e2e/UAT test harness for the interactive TUI | in ROADMAP Backlog |
 | backlog | 999.4 — CheckRegression current-metrics positivity guard | in ROADMAP Backlog |
-| backlog | 999.5 — macOS Gatekeeper signing and notarization | in ROADMAP Backlog |
-| requirement | MRTR-01 — mid-call elicitation via `resultType: "input_required"` | genuinely enabled for the first time by this spec revision; deferred as new product behavior, not protocol currency |
+| requirement | MRTR-01 — mid-call elicitation via `resultType: "input_required"` | deferred as new product behavior, not protocol currency |
 | requirement | TASK-01 — long-running operations via `io.modelcontextprotocol/tasks` | not applicable today; codegraph's MCP tools are fast read-only queries |
-| milestone | Team Scale (central server, CI-distributed indexes, concurrent access) | v0.3.0 records the strategic read-out as a decision (the stateless core removes the sticky-routing/session-store infrastructure it would have needed); it builds none of it |
+| milestone | Team Scale (central server, CI-distributed indexes, concurrent access) | unscoped |
+| deferral | DIST-06 — stapled offline-safe container | v0.5.x deferral; stapling is categorically impossible for bare Mach-O and `.zip` |
+| deferral | BREW-07 — homebrew-core submission | v0.5.x deferral |
 
-Promoted into v0.3.0 (no longer deferred):
+Closed and no longer deferred:
 
 | Category | Item | Landed as |
 |----------|------|-----------|
-| backlog | 999.6 — MCP `2026-07-28` impact assessment | the milestone's spine; residual scoping work folded into Phase 1 |
-| backlog | 999.3 — vulnerability scanning for the tool modfiles | VULN-01/02/03, Phase 4 |
+| seed | SEED-002 — homebrew installation path | consumed by v0.5.0 Phases 1–4; tap published, cask installable |
+| backlog | 999.5 — macOS Gatekeeper signing and notarization | promoted into v0.5.0 Phase 2 (SIGN-01…04) |
+| backlog | 999.6 — MCP `2026-07-28` impact assessment | the spine of v0.3.0 |
+| backlog | 999.3 — vulnerability scanning for the tool modfiles | VULN-01/02/03, v0.3.0 Phase 4 |
+| todo | 2026-08-08 — author a codegraph usage skill for agents | closed by v0.10.0 Phases 6–8 |
+| Release | DIST-02 — real signed `v*` tag | ✓ `v0.2.0` shipped via release-please (REL-02) |
+| Perf | PERF-01 — published head-to-head numbers | ✓ Closed in v1.0 Phase 8 (REL-03) — **note: BENCH-01 retires those numbers this milestone** |
 
-Carried forward from the v0.1 close and **closed during v1.0**:
-
-| Category | Item | Status |
-|----------|------|--------|
-| Release | DIST-02 — real signed `v*` tag | ✓ Closed — `v0.2.0` shipped via release-please (REL-02) |
-| Perf | PERF-01 — published head-to-head numbers | ✓ Closed in Phase 8 (REL-03) |
+Not deferred but worth carrying: `.planning/debug/perf-gate-throughput-regress.md` is backed by
+fresh data on issue #20 — the gate failed then passed on an inert diff at ~6.9% intra-run spread
+against a 10% budget. Relevant to BENCH-02.
 
 ## Session Continuity
 
-Last session: 2026-08-13T21:05:33.000Z
-Stopped at: v0.10.0 milestone closed and archived; PR #60 open against main, awaiting human review/merge
-  NEXT: review and merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60), then `/gsd-new-milestone`
+Last session: 2026-08-16T10:47:10.308Z
+Stopped at: Phase 6 complete — all phases complete
+  NEXT: `/gsd-plan-phase 1` (Corpus Selection by Measurement — blocking spike)
   CARRY-OVER:
-    - **This milestone lived entirely on `gsd/v0.10.0-agent-onboarding-skill-mcp-resources`** (branching_strategy: milestone) and was never incrementally merged — 153 commits ahead of `main`, pushed and opened as PR #60 at close time. Nothing from v0.10.0 is on `main` until that PR merges.
-    - **PR #60 title (`feat(agents): ...`) is the release decision** — this repo is squash-merge-only with `squash_merge_commit_title: PR_TITLE`, so merging it is what triggers release-please's version bump. Do not retitle without intent.
-    - **No `v0.10.0` git tag was created** — release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-    - **8 audit-open items handled at close:** 7 acknowledged/deferred (6 pre-existing todos + 2 dormant seeds, see Deferred Items below), 1 closed as a false positive (`knowledge-base` debug-session flag — it's the resolved-session reference index, not an open investigation).
-    - **v2 deferrals are deliberate, not omissions.** GUARD-HOOK-01/02 (PreToolUse guard) and AGENT-04…07 (multi-agent skill/hooks porting) are tracked in `milestones/v0.10.0-REQUIREMENTS.md`'s v2 section, mapped to no phase — the fallback if skill+resources+nudge prove insufficient, and that evidence doesn't exist yet.
-Resume file: none — milestone closed
+
+    - **Phase 1 is blocking.** No phase that re-freezes a golden may be planned until FIXT-01 locks the corpus set by recorded measurement. Phase 4 (Attribution & Documentation Sweep) has no dependency on Phases 1–3 and may be planned and run in parallel.
+    - **PR #60 (v0.10.0) must be on `main` before this milestone's branch is cut** — verify it merged before starting. This repo is squash-merge-only with `squash_merge_commit_title: PR_TITLE`, so the PR title is the release decision.
+    - **`branching_strategy: milestone`** — this milestone lives on one branch (`gsd/v0.11.0-standalone-project-identity`) and is not incrementally merged.
+    - **No `v0.11.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+    - **`.planning/` and `CHANGELOG.md` are out of scope for the sweep** — the first would falsify project history and break GSD's scope-sensitive parsers, the second is release-please-owned.
+
+Resume file: .planning/phases/06-benchmark-de-coupling-memory-sweep/06-CONTEXT.md
 
 ## Operator Next Steps
 
-- Merge PR #60 (https://github.com/seanb4t/codegraph-go/pull/60) once CI is green — this is the only remaining step to land v0.10.0 on `main`
-- Start the next milestone with `/gsd-new-milestone`
+- Start the next milestone with /gsd-new-milestone

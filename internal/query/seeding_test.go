@@ -33,9 +33,6 @@ func (f *seedingFakeReader) GetFile(string) (*schema.File, error) {
 func (f *seedingFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("seedingFakeReader: GetMeta not implemented")
 }
-func (f *seedingFakeReader) GetMigration() ([]byte, error) {
-	return nil, errors.New("seedingFakeReader: GetMigration not implemented")
-}
 func (f *seedingFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("seedingFakeReader: IterateFiles not implemented")
 }

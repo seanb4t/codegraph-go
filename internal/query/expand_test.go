@@ -34,9 +34,6 @@ func (f *expandFakeReader) GetFile(string) (*schema.File, error) {
 func (f *expandFakeReader) GetMeta() (*schema.Meta, error) {
 	return nil, errors.New("expandFakeReader: GetMeta not implemented")
 }
-func (f *expandFakeReader) GetMigration() ([]byte, error) {
-	return nil, errors.New("expandFakeReader: GetMigration not implemented")
-}
 func (f *expandFakeReader) IterateFiles() (graphstore.FileIterator, error) {
 	return nil, errors.New("expandFakeReader: IterateFiles not implemented")
 }

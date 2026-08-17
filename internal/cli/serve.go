@@ -134,8 +134,10 @@ func serveWatchStart(
 			// (RunWithRetry returns ctx.Err()). Neither is an error worth
 			// surfacing.
 		case errors.As(runErr, &de):
-			// D-12/D-13: verbatim TS disabled message, stderr-only
-			// (model-invisible). Terminal — no retry: policy doesn't change
+			// D-12/D-13: the documented disabled message, stderr-only
+			// (model-invisible). Its exact wording is a fixed contract,
+			// asserted by serve_test.go — do not "improve" it here.
+			// Terminal — no retry: policy doesn't change
 			// mid-session (Pitfall 2: --no-watch must still print this).
 			// IN-05: the reason is extracted from the typed error
 			// daemon.Run returned — the exact string its own policy gate

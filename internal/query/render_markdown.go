@@ -55,7 +55,7 @@ func renderNumberedSource(content []byte) string {
 }
 
 // renderNumberedSourceRange is renderNumberedSource's sibling for
-// NODE-02's multi-def body rendering: TS's renderNodeSection shows only
+// NODE-02's multi-def body rendering: the documented renderNodeSection shows only
 // the definition's own body (its [StartLine,EndLine] span), not its
 // enclosing file, and each row keeps its TRUE on-disk line number
 // (matching the golden captures, e.g. a definition starting at line 10
@@ -136,7 +136,7 @@ func RenderNode(n *schema.Node, calls, calledBy []*schema.Node) string {
 }
 
 // nodeMultiDefHardCap, nodeMultiDefBodyBudget, and nodeMultiDefListCap
-// are TS's exact NODE-02 budget constants (RESEARCH §8, verbatim):
+// are the documented NODE-02 budget constants (RESEARCH §8, verbatim):
 // HARD_CAP bounds how many full bodies are ever rendered, BODY_BUDGET is
 // the cumulative char budget those bodies must fit within (the first
 // body always renders regardless of budget), and LIST_CAP bounds how
@@ -152,22 +152,22 @@ const (
 // on-disk source plus the forward/reverse call trail) for one multi-def
 // candidate. RenderNodeMultiDef calls this LAZILY, in matches order,
 // and stops calling it once HARD_CAP renders have been produced —
-// mirroring TS's loop (RESEARCH §8) so a symbol with far more
+// mirroring the documented loop (RESEARCH §8) so a symbol with far more
 // definitions than the budget allows never pays the I/O cost of
 // resolving bodies past HARD_CAP.
 type nodeSectionFetch func(n *schema.Node) (source []byte, calls, calledBy []*schema.Node, err error)
 
 // renderNodeSection renders one multi-def candidate's full detail
 // (name/kind, Location, Signature, verbatim source, and — only when
-// non-empty — the Trail/Calls/CalledBy lines): TS's
+// non-empty — the Trail/Calls/CalledBy lines): the documented
 // renderNodeSection(cg, n, true) (RESEARCH §8). source is the
 // definition's ENCLOSING FILE's full content — renderNodeSection slices
 // it down to n's own [StartLine,EndLine] span (renderNumberedSourceRange),
 // matching the golden captures, which show only the definition's body,
 // not its whole file. Unlike the single-def RenderNode, the Trail line
 // (and its Calls/CalledBy children) is OMITTED ENTIRELY when both calls
-// and calledBy are empty — confirmed against the live TS golden captures
-// (testdata/golden/corpus/*/node-multi.json; e.g. the synthetic-parity
+// and calledBy are empty — confirmed against the golden captures
+// (testdata/golden/corpus/*/node-multi.json; e.g. the behavioral corpus's
 // "Validate" case, where both definitions have zero callers and neither
 // section renders a "**Called by ←**" line at all, unlike the single-def
 // path which always renders it even when empty).
@@ -192,8 +192,8 @@ func renderNodeSection(n *schema.Node, source []byte, calls, calledBy []*schema.
 	return strings.Join(parts, "\n")
 }
 
-// RenderNodeMultiDef reproduces TS's multi-def node markdown shape
-// verbatim (NODE-02, RESEARCH §8, Pitfall 4): the "**N definitions
+// RenderNodeMultiDef reproduces the documented multi-def node markdown shape
+// byte-for-byte (NODE-02, RESEARCH §8, Pitfall 4): the "**N definitions
 // named "X"**" header line, immediately followed (single newline, NOT a
 // blank line — Pitfall 4) by the "Returning M in full[; K more listed
 // below] — pick the one you need (no Read required)." line, a blank
@@ -266,7 +266,7 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 // root has direct callers but NONE of them are covered by a test — the
 // EXACT string "; ⚠️ no covering tests found" (verbatim, note "found", the
 // emoji, and that it is appended, not a standalone line). A root with
-// ZERO callers gets NEITHER clause, mirroring TS's early-continue before
+// ZERO callers gets NEITHER clause, mirroring the documented early-continue before
 // this block is ever reached for a caller-less root.
 func renderBlastBullet(bl exploreBlast) string {
 	n := bl.Symbol

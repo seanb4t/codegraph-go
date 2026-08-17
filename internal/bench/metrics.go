@@ -3,10 +3,10 @@ package bench
 // Metrics is a plain json-tagged data holder for one benchmark run's
 // results — no methods with side effects, no network, no shelling out
 // (mirrors internal/version.VersionInfo's discipline). Consumed by the
-// committed-baseline regression gate (Plan 08-06) and the head-to-head
-// Go-vs-TS runner (Plan 08-07).
+// committed-baseline regression gate and the absolute-numbers publisher
+// (bench.yml's publish job).
 type Metrics struct {
-	Subject string `json:"subject"` // e.g. "go" or "ts"
+	Subject string `json:"subject"` // provenance label, e.g. "go" — not part of a measurement's identity
 	Repo    string `json:"repo"`
 	GOOS    string `json:"goos"`
 	GOARCH  string `json:"goarch"`

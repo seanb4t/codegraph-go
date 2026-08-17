@@ -4,8 +4,13 @@ title: tap App secret-distinctness test is tautological — it compares two in-t
 area: testing
 severity: medium
 files:
+
   - internal/upgrade/release_workflow_shape_test.go:1544-1553
+
 threat_ref: AR-01 (03-SECURITY.md), T-03-07 leg (c)
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
 ---
 
 ## Problem

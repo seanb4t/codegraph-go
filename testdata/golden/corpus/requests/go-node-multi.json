@@ -1,0 +1,4 @@
+{
+  "command": "node \"Request\" -p requests",
+  "output": "**Request** (struct)\n\n**Location:** src/requests/models.py:284\n**Signature:** ``\n**Trail — codegraph_node any of these to follow it (no Read needed)**\n**Calls →** \n**Called by ←** \n"
+}

@@ -1,5 +1,47 @@
 # Milestones
 
+## v0.11.0 Standalone Project Identity (Shipped: 2026-08-16)
+
+**Phases completed:** 6 phases, 30 plans, 60 tasks
+
+**Delivered:** codegraph-go now reads, tests, and benchmarks as a project in its own right. The origin is acknowledged exactly once — legally and in the past tense — in `NOTICE`, plus one clause in README's `## License`, with `LICENSE` left verbatim MIT so GitHub does not downgrade detection to `NOASSERTION`. Comparison framing was removed from every doc, issue/PR template, workflow, script, code comment, identifier and fixture, resolved term-by-term with a recorded verdict per occurrence rather than by regex, and closed by a positive-controlled tree-wide census reporting `TOTAL=0` across 285 Go files. The golden suite was re-based onto third-party MIT/Apache-2.0 corpora selected **by recorded measurement** and fetched at pinned SHAs rather than vendored, re-frozen from codegraph-go's own output, and re-proven capable of failing — all five assertion families red-demonstrated against the suite in its final form and byte-cleanly reverted. `docs/BENCHMARKS.md` publishes absolute throughput / query-latency / peak-RSS figures mechanically generated from a committed raw measurement, with no figure typed by hand and the head-to-head runner deleted. The **Compatibility constraint is retired**.
+
+**Stats:** 261 commits over 4 days (2026-08-13 → 2026-08-16). 381 files changed, +42,778/−11,419 overall; **outside `.planning/`, 256 files and a net −806 lines** — this milestone removed more code than it added. ~209k lines of Go in tree at close. Git range: `2d466d9`..`5a133f7` on `gsd/v0.11.0-standalone-project-identity`. No git tag — release-please is the sole tag authority (D-06R).
+
+**Closeout:** `override_closeout`. All 6 phases `phase_complete: true` / `verification_status: passed`, 25/25 requirements accounted for (24 Complete, CODE-03 **Removed** by maintainer ruling D-04). The override is not a verification gap — it is the acknowledged-artifact disclosure below.
+
+**Known verification overrides:** 10 newly acknowledged, 0 carried forward from a prior close (see STATE.md → Deferred Items). All 10 predate v0.11.0: 1 debug session, 6 todos, 2 dormant seeds, and 1 deferred item (a documented, pre-existing `internal/daemon` load-induced flake that CI already routes around). Nine were surfaced in the audit summary; the tenth sat inside the todos scanner's 5-per-scan display cap.
+
+**Known gaps (accepted, not closed):**
+
+- **MEM-02's store half** — closed by *acceptance* at the D-15 evidence standard, not by demonstration. No session was ever both genuinely fresh **and** engram-tooled, so spine recall was never observed. Deliberately left at `accepted-by-d15-evidence-standard` rather than upgraded. Cheapest future discharge: a fresh session probing recall as its first action.
+- **BENCH-03** — recorded honestly as `pending-no-ci-run` at phase close (the branch was unpushed and every historical `bench.yml` run predated the phase, having executed the now-deleted head-to-head job), rather than closed by a local measurement standing in for CI. Subsequently verified by live run `31973967130`.
+
+**Deliberately declined (not deferred):** VOCAB-01, a build-time vocabulary drift guard. Phase 5's CODE-01 census is the evidence — of 25 raw hits, all 25 were legitimate, and one was the very sentence recording that the framing had been retired. A blocklist would demand editing the sentence documenting that you stopped.
+
+**Cross-phase supersession worth carrying forward:** Phase 4's threat T-04-02 protected a README `migrate` row that maintainer ruling D-04 then deleted in Phase 5. A mitigation can be legitimately undone by a later ruling; what must not happen is the undoing going unrecorded.
+
+**Key accomplishments:**
+
+- `codegraph status --json` now emits a live, sparse `edgesByKind` tally and a live `filesByLanguage` map — both required by FIXT-01 and both absent from the previous output — from one new unconditional `IterateEdges("")` full scan, unfiltered by `RankEdges`.
+- `codegraph status` gained an opt-in `--all-kinds` flag and an `Edges by Kind:` section on all four render surfaces — piped text, TTY, `--json`, and MCP markdown — with the dense key set derived from `query.RankEdges` in both directions so a future 10th ranked edge kind is measured automatically instead of silently dropped.
+- Re-frozen `call-status.golden` through the existing capture entrypoint to include the new `Edges by Kind:` section, added a semantic MCP sparsity assertion driven through the real `BuildServer` tool path (RED-proven against a densified handler), and landed `edgesByKind`/`filesByLanguage` key-presence assertions in the golden-parity `status` subtest against the real weft corpus.
+- Strictly-validated corpora manifest, live-resolved 9-candidate seed set (including a recorded-but-rejected apache/arrow), and a claim-stage-check-promote Taskfile fetch pipeline whose four-part integrity check catches a tampered tracked file that a HEAD-only check would miss.
+- The golden suite now proves its own execution: a table-derived, loop-keyed exact count (26 goldens + 4 CASES cases = 30) plus an unconditional corpora.yml golden job (fetch → assert → `task test:golden` with -count=1) that CI cannot silently stop running.
+- FIXT-07 proven: each of the five assertion families ((a) CASES.json behavioral, (b) golden byte-identity, (c) CLI==MCP trio, (d) hermetic fail-loud resolution, (e) coverage guard) was red-demonstrated against the suite in its final form, reverted byte-clean, and recorded with pasted failing output in 03-MUTATION-LOG.md — nothing landed.
+- NOTICE reduced to its legal minimum — MIT copyright transcription plus one origin sentence, README swept to a single past-tense origin clause inside `## License`, and LICENSE re-verified live as MIT (ATTR-01/02/03)
+- Swept comparison framing from all 5 GitHub issue templates and all 4 PR templates (including the review-flagged `bug_report.yml` migrate-origin option), verified the pr-template-format policy gate still keys on surviving headings via a captured (non-tautological) `action=pass` verdict.
+- Reworded two contributor-visible inline-JS strings and two workflow display-name families (corpora, bench head-to-head) off retired parity/comparison framing, with zero required-check job-name edits and zero shell run:-body changes.
+- Swept ~90 comparison-framing comment rows across 10 packages term-by-term, re-pointed 9 stale golden-filename citations to their current names, kept the schema `.proto`/`.pb.go` doc pair in lockstep, and rewrote `.claude/CLAUDE.md`'s + `.planning/PROJECT.md`'s core-value paragraph off the "uninstall TS CodeGraph" framing — with zero runtime, assertion, flag, or marker-byte changes anywhere.
+- Reworded the four `corpus/behavioral/src` "synthetic-parity corpus" doc comments to "behavioral corpus" and re-froze the one golden transcript that embeds those bytes, with the diff asserted (not eyeballed) to be exactly the expected narrow set.
+- Reworded 9 Go files' comparison-baseline framing (missed by both prior line-based censuses because the phrase wrapped across a comment line break) using a positive-controlled multiline `rg -U` census, and audited the full 30-file `internal/agents` population instead of the prior 10-name sample.
+- Reworded the last 19 CODE-01 framing locations in `testdata/golden/behavioral_test.go`, applied two orchestrator corrections (rewording `internal/cli/root.go` and closing a 13-pattern census hole), and ran the phase's positive-controlled tree-wide acceptance census to a recorded TOTAL=0 across 285 Go files — closing ROADMAP Phase 5's one failed success criterion (CODE-01).
+- `tools/bench/runner -mode publish` replaces the two-subject head-to-head comparison with a single-subject Go-only measurement over a two-entry realcorpus (weft-go, cockroachdb-pebble), verified end-to-end by a new pure-Go `tools/bench/publishcheck` binary.
+- `docs/BENCHMARKS.md` rewritten from scratch to publish locally-measured absolute throughput/query-latency/peak-RSS figures (mechanically generated from a committed raw measurement via `publishcheck -emit-rows`), a phase-wide positive-controlled census reporting a proven zero across the Phase 6 surface, and BENCH-03 recorded honestly as pending (no `bench.yml` run exists for this unpushed branch) rather than closed by a local measurement standing in for it.
+- Swept retired parity/port/drop-in framing out of `.claude/CLAUDE.md`, `.planning/PROJECT.md` and `.planning/STATE.md`, closing MEM-02's file half with a full per-occurrence D-13 verdict record.
+
+---
+
 ## v0.10.0 Agent Onboarding Skill & MCP Resources (Shipped: 2026-08-13)
 
 **Phases completed:** 4 phases, 15 plans, 34 tasks

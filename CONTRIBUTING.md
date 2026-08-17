@@ -8,9 +8,9 @@ triage process and the CI gates both read it literally.
 **Open an issue before opening a pull request.** Every PR must reference an
 issue it resolves.
 
-This is not bureaucracy for its own sake: this project ports observable behavior
-from another implementation, and a change that looks like an obvious improvement
-is sometimes a deliberate parity decision recorded in `docs/FLAG-PARITY.md` or
+This is not bureaucracy for its own sake: behavior is pinned by the project's own
+golden-corpus suite and its planning record, and a change that looks like an
+obvious improvement can still contradict a deliberate decision recorded in
 `.planning/`. The issue is where we find that out before you've written the code.
 
 The exception is trivially mechanical fixes — a typo, a broken link, a dead
@@ -80,9 +80,9 @@ Every command CI runs is defined exactly once, as a `task` target — see
 
 - `task` with no arguments lists everything available.
 - `task build`, `task test`, and `task lint` are the three you need day to
-  day. `task test` covers every host-only leg — unit, golden parity,
-  subprocess integration, isolated daemon, and race — and needs nothing
-  beyond the C toolchain above.
+  day. `task test` covers every host-only leg — unit, golden-corpus
+  behavioral, subprocess integration, isolated daemon, and race — and needs
+  nothing beyond the C toolchain above.
 - The cross-toolchain checks are deliberately separate targets, not part of
   `task test`: `task check:reproducibility:arm64` needs `zig`. It fails with
   an install instruction rather than skipping, so a green run means the same
@@ -187,9 +187,9 @@ New behavior needs a test. Bug fixes need a test that fails before the fix and
 passes after — please say in the PR that you observed it fail, because a
 regression test never seen red is indistinguishable from one that cannot fail.
 
-The suite is a mix of unit tests, golden-corpus behavioral fixtures diffed
-against frozen TypeScript CodeGraph v1.3.1 output, and workflow-shape guards
-that parse the real `.yml` files.
+The suite is a mix of unit tests, golden-corpus behavioral fixtures frozen
+from codegraph-go's own output against pinned third-party corpora, and
+workflow-shape guards that parse the real `.yml` files.
 
 ## What `.planning/` is
 

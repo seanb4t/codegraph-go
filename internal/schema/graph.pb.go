@@ -51,23 +51,23 @@ type Node struct {
 	StartCol      int32                  `protobuf:"varint,9,opt,name=start_col,json=startCol,proto3" json:"start_col,omitempty"`
 	EndCol        int32                  `protobuf:"varint,10,opt,name=end_col,json=endCol,proto3" json:"end_col,omitempty"`
 	// signature is the extractor-rendered parameter/return signature string
-	// (e.g. "func(a int, b string) error"). Additive Go-parity field (D-03);
+	// (e.g. "func(a int, b string) error"). Additive schema field (D-03);
 	// written by the Phase 2 goextract symbol pass.
 	Signature string `protobuf:"bytes,11,opt,name=signature,proto3" json:"signature,omitempty"`
 	// docstring is the leading comment/doc block attached to the symbol, as
-	// captured verbatim by the extractor. Additive Go-parity field (D-03);
+	// captured verbatim by the extractor. Additive schema field (D-03);
 	// written by the Phase 2 goextract symbol pass.
 	Docstring string `protobuf:"bytes,12,opt,name=docstring,proto3" json:"docstring,omitempty"`
 	// visibility is the language-level access modifier ("public", "private",
-	// "package", etc.) as classified by the extractor. Additive Go-parity
+	// "package", etc.) as classified by the extractor. Additive schema
 	// field (D-03); written by the Phase 2 goextract symbol pass.
 	Visibility string `protobuf:"bytes,13,opt,name=visibility,proto3" json:"visibility,omitempty"`
 	// is_exported reports whether the symbol crosses the package/module
-	// boundary (Go: identifier starts uppercase). Additive Go-parity field
+	// boundary (Go: identifier starts uppercase). Additive schema field
 	// (D-03); written by the Phase 2 goextract symbol pass.
 	IsExported bool `protobuf:"varint,14,opt,name=is_exported,json=isExported,proto3" json:"is_exported,omitempty"`
 	// return_type is the extractor-rendered return type string, when the
-	// symbol kind has one (function/method). Additive Go-parity field
+	// symbol kind has one (function/method). Additive schema field
 	// (D-03); written by the Phase 2 goextract symbol pass.
 	ReturnType    string `protobuf:"bytes,15,opt,name=return_type,json=returnType,proto3" json:"return_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -231,7 +231,7 @@ type Edge struct {
 	// (fuzzy/inferred edges) is Phase 5's addition, not written here.
 	Provenance string `protobuf:"bytes,6,opt,name=provenance,proto3" json:"provenance,omitempty"`
 	// metadata is an open extension bag for edge-kind-specific extractor
-	// annotations that do not warrant their own field yet. Additive Go-parity
+	// annotations that do not warrant their own field yet. Additive schema
 	// field (D-03).
 	Metadata      map[string]string `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields

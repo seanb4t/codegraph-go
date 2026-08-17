@@ -4,9 +4,14 @@ title: brew trust instructions recommend the broader --tap grant and carry no se
 area: docs
 severity: medium
 files:
+
   - docs/RELEASE.md:518-533
   - README.md:78
+
 threat_ref: UF-2 (03-SECURITY.md)
+audit_acknowledged:
+  milestone: v0.11.0
+  at: 2026-08-17
 ---
 
 ## Problem
@@ -56,5 +61,6 @@ the trust boundary. No row could have anticipated it.
 - Recommend `brew trust --cask seanb4t/tap/codegraph` as the primary form.
 - Add one sentence naming what the control is and why Homebrew asks: a
   third-party cask runs arbitrary Ruby at install time, and this one does.
+
 - Keep `--tap` documented as an explicit, labelled convenience for users who
   expect to install more than one cask from this tap.

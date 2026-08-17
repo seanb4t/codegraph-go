@@ -26,7 +26,7 @@ import (
 //	---------------------------------|---------------------------------------------|----------
 //	initialized                      | true (Status only runs on an opened Engine) | Unchanged — same concept
 //	version                          | fmt.Sprintf("%d", schema.SchemaVersion)     | No codegraph-go release-version concept exists yet; schema version is the closest stable Go analog
-//	projectPath / indexPath          | "" (empty string, key kept)                 | Engine carries no path context in its read-only Reader-only design (files_modified excludes engine.go this plan) — trivially satisfies T-03-05-Leak by having nothing host-specific to leak, while keeping the key present for shape parity
+//	projectPath / indexPath          | "" (empty string, key kept)                 | Engine carries no path context in its read-only Reader-only design (files_modified excludes engine.go this plan) — trivially satisfies T-03-05-Leak by having nothing host-specific to leak, while keeping the key present for output shape stability
 //	fileCount / nodeCount / edgeCount | computed from IterateFiles/IterateNodes scans + Meta.EdgeCount | Unchanged concept, Go-sourced values
 //	backend                          | "pebble" (a literal Pebble identifier)      | D-05's explicit example remapping
 //	journalMode                      | dropped (key omitted)                       | No Pebble user-facing WAL/journal-mode analog (RESEARCH Open Question 2); D-05 permits dropping keys with no Go analog
@@ -41,7 +41,8 @@ import (
 //	index.state                      | "complete" if Meta exists, else "not_indexed" | Best-effort Go analog of TS's index lifecycle state
 //	index.pendingRefs                | 0 (always)                                  | Phase 2 resolves all refs at index time (no unresolved-ref persistence in Go v1); inert placeholder matching the golden's own steady-state 0
 //	dbSizeBytes                      | filepath.WalkDir byte sum over .codegraph/store/ | D-07 — Pebble has no single-file page-count analog to SQLite; a recursive byte sum over the store dir (SSTables+WAL+MANIFEST) is the honest Go-truthful reading. Best-effort: an Engine with no repoRoot (New, not OpenAt) or an unreadable/missing store dir degrades to 0 rather than failing Status(). Reverses the golden-corpus strip on the Go side only — see D-08 and testdata/golden/README.md's volatile-fields table
-//	filesByLanguage                  | map[string]int64, json:"-" (Go-internal only) | D-05 — genuinely NEW computation (not already-scanned data): computed in the existing IterateFiles() scan by reading fileIt.File().Language. NOT emitted in --json — TS's own --json derives `languages` from this map and discards the counts, so emitting the key here would be a NEW Go-vs-TS divergence in the exact shape the golden oracle guards. Exists solely to feed the human/markdown renderers (Phase 2 wave 2)
+//	filesByLanguage                  | map[string]int64, now emitted (key unsuppressed) | D-05 originally suppressed this key from --json to avoid a Go-vs-TS shape divergence — TS's own --json derives `languages` from this map and discards the counts. That Compatibility constraint was formally retired 2026-08-13 (engram record gw79qy2a9z): TS parity is no longer owed on --json shape, so v0.11.0 Phase 1 (FIXT-01) un-suppresses this key in the same diff as the new edge tally below. Still computed in the existing IterateFiles() scan by reading fileIt.File().Language — no new scan needed
+//	edgesByKind                       | map[string]int64, new field, emitted        | v0.11.0 Phase 1 (FIXT-01) — a read-time-derived, per-edge-kind tally from one full edge scan, mirroring nodesByKind/buildExpandAdjacency's established full-scan shape (internal/query/expand.go). Unfiltered by RankEdges, so a kind outside the 9-kind ranked set (e.g. "contains") is still tallied rather than silently discarded. Sparse: a kind with zero observed edges is absent from the map, never present with value 0. Deliberately NOT stored in Meta — see Status()'s doc comment
 //	(no lastIndexed / *_at keys)      | omitted entirely                           | Volatile fields per testdata/golden/README.md's stripping rules — never rendered (dbSizeBytes above is the one documented exception, D-08)
 type StatusResult struct {
 	Initialized      bool              `json:"initialized"`
@@ -54,7 +55,8 @@ type StatusResult struct {
 	DbSizeBytes      int64             `json:"dbSizeBytes"`
 	Backend          string            `json:"backend"`
 	NodesByKind      map[string]int64  `json:"nodesByKind"`
-	FilesByLanguage  map[string]int64  `json:"-"`
+	EdgesByKind      map[string]int64  `json:"edgesByKind"`
+	FilesByLanguage  map[string]int64  `json:"filesByLanguage"`
 	Languages        []string          `json:"languages"`
 	PendingChanges   PendingChanges    `json:"pendingChanges"`
 	WorktreeMismatch *gitmeta.Mismatch `json:"worktreeMismatch"`
@@ -201,27 +203,57 @@ func dbSizeBytes(storeDir string) (int64, error) {
 
 // Status reports index health/counts (QRY-09) by scanning the frozen
 // graph: fileCount + filesByLanguage from a single IterateFiles scan,
-// nodeCount + nodesByKind from a single IterateNodes scan, and edgeCount
-// from GetMeta (avoiding a second full edge scan — the indexer stamps
-// Meta.EdgeCount at index time, internal/indexer/resolve.go). languages
-// is derived from filesByLanguage (D-05: count > 0, sorted), not from a
-// separate node-scan languageSet, so it reflects every file the indexer
-// discovered and stored — including a file that yields zero extracted
-// nodes — rather than only files with at least one resolved node. A
-// missing Meta record (a store that exists but was never indexed) is
-// tolerated rather than treated as an error: counts fall back to the
-// scanned values and index.state reports "not_indexed".
+// nodeCount + nodesByKind from a single IterateNodes scan, and
+// edgesByKind from a single full edge-iteration scan (v0.11.0 Phase 1,
+// FIXT-01) mirroring buildExpandAdjacency's established full-scan shape
+// (internal/query/expand.go), unfiltered by RankEdges so a kind outside
+// the 9-kind ranked set is still tallied. edgeCount itself still comes
+// from GetMeta's indexer-stamped Meta.EdgeCount aggregate
+// (internal/indexer/resolve.go) — a separate read from edgesByKind, not a
+// sum of it.
+//
+// A full edge scan is now UNCONDITIONAL on every status call — previously
+// this method read only Meta.EdgeCount and never scanned edges at all.
+// edgesByKind is deliberately derived fresh at read time on every call
+// and never stored in Meta: D-01 scopes this phase to `status`, not to
+// indexer/Meta changes, so a future phase MAY choose to stamp a per-kind
+// aggregate at index time to remove this scan's cost — a real, named
+// future optimization, not an oversight. Edge keys are
+// `edge/<src>/<kind>/<dst>` with no leading kind segment
+// (internal/graphstore/keys.go), so no cheaper per-kind prefix scan is
+// available today: one full scan tallying every kind at once is the
+// correct and only reasonable approach given the current key layout.
+//
+// Every scan-derived count in the returned StatusResult (fileCount,
+// nodeCount, nodesByKind, filesByLanguage, edgesByKind) comes from the
+// SAME e.reader snapshot, so they are mutually consistent with each
+// other. Meta.EdgeCount, by contrast, is a separately-stamped aggregate
+// the indexer writes at index time — while a background re-index is in
+// flight, it may legitimately disagree with the sum of edgesByKind. That
+// disagreement is a true reading of an index mid-write, not a bug.
+//
+// languages is derived from filesByLanguage (D-05: count > 0, sorted),
+// not from a separate node-scan languageSet, so it reflects every file
+// the indexer discovered and stored — including a file that yields zero
+// extracted nodes — rather than only files with at least one resolved
+// node. A missing Meta record (a store that exists but was never
+// indexed) is tolerated rather than treated as an error: counts fall
+// back to the scanned values and index.state reports "not_indexed".
 //
 // ctx (WR-01) is threaded through to WorktreeMismatch, which spawns up to
 // four git subprocesses — see WorktreeMismatch's doc comment for why this
 // must be the caller's real, cancelable context rather than
 // context.Background().
 func (e *Engine) Status(ctx context.Context) (StatusResult, error) {
+	// Each iterator below is closed explicitly right after its own Err()
+	// check — on BOTH the success and error path, before any return — so
+	// no iterator is ever retained deferred to method exit and no early
+	// return can leak one. Three scans run one at a time rather than all
+	// held open simultaneously.
 	fileIt, err := e.reader.IterateFiles()
 	if err != nil {
 		return StatusResult{}, err
 	}
-	defer fileIt.Close()
 
 	var fileCount int64
 	filesByLang := make(map[string]int64)
@@ -231,15 +263,16 @@ func (e *Engine) Status(ctx context.Context) (StatusResult, error) {
 			filesByLang[lang]++
 		}
 	}
-	if err := fileIt.Err(); err != nil {
-		return StatusResult{}, err
+	fileErr := fileIt.Err()
+	fileIt.Close()
+	if fileErr != nil {
+		return StatusResult{}, fileErr
 	}
 
 	nodeIt, err := e.reader.IterateNodes()
 	if err != nil {
 		return StatusResult{}, err
 	}
-	defer nodeIt.Close()
 
 	nodesByKind := make(map[string]int64)
 	var nodeCount int64
@@ -248,8 +281,28 @@ func (e *Engine) Status(ctx context.Context) (StatusResult, error) {
 		nodeCount++
 		nodesByKind[n.Kind]++
 	}
-	if err := nodeIt.Err(); err != nil {
+	nodeErr := nodeIt.Err()
+	nodeIt.Close()
+	if nodeErr != nil {
+		return StatusResult{}, nodeErr
+	}
+
+	// v0.11.0 Phase 1 (FIXT-01): the new edgesByKind scan. Unfiltered by
+	// RankEdges — a kind outside the ranked 9 (e.g. "contains") must
+	// still be measured, not silently discarded (see doc comment above).
+	edgeIt, err := e.reader.IterateEdges("")
+	if err != nil {
 		return StatusResult{}, err
+	}
+
+	edgesByKind := make(map[string]int64)
+	for edgeIt.Next() {
+		edgesByKind[edgeIt.Edge().Kind]++
+	}
+	edgeErr := edgeIt.Err()
+	edgeIt.Close()
+	if edgeErr != nil {
+		return StatusResult{}, edgeErr
 	}
 
 	languages := make([]string, 0, len(filesByLang))
@@ -300,6 +353,7 @@ func (e *Engine) Status(ctx context.Context) (StatusResult, error) {
 		Stale:            stale,
 		Backend:          "pebble",
 		NodesByKind:      nodesByKind,
+		EdgesByKind:      edgesByKind,
 		FilesByLanguage:  filesByLang,
 		Languages:        languages,
 		WorktreeMismatch: e.WorktreeMismatch(ctx),

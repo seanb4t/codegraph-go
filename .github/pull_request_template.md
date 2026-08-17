@@ -32,9 +32,9 @@ Link an issue, and for anything beyond a mechanical fix let it be approved first
 - **Features** — the issue should carry `approved-feature`
 - **Enhancements** — the issue should carry `approved-enhancement`
 
-This is not ceremony. This project ports observable behavior from another
-implementation, and changes that look like obvious improvements are sometimes
-deliberate parity decisions recorded in `docs/FLAG-PARITY.md` or `.planning/`.
+This is not ceremony. Behavior-affecting changes are resolved against the
+project's recorded decisions in `.planning/` — changes that look like obvious
+improvements are sometimes deliberate calls recorded there.
 The issue is where that surfaces before you have written the code.
 
 Trivially mechanical fixes — typo, dead link, broken reference — can skip this.

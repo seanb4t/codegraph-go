@@ -37,9 +37,9 @@ func (e *DisabledError) Is(target error) bool { return target == ErrWatchDisable
 
 // Probe carries WatchDisabledReason's inputs — env lookup, WSL detection,
 // and the two CLI flags — as explicit values/functions rather than reading
-// process state directly (D-05: the watcher is in-process, so unlike TS
-// (which routes --no-watch by mutating process.env.CODEGRAPH_NO_WATCH), we
-// never mutate the process environment). Nil Env/IsWSL default to
+// process state directly (D-05: the watcher is in-process, so this
+// package never mutates the process environment; CODEGRAPH_NO_WATCH is
+// read directly via the Env probe). Nil Env/IsWSL default to
 // os.Getenv/DetectWSL inside WatchDisabledReason, so callers only need to
 // set them explicitly in tests.
 type Probe struct {
@@ -59,23 +59,21 @@ type Probe struct {
 // isWindowsDriveMountRe matches a WSL2 /mnt/<single-letter> drive mount —
 // deliberately single-letter only (D-10), so /mnt/wsl/... (WSL's own
 // virtual filesystem, not a slow Windows drive) stays on the fast path.
-// Ported verbatim from TS's /^\/mnt\/[a-z](\/|$)/i.
 var isWindowsDriveMountRe = regexp.MustCompile(`(?i)^/mnt/[a-z](/|$)`)
 
 // isWindowsDriveMount reports whether projectRoot is on a WSL2 /mnt/<drive>
-// mount. TS's normalizePath (utils.js) unconditionally replaces backslashes
-// with forward slashes regardless of host OS — filepath.ToSlash is NOT
-// equivalent here, since on Linux (the only GOOS DetectWSL ever reports
-// true for) filepath.Separator is already '/', making ToSlash a no-op that
-// would leave WSL2 paths reported with Windows-style backslashes
-// unnormalized. Match TS exactly with an unconditional replace.
+// mount. An unconditional backslash-to-forward-slash replace is required —
+// filepath.ToSlash is NOT equivalent here, since on Linux (the only GOOS
+// DetectWSL ever reports true for) filepath.Separator is already '/',
+// making ToSlash a no-op that would leave WSL2 paths reported with
+// Windows-style backslashes unnormalized.
 func isWindowsDriveMount(projectRoot string) bool {
 	return isWindowsDriveMountRe.MatchString(strings.ReplaceAll(projectRoot, `\`, "/"))
 }
 
 // WatchDisabledReason returns "" when the watcher should run, or a short
-// human-readable reason (verbatim TS strings, D-12/D-13) when it should
-// not. Precedence, first match wins (D-04):
+// human-readable reason (the documented disabled-reason strings, D-12/D-13)
+// when it should not. Precedence, first match wins (D-04):
 //
 //  1. NoWatch flag OR Env("CODEGRAPH_NO_WATCH")=="1" -> off
 //  2. ForceWatch flag OR Env("CODEGRAPH_FORCE_WATCH")=="1" -> on (beats auto-detect)
@@ -83,15 +81,12 @@ func isWindowsDriveMount(projectRoot string) bool {
 //  4. default -> on
 //
 // Env comparisons are strict `== "1"` (D-10) — never strconv.ParseBool or
-// non-empty truthiness, ported exactly from TS's `=== '1'` checks so
-// unrelated env noise ("true", "yes", "0", padded values) can never
-// silently flip watch state (T-03-01).
+// non-empty truthiness — so unrelated env noise ("true", "yes", "0", padded
+// values) can never silently flip watch state (T-03-01).
 //
-// TS's own --no-watch flag routes through process.env.CODEGRAPH_NO_WATCH
-// before watchDisabledReason runs, so its disabled message is
-// byte-identical whether the flag or the env var triggered it — this port
-// preserves that behavior by treating NoWatch and the env var as two inputs
-// to the same tier-1 check, both producing the same reason string.
+// The --no-watch flag and the CODEGRAPH_NO_WATCH env var are two inputs
+// to the same tier-1 check, both producing the same reason string, so the
+// disabled message is identical whichever one triggered it.
 func WatchDisabledReason(projectRoot string, p Probe) string {
 	if p.Env == nil {
 		p.Env = os.Getenv
@@ -106,10 +101,9 @@ func WatchDisabledReason(projectRoot string, p Probe) string {
 	if p.ForceWatch || p.Env("CODEGRAPH_FORCE_WATCH") == "1" {
 		return ""
 	}
-	// D-13: TS's source reads "...recursive fs.watch is too slow..." — we
-	// say "file watching" instead of naming fs.watch, a Node API, in a Go
-	// binary (documented allowed divergence; this string is human-facing
-	// stderr, never parsed). Everything else is byte-identical to TS.
+	// D-13: this message says "file watching" rather than naming fs.watch,
+	// a Node-specific API, since this is a Go binary (documented choice;
+	// this string is human-facing stderr, never parsed).
 	if p.IsWSL() && isWindowsDriveMount(projectRoot) {
 		return "project is on a WSL2 /mnt/ drive, where recursive file watching is too slow to be reliable"
 	}
@@ -122,8 +116,8 @@ var (
 )
 
 // DetectWSL reports whether the process is running under WSL2, cached after
-// the first call (sync.Once-guarded, D-10). Logic ported verbatim from TS's
-// detectWsl: non-linux GOOS is unconditionally false (no I/O); WSL_DISTRO_NAME
+// the first call (sync.Once-guarded, D-10): non-linux GOOS is
+// unconditionally false (no I/O); WSL_DISTRO_NAME
 // or WSL_INTEROP env presence is true (no I/O); otherwise /proc/version is
 // read and lowercased, true if it contains "microsoft" or "wsl"; any read
 // failure degrades to false (never panics — V5/V12: a hostile or missing
@@ -152,8 +146,8 @@ func detectWSLUncached() bool {
 
 // resetWSLCacheForTests clears DetectWSL's cached result so tests can force
 // a fresh evaluation. Unexported, no exported setter — mirrors
-// internal/daemon.Daemon's onSyncStart test-only control seam convention;
-// TS's analogue is __resetWslCacheForTests. Production code never calls this.
+// internal/daemon.Daemon's onSyncStart test-only control seam convention.
+// Production code never calls this.
 func resetWSLCacheForTests() {
 	wslOnce = sync.Once{}
 	wslCache = false

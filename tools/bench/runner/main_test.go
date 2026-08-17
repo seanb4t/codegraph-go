@@ -478,42 +478,31 @@ func TestDefaultTrialsIsAtLeastThree(t *testing.T) {
 	}
 }
 
-func TestParseFlags_OverridesApply(t *testing.T) {
-	cfg, err := parseFlags([]string{"-mode", "headtohead", "-ts-binary", "/custom/codegraph", "-count", "5"})
+func TestParseFlags_PublishOverridesApply(t *testing.T) {
+	cfg, err := parseFlags([]string{"-mode", "publish", "-count", "5"})
 	if err != nil {
 		t.Fatalf("parseFlags: %v", err)
 	}
-	if cfg.tsBinary != "/custom/codegraph" {
-		t.Errorf("tsBinary = %q, want /custom/codegraph", cfg.tsBinary)
+	if cfg.mode != "publish" {
+		t.Errorf("mode = %q, want publish", cfg.mode)
 	}
 	if cfg.count != 5 {
 		t.Errorf("count = %d, want 5", cfg.count)
 	}
 }
 
-// --- resolveTSBinary (IN-02, Phase 8 re-review) ---
-
-func TestResolveTSBinary_FindsOnPath(t *testing.T) {
-	dir := t.TempDir()
-	fakeBinary := filepath.Join(dir, "codegraph")
-	mustWriteFile(t, fakeBinary, "#!/bin/sh\n")
-	if err := os.Chmod(fakeBinary, 0o755); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
-
-	t.Setenv("PATH", dir)
-
-	got := resolveTSBinary()
-	if got != fakeBinary {
-		t.Errorf("resolveTSBinary() = %q, want %q", got, fakeBinary)
-	}
-}
-
-func TestResolveTSBinary_EmptyWhenNotFound(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
-	got := resolveTSBinary()
-	if got != "" && got != macOSHomebrewTSBinary {
-		t.Errorf("resolveTSBinary() = %q, want empty or the Homebrew fallback", got)
+// This is the positive removal assertion (rule 84d1gfpywd) proving the
+// retired comparison-binary flag is gone from the flag set, not merely
+// undocumented. Go's flag package matches by name, so this test cannot
+// be written without the literal below — see 06-01-PLAN.md's cycle-5
+// HIGH 1 note. Named exactly once in this file, deliberately: three
+// separate census gates in this phase pre-authorise excluding this file
+// on the strength of a companion assertion that this exact name occurs
+// here exactly once.
+func TestParseFlags_RejectsRetiredComparisonBinaryFlag(t *testing.T) {
+	_, err := parseFlags([]string{"-ts-binary", "/custom/codegraph"})
+	if err == nil {
+		t.Fatal("parseFlags with the retired comparison-binary flag should error, got nil")
 	}
 }
 

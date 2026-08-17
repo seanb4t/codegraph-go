@@ -48,13 +48,6 @@ type Reader interface {
 	// has never had a Meta record written.
 	GetMeta() (*schema.Meta, error)
 
-	// GetMigration returns the migration-progress cursor blob (07-02) — an
-	// opaque payload owned and encoded by the caller (internal/migrate),
-	// never interpreted here. Lives under its own m/migration meta key,
-	// distinct from the m/schema Meta record GetMeta returns. Returns
-	// ErrNotFound if no migration progress record has ever been written.
-	GetMigration() ([]byte, error)
-
 	// IterateEdges returns an EdgeIterator over every edge whose source
 	// is srcPrefix, ordered by (src, kind, dst) — a single contiguous
 	// range scan (D-03), suitable for callers/callees/impact queries.
@@ -193,14 +186,6 @@ type Writer interface {
 
 	// PutMeta stages the store-wide Meta record for write.
 	PutMeta(m *schema.Meta) error
-
-	// PutMigration stages the migration-progress cursor blob for write
-	// (07-02). data is an opaque payload owned and encoded by the caller
-	// (internal/migrate) — this is a raw byte Set, not a proto-marshaled
-	// record, and it is stored under its own m/migration meta key,
-	// distinct from and never overwriting the m/schema Meta record PutMeta
-	// writes.
-	PutMigration(data []byte) error
 
 	// DeleteNode stages a point-delete of the node record identified by
 	// id (Phase 4 D-02) — the mechanism Sync's prune step uses after

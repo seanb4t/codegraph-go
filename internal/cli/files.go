@@ -15,9 +15,9 @@ import (
 // newFilesCmd builds `codegraph files` (QRY-07): browses the indexed file
 // structure from the frozen graph (never a live filesystem walk),
 // narrowed by --pattern (glob), --filter (exact language match), --dir
-// (directory-path prefix match, SURF-02 — matches TS's files --filter
-// <dir> semantics; orthogonal to and composed AND with the language
-// --filter, CONTEXT D-03 add-alongside), and --depth (directory-nesting
+// (directory-path prefix match, SURF-02 — orthogonal to and composed AND
+// with the language --filter, CONTEXT D-03 add-alongside), and --depth
+// (directory-nesting
 // cap; 0 means unlimited), projected as either the default "flat" list or
 // a nested "--format tree". --json (short -j, SURF-03) emits
 // query.MarshalFilesJSON's FilesResult shape — this plan's own design,
@@ -87,7 +87,7 @@ func newFilesCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().StringVar(&pattern, "pattern", "", "shell glob narrowing the result set")
 	cmd.Flags().StringVar(&filter, "filter", "", "restrict to one language")
-	cmd.Flags().StringVar(&dir, "dir", "", "directory-path prefix filter (matches TS --filter <dir>)")
+	cmd.Flags().StringVar(&dir, "dir", "", "directory-path prefix filter")
 	cmd.Flags().IntVar(&depth, "depth", 0, "directory-nesting cap (0 = unlimited)")
 	cmd.Flags().StringVar(&format, "format", "", `"flat" (default) or "tree"`)
 	cmd.Flags().BoolVarP(&jsonOut, "json", "j", false, "emit JSON output")

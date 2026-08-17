@@ -108,7 +108,7 @@ func exploreZeroResult(query string, stale bool) string {
 // one a wider one). Divergence (D-02): the live TS dist is unreadable on
 // this machine (gather.go's package doc comment) — only the qualitative
 // rule ("bigger project, wider budget") and the [1,20] clamp survive in
-// the frozen RESEARCH capture, not TS's exact step function; this
+// the frozen RESEARCH capture, not the exact original step function; this
 // monotonic step function is this plan's own documented substitute.
 func getExploreOutputBudget(fileCount int) int {
 	switch {
@@ -208,7 +208,7 @@ func computeFileTermHits(r graphstore.Reader, nodeIDs []string, terms []string) 
 }
 
 // Explore is the flagship one-round-trip command (QRY-08, D-05a, EXPL-02):
-// wires the full TS-parity explore pipeline in TS's own stage order
+// wires the full explore pipeline in the documented stage order
 // (RESEARCH Architecture Diagram) — tokenize (H1/H2) -> hybrid gather
 // (H3-H6) -> post-merge rerank (H7-H9) -> named-symbol seeding (H13) ->
 // type-hierarchy expansion (H10) -> bounded BFS (H11) -> glue-node
