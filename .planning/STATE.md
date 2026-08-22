@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.12.0
 milestone_name: Local Graph UI
-status: planning
-last_updated: "2026-08-22T17:27:40.944Z"
+status: in_progress
+last_updated: "2026-08-22T00:00:00.000Z"
 last_activity: 2026-08-22
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,79 +17,50 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-16)
+See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Planning next milestone — v0.11.0 shipped 2026-08-16; `REQUIREMENTS.md` is archived and milestone-scoped, so the next cycle starts fresh via `/gsd-new-milestone`.
+**Current focus:** v0.12.0 Local Graph UI — roadmap created 2026-08-22. 6 phases, 51 requirements, 51/51 mapped. Next: `/gsd-plan-phase 1`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 — Engine Seam, Wire Protocol & Secure Transport (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-08-22 — Milestone v0.12.0 started
+Status: Roadmap approved; awaiting phase planning
+Last activity: 2026-08-22 — ROADMAP.md and REQUIREMENTS.md traceability written
+
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/6 phases)
 
 ## Performance Metrics
 
-**Velocity (v0.11.0):**
+**Velocity (v0.12.0):**
 
-- Total plans completed: 30
 - No execution data yet for this milestone.
 
-**By Phase (v0.11.0):**
+**By Phase (v0.12.0):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 7 | - | - |
-| 2 | 4 | - | - |
-| 3 | 2 | - | - |
-| 4 | 3 | - | - |
-| 05 | 8 | - | - |
-| 6 | 6 | - | - |
+| 1 | TBD | - | - |
+| 2 | TBD | - | - |
+| 3 | TBD | - | - |
+| 4 | TBD | - | - |
+| 5 | TBD | - | - |
+| 6 | TBD | - | - |
+
+**Velocity (v0.11.0 — archived, shipped 2026-08-16):** 6 phases, 30 plans, 60 tasks over 4 days.
 
 **Velocity (v0.10.0 — archived, shipped 2026-08-13):** 4 phases, 15 plans, 34 tasks over 2 days.
 
 **Velocity (v0.5.0 — archived, shipped 2026-08-11):** 4 phases, 24 plans, 59 tasks over 3 days.
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 6 | - | - |
-| 02 | 7 | - | - |
-| 03 | 5 | - | - |
-| 04 | 6 | - | - |
-| 05 | 4 | - | - |
-| 06 | 4 | - | - |
-| 07 | 4 | - | - |
-| 08 | 3 | - | - |
+**Velocity (v0.3.0 — archived, shipped 2026-08-06):** 5 phases, 21 plans over 4 days.
 
-**By Phase (v0.3.0 — archived, milestone shipped 2026-08-06):**
+**Velocity (v1.0 — archived, shipped 2026-08-03):** 10 phases, 72 plans, 162 tasks. v0.1 shipped 58+ plans across 8 phases.
 
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01 | 7 | - | - |
-| 2 | 5 | - | - |
-| 3 | 5 | - | - |
-| 4 | 3 | - | - |
-| 5 | 1 | - | - |
+Note the standing reconciliation carried from v1.0: "plans completed" counts SUMMARY files (66) while the old frontmatter `completed_plans` counted PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.
 
-**By Phase (v1.0 — archived, milestone shipped 2026-08-03):**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 1 | 18 | - | - |
-| 2 | 7 | - | - |
-| 3 | 5 | - | - |
-| 4 | 3 | - | - |
-| 5 | 5 | - | - |
-| 6 | 3 | - | - |
-| 07 | 8 | - | - |
-| 8 | 9 | - | - |
-| 09 | 8 | - | - |
-| 10 | 7 | - | - |
-
-v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8 phases — see `milestones/v0.1-*`). Note the standing reconciliation: "plans completed" counts SUMMARY files (66) while the old frontmatter `completed_plans` counted PLAN files (65) — Phase 01 carries 17 plans against 18 summaries. Reconcile deliberately rather than by editing one number to match the other.
-
-**Per-plan metrics for v1.0, v0.3.0 and v0.5.0 are archived** with their milestones under `.planning/milestones/` and in each phase's own SUMMARY files; they were trimmed from this file at the v0.11.0 boundary to keep the live state readable. Nothing was deleted from the archives.
+**Per-plan metrics for v1.0, v0.3.0, v0.5.0, v0.10.0 and v0.11.0 are archived** with their milestones under `.planning/milestones/` and in each phase's own SUMMARY files. Nothing was deleted from the archives.
 
 *Updated after each plan completion*
 
@@ -97,20 +68,27 @@ v1.0 totals: 73 plan summaries across 10 phases (v0.1 shipped 58+ plans across 8
 
 ### Decisions
 
-Decisions already made for v0.11.0, before any phase executes (full rationale in
+Decisions already made for v0.12.0, before any phase executes (full rationale in
 PROJECT.md → Current Milestone and ROADMAP.md → "Ordering is load-bearing"):
 
-- **Corpus selection is decided by measurement, and it blocks everything downstream.** FIXT-01 is a Phase-1 spike that indexes candidate MIT/Apache-2.0 repositories and records real per-kind edge counts and per-language file counts before any set is locked. The trap it exists to catch is already in this repo's history: v1.0 Phase 1 established that codegraph-go's own idiomatic Go source produces **zero** `overrides` and `type_of` edges, so a corpus set can silently under-cover the 9-kind `RANK_EDGES` vocabulary while the whole suite stays green. Shortlist to measure (not locked): gohugoio/hugo, nestjs/nest, google/guava, apache/arrow.
-- **Fetch at pinned SHA with CI cache; never vendor corpus source.** Avoids repo bloat and avoids adding redistribution obligations to the very `NOTICE` file this milestone is trimming.
-- **The rename pass (CODE-02) and the re-freeze pass (FIXT-06) are separate reviewed diffs.** One diff containing both makes any regression un-attributable. The repo's discipline is one reviewed-diff pass with every changed transcript attributable to a single named cause (v0.3.0 Phase 3; v0.10.0 Phase 8). The identifier pass changes no golden byte; the re-freeze changes no identifier.
-- **FIXT-07 runs after FIXT-06 and in a different phase, never in the same plan.** A gate is not trusted until demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation. A re-baseline that authors its own proof in the same change certifies its own oracle.
-- **FIXT-03's "no self-skips" needs a positive assertion.** A negative-only guard passes vacuously — this repo already carries that class twice (rule `84d1gfpywd`; the `dry-run-signed` additions-only diff guard). The CI job must report and assert an executed-scenario count, on the `ExpectedScenarioCount` precedent from the wire oracle.
-- **The sweep removes framing, never capability — with one recorded exception.** `codegraph migrate` was the exception: maintainer ruling D-04 (2026-08-15) amended CODE-03 to remove it entirely in Phase 5 — the command, the `internal/migrate` package, its fixture, and the sole-use `modernc.org/sqlite` dependency. There is no migration path; a user of the prior implementation re-indexes from source. Everything else holds: `internal/indexer/tsextract`, the language registry and the capability matrix are product surface — TypeScript-the-indexed-language, not TypeScript-the-origin-project. Resolved term-by-term with recorded reasons, never by regex.
-- **No vocabulary drift guard (VOCAB-01), deliberately.** A term blocklist either goes vacuous or fights legitimate uses like `tsextract`. One-time sweep plus review discipline is the chosen posture, recorded in REQUIREMENTS.md → v2 so the decision stays visible.
-- **`docs/CLI-REFERENCE.md` (DOCS-05) is deferred.** This milestone *deletes* `docs/FLAG-PARITY.md` and its drift guard; authoring a self-authored replacement with its own guard is separate work. This is a knowing, recorded reduction in flag-documentation coverage.
-- **The engram memory sweep is last and is verified by inspection.** The spine lives outside git; no CI gate can hold it. MEM-01 supersedes rather than overwrites — nothing recording real history is deleted, only present-tense assertions of the retired framing are corrected.
-- **`.planning/` archives and `CHANGELOG.md` are out of scope.** The first is an append-only record parsed by scope-sensitive tooling; the second is release-please-owned and hand-editing it breaks the tool that both writes and re-reads it.
-- **`v0.11.0` is a prediction, not a tag.** release-please is the sole tag authority (D-06R); no phase schedules a `git tag` step.
+- **ConnectRPC over Protobuf is the wire protocol** (maintainer directive, 2026-08-22). Chosen over a hand-rolled JSON/REST surface: typed end-to-end, server-streaming works in browsers over plain HTTP/1.1 so it carries live push natively, and `connect-go` is pure Go layered over `net/http` rather than gRPC's transport stack — a much smaller supply-chain surface than `grpc-go`.
+- **`pnpm` is the package manager, not `npm`** (maintainer directive, 2026-08-22). `pnpm-lock.yaml` is the lockfile, `pnpm install --frozen-lockfile` is the CI-correct install, and `pnpm audit` is the JS vulnerability gate. pnpm's strict non-hoisted `node_modules` and its default blocking of dependency lifecycle scripts are both live ways a developer's build can differ from CI's — which is exactly what a *committed* `dist/` cannot tolerate.
+- **The SPA is committed and `go:embed`'d; the signed release path stays pure Go.** No JS toolchain inside the reproducible build. `//go:embed all:dist` — the `all:` prefix is mandatory, since Go's default dotfile/underscore exclusion silently drops Vite's `_app`-prefixed chunks while the build still succeeds.
+- **The UI is a third consumer of `internal/query.Engine`, never a second implementation.** Eight of the Engine's ten read methods already return structured results; `ENG-01`/`ENG-02` extract the remaining two (`Node`, `Explore`) by exposing the fetch pipeline that already exists and stopping *before* the render call. `Node()`/`Explore()` stay byte-identical and the frozen goldens never see a diff.
+- **No IPC-to-daemon architecture, and no long-lived store handle.** `pebble.Open` takes an exclusive directory lock regardless of `ReadOnly` (cockroachdb/pebble#1583), but `graphstore.Open` already wraps it in a bounded retry (5 × 100ms) classifying lock-held failures as the exported `ErrStoreLocked`. `codegraph ui` opens-snapshots-closes per RPC exactly as `internal/mcp`'s `openEngine` does (`SRV-04`). PITFALLS.md's "needs an explicit IPC-to-daemon decision" claim was investigated and is **wrong**; SUMMARY.md carries the correction.
+- **Two distinct findings are both named CR-01 — never conflate them.** This milestone's `FIX-01` is `internal/mcp/server.go`'s `pendingWriter` counter corruption (**open**). The CR-01 cited throughout `internal/graphstore/pebble_store.go` is a v0.5.0 Phase-3 finding about the Pebble lock — **already fixed**; the retry loop *is* that fix.
+- **`FIX-01` lands early (Phase 1), deliberately out of dependency order.** Its root cause — server-initiated writes decrementing a counter only client-initiated requests increment — is exactly the shape the new ConnectRPC streaming surface can reinvent, so fixing it first makes it a worked example Phase 6's design review checks against.
+- **Origin/Host validation lands in the transport phase, before any RPC handler ships.** Retrofitting a rebinding defense after handlers exist is how CVE-2024-28224 (Ollama) and CVE-2025-66414/66416 (MCP SDKs) happened. Exact-match allowlist only — no `Contains`/`HasPrefix`/wildcard regex — with `localhost`, `127.0.0.1` and `[::1]` each admitted explicitly rather than treated as interchangeable.
+- **Protobuf is already in-tree; this adds a SECOND proto surface, not the first.** `internal/schema/graph.proto` → `graph.pb.go` is the on-disk record format under an additive-only evolution discipline (D-02a: field numbers never renumbered or reused, retired fields `reserved`). The new UI schema (`RPC-01`) inherits that discipline rather than reinventing it, in a separate package with its own cadence.
+- **`BLD-04` closes a pre-existing gap, not just a new one.** There is no proto codegen drift guard in this repo today and no regeneration task in `Taskfile.yml` — `roundtrip_test.go` tests serialization round-tripping, not codegen currency. The guard must cover both the new UI schema and the pre-existing `internal/schema/graph.proto`.
+- **`ENG-04` is schema work and gates `BRW-09`.** `schema.Meta` records no commit SHA today. A permalink that matches what the UI just showed must point at the *indexed* commit, so `Meta` gains one additive field following the `HasFileIndex` precedent (absent ⇒ pre-upgrade graph, degrade gracefully). Sequenced with the proto work in Phase 1, not with UI work.
+- **Both drift guards ship in the same phase as the artifact they guard** (`BLD-04` in Phase 1 with the new `.proto`; `BLD-03` in Phase 2 with the committed `dist/`), per the v0.10.0 pattern — never deferred to a cleanup phase at the end.
+- **`GRF-01` is a blocking measurement spike with its pass condition locked before dispatch,** and its result — not a preference — selects between Cytoscape.js and Sigma.js + graphology. The roadmap deliberately pre-commits to neither renderer. Precedent: v0.5.0's zig-cross spike.
+- **The graph view is never force-directed.** File/package aggregation with directory-structural grouping and a hierarchical layout is the v1 design, decided up front rather than discovered as a UX bug. Recovery from shipping the hairball is HIGH cost — layout choice reaches into drag, zoom and click-target code throughout.
+- **The rollup is computed on demand, never precomputed.** `Engine.FileGraph()` follows `BuildReverseAdjacency`'s fresh-per-call full-scan discipline — no new record kind, no second staleness mechanism, no re-indexing.
+- **Live push comes last, and its integration test runs against real processes.** "Apply this delta to a view" is not designable before the view exists, and the property live push must not violate (never holding the store open) is only observable with a real `codegraph daemon` / `serve --mcp` holding the same store. "Run `codegraph ui` alone" is the dev workflow that hides it.
+- **`SEED-001`'s stated trigger is obsolete but the seed is consumed.** It waited on "CLI-surface parity" — a gate v0.11.0 retired outright. The warrant for building now is that the query surface is stable *on its own terms*, which is a stronger reason than the original one.
+- **`v0.12.0` is a prediction, not a tag.** release-please is the sole tag authority (D-06R); no phase schedules a `git tag` step.
 
 Decisions from prior milestones are archived with them — per-phase decisions live in
 `milestones/*-phases/*/`, and the durable product-level ones are summarized in
@@ -125,12 +103,14 @@ Standing decisions that outlive every milestone:
 - `Taskfile.yml` is the single definition of every CI job body; `TestWorkflowRunBodiesInvokeTask` enforces it.
 - **A gate is not trusted until it has been demonstrated RED against a confirmed-applied mutation.**
 - **A guard must carry a positive assertion that it did its work.** Negative-only guards pass vacuously (rule `84d1gfpywd`).
+- **`go test -run PATTERN` exits 0 when the pattern matches nothing.** A green exit is never on its own evidence that a test ran; report a count.
 - **Shared-array-entry ownership must be exact-identity, never shape/position** (hardened after the v0.10.0 hook-ownership vulnerability, commit `242ec0a`).
 - **A transcript grep is a claim about the grep, not about the product.** Before recording an absence from a transcript, prove the same search can find the thing when it is present (established twice in the v0.10.0 Phase 6 rehearsal).
+- **Never invent structure in a tool-owned generated file.** `.planning/ROADMAP.md` and `.planning/STATE.md` are parsed by scope-sensitive readers; an invented version-bearing or ✅-bearing `###` heading under `## Phases` silently truncates the active milestone's scope.
 
 ### Pending Todos
 
-8 pending — `/gsd-capture --list` to review. One (`bench pinnedAt`) surfaced during v0.11.0 Phase 1 but is out of scope there; the rest predate v0.11.0 and none block it.
+8 pending — `/gsd-capture --list` to review. One (`CR-01`) is now in scope as this milestone's `FIX-01` (Phase 1); the `bench pinnedAt` item was expected to reconcile in v0.11.0 Phase 6 and should be re-checked. None block v0.12.0.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
@@ -140,8 +120,8 @@ Standing decisions that outlive every milestone:
 | 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
 | 2026-08-10 | docs | — | `brew trust` instructions recommend broader tap grant with no security framing |
 | 2026-08-10 | ci | — | Tap App secret distinctness test is tautological and reads no workflow |
-| 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces; latent in the benchmark path, reconciles when Phase 6 (Benchmark De-coupling) touches `realcorpus` |
-| — | mcp | major | CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications (see Blockers/Concerns) |
+| 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces |
+| — | mcp | major | **CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications. NOW IN SCOPE as v0.12.0 `FIX-01`, Phase 1.** |
 
 Resolved and filed to `.planning/todos/completed/`:
 
@@ -154,16 +134,16 @@ Resolved and filed to `.planning/todos/completed/`:
 
 ### Blockers/Concerns
 
-Nothing blocks v0.11.0. Carried forward from prior milestones:
+Nothing blocks v0.12.0. Carried forward from prior milestones:
 
-- **CR-01 (v0.10.0 Phase 5 code review, `internal/mcp/server.go:225-349`): `pendingWriter`'s "pending response" counter is corrupted by server-initiated notifications,** defeating the stdin-EOF-race fix it exists to provide. The counter increments only on accepted client requests but decrements on every stdout `Write()` call, including notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that SPEC-09 routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable, not merely theoretical. Predates v0.10.0 (introduced in `13f2875`). Full trace and proposed fix in `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md`. Needs its own tracking issue/plan.
-- **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` and `999.6` were both promoted into v0.3.0, but all five `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. Decide whether the promoted entries should be struck or annotated; nothing was removed pending that call. (`999.5` has since been consumed by v0.5.0 and is no longer in the Backlog; `999.2` and `999.4` remain.)
+- **CR-01 is no longer just carried — it is scoped.** `internal/mcp/server.go:225-349`'s `pendingWriter` "pending response" counter increments only on accepted client requests but decrements on every stdout `Write()`, including server-initiated notifications (`notifications/tools/list_changed`, `notifications/subscriptions/acknowledged`) that SPEC-09 routes through the identical writer. A notification landing between a request's acceptance and its response being written can zero the counter early, causing premature EOF propagation and silent loss of the still-in-flight response — confirmed reachable, not theoretical. Predates v0.10.0 (introduced in `13f2875`). Full trace and proposed fix in `.planning/phases/05-mcp-resources-capability-claims-drift-guard/05-REVIEW.md` (archived under `milestones/`). Now `FIX-01`, Phase 1.
+- **Backlog bookkeeping inconsistency (needs a maintainer call).** `999.3` and `999.6` were both promoted into v0.3.0, but all `999.x` Backlog entries were preserved verbatim in `ROADMAP.md` by explicit instruction. Decide whether the promoted entries should be struck or annotated; nothing was removed pending that call. (`999.5` has since been consumed by v0.5.0; `999.2` and `999.4` remain.)
 - **Client-side `tools/list` caching bugs are a known confound.** Real, primary-source GitHub issues exist against Claude Code itself (anthropics/claude-code #41123, #40025, #50515; claude-ai-mcp #45).
-- **Open GitHub issues:** #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity — note this touches BENCH-02's surface).
+- **Open GitHub issues:** #14 provenance-over-checksums wording still uncorrected in `release.yml` and two docs · #15 `PRFILES_EOF` heredoc over fork-controlled paths in two `pull_request_target` workflows · #16 `CheckRegression` still never compares `Metrics.Repo` (corpus identity).
 - **Advisory, unregistered surfaces** from the v1.0 Phase 10 security audit: the four `pull_request_target` workflows and the darwin canary have no threat-register entry, having landed after their registers were authored.
 - **`GOOS=windows go vet`** on `internal/daemon` / `internal/graphstore` fails (`undefined: tree_sitter.Node` in `goextract/routes`) — CGo grammar bindings excluded under windows build constraints; pre-existing. Native Windows support was dropped in `v0.4.0` (WSL2 only).
-- **GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling.** goreleaser's binary reaches `golang.org/x/crypto/openpgp` (110 vulnerable symbols) via pipe/ko → google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A) and the ko pipe compiles into every goreleaser binary regardless of config. The advisory `tool-vuln` job surfaces it — reported, not resolved.
-- **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06). Not scheduled for further work. The associated feedback-latency tradeoff (daemon package ~65s clean at GOMAXPROCS=4, failures take ~250s to surface) is accepted at CI concurrency.
+- **GO-2026-5932 is a real, ACCEPTED, unmitigated exposure in release tooling.** goreleaser's binary reaches `golang.org/x/crypto/openpgp` (110 vulnerable symbols) via pipe/ko → google/ko → sigstore/cosign/oci → sigstore/rekor/pkg/pki/pgp. Upstream is unmaintained (Fixed in: N/A). The advisory `tool-vuln` job surfaces it — reported, not resolved. **Relevant to `BLD-06`:** `pnpm audit` adds a second, disjoint scanner covering the JS tree neither `govulncheck` nor Syft can see; `SECURITY.md` must state both scanners' actual scope rather than implying one covers everything.
+- **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
 
@@ -178,7 +158,17 @@ Nothing blocks v0.11.0. Carried forward from prior milestones:
 
 Items acknowledged and deferred at milestone close, most recent first.
 
-Acknowledged at the **v0.11.0 close (2026-08-16)** — suppressed at the next `audit-open` scan, not fixed. All 10 predate v0.11.0. Acknowledgment is verdict-preserving and **self-invalidating**: it never rewrites an artifact's own `status:`, and the suppression lapses the moment the artifact's observed state changes again (a reopened debug session, an edited deferred entry, a re-triggered seed resurfaces on its own and must be acknowledged again).
+Deferred at **v0.12.0 scoping (2026-08-22)** — recorded so the decisions stay visible:
+
+| Category | Item | Status |
+|----------|------|--------|
+| requirement | HLT-04 — coverage denominator ("files discovered but NOT indexed") | v2; needs new Engine surface, deliberately out of v1 scope |
+| requirement | BRW-10 — "where am I" breadcrumb while scrolling a long file | v2 |
+| requirement | BRW-11 — editor handoff (`vscode://file/...`) with configurable URI scheme | v2 |
+| requirement | GRF-06 — community-detection clustering | v2; the schema reserves annotation space, directory-structural grouping is the correct v1 substitute |
+| requirement | GRF-07 — opt-in whole-symbol graph within an already-drilled-into package | v2 |
+
+Acknowledged at the **v0.11.0 close (2026-08-16)** — suppressed at the next `audit-open` scan, not fixed. All 10 predate v0.11.0. Acknowledgment is verdict-preserving and **self-invalidating**: it never rewrites an artifact's own `status:`, and the suppression lapses the moment the artifact's observed state changes again.
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
@@ -189,32 +179,25 @@ Acknowledged at the **v0.11.0 close (2026-08-16)** — suppressed at the next `a
 | todos | 2026-08-10-add-golangci-lint-with-gofmt-and-idiomatic-go-linters.md | (presence-only) | 2026-08-17 | v0.11.0 |
 | todos | 2026-08-10-brew-trust-instructions-recommend-the-broader-tap-grant-with-no-security-framing.md | (presence-only) | 2026-08-17 | v0.11.0 |
 | todos | 2026-08-10-tap-app-secret-distinctness-test-is-tautological-and-reads-no-workflow.md | (presence-only) | 2026-08-17 | v0.11.0 |
-| seeds | SEED-001-local-svelte-shadcn-graph-browsing-ui | dormant | 2026-08-17 | v0.11.0 |
+| seeds | SEED-001-local-svelte-shadcn-graph-browsing-ui | **CONSUMED by v0.12.0** | 2026-08-17 | v0.11.0 |
 | seeds | SEED-003-markdown-in-the-index | dormant | 2026-08-17 | v0.11.0 |
 | deferred_items | 04/deferred-items.md: `internal/daemon` load-induced flake under full-suite parallel load | acknowledged | 2026-08-17 | v0.11.0 |
 
-The `deferred_items` entry was acknowledged by hand rather than through `audit-open acknowledge`: that file uses the heading-delimited (#3457) entry shape, which the CLI writer deliberately refuses rather than risk writing into the wrong entry. Its `- **Status:** acknowledged` bullet is exactly the marker the writer would have set — the entry's own `status:` field doubles as the marker for this category.
+The `deferred_items` entry was acknowledged by hand rather than through `audit-open acknowledge`: that file uses the heading-delimited (#3457) entry shape, which the CLI writer deliberately refuses rather than risk writing into the wrong entry.
 
 Deferred at v0.11.0 scoping (2026-08-13) — recorded so the decisions stay visible:
 
 | Category | Item | Status |
 |----------|------|--------|
-| requirement | DOCS-05 — self-authored `docs/CLI-REFERENCE.md` with its own drift guard | v2; this milestone deletes `docs/FLAG-PARITY.md`, a later one authors the replacement |
-| requirement | VOCAB-01 — build-time vocabulary drift guard | v2, deliberately **declined** for this milestone (blocklist goes vacuous or fights `tsextract`) |
+| requirement | DOCS-05 — self-authored `docs/CLI-REFERENCE.md` with its own drift guard | v2; v0.11.0 deleted `docs/FLAG-PARITY.md`, a later milestone authors the replacement |
+| requirement | VOCAB-01 — build-time vocabulary drift guard | **declined**, not deferred (blocklist goes vacuous or fights `tsextract`) |
 
 Carried forward, acknowledged and deferred at v0.10.0 close on 2026-08-13:
 
 | Category | Item | Status |
 |----------|------|--------|
-| todo | 2026-08-07 — wire-oracle toolsList repeat-response ordering flake | pending [mcp] |
-| todo | 2026-08-09 — dry-run-signed additions-only diff guard passes vacuously | pending [release] |
-| todo | 2026-08-09 — post-release-verify event-aware conclusion guard has no regression assertion | pending [ci] |
-| todo | 2026-08-10 — add golangci-lint with gofmt and idiomatic Go linters | pending [ci] |
-| todo | 2026-08-10 — brew trust instructions recommend broader tap grant with no security framing | pending [docs] |
-| todo | 2026-08-10 — tap App secret distinctness test is tautological and reads no workflow | pending [ci] |
 | requirement | GUARD-HOOK-01/02 — PreToolUse guard hook | v2; the fallback if skill+resources+nudge prove insufficient, and that evidence does not exist yet |
 | requirement | AGENT-04…07 — multi-agent skill/hooks porting | v2; blocked on per-agent hook-schema differences across Cursor / Codex CLI / Antigravity |
-| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | dormant |
 | seed | SEED-003 — markdown in the index | dormant |
 | backlog | 999.2 — tmux e2e/UAT test harness for the interactive TUI | in ROADMAP Backlog |
 | backlog | 999.4 — CheckRegression current-metrics positivity guard | in ROADMAP Backlog |
@@ -228,33 +211,33 @@ Closed and no longer deferred:
 
 | Category | Item | Landed as |
 |----------|------|-----------|
+| seed | SEED-001 — local Svelte + shadcn-svelte UI for browsing/querying the graph | **consumed by v0.12.0** (scoped across all 6 phases) |
 | seed | SEED-002 — homebrew installation path | consumed by v0.5.0 Phases 1–4; tap published, cask installable |
 | backlog | 999.5 — macOS Gatekeeper signing and notarization | promoted into v0.5.0 Phase 2 (SIGN-01…04) |
 | backlog | 999.6 — MCP `2026-07-28` impact assessment | the spine of v0.3.0 |
 | backlog | 999.3 — vulnerability scanning for the tool modfiles | VULN-01/02/03, v0.3.0 Phase 4 |
 | todo | 2026-08-08 — author a codegraph usage skill for agents | closed by v0.10.0 Phases 6–8 |
 | Release | DIST-02 — real signed `v*` tag | ✓ `v0.2.0` shipped via release-please (REL-02) |
-| Perf | PERF-01 — published head-to-head numbers | ✓ Closed in v1.0 Phase 8 (REL-03) — **note: BENCH-01 retires those numbers this milestone** |
+| Perf | PERF-01 — published head-to-head numbers | ✓ retired by v0.11.0 BENCH-01; replaced by absolute single-subject numbers |
 
 Not deferred but worth carrying: `.planning/debug/perf-gate-throughput-regress.md` is backed by
 fresh data on issue #20 — the gate failed then passed on an inert diff at ~6.9% intra-run spread
-against a 10% budget. Relevant to BENCH-02.
+against a 10% budget.
 
 ## Session Continuity
 
-Last session: 2026-08-16T10:47:10.308Z
-Stopped at: Phase 6 complete — all phases complete
-  NEXT: `/gsd-plan-phase 1` (Corpus Selection by Measurement — blocking spike)
+Last session: 2026-08-22
+Stopped at: ROADMAP.md written — v0.12.0 scoped at 6 phases, 51/51 requirements mapped, 0 unmapped
+  NEXT: `/gsd-plan-phase 1` (Engine Seam, Wire Protocol & Secure Transport)
   CARRY-OVER:
 
-    - **Phase 1 is blocking.** No phase that re-freezes a golden may be planned until FIXT-01 locks the corpus set by recorded measurement. Phase 4 (Attribution & Documentation Sweep) has no dependency on Phases 1–3 and may be planned and run in parallel.
-    - **PR #60 (v0.10.0) must be on `main` before this milestone's branch is cut** — verify it merged before starting. This repo is squash-merge-only with `squash_merge_commit_title: PR_TITLE`, so the PR title is the release decision.
-    - **`branching_strategy: milestone`** — this milestone lives on one branch (`gsd/v0.11.0-standalone-project-identity`) and is not incrementally merged.
-    - **No `v0.11.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
-    - **`.planning/` and `CHANGELOG.md` are out of scope for the sweep** — the first would falsify project history and break GSD's scope-sensitive parsers, the second is release-please-owned.
-
-Resume file: .planning/phases/06-benchmark-de-coupling-memory-sweep/06-CONTEXT.md
+    - **Phase numbering restarts at 1** (this milestone was started with `--reset-phase-numbers`). `.planning/phases/` holds only `999.x` backlog directories, so Phases 1–6 collide with nothing.
+    - **`branching_strategy: milestone`** — this milestone lives on one branch (`gsd/v0.12.0-local-graph-ui`) and is not incrementally merged.
+    - **Within Phase 1, `FIX-01` is independent** of the Engine/proto/transport work and may be planned first; `SRV-02` must land before any RPC handler.
+    - **Within Phase 5, `GRF-01` blocks everything else in the phase.** Its pass condition must be written down before it is dispatched, and the roadmap deliberately names no renderer.
+    - **No `v0.12.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+    - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first phase with `/gsd-plan-phase 1`

@@ -129,17 +129,78 @@ Explicitly excluded. Each is a trap specifically because this UI is local, read-
 
 ## Traceability
 
-Populated during roadmap creation.
+Populated during roadmap creation (2026-08-22). Phase assignments come from `ROADMAP.md` → Phase Details; every v1 requirement maps to exactly one phase.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | Pending |
+| SRV-01 | Phase 1 | Pending |
+| SRV-02 | Phase 1 | Pending |
+| SRV-03 | Phase 1 | Pending |
+| SRV-04 | Phase 1 | Pending |
+| SRV-05 | Phase 3 | Pending |
+| RPC-01 | Phase 1 | Pending |
+| RPC-02 | Phase 1 | Pending |
+| RPC-03 | Phase 2 | Pending |
+| RPC-04 | Phase 6 | Pending |
+| RPC-05 | Phase 1 | Pending |
+| ENG-01 | Phase 1 | Pending |
+| ENG-02 | Phase 1 | Pending |
+| ENG-03 | Phase 5 | Pending |
+| ENG-04 | Phase 1 | Pending |
+| BRW-01 | Phase 3 | Pending |
+| BRW-02 | Phase 3 | Pending |
+| BRW-03 | Phase 3 | Pending |
+| BRW-04 | Phase 3 | Pending |
+| BRW-05 | Phase 3 | Pending |
+| BRW-06 | Phase 3 | Pending |
+| BRW-07 | Phase 3 | Pending |
+| BRW-08 | Phase 3 | Pending |
+| BRW-09 | Phase 3 | Pending |
+| NAV-01 | Phase 3 | Pending |
+| NAV-02 | Phase 3 | Pending |
+| NAV-03 | Phase 3 | Pending |
+| NAV-04 | Phase 3 | Pending |
+| WRK-01 | Phase 4 | Pending |
+| WRK-02 | Phase 4 | Pending |
+| WRK-03 | Phase 4 | Pending |
+| WRK-04 | Phase 4 | Pending |
+| GRF-01 | Phase 5 | Pending |
+| GRF-02 | Phase 5 | Pending |
+| GRF-03 | Phase 5 | Pending |
+| GRF-04 | Phase 5 | Pending |
+| GRF-05 | Phase 5 | Pending |
+| HLT-01 | Phase 4 | Pending |
+| HLT-02 | Phase 4 | Pending |
+| HLT-03 | Phase 4 | Pending |
+| LIV-01 | Phase 6 | Pending |
+| LIV-02 | Phase 6 | Pending |
+| LIV-03 | Phase 6 | Pending |
+| LIV-04 | Phase 6 | Pending |
+| BLD-01 | Phase 2 | Pending |
+| BLD-02 | Phase 2 | Pending |
+| BLD-03 | Phase 2 | Pending |
+| BLD-04 | Phase 1 | Pending |
+| BLD-05 | Phase 2 | Pending |
+| BLD-06 | Phase 2 | Pending |
+| BLD-07 | Phase 2 | Pending |
+| FIX-01 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 51 total
-- Mapped to phases: 0
-- Unmapped: 51 ⚠️
+- Mapped to phases: 51
+- Unmapped: 0 ✓
+
+**By phase:**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 1 | Engine Seam, Wire Protocol & Secure Transport | 12 |
+| 2 | SPA Toolchain, Embedded App Shell & JS Supply Chain | 7 |
+| 3 | Browse, Inspect & Navigation | 14 |
+| 4 | Query Workbench & Index Health | 7 |
+| 5 | File/Package Graph View | 6 |
+| 6 | Live Push | 5 |
 
 ---
 *Requirements defined: 2026-08-22*
-*Last updated: 2026-08-22 after initial definition*
+*Last updated: 2026-08-22 after roadmap creation (51/51 requirements mapped across 6 phases)*
