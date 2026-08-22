@@ -70,6 +70,7 @@ The artifact line at v1.0's close was `v0.2.0` (signed, SBOM'd, SLSA-attested, c
 - **Live push** — watcher re-index events stream to the browser over a Connect **server-streaming** method; views update in place rather than going quietly stale. Not a separate SSE/WebSocket transport — the same schema and the same client as every other call.
 - **ConnectRPC (`connectrpc.com`) as the wire protocol** (maintainer directive, 2026-08-22) — Protobuf-defined schema, `connect-go` on the server, `connect-es` in the browser. Chosen over a hand-rolled JSON/REST surface: it is typed end-to-end, its server-streaming works in browsers over plain HTTP (so it carries live push natively), and `connect-go` is pure Go layered over `net/http` rather than gRPC's transport stack — a much smaller supply-chain surface than `grpc-go`.
 - **Svelte + shadcn-svelte SPA**, built assets committed and `go:embed`'d — the signed release pipeline stays pure Go, with no JS toolchain inside the reproducible build.
+- **`pnpm` is the package manager** (maintainer directive, 2026-08-22) — not `npm`. `pnpm-lock.yaml` is the lockfile, `pnpm install --frozen-lockfile` is the CI-correct install, and the JS vulnerability gate is `pnpm audit`. pnpm's strict non-hoisted `node_modules` and its default blocking of dependency lifecycle scripts are both live risks to a *committed* `dist/`, since either can make a developer's build differ from CI's — which is precisely what the drift guard has to catch.
 - **A non-vacuous generated-artifact drift guard** — proof that committed generated output matches its source, demonstrated red before it is trusted green (rule `84d1gfpywd`). Two consumers, one pattern: `dist/` against the SPA source, and Protobuf codegen (`*.pb.go` + generated TS) against the `.proto` definitions.
 - **Loopback-only bind + Origin/Host validation**, read-only by construction — with bind address and auth kept as explicit seams so widening to `--host` later is a change, not a rewrite.
 - **CR-01** — fix `internal/mcp/server.go`'s `pendingWriter` counter corruption from server-initiated notifications. Folded in deliberately: this milestone adds a second long-lived connection-bearing surface, so the existing one being correct matters more, not less.
@@ -257,6 +258,7 @@ stapling-impossibility findings remain live constraints for DIST-06.
 - [ ] Live push — watcher re-index events push to the browser; views update in place
 - [ ] ConnectRPC wire protocol — Protobuf schema, `connect-go` server, `connect-es` browser client; server-streaming carries live push
 - [ ] Svelte + shadcn-svelte SPA with committed built assets, `go:embed`'d; release pipeline stays pure Go
+- [ ] `pnpm` as package manager — `pnpm-lock.yaml`, `--frozen-lockfile` in CI, `pnpm audit` as the JS vulnerability gate
 - [ ] Non-vacuous generated-artifact drift guard, demonstrated red before trusted green — covers both `dist/`↔SPA source and Protobuf codegen↔`.proto`
 - [ ] Loopback-only bind + Origin/Host validation, read-only; bind address and auth kept as seams for a later `--host`
 - [ ] CR-01 — `internal/mcp/server.go` `pendingWriter` counter corruption from server-initiated notifications
