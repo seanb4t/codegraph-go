@@ -68,6 +68,33 @@ independently proven golden-clean.
   This satisfies rule `84d1gfpywd`: the guard carries a positive assertion that it
   did its work.
 
+  > **⚠ CORRECTED — the "never by exit status" clause above is WRONG. Read this
+  > before writing any `<verify>` gate.**
+  > The sentence "Scoring is by counting `--- PASS` lines, **never** by exit status"
+  > is an over-compression introduced by the orchestrator when phrasing this
+  > decision, not a maintainer ruling. The maintainer selected this option for its
+  > substance — mutation-proof with the count asserted. The v0.11.0 finding it cites
+  > (`5pzpmvthcc`) says exit status ALONE is insufficient because
+  > `go test -run PATTERN` exits 0 when the pattern matches nothing. It does **not**
+  > say the status should be discarded.
+  > **The correct rule is the CONJUNCTION:**
+  > - the test command's exit status MUST be honored — capture it before any pipe,
+  >   or use `set -o pipefail` / `${PIPESTATUS[0]}`; **and**
+  > - the `--- PASS` count MUST meet its floor.
+  >
+  > Exit status alone is vacuous when the pattern matches nothing. The count alone is
+  > vacuous when something fails — in a pipeline `$?` belongs to the LAST command, so
+  > `go test … | rg -o -e '--- PASS' | wc -l` yields `wc`'s status and N passing
+  > subtests plus one `--- FAIL` satisfies the gate. Cycle 2 of the plan-review
+  > convergence loop found this shape in 26 gates, all authored from the uncorrected
+  > sentence above.
+  > **The one place the original wording holds:** while OBSERVING a deliberate
+  > mutation, a non-zero exit IS the expected evidence — requiring status 0 there
+  > would make this very mutation-proof unperformable. Score those by the failure
+  > count. Everywhere else, use the conjunction.
+  > A plan-level prohibition against the bare count-only form is carried in all 11
+  > plans' `must_haves.prohibitions`.
+
   > **⚠ CORRECTED BY RESEARCH (01-RESEARCH.md) — read before planning D-04.**
   > This decision was taken believing the 26 frozen goldens already act as an
   > output-regression net. **They do not.** Verified in source:
