@@ -68,6 +68,30 @@ independently proven golden-clean.
   This satisfies rule `84d1gfpywd`: the guard carries a positive assertion that it
   did its work.
 
+  > **⚠ CORRECTED BY RESEARCH (01-RESEARCH.md) — read before planning D-04.**
+  > This decision was taken believing the 26 frozen goldens already act as an
+  > output-regression net. **They do not.** Verified in source:
+  > `TestReFrozenGoldensValid` (`testdata/golden/golden_test.go:243-297`) checks only
+  > that each golden file exists, is non-empty, begins with `{`, parses as
+  > `goldenCapture`, and has a non-empty `Output` field — it never re-invokes
+  > `Engine.Node`/`Explore`. And `TestCorpusBehavior_Go`'s doc comment
+  > (`testdata/golden/behavioral_test.go:685-691`) states it asserts "named
+  > behavioral properties of live engine output, **not byte-diffs against a frozen
+  > golden**", the TS-era capture path having been retired in FIXT-04.
+  > **Nothing byte-diffs live output against the frozen goldens.**
+  > Consequences the planner MUST absorb:
+  > 1. D-04's mutation-proof cannot go RED against a comparison that does not exist.
+  >    **A new live-output-vs-frozen-golden comparison test is Wave-0, must-add
+  >    scope** — write it, prove it RED, and only then is D-04 performable.
+  > 2. ROADMAP success criterion 1's "every frozen golden covering them passes
+  >    unchanged" is, as written, satisfiable WITHOUT the output being unchanged —
+  >    a vacuous criterion of exactly the shape rule `84d1gfpywd` names.
+  > 3. What DOES exist and is worth preserving: `behavioral_test.go` invokes
+  >    `eng.Node(...)` / `eng.Explore(...)` live (`:874`, `:909`, `:931`, `:961`,
+  >    `:1043`, `:1051`, `:1282`, `:1326`, `:1378`) and asserts named properties.
+  >    That is a property net, not a byte net; treat it as complementary, not
+  >    a substitute.
+
 ### Commit-Aware Meta (ENG-04)
 
 - **D-05:** The indexed commit SHA is added to `schema.Meta` as **field 8**,
@@ -202,11 +226,24 @@ and will need either a task under an existing requirement or a roadmap addition.
    area `mcp`, score 0.9) — two recorded sightings; the diff was `"id":3` vs `"id":2`
    with payloads otherwise identical (arrival order, not content), and a re-run of
    the identical commit went green. It freezes JSON-RPC arrival order, which the
-   protocol does not guarantee. **Folded because it is plausibly the same root cause
-   as FIX-01** — server-initiated writes racing client-initiated responses on the
-   same stdout. Phase 1 must decide whether fixing `pendingWriter` also fixes the
-   flake and **prove it either way**, rather than leaving a two-sighting flake open
-   beside its likely cause. Maps to FIX-01.
+   protocol does not guarantee. Folded on the hypothesis that it shared FIX-01's root
+   cause, with an obligation to **prove it either way**.
+
+   > **⚠ HYPOTHESIS FALSIFIED BY RESEARCH (01-RESEARCH.md). The obligation is
+   > discharged — as a DISPROOF. Do not plan these as one fix.**
+   > Verified against `github.com/modelcontextprotocol/go-sdk@v1.7.0` in the local
+   > module cache: every JSON-RPC call except `initialize` has `jsonrpc2.Async(ctx)`
+   > invoked on it (`mcp/server.go:1908-1913`, citing upstream `go-sdk#26`). Two
+   > pipelined `tools/list` calls therefore run in **separate goroutines with no
+   > response-ordering guarantee**. That is a different defect from `pendingWriter`
+   > decrementing a counter it never incremented (`internal/mcp/server.go:339-343`
+   > vs `:276`).
+   > **Planner guidance:** FIX-01 remains scoped to `pendingWriter` alone and is the
+   > only half backed by a requirement. The flake is a *separate* finding whose fix
+   > belongs in the **wire oracle**, which freezes an arrival order the protocol
+   > never promised — not in the server. Size it as its own small task or hand it
+   > back to its todo; either is defensible, but it must not be folded INTO FIX-01,
+   > and closing FIX-01 must not be reported as closing the flake.
 
 2. **Add golangci-lint with gofmt and idiomatic Go linters**
    (`todos/pending/2026-08-10-add-golangci-lint-with-gofmt-and-idiomatic-go-linters.md`,
