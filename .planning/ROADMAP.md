@@ -130,12 +130,18 @@ Archived: [`milestones/v0.11.0-ROADMAP.md`](./milestones/v0.11.0-ROADMAP.md) · 
   4. Regenerating both protobuf surfaces — the new UI schema and the pre-existing `internal/schema/graph.proto` — produces no diff, the guard reports how many generated files it actually compared, and it has been watched fail against a deliberately stale checked-in file (BLD-04)
   5. An MCP session no longer loses an in-flight response when a server-initiated notification is written concurrently, proven against a reproduction that showed the loss (FIX-01)
 
-**Notes**: `ENG-01`/`ENG-02` are extractions that stop before the existing `RenderNode`/`RenderNodeMultiDef`/`RenderExplore` call — not rewrites. `ENG-04` follows the `HasFileIndex` precedent: absent ⇒ pre-upgrade graph, degrade gracefully. `BLD-04` closes a pre-existing gap; `Taskfile.yml` has no proto regeneration task today. The two CR-01s are distinct (see the ordering notes above) — this phase's is `internal/mcp/server.go`'s `pendingWriter`, not the already-fixed Pebble lock finding.
-**Plans**: TBD
+**Notes**: `ENG-01`/`ENG-02` are extractions that stop before the existing `RenderNode`/`RenderNodeMultiDef`/`RenderExplore` call — not rewrites. `ENG-04` follows the `HasFileIndex` precedent: absent ⇒ pre-upgrade graph, degrade gracefully. `BLD-04` closes a pre-existing gap; `Taskfile.yml` has no proto regeneration task today. The two CR-01s are distinct (see the ordering notes above) — this phase's is `internal/mcp/server.go`'s `pendingWriter`, not the already-fixed Pebble lock finding. **Planning correction (2026-08-22):** research verified that nothing in the repo byte-diffs live `Engine.Node`/`Explore` output against the 26 frozen goldens today — `TestReFrozenGoldensValid` checks envelope shape only, and the byte-diff capture path was retired in FIXT-04. A new byte-identity oracle is therefore Wave-1 must-add scope (plan 01-02) and lands before the extraction, or criterion 1 is satisfiable without the output being unchanged.
+**Plans**: 7 plans
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 1`)
+- [ ] 01-01-PLAN.md — Tracer: `codegraph ui` serves one origin-guarded RPC end-to-end (SRV-02, SRV-01, SRV-03, RPC-01, RPC-02)
+- [ ] 01-02-PLAN.md — Golden byte-identity oracle over all 26 frozen pairs, proven non-vacuous (ENG-01, ENG-02)
+- [ ] 01-03-PLAN.md — FIX-01 `pendingWriter` counter, plus the `toolslist-repeat` separability disproof (FIX-01)
+- [ ] 01-04-PLAN.md — Engine seam: `NodeDetail` and `ExploreResult` extraction, goldens byte-identical (ENG-01, ENG-02)
+- [ ] 01-05-PLAN.md — Commit-aware `Meta` field 8 and the two-surface proto codegen drift guard (ENG-04, BLD-04)
+- [ ] 01-06-PLAN.md — Full read-only RPC surface over the single Engine gather path (RPC-01, RPC-02, SRV-03)
+- [ ] 01-07-PLAN.md — Bounded responses and degraded state (RPC-05, SRV-04, SRV-03)
 
 ### Phase 2: SPA Toolchain, Embedded App Shell & JS Supply Chain
 
@@ -249,7 +255,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Seam, Wire Protocol & Secure Transport | 0/TBD | Not started | - |
+| 1. Engine Seam, Wire Protocol & Secure Transport | 0/7 | Planned | - |
 | 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 0/TBD | Not started | - |
 | 3. Browse, Inspect & Navigation | 0/TBD | Not started | - |
 | 4. Query Workbench & Index Health | 0/TBD | Not started | - |
