@@ -67,9 +67,10 @@ The artifact line at v1.0's close was `v0.2.0` (signed, SBOM'd, SLSA-attested, c
 - **Graph view** — a whole-repo picture at file/package granularity with aggregated edges; drill into a file for its symbols. Chosen over a filtered whole-symbol graph because the rollup is largely reading edges that already exist rather than computing a new projection.
 - **Query workbench** — `impact`/`affected`/`callers`/`callees` run interactively with tweakable depth and limits, results as structured tables.
 - **Index health** — freshness, coverage, languages, staleness and worktree-mismatch surfaced visually.
-- **Live push** — watcher re-index events push to the browser; views update in place rather than going quietly stale.
+- **Live push** — watcher re-index events stream to the browser over a Connect **server-streaming** method; views update in place rather than going quietly stale. Not a separate SSE/WebSocket transport — the same schema and the same client as every other call.
+- **ConnectRPC (`connectrpc.com`) as the wire protocol** (maintainer directive, 2026-08-22) — Protobuf-defined schema, `connect-go` on the server, `connect-es` in the browser. Chosen over a hand-rolled JSON/REST surface: it is typed end-to-end, its server-streaming works in browsers over plain HTTP (so it carries live push natively), and `connect-go` is pure Go layered over `net/http` rather than gRPC's transport stack — a much smaller supply-chain surface than `grpc-go`.
 - **Svelte + shadcn-svelte SPA**, built assets committed and `go:embed`'d — the signed release pipeline stays pure Go, with no JS toolchain inside the reproducible build.
-- **A non-vacuous `dist/`↔`src/` drift guard** — proof the committed build matches its source, demonstrated red before it is trusted green (rule `84d1gfpywd`).
+- **A non-vacuous generated-artifact drift guard** — proof that committed generated output matches its source, demonstrated red before it is trusted green (rule `84d1gfpywd`). Two consumers, one pattern: `dist/` against the SPA source, and Protobuf codegen (`*.pb.go` + generated TS) against the `.proto` definitions.
 - **Loopback-only bind + Origin/Host validation**, read-only by construction — with bind address and auth kept as explicit seams so widening to `--host` later is a change, not a rewrite.
 - **CR-01** — fix `internal/mcp/server.go`'s `pendingWriter` counter corruption from server-initiated notifications. Folded in deliberately: this milestone adds a second long-lived connection-bearing surface, so the existing one being correct matters more, not less.
 
@@ -254,8 +255,9 @@ stapling-impossibility findings remain live constraints for DIST-06.
 - [ ] Query workbench — interactive `impact`/`affected`/`callers`/`callees` with tweakable depth and limits
 - [ ] Index health — freshness, coverage, languages, staleness and worktree-mismatch surfaced visually
 - [ ] Live push — watcher re-index events push to the browser; views update in place
+- [ ] ConnectRPC wire protocol — Protobuf schema, `connect-go` server, `connect-es` browser client; server-streaming carries live push
 - [ ] Svelte + shadcn-svelte SPA with committed built assets, `go:embed`'d; release pipeline stays pure Go
-- [ ] Non-vacuous `dist/`↔`src/` drift guard, demonstrated red before trusted green
+- [ ] Non-vacuous generated-artifact drift guard, demonstrated red before trusted green — covers both `dist/`↔SPA source and Protobuf codegen↔`.proto`
 - [ ] Loopback-only bind + Origin/Host validation, read-only; bind address and auth kept as seams for a later `--host`
 - [ ] CR-01 — `internal/mcp/server.go` `pendingWriter` counter corruption from server-initiated notifications
 
