@@ -1,8 +1,8 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-08-22T21:52:00Z
-review_cycle: 2
+reviewed_at: 2026-08-22T22:33:36Z
+review_cycle: 3
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -912,3 +912,352 @@ against `golden_test.go`'s own assertion; four zero-results positive-controlled;
 ABSENT-and-declared; the new-artifact set confirmed absent and deliberately excluded; and 7 items
 recorded UNCHECKABLE, every one blocked on the `connectrpc.com/connect` and `buf` toolchains this
 phase itself introduces.
+
+---
+
+# Cross-AI Plan Review — Phase 1 (cycle 3, final convergence)
+
+Everything above this line is cycles 1 and 2. The plans were replanned in response
+(commit `1b97fab`) and remain 11 plans / 7 waves. This file is APPEND-style history:
+a prior finding is closed only if the section below says so.
+
+## Codex Review
+
+## Summary
+
+The plans are substantially converged: the cycle-2 security, gate-hygiene, field-number, concurrency, and SHA-format findings are incorporated coherently. Source inspection supports the main architectural assumptions, including the lazy Node extraction boundary, five Explore zero-result branches, exclusive Pebble locking, and the `pendingWriter` defect. Two actionable issues remain: plan 01-11 cites a nonexistent final-attempt lock test, and its concurrent-holder test requires a fairness property the store does not guarantee.
+
+## Strengths
+
+- The golden oracle is necessary and correctly precedes extraction. The current `Node` path mixes gather/render logic at [internal/query/node.go:316](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:316), while `Explore` contains five separate zero-result returns at lines 293, 357, 410, 473, and 559. Plans 01-02, 01-04, and 01-05 address both risks before downstream RPC mapping.
+
+- The lazy multi-definition design matches the existing behavior. Source, calls, and callers are fetched inside the callback at [internal/query/node.go:448](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:448), so plan 01-04 correctly avoids eager reads.
+
+- FIX-01 is grounded in the actual imbalance: inbound calls increment at [internal/mcp/server.go:271](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/mcp/server.go:271), but every outbound write currently decrements at [internal/mcp/server.go:339](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/mcp/server.go:339). Plan 01-03 now correctly serializes write and classification and limits classification to bytes actually written.
+
+- C2-1 is resolved cleanly. Plan 01-09 guards only fields it declares and requires every fixture entry to resolve; plan 01-10 extends that fixture by exactly nine entries after declaring the fields. Both halves are runnable in their respective waves.
+
+- C2-2 is consistently corrected. All inspected automated test gates capture `STATUS` before piping and require both status zero and a PASS floor. The deliberate-mutation observations in plans 01-02 and 01-05 correctly retain nonzero exit as expected evidence. Plan 01-07 similarly preserves `task proto:drift` status in `DSTATUS`.
+
+- Raised floors appear feasible:
+
+  - Origin/Host describes at least 20 request cases for a floor of 19.
+  - `pendingWriter` includes seven classification subcases plus the parent and several additional tests, comfortably supporting 15.
+  - Server lifecycle names six top-level tests for a floor of 6.
+  - SHA tests include both object formats, five invalid forms, and multiple top-level tests, supporting 9.
+
+- The Pebble lifecycle premise is accurate. `Open` performs five exclusive-lock attempts at [internal/graphstore/pebble_store.go:141](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/pebble_store.go:141), and the retry seam explicitly exists to avoid wall-clock tests at [internal/graphstore/pebble_store.go:83](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/pebble_store.go:83).
+
+- The probe ledger is internally reconciled: 15 edge/backstop items plus six explicitly flagged assumptions. The pending-writer concurrency refinement is documented as strengthening an existing concurrency probe rather than silently adding another; the SHA object-format uncertainty is closed through tests rather than retained as an assumption.
+
+## Concerns
+
+- **HIGH — ACTIONABLE:** Plan 01-11 depends on a final-attempt boundary test that does not exist. It instructs the executor to cite “the existing event-synchronized final-attempt test” and stop if none is found ([01-11-PLAN.md:286](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:286)). The actual event-synchronized test is `TestOpenConvergesWhenHolderCloses`, but it releases when attempt 2’s sleep begins, leaving several attempts available—not on the final attempt ([internal/graphstore/open_lock_test.go:48](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/open_lock_test.go:48), [internal/graphstore/open_lock_test.go:76](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/open_lock_test.go:76)). As written, execution must stop.
+
+- **MEDIUM — ACTIONABLE:** `TestConcurrentRPCsDoNotStarveAHolder` requires fairness that Pebble and the retry loop do not promise ([01-11-PLAN.md:238](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:238)). Every open competes for one exclusive lock, and each caller only gets five attempts with fixed backoff ([internal/graphstore/pebble_store.go:67](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/pebble_store.go:67), [internal/graphstore/pebble_store.go:141](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/pebble_store.go:141)). Independent short-lived UI opens can legitimately reacquire between holder attempts. This may flake without indicating retained handles, and it tests more than SRV-04 requires.
+
+- **MEDIUM — already covered as execution risk:** Plans 01-01, 01-09, 01-10, and 01-11 remain large at 70–96k estimated tokens. They are decomposed into atomic tasks with buildable boundaries, so no correctness change is mandatory, but context exhaustion remains plausible—especially plan 01-11 with tests plus three manual multi-process transcripts.
+
+## Suggestions
+
+- Amend plan 01-11 to cite `TestOpenConvergesWhenHolderCloses` accurately as an event-synchronized “release between attempts” test. Either add a true final-attempt boundary test to `internal/graphstore` or remove every claim that one already exists.
+
+- Replace the holder-starvation test with a deterministic retained-handle property: complete concurrent RPC calls, then causally start the holder and require its open to succeed. Keep the existing structural no-handle-field check and per-call open/close instrumentation as the primary SRV-04 evidence.
+
+- During execution, consider splitting plan 01-01 after the guarded server tracer and plan 01-11 before manual process evidence if context pressure becomes material. No wave redesign is needed.
+
+## Risk Assessment
+
+**MEDIUM.** The phase architecture and nearly all convergence corrections are sound. The remaining blocker is localized but real: plan 01-11 currently orders the executor to rely on a source test that does not exist. Correcting that citation/coverage and removing the unsupported fairness assertion should make the plan set ready to proceed.
+
+
+---
+
+## Verification coverage (cycle 3 source-grounding pass)
+
+The `drift-guard authority` resolves to `intel`, but `.planning/intel/API-SURFACE.md` carries
+`symbolCount: 0` on this Go repo — the extractor is regex/JS-only. It was **NOT CONSULTED**:
+grading against it would have marked every Go symbol UNCHECKABLE → INFO and hard-blocked
+nothing. Every symbol below was resolved by reading source.
+
+### Method
+
+Five independent verification passes over the 11 plans plus the repo tree: (1) an exhaustive
+census of every PASS-count gate; (2) probe accounting and every raised floor counted against
+the subtests the plans actually describe; (3) the cross-wave field-number guard and the 01-11
+causal edge; (4) every negative/zero-count gate checked for self-invalidation, positive
+control and wave reachability; (5) symbol source-grounding with artifact manifests excluded.
+
+### Exclusions
+
+Every plan carries an `## Artifacts this phase produces` section with a "Created by this
+plan" and a "Created elsewhere in this phase" block. Both are creation manifests, so absence
+today is correct and expected. Excluded and confirmed genuinely absent from `main`:
+`internal/goldenspec` (whole pkg); `testdata/golden/byte_identity_test.go`;
+`internal/uiproto/uiv1` (whole pkg, `ui.proto`, `UIService` + 9 rpcs, all messages,
+`SourceBlob`, generated `ui.pb.go` / `uiv1connect/ui.connect.go`); `internal/uiserver`
+(whole pkg, incl. `openEngine`, `withEngine`, `originHostGuard`, `allowedHosts`,
+`allowedOrigins`, `uiService`, `mapEngineError`, `uiMultiDefCap`, `truncateSource`,
+`classifyDegrade`, `degradeKind`); `internal/cli/ui.go`; `internal/textutil`;
+`internal/query`'s `NodeDetail`/`ExploreResult` families, `ErrNotFound`,
+`ErrInvalidArgument`, `(*Engine).IndexMeta`, `(*Engine).SourceFor`, the `build*` builders;
+`schema.Meta.commit_sha` field 8 / `schema.IndexedCommitSHA`; `internal/indexer/commit.go`;
+`internal/mcp`'s `looksLikeJSONRPCResponse`, `sniffedOutbound`, `decrementPending`;
+`buf.yaml`, `buf.gen.yaml`, `go.tool-proto.mod`, `Taskfile.yml`'s `proto:gen`/`proto:drift`;
+module deps `connectrpc.com/connect` and `github.com/pkg/browser`.
+
+Not drift, recorded so a later reader does not re-raise it: an unrelated `openEngine`
+function already exists at `internal/mcp/tools.go:65`. Different package, no collision — the
+name is simply not novel in the tree. `.proto` snake_case vs generated Go camelCase was
+likewise excluded by rule.
+
+### Verified against source
+
+Over 80 cited symbols resolved FOUND with `file:line`. The load-bearing ones:
+
+| Claim | Verdict | Evidence |
+|---|---|---|
+| `(*Engine).Node` / `(*Engine).Explore` compute structured data before rendering | **VERIFIED** — the "pure extraction" premise holds | `node.go:420` computes `fetchCalls`→`BuildReverseAdjacency`→`fetchCalledBy` then calls `RenderNode` at `node.go:439`; `node.go:442` passes a lazy `fetch` closure to `RenderNodeMultiDef` at `:464`; `explore.go:240` computes `groups` `:558`, `blasts` `:568-577`, `sources` `:579-586`, `skeletonFiles` `:594`, then the file's single `RenderExplore(` call at `:596` |
+| `Explore()` has five zero-result branches | **VERIFIED** — exactly five | `explore.go:294, 358, 411, 474, 560` |
+| `schema.Meta` has exactly 7 fields and NO commit SHA | **VERIFIED**, field 8 free | `graph.proto:137-151` |
+| `graphstore.Open` bounded retry budget | **VERIFIED** — 5 attempts / 4 sleeps = 400 ms floor | `pebble_store.go:79-80`, loop at `:141-155` |
+| `openLockRetrySleep` test-only seam, unexported | **VERIFIED** | `pebble_store.go:83-90` |
+| `pendingWriter` root cause | **VERIFIED exactly as described** | unconditional `p.pending.Add(-1)` on every write at `server.go:339`; the only increment is `s.pending.Add(1)` at `:276`, gated on `looksLikeJSONRPCCall` (`:330`, `msg.Method != "" && msg.ID != nil`) inside `stdinLingerReader.Read`. No mutex and no line buffering on `pendingWriter` today |
+| 26 frozen goldens, and no byte-diff oracle exists | **VERIFIED** | `expectedGoCaptures` `golden_test.go:170-220` = behavioral(2) + hugo/guava/serilog/requests(6 each) = 26, cross-asserted `golden_test.go:318`; `TestReFrozenGoldensValid` (`:243-296`) never constructs an Engine; `loadBehavioralFixture` (`:186`) and `loadGoldenOutputIn` (`:443`) have **zero callers** |
+| No proto codegen/drift guard exists today | **VERIFIED on four counts** | `rg -i 'proto' Taskfile.yml` → 0 hits; no `go:generate` proto directive; no `Makefile`; `rg -i 'proto\|buf' .github/workflows/ci.yml` → 0 hits; `buf.yaml`/`buf.gen.yaml` absent |
+| `(*Engine).SourceFor` in all 11 artifact manifests | **VERIFIED 11/11** | absent from source (`rg -n 'SourceFor' --type go` → 0 hits), declared new by 01-04, named in all of 01-01…01-11 |
+| Exactly three `PutMeta` write sites | **VERIFIED** | `resolve.go:774`, `sync.go:170`, `sync.go:398` |
+| 01-11's causal edge is fired from the wrapped `openEngine` seam | **VERIFIED** | `01-11-PLAN.md:257-262` — wrap the `openEngine` package var, signal a channel on first invocation only via `sync.Once`, restore with `t.Cleanup`; holder blocks on that channel. No wall-clock coordination survives: every remaining `time.*` mention in 01-11 is prose *rejecting* timers |
+| C2-1 on the `SourceBlob` path (01-09 → 01-10) | **RESOLVED** | 01-09's fixture is scoped to fields 01-09 declares (`01-09:329-336`), with mandatory resolution (`resolved == len(fixture)`, `len(fixture) > 0`, unresolved entries named and FAILED, `01-09:372`); 01-10 extends by exactly nine (`01-10:37`, `:373`). Both halves runnable in their declaring wave |
+| C2-2 across all 27 PASS-count gates | **RESOLVED** | all 25 `go test` gates capture `OUT`/`STATUS` before any pipe, assert `STATUS -eq 0` AND a floor, and dump on failure; the two `01-07` drift gates capture `DRIFT`/`DSTATUS` first (`01-07:183`, `:245`). No bare count-only form survives. All 27 pass `sh -n`; no `STATUS=$?` follows a pipe anywhere |
+| The deliberate-RED scoped exception | **CORRECTLY SPLIT** | all five mutation observations are scored by `--- FAIL`/`--- PASS` counts, never by `STATUS -eq 0`; each owning task's `<automated>` gate is fenced to the *restored* tree (`01-05:356`, `01-07:245` both guarded by `test -z "$(git status --porcelain …)"`). No plan requires a zero exit on a deliberate-RED observation |
+| Probe accounting | **RECONCILES AT EXACTLY 21** | 15 edge-tagged `must_haves` (01-01:47,48; 01-02:29,30; 01-04:30,31; 01-05:37,38; 01-10:38,39; 01-11:29-33) + 6 flagged assumptions (01-01:526,530,534; 01-03:342; 01-06:365; 01-07:267). Exactly one flat-scalar `verification: backstop` (01-01:49) — the only `verification:` YAML key in the phase. Both "recorded in place" reconciliations are genuinely present: the deliberately-untagged 01-03 concurrency property at `01-03:25`, the closed 01-06 object-format item at `01-06:358-364`. Neither hides a drop |
+| Both `01-CONTEXT.md` correction blocks | **PRESENT AND HONORED** | D-04 scoring correction at `01-CONTEXT.md:71-88`; the `toolslist-repeat`-is-a-different-bug disproof at `:259-260` |
+| Raised PASS floors | **all four satisfiable**, but see M8 | 19 vs 20 described cases (`01-01:155-174`); 15 vs 13 guaranteed + 2 conditional (`01-03`); 6 vs exactly 6 test functions (`01-01:260-265`); 9 vs 14-15 (`01-06:260-268`) |
+| Wave/dependency graph | **CONSISTENT** | every `depends_on` resolves to a strictly lower wave; no same-wave file-ownership overlap |
+| Wave reachability of every gate target | **NO DEFECTS** | each negative gate's target file exists at its declaring wave, verified against the repo and earlier plans' `files_modified` |
+
+### Positive controls and vacuous zeros
+
+Four zero-results were positive-controlled. Three negative gates are correctly same-file
+controlled (`01-02:176`, `01-05:213`, `01-10:289`), and `01-11:325` is the best-constructed
+gate in the phase — same-file control, anchored pattern, and its own self-invalidation risk
+named in the criterion. Two are **not** (see M2). Positive controls that read zero *today*
+were confirmed correct-post-change, not broken: `ExploreFileGroup` (0 → 19 after 01-05's
+rename), `textutil\.` in `session_line.go`, `goldenspec\.` in `gocapture/main.go`.
+
+Verified in-repo rather than assumed: `git status --porcelain <missing-path>` exits **0**
+with empty stdout (the "could not open directory" warning goes to stderr), which is what
+makes M4 real; and `rg -v '^\s*//' /nonexistent | rg -o … | wc -l` prints `0`, which is what
+makes M2 real.
+
+### UNCHECKABLE — and why
+
+| Item | Reason |
+|---|---|
+| `connect.WithSendMaxBytes` / `WithReadMaxBytes` / `NewErrorDetail` / `CodeOf` and the `connect.Code*` constants | `connectrpc.com/connect` is added by this phase and is still absent from `go.mod`. 01-01's acceptance already requires these signatures be verified and recorded in the SUMMARY as soon as the dependency lands — the correct disposition, unchanged from cycles 1-2 |
+| `buf` / `protoc-gen-connect-go` / `protoc-gen-go` MVS compatibility; whether `buf generate` reproduces `graph.pb.go` byte-identically; whether `buf` stamps a compiler identity at all | No buf toolchain present. 01-01 Task 2 and 01-07 schedule exactly these measurements and handle either outcome |
+| "Nineteen of this repo's forty-nine non-vacuity guards live in `taskfile_shape_test.go`" | Not a symbol; the 49-guard census has no machine-checkable definition. The file is 1350+ lines of literal-fixture guards, consistent with the claim, but the counts cannot be reproduced |
+| go-sdk `jsonrpc2.Async(ctx)` on every non-`initialize` call | Third-party internal behaviour. The call site itself was confirmed at `go-sdk@v1.7.0/mcp/server.go:1910-1915`; 01-03 does not depend on it beyond keeping `toolslist-repeat` separately attributed |
+
+**A short UNCHECKABLE list is not an unchecked review.** 80+ symbols resolved against source
+with `file:line`; the 26-golden derivation independently reconstructed from disk and
+cross-checked against `golden_test.go:318`; the absence of a golden byte-diff oracle proven
+by zero-caller analysis; the no-proto-codegen claim proven on four independent counts; 27
+gates parenthesis-matched, `sh -n`-checked and behaviourally simulated against both failure
+modes; and every remaining UNCHECKABLE blocked on the `connectrpc.com/connect` and `buf`
+toolchains this phase itself introduces.
+
+---
+
+## Cycle 3 findings
+
+### HIGH — unresolved
+
+**H1. C2-1 survives untouched on the `01-08` → `01-11` path: `GetStatusResponse` fields 8
+and 9 are pinned by nothing, and 01-11 claims otherwise.**
+
+The cycle-2 fix was applied rigorously to the `SourceBlob` path and is closed there. The
+identical defect class is live in a message the fix never covered:
+
+- `01-09:329` states the rule: "The fixture covers ONLY fields this plan actually declares."
+- `GetStatusResponse` is declared by **01-08** (wave 4). `rg 'GetStatusResponse' 01-09-PLAN.md`
+  returns **zero hits** — 01-09's fixture contains no `GetStatusResponse` entry at all.
+- 01-08 has no field-number fixture test; it records the allocation only in a proto comment
+  (`01-08:166-168`) and a `must_haves` line (`01-08:39`).
+- Fields 8 and 9 do not exist until **01-11** (wave 7), and nothing instructs 01-11 to extend
+  the fixture — unlike 01-10, which is told to explicitly.
+- `01-11:221` nevertheless asserts "plan 01-09's `TestUIProtoFieldNumbersAreStableAndUnique`
+  still passes with fields 8 and 9 landing where they were allocated." The test *will* pass —
+  and asserts nothing whatsoever about fields 8 or 9. That is a vacuous cross-wave guard.
+- `01-11:429` goes further and is simply false: "the field numbers it uses were allocated by
+  plan 01-08 and are already pinned by plan 01-09's fixture."
+
+Fix: have 01-11 EXTEND the fixture with `GetStatusResponse.store_exists = 8` and
+`.indexing_in_progress = 9` (mirroring 01-10's `+9` pattern), and correct `01-11:429`.
+Optionally give `GetStatusResponse`'s fields 1-7 fixture entries in 01-08.
+
+**H2. 01-11 delegates the final-attempt boundary to a `graphstore` test that does not exist,
+leaving the SRV-04 adjacency-edge probe unbacked.**
+
+`01-11:32` — an edge-tagged probe, one of the 21 — asserts "the exact final-attempt boundary
+stays owned by `internal/graphstore`'s existing event-synchronized test." `01-11:121`, `:233`
+and `:298-309` repeat it and instruct the executor to cite that test by name in the shipped
+package comment.
+
+`internal/graphstore/open_lock_test.go` has exactly two `Open` tests and neither is one:
+
+- `TestOpenConvergesWhenHolderCloses` (`:62`) is event-synchronized, but releases at
+  **attempt 2's** sleep. Its own doc comment (`:59-61`) says "some remaining attempt
+  (budget: 5) deterministically finds the LOCK free" — a release-*between*-attempts test.
+- The other (`:36-45`) asserts elapsed time against the budget — wall-clock, not
+  event-synchronized, and it is the never-releases case.
+
+The plan's stop-instruction ("if no such NAMED test is found, stop and report it") does not
+fire, because a named event-synchronized test *is* found. And `01-11:326` only greps that the
+cited name exists — it verifies existence, not the property. The executor will therefore cite
+`TestOpenConvergesWhenHolderCloses`, ship a false attribution in a package comment, and leave
+the adjacency edge unproven.
+
+Fix: either add a genuine final-attempt boundary test to `internal/graphstore`, or restate
+`01-11:32`/`:121`/`:233`/`:298-309` to describe what `TestOpenConvergesWhenHolderCloses`
+actually covers and drop the "final-attempt boundary is owned there" claim.
+
+### MEDIUM — actionable
+
+**M1.** 01-02's central non-divergence guarantee is false as written. Its `must_haves` claims
+"exactly one authoritative table" and "ONE authoritative MCP call shape", and its action says
+to move `callExploreViaMCP` / `callNodeViaMCP` / `mcpResultText` **from
+`testdata/golden/gocapture/main.go`**. But `testdata/golden/behavioral_test.go` independently
+declares a second full set — `languageToLockedSlug:43`, `slugToRepo:52`,
+`callExploreViaMCP:1181`, `callNodeViaMCP:1202`, `mcpResultText:1242` — in the very package
+the new oracle file joins, and those are the copies `TestExploreCLIMatchesMCP` (`:1282`) and
+`TestNodeCLIMatchesMCP` (`:1326`) already use. 01-02's zero-gate is scoped to
+`gocapture/main.go` only, so it passes green while the duplicates survive. Fix: extend the
+move and the gate to `behavioral_test.go`, or narrow the `must_haves` claim.
+
+**M2.** Two zero-count gates are positive-controlled against a **different file**, so a
+typo'd or renamed target reads green while the guarded file is never opened:
+`01-01:238` (target `internal/uiserver/originguard.go`, control `internal/query/files.go`)
+and `01-04:264` (target `node.go` + `detail.go`, control `gather.go`). Verified: the
+pipeline prints `0` for a nonexistent path. Fix: same-file positive control. Secondary for
+`01-01:238`: `internal/query/files.go` yields exactly 1 match today, so an unrelated
+refactor there turns the gate red for the wrong reason.
+
+**M3.** `01-04:264`'s forbidden pattern `\bgather[A-Z]` is unanchored, while `01-04:190-197`
+spends six lines explaining the prohibition and naming `gatherChannel1/2/3` and `gatherMerge`
+— all of which match it. A trailing comment or a `/* */` block survives `rg -v '^\s*//'` and
+fails the gate for the wrong reason. Fix: anchor to `func gather[A-Z]`, the shape
+`01-10:289` already uses.
+
+**M4.** `test -z "$(git status --porcelain <path>)"` passes vacuously on a missing or typo'd
+pathspec — verified in-repo, `internal/uiprotoTYPO/` exits 0 with empty stdout. Nine
+`<automated>` sites: `01-05:356`, `01-07:245`, `01-08:212`, `01-08:273`, `01-08:328`,
+`01-09:199`, `01-09:270`, `01-10:366`, `01-11:211`. Fix: prefix `test -d <path> &&`.
+
+**M5.** `01-06:341` asserts `git diff --stat internal/query/status.go` is empty. `git diff`
+reports only unstaged working-tree changes, so under GSD's atomic-commit-per-task rule this
+is empty **by construction** at verification time regardless of whether the file was edited.
+Fix: use a `<phase-base>..HEAD` revision range.
+
+**M6.** `01-07:183` and `01-07:245` score the drift guard's non-vacuity with
+`rg -q -e 'compared [0-9]+ generated files'`. `[0-9]+` matches `0`, so this is a presence
+check on the count, not a floor — structurally the same vacuity the phase-wide conjunction
+rule exists to close. The plan's own criteria demand at least 3 (`01-07:186`, `01-07:306`).
+Fix: capture the count and assert `-ge 3`.
+
+**M7.** `01-10:288`'s numeric-literal check has no command, no path scope and no positive
+control, and the searched value is chosen at execution time. Unscoped it would match the
+committed generated `internal/schema/graph.pb.go`. Fix: name the scope and exclude
+`*.pb.go` / `*.connect.go`.
+
+**M8.** 01-03's PASS floor of 15 is not derivable from the plan. It names 6 test functions
+(`01-03:87-92`) and explicitly describes one 7-case table (`:131`) — 13 guaranteed `--- PASS`
+lines. The remaining 2 must come from `:132`'s two cases being `t.Run` subtests, which no
+behavior bullet or acceptance criterion requires. Separately, behaviors `:136` (two responses
+in one `Write`) and `:137` (a response split across two `Write`s) are **orphaned** — each
+names a distinct decrement case but is assigned to no test function. An executor who writes
+`:132` as sequential assertions in one body produces 13 and the gate cannot pass. Fix: assign
+`:136`/`:137` to named tests and state `:132`'s subtest structure, or lower the floor to 13.
+
+**M9.** `01-11:241`'s `TestConcurrentRPCsDoNotStarveAHolder` requires a fairness property
+neither Pebble's exclusive directory LOCK nor the retry loop provides. Every open competes
+for one lock and each caller gets 5 attempts on a fixed 100 ms backoff
+(`pebble_store.go:79-80`, `:141`); independent short-lived UI opens can legitimately
+reacquire between the holder's attempts, so the test can fail with no retained handle
+present. It also asserts more than SRV-04 requires. Fix: replace with a deterministic
+retained-handle property — complete the concurrent RPCs, then causally start the holder and
+require its open to succeed — keeping the structural no-handle-field check and the
+per-call open/close instrumentation as the primary SRV-04 evidence.
+
+**M10.** `01-10:373` asserts the fixture "has GROWN by exactly nine ... compared against
+01-09's recorded length plus nine", but 01-09 never pins a length — it asserts only
+`len(fixture) > 0` and `resolved == len(fixture)`. The `+9` arithmetic therefore depends on a
+number carried across two waves in a prose SUMMARY rather than in code. Fix: pin 01-09's
+fixture length as a named constant the extension can reference.
+
+### LOW — actionable
+
+**L1.** The `--- PASS` counting convention (parent line **plus** subtests) is never stated
+anywhere in the phase. It is inferable only by arithmetic from `01-05:356` (floor 27 against
+26 goldens). The gates' own echo labels contradict each other inside one file: `01-01:231`
+prints `PASS subtests:`, `01-01:420` prints `PASS tests:`, everything else prints
+`PASS lines:`. Every floor in the phase depends on this convention.
+
+**L2.** `01-07:307`'s exit criterion states a PASS floor with no exit-status clause — the
+count-only shape `01-07:37`'s own prohibition forbids. It is the only such bullet across the
+11 plans; the matching gate at `01-07:183` is compliant, so this is a documentation
+inconsistency rather than an executable defect. (`01-01:510` also omits the clause but is a
+sub-criterion of `01-01:506`, which states the conjunction — subsumed, not a finding.)
+
+**L3.** `01-11:325`'s forbidden-timer alternation omits `time.Tick`, and both degrade tests
+must still bound "within the budget" somehow. `context.WithTimeout` is the sanctioned escape
+and is nowhere named, so an executor may reach for a banned primitive or an unmentioned one.
+Fix: add `time.Tick` to the pattern and state the sanctioned bounding mechanism.
+
+**L4.** Six `read_first` citations point at use sites or the wrong file rather than the
+declaration, so an executor following them loads the wrong lines: `goldenCapture` (01-02
+cites `golden_test.go` 150-300; declared `behavioral_test.go:419`); `nodeSectionFetch` (01-04
+cites 195-260; declared `render_markdown.go:158`); `nodeMultiDefHardCap` /
+`nodeMultiDefBodyBudget` (01-04 and 01-09 both cite 206-225; declared `:145-148`, so the
+values 16 and 12000 are never seen); `FilesOptions` and `validateFilesDepth` (01-08 cites
+`files.go` 100-170; declared `:14` and `:86`); go-sdk `mcp/server.go:1908-1913` (actual
+1910-1915); and `01-01`'s claim that `internal/daemon`'s `onSyncStart` is an established
+**package-var** precedent — it is a struct field at `daemon.go:113`, so only one of the two
+cited precedents matches the shape being copied.
+
+### Closed this cycle
+
+- **C2-1 on the `SourceBlob` path** — resolved. The withdrawal is real, 01-09's fixture is
+  correctly scoped with mandatory resolution, and 01-10's `+9` extension re-runs it. Both
+  halves are runnable in their declaring wave. (Residual on a different path: **H1**.)
+- **C2-2** — resolved across all 27 gates, with the deliberate-RED exception correctly
+  scoped to the five mutation observations and no plan requiring `STATUS -eq 0` on one.
+- **Probe accounting** — reconciles at exactly 21; both "recorded in place" reconciliations
+  are genuinely present in the plan text.
+- **Paired Host/Origin check** — incorporated. Set membership AND `Origin == "http://" +
+  r.Host`, four cross-spelling negatives in both directions, three admitted pairs asserted
+  positively, floor 19 against 20 described cases.
+- **`pendingWriter` write+classify in one critical section** — incorporated
+  (`01-03:23`, `:172-176`). The floor is the issue, not the design (**M8**).
+- **Prescribed `Serve(ctx)` shape** — incorporated; floor 6 against exactly 6 test functions.
+- **01-11 wall-clock → causal edge** — incorporated and verified. The channel is fired from
+  the wrapped `openEngine` var on first invocation via `sync.Once`; no wall-clock
+  coordination survives.
+- **SHA at 40 or 64 lowercase hex** — incorporated with negatives at 39/41/63/65/uppercase.
+- **`(*Engine).SourceFor` in all artifact manifests** — verified 11/11.
+
+### Scope
+
+No plan has grown past what one execution context can hold, but four sit at the ceiling:
+01-01 (96k), 01-09 and 01-11 (72k), 01-10 (70k). Each is decomposed into atomic tasks with
+buildable boundaries, so no correctness change is required. If context pressure becomes
+material at execution, the natural split points are 01-01 after the guarded server tracer
+and 01-11 before the manual multi-process evidence. No wave redesign is needed.
+
+### Risk
+
+**MEDIUM.** The architecture, both correction blocks, the probe ledger and nearly all
+convergence corrections are sound and source-verified. Two HIGH findings remain, both
+localized and both surgical: a vacuous cross-wave field-number guard (H1) and a delegated
+test that does not exist (H2). Neither requires re-planning the phase.
