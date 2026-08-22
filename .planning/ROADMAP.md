@@ -134,13 +134,23 @@ Archived: [`milestones/v0.11.0-ROADMAP.md`](./milestones/v0.11.0-ROADMAP.md) · 
 **Plans**: 7 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 01-01-PLAN.md — Tracer: `codegraph ui` serves one origin-guarded RPC end-to-end (SRV-02, SRV-01, SRV-03, RPC-01, RPC-02)
 - [ ] 01-02-PLAN.md — Golden byte-identity oracle over all 26 frozen pairs, proven non-vacuous (ENG-01, ENG-02)
 - [ ] 01-03-PLAN.md — FIX-01 `pendingWriter` counter, plus the `toolslist-repeat` separability disproof (FIX-01)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-04-PLAN.md — Engine seam: `NodeDetail` and `ExploreResult` extraction, goldens byte-identical (ENG-01, ENG-02)
 - [ ] 01-05-PLAN.md — Commit-aware `Meta` field 8 and the two-surface proto codegen drift guard (ENG-04, BLD-04)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-06-PLAN.md — Full read-only RPC surface over the single Engine gather path (RPC-01, RPC-02, SRV-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-07-PLAN.md — Bounded responses and degraded state (RPC-05, SRV-04, SRV-03)
 
 ### Phase 2: SPA Toolchain, Embedded App Shell & JS Supply Chain
