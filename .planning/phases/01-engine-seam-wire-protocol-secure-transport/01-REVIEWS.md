@@ -1,7 +1,8 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-08-22T21:02:44Z
+reviewed_at: 2026-08-22T21:52:00Z
+review_cycle: 2
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -10,6 +11,10 @@ plans_reviewed:
   - 01-05-PLAN.md
   - 01-06-PLAN.md
   - 01-07-PLAN.md
+  - 01-08-PLAN.md
+  - 01-09-PLAN.md
+  - 01-10-PLAN.md
+  - 01-11-PLAN.md
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
 model_sources:
@@ -570,3 +575,340 @@ against source with `file:line`; 5 resolved ABSENT-and-load-bearing (each drivin
 the new-artifact set confirmed absent and deliberately excluded; 6 items recorded
 UNCHECKABLE, every one of them blocked on the `connectrpc.com/connect` and `buf` toolchains
 that this phase itself introduces.
+
+---
+
+# Cross-AI Plan Review — Phase 1 (cycle 2, post-replan)
+
+Everything above this line is cycle 1, reviewed against the 7-plan / 4-wave shape.
+The plans were replanned in response (commit `d1695a2`) and are now 11 plans / 7 waves.
+This file is APPEND-style history: a cycle-1 finding is closed only if the section below
+says so.
+
+## Codex Review
+
+# Cycle 2 Plan Review
+
+## Summary
+
+The replan is materially stronger and resolves all nine cycle-1 HIGH findings. The dependency graph is coherent, same-wave file ownership does not overlap, both correction blocks are honored, probe accounting remains exactly 21, and all four requested rejection decisions are recorded in the relevant plans with rationale.
+
+Three newly introduced issues remain. Most importantly, plan 01-09 tries to descriptor-pin source fields that are only comments until plan 01-10 adds them; that guard cannot pass as specified. In addition, most automated test gates discard `go test`’s exit status and can pass despite failed tests, and the Origin/Host guard does not require the admitted Origin to correspond to the admitted Host. Overall risk is **MEDIUM-HIGH** until those are corrected.
+
+## Strengths
+
+- **01-01:** The `Listen`/`Serve` split fixes the ephemeral-port lifecycle problem. `Listen` binds before URL publication, while the CLI prints and optionally opens the bound URL before entering `Serve` ([01-01-PLAN.md:327](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:327), [01-01-PLAN.md:349](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:349)).
+
+- **01-02:** The D-04 correction is fully honored. The plan adds a live-output oracle before either extraction, whereas the current test only checks the frozen envelope and never invokes the Engine ([golden_test.go:243](/Volumes/Code/github.com/seanb4t/codegraph-go/testdata/golden/golden_test.go:243), [golden_test.go:275](/Volumes/Code/github.com/seanb4t/codegraph-go/testdata/golden/golden_test.go:275)). It also correctly treats the existing behavioral suite as complementary property coverage, consistent with its source comment ([behavioral_test.go:684](/Volumes/Code/github.com/seanb4t/codegraph-go/testdata/golden/behavioral_test.go:684)).
+
+- **01-03:** The pending-writer redesign now reflects the actual defect. The current implementation decrements on every write ([server.go:331](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/mcp/server.go:331), [server.go:339](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/mcp/server.go:339)), while only inbound calls increment ([server.go:271](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/mcp/server.go:271)). The replan forwards first and classifies only `b[:n]`, resolving both cycle-1 transport findings.
+
+- **01-04:** The lazy `MultiDefDetail.Definition` protocol matches the real rendering boundary. The current renderer invokes its callback only before the hard cap and makes budget decisions inside that loop ([render_markdown.go:206](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/render_markdown.go:206), [render_markdown.go:210](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/render_markdown.go:210)). The proposed sum type therefore preserves behavior that an eager structure would change.
+
+- **01-05:** Exporting `ExploreFileGroup` and `ExploreBlast`, funneling every zero-result branch into `ExploreResult`, and adding message-preserving error classes together form a usable Engine seam. Keeping `Error()` byte-identical while implementing `errors.Is` is the correct way to preserve shipped CLI behavior.
+
+- **01-06:** `(*Engine).IndexMeta()` closes the previously missing data path without altering `StatusResult`. Its placement in `engine.go` rather than `status.go`, combined with the reflected field-set assertion, supports D-06 cleanly.
+
+- **01-07:** The temp-tree drift guard is safer than in-place generation. It covers both generated surfaces, asserts a positive compared count, names mismatched files, and explicitly treats header-only changes as drift. That is coherent with the current generated header stamp ([graph.pb.go:11](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/schema/graph.pb.go:11)) and 01-01 now checks both `internal/uiproto` and `internal/schema`.
+
+- **01-08:** The seven structured RPC mappings reuse one Engine lifecycle seam and delegate existing depth/limit rules to the Engine instead of duplicating them.
+
+- **01-09:** The wire model now preserves per-candidate node details and per-group Explore source association. The explicit nine-method set guard is much stronger than a mutating-verb blacklist.
+
+- **01-10:** Application truncation and Connect transport rejection are correctly treated as different layers. Using `bytes` with a scoped UTF-8 guarantee avoids protobuf string-marshal failures for non-UTF-8 source.
+
+- **01-11:** The impossible filesystem precedence fixture is gone. Testing `classifyDegrade` directly with a multi-target error is appropriate, and transient versus sustained lock contention now has determinate expected outcomes.
+
+- **Ordering:** There is no same-wave `files_modified` overlap. The byte oracle precedes the Node extraction, the Node extraction precedes Explore, and all complete view RPC work follows both seams. The roadmap’s seven-wave sequence reflects this ([ROADMAP.md:137](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/ROADMAP.md:137), [ROADMAP.md:148](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/ROADMAP.md:148), [ROADMAP.md:153](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/ROADMAP.md:153)).
+
+- **Probe accounting:** The ledger still balances: 14 explicit edge truths, one backstop, and six flagged assumptions = 21. Only one actual `verification: backstop` marker exists, in the required `{statement, verification}` mapping form ([01-01-PLAN.md:46](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:46)). The apparent second marker is prose discussing that same backstop, not another probe disposition.
+
+- **Recorded rejections:** All four are present with rationale:
+
+  - Locked-store real-results concern: [01-11-PLAN.md:394](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:394)
+  - JSON-RPC batch case: [01-03-PLAN.md:288](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-03-PLAN.md:288)
+  - Checkpoint distinction: [01-06-PLAN.md:360](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-06-PLAN.md:360), [01-10-PLAN.md:370](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:370)
+  - Per-candidate partial failure deferral: [01-09-PLAN.md:174](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:174)
+
+## Concerns
+
+- **HIGH — 01-09/01-10: the field-number guard cannot work one wave before the fields exist.**  
+  Plan 01-09 says it only leaves comments reserving future source numbers ([01-09-PLAN.md:145](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:145), [01-09-PLAN.md:190](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:190)), but its descriptor-based known-number fixture must already include those fields ([01-09-PLAN.md:334](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:334)). Protobuf descriptors contain declared fields and `reserved` ranges; they do not contain field-number allocations mentioned only in comments. Therefore:
+
+  - If the fixture requires `GetNodeDetailResponse.source`, `NodeDefinition.source`, and `ExploreGroup.source`, 01-09 fails because those fields do not exist.
+  - If the test skips absent fixture entries, the claimed protection is vacuous.
+  - A proto `reserved` declaration would prevent 01-10 from using the numbers.
+
+  The cycle-1 modeling concern is fixed, but this attempted one-wave separation introduces a new execution blocker.
+
+- **HIGH — all plans: automated PASS-count gates discard failing test status.**  
+  Typical verification captures piped output and then checks only a lower-bound PASS count, for example [01-01-PLAN.md:201](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:201), [01-03-PLAN.md:202](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-03-PLAN.md:202), and [01-11-PLAN.md:371](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:371). Without `set -o pipefail` or separately checking the captured exit status, a run with one failing test and enough passing subtests satisfies `[ "$COUNT" -ge N ]`.
+
+  This recreates the vacuity class the plans are trying to eliminate. Counting protects against “matched no tests”; it is not a substitute for requiring the suite itself to exit zero.
+
+- **MEDIUM — 01-01: admitted Host and Origin are validated independently, not as a pair.**  
+  The plan builds separate three-member allowlists and accepts any admitted Origin with any admitted Host ([01-01-PLAN.md:179](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:179), [01-01-PLAN.md:207](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:207)). Thus `Host: 127.0.0.1:P` with `Origin: http://localhost:P` is admitted. That conflicts with the phase criterion saying the three spellings are admitted by exact match rather than treated as interchangeable ([ROADMAP.md:128](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/ROADMAP.md:128)). Require `Origin`’s authority to equal the admitted `Host` exactly, when Origin is present.
+
+- **MEDIUM — 01-03: locking only the classification buffer does not make concurrent `Write` safe.**  
+  The plan forwards via `p.w.Write(b)` before taking the classification-buffer mutex ([01-03-PLAN.md:168](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-03-PLAN.md:168), [01-03-PLAN.md:181](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-03-PLAN.md:181)). `io.Writer` does not promise concurrent-call safety. Concurrent underlying writes may interleave or return in an order different from classification-buffer acquisition, causing the copied line stream not to match wire order.
+
+  Use one mutex around both the underlying write and classification of `b[:n]`. “Forward first” should mean write before interpreting bytes within the serialized critical section, not write outside synchronization.
+
+- **MEDIUM — 01-01: `Serve` cancellation mechanics are underspecified.**  
+  The plan says `Serve(ctx)` calls blocking `http.Server.Serve` and “on `ctx.Done()`” calls `Shutdown` ([01-01-PLAN.md:349](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:349)). That requires a goroutine/select or a shutdown goroutine; a literal sequential implementation never reaches the context branch until serving has already stopped. The cancellation test should catch this, but the implementation instruction should prescribe the concurrency shape and error-channel handling.
+
+- **MEDIUM — 01-11: “release comfortably inside the budget” remains timing-sensitive.**  
+  The plan correctly avoids elapsed-time assertions, but scheduling release “comfortably inside” the roughly bounded retry period is still wall-clock coordination ([01-11-PLAN.md:247](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:247), [01-11-PLAN.md:251](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:251)). Under loaded race CI this can cross the boundary spuriously. The exact retry seam lives in `graphstore`, so either expose a test-only coordination seam to `uiserver` tests or keep only one integration smoke case and delegate deterministic boundary coverage entirely to `graphstore`.
+
+- **LOW — 01-06: SHA validation assumes SHA-1 object format.**  
+  Requiring exactly 40 lowercase hex characters excludes Git SHA-256 repositories. This may be acceptable for v1, but it should be stated as a scoped limitation or accept both 40- and 64-character object IDs.
+
+## Suggestions
+
+- Move the three `SourceBlob` attachment fields themselves into plan 01-09 using a placeholder message already declared there, or move the known-number descriptor guard to 01-10 after the fields exist. Do not attempt to reserve future usable numbers with comments or protobuf `reserved`.
+
+- Change every automated Go-test gate to require both conditions:
+
+  1. the test command exits zero; and
+  2. the expected positive/exact execution count is observed.
+
+  Capture output to a temporary file, save the command status, count PASS lines from the file, then assert both.
+
+- Make Origin validation pairwise: after Host succeeds, require a present Origin to equal `"http://"+r.Host` exactly. Add negative cross-spelling cases in both directions.
+
+- Serialize `pendingWriter.Write` across the underlying write and subsequent `b[:n]` classification. Keep forwarding before classification inside the lock.
+
+- Specify `Serve(ctx)` as a goroutine/select lifecycle with a buffered serve-error channel, bounded shutdown, and normalization of `http.ErrServerClosed`.
+
+- Replace timing-sensitive lock-release coordination with an event-controlled retry seam where practical.
+
+## Risk Assessment
+
+**Overall risk: MEDIUM-HIGH.**
+
+The architecture is now sound and the cycle-1 HIGH issues are genuinely addressed. The remaining risk comes from two plan-level execution/verification defects: the impossible cross-wave descriptor guard and automated commands that can report green despite failed tests. Once those are fixed, risk should drop to **MEDIUM**, driven mainly by the breadth of the Engine extraction, the permanent protobuf surface, lock-contention integration behavior, and the amount of manual mutation evidence required.
+
+
+---
+
+## Consensus Summary
+
+Single grounded reviewer this cycle (Codex, source-grounded, `file:line`-cited), independently
+re-verified by the orchestrator against the tree. Where the two agree the finding is recorded as
+confirmed; nothing below rests on the reviewer's word alone.
+
+### Cycle-1 HIGHs: all nine verified CLOSED
+
+| Cycle-1 HIGH | Verified closed by |
+|---|---|
+| URL printed before the listener binds | `Listen(Options) (*Server, error)` binds, extracts the concrete port, mounts the guard and returns before `Serve` blocks (01-01-PLAN.md:340-356); `TestListenPublishesABoundPortBeforeServe` dials the port with no `Serve` call anywhere before the assertion |
+| `NodeDetail` cannot represent the multi-definition shape | Sum type `Mode`/`File`/`Definition`/`Multi` (01-04-PLAN.md:90-95) with `MultiDefDetail.Definition(n)` lazy per candidate; `TestNodeDetailMultiDefDoesNotReadSourceForUnrenderedCandidates` asserts BOTH that an unreadable out-of-cap candidate does not fail `Node`/`NodeDetail` AND that asking for it explicitly returns the read error |
+| No data path from `Meta.commit_sha` to the Status RPC | `(*Engine).IndexMeta` added in `engine.go`, not `status.go`; D-06 held by a reflected `StatusResult` field-set assertion plus a recorded `status --json` byte capture (01-06-PLAN.md:353) |
+| Error classification by string match | `query.ErrNotFound` / `query.ErrInvalidArgument` with message bytes held byte-identical (01-05-PLAN.md:35); site count measured and asserted |
+| `TestDegradePrecedence` fixture was unreachable by construction | Removed; precedence now driven at `classifyDegrade` with a synthetic multi-target error, and the unreachability recorded as a key_link (01-11-PLAN.md:30) |
+| Outbound sniff classified `b` not `b[:n]` | 01-03-PLAN.md:24 must_have + `TestPendingWriterClassifiesOnlyBytesActuallyWritten` |
+| Classification delayed forwarding | Forward-first is step 1; buffer is an explicit classification-only copy (01-03-PLAN.md:25) |
+| `exploreFileGroup` / `exploreBlast` unnameable from `internal/uiserver` | Exported as `ExploreFileGroup` / `ExploreBlast` with a positive-controlled zero-gate on the old names (01-05-PLAN.md:211) |
+| Field numbers locked by a checkpoint in the same plan that invents them | Moved one wave earlier to 01-09 — **but see HIGH C2-1: the move as specified cannot be executed** |
+
+### Probe accounting — balances at 21, no silent drops
+
+15 edge-tagged truths authored into `must_haves` (SRV-02 ×1, RPC-01 ×1, ENG-01 ×3, ENG-02 ×3,
+SRV-04 ×5, RPC-05 ×2) + 6 flagged assumptions (SRV-01, SRV-03, RPC-02 in 01-01; FIX-01 in 01-03;
+ENG-04 in 01-06; BLD-04 in 01-07) = **21**. Exactly one `verification: backstop` marker exists, in
+the required flat-scalar `{ statement, verification }` mapping form (01-01-PLAN.md:46-47). The
+apparent second marker is prose at 01-01-PLAN.md:490 discussing that same backstop, and the
+`backstop` hits in 01-10 are about the Connect transport backstop — a different concept, not a
+probe disposition.
+
+### Recorded rejections — all four present with rationale
+
+| Rejection | Location |
+|---|---|
+| "locked-store RPCs cannot serve real results" | 01-11-PLAN.md:394 — Rejected per adjudication, with the partition argument |
+| JSON-RPC batch-payload test case | 01-03-PLAN.md:288 — Rejected with the newline-delimited-transport rationale |
+| "both checkpoints only reconfirm CONTEXT" | Accepted for 01-06 (01-06-PLAN.md:360, kept with the cost recorded); Rejected for 01-10 (01-10-PLAN.md:370, five new decisions named) |
+| per-candidate partial failure on `GetNodeDetail` | 01-09-PLAN.md:170-177 — deferred in the action body, with SUMMARY recording required |
+
+### Generated-header ruling — coherent, and both surfaces covered
+
+`internal/schema/graph.pb.go:11-14` stamps `protoc-gen-go v1.36.11` / `protoc v7.35.1` (verified
+present). The tree has no checked-in codegen invocation today: no `go:generate` directive, no
+Makefile, no `proto` target in `Taskfile.yml` (positive-controlled — `rg -c "task" Taskfile.yml`
+returns 55, `rg -n "proto" Taskfile.yml` returns nothing), and no `buf.yaml`/`buf.gen.yaml`. So the
+first `buf generate` genuinely will restamp that header. 01-01 absorbs it deliberately, in its own
+reviewed commit, verifying every changed hunk is inside the header block (01-01-PLAN.md:281-295),
+and 01-07 then treats any header change as drift. 01-01's acceptance covers **both** surfaces:
+`git status --porcelain internal/uiproto internal/schema` is asserted empty after `task proto:gen`.
+The residual — that a toolchain bump presents identically to a source drift — is exactly what
+BLD-04's flagged assumption records (01-07-PLAN.md:266-272). Ruling accepted.
+
+### Wave ordering — clean
+
+Waves are 1:{01-01,01-02,01-03} 2:{01-04,01-06} 3:{01-05,01-07} 4:{01-08} 5:{01-09} 6:{01-10}
+7:{01-11}. No same-wave `files_modified` overlap: the wave-1 trio partitions into
+`uiproto`/`uiserver`/`cli`/buf, `goldenspec`/`testdata/golden`, and `internal/mcp`; wave 2 splits
+`internal/query/{detail,node,traverse}.go` from `internal/query/{engine,meta_test}.go`; wave 3
+splits `internal/query/*` from `Taskfile.yml`/`internal/upgrade`/`ci.yml`/`*.pb.go`. Cross-wave
+reuse of `internal/schema/graph.pb.go` (01-01 → 01-06 → 01-07) is sequential and therefore fine.
+ROADMAP blocking order holds: SRV-02's guard is 01-01 Task 1, before that plan's own tracer handler
+and four waves before the RPC surface; the byte oracle (01-02) precedes ENG-01 (01-04) which
+precedes ENG-02 (01-05), and the seam-backed view RPCs (01-09) depend on both.
+
+### Both correction blocks honored
+
+- **D-04.** Verified against source that no test today byte-diffs live `Engine` output against the
+  goldens: `TestReFrozenGoldensValid` (`testdata/golden/golden_test.go:243`) asserts existence,
+  non-emptiness, envelope parse and a positive count — it never constructs an `Engine`. Building
+  that oracle is 01-02, wave 0/1, before either extraction. Honored.
+- **Folded Todos item 1.** 01-03 carries a dedicated must_have that closing FIX-01 is proven NOT to
+  close `toolslist-repeat`, plus a prohibition against reporting otherwise (01-03-PLAN.md:29, and
+  the prohibitions block). Honored.
+
+### Vacuity guards after the split — no stranded guards found
+
+Every zero-expecting `rg` gate in the phase carries an in-invocation positive control
+(01-01:208, 01-02:174, 01-04:263, 01-05:211, 01-10:277) and strips comment lines first. Counted
+guards carry positive assertions of what they inspected: `attempted == 26` computed before any
+subtest runs (01-02), classified-error-site count (01-05), compared-generated-file count (01-07),
+inspected message/field counts (01-09), `openEngine` invocation counts (01-08, 01-11). Rule
+`84d1gfpywd` is satisfied at the assertion level — **but is defeated at the shell level by
+HIGH C2-2 below**, which lets a failing test pass any of these gates.
+
+### Agreed Concerns (both reviewers, confirmed against source)
+
+1. **HIGH C2-1 — the cross-wave field-number guard cannot be executed as written.** 01-09 allocates
+   the `SourceBlob` field numbers for `GetNodeDetailResponse`, `NodeDefinition` and `ExploreGroup`
+   *as comments only* ("Reserve the next free number in each message here, with a comment naming
+   plan 01-10 as the owner", 01-09-PLAN.md:145-150), while its acceptance requires "The known-number
+   fixture includes the field numbers reserved for plan 01-10, so 01-10 cannot allocate them
+   elsewhere without failing this test" (01-09-PLAN.md:334) on a test that reads the generated
+   descriptor. A protobuf descriptor carries declared fields and `reserved` ranges; it does not
+   carry a comment. Three outcomes, all bad: the fixture entry has no descriptor field to match and
+   the test fails in 01-09; or the test skips absent entries and the claimed protection is vacuous;
+   or a real `reserved N;` clause is emitted and `protoc`/`buf` then refuses 01-10's use of that
+   same number. This is a *new* defect introduced by the fix for cycle-1 HIGH #9.
+2. **HIGH C2-2 — 26 automated gates discard the test command's exit status.** Every `<automated>`
+   PASS-count gate has the shape
+   `COUNT=$(go test -v ... 2>&1 | rg -o -e '--- PASS' | wc -l); [ "$COUNT" -ge N ]`. The pipeline's
+   status is `rg`'s, not `go test`'s, and no plan sets `set -o pipefail` or inspects `PIPESTATUS`
+   (positive-controlled: `rg -n "pipefail|PIPESTATUS|STATUS="` over `01-*-PLAN.md` returns nothing,
+   against 26 matches for the PASS-count idiom). A run with N passing subtests and one `--- FAIL`
+   satisfies the gate. 01-01-PLAN.md:200 states the choice explicitly — "The gate is the PASS count,
+   not the exit status: `go test -run PATTERN` exits 0 when the pattern matches nothing" — but that
+   rationale argues for *adding* the count, not for *dropping* the status. Both are needed; this is
+   the same vacuity class the phase spent its guard budget eliminating.
+3. **MEDIUM — 01-01 admits cross-spelling Host/Origin pairs.** `allowedHosts(port)` and
+   `allowedOrigins(port)` are two independent sets checked independently (01-01-PLAN.md:179-197), so
+   `Host: 127.0.0.1:P` with `Origin: http://localhost:P` is admitted. ROADMAP success criterion 2
+   requires the three spellings be "each admitted by exact match rather than treated as
+   interchangeable" (`.planning/ROADMAP.md:128`). Pair them: when Origin is present, require its
+   authority to equal the admitted `r.Host` exactly, and add negative cross-spelling cases in both
+   directions to the rejection matrix.
+4. **MEDIUM — 01-03 forwards outside the mutex.** The plan takes the classification-buffer mutex
+   *after* `p.w.Write(b)` (01-03-PLAN.md:168, 181). `io.Writer` promises nothing about concurrent
+   calls, so two concurrent `Write`s can reach the wire in one order and the classification buffer
+   in another, and the copied line stream stops matching wire order. Serialize the underlying write
+   and the `b[:n]` classification in one critical section — "forward first" should mean *within* the
+   serialized section, not outside synchronization.
+5. **MEDIUM — 01-01 `Serve(ctx)` concurrency shape unspecified.** The action says `Serve` calls
+   blocking `srv.Serve(ln)` and, "on `ctx.Done()`", calls `Shutdown` (01-01-PLAN.md:349-353). Read
+   literally that is unreachable — the blocking call must be in a goroutine with a buffered
+   serve-error channel and a `select`. Prescribe the shape and the `http.ErrServerClosed`
+   normalization rather than leaving it to the executor.
+6. **MEDIUM — 01-11 transient-lock case still uses wall-clock coordination.** Releasing the holder
+   "comfortably inside" `graphstore.Open`'s retry budget (01-11-PLAN.md:247, 251) is timing-based
+   even though no elapsed-time assertion is made, and can cross the boundary spuriously under a
+   loaded `-race` CI. Either expose an event seam to `uiserver` tests or keep one integration smoke
+   case and leave deterministic boundary coverage entirely to `internal/graphstore`'s existing
+   event-synchronized test.
+7. **LOW — 01-06 SHA validation assumes SHA-1.** Accepting only 40 lowercase hex characters excludes
+   Git SHA-256 repositories, which would silently record an absent SHA. Acceptable for v1, but state
+   it as a scoped limitation in the flagged assumption or accept 64 characters too.
+8. **LOW — cross-plan artifact manifest drift.** `(*Engine).SourceFor` is declared by 01-04
+   (01-04-PLAN.md:97) and appears in 01-08, 01-09, 01-10 and 01-11's "Created elsewhere in this
+   phase" manifests, but is missing from 01-02's and 01-05's. Those manifests exist so drift
+   verification sees the whole set; two of them are incomplete.
+
+### Divergent Views
+
+None — single grounded reviewer. Every finding above was independently re-derived against the tree
+by the orchestrator before being recorded; none is carried on the reviewer's assertion alone.
+
+## Verification coverage (cycle 2 source-grounding pass)
+
+**Adapter caveat applied.** `drift-guard authority` resolves to `intel`, but
+`.planning/intel/API-SURFACE.md` reports `symbolCount: 0` on this Go repo (the extractor is
+regex/JS-only). Under that authority every Go symbol would grade UNCHECKABLE → INFO and nothing
+would hard-block. The intel map was therefore **not consulted as evidence**; every cited symbol
+below was resolved by reading source. Absence in intel was treated as "unknown", never as "does not
+exist", per that file's own instruction.
+
+**False-drift traps observed.** `.proto` snake_case vs generated Go camelCase was not treated as
+drift. `rg` exits non-zero for both "no match" and "file not found", so every zero result below was
+positive-controlled with a second pattern known to match in the same invocation.
+
+### Resolved FOUND against source
+
+`query.OpenAt` (`internal/query/engine.go`), `(*Engine).Status` (`internal/query/status.go:247`),
+`StatusResult`, `(*Engine).Node` (`internal/query/node.go:316`), `(*Engine).Explore`
+(`internal/query/explore.go:240`), `RenderNode`, `RenderNodeMultiDef`, `renderMultiDefNode`,
+`nodeMultiDefHardCap`, `(*Engine).readSourceFile` (`internal/query/node.go:84`),
+`(*Engine).resolveSourcePath` (`internal/query/node.go:33`), `(*Engine).fetchCalls`
+(`internal/query/node.go:363`), `(*Engine).fetchCalledBy` (`internal/query/node.go:399`),
+`BuildReverseAdjacency`, `groupMatchesByFile`, `exploreZeroResult`, `validateDepth`, `clampDepth`,
+`clampAffectedDepth`, `validateLimit`, `MaxLimit`, `validateMaxFiles`, `validateFilesDepth`,
+`FilesOptions`, `FilesResult`, `ResolveCodegraphDir`, `ErrNotInitialized`,
+`graphstore.ErrStoreLocked`, `graphstore.ErrNotFound`, `graphstore.Open`
+(`internal/graphstore/pebble_store.go:141`), `openLockRetrySleep`, `schema.NewMeta`,
+`Meta.HasFileIndex`, `Meta.LastSyncUnixMs`, `PutMeta`, `pendingWriter`, `stdinLingerReader`,
+`looksLikeJSONRPCCall`, `waitForDrain`, `stdinLingerGrace`, `BuildServer`,
+`goSDKServer.ServeStdio` (`internal/mcp/server.go:225`), `resolveStartPath`, `onSyncStart`,
+`TestWorkflowRunBodiesInvokeTask`, `Engine.WorktreeMismatch`, `internal/mcp/session_line.go`,
+`internal/query/{validate,files,search,traverse,render_markdown,engine}.go`,
+`internal/indexer/{resolve,sync}.go`, `internal/schema/meta.go`, `.github/workflows/ci.yml`,
+`testdata/golden/gocapture/main.go`, `internal/corpora` corpus resolution.
+
+Also verified as facts the plans assert:
+- `internal/schema/graph.pb.go:11-14` — the generated header block, `protoc-gen-go v1.36.11` /
+  `protoc v7.35.1`. `v7.35.1` is a real protoc identity (protobuf's language-version prefix, i.e.
+  protoc 35.1), not a placeholder.
+- **26 goldens confirmed**, and the derivation matches the plans: 24 tracked under
+  `testdata/golden/corpus/{hugo,guava,requests,serilog}/` (6 each) plus 2 at
+  `corpus/behavioral/{go-explore-multi,go-node-multi}.json`. `testdata/golden/golden_test.go:317`
+  asserts `goldenTotal == 26` from `expectedGoCaptures`, and `ExpectedGoldenScenarioCount = 30`
+  (26 + 4 `CASES.json` property cases). 8 of the 26 are `-mcp.json` captures; 01-02 routes those
+  through `goldenspec.CallNodeViaMCP`/`CallExploreViaMCP` rather than through `Engine` directly
+  (01-02-PLAN.md:200), so the oracle's mechanism is correct even though the plan's summary truth at
+  01-02-PLAN.md:27 says "Engine.Node/Engine.Explore" for all 26.
+- `Taskfile.yml` has **no** proto target (zero result positive-controlled against 55 matches for
+  `task`); no `buf.yaml`, `buf.gen.yaml` or `go.tool-proto.mod` exists; `internal/textutil` does not
+  exist. All confirm BLD-04 closes a genuine pre-existing gap.
+
+### Resolved ABSENT — and load-bearing
+
+- `(*Engine).SourceFor` — **ABSENT** (zero result positive-controlled). Declared as an artifact
+   01-04 produces (01-04-PLAN.md:97), so correctly excluded from drift grading; recorded here only
+  because it is missing from 01-02's and 01-05's cross-plan manifests (LOW finding 8 above).
+- `looksLikeJSONRPCResponse`, `sniffedOutbound`, `decrementPending`, `pendingUnderflows` — ABSENT,
+  declared as 01-03 artifacts. Excluded.
+
+### UNCHECKABLE / skipped — and why
+
+| Symbol | Verdict | Reason |
+|---|---|---|
+| `connect.WithSendMaxBytes`, `connect.WithReadMaxBytes`, `connect.NewErrorDetail`, `connect.CodeOf`, `connect.CodeUnavailable`, `connect.CodeInternal`, `connect.CodeNotFound`, `connect.CodeInvalidArgument`, `connect.CodeResourceExhausted` | **UNCHECKABLE (unchanged from cycle 1)** | `connectrpc.com/connect` is added by this phase and is still absent from `go.mod`. 01-01's acceptance now requires these signatures be verified and recorded in the SUMMARY immediately after the dependency lands — the correct disposition. |
+| `uiv1connect.NewUIServiceHandler` / `NewUIServiceClient` / `UIServiceHandler`, all `uiv1` messages | **SKIPPED (new)** | Generated by a codegen pipeline this phase creates. |
+| `buf` v1.72.0 / `protoc-gen-connect-go` v1.20.0 / `protoc-gen-go` v1.36.x MVS compatibility | **UNCHECKABLE** | Requires actually running `go mod tidy -modfile=<scratch>` and building each tool. 01-01 Task 2 schedules exactly that measurement, with the outcome to be recorded in the modfile header. |
+| Whether `buf generate` reproduces `graph.pb.go` byte-identically apart from the header | **UNCHECKABLE** | No buf toolchain present. This is the basis of the header-drift ruling and must be measured at execution. |
+| Whether `buf` stamps a compiler identity at all (and so whether the restamp is a rewrite or a blanking) | **UNCHECKABLE** | Same reason. 01-01 handles either outcome by requiring every changed hunk to be inside the header block. |
+| All `internal/uiserver`, `internal/goldenspec`, `internal/textutil`, `internal/query/{detail,errors}.go`, `internal/indexer/commit.go`, `internal/upgrade/proto_task_test.go` symbols | **SKIPPED (new)** | Listed under 01-02-PLAN.md's "Artifacts this phase produces" manifest, which enumerates the complete phase-wide new-symbol set. Excluded by the source-grounding rule. |
+| `.planning/intel/API-SURFACE.md` | **NOT CONSULTED** | `symbolCount: 0` on a Go repo; extractor is regex/JS-only. Consulting it would have graded every symbol UNCHECKABLE and hard-blocked nothing. |
+| `go-sdk@v1.7.0` calling `jsonrpc2.Async(ctx)` on every non-`initialize` call | **UNCHECKABLE** | Third-party module internal behaviour; the claim is CONTEXT's, and 01-03 does not depend on it beyond keeping `toolslist-repeat` open and separately attributed. |
+
+**A clean line here does not mean "nothing was checked."** 50+ symbols resolved FOUND against source
+with `file:line`; the 26-golden derivation independently reconstructed from disk and cross-checked
+against `golden_test.go`'s own assertion; four zero-results positive-controlled; one symbol resolved
+ABSENT-and-declared; the new-artifact set confirmed absent and deliberately excluded; and 7 items
+recorded UNCHECKABLE, every one blocked on the `connectrpc.com/connect` and `buf` toolchains this
+phase itself introduces.
