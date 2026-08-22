@@ -1,8 +1,8 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-08-22T22:33:36Z
-review_cycle: 3
+reviewed_at: 2026-08-22T23:52:00Z
+review_cycle: 5
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -1261,3 +1261,494 @@ and 01-11 before the manual multi-process evidence. No wave redesign is needed.
 convergence corrections are sound and source-verified. Two HIGH findings remain, both
 localized and both surgical: a vacuous cross-wave field-number guard (H1) and a delegated
 test that does not exist (H2). Neither requires re-planning the phase.
+
+---
+
+# Cross-AI Plan Review — Phase 1 (cycle 5, class-termination verification)
+
+This cycle asked a narrower question than cycles 1-3: **not "are there more findings" but "did
+cycle 4's termination of the gate-vacuity class actually hold".** Every census claim below was
+re-derived independently rather than taken from cycle 4's report.
+
+## Codex Review
+
+## Summary
+
+The vacuity class appears **TERMINATED**. The cycle-4 census holds across the 11 plans: all 27 automated gates parse, all 26 Go-test gates preserve exit status before counting output, all nine automated `git status --porcelain` checks have existence guards, the five prohibitions are canonical, and H1 is fixed at the root with bidirectional descriptor coverage. H2’s concurrency design is sound, but one new acceptance grep cannot match gofmt-formatted Go. That is the only unresolved issue I found.
+
+## Verification Results
+
+### A. Vacuity census — HELD
+
+- Exactly 27 `<automated>` gates were extracted and all passed `sh -n`.
+- Exactly 26 invoke `go test`; all capture output and test status before piping into `rg`/`wc`.
+- Exactly nine automated gates contain `git status --porcelain`; all nine first require the target directory with `test -d`. Representative corrected gate: [01-05-PLAN.md:411](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-05-PLAN.md:411).
+- The two count-bearing proto-drift gates capture `task` status and numerically require at least three files rather than accepting `compared 0`: [01-07-PLAN.md:224](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-07-PLAN.md:224), [01-07-PLAN.md:292](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-07-PLAN.md:292).
+- The sole unranged-diff concern was corrected to a revision-range assertion with a same-range positive control: [01-06-PLAN.md:395](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-06-PLAN.md:395). Other unranged `git diff --stat` uses are mutation-applied confirmations where non-empty output is explicitly required, e.g. [01-05-PLAN.md:375](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-05-PLAN.md:375).
+- Duplicate golden declarations are removed by plan rather than merely prohibited: both existing declaration sites and wrapper conversions are explicitly covered at [01-02-PLAN.md:190](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:190) and [01-02-PLAN.md:259](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:259).
+
+### B. New prohibitions — HELD
+
+All 11 `must_haves.prohibitions` lists carry the same five descriptor-less rules. The canonical block begins, for example, at [01-01-PLAN.md:65](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:65).
+
+The prohibitions are precise:
+
+- existence guard before `git status --porcelain`;
+- same-file positive control;
+- numeric floor rather than a zero-accepting regex;
+- declaration-anchored identifier grep;
+- explicit revision range for emptiness assertions.
+
+They appear only as prose inside the plan files; executable absence checks generally strip comment lines and scope themselves to source files, so the prohibition text does not poison those checks.
+
+### C. PASS convention and floors — HELD
+
+- The canonical “Gate conventions” sections hash to exactly one distinct digest across all 11 plans.
+- All automated test gates print `PASS lines:`.
+- Each ordinary gate requires the conjunction of status zero and its PASS floor. The deliberate-mutation exception remains scoped to expected-RED observations, as stated in [01-05-PLAN.md:396](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-05-PLAN.md:396).
+- The described floor arithmetic is conservative and sufficient. For example:
+  - 26 golden subtests plus parent = 27: [01-02-PLAN.md:390](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:390).
+  - Seven MCP writer functions plus table subtests = 18 against floor 15: [01-03-PLAN.md:302](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-03-PLAN.md:302).
+  - Final degrade task derives 22 lines against floor 10: [01-11-PLAN.md:467](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:467).
+
+One minor prose slip says “eight test functions” in 01-06 while its arithmetic describes seven functions plus seven subtests; the resulting total of 14 is still correct and the floor is unaffected.
+
+### D. HIGH root fixes
+
+#### H1 — HELD
+
+The fix is genuinely bidirectional:
+
+- Every fixture entry must resolve, with `resolved == len(fixture)`: [01-09-PLAN.md:403](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:403).
+- The test must also walk every generated descriptor field and fail if the fixture omits it: [01-09-PLAN.md:457](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:457).
+- Earlier-wave `GetStatusResponse` fields 1–7 and `IndexingInProgress` are explicitly in scope: [01-09-PLAN.md:393](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:393).
+- The fixture-length chain is compiler-visible: baseline at [01-09-PLAN.md:409](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-09-PLAN.md:409), `+9` at [01-10-PLAN.md:431](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:431), and `+2` at [01-11-PLAN.md:275](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:275).
+- The 01-11 gate actually runs the fixture test: [01-11-PLAN.md:296](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:296).
+
+#### H2 — DID NOT FULLY HOLD
+
+The concurrency mechanism itself is correct. `Open` sleeps synchronously immediately before attempts 2–5 at [pebble_store.go:143](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/pebble_store.go:143). The planned unbuffered ordinal send followed by an unbuffered `resume` receive, with the helper closing the holder before sending `resume`, establishes:
+
+`holder.Close returns` → `resume send/receive` → sleep hook returns → final `pebble.Open`.
+
+That fixes the race present in the existing release-at-attempt-2 test, whose later-send drain supplies its synchronization at [open_lock_test.go:70](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/open_lock_test.go:70).
+
+However, the source-property acceptance grep is impossible after `gofmt`; see the concern below.
+
+### E. Phase invariants — HELD
+
+- Probe ledger reconciles to 21: 15 edge-tagged truths, including the flat-scalar backstop, plus six flagged assumptions. The backstop is marked at [01-01-PLAN.md:48](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-01-PLAN.md:48).
+- All 12 requirement IDs are covered.
+- Wave graph is acyclic.
+- Same-wave file ownership overlap is zero; `internal/graphstore/open_lock_test.go` belongs only to wave-7 plan 01-11: [01-11-PLAN.md:15](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:15).
+- Golden gates explicitly target `./testdata/golden/`, including the automated oracle at [01-02-PLAN.md:386](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:386).
+- Every plan contains both “Artifacts this phase produces” and `<threat_model>`.
+- All 11 frontmatters parse under Ruby’s strict safe YAML loader.
+
+### F. Context overrides — HELD
+
+All three correction blocks remain authoritative:
+
+1. Missing live byte oracle and Wave-1 remedy: [01-CONTEXT.md:98](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-CONTEXT.md:98), implemented by plan 01-02.
+2. Exit-status/count conjunction: [01-CONTEXT.md:71](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-CONTEXT.md:71), reflected in all ordinary gates.
+3. `toolslist-repeat` separability: [01-CONTEXT.md:259](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-CONTEXT.md:259), preserved by the separate test and explicit non-closure in plan 01-03.
+
+## Concerns
+
+### MEDIUM — H2’s property grep cannot match gofmt output
+
+[01-11-PLAN.md:476](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:476) searches for the literal:
+
+```text
+openLockRetryAttempts-1
+```
+
+Go formats binary expressions with spaces. Existing source demonstrates the canonical form at [open_lock_test.go:43](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/graphstore/open_lock_test.go:43):
+
+```go
+openLockRetryAttempts - 1
+```
+
+Because comment lines are stripped, the plan’s unspaced prose occurrences cannot rescue the check. A correctly implemented and formatted `TestOpenSucceedsOnTheFinalAttempt` therefore produces zero matches and fails this acceptance criterion.
+
+## Suggestions
+
+Replace the H2 grep with a whitespace-tolerant expression:
+
+```sh
+rg -o -e 'openLockRetryAttempts[[:space:]]*-[[:space:]]*1'
+```
+
+Keep the same-file function-declaration positive control and the minimum count of two.
+
+Optionally correct 01-06’s “eight test functions” wording to “seven test functions”; no gate change is needed.
+
+## Risk Assessment
+
+**MEDIUM.** The vacuity class is terminated and both HIGH fixes are architecturally sound. The remaining issue is narrow and mechanical, but it blocks a correct H2 implementation at acceptance time until the grep is fixed.
+
+---
+
+## Cycle 5 findings
+
+### Verdict
+
+The vacuity class is **very nearly terminated but not terminated**. Every shape-based sweep
+cycle 4 claimed holds under independent re-derivation, and both cycle-3 HIGHs are fixed at the
+root rather than at the symptom. One task, however, carries a *new* instance of the class — and
+it is the one place the census's own method could not see, because the defect is an **absence**
+rather than a malformed command.
+
+### HIGH — unresolved
+
+**H3. `01-10` Task 2's entire deliverable is guarded by nothing executable: the gate's `-run`
+pattern names a test that is declared nowhere, and its floor is already cleared by tests
+belonging to another plan.**
+
+Four facts, each independently checked:
+
+1. The gate at `01-10:423` runs
+   `-run 'TestUIServiceSourceBlob|TestUIServiceNodeDetail|TestUIServiceExplore'`.
+   `rg -n 'TestUIServiceSourceBlob' 01-10-PLAN.md` returns exactly three hits — `:423` (the
+   gate), `:426` (the acceptance bullet restating the gate command) and `:427` (the derivation
+   prose, "this task's new `TestUIServiceSourceBlob*` cases"). **The name is declared nowhere**:
+   no artifacts entry, no behavior bullet, no `<files>` test file.
+   *Positive control, identical pipeline against the same file class:* the only two other `-run`
+   atoms in the phase that a strict-declaration check flags both resolve —
+   `TestOriginHostGuard` at `01-01:126` ("Tests: `internal/uiserver/originguard_test.go`
+   (`TestOriginHostGuard`, …)") and
+   `TestPipelinedToolsListResponsesAreMatchedByIDWithoutNotifications` at `01-03:99`. The zero
+   for `TestUIServiceSourceBlob` is a real absence, not a broken query.
+2. Task 2's `<behavior>` block (`01-10:365-371`) has five bullets and **none names a test
+   function**. Every other task in the phase names its test functions in the behavior block or in
+   the plan's artifacts section; this is the only one that does not.
+3. Task 2's `<files>` (`01-10:354`) is `internal/uiproto/uiv1/ui.proto, …ui.pb.go,
+   …ui.connect.go, internal/uiserver/handlers.go, internal/uiserver/readonly_test.go,
+   internal/uiserver/server.go`. Its only test file is `readonly_test.go`, which `01-10:106`
+   scopes to the field-number fixture extension. **There is no file in which the five behaviors
+   could be written.**
+4. The floor is 14, and the plan's own derivation at `01-10:427` states the reason it cannot
+   bind: *"This `-run` pattern re-runs plan 01-09's `TestUIServiceNodeDetail*` (10 lines by
+   01-09's own derivation) and `TestUIServiceExplore*` (6 lines) … The inherited sixteen alone
+   clear the floor; the new blob tests are headroom."*
+
+Taken together: an executor can complete `01-10` Task 2 without writing a single end-to-end
+`SourceBlob` test and **both halves of the D-04 conjunction still pass** — `STATUS -eq 0` from
+the inherited 01-09 tests, and `COUNT` 16 ≥ 14 from the same. `TestUIServiceSourceBlob` matching
+nothing is precisely the "`-run` pattern matches nothing" failure the phase's own canon says the
+count floor exists to close; here the count floor does not close it, because it is satisfied by
+*another plan's* tests sharing the pattern.
+
+Nothing downstream rescues it. `01-10` has exactly two gates — `:331` (Task 1's truncation
+tests) and `:423` — so no sibling gate covers Task 2. The phase's only whole-package sweep,
+`01-11:550` (`go test -race ./internal/uiserver/`, floor 60 against a derived ≥111), is loose by
+design and would not notice five missing tests either.
+
+This is a counterexample both to the "13 orphaned behavior bullets across 6 tasks, all adopted"
+census and to the class-termination claim. The plan frames the unwritten tests as "headroom",
+which is why the census did not see it: the gate is well-formed, `sh -n`-clean, status-honoring
+and positively controlled. It is vacuous for a reason no shape-based sweep detects — the work it
+scores is not in its scope.
+
+Fix (surgical, no re-plan): name the test functions in Task 2's behavior block, add the test file
+to `<files>`, and give Task 2 a gate leg scoped to those tests alone with its own derivation —
+the way `01-11:463` already conjoins a `graphstore` leg to a `uiserver` leg.
+
+### MEDIUM — unresolved
+
+**M1. `01-03:291` is an unranged `git diff` assertion evaluated at verification time — the one
+member the "the other 11 uses are applied-confirmations" split missed.**
+
+The distinction is real for five of the six `git diff` uses inside `<acceptance_criteria>`.
+`01-02:396`, `01-05:414`, `01-06:296` and `01-07:301` all record a `git diff --stat` **captured
+mid-task while the mutation is still uncommitted**, where non-empty genuinely is the evidence;
+`01-06:396` is the one already fixed to a revision range with a same-range positive control.
+`01-03:291` is neither:
+
+> `git diff --stat` for this task touches exactly `internal/mcp/server.go` and
+> `internal/mcp/pending_writer_test.go`. The `Server` interface, `BuildServer` and
+> `internal/cli/serve.go` are untouched.
+
+It sits inside `<acceptance_criteria>` (`01-03:280-293`), so it is evaluated after the task's
+atomic commit. Its own plan's canon bullet 5 (`01-03:170-171`) states exactly why that fails:
+*"An unranged `git diff` is empty by construction at verification time under
+atomic-commit-per-task. Assert over `<phase-base>..HEAD`."* The bullet's first half then fails
+for a bookkeeping reason; its second half ("…are untouched") **passes vacuously**, which is the
+banned emptiness shape.
+
+Fix: adopt `01-06:396`'s form verbatim — a `merge-base`-derived `PB` with
+`git diff --stat "$PB"..HEAD -- <paths>` and its positive control.
+
+**M2. `01-11:476`'s H2 property grep is gofmt-form-dependent, and the same file's existing idiom
+is the non-matching form.**
+
+The criterion requires
+`rg -v '^\s*//' internal/graphstore/open_lock_test.go | rg -o -e 'openLockRetryAttempts-1' | wc -l`
+to print at least `2`. Codex reports this is impossible after `gofmt`; that is **overstated**,
+and the corrected reading matters. Measured directly against `gofmt`:
+
+```go
+if ord == openLockRetryAttempts-1 {             // gofmt KEEPS this unspaced
+t.Fatalf("...", ord, openLockRetryAttempts-1)   // gofmt SPACES this
+want := openLockRetryAttempts - 1               // gofmt SPACES this
+```
+
+`gofmt` elides the spaces only when the subtraction is an operand of a lower-precedence operator
+(or an index expression). So the grep is satisfiable — but only if **both** cited sites happen to
+be direct comparison operands, and the plan never says so. The nearest in-file precedent is the
+spaced form: `internal/graphstore/open_lock_test.go:43` reads
+`if want := (openLockRetryAttempts - 1) * openLockRetryBackoff;`. That file is in this task's
+`read_first`, so an executor following its style writes a **correct** test against a **red**
+gate — and the pressure is then to edit the test to satisfy the grep.
+
+The failure direction is safe (false-FAIL, not vacuity), but it stalls execution on the exact
+criterion cycle 4 wrote to close H2. Fix: make the pattern whitespace-tolerant,
+`'openLockRetryAttempts[[:space:]]*-[[:space:]]*1'`, keeping the same-file
+`func TestOpenSucceedsOnTheFinalAttempt` positive control and the floor of 2.
+
+**M3. `01-11:463`'s first floor carries no derivation — the one exception to "all 26 floors now
+carry derivations".**
+
+`01-11:463` is a compound gate with two floors: `GCOUNT -ge 1` for
+`TestOpenSucceedsOnTheFinalAttempt`, and `COUNT -ge 10` for the five degrade tests. Only the
+second has a **Floor derivation** bullet (`01-11:467`); the floor of 1 is stated bare at
+`01-11:475`. The correct total is 1 (one test function, no subtests), so the floor is trivially
+satisfiable — and unlike the phase's two other floor-1 gates (`01-02:260`, `01-03:342`), which
+both say so explicitly and note that `STATUS -eq 0` is what actually carries them, this one does
+not. Fix: one bullet.
+
+### LOW — unresolved
+
+**L1. `01-01:289`'s derivation double-counts one behavior bullet.** It credits
+`TestOriginHostGuard` with 20 `t.Run` rows *and* adds `TestOriginHostGuardAdmitsOriginlessGET`
+separately — but behavior bullet 19 ("No Origin header at all on a GET with an admitted Host →
+200") **is** that separate function, named as such at `01-01:126`. True total is 21, not the
+stated 22. The floor of 19 is still met with two lines of headroom, so there is no gate
+consequence — but the arithmetic is off by one in a derivation whose purpose is to be checked.
+
+**L2. `01-06:388`'s derivation says "Eight test functions match" and then enumerates seven**
+(`TestResolveHeadCommitSHA`, `…OnNonGitTree`, `…WithNoGitBinary`,
+`TestHeadIsResolvedOncePerOperation`, `TestIndexMetaCarriesTheStoredMeta`,
+`TestIndexMetaOnAGraphWithNoMeta`, `TestStatusResultFieldSetIsUnchanged`). The total of 14
+(8 + 6×1) is correct **for seven functions**; only the count word is wrong. Independently found
+by Codex. One-word fix.
+
+### Noted, not actionable
+
+- **`01-05:336`'s floor of 10 is an exact fit against a lower-bound derivation.** The derivation
+  reads "at least eight" subtests + parent + 1, and its enumerated site list contains exactly
+  eight entries, one of which (the `Query`/`Search` empty-term case) is a compound that could be
+  written as one subtest or two. Eight subtests give exactly 10 against a floor of 10 — zero
+  headroom on a floor phrased as a bound rather than a count. Not wrong; fragile.
+- **`01-07:236`'s derivation lives in `<verification>` (`01-07:366`), not in the task's
+  `<acceptance_criteria>`** where the other 25 sit; the acceptance bullet at `:238` states the
+  floor bare. Content is correct (4 named functions, no subtests, zero headroom).
+- **Toolchain observation.** `gsd-tools query progress` reported `"plans": 11` /
+  `"total_plans": 11` cleanly for this phase throughout. It counts `*-PLAN.md` files and does not
+  parse their YAML frontmatter, so it reported 11/11 during the window in which cycle 4's new
+  prohibition entries carried trailing-comma YAML defects. A file count is not a health check;
+  nothing in the GSD surface would have surfaced that breakage. Worth an upstream note.
+
+### Census results — what HELD
+
+| Sweep | Claim | Verified |
+|---|---|---|
+| `<automated>` gate count | 27 | **27** (`</automated>` closers; the 57 `<automated>` occurrences include 30 prose mentions) |
+| `sh -n` cleanliness | 27/27 | **27/27**, zero syntax failures |
+| `OUT`/`STATUS` captured before any pipe | all `go test` gates | **26/26** — no gate invokes `go test` without `STATUS=$?` |
+| unguarded `git status --porcelain` in `<automated>` | 9 sites, 9 fixed, exactly that set | **9/9 guarded**, and every `test -d X` guard matches the pathspec `X/` it protects |
+| count regexes accepting zero | 2, both in 01-07 | **both numericized** (`NFILES=…; [ "$NFILES" -ge 3 ]`) at `01-07:236` and `01-07:298` |
+| gates with no control | 1 (01-10 numeric-literal) | **fixed** — `01-10:343-345` is now path-scoped, `*.pb.go`/`*.connect.go`-excluded and positively controlled, with the reason each part is load-bearing written out |
+| zero-count assertions | all controlled | **8/8 carry same-file positive controls** (`01-01:293`, `01-02:266-267`, `01-04:320-321`, `01-05:267`, `01-10:343`, `01-10:346`, `01-11:472`) |
+| unranged `git diff` emptiness | exactly 1, now ranged | **the split is real for 5 of 6 — see M1** |
+| PASS floors carrying derivations | 26 of 26 | **25 of 26 — see M3** |
+| floor arithmetic | correct | **24 of 26 exactly correct; 2 off in prose only (L1, L2), no floor affected** |
+| five vacuity prohibitions | in all 11 | **11/11**, descriptor-less scalars in `must_haves.prohibitions`, naming the shape rather than the symptom |
+| prohibition text vs absence-greps | must not self-trip | **safe** — the prohibition prose lives only in plan files; every absence-gate strips `^\s*//` and scopes itself to source paths |
+| `## Gate conventions (phase-wide canon)` | byte-identical in 11 | **11/11 identical**, `sha1 5cd30a03d939` |
+| echo labels | 6 variants normalized to `PASS lines:` | **26/26 PASS echoes use `PASS lines:`**; the only 2 other echoes are the drift gates' `compared=` |
+| trailing-comma YAML defect | fixed pre-commit, never landed | **confirmed** — 0 present in any frontmatter; `git show e81dc32` deletes 0 lines ending in a quoted comma |
+| frontmatter strict parse | 11/11 | **11/11 clean under `yq -e`** |
+| duplicate declarations in `behavioral_test.go` | 7 | **confirmed in source** — see below |
+| duplicate test-function declarations | — | **0 collisions** — no (package, test-function-name) pair is declared by two different tasks anywhere in the phase |
+| `read_first` citation errors | 8 of 85, corrected | **spot-check clean** — see below |
+| threat model IDs | — | `T-01-01`..`T-01-39`, contiguous, no gaps; the eight IDs appearing in more than one plan are the same threat restated per surface (identical category, severity and disposition), not collisions |
+
+The seven duplicates are real and `01-02` scopes them correctly. Verified by reading source:
+`languageToLockedSlug`, `slugToRepo`, `goldenCapture`, `callExploreViaMCP`, `mcpResultText` and
+the two `callNodeViaMCP*` variants are each declared in **both**
+`testdata/golden/behavioral_test.go` and `testdata/golden/gocapture/main.go` — seven declarations
+across six names. `01-02`'s cited line numbers are exact:
+`behavioral_test.go:43` = `var languageToLockedSlug`, `:52` = `var slugToRepo`,
+`:419` = `type goldenCapture struct`, and `gocapture/main.go:36` = `type goldenCapture struct`.
+Positive control: `rg -c '^func Test' testdata/golden/behavioral_test.go` = 8, so the pipeline
+that produced the zeros above works against that file.
+
+`read_first` spot-check, line-ranged citations resolved by reading the cited range:
+`internal/query/render_markdown.go:138-148` (`nodeMultiDefHardCap`) ✓;
+`testdata/golden/golden_test.go:243-297` (`TestReFrozenGoldensValid`) ✓;
+`testdata/golden/behavioral_test.go:685-691` ("byte-diffs") ✓;
+`internal/mcp/server.go:200-350` (`waitForDrain`) ✓;
+`internal/mcp/session_line_test.go:60-90` (`t.Run`) ✓;
+`internal/query/explore.go` ~236 (`T-01-25`) ✓. The two `01-CONTEXT.md` D-04 citations are among
+these, so the correction block's own evidence is sound.
+
+### The two HIGHs — root fixes verified
+
+**H1 — HELD, and the fix is genuinely bidirectional.** `01-09:457` requires the test to *"walk
+the descriptor, collect every `message.field` it finds, and fail naming any that the fixture does
+not cover"*, alongside `resolved == len(fixture)` and `len(fixture) > 0` at `:456`. Both
+directions, stated as such: *"the coverage assertion runs in BOTH directions"*. The wave-5 scope
+explicitly includes `GetStatusResponse` 1-7 and `IndexingInProgress` (`01-09:393`, `:457`) and
+explicitly excludes 8/9 with the reason (`:458`). The baseline is compiler-carried, not
+prose-carried: `uiProtoFieldFixtureLenAtPlan0109` → `+9` (`01-10:431`) → `+2` (`01-11:275`).
+`TestUIProtoFieldNumbersAreStableAndUnique` is in `01-11:296`'s `-run` with floor 9, and the
+derivation at `01-11:300` correctly nets the re-run test into the total of 10. The false statement
+is corrected in place at `01-11:581` and again at `01-11:308`, both marked as corrections rather
+than silently rewritten. Additionally checked: `01-11` declares no proto field beyond the two —
+`IndexingInProgress.message` is *populated*, not newly declared (`01-11:104`) — so `+2` really
+does keep the bidirectional walk satisfied at wave 7.
+
+**H2 — the concurrency argument is correct.** Checked as a concurrency argument, against
+`internal/graphstore/pebble_store.go:141-147`. The loop runs `openLockRetryAttempts` (5) attempts
+with `openLockRetrySleep` called at the top of attempts 1-4, so there are exactly
+`openLockRetryAttempts-1` = 4 sleeps and the fourth immediately precedes the final attempt — the
+plan's ordinal (`01-11:409-410`) is 1-based and lands on it correctly. The happens-before chain
+holds under the Go memory model: the helper receives ordinal 4, calls `holder.Close()` to
+completion, *then* sends on the unbuffered `resume`; a send on an unbuffered channel happens
+before the corresponding receive completes, so `Close` returns → `resume` send → `resume` receive
+→ the seam returns → `pebble.Open`. No race, no wall clock. The plan is also right about why
+`TestOpenConvergesWhenHolderCloses`'s drain loop does not generalise: that test's synchronisation
+comes from a *later* sleep blocking (`internal/graphstore/open_lock_test.go:70-76`), and on the
+final sleep there is no later sleep. The acceptance checks the property (`Open` returned nil
+**and** the observed ordinal equals the final one), not merely that a cited name exists. The only
+defect is the grep's source-form dependence — **M2**, which is about the criterion, not the
+design.
+
+### Invariants — all HELD
+
+- **Probe ledger 21.** `rg ' edge\)'` returns 15 edge-tagged `must_haves` across 01-01, 01-02,
+  01-04, 01-05, 01-10 and 01-11; `01-01:48`'s `verification: backstop` truth is one of them
+  (tagged `RPC-01 / concurrency edge`), so it is inside the 15 rather than a 16th. Four plans
+  carry a `## Flagged Assumptions` section (01-01, 01-03, 01-06, 01-07) totalling 6 open
+  assumptions. 15 + 6 = 21, and `01-06:409-411` states that reconciliation in the same terms:
+  *"the phase's probe ledger stays at 21 — 15 edge-tagged `must_haves` (including 01-01's
+  `verification: backstop`) plus 6 flagged assumptions."* H2's fix touches `01-11`'s
+  `concurrency edge` probe, which is still present and still reconciles.
+- **12/12 requirement IDs.** The union of the 11 frontmatters' `requirements:` is set-equal to
+  the ROADMAP line — `{BLD-04, ENG-01, ENG-02, ENG-04, FIX-01, RPC-01, RPC-02, RPC-05, SRV-01,
+  SRV-02, SRV-03, SRV-04}` — no extras, no gaps.
+- **Wave graph acyclic**, 1→7, every `depends_on` pointing to a strictly lower wave.
+- **Zero same-wave file-ownership overlap** across all 87 `files_modified` entries.
+  `internal/graphstore/open_lock_test.go` appears exactly once, in `01-11` (wave 7, sole
+  occupant) — H2's new file introduces no contention.
+- **Golden gates name their target explicitly**: every golden invocation carries
+  `./testdata/golden/`, never `./...` (which `01-VALIDATION.md` notes would cover zero goldens).
+- **`<threat_model>` and "Artifacts this phase produces" present in 11/11.**
+- **Prohibitions are descriptor-less scalars** in `must_haves.prohibitions` in 11/11.
+
+### The three `01-CONTEXT.md` correction blocks — all preserved
+
+1. **D-04 / no live byte oracle** (`01-CONTEXT.md:98-112`) — intact, and discharged by `01-02`,
+   whose `TestGoldensMatchLiveEngineOutput` gate (`01-02:386`, floor 30) is the missing oracle.
+   `01-02:390` correctly separates the unanchored form (30, both tests) from `01-05:411`'s
+   `$`-anchored form (27, the single test) — a distinction that would silently break both floors
+   if collapsed.
+2. **D-04 scoring conjunction** (`01-CONTEXT.md:71-89`) — preserved with its single scoped
+   exception intact. `01-05:417` states it precisely: the RESTORED-tree gate requires
+   `STATUS -eq 0`, and *"the deliberate-RED exception applies only to the mutation observations …
+   scored by `--- FAIL`/`--- PASS` counts and never by status."* `01-05:432` additionally flags
+   the residual D-04 reading question for the maintainer rather than resolving it silently —
+   correctly, and since it is already in the plan it is not an open review item.
+3. **`toolslist-repeat` separability** (`01-CONTEXT.md:259-272`) — preserved. `01-03` Task 2
+   exists to make the disproof executable, and `01-03`'s prohibition list carries *"Never report
+   FIX-01's closure as closing the `toolslist-repeat` …"*.
+
+### Risk
+
+**MEDIUM.** The class-termination largely worked: every shape-based sweep holds under independent
+re-derivation, both HIGHs are fixed at the root, and the mechanical invariants are intact. What
+cycle 4 could not reach is a vacuity that is an *absence* rather than a malformed command —
+`01-10` Task 2 (**H3**). That is one surgical fix (name the tests, add the file, scope a floor to
+them), plus three small criterion edits (**M1**, **M2**, **M3**) and two one-word arithmetic
+corrections (**L1**, **L2**). No wave redesign, no re-plan.
+
+The useful generalisation for the maintainer: the phase's prohibitions now cover every way a gate
+can be *written* wrong, and none of the ways a gate can be *scoped* wrong. `01-10:423` satisfies
+all five prohibitions and still scores nothing it owns. A sixth prohibition — *every gate's `-run`
+pattern must name at least one test function the task itself declares, and its floor must be
+derived from that task's own subtests* — would close the shape H3 exposes.
+
+## Verification coverage (cycle 5 source-grounding pass)
+
+`.planning/config.json:67` sets `source_grounding_authority: "grep"`, and
+`.planning/intel/API-SURFACE.md` states in its own header that `api-map.json` has no entries and
+that absence there means "unknown", not "does not exist". The intel map was therefore **NOT
+CONSULTED** — grading against it would have marked every Go symbol UNCHECKABLE → INFO and
+hard-blocked nothing. Every symbol below was resolved by reading source.
+
+### Method
+
+Six independent passes over the 11 plans plus the repo tree:
+
+1. **Gate extraction and mechanics.** All 27 `<automated>` gates extracted by matching
+   `</automated>` closers (the 57 `<automated>` occurrences include 30 prose mentions), each run
+   through `sh -n`, then checked for `STATUS=$?` capture before any pipe, `test -d` guards on
+   every `git status --porcelain` pathspec, and numeric floors on every count regex.
+2. **Floor re-derivation.** All 26 PASS floors re-derived independently from each plan's own
+   `<behavior>` bullets under the phase counting convention, accounting for Go's `-run` being an
+   unanchored regex and for test functions accumulating in a shared package across waves.
+3. **`-run` atom resolution.** Every alternation atom in every gate checked against the set of
+   test-function names the phase actually *declares* (behavior-bullet heads and artifact "Tests:"
+   lines), with each zero positively controlled against atoms known to resolve.
+4. **Invariant reconciliation.** Probe ledger, requirement-ID set equality, wave acyclicity,
+   same-wave file-ownership overlap across all 87 `files_modified` entries, golden-target
+   explicitness, `<threat_model>` / artifacts presence, prohibition uniformity, and strict YAML
+   parse of all 11 frontmatters under `yq -e`.
+5. **Concurrency review of H2.** The acknowledgement-channel design checked as a concurrency
+   argument against `internal/graphstore/pebble_store.go:141-147` and
+   `internal/graphstore/open_lock_test.go:60-90`, and `gofmt`'s actual spacing behaviour measured
+   rather than assumed.
+6. **Symbol source-grounding**, with each plan's "Artifacts this phase produces" manifest
+   excluded.
+
+### Symbols resolved by reading source
+
+Confirmed present, at the cited package: `graphstore.Open` (`internal/graphstore/pebble_store.go:141`),
+`graphstore.ErrStoreLocked`, `graphstore.ErrNotFound`, `classifyOpenError`, `openLockRetrySleep`,
+`openLockRetryAttempts` / `openLockRetryBackoff` (`pebble_store.go:79-80`),
+`TestOpenConvergesWhenHolderCloses` (`open_lock_test.go:60`), `query.OpenAt`,
+`query.ErrNotInitialized` (`internal/query/resolve.go:18`), `query.StatusResult`, `Engine.Status`,
+`schema.Meta`, `pendingWriter` and `pendingWriter.Write`, `stdinLingerReader`, `stdinLingerGrace`,
+`waitForDrain`, `sniffedMessage`, `looksLikeJSONRPCCall`, `TestReFrozenGoldensValid`,
+`TestCorpusBehavior_Go`.
+
+### Exclusions (phase artifacts — absence today is correct)
+
+Four cited symbols resolve to nothing on `main` and were verified to be **phase artifacts**, each
+traced to the plan that creates it, so none is a grounding failure:
+
+| Symbol | Created by |
+|---|---|
+| `query.ErrInvalidArgument` (and `internal/query/errors.go`) | `01-05:302` — "Create `internal/query/errors.go` with two exported sentinels"; cited downstream by `01-08:183` and `01-09:174` as an earlier-wave artifact |
+| `goldenspec.LockedCorpusArgs` | `01-02:92` — `internal/goldenspec/spec.go` |
+| `goldenspec.CallNodeViaMCP` | `01-02:93` — `internal/goldenspec/mcp.go` |
+| `gitExecLookPath` | `01-06` — `internal/indexer/commit.go` |
+
+Zero genuine grounding failures.
+
+### Traps positive-controlled
+
+- **`rg` exits non-zero for both "no match" and "file not found."** Every zero reported above was
+  positive-controlled by running the identical pipeline with a pattern the same target genuinely
+  contains — this is what established that `TestUIServiceSourceBlob`'s zero (**H3**) is a real
+  absence while `TestOriginHostGuard`'s and
+  `TestPipelinedToolsListResponsesAreMatchedByIDWithoutNotifications`'s apparent zeroes were
+  artifacts of a too-strict declaration regex.
+- **`.proto` snake_case vs generated Go camelCase is not drift** — `store_exists` /
+  `indexing_in_progress` were read as proto field names throughout and never compared against
+  generated Go identifiers.
+- **`gofmt` spacing was measured, not assumed** (**M2**): `a-1` survives unspaced as an operand of
+  a lower-precedence operator or inside an index, and is spaced everywhere else. Codex's claim
+  that the H2 grep is *impossible* is therefore wrong; the correct finding is that it is
+  *form-dependent*, which changes the fix.
