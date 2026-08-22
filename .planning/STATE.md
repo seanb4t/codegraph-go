@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.11.0
-milestone_name: Standalone Project Identity
-status: Awaiting next milestone
-stopped_at: Phase 6 complete — all phases complete
-last_updated: "2026-08-17T00:51:41.383Z"
-last_activity: 2026-08-16
-last_activity_desc: Milestone v0.11.0 completed and archived
-state_head: 5a133f77fd51636369e89b1931304cbff8d950f9
+milestone: v0.12.0
+milestone_name: Local Graph UI
+status: planning
+last_updated: "2026-08-22T17:27:40.944Z"
+last_activity: 2026-08-22
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 30
-  completed_plans: 30
-  percent: 100
-current_phase: 6
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -28,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-08-16)
 
 ## Current Position
 
-Phase: Milestone v0.11.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-08-16 — Milestone v0.11.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-08-22 — Milestone v0.12.0 started
 
 ## Performance Metrics
 
