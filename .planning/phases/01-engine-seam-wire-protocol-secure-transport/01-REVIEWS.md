@@ -1,8 +1,8 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-08-22T23:52:00Z
-review_cycle: 5
+reviewed_at: 2026-08-22T21:20:00Z
+review_cycle: 7
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -1840,3 +1840,306 @@ Zero genuine grounding failures.
   a lower-precedence operator or inside an index, and is spaced everywhere else. Codex's claim
   that the H2 grep is *impossible* is therefore wrong; the correct finding is that it is
   *form-dependent*, which changes the fix.
+
+---
+
+# Cross-AI Plan Review — Phase 1 (cycle 7, SEMANTIC class-termination verification)
+
+Reviewers: codex (`gpt-5.6-sol`, reasoning=low), plus an independent orchestrator verification
+pass. Trajectory: 40 → 8 → 16 → (replan) → 9 → (replan) → **cycle 7**.
+
+Cycle 6 was tasked with terminating the SCOPE class with a rule rather than another instance
+sweep. This cycle tests that claim adversarially: whether the instance fix in `01-10` is real,
+whether the new semantic prohibition actually binds, whether prose-homing reintroduces H3's
+mechanism, and whether fixing scope regressed shape.
+
+## Codex Review
+
+## Summary
+
+The specific `01-10` SourceBlob fix is sound: its task-owned leg has no inherited matches, its seven-line floor is exact, and all 27 automated gates are shell-syntax clean. However, the scope-vacuity class is **not fully terminated**. The new semantic prohibition’s OWNERSHIP and HOMING rules can both be satisfied by a trivial task-owned test unrelated to the deliverable while behavior bullets are “homed” to prose-only criteria. Thus, the general rule remains under-specified even though the known instance is fixed correctly.
+
+## Strengths
+
+- The SourceBlob gate is genuinely isolated. The five matching functions are declared only by plan 01-10 in [01-10-PLAN.md:113](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:113) and detailed at [01-10-PLAN.md:381](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:381). A repository-wide Go-source search found no existing `func TestUIServiceSourceBlob...`; searches across the other ten plans found no competing declaration.
+
+- Leg 1’s arithmetic is correct. Four ordinary test functions contribute four lines, while `TestUIServiceSourceBlobOnEveryAttachmentPoint` contributes its parent plus two subtests, totaling three. Therefore `4 + 3 = 7`, exactly matching the zero-headroom floor at [01-10-PLAN.md:446](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:446) and its derivation at [01-10-PLAN.md:451](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:451). Omitting or renaming any declared function makes the leg fail.
+
+- The inherited regression leg is honestly separated and explicitly disclaims ownership of the new deliverable at [01-10-PLAN.md:453](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:453). It can no longer subsidize Leg 1.
+
+- I extracted all 27 `<automated>` commands and checked each with `sh -n`: 27/27 passed. The nine actual `git status --porcelain` gates all retain preceding `test -d` guards; examples include [01-05-PLAN.md:424](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-05-PLAN.md:424), [01-07-PLAN.md:309](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-07-PLAN.md:309), and [01-10-PLAN.md:446](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:446).
+
+## Concerns
+
+### HIGH — The semantic prohibition’s two operational halves still admit a scope-vacuous gate
+
+The prohibition says:
+
+> “(a) OWNERSHIP — every gate carries at least one leg whose test-selection pattern matches ONLY test functions this task itself declares… (b) HOMING — every behavior bullet is named by… a test function… or… covered by a specific named criterion…”
+
+This appears verbatim at [01-10-PLAN.md:59](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:59) and all eleven plans.
+
+A counterexample satisfying both halves literally:
+
+```sh
+OUT=$(go test -v -run '^TestTaskGateExists$' ./internal/example 2>&1)
+STATUS=$?
+COUNT=$(printf '%s\n' "$OUT" | rg -o -e '--- PASS' | wc -l)
+[ "$STATUS" -eq 0 ] && [ "$COUNT" -ge 1 ]
+```
+
+The task declares:
+
+```go
+func TestTaskGateExists(t *testing.T) {
+    if 1+1 != 2 {
+        t.Fatal("impossible")
+    }
+}
+```
+
+- OWNERSHIP passes: the pattern matches only a test declared by this task, and its floor derives solely from that test.
+- HOMING passes literally if each behavior bullet says it is covered by a named acceptance criterion such as `AC-SourceBlob-Bounded`.
+- The implementation, schema, and actual SourceBlob behavior can all be absent while the gate remains green.
+
+The opening sentence forbids this outcome, but the two stated “mandatory and reader-checkable” tests do not operationalize that sentence. In particular, HOMING permits a “specific named criterion” without requiring that criterion to be executable or that its evidence artifact be machine-checked.
+
+This is not a defect in the repaired SourceBlob gate itself; it means the claimed phase-wide termination rule remains incomplete.
+
+## Suggestions
+
+Change the semantic rule so each task-owned leg must have a demonstrated causal connection to the deliverable:
+
+- Every counted test must reference or exercise at least one artifact or behavior owned by the task.
+- Removing the named deliverable—or replacing it with a no-op—must make that leg fail.
+- A behavior may be homed to a criterion only when that criterion is executable, or when it requires a named evidence artifact whose existence and relevant content are checked.
+- Trivial “gate exists” tests must not satisfy OWNERSHIP.
+
+For example: “OWNERSHIP requires task-owned tests whose assertions depend on the named deliverable, with the dependency stated in the floor derivation.”
+
+## Risk Assessment
+
+**MEDIUM.** The concrete cycle-6 SourceBlob defect is fixed correctly, and the 27 automated gates retain their established shell and exit-status protections. Risk remains because the new general prohibition can certify future scope-vacuous gates despite satisfying both advertised halves. The scope class is therefore reduced, but not terminated.
+
+---
+
+## Cycle 7 findings
+
+Every check below was run by the orchestrator independently of Codex. Where a check asserts an
+absence, the positive control uses the **identical invocation shape** on a path known to match.
+
+### Verified clean
+
+- **H3's fix is real, not cosmetic** (`01-10:446` leg 1). The atom `TestUIServiceSourceBlob`
+  appears in exactly two plan files: `01-10-PLAN.md` (11 occurrences — the pattern, the five
+  function names, the derivation) and `01-11-PLAN.md` (1 occurrence, a floor derivation that
+  credits 01-10's tests inside a package sweep). **No other plan declares a matching test, and
+  01-09 declares none.** `rg -n 'TestUIServiceSourceBlob' --glob '*.go' .` returns nothing
+  (exit 1), positive-controlled by `rg -c 'func Test' --glob '*.go' .` on the same shape
+  returning hits; `internal/uiserver` does not exist in the tree yet. Leg 1's floor is therefore
+  unreachable without the deliverable.
+- **Leg 1's arithmetic is exact.** Four single functions = 4 `--- PASS` lines;
+  `TestUIServiceSourceBlobOnEveryAttachmentPoint` = 1 parent + 2 subtests = 3. Total **7**
+  against `-ge 7`. Zero headroom in the direction that matters: dropping, renaming or omitting
+  any one of the five turns the leg red. A `-run` pattern matching nothing yields 0 and fails
+  the floor even though `go test` exits 0.
+- **The sixth prohibition is present verbatim in 11/11 plans.**
+- **Shape did not regress.** All 27 `<automated>` gates were extracted and run through `sh -n`:
+  **27/27 clean**, positive-controlled against a deliberately unbalanced gate which `sh -n`
+  correctly rejects. All 26 gates that invoke `go test` carry an explicit `STATUS -eq 0`
+  conjunct (no gate has fewer than two `-eq 0` clauses); **zero** gates use `-ne 0`, which is
+  consistent with D-04's one exception living in recorded mutation observations rather than in
+  an automated gate.
+- **9/9 `git status --porcelain` uses are guarded.** Both multi-pathspec cases guard *every*
+  pathspec, not just the first: `01-07:309` carries `test -d internal/schema && test -d
+  internal/uiproto &&`, and `01-08:276` carries `test -d internal/uiproto && test -d
+  internal/schema &&`.
+- **`-run` atom census reconciles.** Every atom across the 25 `-run`-bearing gates resolves to a
+  declaring plan — **0 unresolved atoms**. Exactly **3** legs span plans, matching cycle 6's
+  census: `01-05:424` (01-02's `TestGoldensMatchLiveEngineOutput$`), `01-10:446` leg 2 (01-09's
+  `TestUIServiceNodeDetail|TestUIServiceExplore`), and `01-11:307` (01-09's
+  `TestUIProtoFieldNumbersAreStableAndUnique` alongside four own atoms). Each carries a written
+  justification.
+- **M5 is load-bearing** (`01-06:401`). Floor raised 9 → 15 against a derived total of 17
+  (16 if the `--object-format=sha256` subtest skips). Without `TestIndexRunStampsHeadCommitSHA`
+  the total is 14 — below the floor, so the gate goes red. At the old floor of 9 the new test
+  would have been pure headroom, which is exactly the shape the new prohibition forbids.
+- **M1 is fixed** (`01-03:302-303`): `PB=$(git merge-base HEAD main); git diff -U0 "$PB"..HEAD`
+  with declaration-anchored patterns. The remaining unranged `git diff --stat` occurrences
+  (`01-02:372`, `01-05:387`, `01-07:285` and their SUMMARY criteria) are *presence*
+  confirmations that a deliberate mutation was applied — the opposite of the emptiness assertion
+  the prohibition bans, and a correct use.
+- **L3's three absence assertions each carry an executable same-invocation control**
+  (`01-01:305`, `01-05:279`, `01-10:361`), as do the additional pairs at `01-02:278-279` and
+  `01-04:331-332`.
+- **Self-invalidation holds.** The 27 gates contain only three distinct `rg -o -e` patterns:
+  `'--- PASS'`, `'[0-9]+'` and `'compared [0-9]+ generated files'`. None is an absence gate and
+  none reads `.planning/` — every comment-stripped grep in the phase targets Go source under
+  `internal/`/`testdata/` or `task proto:drift` output.
+- **Golden verification targets `./testdata/golden/` explicitly** in both gates that run it
+  (`01-02:398`, `01-05:424`), never `./...` — which matters, because the go tool ignores
+  `testdata` directories (see M-7-2 below).
+- **Invariants.** `<threat_model>` and `## Artifacts this phase produces` in 11/11.
+  Frontmatter strict-parses in 11/11 under Ruby `YAML.safe_load` with `Date`/`Time` permitted,
+  positive-controlled against deliberately malformed YAML (`Psych::SyntaxError`). 88
+  `files_modified` entries; **zero same-wave file-ownership overlap** (wave 6 has 01-10 as its
+  sole occupant, so the new `sourceblob_test.go` collides with nothing). Waves 1→7 acyclic —
+  every `depends_on` points to a strictly lower wave. 12/12 requirement IDs
+  (BLD-04, ENG-01, ENG-02, ENG-04, FIX-01, RPC-01, RPC-02, RPC-05, SRV-01..04). Probe ledger
+  reconciles at **21**: 15 `edge)`-tagged truths + 6 flagged assumptions
+  (01-01 ×3, 01-03, 01-06, 01-07), with exactly one flat-scalar `verification:` key in the
+  entire phase (`01-01:49`, the BLD-04 backstop).
+
+### H-7-1 (HIGH) — the semantic prohibition's two halves do not operationalize its own headline
+
+The prohibition opens with the correct rule — *"Never write a gate whose floor can be met
+without the deliverable it names existing"* — then offers two "mandatory and both checkable"
+halves. Neither half, as written, entails the headline.
+
+**(a) OWNERSHIP** constrains *who declares the counted tests*, not *what those tests assert*. It
+is satisfied by any leg whose pattern matches only tests the task declares, regardless of
+whether those tests touch the deliverable.
+
+**(b) HOMING** offers an explicit escape: a bullet may be homed by "the derivation states in
+writing that the bullet is covered by a **specific named criterion**". Nothing requires that
+criterion to be executable, or to appear in any `<automated>` gate.
+
+Counterexample satisfying both halves literally while remaining scope-vacuous — a task declares
+one trivial own test:
+
+```go
+func TestTaskGateExists(t *testing.T) { if 1+1 != 2 { t.Fatal("impossible") } }
+```
+
+```sh
+OUT=$(go test -v -count=1 -run '^TestTaskGateExists$' ./internal/example 2>&1); STATUS=$?
+COUNT=$(printf '%s\n' "$OUT" | rg -o -e '--- PASS' | wc -l | tr -d ' ')
+[ "$STATUS" -eq 0 ] && [ "$COUNT" -ge 1 ]
+```
+
+OWNERSHIP passes (the pattern matches only a test this task declares; the floor derives from
+that leg alone). HOMING passes (every behavior bullet is declared "covered by criterion
+AC-Foo-Bounded"). The production deliverable, the schema change and the asserted behavior can
+all be absent and the gate is green. Codex reached this counterexample independently.
+
+This is not a defect in the repaired `01-10` gate — that one is correct — but the *general* rule
+the phase now carries does not close the class it claims to close. The missing clause is a
+**causal** one: the counted tests' assertions must depend on the named deliverable, such that
+replacing the deliverable with a no-op turns the leg red; and a bullet may be homed to a
+criterion only when that criterion is itself executed by an `<automated>` gate.
+
+**Suggested amendment** to half (a), as one sentence: *"…and the floor derivation must state
+which named artifact of this task each counted test depends on, such that replacing that
+artifact with a no-op turns the leg red; a test that would still pass with the task's artifacts
+absent does not satisfy OWNERSHIP."* And to half (b): *"…a named criterion qualifies as a home
+only if that criterion's command appears in this task's `<automated>` gate."*
+
+### M-7-1 (MEDIUM) — `01-05:424` has no own-only leg, which half (a) does not actually permit
+
+Half (a) requires that **every** gate carry at least one leg matching only tests the task itself
+declares. `01-05`'s third gate has no such leg: the task declares no test functions at all, and
+its single `-run` atom is plan 01-02's `TestGoldensMatchLiveEngineOutput$`. The plan is candid
+about this (`01-05:428` — *"This task declares no test of its own"*) and invokes half (a)'s
+exception clause, but that clause covers a pattern that **also** matches inherited tests, not
+one that matches **only** inherited tests. There is no exception for a task with no tests.
+
+The practical consequence is real: on an untouched tree, `test -d internal/query && porcelain
+clean && goldens pass` is already true, so the executable gate is green before the task starts.
+The evidence that discriminates — non-zero `--- FAIL` counts from the two deliberate mutations —
+lives only in `<acceptance_criteria>` prose destined for the SUMMARY.
+
+**Change needed in PLAN.md:** either widen half (a) to name the sanctioned non-test evidence form
+for a mutation-observation task (recorded `--- FAIL` counts with a stated zero-is-a-stop-condition
+rule), or give `01-05` Task 3 an executable leg that cannot pass before the mutations were
+performed. As written, the phase's own sixth prohibition is violated by one of its own gates.
+
+### M-7-2 (MEDIUM) — `01-02`'s bullet 3 is homed to a criterion no gate executes, and `go build ./...` cannot cover it
+
+`01-02:276` homes Task 1's third behavior bullet (*"`gocapture` still builds and runs after the
+move"*) to the acceptance criterion at `01-02:284`: *"`go run ./testdata/golden/gocapture`
+builds and its usage/entry path executes without a compile error."* That criterion appears in no
+`<automated>` gate — `rg -l 'gocapture' ` over all 27 extracted gates returns nothing,
+positive-controlled by `rg -c 'go build'` over the same directory returning hits.
+
+The gate's `go build ./...` does not cover it either: **the go tool ignores directories named
+`testdata` when expanding `...`**. Verified on this repo, not assumed —
+`go list ./... | rg 'testdata'` exits 1 while the identical-shape control
+`go list ./... | rg 'internal/query'` returns `github.com/seanb4t/codegraph-go/internal/query`,
+and `go list ./testdata/golden/...` does list `.../testdata/golden/gocapture`.
+
+So the bullet's claimed "executable owner" is executed by nothing, which is H-7-1's prose-homing
+escape realized in-plan rather than hypothetically. The `01-02` case is benign in effect (a
+compile break would surface at Task 2's `go test ./testdata/golden/`), but it is the exact
+mechanism H3 was.
+
+**Change needed in PLAN.md:** add `go build ./testdata/golden/gocapture/` to the `01-02:271`
+gate, ahead of the existing `go vet`, so the bullet's home is executed by the gate that scores
+the task.
+
+### L-7-1 (LOW, not actionable) — homing-label bookkeeping
+
+The literal label `**Behavior-bullet homes.**` appears 20 times against 21 `<behavior>` blocks.
+The gap is `01-08` Task 3, which carries its homing and its ownership statement **inline inside
+the floor derivation** (`01-08:344`: *"…which are the behavior block's remaining three bullets,
+so none is orphaned — bullet 1 is the four per-rpc subtests… **Ownership:** the single atom
+matches exactly one test function and THIS task declares it"*). It is substantively compliant;
+only a mechanical label-counter would see a gap. `01-07` correctly has none — it has zero
+`<behavior>` blocks. No plan change needed.
+
+### Source-grounding pass
+
+Codex's review cites `file:line` evidence throughout and is not marked
+`[reviewed-without-repo-access]` or `[reviewed-without-source-citations]`.
+
+### Verification coverage
+
+`drift-guard authority` resolves to `intel`, but `.planning/intel/API-SURFACE.md` reports
+`symbolCount: 0` on this Go repository — the extractor is regex/JS-only, so every symbol would
+grade UNCHECKABLE → INFO and nothing would hard-block. **The empty intel map was therefore not
+treated as evidence of absence.** Every citation below was resolved by reading source.
+
+| Class | Count | Method | Result |
+|---|---|---|---|
+| Files cited in `<read_first>` blocks | 45 | filesystem existence | 32 present; 13 absent, **all 13 declared under a plan's "Artifacts this phase produces"** (`internal/uiserver/*`, `internal/uiproto/*`, `internal/goldenspec/spec.go`, `internal/query/detail.go`, `internal/query/errors.go`, `internal/schema/meta_commit_test.go`, `internal/jsonrpc2/conn.go`) — **0 unexplained** |
+| Go identifiers cited in `<read_first>` | 165 | `rg --glob '*.go'`, positive-controlled on `OpenAt` | 130 resolve directly in-tree; 35 did not, and all 35 classify as phase-produced or external (below) — **0 unresolved** |
+| External: `connect.WithReadMaxBytes`, `WithSendMaxBytes`, `CodeUnavailable` | 3 | module cache `connectrpc.com/connect@v1.20.0` | `option.go:257`, `option.go:269`, `code.go:96` — all present. `connectrpc.com/connect` is not yet in `go.mod`; plan 01-01 adds it and `01-01:511` requires the verified signatures be recorded in its SUMMARY |
+| External: `http.Protocols`, `(*Protocols).SetUnencryptedHTTP2` | 2 | Go 1.26.7 stdlib | `net/http/http.go:30` and `net/http/http.go:56` — present, so the h2c mechanism needs no `x/net` dependency |
+| Declared test-function names across all 11 plans | 87 | cross-plan ownership map | every `-run` atom in every gate maps to a declaring plan — **0 unresolved atoms** |
+| Repo traps avoided | — | — | `.proto` snake_case vs generated Go camelCase never treated as drift; every zero-result assertion above carries a control using the **identical** invocation shape on a path known to match |
+
+## Consensus Summary
+
+Both the orchestrator's independent pass and Codex reach the same verdict, and both reach the
+same single HIGH by independent construction.
+
+### Agreed Strengths
+
+- `01-10:446` leg 1 is genuinely zero-headroom and genuinely own-only. H3 is closed at the root:
+  five named functions, a new dedicated test file in `<files>`/`files_modified`/`must_haves.artifacts`,
+  and a floor equal to the exact derived count. Both reviewers reached 4 + 3 = 7 independently.
+- All 27 gates remain `sh -n`-clean and status-honoring; 9/9 porcelain guards intact; the five
+  shape prohibitions from cycle 4 all still hold. Fixing scope did **not** regress shape.
+- The three cross-plan legs are honestly declared, and the inherited-regression leg at
+  `01-10:446` leg 2 explicitly disclaims any ownership of this task's deliverable, so it can no
+  longer subsidize leg 1.
+
+### Agreed Concerns
+
+- **HIGH — the general rule is under-specified (H-7-1).** OWNERSHIP constrains who *declares* the
+  counted tests, not what they *assert*; HOMING accepts a non-executable "named criterion". A
+  trivial task-owned test plus prose homing satisfies both halves literally while the deliverable
+  is entirely absent. **The known instance is fixed; the class is reduced, not terminated.**
+
+### Divergent Views
+
+None on substance. The orchestrator additionally raises two MEDIUMs that Codex did not reach —
+`M-7-1` (a gate in `01-05` that half (a) does not actually permit) and `M-7-2` (a bullet homed to
+a criterion no gate executes, where `go build ./...` cannot cover it because the go tool ignores
+`testdata`). Both are instances of H-7-1's mechanism appearing inside the phase rather than
+hypothetically, which strengthens rather than contradicts the shared verdict.
+
+### Risk Assessment
+
+**MEDIUM.** The concrete cycle-6 deliverable is correct and every structural invariant holds.
+Residual risk is confined to the generality of the new prohibition: as written it can certify a
+future scope-vacuous gate, and two in-phase gates already sit in the gap it leaves.
