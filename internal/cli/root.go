@@ -9,7 +9,10 @@
 // githooks (phase 05) manages marker-fenced git sync hooks, and man
 // (Phase 3 D-01/D-02) is the hidden man-page generator the Homebrew
 // cask's post-install hook invokes — both are documented Go-only
-// surface extensions.
+// surface extensions. ui (Phase 1 SRV-01) runs a local, read-only
+// Connect RPC server (internal/uiserver) over the repository's own
+// index, foreground until Ctrl-C like serve/daemon start, sharing
+// neither's lifecycle.
 package cli
 
 import (
@@ -55,7 +58,7 @@ func newRootCmd() *cobra.Command {
 		newNodeCmd(), newExploreCmd(), newServeCmd(), newSyncCmd(),
 		newDaemonCmd(), newUnlockCmd(), newVersionCmd(), newTelemetryCmd(),
 		newUpgradeCmd(), newInstallCmd(), newUninstallCmd(),
-		newGithooksCmd(), newManCmd())
+		newGithooksCmd(), newManCmd(), newUiCmd())
 	return root
 }
 
