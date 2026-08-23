@@ -220,3 +220,95 @@ func (s *uiService) Search(ctx context.Context, req *connect.Request[uiv1.Search
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// fileEntryToProto maps internal/query.FileEntry onto uiv1.FileEntry
+// field-for-field.
+func fileEntryToProto(e query.FileEntry) *uiv1.FileEntry {
+	return &uiv1.FileEntry{
+		Path:      e.Path,
+		Language:  e.Language,
+		NodeCount: e.NodeCount,
+		EdgeCount: e.EdgeCount,
+	}
+}
+
+// fileEntriesToProto maps a slice of internal/query.FileEntry onto their
+// uiv1.FileEntry wire projections, preserving order.
+func fileEntriesToProto(entries []query.FileEntry) []*uiv1.FileEntry {
+	out := make([]*uiv1.FileEntry, len(entries))
+	for i, e := range entries {
+		out[i] = fileEntryToProto(e)
+	}
+	return out
+}
+
+// fileTreeNodeToProto recursively maps internal/query.FileTreeNode onto
+// its uiv1.FileTreeNode wire projection, preserving the directory/leaf
+// asymmetry (a directory carries children and no path/language; a leaf
+// carries path/language and no children) exactly as the Go type already
+// does — this mapper introduces no depth limit of its own: the Engine's
+// own validateFilesDepth already bounds how deep a tree Files can ever
+// return, so a second limit here would be dead code, not a safety net.
+func fileTreeNodeToProto(n *query.FileTreeNode) *uiv1.FileTreeNode {
+	if n == nil {
+		return nil
+	}
+	out := &uiv1.FileTreeNode{
+		Name:     n.Name,
+		IsDir:    n.IsDir,
+		Path:     n.Path,
+		Language: n.Language,
+	}
+	if len(n.Children) > 0 {
+		out.Children = make([]*uiv1.FileTreeNode, len(n.Children))
+		for i, c := range n.Children {
+			out.Children[i] = fileTreeNodeToProto(c)
+		}
+	}
+	return out
+}
+
+// fileTreeToProto maps a slice of internal/query.FileTreeNode (a tree
+// level, starting at the root's children) onto their wire projections.
+func fileTreeToProto(nodes []*query.FileTreeNode) []*uiv1.FileTreeNode {
+	out := make([]*uiv1.FileTreeNode, len(nodes))
+	for i, n := range nodes {
+		out[i] = fileTreeNodeToProto(n)
+	}
+	return out
+}
+
+// Files answers internal/query.Engine.Files' union result over the wire,
+// preserving BOTH possible shapes rather than flattening them: a "flat"
+// FilesResult populates only FilesResponse.files, a "tree" FilesResult
+// populates only FilesResponse.tree, and format names which one a client
+// should read — the same union contract internal/query/files.go's
+// FilesResult already documents, carried onto the wire unchanged.
+// pattern/filter/dir/depth/format pass straight through: Engine.Files'
+// own validateFilesDepth and format rejection already bound them for
+// every caller.
+func (s *uiService) Files(ctx context.Context, req *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error) {
+	var resp *uiv1.FilesResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.Files(query.FilesOptions{
+			Pattern: req.Msg.GetPattern(),
+			Filter:  req.Msg.GetFilter(),
+			Dir:     req.Msg.GetDir(),
+			Depth:   int(req.Msg.GetDepth()),
+			Format:  req.Msg.GetFormat(),
+		})
+		if err != nil {
+			return err
+		}
+		resp = &uiv1.FilesResponse{
+			Format: result.Format,
+			Files:  fileEntriesToProto(result.Files),
+			Tree:   fileTreeToProto(result.Tree),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}

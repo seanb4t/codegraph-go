@@ -60,12 +60,15 @@ const (
 	UIServiceGetStatusProcedure = "/codegraph.ui.v1.UIService/GetStatus"
 	// UIServiceSearchProcedure is the fully-qualified name of the UIService's Search RPC.
 	UIServiceSearchProcedure = "/codegraph.ui.v1.UIService/Search"
+	// UIServiceFilesProcedure is the fully-qualified name of the UIService's Files RPC.
+	UIServiceFilesProcedure = "/codegraph.ui.v1.UIService/Files"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
 type UIServiceClient interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
 	Search(context.Context, *connect.Request[uiv1.SearchRequest]) (*connect.Response[uiv1.SearchResponse], error)
+	Files(context.Context, *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -91,6 +94,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("Search")),
 			connect.WithClientOptions(opts...),
 		),
+		files: connect.NewClient[uiv1.FilesRequest, uiv1.FilesResponse](
+			httpClient,
+			baseURL+UIServiceFilesProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("Files")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -98,6 +107,7 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 type uIServiceClient struct {
 	getStatus *connect.Client[uiv1.GetStatusRequest, uiv1.GetStatusResponse]
 	search    *connect.Client[uiv1.SearchRequest, uiv1.SearchResponse]
+	files     *connect.Client[uiv1.FilesRequest, uiv1.FilesResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -110,10 +120,16 @@ func (c *uIServiceClient) Search(ctx context.Context, req *connect.Request[uiv1.
 	return c.search.CallUnary(ctx, req)
 }
 
+// Files calls codegraph.ui.v1.UIService.Files.
+func (c *uIServiceClient) Files(ctx context.Context, req *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error) {
+	return c.files.CallUnary(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
 	Search(context.Context, *connect.Request[uiv1.SearchRequest]) (*connect.Response[uiv1.SearchResponse], error)
+	Files(context.Context, *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -135,12 +151,20 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("Search")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceFilesHandler := connect.NewUnaryHandler(
+		UIServiceFilesProcedure,
+		svc.Files,
+		connect.WithSchema(uIServiceMethods.ByName("Files")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
 			uIServiceGetStatusHandler.ServeHTTP(w, r)
 		case UIServiceSearchProcedure:
 			uIServiceSearchHandler.ServeHTTP(w, r)
+		case UIServiceFilesProcedure:
+			uIServiceFilesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -156,4 +180,8 @@ func (UnimplementedUIServiceHandler) GetStatus(context.Context, *connect.Request
 
 func (UnimplementedUIServiceHandler) Search(context.Context, *connect.Request[uiv1.SearchRequest]) (*connect.Response[uiv1.SearchResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Search is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) Files(context.Context, *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Files is not implemented"))
 }

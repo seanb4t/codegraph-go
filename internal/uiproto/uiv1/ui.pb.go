@@ -572,6 +572,308 @@ func (x *SearchResponse) GetLocations() []*Location {
 	return nil
 }
 
+// FileEntry is the wire projection of internal/query.FileEntry: one
+// browsed file's identity plus its stored aggregate symbol/edge counts.
+type FileEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Language      string                 `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
+	NodeCount     int64                  `protobuf:"varint,3,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	EdgeCount     int64                  `protobuf:"varint,4,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileEntry) Reset() {
+	*x = FileEntry{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileEntry) ProtoMessage() {}
+
+func (x *FileEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileEntry.ProtoReflect.Descriptor instead.
+func (*FileEntry) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FileEntry) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FileEntry) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *FileEntry) GetNodeCount() int64 {
+	if x != nil {
+		return x.NodeCount
+	}
+	return 0
+}
+
+func (x *FileEntry) GetEdgeCount() int64 {
+	if x != nil {
+		return x.EdgeCount
+	}
+	return 0
+}
+
+// FileTreeNode is the wire projection of internal/query.FileTreeNode —
+// one node of the "tree" format's nested directory projection. A
+// directory node carries name, is_dir=true, and children, and NO path or
+// language; a leaf (file) node carries name, is_dir=false, path and
+// language, and NO children. A client that assumes every node carries a
+// path will break on the first directory — this asymmetry is the wire
+// shape's defining property, not an omission.
+type FileTreeNode struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	IsDir         bool                   `protobuf:"varint,2,opt,name=is_dir,json=isDir,proto3" json:"is_dir,omitempty"`
+	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	Language      string                 `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	Children      []*FileTreeNode        `protobuf:"bytes,5,rep,name=children,proto3" json:"children,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileTreeNode) Reset() {
+	*x = FileTreeNode{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileTreeNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileTreeNode) ProtoMessage() {}
+
+func (x *FileTreeNode) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileTreeNode.ProtoReflect.Descriptor instead.
+func (*FileTreeNode) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *FileTreeNode) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FileTreeNode) GetIsDir() bool {
+	if x != nil {
+		return x.IsDir
+	}
+	return false
+}
+
+func (x *FileTreeNode) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FileTreeNode) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *FileTreeNode) GetChildren() []*FileTreeNode {
+	if x != nil {
+		return x.Children
+	}
+	return nil
+}
+
+// FilesRequest carries internal/query.FilesOptions' fields unchanged.
+// depth and format are passed straight through: Engine.Files' own
+// validateFilesDepth and format rejection already bound them
+// server-side for every caller, so this rpc adds no second copy of
+// either rule.
+type FilesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pattern       string                 `protobuf:"bytes,1,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	Filter        string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	Dir           string                 `protobuf:"bytes,3,opt,name=dir,proto3" json:"dir,omitempty"`
+	Depth         int32                  `protobuf:"varint,4,opt,name=depth,proto3" json:"depth,omitempty"`
+	Format        string                 `protobuf:"bytes,5,opt,name=format,proto3" json:"format,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FilesRequest) Reset() {
+	*x = FilesRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FilesRequest) ProtoMessage() {}
+
+func (x *FilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FilesRequest.ProtoReflect.Descriptor instead.
+func (*FilesRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *FilesRequest) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *FilesRequest) GetFilter() string {
+	if x != nil {
+		return x.Filter
+	}
+	return ""
+}
+
+func (x *FilesRequest) GetDir() string {
+	if x != nil {
+		return x.Dir
+	}
+	return ""
+}
+
+func (x *FilesRequest) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
+func (x *FilesRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+// FilesResponse is the wire projection of internal/query.FilesResult — a
+// UNION, not two independent collections: format selects which ONE of
+// files (the "flat" format) or tree (the "tree" format) is populated: a
+// "flat" response carries a populated files and an EMPTY tree; a "tree"
+// response carries a populated tree and an EMPTY files. A client must
+// read format before deciding which field to render, exactly as
+// internal/query/files.go's own FilesResult contract already requires
+// its CLI/MCP callers to do.
+type FilesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Format        string                 `protobuf:"bytes,1,opt,name=format,proto3" json:"format,omitempty"`
+	Files         []*FileEntry           `protobuf:"bytes,2,rep,name=files,proto3" json:"files,omitempty"`
+	Tree          []*FileTreeNode        `protobuf:"bytes,3,rep,name=tree,proto3" json:"tree,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FilesResponse) Reset() {
+	*x = FilesResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FilesResponse) ProtoMessage() {}
+
+func (x *FilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FilesResponse.ProtoReflect.Descriptor instead.
+func (*FilesResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *FilesResponse) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
+func (x *FilesResponse) GetFiles() []*FileEntry {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *FilesResponse) GetTree() []*FileTreeNode {
+	if x != nil {
+		return x.Tree
+	}
+	return nil
+}
+
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
 // path (D-14) attaches to a CodeUnavailable response when the graph
 // store stays locked past graphstore.Open's retry budget. Reserved by
@@ -592,7 +894,7 @@ type IndexingInProgress struct {
 
 func (x *IndexingInProgress) Reset() {
 	*x = IndexingInProgress{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[6]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -604,7 +906,7 @@ func (x *IndexingInProgress) String() string {
 func (*IndexingInProgress) ProtoMessage() {}
 
 func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[6]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -617,7 +919,7 @@ func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexingInProgress.ProtoReflect.Descriptor instead.
 func (*IndexingInProgress) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{6}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *IndexingInProgress) GetMessage() string {
@@ -679,12 +981,36 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\x05R\x05limit\"I\n" +
 	"\x0eSearchResponse\x127\n" +
-	"\tlocations\x18\x01 \x03(\v2\x19.codegraph.ui.v1.LocationR\tlocations\".\n" +
+	"\tlocations\x18\x01 \x03(\v2\x19.codegraph.ui.v1.LocationR\tlocations\"y\n" +
+	"\tFileEntry\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\x12\x1d\n" +
+	"\n" +
+	"node_count\x18\x03 \x01(\x03R\tnodeCount\x12\x1d\n" +
+	"\n" +
+	"edge_count\x18\x04 \x01(\x03R\tedgeCount\"\xa4\x01\n" +
+	"\fFileTreeNode\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x15\n" +
+	"\x06is_dir\x18\x02 \x01(\bR\x05isDir\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12\x1a\n" +
+	"\blanguage\x18\x04 \x01(\tR\blanguage\x129\n" +
+	"\bchildren\x18\x05 \x03(\v2\x1d.codegraph.ui.v1.FileTreeNodeR\bchildren\"\x80\x01\n" +
+	"\fFilesRequest\x12\x18\n" +
+	"\apattern\x18\x01 \x01(\tR\apattern\x12\x16\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\x12\x10\n" +
+	"\x03dir\x18\x03 \x01(\tR\x03dir\x12\x14\n" +
+	"\x05depth\x18\x04 \x01(\x05R\x05depth\x12\x16\n" +
+	"\x06format\x18\x05 \x01(\tR\x06format\"\x8c\x01\n" +
+	"\rFilesResponse\x12\x16\n" +
+	"\x06format\x18\x01 \x01(\tR\x06format\x120\n" +
+	"\x05files\x18\x02 \x03(\v2\x1a.codegraph.ui.v1.FileEntryR\x05files\x121\n" +
+	"\x04tree\x18\x03 \x03(\v2\x1d.codegraph.ui.v1.FileTreeNodeR\x04tree\".\n" +
 	"\x12IndexingInProgress\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2\xaa\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2\xf2\x01\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
-	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
+	"\x05Files\x12\x1d.codegraph.ui.v1.FilesRequest\x1a\x1e.codegraph.ui.v1.FilesResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -698,7 +1024,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 	return file_internal_uiproto_uiv1_ui_proto_rawDescData
 }
 
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*Node)(nil),               // 0: codegraph.ui.v1.Node
 	(*Location)(nil),           // 1: codegraph.ui.v1.Location
@@ -706,19 +1032,28 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*GetStatusResponse)(nil),  // 3: codegraph.ui.v1.GetStatusResponse
 	(*SearchRequest)(nil),      // 4: codegraph.ui.v1.SearchRequest
 	(*SearchResponse)(nil),     // 5: codegraph.ui.v1.SearchResponse
-	(*IndexingInProgress)(nil), // 6: codegraph.ui.v1.IndexingInProgress
+	(*FileEntry)(nil),          // 6: codegraph.ui.v1.FileEntry
+	(*FileTreeNode)(nil),       // 7: codegraph.ui.v1.FileTreeNode
+	(*FilesRequest)(nil),       // 8: codegraph.ui.v1.FilesRequest
+	(*FilesResponse)(nil),      // 9: codegraph.ui.v1.FilesResponse
+	(*IndexingInProgress)(nil), // 10: codegraph.ui.v1.IndexingInProgress
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	1, // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
-	2, // 1: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	4, // 2: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	3, // 3: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	5, // 4: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	7, // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
+	6, // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
+	7, // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
+	2, // 4: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	4, // 5: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	8, // 6: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	3, // 7: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	5, // 8: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	9, // 9: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -732,7 +1067,7 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

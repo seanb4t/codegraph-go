@@ -272,3 +272,160 @@ func TestUIServiceOpensThroughTheSingleSeam(t *testing.T) {
 		t.Fatalf("openEngine invoked %d times for one GetStatus call, want exactly 1", got)
 	}
 }
+
+// findFileTreeChild returns the child of nodes named name, or nil.
+func findFileTreeChild(nodes []*uiv1.FileTreeNode, name string) *uiv1.FileTreeNode {
+	for _, n := range nodes {
+		if n.GetName() == name {
+			return n
+		}
+	}
+	return nil
+}
+
+// TestUIServiceFilesPreservesBothFormats proves FilesResult's union
+// contract survives the wire: a flat request returns a populated entry
+// list and an EMPTY tree; a tree request returns a populated tree and an
+// EMPTY entry list; both compared against an independently-computed
+// Engine.Files call for the same options. The third subtest walks the
+// tree at least two levels deep and asserts a directory node carries
+// children and no path while a leaf carries a path and language and no
+// children — FileTreeNode's documented asymmetry.
+func TestUIServiceFilesPreservesBothFormats(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	// openIndependentEngine opens/computes/closes its own Engine per call
+	// rather than sharing one held open across subtests: an Engine held
+	// open for the whole test would lock-contend with each subtest's own
+	// RPC call, which internally opens/closes the SAME store directory
+	// (SRV-04's per-call discipline) — a store-lock failure there would
+	// prove nothing about the union contract this test actually checks.
+	openIndependentEngine := func(t *testing.T, opts query.FilesOptions) query.FilesResult {
+		t.Helper()
+		eng, closer, err := query.OpenAt(dir)
+		if err != nil {
+			t.Fatalf("query.OpenAt (independent verification path): %v", err)
+		}
+		defer closer.Close()
+		result, err := eng.Files(opts)
+		if err != nil {
+			t.Fatalf("eng.Files (independent verification path): %v", err)
+		}
+		return result
+	}
+
+	t.Run("flat", func(t *testing.T) {
+		resp, err := client.Files(context.Background(), connect.NewRequest(&uiv1.FilesRequest{Format: "flat"}))
+		if err != nil {
+			t.Fatalf("Files: %v", err)
+		}
+		want := openIndependentEngine(t, query.FilesOptions{Format: "flat"})
+		if len(want.Files) == 0 {
+			t.Fatal("test fixture assumption broken: eng.Files(flat) returned no entries")
+		}
+		if len(resp.Msg.GetFiles()) != len(want.Files) {
+			t.Fatalf("Files(flat) returned %d entries, want %d (independently computed)", len(resp.Msg.GetFiles()), len(want.Files))
+		}
+		if len(resp.Msg.GetTree()) != 0 {
+			t.Fatalf("Files(flat) tree has %d entries, want 0 (empty for the flat format)", len(resp.Msg.GetTree()))
+		}
+		for i, wantEntry := range want.Files {
+			got := resp.Msg.GetFiles()[i]
+			if got.GetPath() != wantEntry.Path || got.GetLanguage() != wantEntry.Language ||
+				got.GetNodeCount() != wantEntry.NodeCount || got.GetEdgeCount() != wantEntry.EdgeCount {
+				t.Fatalf("Files(flat) entry[%d] = %+v, want %+v", i, got, wantEntry)
+			}
+		}
+	})
+
+	t.Run("tree", func(t *testing.T) {
+		resp, err := client.Files(context.Background(), connect.NewRequest(&uiv1.FilesRequest{Format: "tree"}))
+		if err != nil {
+			t.Fatalf("Files: %v", err)
+		}
+		want := openIndependentEngine(t, query.FilesOptions{Format: "tree"})
+		if len(want.Tree) == 0 {
+			t.Fatal("test fixture assumption broken: eng.Files(tree) returned no tree nodes")
+		}
+		if len(resp.Msg.GetFiles()) != 0 {
+			t.Fatalf("Files(tree) files has %d entries, want 0 (empty for the tree format)", len(resp.Msg.GetFiles()))
+		}
+		if len(resp.Msg.GetTree()) != len(want.Tree) {
+			t.Fatalf("Files(tree) returned %d root nodes, want %d (independently computed)", len(resp.Msg.GetTree()), len(want.Tree))
+		}
+	})
+
+	t.Run("tree-children-round-trip", func(t *testing.T) {
+		resp, err := client.Files(context.Background(), connect.NewRequest(&uiv1.FilesRequest{Format: "tree"}))
+		if err != nil {
+			t.Fatalf("Files: %v", err)
+		}
+		// The gofixture corpus's pkga/pkga.go and pkga/embed.go put a
+		// "pkga" directory at least two levels deep (root -> pkga/ ->
+		// pkga.go): exactly the shape this subtest needs to walk.
+		pkgaDir := findFileTreeChild(resp.Msg.GetTree(), "pkga")
+		if pkgaDir == nil {
+			t.Fatal("test fixture assumption broken: no \"pkga\" directory at tree root")
+		}
+		if !pkgaDir.GetIsDir() {
+			t.Fatalf("pkga node IsDir = false, want true")
+		}
+		if pkgaDir.GetPath() != "" {
+			t.Fatalf("pkga directory node Path = %q, want empty (directories carry no path)", pkgaDir.GetPath())
+		}
+		if len(pkgaDir.GetChildren()) == 0 {
+			t.Fatal("pkga directory node has no children, want at least one file")
+		}
+
+		leaf := findFileTreeChild(pkgaDir.GetChildren(), "pkga.go")
+		if leaf == nil {
+			t.Fatal("test fixture assumption broken: no \"pkga.go\" leaf under the pkga directory")
+		}
+		if leaf.GetIsDir() {
+			t.Fatalf("pkga.go node IsDir = true, want false (a file leaf)")
+		}
+		if leaf.GetPath() == "" {
+			t.Fatal("pkga.go leaf node Path is empty, want a non-empty file path")
+		}
+		if leaf.GetLanguage() == "" {
+			t.Fatal("pkga.go leaf node Language is empty, want a non-empty language")
+		}
+		if len(leaf.GetChildren()) != 0 {
+			t.Fatalf("pkga.go leaf node has %d children, want 0 (leaves carry no children)", len(leaf.GetChildren()))
+		}
+	})
+}
+
+// TestUIServiceFilesRejectsInvalidInput proves Files reflects the
+// Engine's own input rejections as CodeInvalidArgument rather than an
+// empty successful response — the RPC layer adds no second copy of
+// either rule and does not silently swallow a rejection.
+func TestUIServiceFilesRejectsInvalidInput(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	t.Run("invalid-format", func(t *testing.T) {
+		_, err := client.Files(context.Background(), connect.NewRequest(&uiv1.FilesRequest{Format: "not-a-real-format"}))
+		if err == nil {
+			t.Fatal("Files with an unknown format succeeded, want an error")
+		}
+		if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+			t.Fatalf("Files with an unknown format: code = %v, want CodeInvalidArgument", code)
+		}
+	})
+
+	t.Run("depth-above-maximum", func(t *testing.T) {
+		_, err := client.Files(context.Background(), connect.NewRequest(&uiv1.FilesRequest{Depth: int32(query.MaxDepth) + 1}))
+		if err == nil {
+			t.Fatal("Files with depth above the Engine's maximum succeeded, want an error")
+		}
+		if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+			t.Fatalf("Files with depth above the Engine's maximum: code = %v, want CodeInvalidArgument", code)
+		}
+	})
+}

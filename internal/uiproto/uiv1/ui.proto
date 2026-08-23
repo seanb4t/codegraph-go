@@ -38,6 +38,7 @@ option go_package = "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1"
 service UIService {
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
   rpc Search(SearchRequest) returns (SearchResponse);
+  rpc Files(FilesRequest) returns (FilesResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -157,6 +158,57 @@ message SearchRequest {
 // Engine.Search returns them.
 message SearchResponse {
   repeated Location locations = 1;
+}
+
+// FileEntry is the wire projection of internal/query.FileEntry: one
+// browsed file's identity plus its stored aggregate symbol/edge counts.
+message FileEntry {
+  string path = 1;
+  string language = 2;
+  int64 node_count = 3;
+  int64 edge_count = 4;
+}
+
+// FileTreeNode is the wire projection of internal/query.FileTreeNode —
+// one node of the "tree" format's nested directory projection. A
+// directory node carries name, is_dir=true, and children, and NO path or
+// language; a leaf (file) node carries name, is_dir=false, path and
+// language, and NO children. A client that assumes every node carries a
+// path will break on the first directory — this asymmetry is the wire
+// shape's defining property, not an omission.
+message FileTreeNode {
+  string name = 1;
+  bool is_dir = 2;
+  string path = 3;
+  string language = 4;
+  repeated FileTreeNode children = 5;
+}
+
+// FilesRequest carries internal/query.FilesOptions' fields unchanged.
+// depth and format are passed straight through: Engine.Files' own
+// validateFilesDepth and format rejection already bound them
+// server-side for every caller, so this rpc adds no second copy of
+// either rule.
+message FilesRequest {
+  string pattern = 1;
+  string filter = 2;
+  string dir = 3;
+  int32 depth = 4;
+  string format = 5;
+}
+
+// FilesResponse is the wire projection of internal/query.FilesResult — a
+// UNION, not two independent collections: format selects which ONE of
+// files (the "flat" format) or tree (the "tree" format) is populated: a
+// "flat" response carries a populated files and an EMPTY tree; a "tree"
+// response carries a populated tree and an EMPTY files. A client must
+// read format before deciding which field to render, exactly as
+// internal/query/files.go's own FilesResult contract already requires
+// its CLI/MCP callers to do.
+message FilesResponse {
+  string format = 1;
+  repeated FileEntry files = 2;
+  repeated FileTreeNode tree = 3;
 }
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
