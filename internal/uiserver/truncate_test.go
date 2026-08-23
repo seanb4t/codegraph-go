@@ -296,3 +296,52 @@ func TestExploreGroupsBoundTheirAggregateSourceBudget(t *testing.T) {
 		}
 	}
 }
+
+// TestExploreGroupDistinguishesAMissingSourceFromAnEmptyFile proves
+// WR-07's fix: a group whose path is absent from the Sources map carries
+// an UNSET source, while a group whose path maps to a genuinely empty
+// file carries a POPULATED, zero-valued blob. Before the fix both
+// rendered as the same wire value — truncateSource(nil) and
+// truncateSource([]byte{}) are identical — so a client had no way to
+// tell "source unavailable" from "file is empty".
+//
+// The empty-file half is the assertion that keeps this honest: a fix that
+// simply dropped every zero-length blob would satisfy the miss case and
+// fail here.
+func TestExploreGroupDistinguishesAMissingSourceFromAnEmptyFile(t *testing.T) {
+	groups := []query.ExploreFileGroup{
+		{Path: "pkg/present.go"},
+		{Path: "pkg/empty.go"},
+		{Path: "pkg/missing.go"},
+	}
+	sources := map[string][]byte{
+		"pkg/present.go": []byte("package pkg\n"),
+		"pkg/empty.go":   {},
+		// pkg/missing.go is deliberately absent.
+	}
+
+	out := exploreGroupsToProto(groups, map[string]bool{}, sources)
+	if len(out) != len(groups) {
+		t.Fatalf("exploreGroupsToProto returned %d groups, want %d", len(out), len(groups))
+	}
+
+	present := out[0]
+	if present.Source == nil {
+		t.Fatal("group with a real source: source is UNSET, want a populated blob")
+	}
+	if !bytes.Equal(present.Source.GetContent(), sources["pkg/present.go"]) {
+		t.Fatalf("group with a real source: content = %q, want %q", present.Source.GetContent(), sources["pkg/present.go"])
+	}
+
+	empty := out[1]
+	if empty.Source == nil {
+		t.Fatal("group whose file is genuinely EMPTY: source is UNSET, want a populated zero-valued blob — an empty file is a known, readable source, not a missing one")
+	}
+	if len(empty.Source.GetContent()) != 0 || empty.Source.GetTotalBytes() != 0 || empty.Source.GetTruncated() {
+		t.Fatalf("group whose file is empty: source = %v, want an empty, non-truncated, zero-total blob", empty.Source)
+	}
+
+	if missing := out[2]; missing.Source != nil {
+		t.Fatalf("group ABSENT from the Sources map: source = %v, want UNSET — an unchecked map read renders it identically to the empty file above", missing.Source)
+	}
+}

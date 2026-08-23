@@ -771,8 +771,20 @@ func exploreGroupToProto(g query.ExploreFileGroup, skeletonFiles map[string]bool
 		Symbols:      nodesToProto(g.Symbols),
 		Skeletonized: skeletonFiles[g.Path],
 	}
-	if attachSource {
-		out.Source = sourceBlobToProto(truncateSource(sources[g.Path]))
+	// WR-07: the map read is comma-ok, and a MISS leaves source UNSET.
+	// truncateSource(nil) returns a zero-valued blob — no content, not
+	// truncated, zero totals — which is byte-for-byte the same wire value
+	// as a genuinely EMPTY file, so an unchecked read would render
+	// "source unavailable" and "this file is empty" identically with no
+	// way for a client to tell them apart. The invariant that today makes
+	// a miss impossible (buildExploreResult populates Sources for every
+	// group) lives in a different package from this code, so it is
+	// checked here rather than assumed: any future change making Sources
+	// sparse — a per-file size cap, a skeletonized-file skip, a
+	// partial-failure mode — surfaces as an unset blob rather than
+	// silently emptying every affected file in the UI.
+	if src, ok := sources[g.Path]; attachSource && ok {
+		out.Source = sourceBlobToProto(truncateSource(src))
 	}
 	return out
 }
