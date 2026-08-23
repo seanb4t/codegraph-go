@@ -9,3 +9,11 @@
 version: v2
 modules:
   - path: .
+    excludes:
+      # Agent worktrees under .claude/worktrees/ each contain a FULL copy of
+      # this repo, including its own internal/schema/graph.proto. Without this
+      # exclude, buf's module discovery pulls both copies into one module and
+      # fails with "`Node` declared multiple times" — breaking `task proto:gen`
+      # and `task proto:drift` whenever any agent worktree exists, which is the
+      # normal state during parallel plan execution. Found during 01-07.
+      - .claude/worktrees
