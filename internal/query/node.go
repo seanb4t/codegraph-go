@@ -298,62 +298,42 @@ func (e *Engine) resolveNodeForDetail(symbol, file string) (*schema.Node, error)
 // Node renders symbol detail (QRY-02, D-05b) when symbol is non-empty, or
 // a line-numbered verbatim file read when symbol is empty and file is
 // given. file additionally disambiguates symbol when both are supplied.
-// line is an optional NODE-03 narrowing hint (RESEARCH §9); a nil line
-// with a non-empty file tries resolveNodeForDetail's existing exact-match
-// single-winner behavior FIRST and returns immediately on success, so
-// every pre-CR-02 exact-match caller — the CLI's `-f`/`--file` flag used
-// without `--line`, and any existing golden fixture — gets byte-for-byte
-// identical output (NODE-04). When symbol is given without file, or when
-// the exact-match attempt above didn't apply/succeed, Node enumerates
-// every exact-name definition (NODE-01) and narrows it via
-// narrowNodeMatches (NODE-03: substring file hint + line-containment
-// hint, never emptying the set — a pure in-memory filter, D-07, never a
-// fresh disk read keyed on the raw hint): a single narrowed match renders
-// via the original single-def RenderNode path unchanged (NODE-04's
-// no-hints case is a no-op through narrowNodeMatches), while multiple
-// narrowed matches render via NODE-02's multi-def budget/overflow path
-// (RenderNodeMultiDef).
+// line is an optional NODE-03 narrowing hint (RESEARCH §9).
+//
+// Node is a THIN WRAPPER over buildNodeDetail (D-01, ENG-01): it gathers
+// exactly once via the single shared builder — the same one
+// (*Engine).NodeDetail calls — then switches on the returned Mode and
+// calls the matching existing PURE render function
+// (renderNumberedSource / RenderNode / RenderNodeMultiDef through a thin
+// adapter closure over the already-built MultiDefDetail). Node never
+// gathers a second time and never diverges from what NodeDetail would
+// return for the same arguments — CLI, MCP and UI cannot disagree about
+// what a node is.
 func (e *Engine) Node(symbol, file string, line *int) (string, error) {
-	if symbol == "" {
-		if file == "" {
-			return "", fmt.Errorf("query: node requires a symbol name or a file path")
-		}
-		content, err := e.readSourceFile(file)
-		if err != nil {
-			return "", err
-		}
-		return renderNumberedSource(content), nil
-	}
-
-	// NODE-04: file supplied with no line hint tries the pre-CR-02
-	// exact-match single-def path first, returning immediately on
-	// success — unchanged output for every existing exact-match caller.
-	if file != "" && line == nil {
-		if node, err := e.resolveNodeForDetail(symbol, file); err == nil {
-			return e.renderSingleDefNode(node)
-		}
-	}
-
-	matches, err := e.enumerateSymbolDefs(symbol)
+	d, err := e.buildNodeDetail(symbol, file, line)
 	if err != nil {
 		return "", err
 	}
-	if len(matches) == 0 {
-		return "", fmt.Errorf("query: symbol %q not found", symbol)
-	}
 
-	// NODE-03: narrow by substring file hint and/or line containment; a
-	// no-op when neither hint is set (narrowNodeMatches returns matches
-	// unchanged), preserving NODE-01/02's identical behavior for the plain
-	// `node <symbol>` case. Also the fallback for a file hint that didn't
-	// exactly match anything above — the documented substring semantics
-	// rather than a hard "not found in file" error.
-	matches = narrowNodeMatches(matches, file, line)
-
-	if len(matches) == 1 {
-		return e.renderSingleDefNode(matches[0])
+	switch d.Mode {
+	case NodeDetailModeFile:
+		return renderNumberedSource(d.File.Source), nil
+	case NodeDetailModeSingleDef:
+		return RenderNode(d.Definition.Node, d.Definition.Calls, d.Definition.CalledBy), nil
+	default:
+		// NodeDetailModeMultiDef: adapt MultiDefDetail's lazy Definition
+		// method to RenderNodeMultiDef's nodeSectionFetch shape, without
+		// rebuilding the reverse adjacency a second time — d.Multi was
+		// already built once by buildNodeDetail above.
+		fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
+			dd, err := d.Multi.Definition(n)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			return dd.Source, dd.Calls, dd.CalledBy, nil
+		}
+		return RenderNodeMultiDef(d.Multi.Symbol, d.Multi.Matches, fetch)
 	}
-	return e.renderMultiDefNode(symbol, matches)
 }
 
 // fetchCalls resolves node's forward "calls" edges into their target
@@ -413,52 +393,42 @@ func (e *Engine) fetchCalledBy(node *schema.Node, rev map[string][]*schema.Edge)
 }
 
 // renderSingleDefNode renders node via the original single-def path
-// (RenderNode) — unchanged behavior, just extracted from Node into its
-// own function so both the symbol+file and the single-match symbol-only
-// branches share it without duplicating the fetch logic (NODE-04: the
-// output is byte-for-byte identical to before this plan).
+// (RenderNode) — reduced by this plan's extraction (D-01) to calling
+// buildSingleDefDetail and then RenderNode(d.Node, d.Calls, d.CalledBy):
+// same calls, same order, same error handling, one new structured return
+// type in between. Node() no longer calls this directly (it gathers once
+// via buildNodeDetail and renders inline to avoid a second gather for
+// the same request), but the function is kept — unchanged in name and
+// behavior — as a standalone single-def render entry point built on the
+// same builder buildNodeDetail uses.
 func (e *Engine) renderSingleDefNode(node *schema.Node) (string, error) {
-	calls, err := e.fetchCalls(node)
+	d, err := e.buildSingleDefDetail(node)
 	if err != nil {
 		return "", err
 	}
-	rev, err := BuildReverseAdjacency(e.reader)
-	if err != nil {
-		return "", err
-	}
-	calledBy, err := e.fetchCalledBy(node, rev)
-	if err != nil {
-		return "", err
-	}
-	return RenderNode(node, calls, calledBy), nil
+	return RenderNode(d.Node, d.Calls, d.CalledBy), nil
 }
 
 // renderMultiDefNode renders NODE-02's multi-def markdown for an
-// overloaded symbol (RenderNodeMultiDef): the reverse-adjacency map is
-// built ONCE and shared across every candidate's fetch (see
-// fetchCalledBy), and each candidate's source is read fresh from disk
-// via the existing repo-root-confined readSourceFile (T-03-06-Path) —
-// the same safety gate Node's file mode uses, not a new read path.
+// overloaded symbol (RenderNodeMultiDef) — reduced by this plan's
+// extraction (D-01) to calling buildMultiDefDetail and then adapting its
+// lazy Definition method to RenderNodeMultiDef's nodeSectionFetch shape.
+// The render function and the nodeSectionFetch signature are untouched,
+// and so is the laziness: a candidate RenderNodeMultiDef never asks for
+// is never read from disk. Node() no longer calls this directly, for the
+// same single-gather reason renderSingleDefNode's doc comment states.
 func (e *Engine) renderMultiDefNode(symbol string, matches []*schema.Node) (string, error) {
-	rev, err := BuildReverseAdjacency(e.reader)
+	md, err := e.buildMultiDefDetail(symbol, matches)
 	if err != nil {
 		return "", err
 	}
 
 	fetch := func(n *schema.Node) ([]byte, []*schema.Node, []*schema.Node, error) {
-		source, err := e.readSourceFile(n.FilePath)
+		d, err := md.Definition(n)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		calls, err := e.fetchCalls(n)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		calledBy, err := e.fetchCalledBy(n, rev)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		return source, calls, calledBy, nil
+		return d.Source, d.Calls, d.CalledBy, nil
 	}
 
 	return RenderNodeMultiDef(symbol, matches, fetch)

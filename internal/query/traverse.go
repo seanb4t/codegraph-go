@@ -50,6 +50,17 @@ func BuildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 	return rev, nil
 }
 
+// buildReverseAdjacency is BuildReverseAdjacency behind an unexported
+// package var — the same test-only control-seam convention
+// internal/graphstore/pebble_store.go's openLockRetrySleep uses — so a
+// test can count invocations of the reverse-adjacency build without an
+// exported setter and with no production behavior change. detail.go's
+// buildSingleDefDetail and buildMultiDefDetail route through this var
+// rather than calling BuildReverseAdjacency directly, so the once-per-
+// call discipline they preserve is counted rather than merely asserted
+// from the code (ENG-01 performance invariant).
+var buildReverseAdjacency = BuildReverseAdjacency
+
 // BuildImplementsIndex builds an in-memory index of "implements" edges
 // keyed by edge.Target (the interface node), from one full
 // IterateEdges("") scan — mirrors BuildReverseAdjacency's shape exactly
