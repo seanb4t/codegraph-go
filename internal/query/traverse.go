@@ -3,7 +3,6 @@ package query
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -223,7 +222,7 @@ func (e *Engine) resolveSymbolNode(symbol string) (*schema.Node, error) {
 		return nil, err
 	}
 	if best == nil {
-		return nil, fmt.Errorf("query: symbol %q not found", symbol)
+		return nil, notFoundf("query: symbol %q not found", symbol)
 	}
 	return best, nil
 }

@@ -35,15 +35,15 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 		return "", fmt.Errorf("query: engine has no repo root configured for source reads")
 	}
 	if relPath == "" {
-		return "", fmt.Errorf("query: empty file path")
+		return "", invalidArgumentf("query: empty file path")
 	}
 	if filepath.IsAbs(relPath) {
-		return "", fmt.Errorf("query: absolute path %q is not allowed", relPath)
+		return "", invalidArgumentf("query: absolute path %q is not allowed", relPath)
 	}
 
 	cleaned := filepath.Clean(relPath)
 	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("query: path %q escapes the repo root", relPath)
+		return "", invalidArgumentf("query: path %q escapes the repo root", relPath)
 	}
 
 	root, err := filepath.Abs(e.repoRoot)
@@ -57,7 +57,7 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 		return "", err
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("query: path %q escapes the repo root", relPath)
+		return "", invalidArgumentf("query: path %q escapes the repo root", relPath)
 	}
 
 	// WR-03: re-verify confinement after resolving symlinks, so a
@@ -72,7 +72,7 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 	}
 	resolvedRel, err := filepath.Rel(resolvedRoot, resolvedAbs)
 	if err != nil || resolvedRel == ".." || strings.HasPrefix(resolvedRel, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("query: path %q escapes the repo root", relPath)
+		return "", invalidArgumentf("query: path %q escapes the repo root", relPath)
 	}
 
 	return abs, nil

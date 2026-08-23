@@ -2,7 +2,6 @@ package query
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -119,7 +118,7 @@ func (e *Engine) matchNodes(term, kind string) ([]rankedNode, error) {
 // returns an error without touching the store.
 func (e *Engine) Query(term, kind string, limit int) ([]*schema.Node, error) {
 	if strings.TrimSpace(term) == "" {
-		return nil, fmt.Errorf("query: search term must not be empty")
+		return nil, invalidArgumentf("query: search term must not be empty")
 	}
 	if err := ValidateKind(kind); err != nil {
 		return nil, err
@@ -152,7 +151,7 @@ func (e *Engine) Query(term, kind string, limit int) ([]*schema.Node, error) {
 // term/kind/limit are validated identically to Query, before any scan.
 func (e *Engine) Search(term, kind string, limit int) ([]Location, error) {
 	if strings.TrimSpace(term) == "" {
-		return nil, fmt.Errorf("query: search term must not be empty")
+		return nil, invalidArgumentf("query: search term must not be empty")
 	}
 	if err := ValidateKind(kind); err != nil {
 		return nil, err

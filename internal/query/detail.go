@@ -2,7 +2,6 @@ package query
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -191,7 +190,7 @@ func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*Mu
 func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, error) {
 	if symbol == "" {
 		if file == "" {
-			return NodeDetail{}, fmt.Errorf("query: node requires a symbol name or a file path")
+			return NodeDetail{}, invalidArgumentf("query: node requires a symbol name or a file path")
 		}
 		fd, err := e.buildFileNodeDetail(file)
 		if err != nil {
@@ -218,7 +217,7 @@ func (e *Engine) buildNodeDetail(symbol, file string, line *int) (NodeDetail, er
 		return NodeDetail{}, err
 	}
 	if len(matches) == 0 {
-		return NodeDetail{}, fmt.Errorf("query: symbol %q not found", symbol)
+		return NodeDetail{}, notFoundf("query: symbol %q not found", symbol)
 	}
 
 	// NODE-03: narrow by substring file hint and/or line containment; a
@@ -306,7 +305,7 @@ type ExploreResult struct {
 // being planned around until it is proven complete (D-02).
 func (e *Engine) buildExploreResult(query string, maxFiles int) (ExploreResult, error) {
 	if strings.TrimSpace(query) == "" {
-		return ExploreResult{}, fmt.Errorf("query: explore query must not be empty")
+		return ExploreResult{}, invalidArgumentf("query: explore query must not be empty")
 	}
 	if err := validateMaxFiles(maxFiles); err != nil {
 		return ExploreResult{}, err

@@ -106,10 +106,10 @@ func clampAffectedDepth(n int) int {
 // consistency gap (WR-02).
 func validateLimit(n int) error {
 	if n < 0 {
-		return fmt.Errorf("query: limit %d must be non-negative", n)
+		return invalidArgumentf("query: limit %d must be non-negative", n)
 	}
 	if n > MaxLimit {
-		return fmt.Errorf("query: limit %d exceeds maximum %d", n, MaxLimit)
+		return invalidArgumentf("query: limit %d exceeds maximum %d", n, MaxLimit)
 	}
 	return nil
 }
@@ -118,10 +118,10 @@ func validateLimit(n int) error {
 // with a clear error, mirroring validateLimit's contract.
 func validateMaxFiles(n int) error {
 	if n < 0 {
-		return fmt.Errorf("query: max-files %d must be non-negative", n)
+		return invalidArgumentf("query: max-files %d must be non-negative", n)
 	}
 	if n > MaxFiles {
-		return fmt.Errorf("query: max-files %d exceeds maximum %d", n, MaxFiles)
+		return invalidArgumentf("query: max-files %d exceeds maximum %d", n, MaxFiles)
 	}
 	return nil
 }
@@ -136,7 +136,7 @@ func validateMaxFiles(n int) error {
 // unified across depth/max-files/limit by this fix.
 func validateDepth(n int) error {
 	if n < 0 {
-		return fmt.Errorf("query: depth %d must be non-negative", n)
+		return invalidArgumentf("query: depth %d must be non-negative", n)
 	}
 	return nil
 }
@@ -218,5 +218,5 @@ func ValidateKind(kind string) error {
 		allowed = append(allowed, k)
 	}
 	sort.Strings(allowed)
-	return fmt.Errorf("query: unknown kind %q — allowed kinds: %s", kind, strings.Join(allowed, ", "))
+	return invalidArgumentf("query: unknown kind %q — allowed kinds: %s", kind, strings.Join(allowed, ", "))
 }

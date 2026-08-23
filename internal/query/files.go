@@ -85,10 +85,10 @@ type FilesResult struct {
 // accepted and means "unlimited" (see FilesOptions.Depth doc).
 func validateFilesDepth(n int) error {
 	if n < 0 {
-		return fmt.Errorf("query: depth %d must be non-negative", n)
+		return invalidArgumentf("query: depth %d must be non-negative", n)
 	}
 	if n > MaxDepth {
-		return fmt.Errorf("query: depth %d exceeds maximum %d", n, MaxDepth)
+		return invalidArgumentf("query: depth %d exceeds maximum %d", n, MaxDepth)
 	}
 	return nil
 }
@@ -142,7 +142,7 @@ func (e *Engine) Files(opts FilesOptions) (FilesResult, error) {
 		format = "flat"
 	}
 	if format != "flat" && format != "tree" {
-		return FilesResult{}, fmt.Errorf("query: unknown files format %q — allowed: flat, tree", format)
+		return FilesResult{}, invalidArgumentf("query: unknown files format %q — allowed: flat, tree", format)
 	}
 	if opts.Pattern != "" {
 		if _, err := filepath.Match(opts.Pattern, "sanity-check"); err != nil {
