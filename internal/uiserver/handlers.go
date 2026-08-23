@@ -93,6 +93,33 @@ func mapEngineError(err error) error {
 // duplicates this number as a bare literal.
 const uiMultiDefCap = 20
 
+// uiExploreSourceGroupCap bounds how many of an ExploreResponse's file
+// groups carry a SourceBlob, playing the same role for Explore that
+// uiMultiDefCap plays for GetNodeDetail's multi-definition mode (CR-01).
+//
+// It exists because Explore's group count is NOT bounded by anything
+// this package owns: max_files passes through to the Engine, which
+// accepts up to query.MaxFiles (1000), and an explicit max_files also
+// bypasses the Engine's own adaptive budget. One SourceBlob per group at
+// up to sourceByteCap each therefore has a worst case two orders of
+// magnitude above transportSendMaxBytes — and the failure mode is the
+// precise one RPC-05's two-layer design exists to prevent: every blob is
+// CORRECTLY under its cap, `truncated` is false on all of them, and the
+// transport backstop still rejects the marshaled message so the client
+// receives resource_exhausted with no data at all.
+//
+// Only the source ATTACHMENT is capped, never the group list: every
+// group the Engine returned is still present with its path, symbols and
+// skeletonized flag, so a client's file list stays complete and only the
+// inline source previews stop after this many. A group past the cap
+// carries an UNSET source, which is already the wire's meaning of "no
+// source blob for this group" — no new field and no proto change.
+//
+// Referenced from exploreGroupsToProto and from truncate_test.go's
+// aggregate assertion — nowhere else, per this package's discipline of
+// never repeating a limit as a bare literal.
+const uiExploreSourceGroupCap = 32
+
 // uiService implements uiv1connect.UIServiceHandler over the
 // repository's own internal/query.Engine. It holds repoPath and NOTHING
 // ELSE reachable through an Engine or GraphStore — asserted structurally
@@ -672,21 +699,35 @@ func (s *uiService) GetNodeDetail(ctx context.Context, req *connect.Request[uiv1
 // index" discipline (RPC-05, plan 01-10: sources[g.Path] goes through
 // truncateSource before it reaches the wire, the same as every other
 // source-producing path).
-func exploreGroupToProto(g query.ExploreFileGroup, skeletonFiles map[string]bool, sources map[string][]byte) *uiv1.ExploreGroup {
-	return &uiv1.ExploreGroup{
+//
+// attachSource decides whether this group carries a source blob at all
+// (CR-01): exploreGroupsToProto passes false once uiExploreSourceGroupCap
+// groups have already been given one, so the response's aggregate blob
+// budget stays under the transport backstop no matter how many groups the
+// Engine returned. The group itself — path, symbols, skeletonized — is
+// mapped either way.
+func exploreGroupToProto(g query.ExploreFileGroup, skeletonFiles map[string]bool, sources map[string][]byte, attachSource bool) *uiv1.ExploreGroup {
+	out := &uiv1.ExploreGroup{
 		Path:         g.Path,
 		Symbols:      nodesToProto(g.Symbols),
 		Skeletonized: skeletonFiles[g.Path],
-		Source:       sourceBlobToProto(truncateSource(sources[g.Path])),
 	}
+	if attachSource {
+		out.Source = sourceBlobToProto(truncateSource(sources[g.Path]))
+	}
+	return out
 }
 
 // exploreGroupsToProto maps a slice of internal/query.ExploreFileGroup
-// onto their uiv1.ExploreGroup wire projections, preserving order.
+// onto their uiv1.ExploreGroup wire projections, preserving order and
+// preserving EVERY group — the uiExploreSourceGroupCap bound applies to
+// the per-group source attachment alone (CR-01), never to the group list
+// itself, so a client's file list is always complete and only the inline
+// previews stop.
 func exploreGroupsToProto(groups []query.ExploreFileGroup, skeletonFiles map[string]bool, sources map[string][]byte) []*uiv1.ExploreGroup {
 	out := make([]*uiv1.ExploreGroup, len(groups))
 	for i, g := range groups {
-		out[i] = exploreGroupToProto(g, skeletonFiles, sources)
+		out[i] = exploreGroupToProto(g, skeletonFiles, sources, i < uiExploreSourceGroupCap)
 	}
 	return out
 }

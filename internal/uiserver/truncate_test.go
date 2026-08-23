@@ -2,9 +2,12 @@ package uiserver
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/seanb4t/codegraph-go/internal/query"
 )
 
 // TestCountLinesSemantics proves countLines' locked rule (D-11, the
@@ -210,5 +213,86 @@ func TestTruncateSourceTotalsAreExact(t *testing.T) {
 func TestTransportBackstopSitsAboveApplicationCap(t *testing.T) {
 	if transportSendMaxBytes <= sourceByteCap {
 		t.Fatalf("transportSendMaxBytes (%d) is not strictly greater than sourceByteCap (%d) — a correctly-truncated response could be rejected as resource_exhausted", transportSendMaxBytes, sourceByteCap)
+	}
+}
+
+// TestTransportBackstopSitsAboveEveryAggregate extends the single-blob
+// ordering above to the two MULTI-blob aggregates this service can put on
+// one wire message (CR-01). The single-blob inequality alone is not
+// sufficient: a response carrying many correctly-capped blobs can exceed
+// transportSendMaxBytes while every individual blob is under
+// sourceByteCap and every `truncated` flag is false — the exact failure
+// RPC-05's two-layer design exists to prevent, and one no single-blob
+// assertion can see.
+//
+// Both aggregates are asserted by name so raising either per-response cap
+// (uiMultiDefCap, uiExploreSourceGroupCap) or lowering the backstop fails
+// here rather than in production.
+func TestTransportBackstopSitsAboveEveryAggregate(t *testing.T) {
+	cases := []struct {
+		name      string
+		groupCap  int
+		aggregate int
+	}{
+		{"node-detail-multi-def", uiMultiDefCap, uiMultiDefCap * sourceByteCap},
+		{"explore-groups", uiExploreSourceGroupCap, uiExploreSourceGroupCap * sourceByteCap},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.groupCap <= 0 {
+				t.Fatalf("%s: per-response blob cap is %d — an unbounded or absent cap leaves the aggregate unbounded", tc.name, tc.groupCap)
+			}
+			if transportSendMaxBytes <= tc.aggregate {
+				t.Fatalf("%s: aggregate worst case %d bytes (%d blobs x sourceByteCap %d) is not strictly below transportSendMaxBytes (%d) — a response whose every blob is correctly under the application cap could still be rejected as resource_exhausted", tc.name, tc.aggregate, tc.groupCap, sourceByteCap, transportSendMaxBytes)
+			}
+		})
+	}
+}
+
+// TestExploreGroupsBoundTheirAggregateSourceBudget proves the CR-01 fix
+// behaviorally at the mapper, not merely as an inequality between
+// constants: given more groups than uiExploreSourceGroupCap, EVERY group
+// is still mapped (the file list stays complete), the first
+// uiExploreSourceGroupCap carry their own source blob, and every group
+// past the cap carries an UNSET source.
+//
+// The assertions are positive on both sides of the boundary — a mapped
+// group count, a populated blob whose content is the group's own source,
+// and an unset blob past the cap — so removing the cap turns this RED
+// (every group would carry source) rather than passing vacuously.
+func TestExploreGroupsBoundTheirAggregateSourceBudget(t *testing.T) {
+	const extraGroups = 8
+	total := uiExploreSourceGroupCap + extraGroups
+
+	groups := make([]query.ExploreFileGroup, total)
+	sources := make(map[string][]byte, total)
+	for i := range groups {
+		path := fmt.Sprintf("pkg/file%03d.go", i)
+		groups[i] = query.ExploreFileGroup{Path: path}
+		sources[path] = []byte(fmt.Sprintf("package pkg // %d\n", i))
+	}
+
+	out := exploreGroupsToProto(groups, map[string]bool{}, sources)
+
+	if len(out) != total {
+		t.Fatalf("exploreGroupsToProto returned %d groups, want all %d — the cap bounds the SOURCE attachment, never the group list", len(out), total)
+	}
+	for i, g := range out {
+		if g.GetPath() != groups[i].Path {
+			t.Fatalf("group[%d]: path = %q, want %q (order must be preserved)", i, g.GetPath(), groups[i].Path)
+		}
+		if i < uiExploreSourceGroupCap {
+			src := g.Source
+			if src == nil {
+				t.Fatalf("group[%d] (under uiExploreSourceGroupCap %d): source is UNSET, want the group's own blob", i, uiExploreSourceGroupCap)
+			}
+			if !bytes.Equal(src.GetContent(), sources[groups[i].Path]) {
+				t.Fatalf("group[%d]: source content = %q, want %q (looked up by the group's own path)", i, src.GetContent(), sources[groups[i].Path])
+			}
+			continue
+		}
+		if g.Source != nil {
+			t.Fatalf("group[%d] (at or past uiExploreSourceGroupCap %d): source = %v, want UNSET — the aggregate blob budget is unbounded without this cap", i, uiExploreSourceGroupCap, g.Source)
+		}
 	}
 }

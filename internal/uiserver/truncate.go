@@ -46,14 +46,25 @@ const sourceByteCap = 262144
 // exists to prevent (TestTransportBackstopSitsAboveApplicationCap asserts
 // this inequality directly so a later edit cannot invert it silently).
 //
-// The headroom is sized above more than a single blob: GetNodeDetail's
-// multi-definition mode can return up to uiMultiDefCap gathered
-// candidates in one response, each carrying its own SourceBlob up to
-// sourceByteCap — an aggregate worst case on the order of
-// uiMultiDefCap*sourceByteCap (roughly 5 MiB at today's values), plus the
-// surrounding message's own overhead (node metadata, calls/called-by
-// lists). 16 MiB leaves comfortable headroom above that aggregate, not
-// merely above one blob's cap.
+// The headroom is sized above more than a single blob. TWO responses in
+// this service attach many SourceBlobs to one message, and the backstop
+// must sit above BOTH aggregates, not just the larger single blob:
+//
+//   - GetNodeDetail's multi-definition mode returns up to uiMultiDefCap
+//     gathered candidates, each carrying its own SourceBlob up to
+//     sourceByteCap — roughly 5 MiB at today's values.
+//   - Explore attaches a SourceBlob per file group. Its group count is
+//     the Engine's, bounded by query.MaxFiles (1000) rather than by
+//     anything this package owns, so the source ATTACHMENT is bounded
+//     here instead by uiExploreSourceGroupCap (handlers.go) — roughly
+//     8 MiB at today's values (CR-01).
+//
+// Plus the surrounding message's own overhead (node metadata,
+// calls/called-by lists, symbol lists). 16 MiB leaves headroom above the
+// larger of the two aggregates, not merely above one blob's cap.
+// TestTransportBackstopSitsAboveEveryAggregate asserts BOTH inequalities,
+// so raising either cap without raising this one fails a test rather
+// than silently converting correct truncation into resource_exhausted.
 const transportSendMaxBytes = 16 * 1024 * 1024
 
 // transportReadMaxBytes is D-13's transport backstop on incoming request
