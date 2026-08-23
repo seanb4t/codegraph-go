@@ -17,6 +17,7 @@
 package uiserver
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -545,4 +546,85 @@ func TestAHolderAcquiresTheStoreAfterConcurrentRPCsComplete(t *testing.T) {
 		t.Fatalf("holder Open after every concurrent RPC completed: %v — a retained handle would leave the lock held here", err)
 	}
 	defer holder.Close()
+}
+
+// captureDiagWriter redirects this package's diagnostic sink into a
+// buffer for the duration of one test, restoring the previous writer on
+// cleanup — the same capture shape internal/graphstore/logger_test.go
+// uses for its own diagWriter seam.
+func captureDiagWriter(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := setDiagWriter(&buf)
+	t.Cleanup(func() { setDiagWriter(prev) })
+	return &buf
+}
+
+// TestInternalErrorOnTheWireLeaksNoHostPath proves WR-01's mitigation at
+// the same standard TestIndexingInProgressMessageLeaksNothing sets for
+// the degrade path: an UNCLASSIFIED engine error — the arm of
+// mapEngineError that used to place err.Error() verbatim on the wire —
+// renders to the loopback browser caller as a fixed generic sentence
+// carrying no path separator, while the operator still gets the real
+// error on the server's own diagnostic stream.
+//
+// Both halves are asserted positively, so neither can pass vacuously:
+//
+//   - the wire message must EQUAL errInternal's text and contain no path
+//     separator (containsPathSeparator is positive-controlled by
+//     TestIndexingInProgressMessageLeaksNothing in this same file); and
+//   - the captured diagnostic stream must contain the repository's own
+//     absolute temp path, proving the detail was RELOCATED rather than
+//     discarded. Removing the scrub turns the first half RED; removing
+//     the writeDiagLine call turns the second half RED.
+//
+// The provoking scenario is the one handlers_test.go's
+// "unreadable-candidate-within-the-cap" subtest already establishes:
+// every multi-def candidate's source file is replaced by a directory of
+// the same name, so the per-candidate read fails with an *os.PathError
+// carrying the absolute host path.
+func TestInternalErrorOnTheWireLeaksNoHostPath(t *testing.T) {
+	dir := buildOverloadedFixture(t, "Leaky", 2)
+	for i := 0; i < 2; i++ {
+		p := filepath.Join(dir, fmt.Sprintf("pkg%d", i), fmt.Sprintf("pkg%d.go", i))
+		if err := os.Remove(p); err != nil {
+			t.Fatalf("remove %s: %v", p, err)
+		}
+		if err := os.Mkdir(p, 0o755); err != nil {
+			t.Fatalf("mkdir %s (in place of the file): %v", p, err)
+		}
+	}
+
+	diag := captureDiagWriter(t)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	_, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Leaky"}))
+	if err == nil {
+		t.Fatal("GetNodeDetail with every candidate's file replaced by a directory succeeded, want CodeInternal")
+	}
+	if code := connect.CodeOf(err); code != connect.CodeInternal {
+		t.Fatalf("GetNodeDetail: code = %v, want CodeInternal", code)
+	}
+
+	connErr := &connect.Error{}
+	if !errors.As(err, &connErr) {
+		t.Fatalf("error %v is not a *connect.Error", err)
+	}
+	if got := connErr.Message(); got != errInternal.Error() {
+		t.Fatalf("wire message = %q, want the fixed generic %q", got, errInternal.Error())
+	}
+	if containsPathSeparator(connErr.Message()) {
+		t.Fatalf("wire message %q contains a path separator, want none — an unclassified os.PathError must never disclose the host checkout's layout", connErr.Message())
+	}
+
+	// The detail must have been relocated, not dropped: the operator's
+	// diagnostic stream carries the real error, absolute path and all.
+	logged := diag.String()
+	if !strings.Contains(logged, dir) {
+		t.Fatalf("diagnostic stream = %q, want it to contain the real error including the repository path %q — the scrub must relocate the detail server-side, never discard it", logged, dir)
+	}
+	if !strings.HasPrefix(logged, diagPrefix) {
+		t.Fatalf("diagnostic stream = %q, want it to start with the provenance prefix %q", logged, diagPrefix)
+	}
 }

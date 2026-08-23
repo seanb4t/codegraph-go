@@ -58,7 +58,9 @@ func withEngine(ctx context.Context, repoPath string, fn func(*query.Engine) err
 //     IndexingInProgress detail (SRV-04's degrade path, D-14/D-15) —
 //     errIndexingInProgress() builds the one shape every non-GetStatus
 //     handler's degraded response uses
-//   - anything else -> connect.CodeInternal
+//   - anything else -> connect.CodeInternal, with a FIXED generic
+//     message; the real error goes to the server-side diagnostic stream
+//     instead of onto the wire (WR-01)
 //
 // GetStatus does NOT go through this function: it is the one handler
 // with its own degrade path (degradedStatus, D-16), since a locked store
@@ -76,9 +78,34 @@ func mapEngineError(err error) error {
 	case errors.Is(err, graphstore.ErrStoreLocked):
 		return errIndexingInProgress()
 	default:
-		return connect.NewError(connect.CodeInternal, err)
+		// WR-01: everything reaching this arm is by definition an error
+		// this package could NOT classify, so nothing is known about
+		// what its message contains — and in practice the common
+		// occupants are *os.PathError values from readSourceFile and
+		// resolveSourcePath, which carry the ABSOLUTE host path of the
+		// user's checkout. Putting that verbatim on the wire discloses
+		// the checkout location and directory layout to an
+		// unauthenticated loopback browser caller, the exact posture
+		// indexingInProgressMessage (degrade.go) is a fixed generic
+		// sentence to avoid (T-01-06).
+		//
+		// The classified arms above are safe to pass through verbatim
+		// because their messages are this repository's own
+		// invalidArgumentf/notFoundf strings, built from the caller's
+		// own request values. Only this arm is unknown, so only this
+		// arm is scrubbed — the operator still gets the full error, on
+		// the server's diagnostic stream where it belongs.
+		writeDiagLine("internal error: %v", err)
+		return connect.NewError(connect.CodeInternal, errInternal)
 	}
 }
+
+// errInternal is the FIXED, path-free message every unclassified error
+// renders as on the wire (WR-01). A single package-level value, not a
+// per-call errors.New, so a test can assert the exact bytes a browser
+// caller can observe and no call site can drift into a bespoke wording
+// that reintroduces detail.
+var errInternal = errors.New("an internal error occurred")
 
 // uiMultiDefCap bounds how many of GetNodeDetail's multi-definition
 // candidates receive gathered detail (calls and called-by) per request.
