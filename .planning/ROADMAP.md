@@ -131,40 +131,40 @@ Archived: [`milestones/v0.11.0-ROADMAP.md`](./milestones/v0.11.0-ROADMAP.md) · 
   5. An MCP session no longer loses an in-flight response when a server-initiated notification is written concurrently, proven against a reproduction that showed the loss (FIX-01)
 
 **Notes**: `ENG-01`/`ENG-02` are extractions that stop before the existing `RenderNode`/`RenderNodeMultiDef`/`RenderExplore` call — not rewrites. `ENG-04` follows the `HasFileIndex` precedent: absent ⇒ pre-upgrade graph, degrade gracefully. `BLD-04` closes a pre-existing gap; `Taskfile.yml` has no proto regeneration task today. The two CR-01s are distinct (see the ordering notes above) — this phase's is `internal/mcp/server.go`'s `pendingWriter`, not the already-fixed Pebble lock finding. **Planning correction (2026-08-22):** research verified that nothing in the repo byte-diffs live `Engine.Node`/`Explore` output against the 26 frozen goldens today — `TestReFrozenGoldensValid` checks envelope shape only, and the byte-diff capture path was retired in FIXT-04. A new byte-identity oracle is therefore Wave-1 must-add scope (plan 01-02) and lands before the extraction, or criterion 1 is satisfiable without the output being unchanged.
-**Plans**: 11 plans
+**Plans**: 11/11 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Tracer: `codegraph ui` binds, publishes its URL, then serves one origin-guarded RPC end-to-end (SRV-02, SRV-01, SRV-03, RPC-01, RPC-02)
-- [ ] 01-02-PLAN.md — Shared capture spec plus the golden byte-identity oracle over all 26 frozen pairs, proven non-vacuous (ENG-01, ENG-02)
-- [ ] 01-03-PLAN.md — FIX-01 `pendingWriter` counter, plus the `toolslist-repeat` separability disproof (FIX-01)
+- [x] 01-01-PLAN.md — Tracer: `codegraph ui` binds, publishes its URL, then serves one origin-guarded RPC end-to-end (SRV-02, SRV-01, SRV-03, RPC-01, RPC-02)
+- [x] 01-02-PLAN.md — Shared capture spec plus the golden byte-identity oracle over all 26 frozen pairs, proven non-vacuous (ENG-01, ENG-02)
+- [x] 01-03-PLAN.md — FIX-01 `pendingWriter` counter, plus the `toolslist-repeat` separability disproof (FIX-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-04-PLAN.md — Engine seam: `NodeDetail` sum shape with a lazy multi-definition protocol (ENG-01)
-- [ ] 01-06-PLAN.md — Commit-aware `Meta` field 8 and the `(*Engine).IndexMeta` data path (ENG-04)
+- [x] 01-04-PLAN.md — Engine seam: `NodeDetail` sum shape with a lazy multi-definition protocol (ENG-01)
+- [x] 01-06-PLAN.md — Commit-aware `Meta` field 8 and the `(*Engine).IndexMeta` data path (ENG-04)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-05-PLAN.md — Engine seam: `ExploreResult`, exported component types, typed query errors, and the D-04 mutation proof (ENG-02, ENG-01)
-- [ ] 01-07-PLAN.md — Two-surface proto codegen drift guard, temp-tree generated and RED-proven (BLD-04)
+- [x] 01-05-PLAN.md — Engine seam: `ExploreResult`, exported component types, typed query errors, and the D-04 mutation proof (ENG-02, ENG-01)
+- [x] 01-07-PLAN.md — Two-surface proto codegen drift guard, temp-tree generated and RED-proven (BLD-04)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-08-PLAN.md — Shared wire types plus the seven structured reads, including Status's commit SHA (RPC-01, RPC-02, ENG-04)
+- [x] 01-08-PLAN.md — Shared wire types plus the seven structured reads, including Status's commit SHA (RPC-01, RPC-02, ENG-04)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-09-PLAN.md — `GetNodeDetail` and `Explore` over the extracted seams, plus the read-only method-set guard (RPC-01, RPC-02, SRV-03)
+- [x] 01-09-PLAN.md — `GetNodeDetail` and `Explore` over the extracted seams, plus the read-only method-set guard (RPC-01, RPC-02, SRV-03)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 
-- [ ] 01-10-PLAN.md — Bounded source responses: shared rune-boundary cut, two-tier truncation, transport backstop (RPC-05)
+- [x] 01-10-PLAN.md — Bounded source responses: shared rune-boundary cut, two-tier truncation, transport backstop (RPC-05)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 
-- [ ] 01-11-PLAN.md — Degraded state: typed `IndexingInProgress`, a `Status` that answers without the store (SRV-04)
+- [x] 01-11-PLAN.md — Degraded state: typed `IndexingInProgress`, a `Status` that answers without the store (SRV-04)
 
 ### Phase 2: SPA Toolchain, Embedded App Shell & JS Supply Chain
 
@@ -278,7 +278,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Seam, Wire Protocol & Secure Transport | 0/7 | Planned | - |
+| 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | In Progress|  |
 | 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 0/TBD | Not started | - |
 | 3. Browse, Inspect & Navigation | 0/TBD | Not started | - |
 | 4. Query Workbench & Index Health | 0/TBD | Not started | - |
