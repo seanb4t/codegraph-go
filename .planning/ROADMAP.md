@@ -108,7 +108,7 @@ Archived: [`milestones/v0.11.0-ROADMAP.md`](./milestones/v0.11.0-ROADMAP.md) · 
 - **Out of scope by construction, and recorded so the decisions stay visible:** in-browser editing, multi-user auth, server-persisted bookmarks, a force-directed whole-graph landing view, collaborative presence, a free-form graph query console, a churn/complexity dashboard, and hosted platform features. Each is a trap specifically *because* this UI is local, read-only, single-binary and cloud-free.
 - **`v0.12.0` carries no git tag.** release-please is the sole tag authority (D-06R). The label is a prediction that holds if this milestone lands `feat:` commits. No phase schedules a `git tag` step.
 
-- [ ] **Phase 1: Engine Seam, Wire Protocol & Secure Transport** - `codegraph ui` runs as its own process, serving typed, bounded, read-only RPCs over a loopback listener that refuses a rebinding request — with every existing CLI and MCP byte unchanged
+- [x] **Phase 1: Engine Seam, Wire Protocol & Secure Transport** - `codegraph ui` runs as its own process, serving typed, bounded, read-only RPCs over a loopback listener that refuses a rebinding request — with every existing CLI and MCP byte unchanged (completed 2026-08-23)
 - [ ] **Phase 2: SPA Toolchain, Embedded App Shell & JS Supply Chain** - The browser gets a real pnpm-built Svelte app served from inside the binary, committed, drift-guarded, and covered by a JS vulnerability gate the Go tooling cannot see
 - [ ] **Phase 3: Browse, Inspect & Navigation** - A developer finds any symbol or file, reads its verbatim source with callers, callees and blast radius, keeps clicking outward, and can hand someone a URL that lands them exactly where they were
 - [ ] **Phase 4: Query Workbench & Index Health** - A developer runs the four graph analyses interactively with their own knobs and can tell at a glance whether the index they are reading is worth trusting
@@ -278,7 +278,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | In Progress|  |
+| 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | Complete    | 2026-08-23 |
 | 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 0/TBD | Not started | - |
 | 3. Browse, Inspect & Navigation | 0/TBD | Not started | - |
 | 4. Query Workbench & Index Health | 0/TBD | Not started | - |

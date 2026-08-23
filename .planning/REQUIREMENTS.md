@@ -12,26 +12,26 @@
 
 ### Command & Transport
 
-- [ ] **SRV-01**: `codegraph ui` binds loopback, prints and opens the URL, and runs as its own process — never sharing a lifecycle with `serve --mcp`
-- [ ] **SRV-02**: Origin/Host exact-match validation rejects DNS-rebinding requests (CVE-2024-28224 Ollama, CVE-2025-66414/66416 MCP SDK class); loopback binding alone is insufficient and is not treated as sufficient
-- [ ] **SRV-03**: Read-only by construction; bind address and auth exist as explicit seams so a later `--host` is a change, not a rewrite — neither is exposed in v1
+- [x] **SRV-01**: `codegraph ui` binds loopback, prints and opens the URL, and runs as its own process — never sharing a lifecycle with `serve --mcp`
+- [x] **SRV-02**: Origin/Host exact-match validation rejects DNS-rebinding requests (CVE-2024-28224 Ollama, CVE-2025-66414/66416 MCP SDK class); loopback binding alone is insufficient and is not treated as sufficient
+- [x] **SRV-03**: Read-only by construction; bind address and auth exist as explicit seams so a later `--host` is a change, not a rewrite — neither is exposed in v1
 - [x] **SRV-04**: Every RPC opens-snapshots-closes the store and never caches an `Engine`/`GraphStore` handle; an `ErrStoreLocked` that outlives `graphstore.Open`'s bounded retry renders as "indexing in progress", never as an error
 - [ ] **SRV-05**: Verbatim source serving reuses the existing MCP path-confinement fix rather than reimplementing it
 
 ### Wire Protocol
 
-- [ ] **RPC-01**: Protobuf schema for the UI API, inheriting `internal/schema/graph.proto`'s additive-only evolution discipline (D-02a — field numbers never renumbered or reused; retired fields `reserved`)
-- [ ] **RPC-02**: `connect-go` handlers mount on `net/http` alongside the `go:embed`'d SPA
+- [x] **RPC-01**: Protobuf schema for the UI API, inheriting `internal/schema/graph.proto`'s additive-only evolution discipline (D-02a — field numbers never renumbered or reused; retired fields `reserved`)
+- [x] **RPC-02**: `connect-go` handlers mount on `net/http` alongside the `go:embed`'d SPA
 - [ ] **RPC-03**: SPA fallback routing — client-side routes resolve to `index.html`; RPC paths and hashed assets do not
 - [ ] **RPC-04**: A Connect server-streaming method carries re-index events to the browser over plain HTTP/1.1
-- [ ] **RPC-05**: Message sizes are bounded; verbatim source blobs are handled without unbounded response growth
+- [x] **RPC-05**: Message sizes are bounded; verbatim source blobs are handled without unbounded response growth
 
 ### Engine Seam
 
-- [ ] **ENG-01**: A structured `NodeDetail` variant is exposed; `Node()` and every frozen golden covering it remain byte-identical
-- [ ] **ENG-02**: A structured `ExploreResult` variant is exposed; `Explore()` and every frozen golden covering it remain byte-identical
+- [x] **ENG-01**: A structured `NodeDetail` variant is exposed; `Node()` and every frozen golden covering it remain byte-identical
+- [x] **ENG-02**: A structured `ExploreResult` variant is exposed; `Explore()` and every frozen golden covering it remain byte-identical
 - [ ] **ENG-03**: `Engine.FileGraph()` returns aggregated file/package adjacency with per-kind edge counts, computed fresh per call following `BuildReverseAdjacency`'s full-scan discipline
-- [ ] **ENG-04**: `schema.Meta` records the indexed commit SHA as an additive field, following the `HasFileIndex` precedent (absent ⇒ pre-upgrade graph, degrades gracefully)
+- [x] **ENG-04**: `schema.Meta` records the indexed commit SHA as an additive field, following the `HasFileIndex` precedent (absent ⇒ pre-upgrade graph, degrades gracefully)
 
 ### Browse & Inspect
 
@@ -85,14 +85,14 @@
 - [ ] **BLD-01**: The frontend toolchain is `pnpm` — `pnpm-lock.yaml` committed, pnpm version pinned via Corepack's `packageManager`, `pnpm install --frozen-lockfile` in CI
 - [ ] **BLD-02**: The built SPA is committed to the repo and `go:embed`'d into the binary
 - [ ] **BLD-03**: A drift guard proves committed `dist/` matches its SPA source, carries a positive assertion that it inspected something, and is demonstrated RED before being trusted green
-- [ ] **BLD-04**: A drift guard proves committed protobuf codegen matches its `.proto` source, covering **both** the new UI schema **and** the pre-existing `internal/schema/graph.proto` (which has no such guard today)
+- [x] **BLD-04**: A drift guard proves committed protobuf codegen matches its `.proto` source, covering **both** the new UI schema **and** the pre-existing `internal/schema/graph.proto` (which has no such guard today)
 - [ ] **BLD-05**: pnpm build-script approvals are committed, and CI asserts no new "Ignored build scripts" warning appears — a blocked lifecycle script must not silently change `dist/`
 - [ ] **BLD-06**: A `pnpm audit` gate covers the JS dependency tree that `govulncheck` and Syft cannot see, with a sibling assertion proving non-vacuity independent of `pnpm audit`'s own exit code
 - [ ] **BLD-07**: No Node or pnpm invocation appears anywhere in the signed release path — `.goreleaser.yaml` and `release.yml` build steps stay pure Go
 
 ### Carried Fix
 
-- [ ] **FIX-01**: `internal/mcp/server.go`'s `pendingWriter` counter is not corrupted by server-initiated notifications (CR-01)
+- [x] **FIX-01**: `internal/mcp/server.go`'s `pendingWriter` counter is not corrupted by server-initiated notifications (CR-01)
 
 ## v2 Requirements
 
@@ -133,20 +133,20 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SRV-01 | Phase 1 | Pending |
-| SRV-02 | Phase 1 | Pending |
-| SRV-03 | Phase 1 | Pending |
+| SRV-01 | Phase 1 | Complete |
+| SRV-02 | Phase 1 | Complete |
+| SRV-03 | Phase 1 | Complete |
 | SRV-04 | Phase 1 | Complete |
 | SRV-05 | Phase 3 | Pending |
-| RPC-01 | Phase 1 | Pending |
-| RPC-02 | Phase 1 | Pending |
+| RPC-01 | Phase 1 | Complete |
+| RPC-02 | Phase 1 | Complete |
 | RPC-03 | Phase 2 | Pending |
 | RPC-04 | Phase 6 | Pending |
-| RPC-05 | Phase 1 | Pending |
-| ENG-01 | Phase 1 | Pending |
-| ENG-02 | Phase 1 | Pending |
+| RPC-05 | Phase 1 | Complete |
+| ENG-01 | Phase 1 | Complete |
+| ENG-02 | Phase 1 | Complete |
 | ENG-03 | Phase 5 | Pending |
-| ENG-04 | Phase 1 | Pending |
+| ENG-04 | Phase 1 | Complete |
 | BRW-01 | Phase 3 | Pending |
 | BRW-02 | Phase 3 | Pending |
 | BRW-03 | Phase 3 | Pending |
@@ -179,11 +179,11 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | BLD-01 | Phase 2 | Pending |
 | BLD-02 | Phase 2 | Pending |
 | BLD-03 | Phase 2 | Pending |
-| BLD-04 | Phase 1 | Pending |
+| BLD-04 | Phase 1 | Complete |
 | BLD-05 | Phase 2 | Pending |
 | BLD-06 | Phase 2 | Pending |
 | BLD-07 | Phase 2 | Pending |
-| FIX-01 | Phase 1 | Pending |
+| FIX-01 | Phase 1 | Complete |
 
 **Coverage:**
 
