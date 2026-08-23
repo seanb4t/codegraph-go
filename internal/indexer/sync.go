@@ -178,7 +178,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
-		newMeta.CommitSha = headCommitSHA
+		newMeta.CommitSha = syncCommitSHA(headCommitSHA, meta)
 		if err := w.PutMeta(newMeta); err != nil {
 			w.Close()
 			return Stats{}, err
@@ -407,7 +407,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
-	newMeta.CommitSha = headCommitSHA
+	newMeta.CommitSha = syncCommitSHA(headCommitSHA, meta)
 	if err := w.PutMeta(newMeta); err != nil {
 		w.Close()
 		return Stats{}, err

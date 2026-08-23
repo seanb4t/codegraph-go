@@ -292,3 +292,95 @@ func readBackMeta(t *testing.T, storeDir string) *schema.Meta {
 	}
 	return meta
 }
+
+// TestSyncPreservesAKnownCommitWhenHeadCannotBeResolved is WR-05's
+// end-to-end proof: a Sync whose HEAD resolution fails leaves the
+// previously recorded commit_sha intact rather than erasing it.
+//
+// resolveHeadCommitSHA returns "" for every failure mode by design, and
+// schema.NewMeta() starts from a zero-valued record, so an unconditional
+// assignment REPLACES a known-good SHA with absent — and D-05 defines
+// empty as "unknown, never an error", so nothing anywhere reports the
+// loss. The realistic trigger is mundane: a watcher-driven Sync firing
+// while `git rebase` holds .git/index.lock.
+//
+// Three subtests, none of which can pass vacuously:
+//
+//   - the baseline establishes that a real SHA was recorded at all;
+//   - the failure case asserts that exact SHA is STILL there after a
+//     Sync with git unresolvable (this is the one that goes RED without
+//     the fix — the value becomes "");
+//   - the positive control makes a SECOND commit with git working and
+//     asserts the SHA MOVES, proving the fix preserves rather than
+//     freezes.
+func TestSyncPreservesAKnownCommitWhenHeadCannotBeResolved(t *testing.T) {
+	repoRoot := newGitCommitFixture(t)
+	storeDir := t.TempDir()
+
+	if _, err := Run(repoRoot, storeDir, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	firstSHA := gitRevParseHEAD(t, repoRoot)
+	if got := readBackMeta(t, storeDir).GetCommitSha(); got != firstSHA {
+		t.Fatalf("baseline Meta.CommitSha = %q, want %q (independently computed) — the rest of this test proves nothing without it", got, firstSHA)
+	}
+
+	t.Run("unresolvable-head-preserves-the-prior-commit", func(t *testing.T) {
+		// A real content change, so Sync takes the incremental write
+		// path rather than the fully-no-op early return.
+		writeTestFile(t, filepath.Join(repoRoot, "main.go"), "package main\n\nfunc main() { println(\"changed\") }\n")
+
+		orig := gitExecLookPath
+		defer func() { gitExecLookPath = orig }()
+		gitExecLookPath = func(string) (string, error) {
+			return "", exec.ErrNotFound
+		}
+
+		if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+			t.Fatalf("Sync with git unresolvable must still succeed: %v", err)
+		}
+		if got := readBackMeta(t, storeDir).GetCommitSha(); got != firstSHA {
+			t.Fatalf("Meta.CommitSha after a Sync that could not resolve HEAD = %q, want the preserved %q — an unresolvable HEAD is not evidence that the recorded commit is wrong", got, firstSHA)
+		}
+	})
+
+	t.Run("resolvable-head-still-advances-the-commit", func(t *testing.T) {
+		runGitFixture(t, repoRoot, "add", "-A")
+		runGitFixture(t, repoRoot, "commit", "-q", "-m", "second")
+		secondSHA := gitRevParseHEAD(t, repoRoot)
+		if secondSHA == firstSHA {
+			t.Fatal("fixture assumption broken: the second commit did not move HEAD")
+		}
+
+		writeTestFile(t, filepath.Join(repoRoot, "main.go"), "package main\n\nfunc main() { println(\"changed again\") }\n")
+		if _, err := Sync(repoRoot, storeDir, Options{}); err != nil {
+			t.Fatalf("Sync: %v", err)
+		}
+		if got := readBackMeta(t, storeDir).GetCommitSha(); got != secondSHA {
+			t.Fatalf("Meta.CommitSha after a Sync that DID resolve HEAD = %q, want the new %q — preserving a prior value must never freeze it", got, secondSHA)
+		}
+	})
+}
+
+// TestSyncCommitSHAPrefersAResolvedValue covers syncCommitSHA's two
+// branches directly, so the rule survives independently of which of
+// Sync's two Meta write sites a given integration test happens to reach.
+func TestSyncCommitSHAPrefersAResolvedValue(t *testing.T) {
+	const prior = "0123456789abcdef0123456789abcdef01234567"
+	const fresh = "fedcba9876543210fedcba9876543210fedcba98"
+
+	prev := schema.NewMeta()
+	prev.CommitSha = prior
+
+	if got := syncCommitSHA(fresh, prev); got != fresh {
+		t.Fatalf("syncCommitSHA(resolved=%q) = %q, want the freshly resolved value", fresh, got)
+	}
+	if got := syncCommitSHA("", prev); got != prior {
+		t.Fatalf("syncCommitSHA(resolved=\"\") = %q, want the preserved prior value %q", got, prior)
+	}
+
+	empty := schema.NewMeta()
+	if got := syncCommitSHA("", empty); got != "" {
+		t.Fatalf("syncCommitSHA(resolved=\"\", prior=\"\") = %q, want empty — there is nothing to preserve", got)
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // gitExecLookPath is resolveHeadCommitSHA's executable-lookup seam,
@@ -95,4 +97,29 @@ func isLowercaseHexCommitSHA(s string) bool {
 		}
 	}
 	return true
+}
+
+// syncCommitSHA decides what a Sync writes into Meta.commit_sha (WR-05).
+//
+// resolveHeadCommitSHA returns "" for EVERY failure mode by design — git
+// absent from PATH, the resolveHeadCommitGitTimeout firing, `git
+// rev-parse` exiting non-zero because .git/index.lock is held by a
+// concurrent rebase or commit, or output failing the hex check — so ""
+// means "could not resolve HEAD this run", not "this checkout has no
+// HEAD". Because schema.NewMeta() starts from a zero-valued record, an
+// unconditional assignment does not leave the previous value alone: it
+// REPLACES a known-good commit with absent, and D-05 defines empty as
+// "unknown, never an error", so the erasure surfaces to the user as a
+// status panel that silently flips to unknown with nothing anywhere to
+// explain it.
+//
+// An unresolvable HEAD is not evidence that the previously recorded
+// commit is wrong, so the prior value is preserved. This is deliberately
+// scoped to Sync: a full index Run rebuilds the record from scratch and
+// has no prior value to preserve.
+func syncCommitSHA(resolved string, prev *schema.Meta) string {
+	if resolved != "" {
+		return resolved
+	}
+	return prev.GetCommitSha()
 }
