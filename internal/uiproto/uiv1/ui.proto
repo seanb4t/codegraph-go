@@ -355,6 +355,12 @@ message SourceBlob {
   int32 returned_lines = 5;
   int32 returned_bytes = 6;
 
+  // Reserved band for future payload metadata (compression, encoding hints,
+  // syntax-highlight spans). Mirrors the identical clauses on Node, Edge and
+  // Meta in internal/schema/graph.proto: the band sits far above organic field
+  // numbering so a pre-agreed future field lands at an agreed number instead of
+  // colliding with whatever the next organic field would be. Maintainer ruling
+  // at plan 01-10's one-way checkpoint; permanent under D-02a.
   reserved 50 to 59;
 }
 
