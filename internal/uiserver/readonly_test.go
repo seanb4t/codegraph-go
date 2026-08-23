@@ -135,6 +135,18 @@ type uiProtoFieldNumber struct {
 // not carried only in a prose SUMMARY across waves.
 const uiProtoFieldFixtureLenAtPlan0109 = 97
 
+// uiProtoFieldFixtureLenAtPlan0110 EXTENDS uiProtoFieldFixtureLenAtPlan0109
+// by exactly 9 (plan 01-10, RPC-05, dated 2026-08-23): SourceBlob's own
+// six fields (content, truncated, total_lines, total_bytes,
+// returned_lines, returned_bytes) plus the three attachment fields this
+// plan adds — GetNodeDetailResponse.source = 9, NodeDefinition.source = 5,
+// ExploreGroup.source = 4. Declared in terms of the prior constant, never
+// as a bare literal, so an edit to 01-09's fixture that changes its
+// length breaks THIS assertion rather than silently shifting the
+// arithmetic. Plan 01-11 is the next and final extender in this phase,
+// adding GetStatusResponse.store_exists = 8 and .indexing_in_progress = 9.
+const uiProtoFieldFixtureLenAtPlan0110 = uiProtoFieldFixtureLenAtPlan0109 + 9
+
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
 // the wave that completes GetNodeDetail and Explore). Per the corrected
@@ -147,22 +159,24 @@ const uiProtoFieldFixtureLenAtPlan0109 = 97
 // and IndexingInProgress (allocated by plan 01-01), neither of which this
 // plan declares.
 //
-// It deliberately contains NO entry for plan 01-10's forthcoming
-// SourceBlob-typed source fields on GetNodeDetailResponse, NodeDefinition
-// and ExploreGroup, and none for GetStatusResponse.store_exists = 8 or
-// .indexing_in_progress = 9 (plan 01-11): none of those fields exist yet
+// Plan 01-10 (RPC-05, dated 2026-08-23) EXTENDED this fixture with
+// SourceBlob's own six fields and the three attachment fields on
+// GetNodeDetailResponse, NodeDefinition and ExploreGroup — the numbers
+// 01-09 recorded as intent in ui.proto's file-level comment, now spent.
+// It still deliberately contains NO entry for GetStatusResponse.store_exists = 8
+// or .indexing_in_progress = 9 (plan 01-11): those fields do not exist yet
 // in the generated descriptor, and a descriptor carries declared fields
 // and `reserved` ranges, never comments — an entry for a not-yet-declared
 // field could only fail this plan or be silently skipped, and a skipped
 // entry is exactly the vacuous-guard defect class this test exists to
 // avoid.
 //
-// Plans 01-10 and 01-11 both EXTEND this fixture (append entries) and
-// re-run TestUIProtoFieldNumbersAreStableAndUnique — 01-10 with its nine
-// source fields, 01-11 with GetStatusResponse.store_exists = 8 and
-// .indexing_in_progress = 9. Every entry written here must still resolve
-// unchanged at both of those later points — that is the real, and only
-// enforceable, cross-wave protection D-02a provides: a later plan may
+// Plan 01-11 is the next and final extender in this phase (append
+// entries only) and re-runs TestUIProtoFieldNumbersAreStableAndUnique with
+// GetStatusResponse.store_exists = 8 and .indexing_in_progress = 9. Every
+// entry written here must still resolve unchanged at that later point —
+// that is the real, and only enforceable, cross-wave protection D-02a
+// provides: a later plan may
 // ADD a field number, it may never DISTURB one an earlier plan allocated.
 var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"Node", "id", 1},
@@ -262,6 +276,21 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"ExploreResponse", "groups", 5},
 	{"ExploreResponse", "blasts", 6},
 	{"IndexingInProgress", "message", 1},
+
+	// Plan 01-10 (RPC-05, dated 2026-08-23): SourceBlob's own six fields,
+	// plus the three attachment fields on messages plan 01-09 already
+	// declared — the numbers 01-09 recorded as intent in ui.proto's
+	// file-level comment, spent here. Nine entries total, matching
+	// uiProtoFieldFixtureLenAtPlan0110's +9.
+	{"SourceBlob", "content", 1},
+	{"SourceBlob", "truncated", 2},
+	{"SourceBlob", "total_lines", 3},
+	{"SourceBlob", "total_bytes", 4},
+	{"SourceBlob", "returned_lines", 5},
+	{"SourceBlob", "returned_bytes", 6},
+	{"NodeDefinition", "source", 5},
+	{"GetNodeDetailResponse", "source", 9},
+	{"ExploreGroup", "source", 4},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -288,8 +317,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0109 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0109 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0109)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0110 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0110 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0110)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")

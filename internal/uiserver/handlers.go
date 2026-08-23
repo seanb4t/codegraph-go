@@ -447,13 +447,33 @@ func nodeDetailModeToProto(m query.NodeDetailMode) uiv1.NodeDetailMode {
 	}
 }
 
+// sourceBlobToProto maps a truncateSource result (RPC-05, plan 01-10)
+// onto its uiv1.SourceBlob wire projection, field-for-field in the
+// checkpoint-locked order: content, truncated, total_lines, total_bytes,
+// returned_lines, returned_bytes. This is the ONE mapper every
+// source-producing path below calls — never a second inline construction
+// of a SourceBlob — so a source blob leaving this process always went
+// through truncateSource first.
+func sourceBlobToProto(ts truncatedSource) *uiv1.SourceBlob {
+	return &uiv1.SourceBlob{
+		Content:       ts.Content,
+		Truncated:     ts.Truncated,
+		TotalLines:    int32(ts.TotalLines),
+		TotalBytes:    int32(ts.TotalBytes),
+		ReturnedLines: int32(ts.ReturnedLines),
+		ReturnedBytes: int32(ts.ReturnedBytes),
+	}
+}
+
 // nodeDefinitionToProto maps one multi-definition candidate onto its
 // uiv1.NodeDefinition wire projection. gathered is true when the
 // candidate's *query.DefinitionDetail was actually fetched (within
 // uiMultiDefCap, see nodeDetailToProto); when false, dd is nil and
-// calls/called_by are left at their empty zero value — the candidate is
-// LISTED, never gathered, exactly as MultiDefDetail.Definition's laziness
-// requires (D-02).
+// calls/called_by/source are left at their empty zero value — the
+// candidate is LISTED, never gathered, exactly as
+// MultiDefDetail.Definition's laziness requires (D-02). When gathered,
+// dd.Source (already read by buildMultiDefDetail's per-candidate closure)
+// goes through truncateSource before it reaches the wire (RPC-05).
 func nodeDefinitionToProto(n *schema.Node, dd *query.DefinitionDetail, gathered bool) *uiv1.NodeDefinition {
 	out := &uiv1.NodeDefinition{
 		Node:           nodeToProto(n),
@@ -462,6 +482,7 @@ func nodeDefinitionToProto(n *schema.Node, dd *query.DefinitionDetail, gathered 
 	if gathered && dd != nil {
 		out.Calls = nodesToProto(dd.Calls)
 		out.CalledBy = nodesToProto(dd.CalledBy)
+		out.Source = sourceBlobToProto(truncateSource(dd.Source))
 	}
 	return out
 }
@@ -479,15 +500,28 @@ func nodeDefinitionToProto(n *schema.Node, dd *query.DefinitionDetail, gathered 
 // than returning a partially-populated response, matching Node()'s own
 // behavior exactly (no invented partial-failure semantics — see this
 // plan's SUMMARY for why that was deferred rather than built now).
-func nodeDetailToProto(d query.NodeDetail) (*uiv1.GetNodeDetailResponse, error) {
+//
+// eng is used ONLY for the single-definition mode's source read
+// (RPC-05, plan 01-10): (*query.Engine).SourceFor on the definition's own
+// file path, a deliberate wire-layer addition the CLI's single-definition
+// path does not perform (DefinitionDetail.Source is only ever populated
+// on the multi-definition path — see its own doc comment), going through
+// the same repo-root confinement gate readSourceFile already provides.
+func nodeDetailToProto(eng *query.Engine, d query.NodeDetail) (*uiv1.GetNodeDetailResponse, error) {
 	resp := &uiv1.GetNodeDetailResponse{Mode: nodeDetailModeToProto(d.Mode)}
 	switch d.Mode {
 	case query.NodeDetailModeFile:
 		resp.Path = d.File.Path
+		resp.Source = sourceBlobToProto(truncateSource(d.File.Source))
 	case query.NodeDetailModeSingleDef:
 		resp.Node = nodeToProto(d.Definition.Node)
 		resp.Calls = nodesToProto(d.Definition.Calls)
 		resp.CalledBy = nodesToProto(d.Definition.CalledBy)
+		src, err := eng.SourceFor(d.Definition.Node.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		resp.Source = sourceBlobToProto(truncateSource(src))
 	case query.NodeDetailModeMultiDef:
 		resp.Symbol = d.Multi.Symbol
 		resp.TotalCandidates = int32(len(d.Multi.Matches))
@@ -529,7 +563,7 @@ func (s *uiService) GetNodeDetail(ctx context.Context, req *connect.Request[uiv1
 		if err != nil {
 			return err
 		}
-		r, err := nodeDetailToProto(d)
+		r, err := nodeDetailToProto(eng, d)
 		if err != nil {
 			return err
 		}
@@ -543,24 +577,28 @@ func (s *uiService) GetNodeDetail(ctx context.Context, req *connect.Request[uiv1
 }
 
 // exploreGroupToProto maps one internal/query.ExploreFileGroup onto its
-// uiv1.ExploreGroup wire projection. skeletonized is looked up by the
-// group's own Path in skeletonFiles — never by position — mirroring
-// internal/query.ExploreResult.SkeletonFiles' documented keying and this
-// package's existing "look sources up by path, never by index" discipline.
-func exploreGroupToProto(g query.ExploreFileGroup, skeletonFiles map[string]bool) *uiv1.ExploreGroup {
+// uiv1.ExploreGroup wire projection. skeletonized and source are both
+// looked up by the group's own Path — never by position — mirroring
+// internal/query.ExploreResult.SkeletonFiles' and .Sources' documented
+// keying and this package's existing "look sources up by path, never by
+// index" discipline (RPC-05, plan 01-10: sources[g.Path] goes through
+// truncateSource before it reaches the wire, the same as every other
+// source-producing path).
+func exploreGroupToProto(g query.ExploreFileGroup, skeletonFiles map[string]bool, sources map[string][]byte) *uiv1.ExploreGroup {
 	return &uiv1.ExploreGroup{
 		Path:         g.Path,
 		Symbols:      nodesToProto(g.Symbols),
 		Skeletonized: skeletonFiles[g.Path],
+		Source:       sourceBlobToProto(truncateSource(sources[g.Path])),
 	}
 }
 
 // exploreGroupsToProto maps a slice of internal/query.ExploreFileGroup
 // onto their uiv1.ExploreGroup wire projections, preserving order.
-func exploreGroupsToProto(groups []query.ExploreFileGroup, skeletonFiles map[string]bool) []*uiv1.ExploreGroup {
+func exploreGroupsToProto(groups []query.ExploreFileGroup, skeletonFiles map[string]bool, sources map[string][]byte) []*uiv1.ExploreGroup {
 	out := make([]*uiv1.ExploreGroup, len(groups))
 	for i, g := range groups {
-		out[i] = exploreGroupToProto(g, skeletonFiles)
+		out[i] = exploreGroupToProto(g, skeletonFiles, sources)
 	}
 	return out
 }
@@ -588,18 +626,18 @@ func blastEntriesToProto(blasts []query.ExploreBlast) []*uiv1.BlastEntry {
 // exploreResultToProto maps internal/query.ExploreResult onto
 // uiv1.ExploreResponse (D-01). A zero-match result is mapped exactly as
 // ExploreResult models it: empty=true, stale carried through, and every
-// other field at its zero value — never an error shape. This mapping does
-// NOT read ExploreResult.Sources at all: attaching per-group source bytes
-// is plan 01-10's deliverable (see ui.proto's file-level intent
-// paragraph), and this mapper's job stops at the fields ExploreGroup
-// declares today.
+// other field at its zero value — never an error shape. r.Sources (keyed
+// by each group's own Path) is threaded through to exploreGroupsToProto
+// so each ExploreGroup carries its own bounded source blob (RPC-05, plan
+// 01-10) — for an empty result, r.Groups is empty and r.Sources is never
+// consulted.
 func exploreResultToProto(r query.ExploreResult) *uiv1.ExploreResponse {
 	return &uiv1.ExploreResponse{
 		Query:       r.Query,
 		Empty:       r.Empty,
 		Stale:       r.Stale,
 		SymbolCount: int32(r.SymbolCount),
-		Groups:      exploreGroupsToProto(r.Groups, r.SkeletonFiles),
+		Groups:      exploreGroupsToProto(r.Groups, r.SkeletonFiles, r.Sources),
 		Blasts:      blastEntriesToProto(r.Blasts),
 	}
 }

@@ -21,19 +21,17 @@
 // the UI needs", not "every exported method on Engine" — this is that
 // contract applied, not an oversight.
 //
-// Plan 01-10's forthcoming attachment (documentation only, deliberately
-// NOT a `reserved` clause — a `reserved` here would forbid the very field
-// numbers 01-10 needs to use, and a descriptor carries no comments, so an
-// undeclared number cannot be pinned by any guard; see plan 01-09's
-// SUMMARY for the full reasoning). Plan 01-10 attaches a `SourceBlob`-
-// typed source field to three messages this plan (01-09) declares, at
-// each message's next free field number as of the end of 01-09:
-//   - GetNodeDetailResponse: next free number 9
-//   - NodeDefinition: next free number 5
-//   - ExploreGroup: next free number 4
-// Plan 01-09's Task 3 known-number fixture pins every number allocated
-// through 01-09 over the generated descriptor, so 01-10 may ADD those
-// three fields but cannot disturb one already shipped.
+// Plan 01-10's attachment (RPC-05, D-11/D-12/D-13): a `SourceBlob`-typed
+// source field on three messages plan 01-09 declared, at each message's
+// next free field number as of the end of 01-09 — exactly the numbers
+// 01-09 recorded here as intent, spent now:
+//   - GetNodeDetailResponse: source = 9
+//   - NodeDefinition: source = 5
+//   - ExploreGroup: source = 4
+// Plan 01-09's Task 3 known-number fixture (internal/uiserver/readonly_test.go)
+// pinned every number allocated through 01-09; this plan EXTENDS that
+// fixture with these three plus SourceBlob's own six, and every entry
+// 01-09 wrote still holds afterward.
 syntax = "proto3";
 
 package codegraph.ui.v1;
@@ -317,6 +315,49 @@ message GetNodeDetailRequest {
   optional int32 line = 3;
 }
 
+// SourceBlob is RPC-05's bounded, two-unit projection of a verbatim
+// source read (D-11, D-12, plan 01-10's checkpoint): every source blob
+// leaving this process, at every attachment point below, is one of
+// these — never a raw, unbounded byte string. Fields 1 through 6 are
+// spent permanently (D-02a); reserved 50 to 59 mirrors the identical
+// clause on internal/schema/graph.proto's Node and Edge messages and this
+// file's own Meta-equivalent precedent: the band sits far above organic
+// field numbering so a future pre-agreed field (payload metadata such as
+// compression, encoding hints, or syntax-highlight spans) lands at an
+// agreed number instead of colliding with whatever the next organic field
+// would be.
+//
+// content is `bytes`, not `string`, and the UTF-8 guarantee it carries is
+// SCOPED, never universal: if the input was valid UTF-8, content is too,
+// because the byte cut never splits a rune — but indexed source is not
+// guaranteed valid UTF-8, and a proto3 `string` field would fail to
+// marshal such a file rather than serving it, turning an ordinary source
+// view into a server error for one oddly-encoded file anywhere in the
+// repository.
+//
+// Line counting (total_lines and returned_lines) follows one rule,
+// applied identically to both: the count is the number of newline
+// characters in the content, plus one when the content is non-empty and
+// does not end in a newline. Worked examples: "" is 0 lines; "\n" is 1
+// line; "a\nb\n" is 2 lines; "a\nb" (an unterminated final line) is 2
+// lines. See internal/uiserver/truncate.go's countLines for the one
+// implementation both the total and the returned count go through.
+//
+// truncated is never an error signal (D-12): the client always receives
+// usable content, whether or not either cap fired, and renders "showing
+// first N of M" using total_lines/total_bytes for M and
+// returned_lines/returned_bytes for N.
+message SourceBlob {
+  bytes content = 1;
+  bool truncated = 2;
+  int32 total_lines = 3;
+  int32 total_bytes = 4;
+  int32 returned_lines = 5;
+  int32 returned_bytes = 6;
+
+  reserved 50 to 59;
+}
+
 // NodeDefinition carries one multi-definition candidate (D-02). Every
 // candidate in a GetNodeDetailResponse's definitions list carries its own
 // node; detail_gathered distinguishes a candidate whose calls/called_by
@@ -327,11 +368,17 @@ message GetNodeDetailRequest {
 // tell which entries are complete without inferring it from emptiness
 // alone (an in-cap candidate that genuinely calls and is called by
 // nothing would otherwise be indistinguishable from an out-of-cap one).
+// source (RPC-05, plan 01-10) is this candidate's verbatim, bounded source
+// blob — populated whenever detail_gathered is true (the same lazy
+// per-candidate lookup that fetches calls/called_by also fetches source,
+// see internal/query.DefinitionDetail.Source); unset for a listed-only
+// candidate, the same discipline calls/called_by already follow.
 message NodeDefinition {
   Node node = 1;
   repeated Node calls = 2;
   repeated Node called_by = 3;
   bool detail_gathered = 4;
+  SourceBlob source = 5;
 }
 
 // GetNodeDetailResponse is the discriminated wire projection of
@@ -344,8 +391,8 @@ message NodeDefinition {
 //
 //	mode                      | populated fields
 //	--------------------------|--------------------------------------------
-//	NODE_DETAIL_MODE_FILE       | path
-//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by
+//	NODE_DETAIL_MODE_FILE       | path, source
+//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by, source
 //	NODE_DETAIL_MODE_MULTI_DEF  | symbol, definitions, total_candidates
 //
 // total_candidates is the TRUE total candidate count
@@ -353,6 +400,13 @@ message NodeDefinition {
 // definitions actually carry gathered detail — the UI's own
 // uiMultiDefCap bounds gathering, never the reported total, so a client
 // can always render "showing N of M" accurately.
+//
+// source (RPC-05, plan 01-10) is the ONE new field this plan adds to this
+// message, shared by both the file mode and the single-def mode — never
+// both populated in the same response, since mode discriminates which is
+// active. Multi-def mode carries its source per-candidate instead, on
+// NodeDefinition.source, because a single response-level blob would lose
+// which candidate it belongs to.
 message GetNodeDetailResponse {
   NodeDetailMode mode = 1;
 
@@ -370,6 +424,14 @@ message GetNodeDetailResponse {
   string symbol = 6;
   repeated NodeDefinition definitions = 7;
   int32 total_candidates = 8;
+
+  // source is populated in NODE_DETAIL_MODE_FILE (the whole file's
+  // verbatim content) and in NODE_DETAIL_MODE_SINGLE_DEF (the
+  // definition's own file, read via (*query.Engine).SourceFor — a
+  // deliberate wire-layer read the CLI's single-definition path does not
+  // perform, going through the same repo-root confinement gate). Unset
+  // in NODE_DETAIL_MODE_MULTI_DEF.
+  SourceBlob source = 9;
 }
 
 // ExploreRequest carries internal/query.Engine.ExploreDetail's two
@@ -388,10 +450,16 @@ message ExploreRequest {
 // present in internal/query.ExploreResult.SkeletonFiles — a per-group
 // boolean carries the same information a second client-side lookup would
 // need, without requiring one.
+//
+// source (RPC-05, plan 01-10) is this group's own bounded verbatim source
+// blob, looked up by this group's OWN path key in
+// internal/query.ExploreResult.Sources — never by position — mirroring
+// skeletonized's lookup discipline exactly.
 message ExploreGroup {
   string path = 1;
   repeated Node symbols = 2;
   bool skeletonized = 3;
+  SourceBlob source = 4;
 }
 
 // BlastEntry is the wire projection of internal/query.ExploreBlast: one

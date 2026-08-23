@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
 )
 
@@ -80,7 +82,18 @@ func Listen(o Options) (*Server, error) {
 	port := strconv.Itoa(tcpAddr.Port)
 
 	mux := http.NewServeMux()
-	mux.Handle(uiv1connect.NewUIServiceHandler(&uiService{repoPath: o.RepoPath}))
+	// D-13's transport backstop: connect-go defaults to UNLIMITED on both
+	// send and receive, so RPC-05 is satisfied by no default.
+	// transportSendMaxBytes/transportReadMaxBytes (truncate.go) sit
+	// strictly above the application caps, asserted by
+	// TestTransportBackstopSitsAboveApplicationCap, so this backstop only
+	// ever fires when application truncation was somehow missed — never
+	// on correctly-truncated output.
+	mux.Handle(uiv1connect.NewUIServiceHandler(
+		&uiService{repoPath: o.RepoPath},
+		connect.WithSendMaxBytes(transportSendMaxBytes),
+		connect.WithReadMaxBytes(transportReadMaxBytes),
+	))
 
 	guarded := originHostGuard(port, mux)
 
