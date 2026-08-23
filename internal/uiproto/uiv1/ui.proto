@@ -1,0 +1,90 @@
+// Package codegraph.ui.v1 defines codegraph ui's wire protocol: a Connect
+// RPC service over the repository's own read-only internal/query.Engine
+// (RPC-01, RPC-02). This is a SECOND proto surface, independent of
+// internal/schema/graph.proto's on-disk graph-store record format — this
+// package never appears on disk, only on the loopback wire.
+//
+// Additive-only discipline (D-02a, inherited from internal/schema):
+// within this package, a field number is never renumbered and never
+// reused. When a field is retired, its number is added to a `reserved`
+// clause instead of being deleted or repurposed.
+syntax = "proto3";
+
+package codegraph.ui.v1;
+
+option go_package = "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1";
+
+// UIService is codegraph ui's RPC surface. This plan (01-01, the phase's
+// tracer) defines exactly one method — GetStatus — proving the whole
+// transport end-to-end before the remaining eight methods are added by
+// later plans in this phase (SRV-04's per-call open/close discipline
+// applies to all of them).
+service UIService {
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+}
+
+// GetStatusRequest is presently empty of consulted fields — v1's server
+// binds exactly one repository at startup (uiserver.Options.RepoPath, an
+// unwired field per D-08) and every rpc reports on that repository.
+message GetStatusRequest {
+  // path is RESERVED for a future milestone where one server process
+  // answers for more than one repository; the v1 handler does not read
+  // it — every response reports on the server's own configured
+  // RepoPath regardless of this field's value. Declared now, rather
+  // than left for a later field-number addition, so the wire shape is
+  // stable before any client depends on it.
+  string path = 1;
+}
+
+// GetStatusResponse is the uiv1 projection of internal/query.StatusResult
+// (D-06): a bounded subset sufficient for this tracer's health check,
+// not the full CLI `status --json` shape. The mapping table lives in
+// internal/uiserver/handlers.go's GetStatus doc comment.
+message GetStatusResponse {
+  // initialized mirrors StatusResult.Initialized: true whenever this
+  // response was produced from a successfully opened Engine. Absent
+  // (zero value: false) has no meaning yet in this plan — SRV-04's
+  // degrade path (D-16, a later plan) is the first caller that can
+  // legitimately answer with initialized=false from a locked store.
+  bool initialized = 1;
+
+  // version mirrors StatusResult.Version — the schema version string
+  // (fmt.Sprintf("%d", schema.SchemaVersion)), not a codegraph-go
+  // release version (D-06, status.go's mapping table).
+  string version = 2;
+
+  // node_count mirrors StatusResult.NodeCount, a live graphstore.Reader
+  // scan result. Absent (zero value: 0) means the store reported no
+  // nodes, not "unknown" — this plan's GetStatus never returns a
+  // zero-valued node_count for any other reason, since a failed Engine
+  // open never reaches message construction in this plan.
+  int64 node_count = 3;
+
+  // edge_count mirrors StatusResult.EdgeCount, the same discipline as
+  // node_count.
+  int64 edge_count = 4;
+
+  // file_count mirrors StatusResult.FileCount, the same discipline as
+  // node_count.
+  int64 file_count = 5;
+
+  // stale mirrors StatusResult.Stale (D-04a): true when a sync is
+  // pending (the watcher/daemon signal file exists, or the newest
+  // on-disk source mtime is newer than the last recorded sync).
+  bool stale = 6;
+}
+
+// IndexingInProgress is the typed Connect error detail SRV-04's degrade
+// path (D-14) attaches to a CodeUnavailable response when the graph
+// store stays locked past graphstore.Open's retry budget. Reserved by
+// this plan for that later plan (01-11) to populate; no rpc in this
+// plan returns it yet.
+message IndexingInProgress {
+  // message is a GENERIC, human-readable status string — never an OS
+  // lock-file path, PID, or other host-local detail (Information
+  // Disclosure risk to an unauthenticated loopback caller, T-01-06).
+  // Absent (zero value: "") never occurs in practice: the later plan
+  // that constructs this message always sets a non-empty generic
+  // constant.
+  string message = 1;
+}
