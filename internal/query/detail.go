@@ -116,8 +116,8 @@ func (e *Engine) buildFileNodeDetail(file string) (*FileDetail, error) {
 	return &FileDetail{Path: file, Source: content}, nil
 }
 
-// buildSingleDefDetail performs exactly the body renderSingleDefNode
-// performed before this extraction — fetchCalls, then the reverse
+// buildSingleDefDetail performs exactly the body the pre-extraction
+// single-def render path performed — fetchCalls, then the reverse
 // adjacency (via the buildReverseAdjacency seam), then fetchCalledBy —
 // and returns the populated struct with Source left nil. It returns
 // whatever the fetchers returned without normalising: nil stays nil,
@@ -139,14 +139,14 @@ func (e *Engine) buildSingleDefDetail(node *schema.Node) (*DefinitionDetail, err
 }
 
 // buildMultiDefDetail builds the reverse adjacency ONCE (via the
-// buildReverseAdjacency seam) and closes over it, exactly as
-// renderMultiDefNode's closure already did — fetchCalledBy's own doc
+// buildReverseAdjacency seam) and closes over it, exactly as the
+// pre-extraction multi-def render closure did — fetchCalledBy's own doc
 // comment states why the map is shared: the multi-definition path fetches
 // trails for up to nodeMultiDefHardCap candidates, and rebuilding the
 // O(edges) map per candidate would multiply that scan. The returned
 // MultiDefDetail's Definition gathers one candidate at a time, in
-// source-then-calls-then-calledBy order — the same order
-// renderMultiDefNode's fetch closure used — so which error surfaces
+// source-then-calls-then-calledBy order — the same order that
+// pre-extraction fetch closure used — so which error surfaces
 // first for a given candidate is unchanged.
 func (e *Engine) buildMultiDefDetail(symbol string, matches []*schema.Node) (*MultiDefDetail, error) {
 	rev, err := buildReverseAdjacency(e.reader)
