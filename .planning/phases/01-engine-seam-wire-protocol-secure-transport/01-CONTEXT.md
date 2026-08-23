@@ -458,6 +458,46 @@ and will need either a task under an existing requirement or a roadmap addition.
 - **A user config file mechanism.** Explicitly declined as out of scope for a port
   question (see D-08). If it is ever wanted, it is a milestone-sized decision.
 
+### Known limitation carried forward — the sixth prohibition's generality (H-9-1)
+
+**Status: accepted, not fixed. No gate in Phase 1 exploits it. Recorded for whichever phase
+next authors gates.**
+
+The sixth (semantic) prohibition carried in all 11 Phase-1 plans still does not entail its own
+headline — *"Never write a gate whose floor can be met without the deliverable it names existing."*
+Two independent reviewers (the cycle-9 review agent and Codex, without contact) constructed the same
+counterexample. The diagnosis is structural:
+
+- **Half (a) OWNERSHIP AND CAUSATION is causal but NOT exhaustive** — it requires a no-op replacement
+  to turn the leg RED, but names only *one* artifact under test.
+- **Half (b) HOMING is exhaustive but NOT causal** — it quantifies over every behavior bullet, but
+  requires a bullet to *name* a counted test, never to be *asserted* by it.
+
+Neither half is both, so their conjunction is neither, while the headline requires both. A task with a
+**plural** deliverable therefore satisfies every clause literally by naming one peripheral artifact for
+(a) and nominally homing the rest to inert subtests. The `STATUS -eq 0` conjunction does not rescue it:
+a subtest asserting nothing load-bearing cannot fail, so it contributes its `--- PASS` line and its
+name while staying causally inert.
+
+**Why it was not fixed here.** This would have been the *third* textual amendment in three cycles —
+cycle 6 added the prohibition, cycle 8 made half (a) causal, and each closed its predecessor's
+**instance** without closing the **pattern**. A fourth amendment has a poor prior. Maintainer ruling:
+accept and record.
+
+**The proposal to adopt instead, from the cycle-9 reviewer.** Replace the textual rule with a
+per-task **no-op matrix** — a bounded planning-time artifact, one row per deliverable, one column
+naming the test that goes RED when that deliverable is replaced by a no-op. It is structural rather
+than textual, so a naming trick cannot satisfy it: a table that must enumerate every deliverable
+cannot be satisfied by naming one. If a later phase adopts this, it supersedes the sixth prohibition
+rather than amending it again.
+
+**What the phase's own gates do today**, verified: the two multi-artifact form-A1 derivations actually
+written name several artifacts each and trace the no-op consequence for all of them. The gap is in what
+the rule *permits* a future author to write, not in what this phase wrote.
+
+Full text, the exact admitting gate, and the clause-by-clause admission argument are in
+`01-REVIEWS.md`'s cycle-9 section (commit `4fc5176`).
+
 ### Reviewed Todos (not folded)
 
 - **`release:dry-run-signed`'s additions-only diff guard passes vacuously when the
