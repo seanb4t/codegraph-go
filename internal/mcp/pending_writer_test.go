@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // TestPendingWriterDrainsEarlyWithoutFix is FIX-01's committed reproduction
@@ -483,5 +486,174 @@ func TestPendingWriterNeverGoesNegative(t *testing.T) {
 	wantUnderflows := int64(attempts - accepted)
 	if got := pendingUnderflows.Load(); got != wantUnderflows {
 		t.Fatalf("pendingUnderflows = %d, want %d refused decrements (attempts=%d - accepted=%d)", got, wantUnderflows, attempts, accepted)
+	}
+}
+
+// notificationCountingWriter wraps an underlying io.WriteCloser and
+// classifies every complete outbound line it forwards as either a
+// response (id present, no method) or a notification/request (method
+// present) — implemented independently of Task 1's production
+// looksLikeJSONRPCResponse classifier so this test's separability claim
+// does not depend on that classifier being correct.
+type notificationCountingWriter struct {
+	w io.WriteCloser
+
+	mu            sync.Mutex
+	buf           []byte
+	responseIDs   map[string]int
+	notifications int
+}
+
+func (n *notificationCountingWriter) Write(b []byte) (int, error) {
+	nn, err := n.w.Write(b)
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.buf = append(n.buf, b[:nn]...)
+	start := 0
+	for {
+		i := bytes.IndexByte(n.buf[start:], '\n')
+		if i < 0 {
+			break
+		}
+		end := start + i + 1
+		line := n.buf[start:end]
+		var msg struct {
+			Method string           `json:"method"`
+			ID     *json.RawMessage `json:"id"`
+		}
+		if jsonErr := json.Unmarshal(line, &msg); jsonErr == nil {
+			switch {
+			case msg.Method != "":
+				n.notifications++
+			case msg.ID != nil:
+				if n.responseIDs == nil {
+					n.responseIDs = make(map[string]int)
+				}
+				n.responseIDs[string(*msg.ID)]++
+			}
+		}
+		start = end
+	}
+	if start > 0 {
+		remaining := copy(n.buf, n.buf[start:])
+		n.buf = n.buf[:remaining]
+	}
+	return nn, err
+}
+
+func (n *notificationCountingWriter) Close() error { return n.w.Close() }
+
+// TestPipelinedToolsListResponsesAreMatchedByIDWithoutNotifications proves
+// that FIX-01 and the wire-oracle toolslist-repeat ordering flake
+// (todos/pending/2026-08-07-wire-oracle-toolslist-repeat-response-ordering-flake.md)
+// are DIFFERENT defects: with ZERO notification traffic present, two
+// pipelined tools/list calls against a real BuildServer over an
+// io.Pipe-backed mcp.IOTransport are both answered exactly once, matched
+// by JSON-RPC id.
+//
+// This test deliberately does NOT assert arrival order. go-sdk@v1.7.0
+// invokes jsonrpc2.Async(ctx) for every call except initialize
+// (github.com/modelcontextprotocol/go-sdk@v1.7.0's mcp/server.go:1910-1916,
+// citing upstream issue go-sdk#26), so two pipelined calls run in separate
+// goroutines with no guarantee which one's response reaches the transport
+// first. Not asserting order here is NOT a demonstration that reordering
+// occurs — it establishes separability by construction: this same async
+// dispatch mechanism is exercised in a session that carries no
+// notification traffic at all, so FIX-01's counter bug — which requires a
+// server-initiated notification write racing an owed response — cannot be
+// the cause of the toolslist-repeat flake. The flake's correct fix is at
+// the wire-oracle harness level (match responses by id, not arrival
+// position), which carries no requirement ID in this milestone and stays,
+// unresolved, in its own todo.
+func TestPipelinedToolsListResponsesAreMatchedByIDWithoutNotifications(t *testing.T) {
+	dir := t.TempDir()
+
+	srvR, cliW := io.Pipe()
+	cliR, srvW := io.Pipe()
+
+	rec := &notificationCountingWriter{w: srvW}
+	serverTransport := &mcp.IOTransport{Reader: srvR, Writer: rec}
+	clientTransport := &mcp.IOTransport{Reader: cliR, Writer: cliW}
+
+	// hasIndex=false is deliberate: this test is about response
+	// matching/ordering under pipelined calls, not about the tool
+	// catalog's contents, and a no-index server never emits a
+	// notifications/tools/list_changed — one fewer thing that could
+	// accidentally introduce the notification traffic this test's claim
+	// requires be absent.
+	s := BuildServer(false, nil, dir, dir)
+
+	ctx := context.Background()
+	go func() { _ = s.Run(ctx, serverTransport) }()
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "toolslist-repeat-separability-test", Version: "0.0.0"}, nil)
+	session, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client Connect: %v", err)
+	}
+	defer session.Close()
+
+	const pipelinedCalls = 2
+	var wg sync.WaitGroup
+	results := make([]*mcp.ListToolsResult, pipelinedCalls)
+	errs := make([]error, pipelinedCalls)
+	wg.Add(pipelinedCalls)
+	for i := 0; i < pipelinedCalls; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			results[i], errs[i] = session.ListTools(ctx, nil)
+		}()
+	}
+	wg.Wait()
+
+	for i, callErr := range errs {
+		if callErr != nil {
+			t.Fatalf("pipelined ListTools call %d: %v", i, callErr)
+		}
+		if results[i] == nil {
+			t.Fatalf("pipelined ListTools call %d returned a nil result", i)
+		}
+	}
+
+	// initialize (Connect's own implicit call) plus the two pipelined
+	// ListTools calls made above.
+	wantCalls := pipelinedCalls + 1
+
+	// The client-side calls above returning does not guarantee this
+	// recorder — which observes the SERVER's write side of the same
+	// pipe — has finished its own bookkeeping for the last response yet;
+	// bound the wait rather than assume it is already done.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		rec.mu.Lock()
+		gotCalls := len(rec.responseIDs)
+		rec.mu.Unlock()
+		if gotCalls >= wantCalls || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	rec.mu.Lock()
+	notifications := rec.notifications
+	responseIDs := make(map[string]int, len(rec.responseIDs))
+	for id, count := range rec.responseIDs {
+		responseIDs[id] = count
+	}
+	rec.mu.Unlock()
+
+	if notifications != 0 {
+		t.Fatalf("server sent %d notifications, want 0 — this test's separability claim requires zero notification traffic", notifications)
+	}
+
+	if len(responseIDs) != wantCalls {
+		t.Fatalf("server answered %d distinct ids, want %d (1 initialize + %d pipelined tools/list calls)", len(responseIDs), wantCalls, pipelinedCalls)
+	}
+	for id, count := range responseIDs {
+		if count != 1 {
+			t.Fatalf("id %q was answered %d times, want exactly 1 — a response was lost or duplicated", id, count)
+		}
 	}
 }
