@@ -176,6 +176,93 @@ tasks:
         PATH="${scratch}:${PATH}" {{.GO_TOOL_PROTO}} buf generate
         echo "proto:gen: regenerated internal/schema and internal/uiproto/uiv1 via buf v1.72.0"
 
+  proto:drift:
+    desc: >-
+      BLD-04's codegen drift guard over BOTH proto surfaces this repo
+      maintains (internal/schema/graph.proto, internal/uiproto/uiv1/ui.proto).
+      Regenerates with the SAME pinned toolchain proto:gen uses into a
+      TEMPORARY tree — never in place, so a developer's uncommitted edit to
+      a committed generated file survives a guard run untouched — then
+      byte-compares each committed generated file against its freshly
+      regenerated counterpart. Reports `compared N generated files` BEFORE
+      comparing anything, and fails with a named error when N is zero or
+      below the expected minimum (3: graph.pb.go, ui.pb.go, ui.connect.go),
+      so an enumeration that silently finds nothing can never read as a
+      clean pass (rule 84d1gfpywd) — this is BLD-04's own "report how many
+      it compared" guard, so it is doubly bound not to be the vacuous shape
+      it exists to catch. A header-only difference IS drift: 01-01 absorbed
+      the one-time generated-header restamp caused by introducing this
+      checked-in codegen invocation (01-01-PLAN.md Task 2), so from that
+      commit onward the committed file must be exactly what the pinned
+      toolchain emits, header included — this guard does not normalise the
+      header away, because doing so would hide a toolchain downgrade, one
+      of the two drift causes worth catching (T-01-33). `buf generate` is
+      invoked against an explicit absolute-path input, never bare ".":
+      buf's default upward-directory workspace search misidentifies the
+      controlling workspace when this task runs from inside a linked git
+      worktree nested under another checkout of the same repository (buf
+      walks up past the worktree's gitlink file looking for a real `.git`
+      directory and lands on the outer checkout, then folds its proto tree
+      into the same image), duplicating declarations from sibling trees —
+      an explicit absolute path pins the module root deterministically
+      regardless of where this task is invoked from, in CI or a worktree.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — proto:drift builds protoc-gen-go/protoc-gen-connect-go and runs buf via go tool, same as proto:gen."
+      - sh: command -v git
+        msg: "git not found — proto:drift enumerates the committed generated file set via git ls-files."
+      - sh: GOWORK=off go tool -modfile=go.tool-proto.mod buf --version
+        msg: "buf (pinned via go.tool-proto.mod) not resolvable — proto:drift regenerates through the same pinned toolchain proto:gen uses."
+    cmds:
+      - |
+        set -euo pipefail
+        export GOWORK=off
+        repo_root=$(pwd)
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        files=$(git ls-files -- 'internal/schema/*.pb.go' 'internal/uiproto/uiv1/*.pb.go' 'internal/uiproto/uiv1/uiv1connect/*.connect.go')
+        nfiles=0
+        if [ -n "${files}" ]; then
+          nfiles=$(printf '%s\n' "${files}" | wc -l | tr -d ' ')
+        fi
+        echo "proto:drift: compared ${nfiles} generated files"
+        if [ "${nfiles}" -lt 3 ]; then
+          echo "::error::proto:drift: enumerated only ${nfiles} committed generated files under internal/schema/ and internal/uiproto/uiv1/ (expected at least 3: graph.pb.go, ui.pb.go, ui.connect.go) — a broken enumeration must fail loud, never read as a clean pass"
+          exit 1
+        fi
+
+        mkdir -p "${scratch}/bin" "${scratch}/gen"
+        go build -modfile=go.tool-proto.mod -o "${scratch}/bin/protoc-gen-go" google.golang.org/protobuf/cmd/protoc-gen-go
+        go build -modfile=go.tool-proto.mod -o "${scratch}/bin/protoc-gen-connect-go" connectrpc.com/connect/cmd/protoc-gen-connect-go
+
+        # Regenerate into scratch/gen, never in place: a developer's
+        # uncommitted edit to a committed generated file must survive this
+        # guard's run untouched. The explicit absolute-path input (never
+        # bare ".") pins buf's module root deterministically — see desc:.
+        PATH="${scratch}/bin:${PATH}" {{.GO_TOOL_PROTO}} buf generate -o "${scratch}/gen" "${repo_root}"
+
+        drift_found=0
+        while IFS= read -r f; do
+          [ -z "${f}" ] && continue
+          fresh="${scratch}/gen/${f}"
+          if [ ! -f "${fresh}" ]; then
+            echo "::error::proto:drift: regeneration produced no output for ${f} at ${fresh}"
+            drift_found=1
+            continue
+          fi
+          if ! cmp -s "${f}" "${fresh}"; then
+            echo "::error::proto:drift: ${f} differs from the pinned toolchain's regeneration (generated header included — a header-only change IS drift)"
+            drift_found=1
+          fi
+        done <<< "${files}"
+
+        if [ "${drift_found}" -ne 0 ]; then
+          exit 1
+        fi
+
+        echo "proto:drift: all ${nfiles} generated files byte-identical to the pinned toolchain's regeneration (temporary tree only — source tree untouched)"
+
   vuln:
     desc: >-
       ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —

@@ -104,6 +104,16 @@ jobs:
       - name: Corpus coverage claim (committed record)
         run: task corpora:verify
 
+      # BLD-04: proves the committed generated files under internal/schema/
+      # and internal/uiproto/uiv1/ still match what the pinned buf toolchain
+      # emits from their .proto sources — including the generated header, a
+      # header-only rewrite counts as drift from 01-01's restamp commit
+      # onward. Regenerates into a temporary tree (never in place) so this
+      # step can never clobber a developer's working-tree edit; it is not
+      # relevant on a CI runner, but the task is written once and shared.
+      - name: Proto codegen drift guard (BLD-04)
+        run: task proto:drift
+
       # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
       # by `go list ./...` above (it's a normal package, not testdata/), but
       # an explicit named step guards against a future refactor of that
