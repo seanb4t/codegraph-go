@@ -2,10 +2,12 @@ package query
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer/goextract"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
@@ -280,4 +282,140 @@ func TestNodeDetailErrorsMatchNode(t *testing.T) {
 			t.Fatalf("Node(escaping path) error = %q, want recorded literal %q", nodeErr.Error(), want)
 		}
 	})
+}
+
+// TestNodeDetailMultiDefDoesNotReadSourceForUnrenderedCandidates proves
+// the multi-definition laziness is real, not incidental: a fixture
+// declares one more definition of "Big" than nodeMultiDefHardCap, with
+// the LAST candidate (the one RenderNodeMultiDef's hard-cap early-
+// continue never fetches) backed by a DIRECTORY rather than a regular
+// file. os.ReadFile on a directory reliably fails with "is a directory"
+// regardless of the running user's privileges — unlike a permission-bit
+// approach, which a root-run test process would not observe — so this
+// deterministically proves unreadability without a skip-if-root escape
+// hatch. Both Node and NodeDetail must succeed (neither reads that
+// candidate); asking the multi-definition value for that candidate
+// explicitly must return the read error, proving the data is reachable
+// on demand rather than silently swallowed.
+func TestNodeDetailMultiDefDoesNotReadSourceForUnrenderedCandidates(t *testing.T) {
+	dir := t.TempDir()
+	const total = nodeMultiDefHardCap + 1 // one more definition than the hard cap ever fetches
+
+	nodes := make(map[string]*schema.Node, total)
+	var lastID string
+	for i := 0; i < total; i++ {
+		id := fmt.Sprintf("big%02d", i)
+		filePath := fmt.Sprintf("big%02d.go", i)
+		nodes[id] = &schema.Node{Id: id, Name: "Big", Kind: "function", FilePath: filePath, StartLine: 1, EndLine: 1, Signature: "func Big()"}
+
+		if i == total-1 {
+			if err := os.MkdirAll(filepath.Join(dir, filePath), 0o755); err != nil {
+				t.Fatalf("mkdir unreadable candidate dir: %v", err)
+			}
+			lastID = id
+			continue
+		}
+		content := fmt.Sprintf("package p\n\nfunc Big() {} // %d\n", i)
+		if err := os.WriteFile(filepath.Join(dir, filePath), []byte(content), 0o644); err != nil {
+			t.Fatalf("write fixture file %s: %v", filePath, err)
+		}
+	}
+
+	e := NewWithRoot(&traverseFakeReader{nodes: nodes}, dir)
+
+	if _, err := e.Node("Big", "", nil); err != nil {
+		t.Fatalf("Node(Big): unexpected error — an out-of-cap unreadable candidate must never be read: %v", err)
+	}
+
+	d, err := e.NodeDetail("Big", "", nil)
+	if err != nil {
+		t.Fatalf("NodeDetail(Big): unexpected error — an out-of-cap unreadable candidate must never be read: %v", err)
+	}
+	if d.Mode != NodeDetailModeMultiDef {
+		t.Fatalf("NodeDetail(Big): got Mode %v, want NodeDetailModeMultiDef", d.Mode)
+	}
+
+	var lastMatch *schema.Node
+	for _, m := range d.Multi.Matches {
+		if m.Id == lastID {
+			lastMatch = m
+		}
+	}
+	if lastMatch == nil {
+		t.Fatalf("NodeDetail(Big): Matches does not include the last candidate %q", lastID)
+	}
+
+	if _, err := d.Multi.Definition(lastMatch); err == nil {
+		t.Fatalf("Multi.Definition(%s): expected a read error for the directory-backed candidate, got nil — laziness is not real if this candidate was already read elsewhere", lastID)
+	}
+}
+
+// TestMultiDefReverseAdjacencyBuiltOnce swaps the buildReverseAdjacency
+// seam (internal/query/traverse.go) for a counting wrapper, restores it
+// via t.Cleanup, and asserts the counter is exactly 1 after one
+// NodeDetail call on a multi-definition symbol plus one Definition call
+// per returned match — counting builds through the seam rather than
+// asserting from the source.
+func TestMultiDefReverseAdjacencyBuiltOnce(t *testing.T) {
+	e := newDetailFixtureEngine(t)
+
+	var buildCount int
+	original := buildReverseAdjacency
+	buildReverseAdjacency = func(r graphstore.Reader) (map[string][]*schema.Edge, error) {
+		buildCount++
+		return original(r)
+	}
+	t.Cleanup(func() { buildReverseAdjacency = original })
+
+	d, err := e.NodeDetail("Multi", "", nil)
+	if err != nil {
+		t.Fatalf("NodeDetail(Multi): unexpected error: %v", err)
+	}
+	if d.Mode != NodeDetailModeMultiDef {
+		t.Fatalf("NodeDetail(Multi): got Mode %v, want NodeDetailModeMultiDef", d.Mode)
+	}
+	for _, m := range d.Multi.Matches {
+		if _, err := d.Multi.Definition(m); err != nil {
+			t.Fatalf("Multi.Definition(%s): unexpected error: %v", m.Id, err)
+		}
+	}
+
+	if buildCount != 1 {
+		t.Fatalf("reverse-adjacency build count = %d after one NodeDetail call plus %d Definition calls, want exactly 1 (built once, shared across every candidate)", buildCount, len(d.Multi.Matches))
+	}
+}
+
+// TestNodeErrorStringsAreUnchanged pins the three error strings
+// Node/NodeDetail can produce — the argument error, the not-found error,
+// and resolveSourcePath's repo-root confinement refusal — captured
+// verbatim from internal/query/node.go's pre-extraction source (read in
+// full this session; recorded in 01-04-SUMMARY.md), and asserts both
+// entry points return them byte-identically for the same inputs.
+func TestNodeErrorStringsAreUnchanged(t *testing.T) {
+	e := newDetailFixtureEngine(t)
+
+	cases := []struct {
+		name         string
+		symbol, file string
+		line         *int
+		want         string
+	}{
+		{"argument error", "", "", nil, "query: node requires a symbol name or a file path"},
+		{"not-found error", "nosuchsymbol", "", nil, `query: symbol "nosuchsymbol" not found`},
+		{"repo-root confinement refusal", "", "../outside.txt", nil, `query: path "../outside.txt" escapes the repo root`},
+	}
+
+	for _, c := range cases {
+		_, nodeErr := e.Node(c.symbol, c.file, c.line)
+		_, detailErr := e.NodeDetail(c.symbol, c.file, c.line)
+		if nodeErr == nil || detailErr == nil {
+			t.Fatalf("%s: got Node err=%v NodeDetail err=%v, want both non-nil", c.name, nodeErr, detailErr)
+		}
+		if nodeErr.Error() != c.want {
+			t.Fatalf("%s: Node error = %q, want recorded literal %q", c.name, nodeErr.Error(), c.want)
+		}
+		if detailErr.Error() != c.want {
+			t.Fatalf("%s: NodeDetail error = %q, want recorded literal %q", c.name, detailErr.Error(), c.want)
+		}
+	}
 }
