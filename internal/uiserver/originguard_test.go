@@ -16,15 +16,14 @@ const (
 	testOtherPort = "9999"
 )
 
-// newGuardedHandler is the test-only seam this suite drives through. RED:
-// originHostGuard does not exist yet, so this seam is a bare passthrough
-// — every "should reject" row below is expected to fail, and the failing
-// count is recorded in the commit introducing this file as the RED
-// evidence ROADMAP success criterion 2 requires ("demonstrated RED
-// against the pre-middleware build"). GREEN swaps this body for a call to
-// originHostGuard once it exists.
+// newGuardedHandler is the test-only seam this suite drives through: it
+// wraps next in the real originHostGuard bound to port. (RED history:
+// before originHostGuard existed, this seam was a bare passthrough and
+// the "should reject" rows below failed — see the commit that introduced
+// this file for the recorded 14-failing-subtest RED count, ROADMAP
+// success criterion 2's required evidence. This commit turns them green.)
 func newGuardedHandler(port string, next http.Handler) http.Handler {
-	return next
+	return originHostGuard(port, next)
 }
 
 type guardCase struct {
@@ -37,6 +36,51 @@ type guardCase struct {
 }
 
 func TestOriginHostGuard(t *testing.T) {
+	// allowedHosts(p) / allowedOrigins(p) must be EXACTLY the three
+	// admitted literals for this port — asserted by set equality with an
+	// explicit length check, so an added or dropped entry fails even
+	// though no rejection-matrix row would notice a spuriously-admitted
+	// fourth entry.
+	wantHosts := map[string]struct{}{
+		"127.0.0.1:" + testPort: {},
+		"localhost:" + testPort: {},
+		"[::1]:" + testPort:     {},
+	}
+	gotHosts := allowedHosts(testPort)
+	if len(gotHosts) != 3 {
+		t.Fatalf("allowedHosts(%q) has %d entries, want 3: %v", testPort, len(gotHosts), gotHosts)
+	}
+	for h := range wantHosts {
+		if _, ok := gotHosts[h]; !ok {
+			t.Fatalf("allowedHosts(%q) missing %q", testPort, h)
+		}
+	}
+	for h := range gotHosts {
+		if _, ok := wantHosts[h]; !ok {
+			t.Fatalf("allowedHosts(%q) has unexpected entry %q", testPort, h)
+		}
+	}
+
+	wantOrigins := map[string]struct{}{
+		"http://127.0.0.1:" + testPort: {},
+		"http://localhost:" + testPort: {},
+		"http://[::1]:" + testPort:     {},
+	}
+	gotOrigins := allowedOrigins(testPort)
+	if len(gotOrigins) != 3 {
+		t.Fatalf("allowedOrigins(%q) has %d entries, want 3: %v", testPort, len(gotOrigins), gotOrigins)
+	}
+	for o := range wantOrigins {
+		if _, ok := gotOrigins[o]; !ok {
+			t.Fatalf("allowedOrigins(%q) missing %q", testPort, o)
+		}
+	}
+	for o := range gotOrigins {
+		if _, ok := wantOrigins[o]; !ok {
+			t.Fatalf("allowedOrigins(%q) has unexpected entry %q", testPort, o)
+		}
+	}
+
 	cases := []guardCase{
 		// Admitted Host, no Origin (bullets 1-3).
 		{name: "admitted host 127.0.0.1", host: "127.0.0.1:" + testPort, method: http.MethodGet, wantStatus: http.StatusOK, wantNextCalled: true},
