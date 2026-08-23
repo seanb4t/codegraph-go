@@ -1209,3 +1209,64 @@ func TestUIServiceExploreRejectsEmptyQuery(t *testing.T) {
 		t.Fatalf("Explore with an empty query: code = %v, want CodeInvalidArgument", code)
 	}
 }
+
+// TestUIServiceAffectedEnforcesTheFileCountCap proves CR-03's contract:
+// the Affected RPC enforces query.ValidateAffectedFiles on the
+// wire-supplied files slice, exactly as internal/cli/affected.go's
+// collectAffectedFiles does before it calls Engine.Affected.
+//
+// The cap is the Engine's documented DoS ceiling (MaxAffectedFiles,
+// added under CR-01/T-03-02-DoS) and ValidateAffectedFiles is exported
+// precisely so a caller can enforce it BEFORE Engine.Affected is ever
+// reached — but Engine.Affected itself validates only depth, so a new
+// surface that forgets the pre-check inherits no bound at all. The wire
+// is exactly such a surface: the only remaining limit on a `repeated
+// string` is transportReadMaxBytes (1 MiB), which at a few bytes per
+// short path admits well over an order of magnitude more entries than
+// the documented ceiling.
+//
+// Both sides of the boundary are asserted, so the test cannot pass
+// vacuously: MaxAffectedFiles entries must still be ACCEPTED (a
+// successful response), and MaxAffectedFiles+1 must be REJECTED with
+// CodeInvalidArgument. Removing the handler's check turns the
+// over-the-cap subtest RED — without it the request succeeds.
+func TestUIServiceAffectedEnforcesTheFileCountCap(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	// Short, distinct, in-repo-shaped paths: the point is the COUNT, not
+	// whether any of them resolves to a real indexed file.
+	buildFiles := func(n int) []string {
+		files := make([]string, n)
+		for i := range files {
+			files[i] = fmt.Sprintf("pkga/f%d.go", i)
+		}
+		return files
+	}
+
+	t.Run("at-the-cap-is-accepted", func(t *testing.T) {
+		_, err := client.Affected(context.Background(), connect.NewRequest(&uiv1.AffectedRequest{
+			Files: buildFiles(query.MaxAffectedFiles),
+		}))
+		if err != nil {
+			t.Fatalf("Affected with exactly MaxAffectedFiles (%d) entries: %v, want a successful response — the cap rejects only what is ABOVE it", query.MaxAffectedFiles, err)
+		}
+	})
+
+	t.Run("over-the-cap-is-rejected", func(t *testing.T) {
+		_, err := client.Affected(context.Background(), connect.NewRequest(&uiv1.AffectedRequest{
+			Files: buildFiles(query.MaxAffectedFiles + 1),
+		}))
+		if err == nil {
+			t.Fatalf("Affected with MaxAffectedFiles+1 (%d) entries succeeded, want CodeInvalidArgument — the documented DoS ceiling is not enforced at this surface", query.MaxAffectedFiles+1)
+		}
+		if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+			t.Fatalf("Affected over the cap: code = %v (%v), want CodeInvalidArgument", got, err)
+		}
+		if !strings.Contains(err.Error(), "exceeds maximum") {
+			t.Fatalf("Affected over the cap: message = %q, want it to carry ValidateAffectedFiles's own %q wording", err.Error(), "exceeds maximum")
+		}
+	})
+}

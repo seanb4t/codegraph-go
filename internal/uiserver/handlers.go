@@ -424,14 +424,37 @@ func (s *uiService) Impact(ctx context.Context, req *connect.Request[uiv1.Impact
 	return connect.NewResponse(resp), nil
 }
 
-// Affected answers internal/query.Engine.Affected over the wire: files
-// and depth pass straight through — validateDepth/clampAffectedDepth
+// Affected answers internal/query.Engine.Affected over the wire.
+//
+// depth passes straight through — validateDepth/clampAffectedDepth
 // already bound and clamp depth for every caller, using Affected's own
 // (different-from-Impact) default and ceiling.
+//
+// files does NOT (CR-03). Engine.Affected validates depth only and then
+// builds its fileSet from every entry it is handed, so the documented
+// MaxAffectedFiles ceiling is enforced by each CALLER — that is exactly
+// why query.ValidateAffectedFiles is exported, and why
+// internal/cli/affected.go calls it before Engine.Affected is ever
+// reached. This wire surface is a second such caller and owes the same
+// pre-check: without it the only remaining bound on an unbounded
+// `repeated string` is transportReadMaxBytes, which at a few bytes per
+// short path admits well over an order of magnitude more entries than
+// the ceiling a prior review cycle added.
+//
+// The check runs BEFORE withEngine deliberately: an over-the-cap
+// request is refused without opening the store at all, so the rejection
+// costs a length comparison rather than an Engine open plus the
+// reverse-adjacency/implements/contains index builds Affected performs
+// per request.
 func (s *uiService) Affected(ctx context.Context, req *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error) {
+	files := req.Msg.GetFiles()
+	if err := query.ValidateAffectedFiles(len(files)); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	var resp *uiv1.AffectedResponse
 	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
-		result, err := eng.Affected(req.Msg.GetFiles(), int(req.Msg.GetDepth()))
+		result, err := eng.Affected(files, int(req.Msg.GetDepth()))
 		if err != nil {
 			return err
 		}
