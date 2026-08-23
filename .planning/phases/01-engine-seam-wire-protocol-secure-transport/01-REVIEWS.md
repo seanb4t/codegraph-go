@@ -1,8 +1,8 @@
 ---
 phase: 1
 reviewers: [codex]
-reviewed_at: 2026-08-22T21:20:00Z
-review_cycle: 7
+reviewed_at: 2026-08-22T22:45:00Z
+review_cycle: 9
 plans_reviewed:
   - 01-01-PLAN.md
   - 01-02-PLAN.md
@@ -2143,3 +2143,375 @@ hypothetically, which strengthens rather than contradicts the shared verdict.
 **MEDIUM.** The concrete cycle-6 deliverable is correct and every structural invariant holds.
 Residual risk is confined to the generality of the new prohibition: as written it can certify a
 future scope-vacuous gate, and two in-phase gates already sit in the gap it leaves.
+
+---
+
+# Cross-AI Plan Review — Phase 1 (cycle 9, FINAL — adversarial attack on the amended prohibition)
+
+**Scope.** Deliberately narrow, per the maintainer's brief. This is NOT a re-sweep. Requirement
+coverage, wave ordering, gate shape, probe accounting, YAML validity and shell syntax were audited
+in cycles 1/3/5/7 and independently re-verified immediately before this cycle; they are not
+re-derived here. The primary job was a single question: **can a gate satisfy the cycle-8 amended
+sixth prohibition literally and still be scope-vacuous?**
+
+**Answer: yes.** Two independent attackers — the Codex lane and the orchestrator — converged on
+the same counterexample class without contact, which is the same convergence signature that
+produced cycle 7's HIGH.
+
+## Codex Review
+
+> Model: `gpt-5.6-sol (reasoning=low)`. Source-grounded; cites `file:line` throughout.
+> **Caveat recorded honestly:** this lane ran at `reasoning=low`. It nonetheless produced the
+> counterexample below, so the low effort did not suppress the primary result; but a reader
+> should not treat a *clean* verdict from this lane at this effort as strong evidence of absence.
+
+### 1. Counterexample attempt — HIGH, counterexample #6 found: peripheral-artifact causation
+
+Codex's exact submitted gate:
+
+```sh
+{
+  OUT=$(go test -v -count=1 -run '^TestReportFeature$' ./internal/report 2>&1)
+  STATUS=$?
+  COUNT=$(printf '%s\n' "$OUT" | rg -o -e '--- PASS' | wc -l | tr -d ' ')
+  echo "exit=$STATUS PASS lines: $COUNT"
+  [ "$STATUS" -eq 0 ] && [ "$COUNT" -ge 3 ]
+}
+```
+
+Task-owned test:
+
+```go
+func TestReportFeature(t *testing.T) {
+	t.Run("returns-report", func(t *testing.T) {
+		if ReportSchemaVersion != 1 {
+			t.Fatalf("version = %d, want 1", ReportSchemaVersion)
+		}
+	})
+	t.Run("enforces-limit", func(t *testing.T) {
+		if ReportSchemaVersion != 1 {
+			t.Fatalf("version = %d, want 1", ReportSchemaVersion)
+		}
+	})
+}
+```
+
+Submitted derivation prose:
+
+> **Form A1 (own-test), causation.** The pattern matches only `TestReportFeature`, declared by this
+> task. One parent plus two subtests yields 3 PASS lines, so the floor is 3. The artifact under test
+> is the task-created `ReportSchemaVersion` constant in `internal/report/report.go`. Replacing that
+> declarative artifact with its default-valued no-op, `0`, turns both subtests RED. Behavior bullet
+> "returns a report" is homed to subtest `returns-report`; behavior bullet "enforces the result
+> limit" is homed to subtest `enforces-limit`.
+
+**Why the amended text admits it** (Codex's clause-by-clause, checked against
+[01-02-PLAN.md:49](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:49)
+and the canon at
+[01-02-PLAN.md:181](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:181)):
+
+- A1 permits naming **"a specific function, type, constant, generated file or task"** — singular. It
+  never requires the named artifact to be, or to cover, the task's *complete* deliverable.
+- The leg is genuinely task-owned, its floor is genuinely self-derived, and no-op-ing the truthfully
+  named constant genuinely turns it RED. A1 is satisfied, not evaded.
+- HOMING requires a bullet to **name or be named by** a counted test/subtest. It does not require
+  that test to *assert* the bullet's behavior.
+
+**Why it is still vacuous.** Replace the task's primary implementation `ServeReport` with a
+signature-compatible no-op returning a zero result; leave `ReportSchemaVersion == 1`. All three
+`--- PASS` lines survive, `STATUS` stays 0, the floor of 3 is met — and neither behavior bullet is
+implemented.
+
+**Distinctness from the five cycle-8 attempts.** This is not the trivial-arithmetic test (there
+*is* a real artifact under test), not the existence assertion (the leg *does* go RED against that
+artifact's no-op), not inherited subsidy (no inherited test matches), not A3 laundering (form A1 is
+used correctly), and not out-of-scope homing (no bullet claims out of scope). The escape is
+selecting a **peripheral** artifact out of a **plural** deliverable and merely *naming* the real
+behaviors in subtests.
+
+### 2. Secondary verification
+
+- **01-05 Task 3 — PASS.** Named `go test` FAIL/PASS measurements plus the `git diff --stat`
+  applied-confirmation; a zero FAIL count written as a STOP CONDITION; the restored-tree conjunction
+  as strongest executable leg; CAN/CANNOT stated. The "cannot catch doing nothing" limit is
+  **accurate** — after restoration the tree is byte-indistinguishable from one never mutated. The
+  STOP CONDITION can genuinely fire (an applied mutation yielding zero observed failures).
+  ([01-05-PLAN.md:442](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-05-PLAN.md:442),
+  [01-05-PLAN.md:445](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-05-PLAN.md:445))
+- **01-07 Task 2 — PASS.** Non-zero exit, compared-count and drifted filename recorded; green
+  against confirmed staleness is a real STOP CONDITION; `task proto:drift` is a correct A2 leg;
+  CAN/CANNOT explicit.
+  ([01-07-PLAN.md:327](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-07-PLAN.md:327))
+- **01-11 Task 3 — PASS** on the four A3 items as written.
+  ([01-11-PLAN.md:590](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:590))
+  *(The orchestrator raises two narrower defects in this same bullet — see M-9-1.)*
+- **01-02 changed gate — PASS on the `-o /dev/null` reasoning and the homing, PARTIAL on the
+  bullet.** `-o /dev/null` is correct and the command does stand in the gate
+  ([01-02-PLAN.md:286](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:286),
+  [01-02-PLAN.md:291](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:291)).
+  But bullet 3 claims gocapture "builds **and runs**"
+  ([01-02-PLAN.md:211](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:211));
+  `go build -o /dev/null` does not run it, and the `go run` half is relegated to the SUMMARY
+  ([01-02-PLAN.md:299](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:299)).
+- **01-10 Task 2 — PASS.** Inherited-only = 10 + 6 = 16 against floor 14 → ABOVE, explicitly
+  declared non-qualifying, leg 1 qualifies.
+- **01-11 Task 1 — PASS.** Inherited-only = 1 against floor 9 → BELOW, qualifies.
+
+### 3. Concerns
+
+- **HIGH** — the amended prohibition permits peripheral-artifact causation while the primary
+  implementation is a no-op.
+- **MEDIUM** — 01-02 bullet 3 claims runtime execution; its automated home only builds.
+
+### 4. Risk Assessment
+
+**HIGH.** The requested adversarial attack succeeded against the phase-wide semantic safeguard. The
+three A3 applications and both inherited-floor calculations are sound, but the universal rule still
+does not entail its headline.
+
+---
+
+## Cycle 9 findings (orchestrator)
+
+### H-9-1 — HIGH (converged with Codex, independently constructed): the amended prohibition's two halves still do not compose into its headline
+
+The orchestrator constructed the same class before reading Codex's output, from a different
+starting point, and adds the structural diagnosis Codex's instance implies but does not state.
+
+**The composition failure, stated exactly:**
+
+| half | exhaustive over the task's deliverables? | causal? |
+|---|---|---|
+| (a) OWNERSHIP AND CAUSATION | **no** — "at least one leg", "a specific … artifact", singular | **yes** |
+| (b) HOMING | **yes** — "every behavior bullet" | **no** — naming, not asserting |
+
+Neither half is both. Their conjunction is therefore not both, and the headline — *"Never write a
+gate whose floor can be met without the deliverable it names existing"* — requires both. This is
+**the same shape as cycle 7's H-7-1 one level up**: cycle 8 amended the *instance* (it made half (a)
+causal) without amending the *pattern* (it left half (a) non-exhaustive and half (b) non-causal).
+
+**Orchestrator's independent instance**, cast in this phase's own idiom so the maintainer can see it
+is not a toy. A hypothetical task delivering four artifacts — `truncateOnRuneBoundary`,
+`classifyDegrade`, `blobResponse`, `sourceBlobLimit`:
+
+```
+<automated>{ OUT=$(go test -v -count=1 -run 'TestTruncateOnRuneBoundary$|TestClassifyDegrade$|TestBlobResponse$' ./internal/textutil/ ./internal/uiserver/ 2>&1); STATUS=$?; COUNT=$(printf '%s\n' "$OUT" | rg -o -e '--- PASS' | wc -l | tr -d ' '); echo "PASS lines: $COUNT"; [ "$STATUS" -eq 0 ] || printf '%s\n' "$OUT"; [ "$STATUS" -eq 0 ] && [ "$COUNT" -ge 12 ]; }</automated>
+```
+
+> **Form A1 (own-test), causation.** The pattern matches only the three test functions this task
+> declares. Floor: `TestTruncateOnRuneBoundary` 1 + 5 subtests, `TestClassifyDegrade` 1 + 3 subtests,
+> `TestBlobResponse` 1 + 1 subtest = **12**. **Artifact under test: `truncateOnRuneBoundary`**,
+> named in this task's files list. Replacing it with a no-op returning its input unchanged turns this
+> leg RED, because `TestTruncateOnRuneBoundary/splits-at-a-rune-boundary` asserts the returned string
+> is exactly 64 bytes and ends on a complete rune.
+> **Behavior-bullet homes.** Bullet 2 (`classifyDegrade` maps a lock error to `CodeUnavailable`) is
+> named by `TestClassifyDegrade/lock-error`; bullet 3 (`blobResponse` sets the truncated flag) is
+> named by `TestBlobResponse/sets-truncated`.
+
+Every clause is literally satisfied. Yet `TestClassifyDegrade/lock-error` may assert only that the
+returned code is `CodeUnavailable` **or** `CodeUnknown`, and `TestBlobResponse/sets-truncated` only
+that the response is non-nil — both survive zero-value no-ops of their artifacts. Note that the
+phase's ban on the disjunctive "succeeds **or** degrades" acceptance shape is **plan-local to
+01-11** (`01-11`'s dispositions table, "A prohibition forbids the 'succeeds or degrades' shape
+anywhere in this plan"), so in any other plan that shape is not prohibited at all.
+
+**Why the `STATUS -eq 0` conjunction does not save it.** The conjunction is what makes A1 robust
+*for the named artifact* — any counted test that fails drives the status non-zero. But it is
+sensitive only to tests that actually assert. A subtest that asserts nothing load-bearing cannot
+fail, so it contributes its `--- PASS` line to the floor and its name to the homing table while
+being causally inert.
+
+**Practical exposure in THIS phase: low.** Every task's `<action>` block spells the test bodies out
+in enough detail that a peripheral-artifact derivation would be visible on inspection, and the two
+multi-artifact A1 derivations actually written both name *several* artifacts and trace the no-op
+consequence for each — `01-10` Task 2 names `TruncateOnRuneBoundary`, `truncateSource`, `countLines`
+and the three caps
+([01-10-PLAN.md:364](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-10-PLAN.md:364)),
+and `01-11` Task 1 names `classifyDegrade`, `errIndexingInProgress`, `indexingInProgressMessage`,
+`degradedStatus` and proto fields 8/9
+([01-11-PLAN.md:326](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:326)).
+**No gate currently in the phase exploits the gap.** The HIGH is against the *rule's generality*,
+not against a landed gate.
+
+**Recommended amendment** (Codex's, sharpened by the composition analysis above) — make **(b)**
+causal rather than making **(a)** exhaustive, because (b) already quantifies over every bullet:
+
+> Half (b) HOMING, amended: a behavior bullet is homed only when the counted test or subtest it
+> names **turns RED when the production artifact implementing THAT bullet is replaced by a no-op**,
+> and the derivation states, per bullet, which artifact that is. A subtest that would still pass
+> against that no-op is not a home. Where a task's deliverable is plural, half (a)'s named artifact
+> under test may be any one of them, because (b) now carries the rest.
+
+This is a one-paragraph edit to the prohibition text and the `## Gate conventions` canon in all
+eleven plans, and it is the first formulation under which (a) ∧ (b) actually entails the headline.
+
+**A caution the maintainer should weigh, stated plainly:** this is the third amendment to the same
+rule in three cycles, and each has closed its predecessor's instance without closing the pattern. A
+rule that must anticipate every adversarial derivation is being asked to do work that per-task
+review does. The alternative worth considering is to stop strengthening the text and instead require,
+once per task, an explicit **no-op matrix** — one row per named deliverable, one column naming the
+counted test that goes RED against its no-op — which is mechanically checkable by reading the plan
+and cannot be satisfied by a naming trick. That is a bounded planning-time artifact rather than an
+ever-growing prose rule.
+
+### M-9-1 — MEDIUM (new, not raised by Codex): `01-11` Task 3's A3 declaration is contingent on a branch its own action permits, and its CAN-claim about build-tagged tests is factually wrong
+
+Two defects in the same bullet
+([01-11-PLAN.md:590](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:590)):
+
+1. **A3 eligibility is decided at execution time, not plan time.** The bullet asserts "this task
+   declares no test function at all", which is what admits A3 — but the task's own action says
+   "If any exercise surfaces behavior the in-process tests miss, **add the corresponding
+   build-tagged integration test**"
+   ([01-11-PLAN.md:575](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:575)),
+   and its `<files>` is `internal/uiserver/degrade_test.go` — a test file. The amended rule is
+   categorical: *"A task that declares even one test function of its own may never use A3."* In the
+   branch where an exercise does surface something, the task's declared form becomes retroactively
+   invalid and its floor derivation no longer describes it.
+2. **The CAN-claim is false.** The bullet states the sweep "CAN catch a regression anywhere in that
+   package, **including one introduced by any build-tagged integration test this task adds**". The
+   gate is `go test -v -count=1 -race ./internal/uiserver/` with **no `-tags`**
+   ([01-11-PLAN.md:580](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-PLAN.md:580)),
+   so a `//go:build <tag>` file is excluded from the build entirely and the sweep would never
+   execute it. Verified empirically in a scratch module rather than assumed: an untagged
+   `go test -v ./p/` emits only `--- PASS: TestPlain`, while the identical command plus
+   `-tags integration` emits `--- PASS: TestPlain` **and** `--- PASS: TestTagged`. The repo already
+   carries build-constrained test files, so this is a live pattern here, not a hypothetical
+   (`internal/graphstore/locked_unix_test.go:1` — `//go:build !windows`).
+
+   This matters precisely because A3's fourth requirement is the *honest* CAN/CANNOT statement. A
+   CAN-claim that is untrue is the one thing A3 cannot tolerate, since disclosure is the whole of
+   its warrant.
+
+**PLAN.md change needed:** in `01-11` Task 3's form-A3 bullet, (i) state that if the conditional
+branch fires and a test function is added, the task's form changes from A3 to A1 and the floor
+derivation must be re-derived at that point — or scope the added test out of this task entirely and
+name the plan that owns it; and (ii) delete the "including one introduced by any build-tagged
+integration test this task adds" clause, or add `-tags` to the gate so the claim becomes true.
+
+### M-9-2 — MEDIUM (Codex): `01-02` Task 1 bullet 3 claims "builds **and runs**"; only the build half is in the gate
+
+Bullet 3 reads "`go run ./testdata/golden/gocapture --help` (or its equivalent no-op invocation)
+still **builds and runs** after the move"
+([01-02-PLAN.md:211](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:211)).
+The `<automated>` gate carries `go build -o /dev/null ./testdata/golden/gocapture/`
+([01-02-PLAN.md:286](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:286)),
+and the criterion itself says the run half "is recorded in the SUMMARY, while the build half is what
+the gate enforces"
+([01-02-PLAN.md:299](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/01-engine-seam-wire-protocol-secure-transport/01-02-PLAN.md:299)).
+Under half (b) as amended, a criterion is a home only if **its command appears in the gate** — so
+the "runs" half of bullet 3 is homed to prose, which is the exact escape the amendment closes. The
+bullet is not declared out of scope either, so none of (b)'s three homes covers it.
+
+**PLAN.md change needed:** either narrow bullet 3 to "still builds" (the honest scope of what the
+gate enforces), or add `go run ./testdata/golden/gocapture --help >/dev/null` to the `<automated>`
+gate. The `-o /dev/null` decision itself is **correct and confirmed** — see the verification block
+below.
+
+### Confirmed clean (no finding)
+
+- **`-o /dev/null` reasoning — CONFIRMED empirically.** In a scratch module, bare
+  `go build ./cmd/gocapture/` on a `package main` leaves a `gocapture` binary in the working
+  directory; `go build -o /dev/null ./cmd/gocapture/` leaves the tree unchanged. Cycle 8's
+  justification for departing from the review's bare form is correct, not decorative.
+  `testdata/golden/gocapture/main.go:12` is indeed `package main`.
+- **The `testdata` exclusion claim — CONFIRMED empirically.** `go list ./... | rg 'testdata'` exits
+  1, while the identical invocation `go list ./... | rg 'internal/query'` exits 0 and returns
+  `github.com/seanb4t/codegraph-go/internal/query`; `go list ./testdata/golden/...` does list
+  `.../testdata/golden/gocapture`. The explicit package path in the gate is load-bearing.
+- **Canon digest — 1.** `for f in 01-*-PLAN.md; do sed -n '/^## Gate conventions/,/^<tasks>$/p' "$f" | shasum; done | sort -u | wc -l` → `1`. All eleven copies agree.
+- **A3 tasks — all three discharge all four requirements**, and `01-05` T3's stated limit is
+  accurate: a restored tree genuinely is byte-indistinguishable from one never mutated, so no
+  executable leg can distinguish "did the work and restored it" from "did nothing". Its STOP
+  CONDITION (a zero `--- FAIL` count against a confirmed-applied mutation) is real and can fire.
+- **Inherited-floor arithmetic — both statements true.** `01-10` T2 leg 2: 10 + 6 = 16 vs floor 14,
+  ABOVE, declared non-qualifying, leg 1 (floor 7, `TestUIServiceSourceBlob`, task-declared)
+  qualifies. `01-11` T1: inherited `TestUIProtoFieldNumbersAreStableAndUnique` = 1 vs floor 9,
+  BELOW, qualifies.
+
+## Verification coverage (source-grounding pass)
+
+**Extractor note.** `drift-guard authority` resolves to `intel`, but its extractor is regex/JS-only
+and reports `symbolCount: 0` on this Go repo — every symbol would grade UNCHECKABLE → INFO and
+nothing would hard-block. Symbols were therefore resolved **by reading source**, not by the guard.
+Symbols listed under each plan's "Artifacts this phase produces" are excluded by construction
+(they do not exist yet, by design).
+
+| cited symbol / path | plan citation | resolution | method |
+|---|---|---|---|
+| `testdata/golden/gocapture/main.go` is `package main` | 01-02 bullet 3, criterion | **CONFIRMED** — `main.go:12` | read source |
+| `go list ./...` omits `testdata` | 01-02:291, 01-02:453 | **CONFIRMED** — assert exits 1; control exits 0 | executed |
+| `internal/graphstore.Open` | 01-11 T3 read_first | **CONFIRMED** — `pebble_store.go:141` | read source |
+| `openLockRetrySleep` seam | 01-11 disposition | **CONFIRMED** — `pebble_store.go:90` | read source |
+| `openLockRetryAttempts` | 01-11 T?, final-attempt claim | **CONFIRMED** — `pebble_store.go:79` (= 5) | read source |
+| `TestOpenConvergesWhenHolderCloses` | 01-11 cycle-3 H2 disposition | **CONFIRMED** — `open_lock_test.go:62` | read source |
+| `TestOpenSucceedsOnTheFinalAttempt` claimed ABSENT | 01-11 cycle-3 H2 disposition | **CONFIRMED ABSENT** — assert exits 1; control on `TestOpenConvergesWhenHolderCloses` exits 0 | executed |
+| `internal/mcp/tools.go` opens per tool call | 01-11 T3 read_first (~:71) | **CONFIRMED** — `query.OpenAt` + `closer.Close` per call, `tools.go:71` | read source |
+| `internal/cli/daemon.go`, `internal/cli/serve.go` | 01-11 T3 read_first | **CONFIRMED present** | filesystem |
+| `internal/schema/graph.pb.go` | 01-07 T2 `<files>` | **CONFIRMED present** | filesystem |
+| `testdata/golden/behavioral_test.go` | 01-02 T1 read_first | **CONFIRMED present** | filesystem |
+| `truncateOnRuneBoundary` (the existing duplicate 01-10 extracts) | 01-11 disposition | **CONFIRMED** — `internal/mcp/session_line.go:80` | read source |
+| build-constrained test files exist in-repo | M-9-1 grounding | **CONFIRMED** — `internal/graphstore/locked_unix_test.go:1` (`//go:build !windows`), `internal/daemon/stop_test.go` | read source |
+| untagged `go test` skips a `//go:build`-tagged file | M-9-1 | **CONFIRMED** — scratch module: untagged emits `TestPlain` only; identical command `+ -tags integration` emits `TestPlain` **and** `TestTagged` | executed |
+| bare `go build <main pkg dir>` emits a binary into CWD | 01-02, `-o /dev/null` rationale | **CONFIRMED** — scratch module: bare build leaves `gocapture`; `-o /dev/null` leaves tree clean | executed |
+| `internal/query/detail.go` | 01-05 T3 `<files>` | **EXCLUDED** — phase-produced (`buildExploreResult`, `ExploreDetail`, `NodeDetail` family are all in the artifact manifest) | manifest |
+| `internal/uiserver`, `internal/uiproto/uiv1`, `internal/textutil`, `internal/goldenspec` | passim | **EXCLUDED** — phase-produced, named in "Artifacts this phase produces" | manifest |
+
+**Positive controls.** Every zero/absence assertion above is paired with a control that uses the
+**identical invocation** against the **same path**, differing only in the pattern (or, for the
+build-tag case, only in the added `-tags` flag). No control was run against a different path or a
+different call shape. Zeros with controls: 3 (`testdata` exclusion, `TestOpenSucceedsOnTheFinalAttempt`
+absence, untagged-vs-tagged test selection). All three controls fired.
+
+**Not verified this cycle** (audited in earlier cycles, re-verified by the maintainer immediately
+before this one, and deliberately not re-derived): the 27 line-scoped `<automated>` gates' `sh -n`
+cleanliness and status-honoring, the 11/11 strict-YAML parse, the 12/12 requirement IDs, the 11/11
+`<threat_model>` and artifact manifests, the 21-entry probe ledger, wave acyclicity 1→7 and
+same-wave file-ownership disjointness across 88 `files_modified`.
+
+## Consensus Summary
+
+Two independent reviewers — the Codex lane at `reasoning=low`, and the orchestrator working from a
+different starting point — constructed **the same sixth counterexample** to the cycle-8 amended
+prohibition, without contact. That is the identical convergence signature that produced cycle 7's
+HIGH, and it is the strongest evidence available that the gap is real rather than an artifact of one
+reviewer's framing.
+
+### Agreed Strengths
+
+- The three A3 applications (`01-05` T3, `01-07` T2, `01-11` T3) each discharge all four A3
+  requirements item by item, with honest CAN/CANNOT limits. `01-05` T3's limit is factually correct.
+- Both inherited-floor arithmetic statements are true, including the one that *disqualifies* its own
+  leg (`01-10` T2 leg 2) — a plan disqualifying its own gate is a good sign, not a defect.
+- The `-o /dev/null` and `testdata`-exclusion decisions in `01-02` are empirically correct, not
+  assumed.
+- No gate currently in the phase exploits the gap found. The plans' derivations are, in practice,
+  more rigorous than the rule requires.
+
+### Agreed Concerns
+
+- **HIGH — H-9-1: the amended rule still does not entail its own headline.** Half (a) is causal but
+  **not exhaustive** (one named artifact); half (b) is exhaustive but **not causal** (naming, not
+  asserting). Their conjunction is neither. A task with a plural deliverable satisfies both halves
+  literally by naming a peripheral artifact for (a) and nominally homing the rest to inert subtests.
+  This is cycle-7's failure shape recurring one level up: the amendment fixed the instance, not the
+  pattern.
+- **MEDIUM — M-9-2: `01-02` bullet 3's "runs" half is homed to prose**, which is the exact escape
+  half (b) was amended to close.
+
+### Divergent Views
+
+None on substance. The orchestrator raises one MEDIUM Codex did not reach (**M-9-1**, `01-11` T3's
+contingent A3 eligibility plus a factually false CAN-claim about build-tagged tests), grounded by
+executed controls rather than inference. Codex's `reasoning=low` setting is recorded as a caveat:
+it did not suppress the primary result, but it weakens any inference from what this lane did *not*
+find.
+
+### Risk Assessment
+
+**MEDIUM.** Every concrete artifact in the phase is sound: the three A3 tasks are correctly
+constructed, both inherited-floor derivations are true, the `01-02` gate change is empirically
+justified, and no landed gate exploits the gap. Residual risk is confined to (i) the *generality* of
+the sixth prohibition, which can still certify a future scope-vacuous gate written by a less careful
+author, and (ii) two narrow in-phase homing defects, both one-line fixes. The maintainer is
+executing this phase personally, which materially reduces exposure to (i).
