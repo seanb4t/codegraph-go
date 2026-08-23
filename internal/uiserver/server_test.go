@@ -339,3 +339,47 @@ func TestUIServiceHoldsNoStoreTypedField(t *testing.T) {
 		}
 	}
 }
+
+// TestListenSetsEveryServerTimeout proves WR-03's mitigation (gosec
+// G112): the http.Server Listen builds has all four timeouts set to the
+// named constants, none left at net/http's "no limit" zero value.
+//
+// The set is asserted by NAME and by VALUE, one subtest per field, so a
+// future edit that drops one — the realistic regression, since three
+// correct fields make the fourth easy to miss — fails on that field
+// rather than passing because the other three are still set. The
+// ordering assertion below is the reason writeTimeout is not merely
+// "some positive duration": a write budget at or under the read budget
+// would cut off a legitimate slow response.
+func TestListenSetsEveryServerTimeout(t *testing.T) {
+	srv := mustListen(t, t.TempDir())
+	defer srv.Close()
+
+	cases := []struct {
+		name string
+		got  time.Duration
+		want time.Duration
+	}{
+		{"ReadHeaderTimeout", srv.srv.ReadHeaderTimeout, readHeaderTimeout},
+		{"ReadTimeout", srv.srv.ReadTimeout, readTimeout},
+		{"WriteTimeout", srv.srv.WriteTimeout, writeTimeout},
+		{"IdleTimeout", srv.srv.IdleTimeout, idleTimeout},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.got == 0 {
+				t.Fatalf("http.Server.%s is 0 — net/http's zero value means NO LIMIT, so a client that never completes its request pins a goroutine and an fd indefinitely (gosec G112)", tc.name)
+			}
+			if tc.got != tc.want {
+				t.Fatalf("http.Server.%s = %v, want the named constant %v", tc.name, tc.got, tc.want)
+			}
+		})
+	}
+
+	if writeTimeout <= readTimeout {
+		t.Fatalf("writeTimeout (%v) is not greater than readTimeout (%v) — the response budget must exceed the request budget, or a legitimate slow response is cut off", writeTimeout, readTimeout)
+	}
+	if readHeaderTimeout >= readTimeout {
+		t.Fatalf("readHeaderTimeout (%v) is not less than readTimeout (%v) — the header budget is a subset of the whole-request budget", readHeaderTimeout, readTimeout)
+	}
+}

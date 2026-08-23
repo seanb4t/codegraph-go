@@ -21,6 +21,33 @@ import (
 // ui` simply gets a different port.
 const DefaultAddr = "127.0.0.1:0"
 
+// The four http.Server timeouts Listen sets (WR-03). Named here rather
+// than written as bare durations at the construction site, per this
+// package's discipline of never repeating a limit as a literal, and
+// asserted as a set by TestListenSetsEveryServerTimeout.
+//
+// Every request this service answers is a local, in-process query
+// against an on-disk index — there is no upstream to wait on — so these
+// are sized for "a legitimate request finishes in well under a second,
+// with generous slack" rather than for network variance:
+//
+//   - readHeaderTimeout is the load-bearing one: it is the ONLY bound on
+//     a connection that has been accepted but whose header block never
+//     completes, which is precisely what originHostGuard cannot see.
+//   - writeTimeout must exceed the slowest legitimate response. The
+//     slowest is an Explore carrying up to uiExploreSourceGroupCap
+//     source blobs (handlers.go); 60s is roughly two orders of
+//     magnitude above that on any machine this runs on.
+//   - idleTimeout bounds a kept-alive connection between requests, so an
+//     abandoned tab's socket is reclaimed rather than held for the
+//     process's lifetime.
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 30 * time.Second
+	writeTimeout      = 60 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
 // Options configures Listen. RepoPath and Addr are the ONLY two fields —
 // asserted by TestUIServiceHoldsNoStoreTypedField's sibling assertion in
 // server_test.go, a reflected field-set equality with a length-2 check —
@@ -98,8 +125,25 @@ func Listen(o Options) (*Server, error) {
 	guarded := originHostGuard(port, mux)
 
 	return &Server{
-		ln:  ln,
-		srv: &http.Server{Handler: guarded},
+		ln: ln,
+		srv: &http.Server{
+			Handler: guarded,
+			// WR-03 (gosec G112): net/http's own defaults are all "no
+			// limit". originHostGuard runs at the HANDLER level, which
+			// is AFTER the header block has been read, so it is no
+			// defence at all against a client that connects and simply
+			// never finishes its headers — and any local process, plus
+			// any web page (which can open a socket to
+			// localhost:<port> even though the guard will reject the
+			// eventual request), can hold such connections open, each
+			// pinning a goroutine and a file descriptor until the
+			// process hits its fd limit and stops serving the
+			// legitimate UI.
+			ReadHeaderTimeout: readHeaderTimeout,
+			ReadTimeout:       readTimeout,
+			WriteTimeout:      writeTimeout,
+			IdleTimeout:       idleTimeout,
+		},
 		url: "http://127.0.0.1:" + port,
 	}, nil
 }
