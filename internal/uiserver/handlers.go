@@ -32,7 +32,26 @@ var openEngine = query.OpenAt
 // Nothing is retained on uiService across the call: no *query.Engine,
 // graphstore.GraphStore or graphstore.Reader value outlives withEngine's
 // return (SRV-04's per-call discipline).
+//
+// ctx is honoured as a PRE-FLIGHT gate only (WR-02): a request whose
+// client has already gone away — the browser tab closed, the fetch
+// aborted, the read timeout in server.go fired — is refused here,
+// before the store is opened and before any of the Engine's per-request
+// index builds or whole-file reads begin.
+//
+// KNOWN GAP, stated rather than implied by an unused parameter: once fn
+// is running, cancellation is NOT observed. Honouring it mid-flight
+// requires threading ctx into the Engine's own IterateNodes/IterateEdges
+// scan loops, which is a change to internal/query — the single read seam
+// the CLI and the MCP server share — and is deliberately out of this
+// wire layer's scope. Until that exists, the practical bound on a
+// request that outlives its client is server.go's WriteTimeout plus the
+// per-response caps, not cancellation.
 func withEngine(ctx context.Context, repoPath string, fn func(*query.Engine) error) error {
+	if err := ctx.Err(); err != nil {
+		return mapContextError(err)
+	}
+
 	eng, closer, err := openEngine(repoPath)
 	if err != nil {
 		return mapEngineError(err)
@@ -43,6 +62,19 @@ func withEngine(ctx context.Context, repoPath string, fn func(*query.Engine) err
 		return mapEngineError(err)
 	}
 	return nil
+}
+
+// mapContextError translates a cancelled or expired request context onto
+// its Connect code (WR-02). It is separate from mapEngineError on
+// purpose: these two errors never originate in the Engine at all, and
+// routing them through mapEngineError's default arm would render an
+// ordinary client-side abort as CodeInternal — an operator-visible
+// "something broke" for a browser tab that was merely closed.
+func mapContextError(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return connect.NewError(connect.CodeDeadlineExceeded, err)
+	}
+	return connect.NewError(connect.CodeCanceled, err)
 }
 
 // mapEngineError is withEngine's single error-translation site. It

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -1267,6 +1268,79 @@ func TestUIServiceAffectedEnforcesTheFileCountCap(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "exceeds maximum") {
 			t.Fatalf("Affected over the cap: message = %q, want it to carry ValidateAffectedFiles's own %q wording", err.Error(), "exceeds maximum")
+		}
+	})
+}
+
+// TestWithEngineRefusesAnAlreadyCancelledRequest proves WR-02's
+// pre-flight gate: withEngine's ctx parameter is actually consulted, so
+// a request whose client has already gone away is refused before the
+// store is opened and before any Engine work begins.
+//
+// Both directions are asserted so the test cannot pass vacuously:
+//
+//   - cancelled ctx: fn must NOT run, and the error must be
+//     CodeCanceled — not CodeInternal, which is what routing a
+//     context.Canceled through mapEngineError's default arm would
+//     produce for an ordinary browser-tab close;
+//   - expired deadline: CodeDeadlineExceeded, its own distinct code;
+//   - live ctx (the positive control): fn MUST run and its result must
+//     propagate, proving the gate rejects only what it should.
+//
+// Removing the ctx.Err() check turns the first two subtests RED (fn
+// runs and the call succeeds).
+func TestWithEngineRefusesAnAlreadyCancelledRequest(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+
+	t.Run("cancelled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		ran := false
+		err := withEngine(ctx, dir, func(*query.Engine) error {
+			ran = true
+			return nil
+		})
+		if err == nil {
+			t.Fatal("withEngine with an already-cancelled ctx returned nil, want CodeCanceled")
+		}
+		if got := connect.CodeOf(err); got != connect.CodeCanceled {
+			t.Fatalf("withEngine with a cancelled ctx: code = %v (%v), want CodeCanceled", got, err)
+		}
+		if ran {
+			t.Fatal("withEngine ran fn for an already-cancelled request — the pre-flight gate must refuse before any Engine work begins")
+		}
+	})
+
+	t.Run("deadline-exceeded", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+
+		ran := false
+		err := withEngine(ctx, dir, func(*query.Engine) error {
+			ran = true
+			return nil
+		})
+		if got := connect.CodeOf(err); got != connect.CodeDeadlineExceeded {
+			t.Fatalf("withEngine with an expired deadline: code = %v (%v), want CodeDeadlineExceeded", got, err)
+		}
+		if ran {
+			t.Fatal("withEngine ran fn for an already-expired request")
+		}
+	})
+
+	t.Run("live-ctx-still-runs", func(t *testing.T) {
+		ran := false
+		err := withEngine(context.Background(), dir, func(eng *query.Engine) error {
+			ran = true
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("withEngine with a live ctx: %v, want success", err)
+		}
+		if !ran {
+			t.Fatal("withEngine did not run fn for a live request — the pre-flight gate must reject only cancelled/expired contexts")
 		}
 	})
 }
