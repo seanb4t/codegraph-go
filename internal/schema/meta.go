@@ -29,3 +29,22 @@ func IsCurrentSchemaVersion(m *Meta) bool {
 	}
 	return m.GetSchemaVersion() == SchemaVersion
 }
+
+// IndexedCommitSHA reports the git commit m's index was built at (ENG-04,
+// D-05). A nil m, or a m whose commit_sha field is absent or empty,
+// returns ("", false) — the same "unknown, not an error" contract
+// has_file_index's own absent case follows: a pre-upgrade graph (built
+// before field 8 existed) and a non-git checkout are both indistinguishable
+// from each other and both degrade the same way. Callers get one place to
+// ask "do we know the indexed commit" rather than each re-deriving the
+// empty-means-absent convention.
+func IndexedCommitSHA(m *Meta) (string, bool) {
+	if m == nil {
+		return "", false
+	}
+	sha := m.GetCommitSha()
+	if sha == "" {
+		return "", false
+	}
+	return sha, true
+}
