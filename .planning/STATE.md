@@ -25,7 +25,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 01 — Engine Seam, Wire Protocol & Secure Transport
+**Current focus:** Phase 2 — SPA Toolchain, Embedded App Shell & JS Supply Chain
 
 ## Current Position
 
@@ -34,13 +34,13 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-08-23 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/6 phases)
+Progress: [███░░░░░░░░░░░░░░░░░] 17% (1/6 phases)
 
 ## Performance Metrics
 
 **Velocity (v0.12.0):**
 
-- No execution data yet for this milestone.
+- Phase 1: 11 plans across 7 waves, executed and verified 2026-08-23 (1 day). Per-task timings were not recorded in this phase's SUMMARY frontmatter, so no task count is reported rather than an inferred one.
 
 **By Phase (v0.12.0):**
 
@@ -231,20 +231,22 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/01-engine-seam-wire-protocol-secure-transport/01-11-SUMMARY.md
+**Resume file:** .planning/phases/01-engine-seam-wire-protocol-secure-transport/01-VERIFICATION.md
 
 Last session: 2026-08-23T18:00:02.762Z
 Stopped at: Phase 01 complete, ready to plan Phase 2
-  NEXT: `/gsd-plan-phase 1` (Engine Seam, Wire Protocol & Secure Transport)
+  NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
     - **Phase numbering restarts at 1** (this milestone was started with `--reset-phase-numbers`). `.planning/phases/` holds only `999.x` backlog directories, so Phases 1–6 collide with nothing.
     - **`branching_strategy: milestone`** — this milestone lives on one branch (`gsd/v0.12.0-local-graph-ui`) and is not incrementally merged.
-    - **Within Phase 1, `FIX-01` is independent** of the Engine/proto/transport work and may be planned first; `SRV-02` must land before any RPC handler.
+    - **Phase 1 is complete and verified** (5/5 ROADMAP criteria, `01-VERIFICATION.md`). The Connect server, the nine read-only RPCs, the Origin/Host guard and the `internal/query` seams are live and golden-clean.
+    - **Phase 2 inherits one open UAT item by design:** `01-UAT.md` test 1 records `GET /` → 404 because Phase 1 mounts only the Connect handler prefix and ships no SPA. It is recorded as `deferred` in `01-VERIFICATION.md`, and Phase 2's success criterion 1 (embedded SPA on this same mux) closes it by construction. `phase uat-passed 1` therefore reports `passed:false` on that one named blocker — this is a real, non-vacuous blocker, not the empty-blockers failure mode.
+    - **The protobuf half of the drift guard already exists** (`task proto:drift`, 3 files compared, RED-proven). Phase 2's `dist/`↔SPA guard is the second consumer of that one pattern, not a new one.
     - **Within Phase 5, `GRF-01` blocks everything else in the phase.** Its pass condition must be written down before it is dispatched, and the roadmap deliberately names no renderer.
     - **No `v0.12.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
     - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
 
 ## Operator Next Steps
 
-- Plan the first phase with `/gsd-plan-phase 1`
+- Plan Phase 2 with `/gsd-plan-phase 2`
