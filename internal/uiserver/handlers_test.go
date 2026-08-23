@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -1037,4 +1038,174 @@ func TestUIServiceNodeDetailErrorClasses(t *testing.T) {
 			t.Fatalf("GetNodeDetail with an unreadable within-cap candidate: code = %v, want CodeInternal (an unclassified read failure, not a resolveSourcePath rejection)", code)
 		}
 	})
+}
+
+// copyBehavioralFixture mirrors internal/query/explore_test.go's
+// copyBehavioralFixture byte-for-byte (unexported in package query,
+// reproduced here per this repo's existing "test scaffolding" convention
+// — see copyGofixture's own comment above): it copies the behavioral
+// corpus source tree (corpus/behavioral/src, D-03) into a fresh
+// t.TempDir(), skipping any committed .codegraph/ directory since this
+// test builds a fresh index via indexGofixture (indexer.Run) against the
+// CURRENT extractors/schema. Explore's wire tests need a REAL multi-file
+// corpus — gofixture's handful of tiny files do not reliably produce
+// several ranked file groups for a real query.
+func copyBehavioralFixture(t *testing.T) string {
+	t.Helper()
+	src, err := filepath.Abs(filepath.Join("..", "..", "corpus", "behavioral", "src"))
+	if err != nil {
+		t.Fatalf("resolve behavioral corpus fixture path: %v", err)
+	}
+	dst := t.TempDir()
+	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if rel == ".codegraph" {
+			return filepath.SkipDir
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		t.Fatalf("copy behavioral fixture: %v", err)
+	}
+	return dst
+}
+
+// TestUIServiceExploreGroupsCarryTheirOwnSources proves the wire mapping
+// preserves ExploreResult's three per-group/per-blast associations
+// (D-01, D-02) for a query producing several groups: each group's path is
+// a valid lookup key into the independently-computed
+// ExploreResult.Sources map (the exact keying plan 01-10's forthcoming
+// per-group source field will use — see ui.proto's header comment); the
+// skeletonized flag is set for exactly the group paths present in
+// ExploreResult.SkeletonFiles; and blast entries map one-to-one onto
+// ExploreResult.Blasts.
+func TestUIServiceExploreGroupsCarryTheirOwnSources(t *testing.T) {
+	dir := copyBehavioralFixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	const query1 = "account balance"
+
+	resp, err := client.Explore(context.Background(), connect.NewRequest(&uiv1.ExploreRequest{Query: query1}))
+	if err != nil {
+		t.Fatalf("Explore(%q): %v", query1, err)
+	}
+	if resp.Msg.GetEmpty() {
+		t.Fatalf("Explore(%q): empty = true, want a populated result (test fixture assumption)", query1)
+	}
+	if len(resp.Msg.GetGroups()) < 3 {
+		t.Fatalf("Explore(%q) returned %d groups, want at least 3 (test fixture assumption)", query1, len(resp.Msg.GetGroups()))
+	}
+
+	eng, closer, err := query.OpenAt(dir)
+	if err != nil {
+		t.Fatalf("query.OpenAt (independent verification path): %v", err)
+	}
+	defer closer.Close()
+	want, err := eng.ExploreDetail(query1, 0)
+	if err != nil {
+		t.Fatalf("eng.ExploreDetail(%q) (independent verification path): %v", query1, err)
+	}
+	if len(want.Groups) != len(resp.Msg.GetGroups()) {
+		t.Fatalf("Explore(%q) returned %d groups, want %d (independently computed)", query1, len(resp.Msg.GetGroups()), len(want.Groups))
+	}
+
+	t.Run("source-matches-group-path", func(t *testing.T) {
+		for _, g := range resp.Msg.GetGroups() {
+			src, ok := want.Sources[g.GetPath()]
+			if !ok || len(src) == 0 {
+				t.Fatalf("wire group path %q has no corresponding non-empty entry in the independently-computed ExploreResult.Sources — the wire path is not a valid source-lookup key", g.GetPath())
+			}
+		}
+	})
+
+	t.Run("skeletonized-flag-set-exactly-for-SkeletonFiles", func(t *testing.T) {
+		for _, g := range resp.Msg.GetGroups() {
+			wantSkeleton := want.SkeletonFiles[g.GetPath()]
+			if g.GetSkeletonized() != wantSkeleton {
+				t.Fatalf("group %q: skeletonized = %v, want %v (ExploreResult.SkeletonFiles[%q])", g.GetPath(), g.GetSkeletonized(), wantSkeleton, g.GetPath())
+			}
+		}
+	})
+
+	t.Run("blast-entries-map-one-to-one", func(t *testing.T) {
+		gotBlasts := resp.Msg.GetBlasts()
+		if len(gotBlasts) != len(want.Blasts) {
+			t.Fatalf("Explore(%q) returned %d blast entries, want %d (independently computed)", query1, len(gotBlasts), len(want.Blasts))
+		}
+		for i, w := range want.Blasts {
+			g := gotBlasts[i]
+			if g.GetSymbol().GetName() != w.Symbol.Name {
+				t.Fatalf("blast[%d].symbol.name = %q, want %q", i, g.GetSymbol().GetName(), w.Symbol.Name)
+			}
+			if g.GetCallerCount() != int32(w.CallerCount) {
+				t.Fatalf("blast[%d].caller_count = %d, want %d", i, g.GetCallerCount(), w.CallerCount)
+			}
+			if len(g.GetTestFiles()) != len(w.TestFiles) {
+				t.Fatalf("blast[%d].test_files has %d entries, want %d", i, len(g.GetTestFiles()), len(w.TestFiles))
+			}
+			for j, tf := range w.TestFiles {
+				if g.GetTestFiles()[j] != tf {
+					t.Fatalf("blast[%d].test_files[%d] = %q, want %q", i, j, g.GetTestFiles()[j], tf)
+				}
+			}
+		}
+	})
+}
+
+// TestUIServiceExploreZeroMatchIsNotAnError proves a query matching
+// nothing returns a SUCCESSFUL response with the empty marker set and no
+// groups — never connect.CodeNotFound and never connect.CodeInternal
+// (D-02): ExploreResult models the empty case explicitly for exactly
+// this reason.
+func TestUIServiceExploreZeroMatchIsNotAnError(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	resp, err := client.Explore(context.Background(), connect.NewRequest(&uiv1.ExploreRequest{Query: "zzzznonexistentquerytermxyz987"}))
+	if err != nil {
+		t.Fatalf("Explore with a query matching nothing returned an error, want a successful empty response: %v", err)
+	}
+	if !resp.Msg.GetEmpty() {
+		t.Fatal("Explore with a query matching nothing: empty = false, want true")
+	}
+	if len(resp.Msg.GetGroups()) != 0 {
+		t.Fatalf("Explore with a query matching nothing: got %d groups, want 0", len(resp.Msg.GetGroups()))
+	}
+}
+
+// TestUIServiceExploreRejectsEmptyQuery proves an empty query is rejected
+// as connect.CodeInvalidArgument, reflecting Engine.ExploreDetail's own
+// rejection rather than a second, independently-drifting copy of the
+// rule at this layer.
+func TestUIServiceExploreRejectsEmptyQuery(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	_, err := client.Explore(context.Background(), connect.NewRequest(&uiv1.ExploreRequest{Query: ""}))
+	if err == nil {
+		t.Fatal("Explore with an empty query succeeded, want an error")
+	}
+	if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+		t.Fatalf("Explore with an empty query: code = %v, want CodeInvalidArgument", code)
+	}
 }

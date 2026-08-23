@@ -1672,6 +1672,292 @@ func (x *GetNodeDetailResponse) GetTotalCandidates() int32 {
 	return 0
 }
 
+// ExploreRequest carries internal/query.Engine.ExploreDetail's two
+// arguments unchanged. max_files is passed straight through:
+// Engine.ExploreDetail's own validateMaxFiles/clampMaxFiles/H21 adaptive
+// budget already bound it server-side for every caller, so this rpc adds
+// no second copy of that rule.
+type ExploreRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	MaxFiles      int32                  `protobuf:"varint,2,opt,name=max_files,json=maxFiles,proto3" json:"max_files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExploreRequest) Reset() {
+	*x = ExploreRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExploreRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExploreRequest) ProtoMessage() {}
+
+func (x *ExploreRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExploreRequest.ProtoReflect.Descriptor instead.
+func (*ExploreRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ExploreRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *ExploreRequest) GetMaxFiles() int32 {
+	if x != nil {
+		return x.MaxFiles
+	}
+	return 0
+}
+
+// ExploreGroup is the wire projection of internal/query.ExploreFileGroup:
+// one matched file's path plus every matched symbol defined in it, in
+// ranked-match order. skeletonized mirrors whether this group's path is
+// present in internal/query.ExploreResult.SkeletonFiles — a per-group
+// boolean carries the same information a second client-side lookup would
+// need, without requiring one.
+type ExploreGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Symbols       []*Node                `protobuf:"bytes,2,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	Skeletonized  bool                   `protobuf:"varint,3,opt,name=skeletonized,proto3" json:"skeletonized,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExploreGroup) Reset() {
+	*x = ExploreGroup{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExploreGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExploreGroup) ProtoMessage() {}
+
+func (x *ExploreGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExploreGroup.ProtoReflect.Descriptor instead.
+func (*ExploreGroup) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ExploreGroup) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ExploreGroup) GetSymbols() []*Node {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+func (x *ExploreGroup) GetSkeletonized() bool {
+	if x != nil {
+		return x.Skeletonized
+	}
+	return false
+}
+
+// BlastEntry is the wire projection of internal/query.ExploreBlast: one
+// blast-radius bullet's matched symbol, its total caller count, and the
+// distinct test files among those callers.
+type BlastEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        *Node                  `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	CallerCount   int32                  `protobuf:"varint,2,opt,name=caller_count,json=callerCount,proto3" json:"caller_count,omitempty"`
+	TestFiles     []string               `protobuf:"bytes,3,rep,name=test_files,json=testFiles,proto3" json:"test_files,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlastEntry) Reset() {
+	*x = BlastEntry{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlastEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlastEntry) ProtoMessage() {}
+
+func (x *BlastEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlastEntry.ProtoReflect.Descriptor instead.
+func (*BlastEntry) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *BlastEntry) GetSymbol() *Node {
+	if x != nil {
+		return x.Symbol
+	}
+	return nil
+}
+
+func (x *BlastEntry) GetCallerCount() int32 {
+	if x != nil {
+		return x.CallerCount
+	}
+	return 0
+}
+
+func (x *BlastEntry) GetTestFiles() []string {
+	if x != nil {
+		return x.TestFiles
+	}
+	return nil
+}
+
+// ExploreResponse is the wire projection of internal/query.ExploreResult
+// (D-01, D-02). empty mirrors ExploreResult.Empty: a query matching
+// nothing is a SUCCESSFUL response with empty=true and zero groups, never
+// an error — Explore()'s five distinct "no results" pipeline stages all
+// funnel through this one representation, and turning it into an error
+// would make an ordinary "no results" indistinguishable from a genuine
+// failure. When empty is true, groups and blasts are both empty and
+// symbol_count is 0.
+//
+// Each ExploreGroup carries its OWN matched symbols and skeletonized
+// flag — internal/query.ExploreResult.Sources is a map keyed by each
+// group's own Path, which is exactly why the source that plan 01-10
+// attaches lands on ExploreGroup itself (see this file's header comment)
+// rather than as a single response-level blob: a response-level blob
+// would lose which file each blob belongs to, and a parallel unkeyed
+// list would make the association positional and therefore fragile.
+type ExploreResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Empty         bool                   `protobuf:"varint,2,opt,name=empty,proto3" json:"empty,omitempty"`
+	Stale         bool                   `protobuf:"varint,3,opt,name=stale,proto3" json:"stale,omitempty"`
+	SymbolCount   int32                  `protobuf:"varint,4,opt,name=symbol_count,json=symbolCount,proto3" json:"symbol_count,omitempty"`
+	Groups        []*ExploreGroup        `protobuf:"bytes,5,rep,name=groups,proto3" json:"groups,omitempty"`
+	Blasts        []*BlastEntry          `protobuf:"bytes,6,rep,name=blasts,proto3" json:"blasts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExploreResponse) Reset() {
+	*x = ExploreResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExploreResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExploreResponse) ProtoMessage() {}
+
+func (x *ExploreResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExploreResponse.ProtoReflect.Descriptor instead.
+func (*ExploreResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ExploreResponse) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *ExploreResponse) GetEmpty() bool {
+	if x != nil {
+		return x.Empty
+	}
+	return false
+}
+
+func (x *ExploreResponse) GetStale() bool {
+	if x != nil {
+		return x.Stale
+	}
+	return false
+}
+
+func (x *ExploreResponse) GetSymbolCount() int32 {
+	if x != nil {
+		return x.SymbolCount
+	}
+	return 0
+}
+
+func (x *ExploreResponse) GetGroups() []*ExploreGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+func (x *ExploreResponse) GetBlasts() []*BlastEntry {
+	if x != nil {
+		return x.Blasts
+	}
+	return nil
+}
+
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
 // path (D-14) attaches to a CodeUnavailable response when the graph
 // store stays locked past graphstore.Open's retry budget. Reserved by
@@ -1692,7 +1978,7 @@ type IndexingInProgress struct {
 
 func (x *IndexingInProgress) Reset() {
 	*x = IndexingInProgress{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1704,7 +1990,7 @@ func (x *IndexingInProgress) String() string {
 func (*IndexingInProgress) ProtoMessage() {}
 
 func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[21]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1717,7 +2003,7 @@ func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexingInProgress.ProtoReflect.Descriptor instead.
 func (*IndexingInProgress) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{21}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *IndexingInProgress) GetMessage() string {
@@ -1850,14 +2136,34 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\tcalled_by\x18\x05 \x03(\v2\x15.codegraph.ui.v1.NodeR\bcalledBy\x12\x16\n" +
 	"\x06symbol\x18\x06 \x01(\tR\x06symbol\x12A\n" +
 	"\vdefinitions\x18\a \x03(\v2\x1f.codegraph.ui.v1.NodeDefinitionR\vdefinitions\x12)\n" +
-	"\x10total_candidates\x18\b \x01(\x05R\x0ftotalCandidates\".\n" +
+	"\x10total_candidates\x18\b \x01(\x05R\x0ftotalCandidates\"C\n" +
+	"\x0eExploreRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x1b\n" +
+	"\tmax_files\x18\x02 \x01(\x05R\bmaxFiles\"w\n" +
+	"\fExploreGroup\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12/\n" +
+	"\asymbols\x18\x02 \x03(\v2\x15.codegraph.ui.v1.NodeR\asymbols\x12\"\n" +
+	"\fskeletonized\x18\x03 \x01(\bR\fskeletonized\"}\n" +
+	"\n" +
+	"BlastEntry\x12-\n" +
+	"\x06symbol\x18\x01 \x01(\v2\x15.codegraph.ui.v1.NodeR\x06symbol\x12!\n" +
+	"\fcaller_count\x18\x02 \x01(\x05R\vcallerCount\x12\x1d\n" +
+	"\n" +
+	"test_files\x18\x03 \x03(\tR\ttestFiles\"\xe2\x01\n" +
+	"\x0fExploreResponse\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x14\n" +
+	"\x05empty\x18\x02 \x01(\bR\x05empty\x12\x14\n" +
+	"\x05stale\x18\x03 \x01(\bR\x05stale\x12!\n" +
+	"\fsymbol_count\x18\x04 \x01(\x05R\vsymbolCount\x125\n" +
+	"\x06groups\x18\x05 \x03(\v2\x1d.codegraph.ui.v1.ExploreGroupR\x06groups\x123\n" +
+	"\x06blasts\x18\x06 \x03(\v2\x1b.codegraph.ui.v1.BlastEntryR\x06blasts\".\n" +
 	"\x12IndexingInProgress\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage*\x8e\x01\n" +
 	"\x0eNodeDetailMode\x12 \n" +
 	"\x1cNODE_DETAIL_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15NODE_DETAIL_MODE_FILE\x10\x01\x12\x1f\n" +
 	"\x1bNODE_DETAIL_MODE_SINGLE_DEF\x10\x02\x12\x1e\n" +
-	"\x1aNODE_DETAIL_MODE_MULTI_DEF\x10\x032\x8a\x05\n" +
+	"\x1aNODE_DETAIL_MODE_MULTI_DEF\x10\x032\xd8\x05\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
@@ -1866,7 +2172,8 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\aCallees\x12\x1f.codegraph.ui.v1.CalleesRequest\x1a .codegraph.ui.v1.CalleesResponse\x12I\n" +
 	"\x06Impact\x12\x1e.codegraph.ui.v1.ImpactRequest\x1a\x1f.codegraph.ui.v1.ImpactResponse\x12O\n" +
 	"\bAffected\x12 .codegraph.ui.v1.AffectedRequest\x1a!.codegraph.ui.v1.AffectedResponse\x12^\n" +
-	"\rGetNodeDetail\x12%.codegraph.ui.v1.GetNodeDetailRequest\x1a&.codegraph.ui.v1.GetNodeDetailResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\rGetNodeDetail\x12%.codegraph.ui.v1.GetNodeDetailRequest\x1a&.codegraph.ui.v1.GetNodeDetailResponse\x12L\n" +
+	"\aExplore\x12\x1f.codegraph.ui.v1.ExploreRequest\x1a .codegraph.ui.v1.ExploreResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -1881,7 +2188,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
 	(*Node)(nil),                  // 1: codegraph.ui.v1.Node
@@ -1905,7 +2212,11 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*GetNodeDetailRequest)(nil),  // 19: codegraph.ui.v1.GetNodeDetailRequest
 	(*NodeDefinition)(nil),        // 20: codegraph.ui.v1.NodeDefinition
 	(*GetNodeDetailResponse)(nil), // 21: codegraph.ui.v1.GetNodeDetailResponse
-	(*IndexingInProgress)(nil),    // 22: codegraph.ui.v1.IndexingInProgress
+	(*ExploreRequest)(nil),        // 22: codegraph.ui.v1.ExploreRequest
+	(*ExploreGroup)(nil),          // 23: codegraph.ui.v1.ExploreGroup
+	(*BlastEntry)(nil),            // 24: codegraph.ui.v1.BlastEntry
+	(*ExploreResponse)(nil),       // 25: codegraph.ui.v1.ExploreResponse
+	(*IndexingInProgress)(nil),    // 26: codegraph.ui.v1.IndexingInProgress
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	2,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
@@ -1924,27 +2235,33 @@ var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	1,  // 13: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
 	1,  // 14: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
 	20, // 15: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
-	3,  // 16: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	5,  // 17: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	9,  // 18: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	11, // 19: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
-	13, // 20: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
-	15, // 21: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
-	17, // 22: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
-	19, // 23: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
-	4,  // 24: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	6,  // 25: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	10, // 26: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	12, // 27: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	14, // 28: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	16, // 29: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	18, // 30: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	21, // 31: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	24, // [24:32] is the sub-list for method output_type
-	16, // [16:24] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	1,  // 16: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
+	1,  // 17: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
+	23, // 18: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
+	24, // 19: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
+	3,  // 20: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	5,  // 21: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	9,  // 22: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	11, // 23: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	13, // 24: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	15, // 25: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	17, // 26: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	19, // 27: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
+	22, // 28: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
+	4,  // 29: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	6,  // 30: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	10, // 31: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	12, // 32: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	14, // 33: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	16, // 34: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	18, // 35: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	21, // 36: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	25, // 37: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	29, // [29:38] is the sub-list for method output_type
+	20, // [20:29] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -1959,7 +2276,7 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   22,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

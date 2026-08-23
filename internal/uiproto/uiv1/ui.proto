@@ -58,6 +58,7 @@ service UIService {
   rpc Impact(ImpactRequest) returns (ImpactResponse);
   rpc Affected(AffectedRequest) returns (AffectedResponse);
   rpc GetNodeDetail(GetNodeDetailRequest) returns (GetNodeDetailResponse);
+  rpc Explore(ExploreRequest) returns (ExploreResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -369,6 +370,62 @@ message GetNodeDetailResponse {
   string symbol = 6;
   repeated NodeDefinition definitions = 7;
   int32 total_candidates = 8;
+}
+
+// ExploreRequest carries internal/query.Engine.ExploreDetail's two
+// arguments unchanged. max_files is passed straight through:
+// Engine.ExploreDetail's own validateMaxFiles/clampMaxFiles/H21 adaptive
+// budget already bound it server-side for every caller, so this rpc adds
+// no second copy of that rule.
+message ExploreRequest {
+  string query = 1;
+  int32 max_files = 2;
+}
+
+// ExploreGroup is the wire projection of internal/query.ExploreFileGroup:
+// one matched file's path plus every matched symbol defined in it, in
+// ranked-match order. skeletonized mirrors whether this group's path is
+// present in internal/query.ExploreResult.SkeletonFiles — a per-group
+// boolean carries the same information a second client-side lookup would
+// need, without requiring one.
+message ExploreGroup {
+  string path = 1;
+  repeated Node symbols = 2;
+  bool skeletonized = 3;
+}
+
+// BlastEntry is the wire projection of internal/query.ExploreBlast: one
+// blast-radius bullet's matched symbol, its total caller count, and the
+// distinct test files among those callers.
+message BlastEntry {
+  Node symbol = 1;
+  int32 caller_count = 2;
+  repeated string test_files = 3;
+}
+
+// ExploreResponse is the wire projection of internal/query.ExploreResult
+// (D-01, D-02). empty mirrors ExploreResult.Empty: a query matching
+// nothing is a SUCCESSFUL response with empty=true and zero groups, never
+// an error — Explore()'s five distinct "no results" pipeline stages all
+// funnel through this one representation, and turning it into an error
+// would make an ordinary "no results" indistinguishable from a genuine
+// failure. When empty is true, groups and blasts are both empty and
+// symbol_count is 0.
+//
+// Each ExploreGroup carries its OWN matched symbols and skeletonized
+// flag — internal/query.ExploreResult.Sources is a map keyed by each
+// group's own Path, which is exactly why the source that plan 01-10
+// attaches lands on ExploreGroup itself (see this file's header comment)
+// rather than as a single response-level blob: a response-level blob
+// would lose which file each blob belongs to, and a parallel unkeyed
+// list would make the association positional and therefore fragile.
+message ExploreResponse {
+  string query = 1;
+  bool empty = 2;
+  bool stale = 3;
+  int32 symbol_count = 4;
+  repeated ExploreGroup groups = 5;
+  repeated BlastEntry blasts = 6;
 }
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade

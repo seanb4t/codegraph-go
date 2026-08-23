@@ -541,3 +541,87 @@ func (s *uiService) GetNodeDetail(ctx context.Context, req *connect.Request[uiv1
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// exploreGroupToProto maps one internal/query.ExploreFileGroup onto its
+// uiv1.ExploreGroup wire projection. skeletonized is looked up by the
+// group's own Path in skeletonFiles — never by position — mirroring
+// internal/query.ExploreResult.SkeletonFiles' documented keying and this
+// package's existing "look sources up by path, never by index" discipline.
+func exploreGroupToProto(g query.ExploreFileGroup, skeletonFiles map[string]bool) *uiv1.ExploreGroup {
+	return &uiv1.ExploreGroup{
+		Path:         g.Path,
+		Symbols:      nodesToProto(g.Symbols),
+		Skeletonized: skeletonFiles[g.Path],
+	}
+}
+
+// exploreGroupsToProto maps a slice of internal/query.ExploreFileGroup
+// onto their uiv1.ExploreGroup wire projections, preserving order.
+func exploreGroupsToProto(groups []query.ExploreFileGroup, skeletonFiles map[string]bool) []*uiv1.ExploreGroup {
+	out := make([]*uiv1.ExploreGroup, len(groups))
+	for i, g := range groups {
+		out[i] = exploreGroupToProto(g, skeletonFiles)
+	}
+	return out
+}
+
+// blastEntryToProto maps one internal/query.ExploreBlast onto its
+// uiv1.BlastEntry wire projection field-for-field.
+func blastEntryToProto(b query.ExploreBlast) *uiv1.BlastEntry {
+	return &uiv1.BlastEntry{
+		Symbol:      nodeToProto(b.Symbol),
+		CallerCount: int32(b.CallerCount),
+		TestFiles:   b.TestFiles,
+	}
+}
+
+// blastEntriesToProto maps a slice of internal/query.ExploreBlast onto
+// their uiv1.BlastEntry wire projections, preserving order.
+func blastEntriesToProto(blasts []query.ExploreBlast) []*uiv1.BlastEntry {
+	out := make([]*uiv1.BlastEntry, len(blasts))
+	for i, b := range blasts {
+		out[i] = blastEntryToProto(b)
+	}
+	return out
+}
+
+// exploreResultToProto maps internal/query.ExploreResult onto
+// uiv1.ExploreResponse (D-01). A zero-match result is mapped exactly as
+// ExploreResult models it: empty=true, stale carried through, and every
+// other field at its zero value — never an error shape. This mapping does
+// NOT read ExploreResult.Sources at all: attaching per-group source bytes
+// is plan 01-10's deliverable (see ui.proto's file-level intent
+// paragraph), and this mapper's job stops at the fields ExploreGroup
+// declares today.
+func exploreResultToProto(r query.ExploreResult) *uiv1.ExploreResponse {
+	return &uiv1.ExploreResponse{
+		Query:       r.Query,
+		Empty:       r.Empty,
+		Stale:       r.Stale,
+		SymbolCount: int32(r.SymbolCount),
+		Groups:      exploreGroupsToProto(r.Groups, r.SkeletonFiles),
+		Blasts:      blastEntriesToProto(r.Blasts),
+	}
+}
+
+// Explore answers internal/query.Engine.ExploreDetail over the wire
+// (D-01, D-02): it calls (*query.Engine).ExploreDetail and nothing else.
+// A zero-match result is a SUCCESSFUL response carrying the empty marker,
+// never an error: ExploreResult models the empty case explicitly for
+// exactly this reason, and turning it into connect.CodeNotFound would
+// make an ordinary "no results" indistinguishable from a missing symbol.
+func (s *uiService) Explore(ctx context.Context, req *connect.Request[uiv1.ExploreRequest]) (*connect.Response[uiv1.ExploreResponse], error) {
+	var resp *uiv1.ExploreResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.ExploreDetail(req.Msg.GetQuery(), int(req.Msg.GetMaxFiles()))
+		if err != nil {
+			return err
+		}
+		resp = exploreResultToProto(result)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}

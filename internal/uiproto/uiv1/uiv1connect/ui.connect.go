@@ -86,6 +86,8 @@ const (
 	UIServiceAffectedProcedure = "/codegraph.ui.v1.UIService/Affected"
 	// UIServiceGetNodeDetailProcedure is the fully-qualified name of the UIService's GetNodeDetail RPC.
 	UIServiceGetNodeDetailProcedure = "/codegraph.ui.v1.UIService/GetNodeDetail"
+	// UIServiceExploreProcedure is the fully-qualified name of the UIService's Explore RPC.
+	UIServiceExploreProcedure = "/codegraph.ui.v1.UIService/Explore"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -98,6 +100,7 @@ type UIServiceClient interface {
 	Impact(context.Context, *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error)
 	Affected(context.Context, *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error)
 	GetNodeDetail(context.Context, *connect.Request[uiv1.GetNodeDetailRequest]) (*connect.Response[uiv1.GetNodeDetailResponse], error)
+	Explore(context.Context, *connect.Request[uiv1.ExploreRequest]) (*connect.Response[uiv1.ExploreResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -159,6 +162,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("GetNodeDetail")),
 			connect.WithClientOptions(opts...),
 		),
+		explore: connect.NewClient[uiv1.ExploreRequest, uiv1.ExploreResponse](
+			httpClient,
+			baseURL+UIServiceExploreProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("Explore")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -172,6 +181,7 @@ type uIServiceClient struct {
 	impact        *connect.Client[uiv1.ImpactRequest, uiv1.ImpactResponse]
 	affected      *connect.Client[uiv1.AffectedRequest, uiv1.AffectedResponse]
 	getNodeDetail *connect.Client[uiv1.GetNodeDetailRequest, uiv1.GetNodeDetailResponse]
+	explore       *connect.Client[uiv1.ExploreRequest, uiv1.ExploreResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -214,6 +224,11 @@ func (c *uIServiceClient) GetNodeDetail(ctx context.Context, req *connect.Reques
 	return c.getNodeDetail.CallUnary(ctx, req)
 }
 
+// Explore calls codegraph.ui.v1.UIService.Explore.
+func (c *uIServiceClient) Explore(ctx context.Context, req *connect.Request[uiv1.ExploreRequest]) (*connect.Response[uiv1.ExploreResponse], error) {
+	return c.explore.CallUnary(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
@@ -224,6 +239,7 @@ type UIServiceHandler interface {
 	Impact(context.Context, *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error)
 	Affected(context.Context, *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error)
 	GetNodeDetail(context.Context, *connect.Request[uiv1.GetNodeDetailRequest]) (*connect.Response[uiv1.GetNodeDetailResponse], error)
+	Explore(context.Context, *connect.Request[uiv1.ExploreRequest]) (*connect.Response[uiv1.ExploreResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -281,6 +297,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("GetNodeDetail")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceExploreHandler := connect.NewUnaryHandler(
+		UIServiceExploreProcedure,
+		svc.Explore,
+		connect.WithSchema(uIServiceMethods.ByName("Explore")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -299,6 +321,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceAffectedHandler.ServeHTTP(w, r)
 		case UIServiceGetNodeDetailProcedure:
 			uIServiceGetNodeDetailHandler.ServeHTTP(w, r)
+		case UIServiceExploreProcedure:
+			uIServiceExploreHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -338,4 +362,8 @@ func (UnimplementedUIServiceHandler) Affected(context.Context, *connect.Request[
 
 func (UnimplementedUIServiceHandler) GetNodeDetail(context.Context, *connect.Request[uiv1.GetNodeDetailRequest]) (*connect.Response[uiv1.GetNodeDetailResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetNodeDetail is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) Explore(context.Context, *connect.Request[uiv1.ExploreRequest]) (*connect.Response[uiv1.ExploreResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Explore is not implemented"))
 }
