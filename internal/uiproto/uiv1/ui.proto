@@ -8,19 +8,73 @@
 // within this package, a field number is never renumbered and never
 // reused. When a field is retired, its number is added to a `reserved`
 // clause instead of being deleted or repurposed.
+//
+// Deliberate omission — Query vs Search (plan 01-08): internal/query.Engine
+// exposes both Query (full node records for an exact name/kind match) and
+// Search (the lightweight Location-only projection of the same match).
+// Only Search is exposed here. Query's fuller shape — calls, called-by, and
+// the multi-definition candidate set — is strictly subsumed by plan
+// 01-09's GetNodeDetail rpc, which covers node lookup; Search covers
+// discovery. Exposing both Query and Search on the wire would give the UI
+// two overlapping name-lookup rpcs with different result shapes and no
+// rule about which to reach for. This service's contract is "every read
+// the UI needs", not "every exported method on Engine" — this is that
+// contract applied, not an oversight.
 syntax = "proto3";
 
 package codegraph.ui.v1;
 
 option go_package = "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1";
 
-// UIService is codegraph ui's RPC surface. This plan (01-01, the phase's
-// tracer) defines exactly one method — GetStatus — proving the whole
-// transport end-to-end before the remaining eight methods are added by
-// later plans in this phase (SRV-04's per-call open/close discipline
-// applies to all of them).
+// UIService is codegraph ui's RPC surface. Plan 01-01 (the phase's tracer)
+// defined GetStatus alone, proving the whole transport end-to-end. Plan
+// 01-08 adds the six mechanical structured-result reads — Search, Files,
+// Callers, Callees, Impact, Affected — bringing the surface to seven of
+// the nine total methods, one rpc per task so the tree builds after every
+// task. GetNodeDetail and Explore are plan 01-09's, at which point the
+// full nine-method, read-only set is asserted by equality (T-01-04).
+// Every rpc opens, uses, and closes its own Engine via internal/uiserver's
+// withEngine seam (SRV-04).
 service UIService {
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+
+// Node is the shared wire projection of a graph symbol record — the
+// fields a UI view actually renders, mirroring internal/schema/graph.proto's
+// Node message field-for-field (minus its reserved 50-59 annotation
+// range, which has no consumer yet on either surface). Defined once here
+// and reused across every response that needs a full node rather than a
+// bare Location, so Phases 3-6 never have to reconcile divergent
+// per-response node shapes for the same underlying record.
+message Node {
+  string id = 1;
+  string kind = 2;
+  string name = 3;
+  string qualified_name = 4;
+  string file_path = 5;
+  string language = 6;
+  int32 start_line = 7;
+  int32 end_line = 8;
+  int32 start_col = 9;
+  int32 end_col = 10;
+  string signature = 11;
+  string docstring = 12;
+  string visibility = 13;
+  bool is_exported = 14;
+  string return_type = 15;
+}
+
+// Location is the shared wire projection of internal/query.Location — a
+// lightweight name/kind/file/line-only reference, with no source body or
+// signature. Every traversal rpc's repeated result (Search, Callers,
+// Callees, Impact, Affected) reuses this one message rather than a
+// per-rpc variant.
+message Location {
+  string name = 1;
+  string kind = 2;
+  string file_path = 3;
+  int32 start_line = 4;
 }
 
 // GetStatusRequest is presently empty of consulted fields — v1's server
@@ -72,6 +126,37 @@ message GetStatusResponse {
   // pending (the watcher/daemon signal file exists, or the newest
   // on-disk source mtime is newer than the last recorded sync).
   bool stale = 6;
+
+  // commit_sha (ENG-04, D-05/D-06) is the git commit this graph was
+  // indexed at, read through (*query.Engine).IndexMeta and
+  // schema.IndexedCommitSHA. Empty means the graph predates Meta field 8
+  // (a pre-upgrade graph) or the index was built outside a git checkout
+  // — both cases are "unknown", never an error, and the client must
+  // render "unknown" rather than treating an empty value as a failure.
+  //
+  // Field numbers 8 and 9 on this message are ALREADY ALLOCATED to plan
+  // 01-11's store_exists and indexing_in_progress fields (D-14/D-16's
+  // degrade path) and MUST NOT be assigned here or by any other plan — a
+  // numbering collision between two plans sharing this phase is exactly
+  // what D-02a's additive-only, never-renumbered discipline exists to
+  // prevent.
+  string commit_sha = 7;
+}
+
+// SearchRequest carries internal/query.Engine.Search's three arguments
+// unchanged. limit is passed straight through: validateLimit and MaxLimit
+// already bound it server-side for every caller, so this rpc adds no
+// second copy of that rule that could drift from the Engine's own.
+message SearchRequest {
+  string term = 1;
+  string kind = 2;
+  int32 limit = 3;
+}
+
+// SearchResponse carries Search's Location matches, in the same order
+// Engine.Search returns them.
+message SearchResponse {
+  repeated Location locations = 1;
 }
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
