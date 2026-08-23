@@ -1393,11 +1393,14 @@ Optionally correct 01-06’s “eight test functions” wording to “seven test
 
 ### Verdict
 
-The vacuity class is **very nearly terminated but not terminated**. Every shape-based sweep
-cycle 4 claimed holds under independent re-derivation, and both cycle-3 HIGHs are fixed at the
-root rather than at the symptom. One task, however, carries a *new* instance of the class — and
-it is the one place the census's own method could not see, because the defect is an **absence**
-rather than a malformed command.
+The vacuity class is **not terminated**. Every shape-based sweep cycle 4 claimed holds under
+independent re-derivation, and both cycle-3 HIGHs are fixed at the root rather than at the
+symptom — that part worked. What did not is the part the census's own method could not see: a
+gate is vacuous here not because the command is malformed but because a described behavior is
+**absent** from everything the gate reaches. Three live members remain (**H3**, **M4**, **M5**),
+plus a class of uncontrolled absence assertion the census did not enumerate (**L3**). See the
+Addendum, which was written after a second, deeper pass and which corrects two rows of the census
+table below.
 
 ### HIGH — unresolved
 
@@ -1558,8 +1561,8 @@ by Codex. One-word fix.
 | `OUT`/`STATUS` captured before any pipe | all `go test` gates | **26/26** — no gate invokes `go test` without `STATUS=$?` |
 | unguarded `git status --porcelain` in `<automated>` | 9 sites, 9 fixed, exactly that set | **9/9 guarded**, and every `test -d X` guard matches the pathspec `X/` it protects |
 | count regexes accepting zero | 2, both in 01-07 | **both numericized** (`NFILES=…; [ "$NFILES" -ge 3 ]`) at `01-07:236` and `01-07:298` |
-| gates with no control | 1 (01-10 numeric-literal) | **fixed** — `01-10:343-345` is now path-scoped, `*.pb.go`/`*.connect.go`-excluded and positively controlled, with the reason each part is load-bearing written out |
-| zero-count assertions | all controlled | **8/8 carry same-file positive controls** (`01-01:293`, `01-02:266-267`, `01-04:320-321`, `01-05:267`, `01-10:343`, `01-10:346`, `01-11:472`) |
+| gates with no control | 1 (01-10 numeric-literal) | **claim stale in both directions.** Its one named instance is genuinely fixed — `01-10:343-345` is now path-scoped, `*.pb.go`/`*.connect.go`-excluded and positively controlled, with the reason each part is load-bearing written out — so it is no longer an instance. But three uncontrolled absence assertions are absent from the claim's list: see **L3** |
+| zero-count assertions | all controlled | **8/8 executable `rg … | wc -l` → `0` gates carry same-file positive controls** (`01-01:293`, `01-02:266-267`, `01-04:320-321`, `01-05:267`, `01-10:343`, `01-10:346`, `01-11:472`). This row covers only the executable ones; three absence claims written as bare prose carry no pipeline at all — see **L3** |
 | unranged `git diff` emptiness | exactly 1, now ranged | **the split is real for 5 of 6 — see M1** |
 | PASS floors carrying derivations | 26 of 26 | **25 of 26 — see M3** |
 | floor arithmetic | correct | **24 of 26 exactly correct; 2 off in prose only (L1, L2), no floor affected** |
@@ -1569,6 +1572,7 @@ by Codex. One-word fix.
 | echo labels | 6 variants normalized to `PASS lines:` | **26/26 PASS echoes use `PASS lines:`**; the only 2 other echoes are the drift gates' `compared=` |
 | trailing-comma YAML defect | fixed pre-commit, never landed | **confirmed** — 0 present in any frontmatter; `git show e81dc32` deletes 0 lines ending in a quoted comma |
 | frontmatter strict parse | 11/11 | **11/11 clean under `yq -e`** |
+| orphaned behavior bullets | 13 across 6 tasks, all adopted | **three live members remain** — `01-05:198` (**M4**), `01-06:319` (**M5**) and `01-10` Task 2's five bullets (**H3**). The adoption work itself is real and well done in `01-03`, `01-04`, `01-08` and `01-09`, whose derivations each name the home for every unnamed bullet; it was simply not applied to all 13 tasks that have unnamed bullets |
 | duplicate declarations in `behavioral_test.go` | 7 | **confirmed in source** — see below |
 | duplicate test-function declarations | — | **0 collisions** — no (package, test-function-name) pair is declared by two different tasks anywhere in the phase |
 | `read_first` citation errors | 8 of 85, corrected | **spot-check clean** — see below |
@@ -1666,18 +1670,102 @@ design.
 
 ### Risk
 
-**MEDIUM.** The class-termination largely worked: every shape-based sweep holds under independent
-re-derivation, both HIGHs are fixed at the root, and the mechanical invariants are intact. What
-cycle 4 could not reach is a vacuity that is an *absence* rather than a malformed command —
-`01-10` Task 2 (**H3**). That is one surgical fix (name the tests, add the file, scope a floor to
-them), plus three small criterion edits (**M1**, **M2**, **M3**) and two one-word arithmetic
-corrections (**L1**, **L2**). No wave redesign, no re-plan.
+**MEDIUM.** The mechanical half of the class-termination worked completely: every shape-based
+sweep holds under independent re-derivation, both HIGHs are fixed at the root, and every invariant
+is intact. The half that did not is the *absence* half — a behavior the plan describes that no
+test, subtest or floor reaches. Three members are live: `01-10` Task 2's whole deliverable
+(**H3**), `01-05:198`'s `maxFiles == 0` path (**M4**), and `01-06:319`'s ENG-04 end-to-end
+stamping property (**M5**). Alongside those, three absence assertions carry no executable control
+at all (**L3**), three criterion edits are needed (**M1**, **M2**, **M3**), and two derivations
+have one-word arithmetic slips (**L1**, **L2**). Every one is surgical: no wave redesign, no
+re-plan, no change to the architecture or to either HIGH fix.
 
 The useful generalisation for the maintainer: the phase's prohibitions now cover every way a gate
 can be *written* wrong, and none of the ways a gate can be *scoped* wrong. `01-10:423` satisfies
 all five prohibitions and still scores nothing it owns. A sixth prohibition — *every gate's `-run`
 pattern must name at least one test function the task itself declares, and its floor must be
 derived from that task's own subtests* — would close the shape H3 exposes.
+
+### Addendum — second-pass census results
+
+A deeper sweep completed after the section above was first written and found **three more items**,
+each verified independently against source. Two are further members of the orphaned-behavior class
+that **H3** exposes; one is a class of absence-assertion the earlier "all controlled" row did not
+cover. The two corrected census rows are marked in the table above.
+
+**M4. `01-05:198` — the `maxFiles == 0` behavior is owned by no test.**
+
+> `maxFiles == 0` behaves exactly as it does today (the multi-file capture path uses it, and the
+> adaptive-budget override at H21 only fires when no explicit value was given).
+
+The only candidate owner is `TestExploreResultMaxFilesBoundary`, but the floor derivation at
+`01-05:261` pins that function to **exactly two** `t.Run` subtests, `exactly-at-match-count` and
+`one-below`, and the acceptance bullet at `01-05:265` restates only those two. Zero is neither.
+Nor is it a row of any other matrix the gate reaches: `TestExploreResultZeroMatchModeCoversEveryBranch`
+has one subtest per zero-**result** branch, which is a different concept, and the remaining two
+functions declare no subtests. The `must_haves` truth at `01-05:37` likewise covers only the
+at-count boundary. Positive control: `MaxFilesZero` occurs **0** times in the file while
+`TestExploreResultMaxFilesBoundary` occurs 3, so the zero is a real absence. This is not
+bookkeeping — the bullet itself says the multi-file capture path uses `maxFiles == 0`, so a live
+code path is described and then left unasserted. The plan nowhere reasons about omitting it.
+
+**M5. `01-06:319` — ENG-04's end-to-end stamping property is owned by no test.**
+
+> A `codegraph index` run over a git checkout produces a `Meta` whose commit field equals
+> `git rev-parse HEAD` for that checkout; over a non-git directory it succeeds with an empty value.
+
+It is the only plain-prose bullet among eight in that behavior block (`01-06:314-322`) that no
+named function owns — and the contrast is instructive, because the *other* plain-prose bullet
+there (`:315`, the 39/41/63/65/uppercase-hex lengths) **is** owned: the derivation names those five
+explicitly as `t.Run` subtests of `TestResolveHeadCommitSHA`. All three ownership routes fail for
+`:319`:
+
+- The nearest named function, `TestHeadIsResolvedOncePerOperation`, asserts only the injected
+  lookup's **invocation count** per `01-06:394` ("exactly 1 for a full index run and exactly 1 for
+  a sync run"). Counting resolutions is not asserting the resolved value lands in `Meta`.
+- The artifact lists (`01-06:103`, `:105`) name seven tests; none indexes a real git checkout.
+  `TestIndexMetaCarriesTheStoredMeta` reads back whatever the store holds for a fixture, which does
+  not pin the value to `git rev-parse HEAD`.
+- The nearest acceptance criterion, `01-06:393`, is a **source grep** requiring exactly three
+  assignments of the generated field across `internal/indexer/`. That proves assignment statements
+  exist; it does not prove the resolved SHA reaches `Meta` — which is precisely the gap the bullet
+  describes.
+
+The gate at `01-06:384` would not match a remedial `TestIndexRunStampsHeadCommitSHA` either, so
+the fix is a `-run` change as well as a test.
+
+**L3. Three absence assertions carry no executable control.** Distinct from the eight
+`rg … | wc -l` → `0` gates, which are all controlled: these are absence claims written as bare
+prose with no pipeline at all, so nothing can fail them.
+
+- `01-08:277` — "`mapEngineError` contains no string comparison against an error message;
+  classification is `errors.Is`/`errors.As` only." Two lines above it, `01-08:275` is the fully
+  controlled form on the same file, so the plan already knows the shape. The gate at `01-08:265`
+  runs four `TestUIService*` functions, none of which inspects the implementation.
+- `01-11:306`, **second clause only** — "…and no error classification in either file compares
+  against an error message string." The first clause is executable with a floor and is fine; the
+  second is welded onto the same bullet with no pipeline. Same shape and subject as the above.
+- `01-01:317` — "…the response body does not contain a serialized Connect envelope." Uncontrolled,
+  and additionally **dropped**: the acceptance criterion at `01-01:489` reduces the whole behavior
+  to "receives HTTP 403 for `Host: evil.com`". Positive control: "Connect envelope" occurs exactly
+  **1** time in the file (against `originHostGuard` at 5), confirming the phrase never reaches an
+  acceptance criterion. The phase already uses the right pattern for this at `01-11:202`/`:305` —
+  apply the same predicate to a known-good 200 response and assert it detects the envelope there.
+
+Fix for all three: an executable pipeline over the guarded file plus a same-invocation control,
+e.g. `rg -v '^\s*//' internal/uiserver/handlers.go | rg -o -e 'strings\.(Contains|HasPrefix|EqualFold)|err\.Error\(\) ==' | wc -l`
+prints `0`, controlled by `errors\.(Is|As)` against that same file returning non-zero.
+
+**What this does to the class verdict.** It sharpens it rather than changing it. The
+orphaned-behavior class has **three** live members (`01-05:198`, `01-06:319`, and `01-10` Task 2's
+five bullets), not one — and all three share H3's signature: the gate is well-formed and passes
+every one of the five prohibitions, but nothing in it can fail when the described behavior is
+absent. The sixth prohibition proposed at the end of the Risk section would catch `01-10` Task 2
+directly; catching M4 and M5 additionally needs the rule that **every behavior bullet must name, or
+be named by, a test function or `t.Run` subtest the task's own floor derivation counts.** That
+rule is the generalisation of the work cycle 4 already did by hand in `01-03`, `01-04`, `01-08` and
+`01-09`, where each derivation explicitly names the home for every unnamed bullet — it simply was
+not applied to all thirteen tasks that have unnamed bullets.
 
 ## Verification coverage (cycle 5 source-grounding pass)
 
