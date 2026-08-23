@@ -62,6 +62,14 @@ const (
 	UIServiceSearchProcedure = "/codegraph.ui.v1.UIService/Search"
 	// UIServiceFilesProcedure is the fully-qualified name of the UIService's Files RPC.
 	UIServiceFilesProcedure = "/codegraph.ui.v1.UIService/Files"
+	// UIServiceCallersProcedure is the fully-qualified name of the UIService's Callers RPC.
+	UIServiceCallersProcedure = "/codegraph.ui.v1.UIService/Callers"
+	// UIServiceCalleesProcedure is the fully-qualified name of the UIService's Callees RPC.
+	UIServiceCalleesProcedure = "/codegraph.ui.v1.UIService/Callees"
+	// UIServiceImpactProcedure is the fully-qualified name of the UIService's Impact RPC.
+	UIServiceImpactProcedure = "/codegraph.ui.v1.UIService/Impact"
+	// UIServiceAffectedProcedure is the fully-qualified name of the UIService's Affected RPC.
+	UIServiceAffectedProcedure = "/codegraph.ui.v1.UIService/Affected"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -69,6 +77,10 @@ type UIServiceClient interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
 	Search(context.Context, *connect.Request[uiv1.SearchRequest]) (*connect.Response[uiv1.SearchResponse], error)
 	Files(context.Context, *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error)
+	Callers(context.Context, *connect.Request[uiv1.CallersRequest]) (*connect.Response[uiv1.CallersResponse], error)
+	Callees(context.Context, *connect.Request[uiv1.CalleesRequest]) (*connect.Response[uiv1.CalleesResponse], error)
+	Impact(context.Context, *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error)
+	Affected(context.Context, *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -100,6 +112,30 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("Files")),
 			connect.WithClientOptions(opts...),
 		),
+		callers: connect.NewClient[uiv1.CallersRequest, uiv1.CallersResponse](
+			httpClient,
+			baseURL+UIServiceCallersProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("Callers")),
+			connect.WithClientOptions(opts...),
+		),
+		callees: connect.NewClient[uiv1.CalleesRequest, uiv1.CalleesResponse](
+			httpClient,
+			baseURL+UIServiceCalleesProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("Callees")),
+			connect.WithClientOptions(opts...),
+		),
+		impact: connect.NewClient[uiv1.ImpactRequest, uiv1.ImpactResponse](
+			httpClient,
+			baseURL+UIServiceImpactProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("Impact")),
+			connect.WithClientOptions(opts...),
+		),
+		affected: connect.NewClient[uiv1.AffectedRequest, uiv1.AffectedResponse](
+			httpClient,
+			baseURL+UIServiceAffectedProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("Affected")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -108,6 +144,10 @@ type uIServiceClient struct {
 	getStatus *connect.Client[uiv1.GetStatusRequest, uiv1.GetStatusResponse]
 	search    *connect.Client[uiv1.SearchRequest, uiv1.SearchResponse]
 	files     *connect.Client[uiv1.FilesRequest, uiv1.FilesResponse]
+	callers   *connect.Client[uiv1.CallersRequest, uiv1.CallersResponse]
+	callees   *connect.Client[uiv1.CalleesRequest, uiv1.CalleesResponse]
+	impact    *connect.Client[uiv1.ImpactRequest, uiv1.ImpactResponse]
+	affected  *connect.Client[uiv1.AffectedRequest, uiv1.AffectedResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -125,11 +165,35 @@ func (c *uIServiceClient) Files(ctx context.Context, req *connect.Request[uiv1.F
 	return c.files.CallUnary(ctx, req)
 }
 
+// Callers calls codegraph.ui.v1.UIService.Callers.
+func (c *uIServiceClient) Callers(ctx context.Context, req *connect.Request[uiv1.CallersRequest]) (*connect.Response[uiv1.CallersResponse], error) {
+	return c.callers.CallUnary(ctx, req)
+}
+
+// Callees calls codegraph.ui.v1.UIService.Callees.
+func (c *uIServiceClient) Callees(ctx context.Context, req *connect.Request[uiv1.CalleesRequest]) (*connect.Response[uiv1.CalleesResponse], error) {
+	return c.callees.CallUnary(ctx, req)
+}
+
+// Impact calls codegraph.ui.v1.UIService.Impact.
+func (c *uIServiceClient) Impact(ctx context.Context, req *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error) {
+	return c.impact.CallUnary(ctx, req)
+}
+
+// Affected calls codegraph.ui.v1.UIService.Affected.
+func (c *uIServiceClient) Affected(ctx context.Context, req *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error) {
+	return c.affected.CallUnary(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
 	Search(context.Context, *connect.Request[uiv1.SearchRequest]) (*connect.Response[uiv1.SearchResponse], error)
 	Files(context.Context, *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error)
+	Callers(context.Context, *connect.Request[uiv1.CallersRequest]) (*connect.Response[uiv1.CallersResponse], error)
+	Callees(context.Context, *connect.Request[uiv1.CalleesRequest]) (*connect.Response[uiv1.CalleesResponse], error)
+	Impact(context.Context, *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error)
+	Affected(context.Context, *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -157,6 +221,30 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("Files")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceCallersHandler := connect.NewUnaryHandler(
+		UIServiceCallersProcedure,
+		svc.Callers,
+		connect.WithSchema(uIServiceMethods.ByName("Callers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	uIServiceCalleesHandler := connect.NewUnaryHandler(
+		UIServiceCalleesProcedure,
+		svc.Callees,
+		connect.WithSchema(uIServiceMethods.ByName("Callees")),
+		connect.WithHandlerOptions(opts...),
+	)
+	uIServiceImpactHandler := connect.NewUnaryHandler(
+		UIServiceImpactProcedure,
+		svc.Impact,
+		connect.WithSchema(uIServiceMethods.ByName("Impact")),
+		connect.WithHandlerOptions(opts...),
+	)
+	uIServiceAffectedHandler := connect.NewUnaryHandler(
+		UIServiceAffectedProcedure,
+		svc.Affected,
+		connect.WithSchema(uIServiceMethods.ByName("Affected")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -165,6 +253,14 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceSearchHandler.ServeHTTP(w, r)
 		case UIServiceFilesProcedure:
 			uIServiceFilesHandler.ServeHTTP(w, r)
+		case UIServiceCallersProcedure:
+			uIServiceCallersHandler.ServeHTTP(w, r)
+		case UIServiceCalleesProcedure:
+			uIServiceCalleesHandler.ServeHTTP(w, r)
+		case UIServiceImpactProcedure:
+			uIServiceImpactHandler.ServeHTTP(w, r)
+		case UIServiceAffectedProcedure:
+			uIServiceAffectedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -184,4 +280,20 @@ func (UnimplementedUIServiceHandler) Search(context.Context, *connect.Request[ui
 
 func (UnimplementedUIServiceHandler) Files(context.Context, *connect.Request[uiv1.FilesRequest]) (*connect.Response[uiv1.FilesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Files is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) Callers(context.Context, *connect.Request[uiv1.CallersRequest]) (*connect.Response[uiv1.CallersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Callers is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) Callees(context.Context, *connect.Request[uiv1.CalleesRequest]) (*connect.Response[uiv1.CalleesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Callees is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) Impact(context.Context, *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Impact is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) Affected(context.Context, *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.Affected is not implemented"))
 }

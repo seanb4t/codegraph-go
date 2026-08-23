@@ -312,3 +312,98 @@ func (s *uiService) Files(ctx context.Context, req *connect.Request[uiv1.FilesRe
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// Callers answers internal/query.Engine.Callers over the wire: symbol
+// and limit pass straight through — validateLimit/MaxLimit already
+// bound limit for every caller, and an unknown symbol surfaces as
+// connect.CodeNotFound (mapEngineError classifying query.ErrNotFound),
+// never CodeInternal.
+func (s *uiService) Callers(ctx context.Context, req *connect.Request[uiv1.CallersRequest]) (*connect.Response[uiv1.CallersResponse], error) {
+	var resp *uiv1.CallersResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.Callers(req.Msg.GetSymbol(), int(req.Msg.GetLimit()))
+		if err != nil {
+			return err
+		}
+		resp = &uiv1.CallersResponse{
+			Symbol:  result.Symbol,
+			Callers: locationsToProto(result.Callers),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// Callees answers internal/query.Engine.Callees over the wire, the same
+// discipline as Callers.
+func (s *uiService) Callees(ctx context.Context, req *connect.Request[uiv1.CalleesRequest]) (*connect.Response[uiv1.CalleesResponse], error) {
+	var resp *uiv1.CalleesResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.Callees(req.Msg.GetSymbol(), int(req.Msg.GetLimit()))
+		if err != nil {
+			return err
+		}
+		resp = &uiv1.CalleesResponse{
+			Symbol:  result.Symbol,
+			Callees: locationsToProto(result.Callees),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// Impact answers internal/query.Engine.Impact over the wire: depth
+// passes straight through — validateDepth/clampDepth already bound and
+// clamp it for every caller, and ImpactResponse.depth echoes back the
+// Engine's OWN clamped value (ImpactResult.Depth), never the caller's
+// raw request value, so a client can tell what depth was actually used.
+func (s *uiService) Impact(ctx context.Context, req *connect.Request[uiv1.ImpactRequest]) (*connect.Response[uiv1.ImpactResponse], error) {
+	var resp *uiv1.ImpactResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.Impact(req.Msg.GetSymbol(), int(req.Msg.GetDepth()))
+		if err != nil {
+			return err
+		}
+		resp = &uiv1.ImpactResponse{
+			Symbol:    result.Symbol,
+			Depth:     int32(result.Depth),
+			NodeCount: int32(result.NodeCount),
+			EdgeCount: int32(result.EdgeCount),
+			Affected:  locationsToProto(result.Affected),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// Affected answers internal/query.Engine.Affected over the wire: files
+// and depth pass straight through — validateDepth/clampAffectedDepth
+// already bound and clamp depth for every caller, using Affected's own
+// (different-from-Impact) default and ceiling.
+func (s *uiService) Affected(ctx context.Context, req *connect.Request[uiv1.AffectedRequest]) (*connect.Response[uiv1.AffectedResponse], error) {
+	var resp *uiv1.AffectedResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.Affected(req.Msg.GetFiles(), int(req.Msg.GetDepth()))
+		if err != nil {
+			return err
+		}
+		resp = &uiv1.AffectedResponse{
+			Files:         result.Files,
+			AffectedTests: locationsToProto(result.AffectedTests),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}

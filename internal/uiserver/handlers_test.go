@@ -429,3 +429,246 @@ func TestUIServiceFilesRejectsInvalidInput(t *testing.T) {
 		}
 	})
 }
+
+// TestUIServiceTraversalsMatchEngine proves the four remaining
+// structured-result reads — Callers, Callees, Impact, Affected — answer
+// over the wire exactly as the corresponding Engine method does for the
+// same arguments, computed independently in this test rather than merely
+// asserted non-empty. It also proves depth/limit bounds are the Engine's
+// alone (never a second, independently-drifting copy at this layer),
+// that Affected accepts more than one file path, and that an unknown
+// symbol classifies as CodeNotFound rather than CodeInternal.
+//
+// The gofixture corpus's pkga.Alpha calls the unexported pkga.helper
+// (internal/indexer/testdata/gofixture/pkga/pkga.go), giving a real,
+// deterministic caller/callee pair to drive Callers/Callees/Impact
+// against.
+func TestUIServiceTraversalsMatchEngine(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	// openIndependentEngine opens a fresh Engine for exactly one caller's
+	// use, to be closed before the NEXT rpc call in the same subtest —
+	// never held open across an RPC call, which would lock-contend with
+	// that call's own internal open (SRV-04's per-call discipline; see
+	// TestUIServiceFilesPreservesBothFormats's openIndependentEngine for
+	// the same reasoning).
+	openIndependentEngine := func(t *testing.T) (*query.Engine, func()) {
+		t.Helper()
+		eng, closer, err := query.OpenAt(dir)
+		if err != nil {
+			t.Fatalf("query.OpenAt (independent verification path): %v", err)
+		}
+		return eng, func() { closer.Close() }
+	}
+
+	t.Run("callers", func(t *testing.T) {
+		resp, err := client.Callers(context.Background(), connect.NewRequest(&uiv1.CallersRequest{Symbol: "helper"}))
+		if err != nil {
+			t.Fatalf("Callers: %v", err)
+		}
+		eng, closeFn := openIndependentEngine(t)
+		defer closeFn()
+		want, err := eng.Callers("helper", 0)
+		if err != nil {
+			t.Fatalf("eng.Callers (independent verification path): %v", err)
+		}
+		if len(want.Callers) == 0 {
+			t.Fatal("test fixture assumption broken: eng.Callers(\"helper\") returned no callers")
+		}
+		if resp.Msg.GetSymbol() != want.Symbol {
+			t.Fatalf("Callers symbol = %q, want %q", resp.Msg.GetSymbol(), want.Symbol)
+		}
+		got := resp.Msg.GetCallers()
+		if len(got) != len(want.Callers) {
+			t.Fatalf("Callers returned %d locations, want %d (independently computed)", len(got), len(want.Callers))
+		}
+		for i, w := range want.Callers {
+			g := got[i]
+			if g.GetName() != w.Name || g.GetKind() != w.Kind || g.GetFilePath() != w.FilePath || g.GetStartLine() != w.StartLine {
+				t.Fatalf("Callers location[%d] = %+v, want %+v", i, g, w)
+			}
+		}
+	})
+
+	t.Run("callees", func(t *testing.T) {
+		resp, err := client.Callees(context.Background(), connect.NewRequest(&uiv1.CalleesRequest{Symbol: "Alpha"}))
+		if err != nil {
+			t.Fatalf("Callees: %v", err)
+		}
+		eng, closeFn := openIndependentEngine(t)
+		defer closeFn()
+		want, err := eng.Callees("Alpha", 0)
+		if err != nil {
+			t.Fatalf("eng.Callees (independent verification path): %v", err)
+		}
+		if len(want.Callees) == 0 {
+			t.Fatal("test fixture assumption broken: eng.Callees(\"Alpha\") returned no callees")
+		}
+		if resp.Msg.GetSymbol() != want.Symbol {
+			t.Fatalf("Callees symbol = %q, want %q", resp.Msg.GetSymbol(), want.Symbol)
+		}
+		got := resp.Msg.GetCallees()
+		if len(got) != len(want.Callees) {
+			t.Fatalf("Callees returned %d locations, want %d (independently computed)", len(got), len(want.Callees))
+		}
+		for i, w := range want.Callees {
+			g := got[i]
+			if g.GetName() != w.Name || g.GetKind() != w.Kind || g.GetFilePath() != w.FilePath || g.GetStartLine() != w.StartLine {
+				t.Fatalf("Callees location[%d] = %+v, want %+v", i, g, w)
+			}
+		}
+	})
+
+	t.Run("impact", func(t *testing.T) {
+		resp, err := client.Impact(context.Background(), connect.NewRequest(&uiv1.ImpactRequest{Symbol: "helper"}))
+		if err != nil {
+			t.Fatalf("Impact: %v", err)
+		}
+		eng, closeFn := openIndependentEngine(t)
+		defer closeFn()
+		want, err := eng.Impact("helper", 0)
+		if err != nil {
+			t.Fatalf("eng.Impact (independent verification path): %v", err)
+		}
+		if resp.Msg.GetSymbol() != want.Symbol {
+			t.Fatalf("Impact symbol = %q, want %q", resp.Msg.GetSymbol(), want.Symbol)
+		}
+		if resp.Msg.GetDepth() != int32(want.Depth) {
+			t.Fatalf("Impact depth = %d, want %d (independently computed)", resp.Msg.GetDepth(), want.Depth)
+		}
+		if resp.Msg.GetNodeCount() != int32(want.NodeCount) {
+			t.Fatalf("Impact node_count = %d, want %d (independently computed)", resp.Msg.GetNodeCount(), want.NodeCount)
+		}
+		if resp.Msg.GetEdgeCount() != int32(want.EdgeCount) {
+			t.Fatalf("Impact edge_count = %d, want %d (independently computed)", resp.Msg.GetEdgeCount(), want.EdgeCount)
+		}
+		got := resp.Msg.GetAffected()
+		if len(got) != len(want.Affected) {
+			t.Fatalf("Impact affected has %d locations, want %d (independently computed)", len(got), len(want.Affected))
+		}
+		for i, w := range want.Affected {
+			g := got[i]
+			if g.GetName() != w.Name || g.GetKind() != w.Kind || g.GetFilePath() != w.FilePath || g.GetStartLine() != w.StartLine {
+				t.Fatalf("Impact affected[%d] = %+v, want %+v", i, g, w)
+			}
+		}
+	})
+
+	t.Run("affected", func(t *testing.T) {
+		files := []string{"pkga/pkga.go"}
+		resp, err := client.Affected(context.Background(), connect.NewRequest(&uiv1.AffectedRequest{Files: files}))
+		if err != nil {
+			t.Fatalf("Affected: %v", err)
+		}
+		eng, closeFn := openIndependentEngine(t)
+		defer closeFn()
+		want, err := eng.Affected(files, 0)
+		if err != nil {
+			t.Fatalf("eng.Affected (independent verification path): %v", err)
+		}
+		if len(resp.Msg.GetFiles()) != len(want.Files) {
+			t.Fatalf("Affected files has %d entries, want %d (independently computed)", len(resp.Msg.GetFiles()), len(want.Files))
+		}
+		for i, f := range want.Files {
+			if resp.Msg.GetFiles()[i] != f {
+				t.Fatalf("Affected files[%d] = %q, want %q", i, resp.Msg.GetFiles()[i], f)
+			}
+		}
+		got := resp.Msg.GetAffectedTests()
+		if len(got) != len(want.AffectedTests) {
+			t.Fatalf("Affected affected_tests has %d entries, want %d (independently computed)", len(got), len(want.AffectedTests))
+		}
+		for i, w := range want.AffectedTests {
+			g := got[i]
+			if g.GetName() != w.Name || g.GetKind() != w.Kind || g.GetFilePath() != w.FilePath || g.GetStartLine() != w.StartLine {
+				t.Fatalf("Affected affected_tests[%d] = %+v, want %+v", i, g, w)
+			}
+		}
+	})
+
+	// depth/limit bounds are the Engine's alone. For Impact/Affected, an
+	// explicit depth above the Engine's clamp ceiling (MaxDepth) is
+	// silently CLAMPED (validateDepth only rejects a negative depth;
+	// clampDepth/clampAffectedDepth then cap anything above MaxDepth) —
+	// so this asserts a SUCCESSFUL response whose depth is the Engine's
+	// own clamped value, never the caller's raw over-max request. For
+	// Callers/Callees, an explicit limit above the Engine's ceiling
+	// (MaxLimit) is a DIFFERENT shape: validateLimit REJECTS it outright
+	// as ErrInvalidArgument before any traversal runs (the len(locs) >
+	// MaxLimit clamp inside Callers/Callees only ever fires for a
+	// naturally-oversized RESULT under an in-range request, never for an
+	// explicit out-of-range LIMIT argument). Both are the SAME underlying
+	// principle this subtest proves: the RPC adds no second, independently
+	// -drifting bound at this layer — it reflects EXACTLY what the Engine
+	// itself does with the identical argument, whether that is a clamp or
+	// a rejection.
+	t.Run("limit-above-MaxLimit-is-clamped-by-the-Engine", func(t *testing.T) {
+		overDepth := int32(query.MaxDepth) + 5
+		resp, err := client.Impact(context.Background(), connect.NewRequest(&uiv1.ImpactRequest{Symbol: "helper", Depth: overDepth}))
+		if err != nil {
+			t.Fatalf("Impact with depth above MaxDepth returned an error, want the Engine's own clamped success: %v", err)
+		}
+		if resp.Msg.GetDepth() >= overDepth {
+			t.Fatalf("Impact depth = %d, want a value clamped below the requested %d", resp.Msg.GetDepth(), overDepth)
+		}
+		eng, closeFn := openIndependentEngine(t)
+		want, err := eng.Impact("helper", int(overDepth))
+		closeFn()
+		if err != nil {
+			t.Fatalf("eng.Impact (independent verification path): %v", err)
+		}
+		if resp.Msg.GetDepth() != int32(want.Depth) {
+			t.Fatalf("Impact depth = %d, want %d (independently computed Engine clamp)", resp.Msg.GetDepth(), want.Depth)
+		}
+
+		overLimit := int32(query.MaxLimit) + 1
+		if _, err := client.Callers(context.Background(), connect.NewRequest(&uiv1.CallersRequest{Symbol: "helper", Limit: overLimit})); err == nil {
+			t.Fatal("Callers with limit above MaxLimit succeeded over the wire, want the Engine's own rejection reflected unchanged")
+		} else if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+			t.Fatalf("Callers with limit above MaxLimit: code = %v, want CodeInvalidArgument", code)
+		}
+		eng2, closeFn2 := openIndependentEngine(t)
+		defer closeFn2()
+		if _, err := eng2.Callers("helper", int(overLimit)); err == nil {
+			t.Fatal("test assumption broken: independently-computed eng.Callers with the same over-limit argument succeeded")
+		}
+	})
+
+	t.Run("affected-accepts-a-repeated-file-path", func(t *testing.T) {
+		files := []string{"pkga/pkga.go", "pkgb/pkgb.go"}
+		resp, err := client.Affected(context.Background(), connect.NewRequest(&uiv1.AffectedRequest{Files: files}))
+		if err != nil {
+			t.Fatalf("Affected: %v", err)
+		}
+		eng, closeFn := openIndependentEngine(t)
+		defer closeFn()
+		want, err := eng.Affected(files, 0)
+		if err != nil {
+			t.Fatalf("eng.Affected (independent verification path): %v", err)
+		}
+		if len(resp.Msg.GetFiles()) != len(files) {
+			t.Fatalf("Affected files has %d entries, want %d (the repeated request field, echoed back)", len(resp.Msg.GetFiles()), len(files))
+		}
+		for i, f := range files {
+			if resp.Msg.GetFiles()[i] != f {
+				t.Fatalf("Affected files[%d] = %q, want %q", i, resp.Msg.GetFiles()[i], f)
+			}
+		}
+		if len(resp.Msg.GetAffectedTests()) != len(want.AffectedTests) {
+			t.Fatalf("Affected affected_tests has %d entries, want %d (independently computed for the same repeated file set)", len(resp.Msg.GetAffectedTests()), len(want.AffectedTests))
+		}
+	})
+
+	t.Run("unknown-symbol-is-CodeNotFound-not-CodeInternal", func(t *testing.T) {
+		_, err := client.Callers(context.Background(), connect.NewRequest(&uiv1.CallersRequest{Symbol: "NoSuchSymbolXYZ123"}))
+		if err == nil {
+			t.Fatal("Callers for an unknown symbol succeeded, want an error")
+		}
+		if code := connect.CodeOf(err); code != connect.CodeNotFound {
+			t.Fatalf("Callers for an unknown symbol: code = %v, want CodeNotFound (got error %v)", code, err)
+		}
+	})
+}

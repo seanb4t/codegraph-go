@@ -874,6 +874,466 @@ func (x *FilesResponse) GetTree() []*FileTreeNode {
 	return nil
 }
 
+// CallersRequest carries internal/query.Engine.Callers' two arguments
+// unchanged. limit is passed straight through — validateLimit and
+// MaxLimit already bound it server-side for every caller.
+type CallersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallersRequest) Reset() {
+	*x = CallersRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallersRequest) ProtoMessage() {}
+
+func (x *CallersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallersRequest.ProtoReflect.Descriptor instead.
+func (*CallersRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *CallersRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *CallersRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+// CallersResponse mirrors internal/query.CallersResult's shape.
+type CallersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Callers       []*Location            `protobuf:"bytes,2,rep,name=callers,proto3" json:"callers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CallersResponse) Reset() {
+	*x = CallersResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CallersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallersResponse) ProtoMessage() {}
+
+func (x *CallersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallersResponse.ProtoReflect.Descriptor instead.
+func (*CallersResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *CallersResponse) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *CallersResponse) GetCallers() []*Location {
+	if x != nil {
+		return x.Callers
+	}
+	return nil
+}
+
+// CalleesRequest carries internal/query.Engine.Callees' two arguments
+// unchanged, the same discipline as CallersRequest.
+type CalleesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalleesRequest) Reset() {
+	*x = CalleesRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalleesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalleesRequest) ProtoMessage() {}
+
+func (x *CalleesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalleesRequest.ProtoReflect.Descriptor instead.
+func (*CalleesRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *CalleesRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *CalleesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+// CalleesResponse mirrors internal/query.CalleesResult's shape.
+type CalleesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Callees       []*Location            `protobuf:"bytes,2,rep,name=callees,proto3" json:"callees,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalleesResponse) Reset() {
+	*x = CalleesResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalleesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalleesResponse) ProtoMessage() {}
+
+func (x *CalleesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalleesResponse.ProtoReflect.Descriptor instead.
+func (*CalleesResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CalleesResponse) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *CalleesResponse) GetCallees() []*Location {
+	if x != nil {
+		return x.Callees
+	}
+	return nil
+}
+
+// ImpactRequest carries internal/query.Engine.Impact's two arguments
+// unchanged. depth is passed straight through — validateDepth and
+// clampDepth already bound/clamp it server-side for every caller.
+type ImpactRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Depth         int32                  `protobuf:"varint,2,opt,name=depth,proto3" json:"depth,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImpactRequest) Reset() {
+	*x = ImpactRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImpactRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImpactRequest) ProtoMessage() {}
+
+func (x *ImpactRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImpactRequest.ProtoReflect.Descriptor instead.
+func (*ImpactRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ImpactRequest) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *ImpactRequest) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
+// ImpactResponse mirrors internal/query.ImpactResult's shape. depth is
+// the CLAMPED depth Impact actually used (clampDepth's return value,
+// echoed back by the Engine itself), not the caller's raw request value.
+type ImpactResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	Depth         int32                  `protobuf:"varint,2,opt,name=depth,proto3" json:"depth,omitempty"`
+	NodeCount     int32                  `protobuf:"varint,3,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	EdgeCount     int32                  `protobuf:"varint,4,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	Affected      []*Location            `protobuf:"bytes,5,rep,name=affected,proto3" json:"affected,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImpactResponse) Reset() {
+	*x = ImpactResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImpactResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImpactResponse) ProtoMessage() {}
+
+func (x *ImpactResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImpactResponse.ProtoReflect.Descriptor instead.
+func (*ImpactResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ImpactResponse) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *ImpactResponse) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
+func (x *ImpactResponse) GetNodeCount() int32 {
+	if x != nil {
+		return x.NodeCount
+	}
+	return 0
+}
+
+func (x *ImpactResponse) GetEdgeCount() int32 {
+	if x != nil {
+		return x.EdgeCount
+	}
+	return 0
+}
+
+func (x *ImpactResponse) GetAffected() []*Location {
+	if x != nil {
+		return x.Affected
+	}
+	return nil
+}
+
+// AffectedRequest carries internal/query.Engine.Affected's two
+// arguments unchanged. depth is passed straight through — validateDepth
+// and clampAffectedDepth already bound/clamp it server-side for every
+// caller (a DIFFERENT default than Impact's clampDepth — see
+// clampAffectedDepth's doc comment — so this is deliberately its own
+// message, not a reuse of ImpactRequest).
+type AffectedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Files         []string               `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	Depth         int32                  `protobuf:"varint,2,opt,name=depth,proto3" json:"depth,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AffectedRequest) Reset() {
+	*x = AffectedRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedRequest) ProtoMessage() {}
+
+func (x *AffectedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedRequest.ProtoReflect.Descriptor instead.
+func (*AffectedRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AffectedRequest) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *AffectedRequest) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
+}
+
+// AffectedResponse mirrors internal/query.AffectedResult's shape.
+type AffectedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Files         []string               `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	AffectedTests []*Location            `protobuf:"bytes,2,rep,name=affected_tests,json=affectedTests,proto3" json:"affected_tests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AffectedResponse) Reset() {
+	*x = AffectedResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedResponse) ProtoMessage() {}
+
+func (x *AffectedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedResponse.ProtoReflect.Descriptor instead.
+func (*AffectedResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *AffectedResponse) GetFiles() []string {
+	if x != nil {
+		return x.Files
+	}
+	return nil
+}
+
+func (x *AffectedResponse) GetAffectedTests() []*Location {
+	if x != nil {
+		return x.AffectedTests
+	}
+	return nil
+}
+
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
 // path (D-14) attaches to a CodeUnavailable response when the graph
 // store stays locked past graphstore.Open's retry budget. Reserved by
@@ -894,7 +1354,7 @@ type IndexingInProgress struct {
 
 func (x *IndexingInProgress) Reset() {
 	*x = IndexingInProgress{}
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[10]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -906,7 +1366,7 @@ func (x *IndexingInProgress) String() string {
 func (*IndexingInProgress) ProtoMessage() {}
 
 func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[10]
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -919,7 +1379,7 @@ func (x *IndexingInProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexingInProgress.ProtoReflect.Descriptor instead.
 func (*IndexingInProgress) Descriptor() ([]byte, []int) {
-	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{10}
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *IndexingInProgress) GetMessage() string {
@@ -1004,13 +1464,46 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\rFilesResponse\x12\x16\n" +
 	"\x06format\x18\x01 \x01(\tR\x06format\x120\n" +
 	"\x05files\x18\x02 \x03(\v2\x1a.codegraph.ui.v1.FileEntryR\x05files\x121\n" +
-	"\x04tree\x18\x03 \x03(\v2\x1d.codegraph.ui.v1.FileTreeNodeR\x04tree\".\n" +
+	"\x04tree\x18\x03 \x03(\v2\x1d.codegraph.ui.v1.FileTreeNodeR\x04tree\">\n" +
+	"\x0eCallersRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"^\n" +
+	"\x0fCallersResponse\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x123\n" +
+	"\acallers\x18\x02 \x03(\v2\x19.codegraph.ui.v1.LocationR\acallers\">\n" +
+	"\x0eCalleesRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"^\n" +
+	"\x0fCalleesResponse\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x123\n" +
+	"\acallees\x18\x02 \x03(\v2\x19.codegraph.ui.v1.LocationR\acallees\"=\n" +
+	"\rImpactRequest\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x14\n" +
+	"\x05depth\x18\x02 \x01(\x05R\x05depth\"\xb3\x01\n" +
+	"\x0eImpactResponse\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x14\n" +
+	"\x05depth\x18\x02 \x01(\x05R\x05depth\x12\x1d\n" +
+	"\n" +
+	"node_count\x18\x03 \x01(\x05R\tnodeCount\x12\x1d\n" +
+	"\n" +
+	"edge_count\x18\x04 \x01(\x05R\tedgeCount\x125\n" +
+	"\baffected\x18\x05 \x03(\v2\x19.codegraph.ui.v1.LocationR\baffected\"=\n" +
+	"\x0fAffectedRequest\x12\x14\n" +
+	"\x05files\x18\x01 \x03(\tR\x05files\x12\x14\n" +
+	"\x05depth\x18\x02 \x01(\x05R\x05depth\"j\n" +
+	"\x10AffectedResponse\x12\x14\n" +
+	"\x05files\x18\x01 \x03(\tR\x05files\x12@\n" +
+	"\x0eaffected_tests\x18\x02 \x03(\v2\x19.codegraph.ui.v1.LocationR\raffectedTests\".\n" +
 	"\x12IndexingInProgress\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage2\xf2\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage2\xaa\x04\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
-	"\x05Files\x12\x1d.codegraph.ui.v1.FilesRequest\x1a\x1e.codegraph.ui.v1.FilesResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\x05Files\x12\x1d.codegraph.ui.v1.FilesRequest\x1a\x1e.codegraph.ui.v1.FilesResponse\x12L\n" +
+	"\aCallers\x12\x1f.codegraph.ui.v1.CallersRequest\x1a .codegraph.ui.v1.CallersResponse\x12L\n" +
+	"\aCallees\x12\x1f.codegraph.ui.v1.CalleesRequest\x1a .codegraph.ui.v1.CalleesResponse\x12I\n" +
+	"\x06Impact\x12\x1e.codegraph.ui.v1.ImpactRequest\x1a\x1f.codegraph.ui.v1.ImpactResponse\x12O\n" +
+	"\bAffected\x12 .codegraph.ui.v1.AffectedRequest\x1a!.codegraph.ui.v1.AffectedResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -1024,7 +1517,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 	return file_internal_uiproto_uiv1_ui_proto_rawDescData
 }
 
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*Node)(nil),               // 0: codegraph.ui.v1.Node
 	(*Location)(nil),           // 1: codegraph.ui.v1.Location
@@ -1036,24 +1529,44 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*FileTreeNode)(nil),       // 7: codegraph.ui.v1.FileTreeNode
 	(*FilesRequest)(nil),       // 8: codegraph.ui.v1.FilesRequest
 	(*FilesResponse)(nil),      // 9: codegraph.ui.v1.FilesResponse
-	(*IndexingInProgress)(nil), // 10: codegraph.ui.v1.IndexingInProgress
+	(*CallersRequest)(nil),     // 10: codegraph.ui.v1.CallersRequest
+	(*CallersResponse)(nil),    // 11: codegraph.ui.v1.CallersResponse
+	(*CalleesRequest)(nil),     // 12: codegraph.ui.v1.CalleesRequest
+	(*CalleesResponse)(nil),    // 13: codegraph.ui.v1.CalleesResponse
+	(*ImpactRequest)(nil),      // 14: codegraph.ui.v1.ImpactRequest
+	(*ImpactResponse)(nil),     // 15: codegraph.ui.v1.ImpactResponse
+	(*AffectedRequest)(nil),    // 16: codegraph.ui.v1.AffectedRequest
+	(*AffectedResponse)(nil),   // 17: codegraph.ui.v1.AffectedResponse
+	(*IndexingInProgress)(nil), // 18: codegraph.ui.v1.IndexingInProgress
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
-	1, // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
-	7, // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
-	6, // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
-	7, // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
-	2, // 4: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	4, // 5: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	8, // 6: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	3, // 7: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	5, // 8: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	9, // 9: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	7, // [7:10] is the sub-list for method output_type
-	4, // [4:7] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	1,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
+	7,  // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
+	6,  // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
+	7,  // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
+	1,  // 4: codegraph.ui.v1.CallersResponse.callers:type_name -> codegraph.ui.v1.Location
+	1,  // 5: codegraph.ui.v1.CalleesResponse.callees:type_name -> codegraph.ui.v1.Location
+	1,  // 6: codegraph.ui.v1.ImpactResponse.affected:type_name -> codegraph.ui.v1.Location
+	1,  // 7: codegraph.ui.v1.AffectedResponse.affected_tests:type_name -> codegraph.ui.v1.Location
+	2,  // 8: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	4,  // 9: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	8,  // 10: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	10, // 11: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	12, // 12: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	14, // 13: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	16, // 14: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	3,  // 15: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	5,  // 16: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	9,  // 17: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	11, // 18: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	13, // 19: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	15, // 20: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	17, // 21: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	15, // [15:22] is the sub-list for method output_type
+	8,  // [8:15] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -1067,7 +1580,7 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

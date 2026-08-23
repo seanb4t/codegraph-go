@@ -39,6 +39,10 @@ service UIService {
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
   rpc Search(SearchRequest) returns (SearchResponse);
   rpc Files(FilesRequest) returns (FilesResponse);
+  rpc Callers(CallersRequest) returns (CallersResponse);
+  rpc Callees(CalleesRequest) returns (CalleesResponse);
+  rpc Impact(ImpactRequest) returns (ImpactResponse);
+  rpc Affected(AffectedRequest) returns (AffectedResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -209,6 +213,69 @@ message FilesResponse {
   string format = 1;
   repeated FileEntry files = 2;
   repeated FileTreeNode tree = 3;
+}
+
+// CallersRequest carries internal/query.Engine.Callers' two arguments
+// unchanged. limit is passed straight through — validateLimit and
+// MaxLimit already bound it server-side for every caller.
+message CallersRequest {
+  string symbol = 1;
+  int32 limit = 2;
+}
+
+// CallersResponse mirrors internal/query.CallersResult's shape.
+message CallersResponse {
+  string symbol = 1;
+  repeated Location callers = 2;
+}
+
+// CalleesRequest carries internal/query.Engine.Callees' two arguments
+// unchanged, the same discipline as CallersRequest.
+message CalleesRequest {
+  string symbol = 1;
+  int32 limit = 2;
+}
+
+// CalleesResponse mirrors internal/query.CalleesResult's shape.
+message CalleesResponse {
+  string symbol = 1;
+  repeated Location callees = 2;
+}
+
+// ImpactRequest carries internal/query.Engine.Impact's two arguments
+// unchanged. depth is passed straight through — validateDepth and
+// clampDepth already bound/clamp it server-side for every caller.
+message ImpactRequest {
+  string symbol = 1;
+  int32 depth = 2;
+}
+
+// ImpactResponse mirrors internal/query.ImpactResult's shape. depth is
+// the CLAMPED depth Impact actually used (clampDepth's return value,
+// echoed back by the Engine itself), not the caller's raw request value.
+message ImpactResponse {
+  string symbol = 1;
+  int32 depth = 2;
+  int32 node_count = 3;
+  int32 edge_count = 4;
+  repeated Location affected = 5;
+}
+
+// AffectedRequest carries internal/query.Engine.Affected's two
+// arguments unchanged. depth is passed straight through — validateDepth
+// and clampAffectedDepth already bound/clamp it server-side for every
+// caller (a DIFFERENT default than Impact's clampDepth — see
+// clampAffectedDepth's doc comment — so this is deliberately its own
+// message, not a reuse of ImpactRequest).
+message AffectedRequest {
+  repeated string files = 1;
+  int32 depth = 2;
+}
+
+// AffectedResponse mirrors internal/query.AffectedResult's shape.
+message AffectedResponse {
+  repeated string files = 1;
+  repeated Location affected_tests = 2;
 }
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
