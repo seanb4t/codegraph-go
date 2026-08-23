@@ -93,6 +93,81 @@ func TestOpenConvergesWhenHolderCloses(t *testing.T) {
 	}
 }
 
+// TestOpenSucceedsOnTheFinalAttempt pins the FINAL-ATTEMPT boundary of
+// Open's bounded retry loop — the property TestOpenConvergesWhenHolderCloses
+// above does NOT cover. That test's own doc comment states the holder is
+// released once "attempt 2's backoff sleep began" (some remaining
+// attempt out of budget 5), which is release-BETWEEN-attempts, not the
+// final-attempt boundary. internal/uiserver's degrade tests delegate
+// this specific boundary here, because openLockRetrySleep is unexported
+// and unreachable from that package.
+//
+// Deterministic and wall-clock-free, built on the SAME openLockRetrySleep
+// seam TestOpenConvergesWhenHolderCloses already uses, with one addition:
+// an acknowledgement channel (resume). TestOpenConvergesWhenHolderCloses's
+// drain-loop trick works because a LATER sleep blocks until Close
+// returns; on the FINAL sleep there is no later sleep, so without an
+// acknowledgement the holder's Close would race the final pebble.Open.
+// With the acknowledgement, Close happens-before the final attempt,
+// deterministically.
+//
+// Sleep ordinals are counted 1-INDEXED (the Nth call to
+// openLockRetrySleep), matching "the fourth and LAST sleep" for
+// openLockRetryAttempts=5 (4 sleeps occur, before attempts 2 through 5 in
+// 1-indexed human terms — attempt 1 never sleeps). The LAST ordinal is
+// therefore openLockRetryAttempts-1, which is both the release condition
+// below and the assertion that the observed release ordinal really was
+// the final one, not an earlier one.
+func TestOpenSucceedsOnTheFinalAttempt(t *testing.T) {
+	dir := t.TempDir()
+
+	holder, err := Open(dir)
+	if err != nil {
+		t.Fatalf("first Open: %v", err)
+	}
+
+	sleeps := make(chan int)
+	resume := make(chan struct{})
+	closeErr := make(chan error, 1)
+	orig := openLockRetrySleep
+	ordinal := 0
+	openLockRetrySleep = func(time.Duration) {
+		ordinal++
+		sleeps <- ordinal
+		<-resume
+	}
+	t.Cleanup(func() { openLockRetrySleep = orig })
+
+	var observedOrdinal int
+	go func() {
+		for o := range sleeps {
+			observedOrdinal = o
+			if o == openLockRetryAttempts-1 {
+				// The fourth and LAST sleep, immediately preceding the
+				// fifth and final attempt: release the holder NOW, before
+				// acknowledging, so Close happens-before the final
+				// pebble.Open rather than racing it.
+				closeErr <- holder.Close()
+			}
+			resume <- struct{}{}
+		}
+	}()
+
+	second, err := Open(dir)
+	close(sleeps) // Open has returned; end the goroutine's range loop.
+	if err != nil {
+		t.Fatalf("Open did not succeed on the final attempt: %v", err)
+	}
+	second.Close()
+
+	if err := <-closeErr; err != nil {
+		t.Fatalf("holder Close: %v", err)
+	}
+	if observedOrdinal != openLockRetryAttempts-1 {
+		t.Fatalf("observed release sleep ordinal = %d, want %d (openLockRetryAttempts-1) — success must be proven to occur on the FINAL attempt, not an earlier one (that is TestOpenConvergesWhenHolderCloses's case)", observedOrdinal, openLockRetryAttempts-1)
+	}
+}
+
 // TestClassifyOpenErrorSharedPath tests the platform-neutral shared
 // classification path with synthesized errors (03-REVIEW-2.md WR-02 /
 // WR-01): only errors matching the running platform's pebble lock shape

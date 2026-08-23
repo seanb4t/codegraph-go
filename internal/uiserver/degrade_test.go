@@ -1,12 +1,33 @@
+// Package-level scope note for this file (SRV-04's degrade behavior
+// tests): the exact FINAL-ATTEMPT boundary of graphstore.Open's bounded
+// retry budget is owned by, and tested in, internal/graphstore —
+// TestOpenSucceedsOnTheFinalAttempt (internal/graphstore/open_lock_test.go)
+// — because the openLockRetrySleep seam it uses is unexported and
+// unreachable from this package. This file deliberately covers only the
+// two BEHAVIORAL sides of that boundary: TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget
+// (a causally-released holder, which MUST succeed) and
+// TestNonStatusRPCsDegradeWhenAHolderNeverReleases (a never-released
+// holder, which MUST degrade). Neither test here reaches for
+// openLockRetrySleep or reimplements a retry-aware clock.
+//
+// Deferred build-tagged integration coverage discovered while exercising
+// this degrade path against real processes (Task 3) is recorded in
+// 01-11-SUMMARY.md under "## Deferred: build-tagged integration
+// coverage".
 package uiserver
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -161,4 +182,367 @@ func TestIndexingInProgressMessageLeaksNothing(t *testing.T) {
 	if !containsPathSeparator(`C:\Users\example\.codegraph\store\LOCK`) {
 		t.Fatal("positive control failed: containsPathSeparator did not detect a backslash path separator in a string that has one")
 	}
+}
+
+// namedRPCCall pairs an rpc's name with a closure invoking it, so
+// TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget and
+// TestNonStatusRPCsDegradeWhenAHolderNeverReleases can drive every rpc
+// (or every non-GetStatus rpc) uniformly, one t.Run subtest per name.
+type namedRPCCall struct {
+	name string
+	call func() error
+}
+
+// allNineRPCCalls returns one namedRPCCall per uiv1connect.UIServiceClient
+// method, each carrying arguments that succeed against a gofixture-indexed
+// repository (see copyGofixture/indexGofixture and other tests in this
+// package that use the same "Alpha"/"helper"/"pkga/pkga.go" fixture
+// symbols).
+func allNineRPCCalls(client uiv1connect.UIServiceClient) []namedRPCCall {
+	ctx := context.Background()
+	return []namedRPCCall{
+		{"GetStatus", func() error {
+			_, err := client.GetStatus(ctx, connect.NewRequest(&uiv1.GetStatusRequest{}))
+			return err
+		}},
+		{"Search", func() error {
+			_, err := client.Search(ctx, connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))
+			return err
+		}},
+		{"Files", func() error {
+			_, err := client.Files(ctx, connect.NewRequest(&uiv1.FilesRequest{Format: "flat"}))
+			return err
+		}},
+		{"Callers", func() error {
+			_, err := client.Callers(ctx, connect.NewRequest(&uiv1.CallersRequest{Symbol: "helper"}))
+			return err
+		}},
+		{"Callees", func() error {
+			_, err := client.Callees(ctx, connect.NewRequest(&uiv1.CalleesRequest{Symbol: "Alpha"}))
+			return err
+		}},
+		{"Impact", func() error {
+			_, err := client.Impact(ctx, connect.NewRequest(&uiv1.ImpactRequest{Symbol: "helper"}))
+			return err
+		}},
+		{"Affected", func() error {
+			_, err := client.Affected(ctx, connect.NewRequest(&uiv1.AffectedRequest{Files: []string{"pkga/pkga.go"}}))
+			return err
+		}},
+		{"GetNodeDetail", func() error {
+			_, err := client.GetNodeDetail(ctx, connect.NewRequest(&uiv1.GetNodeDetailRequest{File: "pkga/pkga.go"}))
+			return err
+		}},
+		{"Explore", func() error {
+			_, err := client.Explore(ctx, connect.NewRequest(&uiv1.ExploreRequest{Query: "Alpha"}))
+			return err
+		}},
+	}
+}
+
+// nonStatusRPCCalls is allNineRPCCalls minus GetStatus — the eight rpcs
+// that map a locked store to connect.CodeUnavailable rather than to
+// D-16's degraded-but-successful GetStatus response.
+func nonStatusRPCCalls(client uiv1connect.UIServiceClient) []namedRPCCall {
+	all := allNineRPCCalls(client)
+	out := make([]namedRPCCall, 0, len(all)-1)
+	for _, c := range all {
+		if c.name == "GetStatus" {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
+// TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget proves the
+// TRANSIENT-collision case: a holder that acquires the store and
+// releases it on a CAUSAL EDGE — a channel fired from the wrapped
+// openEngine package var on its FIRST invocation, never a timer sized
+// against graphstore.Open's budget — must let EVERY one of the nine RPCs
+// return a normal successful result. A degrade here is a failure,
+// because riding out a transient collision is exactly what the bounded
+// retry exists for and what internal/cli/daemon.go (opens only inside
+// its flush, then closes) and internal/mcp/tools.go (opens per tool
+// call) actually produce: neither holds the store long-term, so a real
+// `codegraph daemon` or `serve --mcp` running concurrently with
+// `codegraph ui` collides only transiently.
+//
+// The release is event-synchronized, not timer-scheduled: wrapping
+// openEngine so its first call signals a channel establishes a
+// happens-before edge between "an RPC is about to open the store" and
+// "the holder has begun releasing it". The only way the first RPC could
+// still fail is if a single Close() call took longer than the ENTIRE
+// retry budget — a real defect worth failing on, not a scheduling
+// artifact. A timer-based release "comfortably inside" the ~400ms budget
+// was considered and rejected: it is still wall-clock coordination and
+// can cross the boundary spuriously on a loaded -race runner.
+func TestRPCsSucceedWhenAHolderReleasesWithinTheOpenBudget(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+
+	holder, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("acquire holder graphstore.Open: %v", err)
+	}
+
+	release := make(chan struct{})
+	var once sync.Once
+	orig := openEngine
+	openEngine = func(start string) (*query.Engine, io.Closer, error) {
+		once.Do(func() { close(release) })
+		return orig(start)
+	}
+	t.Cleanup(func() { openEngine = orig })
+
+	closeErr := make(chan error, 1)
+	go func() {
+		<-release
+		closeErr <- holder.Close()
+	}()
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	for _, c := range allNineRPCCalls(client) {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.call(); err != nil {
+				t.Fatalf("%s returned an error, want a normal successful result under a transiently-released holder: %v", c.name, err)
+			}
+		})
+	}
+
+	if err := <-closeErr; err != nil {
+		t.Fatalf("holder Close: %v", err)
+	}
+}
+
+// indexingInProgressDetail extracts and unmarshals the *uiv1.IndexingInProgress
+// detail from a connect error, failing the test if err is not a
+// *connect.Error, carries no detail, or no detail unmarshals to that
+// type. Used to assert on the STRUCTURED detail, never on the error
+// string.
+func indexingInProgressDetail(t *testing.T, err error) *uiv1.IndexingInProgress {
+	t.Helper()
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) {
+		t.Fatalf("error %v is not a *connect.Error", err)
+	}
+	for _, d := range connErr.Details() {
+		msg, valueErr := d.Value()
+		if valueErr != nil {
+			continue
+		}
+		if iip, ok := msg.(*uiv1.IndexingInProgress); ok {
+			return iip
+		}
+	}
+	t.Fatalf("error %v carries no IndexingInProgress detail", err)
+	return nil
+}
+
+// TestNonStatusRPCsDegradeWhenAHolderNeverReleases proves the SUSTAINED
+// case — criterion 3's second clause, "a re-index that outlasts
+// graphstore.Open's retry budget renders as indexing in progress": with
+// the store held for the whole test, EVERY one of the eight non-GetStatus
+// RPCs returns exactly connect.CodeUnavailable with a detail that
+// unmarshals to an IndexingInProgress. A success here is a failure, and
+// so is connect.CodeInternal.
+func TestNonStatusRPCsDegradeWhenAHolderNeverReleases(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+
+	holder, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("acquire holder graphstore.Open: %v", err)
+	}
+	t.Cleanup(func() { holder.Close() })
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	for _, c := range nonStatusRPCCalls(client) {
+		t.Run(c.name, func(t *testing.T) {
+			err := c.call()
+			if err == nil {
+				t.Fatalf("%s succeeded while the store was locked past the retry budget, want CodeUnavailable", c.name)
+			}
+			if code := connect.CodeOf(err); code != connect.CodeUnavailable {
+				t.Fatalf("%s: code = %v, want CodeUnavailable", c.name, code)
+			}
+			detail := indexingInProgressDetail(t, err)
+			if detail.GetMessage() == "" {
+				t.Fatalf("%s: IndexingInProgress.message is empty", c.name)
+			}
+		})
+	}
+}
+
+// TestDegradedRPCOpensTheStoreExactlyOnce proves D-15 directly: with
+// openEngine swapped for a counting wrapper and the store held for the
+// duration, one degraded RPC call invokes openEngine exactly once. A
+// second retry layer above graphstore.Open would have to open again, so
+// the count would exceed 1. This is deterministic under parallel CI
+// load, unlike a timing assertion around the ~400ms budget would be —
+// no test in this file asserts on elapsed wall-clock time.
+func TestDegradedRPCOpensTheStoreExactlyOnce(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+
+	holder, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("acquire holder graphstore.Open: %v", err)
+	}
+	t.Cleanup(func() { holder.Close() })
+
+	var opens int64
+	orig := openEngine
+	openEngine = func(start string) (*query.Engine, io.Closer, error) {
+		atomic.AddInt64(&opens, 1)
+		return orig(start)
+	}
+	t.Cleanup(func() { openEngine = orig })
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	_, err = client.Search(context.Background(), connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))
+	if err == nil {
+		t.Fatal("Search succeeded while the store was locked past the retry budget, want a degrade")
+	}
+	if got := atomic.LoadInt64(&opens); got != 1 {
+		t.Fatalf("openEngine invoked %d times for one degraded RPC call, want exactly 1", got)
+	}
+}
+
+// snapshotRepoFiles walks dir and returns a map of relative path to
+// (size, mtime) for every regular file — a cheap fingerprint used by
+// TestDegradeIsIdempotent to prove a degraded call mutates nothing under
+// the repository.
+func snapshotRepoFiles(t *testing.T, dir string) map[string][2]int64 {
+	t.Helper()
+	out := make(map[string][2]int64)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(dir, path)
+		if relErr != nil {
+			return relErr
+		}
+		out[rel] = [2]int64{info.Size(), info.ModTime().UnixNano()}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("snapshotRepoFiles(%s): %v", dir, err)
+	}
+	return out
+}
+
+// TestDegradeIsIdempotent proves calling the same RPC twice against a
+// permanently locked store yields the identical connect.CodeUnavailable
+// and an identical detail message both times, and mutates nothing under
+// the repository between the two calls (SRV-04's idempotency edge).
+func TestDegradeIsIdempotent(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+
+	holder, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("acquire holder graphstore.Open: %v", err)
+	}
+	t.Cleanup(func() { holder.Close() })
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	before := snapshotRepoFiles(t, dir)
+
+	_, err1 := client.Search(context.Background(), connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))
+	_, err2 := client.Search(context.Background(), connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))
+
+	after := snapshotRepoFiles(t, dir)
+
+	if err1 == nil || err2 == nil {
+		t.Fatalf("expected both calls to degrade, got err1=%v err2=%v", err1, err2)
+	}
+	code1, code2 := connect.CodeOf(err1), connect.CodeOf(err2)
+	if code1 != connect.CodeUnavailable || code2 != connect.CodeUnavailable {
+		t.Fatalf("codes = %v, %v, want both CodeUnavailable", code1, code2)
+	}
+	if code1 != code2 {
+		t.Fatalf("codes differ across two calls under the same permanent hold: %v vs %v", code1, code2)
+	}
+	msg1 := indexingInProgressDetail(t, err1).GetMessage()
+	msg2 := indexingInProgressDetail(t, err2).GetMessage()
+	if msg1 != msg2 {
+		t.Fatalf("detail messages differ across two calls under the same permanent hold: %q vs %q", msg1, msg2)
+	}
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("repository files changed between two degraded calls, want no mutation")
+	}
+}
+
+// TestAHolderAcquiresTheStoreAfterConcurrentRPCsComplete proves SRV-04's
+// actual property — no handle retained BETWEEN calls — the behavioral
+// way: N concurrent RPCs are issued and EVERY one is awaited to
+// completion (each handler's withEngine, or GetStatus's own direct
+// openEngine call, closes its handle before the handler itself returns —
+// so by the time every client call has returned, every server-side
+// handle has already been released) before this test's own
+// graphstore.Open on the same store directory is attempted. By
+// construction there is no contention left at that instant: this needs
+// no fairness assumption about who wins a race, unlike the rejected
+// TestConcurrentRPCsDoNotStarveAHolder shape, which required a holder to
+// acquire WHILE RPCs were still in flight — a property neither Pebble's
+// exclusive directory lock nor the fixed five-attempt backoff promises,
+// and independent short-lived UI opens can legitimately reacquire
+// between a holder's own attempts.
+//
+// The one direct Open call below either succeeds immediately or reveals
+// a retained handle: a uiService caching a handle across calls would
+// leave the lock held even after every RPC has returned, and this Open
+// would then need retries or fail outright. No wall-clock assertion is
+// made anywhere in this test — the property is proven by the STRUCTURAL
+// absence of contention at the moment Open is attempted, not by timing
+// how fast it returns.
+func TestAHolderAcquiresTheStoreAfterConcurrentRPCsComplete(t *testing.T) {
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	const n = 10
+	var wg sync.WaitGroup
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := client.GetStatus(context.Background(), connect.NewRequest(&uiv1.GetStatusRequest{}))
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent RPC %d failed: %v", i, err)
+		}
+	}
+
+	holder, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("holder Open after every concurrent RPC completed: %v — a retained handle would leave the lock held here", err)
+	}
+	defer holder.Close()
 }
