@@ -288,7 +288,17 @@ func (e *Engine) resolveNodeForDetail(symbol, file string) (*schema.Node, error)
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		return nil, fmt.Errorf("query: symbol %q not found in file %q", symbol, file)
+		// WR-08: classified, like every sibling rejection in this
+		// package, so mapEngineError can answer CodeNotFound by
+		// errors.Is rather than by message text. The message bytes are
+		// unchanged — classifiedError.Error() returns msg verbatim — so
+		// no golden or CLI output moves. This error is currently
+		// swallowed by buildNodeDetail's fast path, which is exactly why
+		// it was easy to miss: the moment anything calls this directly,
+		// or the fast path starts propagating, an unmistakable not-found
+		// would surface as CodeInternal with a message that reads
+		// perfectly correct.
+		return nil, notFoundf("query: symbol %q not found in file %q", symbol, file)
 	}
 
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Id < candidates[j].Id })

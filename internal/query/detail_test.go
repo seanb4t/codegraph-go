@@ -2,6 +2,7 @@ package query
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -734,6 +735,55 @@ func TestExploreResultMaxFilesBoundary(t *testing.T) {
 		wantRender := RenderExplore(explicit.Query, len(explicit.Groups), explicit.SymbolCount, explicit.Groups, explicit.Blasts, explicit.Sources, explicit.Stale, explicit.SkeletonFiles)
 		if gotRender != wantRender {
 			t.Fatalf("ExploreDetail(%q, 0) rendered output differs from the independently-computed explicit-budget equivalent:\ngot:\n%s\nwant:\n%s", query, gotRender, wantRender)
+		}
+	})
+}
+
+// TestResolveNodeForDetailClassifiesNotFound closes WR-08: this phase
+// converted essentially every caller-reachable rejection in this package
+// to notFoundf/invalidArgumentf so mapEngineError can classify by
+// errors.Is instead of by message text, and resolveNodeForDetail's
+// not-found was the one that was missed.
+//
+// It is currently unreachable as a SURFACED error — buildNodeDetail's
+// fast path swallows it — which is precisely what made it dangerous:
+// the message reads perfectly correct, so an unmistakable not-found
+// arriving at a client as CodeInternal would look like a server fault
+// rather than a missing symbol. Calling the resolver directly is the
+// only way to assert the classification before something else starts
+// propagating it.
+//
+// The message bytes are asserted too, not just the classification:
+// classifiedError.Error() returns its msg verbatim, and this test is
+// what proves the conversion moved no output — a golden or CLI-visible
+// string change would fail here.
+func TestResolveNodeForDetailClassifiesNotFound(t *testing.T) {
+	e := newDetailFixtureEngine(t)
+
+	t.Run("symbol-absent-from-the-named-file", func(t *testing.T) {
+		_, err := e.resolveNodeForDetail("Alpha", "gamma.go")
+		if err == nil {
+			t.Fatal("resolveNodeForDetail(Alpha, gamma.go) succeeded, want a not-found error (Alpha lives in alpha.go)")
+		}
+		if !errors.Is(err, ErrNotFound) {
+			t.Fatalf("resolveNodeForDetail: error %v is not classified ErrNotFound — mapEngineError would render it CodeInternal, not CodeNotFound", err)
+		}
+		if errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("resolveNodeForDetail: error %v is classified ErrInvalidArgument, want ErrNotFound only", err)
+		}
+		const want = `query: symbol "Alpha" not found in file "gamma.go"`
+		if err.Error() != want {
+			t.Fatalf("resolveNodeForDetail: message = %q, want %q — classification must not move the message bytes", err.Error(), want)
+		}
+	})
+
+	t.Run("resolvable-pair-still-resolves", func(t *testing.T) {
+		n, err := e.resolveNodeForDetail("Alpha", "alpha.go")
+		if err != nil {
+			t.Fatalf("resolveNodeForDetail(Alpha, alpha.go): %v, want the Alpha node", err)
+		}
+		if n.GetId() != "alpha1" {
+			t.Fatalf("resolveNodeForDetail(Alpha, alpha.go): id = %q, want %q", n.GetId(), "alpha1")
 		}
 	})
 }
