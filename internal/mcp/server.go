@@ -267,6 +267,21 @@ type stdinLingerReader struct {
 	br      *bufio.Reader
 	closer  io.Closer
 	pending *atomic.Int64
+	// unparseable counts the increments this reader made for lines it
+	// could NOT parse (WR-06). Such a line is counted as a call by the
+	// conservative default in classifyInboundLine, but the reply go-sdk
+	// produces for it is a JSON-RPC parse-error response carrying
+	// `id: null`, which looksLikeJSONRPCResponse deliberately refuses to
+	// count — so nothing ever balances the increment and pending is
+	// stuck at >=1 for the rest of the session. waitForDrain subtracts
+	// this count from its target so a single malformed line (a partial
+	// write, a stray keepalive newline, a UTF-8 BOM prefix) cannot cost
+	// a full stdinLingerGrace hang at every subsequent exit.
+	//
+	// Owned by this reader alone — unlike pending, which the outbound
+	// pendingWriter also mutates — so it is a value, not a shared
+	// pointer.
+	unparseable atomic.Int64
 	// unread holds the tail of a line already sniffed and buffered but not
 	// yet copied out to a caller-supplied Read(p) slice.
 	unread []byte
@@ -280,8 +295,11 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 	if len(s.unread) == 0 {
 		line, readErr := s.br.ReadBytes('\n')
 		if len(line) > 0 {
-			if looksLikeJSONRPCCall(line) {
+			if isCall, unparseable := classifyInboundLine(line); isCall {
 				s.pending.Add(1)
+				if unparseable {
+					s.unparseable.Add(1)
+				}
 			}
 			s.unread = line
 		}
@@ -303,9 +321,26 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// waitForDrain blocks until every accepted call that can still be
+// balanced has been, or stdinLingerGrace elapses.
+//
+// The target is pending MINUS unparseable, not zero (WR-06): an
+// increment made for a line that could not be parsed will never be
+// balanced by a response, because the only reply such a line receives is
+// a `null`-id parse-error response that looksLikeJSONRPCResponse
+// correctly refuses to count. Waiting for zero therefore burns the whole
+// grace period at EOF for the rest of the session, which to an agent
+// harness batching MCP invocations reads as a multi-second hang on every
+// exit rather than as the defensive upper bound it is meant to be — and
+// pendingUnderflows stays at zero throughout, so the counter built to
+// catch imbalance reports all-clear.
+//
+// This corrects the over-count rather than removing it: real in-flight
+// calls are still waited on, and the two sniffers' opposite conservative
+// defaults are both preserved.
 func (s *stdinLingerReader) waitForDrain() {
 	deadline := time.Now().Add(stdinLingerGrace)
-	for s.pending.Load() > 0 && time.Now().Before(deadline) {
+	for s.pending.Load() > s.unparseable.Load() && time.Now().Before(deadline) {
 		time.Sleep(stdinLingerPollInterval)
 	}
 }
@@ -329,11 +364,26 @@ type sniffedMessage struct {
 // handling, and over-counting pending only ever costs a bounded wait
 // against stdinLingerGrace, never incorrect behavior.
 func looksLikeJSONRPCCall(line []byte) bool {
+	isCall, _ := classifyInboundLine(line)
+	return isCall
+}
+
+// classifyInboundLine is looksLikeJSONRPCCall's two-bit form: whether the
+// line counts as a call, AND whether that answer came from the
+// conservative parse-failure default rather than from the line's actual
+// contents (WR-06).
+//
+// The second bit is what makes the over-count self-correcting. Both bits
+// come from one Unmarshal so the two answers can never disagree about
+// the same line — re-testing with json.Valid would not do, since a line
+// like `{"method":1}` is valid JSON yet still fails to unmarshal into
+// sniffedMessage, and would be misclassified as parseable.
+func classifyInboundLine(line []byte) (isCall, unparseable bool) {
 	var msg sniffedMessage
 	if err := json.Unmarshal(line, &msg); err != nil {
-		return true
+		return true, true
 	}
-	return msg.Method != "" && msg.ID != nil
+	return msg.Method != "" && msg.ID != nil, false
 }
 
 // looksLikeJSONRPCResponse reports whether line is a JSON-RPC response —

@@ -657,3 +657,90 @@ func TestPipelinedToolsListResponsesAreMatchedByIDWithoutNotifications(t *testin
 		}
 	}
 }
+
+// drainAfterLines feeds lines through a stdinLingerReader to EOF and
+// returns how long the EOF read took — which is exactly how long
+// waitForDrain blocked, since Read calls it on observing real EOF. The
+// reader is driven through io.ReadAll rather than by calling
+// waitForDrain directly so the increment side under test is the REAL
+// one (stdinLingerReader.Read's own sniff), never a value a test poked
+// into the counter.
+func drainAfterLines(t *testing.T, lines string) time.Duration {
+	t.Helper()
+	var pending atomic.Int64
+	r := newStdinLingerReader(io.NopCloser(strings.NewReader(lines)), &pending)
+	start := time.Now()
+	if _, err := io.ReadAll(r); err != nil {
+		t.Fatalf("io.ReadAll through stdinLingerReader: %v", err)
+	}
+	return time.Since(start)
+}
+
+// TestUnparseableLineDoesNotCostAFullDrainGrace proves WR-06's fix: an
+// increment made for a line that could not be parsed is subtracted from
+// waitForDrain's target, because the only reply such a line ever gets is
+// a `null`-id parse-error response that looksLikeJSONRPCResponse
+// correctly refuses to count — so nothing will ever balance it and
+// waiting for zero burns the entire stdinLingerGrace at EOF.
+//
+// Both sides of the rule are asserted, so neither can pass vacuously:
+//
+//   - a malformed line must NOT cost the grace period (RED without the
+//     fix: pending sticks at 1 and the drain runs the full 5s); and
+//   - a well-formed call with no response written must STILL cost it,
+//     which is the guard's actual job — a fix that simply stopped
+//     waiting would pass the first assertion and fail this one.
+func TestUnparseableLineDoesNotCostAFullDrainGrace(t *testing.T) {
+	t.Run("malformed-line-drains-promptly", func(t *testing.T) {
+		elapsed := drainAfterLines(t, "{oops not json\n")
+		if elapsed >= stdinLingerGrace/2 {
+			t.Fatalf("draining after a single malformed line took %v, want well under stdinLingerGrace (%v) — an increment nothing can ever balance must not be waited on", elapsed, stdinLingerGrace)
+		}
+	})
+
+	t.Run("malformed-line-does-not-mask-a-real-pending-call", func(t *testing.T) {
+		// One malformed line AND one well-formed call whose response is
+		// never written: pending=2, unparseable=1, so the drain target
+		// is 1 and the real call is still waited on for the full grace.
+		elapsed := drainAfterLines(t, "{oops not json\n"+`{"jsonrpc":"2.0","id":7,"method":"tools/call"}`+"\n")
+		if elapsed < stdinLingerGrace {
+			t.Fatalf("draining with a real unanswered call outstanding took %v, want at least stdinLingerGrace (%v) — the malformed-line correction must not cancel the wait for a genuinely pending response", elapsed, stdinLingerGrace)
+		}
+	})
+}
+
+// TestClassifyInboundLineReportsBothBits covers classifyInboundLine's two
+// return values across the shapes stdinLingerReader.Read must
+// distinguish, including the case json.Valid alone would get wrong: a
+// line that is valid JSON but does not unmarshal into sniffedMessage.
+func TestClassifyInboundLineReportsBothBits(t *testing.T) {
+	cases := []struct {
+		name            string
+		line            string
+		wantCall        bool
+		wantUnparseable bool
+	}{
+		{"well-formed-call", `{"jsonrpc":"2.0","id":1,"method":"tools/call"}`, true, false},
+		{"notification-has-no-id", `{"jsonrpc":"2.0","method":"notifications/initialized"}`, false, false},
+		{"response-has-no-method", `{"jsonrpc":"2.0","id":1,"result":{}}`, false, false},
+		{"truncated-line", `{"jsonrpc":"2.0","id":1,"me`, true, true},
+		{"not-json-at-all", `hello`, true, true},
+		// Valid JSON, wrong types: json.Valid would call this parseable
+		// and the correction would never fire for it.
+		{"valid-json-wrong-types", `{"method":1,"id":2}`, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotCall, gotUnparseable := classifyInboundLine([]byte(tc.line))
+			if gotCall != tc.wantCall {
+				t.Fatalf("classifyInboundLine(%q) isCall = %v, want %v", tc.line, gotCall, tc.wantCall)
+			}
+			if gotUnparseable != tc.wantUnparseable {
+				t.Fatalf("classifyInboundLine(%q) unparseable = %v, want %v", tc.line, gotUnparseable, tc.wantUnparseable)
+			}
+			if got := looksLikeJSONRPCCall([]byte(tc.line)); got != tc.wantCall {
+				t.Fatalf("looksLikeJSONRPCCall(%q) = %v, want %v — the wrapper must agree with the classifier it delegates to", tc.line, got, tc.wantCall)
+			}
+		})
+	}
+}
