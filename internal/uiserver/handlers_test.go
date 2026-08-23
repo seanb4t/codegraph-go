@@ -2,6 +2,7 @@ package uiserver
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -669,6 +670,371 @@ func TestUIServiceTraversalsMatchEngine(t *testing.T) {
 		}
 		if code := connect.CodeOf(err); code != connect.CodeNotFound {
 			t.Fatalf("Callers for an unknown symbol: code = %v, want CodeNotFound (got error %v)", code, err)
+		}
+	})
+}
+
+// buildOverloadedFixture indexes a synthetic module with n distinct
+// packages, each declaring exactly one exported function literally named
+// funcName plus its own uniquely-named unexported helper — Go tolerates
+// the same function name across separate packages (unlike within one
+// package), giving GetNodeDetail a real overloaded symbol with n
+// distinct schema.Node definitions, one per package/file. Package i's
+// function calls its own helperN so each candidate's Calls is
+// independently distinguishable (never a shared or collapsed value); a
+// single external "caller" package calls ONLY package 0's function (a
+// real cross-package qualified call, the same pattern
+// internal/indexer/testdata/gofixture/pkgb/pkgb.go already exercises for
+// pkga.Alpha), so CalledBy is non-empty for exactly one candidate and
+// empty for the rest — proving a wire consumer cannot observe a shared or
+// collapsed per-candidate value (D-02).
+func buildOverloadedFixture(t *testing.T, funcName string, n int) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/multidef\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	for i := 0; i < n; i++ {
+		pkgDir := filepath.Join(dir, fmt.Sprintf("pkg%d", i))
+		if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", pkgDir, err)
+		}
+		src := fmt.Sprintf("package pkg%d\n\nfunc helper%d() {}\n\nfunc %s() {\n\thelper%d()\n}\n", i, i, funcName, i)
+		if err := os.WriteFile(filepath.Join(pkgDir, fmt.Sprintf("pkg%d.go", i)), []byte(src), 0o644); err != nil {
+			t.Fatalf("write pkg%d.go: %v", i, err)
+		}
+	}
+	callerDir := filepath.Join(dir, "caller")
+	if err := os.MkdirAll(callerDir, 0o755); err != nil {
+		t.Fatalf("mkdir caller: %v", err)
+	}
+	callerSrc := fmt.Sprintf("package caller\n\nimport \"example.com/multidef/pkg0\"\n\nfunc InvokeFirst() {\n\tpkg0.%s()\n}\n", funcName)
+	if err := os.WriteFile(filepath.Join(callerDir, "caller.go"), []byte(callerSrc), 0o644); err != nil {
+		t.Fatalf("write caller.go: %v", err)
+	}
+	indexGofixture(t, dir)
+	return dir
+}
+
+// TestUIServiceNodeDetailCoversAllThreeModes proves GetNodeDetail answers
+// all three internal/query.NodeDetail shapes over the wire (D-02): file
+// mode returns the path, single-def mode returns a node plus calls plus
+// called-by, and multi-def mode returns the symbol plus a populated
+// candidate list — with every field belonging to the OTHER two modes left
+// at its zero value in each case.
+func TestUIServiceNodeDetailCoversAllThreeModes(t *testing.T) {
+	t.Run("file", func(t *testing.T) {
+		dir := copyGofixture(t)
+		indexGofixture(t, dir)
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{File: "pkga/pkga.go"}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(file): %v", err)
+		}
+		if resp.Msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_FILE {
+			t.Fatalf("GetNodeDetail(file): mode = %v, want NODE_DETAIL_MODE_FILE", resp.Msg.GetMode())
+		}
+		if resp.Msg.GetPath() != "pkga/pkga.go" {
+			t.Fatalf("GetNodeDetail(file): path = %q, want %q", resp.Msg.GetPath(), "pkga/pkga.go")
+		}
+		if resp.Msg.GetNode() != nil || len(resp.Msg.GetCalls()) != 0 || len(resp.Msg.GetCalledBy()) != 0 {
+			t.Fatal("GetNodeDetail(file): single-def fields populated, want all empty for file mode")
+		}
+		if resp.Msg.GetSymbol() != "" || len(resp.Msg.GetDefinitions()) != 0 || resp.Msg.GetTotalCandidates() != 0 {
+			t.Fatal("GetNodeDetail(file): multi-def fields populated, want all empty for file mode")
+		}
+	})
+
+	t.Run("single-def", func(t *testing.T) {
+		dir := copyGofixture(t)
+		indexGofixture(t, dir)
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Alpha"}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(Alpha): %v", err)
+		}
+		if resp.Msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("GetNodeDetail(Alpha): mode = %v, want NODE_DETAIL_MODE_SINGLE_DEF", resp.Msg.GetMode())
+		}
+		if resp.Msg.GetNode() == nil || resp.Msg.GetNode().GetName() != "Alpha" {
+			t.Fatalf("GetNodeDetail(Alpha): node = %v, want a populated Alpha node", resp.Msg.GetNode())
+		}
+		if len(resp.Msg.GetCalls()) == 0 {
+			t.Fatal("GetNodeDetail(Alpha): calls is empty, want Alpha's call to helper")
+		}
+		if len(resp.Msg.GetCalledBy()) == 0 {
+			t.Fatal("GetNodeDetail(Alpha): called_by is empty, want pkgb.Run's call to Alpha")
+		}
+		if resp.Msg.GetPath() != "" {
+			t.Fatalf("GetNodeDetail(Alpha): path = %q, want empty for single-def mode", resp.Msg.GetPath())
+		}
+		if resp.Msg.GetSymbol() != "" || len(resp.Msg.GetDefinitions()) != 0 {
+			t.Fatal("GetNodeDetail(Alpha): multi-def fields populated, want empty for single-def mode")
+		}
+	})
+
+	t.Run("multi-def", func(t *testing.T) {
+		dir := buildOverloadedFixture(t, "Overload", 2)
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Overload"}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(Overload): %v", err)
+		}
+		if resp.Msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_MULTI_DEF {
+			t.Fatalf("GetNodeDetail(Overload): mode = %v, want NODE_DETAIL_MODE_MULTI_DEF", resp.Msg.GetMode())
+		}
+		if resp.Msg.GetSymbol() != "Overload" {
+			t.Fatalf("GetNodeDetail(Overload): symbol = %q, want %q", resp.Msg.GetSymbol(), "Overload")
+		}
+		if len(resp.Msg.GetDefinitions()) != 2 {
+			t.Fatalf("GetNodeDetail(Overload): got %d definitions, want 2", len(resp.Msg.GetDefinitions()))
+		}
+		if resp.Msg.GetTotalCandidates() != 2 {
+			t.Fatalf("GetNodeDetail(Overload): total_candidates = %d, want 2", resp.Msg.GetTotalCandidates())
+		}
+		if resp.Msg.GetPath() != "" || resp.Msg.GetNode() != nil {
+			t.Fatal("GetNodeDetail(Overload): file/single-def fields populated, want empty for multi-def mode")
+		}
+	})
+}
+
+// TestUIServiceNodeDetailGoesThroughEngineBuilder proves GetNodeDetail's
+// calls/called-by sets equal (*query.Engine).NodeDetail's for the SAME
+// symbol, computed independently in this test — for both the
+// single-definition case and, per-candidate, the multi-definition case
+// (D-01): the UI is a third consumer of the one gather path, never a
+// second implementation.
+func TestUIServiceNodeDetailGoesThroughEngineBuilder(t *testing.T) {
+	// Single-definition case.
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Alpha"}))
+	if err != nil {
+		t.Fatalf("GetNodeDetail(Alpha): %v", err)
+	}
+
+	eng, closer, err := query.OpenAt(dir)
+	if err != nil {
+		t.Fatalf("query.OpenAt (independent verification path): %v", err)
+	}
+	want, err := eng.NodeDetail("Alpha", "", nil)
+	closer.Close()
+	if err != nil {
+		t.Fatalf("eng.NodeDetail(Alpha) (independent verification path): %v", err)
+	}
+	if want.Mode != query.NodeDetailModeSingleDef {
+		t.Fatal("test fixture assumption broken: eng.NodeDetail(Alpha) is not single-def")
+	}
+	if len(resp.Msg.GetCalls()) != len(want.Definition.Calls) {
+		t.Fatalf("GetNodeDetail(Alpha) calls has %d entries, want %d (independently computed)", len(resp.Msg.GetCalls()), len(want.Definition.Calls))
+	}
+	for i, w := range want.Definition.Calls {
+		if resp.Msg.GetCalls()[i].GetName() != w.Name {
+			t.Fatalf("GetNodeDetail(Alpha) calls[%d] = %q, want %q", i, resp.Msg.GetCalls()[i].GetName(), w.Name)
+		}
+	}
+	if len(resp.Msg.GetCalledBy()) != len(want.Definition.CalledBy) {
+		t.Fatalf("GetNodeDetail(Alpha) called_by has %d entries, want %d (independently computed)", len(resp.Msg.GetCalledBy()), len(want.Definition.CalledBy))
+	}
+	for i, w := range want.Definition.CalledBy {
+		if resp.Msg.GetCalledBy()[i].GetName() != w.Name {
+			t.Fatalf("GetNodeDetail(Alpha) called_by[%d] = %q, want %q", i, resp.Msg.GetCalledBy()[i].GetName(), w.Name)
+		}
+	}
+
+	// Multi-definition case: each returned candidate's calls/called-by
+	// must equal THAT candidate's own per-candidate lookup — matched by
+	// node id, never by position, since match order is not this test's
+	// claim.
+	multiDir := buildOverloadedFixture(t, "Overload", 2)
+	multiSrv := startedServer(t, multiDir)
+	multiClient := uiv1connect.NewUIServiceClient(http.DefaultClient, multiSrv.URL())
+
+	multiResp, err := multiClient.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Overload"}))
+	if err != nil {
+		t.Fatalf("GetNodeDetail(Overload): %v", err)
+	}
+
+	multiEng, multiCloser, err := query.OpenAt(multiDir)
+	if err != nil {
+		t.Fatalf("query.OpenAt (multi-def independent verification path): %v", err)
+	}
+	defer multiCloser.Close()
+	wantMulti, err := multiEng.NodeDetail("Overload", "", nil)
+	if err != nil {
+		t.Fatalf("eng.NodeDetail(Overload) (independent verification path): %v", err)
+	}
+	if wantMulti.Mode != query.NodeDetailModeMultiDef {
+		t.Fatal("test fixture assumption broken: eng.NodeDetail(Overload) is not multi-def")
+	}
+	if len(multiResp.Msg.GetDefinitions()) != len(wantMulti.Multi.Matches) {
+		t.Fatalf("GetNodeDetail(Overload) returned %d definitions, want %d (independently computed)", len(multiResp.Msg.GetDefinitions()), len(wantMulti.Multi.Matches))
+	}
+
+	byID := make(map[string]*uiv1.NodeDefinition, len(multiResp.Msg.GetDefinitions()))
+	for _, def := range multiResp.Msg.GetDefinitions() {
+		byID[def.GetNode().GetId()] = def
+	}
+
+	var sawNonEmptyCalledBy, sawEmptyCalledBy bool
+	for _, match := range wantMulti.Multi.Matches {
+		gotDef, ok := byID[match.Id]
+		if !ok {
+			t.Fatalf("GetNodeDetail(Overload) definitions has no entry for independently-computed candidate id %q", match.Id)
+		}
+		wantDD, err := wantMulti.Multi.Definition(match)
+		if err != nil {
+			t.Fatalf("wantMulti.Multi.Definition(%s) (independent verification path): %v", match.Id, err)
+		}
+		if len(gotDef.GetCalls()) != len(wantDD.Calls) {
+			t.Fatalf("GetNodeDetail(Overload) definition[id=%s].calls has %d entries, want %d (that candidate's OWN per-candidate lookup)", match.Id, len(gotDef.GetCalls()), len(wantDD.Calls))
+		}
+		for j, w := range wantDD.Calls {
+			if gotDef.GetCalls()[j].GetName() != w.Name {
+				t.Fatalf("GetNodeDetail(Overload) definition[id=%s].calls[%d] = %q, want %q", match.Id, j, gotDef.GetCalls()[j].GetName(), w.Name)
+			}
+		}
+		if len(gotDef.GetCalledBy()) != len(wantDD.CalledBy) {
+			t.Fatalf("GetNodeDetail(Overload) definition[id=%s].called_by has %d entries, want %d (that candidate's OWN per-candidate lookup)", match.Id, len(gotDef.GetCalledBy()), len(wantDD.CalledBy))
+		}
+		for j, w := range wantDD.CalledBy {
+			if gotDef.GetCalledBy()[j].GetName() != w.Name {
+				t.Fatalf("GetNodeDetail(Overload) definition[id=%s].called_by[%d] = %q, want %q", match.Id, j, gotDef.GetCalledBy()[j].GetName(), w.Name)
+			}
+		}
+		if len(gotDef.GetCalledBy()) > 0 {
+			sawNonEmptyCalledBy = true
+		} else {
+			sawEmptyCalledBy = true
+		}
+	}
+	if !sawNonEmptyCalledBy || !sawEmptyCalledBy {
+		t.Fatal("test fixture assumption broken: want at least one Overload candidate with non-empty called_by and at least one with empty called_by — otherwise a mapper collapsing every candidate to the same value could pass this test vacuously")
+	}
+}
+
+// TestUIServiceNodeDetailCapsCandidatesAndReportsTheTotal proves a symbol
+// with more definitions than uiMultiDefCap returns exactly uiMultiDefCap
+// candidates carrying gathered detail, the remaining candidates listed
+// without detail, and a total-candidate count equal to the real number
+// of matches.
+func TestUIServiceNodeDetailCapsCandidatesAndReportsTheTotal(t *testing.T) {
+	const total = uiMultiDefCap + 2
+	dir := buildOverloadedFixture(t, "Big", total)
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Big"}))
+	if err != nil {
+		t.Fatalf("GetNodeDetail(Big): %v", err)
+	}
+	if resp.Msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_MULTI_DEF {
+		t.Fatalf("GetNodeDetail(Big): mode = %v, want NODE_DETAIL_MODE_MULTI_DEF", resp.Msg.GetMode())
+	}
+	if resp.Msg.GetTotalCandidates() != int32(total) {
+		t.Fatalf("GetNodeDetail(Big): total_candidates = %d, want %d (the real match count)", resp.Msg.GetTotalCandidates(), total)
+	}
+	if len(resp.Msg.GetDefinitions()) != total {
+		t.Fatalf("GetNodeDetail(Big): got %d definitions, want %d (every candidate listed)", len(resp.Msg.GetDefinitions()), total)
+	}
+
+	var gathered, listed int
+	for _, def := range resp.Msg.GetDefinitions() {
+		if def.GetNode() == nil {
+			t.Fatal("GetNodeDetail(Big): a definition has no node record")
+		}
+		if def.GetDetailGathered() {
+			gathered++
+		} else {
+			listed++
+			if len(def.GetCalls()) != 0 || len(def.GetCalledBy()) != 0 {
+				t.Fatal("GetNodeDetail(Big): a listed (non-gathered) definition carries calls/called_by, want both empty")
+			}
+		}
+	}
+	if gathered != uiMultiDefCap {
+		t.Fatalf("GetNodeDetail(Big): %d definitions carry gathered detail, want exactly uiMultiDefCap (%d)", gathered, uiMultiDefCap)
+	}
+	if listed != total-uiMultiDefCap {
+		t.Fatalf("GetNodeDetail(Big): %d definitions listed without detail, want %d", listed, total-uiMultiDefCap)
+	}
+}
+
+// TestUIServiceNodeDetailErrorClasses proves GetNodeDetail classifies
+// every caller-reachable rejection with the mapped Connect code rather
+// than an unclassified default: a not-found symbol, a request with
+// neither symbol nor file, and a per-candidate lookup that fails within
+// the cap (an unreadable candidate file) — the last case fails the WHOLE
+// RPC rather than returning a partially-populated response.
+func TestUIServiceNodeDetailErrorClasses(t *testing.T) {
+	t.Run("symbol-not-found", func(t *testing.T) {
+		dir := copyGofixture(t)
+		indexGofixture(t, dir)
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		_, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "NoSuchSymbolXYZ123"}))
+		if err == nil {
+			t.Fatal("GetNodeDetail for an unknown symbol succeeded, want an error")
+		}
+		if code := connect.CodeOf(err); code != connect.CodeNotFound {
+			t.Fatalf("GetNodeDetail for an unknown symbol: code = %v, want CodeNotFound", code)
+		}
+	})
+
+	t.Run("neither-symbol-nor-file", func(t *testing.T) {
+		dir := copyGofixture(t)
+		indexGofixture(t, dir)
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		_, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{}))
+		if err == nil {
+			t.Fatal("GetNodeDetail with neither symbol nor file succeeded, want an error")
+		}
+		if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+			t.Fatalf("GetNodeDetail with neither symbol nor file: code = %v, want CodeInvalidArgument", code)
+		}
+	})
+
+	t.Run("unreadable-candidate-within-the-cap", func(t *testing.T) {
+		dir := buildOverloadedFixture(t, "Broken", 2)
+		// Corrupt EVERY candidate's file after indexing: the Pebble store
+		// already has the schema.Node records, and a candidate's FilePath
+		// is read fresh from disk at RPC time (never from the store), so
+		// replacing the file with a directory of the same name makes ANY
+		// within-cap candidate's per-candidate lookup fail deterministically
+		// regardless of matches order — mirroring 01-04's directory-backed
+		// unreadable-candidate technique
+		// (TestNodeDetailMultiDefDoesNotReadSourceForUnrenderedCandidates).
+		for i := 0; i < 2; i++ {
+			p := filepath.Join(dir, fmt.Sprintf("pkg%d", i), fmt.Sprintf("pkg%d.go", i))
+			if err := os.Remove(p); err != nil {
+				t.Fatalf("remove %s: %v", p, err)
+			}
+			if err := os.Mkdir(p, 0o755); err != nil {
+				t.Fatalf("mkdir %s (in place of the file): %v", p, err)
+			}
+		}
+
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		_, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Broken"}))
+		if err == nil {
+			t.Fatal("GetNodeDetail with every within-cap candidate's file replaced by a directory succeeded, want an error")
+		}
+		if code := connect.CodeOf(err); code != connect.CodeInternal {
+			t.Fatalf("GetNodeDetail with an unreadable within-cap candidate: code = %v, want CodeInternal (an unclassified read failure, not a resolveSourcePath rejection)", code)
 		}
 	})
 }

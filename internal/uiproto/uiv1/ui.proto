@@ -20,6 +20,20 @@
 // rule about which to reach for. This service's contract is "every read
 // the UI needs", not "every exported method on Engine" — this is that
 // contract applied, not an oversight.
+//
+// Plan 01-10's forthcoming attachment (documentation only, deliberately
+// NOT a `reserved` clause — a `reserved` here would forbid the very field
+// numbers 01-10 needs to use, and a descriptor carries no comments, so an
+// undeclared number cannot be pinned by any guard; see plan 01-09's
+// SUMMARY for the full reasoning). Plan 01-10 attaches a `SourceBlob`-
+// typed source field to three messages this plan (01-09) declares, at
+// each message's next free field number as of the end of 01-09:
+//   - GetNodeDetailResponse: next free number 9
+//   - NodeDefinition: next free number 5
+//   - ExploreGroup: next free number 4
+// Plan 01-09's Task 3 known-number fixture pins every number allocated
+// through 01-09 over the generated descriptor, so 01-10 may ADD those
+// three fields but cannot disturb one already shipped.
 syntax = "proto3";
 
 package codegraph.ui.v1;
@@ -43,6 +57,7 @@ service UIService {
   rpc Callees(CalleesRequest) returns (CalleesResponse);
   rpc Impact(ImpactRequest) returns (ImpactResponse);
   rpc Affected(AffectedRequest) returns (AffectedResponse);
+  rpc GetNodeDetail(GetNodeDetailRequest) returns (GetNodeDetailResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -276,6 +291,84 @@ message AffectedRequest {
 message AffectedResponse {
   repeated string files = 1;
   repeated Location affected_tests = 2;
+}
+
+// NodeDetailMode discriminates which of GetNodeDetailResponse's three
+// shapes is populated, mirroring internal/query.NodeDetailMode's three
+// constants exactly (D-02). NODE_DETAIL_MODE_UNSPECIFIED is the required
+// proto3 zero value and is never a mode NodeDetail itself produces.
+enum NodeDetailMode {
+  NODE_DETAIL_MODE_UNSPECIFIED = 0;
+  NODE_DETAIL_MODE_FILE = 1;
+  NODE_DETAIL_MODE_SINGLE_DEF = 2;
+  NODE_DETAIL_MODE_MULTI_DEF = 3;
+}
+
+// GetNodeDetailRequest carries internal/query.Engine.NodeDetail's three
+// arguments unchanged. line is `optional` (proto3 presence tracking) so
+// the wire can distinguish "no line hint" (line unset, mapping to the
+// Engine's nil *int) from an explicit line 0 — collapsing the two would
+// silently disable NODE-03's line-narrowing for a caller that means to
+// pass line zero.
+message GetNodeDetailRequest {
+  string symbol = 1;
+  string file = 2;
+  optional int32 line = 3;
+}
+
+// NodeDefinition carries one multi-definition candidate (D-02). Every
+// candidate in a GetNodeDetailResponse's definitions list carries its own
+// node; detail_gathered distinguishes a candidate whose calls/called_by
+// were actually fetched (one of the first uiMultiDefCap matches, see
+// internal/uiserver/handlers.go) from one merely LISTED beyond the cap —
+// for a listed-only candidate, calls and called_by are both empty and
+// detail_gathered is false, so a client rendering "showing N of M" can
+// tell which entries are complete without inferring it from emptiness
+// alone (an in-cap candidate that genuinely calls and is called by
+// nothing would otherwise be indistinguishable from an out-of-cap one).
+message NodeDefinition {
+  Node node = 1;
+  repeated Node calls = 2;
+  repeated Node called_by = 3;
+  bool detail_gathered = 4;
+}
+
+// GetNodeDetailResponse is the discriminated wire projection of
+// internal/query.NodeDetail's three shapes (D-02): mode identifies which
+// group of fields below is populated; every field belonging to the other
+// two groups is left at its zero value, never an error. A client reading
+// the wrong field for the current mode gets a zero value, not a panic or
+// a wire error — this asymmetry is the whole reason mode exists as its
+// own field rather than being inferred from which fields are non-empty.
+//
+//	mode                      | populated fields
+//	--------------------------|--------------------------------------------
+//	NODE_DETAIL_MODE_FILE       | path
+//	NODE_DETAIL_MODE_SINGLE_DEF | node, calls, called_by
+//	NODE_DETAIL_MODE_MULTI_DEF  | symbol, definitions, total_candidates
+//
+// total_candidates is the TRUE total candidate count
+// (len(NodeDetail.Multi.Matches)) regardless of how many entries in
+// definitions actually carry gathered detail — the UI's own
+// uiMultiDefCap bounds gathering, never the reported total, so a client
+// can always render "showing N of M" accurately.
+message GetNodeDetailResponse {
+  NodeDetailMode mode = 1;
+
+  // path is populated only in NODE_DETAIL_MODE_FILE.
+  string path = 2;
+
+  // node, calls and called_by are populated only in
+  // NODE_DETAIL_MODE_SINGLE_DEF.
+  Node node = 3;
+  repeated Node calls = 4;
+  repeated Node called_by = 5;
+
+  // symbol, definitions and total_candidates are populated only in
+  // NODE_DETAIL_MODE_MULTI_DEF.
+  string symbol = 6;
+  repeated NodeDefinition definitions = 7;
+  int32 total_candidates = 8;
 }
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade

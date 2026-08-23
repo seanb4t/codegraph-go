@@ -75,6 +75,19 @@ func mapEngineError(err error) error {
 	}
 }
 
+// uiMultiDefCap bounds how many of GetNodeDetail's multi-definition
+// candidates receive gathered detail (calls and called-by) per request.
+// It is the UI's OWN cap — deliberately independent of
+// internal/query/render_markdown.go's nodeMultiDefHardCap (16): a
+// browser view and a markdown block are different media with different
+// budgets, not the same limit surfacing twice. GetNodeDetailResponse
+// always reports the TRUE total candidate count
+// (len(NodeDetail.Multi.Matches)) regardless of this cap, so a client
+// can render "showing N of M". Referenced from GetNodeDetail's mapper
+// (nodeDetailToProto) and from its own test — nowhere else: no call site
+// duplicates this number as a bare literal.
+const uiMultiDefCap = 20
+
 // uiService implements uiv1connect.UIServiceHandler over the
 // repository's own internal/query.Engine. It holds repoPath and NOTHING
 // ELSE reachable through an Engine or GraphStore — asserted structurally
@@ -400,6 +413,127 @@ func (s *uiService) Affected(ctx context.Context, req *connect.Request[uiv1.Affe
 			Files:         result.Files,
 			AffectedTests: locationsToProto(result.AffectedTests),
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// nodesToProto maps a slice of *schema.Node onto their uiv1.Node wire
+// projections, preserving order, reusing nodeToProto per element rather
+// than a second inline conversion.
+func nodesToProto(nodes []*schema.Node) []*uiv1.Node {
+	out := make([]*uiv1.Node, len(nodes))
+	for i, n := range nodes {
+		out[i] = nodeToProto(n)
+	}
+	return out
+}
+
+// nodeDetailModeToProto maps internal/query.NodeDetailMode onto its
+// uiv1.NodeDetailMode wire projection, one constant per constant.
+func nodeDetailModeToProto(m query.NodeDetailMode) uiv1.NodeDetailMode {
+	switch m {
+	case query.NodeDetailModeFile:
+		return uiv1.NodeDetailMode_NODE_DETAIL_MODE_FILE
+	case query.NodeDetailModeSingleDef:
+		return uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF
+	case query.NodeDetailModeMultiDef:
+		return uiv1.NodeDetailMode_NODE_DETAIL_MODE_MULTI_DEF
+	default:
+		return uiv1.NodeDetailMode_NODE_DETAIL_MODE_UNSPECIFIED
+	}
+}
+
+// nodeDefinitionToProto maps one multi-definition candidate onto its
+// uiv1.NodeDefinition wire projection. gathered is true when the
+// candidate's *query.DefinitionDetail was actually fetched (within
+// uiMultiDefCap, see nodeDetailToProto); when false, dd is nil and
+// calls/called_by are left at their empty zero value — the candidate is
+// LISTED, never gathered, exactly as MultiDefDetail.Definition's laziness
+// requires (D-02).
+func nodeDefinitionToProto(n *schema.Node, dd *query.DefinitionDetail, gathered bool) *uiv1.NodeDefinition {
+	out := &uiv1.NodeDefinition{
+		Node:           nodeToProto(n),
+		DetailGathered: gathered,
+	}
+	if gathered && dd != nil {
+		out.Calls = nodesToProto(dd.Calls)
+		out.CalledBy = nodesToProto(dd.CalledBy)
+	}
+	return out
+}
+
+// nodeDetailToProto maps internal/query.NodeDetail onto
+// uiv1.GetNodeDetailResponse (D-02): exactly one of the three shapes'
+// fields is populated per mode, matching GetNodeDetailResponse's own doc
+// comment table. For the multi-definition mode, it asks
+// MultiDefDetail.Definition for exactly the first uiMultiDefCap matches
+// and no more — the per-candidate lookup is lazy, so gathering every
+// match would perform reads neither Node() nor the Engine performs
+// (D-01) — and reports the TRUE total match count regardless of the cap.
+// A per-candidate lookup error fails the whole mapping (and therefore the
+// whole RPC, once returned through withEngine's mapEngineError) rather
+// than returning a partially-populated response, matching Node()'s own
+// behavior exactly (no invented partial-failure semantics — see this
+// plan's SUMMARY for why that was deferred rather than built now).
+func nodeDetailToProto(d query.NodeDetail) (*uiv1.GetNodeDetailResponse, error) {
+	resp := &uiv1.GetNodeDetailResponse{Mode: nodeDetailModeToProto(d.Mode)}
+	switch d.Mode {
+	case query.NodeDetailModeFile:
+		resp.Path = d.File.Path
+	case query.NodeDetailModeSingleDef:
+		resp.Node = nodeToProto(d.Definition.Node)
+		resp.Calls = nodesToProto(d.Definition.Calls)
+		resp.CalledBy = nodesToProto(d.Definition.CalledBy)
+	case query.NodeDetailModeMultiDef:
+		resp.Symbol = d.Multi.Symbol
+		resp.TotalCandidates = int32(len(d.Multi.Matches))
+		defs := make([]*uiv1.NodeDefinition, len(d.Multi.Matches))
+		for i, m := range d.Multi.Matches {
+			gathered := i < uiMultiDefCap
+			var dd *query.DefinitionDetail
+			if gathered {
+				var err error
+				dd, err = d.Multi.Definition(m)
+				if err != nil {
+					return nil, err
+				}
+			}
+			defs[i] = nodeDefinitionToProto(m, dd, gathered)
+		}
+		resp.Definitions = defs
+	}
+	return resp, nil
+}
+
+// GetNodeDetail answers internal/query.NodeDetail's three shapes over the
+// wire (D-01, D-02): it calls (*query.Engine).NodeDetail and nothing
+// else — the UI is a third consumer of the one gather path CLI and MCP
+// already use, never a second implementation. line is passed through as
+// *int only when the request's optional line field is set, preserving
+// the nil/explicit-zero distinction NODE-03's line-narrowing depends on.
+// See uiv1.GetNodeDetailResponse's doc comment for which fields each
+// mode populates.
+func (s *uiService) GetNodeDetail(ctx context.Context, req *connect.Request[uiv1.GetNodeDetailRequest]) (*connect.Response[uiv1.GetNodeDetailResponse], error) {
+	var resp *uiv1.GetNodeDetailResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		var line *int
+		if req.Msg.Line != nil {
+			l := int(req.Msg.GetLine())
+			line = &l
+		}
+		d, err := eng.NodeDetail(req.Msg.GetSymbol(), req.Msg.GetFile(), line)
+		if err != nil {
+			return err
+		}
+		r, err := nodeDetailToProto(d)
+		if err != nil {
+			return err
+		}
+		resp = r
 		return nil
 	})
 	if err != nil {
