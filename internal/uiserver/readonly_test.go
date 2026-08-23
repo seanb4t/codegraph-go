@@ -143,9 +143,17 @@ const uiProtoFieldFixtureLenAtPlan0109 = 97
 // ExploreGroup.source = 4. Declared in terms of the prior constant, never
 // as a bare literal, so an edit to 01-09's fixture that changes its
 // length breaks THIS assertion rather than silently shifting the
-// arithmetic. Plan 01-11 is the next and final extender in this phase,
-// adding GetStatusResponse.store_exists = 8 and .indexing_in_progress = 9.
+// arithmetic.
 const uiProtoFieldFixtureLenAtPlan0110 = uiProtoFieldFixtureLenAtPlan0109 + 9
+
+// uiProtoFieldFixtureLenAtPlan0111 EXTENDS uiProtoFieldFixtureLenAtPlan0110
+// by exactly 2 (plan 01-11, SRV-04, dated 2026-08-23): the final two
+// extension in this phase, adding GetStatusResponse.store_exists = 8 and
+// .indexing_in_progress = 9 — the numbers plan 01-08 allocated and this
+// plan's own D-14/D-16 degrade path finally populates. Declared in terms
+// of the prior constant, never as a bare literal, mirroring plan 01-10's
+// own +9 pattern.
+const uiProtoFieldFixtureLenAtPlan0111 = uiProtoFieldFixtureLenAtPlan0110 + 2
 
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
@@ -163,21 +171,15 @@ const uiProtoFieldFixtureLenAtPlan0110 = uiProtoFieldFixtureLenAtPlan0109 + 9
 // SourceBlob's own six fields and the three attachment fields on
 // GetNodeDetailResponse, NodeDefinition and ExploreGroup — the numbers
 // 01-09 recorded as intent in ui.proto's file-level comment, now spent.
-// It still deliberately contains NO entry for GetStatusResponse.store_exists = 8
-// or .indexing_in_progress = 9 (plan 01-11): those fields do not exist yet
-// in the generated descriptor, and a descriptor carries declared fields
-// and `reserved` ranges, never comments — an entry for a not-yet-declared
-// field could only fail this plan or be silently skipped, and a skipped
-// entry is exactly the vacuous-guard defect class this test exists to
-// avoid.
 //
-// Plan 01-11 is the next and final extender in this phase (append
-// entries only) and re-runs TestUIProtoFieldNumbersAreStableAndUnique with
-// GetStatusResponse.store_exists = 8 and .indexing_in_progress = 9. Every
-// entry written here must still resolve unchanged at that later point —
-// that is the real, and only enforceable, cross-wave protection D-02a
-// provides: a later plan may
-// ADD a field number, it may never DISTURB one an earlier plan allocated.
+// Plan 01-11 (SRV-04, dated 2026-08-23) is the final extender in this
+// phase (append entries only): it adds GetStatusResponse.store_exists = 8
+// and .indexing_in_progress = 9, the numbers plan 01-08 allocated, now
+// finally declared in the descriptor and populated by 01-11's D-14/D-16
+// degrade path. Every entry written by an earlier plan still resolves
+// unchanged after this extension — that is the real, and only
+// enforceable, cross-wave protection D-02a provides: a later plan may ADD
+// a field number, it may never DISTURB one an earlier plan allocated.
 var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"Node", "id", 1},
 	{"Node", "kind", 2},
@@ -291,6 +293,12 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"NodeDefinition", "source", 5},
 	{"GetNodeDetailResponse", "source", 9},
 	{"ExploreGroup", "source", 4},
+
+	// Plan 01-11 (SRV-04, dated 2026-08-23): the two fields plan 01-08
+	// allocated and this plan finally declares and populates (D-14/D-16).
+	// Two entries total, matching uiProtoFieldFixtureLenAtPlan0111's +2.
+	{"GetStatusResponse", "store_exists", 8},
+	{"GetStatusResponse", "indexing_in_progress", 9},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -317,8 +325,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0110 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0110 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0110)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0111 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0111 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0111)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")

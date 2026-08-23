@@ -408,10 +408,12 @@ func (x *GetStatusRequest) GetPath() string {
 type GetStatusResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// initialized mirrors StatusResult.Initialized: true whenever this
-	// response was produced from a successfully opened Engine. Absent
-	// (zero value: false) has no meaning yet in this plan — SRV-04's
-	// degrade path (D-16, a later plan) is the first caller that can
-	// legitimately answer with initialized=false from a locked store.
+	// response was produced from a successfully opened Engine. False in
+	// BOTH SRV-04 degrade cases (D-16, plan 01-11) — a not-initialized
+	// repository and a store locked past graphstore.Open's retry budget —
+	// which is exactly why store_exists (field 8) exists as a SEPARATE
+	// field: it is what distinguishes the two false-initialized states
+	// from each other.
 	Initialized bool `protobuf:"varint,1,opt,name=initialized,proto3" json:"initialized,omitempty"`
 	// version mirrors StatusResult.Version — the schema version string
 	// (fmt.Sprintf("%d", schema.SchemaVersion)), not a codegraph-go
@@ -439,16 +441,27 @@ type GetStatusResponse struct {
 	// (a pre-upgrade graph) or the index was built outside a git checkout
 	// — both cases are "unknown", never an error, and the client must
 	// render "unknown" rather than treating an empty value as a failure.
-	//
-	// Field numbers 8 and 9 on this message are ALREADY ALLOCATED to plan
-	// 01-11's store_exists and indexing_in_progress fields (D-14/D-16's
-	// degrade path) and MUST NOT be assigned here or by any other plan — a
-	// numbering collision between two plans sharing this phase is exactly
-	// what D-02a's additive-only, never-renumbered discipline exists to
-	// prevent.
-	CommitSha     string `protobuf:"bytes,7,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CommitSha string `protobuf:"bytes,7,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	// store_exists (SRV-04, D-16) reports whether query.ResolveCodegraphDir
+	// found a .codegraph/ directory at all, independent of whether the
+	// store inside it could actually be opened — ResolveCodegraphDir only
+	// os.Stats the directory, so it succeeds regardless of a contended
+	// store lock. False only in the not-initialized degrade case (no
+	// .codegraph/ anywhere up the directory walk); true both in the
+	// ordinary successful-open case AND in the indexing-in-progress
+	// degrade case below, since in both of those the directory was found.
+	// node_count/edge_count/file_count are zeroed whenever this response
+	// was NOT produced from a successfully opened Engine (initialized ==
+	// false).
+	StoreExists bool `protobuf:"varint,8,opt,name=store_exists,json=storeExists,proto3" json:"store_exists,omitempty"`
+	// indexing_in_progress (SRV-04, D-14/D-16) is true when store_exists is
+	// true but the store stayed locked past graphstore.Open's bounded
+	// retry budget — read as "a re-index is in progress", never as an
+	// error condition. initialized is false whenever this is true: the
+	// Engine was never successfully opened for this response.
+	IndexingInProgress bool `protobuf:"varint,9,opt,name=indexing_in_progress,json=indexingInProgress,proto3" json:"indexing_in_progress,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
@@ -528,6 +541,20 @@ func (x *GetStatusResponse) GetCommitSha() string {
 		return x.CommitSha
 	}
 	return ""
+}
+
+func (x *GetStatusResponse) GetStoreExists() bool {
+	if x != nil {
+		return x.StoreExists
+	}
+	return false
+}
+
+func (x *GetStatusResponse) GetIndexingInProgress() bool {
+	if x != nil {
+		return x.IndexingInProgress
+	}
+	return false
 }
 
 // SearchRequest carries internal/query.Engine.Search's three arguments
@@ -2121,9 +2148,11 @@ func (x *ExploreResponse) GetBlasts() []*BlastEntry {
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
 // path (D-14) attaches to a CodeUnavailable response when the graph
-// store stays locked past graphstore.Open's retry budget. Reserved by
-// this plan for that later plan (01-11) to populate; no rpc in this
-// plan returns it yet.
+// store stays locked past graphstore.Open's retry budget. Populated by
+// plan 01-11's internal/uiserver/degrade.go (errIndexingInProgress) for
+// every non-GetStatus rpc's degraded response; GetStatus itself never
+// returns this detail — it degrades to a successful GetStatusResponse
+// instead (D-16).
 type IndexingInProgress struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// message is a GENERIC, human-readable status string — never an OS
@@ -2208,7 +2237,7 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\n" +
 	"start_line\x18\x04 \x01(\x05R\tstartLine\"&\n" +
 	"\x10GetStatusRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\xe1\x01\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"\xb6\x02\n" +
 	"\x11GetStatusResponse\x12 \n" +
 	"\vinitialized\x18\x01 \x01(\bR\vinitialized\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1d\n" +
@@ -2220,7 +2249,9 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"file_count\x18\x05 \x01(\x03R\tfileCount\x12\x14\n" +
 	"\x05stale\x18\x06 \x01(\bR\x05stale\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\a \x01(\tR\tcommitSha\"M\n" +
+	"commit_sha\x18\a \x01(\tR\tcommitSha\x12!\n" +
+	"\fstore_exists\x18\b \x01(\bR\vstoreExists\x120\n" +
+	"\x14indexing_in_progress\x18\t \x01(\bR\x12indexingInProgress\"M\n" +
 	"\rSearchRequest\x12\x12\n" +
 	"\x04term\x18\x01 \x01(\tR\x04term\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +

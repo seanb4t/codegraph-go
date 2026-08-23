@@ -54,13 +54,16 @@ func withEngine(ctx context.Context, repoPath string, fn func(*query.Engine) err
 //
 //   - query.ErrNotFound or graphstore.ErrNotFound -> connect.CodeNotFound
 //   - query.ErrInvalidArgument -> connect.CodeInvalidArgument
+//   - graphstore.ErrStoreLocked -> connect.CodeUnavailable with a typed
+//     IndexingInProgress detail (SRV-04's degrade path, D-14/D-15) —
+//     errIndexingInProgress() builds the one shape every non-GetStatus
+//     handler's degraded response uses
 //   - anything else -> connect.CodeInternal
 //
-// graphstore.ErrStoreLocked's mapping to connect.CodeUnavailable with a
-// typed IndexingInProgress detail (SRV-04's degrade path, D-14) is plan
-// 01-11's deliverable — deliberately NOT partially implemented here,
-// since a half-done CodeUnavailable branch is something 01-11 would have
-// to unpick rather than build on.
+// GetStatus does NOT go through this function: it is the one handler
+// with its own degrade path (degradedStatus, D-16), since a locked store
+// there answers with a SUCCESSFUL, degraded response rather than an
+// error at all — see GetStatus's own doc comment.
 func mapEngineError(err error) error {
 	if err == nil {
 		return nil
@@ -70,6 +73,8 @@ func mapEngineError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, query.ErrInvalidArgument):
 		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, graphstore.ErrStoreLocked):
+		return errIndexingInProgress()
 	default:
 		return connect.NewError(connect.CodeInternal, err)
 	}
@@ -110,13 +115,15 @@ type uiService struct {
 //
 //	StatusResult field | GetStatusResponse field | Notes
 //	--------------------|--------------------------|------
-//	Initialized         | initialized              | Unchanged — Status only runs on a successfully opened Engine in this plan; SRV-04's degrade path (a later plan) is the first caller that can answer initialized=false
+//	Initialized         | initialized              | Unchanged — this successful path only runs on a successfully opened Engine
 //	Version             | version                  | Unchanged — already a schema-version string (status.go's own D-06 mapping)
 //	NodeCount           | node_count               | Unchanged
 //	EdgeCount           | edge_count               | Unchanged
 //	FileCount           | file_count               | Unchanged
 //	Stale               | stale                    | Unchanged (D-04a)
 //	(none — sourced separately) | commit_sha        | NOT a StatusResult field: read via (*query.Engine).IndexMeta + schema.IndexedCommitSHA inside the SAME withEngine call GetStatus already opens for Status, per ENG-04/D-05/D-06. Empty means unknown (pre-upgrade graph or non-git checkout), never an error.
+//	(none — implied)    | store_exists             | Always true on this successful path (SRV-04, D-16, plan 01-11): Status() only ever runs against an already-opened store, so the store manifestly exists. degradedStatus (degrade.go) is the ONLY other place that constructs a GetStatusResponse, and it derives store_exists independently from query.ResolveCodegraphDir for the two degraded cases.
+//	(none — implied)    | indexing_in_progress     | Always false here (plan 01-11): a successfully opened Engine is, by definition, not mid-degrade.
 //
 // Every other StatusResult field (ProjectPath, IndexPath, DbSizeBytes,
 // Backend, NodesByKind, EdgesByKind, FilesByLanguage, Languages,
@@ -131,6 +138,7 @@ func statusToProto(result query.StatusResult, commitSHA string) *uiv1.GetStatusR
 		FileCount:   result.FileCount,
 		Stale:       result.Stale,
 		CommitSha:   commitSHA,
+		StoreExists: true,
 	}
 }
 
@@ -188,29 +196,47 @@ func nodeToProto(n *schema.Node) *uiv1.Node {
 
 // GetStatus answers the health/counts read plus, since ENG-04, the
 // indexed commit SHA (D-05/D-06). Both eng.Status and eng.IndexMeta run
-// inside the SAME withEngine call — one open serves both reads, since
+// against the SAME opened Engine — one open serves both reads, since
 // Engine.reader is unexported and a second graphstore.Open on the same
 // directory is lock-refused (see (*query.Engine).IndexMeta's doc
 // comment). See statusToProto's mapping table for field-by-field detail.
+//
+// GetStatus is the single, deliberate exception to the withEngine rule
+// (SRV-04, D-16, plan 01-11): it calls openEngine directly rather than
+// going through withEngine's mapEngineError translation, because a
+// failed open here is NOT an error to answer with — it is a state to
+// report. When openEngine fails, degradedStatus classifies the failure
+// and builds a SUCCESSFUL, degraded GetStatusResponse from filesystem
+// facts alone (query.ResolveCodegraphDir succeeds independently of the
+// store lock — it only os.Stats the .codegraph/ directory). A
+// degradeNone classification (an unrelated failure) still falls back to
+// mapEngineError, so GetStatus loses no error-classification behavior
+// for failures outside SRV-04's scope. Phase 4's index-health verdict
+// depends on Status being reachable exactly when things are wrong, and
+// "the index is busy" is itself a health answer — this is the one place
+// the partial-availability pattern genuinely applies (D-16); every other
+// handler has no partial data to return on a failed open.
 func (s *uiService) GetStatus(ctx context.Context, _ *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error) {
-	var resp *uiv1.GetStatusResponse
-	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
-		result, err := eng.Status(ctx)
-		if err != nil {
-			return err
+	eng, closer, openErr := openEngine(s.repoPath)
+	if openErr != nil {
+		resp, degradeErr := degradedStatus(s.repoPath, openErr)
+		if degradeErr != nil {
+			return nil, mapEngineError(degradeErr)
 		}
-		meta, err := eng.IndexMeta()
-		if err != nil {
-			return err
-		}
-		commitSHA, _ := schema.IndexedCommitSHA(meta)
-		resp = statusToProto(result, commitSHA)
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		return connect.NewResponse(resp), nil
 	}
-	return connect.NewResponse(resp), nil
+	defer closer.Close()
+
+	result, err := eng.Status(ctx)
+	if err != nil {
+		return nil, mapEngineError(err)
+	}
+	meta, err := eng.IndexMeta()
+	if err != nil {
+		return nil, mapEngineError(err)
+	}
+	commitSHA, _ := schema.IndexedCommitSHA(meta)
+	return connect.NewResponse(statusToProto(result, commitSHA)), nil
 }
 
 // Search answers internal/query.Engine.Search's Location matches over

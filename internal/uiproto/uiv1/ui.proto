@@ -115,10 +115,12 @@ message GetStatusRequest {
 // internal/uiserver/handlers.go's GetStatus doc comment.
 message GetStatusResponse {
   // initialized mirrors StatusResult.Initialized: true whenever this
-  // response was produced from a successfully opened Engine. Absent
-  // (zero value: false) has no meaning yet in this plan — SRV-04's
-  // degrade path (D-16, a later plan) is the first caller that can
-  // legitimately answer with initialized=false from a locked store.
+  // response was produced from a successfully opened Engine. False in
+  // BOTH SRV-04 degrade cases (D-16, plan 01-11) — a not-initialized
+  // repository and a store locked past graphstore.Open's retry budget —
+  // which is exactly why store_exists (field 8) exists as a SEPARATE
+  // field: it is what distinguishes the two false-initialized states
+  // from each other.
   bool initialized = 1;
 
   // version mirrors StatusResult.Version — the schema version string
@@ -152,14 +154,27 @@ message GetStatusResponse {
   // (a pre-upgrade graph) or the index was built outside a git checkout
   // — both cases are "unknown", never an error, and the client must
   // render "unknown" rather than treating an empty value as a failure.
-  //
-  // Field numbers 8 and 9 on this message are ALREADY ALLOCATED to plan
-  // 01-11's store_exists and indexing_in_progress fields (D-14/D-16's
-  // degrade path) and MUST NOT be assigned here or by any other plan — a
-  // numbering collision between two plans sharing this phase is exactly
-  // what D-02a's additive-only, never-renumbered discipline exists to
-  // prevent.
   string commit_sha = 7;
+
+  // store_exists (SRV-04, D-16) reports whether query.ResolveCodegraphDir
+  // found a .codegraph/ directory at all, independent of whether the
+  // store inside it could actually be opened — ResolveCodegraphDir only
+  // os.Stats the directory, so it succeeds regardless of a contended
+  // store lock. False only in the not-initialized degrade case (no
+  // .codegraph/ anywhere up the directory walk); true both in the
+  // ordinary successful-open case AND in the indexing-in-progress
+  // degrade case below, since in both of those the directory was found.
+  // node_count/edge_count/file_count are zeroed whenever this response
+  // was NOT produced from a successfully opened Engine (initialized ==
+  // false).
+  bool store_exists = 8;
+
+  // indexing_in_progress (SRV-04, D-14/D-16) is true when store_exists is
+  // true but the store stayed locked past graphstore.Open's bounded
+  // retry budget — read as "a re-index is in progress", never as an
+  // error condition. initialized is false whenever this is true: the
+  // Engine was never successfully opened for this response.
+  bool indexing_in_progress = 9;
 }
 
 // SearchRequest carries internal/query.Engine.Search's three arguments
@@ -504,9 +519,11 @@ message ExploreResponse {
 
 // IndexingInProgress is the typed Connect error detail SRV-04's degrade
 // path (D-14) attaches to a CodeUnavailable response when the graph
-// store stays locked past graphstore.Open's retry budget. Reserved by
-// this plan for that later plan (01-11) to populate; no rpc in this
-// plan returns it yet.
+// store stays locked past graphstore.Open's retry budget. Populated by
+// plan 01-11's internal/uiserver/degrade.go (errIndexingInProgress) for
+// every non-GetStatus rpc's degraded response; GetStatus itself never
+// returns this detail — it degrades to a successful GetStatusResponse
+// instead (D-16).
 message IndexingInProgress {
   // message is a GENERIC, human-readable status string — never an OS
   // lock-file path, PID, or other host-local detail (Information
