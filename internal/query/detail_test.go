@@ -419,3 +419,321 @@ func TestNodeErrorStringsAreUnchanged(t *testing.T) {
 		}
 	}
 }
+
+// zeroMetaFakeReader wraps traverseFakeReader with a GetMeta that returns
+// graphstore.ErrNotFound rather than traverseFakeReader's own "not
+// implemented" error — buildExploreResult's GetMeta call tolerates
+// ErrNotFound (a pre-upgrade/never-synced graph) but treats any other
+// error as fatal, so an explore-pipeline fixture needs this override
+// where a node-only fixture (newDetailFixtureEngine) never did.
+type zeroMetaFakeReader struct {
+	*traverseFakeReader
+}
+
+func (f *zeroMetaFakeReader) GetMeta() (*schema.Meta, error) {
+	return nil, graphstore.ErrNotFound
+}
+
+// TestExploreResultCarriesRenderInputsUnchanged pins D-01's "the view
+// model is the argument tuple RenderExplore already takes": a populated
+// ExploreDetail result, fed into RenderExplore in the exact argument order
+// Explore() itself uses, must render byte-identically to Explore()'s own
+// output for the identical query/maxFiles — proving buildExploreResult
+// changed no render input. Also pins bullet 6: Stale, Sources and
+// SkeletonFiles carry through, with Sources keyed by each group's Path.
+//
+// Uses the local, network-free behavioral corpus fixture (behavioralEngine,
+// explore_test.go) rather than the plan's illustrative hugo/"page content"
+// example: this in-package unit test must not depend on fetching the
+// external hugo/guava/serilog/requests golden corpora over the network.
+// The corpus-scale byte-identity proof over all four of those corpora
+// already exists and is what this plan re-runs after every task —
+// TestGoldensMatchLiveEngineOutput (testdata/golden/byte_identity_test.go,
+// plan 01-02).
+func TestExploreResultCarriesRenderInputsUnchanged(t *testing.T) {
+	e := behavioralEngine(t)
+
+	const query = "account balance"
+	const maxFiles = 5
+
+	r, err := e.ExploreDetail(query, maxFiles)
+	if err != nil {
+		t.Fatalf("ExploreDetail(%q, %d): unexpected error: %v", query, maxFiles, err)
+	}
+	if r.Empty {
+		t.Fatalf("ExploreDetail(%q, %d): got Empty=true, want a populated result", query, maxFiles)
+	}
+	if len(r.Groups) == 0 {
+		t.Fatalf("ExploreDetail(%q, %d): got 0 Groups, want >= 1", query, maxFiles)
+	}
+
+	want, err := e.Explore(query, maxFiles)
+	if err != nil {
+		t.Fatalf("Explore(%q, %d): unexpected error: %v", query, maxFiles, err)
+	}
+	got := RenderExplore(r.Query, len(r.Groups), r.SymbolCount, r.Groups, r.Blasts, r.Sources, r.Stale, r.SkeletonFiles)
+	if got != want {
+		t.Fatalf("RenderExplore over ExploreDetail's fields != Explore(%q, %d):\ngot:\n%s\nwant:\n%s", query, maxFiles, got, want)
+	}
+
+	if r.Sources == nil {
+		t.Fatalf("ExploreDetail(%q, %d): Sources is nil, want a populated map keyed by group path", query, maxFiles)
+	}
+	for _, g := range r.Groups {
+		if _, ok := r.Sources[g.Path]; !ok {
+			t.Fatalf("ExploreDetail(%q, %d): Sources missing entry for group path %q — Sources must be keyed by ExploreFileGroup.Path", query, maxFiles, g.Path)
+		}
+	}
+}
+
+// TestExploreResultZeroMatchModeCoversEveryBranch pins D-02: every one of
+// Explore()'s five early "no results" returns funnels through the SAME
+// ExploreResult{Empty: true} representation rather than escaping as a
+// pre-rendered string, and Explore()'s output for that input is
+// byte-identical to exploreZeroResult(query, stale) for every branch that
+// is reachable through the public API.
+//
+// The five branches, enumerated top to bottom in buildExploreResult
+// (internal/query/detail.go, line numbers as of this commit): :360 (no
+// gather candidates AND no named-symbol seeds), :424 (the full
+// BFS/hierarchy/glue expansion surfaces no live node), :477 (H15's hard
+// test/spec/icon/i18n exclusion empties fileScores entirely), :540 (H17's
+// relevance gate empties fileOrder), :626 (groupMatchesByFile produces no
+// file group).
+//
+// Branches 1-3 are driven through Explore()'s real public API (a real
+// on-disk-indexed engine for branch 1, the local behavioral fixture with a
+// temporarily inflated DefaultExploreBFSBounds.MinScore for branch 2, and
+// a purpose-built isolated-test-file fixture for branch 3). Branches 4 and
+// 5 are PROVEN UNREACHABLE given the current implementations of
+// fileRelevanceGate/fiveTierFileSort (explore_gate.go) and
+// groupMatchesByFile/clampMaxFiles (explore.go/validate.go): each of those
+// functions is shown, by direct call in its corresponding subtest, to
+// never turn a non-empty input into an empty output — so the non-empty
+// fileScores branch 3 already requires can never produce an empty
+// fileOrder or an empty groups downstream. This was reached by direct
+// code-path tracing during this task's execution (recorded in
+// 01-05-SUMMARY.md), not assumed without support, and those two subtests
+// assert the invariant rather than driving Explore() through a state nothing
+// can reach.
+func TestExploreResultZeroMatchModeCoversEveryBranch(t *testing.T) {
+	t.Run("no-candidates-no-seeds", func(t *testing.T) {
+		dir := copyFixture(t)
+		indexFixture(t, dir)
+		e, closer, err := OpenAt(dir)
+		if err != nil {
+			t.Fatalf("OpenAt: unexpected error: %v", err)
+		}
+		defer closer.Close()
+
+		const query = "zzzznonexistentqueryterm12345"
+		r, err := e.ExploreDetail(query, 5)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q): unexpected error: %v", query, err)
+		}
+		if !r.Empty {
+			t.Fatalf("ExploreDetail(%q): got Empty=false, want true (no gather candidates and no named-symbol seeds)", query)
+		}
+
+		got, err := e.Explore(query, 5)
+		if err != nil {
+			t.Fatalf("Explore(%q): unexpected error: %v", query, err)
+		}
+		want := exploreZeroResult(r.Query, r.Stale)
+		if got != want {
+			t.Fatalf("Explore(%q) = %q, want exploreZeroResult(...) = %q", query, got, want)
+		}
+	})
+
+	t.Run("bfs-fully-pruned-no-final-nodes", func(t *testing.T) {
+		e := behavioralEngine(t)
+		orig := DefaultExploreBFSBounds
+		DefaultExploreBFSBounds = ExpandBFSBounds{
+			MinScore:       1e9, // prunes every real candidate's score below the BFS-root floor
+			MaxNodes:       orig.MaxNodes,
+			TraversalDepth: orig.TraversalDepth,
+			SearchLimit:    orig.SearchLimit,
+		}
+		t.Cleanup(func() { DefaultExploreBFSBounds = orig })
+
+		// "recovery_test" resolves real gather candidates (confirmed by
+		// hand during this task's investigation: 4 candidates, 0 named
+		// seeds) but zero named-symbol seeds, so with every candidate
+		// pruned by the inflated MinScore, BFS/hierarchy/glue surface no
+		// live node at all — finalNodeIDs is empty.
+		const query = "recovery_test"
+		r, err := e.ExploreDetail(query, 5)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q): unexpected error: %v", query, err)
+		}
+		if !r.Empty {
+			t.Fatalf("ExploreDetail(%q): got Empty=false, want true (every gather candidate pruned below the inflated MinScore)", query)
+		}
+
+		got, err := e.Explore(query, 5)
+		if err != nil {
+			t.Fatalf("Explore(%q): unexpected error: %v", query, err)
+		}
+		want := exploreZeroResult(r.Query, r.Stale)
+		if got != want {
+			t.Fatalf("Explore(%q) = %q, want exploreZeroResult(...) = %q", query, got, want)
+		}
+	})
+
+	t.Run("hard-test-exclusion-empties-file-scores", func(t *testing.T) {
+		dir := t.TempDir()
+		nodes := map[string]*schema.Node{
+			"tf1": {Id: "tf1", Name: "IsolatedFunc", Kind: "function", FilePath: "pkg/handler_test.go", StartLine: 1, EndLine: 1, Signature: "func IsolatedFunc()"},
+		}
+		e := NewWithRoot(&zeroMetaFakeReader{&traverseFakeReader{nodes: nodes}}, dir)
+
+		// IsolatedFunc's only definition lives in a _test.go file with no
+		// edges to any other file. H15's hard exclusion drops it — it is
+		// the ONLY file in fileScores, so the "query mentions test AND
+		// >=2 non-low-value files remain" exemption cannot apply — emptying
+		// fileScores entirely.
+		const query = "IsolatedFunc"
+		r, err := e.ExploreDetail(query, 5)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q): unexpected error: %v", query, err)
+		}
+		if !r.Empty {
+			t.Fatalf("ExploreDetail(%q): got Empty=false, want true (H15 excludes the only surfaced file)", query)
+		}
+
+		got, err := e.Explore(query, 5)
+		if err != nil {
+			t.Fatalf("Explore(%q): unexpected error: %v", query, err)
+		}
+		want := exploreZeroResult(r.Query, r.Stale)
+		if got != want {
+			t.Fatalf("Explore(%q) = %q, want exploreZeroResult(...) = %q", query, got, want)
+		}
+	})
+
+	t.Run("relevance-gate-never-empties-a-non-empty-input", func(t *testing.T) {
+		// Branch 4 (detail.go:540, len(fileOrder)==0) is reached only when
+		// fileRelevanceGate's return value is empty. fileRelevanceGate's
+		// own documented "never prunes below 2 files" guard
+		// (explore_gate.go) means it returns either the pre-gate paths
+		// unchanged, or a >=2-file gated subset — never empty for a
+		// non-empty input. fiveTierFileSort is a stable in-place sort: it
+		// returns exactly len(input) elements, never fewer. Composed, a
+		// non-empty candidatePaths — which branch 3 already requires,
+		// since candidatePaths is built directly from the same fileScores
+		// branch 3 checks — can never reach fileOrder==0. This subtest
+		// drives both functions directly with an adversarial input
+		// designed to fail every one of the gate's 5 clauses, and asserts
+		// neither function ever returns fewer elements than it was given.
+		paths := []string{"a.go", "b.go"}
+		fileScores := map[string]float64{"a.go": 0, "b.go": 0}     // fails clause 3 (entry/named)
+		fileGraphScore := map[string]float64{"a.go": 0, "b.go": 0} // maxGraph==0: gate short-circuits to "unchanged"
+		centralFiles := map[string]bool{}                          // fails clause 2
+		rescuedFiles := map[string]bool{}                          // fails clause 4
+		fileTermHits := map[string]int{"a.go": 0, "b.go": 0}       // fails clause 5
+
+		gated := fileRelevanceGate(paths, fileScores, fileGraphScore, centralFiles, rescuedFiles, fileTermHits)
+		if len(gated) == 0 {
+			t.Fatalf("fileRelevanceGate(%v, ...): got an empty result for a non-empty input — this WOULD make branch 4 reachable; investigate before trusting it dead", paths)
+		}
+
+		fileNodeCounts := map[string]int{"a.go": 1, "b.go": 1}
+		order := fiveTierFileSort(gated, fileScores, fileGraphScore, centralFiles, fileTermHits, fileNodeCounts)
+		if len(order) != len(gated) {
+			t.Fatalf("fiveTierFileSort(%v, ...): returned %d elements, want exactly %d (a sort must never drop elements)", gated, len(order), len(gated))
+		}
+	})
+
+	t.Run("group-assembly-never-empties-a-non-empty-ranked-set", func(t *testing.T) {
+		// Branch 5 (detail.go:626, len(groups)==0) is reached only when
+		// groupMatchesByFile(ranked, maxFiles) returns no groups despite a
+		// non-empty ranked slice. groupMatchesByFile only skips a NEW file
+		// once len(groups) >= maxFiles, and maxFiles is always >= 1 by the
+		// time it reaches groupMatchesByFile (clampMaxFiles and
+		// clampExploreBudget both floor it at 1) — so the FIRST ranked
+		// node with a non-empty FilePath always seeds a group. This
+		// subtest proves that directly: a single ranked node with
+		// maxFiles=1 still produces exactly one group.
+		n := &schema.Node{Id: "n1", Name: "N", Kind: "function", FilePath: "only.go"}
+		groups, symbolCount := groupMatchesByFile([]rankedNode{{node: n}}, 1)
+		if len(groups) == 0 {
+			t.Fatal("groupMatchesByFile(single ranked node, maxFiles=1): got 0 groups, want 1 — this WOULD make branch 5 reachable; investigate before trusting it dead")
+		}
+		if symbolCount != 1 {
+			t.Fatalf("groupMatchesByFile: symbolCount = %d, want 1", symbolCount)
+		}
+	})
+}
+
+// TestExploreResultMaxFilesBoundary asserts all three maxFiles boundary
+// rows: maxFiles equal to the matched-file count includes every group;
+// maxFiles one below it drops exactly one; and maxFiles == 0 produces the
+// same result the pre-extraction code produces for the same input,
+// computed independently in this test (via countIndexedFiles/
+// getExploreOutputBudget/clampExploreBudget — the exact H21 formula
+// buildExploreResult itself calls) rather than asserted as a hardcoded
+// constant, so the "behaves exactly as it does today" claim has a failing
+// input.
+func TestExploreResultMaxFilesBoundary(t *testing.T) {
+	e := behavioralEngine(t)
+	const query = "account balance"
+
+	// A generous maxFiles that cannot itself truncate establishes the full
+	// untruncated group count.
+	full, err := e.ExploreDetail(query, 20)
+	if err != nil {
+		t.Fatalf("ExploreDetail(%q, 20): unexpected error: %v", query, err)
+	}
+	if full.Empty {
+		t.Fatalf("ExploreDetail(%q, 20): got Empty=true, want a populated multi-file result", query)
+	}
+	n := len(full.Groups)
+	if n < 2 {
+		t.Fatalf("ExploreDetail(%q, 20): got %d groups, want >= 2 so the boundary subtests below are meaningful", query, n)
+	}
+
+	t.Run("exactly-at-match-count", func(t *testing.T) {
+		r, err := e.ExploreDetail(query, n)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q, %d): unexpected error: %v", query, n, err)
+		}
+		if len(r.Groups) != n {
+			t.Fatalf("ExploreDetail(%q, %d): got %d groups, want exactly %d (maxFiles == match count truncates nothing)", query, n, len(r.Groups), n)
+		}
+	})
+
+	t.Run("one-below", func(t *testing.T) {
+		r, err := e.ExploreDetail(query, n-1)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q, %d): unexpected error: %v", query, n-1, err)
+		}
+		if len(r.Groups) != n-1 {
+			t.Fatalf("ExploreDetail(%q, %d): got %d groups, want exactly %d (one below the match count drops exactly one group)", query, n-1, len(r.Groups), n-1)
+		}
+	})
+
+	t.Run("zero-is-unchanged", func(t *testing.T) {
+		fileCount, err := e.countIndexedFiles()
+		if err != nil {
+			t.Fatalf("countIndexedFiles: unexpected error: %v", err)
+		}
+		wantMaxFiles := clampExploreBudget(getExploreOutputBudget(fileCount))
+
+		zero, err := e.ExploreDetail(query, 0)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q, 0): unexpected error: %v", query, err)
+		}
+		explicit, err := e.ExploreDetail(query, wantMaxFiles)
+		if err != nil {
+			t.Fatalf("ExploreDetail(%q, %d): unexpected error: %v", query, wantMaxFiles, err)
+		}
+		if len(zero.Groups) != len(explicit.Groups) {
+			t.Fatalf("ExploreDetail(%q, 0): got %d groups, want %d (the independently-computed H21 adaptive budget for this index)", query, len(zero.Groups), len(explicit.Groups))
+		}
+		gotRender := RenderExplore(zero.Query, len(zero.Groups), zero.SymbolCount, zero.Groups, zero.Blasts, zero.Sources, zero.Stale, zero.SkeletonFiles)
+		wantRender := RenderExplore(explicit.Query, len(explicit.Groups), explicit.SymbolCount, explicit.Groups, explicit.Blasts, explicit.Sources, explicit.Stale, explicit.SkeletonFiles)
+		if gotRender != wantRender {
+			t.Fatalf("ExploreDetail(%q, 0) rendered output differs from the independently-computed explicit-budget equivalent:\ngot:\n%s\nwant:\n%s", query, gotRender, wantRender)
+		}
+	})
+}

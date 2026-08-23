@@ -403,7 +403,7 @@ func TestNoCoveringTestsWarning(t *testing.T) {
 	root := &schema.Node{Name: "recoverAccount", Kind: "function", FilePath: "recovery/recovery.go", StartLine: 8}
 
 	t.Run("callers but no covering test file appends the exact warning", func(t *testing.T) {
-		got := renderBlastBullet(exploreBlast{Symbol: root, CallerCount: 1})
+		got := renderBlastBullet(ExploreBlast{Symbol: root, CallerCount: 1})
 		want := "- `recoverAccount` (recovery/recovery.go:8) — 1 caller in `recovery/recovery.go`; ⚠️ no covering tests found"
 		if got != want {
 			t.Fatalf("renderBlastBullet: got %q, want %q", got, want)
@@ -411,7 +411,7 @@ func TestNoCoveringTestsWarning(t *testing.T) {
 	})
 
 	t.Run("callers with a covering test file keeps the existing tests: clause, no warning", func(t *testing.T) {
-		got := renderBlastBullet(exploreBlast{Symbol: root, CallerCount: 1, TestFiles: []string{"recovery/recovery_test.go"}})
+		got := renderBlastBullet(ExploreBlast{Symbol: root, CallerCount: 1, TestFiles: []string{"recovery/recovery_test.go"}})
 		want := "- `recoverAccount` (recovery/recovery.go:8) — 1 caller in `recovery/recovery.go`; tests: `recovery/recovery_test.go`"
 		if got != want {
 			t.Fatalf("renderBlastBullet: got %q, want %q", got, want)
@@ -422,7 +422,7 @@ func TestNoCoveringTestsWarning(t *testing.T) {
 	})
 
 	t.Run("zero callers gets neither clause", func(t *testing.T) {
-		got := renderBlastBullet(exploreBlast{Symbol: root, CallerCount: 0})
+		got := renderBlastBullet(ExploreBlast{Symbol: root, CallerCount: 0})
 		want := "- `recoverAccount` (recovery/recovery.go:8) — 0 callers in `recovery/recovery.go`"
 		if got != want {
 			t.Fatalf("renderBlastBullet: got %q, want %q (no tests: clause, no warning)", got, want)
@@ -447,7 +447,7 @@ func TestSkeletonization(t *testing.T) {
 				{Source: "typeC", Target: "iface", Kind: "implements"},
 			},
 		}
-		groups := []exploreFileGroup{{Path: "pkg/widget.go", Symbols: []*schema.Node{widget}}}
+		groups := []ExploreFileGroup{{Path: "pkg/widget.go", Symbols: []*schema.Node{widget}}}
 
 		skeleton := computeSkeletonFiles(groups, nil, implementsIdx)
 		if !skeleton["pkg/widget.go"] {
@@ -470,7 +470,7 @@ func TestSkeletonization(t *testing.T) {
 				{Source: "typeB", Target: "iface", Kind: "implements"},
 			},
 		}
-		groups := []exploreFileGroup{{Path: "pkg/gadget.go", Symbols: []*schema.Node{gadget}}}
+		groups := []ExploreFileGroup{{Path: "pkg/gadget.go", Symbols: []*schema.Node{gadget}}}
 
 		skeleton := computeSkeletonFiles(groups, nil, implementsIdx)
 		if skeleton["pkg/gadget.go"] {
@@ -486,7 +486,7 @@ func TestSkeletonization(t *testing.T) {
 				{Source: "typeC", Target: "iface", Kind: "implements"},
 			},
 		}
-		groups := []exploreFileGroup{{Path: "pkg/widget.go", Symbols: []*schema.Node{widget}}}
+		groups := []ExploreFileGroup{{Path: "pkg/widget.go", Symbols: []*schema.Node{widget}}}
 		centralFiles := map[string]bool{"pkg/widget.go": true}
 
 		skeleton := computeSkeletonFiles(groups, centralFiles, implementsIdx)

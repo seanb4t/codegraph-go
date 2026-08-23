@@ -1,8 +1,13 @@
 package query
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -254,4 +259,426 @@ func (e *Engine) NodeDetail(symbol, file string, line *int) (NodeDetail, error) 
 // wrapper over the existing confinement gate, not a second read path.
 func (e *Engine) SourceFor(path string) ([]byte, error) {
 	return e.readSourceFile(path)
+}
+
+// ExploreResult is the structured ENG-02 seam Explore() renders from (D-01,
+// D-02, D-03): a plain Go struct, not a generated protobuf message, so
+// internal/query stays wire-agnostic and the RPC layer owns the mapping to
+// wire messages. The field set is exactly the argument tuple RenderExplore
+// already takes, plus an Empty mode flag covering every one of Explore()'s
+// five early "no results" returns — nothing invented (D-01's "the view
+// model is the argument tuple the render function already takes").
+//
+// When Empty is true, Query and Stale carry the values the pre-extraction
+// exploreZeroResult(query, stale) call would have used, and every other
+// field is its zero value; Explore() renders exploreZeroResult(Query,
+// Stale) for that case rather than calling RenderExplore. This is the
+// ExploreResult twin of NodeDetail's Mode discriminator (D-02) — a boolean
+// is sufficient here because there are exactly two shapes (empty vs
+// populated), not three.
+//
+// Sources is keyed by each group's Path (ExploreFileGroup.Path) — this
+// keying is what plan 01-09's wire mapping must reproduce, and it is not
+// obvious from the type alone.
+type ExploreResult struct {
+	Query         string
+	Empty         bool
+	Stale         bool
+	Groups        []ExploreFileGroup
+	SymbolCount   int
+	Blasts        []ExploreBlast
+	Sources       map[string][]byte
+	SkeletonFiles map[string]bool
+}
+
+// buildExploreResult is Explore()'s entire gather pipeline (D-01, ENG-02),
+// returning the structured ExploreResult instead of rendering it. This is
+// the ONE gather path for Explore — Explore() and (*Engine).ExploreDetail
+// both call this exact function, so CLI, MCP and UI cannot disagree about
+// what an exploration is (mirroring buildNodeDetail's role for ENG-01).
+//
+// Explore() has FIVE early "no results" returns — the pipeline can come up
+// empty at several distinct stages (H13's seeding, H11/H12's expansion,
+// H15's hard exclusion, H18's file sort, and H19's file-group assembly).
+// Every one funnels through this function's ExploreResult{Empty: true, ...}
+// return instead of escaping as a pre-rendered string — a missed branch
+// would be a silent hole in the ENG-02 seam Phases 3-6 are forbidden from
+// being planned around until it is proven complete (D-02).
+func (e *Engine) buildExploreResult(query string, maxFiles int) (ExploreResult, error) {
+	if strings.TrimSpace(query) == "" {
+		return ExploreResult{}, fmt.Errorf("query: explore query must not be empty")
+	}
+	if err := validateMaxFiles(maxFiles); err != nil {
+		return ExploreResult{}, err
+	}
+	explicitMaxFiles := maxFiles
+	maxFiles = clampMaxFiles(maxFiles)
+
+	meta, err := e.reader.GetMeta()
+	if err != nil && !errors.Is(err, graphstore.ErrNotFound) {
+		return ExploreResult{}, err
+	}
+	stale, err := e.computeStale(meta)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	// H1/H2: tokenize the query for named-symbol seeding (H1) and the FTS
+	// gather channel (H2), respectively (RESEARCH Anti-Pattern: never
+	// conflate the two).
+	symbols := extractSymbolsFromQuery(query)
+	terms := extractSearchTerms(query)
+
+	// H3-H6: hybrid gather (exact-name+co-location, titlecase
+	// definition-prefix, FTS multi-term) merged max-score-wins.
+	ch1, err := gatherChannel1(e.reader, symbols, 0)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	ch2, err := gatherChannel2(e.reader, symbols)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	ch3, err := gatherChannel3(e.reader, terms, "")
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	candidates := gatherMerge(ch1, ch2, ch3)
+
+	// H7-H9: test-file dampening, core-directory boost, multi-term
+	// co-occurrence re-rank (with the H9-before-H7 exemption ordering
+	// applyPostMergeRerankers already encodes).
+	candidates = applyPostMergeRerankers(candidates, query, terms)
+
+	// H13: named-symbol seeding + per-overload disambiguation tiers.
+	projectName := filepath.Base(e.repoRoot)
+	seeds, err := seedNamedSymbols(e.reader, query, projectName)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	if len(candidates) == 0 && len(seeds.SeedIDs) == 0 {
+		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
+	}
+
+	// H10: type-hierarchy expansion — focal ids are the candidates whose
+	// Kind is itself a type/definition kind (struct/interface/type_alias).
+	var focalIDs []string
+	for _, c := range candidates {
+		if definitionKinds[c.Node.Kind] {
+			focalIDs = append(focalIDs, c.Node.Id)
+		}
+	}
+	hierarchyIDs, err := expandTypeHierarchy(e.reader, focalIDs, ExpandMaxNodes)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	// H11: bounded BFS from the gathered/reranked candidates.
+	bfsNodeIDs, bfsRootIDs, _, err := expandBFS(e.reader, candidates, DefaultExploreBFSBounds)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	// The node universe so far (BFS + hierarchy expansion + named seeds) —
+	// H12's glue-node injection needs "files already surfaced" from this
+	// set before it can decide what to pull in.
+	nodeSet := make(map[string]bool, len(bfsNodeIDs)+len(hierarchyIDs)+len(seeds.SeedIDs))
+	for _, id := range bfsNodeIDs {
+		nodeSet[id] = true
+	}
+	for _, id := range hierarchyIDs {
+		nodeSet[id] = true
+	}
+	for _, id := range seeds.SeedIDs {
+		nodeSet[id] = true
+	}
+
+	surfacedIDs := make([]string, 0, len(nodeSet))
+	for id := range nodeSet {
+		surfacedIDs = append(surfacedIDs, id)
+	}
+	surfacedFiles, err := subgraphFileSet(e.reader, surfacedIDs)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	// H12: glue-node injection around the BFS roots and named seeds.
+	glueRoots := make([]string, 0, len(bfsRootIDs)+len(seeds.SeedIDs))
+	glueRoots = append(glueRoots, bfsRootIDs...)
+	glueRoots = append(glueRoots, seeds.SeedIDs...)
+	glueIDs, err := expandGlueNodes(e.reader, glueRoots, surfacedFiles, GlueNodeCap)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	for _, id := range glueIDs {
+		nodeSet[id] = true
+	}
+
+	finalNodeIDs := make([]string, 0, len(nodeSet))
+	for id := range nodeSet {
+		finalNodeIDs = append(finalNodeIDs, id)
+	}
+	sort.Strings(finalNodeIDs)
+
+	if len(finalNodeIDs) == 0 {
+		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
+	}
+
+	// Rebuild the RankEdges-filtered edge list over the FULL final node
+	// set: expandBFS's own internal edge list is scoped to just its own
+	// BFS-discovered nodes, but H10/H12/H13 may have added nodes (and thus
+	// edges among them) it never saw.
+	_, allRankEdges, err := buildExpandAdjacency(e.reader)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	finalEdges := make([]*schema.Edge, 0, len(allRankEdges))
+	for _, edge := range allRankEdges {
+		if nodeSet[edge.Source] && nodeSet[edge.Target] {
+			finalEdges = append(finalEdges, edge)
+		}
+	}
+
+	// computeGraphRelevance: RWR restarts uniformly over the named seeds
+	// (H13) plus the BFS roots (H11) — the pipeline's two notions of
+	// "root" both feed the restart vector.
+	rwrSeedIDs := make(map[string]bool, len(seeds.SeedIDs)+len(bfsRootIDs))
+	for _, id := range seeds.SeedIDs {
+		rwrSeedIDs[id] = true
+	}
+	for _, id := range bfsRootIDs {
+		rwrSeedIDs[id] = true
+	}
+	rwrScores := computeGraphRelevance(finalNodeIDs, finalEdges, rwrSeedIDs)
+
+	// H14: per-file score tiers (named-seed/entry/connected/other).
+	namedSeedIDs := make(map[string]bool)
+	for _, nm := range seeds.Names {
+		for _, id := range nm.Primary {
+			namedSeedIDs[id] = true
+		}
+	}
+	entryIDs := make(map[string]bool, len(bfsRootIDs))
+	for _, id := range bfsRootIDs {
+		entryIDs[id] = true
+	}
+	fileScores, err := computeFileScoreTiers(e.reader, finalNodeIDs, finalEdges, namedSeedIDs, entryIDs)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	fileGraphScore, err := aggregateFileGraphScore(e.reader, finalNodeIDs, rwrScores)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	// H15: hard test/spec/icon/i18n exclusion.
+	applyHardTestExclusion(fileScores, query)
+	if len(fileScores) == 0 {
+		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
+	}
+
+	fileTermHits, err := computeFileTermHits(e.reader, finalNodeIDs, terms)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	var maxGraph float64
+	for _, v := range fileGraphScore {
+		if v > maxGraph {
+			maxGraph = v
+		}
+	}
+
+	// H16: change-surface buried-rescue over the tier-seed callables
+	// (named-seed union entry tier).
+	tierSeedIDs := make([]string, 0, len(namedSeedIDs)+len(entryIDs))
+	for id := range namedSeedIDs {
+		tierSeedIDs = append(tierSeedIDs, id)
+	}
+	for id := range entryIDs {
+		if !namedSeedIDs[id] {
+			tierSeedIDs = append(tierSeedIDs, id)
+		}
+	}
+	rescued, err := applyBuriedRescue(e.reader, tierSeedIDs, fileGraphScore, maxGraph, fileTermHits, fileScores)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	candidatePaths := make([]string, 0, len(fileScores))
+	for f := range fileScores {
+		candidatePaths = append(candidatePaths, f)
+	}
+	sort.Strings(candidatePaths)
+
+	// H19: central-file selection (feeds the gate's clause 2 and the
+	// sort's tier 2), computed before the gate per RESEARCH's own
+	// dependency order.
+	centralFiles := centralFileSelection(candidatePaths, fileGraphScore, fileTermHits)
+
+	// H17: the 5-way OR relevance gate (EXPL-03's core).
+	gated := fileRelevanceGate(candidatePaths, fileScores, fileGraphScore, centralFiles, rescued, fileTermHits)
+
+	fileNodeCounts := make(map[string]int)
+	for _, id := range finalNodeIDs {
+		n, gerr := e.reader.GetNode(id)
+		if gerr != nil {
+			if errors.Is(gerr, graphstore.ErrNotFound) {
+				continue
+			}
+			return ExploreResult{}, gerr
+		}
+		if n.FilePath != "" {
+			fileNodeCounts[n.FilePath]++
+		}
+	}
+
+	// H18: the 5-tier file sort — this is the ranked file ORDER
+	// groupMatchesByFile below consumes instead of lexical match order.
+	fileOrder := fiveTierFileSort(gated, fileScores, fileGraphScore, centralFiles, fileTermHits, fileNodeCounts)
+	if len(fileOrder) == 0 {
+		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
+	}
+
+	// H21: the adaptive output budget only overrides the DEFAULT (the
+	// caller passed no explicit --max-files, i.e. explicitMaxFiles<=0);
+	// an explicit value's validate+clamp above stays verbatim.
+	if explicitMaxFiles <= 0 {
+		fileCount, cerr := e.countIndexedFiles()
+		if cerr != nil {
+			return ExploreResult{}, cerr
+		}
+		maxFiles = clampExploreBudget(getExploreOutputBudget(fileCount))
+	}
+
+	// matchedByFile: the query's actual gather+seed candidates, per file —
+	// what a file's header/blast-radius shows when it has any.
+	matchedByFile := make(map[string][]*schema.Node)
+	seenMatched := make(map[string]bool)
+	addMatched := func(n *schema.Node) {
+		if n == nil || n.FilePath == "" || seenMatched[n.Id] {
+			return
+		}
+		seenMatched[n.Id] = true
+		matchedByFile[n.FilePath] = append(matchedByFile[n.FilePath], n)
+	}
+	for _, c := range candidates {
+		addMatched(c.Node)
+	}
+	for _, id := range seeds.SeedIDs {
+		n, gerr := e.reader.GetNode(id)
+		if gerr != nil {
+			if errors.Is(gerr, graphstore.ErrNotFound) {
+				continue
+			}
+			return ExploreResult{}, gerr
+		}
+		addMatched(n)
+	}
+
+	// nodesByFile: every final-subgraph node, per file — the fallback
+	// source for a file selected purely through structural connectivity
+	// (no direct candidate landed in it).
+	nodesByFile := make(map[string][]*schema.Node)
+	for _, id := range finalNodeIDs {
+		n, gerr := e.reader.GetNode(id)
+		if gerr != nil {
+			if errors.Is(gerr, graphstore.ErrNotFound) {
+				continue
+			}
+			return ExploreResult{}, gerr
+		}
+		if n.FilePath == "" {
+			continue
+		}
+		nodesByFile[n.FilePath] = append(nodesByFile[n.FilePath], n)
+	}
+
+	rwrOrder := func(nodes []*schema.Node) {
+		sort.SliceStable(nodes, func(i, j int) bool {
+			si, sj := rwrScores[nodes[i].Id], rwrScores[nodes[j].Id]
+			if si != sj {
+				return si > sj
+			}
+			return nodes[i].Id < nodes[j].Id
+		})
+	}
+	for f := range matchedByFile {
+		rwrOrder(matchedByFile[f])
+	}
+	for f := range nodesByFile {
+		rwrOrder(nodesByFile[f])
+	}
+
+	var ranked []rankedNode
+	for _, f := range fileOrder {
+		syms := matchedByFile[f]
+		if len(syms) == 0 && len(nodesByFile[f]) > 0 {
+			syms = nodesByFile[f][:1]
+		}
+		for _, n := range syms {
+			ranked = append(ranked, rankedNode{node: n})
+		}
+	}
+
+	groups, symbolCount := groupMatchesByFile(ranked, maxFiles)
+	if len(groups) == 0 {
+		return ExploreResult{Query: query, Empty: true, Stale: stale}, nil
+	}
+
+	rev, err := BuildReverseAdjacency(e.reader)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+
+	blasts := make([]ExploreBlast, 0, symbolCount)
+	for _, g := range groups {
+		for _, n := range g.Symbols {
+			bl, err := e.buildBlastEntry(n, rev)
+			if err != nil {
+				return ExploreResult{}, err
+			}
+			blasts = append(blasts, bl)
+		}
+	}
+
+	sources := make(map[string][]byte, len(groups))
+	for _, g := range groups {
+		content, err := e.readSourceFile(g.Path)
+		if err != nil {
+			return ExploreResult{}, err
+		}
+		sources[g.Path] = content
+	}
+
+	// H20: polymorphic-sibling skeletonization for off-spine files.
+	implementsIdx, err := BuildImplementsIndex(e.reader)
+	if err != nil {
+		return ExploreResult{}, err
+	}
+	skeletonFiles := computeSkeletonFiles(groups, centralFiles, implementsIdx)
+
+	return ExploreResult{
+		Query:         query,
+		Stale:         stale,
+		Groups:        groups,
+		SymbolCount:   symbolCount,
+		Blasts:        blasts,
+		Sources:       sources,
+		SkeletonFiles: skeletonFiles,
+	}, nil
+}
+
+// ExploreDetail is the exported ENG-02 seam: the same gather Explore()
+// renders from (buildExploreResult), returned structured and unrendered so
+// a wire consumer (the UI RPC layer, from Phase 3) can map it without going
+// through markdown. It is named ExploreDetail rather than ExploreResult so
+// the method name and the type name cannot be confused at a call site in
+// another package, and so godoc reads unambiguously — mirroring
+// (*Engine).NodeDetail's naming choice (plan 01-04). It is a plain Go type
+// with no protobuf or wire dependency (D-03) — internal/query imports
+// nothing from the UI wire layer.
+func (e *Engine) ExploreDetail(query string, maxFiles int) (ExploreResult, error) {
+	return e.buildExploreResult(query, maxFiles)
 }
