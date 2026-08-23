@@ -306,3 +306,84 @@ func TestUIServiceSourceBlobFileModeUsesTheSameTruncationPath(t *testing.T) {
 			src.GetReturnedBytes(), src.GetReturnedLines(), wantTrunc.ReturnedBytes, wantTrunc.ReturnedLines)
 	}
 }
+
+// TestUIServiceSingleDefWithNoReadableFileStillAnswers proves CR-02's
+// contract: a single-definition node whose source cannot be read is
+// still answered — node, calls and called-by are returned and `source`
+// is simply left UNSET — rather than failing the whole RPC. The source
+// blob is an OPTIONAL enrichment on GetNodeDetailResponse (ui.proto's
+// `optional SourceBlob source`); a definition that has no readable
+// on-disk file is not thereby an unavailable node, and `codegraph node
+// <symbol>` on the CLI answers both of these cases successfully today.
+//
+// Both reachable causes are covered, one subtest each:
+//
+//   - a package pseudo-node, which internal/indexer/resolve.go
+//     constructs with Id/Kind/Name/QualifiedName and NO FilePath at all,
+//     so the read is attempted against the empty string; and
+//   - a stale index, where the indexed file was deleted from disk after
+//     indexing (`stale` is a first-class state this product models).
+//
+// Each subtest asserts POSITIVELY that the response carries the node's
+// own identity and that source is unset — never merely that no error
+// occurred — so removing the degrade in nodeDetailToProto turns both
+// subtests RED (the RPC fails outright).
+func TestUIServiceSingleDefWithNoReadableFileStillAnswers(t *testing.T) {
+	t.Run("package-pseudo-node-has-no-file-path", func(t *testing.T) {
+		dir := copyGofixture(t)
+		indexGofixture(t, dir)
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		// pkgb imports example.com/gofixture/pkga, so resolve.go creates
+		// exactly one package pseudo-node named "pkga".
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "pkga"}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(pkga): %v, want a successful response with source left unset", err)
+		}
+		if resp.Msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("GetNodeDetail(pkga): mode = %v, want NODE_DETAIL_MODE_SINGLE_DEF (test fixture assumption)", resp.Msg.GetMode())
+		}
+		node := resp.Msg.GetNode()
+		if node == nil {
+			t.Fatal("GetNodeDetail(pkga): node is nil, want the package pseudo-node itself")
+		}
+		if node.GetName() != "pkga" {
+			t.Fatalf("GetNodeDetail(pkga): node name = %q, want %q", node.GetName(), "pkga")
+		}
+		if node.GetFilePath() != "" {
+			t.Fatalf("GetNodeDetail(pkga): node file_path = %q, want empty (test fixture assumption: package pseudo-nodes carry no FilePath)", node.GetFilePath())
+		}
+		if resp.Msg.Source != nil {
+			t.Fatalf("GetNodeDetail(pkga): source = %v, want UNSET for a definition with no on-disk file", resp.Msg.Source)
+		}
+	})
+
+	t.Run("indexed-file-deleted-after-indexing", func(t *testing.T) {
+		dir := copyGofixture(t)
+		indexGofixture(t, dir)
+		if err := os.Remove(filepath.Join(dir, "pkga", "pkga.go")); err != nil {
+			t.Fatalf("remove indexed source file: %v", err)
+		}
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		resp, err := client.GetNodeDetail(context.Background(), connect.NewRequest(&uiv1.GetNodeDetailRequest{Symbol: "Alpha"}))
+		if err != nil {
+			t.Fatalf("GetNodeDetail(Alpha) after deleting its file: %v, want a successful response with source left unset", err)
+		}
+		if resp.Msg.GetMode() != uiv1.NodeDetailMode_NODE_DETAIL_MODE_SINGLE_DEF {
+			t.Fatalf("GetNodeDetail(Alpha): mode = %v, want NODE_DETAIL_MODE_SINGLE_DEF (test fixture assumption)", resp.Msg.GetMode())
+		}
+		node := resp.Msg.GetNode()
+		if node == nil || node.GetName() != "Alpha" {
+			t.Fatalf("GetNodeDetail(Alpha): node = %v, want the Alpha definition itself", node)
+		}
+		if node.GetFilePath() != "pkga/pkga.go" {
+			t.Fatalf("GetNodeDetail(Alpha): node file_path = %q, want %q (test fixture assumption)", node.GetFilePath(), "pkga/pkga.go")
+		}
+		if resp.Msg.Source != nil {
+			t.Fatalf("GetNodeDetail(Alpha): source = %v, want UNSET once the indexed file no longer exists on disk", resp.Msg.Source)
+		}
+	})
+}

@@ -513,6 +513,33 @@ func nodeDefinitionToProto(n *schema.Node, dd *query.DefinitionDetail, gathered 
 	return out
 }
 
+// singleDefSourceBlob reads and bounds the source for a
+// single-definition node, returning nil — an UNSET optional
+// SourceBlob — whenever that source is unavailable rather than
+// propagating the read failure (CR-02). It is the one place the
+// "source is optional, the node is not" rule for
+// NodeDetailModeSingleDef lives.
+//
+// Every read failure degrades identically and deliberately: an empty
+// filePath (the package pseudo-node kind carries none), a file removed
+// since indexing, and a path the repo-root confinement gate rejects all
+// mean the same thing to a client — no source to show for this node —
+// and none of them makes the node's calls/called-by lists any less
+// correct. Distinguishing them on the wire would ask a browser to
+// render a taxonomy of read errors it cannot act on; the errors that
+// matter to an operator go to the server-side diagnostic stream instead.
+func singleDefSourceBlob(eng *query.Engine, filePath string) *uiv1.SourceBlob {
+	if filePath == "" {
+		return nil
+	}
+	src, err := eng.SourceFor(filePath)
+	if err != nil {
+		writeDiagLine("source unavailable for %q: %v", filePath, err)
+		return nil
+	}
+	return sourceBlobToProto(truncateSource(src))
+}
+
 // nodeDetailToProto maps internal/query.NodeDetail onto
 // uiv1.GetNodeDetailResponse (D-02): exactly one of the three shapes'
 // fields is populated per mode, matching GetNodeDetailResponse's own doc
@@ -543,11 +570,23 @@ func nodeDetailToProto(eng *query.Engine, d query.NodeDetail) (*uiv1.GetNodeDeta
 		resp.Node = nodeToProto(d.Definition.Node)
 		resp.Calls = nodesToProto(d.Definition.Calls)
 		resp.CalledBy = nodesToProto(d.Definition.CalledBy)
-		src, err := eng.SourceFor(d.Definition.Node.FilePath)
-		if err != nil {
-			return nil, err
-		}
-		resp.Source = sourceBlobToProto(truncateSource(src))
+		// CR-02: the source blob is an OPTIONAL enrichment on this
+		// response, never the response's reason for existing — a
+		// definition whose source cannot be read is still a perfectly
+		// good node, and `codegraph node <symbol>` on the CLI renders
+		// it without reading source at all (RenderNode takes none). Two
+		// well-formed inputs reach here with no readable file: a
+		// package pseudo-node, which internal/indexer/resolve.go
+		// constructs with no FilePath whatsoever, and a stale index
+		// whose file was deleted or renamed since the last sync. Both
+		// used to fail the WHOLE rpc — telling the client its
+		// well-formed request was invalid, a UI-only divergence from
+		// the CLI introduced by this wire layer. Degrade instead: leave
+		// source unset, exactly as multi-def mode already does for an
+		// ungathered candidate. An unset optional field is what
+		// GetNodeDetailResponse's own doc comment already tells clients
+		// to expect for a field this mode does not populate.
+		resp.Source = singleDefSourceBlob(eng, d.Definition.Node.FilePath)
 	case query.NodeDetailModeMultiDef:
 		resp.Symbol = d.Multi.Symbol
 		resp.TotalCandidates = int32(len(d.Multi.Matches))
