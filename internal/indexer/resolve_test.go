@@ -1083,7 +1083,7 @@ func TestSingleWriter_CommitsOnce(t *testing.T) {
 		{Path: "pkg/a.go", ContentHash: "deadbeef", Language: "go", NodeCount: 2, EdgeCount: 1},
 	}
 
-	if err := writeGraph(store, nodes, packageNodes, edges, files); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, ""); err != nil {
 		t.Fatalf("writeGraph returned error: %v", err)
 	}
 
@@ -1130,7 +1130,7 @@ func TestSingleWriter_CloseOnStagingError(t *testing.T) {
 	edges := []*schema.Edge{{Source: "fn:a", Kind: "calls", Target: "fn:b", Line: 1, Provenance: "ast"}}
 	files := []*schema.File{{Path: "pkg/a.go"}}
 
-	err := writeGraph(store, nodes, nil, edges, files)
+	err := writeGraph(store, nodes, nil, edges, files, "")
 	if err == nil {
 		t.Fatal("expected writeGraph to return the staging error, got nil")
 	}
@@ -1154,7 +1154,7 @@ func TestResolve_EndToEnd(t *testing.T) {
 	}
 	defer store.Close()
 
-	if _, err := Resolve(store, results, modulePath); err != nil {
+	if _, err := Resolve(store, results, modulePath, ""); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 

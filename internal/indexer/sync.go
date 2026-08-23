@@ -49,6 +49,17 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		return stats, err
 	}
 
+	// ENG-04/D-05: resolve HEAD exactly once for this Sync invocation,
+	// before either of the two write sites below construct Meta. HEAD can
+	// move mid-run (a rebase, a checkout, a concurrent commit), and this
+	// call's two write sites are mutually exclusive per invocation (the
+	// mtime-refresh-only early return below, or the incremental path
+	// further down) — so resolving once here, rather than at each site,
+	// both satisfies "resolved once per operation" and avoids adding a
+	// subprocess to the mtime-refresh-only path, which otherwise does no
+	// process work at all.
+	headCommitSHA := resolveHeadCommitSHA(repoRoot)
+
 	store, err := graphstore.Open(storeDir)
 	if err != nil {
 		return Stats{}, err
@@ -167,6 +178,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 		newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 		newMeta.NodeCount = meta.GetNodeCount()
 		newMeta.EdgeCount = meta.GetEdgeCount()
+		newMeta.CommitSha = headCommitSHA
 		if err := w.PutMeta(newMeta); err != nil {
 			w.Close()
 			return Stats{}, err
@@ -395,6 +407,7 @@ func Sync(repoRoot, storeDir string, opts Options) (Stats, error) {
 	newMeta.LastSyncUnixMs = time.Now().UnixMilli()
 	newMeta.NodeCount = meta.GetNodeCount() - int64(nodesRemoved) + int64(nodesAdded)
 	newMeta.EdgeCount = meta.GetEdgeCount() - int64(edgesRemoved) + int64(len(collapsedEdges))
+	newMeta.CommitSha = headCommitSHA
 	if err := w.PutMeta(newMeta); err != nil {
 		w.Close()
 		return Stats{}, err

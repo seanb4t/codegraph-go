@@ -2,12 +2,14 @@ package query
 
 import (
 	"context"
+	"errors"
 	"io"
 	"path/filepath"
 	"sync"
 
 	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
 // storeSubdir is the Pebble store's subdirectory under .codegraph/,
@@ -135,6 +137,33 @@ func (e *Engine) WorktreeMismatch(ctx context.Context) *gitmeta.Mismatch {
 		e.mismatchCache = e.detector.Detect(ctx, e.startPath, e.repoRoot)
 	})
 	return e.mismatchCache
+}
+
+// IndexMeta returns the store's Meta record (schema version, aggregate
+// counts, and — since ENG-04/D-05 — the indexed commit SHA), or (nil, nil)
+// on a store that has never had a Meta record written (a pre-upgrade
+// graph degrades to absent, never an error).
+//
+// This exists for exactly one reason: Engine.reader is unexported, so
+// graphstore.Reader.GetMeta is otherwise unreachable from a wire layer
+// like internal/uiserver, and a second graphstore.Open on the same
+// directory is lock-refused (SRV-04's per-call-store discipline already
+// closes that door) — so there is no alternative path to the metadata the
+// Engine already reads.
+//
+// It is deliberately NOT a StatusResult field and does NOT live in
+// status.go: codegraph status's output bytes are unguarded by any golden
+// (D-06), and D-06 keeps them frozen. Keeping this accessor here, outside
+// status.go, records that boundary in the file layout itself.
+func (e *Engine) IndexMeta() (*schema.Meta, error) {
+	meta, err := e.reader.GetMeta()
+	if err != nil {
+		if errors.Is(err, graphstore.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return meta, nil
 }
 
 // OpenAt is the single read seam CLI commands and MCP tool handlers both
