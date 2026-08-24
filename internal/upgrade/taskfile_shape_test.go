@@ -3240,3 +3240,127 @@ func TestUnsupportedReachabilityEdgeIsLoud(t *testing.T) {
 		t.Errorf("resolveReleasePathClosure: negative control failed — real repository content unexpectedly tripped the unmodelled-edge wire: %v (either a genuine new edge was introduced and the model must widen, or the tripwire itself is over-eager)", err)
 	}
 }
+
+// TestReleasePathScanIsNonVacuous is the non-vacuity companion required
+// before TestReleasePathHasNoJSToolchain's zero-findings result means
+// anything (Taskfile.yml's vuln:selftest is this repository's canonical
+// model: assert an exact result against a PLANTED case, never trust a
+// clean run alone — "a transcript grep is a claim about the grep, not
+// about the product", STATE.md). It plants each of the four forbidden
+// command names in each of four reachable unit shapes — a workflow run:
+// scalar, a GoReleaser hooks: list entry, a local composite action's run:
+// scalar, and a Taskfile cmds: entry — the last two proving the
+// TRANSITIVE half of the closure is genuinely scanned: a planted token in
+// a Taskfile cmds: body or a local action's run: scalar is exactly the
+// shape a two-file model could not see. It also plants both forbidden
+// action prefixes in a version-pinned uses: position. Eighteen planted
+// forms total, each asserted to produce exactly one finding.
+func TestReleasePathScanIsNonVacuous(t *testing.T) {
+	type row struct {
+		name string
+		src  string
+	}
+	var rows []row
+
+	const workflowRunTemplate = "jobs:\n  x:\n    steps:\n      - name: bad\n        run: %s script.js\n"
+	const goreleaserHookTemplate = "before:\n  hooks:\n    - %s script.js\n"
+	const localActionRunTemplate = "runs:\n  using: composite\n  steps:\n    - shell: bash\n      run: %s script.js\n"
+	const taskfileCmdsTemplate = "cmds:\n  - %s script.js\n"
+
+	for _, cmd := range forbiddenJSToolchainCommands {
+		rows = append(rows,
+			row{name: fmt.Sprintf("workflow run: %s", cmd), src: fmt.Sprintf(workflowRunTemplate, cmd)},
+			row{name: fmt.Sprintf("goreleaser hooks: %s", cmd), src: fmt.Sprintf(goreleaserHookTemplate, cmd)},
+			row{name: fmt.Sprintf("local action run: %s", cmd), src: fmt.Sprintf(localActionRunTemplate, cmd)},
+			row{name: fmt.Sprintf("taskfile cmds: %s", cmd), src: fmt.Sprintf(taskfileCmdsTemplate, cmd)},
+		)
+	}
+	for _, action := range forbiddenJSToolchainActions {
+		rows = append(rows, row{
+			name: fmt.Sprintf("uses: %s pinned", action),
+			src:  fmt.Sprintf("jobs:\n  x:\n    steps:\n      - uses: %s@v4\n", action),
+		})
+	}
+
+	if len(rows) < 18 {
+		t.Fatalf("TestReleasePathScanIsNonVacuous: only %d planted rows, want at least 18", len(rows))
+	}
+
+	for _, r := range rows {
+		findings, examined, err := scanYAMLForJSToolchain(r.name, []byte(r.src))
+		if err != nil {
+			t.Errorf("scanYAMLForJSToolchain(%q): %v", r.name, err)
+			continue
+		}
+		if examined == 0 {
+			t.Errorf("scanYAMLForJSToolchain(%q): examined zero scalar nodes", r.name)
+			continue
+		}
+		if len(findings) != 1 {
+			t.Errorf("scanYAMLForJSToolchain(%q): got %d finding(s), want exactly 1: %v", r.name, len(findings), findings)
+			continue
+		}
+		// Capture one row's failure-message shape for the SUMMARY: the
+		// finding names the unit, the YAML location, and the token.
+		if r.name == "workflow run: node" {
+			t.Logf("planted-token finding (SUMMARY evidence): %s", findings[0].String())
+		}
+	}
+}
+
+// TestReleasePathScanIgnoresNearMisses proves scanYAMLForJSToolchain
+// degrades gracefully rather than into a substring search: each row below
+// is a REAL string that exists in this repository today (cited to its
+// source, not invented) and MUST NOT be flagged. A row that fails here
+// means the scanner would have to be weakened until it matched nothing —
+// exactly the failure mode this test prevents.
+func TestReleasePathScanIgnoresNearMisses(t *testing.T) {
+	cases := []struct {
+		name   string
+		src    string
+		source string
+	}{
+		{
+			name:   "pnpm lockfile filename",
+			src:    "jobs:\n  x:\n    steps:\n      - run: cat web/pnpm-lock.yaml\n",
+			source: "web/pnpm-lock.yaml, created by 02-01 (wave 1)",
+		},
+		{
+			name:   "dependencies directory path",
+			src:    "jobs:\n  x:\n    steps:\n      - run: du -sh web/node_modules\n",
+			source: "web/node_modules, created by 02-01 (wave 1)",
+		},
+		{
+			name:   "Go setup action owner/repo",
+			src:    "jobs:\n  x:\n    steps:\n      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16\n",
+			source: ".github/workflows/ci.yml's Go setup step, present on main today",
+		},
+		{
+			name:   "cache action owner/repo",
+			src:    "jobs:\n  x:\n    steps:\n      - uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547\n",
+			source: ".github/workflows/ci.yml's cache action, present on main today",
+		},
+		{
+			name: "generated-plugin binary name (protoc-gen-es)",
+			src:  "cmds:\n  - web/node_modules/.bin/protoc-gen-es --arg\n",
+			source: "02-CONTEXT.md D-05: 02-03 lands this literal into Taskfile.yml/web/package.json " +
+				"in this SAME wave; re-confirm against web/package.json once 02-03 has landed. Not read " +
+				"from that file directly here — this plan must not depend on a sibling in its own wave.",
+		},
+	}
+
+	for _, c := range cases {
+		findings, examined, err := scanYAMLForJSToolchain(c.name, []byte(c.src))
+		if err != nil {
+			t.Errorf("scanYAMLForJSToolchain(%q): %v", c.name, err)
+			continue
+		}
+		if examined == 0 {
+			t.Errorf("scanYAMLForJSToolchain(%q): examined zero scalar nodes", c.name)
+			continue
+		}
+		if len(findings) != 0 {
+			t.Errorf("scanYAMLForJSToolchain(%q): got %d false-positive finding(s) for a real, legitimate string (%s): %v — the scanner degenerated into a substring search", c.name, len(findings), c.source, findings)
+		}
+	}
+}
