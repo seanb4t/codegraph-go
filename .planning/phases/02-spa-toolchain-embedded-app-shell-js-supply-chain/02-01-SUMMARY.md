@@ -215,6 +215,14 @@ None — no external service configuration required.
 - `X-Content-Type-Options: nosniff` and the rest of D-11's header policy (Cache-Control) are deliberately deferred to 02-02 per this plan's own threat register (T-02-01-05, T-02-01-06) — not omitted, tracked.
 - `web/vite.config.ts` is now the sole home for SvelteKit config; any later plan in this phase that expects a `svelte.config.js` (RESEARCH.md's Recommended Project Structure diagram lists one) should read this SUMMARY's Deviations section first.
 
+## Self-Check: PASSED
+
+All key files (`web/embed.go`, `internal/uiserver/spa.go`, `internal/uiserver/spa_test.go`,
+`internal/uiserver/server.go`, `web/vite.config.ts`, `web/package.json`, `web/pnpm-lock.yaml`,
+`web/pnpm-workspace.yaml`, `web/build/index.html`, this SUMMARY.md) confirmed present on disk.
+All 5 commits (`f7613a3`, `91dc238`, `1a805a9`, `fe453d4`, `8e84b85`) confirmed present in
+`git log --oneline --all`.
+
 ---
 *Phase: 02-spa-toolchain-embedded-app-shell-js-supply-chain*
 *Plan: 01*
