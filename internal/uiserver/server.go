@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
+	web "github.com/seanb4t/codegraph-go/web"
 )
 
 // DefaultAddr is the ephemeral loopback bind address D-07 mandates: with
@@ -121,6 +123,20 @@ func Listen(o Options) (*Server, error) {
 		connect.WithSendMaxBytes(transportSendMaxBytes),
 		connect.WithReadMaxBytes(transportReadMaxBytes),
 	))
+
+	// D-09: the SPA handler registers at "/" on the SAME mux, BEFORE
+	// originHostGuard wraps it — Go 1.26 http.ServeMux resolves
+	// most-specific-pattern-wins, so the Connect prefix above stays
+	// preferred over "/" with no allowlist to maintain. Registering the
+	// SPA handler here (inside the mux, before the guard) rather than
+	// as a separate outer layer is what lets it inherit SRV-02's
+	// Origin/Host protection with no extra code (BLD-02).
+	buildFS, err := fs.Sub(web.BuildFS, spaSubdirName)
+	if err != nil {
+		_ = ln.Close()
+		return nil, fmt.Errorf("uiserver: Listen could not derive SPA build sub-filesystem: %w", err)
+	}
+	mux.Handle("/", newSPAHandler(buildFS))
 
 	guarded := originHostGuard(port, mux)
 
