@@ -1,7 +1,9 @@
 ---
 phase: 2
 reviewers: [codex]
-reviewed_at: 2026-08-24T00:59:41Z
+reviewed_at: 2026-08-24T04:39:00Z
+cycles: 2
+cycle_1_reviewed_at: 2026-08-24T00:59:41Z
 plans_reviewed: [02-01-PLAN.md, 02-02-PLAN.md, 02-03-PLAN.md, 02-04-PLAN.md, 02-05-PLAN.md, 02-06-PLAN.md, 02-07-PLAN.md]
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
@@ -10,6 +12,14 @@ model_sources:
 ---
 
 # Cross-AI Plan Review — Phase 2
+
+> **This file accumulates review history.** Cycle 1 is preserved below verbatim;
+> **Cycle 2 — the current, authoritative cycle — is at the bottom of this file.**
+> A concern listed under Cycle 1 is NOT live unless Cycle 2 restates it.
+
+---
+
+# Cycle 1 — 2026-08-24T00:59:41Z (superseded)
 
 ## Codex Review
 
@@ -439,3 +449,261 @@ purity scanner is shallower than the release execution graph (finding 3), two ve
 return success after detecting or encountering failure (findings 4 and 5), and a wave-5 edit can
 leave the phase's own CI gate red with nothing watching (finding 7). These are guard-mechanism
 defects, not documentation polish.
+
+---
+
+# Cycle 2 — 2026-08-24T04:39:00Z (CURRENT)
+
+Reviewed at `32980bf` (`docs(02): revise phase plans from cross-AI review feedback`), the commit
+that revised all seven plans against Cycle 1's 7 HIGH + 13 actionable non-HIGH findings.
+
+## Codex Review (cycle 2)
+
+# Cross-AI Plan Review — Cycle 2
+
+## Summary
+
+The revision is materially stronger and is ready for execution after one wording/scope correction. I judge **19 of the 20 cycle-1 concerns genuinely resolved and one partially resolved**. All previously confirmed HIGH defects are fixed in the current executable plan text: output bytes are bound by the drift marker, CI performs a scratch rebuild, known release-path execution edges are traversed, failing shell pipelines propagate failure, codegen leakage exits non-zero, all nine status fields are rendered, and the final phase re-runs its own drift gate.
+
+The guard-positivity sweep is complete across the current `<automated>` blocks: I found no surviving pipeline-status bug, unchecked `grep -c`, missing-file negative scan, or empty-output assertion matching the cycle-1 defect classes. The two self-found fixes also landed correctly. The remaining concern is that 02-04 still uses broad “reachable” language although its scanner deliberately stops at executable script files, container contents, general-purpose installers, and marketplace actions outside its denylist.
+
+CodeGraph was attempted first as required, but its store was locked and unreadable in this environment; the evidence below therefore comes from direct source inspection.
+
+## Cycle-1 Disposition
+
+| # | Cycle-1 finding | Disposition | Evidence |
+|---:|---|---|---|
+| 1 | Drift guard did not bind committed output bytes | **RESOLVED** | 02-06 now specifies an output-tree digest based on file paths and per-file hashes, enumerated with `find`, excluding the marker itself ([02-06-PLAN.md:191](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:191>)). It requires RED proofs for edited, added, and removed output files. |
+| 2 | CI never rebuilt the SPA | **RESOLVED** | `web:build:verify` performs a scratch rebuild and checks non-empty HTML, JS, CSS, and file count; CI explicitly runs it ([02-06-PLAN.md:213](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:213>), [02-06-PLAN.md:416](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:416>)). |
+| 3 | Release-path scanner ignored transitive actions/tasks | **RESOLVED for the known execution graph** | The resolver now derives local `uses: ./…` actions and `task <target>` calls, follows Taskfile dependencies, and asserts the known action and two targets by name ([02-04-PLAN.md:195](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:195>)). These correspond to the actual edges at [release.yml:162](</Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:162>), [release.yml:228](</Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:228>), and [release.yml:274](</Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:274>). |
+| 4 | Codegen leak check exited zero on `LEAK` | **RESOLVED** | The live verify now uses `! rg -q 'protoc-gen-es' buf.gen.yaml`, preceded by non-empty positive controls ([02-03-PLAN.md:191](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-03-PLAN.md:191>)). |
+| 5 | Full Go suite failure masked by `tail` | **RESOLVED** | The command now enables `pipefail`, captures `$?`, checks it, requires a non-empty log, zero `^FAIL` lines, and at least one `^ok ` line ([02-07-PLAN.md:390](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-07-PLAN.md:390>)). |
+| 6 | GetStatus treated eight fields instead of nine | **RESOLVED** | 02-05 names all nine and uses `indexing_in_progress` directly ([02-05-PLAN.md:296](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:296>)). The source schema confirms field 9 at [ui.proto:172](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:172>). |
+| 7 | Wave 5 could invalidate the drift marker | **RESOLVED** | 02-07 now runs `web:drift` last, rebuilds only on a source mismatch, and stops on an unexplained output mismatch ([02-07-PLAN.md:360](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-07-PLAN.md:360>), [02-07-PLAN.md:391](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-07-PLAN.md:391>)). |
+| 8 | `0 errors` matched 10/20/etc. | **RESOLVED** | Every Svelte check uses `grep -qE 'found 0 errors'`, a non-empty log, `&&`, and `pipefail`; examples: [02-03-PLAN.md:299](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-03-PLAN.md:299>) and [02-05-PLAN.md:204](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:204>). |
+| 9 | 02-05 omitted dependency on 02-02 | **RESOLVED** | Frontmatter now includes `02-02` ([02-05-PLAN.md:6](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:6>)). |
+| 10 | No CSP | **RESOLVED** | 02-02 now derives script/style hashes from embedded HTML, prohibits unsafe script directives, and tests parsed directives across all response branches ([02-02-PLAN.md:185](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-02-PLAN.md:185>)). |
+| 11 | Scaffold/init tools used floating `@latest` | **RESOLVED** | Exact versions and registry integrity values are required before execution: `sv@0.17.0` ([02-01-PLAN.md:238](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-01-PLAN.md:238>)) and `shadcn-svelte@1.5.0` ([02-05-PLAN.md:165](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:165>)). |
+| 12 | Lockfile integrity only indirectly checked | **RESOLVED** | `web:lockfile` checks version, registry-resolution/integrity equality, and forbidden source kinds, with scratch-copy RED demonstrations ([02-07-PLAN.md:258](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-07-PLAN.md:258>)). |
+| 13 | No-cache policy unenforced | **RESOLVED** | 02-04 adds a structural scanner for general cache actions, JS-scoped cache use, and setup-node cache inputs, while positively proving the existing Go cache was examined ([02-04-PLAN.md:393](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:393>)). |
+| 14 | Forbidden action list overstated as structural coverage | **PARTIAL** | The revised plan now explicitly calls it a curated denylist and records four uncovered boundaries ([02-04-PLAN.md:57](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:57>)). However, some truths and completion language still say no JS toolchain is “reachable,” which is stronger than this model proves. |
+| 15 | Multi-test verifies checked only one PASS | **RESOLVED** | Current commands assert exact parent-test names individually. Examples: [02-04-PLAN.md:275](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:275>) and [02-06-PLAN.md:442](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:442>). |
+| 16 | Audit detector’s vulnerable branch unproved | **RESOLVED by narrowing the claim** | 02-07 explicitly distinguishes implemented from demonstrated branches and claims only clean-versus-scan-error evidence ([02-07-PLAN.md:83](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-07-PLAN.md:83>)). |
+| 17 | Tracer PASS count not exact | **RESOLVED** | Exact `-eq 1` assertion now appears at [02-01-PLAN.md:318](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-01-PLAN.md:318>). |
+| 18 | `git check-ignore` conflated exit 1 with errors | **RESOLVED** | The command captures and requires exactly exit 1, with a non-empty positive control ([02-01-PLAN.md:319](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-01-PLAN.md:319>)). |
+| 19 | Negative static checks lacked positive controls | **RESOLVED** | `spa.go`, `spa_test.go`, and component checks now require non-empty/existing subject evidence before asserting absence ([02-02-PLAN.md:263](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-02-PLAN.md:263>), [02-05-PLAN.md:205](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:205>)). |
+| 20 | ROADMAP still named `dist/` | **RESOLVED** | ROADMAP now consistently specifies `web/build/` and `all:build` ([ROADMAP.md:178](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/ROADMAP.md:178>), [ROADMAP.md:182](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/ROADMAP.md:182>)). |
+
+## Strengths
+
+- The revised drift design cleanly separates buildability from byte provenance. Scratch rebuilding avoids false failures from Vite chunk-name nondeterminism, while the in-place output manifest still binds exactly what `go:embed` ships.
+
+- RPC/SP​​A routing follows the actual server architecture: the Connect handler is currently registered on one mux and then wrapped by `originHostGuard` at [server.go:111](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/server.go:111>)–[server.go:125](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/server.go:125>). The plan tests both precedence directions and foreign-Host rejection against a real server.
+
+- The embed guard is particularly strong: it compares both file sets, includes a non-triviality floor, and deliberately demonstrates RED by dropping `all:`.
+
+- The codegen plan has correct arithmetic: three existing Go outputs plus one `target=ts` output. It couples that floor to exact emitted-file evidence instead of merely increasing a number.
+
+- The self-found CSS fix is sound. The current command captures the first matching CSS path, asserts it is non-empty, and only then checks the file size ([02-05-PLAN.md:203](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:203>)). The prior vacuous `xargs test -s` form is no longer live.
+
+- The same-wave near-miss dependency was removed. 02-04 sources ordinary rows only from wave-1 or pre-existing files; the `protoc-gen-es` row is a literal derived from D-05 and explicitly requires reconfirmation after sibling 02-03 lands ([02-04-PLAN.md:328](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:328>)–[02-04-PLAN.md:345](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:345>)).
+
+- The JS audit limitation is handled honestly: real input and scan failure are demonstrated; advisory detection is not falsely claimed as demonstrated.
+
+## Concerns
+
+- **MEDIUM — 02-04 — The completion claim remains broader than the scanner’s reachability model.**  
+  The plan says no JavaScript toolchain is “reachable from either release-path root through the local actions and Taskfile targets the release path actually executes” ([02-04-PLAN.md:483](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:483>)). But the same plan explicitly excludes executable script files, container contents, general-purpose installers, and unlisted marketplace actions ([02-04-PLAN.md:57](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:57>)). The current repository’s known direct edges are covered, but the test does not prove the general “reachable” property after a future shell-script or action edge is added.
+
+  This is not a reason to build a shell interpreter. It is a reason to make the truth and `done` language match the bounded model precisely.
+
+No other live guard-positivity defect was found in the current `<automated>` blocks.
+
+## Suggestions
+
+1. Change 02-04’s truth, done, and success language to:
+
+   > “No forbidden JS-toolchain token appears in either release root, any derived local composite action, or any derived Taskfile target scalar covered by the resolver.”
+
+2. Add one structural failure rule for newly introduced edge kinds: if a scanned command invokes a repository-local executable script, or a workflow gains `container:`/`services:`, fail with “unsupported reachability edge” rather than silently accepting it. This preserves the bounded model without attempting to interpret scripts or container images.
+
+3. Keep the recorded limits for general-purpose installers and marketplace actions outside the denylist; those cannot be solved completely by token scanning and should remain explicit accepted risks.
+
+## Risk Assessment
+
+**Overall risk: LOW–MEDIUM.**
+
+The plans now achieve the phase goals with strong positive controls, meaningful RED demonstrations, correct dependency ordering, and materially improved JS supply-chain coverage. No cycle-1 HIGH defect remains live. The residual risk is primarily specification precision in BLD-07: the implementation is bounded and useful, but one broad reachability claim still exceeds what the scanner can establish.
+
+---
+
+## Consensus Summary (cycle 2)
+
+One grounded external reviewer ran again this cycle (Codex, `gpt-5.6-sol` at `reasoning=low`), so
+as in cycle 1 there is no multi-model consensus to compute. In its place the orchestrator ran its
+own independent pass over all seven plans and all 33 `<automated>` verify blocks, and executed the
+shell forms it could not settle by reading. Findings are marked **[codex]**, **[orchestrator]**, or
+**[both]**; **[verified]** means re-checked against the worktree or executed.
+
+**Headline: every one of cycle 1's 7 HIGH findings is FULLY RESOLVED, and 12 of the 13 actionable
+non-HIGH findings are resolved.** The remaining cycle-1 item (#14) is judged resolved by the
+orchestrator and PARTIAL by Codex — see Divergent Views. Three new, smaller items are raised below,
+one of which is a live blocker for the phase's final verify.
+
+### Cycle-1 Disposition (authoritative)
+
+| # | Cycle-1 finding | Sev | Disposition | Evidence |
+|---:|---|---|---|---|
+| 1 | `web:drift` never binds committed `web/build/` bytes | HIGH | **RESOLVED** | Two-part marker `web/build/.build-manifest` carries `source-files`/`source-sha256` AND `output-files`/`output-sha256`; enumerated with `find` (not `git ls-files`) so untracked-but-embedded files participate; marker excluded from its own digest. `02-06-PLAN.md` truths + prohibitions; verify asserts all four lines by anchored regex. [both, verified] |
+| 2 | CI never rebuilt the SPA | HIGH | **RESOLVED** | New `task web:build:verify` builds into a scratch output dir (via an env-overridable `adapter-static` out) and is a CI step; `02-06-PLAN.md` artifacts + `ci.yml` step list. [both, verified] |
+| 3 | BLD-07 scanner not transitive | HIGH | **RESOLVED** | Closure is now DERIVED from `release.yml` (`uses: ./…` local actions + `task <target>` invocations), not hardcoded; `TestReleasePathClosureIsTransitive` added and asserted with an exact `-eq 1` PASS count. [both, verified] |
+| 4 | 02-03 scoping verify passes on `LEAK` | HIGH | **RESOLVED** | Now `test -s buf.gen.yaml && test -s buf.gen.ts.yaml && rg -q 'target=ts' buf.gen.ts.yaml && rg -q 'protoc-gen-es' buf.gen.ts.yaml && ! rg -q 'protoc-gen-es' buf.gen.yaml` — leak detection exits non-zero, and both templates are proven non-empty first. [both, verified] |
+| 5 | `go test ./...` masked by `tail` | HIGH | **RESOLVED** | `set -o pipefail` + `rc=$?` + `test "$rc" -eq 0` + non-empty log + zero `^FAIL` + at least one `^ok `. [both, verified] |
+| 6 | `GetStatusResponse` is nine fields, not eight | HIGH | **RESOLVED** | 02-05 renders all nine and selects the third state from `indexing_in_progress` directly. [both, verified] |
+| 7 | Wave-5 edit could leave the phase's own CI gate RED | HIGH | **RESOLVED** | 02-07 Task 3 step (c) runs `task web:drift` last with a three-branch protocol (green / source-half mismatch → rebuild + commit marker / output-half mismatch → STOP and report), adds `web/build/` and `web/build/.build-manifest` to `files_modified`, and closes with a `web:drift` verify. [orchestrator, verified] |
+| 8 | `grep -qE '0 errors'` false-passes on 10/20/… | MED | **RESOLVED** | All four `svelte-check` verifies now use `grep -qE 'found 0 errors'`, joined with `&&` under `set -o pipefail`, each preceded by `test -s` on the tee'd log. [both, verified] |
+| 9 | 02-05 did not declare `depends_on: 02-02` | MED | **RESOLVED** | `02-05-PLAN.md:6` → `["02-01", "02-02", "02-03"]`. [both, verified] |
+| 10 | No CSP anywhere in the phase | MED | **RESOLVED** | 02-02 adds a same-origin policy (`default-src`/`connect-src` `'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`) with `script-src`/`style-src` hash sources derived from the embedded `index.html` at handler-construction time, three new tests, a prohibition on `'unsafe-eval'`/`'unsafe-inline'`, and a threat-register row. [both, verified] |
+| 11 | Scaffolding executed from `@latest` | MED | **RESOLVED** | `pnpm dlx sv@0.17.0` and `pnpm dlx shadcn-svelte@1.5.0`, each with a registry `dist.integrity` confirmation before execution and a threat-register row; "no `@latest` tag remains anywhere in the phase". [both, verified] |
+| 12 | Lockfile integrity only indirectly checked | MED | **RESOLVED** | New `task web:lockfile` asserts lockfile version, prints `integrity-bearing resolutions: N of M`, and rejects forbidden source kinds, with scratch-copy RED proofs. [both, verified] |
+| 13 | No-cache decision unenforced | MED | **RESOLVED** | `TestJSInstallPathHasNoMutableCache` + `TestMutableCacheScanIsNonVacuous` in 02-04, scanning `ci.yml` for `actions/cache` on the JS path and for a `cache:` input on the Node setup action, with a positive control proving the existing Go cache was seen. [both, verified] |
+| 14 | Forbidden-action list is a curated denylist | MED | **RESOLVED** [orchestrator] / **PARTIAL** [codex] | See Divergent Views. |
+| 15 | Multi-test verifies asserted only one PASS | MED | **RESOLVED** | Every multi-test verify now loops the named tests and requires exactly one `--- PASS: <name>` each, plus zero `--- FAIL`. [both, verified] |
+| 16 | `pnpm audit` detector's firing unproved | MED | **RESOLVED by narrowing** | 02-07 separates implemented-from-demonstrated and claims only the clean and scan-error branches. [codex, verified] |
+| 17 | Tracer verify had no exact match count | LOW | **RESOLVED** | `test "$(grep -c -- '--- PASS: TestSPAServesEmbeddedIndexAtRoot' …)" -eq 1` plus a zero-`--- FAIL` assertion. [both, verified] |
+| 18 | `git check-ignore` conflated exit 1 with exit 128 | LOW | **RESOLVED** | `git check-ignore -v web/build/index.html; rc=$?; test "$rc" -eq 1 && …` — exactly 1, with a non-empty positive control on `dist/artifacts.json` that also greps for `/dist/`. [orchestrator, verified] |
+| 19 | Absence-only static checks locally vacuous | LOW | **RESOLVED** | All three now lead with a positive control: `test -s internal/uiserver/spa.go` + `ServeHTTP` count ≥ 1; `test -s internal/uiserver/spa_test.go` + `uiv1connect` count ≥ 1; `test -s web/components.json` + `git ls-files 'web/src/lib/*'` ≥ 1. [both, verified] |
+| 20 | ROADMAP still said `dist/` | LOW | **RESOLVED** | ROADMAP Phase 2 criterion 3 and Notes now say `web/build/` and `//go:embed all:build`, and the Notes record the correction. [both, verified] |
+
+### Self-found fixes claimed by the revision — both verified
+
+- **Vacuous `find … | head -1 | xargs test -s`** [orchestrator, verified]. The live form at
+  `02-05-PLAN.md:203` is now
+  `css=$(find build/_app/immutable -type f -name '*.css' | LC_ALL=C sort | head -1) && test -n "$css" && test -s "$css"`.
+  The `test -n` guard closes the "no CSS emitted at all" pass, and `LC_ALL=C sort` makes the pick
+  deterministic. The plan records the old defect in its acceptance criteria — that is a description
+  of a fixed defect, not a live one.
+- **Near-miss table sourcing from a same-wave sibling** [orchestrator, verified].
+  `02-04-PLAN.md:328-345` now restricts ordinary rows to wave-1 or pre-existing files
+  (`web/package.json`, `web/pnpm-lock.yaml`, `ci.yml`'s Go setup step,
+  `.github/actions/install-task/action.yml`), and the one high-value row whose literal 02-03
+  introduces in the SAME wave (`protoc-gen-es`) is cited to `02-CONTEXT.md` D-05 / `02-RESEARCH.md`
+  as a literal, with an explicit instruction not to read the sibling's file and to re-confirm the
+  row after 02-03 lands.
+
+### Guard-positivity sweep — completeness assessment
+
+The orchestrator re-read all 33 `<automated>` blocks across the seven plans against both defect
+classes the revision claimed to sweep for: (a) exit status independent of the property, and
+(b) absence checks with no positive control. **The sweep is materially complete** — every negative
+assertion is now preceded by a `test -s`/`test -d`/count-≥-1 positive control, every pipeline
+carries `set -o pipefail` or a captured `rc`, every `grep -c`/`rg -c` result is compared with
+`test … -eq/-ge N` rather than read for its exit status, and every `|| echo 0` appears only inside
+`$(…)` where it is a value fallback and not a status swallow.
+
+**One class it did not reach**, found by executing the commands rather than reading them:
+
+- **MEDIUM — 02-07 — `wc -l | grep -qx '0'` never matches on this host, so the phase's final
+  verify fails on a clean tree.** [orchestrator, verified by execution]
+  `02-07-PLAN.md:391` ends with `… && git status --porcelain web/ | wc -l | grep -qx '0'`.
+  BSD `wc` (macOS, the development host for this repo) right-pads its count:
+  `printf '' | wc -l` emits `       0`, so `grep -qx '0'` exits **1** on a perfectly clean tree.
+  Executed here: `printf '' | wc -l | grep -qx '0'` → exit 1. This is the LAST verify of the LAST
+  task of the LAST wave, so it blocks phase completion. It fails *closed*, so it is not a safety
+  hole — but it is a guaranteed false RED that an executor will be tempted to "fix" by loosening.
+  Every other `wc -l` in the plan set is already correct (`| tr -d ' '` in 02-03/02-05/02-06, and
+  `test -z "$(git status --porcelain web/build)"` in 02-06) — this is an isolated slip, not a
+  pattern. **Fix:** `test -z "$(git status --porcelain web/)"`, matching 02-06's own form.
+
+### New concerns raised this cycle
+
+**MEDIUM**
+
+1. **02-07 — `wc -l | grep -qx '0'` false-RED on a clean tree** (above) [orchestrator, verified].
+
+**LOW**
+
+2. **02-02 — the CSP artifact names contradict the CSP action text** [orchestrator].
+   `must_haves.artifacts` and the file's symbol inventory name `spaCSPBaseDirectives` (the fixed
+   half) and `buildSPACSPPolicy` (which composes the fixed directives with the derived hash
+   sources) — a *computed* policy. But the action text says "Set … `Content-Security-Policy` to
+   `spaCSPPolicy`" and "Define `spaCSPPolicy` as the **single literal** carrying the
+   Content-Security-Policy", before going on to require that `script-src`/`style-src` be built at
+   handler-construction time from the embedded `index.html`. A literal cannot carry a
+   construction-time-derived hash. The design intent is unambiguous from the surrounding
+   paragraphs, but the three identifiers and the "single literal" phrasing need reconciling or an
+   executor may hardcode the policy and silently drop the derived-hash property that
+   `TestSPACSPHashesCoverEmbeddedInlineScripts` exists to protect.
+
+3. **02-04 — no tripwire for a newly-introduced reachability edge kind** [codex].
+   The four uncovered boundaries are honestly recorded and carry an accepted-risk row
+   (`T-02-04-05`), which is the right posture. But recorded limitation (1) — "if a `run:`/`cmds:`
+   body invokes `./scripts/foo.sh`, the scanner sees the invocation but does not open the script"
+   — degrades *silently* if such an edge is ever added. Codex's suggestion is a cheap structural
+   tripwire that does not require interpreting scripts or images: fail with "unsupported
+   reachability edge" when a scanned scalar invokes a repository-local executable script, or when
+   a scanned workflow gains `container:`/`services:`. That converts a silent coverage hole into a
+   loud one at the moment it appears. Consider adding it to 02-04, or record an explicit rejection.
+
+### Non-actionable observations (recorded, not counted)
+
+- The four closing `go test ./<pkg>/... && go vet ./<pkg>/...` verifies (`02-02` Task 3,
+  `02-04` Tasks 1 and 3, `02-06` Task 3) carry no positive control that any test actually ran —
+  `go test` exits 0 on a package with no test files. Their exit status *does* depend on the
+  property (a red test fails them), and every test these plans author already has an exact
+  `--- PASS: <name>` count assertion in a sibling verify in the same plan, so the property is
+  established elsewhere. Adding `-count=1` and an `^ok ` count would tighten them, but they are
+  not the vacuous shape rule `84d1gfpywd` names.
+- `02-06`'s `test "$(wc -l < web/build/.build-manifest | tr -d ' ')" -eq 4` counts newlines, so a
+  marker written without a trailing newline reads as 3. The four anchored `grep -qE` assertions
+  that follow make this a false RED rather than a false pass; worth a note in the SUMMARY only.
+
+### Agreed Strengths
+
+- **Cycle 1's seven HIGH defects are all genuinely closed in plan content, not merely
+  acknowledged** [both, verified]. Each fix was traced to the live `<automated>` slot or the live
+  must_have, and the remediation prose that quotes the old broken form was distinguished from the
+  form actually in effect.
+- **The drift design now separates buildability from byte provenance correctly** [both]. Scratch
+  rebuild (`web:build:verify`) proves the pinned toolchain still produces a working tree; the
+  in-place output manifest binds exactly the bytes `go:embed all:build` ships. The plan's
+  prohibition against byte-comparing a regenerated tree is well-argued from Vite's
+  content-hash non-determinism (`vitejs/vite#15555`), and avoids the false-RED trap.
+- **The BLD-07 closure is derived, not hardcoded** [both, verified], with a prohibition making the
+  hardcoded-list regression explicit, and the four uncovered boundaries stated in a
+  `<recorded_limitations>` block rather than papered over.
+- **Every RED demonstration is paired with a byte-clean revert requirement and a SUMMARY
+  transcript**, and the guards print what they inspected before branching — the discipline rule
+  `84d1gfpywd` asks for, applied consistently.
+- **Structure remains sound** [orchestrator, verified]: the wave DAG is still acyclic
+  (02-01 → {02-02, 02-03, 02-04} → 02-05 → 02-06 → 02-07), and 02-05's newly declared
+  `depends_on: 02-02` now matches the tests its own verify asserts.
+
+### Divergent Views
+
+**Cycle-1 finding #14 (curated denylist).** Codex marks it **PARTIAL**, arguing that 02-04's
+completion language still says "reachable", which is stronger than the scanner proves. The
+orchestrator read the actual language and marks it **RESOLVED**: the truth is bounded in its own
+sentence — "reachable … **through the release path's own execution edges** — local composite
+actions the workflow `uses:`, and the `Taskfile.yml` targets its `run:` bodies invoke" — and the
+success criterion is bounded the same way and closes with "with the four uncovered boundaries
+stated rather than implied". Recorded limitation (3) says in as many words that the action fixture
+is "a **curated denylist**, not a structural property, and this plan says so rather than implying
+otherwise". That is exactly what cycle 1 asked for. Codex's *suggestion* attached to that finding
+(the edge-kind tripwire) is a genuinely new idea and is carried forward above as LOW #3; its
+*language* objection is not sustained.
+
+**Reviewer-count caveat, unchanged from cycle 1.** One grounded reviewer at `reasoning=low` is not
+adversarial review. Every disposition above marked **[verified]** was independently re-checked or
+executed by the orchestrator, and the one live MEDIUM was found by execution after Codex reported
+the `<automated>` sweep clean — which is the concrete cost of a single lane.
+
+### Overall Risk
+
+**LOW–MEDIUM**, down from HIGH in cycle 1 — concurring with Codex on the direction and the level.
+The phase's central security claim (the SPA bytes shipped inside the binary match reviewed source)
+is now actually established by the guard that claims it; the release-purity scanner's reachability
+model matches its stated scope with its gaps recorded; and no verify command in the plan set can
+return success after detecting or encountering failure. What remains is one guaranteed false RED in
+the phase's final verify, one naming contradiction inside a single task's action text, and one
+optional hardening suggestion.
