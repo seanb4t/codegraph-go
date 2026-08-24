@@ -204,34 +204,49 @@ tasks:
 
   proto:drift:
     desc: >-
-      BLD-04's codegen drift guard over BOTH proto surfaces this repo
-      maintains (internal/schema/graph.proto, internal/uiproto/uiv1/ui.proto).
-      Regenerates with the SAME pinned toolchain proto:gen uses into a
-      TEMPORARY tree — never in place, so a developer's uncommitted edit to
-      a committed generated file survives a guard run untouched — then
-      byte-compares each committed generated file against its freshly
-      regenerated counterpart. Reports `compared N generated files` BEFORE
-      comparing anything, and fails with a named error when N is zero or
-      below the expected minimum (3: graph.pb.go, ui.pb.go, ui.connect.go),
-      so an enumeration that silently finds nothing can never read as a
-      clean pass (rule 84d1gfpywd) — this is BLD-04's own "report how many
-      it compared" guard, so it is doubly bound not to be the vacuous shape
-      it exists to catch. A header-only difference IS drift: 01-01 absorbed
-      the one-time generated-header restamp caused by introducing this
-      checked-in codegen invocation (01-01-PLAN.md Task 2), so from that
-      commit onward the committed file must be exactly what the pinned
-      toolchain emits, header included — this guard does not normalise the
-      header away, because doing so would hide a toolchain downgrade, one
-      of the two drift causes worth catching (T-01-33). `buf generate` is
-      invoked against an explicit absolute-path input, never bare ".":
-      buf's default upward-directory workspace search misidentifies the
-      controlling workspace when this task runs from inside a linked git
-      worktree nested under another checkout of the same repository (buf
-      walks up past the worktree's gitlink file looking for a real `.git`
-      directory and lands on the outer checkout, then folds its proto tree
-      into the same image), duplicating declarations from sibling trees —
-      an explicit absolute path pins the module root deterministically
+      BLD-04's codegen drift guard over ALL FOUR generated files this repo
+      maintains across TWO proto surfaces and TWO languages: three Go files
+      (internal/schema/graph.proto -> graph.pb.go; internal/uiproto/uiv1/ui.proto
+      -> ui.pb.go and uiv1connect/ui.connect.go) and, since this task, ONE
+      TypeScript file (internal/uiproto/uiv1/ui.proto -> web/src/lib/gen/ui_pb.ts
+      via protoc-gen-es, D-05/D-06/D-07). Regenerates with the SAME pinned
+      toolchain proto:gen uses into a TEMPORARY tree — never in place, so a
+      developer's uncommitted edit to a committed generated file survives a
+      guard run untouched — then byte-compares each committed generated
+      file against its freshly regenerated counterpart. Reports `compared N
+      generated files` BEFORE comparing anything, and fails with a named
+      error when N is zero or below the expected minimum of 4, so an
+      enumeration that silently finds nothing can never read as a clean
+      pass (rule 84d1gfpywd) — this is BLD-04's own "report how many it
+      compared" guard, so it is doubly bound not to be the vacuous shape it
+      exists to catch. The floor is 4, NOT 5: protoc-gen-es's `target=ts`
+      option (buf.gen.ts.yaml) makes it emit exactly ONE file per input
+      proto, not the default two-file js+dts pair — the floor moves only
+      if that option ever changes. A header-only difference IS drift: 01-01
+      absorbed the one-time generated-header restamp caused by introducing
+      this checked-in codegen invocation (01-01-PLAN.md Task 2), so from
+      that commit onward the committed file must be exactly what the
+      pinned toolchain emits, header included — this guard does not
+      normalise the header away, because doing so would hide a toolchain
+      downgrade, one of the two drift causes worth catching (T-01-33). Both
+      `buf generate` calls (Go and TypeScript) are invoked against an
+      explicit absolute-path input, never bare ".": buf's default
+      upward-directory workspace search misidentifies the controlling
+      workspace when this task runs from inside a linked git worktree
+      nested under another checkout of the same repository (buf walks up
+      past the worktree's gitlink file looking for a real `.git` directory
+      and lands on the outer checkout, then folds its proto tree into the
+      same image), duplicating declarations from sibling trees — an
+      explicit absolute path pins the module root deterministically
       regardless of where this task is invoked from, in CI or a worktree.
+      The TypeScript regeneration call scopes protoc-gen-es to
+      internal/uiproto/uiv1/ui.proto via `--path` (same mechanism and same
+      reason as proto:gen — see buf.gen.ts.yaml's header comment), which
+      lands the freshly regenerated file at
+      ${scratch}/gen/web/src/lib/gen/internal/uiproto/uiv1/ui_pb.ts; this
+      task relocates it to ${scratch}/gen/web/src/lib/gen/ui_pb.ts so the
+      existing per-file comparison loop below (fresh="${scratch}/gen/${f}")
+      resolves it with no change to the loop itself.
     preconditions:
       - sh: command -v go
         msg: "go not found — proto:drift builds protoc-gen-go/protoc-gen-connect-go and runs buf via go tool, same as proto:gen."
@@ -239,6 +254,8 @@ tasks:
         msg: "git not found — proto:drift enumerates the committed generated file set via git ls-files."
       - sh: GOWORK=off go tool -modfile=go.tool-proto.mod buf --version
         msg: "buf (pinned via go.tool-proto.mod) not resolvable — proto:drift regenerates through the same pinned toolchain proto:gen uses."
+      - sh: test -x web/node_modules/.bin/protoc-gen-es
+        msg: "web/node_modules/.bin/protoc-gen-es not found or not executable — run `pnpm install --frozen-lockfile` in web/. proto:drift cannot compare a file it cannot regenerate; skipping the TypeScript file silently is exactly the vacuous pass the floor exists to catch (D-05)."
     cmds:
       - |
         set -euo pipefail
@@ -247,14 +264,14 @@ tasks:
         scratch=$(mktemp -d)
         trap 'rm -rf "${scratch}"' EXIT
 
-        files=$(git ls-files -- 'internal/schema/*.pb.go' 'internal/uiproto/uiv1/*.pb.go' 'internal/uiproto/uiv1/uiv1connect/*.connect.go')
+        files=$(git ls-files -- 'internal/schema/*.pb.go' 'internal/uiproto/uiv1/*.pb.go' 'internal/uiproto/uiv1/uiv1connect/*.connect.go' 'web/src/lib/gen/*.ts')
         nfiles=0
         if [ -n "${files}" ]; then
           nfiles=$(printf '%s\n' "${files}" | wc -l | tr -d ' ')
         fi
         echo "proto:drift: compared ${nfiles} generated files"
-        if [ "${nfiles}" -lt 3 ]; then
-          echo "::error::proto:drift: enumerated only ${nfiles} committed generated files under internal/schema/ and internal/uiproto/uiv1/ (expected at least 3: graph.pb.go, ui.pb.go, ui.connect.go) — a broken enumeration must fail loud, never read as a clean pass"
+        if [ "${nfiles}" -lt 4 ]; then
+          echo "::error::proto:drift: enumerated only ${nfiles} committed generated files under internal/schema/, internal/uiproto/uiv1/ and web/src/lib/gen/ (expected at least 4: graph.pb.go, ui.pb.go, ui.connect.go, ui_pb.ts) — a broken enumeration must fail loud, never read as a clean pass"
           exit 1
         fi
 
@@ -267,6 +284,14 @@ tasks:
         # guard's run untouched. The explicit absolute-path input (never
         # bare ".") pins buf's module root deterministically — see desc:.
         PATH="${scratch}/bin:${PATH}" {{.GO_TOOL_PROTO}} buf generate -o "${scratch}/gen" "${repo_root}"
+
+        # Second regeneration, into the SAME scratch/gen root: the
+        # TypeScript half. See desc: for why this lands nested and is
+        # relocated immediately after.
+        PATH="${scratch}/bin:web/node_modules/.bin:${PATH}" {{.GO_TOOL_PROTO}} buf generate --template buf.gen.ts.yaml -o "${scratch}/gen" --path "${repo_root}/internal/uiproto/uiv1/ui.proto" "${repo_root}"
+        mkdir -p "${scratch}/gen/web/src/lib/gen"
+        mv "${scratch}/gen/web/src/lib/gen/internal/uiproto/uiv1/ui_pb.ts" "${scratch}/gen/web/src/lib/gen/ui_pb.ts"
+        rm -rf "${scratch}/gen/web/src/lib/gen/internal"
 
         drift_found=0
         while IFS= read -r f; do
