@@ -1,0 +1,10 @@
+# strictDepBuilds (D-14, BLD-05): pnpm exits non-zero on install if any
+# dependency in the tree carries an unreviewed lifecycle/build script,
+# rather than exiting 0 with an "Ignored build scripts" warning. Set
+# BEFORE the first `pnpm install` so the very first dependency tree that
+# lands is already gated (02-01-PLAN.md Task 1 step d).
+#
+# allowBuilds is populated below by `pnpm approve-builds`, which records
+# denials as `false` rather than omitting the key entirely — this file
+# states both halves (approved and denied) once populated.
+strictDepBuilds: true
