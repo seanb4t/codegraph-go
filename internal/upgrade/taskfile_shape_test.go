@@ -3364,3 +3364,233 @@ func TestReleasePathScanIgnoresNearMisses(t *testing.T) {
 		}
 	}
 }
+
+// === BLD-01: no mutable JS cache on ci.yml's install path (02-04 Task 3) ==
+//
+// D-13's fold-in of the JS gates into ci.yml's existing `test` job relies
+// on the JS install being a pure function of web/pnpm-lock.yaml — a stale
+// mutable cache producing a node_modules that differs from what the
+// lockfile describes is exactly the divergence BLD-01/BLD-03 forbid. This
+// makes that a structural invariant instead of an omission nothing
+// enforces, authored one wave BEFORE 02-06 adds the Node setup step, so it
+// cannot arrive with a cache input already attached.
+
+// forbiddenCacheActions are marketplace-action owner/repo prefixes that
+// restore a MUTABLE cache unconditionally, regardless of any input scoping
+// — a general-purpose cache action whose actual scope is whatever its
+// path: input says, which cannot be reasoned about structurally from the
+// action name alone. This is a SCOPED invariant, not a blanket cache ban:
+// ci.yml's test job legitimately caches the Go module/build cache today
+// (namespacelabs/nscloud-cache-action with cache: go), which is explicitly
+// ALLOWED — see scanContentForMutableCache.
+var forbiddenCacheActions = []string{"actions/cache", "actions/cache/restore", "actions/cache/save"}
+
+// cacheInputKeys are the with: input keys that turn a Node setup action
+// into a cache restorer. A cache: input on actions/setup-node is a
+// FINDING regardless of its value; the identical key on actions/setup-go
+// (cache: false in ci.yml today) is a different action prefix entirely and
+// is not matched by this fixture's use in the Node-setup case.
+var cacheInputKeys = []string{"cache"}
+
+// nodeSetupActionPrefix and nscloudCacheActionPrefix are the two `uses:`
+// owner/repo prefixes scanContentForMutableCache classifies by NAME rather
+// than by forbiddenCacheActions membership — the Node setup action gains
+// cache behavior only via cacheInputKeys, and nscloud-cache-action's
+// cache: input value decides JS-vs-Go, not the action's mere presence.
+const (
+	nodeSetupActionPrefix    = "actions/setup-node"
+	nscloudCacheActionPrefix = "namespacelabs/nscloud-cache-action"
+)
+
+// jsEcosystemCacheValues are nscloud-cache-action's own cache: input
+// vocabulary values that name a JavaScript-ecosystem cache. "go" is
+// deliberately absent — that is the existing, allowed cache this
+// invariant leaves alone (ci.yml's test job today).
+var jsEcosystemCacheValues = []string{"pnpm", "npm", "node", "yarn"}
+
+// mutableCacheFinding is one JS-scoped mutable-cache step
+// scanContentForMutableCache found: which step, its uses: value, and why
+// it was classified as a finding.
+type mutableCacheFinding struct {
+	Step string
+	Uses string
+	Kind string // "forbidden-action" | "node-setup-cache-input" | "js-ecosystem-cache-value"
+}
+
+// mutableCacheScanResult is scanContentForMutableCache's return shape:
+// findings, plus the two positive counts (repo rule 84d1gfpywd) that make
+// a zero-findings result mean something — steps genuinely examined, and
+// cache-bearing steps genuinely classified ALLOWED (the existing Go
+// cache), rather than the scanner never having reached the job at all.
+type mutableCacheScanResult struct {
+	Findings      []mutableCacheFinding
+	StepsExamined int
+	AllowedCaches int
+}
+
+type cacheAwareStep struct {
+	Name string                 `yaml:"name"`
+	Uses string                 `yaml:"uses"`
+	With map[string]interface{} `yaml:"with"`
+}
+
+type cacheAwareJob struct {
+	Steps []cacheAwareStep `yaml:"steps"`
+}
+
+type cacheAwareWorkflow struct {
+	Jobs map[string]cacheAwareJob `yaml:"jobs"`
+}
+
+// hasAnyCacheInputKey reports whether with declares any key named in
+// cacheInputKeys, regardless of that key's value.
+func hasAnyCacheInputKey(with map[string]interface{}) bool {
+	for _, key := range cacheInputKeys {
+		if _, ok := with[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// scanContentForMutableCache is the content-taking core of the BLD-01
+// no-mutable-JS-cache invariant. It classifies every cache-bearing step in
+// job jobID into FINDING or ALLOWED:
+//   - a step whose uses: owner/repo prefix matches forbiddenCacheActions is
+//     a FINDING regardless of inputs;
+//   - a step whose uses: owner/repo prefix is the Node setup action and
+//     whose with: mapping carries any key in cacheInputKeys is a FINDING;
+//   - a step whose uses: owner/repo prefix is nscloud-cache-action whose
+//     cache: input names a JavaScript ecosystem (jsEcosystemCacheValues) is
+//     a FINDING;
+//   - a step whose uses: owner/repo prefix is nscloud-cache-action whose
+//     cache: input is "go" is ALLOWED and COUNTED.
+//
+// Returns a non-nil error when content fails to parse, declares no jobs:,
+// names no job jobID, or that job declares zero steps — never a usable
+// empty result on any of those misses.
+func scanContentForMutableCache(jobID string, content []byte) (mutableCacheScanResult, error) {
+	var wf cacheAwareWorkflow
+	if err := yaml.Unmarshal(content, &wf); err != nil {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: %w", err)
+	}
+	if len(wf.Jobs) == 0 {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: no jobs: found in workflow source")
+	}
+	job, ok := wf.Jobs[jobID]
+	if !ok {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: no job %q found in workflow source", jobID)
+	}
+	if len(job.Steps) == 0 {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: job %q declares zero steps", jobID)
+	}
+
+	var result mutableCacheScanResult
+	for _, step := range job.Steps {
+		result.StepsExamined++
+		prefix := actionPrefix(step.Uses)
+
+		switch {
+		case contains(forbiddenCacheActions, prefix):
+			result.Findings = append(result.Findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "forbidden-action"})
+
+		case prefix == nodeSetupActionPrefix && hasAnyCacheInputKey(step.With):
+			result.Findings = append(result.Findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "node-setup-cache-input"})
+
+		case prefix == nscloudCacheActionPrefix:
+			cacheVal, _ := step.With["cache"].(string)
+			switch {
+			case contains(jsEcosystemCacheValues, cacheVal):
+				result.Findings = append(result.Findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "js-ecosystem-cache-value"})
+			case cacheVal == "go":
+				result.AllowedCaches++
+			}
+		}
+	}
+	return result, nil
+}
+
+// scanForMutableCache is the thin path-reading wrapper around
+// scanContentForMutableCache, always reading ciWorkflowPath — the JS
+// install path this invariant guards lives in ci.yml, not release.yml.
+func scanForMutableCache(jobID string) (mutableCacheScanResult, error) {
+	data, err := os.ReadFile(ciWorkflowPath)
+	if err != nil {
+		return mutableCacheScanResult{}, fmt.Errorf("scanForMutableCache: read %s: %w", ciWorkflowPath, err)
+	}
+	return scanContentForMutableCache(jobID, data)
+}
+
+// TestJSInstallPathHasNoMutableCache is the BLD-01 structural invariant:
+// ci.yml's test job carries no mutable JS-scoped cache. The Node-setup
+// clause (actions/setup-node with a cache: input) has NOTHING to match at
+// this wave — 02-06 adds that step two waves later — and that is by
+// design: authoring the invariant BEFORE the step exists means the step
+// cannot arrive with a cache input already attached. What makes this
+// pre-arrival zero mean something is AllowedCaches > 0: ci.yml's test job
+// demonstrably contains a Go cache step (nscloud-cache-action, cache: go)
+// today, so a zero AllowedCaches count would mean this scanner never
+// reached it, and its clean verdict would mean nothing.
+func TestJSInstallPathHasNoMutableCache(t *testing.T) {
+	result, err := scanForMutableCache("test")
+	if err != nil {
+		t.Fatalf("scanForMutableCache(%q): %v", "test", err)
+	}
+	if result.StepsExamined == 0 {
+		t.Fatalf("scanForMutableCache(%q): examined zero steps", "test")
+	}
+	if result.AllowedCaches == 0 {
+		t.Fatalf("scanForMutableCache(%q): AllowedCaches = 0 — ci.yml's test job demonstrably contains a Go cache step today; a zero count means this scanner never reached it, so its clean verdict means nothing", "test")
+	}
+	if len(result.Findings) != 0 {
+		t.Fatalf("scanForMutableCache(%q): found %d mutable-cache finding(s) on the JS install path — a stale cache producing a node_modules that differs from web/pnpm-lock.yaml is exactly the divergence BLD-01/BLD-03 forbid: %+v", "test", len(result.Findings), result.Findings)
+	}
+}
+
+// TestMutableCacheScanIsNonVacuous plants each of the three forbidden
+// forms in synthetic in-memory YAML, one row each, and asserts exactly one
+// finding per row. A fourth row plants the two EXISTING Go forms this
+// repository actually uses (nscloud-cache-action with cache: go,
+// actions/setup-go with cache: false) and asserts zero findings — pinning
+// the boundary so a future widening of the matcher breaks THIS test
+// instead of quietly failing TestJSInstallPathHasNoMutableCache against
+// the real workflow.
+func TestMutableCacheScanIsNonVacuous(t *testing.T) {
+	cases := []struct {
+		name         string
+		src          string
+		wantFindings int
+	}{
+		{
+			name:         "actions/cache step",
+			src:          "jobs:\n  test:\n    steps:\n      - name: bad\n        uses: actions/cache@v4\n        with:\n          path: web/node_modules\n          key: x\n",
+			wantFindings: 1,
+		},
+		{
+			name:         "nscloud-cache-action with a JS ecosystem value",
+			src:          "jobs:\n  test:\n    steps:\n      - name: bad\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: pnpm\n",
+			wantFindings: 1,
+		},
+		{
+			name:         "Node setup action with a cache: input",
+			src:          "jobs:\n  test:\n    steps:\n      - name: bad\n        uses: actions/setup-node@v4\n        with:\n          cache: pnpm\n",
+			wantFindings: 1,
+		},
+		{
+			name:         "existing Go forms stay allowed",
+			src:          "jobs:\n  test:\n    steps:\n      - name: go cache\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: go\n      - name: setup go\n        uses: actions/setup-go@v6\n        with:\n          cache: false\n",
+			wantFindings: 0,
+		},
+	}
+
+	for _, c := range cases {
+		result, err := scanContentForMutableCache("test", []byte(c.src))
+		if err != nil {
+			t.Errorf("scanContentForMutableCache(%q): %v", c.name, err)
+			continue
+		}
+		if len(result.Findings) != c.wantFindings {
+			t.Errorf("scanContentForMutableCache(%q): got %d finding(s), want %d: %v", c.name, len(result.Findings), c.wantFindings, result.Findings)
+		}
+	}
+}
