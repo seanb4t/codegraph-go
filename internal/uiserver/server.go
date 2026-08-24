@@ -13,7 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
-	web "github.com/seanb4t/codegraph-go/web"
+	"github.com/seanb4t/codegraph-go/web"
 )
 
 // DefaultAddr is the ephemeral loopback bind address D-07 mandates: with

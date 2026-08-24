@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	web "github.com/seanb4t/codegraph-go/web"
+	"github.com/seanb4t/codegraph-go/web"
 )
 
 // TestSPAServesEmbeddedIndexAtRoot is Criterion-1's tracer proof (BLD-02):
