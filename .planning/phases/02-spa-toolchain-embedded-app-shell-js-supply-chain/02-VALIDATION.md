@@ -38,17 +38,20 @@ created: 2026-08-23
 
 ## Per-Task Verification Map
 
-Task IDs are assigned by the planner; this map is keyed by requirement until plans exist.
+Task IDs are assigned by the planner. Plans exist as of 2026-08-23; the Plan and Wave
+columns name the plan that owns each requirement's primary verification. Several requirements
+are touched by more than one plan (see each PLAN.md's `requirements` field) — the column names
+the plan whose acceptance criteria carry the automated command in this row.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | RPC-03 | — | A client-side route serves `index.html`; `/codegraph.ui.v1.UIService/*` reaches the Connect handler; a miss under the immutable-asset prefix returns 404, never HTML | unit (Go, `httptest`) | `go test ./internal/uiserver/... -run TestSPAFallback` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | BLD-02 | — | The embedded FS file-list equals the on-disk `web/build/` file-list, `_app/` included (criterion 1 is a file-list diff, not "the build succeeded") | unit (Go, `fs.WalkDir` + `filepath.WalkDir` set-diff) | `go test ./internal/uiserver/... -run TestEmbeddedFSMatchesOnDisk` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | BLD-03 | — | Guard reports how many source files it hashed and fails RED against a deliberately stale `web/build/` | shell (Taskfile target) | `task web:drift` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | BLD-01 | — | `pnpm install --frozen-lockfile` succeeds at the Corepack-pinned version on a clean checkout | integration (CI step) | `corepack enable && pnpm install --frozen-lockfile` (cwd `web/`) | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | BLD-05 | — | `strictDepBuilds` is in effect — asserted positively, not inferred from a passing install | shell/CI | Taskfile target reading `pnpm-workspace.yaml`'s `strictDepBuilds` key and asserting `true` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | BLD-06 | — | `pnpm audit` runs; a sibling assertion counts packages from `pnpm-lock.yaml` **without reading `pnpm audit`'s exit code** | shell/CI | Taskfile target parsing the lockfile package count independently | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | BLD-07 | — | No `node`/`npm`/`npx`/`pnpm` invocation is reachable in `.goreleaser.yaml` or `release.yml` — checked structurally, not by grep | unit (Go, structural parse) | `go test ./internal/upgrade/... -run TestReleasePathHasNoJSToolchain` | ❌ W0 | ⬜ pending |
+| 02-02-T1 | 02-02 | 2 | RPC-03 | — | A client-side route serves `index.html`; `/codegraph.ui.v1.UIService/*` reaches the Connect handler; a miss under the immutable-asset prefix returns 404, never HTML | unit (Go, `httptest`) | `go test ./internal/uiserver/... -run TestSPA -v` (assert the `--- PASS: TestSPA` line count, not the exit code) | ❌ W0 | ⬜ pending |
+| 02-01-T2 | 02-01 | 1 | BLD-02 | — | The embedded FS file-list equals the on-disk `web/build/` file-list, `_app/` included (criterion 1 is a file-list diff, not "the build succeeded") | unit (Go, `fs.WalkDir` + `filepath.WalkDir` set-diff) | `go test ./internal/uiserver/... -run 'TestEmbeddedFSMatchesOnDiskBuildTree|TestEmbeddedBuildTreeIsNonTrivial' -v` | ❌ W0 | ⬜ pending |
+| 02-06-T2 | 02-06 | 4 | BLD-03 | — | Guard reports how many source files it hashed and fails RED against a deliberately stale `web/build/` | shell (Taskfile target) | `task web:drift` | ❌ W0 | ⬜ pending |
+| 02-06-T1 | 02-06 | 4 | BLD-01 | — | `pnpm install --frozen-lockfile` succeeds at the Corepack-pinned version on a clean checkout | integration (CI step) | `task web:deps` (resolves Corepack or a pnpm at major 10+, then installs frozen; reports which path it took) | ❌ W0 | ⬜ pending |
+| 02-07-T1 | 02-07 | 5 | BLD-05 | — | `strictDepBuilds` is in effect — asserted positively, not inferred from a passing install | shell/CI | `task web:deps:strict` — reads `pnpm-workspace.yaml`'s `strictDepBuilds` key structurally and asserts boolean `true`, and reports the `allowBuilds` entry and denial counts | ❌ W0 | ⬜ pending |
+| 02-07-T2 | 02-07 | 5 | BLD-06 | — | `pnpm audit` runs; a sibling assertion counts packages from `pnpm-lock.yaml` **without reading `pnpm audit`'s exit code** | shell/CI | `task web:audit` — prints the `pnpm-lock.yaml` declared-package count BEFORE invoking the audit, then classifies clean / advisories / SCAN ERROR distinctly | ❌ W0 | ⬜ pending |
+| 02-04-T1 | 02-04 | 2 | BLD-07 | — | No `node`/`npm`/`npx`/`pnpm` invocation is reachable in `.goreleaser.yaml` or `release.yml` — checked structurally, not by grep | unit (Go, structural parse) | `go test ./internal/upgrade/... -run 'TestReleasePathHasNoJSToolchain|TestReleasePathScanIsNonVacuous|TestReleasePathScanIgnoresNearMisses|TestReleasePathMissingFileIsError' -v` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -56,12 +59,12 @@ Task IDs are assigned by the planner; this map is keyed by requirement until pla
 
 ## Wave 0 Requirements
 
-- [ ] `internal/uiserver/spa_test.go` — RPC-03: fallback vs. 404 vs. RPC dispatch
-- [ ] `internal/uiserver/embed_test.go` (or similar) — BLD-02 criterion 1: embedded-vs-on-disk file-list diff
-- [ ] `Taskfile.yml` `web:drift` target — BLD-03: source-hash staleness with a positive count assertion, provable RED
-- [ ] `Taskfile.yml` extension of `proto:gen` / `proto:drift` — D-05/D-06/D-07: second buf template, floor moved from 3 to **4**
-- [ ] `.github/workflows/ci.yml` `test` job — `actions/setup-node` pinned to **Node 24** (Corepack is unbundled from Node 25+), `corepack enable`, `pnpm install --frozen-lockfile`, the `strictDepBuilds` assertion, `pnpm audit`, and the sibling lockfile-count assertion (D-13)
-- [ ] `internal/upgrade/taskfile_shape_test.go` extension — BLD-07 structural proof, following that file's existing fixture pattern
+- [ ] `internal/uiserver/spa_test.go` — RPC-03: fallback vs. 404 vs. RPC dispatch (02-01 creates the file, 02-02 completes the rule)
+- [ ] `internal/uiserver/spa_test.go` — BLD-02 criterion 1: embedded-vs-on-disk file-list diff plus the non-triviality guard-the-guard (02-01 Task 2; the plans keep this in `spa_test.go` rather than a separate `embed_test.go`)
+- [ ] `Taskfile.yml` `web:deps` / `web:build` / `web:drift` targets — BLD-01 and BLD-03: source-hash staleness with a positive count assertion, provable RED (02-06)
+- [ ] `Taskfile.yml` extension of `proto:gen` / `proto:drift` — D-05/D-06/D-07: second buf template, floor moved from 3 to **4** (02-03)
+- [ ] `.github/workflows/ci.yml` `test` job — `actions/setup-node` pinned to **Node 24** (Corepack is unbundled from Node 25+), `corepack enable`, `pnpm install --frozen-lockfile`, the `strictDepBuilds` assertion, `pnpm audit`, and the sibling lockfile-count assertion (D-13) — split across 02-06 (Node setup, install, drift guard) and 02-07 (both supply-chain gates). Every new step's `run:` body must be exactly `task <target>`: `ci.yml`'s `test` job is bound by the single-definition property that `internal/upgrade/taskfile_shape_test.go`'s `inScopeJobs` fixture enforces
+- [ ] `internal/upgrade/taskfile_shape_test.go` extension — BLD-07 structural proof plus its positive control and near-miss table, following that file's existing fixture pattern (02-04)
 
 ---
 

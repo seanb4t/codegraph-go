@@ -180,12 +180,32 @@ Plans:
   5. `pnpm audit` runs as a named CI gate that distinguishes "scanned and clean" from "the scan itself failed" — proven by a sibling assertion that does not read `pnpm audit`'s exit code — and no `pnpm`/`node`/`npx`/`npm` invocation is reachable anywhere in `.goreleaser.yaml` or `release.yml`, checked structurally rather than by design intent (BLD-06, BLD-07)
 
 **Notes**: `//go:embed all:dist` — without the `all:` prefix, Go's default dotfile/underscore exclusion silently drops Vite's `_app`-prefixed output and the build still succeeds. Criterion 1's verification is a file-list diff between the embedded FS and the on-disk tree, not "the build succeeded". Approval state belongs in committed config, never in per-machine interactive state.
-**Plans**: TBD
+**Plans**: 7 plans
 **UI hint**: yes
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 2`)
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Tracer: pnpm-built SvelteKit at `web/`, committed `web/build/`, `go:embed all:build`, SPA handler on Phase 1's mux (BLD-01, BLD-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-02-PLAN.md — SPA fallback routing in full: immutable-prefix 404, client-route fallback, two-class cache policy, RPC precedence (RPC-03, BLD-02)
+- [ ] 02-03-PLAN.md — Scoped `protoc-gen-es` template, committed TS Connect client, `proto:drift` floor 3 → 4 (BLD-01, BLD-02)
+- [ ] 02-04-PLAN.md — Structural release-path purity scan over `.goreleaser.yaml` and `release.yml`, positive-controlled (BLD-07)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-05-PLAN.md — App shell: Tailwind v4 + shadcn-svelte init, four named nav slots, live `GetStatus` render (BLD-02, RPC-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-06-PLAN.md — `web:deps`/`web:build`/`web:drift` source-hash staleness guard, RED-proven, plus Node 24 CI fold-in (BLD-01, BLD-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 02-07-PLAN.md — `strictDepBuilds` positive assertion and the `pnpm audit` gate with its exit-code-independent sibling count (BLD-05, BLD-06)
 
 ### Phase 3: Browse, Inspect & Navigation
 
