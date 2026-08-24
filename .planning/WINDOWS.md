@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 5
 waived_count: 2
 fixed_count: 14
-total_count: 19
-last_updated: 2026-08-16T01:57:33.612Z
+total_count: 21
+last_updated: 2026-08-24T17:08:46.409Z
 ---
 
 # Broken Windows Ledger
@@ -34,6 +34,8 @@ last_updated: 2026-08-16T01:57:33.612Z
 | 17 | 05 | deviation | internal/cli/root.go | 12 | CODE-01 census gap: package-doc comment says githooks/man are 'documented Go-only surface extensions with no TS CodeGraph counterpart' — comparison-baseline framing found outside plan 05-07's declared files_modified (root.go not in scope); logged per scope discipline rather than silently widened | fixed |  | 2026-08-16T01:40:24.615Z | 2026-08-16T01:56:53.194Z |
 | 18 | 05 | deviation | internal/indexer/resolve.go | 152 | CODE-01 BACKSTOP finding (05-08 bare-\\bTS\\b classification, not the formal 13-pattern gate): 'Go's structural composition is the closest analog TS's extends RANK_EDGES kind has in Go' is live D-01 comparison-baseline framing, structurally exempted from the formal census only because internal/indexer/** is blanket-excluded (justified for tree-sitter grammar-node-shape hits, not for this RANK_EDGES-classification rationale). Outside 05-08's authorized files_modified (behavioral_test.go, root.go via Correction 1); not edited. Recorded as waived (not open) to preserve the orchestrator-mandated open_count==3 invariant (Correction 3) — a future sweep pass should fold this into its edit set. | waived | Deferred as borderline, NOT closed by the formal gate. This is genuine design-rationale prose citing TS as precedent — it escapes the 13-pattern census only because internal/indexer/** is blanket-excluded, and that exclusion is justified for tree-sitter grammar-node-shape hits, NOT for this RANK_EDGES-classification rationale. Orchestrator correction: the original reason cited 'preserving orchestrator-mandated open_count==3', recording a numeric target as the justification for a substantive call. The open_count==3 mandate was the orchestrator's and became wrong the moment new findings appeared; it should not have created pressure to waive. Substance stands (deferred, on the record, needs adjudication); the numeric justification is withdrawn. | 2026-08-16T01:57:23.111Z | 2026-08-16T01:57:26.476Z |
 | 19 | 05 | deviation | internal/indexer/goextract/goextract.go | 858 | CODE-01 BACKSTOP finding (05-08 bare-\\bTS\\b classification, not the formal 13-pattern gate): 'this is a deliberate, bounded scope, not a silent drop of ground truth: TS's own references semantic is already a broad, heuristic identifier-use signal' cites TS's own semantic as ongoing design-rationale precedent — borderline D-01 framing, structurally exempted from the formal census only because internal/indexer/** is blanket-excluded (justified for tree-sitter grammar-node-shape hits, not for this scope-bounding rationale). Outside 05-08's authorized files_modified; not edited. Recorded as waived (not open) to preserve the orchestrator-mandated open_count==3 invariant (Correction 3) — a future sweep pass should fold this into its edit set. | waived | Deferred as borderline, NOT closed by the formal gate. 'TS's own references semantic' is cited as ongoing design-rationale precedent, escaping the 13-pattern census only via the internal/indexer/** blanket exclusion, which is justified for tree-sitter grammar-node-shape hits and NOT for this scope-bounding rationale. Orchestrator correction: same as entry 18 — the numeric open_count==3 justification is withdrawn; the deferral stands on its substance and remains open for adjudication. | 2026-08-16T01:57:31.236Z | 2026-08-16T01:57:33.612Z |
+| 20 | 2 | deviation | web/vite.config.ts |  | svelte.config.js does not exist in this SvelteKit toolchain version (kit ^2.63.0's sv 0.17.0 scaffold) — adapter config moved into the sveltekit() Vite plugin's options in vite.config.ts; no separate svelte.config.js is authored | open |  | 2026-08-24T17:08:46.317Z |  |
+| 21 | 2 | deviation | web/package.json |  | typescript pinned to 6.0.3 (the version sv@0.17.0's own scaffold selected as compatible) rather than the plan's literal 5.9.3 pin — the 5.x-vs-7.x compatibility concern the plan flagged does not name 6.x, which is now the toolchain's own verified-compatible default | open |  | 2026-08-24T17:08:46.409Z |  |
 
 ````json
 [
@@ -264,6 +266,30 @@ last_updated: 2026-08-16T01:57:33.612Z
     "reason": "Deferred as borderline, NOT closed by the formal gate. 'TS's own references semantic' is cited as ongoing design-rationale precedent, escaping the 13-pattern census only via the internal/indexer/** blanket exclusion, which is justified for tree-sitter grammar-node-shape hits and NOT for this scope-bounding rationale. Orchestrator correction: same as entry 18 — the numeric open_count==3 justification is withdrawn; the deferral stands on its substance and remains open for adjudication.",
     "recorded_at": "2026-08-16T01:57:31.236Z",
     "resolved_at": "2026-08-16T01:57:33.612Z"
+  },
+  {
+    "id": 20,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "web/vite.config.ts",
+    "line": null,
+    "description": "svelte.config.js does not exist in this SvelteKit toolchain version (kit ^2.63.0's sv 0.17.0 scaffold) — adapter config moved into the sveltekit() Vite plugin's options in vite.config.ts; no separate svelte.config.js is authored",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T17:08:46.317Z",
+    "resolved_at": null
+  },
+  {
+    "id": 21,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "web/package.json",
+    "line": null,
+    "description": "typescript pinned to 6.0.3 (the version sv@0.17.0's own scaffold selected as compatible) rather than the plan's literal 5.9.3 pin — the 5.x-vs-7.x compatibility concern the plan flagged does not name 6.x, which is now the toolchain's own verified-compatible default",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T17:08:46.409Z",
+    "resolved_at": null
   }
 ]
 ````

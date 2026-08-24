@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 2
 current_phase_name: SPA Toolchain, Embedded App Shell & JS Supply Chain
 status: executing
-stopped_at: Phase 2 context gathered
-last_updated: "2026-08-24T02:32:54.519Z"
-last_activity: 2026-08-23
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-08-24T17:11:25.541Z"
+last_activity: 2026-08-24
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: 928926fc8f98a564f58c7028c5553e251100c274
+state_head: 3aaa30e4fb42d7e3a406b6bd22e4a3aeb6568b46
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 18
-  completed_plans: 11
+  completed_plans: 12
   percent: 17
 ---
 
@@ -29,12 +29,12 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 2 (SPA Toolchain, Embedded App Shell & JS Supply Chain) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-08-23 — Phase 01 complete, transitioned to Phase 2
+Phase: 2 (SPA Toolchain, Embedded App Shell & JS Supply Chain) — EXECUTING
+Plan: 01 complete (tracer: SPA toolchain, committed web/build/, go:embed, SPA handler at GET /)
+Status: Executing — 6 more plans in this phase (02-02..02-07)
+Last activity: 2026-08-24 — Plan 02-01 complete
 
-Progress: [███░░░░░░░░░░░░░░░░░] 17% (1/6 phases)
+Progress: [██░░░░░░░░] 17% (1/6 phases)
 
 ## Performance Metrics
 
@@ -68,6 +68,11 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 **Per-plan metrics for v1.0, v0.3.0, v0.5.0, v0.10.0 and v0.11.0 are archived** with their milestones under `.planning/milestones/` and in each phase's own SUMMARY files. Nothing was deleted from the archives.
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 02 P01 | 35min | 2 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -112,6 +117,8 @@ Standing decisions that outlive every milestone:
 - **Shared-array-entry ownership must be exact-identity, never shape/position** (hardened after the v0.10.0 hook-ownership vulnerability, commit `242ec0a`).
 - **A transcript grep is a claim about the grep, not about the product.** Before recording an absence from a transcript, prove the same search can find the thing when it is present (established twice in the v0.10.0 Phase 6 rehearsal).
 - **Never invent structure in a tool-owned generated file.** `.planning/ROADMAP.md` and `.planning/STATE.md` are parsed by scope-sensitive readers; an invented version-bearing or ✅-bearing `###` heading under `## Phases` silently truncates the active milestone's scope.
+- [Phase 2]: No svelte.config.js in this SvelteKit toolchain version (kit ^2.63.0 scaffolded by sv@0.17.0) — adapter/kit config lives in vite.config.ts's sveltekit() plugin options instead
+- [Phase 2]: typescript pinned to 6.0.3 (sv@0.17.0's own scaffold default) rather than 5.9.3 — the 6.x line postdates 02-RESEARCH.md and is what the current toolchain itself verified as compatible
 
 ### Pending Todos
 
@@ -231,10 +238,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-08-23T23:48:59.304Z
-Stopped at: Phase 2 context gathered
+Last session: 2026-08-24T17:11:25.495Z
+Stopped at: Completed 02-01-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
