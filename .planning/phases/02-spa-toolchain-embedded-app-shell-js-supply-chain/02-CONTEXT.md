@@ -236,8 +236,18 @@ one.
   (`precompress`, `strict`).
 - The precise `Cache-Control` header values implementing D-11, provided the
   post-upgrade stale-shell failure is impossible.
-- Whether the `go:embed` directive lives in a small dedicated file under
-  `internal/uiserver` or alongside the handler in `spa.go`.
+- ~~Whether the `go:embed` directive lives in a small dedicated file under
+  `internal/uiserver` or alongside the handler in `spa.go`.~~
+  **RESOLVED BY RESEARCH (02-RESEARCH.md Pitfall 5) — and neither option was
+  possible.** Both framings placed the directive inside `internal/uiserver/`,
+  but `web/build/` is reachable from there only via `../../web/build`, and Go
+  embed patterns may not contain `..` (`pkg.go.dev/embed`). This repo already
+  hit and documented the identical constraint for `claudeassets.go:7-17`
+  (`.claude/` and `internal/` are siblings, so only the repo root is an ancestor
+  of both). The directive must live in a file **inside `web/`** — e.g.
+  `web/embed.go` exporting an `embed.FS` — which `internal/uiserver/spa.go`
+  imports. **D-12 itself is unaffected:** the handler still lives in
+  `internal/uiserver`. Only this discretion clause was wrong.
 - The buf mechanism used to scope `protoc-gen-es` to `ui.proto` only (D-07).
 - Navigation placeholder styling and labels in D-18.
 
