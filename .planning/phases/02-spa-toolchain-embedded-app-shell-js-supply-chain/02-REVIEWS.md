@@ -1,9 +1,10 @@
 ---
 phase: 2
 reviewers: [codex]
-reviewed_at: 2026-08-24T04:39:00Z
-cycles: 2
+reviewed_at: 2026-08-24T05:55:00Z
+cycles: 3
 cycle_1_reviewed_at: 2026-08-24T00:59:41Z
+cycle_2_reviewed_at: 2026-08-24T04:39:00Z
 plans_reviewed: [02-01-PLAN.md, 02-02-PLAN.md, 02-03-PLAN.md, 02-04-PLAN.md, 02-05-PLAN.md, 02-06-PLAN.md, 02-07-PLAN.md]
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
@@ -13,9 +14,9 @@ model_sources:
 
 # Cross-AI Plan Review — Phase 2
 
-> **This file accumulates review history.** Cycle 1 is preserved below verbatim;
-> **Cycle 2 — the current, authoritative cycle — is at the bottom of this file.**
-> A concern listed under Cycle 1 is NOT live unless Cycle 2 restates it.
+> **This file accumulates review history.** Cycles 1 and 2 are preserved below verbatim;
+> **Cycle 3 — the current, authoritative cycle — is at the bottom of this file.**
+> A concern listed under Cycle 1 or Cycle 2 is NOT live unless Cycle 3 restates it.
 
 ---
 
@@ -452,7 +453,7 @@ defects, not documentation polish.
 
 ---
 
-# Cycle 2 — 2026-08-24T04:39:00Z (CURRENT)
+# Cycle 2 — 2026-08-24T04:39:00Z (superseded)
 
 Reviewed at `32980bf` (`docs(02): revise phase plans from cross-AI review feedback`), the commit
 that revised all seven plans against Cycle 1's 7 HIGH + 13 actionable non-HIGH findings.
@@ -707,3 +708,246 @@ model matches its stated scope with its gaps recorded; and no verify command in 
 return success after detecting or encountering failure. What remains is one guaranteed false RED in
 the phase's final verify, one naming contradiction inside a single task's action text, and one
 optional hardening suggestion.
+
+---
+
+# Cycle 3 — 2026-08-24T05:55:00Z (CURRENT — FINAL CONVERGENCE CYCLE)
+
+Reviewed at `4a06d6a` (`docs(02): revise phase plans from cross-AI review cycle 3`), the commit
+that applied Cycle 2's 0 HIGH + 3 actionable findings under a deliberately tight scope: three
+fixes in `02-02`, `02-04` and `02-07`, plus a `02-VALIDATION.md` re-sync.
+
+**Convergence trajectory:** cycle 1 → 7 HIGH + 13 actionable · cycle 2 → 0 HIGH + 3 actionable ·
+cycle 3 → **0 HIGH + 1 actionable**. This is the loop's final cycle.
+
+## Codex Review (cycle 3)
+
+# Cycle 3 Final Plan Review
+
+## Summary
+
+The plans have converged and are ready for execution. All prior HIGH findings are resolved in the current executable plan content, the three cycle-3 fixes landed correctly, and no sixth vacuous-guard defect remains. The only unresolved issue is a LOW-severity stale description in several untouched plans that still calls BLD-07 a “two-file” scan, even though 02-04 now derives a transitive closure. This does not affect execution or coverage.
+
+## Strengths
+
+- The embedded-asset test compares both directions and separately proves the tree is non-empty and includes `_app/immutable/`, directly protecting the `all:` requirement ([02-01-PLAN.md:377](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-01-PLAN.md:377)).
+
+- RPC, immutable assets, real files, and client-route fallback are explicitly separated. CSP is now internally consistent: fixed directives live in `spaCSPBaseDirectives`, inline hashes come from embedded HTML, and `buildSPACSPPolicy` composes them ([02-02-PLAN.md:224](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-02-PLAN.md:224)).
+
+- The TypeScript codegen floor has sound arithmetic: three Go files plus exactly one `target=ts` output. The live scoping command fails if `protoc-gen-es` leaks into the module-wide template ([02-03-PLAN.md:190](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-03-PLAN.md:190)).
+
+- BLD-07 now derives local-action and Taskfile edges from the release workflow, follows Taskfile dependencies, and refuses recognized-but-unmodelled script/container edges ([02-04-PLAN.md:255](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:255), [02-04-PLAN.md:267](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:267)). The real release workflow contains the edges the resolver is intended to discover, including `task release:record-final-hashes` ([release.yml:272](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/release.yml:272)).
+
+- Leaving general-purpose installers outside the tripwire is defensible. That class has no bounded structural signature; the plan labels it as residual denylist risk instead of claiming completeness ([02-04-PLAN.md:63](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:63)).
+
+- The shell now requires all nine status fields and directly uses `indexing_in_progress`, matching the actual schema’s ninth field ([ui.proto:172](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:172), [02-05-PLAN.md:311](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:311)).
+
+- Buildability and artifact provenance are correctly separated: scratch rebuilding proves the toolchain works, while the in-place source/output manifest binds the committed bytes without assuming Vite reproducibility ([02-06-PLAN.md:230](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:230), [02-06-PLAN.md:360](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:360)).
+
+- The final phase gate now uses the BSD-safe clean-tree assertion and positively checks both drift counts ([02-07-PLAN.md:391](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-07-PLAN.md:391)).
+
+## Concerns
+
+- **LOW — carried over as stale wording, newly identified in cycle 3’s consistency check:** four plans still describe BLD-07 as a scan over “two files”: [02-01-PLAN.md:165](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-01-PLAN.md:165), [02-03-PLAN.md:127](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-03-PLAN.md:127), [02-05-PLAN.md:138](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-05-PLAN.md:138), and [02-06-PLAN.md:149](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-06-PLAN.md:149). The authoritative 02-04 design instead has two roots plus a derived closure ([02-04-PLAN.md:29](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-04-PLAN.md:29)). This is explanatory drift only: dependencies, tasks, verification, and execution remain correct.
+
+No HIGH or MEDIUM concerns remain.
+
+## Scope-Discipline Verdict
+
+Scope discipline held exactly. Commit `4a06d6a` changes only:
+
+- `02-02-PLAN.md`
+- `02-04-PLAN.md`
+- `02-07-PLAN.md`
+- `02-VALIDATION.md`
+
+The other four plans were untouched. Their dependencies and executable behavior remain consistent with the revised plans. The only inconsistency is the LOW stale “two-file scan” description above.
+
+The validation document was correctly resynchronized with the CSP tests, transitive release closure, unsupported-edge tripwire, BSD-safe `wc` handling, and final drift requirement ([02-VALIDATION.md:46](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-VALIDATION.md:46), [02-VALIDATION.md:70](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/02-spa-toolchain-embedded-app-shell-js-supply-chain/02-VALIDATION.md:70)).
+
+## Vacuous-Guard Sweep
+
+There are 42 current `<automated>` slots, not the historical 33 counted before later revisions.
+
+| Plan | Slots | Positive-work assertion |
+|---|---:|---|
+| 02-01 | 3 | All sound: exact named PASS counts; exact `git check-ignore` status plus non-empty positive control; two-way embedded-tree tests. |
+| 02-02 | 5 | Four sound positive slots; the closing package-wide `go test && go vet` is supplemental to exact named-test assertions in adjacent slots. |
+| 02-03 | 6 | All sound: generated-file count/name, non-empty template controls, explicit four-file drift count, floor presence/absence, anchored type-check summary, non-empty build artifact. |
+| 02-04 | 8 | Six sound positive slots; the two package-wide `go test && go vet` slots are supplemental to exact named-test and planted-input controls. |
+| 02-05 | 7 | All sound: non-empty CSS path, anchored type-check logs, positive project-file control before component absence, non-empty fallback, exact named SPA tests. |
+| 02-06 | 7 | Five sound positive slots; `task lint:actions` and package-wide `go test` are supplemental closing checks. Build and drift gates print inspected counts. |
+| 02-07 | 6 | All sound: strict/approval output, lockfile and integrity counts, audit input count, exact workflow-test names, captured pipeline status plus success-line count, final source/output drift counts and BSD-safe clean-tree assertion. |
+
+The supplemental package-wide commands do not independently prove that named tests exist, but sibling slots in the same tasks already require exact named PASS lines. They therefore do not create a vacuous guard.
+
+**No sixth instance of the vacuous-guard family was found.**
+
+## Suggestions
+
+- Before execution, mechanically replace the four stale “two files” BLD-07 assumption rows with “two roots plus their derived local-action and Taskfile-target closure.” This is documentation cleanup, not a convergence blocker.
+- Preserve the general-purpose-installer limitation as an explicit accepted risk. Adding a speculative denylist would create apparent coverage rather than structural assurance.
+
+## Risk Assessment
+
+**Overall risk: LOW.**
+
+The phase’s largest risks—committed SPA-byte drift, Vite non-reproducibility, lifecycle scripts, failed vulnerability scans, release-path JS contamination, CSP breakage, and vacuous negative guards—have explicit mechanisms, positive controls, and RED demonstrations.
+
+**Final verdict: APPROVE. The phase is ready to exit the convergence loop and proceed to execution.**
+
+---
+
+## Consensus Summary (cycle 3)
+
+One grounded reviewer ran this cycle (Codex, `gpt-5.6-sol`, `reasoning=low`). As in cycles 1 and 2,
+every disposition marked **[verified]** below was independently re-checked or **executed** by the
+orchestrator on this macOS/BSD host — which is how three of this phase's defects were found in the
+first place, and remains the concrete compensation for a single lane.
+
+### Cycle-2 disposition (authoritative)
+
+All three cycle-2 actionable findings are **FULLY RESOLVED in plan content**, each traced to the
+live slot or live identifier rather than to acknowledgement prose.
+
+| # | Cycle-2 finding | Sev | Disposition | Evidence |
+|---|-----------------|-----|-------------|----------|
+| 1 | `02-07` final verify's `wc -l \| grep -qx '0'` is a guaranteed false RED under BSD `wc` | MEDIUM | **FULLY RESOLVED** [verified by execution] | `02-07-PLAN.md:391` now ends `test -z "$(git status --porcelain web/)"`. Executed both forms on a clean tree at `4a06d6a`: old form **exit 1**, new form **exit 0**. The rationale at `02-07:402` quotes the old shape as remediation prose — correctly **not** counted as a live defect. |
+| 2 | `02-02`'s CSP artifact names contradict its action text ("single literal" vs. a computed policy) | LOW | **FULLY RESOLVED** [verified] | `rg -c 'spaCSPPolicy'` over all seven plans + `02-VALIDATION.md` returns **zero**. The computed triple `spaCSPBaseDirectives` / `spaInlineBlockHashes` / `buildSPACSPPolicy` is now used consistently at `02-02:30`, `:82-84`, `:199`, `:224-226`, `:238`, `:248-251`, `:268-270`, `:288`. The two surviving "single literal" strings (`02-02:32`, `:228`) describe `spaAssetPrefix`, a different symbol, and `:228` is itself the remediation note. |
+| 3 | `02-04` has no tripwire for a newly-introduced unmodelled reachability edge kind | LOW | **FULLY RESOLVED** [verified] | `errUnsupportedReachabilityEdge`, `unsupportedEdgeKeys` and `TestUnsupportedReachabilityEdgeIsLoud` are declared (`02-04:149-154`), specified with five planted rows **plus a sixth negative-control row against the real closure** (`02-04:223-233`), wired into the counted verify (`02-04:342`), carried into acceptance criteria (`02-04:355-357`), the threat register (`T-02-04-07`, `02-04:539`), `<verification>` and `<success_criteria>`. Boundary (3) is left un-tripwired with an explicit asymmetry argument (`02-04:63-66`, `:290-294`). |
+
+**The asymmetry argument for leaving boundary (3) un-tripwired is sustained** [both, verified].
+Boundaries (1), (2) and (4) are recognisable by *shape* — a `./`-prefixed word resolving to a real
+worktree file, or a `container:`/`services:` key on a job — so refusing on them is a structural
+rule. Boundary (3) (`brew install node`, `curl … | sh`, an unlisted marketplace action) is
+recognisable only by enumerating command spellings, so a tripwire there would be a second curated
+denylist wearing a structural-guard costume. The plan says so rather than smoothing it over, and
+`T-02-04-05` narrows the residual accepted risk to exactly that one boundary. Recording a bounded
+gap honestly beats manufacturing apparent coverage.
+
+### Scope discipline — HELD [both, verified]
+
+`git show --stat 4a06d6a` touches exactly four files:
+
+```
+02-02-PLAN.md      |  47 ++++++---
+02-04-PLAN.md      | 110 +++++++++++++++++----
+02-07-PLAN.md      |   3 +-
+02-VALIDATION.md   |  11 ++-
+```
+
+`02-01`, `02-03`, `02-05` and `02-06` are byte-untouched. They remain internally consistent with
+the three revised plans on every executable dimension — wave ordering, artifact lists, task
+dependencies, test names and verify slots. The **only** cross-plan inconsistency the change
+introduced is the stale BLD-07 "two files" wording carried in the four untouched plans'
+`assumptions` rows, recorded as the single live finding below.
+
+### Guard-positivity sweep — cycle 3
+
+The phase carries **43** live `<automated>` slots, counted mechanically:
+
+```
+02-01 3 · 02-02 5 · 02-03 7 · 02-04 7 · 02-05 7 · 02-06 8 · 02-07 6  → TOTAL=43
+```
+
+*(Codex reported 42 and mis-tallied three plans — `02-03` as 6, `02-04` as 8, `02-06` as 7. The
+per-slot judgements are unaffected; the orchestrator re-enumerated all 43 directly.)*
+
+**No sixth instance of the vacuous-guard family was found** [both, verified]. Every slot carries a
+positive assertion that it did its work, as rule `84d1gfpywd` requires. Forms executed against
+planted inputs on this BSD host this cycle:
+
+- **`02-07:390` pipeline-status capture** — `set -o pipefail; … | tee … | tail -30; rc=$?` correctly
+  yields the *pipeline's* status, not `tail`'s. Executed under `bash`, `zsh` and `/bin/sh` with a
+  planted failing producer: **`rc=1` in all three**. The `| tail -30` here is a live display limiter
+  whose status is neutralised by `pipefail` + `rc=$?`, not the cycle-1 defect shape. Backed by a
+  success-line floor (`grep -c -- '^ok '` ≥ 1) per recorded lesson `5pzpmvthcc`.
+- **`02-01:319` git-ignore guard** — executed whole: `git check-ignore -v web/build/index.html`
+  exits **exactly 1**, the `dist/artifacts.json` control exits 0 with a **non-empty** line
+  containing `/dist/` (`.gitignore:4:/dist/`). Passes for the right reason; the exact-`-eq 1` form
+  correctly excludes exit 128.
+- **`02-03:191` codegen-leak negation** — executed both directions with planted templates: scoped
+  **exit 0**, leaked **exit 1**. The `… && echo LEAK || echo SCOPED` shape the plan quotes at
+  `02-03:196` is remediation prose only.
+- **`02-03:253` / `02-06:361` Taskfile floor probes** — `rg -v '^\s*#' … | rg -c -- '-lt 4' || echo 0`
+  executed with planted content: yields `1` on match and `0` on miss, so the `-ge 1` / `-eq 0`
+  comparisons bind.
+- **`02-02:277` / `:336` `rg -c … || echo 0` idiom** — executed on stdin: `0` on no-match (rg exits
+  1 → `echo 0` fires) and the true count on match. The comparisons bind in both directions.
+
+The three `grep -qE '… [0-9]+ …'` count-echo assertions (`02-06:360`, `02-07:317`, `:318`) accept a
+literal zero **by design and safely**: the floor is enforced *inside* the Taskfile target with a
+named `::error::` and a non-zero exit (`02-06:26`, `:44`, `:305-317`; `02-07:258`, `:278-282`), which
+breaks the `&&` chain before the grep is reached. Each floor carries a captured RED demonstration
+(`02-06:348`, `:367` transcript 5; `02-07:308`, `:329`). These are **not** vacuous.
+
+The four closing `go test ./<pkg>/... && go vet` slots (`02-02:337`, `02-04:424`, `:507`,
+`02-06:444`) remain supplemental, as recorded in cycle 2 — every test they cover already has an
+exact `--- PASS: <name>` count in a sibling slot in the same task. Unchanged, and still not the
+shape `84d1gfpywd` names.
+
+### Live concerns
+
+**HIGH: none.**
+
+**LOW #1 — the four untouched plans still describe BLD-07 as a scan over "two files"**
+[codex, verified]. `02-01:165`, `02-03:127`, `02-05:138`, `02-06:149` each carry an `assumptions`
+row asserting release-path purity is "a token scan over two files". The authoritative model at
+`02-04:29-30` is **two ROOTS plus a derived transitive closure** (today `.github/actions/install-task/action.yml`,
+`release:goreleaser`, `release:record-final-hashes`) — a change cycle 1 forced and cycle 3's tripwire
+extends. `02-03:127` is the sharpest instance because it draws an operative conclusion from the stale
+premise: *"this plan adds a pnpm invocation to `Taskfile.yml`, which BLD-07 does NOT scan — only
+`.goreleaser.yaml` and `release.yml` are in scope."* Under the revised model, a Taskfile target
+reachable from `release.yml` **is** in scope.
+
+*Verified blast radius:* `release.yml` invokes only `task release:goreleaser` (`:228`) and
+`task release:record-final-hashes` (`:274`); the `web:*` targets `02-03`/`02-06` add are outside that
+closure, so the stale row misleads without currently causing a failure, and the guard fails **closed**
+if an executor acts on it. That is why this is LOW and not a convergence blocker — but it is a plan
+edit, so it is counted actionable.
+
+**Fix:** replace the four rows' "a token scan over two files" with "a structural scan over two roots
+plus their derived local-action and Taskfile-target closure", and drop `02-03:127`'s
+"`Taskfile.yml` … NOT scan" clause in favour of "the `web:*` targets are outside the closure
+`release.yml` reaches".
+
+### Agreed strengths (cycle 3)
+
+- **All three cycle-3 fixes landed in executable plan content, not in acknowledgement prose**
+  [both, verified] — each traced to the live `<automated>` slot, the live identifier set, or the
+  live acceptance criterion, and two confirmed by execution.
+- **The `02-04` tripwire ships with its own negative control** [both, verified]. Five planted rows
+  prove it *can* fire; the sixth row proves it does **not** fire on the repository's real closure.
+  Without that row, five passing rows would be equally satisfied by a tripwire that refuses
+  everything — the same guard-the-guard discipline this phase applies to its scanners, now turned on
+  the tripwire itself. `02-04:352-357` additionally requires the candidate path to *resolve to an
+  existing worktree file*, so a path-shaped word that names nothing cannot produce a false RED.
+- **Remediation prose is consistently distinguishable from live defects** [both, verified]. Every
+  quoted broken form (`… && echo LEAK || echo SCOPED`, `| wc -l | grep -qx '0'`, `grep -q -- '--- PASS'`)
+  sits in an acceptance criterion that names the concern it addresses and states the replacement.
+  The live slots are clean. This is the discipline that let a third cycle be cheap.
+- **`02-04`'s "eight new tests" arithmetic checks out** [verified] — the plan declares nine `Test*`
+  names, of which `TestRequiredCheckNamesPreserved` is pre-existing, leaving exactly eight new.
+- **`02-VALIDATION.md` was re-synced with the three fixes rather than left to drift** [codex] —
+  CSP tests, transitive release closure, the unsupported-edge tripwire, BSD-safe `wc` handling and
+  the final drift requirement all reflected.
+
+### Divergent views
+
+None material. Codex's slot tally (42) disagreed with the mechanical count (43) and mis-assigned
+three plans; the orchestrator's re-enumeration supersedes it. Codex's per-slot **judgements** were
+independently confirmed.
+
+### Overall risk
+
+**LOW**, down from LOW–MEDIUM in cycle 2 and HIGH in cycle 1. Concurring with Codex on level and
+verdict. Every mechanism the phase's central claims rest on — committed SPA bytes bound to reviewed
+source, a CI scratch rebuild proving the toolchain still builds, release-path JS purity over a
+derived closure with a loud refusal on unmodelled edges, a composed CSP whose hashes derive from the
+embedded bytes, lifecycle-script and lockfile-integrity gates — has a positive control, a derived
+floor, and a captured RED demonstration. No verify command in the plan set can return success after
+encountering failure, and none can pass by matching nothing.
+
+**Verdict: the phase is ready to exit the convergence loop.** The single live finding is a
+four-line documentation correction that fails closed and blocks nothing; it can be folded into
+execution or applied as a one-line-per-file edit beforehand.
