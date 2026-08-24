@@ -140,7 +140,18 @@ var protoDriftComparedCountRe = regexp.MustCompile(`compared\s+\$\{nfiles\}\s+ge
 // protoDriftZeroCountFailureRe matches proto:drift's zero/short-count
 // failure branch: a numeric comparison against the same ${nfiles} variable
 // the count echo above reports, guarding a failing exit.
-var protoDriftZeroCountFailureRe = regexp.MustCompile(`\$\{nfiles\}"\s+-lt\s+3`)
+//
+// The floor literal is pinned here on purpose, so that moving proto:drift's
+// floor is a deliberate, paired edit rather than a silent widening. It is 4
+// because four generated files are committed and compared: graph.pb.go,
+// ui.pb.go, ui.connect.go (Go) and ui_pb.ts (TypeScript). To re-verify, run
+// `git ls-files -- 'internal/schema/*.pb.go' 'internal/uiproto/uiv1/*.pb.go'
+// 'internal/uiproto/uiv1/uiv1connect/*.connect.go' 'web/src/lib/gen/*.ts'`
+// and count the result. Per rule 84d1gfpywd the floor moves to the CORRECT
+// number, never merely upward: 4 holds only while buf.gen.ts.yaml sets
+// `opt: target=ts`, since the protoc-gen-es default of js+dts would emit two
+// files and make 5 the wrong-but-plausible number.
+var protoDriftZeroCountFailureRe = regexp.MustCompile(`\$\{nfiles\}"\s+-lt\s+4`)
 
 // TestProtoDriftGuardReportsAComparedCount asserts the proto:drift command
 // body contains a count-reporting step (protoDriftComparedCountRe) AND a
