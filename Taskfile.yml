@@ -141,9 +141,11 @@ tasks:
   proto:gen:
     desc: >-
       Regenerates BOTH proto surfaces this repo maintains
-      (internal/schema/graph.proto and internal/uiproto/uiv1/ui.proto) via
-      `buf generate`, driven by buf.yaml/buf.gen.yaml (RPC-01, BLD-04).
-      Tool versions are pinned in the isolated go.tool-proto.mod (buf
+      (internal/schema/graph.proto and internal/uiproto/uiv1/ui.proto) in
+      TWO languages — Go (buf.gen.yaml, module-wide) and, for
+      internal/uiproto/uiv1/ui.proto alone, the browser's TypeScript
+      Connect client (buf.gen.ts.yaml, D-05/D-06/D-07). Tool versions for
+      the Go half are pinned in the isolated go.tool-proto.mod (buf
       v1.72.0, protoc-gen-go matching the main module's
       google.golang.org/protobuf runtime version, protoc-gen-connect-go
       v1.20.0 — go.tool-proto.mod's own header records why this modfile is
@@ -160,9 +162,27 @@ tasks:
       exactly what this pinned toolchain emits (01-01-PLAN.md Task 2) —
       from that commit onward, a header change here IS drift, not a
       one-time artifact to tolerate.
+
+      The TypeScript half's ONLY non-Go dependency is
+      web/node_modules/.bin/protoc-gen-es (installed by `pnpm install
+      --frozen-lockfile` in web/) — this dependency is deliberately hard,
+      never optional: the precondition below fails the whole target loudly
+      when the plugin binary is missing, rather than silently skipping
+      TypeScript generation and reporting success (D-05). buf.gen.ts.yaml
+      resolves protoc-gen-es via `--path internal/uiproto/uiv1/ui.proto`
+      against buf.yaml's default module, NOT an `inputs: directory:`
+      override — see buf.gen.ts.yaml's own header comment for why the
+      override mechanism fails in this repo. Because that CLI-`--path`
+      mechanism names output relative to the whole module root, the raw
+      `buf generate` call lands the single emitted file at
+      web/src/lib/gen/internal/uiproto/uiv1/ui_pb.ts; this target then
+      relocates it to the committed path web/src/lib/gen/ui_pb.ts and
+      removes the now-empty intermediate directories.
     preconditions:
       - sh: command -v go
         msg: "go not found — proto:gen builds buf/protoc-gen-go/protoc-gen-connect-go via go build/go tool."
+      - sh: test -x web/node_modules/.bin/protoc-gen-es
+        msg: "web/node_modules/.bin/protoc-gen-es not found or not executable — run `pnpm install --frozen-lockfile` in web/. TypeScript client generation is never skipped when this plugin is missing (D-05); fix the install, don't bypass this check."
     cmds:
       - |
         set -euo pipefail
@@ -174,7 +194,13 @@ tasks:
         go build -modfile=go.tool-proto.mod -o "${scratch}/protoc-gen-connect-go" connectrpc.com/connect/cmd/protoc-gen-connect-go
 
         PATH="${scratch}:${PATH}" {{.GO_TOOL_PROTO}} buf generate
-        echo "proto:gen: regenerated internal/schema and internal/uiproto/uiv1 via buf v1.72.0"
+        echo "proto:gen: regenerated internal/schema and internal/uiproto/uiv1 (Go) via buf v1.72.0"
+
+        PATH="web/node_modules/.bin:${PATH}" {{.GO_TOOL_PROTO}} buf generate --template buf.gen.ts.yaml --path internal/uiproto/uiv1/ui.proto
+        mkdir -p web/src/lib/gen
+        mv web/src/lib/gen/internal/uiproto/uiv1/ui_pb.ts web/src/lib/gen/ui_pb.ts
+        rm -rf web/src/lib/gen/internal
+        echo "proto:gen: regenerated web/src/lib/gen/ui_pb.ts (TypeScript) via protoc-gen-es, scoped to internal/uiproto/uiv1/ui.proto alone"
 
   proto:drift:
     desc: >-
