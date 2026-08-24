@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 02
 current_phase_name: SPA Toolchain, Embedded App Shell & JS Supply Chain
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-08-24T23:17:52.136Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-08-24T23:39:42.422Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 02 execution started
-state_head: 7014a583e97a14ca0f57a6257231d9323ed4fc29
+state_head: fdd9e7b7c0b62fea722cd87ea3b689028cf17f16
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 18
-  completed_plans: 14
+  completed_plans: 15
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 02 (SPA Toolchain, Embedded App Shell & JS Supply Chain) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 02 execution started
 
@@ -75,6 +75,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P01 | 35min | 2 tasks | 23 files |
 | Phase 02 P02 | 40min | 2 tasks | 2 files |
 | Phase 02 P03 | ~45min | 3 tasks | 6 files |
+| Phase 02 P04 | 20min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,7 @@ Standing decisions that outlive every milestone:
 - [Phase 2]: No svelte.config.js in this SvelteKit toolchain version (kit ^2.63.0 scaffolded by sv@0.17.0) — adapter/kit config lives in vite.config.ts's sveltekit() plugin options instead
 - [Phase 2]: typescript pinned to 6.0.3 (sv@0.17.0's own scaffold default) rather than 5.9.3 — the 6.x line postdates 02-RESEARCH.md and is what the current toolchain itself verified as compatible
 - [Phase 02]: [Phase 2] buf v1.72.0's inputs: directory: override cannot scope a subdirectory already covered by a configured buf.yaml module — proto:gen/proto:drift use the --path CLI fallback + a relocate step instead (protoc-gen-es has no paths=source_relative equivalent)
+- [Phase 02]: [Phase 02] BLD-07's release-path closure is derived from release.yml's own uses:/run: content (not hardcoded), with an errUnsupportedReachabilityEdge tripwire refusing loudly on edge kinds the model does not cover
 
 ### Pending Todos
 
@@ -243,8 +245,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-24T23:17:52.099Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-08-24T23:39:22.386Z
+Stopped at: Completed 02-04-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

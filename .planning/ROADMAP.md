@@ -180,7 +180,7 @@ Plans:
   5. `pnpm audit` runs as a named CI gate that distinguishes "scanned and clean" from "the scan itself failed" — proven by a sibling assertion that does not read `pnpm audit`'s exit code — and no `pnpm`/`node`/`npx`/`npm` invocation is reachable anywhere in `.goreleaser.yaml` or `release.yml`, checked structurally rather than by design intent (BLD-06, BLD-07)
 
 **Notes**: `//go:embed all:build` — the committed output directory is `web/build/`, `adapter-static`'s own default (D-02/D-03 in `02-CONTEXT.md`); this text previously said `dist/`, which the phase never creates. Without the `all:` prefix, Go's default dotfile/underscore exclusion silently drops SvelteKit's `_app`-prefixed output and the build still succeeds. Criterion 1's verification is a file-list diff between the embedded FS and the on-disk tree, not "the build succeeded". Criterion 3's guard binds two things, not one: a source-tree digest AND a manifest of the committed output tree's own file list and per-file content hashes — a source-only marker passes when someone hand-edits the shipped bytes. Approval state belongs in committed config, never in per-machine interactive state.
-**Plans**: 3/7 plans executed
+**Plans**: 4/7 plans executed
 **UI hint**: yes
 
 Plans:
@@ -193,7 +193,7 @@ Plans:
 
 - [x] 02-02-PLAN.md — SPA fallback routing in full: immutable-prefix 404, client-route fallback, two-class cache policy, RPC precedence, plus `nosniff` and a same-origin CSP whose script hashes derive from the embedded `index.html` (RPC-03, BLD-02)
 - [x] 02-03-PLAN.md — Scoped `protoc-gen-es` template, committed TS Connect client, `proto:drift` floor 3 → 4 (BLD-01, BLD-02)
-- [ ] 02-04-PLAN.md — Transitive structural release-path purity scan over `.goreleaser.yaml`, `release.yml` and the local actions and Taskfile targets they execute, positive-controlled; plus the no-JS-cache invariant on the CI install path (BLD-07, BLD-01)
+- [x] 02-04-PLAN.md — Transitive structural release-path purity scan over `.goreleaser.yaml`, `release.yml` and the local actions and Taskfile targets they execute, positive-controlled; plus the no-JS-cache invariant on the CI install path (BLD-07, BLD-01)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -299,7 +299,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | Complete    | 2026-08-23 |
-| 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 3/7 | In Progress|  |
+| 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 4/7 | In Progress|  |
 | 3. Browse, Inspect & Navigation | 0/TBD | Not started | - |
 | 4. Query Workbench & Index Health | 0/TBD | Not started | - |
 | 5. File/Package Graph View | 0/TBD | Not started | - |
