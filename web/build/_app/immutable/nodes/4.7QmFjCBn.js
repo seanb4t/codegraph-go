@@ -1,0 +1,1 @@
+import{L as e,g as t,m as n}from"../chunks/CqfZ7yRm.js";import"../chunks/xihTtKlq.js";var r=t(`<h1 class="text-lg font-semibold">Graph</h1> <p class="mt-1 text-sm text-muted-foreground">Phase 5: the whole repository as one readable picture at file/package granularity.</p>`,1);function i(t){var i=r();e(2),n(t,i)}export{i as component};
