@@ -694,6 +694,323 @@ tasks:
 
         echo "web:build:verify: PASS — ${FILE_COUNT} files built into scratch, structural invariants held, committed tree untouched"
 
+  web:lockfile:
+    desc: >-
+      BLD-06's lockfile-SHAPE guard — the sibling half `web:audit` invokes
+      BEFORE the audit command ever appears (see that target's desc: for why
+      this half must stay structurally incapable of reading `pnpm audit`'s
+      exit code). Separately runnable on purpose, so it can be reasoned
+      about — and demonstrated RED — independently of the audit itself.
+
+      Reads web/pnpm-lock.yaml with the same REAL YAML decoder
+      web:deps:strict uses (go.yaml.in/yaml/v3, already a direct main-module
+      dependency; built into a scratch dir via `go run`, no new .go file
+      ever committed). This installed pnpm's lockfile format
+      (lockfileVersion '9.0', pnpm 11.23.0, verified 02-07) keeps every
+      resolved dependency version under the top-level `packages:` mapping —
+      that is the mapping this target counts; `importers:` and `snapshots:`
+      are the OTHER two top-level mappings this format uses and are
+      deliberately NOT what is counted here.
+
+      Prints its count BEFORE any comparison (rule 84d1gfpywd): this is the
+      POSITIVE assertion — an empty or truncated lockfile is caught by a
+      floor, not read as a clean scan of nothing. FLOOR=50: this repository
+      declares 129 packages as of 02-07 (observed, printed at every run);
+      50 is chosen as a stable lower bound comfortably below that number —
+      survives ordinary dependency pruning, catches a truncated or emptied
+      lockfile. Never the observed count, which moves with every dependency
+      change.
+
+      `--frozen-lockfile` (web:deps) proves the lockfile was not REWRITTEN;
+      it proves nothing about what is IN it (review concern this target
+      closes). Three further structural properties, each printing its
+      observed number before comparing: (1) the declared lockfileVersion
+      equals '9.0', the value this installed pnpm 11.23.0 writes — a silent
+      lockfile-format bump changes what every other assertion here is
+      reading; (2) integrity-bearing resolutions EQUAL total resolutions
+      (equality, not a floor — a floor would pass while some entries
+      silently lacked integrity); (3) zero `file:` paths, zero mutable git
+      sources, zero direct HTTP/HTTPS tarball URLs — each count printed
+      even when zero, so the check states what it searched for, not merely
+      that it found nothing. Workspace-internal `link:` sources are the ONE
+      permitted non-registry kind (none exist in this single-package
+      workspace today; the count is still printed).
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — web:lockfile parses web/pnpm-lock.yaml with go.yaml.in/yaml/v3 via go run."
+      - sh: test -f web/pnpm-lock.yaml
+        msg: "web/pnpm-lock.yaml not found."
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        cat > "${scratch}/main.go" <<'GOEOF'
+        package main
+
+        import (
+        	"fmt"
+        	"os"
+        	"strings"
+
+        	yaml "go.yaml.in/yaml/v3"
+        )
+
+        type packageEntry struct {
+        	Resolution map[string]interface{} `yaml:"resolution"`
+        }
+
+        type lockFile struct {
+        	LockfileVersion string                  `yaml:"lockfileVersion"`
+        	Packages        map[string]packageEntry `yaml:"packages"`
+        }
+
+        func main() {
+        	data, err := os.ReadFile(os.Args[1])
+        	if err != nil {
+        		fmt.Fprintln(os.Stderr, err)
+        		os.Exit(2)
+        	}
+        	var lf lockFile
+        	if err := yaml.Unmarshal(data, &lf); err != nil {
+        		fmt.Fprintln(os.Stderr, err)
+        		os.Exit(2)
+        	}
+
+        	packages := len(lf.Packages)
+        	resolutions := 0
+        	integrityBearing := 0
+        	fileSources := 0
+        	gitSources := 0
+        	tarballSources := 0
+        	linkSources := 0
+
+        	for key, pkg := range lf.Packages {
+        		isFile := strings.Contains(key, "file:")
+        		isGit := strings.Contains(key, "git+")
+        		isLink := strings.Contains(key, "link:")
+        		if pkg.Resolution != nil {
+        			resolutions++
+        			if _, ok := pkg.Resolution["commit"]; ok {
+        				isGit = true
+        			}
+        			if tb, ok := pkg.Resolution["tarball"]; ok {
+        				if s, ok2 := tb.(string); ok2 && (strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")) {
+        					tarballSources++
+        				}
+        			}
+        			if integ, ok := pkg.Resolution["integrity"]; ok {
+        				if s, ok2 := integ.(string); ok2 && s != "" {
+        					integrityBearing++
+        				}
+        			}
+        		}
+        		if isFile {
+        			fileSources++
+        		}
+        		if isGit {
+        			gitSources++
+        		}
+        		if isLink {
+        			linkSources++
+        		}
+        	}
+
+        	fmt.Printf("lockfileVersion:%s\n", lf.LockfileVersion)
+        	fmt.Printf("packages:%d\n", packages)
+        	fmt.Printf("resolutions:%d\n", resolutions)
+        	fmt.Printf("integrity:%d\n", integrityBearing)
+        	fmt.Printf("file-sources:%d\n", fileSources)
+        	fmt.Printf("git-sources:%d\n", gitSources)
+        	fmt.Printf("tarball-sources:%d\n", tarballSources)
+        	fmt.Printf("link-sources:%d\n", linkSources)
+        }
+        GOEOF
+
+        OUT=$(GOWORK=off go run "${scratch}/main.go" web/pnpm-lock.yaml)
+
+        LOCKFILE_VERSION=$(printf '%s\n' "${OUT}" | sed -n 's/^lockfileVersion://p')
+        PKG_N=$(printf '%s\n' "${OUT}" | sed -n 's/^packages://p')
+        RES_N=$(printf '%s\n' "${OUT}" | sed -n 's/^resolutions://p')
+        INTEGRITY_N=$(printf '%s\n' "${OUT}" | sed -n 's/^integrity://p')
+        FILE_N=$(printf '%s\n' "${OUT}" | sed -n 's/^file-sources://p')
+        GIT_N=$(printf '%s\n' "${OUT}" | sed -n 's/^git-sources://p')
+        TARBALL_N=$(printf '%s\n' "${OUT}" | sed -n 's/^tarball-sources://p')
+        LINK_N=$(printf '%s\n' "${OUT}" | sed -n 's/^link-sources://p')
+
+        echo "web:lockfile: pnpm-lock.yaml declares ${PKG_N} packages"
+        echo "web:lockfile: lockfileVersion '${LOCKFILE_VERSION}' (expected '9.0', written by pnpm 11.23.0 as of 02-07)"
+        echo "web:lockfile: integrity-bearing resolutions: ${INTEGRITY_N} of ${RES_N}"
+        echo "web:lockfile: rejected-source counts — file: ${FILE_N}, git: ${GIT_N}, HTTP/HTTPS tarball: ${TARBALL_N}"
+        echo "web:lockfile: workspace-internal link: sources (the one permitted non-registry kind): ${LINK_N}"
+
+        FLOOR=50
+        FAILED=0
+
+        if [ "${PKG_N}" -lt "${FLOOR}" ]; then
+          echo "::error::web:lockfile: pnpm-lock.yaml declares only ${PKG_N} packages, want at least ${FLOOR} — a truncated or emptied lockfile must fail loud, never read as a clean scan of nothing" >&2
+          FAILED=1
+        fi
+
+        if [ "${LOCKFILE_VERSION}" != "9.0" ]; then
+          echo "::error::web:lockfile: lockfileVersion is '${LOCKFILE_VERSION}', want '9.0' — a silent lockfile-format bump changes what every other assertion in this target is reading" >&2
+          FAILED=1
+        fi
+
+        if [ "${INTEGRITY_N}" != "${RES_N}" ]; then
+          echo "::error::web:lockfile: integrity-bearing resolutions (${INTEGRITY_N}) does not EQUAL total resolutions (${RES_N}) — at least one registry resolution lacks an integrity checksum" >&2
+          FAILED=1
+        fi
+
+        if [ "${FILE_N}" != "0" ]; then
+          echo "::error::web:lockfile: found ${FILE_N} file: dependency source(s) — only registry and workspace-internal link: sources are permitted" >&2
+          FAILED=1
+        fi
+
+        if [ "${GIT_N}" != "0" ]; then
+          echo "::error::web:lockfile: found ${GIT_N} git dependency source(s) — only registry and workspace-internal link: sources are permitted" >&2
+          FAILED=1
+        fi
+
+        if [ "${TARBALL_N}" != "0" ]; then
+          echo "::error::web:lockfile: found ${TARBALL_N} direct HTTP/HTTPS tarball dependency source(s) — only registry and workspace-internal link: sources are permitted" >&2
+          FAILED=1
+        fi
+
+        if [ "${FAILED}" -ne 0 ]; then
+          exit 1
+        fi
+
+        echo "web:lockfile: PASS — ${PKG_N} packages declared, lockfileVersion '9.0', ${INTEGRITY_N} of ${RES_N} resolutions integrity-bearing, zero non-registry/non-link sources"
+
+  web:audit:
+    desc: >-
+      BLD-06's `pnpm audit` gate (D-15). Runs `web:lockfile` FIRST as a
+      Taskfile dependency — that target runs to completion, prints its own
+      counts, and returns before the `pnpm audit` invocation below ever
+      appears in this target's own cmds:. `web:lockfile`'s code path never
+      references `pnpm audit`'s exit status or output; this is what makes
+      it a genuine non-vacuity SIBLING rather than a second read of the same
+      signal. D-15: a pinned JS advisory ID (the `vuln:selftest` shape) was
+      considered and declined — a JS advisory rots as packages are yanked
+      or patched far faster than the Go proxy-cached ecosystem, and no
+      low-maintenance pin was found. `web:lockfile`'s package count proves
+      the scan had real input; it deliberately does not prove the detector
+      can fire (see PLAN.md's `<known_limitations>`).
+
+      Classifies on OUTPUT SHAPE, never on `pnpm audit`'s exit code alone
+      (empirically confirmed 02-07: a real clean scan exits 0 with
+      `{"advisories":{},"metadata":{...}}`; a real registry-unreachable
+      scan ALSO exits 1 — the SAME exit code a real advisory-bearing scan
+      returns — with `{"error":{"code":"pnpm","message":"fetch failed"}}`;
+      exit code alone cannot tell these apart). Parses stdout as JSON via
+      Go's stdlib encoding/json (no new dependency, no new committed file —
+      same scratch-`go run` shape web:deps:strict and web:lockfile use).
+      Three outcomes, three distinct named messages: unparseable/empty
+      output or a present `error` key or a missing `metadata` key is SCAN
+      ERROR — the scan itself could not be trusted, and this is
+      deliberately never folded into CLEAN; a parseable result with zero
+      `advisories` entries is CLEAN; a parseable result with one or more
+      `advisories` entries is a FAILURE naming them. Demonstrated in this
+      phase: CLEAN (the ordinary run) and SCAN ERROR (registry pointed at
+      an unreachable port). NOT demonstrated: ADVISORIES PRESENT — D-15
+      declined a pinned-advisory fixture; this branch is implemented and
+      named but unexercised (see PLAN.md's `<known_limitations>` table).
+    deps:
+      - web:lockfile
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        cat > "${scratch}/main.go" <<'GOEOF'
+        package main
+
+        import (
+        	"encoding/json"
+        	"fmt"
+        	"os"
+        )
+
+        type auditOutput struct {
+        	Advisories map[string]json.RawMessage `json:"advisories"`
+        	Metadata   json.RawMessage            `json:"metadata"`
+        	Error      map[string]interface{}     `json:"error"`
+        }
+
+        func main() {
+        	data, err := os.ReadFile(os.Args[1])
+        	if err != nil {
+        		fmt.Fprintln(os.Stderr, err)
+        		os.Exit(2)
+        	}
+        	if len(data) == 0 {
+        		fmt.Println("CLASS:SCAN_ERROR")
+        		fmt.Println("REASON:empty stdout")
+        		return
+        	}
+        	var out auditOutput
+        	if err := json.Unmarshal(data, &out); err != nil {
+        		fmt.Println("CLASS:SCAN_ERROR")
+        		fmt.Printf("REASON:unparseable JSON: %v\n", err)
+        		return
+        	}
+        	if out.Error != nil {
+        		fmt.Println("CLASS:SCAN_ERROR")
+        		msg, _ := out.Error["message"].(string)
+        		code, _ := out.Error["code"].(string)
+        		fmt.Printf("REASON:transport error code=%s message=%s\n", code, msg)
+        		return
+        	}
+        	if out.Metadata == nil {
+        		fmt.Println("CLASS:SCAN_ERROR")
+        		fmt.Println("REASON:missing metadata key in an otherwise-parseable response")
+        		return
+        	}
+        	if len(out.Advisories) == 0 {
+        		fmt.Println("CLASS:CLEAN")
+        		return
+        	}
+        	fmt.Println("CLASS:ADVISORIES_PRESENT")
+        	fmt.Printf("COUNT:%d\n", len(out.Advisories))
+        	for id := range out.Advisories {
+        		fmt.Printf("ADVISORY:%s\n", id)
+        	}
+        }
+        GOEOF
+
+        set +e
+        (cd web && pnpm audit --json) > "${scratch}/audit-out.json" 2> "${scratch}/audit-err.log"
+        AUDIT_RC=$?
+        set -e
+
+        CLASS_OUT=$(GOWORK=off go run "${scratch}/main.go" "${scratch}/audit-out.json")
+        CLASS=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^CLASS://p')
+
+        case "${CLASS}" in
+          CLEAN)
+            echo "web:audit: pnpm audit exited ${AUDIT_RC}, output classified CLEAN — parseable JSON, zero advisories"
+            echo "web:audit: PASS — lockfile-declared package count printed above by web:lockfile, audit scan produced a real result, zero advisories reported"
+            ;;
+          SCAN_ERROR)
+            REASON=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^REASON://p')
+            echo "::error::web:audit: SCAN ERROR — pnpm audit exited ${AUDIT_RC} and its output could not be trusted as a scan result (${REASON}). This is deliberately NOT folded into a clean verdict." >&2
+            exit 1
+            ;;
+          ADVISORIES_PRESENT)
+            COUNT=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^COUNT://p')
+            IDS=$(printf '%s\n' "${CLASS_OUT}" | sed -n 's/^ADVISORY://p' | tr '\n' ' ')
+            echo "::error::web:audit: ADVISORIES PRESENT — pnpm audit exited ${AUDIT_RC} and reported ${COUNT} advisory(ies): ${IDS}" >&2
+            exit 1
+            ;;
+          *)
+            echo "::error::web:audit: classifier produced an unrecognized class '${CLASS}' — treating as SCAN ERROR" >&2
+            exit 1
+            ;;
+        esac
+
   web:drift:
     desc: >-
       BLD-03's two-part staleness-and-tamper guard. Hashes TWO independent

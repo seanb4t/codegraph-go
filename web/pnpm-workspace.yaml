@@ -21,3 +21,19 @@
 # dependency actually needs approval — it will populate real entries here.
 strictDepBuilds: true
 allowBuilds: {}
+
+# 02-07 (BLD-06): forces the `cookie` transitive dependency pulled in by
+# @sveltejs/kit@2.70.3 past GHSA-pxg6-pf52-xh8x (cookie <0.7.0 accepts
+# out-of-bounds characters in cookie name/path/domain — advisory 1103907,
+# severity low, dev-only). @sveltejs/kit's own published dependency range
+# is still `cookie: ^0.6.0` as of this writing (verified against
+# @sveltejs/kit@latest 02-07) — upstream has not bumped it — so a plain
+# `pnpm update` cannot reach the patched line; this override forces
+# resolution to >=0.7.2 without waiting on that upstream bump. Verified:
+# `pnpm audit` reports zero advisories after this override, and `pnpm
+# build` / `svelte-check` are unaffected — cookie 0.6->0.7 is a
+# parsing-strictness fix, not an API change SvelteKit's usage depends on.
+# Revisit (loosen or drop) once @sveltejs/kit ships its own bump past
+# cookie@0.7.0.
+overrides:
+  cookie@<0.7.0: ^0.7.2
