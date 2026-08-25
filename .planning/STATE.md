@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 02
 current_phase_name: SPA Toolchain, Embedded App Shell & JS Supply Chain
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-08-25T00:16:55.369Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-08-25T00:34:01.941Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 02 execution started
-state_head: 389cb89dc010aed1c0bf697e276b6afe3f553d41
+state_head: 769b0f9053f5b42c516057fffae49590222b8978
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 18
-  completed_plans: 16
+  completed_plans: 17
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 02 (SPA Toolchain, Embedded App Shell & JS Supply Chain) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 02 execution started
 
@@ -77,6 +77,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P03 | ~45min | 3 tasks | 6 files |
 | Phase 02 P04 | 20min | 3 tasks | 1 files |
 | Phase 02 P05 | ~55min | 3 tasks | 13 files |
+| Phase 02 P06 | ~1h5min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: [Phase 02] BLD-07's release-path closure is derived from release.yml's own uses:/run: content (not hardcoded), with an errUnsupportedReachabilityEdge tripwire refusing loudly on edge kinds the model does not cover
 - [Phase 02]: [Phase 02] shadcn-svelte@1.5.0 init has no non-interactive CLI path (piped stdin is treated as EOF, writes nothing) — drove it through a real pty (Python's pty module + pyte VT100 rendering) to answer each prompt and record every answer
 - [Phase 02]: [Phase 02] shadcn-svelte init auto-added itself as a devDependency and imported its own package-relative shadcn-svelte/tailwind.css from app.css; removed the dependency (T-02-05-06 requires dlx-only) and inlined that CSS file's verbatim boilerplate content (not the token set) in its place
+- [Phase 02]: WEB_HASH_LIB Taskfile var shares the source/output hashing pipeline between web:build and web:drift, never duplicated. — Task 2's own instruction: two copies of a hashing pipeline that must agree is a defect waiting to happen.
+- [Phase 02]: CODEGRAPH_WEB_BUILD_DIR override lives in web/vite.config.ts, not web/svelte.config.js (which does not exist in this toolchain). — 02-01-SUMMARY.md already recorded that adapter-static config lives in vite.config.ts for this SvelteKit/sv@0.17.0 scaffold.
 
 ### Pending Todos
 
@@ -248,8 +251,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-25T00:16:55.323Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-08-25T00:34:01.894Z
+Stopped at: Completed 02-06-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

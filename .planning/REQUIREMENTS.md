@@ -82,7 +82,7 @@
 
 ### Build & Supply Chain
 
-- [ ] **BLD-01**: The frontend toolchain is `pnpm` — `pnpm-lock.yaml` committed, pnpm version pinned via Corepack's `packageManager`, `pnpm install --frozen-lockfile` in CI
+- [x] **BLD-01**: The frontend toolchain is `pnpm` — `pnpm-lock.yaml` committed, pnpm version pinned via Corepack's `packageManager`, `pnpm install --frozen-lockfile` in CI
 - [x] **BLD-02**: The built SPA is committed to the repo and `go:embed`'d into the binary
 - [ ] **BLD-03**: A drift guard proves committed `dist/` matches its SPA source, carries a positive assertion that it inspected something, and is demonstrated RED before being trusted green
 - [x] **BLD-04**: A drift guard proves committed protobuf codegen matches its `.proto` source, covering **both** the new UI schema **and** the pre-existing `internal/schema/graph.proto` (which has no such guard today)
@@ -176,7 +176,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | LIV-02 | Phase 6 | Pending |
 | LIV-03 | Phase 6 | Pending |
 | LIV-04 | Phase 6 | Pending |
-| BLD-01 | Phase 2 | Pending |
+| BLD-01 | Phase 2 | Complete |
 | BLD-02 | Phase 2 | Complete |
 | BLD-03 | Phase 2 | Pending |
 | BLD-04 | Phase 1 | Complete |
