@@ -573,6 +573,115 @@ tasks:
 
         echo "web:build:verify: PASS — ${FILE_COUNT} files built into scratch, structural invariants held, committed tree untouched"
 
+  web:drift:
+    desc: >-
+      BLD-03's two-part staleness-and-tamper guard. Hashes TWO independent
+      things — the source tree and the committed output tree, both IN
+      PLACE — via the same WEB_HASH_LIB pipeline web:build wrote the marker
+      with (one shared definition; see the Taskfile var above), never a
+      duplicated copy that could silently drift out of agreement. Neither
+      half is a regenerate-and-byte-compare guard: two Vite builds of
+      identical source can legitimately produce different content-hash
+      filenames (vitejs/vite#15555, closed not-planned; #13071 — this
+      target's own sibling web:build just reproduced that non-determinism
+      twice in a row during this plan's execution); hashing a tree that
+      already exists on disk has no such dependency. What each half proves
+      and what it cannot: the SOURCE half catches "someone changed the app
+      and did not rebuild"; the OUTPUT half catches "someone changed the
+      shipped bytes without changing the source" — a hand-edited, added, or
+      removed file inside the committed web/build/ tree, the exact bytes
+      //go:embed all:build ships to every user. Neither alone is BLD-03.
+      This target invokes rule 84d1gfpywd on itself: both counts are
+      printed BEFORE any comparison runs, and each has its own derived
+      floor — a small, stable lower bound, never the observed count, which
+      moves every time a route or a dependency is added. web:drift MUST
+      NOT depend on web:build and never rebuilds anything: it only
+      recomputes digests over what is already on disk.
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — web:drift enumerates the source tree via git ls-files."
+      - sh: command -v sha256sum || command -v shasum
+        msg: "neither sha256sum nor shasum is on PATH — web:drift cannot hash the source or output trees."
+    cmds:
+      - |
+        set -euo pipefail
+        {{.WEB_HASH_LIB}}
+
+        HC=$(web_hash_cmd)
+
+        SRC_FILES=$(web_source_files)
+        SRC_OUT=$(web_hash_tree "${HC}" "${SRC_FILES}")
+        SRC_N=$(printf '%s\n' "${SRC_OUT}" | sed -n '1p')
+        SRC_DIGEST=$(printf '%s\n' "${SRC_OUT}" | sed -n '2p')
+
+        OUT_FILES=$(web_output_files)
+        OUT_OUT=$(web_hash_tree "${HC}" "${OUT_FILES}")
+        OUT_N=$(printf '%s\n' "${OUT_OUT}" | sed -n '1p')
+        OUT_DIGEST=$(printf '%s\n' "${OUT_OUT}" | sed -n '2p')
+
+        echo "web:drift: hashed ${SRC_N} source files"
+        echo "web:drift: manifested ${OUT_N} output files"
+
+        # SOURCE floor: the six structurally-mandatory toolchain config
+        # files this toolchain version actually has (package.json,
+        # pnpm-lock.yaml, pnpm-workspace.yaml, vite.config.ts,
+        # tsconfig.json, components.json — web/svelte.config.js is NOT one
+        # of them; see the WEB_HASH_LIB var's own comment above) plus the
+        # two files any SvelteKit build requires at all: src/app.html and
+        # at least one route (+page.svelte). A small, stable lower bound —
+        # never the observed count, which moves every time a route or a
+        # dependency is added.
+        SRC_FLOOR=8
+        if [ "${SRC_N}" -lt "${SRC_FLOOR}" ]; then
+          echo "::error::web:drift: hashed only ${SRC_N} source files, want at least ${SRC_FLOOR} (package.json, pnpm-lock.yaml, pnpm-workspace.yaml, vite.config.ts, tsconfig.json, components.json, src/app.html, at least one +page.svelte route) — a narrowed enumeration must fail loud, never read as a clean pass" >&2
+          exit 1
+        fi
+
+        # OUTPUT floor: what any adapter-static build must emit —
+        # index.html, at least one immutable .js chunk, at least one
+        # immutable .css file.
+        OUT_FLOOR=3
+        if [ "${OUT_N}" -lt "${OUT_FLOOR}" ]; then
+          echo "::error::web:drift: manifested only ${OUT_N} output files, want at least ${OUT_FLOOR} (index.html, an immutable .js chunk, an immutable .css file) — a narrowed enumeration must fail loud, never read as a clean pass" >&2
+          exit 1
+        fi
+
+        if [ ! -f web/build/.build-manifest ]; then
+          echo "::error::web:drift: web/build/.build-manifest is missing — run \`task web:build\` to rebuild and write it. This is never a pass." >&2
+          exit 1
+        fi
+
+        MARKER_SRC_N=$(sed -n 's/^source-files: //p' web/build/.build-manifest)
+        MARKER_SRC_DIGEST=$(sed -n 's/^source-sha256: //p' web/build/.build-manifest)
+        MARKER_OUT_N=$(sed -n 's/^output-files: //p' web/build/.build-manifest)
+        MARKER_OUT_DIGEST=$(sed -n 's/^output-sha256: //p' web/build/.build-manifest)
+
+        if [ -z "${MARKER_SRC_N}" ] || [ -z "${MARKER_SRC_DIGEST}" ] || [ -z "${MARKER_OUT_N}" ] || [ -z "${MARKER_OUT_DIGEST}" ]; then
+          echo "::error::web:drift: web/build/.build-manifest is unparseable or missing one of its four expected keys (source-files, source-sha256, output-files, output-sha256) — run \`task web:build\` to rewrite it. This is never a pass." >&2
+          exit 1
+        fi
+
+        DRIFT=0
+        if [ "${MARKER_SRC_N}" != "${SRC_N}" ] || [ "${MARKER_SRC_DIGEST}" != "${SRC_DIGEST}" ]; then
+          echo "::error::web:drift: SOURCE-half mismatch — the committed build output is stale relative to its source (marker: ${MARKER_SRC_N} files / ${MARKER_SRC_DIGEST}; recomputed: ${SRC_N} files / ${SRC_DIGEST}). Run \`task web:build\` to rebuild." >&2
+          DRIFT=1
+        else
+          echo "web:drift: source half MATCH (${SRC_N} files, ${SRC_DIGEST})"
+        fi
+
+        if [ "${MARKER_OUT_N}" != "${OUT_N}" ] || [ "${MARKER_OUT_DIGEST}" != "${OUT_DIGEST}" ]; then
+          echo "::error::web:drift: OUTPUT-half mismatch — the committed web/build/ bytes are NOT the ones \`task web:build\` produced: someone edited, added, or removed a file inside the committed build output (marker: ${MARKER_OUT_N} files / ${MARKER_OUT_DIGEST}; recomputed: ${OUT_N} files / ${OUT_DIGEST}). Run \`task web:build\` to rebuild — but an unexplained output-half mismatch on a tree nobody rebuilt should be INVESTIGATED, not rebuilt away." >&2
+          DRIFT=1
+        else
+          echo "web:drift: output half MATCH (${OUT_N} files, ${OUT_DIGEST})"
+        fi
+
+        if [ "${DRIFT}" -ne 0 ]; then
+          exit 1
+        fi
+
+        echo "web:drift: PASS — hashed ${SRC_N} source files, manifested ${OUT_N} output files, committed web/build/ matches both digests"
+
   vuln:
     desc: >-
       ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —
