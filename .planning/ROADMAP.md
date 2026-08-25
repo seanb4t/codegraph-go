@@ -109,7 +109,7 @@ Archived: [`milestones/v0.11.0-ROADMAP.md`](./milestones/v0.11.0-ROADMAP.md) · 
 - **`v0.12.0` carries no git tag.** release-please is the sole tag authority (D-06R). The label is a prediction that holds if this milestone lands `feat:` commits. No phase schedules a `git tag` step.
 
 - [x] **Phase 1: Engine Seam, Wire Protocol & Secure Transport** - `codegraph ui` runs as its own process, serving typed, bounded, read-only RPCs over a loopback listener that refuses a rebinding request — with every existing CLI and MCP byte unchanged (completed 2026-08-23)
-- [ ] **Phase 2: SPA Toolchain, Embedded App Shell & JS Supply Chain** - The browser gets a real pnpm-built Svelte app served from inside the binary, committed, drift-guarded, and covered by a JS vulnerability gate the Go tooling cannot see
+- [x] **Phase 2: SPA Toolchain, Embedded App Shell & JS Supply Chain** - The browser gets a real pnpm-built Svelte app served from inside the binary, committed, drift-guarded, and covered by a JS vulnerability gate the Go tooling cannot see (completed 2026-08-24)
 - [ ] **Phase 3: Browse, Inspect & Navigation** - A developer finds any symbol or file, reads its verbatim source with callers, callees and blast radius, keeps clicking outward, and can hand someone a URL that lands them exactly where they were
 - [ ] **Phase 4: Query Workbench & Index Health** - A developer runs the four graph analyses interactively with their own knobs and can tell at a glance whether the index they are reading is worth trusting
 - [ ] **Phase 5: File/Package Graph View** - A developer sees the whole repository as one readable picture at file/package granularity and drills into any file — with the renderer chosen by measurement, not assumption
@@ -299,7 +299,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | Complete    | 2026-08-23 |
-| 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 7/7 | In Progress|  |
+| 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 7/7 | Complete    | 2026-08-24 |
 | 3. Browse, Inspect & Navigation | 0/TBD | Not started | - |
 | 4. Query Workbench & Index Health | 0/TBD | Not started | - |
 | 5. File/Package Graph View | 0/TBD | Not started | - |
