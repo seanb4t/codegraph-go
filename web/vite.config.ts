@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
@@ -12,6 +13,12 @@ import { defineConfig } from 'vite';
 // by this project's own `pnpm build`, verified below).
 export default defineConfig({
 	plugins: [
+		// Tailwind v4 (D-17) wires in as a Vite plugin, not PostCSS — no
+		// postcss.config.* file exists anywhere under web/, and none should
+		// be added. Must run before sveltekit() so its :root { @import
+		// "tailwindcss"; ... } transform sees app.css before SvelteKit's own
+		// asset pipeline processes it.
+		tailwindcss(),
 		sveltekit({
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
