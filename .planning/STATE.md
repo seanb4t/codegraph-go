@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 02
 current_phase_name: SPA Toolchain, Embedded App Shell & JS Supply Chain
 status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-08-25T00:34:01.941Z"
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-08-25T00:57:58.361Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 02 execution started
-state_head: 769b0f9053f5b42c516057fffae49590222b8978
+state_head: 15b8a8e0565a1790b5d6c644c38925e4b4a632bc
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 02 (SPA Toolchain, Embedded App Shell & JS Supply Chain) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 02 execution started
 
@@ -78,6 +78,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P04 | 20min | 3 tasks | 1 files |
 | Phase 02 P05 | ~55min | 3 tasks | 13 files |
 | Phase 02 P06 | ~1h5min | 3 tasks | 4 files |
+| Phase 02 P07 | 22min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -130,6 +131,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: [Phase 02] shadcn-svelte init auto-added itself as a devDependency and imported its own package-relative shadcn-svelte/tailwind.css from app.css; removed the dependency (T-02-05-06 requires dlx-only) and inlined that CSS file's verbatim boilerplate content (not the token set) in its place
 - [Phase 02]: WEB_HASH_LIB Taskfile var shares the source/output hashing pipeline between web:build and web:drift, never duplicated. — Task 2's own instruction: two copies of a hashing pipeline that must agree is a defect waiting to happen.
 - [Phase 02]: CODEGRAPH_WEB_BUILD_DIR override lives in web/vite.config.ts, not web/svelte.config.js (which does not exist in this toolchain). — 02-01-SUMMARY.md already recorded that adapter-static config lives in vite.config.ts for this SvelteKit/sv@0.17.0 scaffold.
+- [Phase 02]: [Phase 02] allowBuilds: {} written by hand in web/pnpm-workspace.yaml — pnpm approve-builds --all does not write the allowBuilds key when nothing is pending (confirmed empirically) — task web:deps:strict treats total absence as a named failure distinct from a committed empty map, so the empty map is committed by hand once.
+- [Phase 02]: [Phase 02] Fixed live GHSA-pxg6-pf52-xh8x (cookie) via pnpm-workspace.yaml overrides — 02-07's empirical pnpm audit run surfaced a real, current advisory in cookie <0.7.0 pulled in by @sveltejs/kit@2.70.3's own ^0.6.0 range (not yet bumped upstream) — overrides cookie@<0.7.0: ^0.7.2 so task web:audit's own clean-tree verify is honestly green.
 
 ### Pending Todos
 
@@ -251,8 +254,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-25T00:34:01.894Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-08-25T00:57:58.316Z
+Stopped at: Completed 02-07-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

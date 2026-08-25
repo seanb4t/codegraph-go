@@ -84,10 +84,10 @@
 
 - [x] **BLD-01**: The frontend toolchain is `pnpm` — `pnpm-lock.yaml` committed, pnpm version pinned via Corepack's `packageManager`, `pnpm install --frozen-lockfile` in CI
 - [x] **BLD-02**: The built SPA is committed to the repo and `go:embed`'d into the binary
-- [ ] **BLD-03**: A drift guard proves committed `dist/` matches its SPA source, carries a positive assertion that it inspected something, and is demonstrated RED before being trusted green
+- [x] **BLD-03**: A drift guard proves committed `dist/` matches its SPA source, carries a positive assertion that it inspected something, and is demonstrated RED before being trusted green
 - [x] **BLD-04**: A drift guard proves committed protobuf codegen matches its `.proto` source, covering **both** the new UI schema **and** the pre-existing `internal/schema/graph.proto` (which has no such guard today)
-- [ ] **BLD-05**: pnpm build-script approvals are committed, and CI asserts no new "Ignored build scripts" warning appears — a blocked lifecycle script must not silently change `dist/`
-- [ ] **BLD-06**: A `pnpm audit` gate covers the JS dependency tree that `govulncheck` and Syft cannot see, with a sibling assertion proving non-vacuity independent of `pnpm audit`'s own exit code
+- [x] **BLD-05**: pnpm build-script approvals are committed, and CI asserts no new "Ignored build scripts" warning appears — a blocked lifecycle script must not silently change `dist/`
+- [x] **BLD-06**: A `pnpm audit` gate covers the JS dependency tree that `govulncheck` and Syft cannot see, with a sibling assertion proving non-vacuity independent of `pnpm audit`'s own exit code
 - [x] **BLD-07**: No Node or pnpm invocation appears anywhere in the signed release path — `.goreleaser.yaml` and `release.yml` build steps stay pure Go
 
 ### Carried Fix
@@ -178,10 +178,10 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | LIV-04 | Phase 6 | Pending |
 | BLD-01 | Phase 2 | Complete |
 | BLD-02 | Phase 2 | Complete |
-| BLD-03 | Phase 2 | Pending |
+| BLD-03 | Phase 2 | Complete |
 | BLD-04 | Phase 1 | Complete |
-| BLD-05 | Phase 2 | Pending |
-| BLD-06 | Phase 2 | Pending |
+| BLD-05 | Phase 2 | Complete |
+| BLD-06 | Phase 2 | Complete |
 | BLD-07 | Phase 2 | Complete |
 | FIX-01 | Phase 1 | Complete |
 
