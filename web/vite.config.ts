@@ -40,9 +40,28 @@ export default defineConfig({
 			// Discretion): .br/.gz siblings would double the embedded
 			// byte count and double every entry in criterion 1's
 			// file-list diff for no benefit on a loopback socket.
+			//
+			// CODEGRAPH_WEB_BUILD_DIR (02-06-PLAN.md Task 1, step (b)):
+			// pages/assets read this env var, defaulting to the literal
+			// 'build' when unset, so every existing invocation and every
+			// existing path in this phase behaves identically. The ONLY
+			// reason this override exists is so `task web:build:verify`
+			// can prove the toolchain still produces a working build by
+			// building into a scratch directory, without ever writing
+			// into the committed tree. The default must never change:
+			// D-03 fixes 'build' as the committed output directory, and
+			// `//go:embed all:build` (web/embed.go) names it literally.
+			//
+			// DEVIATION from 02-06-PLAN.md's literal file list: the plan
+			// names `web/svelte.config.js` as the file this override
+			// belongs in. That file does not exist in this SvelteKit
+			// toolchain version — adapter-static's configuration has
+			// always lived here, in vite.config.ts's sveltekit() plugin
+			// options (see the file-level NOTE above, and
+			// 02-01-SUMMARY.md's Deviation 1, which first recorded this).
 			adapter: adapter({
-				pages: 'build',
-				assets: 'build',
+				pages: process.env.CODEGRAPH_WEB_BUILD_DIR || 'build',
+				assets: process.env.CODEGRAPH_WEB_BUILD_DIR || 'build',
 				fallback: 'index.html',
 				precompress: false,
 				strict: false

@@ -10,6 +10,79 @@ vars:
   GO_TOOL_LINT: GOWORK=off go tool -modfile=go.tool-lint.mod
   GO_TOOL_PROTO: GOWORK=off go tool -modfile=go.tool-proto.mod
 
+  # BLD-03 (02-06): the source-tree and output-tree hashing pipeline shared
+  # VERBATIM by web:build (which WRITES web/build/.build-manifest) and
+  # web:drift (which only RECOMPUTES the same two digests and COMPARES them
+  # against the marker — it never rebuilds anything). Two independent
+  # copies of a hashing pipeline that must agree is a defect waiting to
+  # happen (02-06-PLAN.md Task 2's own instruction); this Taskfile variable
+  # is the single definition both targets template in via the WEB_HASH_LIB var.
+  WEB_HASH_LIB: |
+    web_hash_cmd() {
+      if command -v sha256sum >/dev/null 2>&1; then
+        printf 'sha256sum'
+      elif command -v shasum >/dev/null 2>&1; then
+        printf 'shasum -a 256'
+      else
+        echo "::error::web: neither sha256sum nor shasum -a 256 is on PATH — cannot hash the source or output trees" >&2
+        exit 1
+      fi
+    }
+
+    # The structurally-mandatory source set: web/src, web/static, and the
+    # toolchain config files. web/svelte.config.js is deliberately NOT
+    # listed here even though 02-06-PLAN.md's own text names it — this
+    # SvelteKit toolchain version has no such file at all
+    # (02-01-SUMMARY.md Deviation 1): adapter-static's configuration lives
+    # inside web/vite.config.ts, which IS listed below. `git ls-files` on a
+    # nonexistent pathspec is silently a no-op, so omitting it here is a
+    # deliberate, recorded choice, not an oversight.
+    web_source_files() {
+      git ls-files -- \
+        web/src \
+        web/static \
+        web/package.json \
+        web/pnpm-lock.yaml \
+        web/pnpm-workspace.yaml \
+        web/vite.config.ts \
+        web/tsconfig.json \
+        web/components.json \
+        | LC_ALL=C sort
+    }
+
+    # Every regular file under web/build/, EXCLUDING the marker's own path
+    # (web/build/.build-manifest) — enumerated with `find`, never `git
+    # ls-files`: //go:embed all:build ships whatever is on disk, tracked or
+    # not, so an untracked stray inside web/build/ must participate in the
+    # digest too.
+    web_output_files() {
+      find web/build -type f ! -name '.build-manifest' | sed 's#^\./##' | LC_ALL=C sort
+    }
+
+    # Hashes a newline-delimited file list's WORKING-TREE content (never
+    # git's index blob, so an unstaged edit is caught), one line per file
+    # as "<hex>  <path>" from $1 (the hash command), then hashes THAT
+    # concatenated output — so both content and path feed the final
+    # digest. Prints two lines: the file count, then the hex digest.
+    web_hash_tree() {
+      local hc="$1"
+      local files="$2"
+      local n=0
+      if [ -n "${files}" ]; then
+        n=$(printf '%s\n' "${files}" | wc -l | tr -d ' ')
+      fi
+      local digest
+      if [ "${n}" -gt 0 ]; then
+        digest=$(printf '%s\n' "${files}" | while IFS= read -r f; do
+          [ -z "${f}" ] && continue
+          ${hc} "${f}"
+        done | ${hc} | awk '{print $1}')
+      else
+        digest=$(printf '' | ${hc} | awk '{print $1}')
+      fi
+      printf '%s\n%s\n' "${n}" "${digest}"
+    }
+
 tasks:
   default:
     desc: List available targets (does not build, test, or lint anything).
@@ -313,6 +386,192 @@ tasks:
         fi
 
         echo "proto:drift: all ${nfiles} generated files byte-identical to the pinned toolchain's regeneration (temporary tree only — source tree untouched)"
+
+  web:deps:
+    desc: >-
+      BLD-01's resolve-then-install step. Resolution order, reported so the
+      taken path is visible: if `corepack` is on PATH, run `corepack
+      enable` — that resolves the pnpm version from web/package.json's
+      packageManager field (D-16), the single source of truth. Otherwise
+      require a `pnpm` on PATH at major version 10 or newer and report that
+      pnpm's own package-manager self-management is honouring
+      packageManager instead. This branch is not a convenience: Corepack is
+      unbundled from Node.js 25+ (RESEARCH.md Pitfall 4), and this phase's
+      local development machine runs Node 26 with no Corepack at all, while
+      CI pins Node 24 where Corepack IS present (Task 3) — both paths must
+      work, and both must say which one they took
+      (02-01-SUMMARY.md's own recorded deviation found this exact gap and
+      deferred its durable fix to this target). Never adds
+      pnpm/action-setup anywhere: packageManager + Corepack is the single
+      source of truth (D-16), and a second pin would need its own parity
+      assertion. Then runs `pnpm install --frozen-lockfile` (cwd web/) and
+      asserts web/pnpm-lock.yaml is byte-unchanged afterward — a frozen
+      install that silently rewrites the lockfile is exactly the
+      local-vs-CI divergence BLD-01 exists to close, so this is a named
+      failure, never a silent success.
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — web:deps asserts web/pnpm-lock.yaml is unchanged via cmp against a pre-install copy."
+    cmds:
+      - |
+        set -euo pipefail
+        if command -v corepack >/dev/null 2>&1; then
+          corepack enable >/dev/null 2>&1 || true
+          echo "web:deps: corepack resolved the pnpm version from web/package.json's packageManager field"
+        elif command -v pnpm >/dev/null 2>&1; then
+          PNPM_MAJOR=$(pnpm --version | cut -d. -f1)
+          if [ "${PNPM_MAJOR}" -lt 10 ]; then
+            echo "::error::web:deps: pnpm $(pnpm --version) is on PATH but Corepack is absent and this pnpm's major version is below 10 — cannot honour web/package.json's packageManager pin. Install Corepack (bundled with Node.js <=24) or upgrade pnpm to 10+." >&2
+            exit 1
+          fi
+          echo "web:deps: pnpm self-managed (no Corepack on this host — Node.js 25+ unbundles it, RESEARCH.md Pitfall 4); pnpm ${PNPM_MAJOR}.x already on PATH is honouring web/package.json's packageManager pin on its own"
+        else
+          echo "::error::web:deps: neither corepack nor pnpm is on PATH — cannot resolve web/package.json's packageManager pin." >&2
+          exit 1
+        fi
+
+        PRELOCK=$(mktemp)
+        trap 'rm -f "${PRELOCK}"' EXIT
+        cp web/pnpm-lock.yaml "${PRELOCK}"
+
+        (cd web && pnpm install --frozen-lockfile)
+
+        if ! cmp -s web/pnpm-lock.yaml "${PRELOCK}"; then
+          echo "::error::web:deps: pnpm install --frozen-lockfile rewrote web/pnpm-lock.yaml — this is a named failure, not a silent success." >&2
+          exit 1
+        fi
+        echo "web:deps: pnpm install --frozen-lockfile succeeded, web/pnpm-lock.yaml unchanged"
+
+  web:build:
+    desc: >-
+      BLD-01's build step and BLD-03's marker-writing step, in one
+      invocation. Depends on web:deps (frozen install), runs `pnpm build`
+      (cwd web/), then writes the four-line web/build/.build-manifest
+      marker web:drift compares against. The marker lives INSIDE
+      web/build/ on purpose: `pnpm build` EMPTIES that directory on every
+      run, so a rebuild that forgets to rewrite the marker leaves it
+      absent and web:drift fails loudly — a marker outside build/ would
+      survive as a stale value and pass vacuously.
+
+      Two independent digests, not one, computed via the WEB_HASH_LIB
+      functions above (shared verbatim with web:drift): a SOURCE-tree
+      digest (git ls-files restricted to web/src, web/static and the
+      toolchain config files, hashed at WORKING-TREE content, never the
+      git index blob — an unstaged edit must be caught) and an
+      OUTPUT-tree digest (every file `find` locates under web/build/,
+      excluding the marker's own path — so an added file, a removed file,
+      and an edited byte are each caught). The source half catches
+      "someone changed the app and did not rebuild"; the output half
+      catches "someone changed the shipped bytes without changing the
+      source" — the exact bytes //go:embed all:build ships to every user.
+      Neither half alone is BLD-03; this target computes and commits
+      both. Hashing the COMMITTED tree in place (this target, and
+      web:drift which only re-hashes it) is NOT the forbidden
+      regenerate-and-byte-compare shape `task proto:drift` uses for the Go
+      side: no second build ever runs inside a comparison, so Vite's
+      non-reproducible content-hash filenames (vitejs/vite#15555, closed
+      not-planned; #13071) never enter it. The digest changes only when
+      the committed bytes change.
+    deps:
+      - web:deps
+    cmds:
+      - |
+        set -euo pipefail
+        {{.WEB_HASH_LIB}}
+
+        (cd web && pnpm build)
+
+        HC=$(web_hash_cmd)
+
+        SRC_FILES=$(web_source_files)
+        SRC_OUT=$(web_hash_tree "${HC}" "${SRC_FILES}")
+        SRC_N=$(printf '%s\n' "${SRC_OUT}" | sed -n '1p')
+        SRC_DIGEST=$(printf '%s\n' "${SRC_OUT}" | sed -n '2p')
+
+        OUT_FILES=$(web_output_files)
+        OUT_OUT=$(web_hash_tree "${HC}" "${OUT_FILES}")
+        OUT_N=$(printf '%s\n' "${OUT_OUT}" | sed -n '1p')
+        OUT_DIGEST=$(printf '%s\n' "${OUT_OUT}" | sed -n '2p')
+
+        {
+          printf 'source-files: %s\n' "${SRC_N}"
+          printf 'source-sha256: %s\n' "${SRC_DIGEST}"
+          printf 'output-files: %s\n' "${OUT_N}"
+          printf 'output-sha256: %s\n' "${OUT_DIGEST}"
+        } > web/build/.build-manifest
+
+        echo "web:build: wrote web/build/.build-manifest (source-files=${SRC_N}, output-files=${OUT_N})"
+
+  web:build:verify:
+    desc: >-
+      BLD-01's clean-checkout rebuild proof that actually runs CI (review
+      concern, HIGH): without this target, CI proves the marker matches
+      source and never proves the pinned toolchain still produces a
+      working build — ROADMAP criterion 3's rebuild half went unexercised.
+      Depends on web:deps, creates a scratch directory with `mktemp -d`,
+      builds into it via web/vite.config.ts's CODEGRAPH_WEB_BUILD_DIR
+      output-directory override, then asserts structural invariants on
+      the fresh output, printing each observed number before comparing
+      it: a non-empty index.html; at least one non-empty immutable .js
+      chunk; at least one non-empty immutable .css file; and a total file
+      count above a derived floor. Removes the scratch directory, then
+      asserts `git diff --exit-code -- web/` and `git status --porcelain
+      web/build` are both clean — the proof this target never touched the
+      committed tree. Deliberately NOT a byte-identity check against
+      web/build/ — RESEARCH.md Pitfall 1: Vite/Rollup builds of identical
+      source are not guaranteed byte- or filename-identical across runs,
+      so a byte-diff here would reintroduce the false-RED problem this
+      phase's guard shape exists to avoid. This target proves
+      BUILDABILITY, nothing more.
+    deps:
+      - web:deps
+    cmds:
+      - |
+        set -euo pipefail
+        SCRATCH=$(mktemp -d)
+        trap 'rm -rf "${SCRATCH}"' EXIT
+
+        (cd web && CODEGRAPH_WEB_BUILD_DIR="${SCRATCH}" pnpm build)
+
+        FILE_COUNT=$(find "${SCRATCH}" -type f | wc -l | tr -d ' ')
+        echo "web:build:verify: built ${FILE_COUNT} files into a scratch directory"
+
+        FLOOR=3
+        if [ "${FILE_COUNT}" -lt "${FLOOR}" ]; then
+          echo "::error::web:build:verify: scratch build produced only ${FILE_COUNT} files, want at least ${FLOOR} (index.html, an immutable .js chunk, an immutable .css file)" >&2
+          exit 1
+        fi
+
+        if [ ! -s "${SCRATCH}/index.html" ]; then
+          echo "::error::web:build:verify: scratch build produced no non-empty index.html" >&2
+          exit 1
+        fi
+        echo "web:build:verify: index.html present and non-empty"
+
+        JS_COUNT=$(find "${SCRATCH}/_app/immutable" -type f -name '*.js' -size +0c 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${JS_COUNT}" -lt 1 ]; then
+          echo "::error::web:build:verify: scratch build produced zero non-empty .js files under _app/immutable/" >&2
+          exit 1
+        fi
+        echo "web:build:verify: ${JS_COUNT} non-empty immutable .js file(s) present"
+
+        CSS_COUNT=$(find "${SCRATCH}/_app/immutable" -type f -name '*.css' -size +0c 2>/dev/null | wc -l | tr -d ' ')
+        if [ "${CSS_COUNT}" -lt 1 ]; then
+          echo "::error::web:build:verify: scratch build produced zero non-empty .css files under _app/immutable/" >&2
+          exit 1
+        fi
+        echo "web:build:verify: ${CSS_COUNT} non-empty immutable .css file(s) present"
+
+        if ! git diff --exit-code -- web/ >/dev/null; then
+          echo "::error::web:build:verify: git diff -- web/ is NOT clean after the scratch build — this target must never touch the committed tree" >&2
+          exit 1
+        fi
+        if [ -n "$(git status --porcelain web/build)" ]; then
+          echo "::error::web:build:verify: git status --porcelain web/build is NOT empty after the scratch build — this target must never touch the committed tree" >&2
+          exit 1
+        fi
+
+        echo "web:build:verify: PASS — ${FILE_COUNT} files built into scratch, structural invariants held, committed tree untouched"
 
   vuln:
     desc: >-
