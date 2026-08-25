@@ -126,6 +126,20 @@ jobs:
       - name: Install JS deps (frozen lockfile, BLD-01)
         run: task web:deps
 
+      # BLD-05/D-13: positive assertion that strictDepBuilds is actually in
+      # effect and that pnpm-workspace.yaml's allowBuilds approval map is
+      # committed (even if empty) — never a grep of pnpm's own "Ignored
+      # build scripts" warning text, which a reword would silently break.
+      - name: pnpm build-script approval gate (BLD-05)
+        run: task web:deps:strict
+
+      # BLD-06/D-13/D-15: pnpm audit gate, classified on OUTPUT SHAPE (never
+      # on exit code alone — a clean scan and a registry-unreachable scan
+      # both exit 1). Its sibling non-vacuity assertion (task web:lockfile)
+      # runs first and never reads pnpm audit's exit code or output.
+      - name: pnpm audit gate (BLD-06)
+        run: task web:audit
+
       # BLD-01: proves the pinned toolchain still produces a structurally
       # valid build from this source on a clean runner — ROADMAP criterion
       # 3's rebuild half, previously asserted by no gate at all. Builds
