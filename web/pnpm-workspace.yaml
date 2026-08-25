@@ -7,4 +7,17 @@
 # allowBuilds is populated below by `pnpm approve-builds`, which records
 # denials as `false` rather than omitting the key entirely — this file
 # states both halves (approved and denied) once populated.
+#
+# 02-07: `pnpm approve-builds --all` reports "There are no packages awaiting
+# approval" for this dependency tree (02-01-SUMMARY.md, 02-05-SUMMARY.md) and
+# — confirmed empirically in 02-07 — does not write anything to this file
+# when nothing is pending, leaving the key absent rather than an explicit
+# empty map. `task web:deps:strict` (BLD-05) treats total absence as a named
+# failure distinct from a committed empty map, so the empty map below is
+# written by hand once, here, to record "approval was checked and there is
+# nothing to approve" as committed config, per ROADMAP's own instruction
+# that approval state belongs in committed config, never in per-machine
+# interactive state. Re-run `pnpm approve-builds --all` if a future
+# dependency actually needs approval — it will populate real entries here.
 strictDepBuilds: true
+allowBuilds: {}

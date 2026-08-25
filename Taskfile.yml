@@ -442,6 +442,127 @@ tasks:
         fi
         echo "web:deps: pnpm install --frozen-lockfile succeeded, web/pnpm-lock.yaml unchanged"
 
+  web:deps:strict:
+    desc: >-
+      BLD-05's positive lifecycle-script-approval assertion (D-14). Unlike
+      `web:deps`'s frozen install, THIS target is allowed to fail the build
+      — same posture `vuln:selftest` documents relative to `vuln`
+      (Taskfile.yml, `vuln:selftest` ~line 761-801): `strictDepBuilds: true`
+      is itself a negative guard (pnpm exits non-zero on an unreviewed
+      lifecycle script during install), so silently losing the setting
+      reverts install to exit-0-with-a-warning and nothing would notice —
+      this target exists to notice.
+
+      Reads web/pnpm-workspace.yaml with a REAL YAML decoder
+      (go.yaml.in/yaml/v3 — already a DIRECT dependency of the main module,
+      go.mod:32, and the exact library internal/upgrade's own shape tests
+      use to parse Taskfile.yml/workflow YAML — never a line scanner, and
+      above all never a grep of pnpm's "Ignored build scripts" warning
+      text: that predates strictDepBuilds and couples the gate to an
+      upstream string a reword silently breaks). Built into a scratch dir
+      via `go run` at task time — no new .go file is ever committed to this
+      repository.
+
+      Prints TWO counts unconditionally, BEFORE any pass/fail branch (rule
+      84d1gfpywd): (1) the resolved strictDepBuilds value; (2) whether
+      allowBuilds is present at all and, if so, its entry count and denial
+      count. An ABSENT allowBuilds key is a named failure distinct from a
+      PRESENT-but-empty one (`allowBuilds: {}`): pnpm's own `pnpm
+      approve-builds` writes this key once run, even when it finds nothing
+      pending to approve — so total absence means approval state was never
+      committed at all, which ROADMAP's own Notes forbid ("approval state
+      belongs in committed config, never per-machine interactive state").
+      `allowBuilds` replaced pnpm 10's `onlyBuiltDependencies`; it records
+      denials as `false` rather than omitting them, so the committed file
+      states both halves once populated.
+    preconditions:
+      - sh: command -v go
+        msg: "go not found — web:deps:strict parses web/pnpm-workspace.yaml with go.yaml.in/yaml/v3 via go run."
+      - sh: test -f web/pnpm-workspace.yaml
+        msg: "web/pnpm-workspace.yaml not found."
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        cat > "${scratch}/main.go" <<'GOEOF'
+        package main
+
+        import (
+        	"fmt"
+        	"os"
+
+        	yaml "go.yaml.in/yaml/v3"
+        )
+
+        type workspaceFile struct {
+        	StrictDepBuilds *bool           `yaml:"strictDepBuilds"`
+        	AllowBuilds     map[string]bool `yaml:"allowBuilds"`
+        }
+
+        func main() {
+        	data, err := os.ReadFile(os.Args[1])
+        	if err != nil {
+        		fmt.Fprintln(os.Stderr, err)
+        		os.Exit(2)
+        	}
+        	var wf workspaceFile
+        	if err := yaml.Unmarshal(data, &wf); err != nil {
+        		fmt.Fprintln(os.Stderr, err)
+        		os.Exit(2)
+        	}
+        	if wf.StrictDepBuilds == nil {
+        		fmt.Println("strictDepBuilds:ABSENT")
+        	} else if *wf.StrictDepBuilds {
+        		fmt.Println("strictDepBuilds:true")
+        	} else {
+        		fmt.Println("strictDepBuilds:false")
+        	}
+        	if wf.AllowBuilds == nil {
+        		fmt.Println("allowBuilds:ABSENT")
+        	} else {
+        		denials := 0
+        		for _, v := range wf.AllowBuilds {
+        			if !v {
+        				denials++
+        			}
+        		}
+        		fmt.Printf("allowBuilds:PRESENT entries=%d denials=%d\n", len(wf.AllowBuilds), denials)
+        	}
+        }
+        GOEOF
+
+        OUT=$(GOWORK=off go run "${scratch}/main.go" web/pnpm-workspace.yaml)
+
+        STRICT_LINE=$(printf '%s\n' "${OUT}" | sed -n 's/^strictDepBuilds://p')
+        ALLOW_LINE=$(printf '%s\n' "${OUT}" | sed -n 's/^allowBuilds://p')
+
+        ENTRIES=""
+        DENIALS=""
+        if [ "${ALLOW_LINE}" = "ABSENT" ]; then
+          ALLOW_SUMMARY="ABSENT (key never written by pnpm approve-builds)"
+        else
+          ENTRIES=$(printf '%s' "${ALLOW_LINE}" | sed -n 's/PRESENT entries=\([0-9]*\) denials=.*/\1/p')
+          DENIALS=$(printf '%s' "${ALLOW_LINE}" | sed -n 's/.*denials=\([0-9]*\)/\1/p')
+          ALLOW_SUMMARY="${ENTRIES} (denials: ${DENIALS})"
+        fi
+
+        echo "web:deps:strict: strictDepBuilds resolved to '${STRICT_LINE}'"
+        echo "web:deps:strict: allowBuilds entries: ${ALLOW_SUMMARY}"
+
+        if [ "${STRICT_LINE}" != "true" ]; then
+          echo "::error::web:deps:strict: strictDepBuilds resolved to '${STRICT_LINE}', want exactly boolean true — an unreviewed lifecycle script would install silently (exit 0 with a warning) instead of failing the build (D-14)." >&2
+          exit 1
+        fi
+
+        if [ "${ALLOW_LINE}" = "ABSENT" ]; then
+          echo "::error::web:deps:strict: web/pnpm-workspace.yaml has no allowBuilds key at all — pnpm's own \`pnpm approve-builds\` writes this key once run, even when it finds nothing pending, so a total absence means approval state was never committed (ROADMAP: approval state belongs in committed config, never in per-machine interactive state)." >&2
+          exit 1
+        fi
+
+        echo "web:deps:strict: PASS — strictDepBuilds is true and allowBuilds is committed with ${ENTRIES} entries (${DENIALS} denials)"
+
   web:build:
     desc: >-
       BLD-01's build step and BLD-03's marker-writing step, in one
