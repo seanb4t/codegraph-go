@@ -3,15 +3,19 @@ package uiserver
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
 	"github.com/seanb4t/codegraph-go/web"
@@ -691,5 +695,94 @@ func TestSPAInheritsOriginHostGuard(t *testing.T) {
 	}
 	if bytes.Contains(body, []byte("kit.start")) {
 		t.Fatal("response body looks like the SPA index.html bootstrap — the SPA handler was reached despite the foreign Host, meaning it is mounted outside originHostGuard")
+	}
+}
+
+// independentCSPHash renders content's CSP hash-source expression WITHOUT
+// calling cspHashSource or spaInlineBlockHashes. That independence is the
+// point: the pre-existing TestSPACSPHashesCoverEmbeddedInlineScripts builds
+// its expectation by calling spaInlineBlockHashes itself, so any bug in the
+// extraction is reproduced identically on both sides of its comparison and
+// cancels out. A test that shares its subject's bug cannot detect it.
+func independentCSPHash(t *testing.T, content string) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(content))
+	return "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+}
+
+// TestSPAInlineBlockHashesDistinguishesSrcAttributeFromLookalikeAttribute
+// pins the attribute-boundary rule spaExternalSrcAttrRE enforces: a real
+// `src` attribute marks a script external (nothing inline to hash), while
+// an attribute whose NAME merely ends in "src" does not.
+//
+// Regression guard. The original check was an unanchored
+// bytes.Contains(attrs, "src=") substring search, which also matched
+// `data-hydrate-src="1"` and would drop that inline script's hash from
+// script-src. Nothing would fail loudly — the served policy stays strict —
+// but the browser would refuse to run the app's own bootstrap, presenting
+// as a blank shell with no error pointing back here.
+func TestSPAInlineBlockHashesDistinguishesSrcAttributeFromLookalikeAttribute(t *testing.T) {
+	const (
+		inlineBody   = `console.log("inline bootstrap")`
+		externalBody = `should never be hashed`
+		styleBody    = `.a{color:red}`
+	)
+
+	html := `<!doctype html><html><head>` +
+		`<script data-hydrate-src="1">` + inlineBody + `</script>` +
+		`<script src="/_app/immutable/entry/start.js">` + externalBody + `</script>` +
+		`<style data-theme-src="dark">` + styleBody + `</style>` +
+		`</head><body></body></html>`
+
+	gotScripts, gotStyles := spaInlineBlockHashes([]byte(html))
+
+	wantScripts := []string{independentCSPHash(t, inlineBody)}
+	if !reflect.DeepEqual(gotScripts, wantScripts) {
+		t.Errorf("script hash sources = %v, want %v — an attribute whose name merely ends in \"src\" must not mark a script external, and a real src= attribute must", gotScripts, wantScripts)
+	}
+
+	wantStyles := []string{independentCSPHash(t, styleBody)}
+	if !reflect.DeepEqual(gotStyles, wantStyles) {
+		t.Errorf("style hash sources = %v, want %v", gotStyles, wantStyles)
+	}
+
+	// Guard the guard: the external script's body must appear in NO hash
+	// source, or the assertions above passed for the wrong reason.
+	external := independentCSPHash(t, externalBody)
+	for _, got := range append(append([]string{}, gotScripts...), gotStyles...) {
+		if got == external {
+			t.Errorf("hashed the body of a src=-attributed (external) <script>: %s", got)
+		}
+	}
+}
+
+// TestNewSPAHandlerFailsClosedWithoutIndexHTML covers the CSP fallback
+// branch in newSPAHandler, which the deep review flagged as correct but
+// untested (IN-02). When index.html cannot be read there is nothing to
+// derive hashes from, and the only safe answer is the strict base policy —
+// never a permissive one, and never no policy at all. An empty tree is the
+// only input that reaches this branch, so it is the input used.
+func TestNewSPAHandlerFailsClosedWithoutIndexHTML(t *testing.T) {
+	handler := newSPAHandler(fstest.MapFS{})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	policy := rec.Header().Get("Content-Security-Policy")
+	if policy == "" {
+		t.Fatal("no Content-Security-Policy served when index.html is absent — the fallback must still emit a policy; an absent CSP is strictly weaker than a strict one")
+	}
+
+	directives := parseCSP(t, policy)
+	for _, d := range []string{"default-src", "connect-src", "script-src", "style-src"} {
+		if got := directives[d]; !reflect.DeepEqual(got, []string{"'self'"}) {
+			t.Errorf("fallback %s = %v, want [%q]", d, got, "'self'")
+		}
+	}
+	for _, forbidden := range []string{"'unsafe-inline'", "'unsafe-eval'"} {
+		if strings.Contains(policy, forbidden) {
+			t.Errorf("fallback policy contains %s — the no-index.html path must fail CLOSED:\n%s", forbidden, policy)
+		}
 	}
 }

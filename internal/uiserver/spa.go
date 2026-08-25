@@ -104,13 +104,27 @@ const (
 // from the embedded index.html, in place of pulling in an HTML parser:
 // the input is this repository's own committed, reviewed, drift-guarded
 // build output, not adversarial third-party HTML. Each match captures the
-// tag's attribute text (group 1) — checked for a "src=" attribute, which
-// marks an EXTERNAL reference with nothing inline to hash — and the
-// verbatim inner content (group 2), hashed byte-exact.
+// tag's attribute text (group 1) — checked by spaExternalSrcAttrRE for a
+// `src` ATTRIBUTE, which marks an EXTERNAL reference with nothing inline
+// to hash — and the verbatim inner content (group 2), hashed byte-exact.
 var (
 	spaScriptBlockRE = regexp.MustCompile(`(?is)<script(\s[^>]*)?>(.*?)</script>`)
 	spaStyleBlockRE  = regexp.MustCompile(`(?is)<style(\s[^>]*)?>(.*?)</style>`)
 )
+
+// spaExternalSrcAttrRE matches a `src` ATTRIBUTE in a tag's attribute
+// text, anchored to an attribute boundary: `src` must be preceded by
+// whitespace (or start of the attribute run) and followed by optional
+// whitespace and `=`.
+//
+// The boundary is the whole point. An unanchored `src=` substring search
+// also matches the tail of any attribute NAME ending in "src" —
+// `data-hydrate-src="1"`, `data-img-src="…"` — and would then classify an
+// inline <script> as external, silently dropping its CSP hash from
+// script-src. The served policy would still be strict, so nothing fails
+// loudly; the script simply stops executing in the browser, which is a
+// blank app shell diagnosed nowhere near this function.
+var spaExternalSrcAttrRE = regexp.MustCompile(`(?i)(^|\s)src\s*=`)
 
 // spaHasInlineStyleAttrRE detects a `style="..."` HTML attribute anywhere
 // in the document — distinct from a <style> element. CSP hash sources
@@ -140,14 +154,14 @@ func cspHashSource(content []byte) string {
 func spaInlineBlockHashes(html []byte) (scriptSources, styleSources []string) {
 	for _, m := range spaScriptBlockRE.FindAllSubmatch(html, -1) {
 		attrs, content := m[1], m[2]
-		if bytes.Contains(bytes.ToLower(attrs), []byte("src=")) {
+		if spaExternalSrcAttrRE.Match(attrs) {
 			continue // external script — nothing inline to hash
 		}
 		scriptSources = append(scriptSources, cspHashSource(content))
 	}
 	for _, m := range spaStyleBlockRE.FindAllSubmatch(html, -1) {
 		attrs, content := m[1], m[2]
-		if bytes.Contains(bytes.ToLower(attrs), []byte("src=")) {
+		if spaExternalSrcAttrRE.Match(attrs) {
 			continue
 		}
 		styleSources = append(styleSources, cspHashSource(content))
