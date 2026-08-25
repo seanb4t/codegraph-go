@@ -22,7 +22,7 @@
 
 - [x] **RPC-01**: Protobuf schema for the UI API, inheriting `internal/schema/graph.proto`'s additive-only evolution discipline (D-02a — field numbers never renumbered or reused; retired fields `reserved`)
 - [x] **RPC-02**: `connect-go` handlers mount on `net/http` alongside the `go:embed`'d SPA
-- [ ] **RPC-03**: SPA fallback routing — client-side routes resolve to `index.html`; RPC paths and hashed assets do not
+- [x] **RPC-03**: SPA fallback routing — client-side routes resolve to `index.html`; RPC paths and hashed assets do not
 - [ ] **RPC-04**: A Connect server-streaming method carries re-index events to the browser over plain HTTP/1.1
 - [x] **RPC-05**: Message sizes are bounded; verbatim source blobs are handled without unbounded response growth
 
@@ -83,7 +83,7 @@
 ### Build & Supply Chain
 
 - [ ] **BLD-01**: The frontend toolchain is `pnpm` — `pnpm-lock.yaml` committed, pnpm version pinned via Corepack's `packageManager`, `pnpm install --frozen-lockfile` in CI
-- [ ] **BLD-02**: The built SPA is committed to the repo and `go:embed`'d into the binary
+- [x] **BLD-02**: The built SPA is committed to the repo and `go:embed`'d into the binary
 - [ ] **BLD-03**: A drift guard proves committed `dist/` matches its SPA source, carries a positive assertion that it inspected something, and is demonstrated RED before being trusted green
 - [x] **BLD-04**: A drift guard proves committed protobuf codegen matches its `.proto` source, covering **both** the new UI schema **and** the pre-existing `internal/schema/graph.proto` (which has no such guard today)
 - [ ] **BLD-05**: pnpm build-script approvals are committed, and CI asserts no new "Ignored build scripts" warning appears — a blocked lifecycle script must not silently change `dist/`
@@ -140,7 +140,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | SRV-05 | Phase 3 | Pending |
 | RPC-01 | Phase 1 | Complete |
 | RPC-02 | Phase 1 | Complete |
-| RPC-03 | Phase 2 | Pending |
+| RPC-03 | Phase 2 | Complete |
 | RPC-04 | Phase 6 | Pending |
 | RPC-05 | Phase 1 | Complete |
 | ENG-01 | Phase 1 | Complete |
@@ -177,7 +177,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | LIV-03 | Phase 6 | Pending |
 | LIV-04 | Phase 6 | Pending |
 | BLD-01 | Phase 2 | Pending |
-| BLD-02 | Phase 2 | Pending |
+| BLD-02 | Phase 2 | Complete |
 | BLD-03 | Phase 2 | Pending |
 | BLD-04 | Phase 1 | Complete |
 | BLD-05 | Phase 2 | Pending |

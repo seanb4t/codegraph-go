@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 02
 current_phase_name: SPA Toolchain, Embedded App Shell & JS Supply Chain
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-08-24T23:39:42.422Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-08-25T00:16:55.369Z"
 last_activity: 2026-08-24
 last_activity_desc: Phase 02 execution started
-state_head: fdd9e7b7c0b62fea722cd87ea3b689028cf17f16
+state_head: 389cb89dc010aed1c0bf697e276b6afe3f553d41
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 18
-  completed_plans: 15
+  completed_plans: 16
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 02 (SPA Toolchain, Embedded App Shell & JS Supply Chain) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-08-24 — Phase 02 execution started
 
@@ -76,6 +76,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P02 | 40min | 2 tasks | 2 files |
 | Phase 02 P03 | ~45min | 3 tasks | 6 files |
 | Phase 02 P04 | 20min | 3 tasks | 1 files |
+| Phase 02 P05 | ~55min | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -124,6 +125,8 @@ Standing decisions that outlive every milestone:
 - [Phase 2]: typescript pinned to 6.0.3 (sv@0.17.0's own scaffold default) rather than 5.9.3 — the 6.x line postdates 02-RESEARCH.md and is what the current toolchain itself verified as compatible
 - [Phase 02]: [Phase 2] buf v1.72.0's inputs: directory: override cannot scope a subdirectory already covered by a configured buf.yaml module — proto:gen/proto:drift use the --path CLI fallback + a relocate step instead (protoc-gen-es has no paths=source_relative equivalent)
 - [Phase 02]: [Phase 02] BLD-07's release-path closure is derived from release.yml's own uses:/run: content (not hardcoded), with an errUnsupportedReachabilityEdge tripwire refusing loudly on edge kinds the model does not cover
+- [Phase 02]: [Phase 02] shadcn-svelte@1.5.0 init has no non-interactive CLI path (piped stdin is treated as EOF, writes nothing) — drove it through a real pty (Python's pty module + pyte VT100 rendering) to answer each prompt and record every answer
+- [Phase 02]: [Phase 02] shadcn-svelte init auto-added itself as a devDependency and imported its own package-relative shadcn-svelte/tailwind.css from app.css; removed the dependency (T-02-05-06 requires dlx-only) and inlined that CSS file's verbatim boilerplate content (not the token set) in its place
 
 ### Pending Todos
 
@@ -245,8 +248,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-24T23:39:22.386Z
-Stopped at: Completed 02-04-PLAN.md
+Last session: 2026-08-25T00:16:55.323Z
+Stopped at: Completed 02-05-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
