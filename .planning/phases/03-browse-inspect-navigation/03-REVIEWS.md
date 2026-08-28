@@ -1,10 +1,10 @@
 ---
 phase: 3
 reviewers: [codex, claude]
-reviewed_at: 2026-08-28T17:12:00Z
-review_cycle: 3
+reviewed_at: 2026-08-28T17:50:52Z
+review_cycle: 4
 plans_reviewed: [03-01-PLAN.md, 03-02-PLAN.md, 03-03-PLAN.md, 03-04-PLAN.md, 03-05-PLAN.md, 03-06-PLAN.md, 03-07-PLAN.md, 03-08-PLAN.md, 03-09-PLAN.md, 03-10-PLAN.md]
-plans_commit: be318edc
+plans_commit: b9a5a234
 models:
   codex: "gpt-5.6-sol (reasoning=high)"
   claude: "unknown"
@@ -13,7 +13,7 @@ model_sources:
   claude: "unknown"
 cycle_summary:
   current_high: 4
-  current_actionable: 5
+  current_actionable: 3
 cycle_history:
   - cycle: 1
     current_high: 7
@@ -24,7 +24,487 @@ cycle_history:
   - cycle: 3
     current_high: 4
     current_actionable: 5
+  - cycle: 4
+    current_high: 4
+    current_actionable: 3
 ---
+
+# Cross-AI Plan Review — Phase 3 (Cycle 4)
+
+Reviewed at `b9a5a234`, the commit that revised five plans to close all nine cycle-3
+findings. Two prompt-fed lanes ran source-grounded at high reasoning effort (Codex
+`gpt-5.6-sol` reasoning=high; Claude `--effort high`), plus an orchestrator-run
+independent verification pass that executed every live guard's assertions about existing
+behaviour.
+
+## Consensus Summary — Cycle 4
+
+**The cycle-3 defect class is closed. A different one is now exposed.**
+
+All three sources agree, independently and with executed evidence, that every cycle-3
+correction holds: `validateDepth` rejects only `n < 0` while `validateLimit` rejects
+`n > 1000`; the since-deleted-file path really does produce `(CodeInternal, "an internal
+error occurred")`; `TestGateStancesStated` exists and passes while `TestGateStancesAgree`
+exits 0 having run nothing; the pinned formatter backlog is exactly gofmt 8 / gofumpt 23;
+all seven bound test names exist exactly once. The planner's own `rg -U` caveat was
+verified rather than accepted: **all six `-U` sites pair with `-eq 0`**, and Codex executed
+plants confirming a single-line violation returns `1` while a wrapped one returns `3` — the
+line-counting hazard is inert at every site, and no site asserts a positive or exact count.
+The plans' rejection of cycle-2's defective `awk` remedy was re-executed and confirmed
+correct (the reviewer-suggested form returns `0` on both deletion worlds).
+
+What cycle 4 found instead is a third class, one level up from the previous two: **guards
+and acceptance criteria that are sound in shape AND correct about the units they name, but
+rest on a false premise about how the pieces CONNECT.** Cycles 1-2 found guards that could
+not fail. Cycle 3 found guards aimed at false premises about a single unit's behaviour.
+Cycle 4 finds four premises that are false about the *seam between* two units — a proto
+field that does not exist on the RPC the plan actually calls, a mode selector that flips
+when an upstream navigator clears a field, a history entry that a `replaceState` destroys,
+and a security fixture in a package the plan never names. Each is invisible to both a
+shape check and a single-file premise check, because every individual fact each plan states
+is true; only the composition is wrong.
+
+Codex found three of the four. The orchestrator's independent verification pass found the
+fourth. Claude's lane returned **zero HIGH** — it verified the cycle-3 corrections
+exhaustively and correctly but stayed within the units those corrections named, which is
+precisely the blind spot this class occupies. Its three LOW findings are all genuine and
+all confirmed.
+
+### Agreed Strengths
+
+- **Every cycle-3 false premise was re-derived from source, not patched by assertion.**
+  Both lanes verified this independently. 03-05's rewrite is the strongest instance: it
+  re-opened a maintainer checkpoint *because* the justifying claim turned out false, and
+  pinned the `(CodeInternal, "an internal error occurred")` pair the source actually
+  produces.
+- **The `rg -U` caveat the planner self-flagged is discharged.** Six sites, six `-eq 0`
+  assertions, verified by two independent sources; Codex additionally executed the wrapped-
+  import plant that produces the misleading `3`. The plan was right that the hazard is
+  inert here and right to warn against reusing the shape for a positive count.
+- **Guards are paired with executed positive controls, and the controls are real.**
+  `golangciModfilePath`=0 against `go.tool-lint.mod|lintModfilePath`=10; `lint-go`=0
+  against `\blint\b`=4; the five-word vuln loop=0 against the four-word=1; `codegraph init`
+  in `web/build/`=0 against `source-sha256`=1. Every one reproduced by at least two sources.
+- **Regression-vs-completion guards are correctly separated.** 03-10 pairs the already-green
+  `TestGateStancesStated` PASS count with an `rg -o 'func TestGateStancesStated'` existence
+  count, precisely because the first is a *name* and a rename would re-vacuum it.
+- **The depth/limit asymmetry is now encoded rather than blurred.** 03-07 states the two
+  different server contracts explicitly and names the source lines for each — the substance
+  of cycle-3 HIGH-1 is fully repaired at the engine layer. (What remains, HIGH-2 below, is
+  a different problem: `limit` has no wire to travel on.)
+- **The intended-RED `web:drift` window is scheduled, tabulated, and given a named closer**
+  (03-01 → 03-09 Task 3).
+
+### Agreed Concerns
+
+Only one concern was raised by more than one source: none. The four HIGHs partition cleanly
+between Codex (three) and the orchestrator verification pass (one), and the three
+actionable LOWs are all Claude's. This is expected at cycle 4 — the surviving defects are
+narrow and each requires a specific composition to be traced, so overlap is low. Every
+finding below was re-executed by the orchestrator before being counted.
+
+### Divergent Views
+
+- **Codex: HIGH risk. Claude: LOW risk, "Converged."** The divergence is fully explained by
+  coverage, not judgement. Claude verified the cycle-3 corrections and guard shapes
+  exhaustively — and was right about all of it — but did not trace the seams: it never
+  checked whether `ImpactRequest` carries a `limit` field, whether clearing `symbol` flips
+  `buildNodeDetail`'s mode, or whether a tenth RPC collides with a pinned nine-method
+  fixture. Codex traced exactly those. The orchestrator sides with Codex on risk: three of
+  the four HIGHs would surface as an unexplained red or a wrong-data render during
+  execution, not as a review nit.
+- **Codex could not run Go tests** (its read-only sandbox refused to create a Go build
+  directory; it explicitly declined to claim any Go test pass). Its findings are therefore
+  grounded in proto/source reading and executable JS models, all of which the orchestrator
+  re-executed. Its evidence stands, but its lane is source-grounded rather than
+  test-executed and is weighted accordingly.
+- **A local-toolchain caveat, NOT a plan defect:** local Go is 1.27.0 while `go.mod` pins
+  1.26.5, and `cockroachdb/swiss@v0.0.0-20251224182025` has no `go1.27` build-tag variant,
+  so `internal/uiserver`, `internal/query`, `internal/indexer` and `./web/` do not compile
+  on this machine. CI uses `go-version-file: go.mod`. Recorded for the maintainer; it means
+  those packages' guards were verified by source reading and `rg`, not by `go test`.
+
+### Findings Considered and Disposed (not counted)
+
+- **All eight pre-approved items** were re-checked and none was re-raised by any lane: the
+  14-language / 13-module count, `goto()` replacing `pushState`/`replaceState`, SRV-05's
+  confinement reuse, `confidence: low` as estimate-calibration's UNSAMPLED derivation, the
+  `go.tool-proto.mod` and `vuln` pre-existing repo gaps, the `fc4ae27b…` literal, stale
+  strings in plan PROSE, and the three `planner-discipline-allow` markers.
+- **`TestGateStancesAgree` in 03-10 prose** — re-confirmed: 6 occurrences, 0 inside
+  `<automated>`/`<verify>`. Not a finding.
+- **The gofmt backlog numbers** — re-measured and matching (`git ls-files '*.go' | xargs
+  gofmt -l` = 14; pinned-set-minus-testdata = 8 gofmt / 23 gofumpt). The `rg -v '^testdata/'`
+  filter was checked for being a no-op and is not: a top-level `testdata/` exists and the
+  diff is exactly the six `testdata/golden/*.go` files. Settled, not re-litigated.
+- **The `?depth=999` reshape** — the new shapes hold. `clampDepth` unmodified;
+  `traverse_test.go:551` already pins "absurdly large depth is clamped, not unbounded";
+  `ImpactResponse.Depth` is set from `result.Depth` (`handlers.go:486-497`). Not a finding.
+- **`cd web && pnpm install` followed by a repo-root-relative `git diff web/pnpm-lock.yaml`**
+  — checked for the recorded `cd`-then-relative-path vacuity. From `web/`, git exits **128**
+  with `fatal: ambiguous argument`, so it fails loud rather than passing vacuously. Not a
+  finding.
+- **Vacuity sweep, whole phase** — no `rg -c`, no `xargs` over possibly-empty input, no bare
+  `go test -run PATTERN` (every one is paired with a `--- PASS:` count), no
+  pipeline-status-from-last-stage, no hardcoded iteration set. The closed class stays closed.
+- **Structural pins that could have broken but do not:** `TestTaskfileWrapperIsSerial` is
+  set-equality over the `test` wrapper only, and 03-01 correctly refuses to add `web:test` to
+  it; the `lint` wrapper has no such guard, so 03-10's `lint:go` leg is safe;
+  `TestRequiredCheckNamesPreserved` is a subset check; `proto:drift`'s floor of 4 is over the
+  generated file *set*, unchanged by adding messages. (`TestUIServiceMethodSetIsExactlyTheReadSet`
+  is the one that does break — counted as HIGH-1.)
+
+---
+
+### Current HIGH Concerns (4)
+
+1. **03-05 — the tenth RPC breaks a pinned nine-method set-equality fixture that no plan in
+   the phase declares, while three live acceptance criteria assert green.** `03-05:425`
+   states adding `GetPermalink` is *"purely additive: no existing field number is
+   renumbered, no existing field is removed, nothing enters a `reserved` band."* That is
+   true of the **wire schema** and false of the **Go test fixture**.
+   `internal/uiserver/readonly_test.go:26-36` holds `wantUIServiceMethods`, a nine-entry
+   literal, and `TestUIServiceMethodSetIsExactlyTheReadSet` (`:47`) reflects over
+   `uiv1connect.UIServiceHandler` and asserts exact set equality in BOTH directions — its
+   own doc comment says *"an ADDED method (a mutating verb or otherwise) fails the length
+   check or the membership check."* Executed: `rg -c '^\s*rpc ' internal/uiproto/uiv1/ui.proto`
+   → `9`; the fixture's guard is `if len(got) != 9 { t.Fatalf("...has %d methods, want
+   exactly 9...") }`. Adding `GetPermalink` makes that read `has 10 methods, want exactly 9`.
+   `rg -n 'readonly_test|wantUIServiceMethods|MethodSetIsExactly' .planning/phases/03-browse-inspect-navigation/`
+   returns **no hits in any plan**. The file is absent from 03-05's `files_modified`
+   (`:20-29`) and from Task 3's `<files>`. `Taskfile.yml:116` `test:unit` runs every package
+   except `internal/daemon`, so it compiles and runs `internal/uiserver`. 03-05's own
+   `<automated>` (`:542`) uses `-run Permalink` and will NOT surface this; the failure lands
+   only on the acceptance criteria at **`03-05:557`** (*"`task test:unit` and `go vet ./...`
+   both exit 0"*) and **`03-05:595`**, as an unexplained red against a deliberately
+   non-additive **security** fixture (SRV-03, T-01-04) that the executor has no license to
+   edit. Orchestrator-raised and executed. **Fix:** declare `internal/uiserver/readonly_test.go`
+   in `files_modified` and in Task 3's `<files>`; add an `<action>` step widening
+   `wantUIServiceMethods` to ten and the `!= 9` literal to `!= 10`; and record in the
+   SUMMARY that a read-only-surface security fixture was deliberately widened, with
+   `GetPermalink` named as a read verb. Note `TestUIServiceDeclaresNoMutatingMethod` is
+   unaffected — `GetPermalink` matches none of its `mutatingVerbs`.
+
+2. **03-07 — `limit` has no request path on any RPC the plan actually calls, so its
+   invalid-input acceptance criterion can only pass against a mock.** `03-07:41`, `:202`,
+   `:295` and `:303` all state that `limit` "reaches the server exactly as it appears in the
+   URL" and require a test asserting `?limit=100000` arrives in the client's request object
+   unchanged and is refused. But Task 2's `<action>` (`03-07:211`) adds exactly one loader —
+   `loadBlastRadius(params, client, signal)` **issuing the impact RPC** — and callers/callees
+   remain fields returned by `GetNodeDetail`. Executed against the proto:
+   `ImpactRequest` = `{symbol, depth}` (`ui.proto:277-280`); `GetNodeDetailRequest` =
+   `{symbol, file, optional line}` (`ui.proto:327-331`); **`limit` exists only on
+   `CallersRequest` (`:250-253`) and `CalleesRequest` (`:263-266`)**. `rg -n
+   'loadCallers|loadCallees|\.callers\(|\.callees\(' 03-07-PLAN.md` returns nothing, and no
+   plan in the phase wires either RPC (`rg` across all ten plans finds only 03-07:192's
+   `<read_first>` citation). So no specified production call can construct a request
+   carrying `limit`, and the criterion at `:295` is satisfiable only by a fake. Codex raised;
+   orchestrator executed and confirmed. Note this is NOT the cycle-3 depth finding — the
+   depth/clamp reshape is correct; this is the `limit` half, which the reshape promoted to
+   "the invalid-input exemplar" without giving it a wire. **Fix:** either wire the
+   traversal RPCs that carry `limit` (and then confront the identity problem in HIGH-3 —
+   `Callers`/`Callees` accept only a bare symbol and resolve ambiguity deterministically,
+   `traverse.go:300`, `:361`), or drop `limit` from the URL model and the invalid-input
+   criterion for this phase and record the deferral. Do not leave a criterion whose only
+   possible witness is a mock.
+
+3. **03-08 — selecting a picker candidate drops the symbol, so the reopened view is FILE
+   mode, not the promised populated single definition.** `03-08:320` and `:350` navigate to
+   *"parameters that address that candidate's own file and line"*, and `:353-354` concludes
+   *"Picking an ungathered candidate therefore re-issues the node-detail call for that
+   specific file, returning it as a single definition with everything populated."* The
+   navigator this rides on makes the two target kinds exclusive: `03-07:133` — *"Setting a
+   target symbol clears a previously set file target and line, and vice versa."* So the
+   resulting request is `{symbol:"", file, line}`. Executed against the engine:
+   `buildNodeDetail` (`internal/query/detail.go:190-200`) branches on `if symbol == ""`
+   first and, with a non-empty file, returns `NodeDetail{Mode: NodeDetailModeFile, ...}` —
+   **file mode**. File/line only narrow candidates *after* a non-empty symbol has selected
+   the symbol path (`:203-226`). The binary's own help agrees: `--file` "disambiguates
+   symbol", `--line` "narrows an overloaded symbol". The picker therefore opens the file,
+   not the chosen definition, and BRW-05's disambiguation does not land. Codex raised;
+   orchestrator executed and confirmed at every cited line. **Fix:** replace the navigator's
+   global symbol/file exclusivity with discriminated targets — file target `{file, line?}`
+   clearing `symbol`; definition target `{symbol, file, line}` preserving all three — and
+   add a picker test asserting the constructed `GetNodeDetailRequest` carries all three and
+   that the response is single-definition mode.
+
+4. **03-07 — the history acceptance criterion is unsatisfiable against a correct
+   implementation.** `03-07:360-362` instructs: *"interleave a `refine`-intent write between
+   B and C, go back once from C, and assert you land on B rather than on the refinement,"*
+   and the acceptance criterion at `:391` restates it as the assertion *"that would fail if
+   the intents were wired backwards"* — making it the load-bearing mechanical proof of
+   NAV-02. It cannot hold. A refine write is a `replaceState` (`goto(url, { replaceState:
+   true })`), which by definition **overwrites** the current entry: the stack goes
+   `[A, B] → [A, B'] → [A, B', C]`, and `back()` from C yields **B'**, the refinement. There
+   is no surviving unrefined B to land on. Under the wrong wiring (refine as a push) the
+   stack is `[A, B, B', C]` and `back()` also yields `B'` — so the assertion fails in both
+   worlds and discriminates nothing, which is additionally the recorded
+   "exits the same way on both branches" shape. Codex raised (citing installed SvelteKit
+   `client.js:1872`/`:1882` selecting `history.replaceState` for a refine navigation, and an
+   executed stack model returning `back=B+refinement`); orchestrator confirmed the semantics
+   are spec-mandated, not implementation-specific. **This is NOT the pre-approved D-11 item**
+   — that concerns `goto()` leaving `page.url` unchanged under shallow routing; this is the
+   history-stack assertion's own logic. **Fix:** state the correct discriminating sequence.
+   `A → push B → replace B' → push C → back()` must yield **B'** (proving the refine consumed
+   no entry), and a SECOND `back()` must yield **A** (proving there is no fourth entry). The
+   push/replace distinction is proved by the entry COUNT, not by recovering a destroyed
+   state. jsdom is not yet installed (03-01 installs it), so this must be re-verified in the
+   executor's RED run.
+
+### Current Actionable Non-HIGH Concerns (3)
+
+1. **LOW (Claude) — `03-04:330` cites the wrong function for a load-bearing claim.** The
+   `<read_first>` reads *"internal/uiserver/spa.go lines 215-230 (the SPA fallback routing
+   decision is computed from `r.URL.Path` only — a query string never participates)"*.
+   Executed: `sed -n '215,218p'` lands on `newSPAHandler`'s doc comment; `rg -n
+   'r\.URL\.Path|RawQuery|URL\.Query' internal/uiserver/spa.go` returns exactly one hit,
+   **`254: p := path.Clean(strings.TrimPrefix(r.URL.Path, "/"))`**. The claim is TRUE and in
+   fact stronger than stated — the 334-line file contains no `RawQuery`/`URL.Query`
+   reference at all — but the pointer sends the reader to unrelated code. Same class as the
+   cycle-3 `oracle_test.go:608-643` finding that 03-03 fixed; this instance was missed. Not
+   in a live guard. **PLAN change:** change the citation to `internal/uiserver/spa.go line
+   254`, and note the file contains no `RawQuery`/`URL.Query` reference at all, which is
+   what makes the query-value claim total rather than local.
+
+2. **LOW (Claude) — `03-06:210` states a false fact about the tree inside a rollback
+   procedure.** The rollback reads *"`rm -rf web/src/lib/components/ui/` — this directory
+   does not exist before this task, so removing it is complete."* Executed: `test -d
+   web/src/lib/components/ui` → **YES** (an empty, untracked scaffold left by Phase 2's
+   `shadcn-svelte init`; `web/components.json` is present). `git ls-files
+   web/src/lib/components | wc -l` → **0**, so the *consequence* still holds and nothing
+   tracked is destroyed. This is a precision defect, not a live hazard — but a rollback
+   instruction resting on "this cannot exist" is the shape that turns destructive the day it
+   does. **PLAN change:** replace with *"this directory exists today only as an empty,
+   untracked scaffold (`git ls-files web/src/lib/components` returns 0), so removing it
+   destroys nothing tracked"*, and optionally gate the `rm -rf` behind
+   `test "$(git ls-files web/src/lib/components/ui | wc -l | tr -d ' ')" -eq 0`.
+
+3. **LOW (Claude) — `03-04`'s `package web_test` instruction is right for an incomplete
+   reason, leaving the real trap unnamed.** The plan requires `package web_test` *"so the
+   production `web` package gains no dependency on `internal/indexer`"* — true, but not the
+   property that keeps the count correct. `internal/indexer/extract_test.go:27` registers a
+   synthetic `"go-dup"` language in an `init()`, and because Go compiles a package's internal
+   and external test files into one binary, `RegisteredLanguageIDs()` returns **15** inside
+   `internal/indexer`'s test binary and **14** everywhere else (both counts executed). The
+   guard as sited is correct; the risk is a later "simplification" that moves it next to the
+   registry it guards, where set-equality fails 15-vs-14 and the cheapest-looking repair is
+   to bump the floor to 15 — admitting a test-only fixture language into a coverage set that
+   gates a signed-binary artifact. **PLAN change:** add one sentence to the guard's doc
+   comment naming the real reason, and pin the siting with
+   `test "$(rg -o '^package web_test' web/highlight_coverage_test.go 2>/dev/null | wc -l | tr -d ' ')" -eq 1`
+   — verified in three worlds: file absent → count 0, exit 1; correct file → count 1, exit 0;
+   file moved to `package indexer_test` → count 0, exit 1. Fails closed in both wrong worlds.
+
+---
+
+## Codex Review (Cycle 4)
+
+## Summary
+
+The plans have not fully converged. Three HIGH-severity integration contracts remain unresolved: `limit` has no real RPC path in the planned loader, definition-picker navigation drops the symbol required for disambiguation, and the history test expects behavior opposite to `replaceState`. I verified these against HEAD `b9a5a234` using the proto, engine, installed SvelteKit 2.70.3 source, the existing binary, and executable models. Go tests could not start because the managed read-only environment cannot create a Go build directory; every attempt failed with `operation not permitted`, so I claim no Go test pass.
+
+## Strengths
+
+- The cycle-3 depth correction is accurate at the engine layer: `validateDepth` rejects negatives, while `Impact` clamps larger values. `go doc ...Engine.Impact` reported it is “bounded by clampDepth(depth).”
+- Every live `rg -U` guard is a zero-presence assertion. There is no positive or exact-positive count using multiline output. Executed plants produced `1` output line for a single-line import and `3` for a three-line wrapped import, while both guards use only `-eq 0`.
+- The settled formatting figures reproduce exactly: `tracked_gofmt=14`, `pinned_gofmt=8`, and `pinned_gofumpt=23`.
+- All corrected existing test names exist exactly once: `TestImpact`, `TestGateStancesStated`, `TestTaskfileWrapperIsSerial`, `TestToolModfilesRemainIsolated`, `TestWorkflowRunBodiesInvokeTask`, and `TestFrozenTranscriptsMatch`.
+- The new verification blocks generally bind to named deliverables and count explicit `PASS` lines, closing the prior “`go test -run` matched nothing” class.
+
+## Concerns
+
+- **HIGH — `limit` has no real request path in the planned browse loader.** Plan 03-07 claims `limit` reaches a neighbor load and requires `?limit=100000` to appear in the client request object ([03-07-PLAN.md:202](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:202), [03-07-PLAN.md:208](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:208), [03-07-PLAN.md:295](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:295)). But Task 2 adds only `loadBlastRadius`, using `Impact`; callers and callees remain fields returned by `GetNodeDetail`. Executing a proto-field extraction produced:
+
+  ```text
+  CallersRequest:symbol,limit
+  CalleesRequest:symbol,limit
+  ImpactRequest:symbol,depth
+  GetNodeDetailRequest:symbol,file,line
+  ```
+
+  The relevant definitions are [ui.proto:250](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:250), [ui.proto:263](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:263), [ui.proto:277](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:277), and [ui.proto:327](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:327). I also ran `rg -n 'load(Callers|Callees|Neighbor)|\.callers\(|\.callees\(' 03-07-PLAN.md`; it returned no output. A mock can therefore “prove” a limit request that no specified production call can construct. Calling the existing traversal RPCs is not automatically sufficient either: they accept only a bare symbol and resolve ambiguous symbols deterministically rather than using the selected definition ([traverse.go:300](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/traverse.go:300), [traverse.go:361](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/traverse.go:361)).
+
+- **HIGH — picker navigation drops the identity required to reopen a definition.** The navigator explicitly makes symbol and file targets exclusive ([03-07-PLAN.md:133](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:133)), while the picker navigates using only a candidate’s file and line and claims that this returns a populated single definition ([03-08-PLAN.md:320](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-08-PLAN.md:320), [03-08-PLAN.md:350](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-08-PLAN.md:350)). Executing the existing binary’s `node --help` produced:
+
+  ```text
+  --file string  file path — disambiguates symbol, or selects file-mode when symbol is omitted
+  --line int     line number — narrows an overloaded symbol...
+  ```
+
+  The engine confirms the mechanism: an empty symbol plus any file always returns file mode ([detail.go:190](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/detail.go:190)); file/line narrow candidates only after a non-empty symbol has selected the symbol path ([detail.go:215](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/detail.go:215)). The picker must preserve `{symbol, file, line}`. As written, selecting an ambiguous candidate opens the file, not the selected definition with callers and callees.
+
+- **HIGH — the live history acceptance test expects impossible `replaceState` semantics.** Plan 03-07 requires `B → refine → C → back` to yield the original B and skip the refinement ([03-07-PLAN.md:354](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:354), [03-07-PLAN.md:391](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:391)). Installed SvelteKit selects `history.replaceState` for a refine navigation ([client.js:1872](/Volumes/Code/github.com/seanb4t/codegraph-go/web/node_modules/@sveltejs/kit/src/runtime/client/client.js:1872), [client.js:1882](/Volumes/Code/github.com/seanb4t/codegraph-go/web/node_modules/@sveltejs/kit/src/runtime/client/client.js:1882)). Executing the exact stack transition produced:
+
+  ```text
+  stack=["A","B+refinement","C"]
+  back=B+refinement
+  ```
+
+  Replacement overwrites B; it does not retain a hidden unrefined B entry. The acceptance test therefore fails against the correct implementation or pressures the executor to implement history incorrectly.
+
+## Suggestions
+
+- Define a real, identity-safe server path for `limit`. The cleanest shape is to add an optional limit to the resolved `GetNodeDetail` path and validate/truncate calls and callers after `{symbol,file,line}` identifies the exact definition. Alternatively, extend the traversal RPCs so they accept the same disambiguation fields. Then test `100000 → CodeInvalidArgument` through that actual call.
+- Replace the navigator’s global symbol/file exclusivity rule with discriminated targets:
+
+  - File target: `{file, line?}`, clearing `symbol`.
+  - Definition target: `{symbol, file, line}`, preserving all three.
+
+  Add a picker test asserting the resulting `GetNodeDetailRequest` contains all three values and returns single-definition mode.
+- Correct the history test to the actual sequence: `A → push B → replace Bq1 → replace Bq2 → push C → back` must yield `Bq2`; another back yields A. To prove one back leaves an active search, test `A → push B → replace Bq → back`, which correctly yields A.
+
+## Risk Assessment
+
+**HIGH.** The guard-shape and cycle-3 premise repairs are strong, but these three remaining contracts affect NAV-01/NAV-02 and BRW-05 directly. Two would route users to the wrong data or fail to apply URL state, while the third makes a required acceptance test incompatible with the selected router semantics.
+
+CYCLE_SUMMARY: current_high=3 current_actionable=0
+
+---
+
+## Claude Review (Cycle 4)
+
+Tree clean, remedy verified in all three worlds. Here is the review.
+
+`★ Insight ─────────────────────────────────────`
+Two things this repo taught me while verifying:
+- **Go `init()` registry pollution is package-test-scoped.** `internal/indexer/extract_test.go:38` registers a synthetic `"go-dup"` language. Because Go compiles a package's internal *and* external test files into one binary, `RegisteredLanguageIDs()` returns **15** inside `internal/indexer`'s test binary but **14** everywhere else. Where you site a set-equality guard silently changes the set it measures.
+- **`rg -U -o | wc -l` counts matched *lines*, not matches.** A wrapped import returns 3 for one violation. That is safe only against `-eq 0`, and is a live trap for anyone reusing the shape for a positive count.
+`─────────────────────────────────────────────────`
+
+## 1. Summary
+
+I executed the assertions rather than reading them. Every cycle-3 correction holds against the tree at `b9a5a234`: the since-deleted-file path really does return `*fs.PathError` / `errors.Is(fs.ErrNotExist)==true` / `ErrInvalidArgument==false` (so `CodeInternal` + `an internal error occurred`, carrying the absolute host path); `validateDepth` really does reject only `n < 0` while `validateLimit` rejects `n > 1000`; `internal/corpora/coverage_test.go` really is dirty (two `gofmt -d` hunks) and its package really is in `go list ./...`; `TestGateStancesStated` really exists while `TestGateStancesAgree` really exits 0 having run nothing. The pinned gofmt backlog returns exactly **8**, gofumpt **23**, decomposing exactly into the declared 12 + 3 generated. All seven Taskfile line citations land on their target's opening line; all seven bound test names exist exactly once; every `-U` site pairs with `-eq 0`; the corrected `awk` returns 1/0/1/1 while the reviewer-suggested form returns **0 on both deletion worlds**, confirming the plan was right to reject it. I found **no HIGH**, and three LOW items — one wrong file pointer, one false statement about a directory's existence whose consequence is nonetheless benign, and one latent trap the plans avoid for the right outcome but the wrong stated reason.
+
+## 2. Strengths
+
+- **The cycle-3 defect class is genuinely closed.** Each of the four false premises cycle 3 found was re-derived from source in this revision, not patched by assertion. 03-05's point-5 rewrite in particular re-opened a maintainer decision *because* the justification ("a clear message") turned out false — and the corrected `(CodeInternal, "an internal error occurred")` pair is what the source actually produces.
+- **Guards are paired with executed controls, and the controls are real.** `golangciModfilePath`=0 against `go.tool-lint.mod|lintModfilePath`=10; `lint-go`=0 against `\blint\b`=4; five-word vuln loop=0 against four-word=1; `codegraph init` in `web/build/`=0 against `source-sha256`=1. Every one reproduced.
+- **The plans reject a defective reviewer remedy with evidence.** 03-05:345 documents why `awk '$2 != 0 { exit 1 } END { exit NR == 0 }'` fails; I executed it and it returns **0** for both `has-deletions` and `deletion-on-later-line`. The plan's replacement is correct.
+- **Regression-vs-completion guards are correctly separated.** 03-10 pairs the already-green `TestGateStancesStated` PASS count with an `rg -o 'func TestGateStancesStated'` existence count, precisely because the first is a *name* and a rename would re-vacuum it. All four `internal/upgrade` guards pass today and the plans say so rather than implying they prove new work.
+- **The intended-RED `web:drift` window is scheduled, tabulated, and given a named closer** (03-01 → 03-09 Task 3), which is the right treatment for a multi-wave red leg.
+
+## 3. Concerns
+
+- **LOW — `03-04-PLAN.md:262` cites the wrong function for a load-bearing claim.** The `<read_first>` says *"internal/uiserver/spa.go lines 215-230 (the SPA fallback routing decision is computed from `r.URL.Path` only — a query string never participates)"*. That range is `newSPAHandler` / CSP construction.
+  ```
+  $ sed -n '215,230p' internal/uiserver/spa.go
+  // newSPAHandler returns the SPA app-shell http.Handler ...
+  $ rg -n 'r\.URL\.Path|RawQuery|URL\.Query' internal/uiserver/spa.go
+  254:	p := path.Clean(strings.TrimPrefix(r.URL.Path, "/"))
+  ```
+  The **claim is true** — line 254 is the only routing decision and there is no `RawQuery`/`URL.Query` reference anywhere in the 334-line file — but the pointer sends the reader to unrelated code. This is the same class as the cycle-3 `oracle_test.go:608-643` finding, which 03-03 fixed; this instance was missed. Not in a live guard.
+
+- **LOW — `03-06-PLAN.md:161` states a false fact about the tree, inside the rollback procedure.** The rollback reads: *"If ALL of it is rejected: `rm -rf web/src/lib/components/ui/` — **this directory does not exist before this task**, so removing it is complete."*
+  ```
+  $ test -d web/src/lib/components/ui && echo YES || echo NO
+  YES
+  $ git ls-files web/src/lib/components | wc -l
+  0
+  ```
+  The directory **does** exist today (an empty, untracked scaffold left by Phase 2's `shadcn-svelte init`; `web/components.json` is present). The *consequence* still holds — it tracks zero files, so `rm -rf` destroys nothing — so this is a precision defect, not a hazard. It matters only because a rollback instruction resting on "this cannot exist" is the shape that becomes destructive the day it does contain something.
+
+- **LOW — `03-04-PLAN.md:430` gives the right instruction for an incomplete reason, leaving a real trap unnamed.** The plan requires `package web_test` in `web/` *"so the production `web` package gains no dependency on `internal/indexer`"*. That is true but is not the property that keeps the count correct:
+  ```
+  # probe from internal/indexer (external test pkg, same dir):
+  count=15 ids=[c cpp csharp go go-dup java javascript kotlin php python ruby rust swift tsx typescript]
+  # probe from web/ (where the guard actually lives):
+  count=14 ids=[c cpp csharp go java javascript kotlin php python ruby rust swift tsx typescript]
+  $ rg -n 'go-dup' internal/indexer/extract_test.go | head -1
+  27:// init registers "go-dup" — a second registry entry whose NewParser and
+  ```
+  `extract_test.go`'s `init()` injects a 15th language into the registry, but only inside `internal/indexer`'s own test binary. The guard as sited is correct. The risk is a later "simplification" that moves it next to the registry it guards: set-equality would then fail 15-vs-14, and the cheapest-looking fix is to bump the floor to 15 — admitting a test-only fixture language into a coverage set that gates a signed-binary artifact. D-19's "14" is right; nothing in the plan records *why* it stops being right one directory over.
+
+## 4. Suggestions
+
+1. **03-04 `<read_first>`:** change `internal/uiserver/spa.go lines 215-230` to `internal/uiserver/spa.go line 254 (the single routing decision; note the file contains no RawQuery/URL.Query reference at all, which is what makes the query-value claim total rather than local)`. Text-only.
+
+2. **03-06 Task 1 rollback:** replace *"this directory does not exist before this task"* with *"this directory exists today only as an empty, untracked scaffold (`git ls-files web/src/lib/components` returns 0), so removing it destroys nothing tracked"*. Same instruction, true premise. Optionally gate it: `test "$(git ls-files web/src/lib/components/ui | wc -l | tr -d ' ')" -eq 0` before any `rm -rf` — executed today it returns 0 and passes; had a tracked file been there it returns non-zero and stops.
+
+3. **03-04 Task 3:** add one sentence to the guard's doc comment naming the real reason, and pin the siting with a criterion I executed in three worlds:
+   ```
+   test "$(rg -o '^package web_test' web/highlight_coverage_test.go 2>/dev/null | wc -l | tr -d ' ')" -eq 1
+   ```
+   Observed — file absent (today): count 0, **exit 1**; correct file: count 1, **exit 0**; file moved to `package indexer_test`: count 0, **exit 1**. Fails closed in both wrong worlds, so it cannot pass vacuously against a missing path.
+
+None of the three changes any code, any wave, or any acceptance outcome.
+
+## 5. Risk Assessment
+
+**LOW.** The trajectory is 41 → 9 → 9 → 3, and the composition changed as much as the count: cycles 1–2 found guards that could not fail, cycle 3 found guards aimed at false premises, and cycle 4 found no instance of either class in a live guard. Every assertion the plans make about existing behavior that I executed — error classification, clamp-vs-reject, formatter backlog membership, test-name existence, fixture counts, manifest contents, line citations, `awk` and shell shapes — came back true. The three remaining items are documentation precision and one hardening note; all are text edits, none blocks execution, and none affects the five browse success criteria. The two folded todos (03-03, 03-10) remain correctly quarantined from those criteria.
+
+**Converged.**
+
+CYCLE_SUMMARY: current_high=0 current_actionable=3
+
+
+---
+
+## Orchestrator Independent Verification (Cycle 4)
+
+Not a reviewer lane — an orchestrator-run pass that extracted every live guard from the ten
+plans and executed its assertions about existing behaviour. Recorded here because it is the
+source of HIGH-1 and because its negative results are what license the "converged" claims
+above.
+
+**Method.** Extracted all 26 `<automated>` blocks and all 332 lines of
+`<acceptance_criteria>`, pulled every command, and ran the ones that assert something about
+HEAD. Explanatory prose was excluded by construction.
+
+**The one finding: HIGH-1 above** (`internal/uiserver/readonly_test.go`'s nine-method
+set-equality fixture vs. 03-05's tenth RPC). Full evidence is stated in the HIGH list.
+
+**Everything else executed came back TRUE at `b9a5a234`:**
+
+| Claim | Executed result |
+|---|---|
+| Six `rg -U` sites (`03-04:301`, `:311`, `:482`; `03-07:167`, `:172`, `:423`) | all `-eq 0`; none positive, none `-ne 0` |
+| `TestToolModfilesRemainIsolated`, `TestGateStancesStated`, `TestWorkflowRunBodiesInvokeTask`, `TestTaskfileWrapperIsSerial` | all exist, all PASS, each 1 PASS line matching its guard's pattern |
+| `TestFrozenTranscriptsMatch` + `toolslist-repeat` subtest | exist |
+| `git ls-files '*.go' \| xargs gofmt -l \| wc -l` | 14 |
+| same, with `rg -v '^testdata/'` | 8 — filter is real, diff is exactly the six `testdata/golden/*.go` |
+| `validateLimit` rejects `n > MaxLimit` = 1000 | `internal/query/validate.go:107-115`, via `invalidArgumentf` |
+| `validateDepth` rejects only `n < 0` | `:137-142`; doc comment verbatim: *"An explicit depth above MaxDepth is deliberately NOT rejected here"* |
+| `Engine.Impact` → `validateDepth` then `clampDepth`; `MaxDepth` = 50 | `traverse.go:438-442`; `traverse_test.go:551` pins the clamp |
+| `ImpactResponse.Depth` set from `result.Depth` | `handlers.go:486-497` |
+| `errInternal = errors.New("an internal error occurred")` | `handlers.go:140`; `mapEngineError` at `:105-109` |
+| `resolveSourcePath` returns `EvalSymlinks` error RAW | `node.go:69-71` → default scrubbing arm, exactly as 03-05 describes |
+| `rg -o '\blint\b' .github/workflows/ci.yml` / `lint-go` | 4 / 0 |
+| `rg -o '357 measured' Taskfile.yml` | 1 |
+| four-word `for name in task goreleaser govulncheck actionlint` | 1 |
+| `rg -o 'lint:go' Taskfile.yml`; `.golangci.yml` | 0; absent |
+| `^\s*reserved` in `ui.proto` | 1 |
+| `handled synchronously in` in `scenarios.go` | 3 (declared as 3) |
+| `{@html}` / `innerHTML` in `web/src/lib/components/ui/` | 0 / 0 |
+| `pushState` in `web/src/`; `from '$app/state'`; `from '$app/navigation'` | 0; 1; 0 |
+| `rg -o 'codegraph init' web/build/` | 0 (declared as 0) |
+| `source-sha256` and `fc4ae27b…` in `.build-manifest` | 1 and 1 — rg does read the explicitly-named dotfile, so neither zero is a vacuous hidden-file zero |
+| `web_source_files()` (`Taskfile.yml:40-51`) | 8 paths, excludes `web/tests/` |
+| `.github/workflows/ci.yml:164` | `run: task web:drift` |
+| `web/.svelte-kit/tsconfig.json` `include` | carries `../tests/**/*.ts` and `../tests/**/*.svelte` |
+| `web/pnpm-workspace.yaml` | carries `strictDepBuilds: true` |
+| `internal/indexer.RegisteredLanguageIDs()` | exists, `languages.go:103` |
+| `copyGofixture` / `indexGofixture` / `mustListen` / `waitForConnectable` / `startedServer` | all exist |
+| `NodeDetailMode_NODE_DETAIL_MODE_FILE` | exists, `ui.pb.go:67` |
+| `task --list-all` output shape vs `^\* lint:go:` / `^\* web:test:` parsers | matches |
+| `go list ./web/` | resolves |
+| every file path named in a live guard | exists, or is a declared phase artifact |
+
+**Vacuity sweep (the closed class):** no `rg -c`, no `xargs` over possibly-empty input, no
+bare `go test -run PATTERN` (every one paired with a `--- PASS:` count), no
+pipeline-status-from-last-stage, no hardcoded iteration set. The one `cd`-then-repo-relative
+shape (`cd web && pnpm install…` then `git diff --exit-code web/pnpm-lock.yaml`) exits
+**128** with `fatal: ambiguous argument` from `web/` — fails loud, not vacuous.
+
+**Execution-coverage caveat.** `internal/uiserver`, `internal/query`, `internal/indexer` and
+`./web/` do not compile on this machine: local Go is 1.27.0 while `go.mod` pins 1.26.5, and
+`cockroachdb/swiss@v0.0.0-20251224182025` has no `go1.27` build-tag variant (`undefined:
+hashFn / getRuntimeHasher / fastrand64`). CI uses `go-version-file: go.mod`, so this is
+local-toolchain drift, not a plan or repo defect — but those packages' guards were verified
+by source reading and `rg`, not by executing `go test`. Recorded for the maintainer.
+
+---
+
+<!-- ===== AUDIT TRAIL: CYCLES 1, 2 AND 3 (superseded; do not re-count) ===== -->
 
 # Cross-AI Plan Review — Phase 3 (Cycle 3, FINAL)
 
