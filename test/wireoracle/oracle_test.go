@@ -128,6 +128,23 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 				t.Fatalf("scenario %q: normalized transcript is empty — an empty transcript is never a match", sc.Name)
 			}
 
+			// 03-03-PLAN.md Task 3 (R2, 03-03-EVIDENCE.md): canonicalize
+			// response order by request id on BOTH sides before comparing.
+			// This narrows what the oracle freezes to response CONTENT —
+			// still byte-exact, see TestFrozenTranscriptComparisonDetectsContentMutation
+			// — rather than the arrival ORDER of pipelined non-initialize
+			// calls, which github.com/modelcontextprotocol/go-sdk@v1.7.0
+			// never guaranteed (see CanonicalizeResponseOrder's doc
+			// comment for the SDK citation). Applying it to `want` too is
+			// a no-op for every existing frozen transcript in this repo
+			// (verified: each one is already in ascending-id order) and
+			// guards a hypothetical future transcript that was not.
+			normalized, canonHits := CanonicalizeResponseOrder(normalized)
+			want, _ = CanonicalizeResponseOrder(want)
+			if canonHits > 0 {
+				t.Logf("scenario %q: CanonicalizeResponseOrder reordered %d response line(s) before comparison", sc.Name, canonHits)
+			}
+
 			// 03-03-PLAN.md Task 1(b): if the comparison is about to fail,
 			// dump the raw timestamped arrival sequence BEFORE
 			// assertBytesEqualLineByLine's t.Fatalf ends the subtest — this
