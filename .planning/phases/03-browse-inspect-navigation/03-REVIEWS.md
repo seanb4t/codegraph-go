@@ -1,17 +1,414 @@
 ---
 phase: 3
 reviewers: [codex, claude]
-reviewed_at: 2026-08-28T15:36:35Z
+reviewed_at: 2026-08-28T16:22:32Z
+review_cycle: 2
 plans_reviewed: [03-01-PLAN.md, 03-02-PLAN.md, 03-03-PLAN.md, 03-04-PLAN.md, 03-05-PLAN.md, 03-06-PLAN.md, 03-07-PLAN.md, 03-08-PLAN.md, 03-09-PLAN.md, 03-10-PLAN.md]
+plans_commit: fa0fff6e
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
   claude: "unknown"
 model_sources:
   codex: "banner"
   claude: "unknown"
+cycle_summary:
+  current_high: 2
+  current_actionable: 7
 ---
 
-# Cross-AI Plan Review — Phase 3
+# Cross-AI Plan Review — Phase 3 (Cycle 2)
+
+Re-review of the REVISED plan set (commit `fa0fff6e`, 10 plans / 29 tasks) after
+cycle 1's 7 HIGH and 34 actionable non-HIGH findings. Both lanes received the same
+source-grounding prompt plus the cycle-2 directive to mentally EXECUTE every
+`<verify>` block, the four pre-approved deviations, and the list of vacuous shapes
+already recorded in this repository. Neither lane carries a
+`[reviewed-without-repo-access]` or `[reviewed-without-source-citations]` marker.
+
+## Consensus Summary — Cycle 2
+
+Both lanes ran source-grounded with `file:line` citations; neither carries a
+`[reviewed-without-repo-access]` or `[reviewed-without-source-citations]` marker,
+so both count at full weight. Both were given the three pre-approved deviations
+(D-19's 14/13 language count, D-11's `goto()` over shallow routing, SRV-05's
+confinement reuse) and the `confidence: low` derivation note, and neither
+re-reported them.
+
+**Both lanes agree the cycle-1 vacuous-guard class is closed.** Codex: "I found
+no remaining cycle-1 HIGH guard in its original form." Claude: "I could not find
+a single `<verify>` block that still exits 0 in a world where its task was never
+done." The orchestrator independently re-executed the discriminating baselines
+against the working tree and confirms them:
+
+| Assertion | Observed on the current tree | Discriminating? |
+|---|---|---|
+| `rg -o 'codegraph init' web/build/ \| wc -l` | `0` (needs `>= 1`) | yes |
+| `rg -o 'fc4ae27b…' web/build/.build-manifest \| wc -l` | `1` (needs `0`) | yes |
+| `rg -o 'from .$app/navigation.' web/src/ \| wc -l` | `0` (needs `>= 1`, 03-07) | yes |
+| `go test ./internal/gitmeta/ -run 'Permalink\|Remote' -v` PASS count | `0` (needs `>= 12`) | yes |
+| `go test ./internal/uiserver/ -run Permalink -v` PASS count | `0` (needs `>= 10`) | yes |
+| `rg -o '\{@html' web/src/ --glob '!**/components/ui/**' \| wc -l` | `0` (needs `1`) | yes |
+| `rg -o 'PLACEHOLDER-03-07' web/src/ \| wc -l` | `0` (needs `1` in 03-06) | yes |
+
+The BSD-`wc`-padding, `rg -c`-counts-lines, `go test -run`-matches-nothing,
+pipeline-status and `${PIPESTATUS[0]}` shapes are all absent from the revised set.
+The `awk` remedy the orchestrator's brief flagged as itself-vacuous does not appear
+in any plan; 03-05's replacement was independently executed in four worlds by the
+Claude lane and returns `1 / 0 / 1 / 1`, which discriminates.
+
+### Agreed Strengths
+
+- **Guards moved from asserting pre-existing machinery to asserting phase-created
+  identities.** Both lanes single out 03-09 Task 3: cycle 1 chained five targets
+  that were already green on the Phase-2 tree; cycle 2 binds `codegraph init`
+  reaching the shipped `web/build/` bytes and the old `source-sha256` being gone.
+- **Wave re-serialization (03-05 → 3, 03-06 → 4, downstream +1) removes a real
+  shared-worktree race** over `web/src/lib/gen/ui_pb.ts`, and the frontmatter is
+  honest that these are serialization edges, not code dependencies.
+- **SRV-05's proof is grounded and non-vacuous.** Both lanes traced
+  `GetNodeDetail` → `Engine.NodeDetail` → the single `resolveSourcePath`
+  implementation (`internal/query/node.go:33`, including the post-`EvalSymlinks`
+  re-check), and both credit 03-02's same-server in-repo positive control.
+- **03-10 Task 3 correctly diagnoses a tautology cycle 1 could not have caught** —
+  `TestWorkflowRunBodiesInvokeTask` iterates `inScopeJobs` only, so an absent job
+  makes it pass rather than fail — and hoists the fixture assertion into `<verify>`.
+- **The intended-RED `web:drift` window is documented with a named opener, closer
+  and expected-green control legs**, instead of being discovered as a CI failure
+  five waves in.
+
+### Agreed Concerns
+
+- **03-10 Task 1's `TestToolModfilesRemainIsolated` is vacuous for the new third
+  modfile — both lanes, independently.** Codex rates it HIGH and cites the
+  hardcoded two-element fixture (`internal/upgrade/taskfile_shape_test.go:30-31`,
+  the loop at `:928`, the forbidden-package set at `:893`); Claude rates it MEDIUM
+  and makes the same structural point — this is the *identical* shape 03-10 Task 3
+  correctly diagnoses one task later for `inScopeJobs`. The plan's acceptance
+  criterion ("passes with exactly one `--- PASS:` line") is satisfied by the tree
+  as it stands today, and the fixture update is conditional prose
+  ("*If* that guard enumerates the known tool modfiles as a fixture…"). The source
+  settles the condition: it does. Escalated to HIGH on consensus.
+
+### Divergent Views
+
+- **03-09's status gate.** Codex rates the `createStatusGate(client)` /
+  `notifyNavigated` contradiction HIGH and execution-blocking; Claude did not
+  raise it at all. The orchestrator adjudicates **for Codex**: 03-09-PLAN.md:139
+  declares the constructor as `createStatusGate(client): StatusGate`, and
+  :170 states "the creation fetch records the identity it fetched for" — but no
+  navigation identity reaches the constructor and none can be derived from the RPC
+  client. The specified `1 → 1 → 2` fetch-count test in Task 1's `<behavior>` is
+  therefore not implementable as written. Counted as HIGH.
+- **Overall risk.** Codex: HIGH until two blockers are fixed, MEDIUM after.
+  Claude: LOW-to-MEDIUM. The gap is entirely the 03-09 constructor finding Claude
+  did not raise. Orchestrator verdict: **MEDIUM**, with two blocking items.
+- **03-04 Task 1's positive control.** The orchestrator raised, then withdrew, a
+  finding that `rg -o 'from .$app/state.' web/src/` returns `1` today
+  (`web/src/routes/+layout.svelte:8`) and so cannot fail. 03-04-PLAN.md states this
+  explicitly, names the control's narrower purpose (proving the `\$` escaping and
+  that `rg` reads `web/src`), explains why `$app/navigation` cannot serve as the
+  control in *this* plan, and adds a planted-violation discrimination criterion
+  recorded in the SUMMARY. **Disposed with written rationale — not a finding.**
+
+### Orchestrator Notes on Proposed Remedies
+
+Per the cycle-2 directive, a remedy for a vacuous guard carries the same burden of
+proof as the guard. One suggestion was corrected before being recorded:
+
+- Claude's fix for 03-09 Task 3's digest check was written as
+  `test "$(rg -c 'source-sha256' web/build/.build-manifest)" -eq 1`. `rg -c` counts
+  matching **lines**, not matches — a recorded vacuity shape in this repository.
+  The item below restates it as `rg -o … | wc -l | tr -d ' '`, the form the rest of
+  the phase already uses.
+
+### Current HIGH Concerns (2)
+
+1. **03-09 Task 1 — `createStatusGate(client)` cannot record a creation identity.**
+   The constructor takes only the RPC client, yet the gate is specified to record
+   "the identity it fetched for" so that a same-identity `notifyNavigated` is a
+   no-op. Nothing supplies that identity. Task 1's `<behavior>` demands a
+   `1 → 1 → 2` fetch-count test, which cannot be written against this API without
+   special-casing the first notification. Fix: either
+   `createStatusGate(client, initialNavigationIdentity)`, or construct without
+   fetching and let the layout's first `notifyNavigated` perform the initial fetch
+   (which also gives navigation identity a single owner).
+2. **03-10 Task 1 — the modfile-isolation guard is vacuous for `go.tool-golangci.mod`.**
+   `TestToolModfilesRemainIsolated` hardcodes `[]string{toolModfilePath, lintModfilePath}`;
+   the new modfile is inspected by nothing and the test stays green. Fix: add
+   `golangciModfilePath` to the fixture, extend the header-rationale loop and the
+   forbidden-root-package set to cover golangci-lint, and hoist an unconditional
+   `rg -o 'golangciModfilePath' internal/upgrade/taskfile_shape_test.go | wc -l`
+   assertion into Task 1's `<verify>` — mirroring what Task 3 already does correctly
+   for `inScopeJobs`.
+
+### Current Actionable Non-HIGH Concerns (7)
+
+1. **MEDIUM (Claude, new) — 03-10 Task 1: `go.tool-golangci.mod` is invisible to the
+   `vuln` gate.** `Taskfile.yml:1163-1172` builds a hardcoded four-binary set
+   (three from `go.tool.mod`, one from `go.tool-lint.mod`); the target's own `desc:`
+   says "All four binaries stay in scope (no allowlist, no exclusion): the point is
+   detection." golangci-lint is plausibly the largest third-party tree the repo would
+   carry, and 03-10 does not mention `vuln` anywhere. PLAN change: add a fifth
+   `GOWORK=off go build -modfile=go.tool-golangci.mod …` line and a fifth loop entry,
+   plus an acceptance criterion recording the new binary's scan verdict in the SUMMARY.
+2. **MEDIUM (Codex, new) — 03-09: `StatusVerdict` does not contain `unknown-commit`.**
+   The artifact table (`03-09-PLAN.md:112`) declares the union as
+   `ok / stale / no-index / indexing / unknown`, while `<behavior>` (`:139`) requires
+   an empty `commit_sha` to classify as `unknown-commit`. The wire treats empty
+   `commit_sha` as ordinary metadata absence independent of index health
+   (`internal/uiproto/uiv1/ui.proto:151`). PLAN change: model commit knowledge as a
+   second, orthogonal field (`commit: known | unknown`) rather than a sixth mutually
+   exclusive health verdict.
+3. **MEDIUM (Claude, new) — 03-03 Task 3: the NR branch's RED-first contract is an
+   executor escape clause.** Under NR no behaviour changes, so
+   `TestToolsListRepeatOrderingResolution` asserts a property that is already true and
+   cannot be observed RED; the plan hedges with "or — if the old claim is simply
+   unfalsifiable as written — record why". PLAN change: name the scratch-assertion
+   form explicitly (RED against the old comment's stronger claim, recorded and
+   discarded), or state plainly that NR carries no RED proof and why.
+4. **LOW (Claude, new) — 03-09 Task 3: the digest assertion passes on a missing file.**
+   `rg -o 'fc4ae27b…' web/build/.build-manifest | wc -l` returns `0` when the manifest
+   does not exist, so `-eq 0` passes — the "check aimed at a nonexistent path" shape.
+   `task web:drift` earlier in the same `&&` chain protects it in practice, but the
+   assertion is not self-sufficient. PLAN change: add one conjunct in the same
+   `<verify>`: `test "$(rg -o 'source-sha256' web/build/.build-manifest | wc -l | tr -d ' ')" -eq 1`.
+5. **LOW (Claude, new) — 03-10 Task 2: `<verify>` is a bare `task lint:go`.** Nothing
+   binds the green to the linter set Task 1 recorded, so a narrowed `.golangci.yml`
+   produces the identical pass; the prohibition against narrowing is prose only, and
+   Task 2's acceptance criteria do not assert it either. PLAN change: assert the
+   enabled-linter count in `.golangci.yml` equals the number Task 1's SUMMARY records.
+6. **LOW (Codex, new) — 03-06 and 03-08 create `.planning/todos/pending/…` artifacts
+   that are absent from `files_modified`.** Both plans require the todo by acceptance
+   criterion (`03-06-PLAN.md:228`, `03-08-PLAN.md:368`) but neither declares the path,
+   weakening artifact ownership and atomic-commit accounting. PLAN change: add the
+   todo paths to both `files_modified` lists.
+7. **LOW (Codex, new) — 03-08's `<done>` contradicts its own corrected contract.**
+   `03-08-PLAN.md:376` still reads "every candidate the server counted"; the task text
+   was corrected to "every candidate returned". The counts happen to be equal on the
+   current server, but the plan deliberately tests a future state where they differ.
+   PLAN change: update the completion wording to follow the corrected contract.
+
+### Findings Considered and Disposed (not counted)
+
+- **03-04 Task 1's `$app/state` positive control** — pre-satisfied by
+  `web/src/routes/+layout.svelte:8`, but the plan states this verbatim, scopes the
+  control's purpose to the `\$`-escaping mechanism, and adds a planted-violation
+  discrimination criterion. Written rationale present.
+- **Name-only vitest greps in 03-04/03-06/03-08/03-09 task `<verify>` blocks**
+  (Claude MEDIUM). Vitest prints a file's path even when every test in it is
+  `it.skip`, and `vitest run` exits 0 — so a name grep alone is skip-satisfiable.
+  But every one of those plans carries `task web:test` with a strictly-greater
+  executed-count criterion in its `<acceptance_criteria>` and `<verification>`
+  (03-04:367, 03-06:394, 03-07:340, 03-08:366, 03-09:360/395), and 03-09 states
+  explicitly *why* it is a step-(c) criterion rather than a `<verify>` conjunct.
+  Incorporated, therefore disposed. Worth tightening, not counted.
+- **03-07 Task 3's `PLACEHOLDER-03-07 == 0`** (Claude LOW) — true today, but
+  deliberately paired cross-plan with 03-06's `== 1` and a pre-edit SUMMARY
+  observation. Written rationale present.
+- **03-02's `-ge 5` subtest floor being inflatable by nested `t.Run` children**
+  (Claude LOW) — the acceptance criteria enumerate the four refusals and the control
+  by name. Incorporated.
+- **Cycle-1 deferrals with written in-plan rationale** — 03-02 fixture duplication,
+  03-08 client render-cost measurement (with a required todo artifact), 03-10 tool
+  supply-chain review. Disposed by construction.
+
+---
+
+## Codex Review (Cycle 2)
+
+### Codex — Cycle 2 Plan Review
+
+## Summary
+
+The revised plans are substantially stronger than cycle 1. The new-test identity checks, positive controls, corrected shell quoting, generated-client serialization edge, and task-specific bundle assertions close the previously recorded vacuous guards. Source inspection confirms the major architectural premises: path confinement is centralized, node-detail responses are mode-discriminated, degraded status is intentionally asymmetric, and the build drift guard hashes both source and output.
+
+I found no remaining cycle-1 HIGH guard in its original form. I did find two current blockers: the status gate cannot implement its stated identity behavior with its proposed constructor, and the tool-modfile isolation test remains blind to the third modfile it is supposed to guard.
+
+## Strengths
+
+- Confinement reuse is correctly grounded in the source. `GetNodeDetail` passes through `Engine.NodeDetail`, while source reads ultimately use the single `resolveSourcePath` implementation, including post-symlink verification ([internal/query/node.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:33), [internal/uiserver/handlers.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/handlers.go:728)). Plan 03-02’s same-server positive control makes the RPC-boundary proof non-vacuous.
+
+- The browse-state plans correctly require clients to branch on `NodeDetailMode`. The protocol explicitly warns that fields from inactive modes return zero values, and the handler populates each mode accordingly ([internal/uiproto/uiv1/ui.proto](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:405), [internal/uiserver/handlers.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/handlers.go:672)).
+
+- The corrected multi-definition reasoning matches current behavior: all matches are returned, while detail gathering alone is capped ([internal/uiserver/handlers.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/handlers.go:699)). Plans 03-07 and 03-08 correctly use `detail_gathered` instead of inferring completeness from empty adjacency.
+
+- The NAV-04 split accurately reflects the server. `GetStatus` produces successful degraded answers, whereas other handlers map lock contention to `CodeUnavailable` with typed detail ([internal/uiserver/degrade.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/degrade.go:105), [internal/uiserver/degrade.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiserver/degrade.go:136)).
+
+- The generated-artifact closure in 03-09 is well bound to the shipped output. The existing drift mechanism hashes tracked web source and every on-disk build output independently ([Taskfile.yml](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:40), [Taskfile.yml](/Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:1014)). Requiring `codegraph init` inside `web/build/` materially ties the gate to this phase’s banner.
+
+- The revised guard commands generally fail in an unimplemented tree: named new test passes are counted, `go test -run` vacuity is closed, pipeline statuses are preserved, and the shallow-routing regex now has a real positive control.
+
+- Cross-plan writes to generated UI clients are serialized by the 03-04 → 03-05 → 03-06 chain. No remaining same-wave generated-client race was found.
+
+## Concerns
+
+- **HIGH — cycle-1 status-navigation finding remains unresolved:** Plan 03-09 specifies `createStatusGate(client)`, which immediately fetches, but then says that creation “records the identity it fetched for” so the first `notifyNavigated(sameIdentity)` is ignored ([03-09-PLAN.md](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-09-PLAN.md:144), [03-09-PLAN.md](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-09-PLAN.md:170)). The constructor receives no navigation identity and cannot derive one from the RPC client. The only identity source is `page.url` in the layout ([web/src/routes/+layout.svelte](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/routes/+layout.svelte:8)). Consequently, the specified `1 → 1 → 2` fetch-count test cannot be implemented without changing the API or special-casing the first notification. This is a direct execution blocker.
+
+- **HIGH — NEW in cycle 2, vacuous isolation guard:** Plan 03-10 says `TestToolModfilesRemainIsolated` should prove the new third modfile is isolated. The current test hard-codes only `go.tool.mod` and `go.tool-lint.mod`, compares only those two files, scans only their headers, and checks only three existing package paths ([internal/upgrade/taskfile_shape_test.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:23), [internal/upgrade/taskfile_shape_test.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:73), [internal/upgrade/taskfile_shape_test.go](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:893)). Adding `go.tool-golangci.mod` without changing that test still produces a green `TestToolModfilesRemainIsolated`; the test has inspected none of the new artifact. Plan 03-10’s conditional wording—“if that guard enumerates the known tool modfiles”—is already answered by the source: it does, and the new file is absent.
+
+- **MEDIUM — NEW in cycle 2:** Plan 03-09’s status model is internally underspecified. Its artifact table defines `StatusVerdict` as `ok / stale / no-index / indexing / unknown`, while Task 1 requires an empty commit SHA to classify as `unknown-commit` ([03-09-PLAN.md](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-09-PLAN.md:112), [03-09-PLAN.md](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-09-PLAN.md:139)). The wire intentionally treats empty `commit_sha` as ordinary metadata absence, independently of index health ([internal/uiproto/uiv1/ui.proto](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:151)). Commit knowledge should therefore be a separate field, not another mutually exclusive health verdict.
+
+- **LOW — NEW in cycle 2:** Plans 03-06 and 03-08 require creating pending todo files, but those paths are absent from their `files_modified` declarations. This weakens ownership and atomic-commit accounting for artifacts explicitly required by their acceptance criteria.
+
+- **LOW — NEW in cycle 2:** Plan 03-08’s task text was corrected to promise “every candidate returned,” but its `<done>` and phase success wording still say “every candidate the server counted” ([03-08-PLAN.md](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-08-PLAN.md:371)). Current server behavior happens to make the counts equal, but the plan itself deliberately tests a future state where they differ. The completion language should follow the corrected contract.
+
+## Suggestions
+
+- Change the status constructor to one of these coherent shapes:
+
+  - `createStatusGate(client, initialNavigationIdentity)`, which fetches immediately and records that identity; or
+  - create the gate without fetching and make the layout’s first `notifyNavigated(identity)` perform the initial fetch.
+
+  The second shape gives navigation identity one owner and makes the `1 → 1 → 2` special case unnecessary.
+
+- Extend the tool isolation fixture in the same task that creates `go.tool-golangci.mod`:
+
+  - Add `golangciModfilePath`.
+  - Compare all three modfiles pairwise.
+  - Inspect all three rationale headers.
+  - Add `github.com/golangci/golangci-lint/v2/cmd/golangci-lint` to the forbidden root-tool set.
+  - Add a named test proving omission of the third modfile from the fixture fails.
+
+- Model status as two dimensions, for example:
+
+  - `verdict: ok | stale | no-index | indexing | unknown`
+  - `commit: known | unknown`
+
+  This matches the protocol: an index can be healthy but have unknown commit metadata.
+
+- Add the generated todo paths to `files_modified` in 03-06 and 03-08.
+
+- Replace the remaining “every candidate counted” completion wording with “every candidate returned, with the true total reported.”
+
+## Per-plan Assessment
+
+| Plan | Assessment |
+|---|---|
+| 03-01 | Sound harness and non-zero execution proof; CI drift window is explicit. |
+| 03-02 | Strong, source-aligned confinement boundary test. |
+| 03-03 | Guards are no longer vacuous; high execution complexity remains appropriate for an evidence-driven flake investigation. |
+| 03-04 | Strong tracer architecture and corrected positive-controlled prohibitions. |
+| 03-05 | Thorough wire/security design; dependency serialization is correct. |
+| 03-06 | Search trigger and cancellation model are complete; add todo ownership path. |
+| 03-07 | URL/history contract is well specified with an honest automated/manual split. |
+| 03-08 | Functionally complete; minor completion-language and artifact-accounting cleanup needed. |
+| 03-09 | Blocked by the constructor/identity contradiction and ambiguous commit-status model. |
+| 03-10 | Blocked until the isolation guard actually includes the third modfile. |
+
+## Risk Assessment
+
+**Overall risk: HIGH until the two blockers are corrected; MEDIUM afterward.**
+
+The phase architecture and most verification mechanisms are now robust. The HIGH rating comes from two localized but execution-blocking defects: 03-09 cannot meet its own fetch-count contract, and 03-10 relies on a guard that remains green without inspecting the new modfile. Neither requires redesigning the phase, but both should be fixed before execution.
+
+
+---
+
+## Claude Review (Cycle 2)
+
+I read the ten plans, `03-CONTEXT.md`, `03-VALIDATION.md`, `03-PATTERNS.md`, and verified claims against the tree. I also mentally executed every `<verify>` block against the current working tree, and ran the two shell constructs the prompt flagged.
+
+---
+
+### Claude — Cycle-2 Re-Review, Phase 3: Browse, Inspect & Navigation
+
+## 1. Summary
+
+This is a substantially different plan set from cycle 1. **All seven cycle-1 HIGH findings are resolved**, and — the thing that matters most — I could not find a single `<verify>` block that still exits 0 in a world where its task was never done. I checked each of the 29 tasks' guards against the live tree and confirmed the ones that were previously vacuous are now red-in-an-unimplemented-world by construction, with the specific baselines the plans cite confirmed by measurement: `rg -o 'codegraph init' web/build/` returns **0**, `rg -o 'StatusBanner' web/src/routes/+layout.svelte` returns **0**, `rg -o 'from .$app/navigation.' web/src/` returns **0**, `rg -o 'lint-go' .github/workflows/ci.yml` returns **0** against a control of 4 for `\blint\b`, and `web/build/.build-manifest` still carries `source-sha256: fc4ae27b…` verbatim. The `awk` correction in 03-05 is genuinely correct — I ran it in all four worlds and got `1 / 0 / 1 / 1` as claimed, unlike the cycle-1 reviewer's suggested form. The remaining concerns are MEDIUM and below, and two of them are **new** supply-chain gaps in 03-10 that neither cycle-1 lane raised.
+
+`★ Insight ─────────────────────────────────────`
+The structural improvement here is that guards stopped asserting *outcomes of pre-existing machinery* and started asserting *identities that only this phase creates*. `task web:build:verify && task web:drift && task proto:drift` (cycle 1) tests the toolchain; `rg -o 'codegraph init' web/build/` (cycle 2) tests that *this plan's own banner text reached the shipped bytes*. The second cannot be satisfied by anything except doing the work.
+
+The second pattern worth naming: several prohibitions now use a *load-bearing* positive control rather than a decorative one. 03-07's control is `from '$app/navigation'` — the exact module whose two forbidden exports the prohibition scans for, and which that plan itself imports `goto` from. A broken pattern fails the control, so a zero from the prohibition is provably a real absence.
+`─────────────────────────────────────────────────`
+
+---
+
+## 2. Strengths
+
+- **The five cycle-1 guard HIGHs are closed with verified mechanics, not asserted fixes.** The shell/regex quoting collision (`"…\$app…"` collapsing to an end-of-line anchor) is corrected to single-quoted `\$` at all four sites (`03-04` T1, `03-07` T1, plus both `<verification>` blocks), and each carries a mandatory in-block control. `${PIPESTATUS[0]}` is gone from every command in all ten plans and in `03-VALIDATION.md`'s table.
+
+- **03-09 Task 3 went from the worst guard in cycle 1 to the best in the set.** Cycle 1 was `task web:build:verify && task web:drift && task web:test && task proto:drift && task test:unit` — five pre-existing targets, all green on the Phase-2 tree. Cycle 2 binds four Phase-3-specific facts, three of which I confirmed FALSE today. The `rg -o 'codegraph init' web/build/` assertion is the strongest single check in the phase: it cannot pass without the banner existing *and* the bundle having been rebuilt from source containing it.
+
+- **03-10 Task 3 correctly diagnoses a tautology the cycle-1 block could not have caught.** `TestWorkflowRunBodiesInvokeTask` iterates only `inScopeJobs` (`internal/upgrade/taskfile_shape_test.go:129-140`, confirmed) — with no `lint-go` entry it doesn't merely fail to guard the job, it **passes because the job is absent**. Hoisting `rg -o 'JobID: "lint-go"' … -eq 1` into the `<verify>` block is the right structural fix.
+
+- **The wave re-serialization (03-05 → 3, 03-06 → 4, downstream +1) is a real hazard removed, not cosmetic.** 03-05 runs `task proto:gen` over `web/src/lib/gen/ui_pb.ts` while 03-04 runs `pnpm check` against the same directory. The frontmatter comments correctly label these as *serialization* edges rather than code dependencies, which keeps the dependency graph honest.
+
+- **Two design decisions are now *made* rather than left to be discovered.** 03-05 step (f) answers the since-deleted-file case: `resolveSourcePath` calls `filepath.EvalSymlinks(abs)` (`internal/query/node.go:69`), which errors on a nonexistent path, so a permalink for a file deleted since indexing is refused. That is a genuine behavioural consequence of SRV-05's single-gate rule, and the plan adopts and pins it rather than tripping over it in UAT. Likewise 03-08 Task 1's split-identifier bound is stated as an accepted limit with a paired test rather than left to surface as a bug.
+
+- **The intended-RED `web:drift` window is documented with an opener, a closer, and a named plan.** Five waves of a red CI leg is exactly the condition that trains people to relax a guard; writing the window down with `03-09 Task 3` named as its terminator, and requiring the SUMMARY to reproduce the table, is the right treatment.
+
+---
+
+## 3. Concerns
+
+### HIGH
+
+None. No `<verify>` block in the set survives the "would this pass in an unimplemented world" test.
+
+---
+
+### MEDIUM — NEW (cycle 2)
+
+- **`go.tool-golangci.mod` is invisible to the `tool-vuln` gate, and the plan never mentions it.** (03-10 Task 1)
+  `Taskfile.yml:1163-1172` builds the scanned tool binaries from a **hardcoded list**: three from `go.tool.mod`, one from `go.tool-lint.mod`. The target's own `desc:` at `Taskfile.yml:1145` states "All four binaries stay in scope (no allowlist, no exclusion): the point is detection". golangci-lint vendors a substantial fraction of the Go static-analysis ecosystem — plausibly the largest third-party tree in the repo — and adding it in a third modfile that `vuln` does not enumerate **silently narrows VULN-01/03's coverage** in the same commit that grows the tool surface. The plan's justification (Task 1's supply-chain paragraph) argues checksum-database verification suffices, but that is *integrity*, not *vulnerability scanning*, and this repo already built the second gate for precisely this class of dependency. Recommend adding a fifth build+scan line and a fifth loop entry, and recording the new binary's scan result in the SUMMARY.
+
+- **`TestToolModfilesRemainIsolated` will not cover the new modfile, and the plan's own assertion for it is conditional prose.** (03-10 Task 1)
+  Confirmed at `internal/upgrade/taskfile_shape_test.go:928` — the header-comment loop iterates `[]string{toolModfilePath, lintModfilePath}`, a hardcoded two-element fixture (`:30-31`). A third modfile gains no isolation-rationale check. This is **the identical shape** Task 3 correctly diagnoses one task later for `inScopeJobs`: the guard passes because the thing is absent. But Task 1's `<verify>` only asserts `test -f go.tool-golangci.mod`, and the fixture update appears as "If that guard enumerates the known tool modfiles as a fixture, the new one is added to it… Record in the SUMMARY whether the fixture needed updating." It does enumerate one, so the condition is settled — hoist it: `rg -o 'golangciModfilePath' internal/upgrade/taskfile_shape_test.go | wc -l` equal to a nonzero count, inside the block.
+
+- **03-03's NR branch requires a RED-first proof that is not constructible.** (03-03 Task 3)
+  Under `NR`, no behaviour changes, yet the plan requires `TestToolsListRepeatOrderingResolution` be "written FIRST and observed RED", then made green. A test asserting a property that is already true cannot be observed red without changing something. The plan hedges ("or — if the old claim is simply unfalsifiable as written — record why"), which leaves the executor to improvise the phase's own RED-first discipline. This is a cycle-1 issue the revision partially papered over. Recommend making the NR branch explicit: the deliverable is the *comment correction* plus the two named tests, and the RED observation under NR is against the **old comment's stronger claim** in a scratch assertion, recorded and discarded — or state plainly that NR carries no RED proof and why.
+
+---
+
+### MEDIUM — carried from cycle 1, partially addressed
+
+- **The tracer's own `<verify>` lost the executed-count floor that 03-01 exists to provide.** (03-04 Task 1)
+  The block runs `pnpm --dir web test` and greps for `browse-tracer`. Vitest's default reporter prints a file's path whether its tests ran, passed, or were **skipped** — and an all-skipped run exits 0. So `it.skip` in `browse-tracer.test.ts` satisfies this block. Plan 03-01 Task 3 built `task web:test` precisely to close this ("prints the observed executed-test count BEFORE comparing it to a floor"), and 03-04 Task 2's acceptance criteria *do* invoke it — but Task 1's do not. Recommend: use `task web:test` in Task 1's `<verify>` alongside the name grep, or add the count criterion to Task 1 as Task 2 has it. Same shape in 03-06 T2/T3, 03-08 T2/T3, 03-09 T1/T2 — all name-only.
+
+---
+
+### LOW
+
+- **03-09 Task 3's digest assertion has no positive control and passes on a missing file.** Verified empirically: `rg -o 'fc4ae27b' web/build/.NOPE | wc -l` returns `0`, so `test 0 -eq 0` passes — the "check aimed at a nonexistent path" shape. It is protected in practice because `task web:drift` runs earlier in the same `&&` chain and would fail without a manifest, but the assertion is not self-sufficient. One added conjunct fixes it: `test "$(rg -c 'source-sha256' web/build/.build-manifest)" -eq 1`.
+
+- **03-07 Task 3's `PLACEHOLDER-03-07 == 0` assertion is true today.** It is ANDed with two red name-greps so the block as a whole is honest, and the plan deliberately routes the positive control to a pre-edit SUMMARY observation with a cross-plan pair in 03-06 (`== 1`). That is a defensible design, but it is the one prohibition in the set whose non-zero state is never observed *inside* a `<verify>`.
+
+- **03-02's `-ge 5` subtest floor is inflatable.** `grep -Eo '^ *--- PASS: Test…/[a-zA-Z0-9_-]+'` counts any indented subtest line, including nested `t.Run` children. A table restructured into nested subtests could reach 5 without covering all four refusals plus the control. Minor; the acceptance criteria enumerate the cases by name.
+
+- **03-10 Task 2's `<verify>` is a bare `task lint:go`.** Nothing binds the green to the linter set Task 1 recorded, so a narrowed `.golangci.yml` produces the same green. The prohibition against narrowing is stated in prose only. A cheap fix: assert the enabled-linter count in `.golangci.yml` matches the SUMMARY-recorded number.
+
+---
+
+## 4. Suggestions
+
+1. **03-10 Task 1 — add golangci-lint to `vuln`.** One `GOWORK=off go build -modfile=go.tool-golangci.mod …` line at `Taskfile.yml:1172` and one entry in the `for name in …` loop. Record the scan verdict in the SUMMARY. This is the single highest-value change in the set.
+2. **03-10 Task 1 — hoist the modfile-fixture assertion into `<verify>`**, mirroring what Task 3 already does correctly for `inScopeJobs`.
+3. **03-04 Task 1 — swap `pnpm --dir web test` for `task web:test`** (or add it), so the tracer inherits the executed-count floor. Consider doing the same across 03-06/03-08/03-09's name-only blocks; it is one token per block and closes the skip-shaped residual uniformly.
+4. **03-03 Task 3 — decide the NR RED contract explicitly** rather than offering the executor an escape clause. Either name the scratch-assertion form, or state that NR carries no RED proof and say why in one sentence.
+5. **03-09 Task 3 — add `rg -c 'source-sha256' web/build/.build-manifest -eq 1`** as the digest check's positive control.
+
+---
+
+## 5. Risk Assessment
+
+**LOW-to-MEDIUM**, and materially lower than cycle 1.
+
+The phase's central failure mode — guards that cannot fail — is closed. I verified the four baseline measurements the plans stake their strongest assertions on, and all four hold. The `awk` fix is correct where the cycle-1 reviewer's suggestion was not, which is a good signal about the revision's rigour. Wave serialization removes a real shared-worktree data race.
+
+What keeps it off LOW is 03-10. Two of its three tasks add surface that this repository's *existing* structural guards were built to cover and will not cover, and in both cases the plan either omits the wiring (`vuln`) or leaves it as conditional prose (`TestToolModfilesRemainIsolated`). Neither breaks the five browse success criteria — 03-10 is explicitly non-gating — but a third fold of this todo that lands a large unscanned executable dependency tree and an unguarded third modfile would be a worse outcome than the two folds that produced nothing. Both are one-line fixes.
+
+The ten plans, taken together, do achieve the phase goal: criteria 1–5 map cleanly onto 03-04/03-06/03-07/03-08/03-09, SRV-05's proof gap is closed at the boundary with a discriminating control, and BRW-09's honesty requirement now survives all the way from `RemotePresence`'s tri-state to the wire's `availability`/`reason` pair.
+
+
+---
+
+
+# Cycle 1 — Cross-AI Plan Review (2026-08-28T15:36:35Z) — AUDIT TRAIL, SUPERSEDED
+
+> Findings below were raised against the PRE-REVISION plan set (commit `f11bcb9c`).
+> The plans were revised in commit `fa0fff6e`. Cycle 2's assessment above is the
+> current one; anything here that cycle 2 does not restate is resolved.
 
 Both lanes received the same source-grounding prompt, the three pre-approved
 deviations (D-19 14/13 language count, D-11 `goto()` over shallow routing,
