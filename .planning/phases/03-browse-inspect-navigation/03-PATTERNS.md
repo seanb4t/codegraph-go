@@ -90,7 +90,18 @@ func (s *uiService) GetNodeDetail(ctx context.Context, req *connect.Request[uiv1
 	return connect.NewResponse(resp), nil
 }
 ```
-`GetPermalink` will NOT need `withEngine` (it does not touch the graph store — D-06 says the server shells to git via `internal/gitmeta`, not `query.Engine`), so this is a partial-pattern match: copy the `connect.Request[...]`/`connect.Response[...]` signature shape and the "map to proto, return" structure, but the body calls a new `internal/gitmeta` function instead of `withEngine`.
+> **CORRECTION (2026-08-28, cycle-1 cross-AI review finding L3 — this paragraph is STALE).**
+> The sentence below is wrong and `03-05-PLAN.md` Task 3 step (d) is right: `GetPermalink`
+> **DOES** need `withEngine`. It needs the Engine for two things settled after this
+> paragraph was written — the **indexed** commit SHA read out of the index metadata (the
+> whole point of BRW-09 is pinning to the indexed commit, not to `HEAD`), and
+> `(*query.Engine).ValidateRepoRelativePath`, the SRV-05 confinement wrapper. Store-degrade
+> therefore follows the standard non-`GetStatus` path. Follow the plan, not this paragraph.
+> The rest of the paragraph — copy the `connect.Request[...]`/`connect.Response[...]`
+> signature shape and the "map to proto, return" structure — still holds, and the
+> degrade-never-error guidance in the next paragraph is unaffected and correct.
+
+~~`GetPermalink` will NOT need `withEngine` (it does not touch the graph store — D-06 says the server shells to git via `internal/gitmeta`, not `query.Engine`), so this is a partial-pattern match: copy the `connect.Request[...]`/`connect.Response[...]` signature shape and the "map to proto, return" structure, but the body calls a new `internal/gitmeta` function instead of `withEngine`.~~
 
 **Error handling / degrade-never-error pattern to copy** (`internal/uiserver/degrade.go:105-113`, `errIndexingInProgress`, and `internal/indexer/commit.go:41-49`'s doc comment): D-06/D-07 mandate "unknown → empty/no-link, never an error" — this is the SAME shape `resolveHeadCommitSHA` already uses (see gitmeta section below), not `mapEngineError`'s classify-and-wire-as-Connect-error shape. `GetPermalink` should never return a Connect error for "commit unpushed" or "non-GitHub remote" — those are successful responses with `availability = NO_LINK` / `LINKABLE_UNVERIFIED`, mirroring `Explore`'s `empty=true` contract (CONTEXT D-14) and `degradedStatus`'s answer-not-error shape (`degrade.go:136+`).
 
