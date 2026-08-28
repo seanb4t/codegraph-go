@@ -1,20 +1,597 @@
 ---
 phase: 3
 reviewers: [codex, claude]
-reviewed_at: 2026-08-28T16:22:32Z
-review_cycle: 2
+reviewed_at: 2026-08-28T17:12:00Z
+review_cycle: 3
 plans_reviewed: [03-01-PLAN.md, 03-02-PLAN.md, 03-03-PLAN.md, 03-04-PLAN.md, 03-05-PLAN.md, 03-06-PLAN.md, 03-07-PLAN.md, 03-08-PLAN.md, 03-09-PLAN.md, 03-10-PLAN.md]
-plans_commit: fa0fff6e
+plans_commit: be318edc
 models:
-  codex: "gpt-5.6-sol (reasoning=low)"
+  codex: "gpt-5.6-sol (reasoning=high)"
   claude: "unknown"
 model_sources:
   codex: "banner"
   claude: "unknown"
 cycle_summary:
-  current_high: 2
-  current_actionable: 7
+  current_high: 4
+  current_actionable: 5
+cycle_history:
+  - cycle: 1
+    current_high: 7
+    current_actionable: 34
+  - cycle: 2
+    current_high: 2
+    current_actionable: 7
+  - cycle: 3
+    current_high: 4
+    current_actionable: 5
 ---
+
+# Cross-AI Plan Review — Phase 3 (Cycle 3, FINAL)
+
+Third and final convergence cycle over the REVISED plan set (commit `be318edc`,
+10 plans / 29 tasks), after cycle 2's 2 HIGH + 7 actionable findings. Both lanes
+received the same source-grounding prompt plus the cycle-3 directive to mentally
+EXECUTE every `<verify>` block, the six pre-approved deviations, the deliberate
+deferrals, and the list of vacuous shapes already recorded in this repository.
+Both lanes ran to completion with `file:line` citations; neither carries a
+`[reviewed-without-repo-access]` or `[reviewed-without-source-citations]` marker,
+so both count at full weight.
+
+Cycles 1 and 2 are preserved BELOW as a labeled audit trail. Findings recorded
+there that are now fixed are NOT re-counted here.
+
+## Consensus Summary — Cycle 3
+
+**All nine cycle-2 findings are closed.** Both lanes verified this independently
+and the orchestrator re-derived each one against the current plan text and its
+cited source. Codex: "the nine cycle-2 findings appear closed." Claude: "I
+re-derived each one against the current plan text and the source it cites, and
+none survives."
+
+**The residual defect class has shifted.** Cycles 1-2 hunted guards that could
+not fail. Cycle 3's findings are almost entirely **claims about the source that
+reading the source falsifies** — a named test that does not exist, a pinned
+Connect code the code never produces, a server refusal the engine explicitly
+declines to perform, and a named unformatted file that is already clean. A
+guard-shape audit cannot catch these; only resolving every identifier and every
+asserted behaviour against the actual tree can. That is why they survived two
+cycles.
+
+Orchestrator-executed corroboration of every counted finding:
+
+| Claim under test | Command | Observed | Verdict |
+|---|---|---|---|
+| `TestGateStancesAgree` exists | `rg -o 'GateStancesAgree' -g '!.planning' .` | `0` | plan names a nonexistent test |
+| that guard's exit status | `go test ./internal/upgrade/ -run '^TestGateStancesAgree$' -count=1 -v` | `no tests to run` / `PASS` / exit **0** | **VACUOUS** |
+| the real guard | `go test … -run '^TestGateStancesStated$' -v` PASS count | `1` | correct name is `…Stated` |
+| depth above ceiling is refused | `internal/query/traverse.go:438-442` → `validateDepth` (rejects `n<0` only) then `clampDepth` | clamps `999` → `50`, returns success | plan's refusal is false |
+| nonexistent path → `CodeInvalidArgument` | `node.go:66-72` returns raw `EvalSymlinks` err; `errors.go:43-45` `Is` matches only its own sentinel; `handlers.go:112-131` default arm | `CodeInternal` + `an internal error occurred` | plan's code is wrong |
+| `internal/query/files_status_test.go` is unformatted | `gofmt -l` / `gofumpt -l` on that file | `0` / `0` | already clean |
+| the real formatting backlog | `gofmt -l . \| grep -v worktrees \| wc -l` | `14` | 13 undeclared files |
+| stale coverage figure in `vuln` desc | `rg -n '357' Taskfile.yml` | `Taskfile.yml:1128` | stale after a 5th binary |
+| 03-04 threat row vs its own gate | `03-04:464` names `hljs.highlightAuto`; `:309`/`:477` gate it at `0` | contradiction | confirmed |
+| 03-03 subtest citation | `oracle_test.go:608` | `TestToolsListOrderIsDeterministic` | miscited; real site is `:119` |
+
+### Agreed Strengths
+
+- **No `<automated>` block in the ten plans is vacuous in the "task never done"
+  world.** Both lanes executed them; the orchestrator re-ran the discriminating
+  baselines. Every counted finding below is about a guard testing the *wrong
+  thing correctly*, not a guard that cannot fail.
+- **Both cycle-2 HIGHs are closed by construction, not prose.** `createStatusGate`
+  now takes `(client, initialNavigationIdentity)` (`03-09:118,197`) and — the part
+  both lanes single out — the fix is anchored by `rg -o 'navigationIdentity\(page\.url\)'
+  … -eq 2`, where **1 would mean the client-only constructor cycle 2 rejected**.
+  A count assertion that encodes the semantics of the fix, not merely its presence.
+- **The `inScopeJobs` / `TestToolModfilesRemainIsolated` blindness is correctly
+  diagnosed and registered at both sites**, with positive `rg -o … | wc -l` counts
+  hoisted INTO `<verify>` rather than inferred from the guards going green. Both
+  lanes confirmed the hardcoded literals at `taskfile_shape_test.go:126-137` and
+  `:928`, and that all four registration counts are `0` today.
+- **The `.build-manifest` pair is genuinely discriminating.** `source-sha256` → `1`
+  (control green), `codegraph init` in `web/build/` → `0` (claim red). `rg` does
+  search an explicitly-named dotfile, so the control is not defeated by hidden-file
+  skipping — verified.
+- **The `--numstat` additive-only awk is correct** and its rejection of the earlier
+  reviewer's `exit`-in-a-rule form is right; executed across four worlds → `1/0/1/1`.
+- **Requirement coverage is complete** — the union of the ten plans' `requirements:`
+  is exactly BRW-01..09, NAV-01..04, SRV-05.
+
+### Agreed Concerns
+
+- **03-10's `vuln`-stance guard is the one outright vacuous block left.** Claude
+  found it by executing the named command; the orchestrator reproduced
+  `no tests to run` / exit `0`. Codex independently rated 03-10 Task 2 as having
+  no task-specific completion signal. Both point at the same plan.
+- **03-10 Task 2's factual premise is wrong.** Codex: `gofmt -d
+  internal/query/files_status_test.go` "currently produces zero lines"; the
+  orchestrator confirms `0` under both `gofmt` and `gofumpt`, against a real
+  backlog of `14`.
+
+### Divergent Views
+
+- **The generalized hardcoded-subject-set finding.** Codex rates three separate
+  HIGHs on the *residual* generality of `TestToolModfilesRemainIsolated`,
+  `inScopeJobs` and the `vuln` binary list — that the NEXT modfile, job or tool
+  binary will still be undiscovered — and proposes replacing all three with
+  discovery-plus-exceptions. Claude rates the same structures as correctly closed
+  for this phase's additions. **Orchestrator adjudicates for Claude, and disposes
+  Codex's three:** the brief's directive was to check that Phase 3's own additions
+  are registered, which 03-10 does at all three sites; the residual generality is
+  the same pre-existing repo gap already recorded for the maintainer and ruled OUT
+  OF SCOPE for this phase (the `go.tool-proto.mod` disposition). Converting three
+  hand-enumerated gates to discovery is repo-architecture work, not a Phase 3 plan
+  defect, and an unnamed edit of that size in the final cycle is exactly the risk
+  that disposition was made to avoid. **Recorded for the maintainer, not counted.**
+- **03-10 Task 2's severity mechanism.** Codex rates the `<verify>` block VACUOUS
+  "in a valid zero-backlog world." The orchestrator could NOT reproduce that: the
+  backlog is `14` files, so `task lint:go` is genuinely red if Task 2 is skipped
+  and the block does discriminate. The finding is upheld at HIGH on the *other*
+  two grounds the orchestrator verified — a false named exemplar and a `<files>`
+  list that declares one clean file while 13 dirty ones go undeclared.
+- **Overall risk.** Codex: HIGH. Claude: MEDIUM-LOW, becoming LOW after three
+  edits. The gap is entirely Codex's three disposed hardcoded-set HIGHs.
+  **Orchestrator verdict: MEDIUM** — four execution-affecting defects, all
+  small edits, none architectural, none requiring re-planning.
+
+### Findings Considered and Disposed (not counted)
+
+- **Codex's three generalized hardcoded-subject-set HIGHs** (isolation guard,
+  `vuln` list, `inScopeJobs`) — the pre-existing gap explicitly ruled out of scope;
+  Phase 3's own additions ARE registered at all three sites. See Divergent Views.
+- **Claude M1 — 03-01 Task 3's bare `task web:test`.** The CI-wiring assertions
+  (`rg -o 'task web:test' .github/workflows/ci.yml | wc -l` = 1 and the
+  `name: web unit tests (vitest)` count) are present in `<acceptance_criteria>`
+  (`03-01:367-368`). Incorporated, therefore disposed — the same basis on which
+  cycle 2 disposed the analogous name-only vitest greps. Worth hoisting into
+  `<verify>`, not counted.
+- **Claude L2 — 03-10 Task 2's byte-identity conjunct is untracked-file-satisfiable.**
+  Covered by the adjacent criterion `git log --oneline -- .golangci.yml | wc -l`
+  returns exactly 1, which the plan itself describes as "the commit-order-independent
+  form of the same property." Written rationale present.
+- **Claude S9 — 03-06 requires its deferral todo by acceptance criterion with no
+  matching `<action>` step.** Confirmed (03-08 has such a paragraph; 03-06 does
+  not). The artifact and its content ARE specified at `03-06:232` and its path at
+  `:26`. Incorporated, therefore disposed; the asymmetry is worth closing.
+- **Orchestrator observation, uncorroborated by either lane — the shallow-routing
+  negative grep is evadable by a multi-line import.** `rg` is line-oriented by
+  default, so a planted `import {\n  pushState\n} from '$app/navigation';` returns
+  `0` while the single-line form returns `1` (both executed). Claude tested the
+  single-line plant and rated the blocks SOUND; Codex did not raise it. The
+  practical exposure is narrow — the real call site is short enough that no
+  formatter would wrap it — and the primary NAV-01/NAV-02 contract is carried by
+  D-11's `goto()` tests, not by this prohibition. Recorded, not counted.
+- **Environmental, not a plan defect (Claude).** `go.mod` declares `go 1.26.5` with
+  `GOTOOLCHAIN=auto`; a host defaulting to go1.27.0 resolves *up* and
+  `cockroachdb/swiss` (indirect via `pebble/v2`) fails to compile, making every Go
+  `<verify>` locally unrunnable. CI is unaffected (`ci.yml` uses
+  `go-version-file: go.mod`). Workaround: `GOTOOLCHAIN=go1.26.5`. Hand to the
+  executor rather than letting wave 1 debug pebble.
+
+### Current HIGH Concerns (4)
+
+1. **03-07 — the plan requires a server refusal the engine explicitly declines to
+   perform.** `03-07:41`, `:196`, `:216` and the acceptance criterion at `:247`
+   state that an out-of-range `depth` "produces the server's own refusal rendered
+   as a named state," and that `?depth=999` therefore "renders an explicit message
+   instead of an empty pane." The source disagrees: `validateDepth`
+   (`internal/query/validate.go:137-142`) rejects only `n < 0`, and
+   `Engine.Impact` (`internal/query/traverse.go:438-442`) then calls `clampDepth`,
+   which returns `MaxDepth` for anything above `50`. `internal/uiserver/handlers.go:486-491`
+   documents the pass-through and echoes back the Engine's own clamped value.
+   `?depth=999` returns **success with depth 50**. A mocked client can satisfy the
+   planned UI test while the real RPC succeeds. Note the asymmetry the plan
+   conflates: `limit` IS refused (`validateLimit` rejects `n > MaxLimit`,
+   `validate.go:107-115`) — `depth` is not. Codex raised; orchestrator confirmed.
+   The plan's own threat row `:364` half-exposes it by saying "refuse or bound."
+   Fix: state the clamp contract, treat the response's echoed `depth` as
+   authoritative, and drop the invalid-input expectation for `depth` (keeping it
+   for `limit`).
+
+2. **03-10 — the ADVISORY-stance guard names a test that does not exist and
+   therefore exits 0 having run nothing.** `03-10:130`, `:280`, `:304` and `:470`
+   all name `TestGateStancesAgree`. `rg -o 'GateStancesAgree' -g '!.planning' .`
+   returns `0`; the real guard is `TestGateStancesStated`
+   (`internal/upgrade/taskfile_shape_test.go:825`, with the `hasStanceWord(vulnDesc,
+   "advisory")` assertion at `:836`). Executed:
+   `go test ./internal/upgrade/ -run '^TestGateStancesAgree$' -count=1 -v` →
+   `no tests to run` / `PASS` / **exit 0**. This is the repository's own recorded
+   `go test -run PATTERN matches nothing` vacuity shape, and it is the SOLE check
+   that step (f) edit 3's rewrite of the `vuln` `desc:` preserved the word
+   ADVISORY — a constraint the plan flags twice as red-turning. Claude raised;
+   orchestrator executed. Fix: rename to `TestGateStancesStated` and count the
+   PASS line (`grep -Eo '^--- PASS: TestGateStancesStated' | wc -l` = 1 — which
+   returns 1 with the correct name and 0 with the wrong one), and label it a
+   REGRESSION guard that is green by design, whose completion partner is the
+   already-red five-name `for name in …` count.
+
+3. **03-05 — the since-deleted-file case pins `CodeInvalidArgument`; the source
+   produces `CodeInternal` with a scrubbed message.** `03-05:373` (`<behavior>`),
+   `:434-436`, `:444` and the pinned test at `:465` all state that a repo-relative,
+   non-escaping path absent from the working tree "is refused as
+   `CodeInvalidArgument`, carrying the confinement gate's own message." Two steps
+   falsify it: `resolveSourcePath` returns the **raw** `filepath.EvalSymlinks`
+   error, not a classified one (`internal/query/node.go:66-72` — every other
+   refusal in that function uses `invalidArgumentf`); and `classifiedError.Is` is
+   `return target == e.class` (`internal/query/errors.go:43-45`), so an
+   `*os.PathError` never matches `ErrInvalidArgument` and `mapEngineError` falls to
+   its default arm → `connect.NewError(connect.CodeInternal, errInternal)` with the
+   fixed `"an internal error occurred"` (`internal/uiserver/handlers.go:112-140`).
+   That arm's own comment names `resolveSourcePath` PathErrors as its common
+   occupants. Two consequences: the pinned test fails as specified, and both
+   tempting repairs are wrong (accepting reality silently downgrades the case to an
+   opaque internal error; classifying `EvalSymlinks` changes the shared gate that
+   `GetNodeDetail`, `Explore` and the MCP path all use, which `:449-451` defers).
+   Worse, the product argument justifying the disposition — *"Being refused with a
+   clear message is an acceptable answer"* — is void, and it is being put to the
+   maintainer at a `gate="blocking-human"`, `reversibility="one-way"` checkpoint.
+   Claude raised; orchestrator confirmed at every cited line. Fix: pin the real
+   behaviour (`CodeInternal` + the scrubbed message + the `writeDiagLine` cause),
+   and re-open the checkpoint question with the trade-off stated accurately.
+
+4. **03-10 Task 2 — the named unformatted file is already clean, and `<files>`
+   declares one clean file against a 14-file backlog.** `03-10:41`, `:317` and
+   `:319` assert that `internal/query/files_status_test.go` "has carried an
+   unformatted block since it was introduced" and make it Task 2's ONLY declared
+   `<files>` entry. Measured: `gofmt -l internal/query/files_status_test.go` → `0`
+   and `gofumpt -l` → `0`; the real backlog is `14` files under `gofmt` (26 under
+   `gofumpt`), none of them declared. `03-10:377`/`:401` then have Task 3 plant its
+   RED proof in that file *"because Task 2 has just fixed it"* — a premise that
+   will not hold. Codex raised (as a vacuity claim); orchestrator confirmed the
+   facts but NOT the vacuity — `task lint:go` is genuinely red against 14 dirty
+   files, so the block discriminates. Upheld at HIGH for the false premise, the
+   under-scoped `<files>`/`files_modified` accounting, and Task 3's broken
+   dependency. Fix: drop the specific-file claim (or re-derive it), declare the
+   real backlog set, and pick Task 3's plant target from a file Task 2 actually
+   touches.
+
+### Current Actionable Non-HIGH Concerns (5)
+
+1. **LOW (Claude) — 03-10 step (f) edit 3 leaves a stale coverage figure in the
+   `vuln` desc.** The instruction (`:275-279`) names the two "four" occurrences and
+   the build echo, but the `desc:` also states *"the 357 measured third-party
+   modules that execute as credentialed CI tooling"* (`Taskfile.yml:1128`).
+   golangci-lint is, by the plan's own words (`:258-259`), "plausibly the largest
+   third-party executable tree this repository would carry." PLAN change: extend
+   edit 3 to recompute the figure or restate it as a floor, using the module count
+   Task 1 already records.
+
+2. **LOW (Claude) — 03-04's threat row T-03-02 names a function the same plan
+   forbids and gates at zero.** `03-04:464` says markup is produced by
+   `hljs.highlight(rawText, {...}).value` **"or `hljs.highlightAuto(rawText).value`"**,
+   while `:309` and `:477` assert `rg -o 'highlightAuto' web/src/lib/ | wc -l`
+   returns **0** and the action prohibits auto-detection outright. PLAN change:
+   replace the `highlightAuto` clause in the threat row with the plaintext-escape
+   branch the action actually specifies.
+
+3. **LOW (Claude) — 03-05's `--numstat` additive check has no stated ordering and
+   reads red on a clean tree.** The awk is correct, but `NR == 0 → exit 1` means it
+   fails against an unmodified working tree, and `03-05:459-462` says only "Run
+   exactly … and require exit 0." 03-10 states its equivalent ordering explicitly
+   (*"Run the block BEFORE committing this task"*, `:345`). Fails closed, so the
+   risk is a confusing red, but Task 3 touches nine files. PLAN change: add the
+   pre-commit ordering sentence.
+
+4. **LOW (Codex) — 03-03 and 03-10 move a todo to `completed/` without declaring
+   the destination.** `03-03:339` and `03-10:421` both move a todo from
+   `.planning/todos/pending/` to `.planning/todos/completed/`, and both assert the
+   destination in an acceptance criterion (`03-03:356`, `03-10:435`), but neither
+   declares the `completed/` path in `files_modified` or in the responsible task's
+   `<files>`. This is the same artifact-ownership gap cycle 2 closed for the
+   `pending/` paths in 03-06 and 03-08. PLAN change: add both completed paths to
+   `files_modified` and to Task 3's `<files>`.
+
+5. **LOW (Claude) — 03-03 Task 1 miscites the pre-existing subtest.** `03-03:150-151`
+   says `TestFrozenTranscriptsMatch/toolslist-repeat` "already runs today
+   (`test/wireoracle/oracle_test.go:608-643`)". `:608` is
+   `TestToolsListOrderIsDeterministic`; the subtest is generated by
+   `TestFrozenTranscriptsMatch`'s `t.Run(sc.Name, …)` at `oracle_test.go:119` from
+   the scenario at `scenarios.go:669`. The *claim* is correct and verified — only
+   the citation is wrong, so a reader checking the cycle-1 defect lands on a
+   different test. PLAN change: correct the two line references.
+
+---
+
+## Codex Review (Cycle 3)
+
+# Phase 3 Plan Review — Cycle 3
+
+## Summary
+
+The revised plan set is substantially stronger: the nine cycle-2 findings appear closed, and most task-level verification now fails against the unimplemented tree through materialized test output, positive controls, or direct assertions on newly introduced artifacts. However, five HIGH issues remain. Plan 03-07 contradicts the real traversal contract; Plan 03-10 contains a task whose guard can pass without that task running; and all three warned-about hardcoded subject sets remain structurally incomplete despite being extended for the immediate additions. All findings below are newly raised; none are carried over from cycle 2.
+
+## Strengths
+
+- Source confinement is correctly centralized. [`resolveSourcePath`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:17>) rejects empty, absolute, traversal, and post-symlink-escape paths, while [`readSourceFile`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:81>) delegates through that single gate. This supports the plans’ intended `ValidateRepoRelativePath` delegation rather than introducing a second confinement implementation.
+
+- The wire model gives the UI reliable discriminants. Status fields independently represent initialization, store existence, indexing, and indexed commit in [`ui.proto`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:116>). Node detail similarly uses an explicit mode and `detail_gathered`, preventing empty calls/source lists from being misread as another response shape in [`ui.proto`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:382>). Plans 03-07 through 03-09 build against these distinctions rather than inferring state from emptiness.
+
+- The final web-bundle guard is now bound to Phase 3 output. Plan 03-09 requires named new suites, `StatusBanner` in source, `codegraph init` in built bytes, a manifest positive control, and replacement of the pre-phase digest in [`03-09-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-09-PLAN.md:401>). The current manifest contains exactly one source digest at [`web/build/.build-manifest`](</Volumes/Code/github.com/seanb4t/codegraph-go/web/build/.build-manifest:1>), so absence cannot masquerade as “old digest removed.” The shipped tree is also genuinely embedded through `//go:embed all:build` in [`web/embed.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/web/embed.go:20>).
+
+- The immediate 03-10 additions are directly asserted. Its Task 1 verify requires the new target, files, modfile registration, forbidden package, and five-binary loop; Task 3 requires exactly one workflow invocation and exactly one `lint-go` fixture entry in [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:290>) and [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:425>). Those direct checks correctly close the immediate cycle-2 omissions.
+
+- Plan 03-07’s navigation generation is well specified: one route-minted identity spans both detail and blast-radius requests, and the test must assert both committed halves by value in [`03-07-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:221>). That targets the actual cross-request race instead of merely checking individual abort controllers.
+
+## Concerns
+
+- **HIGH — NEWLY RAISED: Plan 03-07 requires a server refusal that the engine explicitly forbids.** The plan says an out-of-range depth produces the server’s refusal and specifically expects `?depth=999` to become an invalid-input state at [`03-07-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:41>) and [`03-07-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:212>). In the source, `validateDepth` deliberately accepts values above `MaxDepth` and documents that they are silently capped in [`validate.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/validate.go:129>). `Impact` then calls `clampDepth` in [`traverse.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/traverse.go:438>), and the regression test requires `999999` to succeed with `Depth == MaxDepth` in [`traverse_test.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/traverse_test.go:551>). A mocked client can therefore satisfy the planned UI test while the real RPC returns success with depth 50. The plan’s own threat table partly exposes the contradiction by saying the server may “refuse or bound” values at [`03-07-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-07-PLAN.md:364>).
+
+- **HIGH — NEWLY RAISED: the modfile-isolation guard remains a hardcoded-subject gate.** `TestToolModfilesRemainIsolated` reads paths from literals at [`taskfile_shape_test.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:23>) and iterates an explicitly written slice at [`taskfile_shape_test.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:928>). Plan 03-10 adds another literal to that set in [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:216>), which protects the immediate new file but preserves the defect: the next `go.tool*.mod` can exist without being discovered, and the isolation test passes because it never visits it.
+
+- **HIGH — NEWLY RAISED: the vulnerability subject set remains hardcoded.** The current `vuln` target independently hardcodes both five future build lines and the scan-loop word list; the present four-subject forms are visible in [`Taskfile.yml`](</Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:1168>) and [`Taskfile.yml`](</Volumes/Code/github.com/seanb4t/codegraph-go/Taskfile.yml:1179>). Plan 03-10 appends the new binary to both lists at [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:253>). That fixes current coverage but establishes no discoverable source of truth. A later tool binary omitted from both lists remains completely unbuilt and unscanned while the target reports normally.
+
+- **HIGH — NEWLY RAISED: the workflow single-definition guard remains a hardcoded job allowlist.** `inScopeJobs` enumerates jobs by hand at [`taskfile_shape_test.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:119>), and `TestWorkflowRunBodiesInvokeTask` visits only those entries at [`taskfile_shape_test.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:1365>). Plan 03-10 explicitly adds only `lint-go` to that list at [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:385>). The stale-exception check is useful, but it cannot detect an entirely unlisted job. A new workflow job containing an inline `go test ./...` is absent from the iteration and passes the guard.
+
+- **HIGH — NEWLY RAISED: Plan 03-10 Task 2’s verify block does not prove Task 2 occurred.** Task 2 claims a known malformed indentation block in `internal/query/files_status_test.go` at [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:315>), but `gofmt -d internal/query/files_status_test.go` currently produces zero lines; the cited test block is already conventionally formatted at [`files_status_test.go`](</Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/files_status_test.go:59>). Its verify command checks only artifacts committed by Task 1, that the config is unchanged, and that the repository is currently lint-clean at [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:352>). In a valid zero-backlog world, every conjunct succeeds when Task 2 is skipped. No inventory artifact, source change, or Task-2-specific test is required.
+
+- **LOW — NEWLY RAISED: conditional todo moves omit their completed destinations from declared ownership.** Plan 03-03 declares only the pending todo path at [`03-03-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-03-PLAN.md:7>) but may move it to `completed/` at [`03-03-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-03-PLAN.md:338>). Plan 03-10 likewise declares only the pending path at [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:9>) while Task 3 moves it at [`03-10-PLAN.md`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:421>). The completed paths should be in `files_modified` and the responsible task’s `<files>`.
+
+## Suggestions
+
+1. Resolve the depth contract before executing 03-07. Either:
+
+   - Change the real engine contract to reject `depth > MaxDepth`, updating `validateDepth`, the engine regression tests, and all CLI/MCP expectations; or
+   - Preserve clamping, treat the response’s echoed depth as authoritative, and replace the URL with that value.
+
+   A sound real-path test should call the actual engine or UI handler with `MaxDepth+1`, not a stub programmed to reject it. Under the plan’s current rejection expectation, that test fails before the server change because the real engine returns success with `Depth == MaxDepth`.
+
+2. Replace the three manual subject sets with discovery plus explicit, reasoned exceptions:
+
+   - Discover `go.tool*.mod` files and require set equality with the isolation test’s registered subjects.
+   - Derive the vulnerability build/scan set from one checked manifest, then require discoverable tool directives to map to that manifest.
+   - Parse every workflow job and require its `run:` steps to invoke Task unless the job or step has an explicit reasoned exception; also reject stale exceptions.
+
+   These remedies fail correctly: a new modfile, tool directive, or inline workflow job appears in the discovered set but not the registered/manifest/exception set, producing a non-empty set difference and a nonzero Go test result. Synthetic unit cases should pin each mismatch independently.
+
+3. Make 03-10 Task 2 produce a machine-checked inventory artifact and allow an honest zero-backlog outcome. For example:
+
+   ```sh
+   inventory=.planning/phases/03-browse-inspect-navigation/03-10-LINT-INVENTORY.txt
+   test -f "$inventory" &&
+   test "$(rg -o '^TOTAL=[0-9]+$' "$inventory" | wc -l | tr -d ' ')" -eq 1 &&
+   task lint:go
+   ```
+
+   In the task-never-done world, `test -f` exits 1 and the `&&` chain stops. `rg -o` counts matches, not merely matching lines. If `TOTAL=0`, the task should record that result without claiming a source fix; if it is positive, the inventory must name the findings and the resulting edits.
+
+4. Add both completed todo destinations to the plans’ frontmatter and Task 3 `<files>` declarations.
+
+## Verify-block audit
+
+| Plan/task | Command or guarded component | Verdict | Mental execution |
+|---|---|---:|---|
+| 03-07 Task 2 | `pnpm --dir web test …; test "$(grep -Eo 'browse-state' /tmp/bs.txt \| wc -l \| tr -d ' ')" -ge 1` | **SOUND** | With the task absent, the named suite is absent and the final numeric test fails. It remains semantically insufficient because a stub can invent the contradicted rejection response. |
+| 03-09 Task 3 | Full conjunction at [`03-09:402`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-09-PLAN.md:402>) | **SOUND** | In the current tree the new suite names, `StatusBanner`, and built `codegraph init` marker are absent. The manifest-key check succeeds before the old-digest absence check, so a missing manifest cannot pass. |
+| 03-10 Task 1, full block | Target/file checks plus exact registration and scan-loop counts at [`03-10:291`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:290>) | **SOUND** | With Task 1 absent, `lint:go`, its files, registration symbols, and five-name loop all have zero matches. |
+| 03-10 Task 1, embedded isolation test | `go test ./internal/upgrade -run '^TestToolModfilesRemainIsolated$'` | **VACUOUS** | Create a new unregistered `go.tool*.mod`: the literal iteration never reads it, so the test’s behavior is unchanged. The outer direct checks only bind the current golangci subject. |
+| 03-10 Task 1, resulting vulnerability gate | `task vuln` over the manually written build and `for name in …` lists | **VACUOUS** | Add a tool outside both lists: no build or scan is attempted, and the target completes exactly as before. |
+| 03-10 Task 2 | `test -f .golangci.yml && … && git diff --exit-code HEAD -- .golangci.yml && task lint:go` | **VACUOUS** | After Task 1, all config conjuncts are already true. If the first run has zero findings—as the already-gofmt-clean named target permits—`task lint:go` exits 0 without Task 2 running. |
+| 03-10 Task 3, full block | Named Go test plus exact `task lint:go` and `JobID: "lint-go"` counts at [`03-10:426`](</Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/03-browse-inspect-navigation/03-10-PLAN.md:425>) | **SOUND** | With Task 3 absent, both exact counts are zero, so the block fails even if the pre-existing Go test passes. |
+| 03-10 Task 3, embedded workflow test | `go test ./internal/upgrade -run '^TestWorkflowRunBodiesInvokeTask$'` | **VACUOUS** | Add a workflow job but omit it from `inScopeJobs`: the test never parses that job and its result is unchanged. |
+
+The environment allowed complete source and plan inspection, plus read-only shell probes. `go test` execution itself could not create its temporary work directory under the read-only filesystem, so no runtime test-pass claim above depends on that failed invocation.
+
+## Risk Assessment
+
+**HIGH.** Most immediate task guards are now discriminating, but 03-07 currently asks implementers to test a behavior contradicted by the real engine, and 03-10 preserves all three explicitly warned-about subject-enumeration defects. Task 03-10-2 also has no task-specific completion signal and can be a genuine no-op. These are execution-affecting failures, not documentation polish.
+
+UNRESOLVED: high=5 actionable_non_high=1
+
+---
+
+## Claude Review (Cycle 3)
+
+
+# Cross-AI Plan Review — Phase 3, Cycle 3 (FINAL)
+
+## 1. Summary
+
+I read all ten plans in full and verified every load-bearing claim against the tree at `be318edc`, executing the risky `<verify>` shapes rather than reading them. **All nine cycle-2 findings are genuinely closed** — I re-derived each one against the current plan text and the source it cites, and none survives. The convergence is real: the guard discipline in this set is now unusually good (positive controls paired in the same `&&` chain, `rg -o | wc -l` never `rg -c`, `grep -Eo … | wc -l -eq N` instead of bare `go test -run` exit status, observed-zero baselines recorded inline). I found **two HIGH defects that no prior cycle raised**, and both are *factual claims about the source that reading the source falsifies* rather than guard-shape errors — which is a different failure class than cycles 1 and 2 hunted, and is why they survived. One is a vacuous guard I proved vacuous by executing it (`go test -run '^TestGateStancesAgree$'` exits 0 having run nothing, because that test does not exist). The other is a wrong Connect error code pinned into a `<behavior>` case and used to justify a product decision, where the source produces a different, materially worse answer. Both are small edits; neither is architectural.
+
+`★ Insight ─────────────────────────────────────`
+- The residual defect class in this plan set has shifted. Cycles 1–2 found **guards that could not fail**; cycle 3's findings are **guards that test the wrong thing correctly** — a named test that doesn't exist, and a pinned error code the code never produces. A guard-shape audit cannot catch either; only resolving every identifier the plan names against the actual tree can.
+- The origin of HIGH-2 is instructive: the wrong claim entered at `03-REVIEWS.md:1235-1238` as an *orchestrator observation*, was adopted verbatim by the planner, and was then cited by cycle 2 as a **strength** (`03-REVIEWS.md:337`). A review artifact is an input to the next planner, so an unverified assertion inside it propagates with the authority of a finding.
+- `classifiedError.Is` is `return target == e.class` (`internal/query/errors.go:43-45`) — a deliberately non-wrapping sentinel. That design makes classification *explicit*, which means every unclassified `return "", err` is silently an internal error. That is a repo-wide property worth knowing before writing any test that pins a Connect code.
+`─────────────────────────────────────────────────`
+
+## 2. Strengths
+
+- **The cycle-2 HIGH on `createStatusGate` is closed by construction, not by prose.** `03-09-PLAN.md:118,197` now declares `createStatusGate(client, initialNavigationIdentity)`, and — critically — the fix is *anchored by a count*: `rg -o 'navigationIdentity\(page\.url\)' web/src/routes/+layout.svelte | wc -l` must equal exactly **2** (`03-09-PLAN.md:319,325`), with the plan stating that **1 would mean the client-only constructor cycle-2 rejected**. Observed 0 on the tree today. That is the rare case where a count assertion encodes the *semantics* of the fix, not just its presence.
+- **The `inScopeJobs` / `TestToolModfilesRemainIsolated` blindness is correctly diagnosed and closed at both sites.** I confirmed both hardcoded iteration sets: `inScopeJobs` is a 10-element literal (`internal/upgrade/taskfile_shape_test.go:126-137`) with no `lint-go` entry, and `TestToolModfilesRemainIsolated` iterates `[]string{toolModfilePath, lintModfilePath}` at exactly the cited `:928`, with the `isolat` substring check at `:934` and `parseToolModfileHeaderComment` at `:340`. All three line citations are exact. 03-10 now asserts registration with positive `rg -o … | wc -l` counts **inside** both `<verify>` blocks, and I confirmed both are 0 today.
+- **The `.build-manifest` absence-claim pair is now genuinely discriminating.** I ran both halves: `rg -o 'source-sha256' web/build/.build-manifest | wc -l` → **1** (control green today), `rg -o 'fc4ae27b…' … | wc -l` → **1** (absence claim red today). The literal in `03-09-PLAN.md:361,409` matches the committed manifest byte-for-byte. `rg` does search an explicitly-named dotfile, so the control is not itself defeated by hidden-file skipping — I verified that too.
+- **The shallow-routing prohibition regex was fixed correctly and I reproduced the discrimination.** Against a planted `import { pushState, replaceState } from '$app/navigation';` the corrected single-quoted `\$` form returns **1**; against the real tree it returns **0**; the positive control `rg -o 'from .\$app/state.' web/src/ | wc -l` returns **1** (`web/src/routes/+layout.svelte`). 03-07 correctly uses a *stronger* control (`$app/navigation` itself, which it imports for `goto`) and says why 03-04 cannot.
+- **The `--numstat` additive-only awk is correct, and the plan's rejection of the reviewer's suggested form is right.** I executed all four worlds: no-diff → 1, additions-only → 0, has-deletions → 1, deletion-on-a-later-line → 1. `03-05-PLAN.md:462`'s warning that `awk '$2 != 0 { exit 1 } END { exit NR == 0 }'` returns 0 for the deletion case (because a rule's `exit` still runs `END`, whose `exit` overrides) is accurate.
+- **Go subtest indentation was checked, not assumed.** `03-02-PLAN.md:155`'s `^ *--- PASS: …/[a-zA-Z0-9_-]+` — I generated a real subtest named `in-repo control`, confirmed Go emits **four spaces** (not a tab) and rewrites the space to `_` while leaving the hyphen, and confirmed the regex counts 2/2. The cycle-1 `[a-z_]+` finding is genuinely closed.
+- **Every load-bearing source citation I sampled is exact:** `resolveSourcePath` at `node.go:33-79`, `readSourceFile` at `:85`, `commit_sha` at `ui.proto:151/157`, `SourceFor` at `detail.go:259`, `uiMultiDefCap` at `handlers.go:153` with `gathered := i < uiMultiDefCap` at `:704`, `vuln` at `Taskfile.yml:1123-1197` with the four build lines at `:1169-1172` and `for name in task goreleaser govulncheck actionlint` at `:1179`, `proto:drift`'s floor of 4 with `compared ${nfiles} generated files` at `:345`, the `lint` wrapper at `:4977-4982`, `.svelte-kit/tsconfig.json`'s `../tests/**/*.svelte` include. The PATTERNS.md:93 staleness correction was actually written into the file.
+- **Requirement coverage is complete.** The union of the ten plans' `requirements:` fields is exactly BRW-01..09, NAV-01..04, SRV-05 — all fourteen — plus the two folded TODO ids, with 03-03 and 03-10 both explicitly declaring they do not gate the phase's five browse criteria.
+
+## 3. Concerns
+
+### HIGH — NEWLY RAISED
+
+**H1. `03-10` — the ADVISORY-stance guard runs zero tests and exits 0. The test it names does not exist.**
+
+`03-10-PLAN.md:304` and `:470` both require:
+
+```
+go test ./internal/upgrade/ -run '^TestGateStancesAgree$' -count=1 -v
+```
+
+There is no `TestGateStancesAgree` in this repository — `rg -o 'GateStancesAgree' -g '!.planning' .` returns **0**. The real guard is `TestGateStancesStated` (`internal/upgrade/taskfile_shape_test.go:825`), whose `hasStanceWord(vulnDesc, "advisory")` assertion is at `:836`. The plan's line citation `:831-837` lands inside the right function body; only the *name* is wrong.
+
+Executed, not read:
+
+```
+$ GOTOOLCHAIN=go1.26.5 go test ./internal/upgrade/ -run '^TestGateStancesAgree$' -count=1 -v
+testing: warning: no tests to run
+PASS
+ok  github.com/seanb4t/codegraph-go/internal/upgrade  0.227s [no tests to run]
+exit 0
+```
+
+This is the repository's own recorded vacuity shape — `go test -run PATTERN` exiting 0 when the pattern matches nothing — and it is the **sole** check that 03-10 step (f) edit 3's rewrite of the `vuln` `desc:` preserved the word ADVISORY. The plan itself flags that constraint twice as red-turning ("a rewrite that drops it turns this edit red", `:282`; "which is what proves the rewrite did not drop the stance the guard binds", `:304`). It proves nothing. Failure scenario: the executor rewrites the multi-paragraph `desc:` to say five binaries, drops or rephrases ADVISORY, runs the named command, sees green, and ships a `vuln` target whose stated stance no longer matches `ci.yml`'s advisory-guard step — the exact "unstated stance mismatch" `TestGateStancesStated`'s own doc comment (`:820-825`) exists to prevent.
+
+**H2. `03-05` — the since-deleted-file case pins `CodeInvalidArgument`; the source produces `CodeInternal` with a scrubbed message.**
+
+`03-05-PLAN.md:373` (`<behavior>`), `:434-436` and `:444` (step (f)) all state that a repo-relative, non-escaping path that does not exist in the working tree "is refused as `CodeInvalidArgument`", "carrying the confinement gate's own message", and `:465` pins a test on it. That is false against the source, in two steps:
+
+1. `internal/query/node.go:64-71` — the two `filepath.EvalSymlinks` calls return the **raw** error, not a classified one:
+   ```go
+   resolvedAbs, err := filepath.EvalSymlinks(abs)
+   if err != nil {
+       return "", err        // *os.PathError — never invalidArgumentf
+   }
+   ```
+   Every *other* refusal layer in that function uses `invalidArgumentf(...)`. `EvalSymlinks` is precisely the layer that fires for a nonexistent path.
+2. `internal/query/errors.go:43-45` — `func (e *classifiedError) Is(target error) bool { return target == e.class }`. An `*os.PathError` is not a `*classifiedError`, so `errors.Is(err, query.ErrInvalidArgument)` is **false**, and `mapEngineError` (`internal/uiserver/handlers.go:101-131`) falls to its default arm: `connect.NewError(connect.CodeInternal, errInternal)` where `errInternal` is the fixed `"an internal error occurred"` (`:140`). That arm's own comment names this case explicitly: *"in practice the common occupants are `*os.PathError` values from `readSourceFile` and `resolveSourcePath`."*
+
+Two distinct consequences, and the second is worse than the first:
+
+- **The pinned test fails as specified.** The executor gets `CodeInternal` where the plan demands `CodeInvalidArgument`, and both tempting repairs are wrong. Changing the test to match reality silently converts the recorded product decision into "the most useful BRW-09 case returns an opaque internal error." Classifying `EvalSymlinks` failures inside `resolveSourcePath` is a behaviour change to the shared gate that `GetNodeDetail`, `Explore` and the MCP path all use — which `03-05-PLAN.md:449-451` explicitly defers to a later phase.
+- **The product argument that justifies the disposition is void.** Step (f) adopts the refusal on the grounds that *"Being refused with a clear message is an acceptable answer; a divergent second gate is not."* There is no clear message. The developer sees `an internal error occurred`; the cause goes only to the server's diagnostic stream via `writeDiagLine`. The maintainer is being asked, at a `gate="blocking-human"` checkpoint, to accept a trade-off described inaccurately — and this is the case BRW-09 is *most* useful in, by the plan's own words (`:435-436`).
+
+Origin note: the wrong code entered at `03-REVIEWS.md:1235-1238` as an orchestrator observation, was adopted by the planner, and was cited by cycle 2 as a strength at `03-REVIEWS.md:337`. It was never raised as a finding, so this is NEWLY RAISED, not carried over.
+
+### MEDIUM — NEWLY RAISED
+
+**M1. `03-01` Task 3's `<verify>` is a bare `task web:test`; the CI wiring it exists to install is unguarded.**
+
+`03-01-PLAN.md:362` is `<automated>task web:test</automated>`. That is red in the never-done world (the target does not exist), so the block is not vacuous — but it passes in the world where step (b) (adding the `web unit tests (vitest)` step to `ci.yml`'s `test` job) and step (d) (the RED demo against an empty include glob) were never performed. The two assertions that *would* catch it live only in `<acceptance_criteria>` (`:367-368`). I confirmed both are 0 today: `rg -o 'task web:test' .github/workflows/ci.yml | wc -l` → 0, against a working control of 8 for `rg -o 'task web:[a-z:]*'`.
+
+This is the identical shape cycle 1 raised against 03-10 Task 3 and cycle 1 raised against 03-03 Task 1 — both fixed by hoisting the counts into `<verify>`. 03-01 was not swept in either pass. It matters more here than usual because 03-01 is the wave-1 plan every JS `<verify>` in the phase depends on, and because the phase deliberately opens a five-wave intended-RED `web:drift` window in this same plan, so "CI is red for a known reason" is already the expected state — a *second* missing CI leg would be very easy to lose in that noise.
+
+### LOW — NEWLY RAISED
+
+**L1. `03-10` step (f) edit 3 leaves a stale coverage figure in the `vuln` desc.** The instruction (`:275-279`) names the two "four" occurrences and the `==> Building tool binaries` echo. The `desc:` also states *"the **357 measured third-party modules** that execute as credentialed CI tooling"* (verified verbatim in `task --list-all`). golangci-lint's tree is, by the plan's own words (`:258-259`), "plausibly the largest third-party executable tree this repository would carry." Leaving 357 makes the desc a coverage claim that stopped being true — which is exactly the reasoning the plan uses to justify the other two edits (`:279`: *"an unchanged `desc:` is a claim about coverage that stopped being true"*). Task 1 already requires recording "the module count the new modfile gained," so the number is in hand.
+
+**L2. `03-10` Task 2's byte-identity conjunct is satisfiable by an untracked file.** `git diff --exit-code HEAD -- .golangci.yml` (`:353`) outputs nothing and exits 0 for an untracked path, so the "byte-identical to what Task 1 committed" property holds vacuously if Task 1 wrote the file but did not commit it. The two preceding conjuncts (`test -f`, the `# enabled-linters: N` anchor) keep the block red in the task-never-done world, and the `git log --oneline -- .golangci.yml | wc -l` = 1 criterion (`:357`) covers it after the commit — so this is a narrow gap, not a vacuous block.
+
+**L3. `03-04`'s threat row T-03-02 still names a function the same plan forbids and gates at zero.** `03-04-PLAN.md:464` says markup is produced by `hljs.highlight(rawText, {...}).value` **"or `hljs.highlightAuto(rawText).value`"**. The action (`:257-263`) prohibits auto-detection with a paragraph of reasoning, and the acceptance criterion (`:309`) asserts `rg -o 'highlightAuto' web/src/lib/ | wc -l` returns **0**. The threat register now describes a mitigation the plan's own gate makes impossible — cycle-1 residue that survived both revisions.
+
+**L4. `03-05`'s `--numstat` additive check must run pre-commit, and does not say so.** The awk is correct, but `NR == 0 → exit 1` means it fails against a clean working tree. 03-10 Task 2 states its ordering explicitly (*"Run the block BEFORE committing this task"*, `:346`); `03-05-PLAN.md:459-462` says only "Run exactly … and require exit 0." Fails closed, so the risk is a confusing red rather than a false green — but Task 3 touches nine files and the executor will not obviously know which state to run it in.
+
+**L5. `03-03` Task 1 miscites the location of the pre-existing subtest.** `03-03-PLAN.md:150-151` says `TestFrozenTranscriptsMatch/toolslist-repeat` "already runs today (`test/wireoracle/oracle_test.go:608-643`)". `:608-643` is `TestToolsListOrderIsDeterministic`; the subtest is generated by `TestFrozenTranscriptsMatch`'s `t.Run(sc.Name, …)` at `oracle_test.go:112,119` from the scenario at `scenarios.go:669`. The *claim* — that the subtest pre-exists and so satisfied the cycle-1 guard either way — is correct and I verified it; only the citation is wrong. Documentation-only, but a reader following it to check the cycle-1 defect lands on a different test.
+
+### Environmental observation (NOT counted — not a plan-text defect)
+
+`go.mod` declares `go 1.26.5` with `GOTOOLCHAIN=auto`, so a machine whose default toolchain is **go1.27.0** resolves *up*, and `github.com/cockroachdb/swiss` (indirect via `pebble/v2 v2.1.6`) fails to compile: `undefined: hashFn / getRuntimeHasher / fastrand64`. On this machine `go build ./internal/query/` fails outright, which means every Go `<verify>` block in 03-02/03-03/03-05/03-10 plus `task test:unit` and `go vet ./...` are locally unrunnable. **CI is unaffected** (`ci.yml:56,238,278` use `go-version-file: go.mod`, pinning 1.26.x), and `GOTOOLCHAIN=go1.26.5 go test …` works — I used it for the H1 proof. This is a pre-existing repo condition, not a Phase 3 defect, but the executor will hit it in wave 1 and should have the workaround rather than debugging pebble.
+
+## 4. Suggestions
+
+Every remedy below was executed before being offered, and each is shown failing in the world the plan is meant to catch.
+
+**S1 (closes H1).** Fix the name and count the PASS line. Replace `03-10-PLAN.md:304`'s command and `:470`'s clause with:
+
+```sh
+go test ./internal/upgrade/ -run '^TestGateStancesStated$' -count=1 -v >/tmp/gs.txt 2>&1 \
+  || { cat /tmp/gs.txt; exit 1; }
+test "$(grep -Eo '^--- PASS: TestGateStancesStated' /tmp/gs.txt | wc -l | tr -d ' ')" -eq 1
+```
+
+Executed on the current tree: exit 0, exactly **1** PASS line. Executed with the current (wrong) name: 0 PASS lines → `test 0 -eq 1` → **exit 1**. So the remedy fails in the world where the name is wrong, which the current form does not.
+
+State in the criterion that this is a **regression** guard, not a task-completion guard — it is green today by design — and that its completion partner is the already-present, already-red `rg -o 'for name in task goreleaser govulncheck actionlint golangci-lint' Taskfile.yml | wc -l` = 1 (observed 0 today). Keeping that distinction explicit is what stops the next reviewer from "fixing" a guard that is correctly green.
+
+**S2 (closes H2).** Two edits, and the second is the one that matters.
+
+*Pin the real behaviour.* Rewrite `03-05-PLAN.md:373` to:
+
+> A path that is repo-relative and non-escaping but DOES NOT EXIST in the working tree → `CodeInternal` carrying the fixed scrubbed message `an internal error occurred`, with the concrete cause written only to the server's diagnostic stream. This is `resolveSourcePath`'s raw `filepath.EvalSymlinks` error (`internal/query/node.go:64-71`) reaching `mapEngineError`'s default arm (`internal/uiserver/handlers.go:112-131`), because `classifiedError.Is` matches only its own sentinel (`internal/query/errors.go:43-45`).
+
+Add to Task 3's acceptance criteria, alongside the existing `escapes the repo root` count:
+
+```sh
+test "$(rg -o 'CodeInternal' internal/uiserver/permalink_test.go | wc -l | tr -d ' ')" -ge 1
+```
+
+Executed on the current tree: the file does not exist, `rg` prints nothing, `wc -l` → **0**, `test 0 -ge 1` → **exit 1**. Fails in the task-never-done world. Its positive control is the criterion already beside it at `:465` (`rg -o 'escapes the repo root' … | wc -l` ≥ 1, also 0 today), so the two are red together and green together.
+
+*Re-open the product question.* Add a fifth point to Task 1's blocking checkpoint (`:151`, `:214`): the since-deleted-file case is refused with an **opaque** message, not a clear one, so the trade-off the maintainer is being asked to accept is "an ordinary daily case returns an internal error" rather than "an ordinary daily case is refused with a reason." That may still be the right call under SRV-05's one-gate rule, but it is a different call, and `<reversibility rating="one-way">` applies to the `availability`/`reason` shape that would have to carry any alternative.
+
+**S3 (closes M1).** Replace `03-01-PLAN.md:362`'s `<automated>` with:
+
+```sh
+task web:test >/tmp/wt.txt 2>&1 || { cat /tmp/wt.txt; exit 1; }
+test "$(rg -o 'task web:test' .github/workflows/ci.yml | wc -l | tr -d ' ')" -eq 1 \
+ && test "$(rg -o 'name: web unit tests \(vitest\)' .github/workflows/ci.yml | wc -l | tr -d ' ')" -eq 1 \
+ && go test ./internal/upgrade/ -run '^TestWorkflowRunBodiesInvokeTask$' -count=1 -v >/tmp/wf1.txt 2>&1 \
+ && test "$(grep -Eo '^--- PASS: TestWorkflowRunBodiesInvokeTask' /tmp/wf1.txt | wc -l | tr -d ' ')" -eq 1
+```
+
+Executed against the three worlds that matter:
+- *Nothing done*: `task web:test` → target not found → non-zero → `||` fires → **exit 1**.
+- *Target added, CI step skipped*: `task web:test` passes; `rg -o 'task web:test' .github/workflows/ci.yml | wc -l` → **0** (measured now) → `test 0 -eq 1` → **exit 1**.
+- *Fully done*: all four conjuncts hold.
+
+The last two conjuncts are worth adding specifically because `ci.yml`'s `test` job **is** in `inScopeJobs` (`internal/upgrade/taskfile_shape_test.go:126`), so `TestWorkflowRunBodiesInvokeTask` genuinely binds the new step's run body here — unlike 03-10's brand-new `lint-go` job, which has to be registered first. This is the one place in the phase where that guard is non-vacuous by construction, and the plan does not run it.
+
+**S4 (L1).** Extend `03-10` step (f) edit 3 to name the third stale figure: *"the `desc:` states a measured module count for the four-binary set; recompute it or restate it as a floor, using the module count Task 1 recorded for the fifth modfile."*
+
+**S5 (L2).** Insert one conjunct ahead of the diff in `03-10-PLAN.md:353`:
+
+```sh
+git ls-files --error-unmatch .golangci.yml >/dev/null 2>&1
+```
+
+Executed against an untracked path: **exit 1**. Against a tracked path: exit 0. That is the missing "this file was actually committed" premise the byte-identity claim rests on.
+
+**S6 (L3).** Delete `"or \`hljs.highlightAuto(rawText).value\`"` from `03-04-PLAN.md:464` and replace it with the plaintext-escape branch the action actually specifies, so the threat row and the `highlightAuto`-count gate agree.
+
+**S7 (L4).** Add to `03-05-PLAN.md:459`: *"Run this against the working tree BEFORE committing Task 3 — `NR == 0` exits 1, so a clean tree reads as a failure."*
+
+**S8 (L5).** Correct `03-03-PLAN.md:151` to cite `test/wireoracle/oracle_test.go:112,119` (the `t.Run(sc.Name, …)` that generates the subtest) and `test/wireoracle/scenarios.go:669` (the scenario named `toolslist-repeat`).
+
+**S9 (not counted).** `03-06` requires the deferral todo by acceptance criterion (`:232`) and declares its path in `files_modified` (`:26`), but no `<action>` step tells the executor to write it — unlike `03-08`, which has an explicit "Action taken instead of nothing" paragraph (`:433-437`). One sentence in Task 1's `<what-built>` closes the asymmetry.
+
+## 5. Verify-block audit
+
+Every `<verify>` block in the ten plans, mentally executed against the "task was never done" world. `<automated>` blocks are marked ✔; criterion-level guards I judged risky are included and marked as such.
+
+| Plan/Task | Command (essence) | Executed verdict |
+|---|---|---|
+| 03-01 T2 | `pnpm exec vitest --reporter=json` → `node -e` asserting `numTotalTests>=1 && numPassed===numTotal` | **SOUND** — vitest absent → non-zero → `||` fires; if it ran, missing JSON → `readFileSync` throws → non-zero |
+| **03-01 T3** | bare `task web:test` | **SOUND but UNDER-BOUND** — red when the target is absent, **green when `ci.yml` step (b) and RED demo (d) were skipped**. See M1 / S3 |
+| 03-02 T1 | `-run Test…Confinement… -v` → `^ *--- PASS: …/[a-zA-Z0-9_-]+` ≥ 5 | **SOUND** — verified Go emits 4 *spaces*, and `in-repo control` → `in-repo_control` matches the class (2/2 in a live probe) |
+| 03-02 T2 | `-run …DoesNotLeakHostPath -v` → `^--- PASS: …` = 1 | **SOUND** — `-run` no-match yields 0 PASS lines → `-eq 1` fails |
+| 03-03 T1 | `^--- PASS: TestCaptureArrivalLedgerPreservesWireOrder` = 1 **and** exactly one `VERDICT:` literal in `03-03-EVIDENCE.md` | **SOUND** — test does not exist in an uninvestigated tree; evidence file absent → `grep` on a missing path → 0 |
+| 03-03 T3 | 2 named top-level PASS + `^ *--- PASS: TestFrozenTranscriptsMatch/toolslist-repeat` = 1 | **SOUND** — confirmed `TestFrozenTranscriptsMatch` (`oracle_test.go:112`) does `t.Run(sc.Name…)` and `scenarios.go:669` names the scenario, so the subtest path is real |
+| 03-04 T1 | `browse-tracer` named **and** shallow-routing = 0 **and** `$app/state` ≥ 1 | **SOUND** — reproduced: 0 in tree, **1** against a planted violation; control = 1 today |
+| 03-04 T2 | `browse-url` ≥1 **and** `rpc-errors` ≥1, counted separately | **SOUND** — cycle-1's alternation-with-`-ge 2` hole is closed |
+| 03-04 T3 | `go test ./web/ -run '^TestHighlight' -v` → `^--- PASS: TestHighlight` = 2 | **SOUND** — 0 in an unimplemented tree |
+| 03-05 T2 | `-run 'Permalink\|Remote' -v` → `[A-Za-z0-9_/-]*(Permalink\|Remote)…` ≥ 12 | **SOUND** — `/` in the class so subtests count; 0 today |
+| 03-05 T3 | `…Permalink…` ≥ 10 **and** `task proto:drift` | **SOUND as a block** — but see H2: the `<behavior>` case it counts pins a Connect code the source does not produce, so a *correct* implementation cannot reach 10 |
+| 03-05 T3 crit. | `git diff --numstat … \| awk '$2!=0{bad=1} END{exit (NR==0\|\|bad)?1:0}'` | **SOUND** — executed 4 worlds: 0/1/1/1. Timing caveat only (L4) |
+| **03-05 T3 crit.** | *(H2)* pinned `CodeInvalidArgument` for the nonexistent-path case | **WRONG ORACLE** — actual is `CodeInternal` + `an internal error occurred` |
+| 03-06 T2 | `search.test` ≥ 1 | **SOUND** |
+| 03-06 T3 | `search-panel` ≥1 **and** `PLACEHOLDER-03-07` in `web/src/` = **1** | **SOUND** — 0 today, so exactly-1 is red until the marker is written; plan-file mention is out of the search path |
+| 03-07 T1 | `browse-nav` ≥1 **and** shallow-routing = 0 **and** `$app/navigation` ≥ 1 | **SOUND** — control is the strongest available (this plan imports `goto` from it); 0 today |
+| 03-07 T2 | `browse-state` ≥ 1 | **SOUND** |
+| 03-07 T3 | `neighbors-panel` ≥1 **and** `browse-history` ≥1 **and** `PLACEHOLDER-03-07` = **0** | **SOUND** — after 03-06 the count is 1, so `-eq 0` is red until the marker is removed; the cross-plan 1↔0 pair is the proof |
+| 03-08 T1 | `call-targets` ≥1 **and** HTML-string APIs = 0 **and** `{@html}` = **1** | **SOUND** — `{@html}` = 0 today (measured), so the `-eq 1` conjunct doubles as the positive control proving `rg` reads `web/src/` under the `!**/components/ui/**` glob |
+| 03-08 T2 / T3 | `source-pane` ≥1 / `definition-picker` ≥1 | **SOUND** |
+| 03-09 T1 | `status.test` named **and** `notifyNavigated` ≥1 **and** `navigationIdentity` ≥1 in `status.ts` | **SOUND** — file absent → 0 |
+| 03-09 T2 | `degrade-states` **and** `StatusBanner` ≥1 **and** `notifyNavigated` = 1 **and** `navigationIdentity(page.url)` = **2** | **SOUND** — all 0 today; the `= 2` encodes the cycle-2 HIGH's fix semantically |
+| 03-09 T3 | 4 pre-existing targets **+** `status.test` **+** `degrade-states` **+** `StatusBanner` ≥1 **+** `codegraph init` in `web/build/` ≥1 **+** `source-sha256` = 1 **+** `fc4ae27b…` = 0 | **SOUND** — measured: `codegraph init` → **0**, `StatusBanner` → **0**, `source-sha256` → **1**, `fc4ae27b…` → **1**. Control green / claim red today is exactly the discriminating split |
+| 03-10 T1 | `lint:go` in `--list-all` = 1, isolation PASS = 1, config files exist, `# enabled-linters:` = 1, `golangciModfilePath` ≥2, `golangci/golangci-lint` ≥1, `for name in … golangci-lint` = 1, `task lint:actions` | **SOUND** — verified `task --list-all` emits `* <name>:` so `^\* lint:go:` matches; all four `rg` counts are 0 today |
+| 03-10 T2 | `.golangci.yml` exists **+** anchor = 1 **+** `git diff --exit-code HEAD` **+** `task lint:go` | **SOUND** in the never-done world; byte-identity conjunct alone is untracked-file-satisfiable (L2) |
+| **03-10 T1 crit.** | `go test … -run '^TestGateStancesAgree$'` "passes" | **VACUOUS — executed: `no tests to run`, exit 0.** H1 |
+| 03-10 T3 | `^--- PASS: TestWorkflowRunBodiesInvokeTask` = 1 **and** `task lint:go` in `ci.yml` = 1 **and** `JobID: "lint-go"` = 1 **and** `task lint:actions` | **SOUND** — confirmed the fixture literal shape is `{Workflow: "ci.yml", JobID: "test"},` so `JobID: "lint-go"` will match; both counts 0 today |
+
+## 6. Risk Assessment
+
+**MEDIUM-LOW**, down from cycle 2's level, and it becomes **LOW** once H1, H2 and M1 are applied.
+
+Justification. The structural risk is genuinely retired: the two hardcoded-iteration-set blindnesses are closed at both sites with counts hoisted into `<verify>`, the shallow-routing regex was fixed and I reproduced its discrimination, the manifest-digest pair now carries a working positive control, and no `<automated>` block in the ten plans is vacuous — I executed every one against the never-done world and all pass that test. Wave serialization (03-05 → 03-06 → 03-07 → 03-08) genuinely removes the shared-`web/src/lib/gen` write race, the three blocking-human checkpoints are on the three one-way decisions (package legitimacy, wire shape, vendored source), and the intended-RED `web:drift` window is written down with a named opener and a named closer.
+
+The residual risk is concentrated and cheap to retire. H1 is a one-word rename plus a PASS-line count — but until it is made, the `vuln` target's stance can silently desynchronize from `ci.yml`, and the *only* thing binding them reports success having executed nothing. H2 is the more expensive one, not because the edit is large but because it sits behind a `one-way` blocking checkpoint: the maintainer is being asked to ratify a permanently-published RPC's behaviour on the strength of a description of that behaviour which is wrong, and the failure mode if it goes unnoticed is an executor "repairing" the shared confinement gate that `GetNodeDetail`, `Explore` and the MCP path all depend on. M1 leaves the phase's foundational CI wiring resting on a criterion no `<verify>` reads, in the one plan where a missed CI leg would be camouflaged by a deliberately red one.
+
+Nothing here is architectural, nothing requires re-planning, and none of the ten plans needs restructuring. Three edits and five one-liners.
+
+    UNRESOLVED: high=2 actionable_non_high=6
+
+---
+
+<!-- ===== AUDIT TRAIL: CYCLES 1 AND 2 (superseded; do not re-count) ===== -->
 
 # Cross-AI Plan Review — Phase 3 (Cycle 2)
 
