@@ -221,12 +221,12 @@ Plans:
   5. No index, a stale index, and a symbol that does not exist each render an explicit state naming what happened rather than an empty pane; and a request for source outside the repository root is refused by the same confinement the MCP path already uses, proven by a regression test aimed at the new endpoint (NAV-04, SRV-05)
 
 **Notes**: `SRV-05` reuses the existing MCP path-confinement fix rather than reimplementing it — this is the same threat class this project already closed once, cheap to prevent by reuse and expensive to rediscover after ship. `BRW-06`'s highlighter registers only the indexed languages, not a full grammar bundle. `NAV-01`'s depth/limit encoding is what Phase 4's workbench deep-links against, so its shape is settled here. **Planning correction (2026-08-28):** the indexed set is **14** `LanguageSpec.ID` values, not the 12 named during discussion (`languages_typescript.go` registers three IDs from one extractor), covered by **13** highlight.js modules because that library's typescript grammar already declares `tsx` as its own alias — a Go set-equality guard binds the two. Criterion 5's "new endpoint" resolves to `GetPermalink`, the one method this phase adds, whose `path` field goes through the same confinement gate; `GetNodeDetail`'s boundary, which had zero confinement coverage in `internal/uiserver`, gets its own regression test with a passing in-repo control so neither guard can pass vacuously. Two unrelated todos ride along in their own plans (03-03 wire-oracle ordering flake, 03-10 golangci-lint — the third fold of that one) and **neither gates these five criteria**.
-**Plans**: 10 plans
+**Plans**: 1/10 plans executed
 **UI hint**: yes
 
 Plans:
 
-- [ ] 03-01-PLAN.md — JS test harness (vitest + jsdom + Testing Library), highlight.js install, `task web:test` and its CI step
+- [x] 03-01-PLAN.md — JS test harness (vitest + jsdom + Testing Library), highlight.js install, `task web:test` and its CI step
 - [ ] 03-02-PLAN.md — SRV-05 confinement regression test at the `GetNodeDetail` RPC boundary, with a passing in-repo control
 - [ ] 03-03-PLAN.md — wire-oracle `toolslist-repeat` ordering flake (folded todo; does not gate the phase criteria)
 - [ ] 03-04-PLAN.md — TRACER: URL → `GetNodeDetail` → error classification → highlighted source, end to end, plus the highlighter coverage guard
@@ -309,7 +309,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 |-------|----------------|--------|-----------|
 | 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | Complete    | 2026-08-23 |
 | 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 7/7 | Complete    | 2026-08-24 |
-| 3. Browse, Inspect & Navigation | 0/TBD | Not started | - |
+| 3. Browse, Inspect & Navigation | 1/10 | In Progress|  |
 | 4. Query Workbench & Index Health | 0/TBD | Not started | - |
 | 5. File/Package Graph View | 0/TBD | Not started | - |
 | 6. Live Push | 0/TBD | Not started | - |

@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.12.0
 milestone_name: Local Graph UI
-current_phase: 3
+current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-08-28T18:18:02.764Z"
-last_activity: 2026-08-24
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: c31a809e36948758b064d730124cbb9e6a4796d3
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-08-28T22:53:59.215Z"
+last_activity: 2026-08-28
+last_activity_desc: Phase 03 execution started
+state_head: 281fd434b05636433fdf81af2276c1884ce4c740
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 18
+  completed_plans: 19
   percent: 33
 ---
 
@@ -25,16 +25,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 02 — SPA Toolchain, Embedded App Shell & JS Supply Chain
+**Current focus:** Phase 03 — Browse, Inspect & Navigation
 
 ## Current Position
 
-Phase: 3 (Browse, Inspect & Navigation) — READY TO EXECUTE
-Plan: Not started
+Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
+Plan: 2 of 10
 Status: Ready to execute
-Last activity: 2026-08-24 — Phase 02 complete, transitioned to Phase 3
+Last activity: 2026-08-28 — Phase 03 execution started
 
-Progress: [██░░░░░░░░] 17% (1/6 phases)
+Progress: [███░░░░░░░] 33% (1/6 phases)
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 02 P05 | ~55min | 3 tasks | 13 files |
 | Phase 02 P06 | ~1h5min | 3 tasks | 4 files |
 | Phase 02 P07 | 22min | 3 tasks | 15 files |
+| Phase 03 P01 | ~5min active work | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,8 @@ Standing decisions that outlive every milestone:
 - [Phase 02]: CODEGRAPH_WEB_BUILD_DIR override lives in web/vite.config.ts, not web/svelte.config.js (which does not exist in this toolchain). — 02-01-SUMMARY.md already recorded that adapter-static config lives in vite.config.ts for this SvelteKit/sv@0.17.0 scaffold.
 - [Phase 02]: [Phase 02] allowBuilds: {} written by hand in web/pnpm-workspace.yaml — pnpm approve-builds --all does not write the allowBuilds key when nothing is pending (confirmed empirically) — task web:deps:strict treats total absence as a named failure distinct from a committed empty map, so the empty map is committed by hand once.
 - [Phase 02]: [Phase 02] Fixed live GHSA-pxg6-pf52-xh8x (cookie) via pnpm-workspace.yaml overrides — 02-07's empirical pnpm audit run surfaced a real, current advisory in cookie <0.7.0 pulled in by @sveltejs/kit@2.70.3's own ^0.6.0 range (not yet bumped upstream) — overrides cookie@<0.7.0: ^0.7.2 so task web:audit's own clean-tree verify is honestly green.
+- [Phase 03]: 03-01: @testing-library/jest-dom newly tripped too-new legitimacy flag at install (published 2026-08-09, after 03-RESEARCH.md); approved under same fallback reasoning as the two tabled [SUS] packages — A recent release on a 2019-vintage, 63M-weekly-download project is not a new or hijacked package
+- [Phase 03]: 03-01: added resolve.conditions:['browser'] to web/vite.config.ts, guarded on process.env.VITEST — Default jsdom resolution picked Svelte's server build for .svelte imports (lifecycle_function_unavailable from mount()); scoping to vitest only leaves vite build/dev resolution unaffected
 
 ### Pending Todos
 
@@ -252,10 +255,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/03-browse-inspect-navigation/03-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-08-28T12:48:27.615Z
-Stopped at: Phase 3 context gathered
+Last session: 2026-08-28T22:53:59.148Z
+Stopped at: Completed 03-01-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
