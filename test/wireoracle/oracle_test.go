@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 )
@@ -127,6 +128,15 @@ func TestFrozenTranscriptsMatch(t *testing.T) {
 				t.Fatalf("scenario %q: normalized transcript is empty — an empty transcript is never a match", sc.Name)
 			}
 
+			// 03-03-PLAN.md Task 1(b): if the comparison is about to fail,
+			// dump the raw timestamped arrival sequence BEFORE
+			// assertBytesEqualLineByLine's t.Fatalf ends the subtest — this
+			// is what separates "the server emitted out of order" from "a
+			// downstream layer reordered it" for whoever investigates the
+			// next occurrence of an ordering flake here.
+			if err := compareBytesLineByLine(normalized, want); err != nil {
+				logArrivalLedger(t, sc.Name, tr.ArrivalLedger)
+			}
 			assertBytesEqualLineByLine(t, sc.Name, normalized, want)
 			if sc.NoInitialize {
 				// No initialize means the VRFY-03 AddAfterInitialize hook
@@ -300,6 +310,20 @@ func assertBytesEqualLineByLine(t *testing.T, scenario string, got, want []byte)
 	t.Helper()
 	if err := compareBytesLineByLine(got, want); err != nil {
 		t.Fatalf("scenario %q: %v", scenario, err)
+	}
+}
+
+// logArrivalLedger prints Transcript.ArrivalLedger's raw lines with their
+// arrival timestamps, in scan order, via t.Logf (03-03-PLAN.md Task 1(b)).
+// Called only when a comparison is about to fail, so a passing run stays
+// quiet; on failure this is the raw evidence distinguishing "the server
+// wrote these out of request-id order" from "capture/normalization
+// reordered something that arrived correctly."
+func logArrivalLedger(t *testing.T, scenario string, ledger []ArrivalLine) {
+	t.Helper()
+	t.Logf("scenario %q: raw arrival ledger (%d lines), earliest first:", scenario, len(ledger))
+	for i, l := range ledger {
+		t.Logf("  [%d] %s  %s", i, l.Arrived.Format(time.RFC3339Nano), l.Raw)
 	}
 }
 

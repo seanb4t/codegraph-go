@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -181,6 +182,51 @@ type Transcript struct {
 	// subprocess ran against — callers use it to build Substitutions
 	// without recomputing the path.
 	RepoDir string
+	// ArrivalLedger is every captured stdout line paired with the
+	// wall-clock time it was observed by Capture's own scanner goroutine —
+	// BEFORE NormalizeWithLedger or any comparison ever runs (03-03-PLAN.md
+	// Task 1(b)). This is the single measurement that separates the two
+	// candidate root causes for an ordering discrepancy: if two response
+	// lines appear here already out of request-id order, the SERVER wrote
+	// them out of order; if they appear here in order but a later
+	// comparison sees them out of order, the defect is downstream of
+	// capture. Populated unconditionally (not just on failure) so a caller
+	// can dump it regardless of which assertion path fails first.
+	ArrivalLedger []ArrivalLine
+}
+
+// ArrivalLine is one raw wire line paired with the arrival timestamp
+// Capture's scanner goroutine (or the standalone scanArrivalLines below)
+// recorded for it, in the exact order the underlying reader produced it.
+type ArrivalLine struct {
+	Raw     []byte
+	Arrived time.Time
+}
+
+// scanArrivalLines reads newline-delimited lines from r and returns them,
+// each timestamped at the moment its bytes were fully scanned, in the
+// EXACT order bufio.Scanner.Scan() returned them — no sorting, no
+// bucketing, no reordering of any kind, and nothing runs concurrently with
+// this single sequential loop that could reorder what it returns.
+//
+// This is the identical scan-and-timestamp primitive Capture's own
+// stdout-reading goroutine uses below (same bufio.Scanner construction,
+// same buffer size, same per-line copy-then-timestamp shape) — extracted
+// here as a standalone, independently testable function specifically so
+// TestCaptureArrivalLedgerPreservesWireOrder can drive it with a synthetic
+// writer and assert the order-preservation property directly and durably,
+// rather than relying on a one-time manual read of this source file.
+func scanArrivalLines(r io.Reader) ([]ArrivalLine, error) {
+	var out []ArrivalLine
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	for scanner.Scan() {
+		out = append(out, ArrivalLine{
+			Raw:     append([]byte(nil), scanner.Bytes()...),
+			Arrived: time.Now(),
+		})
+	}
+	return out, scanner.Err()
 }
 
 // syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer.
@@ -315,18 +361,29 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	seen := make(map[float64]bool, len(wantIDs))
 	methodsSeen := make(map[string]bool)
 
-	type scannedLine struct{ raw []byte }
+	type scannedLine struct {
+		raw     []byte
+		arrived time.Time
+	}
 	lines := make(chan scannedLine)
 	go func() {
 		defer close(lines)
 		scanner := bufio.NewScanner(stdout)
 		scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 		for scanner.Scan() {
-			lines <- scannedLine{raw: append([]byte(nil), scanner.Bytes()...)}
+			// arrived is stamped HERE, immediately after Scan() returns and
+			// before the line is handed to drainUntil — the earliest point
+			// at which this process has observed the line at all. This is
+			// the timestamp 03-03-EVIDENCE.md's arrival sequence uses; it
+			// is captured unconditionally, not only on a later assertion
+			// failure, so ArrivalLedger is always available to a caller
+			// that wants to dump it (03-03-PLAN.md Task 1(b)).
+			lines <- scannedLine{raw: append([]byte(nil), scanner.Bytes()...), arrived: time.Now()}
 		}
 	}()
 
 	var out bytes.Buffer
+	var arrivalLedger []ArrivalLine
 
 	// drainUntil reads from lines, appending every line to out and
 	// recording every response id and every frame method it sees into
@@ -366,6 +423,7 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 				}
 				out.Write(ln.raw)
 				out.WriteByte('\n')
+				arrivalLedger = append(arrivalLedger, ArrivalLine{Raw: ln.raw, Arrived: ln.arrived})
 				if id, ok := responseID(ln.raw); ok {
 					seen[id] = true
 				}
@@ -445,9 +503,10 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	join()
 
 	return Transcript{
-		Stdout:  out.Bytes(),
-		Stderr:  stderrBuf.String(),
-		RepoDir: workDir,
+		Stdout:        out.Bytes(),
+		Stderr:        stderrBuf.String(),
+		RepoDir:       workDir,
+		ArrivalLedger: arrivalLedger,
 	}, nil
 }
 
