@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
@@ -67,5 +68,37 @@ export default defineConfig({
 				strict: false
 			})
 		})
-	]
+	],
+
+	// DEVIATION (03-01-PLAN.md Task 2 step (c), recorded in the SUMMARY):
+	// under jsdom, Vite's default package-export condition resolution
+	// picked Svelte's SERVER build for .svelte imports (`svelte/src/
+	// internal/server/errors.js`'s `lifecycle_function_unavailable`
+	// thrown from `mount()`), rather than the client build the harness
+	// fixture needs. Adding the 'browser' resolve condition — guarded so
+	// it applies ONLY under vitest (process.env.VITEST, which Vitest
+	// itself sets) — fixes the .svelte import to resolve client-side,
+	// without changing resolution for `vite build`/`vite dev`.
+	resolve: process.env.VITEST
+		? {
+				conditions: ['browser']
+			}
+		: undefined,
+
+	// Vitest (03-01, BRW-06): configured HERE rather than a separate
+	// vitest.config.ts, deliberately — Taskfile.yml's WEB_HASH_LIB
+	// `web_source_files()` enumerates web/vite.config.ts as part of the
+	// BLD-03 source digest but does NOT enumerate a hypothetical
+	// vitest.config.ts, so a separate file would be invisible to the
+	// build/drift guard. Tests live under web/tests/, which
+	// .svelte-kit/tsconfig.json's `include` already covers
+	// (../tests/**/*.ts, ../tests/**/*.svelte) and which
+	// web_source_files() deliberately does NOT enumerate, so adding or
+	// editing a test does not churn that digest.
+	test: {
+		environment: 'jsdom',
+		include: ['tests/**/*.test.ts'],
+		setupFiles: ['./tests/setup.ts'],
+		globals: false
+	}
 });
