@@ -126,6 +126,14 @@ jobs:
       - name: Install JS deps (frozen lockfile, BLD-01)
         run: task web:deps
 
+      # BRW-06 (03-01): the JS unit-test suite, run immediately after the
+      # frozen install and before the heavier build/audit steps so a
+      # failing suite fails fast. This step's target asserts a POSITIVE
+      # executed-test count before judging pass/fail (rule 84d1gfpywd) —
+      # it cannot report success while having run zero tests.
+      - name: web unit tests (vitest)
+        run: task web:test
+
       # BLD-05/D-13: positive assertion that strictDepBuilds is actually in
       # effect and that pnpm-workspace.yaml's allowBuilds approval map is
       # committed (even if empty) — never a grep of pnpm's own "Ignored

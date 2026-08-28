@@ -563,6 +563,65 @@ tasks:
 
         echo "web:deps:strict: PASS — strictDepBuilds is true and allowBuilds is committed with ${ENTRIES} entries (${DENIALS} denials)"
 
+  web:test:
+    desc: >-
+      BRW-06's JS unit-test gate (03-01). Depends on web:deps (the frozen
+      install) so vitest never runs against an un-synced node_modules tree.
+      Runs the suite through pnpm with vitest's JSON reporter, WRITING TO A
+      FILE — never piping vitest's stdout into another command, which
+      returns only the LAST command's exit status (this repository shipped
+      exactly that RED-reads-as-GREEN bug in Phase 2). Checks vitest's OWN
+      exit status directly via `set +e`/`$?`, then parses the JSON file and
+      PRINTS both observed numbers (numTotalTests, numPassedTests) BEFORE
+      comparing anything to FLOOR=1 (rule 84d1gfpywd). The floor exists
+      ONLY to catch "executed zero tests" — a fresh or accidentally-emptied
+      suite reading as a clean pass — never to track suite growth, and it
+      must never be raised as the suite grows.
+    deps: [web:deps]
+    preconditions:
+      - sh: command -v node
+        msg: "node not found — web:test parses vitest's JSON reporter output with node -e."
+    cmds:
+      - |
+        set -euo pipefail
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        set +e
+        (cd web && pnpm exec vitest run --reporter=json --outputFile="${scratch}/vitest.json") > "${scratch}/vitest.log" 2>&1
+        VITEST_RC=$?
+        set -e
+
+        cat "${scratch}/vitest.log"
+
+        if [ ! -s "${scratch}/vitest.json" ]; then
+          echo "::error::web:test: vitest produced no JSON report at all (exit ${VITEST_RC}) — cannot assert an executed-test count against nothing." >&2
+          exit 1
+        fi
+
+        COUNTS=$(node -e '
+          const r = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+          console.log(String(r.numTotalTests ?? 0));
+          console.log(String(r.numPassedTests ?? 0));
+        ' "${scratch}/vitest.json")
+        TOTAL=$(printf '%s\n' "${COUNTS}" | sed -n '1p')
+        PASSED=$(printf '%s\n' "${COUNTS}" | sed -n '2p')
+
+        echo "web:test: observed numTotalTests=${TOTAL} numPassedTests=${PASSED} (vitest exit ${VITEST_RC})"
+
+        FLOOR=1
+        if [ "${TOTAL}" -lt "${FLOOR}" ]; then
+          echo "::error::web:test: executed ${TOTAL} tests, want at least ${FLOOR} — a suite that ran ZERO tests must fail loudly, never read as a clean pass. This floor catches 'executed nothing'; it is not a suite-growth ratchet and must never be raised." >&2
+          exit 1
+        fi
+
+        if [ "${VITEST_RC}" -ne 0 ] || [ "${PASSED}" != "${TOTAL}" ]; then
+          echo "::error::web:test: FAILED — ${PASSED} of ${TOTAL} tests passed (vitest exit ${VITEST_RC})." >&2
+          exit 1
+        fi
+
+        echo "web:test: PASS — ${PASSED} of ${TOTAL} tests passed"
+
   web:build:
     desc: >-
       BLD-01's build step and BLD-03's marker-writing step, in one
