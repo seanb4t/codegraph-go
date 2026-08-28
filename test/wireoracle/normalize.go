@@ -189,3 +189,13 @@ func looksLikeRFC3339(val string) bool {
 	_, err := time.Parse(time.RFC3339, val)
 	return err == nil
 }
+
+// CanonicalizeResponseOrder is 03-03-PLAN.md Task 3's R2 resolution
+// (03-03-EVIDENCE.md, VERDICT: SERVER-EMITTED-OUT-OF-ORDER). It is a
+// STUB pending TestToolsListRepeatOrderingResolution's RED-first
+// observation (see 03-03-SUMMARY.md) — the real implementation lands in
+// the immediately following commit. Deliberately an identity function
+// for now: returns raw unchanged with zero hits.
+func CanonicalizeResponseOrder(raw []byte) ([]byte, int) {
+	return raw, 0
+}
