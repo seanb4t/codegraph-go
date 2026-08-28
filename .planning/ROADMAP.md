@@ -227,7 +227,7 @@ Plans:
 Plans:
 
 - [x] 03-01-PLAN.md — JS test harness (vitest + jsdom + Testing Library), highlight.js install, `task web:test` and its CI step
-- [ ] 03-02-PLAN.md — SRV-05 confinement regression test at the `GetNodeDetail` RPC boundary, with a passing in-repo control
+- [x] 03-02-PLAN.md — SRV-05 confinement regression test at the `GetNodeDetail` RPC boundary, with a passing in-repo control
 - [ ] 03-03-PLAN.md — wire-oracle `toolslist-repeat` ordering flake (folded todo; does not gate the phase criteria)
 - [ ] 03-04-PLAN.md — TRACER: URL → `GetNodeDetail` → error classification → highlighted source, end to end, plus the highlighter coverage guard
 - [ ] 03-05-PLAN.md — BRW-09 server side: additive `GetPermalink` RPC, git remote/pushed derivation, confinement reuse
