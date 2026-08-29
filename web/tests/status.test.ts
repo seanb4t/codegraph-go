@@ -165,3 +165,49 @@ describe('createStatusGate: the identity guard', () => {
 		await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
 	});
 });
+
+describe('createStatusGate: response-identity guard (WR-08)', () => {
+	it('a stale first response landing AFTER a fresher second response never overwrites the fresher verdict', async () => {
+		// Reproduces the ordinary loopback interleaving WR-08 describes:
+		// fetch A starts while the index is stale, fetch B starts shortly
+		// after (indexing has since finished), and A's response lands
+		// AFTER B's. Without a response-identity guard, "last settled
+		// wins" reverts the gate to A's stale verdict and it stays there.
+		let resolveFirst!: (r: GetStatusResponse) => void;
+		let resolveSecond!: (r: GetStatusResponse) => void;
+		let callCount = 0;
+
+		const client: StatusClient = {
+			getStatus: (): Promise<GetStatusResponse> => {
+				callCount += 1;
+				if (callCount === 1) {
+					return new Promise<GetStatusResponse>((resolve) => {
+						resolveFirst = resolve;
+					});
+				}
+				return new Promise<GetStatusResponse>((resolve) => {
+					resolveSecond = resolve;
+				});
+			}
+		};
+
+		const gate = createStatusGate(client, '/browse?symbol=Foo');
+		const observed: string[] = [];
+		gate.subscribe((status) => observed.push(status.verdict));
+
+		// Trigger the second fetch (fetch B) before either resolves.
+		gate.notifyNavigated('/browse?symbol=Bar');
+		await vi.waitFor(() => expect(callCount).toBe(2));
+
+		// Fetch B (the FRESHER request) resolves first: index is healthy.
+		resolveSecond(statusResponse({ initialized: true, stale: false }));
+		await vi.waitFor(() => expect(observed.at(-1)).toBe('ok'));
+
+		// Fetch A (the STALE, superseded request) resolves last.
+		resolveFirst(statusResponse({ initialized: true, stale: true }));
+		// Give the (would-be) stale emit a turn to land if the guard were
+		// absent, then assert the fresher verdict is still what's current.
+		await new Promise((r) => setTimeout(r, 0));
+		expect(observed.at(-1)).toBe('ok');
+	});
+});

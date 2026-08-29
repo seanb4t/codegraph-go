@@ -117,16 +117,33 @@ export function createStatusGate(
 	let lastIdentity = initialNavigationIdentity;
 	const listeners = new Set<(status: IndexStatus) => void>();
 
+	// requestId (WR-08): fetchStatus had no cancellation or
+	// response-identity guard, so whichever GetStatus promise settled
+	// LAST won via emit — an ordinary loopback interleaving (fetch A
+	// starts while stale, fetch B starts 50ms later once indexing
+	// finished and settles first) could revert the banner to a stale
+	// verdict that then never updates until the next navigation. Every
+	// other async surface in this phase already guards this
+	// (search.ts's liveRequestId, browse-state.ts's NavigationGeneration)
+	// — mint a monotonic id per fetch and drop any response whose id no
+	// longer matches the most recent one, mirroring that convention.
+	let requestId = 0;
+
 	function emit(status: IndexStatus): void {
 		current = status;
 		for (const listener of listeners) listener(current);
 	}
 
 	function fetchStatus(): void {
+		const id = ++requestId;
 		client
 			.getStatus({})
-			.then((response) => emit(classifyStatus(response)))
+			.then((response) => {
+				if (id !== requestId) return; // superseded by a later fetch
+				emit(classifyStatus(response));
+			})
 			.catch(() => {
+				if (id !== requestId) return; // superseded by a later fetch
 				// A rejected GetStatus call classifies as 'unknown' and never
 				// throws — this is the last line between a transport failure
 				// and a gate that silently stops updating.
