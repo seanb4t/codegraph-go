@@ -321,7 +321,22 @@ func (s *uiService) GetStatus(ctx context.Context, _ *connect.Request[uiv1.GetSt
 	if err != nil {
 		return nil, mapEngineError(err)
 	}
-	commitSHA, _ := schema.IndexedCommitSHA(meta)
+	// IN-06: schema.IsCommitSHA is applied here too, not only at
+	// GetPermalink's read site — schema.IsCommitSHA's own doc comment
+	// states the rule as "callers that read a commit SHA out of a Meta
+	// record ... should call this first", and a Meta record on disk is
+	// not bound by internal/indexer's write-time validation (a store
+	// built or edited by anything other than this binary's own indexer,
+	// the milestone-2 "CI-distributed indexes" shape this project targets,
+	// is not covered by that guarantee). Degrading an unvalidated value to
+	// "" here means "unknown" per D-05 — the same fallback GetPermalink's
+	// own malformed-SHA branch uses — so the invariant "a commit SHA that
+	// leaves this server is well-formed" holds at every exit, not just the
+	// one sink that happens to build a URL from it.
+	commitSHA, ok := schema.IndexedCommitSHA(meta)
+	if ok && !schema.IsCommitSHA(commitSHA) {
+		commitSHA = ""
+	}
 	return connect.NewResponse(statusToProto(result, commitSHA)), nil
 }
 

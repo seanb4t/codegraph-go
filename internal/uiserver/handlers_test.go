@@ -209,6 +209,33 @@ func TestUIServiceStatusCarriesCommitSHA(t *testing.T) {
 			t.Fatalf("GetStatus commit_sha = %q, want empty for a non-git fixture", resp.Msg.GetCommitSha())
 		}
 	})
+
+	// IN-06: GetStatus reads Meta.commit_sha through
+	// schema.IndexedCommitSHA exactly like GetPermalink does, but a Meta
+	// record on disk is not bound by internal/indexer's write-time
+	// validation — a store built or edited by anything other than this
+	// binary's own indexer is not covered by that guarantee.
+	// overwriteCommitSHA (permalink_test.go) bypasses write-time
+	// validation directly to simulate that. Reuses the malformed value
+	// GetPermalink's own malformed-SHA test drives, so the two guards
+	// stay aligned on what "malformed" means.
+	t.Run("malformed-commit-sha-degrades-to-empty", func(t *testing.T) {
+		dir, _ := newGitIndexedFixture(t)
+		overwriteCommitSHA(t, dir, "../../attacker/attacker-repo/blob/main")
+		srv := startedServer(t, dir)
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+		resp, err := client.GetStatus(context.Background(), connect.NewRequest(&uiv1.GetStatusRequest{}))
+		if err != nil {
+			t.Fatalf("GetStatus: %v", err)
+		}
+		if !resp.Msg.GetInitialized() {
+			t.Fatal("GetStatus initialized = false, want true for a successful response")
+		}
+		if got := resp.Msg.GetCommitSha(); got != "" {
+			t.Fatalf("GetStatus commit_sha = %q, want empty — a malformed stored commit_sha must never leave this server", got)
+		}
+	})
 }
 
 // TestUIServiceErrorClassesAreTyped proves mapEngineError's classification
