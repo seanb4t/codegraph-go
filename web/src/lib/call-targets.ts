@@ -221,15 +221,16 @@ export function decorateCallTargets(
 			const anchor = insertedNodes[0];
 			if (anchor && anchor.parentNode === parent) {
 				parent.insertBefore(originalText, anchor);
-			} else {
-				// The anchor is no longer where we left it (something else
-				// mutated this subtree between decoration and teardown) —
-				// append rather than silently drop the original text.
-				parent.appendChild(originalText);
+				for (const inserted of insertedNodes) {
+					inserted.parentNode?.removeChild(inserted);
+				}
 			}
-			for (const inserted of insertedNodes) {
-				inserted.parentNode?.removeChild(inserted);
-			}
+			// else: the subtree was replaced by its owner (Svelte's
+			// {@html}) between decoration and teardown — the inserted
+			// nodes are already detached from the live DOM. Restoring
+			// originalText here would inject stale content (a previous
+			// render's source text) into DOM this decorator no longer
+			// owns, so drop it silently instead.
 		}
 	};
 }

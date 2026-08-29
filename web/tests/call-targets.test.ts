@@ -180,6 +180,31 @@ describe('decorateCallTargets: TEARDOWN', () => {
 		decorated.click();
 		expect(onSelect).not.toHaveBeenCalled();
 	});
+
+	it('does not resurrect stale text when the owner ({@html}) already replaced the subtree', () => {
+		// Reproduces WR-01: Svelte's {@html} can replace this element's
+		// children with a fresh render before the previous decoration's
+		// teardown runs (a direct single-def -> single-def rerender, with
+		// no loading state interposed). Teardown must not append the old
+		// render's text onto the new one.
+		const root = document.createElement('code');
+		root.textContent = 'Foo and Bar';
+		const index = buildCallTargetIndex([node('Foo')]);
+		const onSelect = vi.fn();
+
+		const teardown = decorateCallTargets(root, index, onSelect);
+		expect(root.querySelectorAll('[data-call-target]')).toHaveLength(1);
+
+		// Simulate the owner replacing this element's children out from
+		// under the decorator before teardown runs.
+		root.innerHTML = 'Baz and Qux';
+
+		teardown();
+
+		// Positive assertion: the new owner's content is exactly what
+		// survives — no stale text from the torn-down decoration appended.
+		expect(root.textContent).toBe('Baz and Qux');
+	});
 });
 
 describe('decorateCallTargets: the split-identifier bound (deliberate, documented)', () => {
