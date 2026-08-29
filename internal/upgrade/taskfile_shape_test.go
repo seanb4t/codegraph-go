@@ -26,12 +26,20 @@ const workflowsDir = "../../.github/workflows"
 // tool modfiles must exist as distinct files with a non-empty rationale
 // header.
 const (
-	rootGoModPath    = "../../go.mod"
-	toolModfilePath  = "../../go.tool.mod"
-	lintModfilePath  = "../../go.tool-lint.mod"
-	taskfilePath     = "../../Taskfile.yml"
-	goreleaserPath   = "../../.goreleaser.yaml"
-	checkCrossTaskID = "check:cross"
+	rootGoModPath   = "../../go.mod"
+	toolModfilePath = "../../go.tool.mod"
+	lintModfilePath = "../../go.tool-lint.mod"
+	// golangciModfilePath is the fourth isolated tool modfile
+	// (03-10-PLAN.md Task 1), registered with TestToolModfilesRemainIsolated
+	// below so a new modfile absent from that guard's iterated set is not
+	// silently inspected by nothing (the same shape TestWorkflowRunBodiesInvokeTask
+	// guards for CI jobs — see inScopeJobs). go.tool-proto.mod is a
+	// PRE-EXISTING gap of the identical shape, deliberately left
+	// unregistered here — see 03-10-SUMMARY.md.
+	golangciModfilePath = "../../go.tool-golangci.mod"
+	taskfilePath        = "../../Taskfile.yml"
+	goreleaserPath      = "../../.goreleaser.yaml"
+	checkCrossTaskID    = "check:cross"
 
 	// releasePathWorkflowPath is an alias for releaseWorkflowPath
 	// (release_workflow_shape_test.go), declared here too so the BLD-07
@@ -70,13 +78,15 @@ var requiredCheckNames = []string{
 	"pr-title",
 }
 
-// forbiddenToolPackages are the three build-tool import paths that must
-// live ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod),
-// never as a tool directive or a require line in the root go.mod (D-03).
+// forbiddenToolPackages are the build-tool import paths that must live
+// ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod /
+// go.tool-golangci.mod), never as a tool directive or a require line in
+// the root go.mod (D-03).
 var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
+	"github.com/golangci/golangci-lint",
 }
 
 // forbiddenTaskfileGateKeys are the two go-task fields that silently SKIP
@@ -905,8 +915,18 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat %s: %v", lintModfilePath, err)
 	}
+	golangciInfo, err := os.Stat(golangciModfilePath)
+	if err != nil {
+		t.Fatalf("stat %s: %v", golangciModfilePath, err)
+	}
 	if os.SameFile(toolInfo, lintInfo) {
 		t.Fatalf("go.tool.mod and go.tool-lint.mod resolve to the same file — they must be two distinct modfiles (D-03)")
+	}
+	if os.SameFile(toolInfo, golangciInfo) {
+		t.Fatalf("go.tool.mod and go.tool-golangci.mod resolve to the same file — they must be two distinct modfiles (D-03)")
+	}
+	if os.SameFile(lintInfo, golangciInfo) {
+		t.Fatalf("go.tool-lint.mod and go.tool-golangci.mod resolve to the same file — they must be two distinct modfiles (D-03)")
 	}
 
 	rootData, err := os.ReadFile(rootGoModPath)
@@ -916,16 +936,16 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 	rootSrc := string(rootData)
 
 	if pkgs, toolErr := parseGoModToolPackages(rootSrc); toolErr == nil {
-		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in go.tool.mod/go.tool-lint.mod (D-03)", pkgs)
+		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in go.tool.mod/go.tool-lint.mod/go.tool-golangci.mod (D-03)", pkgs)
 	}
 
 	for _, pkg := range forbiddenToolPackages {
 		if version, reqErr := parseGoModRequireVersion(rootSrc, pkg); reqErr == nil {
-			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in go.tool.mod/go.tool-lint.mod (D-03)", pkg, version)
+			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in go.tool.mod/go.tool-lint.mod/go.tool-golangci.mod (D-03)", pkg, version)
 		}
 	}
 
-	for _, path := range []string{toolModfilePath, lintModfilePath} {
+	for _, path := range []string{toolModfilePath, lintModfilePath, golangciModfilePath} {
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			t.Fatalf("read %s: %v", path, readErr)
