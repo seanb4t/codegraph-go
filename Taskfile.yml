@@ -1183,12 +1183,16 @@ tasks:
   vuln:
     desc: >-
       ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —
-      see 04-01-SUMMARY.md): govulncheck -mode=binary over the five tool
+      see 04-01-SUMMARY.md): govulncheck -mode=binary over the eight tool
       binaries built from go.tool.mod (task, goreleaser, govulncheck),
-      go.tool-lint.mod (actionlint) and go.tool-golangci.mod
-      (golangci-lint, 03-10-PLAN.md Task 1) — the 531 measured third-party
-      modules (deduplicated union across all three modfiles) that execute
-      as credentialed CI tooling (repository write access and secrets) and
+      go.tool-lint.mod (actionlint), go.tool-proto.mod (buf,
+      protoc-gen-go, protoc-gen-connect-go — closed into scope alongside
+      the golangci-lint addition below, 03-10-PLAN.md Task 1: it was a
+      pre-existing gap of the identical shape, absent from this scan since
+      01-01-PLAN.md) and go.tool-golangci.mod (golangci-lint,
+      03-10-PLAN.md Task 1) — the 571 measured third-party modules
+      (deduplicated union across all four modfiles) that execute as
+      credentialed CI tooling (repository write access and secrets) and
       were previously scanned by nothing (D-05: this target used to run
       `govulncheck ./...` over the main module only, a no-op duplicate of
       ci.yml's own gate that never touched any tool modfile). Reports, but
@@ -1202,7 +1206,7 @@ tasks:
       every goreleaser binary regardless of config, and the upstream
       package is unmaintained, Fixed in: N/A). Shipped blocking, this gate
       would have been permanently red from its first run on real in-scope
-      tooling — worse than the no-op it replaces. All five binaries stay
+      tooling — worse than the no-op it replaces. All eight binaries stay
       in scope (no allowlist, no exclusion): the point is detection, not
       build-failure, so a NEW finding in any binary is exactly as visible
       as this known one. -mode=binary is also symbol-level, NOT
@@ -1227,19 +1231,22 @@ tasks:
         scratch=$(mktemp -d)
         trap 'rm -rf "${scratch}"' EXIT
 
-        echo "==> Building tool binaries (GOWORK=off; go.tool.mod x3, go.tool-lint.mod x1, go.tool-golangci.mod x1)"
+        echo "==> Building tool binaries (GOWORK=off; go.tool.mod x3, go.tool-lint.mod x1, go.tool-proto.mod x3, go.tool-golangci.mod x1)"
         GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/task" github.com/go-task/task/v3/cmd/task
         GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/goreleaser" github.com/goreleaser/goreleaser/v2
         GOWORK=off go build -modfile=go.tool.mod -o "${scratch}/govulncheck" golang.org/x/vuln/cmd/govulncheck
         GOWORK=off go build -modfile=go.tool-lint.mod -o "${scratch}/actionlint" github.com/rhysd/actionlint/cmd/actionlint
         GOWORK=off go build -modfile=go.tool-golangci.mod -o "${scratch}/golangci-lint" github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+        GOWORK=off go build -modfile=go.tool-proto.mod -o "${scratch}/buf" github.com/bufbuild/buf/cmd/buf
+        GOWORK=off go build -modfile=go.tool-proto.mod -o "${scratch}/protoc-gen-go" google.golang.org/protobuf/cmd/protoc-gen-go
+        GOWORK=off go build -modfile=go.tool-proto.mod -o "${scratch}/protoc-gen-connect-go" connectrpc.com/connect/cmd/protoc-gen-connect-go
 
         # ADVISORY (D-04 superseded): every outcome below is REPORTED, never
         # fails this task. See this target's desc: for why — goreleaser's
         # binary carries a real, permanently-unfixed, symbol-reachable
         # vulnerability (GO-2026-5932) that would otherwise make a blocking
         # gate permanently red.
-        for name in task goreleaser govulncheck actionlint golangci-lint; do
+        for name in task goreleaser govulncheck actionlint golangci-lint buf protoc-gen-go protoc-gen-connect-go; do
           set +e
           out=$({{.GO_TOOL}} govulncheck -mode=binary "${scratch}/${name}" 2>&1)
           status=$?

@@ -33,13 +33,18 @@ const (
 	// (03-10-PLAN.md Task 1), registered with TestToolModfilesRemainIsolated
 	// below so a new modfile absent from that guard's iterated set is not
 	// silently inspected by nothing (the same shape TestWorkflowRunBodiesInvokeTask
-	// guards for CI jobs — see inScopeJobs). go.tool-proto.mod is a
-	// PRE-EXISTING gap of the identical shape, deliberately left
-	// unregistered here — see 03-10-SUMMARY.md.
+	// guards for CI jobs — see inScopeJobs).
 	golangciModfilePath = "../../go.tool-golangci.mod"
-	taskfilePath        = "../../Taskfile.yml"
-	goreleaserPath      = "../../.goreleaser.yaml"
-	checkCrossTaskID    = "check:cross"
+	// protoModfilePath was a PRE-EXISTING gap of the identical shape —
+	// absent from this guard's iterated set since 01-01-PLAN.md — closed
+	// alongside golangciModfilePath's registration rather than left as a
+	// second recorded-but-unfixed instance of the same defect (03-10-PLAN.md
+	// Task 1; see 03-10-SUMMARY.md for why this went beyond the plan's own
+	// stated scope).
+	protoModfilePath = "../../go.tool-proto.mod"
+	taskfilePath     = "../../Taskfile.yml"
+	goreleaserPath   = "../../.goreleaser.yaml"
+	checkCrossTaskID = "check:cross"
 
 	// releasePathWorkflowPath is an alias for releaseWorkflowPath
 	// (release_workflow_shape_test.go), declared here too so the BLD-07
@@ -80,13 +85,20 @@ var requiredCheckNames = []string{
 
 // forbiddenToolPackages are the build-tool import paths that must live
 // ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod /
-// go.tool-golangci.mod), never as a tool directive or a require line in
-// the root go.mod (D-03).
+// go.tool-proto.mod / go.tool-golangci.mod), never as a tool directive or
+// a require line in the root go.mod (D-03). google.golang.org/protobuf and
+// connectrpc.com/connect are deliberately NOT here even though
+// go.tool-proto.mod also pins their cmd/ tool binaries: both are
+// legitimate RUNTIME dependencies of the main module (the generated
+// .pb.go/.connect.go files import them), so root go.mod requiring them is
+// correct, not a D-03 violation — only the buf CLI itself is pure build
+// tooling with no runtime import anywhere in this module.
 var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
 	"github.com/golangci/golangci-lint",
+	"github.com/bufbuild/buf",
 }
 
 // forbiddenTaskfileGateKeys are the two go-task fields that silently SKIP
@@ -907,27 +919,34 @@ func TestGateStancesStated(t *testing.T) {
 // packages, and each tool modfile's header comment must be non-empty and
 // state the isolation rationale — without that header the two files read
 // as an accident and someone merges them.
+// isolatedModfilePaths is every tool modfile TestToolModfilesRemainIsolated
+// holds to the isolation property (D-03). 03-10-PLAN.md's own review
+// (constraint: "hardcoded iteration set") flagged that this guard
+// previously iterated a two-element slice hardcoded in-line — a new
+// modfile absent from it was inspected by NOTHING and the test stayed
+// green, which is why go.tool-proto.mod (present on disk since
+// 01-01-PLAN.md) was never actually checked. Declaring the set here, as a
+// named slice checked against disk by TestToolModfilesPopulationMatchesDisk
+// below, closes both the golangci-lint gap this plan adds AND the
+// pre-existing proto gap in the same change, rather than recording the
+// latter as accepted debt.
+var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath}
+
 func TestToolModfilesRemainIsolated(t *testing.T) {
-	toolInfo, err := os.Stat(toolModfilePath)
-	if err != nil {
-		t.Fatalf("stat %s: %v", toolModfilePath, err)
+	infos := make([]os.FileInfo, len(isolatedModfilePaths))
+	for i, path := range isolatedModfilePaths {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		infos[i] = info
 	}
-	lintInfo, err := os.Stat(lintModfilePath)
-	if err != nil {
-		t.Fatalf("stat %s: %v", lintModfilePath, err)
-	}
-	golangciInfo, err := os.Stat(golangciModfilePath)
-	if err != nil {
-		t.Fatalf("stat %s: %v", golangciModfilePath, err)
-	}
-	if os.SameFile(toolInfo, lintInfo) {
-		t.Fatalf("go.tool.mod and go.tool-lint.mod resolve to the same file — they must be two distinct modfiles (D-03)")
-	}
-	if os.SameFile(toolInfo, golangciInfo) {
-		t.Fatalf("go.tool.mod and go.tool-golangci.mod resolve to the same file — they must be two distinct modfiles (D-03)")
-	}
-	if os.SameFile(lintInfo, golangciInfo) {
-		t.Fatalf("go.tool-lint.mod and go.tool-golangci.mod resolve to the same file — they must be two distinct modfiles (D-03)")
+	for i := range infos {
+		for j := i + 1; j < len(infos); j++ {
+			if os.SameFile(infos[i], infos[j]) {
+				t.Fatalf("%s and %s resolve to the same file — they must be distinct modfiles (D-03)", isolatedModfilePaths[i], isolatedModfilePaths[j])
+			}
+		}
 	}
 
 	rootData, err := os.ReadFile(rootGoModPath)
@@ -937,16 +956,16 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 	rootSrc := string(rootData)
 
 	if pkgs, toolErr := parseGoModToolPackages(rootSrc); toolErr == nil {
-		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in go.tool.mod/go.tool-lint.mod/go.tool-golangci.mod (D-03)", pkgs)
+		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in the isolated tool modfiles (D-03)", pkgs)
 	}
 
 	for _, pkg := range forbiddenToolPackages {
 		if version, reqErr := parseGoModRequireVersion(rootSrc, pkg); reqErr == nil {
-			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in go.tool.mod/go.tool-lint.mod/go.tool-golangci.mod (D-03)", pkg, version)
+			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in the isolated tool modfiles (D-03)", pkg, version)
 		}
 	}
 
-	for _, path := range []string{toolModfilePath, lintModfilePath, golangciModfilePath} {
+	for _, path := range isolatedModfilePaths {
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			t.Fatalf("read %s: %v", path, readErr)
@@ -955,6 +974,26 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 		if !strings.Contains(strings.ToLower(comment), "isolat") {
 			t.Fatalf("%s: header comment does not mention isolation rationale, got: %q", path, comment)
 		}
+	}
+}
+
+// TestToolModfilesPopulationMatchesDisk is the positive-count guard
+// 03-10-PLAN.md's review demanded: TestToolModfilesRemainIsolated's own
+// exit status cannot report its own blindness to a modfile absent from
+// isolatedModfilePaths (a new go.tool-*.mod that's simply never added to
+// that slice is inspected by nothing, and the isolation test still
+// passes). This test instead globs the actual population on disk and
+// asserts the count matches exactly, so a future go.tool-*.mod landing
+// without a matching isolatedModfilePaths entry fails LOUDLY here rather
+// than silently falling behind — the same population-vs-assertion gap
+// this plan closed for go.tool-proto.mod, guarded from recurring.
+func TestToolModfilesPopulationMatchesDisk(t *testing.T) {
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(rootGoModPath), "go.tool*.mod"))
+	if err != nil {
+		t.Fatalf("glob go.tool*.mod: %v", err)
+	}
+	if len(matches) != len(isolatedModfilePaths) {
+		t.Fatalf("found %d go.tool*.mod file(s) on disk (%v) but isolatedModfilePaths names %d (%v) — a new tool modfile was added without registering it here, or a registered one no longer exists on disk", len(matches), matches, len(isolatedModfilePaths), isolatedModfilePaths)
 	}
 }
 
