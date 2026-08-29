@@ -93,6 +93,22 @@ func classifyDegrade(err error) degradeKind {
 // kind.
 const indexingInProgressMessage = "The index is being rebuilt. Please retry shortly."
 
+// indexingInProgressError is a named error type carrying
+// indexingInProgressMessage as its Error() text (IN-01). ST1005
+// ("error strings should not be capitalized or end with punctuation")
+// only inspects string literals passed to errors.New/fmt.Errorf; a
+// literal passed through a custom Error() method is outside its scope
+// entirely. This removes the trade-off a blanket `//nolint:staticcheck`
+// carried on the errors.New call it replaces: that directive disabled
+// ALL staticcheck classes on its line — SA correctness checks, S
+// simplifications, QF quickfixes — not only ST1005, so a future genuine
+// SA-class finding on the connect.NewError(...) call would have been
+// silently suppressed alongside the one this project actually reasoned
+// about.
+type indexingInProgressError struct{}
+
+func (indexingInProgressError) Error() string { return indexingInProgressMessage }
+
 // errIndexingInProgress builds the SRV-04/D-14 degrade error:
 // connect.CodeUnavailable — the Connect protocol reference's own
 // "transient, back off and retry" code — carrying a typed
@@ -107,8 +123,11 @@ func errIndexingInProgress() error {
 	// prose crossing to an unauthenticated browser caller (see its own doc
 	// comment) — never wrapped with fmt.Errorf/%w into a chained internal
 	// error, so the "error strings should not be capitalized or end with
-	// punctuation" Go convention ST1005 enforces does not apply here.
-	connErr := connect.NewError(connect.CodeUnavailable, errors.New(indexingInProgressMessage)) //nolint:staticcheck // ST1005: intentional, see comment above
+	// punctuation" Go convention ST1005 enforces does not apply here. It is
+	// carried via indexingInProgressError{} above (a named error type)
+	// rather than errors.New(indexingInProgressMessage), which sidesteps
+	// ST1005 by construction rather than by directive.
+	connErr := connect.NewError(connect.CodeUnavailable, indexingInProgressError{})
 	if detail, detailErr := connect.NewErrorDetail(&uiv1.IndexingInProgress{Message: indexingInProgressMessage}); detailErr == nil {
 		connErr.AddDetail(detail)
 	}
