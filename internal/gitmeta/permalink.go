@@ -133,18 +133,24 @@ func parseGitHubRemote(raw string) (host, owner, repo string) {
 	}
 
 	if idx := strings.Index(raw, "://"); idx == -1 {
-		// No scheme. Recognize git's scp-like syntax (user@host:path) only
-		// when a colon appears before any slash — otherwise this is a bare
-		// local filesystem path, which has no host at all.
+		// No scheme. Recognize git's scp-like syntax ([user@]host:path) —
+		// git's own documented grammar makes the user optional (WR-06:
+		// `github.com:owner/repo.git`, with no "git@"/user prefix, is a
+		// perfectly ordinary, git-accepted remote) — keying the decision
+		// on a colon appearing before any slash. Strip a leading user@ if
+		// present, then apply the colon-before-slash rule to what
+		// remains; otherwise this is a bare local filesystem path, which
+		// has no host at all.
+		rest := raw
 		if at := strings.Index(raw, "@"); at >= 0 {
-			rest := raw[at+1:]
-			if colon := strings.Index(rest, ":"); colon >= 0 {
-				slash := strings.Index(rest, "/")
-				if slash == -1 || colon < slash {
-					host = rest[:colon]
-					owner, repo = splitOwnerRepo(rest[colon+1:])
-					return host, owner, repo
-				}
+			rest = raw[at+1:]
+		}
+		if colon := strings.Index(rest, ":"); colon >= 0 {
+			slash := strings.Index(rest, "/")
+			if slash == -1 || colon < slash {
+				host = rest[:colon]
+				owner, repo = splitOwnerRepo(rest[colon+1:])
+				return host, owner, repo
 			}
 		}
 		return "", "", ""

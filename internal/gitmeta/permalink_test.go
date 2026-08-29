@@ -43,6 +43,23 @@ func TestRemoteGitHubRepo_SCPLikeSyntax(t *testing.T) {
 	}
 }
 
+// TestRemoteGitHubRepo_SCPLikeSyntaxNoUser reproduces WR-06: git's own
+// documented scp-like grammar is `[user@]host.xz:path/to/repo.git/` — the
+// user is OPTIONAL. `git remote add origin github.com:owner/repo.git` is a
+// perfectly ordinary, git-accepted remote with no "@" anywhere in it.
+func TestRemoteGitHubRepo_SCPLikeSyntaxNoUser(t *testing.T) {
+	dir := initRepo(t, t.TempDir())
+	runGit(t, dir, "remote", "add", "origin", "github.com:owner/repo.git")
+
+	got := RemoteGitHubRepo(context.Background(), dir)
+	if got.Owner != "owner" || got.Repo != "repo" {
+		t.Fatalf("RemoteGitHubRepo = %+v, want Owner=owner Repo=repo", got)
+	}
+	if got.Reason != "" {
+		t.Fatalf("RemoteGitHubRepo.Reason = %q, want empty on success", got.Reason)
+	}
+}
+
 func TestRemoteGitHubRepo_SSHScheme(t *testing.T) {
 	dir := initRepo(t, t.TempDir())
 	runGit(t, dir, "remote", "add", "origin", "ssh://git@github.com/owner/repo.git")
