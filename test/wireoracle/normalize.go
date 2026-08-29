@@ -191,18 +191,6 @@ func looksLikeRFC3339(val string) bool {
 	return err == nil
 }
 
-// CanonicalizeResponseOrder is 03-03-PLAN.md Task 3's R2 resolution
-// (03-03-EVIDENCE.md, VERDICT: SERVER-EMITTED-OUT-OF-ORDER): the frozen
-// transcript oracle was freezing response ARRIVAL order, a property
-// github.com/modelcontextprotocol/go-sdk@v1.7.0 explicitly does not
-// guarantee for pipelined non-initialize calls — mcp/server.go's
-// ServerSession.handle calls jsonrpc2.Async(ctx) unconditionally for
-// every call except "initialize" (modelcontextprotocol/go-sdk#26), and
-// internal/jsonrpc2/conn.go's handleAsync dequeues requests sequentially
-// but only blocks until Async() fires or the handler completes, so two
-// consecutive same-method calls run in independently scheduled goroutines
-// with no ordering guarantee between them.
-//
 // isResponseLine reports whether raw is a JSON-RPC RESPONSE line — id
 // present AND method absent (IN-07). responseID alone (id present) is
 // NOT sufficient: per JSON-RPC 2.0, a numeric id appears on requests too,
@@ -222,6 +210,18 @@ func isResponseLine(raw []byte) bool {
 	return !hasMethod
 }
 
+// CanonicalizeResponseOrder is 03-03-PLAN.md Task 3's R2 resolution
+// (03-03-EVIDENCE.md, VERDICT: SERVER-EMITTED-OUT-OF-ORDER): the frozen
+// transcript oracle was freezing response ARRIVAL order, a property
+// github.com/modelcontextprotocol/go-sdk@v1.7.0 explicitly does not
+// guarantee for pipelined non-initialize calls — mcp/server.go's
+// ServerSession.handle calls jsonrpc2.Async(ctx) unconditionally for
+// every call except "initialize" (modelcontextprotocol/go-sdk#26), and
+// internal/jsonrpc2/conn.go's handleAsync dequeues requests sequentially
+// but only blocks until Async() fires or the handler completes, so two
+// consecutive same-method calls run in independently scheduled goroutines
+// with no ordering guarantee between them.
+//
 // CanonicalizeResponseOrder narrows what the oracle freezes to response
 // CONTENT, never touching a byte within a line: it identifies every line
 // position that holds a JSON-RPC RESPONSE (id present AND method absent,
