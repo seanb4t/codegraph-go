@@ -45,6 +45,58 @@ type golangciConfigYAML struct {
 	} `yaml:"formatters"`
 }
 
+// compareEnabledLintersHeader is the ONE comparison both
+// TestGolangciEnabledLintersHeaderMatchesConfig (the real guard, driven
+// against .golangci.yml on disk) and
+// TestGolangciEnabledLintersHeaderDiscriminates (the planted positive
+// control, driven against synthetic fixtures) call — WR-05: an earlier
+// version of the discriminator re-implemented this exact sequence (regex
+// match, strconv.Atoi, yaml.Unmarshal, the count comparison, even the
+// failure message) against local fixtures instead of calling the real
+// guard's own code, so it proved a RE-IMPLEMENTATION could fail, not that
+// the guard could. A single shared function makes that vacuity
+// impossible: both tests exercise the SAME code path, so a change to the
+// real guard's logic (e.g. dropping `+ len(cfg.Formatters.Enable)`) fails
+// BOTH tests, not just the one running against the real file.
+//
+// data is the raw .golangci.yml bytes (or a synthetic fixture in the same
+// shape). Returns the header's claimed count, the actually-enabled count,
+// the parsed config (so a caller building a failure message never
+// re-parses the same bytes), and a non-nil err only for a structurally
+// malformed input (no header comment found, header not an integer, or
+// YAML that fails to parse) — headerCount != actual is NOT itself an
+// error return; callers compare the two counts themselves, exactly as
+// TestGolangciEnabledLintersHeaderMatchesConfig already did before this
+// extraction.
+func compareEnabledLintersHeader(data []byte) (headerCount, actual int, cfg golangciConfigYAML, err error) {
+	m := enabledLintersHeaderRE.FindSubmatch(data)
+	if m == nil {
+		return 0, 0, cfg, fmt.Errorf("no `# enabled-linters: N` header comment found — the parse may have silently matched nothing")
+	}
+	headerCount, convErr := strconv.Atoi(string(m[1]))
+	if convErr != nil {
+		return 0, 0, cfg, fmt.Errorf("header comment %q does not parse as an integer: %w", m[0], convErr)
+	}
+
+	if yamlErr := yaml.Unmarshal(data, &cfg); yamlErr != nil {
+		return 0, 0, cfg, fmt.Errorf("parse config: %w", yamlErr)
+	}
+
+	actual = len(cfg.Linters.Enable) + len(cfg.Formatters.Enable)
+	return headerCount, actual, cfg, nil
+}
+
+// enabledLintersHeaderMismatch renders compareEnabledLintersHeader's two
+// counts into the same failure message both tests below assert against —
+// extracted alongside the comparison itself so the message text lives in
+// exactly one place too.
+func enabledLintersHeaderMismatch(headerCount, actual int, cfg golangciConfigYAML) string {
+	return fmt.Sprintf(
+		"header comment claims %d enabled linters, but linters.enable (%v, %d) + formatters.enable (%v, %d) = %d — the header has drifted from the config it annotates",
+		headerCount, cfg.Linters.Enable, len(cfg.Linters.Enable), cfg.Formatters.Enable, len(cfg.Formatters.Enable), actual,
+	)
+}
+
 // TestGolangciEnabledLintersHeaderMatchesConfig parses BOTH the `#
 // enabled-linters: N` header comment and the real linters.enable +
 // formatters.enable lists from the same file, and asserts N equals their
@@ -57,36 +109,26 @@ func TestGolangciEnabledLintersHeaderMatchesConfig(t *testing.T) {
 		t.Fatalf("read %s: %v", golangciConfigPath, err)
 	}
 
-	m := enabledLintersHeaderRE.FindSubmatch(data)
-	if m == nil {
-		t.Fatalf("%s: no `# enabled-linters: N` header comment found — the parse may have silently matched nothing", golangciConfigPath)
-	}
-	headerCount, convErr := strconv.Atoi(string(m[1]))
-	if convErr != nil {
-		t.Fatalf("%s: header comment %q does not parse as an integer: %v", golangciConfigPath, m[0], convErr)
-	}
-
-	var cfg golangciConfigYAML
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		t.Fatalf("parse %s: %v", golangciConfigPath, err)
+	headerCount, actual, cfg, cmpErr := compareEnabledLintersHeader(data)
+	if cmpErr != nil {
+		t.Fatalf("%s: %v", golangciConfigPath, cmpErr)
 	}
 	if len(cfg.Linters.Enable) == 0 {
 		t.Fatalf("%s: linters.enable parsed zero entries — the parse may have silently matched nothing", golangciConfigPath)
 	}
 
-	actual := len(cfg.Linters.Enable) + len(cfg.Formatters.Enable)
 	if headerCount != actual {
-		t.Errorf(
-			"%s: header comment claims %d enabled linters, but linters.enable (%v, %d) + formatters.enable (%v, %d) = %d — the header has drifted from the config it annotates",
-			golangciConfigPath, headerCount, cfg.Linters.Enable, len(cfg.Linters.Enable), cfg.Formatters.Enable, len(cfg.Formatters.Enable), actual,
-		)
+		t.Errorf("%s: %s", golangciConfigPath, enabledLintersHeaderMismatch(headerCount, actual, cfg))
 	}
 }
 
 // TestGolangciEnabledLintersHeaderDiscriminates is the planted positive
-// control (rule 84d1gfpywd): proves the comparison above can actually
-// fail, in both directions, rather than having only ever been run
-// against a matching pair.
+// control (rule 84d1gfpywd): proves compareEnabledLintersHeader — the
+// SAME function the real guard above calls — can actually fail, in both
+// directions, rather than having only ever been run against a matching
+// pair. WR-05: this must drive compareEnabledLintersHeader itself, not a
+// second, parallel implementation of the same steps — see that
+// function's doc comment for why.
 func TestGolangciEnabledLintersHeaderDiscriminates(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -118,28 +160,17 @@ func TestGolangciEnabledLintersHeaderDiscriminates(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			m := enabledLintersHeaderRE.FindSubmatch([]byte(c.src))
-			if m == nil {
-				t.Fatalf("fixture %q: header regexp did not match", c.name)
-			}
-			headerCount, err := strconv.Atoi(string(m[1]))
+			headerCount, actual, cfg, err := compareEnabledLintersHeader([]byte(c.src))
 			if err != nil {
-				t.Fatalf("fixture %q: header does not parse as int: %v", c.name, err)
+				t.Fatalf("fixture %q: compareEnabledLintersHeader: %v", c.name, err)
 			}
-
-			var cfg golangciConfigYAML
-			if err := yaml.Unmarshal([]byte(c.src), &cfg); err != nil {
-				t.Fatalf("fixture %q: yaml parse: %v", c.name, err)
-			}
-			actual := len(cfg.Linters.Enable) + len(cfg.Formatters.Enable)
 
 			gotErr := headerCount != actual
 			if gotErr != c.wantErr {
 				t.Fatalf("fixture %q: headerCount=%d actual=%d mismatch=%v, want mismatch=%v", c.name, headerCount, actual, gotErr, c.wantErr)
 			}
 			if c.wantErr {
-				msg := fmt.Sprintf("header comment claims %d enabled linters, but linters.enable (%d) + formatters.enable (%d) = %d",
-					headerCount, len(cfg.Linters.Enable), len(cfg.Formatters.Enable), actual)
+				msg := enabledLintersHeaderMismatch(headerCount, actual, cfg)
 				if !regexp.MustCompile(c.errContains).MatchString(msg) {
 					t.Fatalf("fixture %q: constructed message %q does not contain expected fragment %q", c.name, msg, c.errContains)
 				}
