@@ -19,7 +19,7 @@ affects: [any future wire-oracle scenario with more than one pipelined non-initi
 actuals:
   tokens: 6234
   tasks: 3
-  commits: 6
+  commits: 9
 
 # Tech tracking
 tech-stack:
@@ -123,7 +123,7 @@ status: complete
 - **Duration:** ~90 min active work (excludes the Task 2 checkpoint wait for the maintainer's decision)
 - **Tasks:** 3 (Task 1: reproduce and root-cause; Task 2: checkpoint:decision, answered R2; Task 3: implement and prove)
 - **Files modified:** 7 (2 created, 5 modified, 1 renamed)
-- **Commits:** 6 (5 code/docs commits + this metadata commit)
+- **Commits:** 9 (5 code/docs commits, a self-caught staging fix, and 3 SUMMARY/metadata commits)
 
 ## Accomplishments
 
@@ -145,9 +145,10 @@ Each task was committed atomically (2-4 commits per task where RED/GREEN discipl
 2. **Task 3, RED:** `c22660c` (test) — `CanonicalizeResponseOrder` identity stub + two failing tests
 3. **Task 3, GREEN:** `7197083` (feat) — real canonicalization implementation, wired into the oracle
 4. **Task 3, comment correction:** `14fd221` (docs) — both false-claim sites corrected in `scenarios.go`
-5. **Task 3, todo closure:** `e8138c0` (docs) — todo moved to `completed/` via `git mv`, resolution recorded
+5. **Task 3, todo closure:** `e8138c0` (docs) — todo moved to `completed/` via `git mv` (this commit landed the rename only; see the staging-bug note below)
+6. **Follow-up fix:** `7ad65cb` (docs) — lands the resolution frontmatter/section content that `e8138c0`'s `git add` silently failed to stage (see Issues Encountered)
 
-**Plan metadata:** (this commit, following)
+**Plan metadata:** `eaf241e` (SUMMARY), `55f4a8d` (self-check), `baea65e0` (STATE/ROADMAP)
 
 _Note: Task 2 was a `checkpoint:decision` answered by the maintainer directly — no separate commit; its answer (R2) drove Task 3._
 
@@ -224,6 +225,7 @@ One non-blocking observation: this plan's `requirements: [TODO-MCP-01]` frontmat
 
 ## Issues Encountered
 
+- **Self-caught commit-staging bug.** `e8138c0`'s `git add` call passed both the new `completed/` path and the already-moved-away `pending/` path in one invocation with stderr suppressed (`2>/dev/null`); git errored on the nonexistent `pending/` pathspec and staged nothing beyond the automatic rename `git mv` had already recorded, so the resolution frontmatter/section never actually landed in that commit despite the commit succeeding. Caught via a routine `git status --short` check before the final metadata commit (the working tree was not clean, as expected after a completed plan); fixed in a new follow-up commit (`7ad65cb`), not an amend. Lesson: never suppress `git add`'s stderr with multiple pathspecs, and always check `git status --short` is clean immediately before the final metadata commit, not just after individual task commits.
 - **Reproduction platform caveat.** The reproducing Docker container is linux/**arm64** (Apple Silicon host resolved `golang:1.26.5` to its native variant), not linux/amd64 like the CI runner (`namespace-profile-linux-amd64-4x8`). Two follow-up attempts to build a standalone repro binary inside the same container hit resource limits unrelated to this investigation (CGo compilation of `tree-sitter-c-sharp` OOM-killed under constrained container memory; a `cp -r /repo` staging step timed out on this repo's large `web/node_modules`/`graphify-out` trees). The successful 60-attempt reproduction (both before and after the fix) used `go test` directly against the read-only bind-mounted repo, which avoided both issues. Recorded in `03-03-EVIDENCE.md` as an assumption, not fully verified: kernel-family (Linux goroutine/thread scheduling) rather than CPU architecture is the more likely factor in why darwin never reproduced it, since the original CI report was also Linux-specific on an unconstrained amd64 host.
 - **First-differing-line limitation.** `compareBytesLineByLine`/`assertBytesEqualLineByLine` report only the FIRST differing line by design, so the original live-reproduced failure (captured before the fix) did not directly show whether the id-2 response appeared later in the transcript (reordered) or never arrived (dropped). The original CI report's "tool payloads match exactly" is consistent with a pure reorder; this session did not independently re-derive that via a full raw dump of a live-reproduced failure — noted as a gap in `03-03-EVIDENCE.md` rather than papered over. It does not change the verdict or the fix: either outcome is still the server writing responses in an order other than request order.
 
