@@ -1511,7 +1511,169 @@ var usesOnlyJobExceptions = []usesOnlyJobException{
 // D-01 exceptions decided in earlier plans (see inScopeJobs's own doc
 // comment) and are deliberately excluded from this population check too,
 // for the identical reason.
+//
+// WR-03: this list is itself hand-enumerated, and — unlike
+// requiredCheckNames (deliberately hand-written; it mirrors a GitHub
+// ruleset outside this repo, and stays that way) — it names only 3 of the
+// 14 files actually under workflowsDir, with no disk binding of its own.
+// Before TestWorkflowFilePopulationMatchesDisk below, a new workflow file
+// added anywhere under .github/workflows/ was invisible to BOTH this list
+// and workflowFileExceptions: it passed every guard in this file by being
+// named nowhere, the exact "new subject passes because it is absent"
+// shape criterion 2 already fixed one level down (job population). Every
+// file on disk must now appear in EXACTLY ONE of inScopeWorkflowFiles or
+// workflowFileExceptions, or that test fails, naming it.
 var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml"}
+
+// workflowFileException names one workflow file, by its filename under
+// workflowsDir, that is deliberately OUT of inScopeWorkflowFiles's
+// job-level enforcement — with a reason, mirroring
+// runBodyException/usesOnlyJobException's own carve-out shape. A reason
+// here is not merely descriptive: TestWorkflowFilePopulationMatchesDisk
+// requires every entry's Workflow to still exist on disk, so a stale
+// entry (the file was deleted) fails loudly rather than silently
+// widening this list past what it once meant.
+type workflowFileException struct {
+	Workflow string
+	Reason   string
+}
+
+// workflowFileExceptions is the explicit, exhaustive record of every
+// workflow file NOT in inScopeWorkflowFiles (WR-03). Two entries
+// (bench.yml, release.yml) restate inScopeJobs's own pre-existing D-01
+// exceptions; the rest are new as of this fix, closing the 9-of-14 gap
+// 03-REVIEW.md's WR-03 finding named by file: auto-close-unsolicited-prs.yml,
+// auto-label-issues.yml, close-draft-prs.yml, darwin-toolchain-canary.yml,
+// linux-cross-canary.yml, post-release-verify.yml, pr-template-format.yml,
+// pr-title.yml, require-issue-link.yml.
+var workflowFileExceptions = []workflowFileException{
+	{
+		Workflow: "bench.yml",
+		Reason:   "rebless/publish/diagnostic jobs run `go run ./tools/bench/runner` inline, commented in-file above the rebless job (D-01 exception decided in an earlier plan of this phase — see inScopeJobs's own doc comment)",
+	},
+	{
+		Workflow: "release.yml",
+		Reason:   "native build matrix, D-08 — not `task <target>`-shaped by design (see inScopeJobs's own doc comment)",
+	},
+	{
+		Workflow: "darwin-toolchain-canary.yml",
+		Reason:   "most run: steps already call `task check:darwin-toolchain`/`task check:darwin-release-build`, but this file has no dedicated per-job D-01 audit in this test file; excepted rather than newly job-level-audited under this fix, to keep this fix scoped to binding the FILE population (WR-03) rather than also expanding job-level enforcement",
+	},
+	{
+		Workflow: "linux-cross-canary.yml",
+		Reason:   "most run: steps already call `task release:dry-run`/`task check:linux-cross-export`/`task check:linux-cross-exec`, but this file has no dedicated per-job D-01 audit in this test file; excepted for the same reason as darwin-toolchain-canary.yml above",
+	},
+	{
+		Workflow: "post-release-verify.yml",
+		Reason:   "has its own dedicated shape guards in release_workflow_shape_test.go (TestPostReleaseJobsDeclareCheckoutPolicy and neighbors: checkout policy, cosign installer count, credential preconditions); this generic single-definition check is not the tool auditing it, and at least one step (:122, a multi-line diagnostic block) is deliberately raw shell, not a `task <target>` call — the concrete evidence WR-03 itself cites for why this population must not be silently universal",
+	},
+	{
+		Workflow: "auto-close-unsolicited-prs.yml",
+		Reason:   "PR-triage automation: its only step is `uses: actions/github-script`, no run: body at all — nothing for a run:-body guard to check",
+	},
+	{
+		Workflow: "auto-label-issues.yml",
+		Reason:   "issue-triage automation: its only step is `uses: actions/github-script`, no run: body at all — nothing for a run:-body guard to check",
+	},
+	{
+		Workflow: "close-draft-prs.yml",
+		Reason:   "PR-triage automation: its only step is `uses: actions/github-script`, no run: body at all — nothing for a run:-body guard to check",
+	},
+	{
+		Workflow: "pr-template-format.yml",
+		Reason:   "PR-hygiene automation: its run: steps invoke a repo policy script (scripts/pr_template_policy.py) and git plumbing, not a Taskfile-target duplicate",
+	},
+	{
+		Workflow: "pr-title.yml",
+		Reason:   "PR-title validation automation: its run: steps validate the PR title text directly (regex/echo), not a Taskfile-target duplicate",
+	},
+	{
+		Workflow: "require-issue-link.yml",
+		Reason:   "issue-link policy automation: its run: steps are gh CLI/echo/policy checks over changed paths, not a Taskfile-target duplicate",
+	},
+}
+
+// validateWorkflowFileExceptions proves every workflowFileExceptions entry
+// still exists on disk and still carries a non-empty reason — mirroring
+// validateRunBodyExceptions/validateUsesOnlyJobExceptions's own "a stale
+// exception cannot silently widen or narrow the checked population"
+// discipline.
+func validateWorkflowFileExceptions(excs []workflowFileException) error {
+	for _, exc := range excs {
+		if strings.TrimSpace(exc.Reason) == "" {
+			return fmt.Errorf("%s: empty reason", exc.Workflow)
+		}
+		path := filepath.Join(workflowsDir, exc.Workflow)
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("%s: %w", exc.Workflow, err)
+		}
+	}
+	return nil
+}
+
+// TestWorkflowFilePopulationMatchesDisk is WR-03's disk-binding fix for
+// inScopeWorkflowFiles, mirroring TestToolModfilesPopulationMatchesDisk
+// and TestInScopeJobsPopulationMatchesDisk's own pattern one level up:
+// every *.yml file actually present under workflowsDir must appear in
+// EXACTLY ONE of inScopeWorkflowFiles or workflowFileExceptions. Before
+// this fix, a new workflow file added anywhere under .github/workflows/
+// — including one whose jobs raw-invoke a command that duplicates a
+// Taskfile target, the exact D-01 violation this whole file exists to
+// catch — was invisible to every guard in this file simply by not being
+// named in the 3-of-14 inScopeWorkflowFiles literal.
+func TestWorkflowFilePopulationMatchesDisk(t *testing.T) {
+	if err := validateWorkflowFileExceptions(workflowFileExceptions); err != nil {
+		t.Fatalf("workflowFileExceptions: %v", err)
+	}
+
+	entries, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", workflowsDir, err)
+	}
+	var onDisk []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yml") {
+			continue
+		}
+		onDisk = append(onDisk, e.Name())
+	}
+	if len(onDisk) == 0 {
+		t.Fatalf("%s: found zero workflow files — this guard would vacuously pass over zero", workflowsDir)
+	}
+	sort.Strings(onDisk)
+
+	accounted := make(map[string]string, len(inScopeWorkflowFiles)+len(workflowFileExceptions))
+	for _, wf := range inScopeWorkflowFiles {
+		accounted[wf] = "inScopeWorkflowFiles"
+	}
+	for _, exc := range workflowFileExceptions {
+		if src, dup := accounted[exc.Workflow]; dup {
+			t.Errorf("%s: named in BOTH %s and workflowFileExceptions — pick one", exc.Workflow, src)
+			continue
+		}
+		accounted[exc.Workflow] = "workflowFileExceptions"
+	}
+
+	var unaccounted []string
+	for _, name := range onDisk {
+		if _, ok := accounted[name]; !ok {
+			unaccounted = append(unaccounted, name)
+		}
+	}
+	if len(unaccounted) > 0 {
+		t.Errorf("%s: workflow file(s) on disk named in NEITHER inScopeWorkflowFiles nor workflowFileExceptions: %v — add each to one of the two (with a reason, if excepted)", workflowsDir, unaccounted)
+	}
+
+	diskSet := make(map[string]bool, len(onDisk))
+	for _, name := range onDisk {
+		diskSet[name] = true
+	}
+	for _, wf := range inScopeWorkflowFiles {
+		if !diskSet[wf] {
+			t.Errorf("inScopeWorkflowFiles names %q, which no longer exists on disk", wf)
+		}
+	}
+}
 
 // validateUsesOnlyJobExceptions proves every usesOnlyJobExceptions entry
 // still exists on disk, still carries a non-empty reason, and still
