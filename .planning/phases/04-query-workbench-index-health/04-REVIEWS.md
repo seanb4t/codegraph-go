@@ -1,8 +1,8 @@
 ---
 phase: 4
-cycle: 2
+cycle: 3
 reviewers: [codex]
-reviewed_at: 2026-08-29T21:35:45Z
+reviewed_at: 2026-08-29T22:05:00Z
 plans_reviewed:
   - 04-01-PLAN.md
   - 04-02-PLAN.md
@@ -11,234 +11,343 @@ plans_reviewed:
   - 04-05-PLAN.md
   - 04-06-PLAN.md
   - 04-07-PLAN.md
-revision_under_review: 08da6afc
+revision_under_review: 6ccff5af
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
 model_sources:
   codex: "banner"
 ---
 
-# Cross-AI Plan Review — Phase 4 (Cycle 2)
+# Cross-AI Plan Review — Phase 4 (Cycle 3, FINAL)
 
-Convergence cycle 2. Cycle 1 raised 9 HIGH + 11 actionable non-HIGH concerns; the plans
-were revised in `08da6afc` and each plan now carries a `## Cycle-1 cross-AI review
-dispositions` table. This cycle assesses the REVISED plans and counts only what REMAINS
-unresolved.
+Convergence cycle 3, the last automated cycle. Trajectory:
 
-The reviewer was given the closed-issue list (the `RC=$?` shape, the `web:components:drift`
-enumeration pathspec, the four Go-side `&&`-list gates, `GetHealth`/`mutatingVerbs`/`10`→`11`,
-`proto:drift`'s `nfiles -lt 4` file floor, `@tanstack/svelte-table@9.2.4`, the `doublestar`
-match, `Engine.Status`'s pre-existing worktree cost, and `devDependency` placement) and did
-not re-raise any of them.
+| Cycle | Findings | Revision |
+|---|---|---|
+| 1 | 9 HIGH + 11 actionable non-HIGH | `08da6afc` |
+| 2 | 1 HIGH + 2 actionable non-HIGH — all three INTRODUCED by `08da6afc` | `6ccff5af` |
+| 3 (this) | 1 HIGH + 2 actionable non-HIGH — the HIGH was also introduced by `08da6afc` and missed by cycle 2 | — (escalates to maintainer) |
+
+`6ccff5af` touched exactly four files (`04-05`, `04-06`, `04-07` PLAN.md and `04-VALIDATION.md`);
+`04-01`–`04-04` were deliberately untouched. Each touched plan carries a
+`## Cycle-2 cross-AI review dispositions` table.
+
+The reviewer was given the closed-issue list (the three textual `; test "$RC" -eq 0` negative
+examples at `04-01:464`, `04-01:556`, `04-04:315`; the four Go-side `&&`-chained gates; the
+`web:components:drift` enumeration pathspec and its 8/2 floors; `ROUTE_LOCAL_PARAMS`;
+`components-drift.yml`'s absence from `release.yml` and `requiredCheckNames`; `GetHealth`
+naming; `mutatingVerbs`; `proto:drift`'s `nfiles -lt 4` floor; TanStack v9 runes API;
+`doublestar` root-level behaviour; and `Engine.Status`'s pre-existing worktree-subprocess
+cost) and did not re-raise any of them.
+
+## Verification of the three cycle-2 fixes (independently confirmed in-tree)
+
+**1. `snapshotAgreement` widening — CORRECT.** `web/src/lib/status.ts:36-39` still carries only
+`verdict` + `commit`, and `classifyStatus` at `:49-50` reduces the SHA to a presence flag —
+so the cycle-2 diagnosis was right. The additive `commitSha: string` fix is the right shape.
+The three typed construction sites the plan enumerates at `04-05:132` all exist and are
+correctly cited: `web/src/routes/+layout.svelte:30`, `web/src/routes/browse/+page.svelte:47`,
+`web/tests/degrade-states.test.ts:17-18`. The new `depends_on: ["04-01","04-03"]` creates no
+wave conflict — 04-01 owns `status.ts`/`status.test.ts` in wave 1, 04-05 in wave 2, and no
+other wave-2 plan (04-04) touches any file 04-05 touches. The two-suite gate at `04-05:264` is
+genuinely discriminating: `web/tests/status.test.ts` has exactly **16** tests today, so the
+`>= 18` floor can only be met by adding the two the widening requires, and the separate
+health-view `>= 8` floor over a file that does not yet exist cannot be masked by the status
+surplus. Both floors and both captured exit statuses are one `&&`-chained final command.
+
+**2. `components-drift.yml` bootstrap — the guard construction is CORRECT.** The four
+`test -n "$CO" && test -n "$SN" && test -n "$CL" && test -n "$RL"` guards precede every
+`rg -q -F "$VAR"` use, so an empty extraction cannot make `rg -F ""` match everything, and
+`test "$CL" -lt "$RL"` cannot run on empty operands. The extraction is robust against real
+formatting: `rg -o 'actions/checkout@[0-9a-f]{40}'` hits `.github/workflows/ci.yml:51`,
+`actions/setup-node@[0-9a-f]{40}` hits `:132`, and the literal `node-version: "24"` is at
+`:134`. `./.github/actions/install-task` is used at `ci.yml:65` and `corpora.yml:187` as the
+plan claims. The `checkStepInvokesTask` reasoning is correct —
+`internal/upgrade/taskfile_shape_test.go:1399-1401` returns nil for any step with an empty
+`Run`, so the three `uses:` bootstrap steps need no `runBodyExceptions` entry.
+
+**3. below-minimum-while-in-flight — CORRECT.** `web/src/lib/search.ts` `setQuery`'s
+below-minimum branch does exactly the three things the plan claims: abort (`:219`), request-ID
+invalidation (`:223`), visible-state clear (`:224`). `onBelowMinimum()` gives the third a home
+while leaving `SEARCH_MIN_CHARS` in one place. Settling the original promise *after* the
+below-minimum term is the right way to prove the identity bump, since abort alone does not
+stop a non-cooperative promise. The byte-unchanged `search.test.ts` claim is now correctly
+qualified as necessary-not-sufficient in three places (`key_links`, Task 1 step (b), behavior
+block).
+
+`04-VALIDATION.md` was updated consistently with all three (rows `04-05-T1` and `04-05-T3`
+gained `T-04-22` and the separate 8/18 floors).
 
 ## Codex Review
 
-# Cycle 2 Plan Review
+# Cycle 3 Plan Review
 
-## Summary
+## 04-01 — Tracer, URL Grammar, and Callers Table
 
-The revision substantially improves the phase plans. The nine cycle-1 HIGH findings are mostly closed with concrete mechanisms and discriminating tests: generic table reuse, route-scoped navigation identity, shared analysis metadata, correct verify gates, literal glob escaping, and non-vacuous drift enumeration are all addressed convincingly. One new blocking inconsistency remains in 04-05: the snapshot-agreement design compares a `known|unknown` enum with a commit SHA, which cannot work against the current `IndexStatus` type. Two additional execution risks remain in 04-06 and 04-07. Overall, the plans are close to executable but not yet converged.
+### Summary
 
-## Plan-by-Plan Assessment
+The tracer is well chosen and validates the riskiest frontend integration before the other analyses build on it. The plan also correctly addresses the shared status-gate amplification problem and makes `DataTable` generic for later health tables.
 
-### 04-01 — Workbench tracer
+### Strengths
 
-Well-designed and materially improved. The generic `DataTable<TRow>` plus caller-provided `getRowId` correctly supports both graph locations and health count rows. The route-scoped identity approach fits the existing architecture: the layout passes every reactive URL through the single `navigationIdentity` function at [web/src/routes/+layout.svelte:47](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/routes/+layout.svelte:47), while the current normalizer deletes view-local parameters before sorting at [web/src/lib/status.ts:81](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:81). Keeping `/workbench` exclusions route-specific avoids changing Browse behavior.
+- The server already exposes the required Callers contract as `symbol` plus `limit`, returning `Location` rows, so this is a genuine vertical slice rather than speculative API work ([internal/uiproto/uiv1/ui.proto:258](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:258)).
+- Passing raw limits through is consistent with the authoritative server validation at [internal/query/validate.go:107](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/validate.go:107).
+- The route-scoped status-identity change addresses a real mechanism: the layout calls `notifyNavigated(navigationIdentity(page.url))` reactively at [web/src/routes/+layout.svelte:47](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/routes/+layout.svelte:47), while the existing normalizer currently strips only `q` at [web/src/lib/status.ts:70](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:70).
+- Sorting, failure taxonomy, URL round trips, repeated `file=` values, and client-bound absence all receive executable assertions.
 
-No remaining concern found.
+### Concerns
 
-### 04-02 — Recursive file glob
+- None remaining.
 
-The plan correctly changes both matching sites, preserves the pre-scan validation position, and builds a genuinely discriminating fixture with root-level, nested, and second-language files. The instrumented-reader test closes the earlier weakness where error text alone could not prove validation occurred before scanning.
+### Suggestions
 
-No remaining concern found.
+- No blocking changes. Preserve the plan’s tracer-first commit boundary during execution.
 
-### 04-03 — GetHealth RPC
+### Risk Assessment
 
-The `GetHealth` naming, exact method-set update, additive proto discipline, mapper convention, and local worktree fixture are coherent with the live source. The plan also correctly treats the existing `Engine.Status` worktree-detection cost as an acknowledged pre-existing issue rather than pretending D-02 newly eliminates it.
+**MEDIUM.** The plan is large and introduces a newly released table adapter, but its staged RED/type-check/DOM verification is proportionate.
 
-No remaining concern found.
+---
 
-### 04-04 — Four-tab Workbench
+## 04-02 — Recursive File Globs
 
-The revised `AnalysisResult<TSummary> = { rows, summary }` contract correctly keeps rows and metadata on the same request-generation lineage. The depth and limit tests now observe the actual status-gate call count, which is stronger than merely checking that `goto` was not invoked.
+### Summary
 
-No remaining concern found.
+The backend fix is correctly placed in `Engine.Files`, which serves CLI, MCP, and UI callers. However, the RED task as currently ordered cannot reach its intended seven subtests.
 
-### 04-05 — Health view
+### Strengths
 
-The ordering, warning-presence/absence, generic count table, and single-verdict design are strong. However, the newly added snapshot-agreement mechanism is incompatible with the existing status model.
+- The root cause is accurately located: both pattern validation and per-file matching currently use `filepath.Match` at [internal/query/files.go:147](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/files.go:147) and [internal/query/files.go:170](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/files.go:170).
+- The pre-scan rejection test is meaningful because iteration begins only after validation at [internal/query/files.go:153](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/files.go:153).
+- Testing root, nested, non-recursive, brace, malformed, and literal-metacharacter behavior gives strong regression coverage.
+- The plan correctly preserves `filepath.ToSlash`, visible at [internal/query/files.go:162](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/files.go:162), and chooses the slash-oriented matcher.
 
-- **HIGH — NEW:** `snapshotAgreement` cannot compare the two commit SHAs as planned. The plan directs `describeFreshness` to compare `IndexStatus.commit` with `GetHealthResponse.commitSha` at [04-05-PLAN.md:146](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-05-PLAN.md:146), and later requires test gates carrying commits such as `aaa…` at [04-05-PLAN.md:326](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-05-PLAN.md:326). In the live implementation, however, `IndexStatus.commit` is `CommitKnowledge = 'known' | 'unknown'`, not the SHA itself ([web/src/lib/status.ts:32](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:32), [web/src/lib/status.ts:36](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:36)). `classifyStatus` intentionally discards the actual SHA and retains only its presence at [web/src/lib/status.ts:49](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:49). As written, the implementation either fails type-checking when tests assign `aaa…`, or compares `"known"` to a SHA and reports false disagreement permanently. This revision introduced the snapshot feature but did not add `web/src/lib/status.ts` or its tests to the plan’s modified files.
+### Concerns
 
-### 04-06 — Multi-file Affected flow
+- **HIGH — Task 1 cannot produce the specified RED observation.** The RED test directly imports and calls `doublestar.Match` ([04-02-PLAN.md:161](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-02-PLAN.md:161)), but `doublestar` is absent from the current `go.mod`; the dependency is added only in Task 2. Consequently, `go test` will fail during package compilation before any subtest executes. The Task 1 gate requires at least seven observed subtests ([04-02-PLAN.md:190](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-02-PLAN.md:190)), making the plan internally unsatisfiable as ordered.
 
-Extracting a generic debounce/abort/request-identity mechanism is the right response to the cycle-1 contradiction, and keeping `search.test.ts` byte-unchanged is a useful regression constraint. One existing semantic is not fully represented in the extracted contract or tests.
+### Suggestions
 
-- **MEDIUM — PARTIALLY RESOLVED cycle-1 extraction concern:** the plan does not explicitly preserve the “backspace below minimum while a request is already in flight” behavior. The current controller aborts the live request, increments `liveRequestId`, and clears results when the query becomes shorter than the minimum ([web/src/lib/search.ts:215](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/search.ts:215)). The proposed generic options expose only `dispatch`, `onResult`, and `onFailure` ([04-06-PLAN.md:184](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-06-PLAN.md:184)), while its test list covers a short initial query but not an in-flight long→short transition ([04-06-PLAN.md:175](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-06-PLAN.md:175)). The unchanged existing tests cover pending disposal and overlapping valid queries, but not this long→short case ([web/tests/search.test.ts:293](/Volumes/Code/github.com/seanb4t/codegraph-go/web/tests/search.test.ts:293)). A faulty extraction could therefore let an old result land after the picker was cleared while every mandated test remains green.
+- Add `doublestar/v4` before the RED run while leaving production code on `filepath.Match`; the engine-level nested and brace cases will still be meaningfully RED.
+- Alternatively, move the direct matcher-contract subtest into Task 2 after dependency installation. Keep the engine regression suite as Task 1’s RED proof.
 
-### 04-07 — Drift, measurement, and bundle refresh
+### Risk Assessment
 
-The revised disk enumeration, two structural floors, two RED demonstrations, and per-family determinism probe are excellent. Registration in both `inScopeWorkflowFiles` and `inScopeJobs` is consistent with the live guards: the existing lists are at [internal/upgrade/taskfile_shape_test.go:152](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:152) and [internal/upgrade/taskfile_shape_test.go:1526](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:1526).
+**HIGH.** Execution stops in Task 1 unless the dependency/test ordering is corrected.
 
-- **MEDIUM — NEW:** the scheduled workflow is underspecified and may never reach its only `run:` step. The plan mandates checkout-compatible pinned actions in general, but does not explicitly require checkout, the repository’s local Task installer, or Node 24/Corepack setup before `task web:components:drift` ([04-07-PLAN.md:326](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-07-PLAN.md:326)). Existing workflows install Task through the checked-out local action, for example [corpora.yml:186](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/corpora.yml:186), and the JS path deliberately sets up Node 24 because Corepack is the pnpm-version mechanism ([ci.yml:121](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/ci.yml:121)). The proposed acceptance criteria run `actionlint` and structural registration tests, but none executes the workflow environment. A syntactically valid workflow lacking these prerequisites would be registered correctly yet fail every scheduled run.
+---
 
-## Strengths
+## 04-03 — GetHealth RPC
 
-- All live frontend verify commands now combine the test-count floor and original exit status correctly.
-- `ROUTE_LOCAL_PARAMS` preserves the single-normalizer architecture and avoids globally suppressing Browse parameters.
-- `AnalysisResult<TSummary>` eliminates metadata side channels and keeps late-response protection meaningful.
-- The glob plan tests exact path sets, malformed-input scan ordering, root preservation, and matcher escape semantics.
-- The drift plan now derives its full subject population from tracked files and proves both the comparison and enumeration floors RED.
-- The render-cost threshold is opt-in, avoiding a wall-clock assertion in required PR CI.
-- Workflow registration targets the correct fixtures and deliberately leaves `requiredCheckNames` unchanged.
+### Summary
 
-## Suggestions
+The plan cleanly adds an additive diagnostic RPC without expanding the frequently fetched `GetStatusResponse`. Naming, field freezing, handler structure, and method-set guards are well covered.
 
-- Change the status model to retain the actual validated commit SHA alongside `CommitKnowledge`, or remove snapshot comparison and explicitly defer it. If retained, add `web/src/lib/status.ts` and `web/tests/status.test.ts` to 04-05’s files and verify backward behavior.
-- Add a generic-controller test for: dispatch a valid term, leave it unresolved, set a below-minimum term, assert the signal is aborted, then settle the old promise and assert no result lands. Specify how callers clear their visible state on that transition.
-- Spell out the scheduled workflow bootstrap: checkout, install Task via `./.github/actions/install-task`, set up Node 24/Corepack, then run the exact Task target. Add a workflow-shape assertion for these prerequisites or perform a local runner-equivalent smoke check.
+### Strengths
 
-## Risk Assessment
+- The existing service has exactly ten methods, with `GetPermalink` last at [internal/uiproto/uiv1/ui.proto:50](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:50), so the eleventh-method assertion is grounded.
+- The plan correctly updates both the positive method-set fixture and its count while leaving the negative mutating-verb guard unchanged.
+- `withEngine` usage, explicit mapping, commit validation, nil/non-nil mismatch tests, and non-degraded behavior cover the important backend seams.
+- It correctly records rather than conceals the pre-existing fact that `Engine.Status` already computes worktree mismatch.
 
-**HIGH.** Most architectural and verification risks are now well controlled, but 04-05 currently specifies an impossible snapshot comparison against the live `IndexStatus` type. That blocks a clean implementation and could otherwise produce a permanently false warning. The debounce transition and workflow bootstrap issues are narrower but should also be corrected before execution.
+### Concerns
 
-CYCLE2_REMAINING: high=1 actionable_non_high=2
+- None remaining.
+
+### Suggestions
+
+- No required changes. The human wire-shape checkpoint is justified because field numbers are irreversible.
+
+### Risk Assessment
+
+**MEDIUM.** Proto generation and worktree fixtures are substantial, but the plan has strong drift, reflection, and handler-level verification.
+
+---
+
+## 04-04 — Workbench Tabs, Impact, and Callees
+
+### Summary
+
+The plan builds coherently on the tracer and fixes the earlier metadata-flow problem by carrying rows and summary through one guarded result lineage.
+
+### Strengths
+
+- The existing wire confirms Impact returns `node_count`, `edge_count`, and affected locations together ([internal/uiproto/uiv1/ui.proto:290](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:290)).
+- The different server-side depth behavior is preserved: Impact clamps at [internal/query/validate.go:71](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/validate.go:71), while no client duplicate is introduced.
+- The proposed `AnalysisResult<TSummary>` prevents a late superseded response from updating summary data independently of rows.
+- Tests distinguish route remount, `goto`, RPC rerun, and status-gate refetch; these are separate mechanisms and appropriately tested separately.
+
+### Concerns
+
+- None remaining.
+
+### Suggestions
+
+- No required changes.
+
+### Risk Assessment
+
+**MEDIUM.** Frontend state orchestration is complex, but dependencies and failure paths are explicit and test-backed.
+
+---
+
+## 04-05 — Health View
+
+### Summary
+
+The cycle-2 `commitSha` widening now makes snapshot comparison implementable without changing the five-member verdict model. One construction site remains omitted from the formal modification set.
+
+### Strengths
+
+- The current type indeed discards the raw SHA, retaining only `CommitKnowledge` at [web/src/lib/status.ts:36](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:36) and [web/src/lib/status.ts:49](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/status.ts:49). Adding `commitSha` is therefore the correct fix.
+- The three typed production/helper constructors named in the plan exist at [web/src/routes/+layout.svelte:30](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/routes/+layout.svelte:30), [web/src/routes/browse/+page.svelte:47](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/routes/browse/+page.svelte:47), and [web/tests/degrade-states.test.ts:17](/Volumes/Code/github.com/seanb4t/codegraph-go/web/tests/degrade-states.test.ts:17).
+- Depending on both 04-01 and 04-03 is sound: 04-01 edits `status.ts` in wave 1, while 04-05 runs in wave 2.
+- The two-suite verification command is discriminating: each JSON result has its own minimum and equality check, followed by both captured exit statuses.
+- The health page’s ordering, mismatch presence/absence, snapshot agreement/disagreement, and single-call behavior are tested rather than left to visual judgment.
+
+### Concerns
+
+- **MEDIUM — the modification manifest omits a known required construction site.** The structural status-gate stub at [web/tests/browse-page.test.ts:178](/Volumes/Code/github.com/seanb4t/codegraph-go/web/tests/browse-page.test.ts:178) declares `{ verdict, commit }` and emits an object without `commitSha` at line 180. The plan notices this in `read_first` and says to modify it if `pnpm check` fails, but `web/tests/browse-page.test.ts` is absent from `files_modified`. Thus the implementation instructions and plan metadata disagree.
+
+### Suggestions
+
+- Add `web/tests/browse-page.test.ts` to `files_modified` and explicitly require its stub callback/emitted object to carry `commitSha`.
+- Keep `pnpm check` as the final authority in case additional construction sites emerge.
+
+### Risk Assessment
+
+**MEDIUM.** The substantive cycle-2 fix is sound; the remaining issue is plan-manifest completeness rather than architectural correctness.
+
+---
+
+## 04-06 — Multi-file Affected Workbench
+
+### Summary
+
+The cycle-2 below-minimum correction is now complete: the shared mechanism owns cancellation and invalidation while each consumer clears its own visible state.
+
+### Strengths
+
+- The existing controller proves the required three-part behavior: abort at [web/src/lib/search.ts:219](/Volumes/Code/github.com/seanb4t/codegraph-go/web/src/lib/search.ts:219), request-ID invalidation at line 223, and visible-state clearing at line 224.
+- The new `onBelowMinimum` contract preserves that behavior without duplicating the length rule in both clients.
+- Settling the original promise after abort is the correct way to prove the identity bump, since abort alone cannot prevent a non-cooperative promise from resolving.
+- Search tests remain byte-unchanged but are no longer overstated as sufficient coverage.
+- Affected’s existing wire shape supports the proposed summary flow: repeated input files and `affected_tests` are defined at [internal/uiproto/uiv1/ui.proto:307](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/ui.proto:307).
+
+### Concerns
+
+- None remaining.
+
+### Suggestions
+
+- No required changes.
+
+### Risk Assessment
+
+**MEDIUM.** The refactor touches subtle async behavior, but the plan now explicitly tests coalescing, overlap, stale resolution, below-minimum invalidation, and disposal.
+
+---
+
+## 04-07 — Drift Guard, Render Measurement, and Bundle Refresh
+
+### Summary
+
+The plan correctly makes vendored-source drift non-vacuous and scheduled without placing a live-network dependency in required CI. The cycle-2 bootstrap fix is mostly sound, but its acceptance gate does not verify the complete required step order.
+
+### Strengths
+
+- The action-pin extraction matches the real formatting in CI: checkout appears as `actions/checkout@<40 hex>` at [ci.yml:51](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/ci.yml:51), setup-node at [ci.yml:132](/Volumes/Code/github.com/seanb4t/codegraph-go/.github/workflows/ci.yml:132), and Node 24 at line 134.
+- The four `test -n` checks close the empty-pattern hole for `CO`, `SN`, `CL`, and `RL`.
+- The workflow-shape reasoning is correct: `uses:` steps have empty `Run` and are accepted immediately by [internal/upgrade/taskfile_shape_test.go:1399](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:1399).
+- Disk-derived subject enumeration, file/component floors, two RED demonstrations, and per-family determinism probing form a strong non-vacuity story.
+- Keeping wall-clock assertions behind an opt-in target avoids making required Vitest runs load-sensitive.
+
+### Concerns
+
+- **MEDIUM — bootstrap ordering is only partially verified.** The plan requires checkout → install-task → setup-node → drift run, but the acceptance command records line numbers only for checkout and the run ([04-07-PLAN.md:418](/Volumes/Code/github.com/seanb4t/codegraph-go/.planning/phases/04-query-workbench-index-health/04-07-PLAN.md:418)). It merely checks that install-task, setup-node, and `node-version: "24"` occur somewhere in the workflow. A workflow with setup-node or install-task after `task web:components:drift` would pass this gate but fail its scheduled execution. The repository’s workflow-shape tests validate run-body form and population, not step dependency order ([internal/upgrade/taskfile_shape_test.go:1453](/Volumes/Code/github.com/seanb4t/codegraph-go/internal/upgrade/taskfile_shape_test.go:1453)).
+
+### Suggestions
+
+- Extract line numbers for install-task and setup-node as well, positively assert all are non-empty, then require:
+  `checkout < install-task < setup-node < run`.
+- Optionally verify `node-version: "24"` belongs to the extracted setup-node step rather than merely appearing elsewhere in the file.
+
+### Risk Assessment
+
+**MEDIUM.** The design is strong, but the bootstrap acceptance gate currently permits a workflow that is syntactically green yet operationally broken.
+
+---
+
+# Overall Assessment
+
+The plans are substantially converged and, aside from 04-02’s dependency-ordering defect, are implementation-ready. The cycle-2 `commitSha`, workflow-bootstrap, and below-minimum fixes are conceptually correct. Remaining work is narrow:
+
+- **Unresolved HIGH concerns: 1**
+- **Unresolved actionable MEDIUM/LOW concerns: 2**
 
 ---
 
 ## Consensus Summary
 
-Single grounded reviewer this cycle (Codex, prompt-fed with repo access; the review cites
-`file:line` evidence throughout and carries no `[reviewed-without-repo-access]` or
-`[reviewed-without-source-citations]` marker). Every finding below was independently
-re-verified by the orchestrating agent against live source before being counted; the
-verification notes are recorded inline.
-
-**Verdict: 1 HIGH remains (NEW, introduced by the revision), plus 2 actionable MEDIUMs
-(1 NEW, 1 a partially-resolved cycle-1 concern).** Seven of the nine cycle-1 HIGHs are
-confirmed fully closed with working mechanisms; the eighth and ninth are closed but their
-closure introduced the two new findings below.
+Single grounded reviewer this cycle (Codex, source-grounded with `file:line` citations
+throughout). Its findings were independently re-verified in-tree by the orchestrator before
+being recorded here; all three stand.
 
 ### Agreed Strengths
 
-- All live `<automated>` verify gates now combine the test-count floor with the original
-  exit status as ONE `&&`-chained final command — no vacuous gate remains.
-- `ROUTE_LOCAL_PARAMS` (04-01 step d2) preserves the single-normalizer architecture
-  (`web/src/lib/status.ts:79-87`) instead of adding a second identity function, and scopes
-  the exclusion to `/workbench` so Phase 3's shipped Browse behavior is untouched. The
-  assertion iterates `WORKBENCH_PARAM_KEYS` rather than a hand-written array
-  (04-01-PLAN.md:514-515, :558), so a missing key fails per key. **Verified:** the layout's
-  sole navigation trigger is `navigationIdentity(page.url)` at
-  `web/src/routes/+layout.svelte:47`, and `web/tests/status.test.ts` is in 04-01's file set.
-- `AnalysisResult<TSummary> = { rows, summary }` (04-04) removes the metadata side channel
-  and keeps rows and summary on one request-generation lineage.
-- 04-02's instrumented-reader test proves validation ordering rather than inferring it from
-  error text.
-- 04-07's drift target derives its population from `git ls-files` and proves BOTH the
-  comparison and the enumeration RED. Workflow registration in `inScopeWorkflowFiles`
-  (`internal/upgrade/taskfile_shape_test.go:1526`) and `inScopeJobs` (`:152`) is the correct
-  and complete pair — **verified:** `TestWorkflowFilePopulationMatchesDisk` requires every
-  on-disk workflow to appear in exactly one of `inScopeWorkflowFiles` /
-  `workflowFileExceptions` (`:1624-1664`), and `TestInScopeJobsPopulationMatchesDisk` requires
-  every job in an in-scope file to be registered. `requiredCheckNames` is correctly left alone.
-- Extracting `web/src/lib/debounced-rpc.ts` rather than configuring `createSearchController`
-  twice is the right resolution of the cycle-1 self-contradiction — `createSearchController`
-  hard-codes two symbol-specific RPCs (`web/src/lib/search.ts:129-231`) and is genuinely not
-  parameterisable in place.
+- The three cycle-2 fixes are **correct**, not merely present. The `commitSha` widening is the
+  right resolution and its enumeration of construction sites is accurate; the drift-workflow
+  guard construction genuinely closes the empty-pattern hole; the `onBelowMinimum` contract
+  preserves all three parts of the below-minimum semantics without duplicating the length rule.
+- 04-01, 04-03, 04-04 and 04-06 now have **no remaining concerns at any severity**.
+- Verification gates across the phase are discriminating rather than ceremonial — separate
+  floors per suite, both exit statuses `&&`-chained, negative greps carrying explicit positive
+  controls, and present/absent assertions in both directions for every warning-style UI element.
 
 ### Agreed Concerns
 
-**HIGH — NEW (04-05): `snapshotAgreement` compares a `CommitKnowledge` enum against a commit
-SHA; as specified it can never work.**
-
-04-05-PLAN.md:153-157 directs `describeFreshness` to compute
-`snapshotAgreement: 'agree' | 'differs' | 'unknown'` "by comparing the passed-in
-`IndexStatus.commit` with the response's `commitSha`: equal and both non-empty → `agree`".
-
-Independently verified against live source:
-- `IndexStatus.commit` is typed `CommitKnowledge = 'known' | 'unknown'`
-  (`web/src/lib/status.ts:33`, `:36-39`) — it is never a SHA and never an empty string.
-- `classifyStatus` deliberately discards the SHA and keeps only its presence:
-  `const commit: CommitKnowledge = response.commitSha ? 'known' : 'unknown';`
-  (`web/src/lib/status.ts:49`).
-- No plan in this phase changes that type. `rg 'IndexStatus|CommitKnowledge|status\.ts'`
-  across all seven plans shows 04-01 touches `navigationIdentity` only (04-01-PLAN.md:622:
-  "the exported signature ... unchanged"); 04-05 lists `status.ts` under `read_first`
-  (04-05-PLAN.md:120) and NOT under any task's `files`, and its artifact list
-  (04-05-PLAN.md:395-405) does not include `status.ts` or `web/tests/status.test.ts`.
-
-Consequences as written: whenever GetHealth returns a real SHA and the gate saw one,
-`'known' !== '<sha>'` → `snapshotAgreement === 'differs'` **permanently**, lighting the
-`health-snapshot-differs` notice on every healthy load. That is precisely the
-"permanently on, which trains the user to ignore it" failure mode 04-05-PLAN.md:131-135
-introduces the blank-roots `hasWorktreeMismatch` case to prevent. Alternatively, the Task 3
-test that constructs "a stub gate at commit `aaa…`" (04-05-PLAN.md:326-328) fails
-`pnpm check` — itself an acceptance criterion (04-05-PLAN.md:192) — because `'aaa…'` is not
-assignable to `CommitKnowledge`. Either way the plan is not executable as written.
-
-Fix requires an explicit decision, not an executor judgement call: either (a) widen
-`IndexStatus` to carry the validated SHA alongside `CommitKnowledge` — which means adding
-`web/src/lib/status.ts` and `web/tests/status.test.ts` to 04-05's `files`, stating that
-`classifyStatus`'s existing outputs are unchanged, and confirming D-04 still holds; or
-(b) drop `snapshotAgreement` and record the two-snapshot problem as an explicit deferral
-with rationale. Threat entry T-04-21 (04-05-PLAN.md:379) leans on `describeFreshness`
-rendering the commit, so option (b) must say what T-04-21's mitigation becomes.
-
-**MEDIUM — NEW (04-07): the scheduled `components-drift.yml` job is specified as "one job,
-one meaningful `run:` step" with no bootstrap, so it would register cleanly and fail every
-scheduled run.**
-
-04-07-PLAN.md:326-341 mandates the triggers, the single `task web:components:drift` run body,
-and full-SHA action pinning — but never requires `actions/checkout`, the repo's local
-`./.github/actions/install-task`, or `actions/setup-node` (Node 24 / Corepack, which is how
-this repo resolves the pinned pnpm version). Verified against live workflows: every existing
-Task-invoking job pairs `actions/checkout@df4cb1c0…` with `uses: ./.github/actions/install-task`
-(`.github/workflows/ci.yml:51`, `:65`; `.github/workflows/corpora.yml:159`, `:187`), and the JS
-path additionally pins `actions/setup-node@8207627…` with `node-version: "24"`
-(`.github/workflows/ci.yml:130-133`) because Corepack is absent from Node 25+. The drift target
-shells out to `pnpm dlx shadcn-svelte@1.5.1`, so all three are required.
-
-None of 04-07's acceptance criteria (04-07-PLAN.md:371-386) would catch the omission:
-`actionlint` validates schema, not runtime prerequisites, and the three registration tests are
-structural. Worth stating explicitly in the plan that adding these bootstrap steps does NOT
-violate the "one meaningful `run:` step" rule — `checkStepInvokesTask`
-(`internal/upgrade/taskfile_shape_test.go:1439-1472`) only inspects steps that have a `run:`
-body, and all three bootstrap steps are `uses:` steps, so no `runBodyExceptions` entry is needed.
-
-**MEDIUM — PARTIALLY RESOLVED (04-06): the debounced-rpc extraction does not preserve or test
-the "backspace below minimum while a request is in flight" behavior.**
-
-`web/src/lib/search.ts:213-224` does three things when the query drops below
-`SEARCH_MIN_CHARS`: aborts the live `AbortController`, increments `liveRequestId` to invalidate
-any in-flight response, and clears `live` + `liveFailure`. The extracted contract exposes only
-`{ debounceMs, minChars, dispatch, onResult, onFailure }` (04-06-PLAN.md:184-193) — there is no
-callback through which a caller learns the term went below minimum, so the state-clearing half
-has no specified home. The new `web/tests/debounced-rpc.test.ts` list (04-06-PLAN.md:175-178)
-covers the min-length gate, coalescing, the aborted overlap, out-of-order discard, rejection and
-`dispose` — but not the long→short in-flight transition.
-
-Independently verified that the byte-unchanged regression proof does not cover it either:
-`web/tests/search.test.ts:109-148` tests only a one-character query that issues no RPC, and its
-cancellation suite (`:151+`) tests long→longer overlap. There is no test in that file for
-backspacing below the minimum while a request is outstanding. A faulty extraction could
-therefore let a stale result land into a picker the user already cleared while every mandated
-test stays green — and 04-06's dispositions table does not record this case.
-
-Fix: add one behavior bullet and one test to Task 1 — dispatch a valid term, leave it
-unresolved, set a below-minimum term, assert the first signal is aborted, then settle the old
-promise and assert no result lands — and state explicitly where the visible-state clear lives
-(caller-side in `search.ts`'s `setQuery`, or a new `onBelowMinimum`/`onReset` option).
+- **HIGH (04-02, dependency ordering).** Task 1's RED test calls `doublestar.Match` directly
+  (`04-02-PLAN.md:161-168`), but `github.com/bmatcuk/doublestar/v4` is **not in `go.mod`**
+  (confirmed: `rg doublestar go.mod` → no match) and is added only by Task 2 step (a)
+  (`04-02-PLAN.md:217`). The package therefore fails to compile, `go test` reports zero
+  subtests, and Task 1's gate — `test "$(rg -c '^ *--- (PASS|FAIL)' /tmp/q-red.log)" -ge 7`
+  (`04-02-PLAN.md:190`) — cannot be satisfied. The plan additionally instructs the executor to
+  record that `escaped_metacharacter_is_literal` *already passes*, which is impossible.
+  **Provenance:** this subtest was introduced by the cycle-1 revision `08da6afc` as the partial
+  mitigation for 04-06's unescaped-metacharacter HIGH (see 04-02's cycle-1 dispositions table,
+  row 3). Cycle 2 did not touch 04-02 and did not catch it. It is dispositioned nowhere.
+- **MEDIUM (04-05, manifest completeness).** `web/tests/browse-page.test.ts:178-180` carries a
+  fourth status-gate construction site. The plan acknowledges it — but only in **Task 3's**
+  `read_first` (`04-05-PLAN.md:377`), as a conditional ("if Task 1's widening makes that stub
+  fail `pnpm check`, add the new field there too"), while the widening happens in **Task 1**,
+  and the file is absent from `files_modified`. Orchestrator note that qualifies the severity:
+  the stub declares its own structural param type and is passed through an untyped Svelte
+  context `Map`, so TypeScript method-parameter bivariance means `pnpm check` will most likely
+  **not** fail on it — making this a manifest/instruction disagreement and a stale mock rather
+  than a compile break. Real but closer to LOW than MEDIUM.
+- **MEDIUM (04-07, partial order assertion).** The bootstrap gate (`04-07-PLAN.md:419`)
+  extracts line numbers only for checkout (`CL`) and the run step (`RL`) and asserts
+  `CL -lt RL`. `install-task`, `setup-node` and `node-version: "24"` are only asserted to occur
+  *somewhere* in the file. A workflow placing `install-task` or `setup-node` **after**
+  `task web:components:drift` passes this gate and fails every scheduled run — the exact
+  failure mode the cycle-2 fix exists to prevent. The repo's own workflow-shape tests validate
+  run-body form and job population, not step order.
 
 ### Divergent Views
 
-None — single reviewer this cycle. The orchestrating agent independently re-verified all three
-findings against live source and concurs with each; no additional defect was found in a
-targeted pass over the revision's other new mechanisms (`ROUTE_LOCAL_PARAMS` including the
-deliberate, documented and per-key-asserted treatment of `mode` as route-local; the
-`AnalysisResult` contract; and 04-07's `web:components:drift` verify command, whose
-`&&`-chained final command and `${NFILES:-0}` guard both behave correctly).
+None — a single grounded reviewer ran this cycle.
 
-### Cycle-2 counts
+### Orchestrator observations (NOT counted as actionable)
 
-    CYCLE2_REMAINING: high=1 actionable_non_high=2
+- `04-06-PLAN.md:312` runs `file-search.test.ts`, `debounced-rpc.test.ts` and `search.test.ts`
+  in one vitest invocation behind a single `numTotalTests < 8` floor. `search.test.ts` alone
+  has **13** tests today, so that numeric floor is non-discriminating for the two new suites —
+  the very "surplus masks shortfall" property 04-05 was given separate floors to avoid. It is
+  **not** actionable because the adjacent acceptance criteria at `04-06:321`, `:323` and `:324`
+  independently require named tests and wired callbacks in both new files by content grep, and
+  `numPassedTests !== numTotalTests` still enforces green. Worth tightening if the maintainer
+  is editing 04-06 anyway; not a blocker on its own.
+- `04-07-PLAN.md:92` cites `ci.yml:130-133` for the Node 24 pin; the `node-version: "24"` line
+  is actually `ci.yml:134`. Prose citation only, no gate depends on it.
+- No `/tmp/*.json|log` filename collides across the seven plans, so parallel wave execution
+  cannot cross-contaminate verify artifacts.
