@@ -227,6 +227,19 @@ func CommitOnRemoteTrackingBranch(ctx context.Context, dir, sha string) RemotePr
 	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 
+	// WR-07 raised passing "--" here to force git to treat sha as a
+	// positional revision rather than an option. Empirically verified
+	// (git 2.54.0) this is unnecessary AND WRONG for `branch --contains`
+	// specifically: git's parse-options unconditionally consumes the very
+	// next argv token as --contains's value regardless of a leading "-"
+	// (`--contains -o`, `--contains --help`, and `--contains --` all fail
+	// with "malformed object name <token>", never a flag reinterpretation)
+	// — so a hostile sha already fails safely here with no "--" needed,
+	// and inserting one breaks the command outright (git resolves the
+	// literal "--" itself as the object name and errors). The real
+	// hardening for a malformed/hostile commit_sha is validating it once
+	// at the read boundary before it ever reaches this call — see
+	// schema.IsCommitSHA and its caller in uiserver.GetPermalink.
 	cmd := exec.CommandContext(ctx, "git", "branch", "-r", "--contains", sha)
 	cmd.Dir = dir
 	cmd.Stdin = nil // git must never be able to block on an interactive prompt

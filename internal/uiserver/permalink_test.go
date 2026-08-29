@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
 )
@@ -224,6 +225,75 @@ func TestGetPermalink_NoLinkNoCommitSHA(t *testing.T) {
 	}
 	if resp.Msg.GetUrl() != "" {
 		t.Fatalf("url = %q, want empty", resp.Msg.GetUrl())
+	}
+	if !strings.Contains(resp.Msg.GetReason(), "re-index") {
+		t.Fatalf("reason = %q, want it to name re-indexing as the remedy", resp.Msg.GetReason())
+	}
+}
+
+// overwriteCommitSHA rewrites an already-indexed store's Meta.commit_sha
+// directly, bypassing internal/indexer's own write-time
+// isLowercaseHexCommitSHA validation entirely — simulating a store built
+// or edited by something other than this binary's own indexer (WR-07:
+// the milestone-2 "CI-distributed indexes" shape .claude/CLAUDE.md names
+// as this project's own architecture target).
+func overwriteCommitSHA(t *testing.T, dir, sha string) {
+	t.Helper()
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+	store, err := graphstore.Open(storeDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer store.Close()
+
+	snap, err := store.Snapshot()
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	meta, err := snap.GetMeta()
+	if err != nil {
+		snap.Close()
+		t.Fatalf("get meta: %v", err)
+	}
+	snap.Close()
+
+	meta.CommitSha = sha
+	w, err := store.NewWriter()
+	if err != nil {
+		t.Fatalf("new writer: %v", err)
+	}
+	if err := w.PutMeta(meta); err != nil {
+		t.Fatalf("put meta: %v", err)
+	}
+	if err := w.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+}
+
+// TestGetPermalink_NoLinkMalformedCommitSHA reproduces WR-07: a Meta
+// record carrying a commit_sha that is not well-formed hex (e.g. written
+// by something other than this binary's own indexer) must degrade to
+// NO_LINK, not reach buildGitHubBlobURL (which would splice it raw into
+// the rendered URL) or gitmeta.CommitOnRemoteTrackingBranch (a git CLI
+// argument).
+func TestGetPermalink_NoLinkMalformedCommitSHA(t *testing.T) {
+	dir, sha := newGitBackedGofixture(t)
+	setOriginRemote(t, dir, "https://github.com/owner/repo.git")
+	markCommitObservedOnRemoteTrackingBranch(t, dir, sha)
+	overwriteCommitSHA(t, dir, "../../attacker/attacker-repo/blob/main")
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	resp, err := client.GetPermalink(context.Background(), connect.NewRequest(&uiv1.GetPermalinkRequest{Path: "pkga/pkga.go"}))
+	if err != nil {
+		t.Fatalf("GetPermalink: %v", err)
+	}
+	if got := resp.Msg.GetAvailability(); got != uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_NO_LINK {
+		t.Fatalf("availability = %v, want NO_LINK", got)
+	}
+	if resp.Msg.GetUrl() != "" {
+		t.Fatalf("url = %q, want empty — a malformed commit_sha must never reach buildGitHubBlobURL", resp.Msg.GetUrl())
 	}
 	if !strings.Contains(resp.Msg.GetReason(), "re-index") {
 		t.Fatalf("reason = %q, want it to name re-indexing as the remedy", resp.Msg.GetReason())

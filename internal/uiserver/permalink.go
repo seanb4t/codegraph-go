@@ -109,6 +109,27 @@ func (s *uiService) GetPermalink(ctx context.Context, req *connect.Request[uiv1.
 			}
 			return nil
 		}
+		// WR-07: internal/indexer validates a commit SHA with
+		// schema.IsCommitSHA before ever stamping it into Meta at WRITE
+		// time (internal/indexer/commit.go), but IndexedCommitSHA above
+		// returns whatever string a Meta record on disk happens to carry
+		// — the read side previously skipped that validator entirely. sha
+		// is used below both spliced raw into a rendered GitHub blob URL
+		// (buildGitHubBlobURL — every OTHER component of that URL is
+		// escaped; this one was not) and as a git CLI argument
+		// (gitmeta.CommitOnRemoteTrackingBranch). A store built by
+		// anything other than this binary's own indexer — the
+		// milestone-2 "CI-distributed indexes" shape this project's own
+		// architecture targets — is not bound by the write-time
+		// guarantee, so re-validate once here, at the one place every
+		// path to those two sinks passes through.
+		if !schema.IsCommitSHA(sha) {
+			resp = &uiv1.GetPermalinkResponse{
+				Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_NO_LINK,
+				Reason:       noCommitSHAReason,
+			}
+			return nil
+		}
 
 		remote := gitmeta.RemoteGitHubRepo(ctx, s.repoPath)
 		if remote.Owner == "" || remote.Repo == "" {

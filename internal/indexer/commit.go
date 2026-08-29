@@ -84,19 +84,16 @@ func resolveHeadCommitSHA(repoPath string) string {
 // two is an ENUMERATED SET, not a relaxation — any other length (39, 41,
 // 63, 65, ...) and any uppercase hex character are rejected exactly as
 // firmly as before.
+//
+// Delegates to schema.IsCommitSHA (WR-07: promoted so the read side —
+// internal/uiserver.GetPermalink — validates a stored commit_sha with the
+// exact same predicate this write-time check applies, rather than two
+// definitions that can drift). The local gitSHA1HexLen/gitSHA256HexLen
+// constants above remain the package's own named lengths (this package's
+// tests reference them directly) and are numerically identical to
+// schema's.
 func isLowercaseHexCommitSHA(s string) bool {
-	if len(s) != gitSHA1HexLen && len(s) != gitSHA256HexLen {
-		return false
-	}
-	for _, r := range s {
-		switch {
-		case r >= '0' && r <= '9':
-		case r >= 'a' && r <= 'f':
-		default:
-			return false
-		}
-	}
-	return true
+	return schema.IsCommitSHA(s)
 }
 
 // syncCommitSHA decides what a Sync writes into Meta.commit_sha (WR-05).
