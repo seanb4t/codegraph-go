@@ -239,3 +239,8 @@ This plan's outcome is unrelated to and does not gate any of Phase 3's five Brow
 
 *Phase: 03-browse-inspect-navigation*
 *Completed: 2026-08-28*
+
+## Self-Check: PASSED
+
+- All 9 claimed files verified present on disk (`[ -f ]`), including the todo's new location and its confirmed absence from `pending/`.
+- All 6 claimed commit hashes (`7b4b4f52`, `c22660c`, `7197083`, `14fd221`, `e8138c0`, `eaf241e`) verified present in `git log --oneline --all`.
