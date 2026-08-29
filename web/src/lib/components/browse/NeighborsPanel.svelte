@@ -51,6 +51,16 @@
 		);
 	}
 
+	// depthInvalid (IN-08): a non-conforming committed value was
+	// previously discarded with no feedback at all — the control kept
+	// showing the rejected text while the URL silently stayed at its
+	// prior depth, with nothing telling the user why their edit had no
+	// effect. Surfaced as aria-invalid below rather than a UI redesign,
+	// which keeps this fix scoped to "give the ignored case visible
+	// feedback" without also relitigating the empty-clears-depth
+	// behavior WR-05's own fix already added and tested.
+	let depthInvalid = $state(false);
+
 	// A depth-control change is a REFINE intent — it rewrites the URL in
 	// place so the address bar stays correct and shareable at every
 	// instant, without filling history with one entry per adjustment.
@@ -69,10 +79,15 @@
 	function handleDepthChange(e: Event): void {
 		const raw = (e.currentTarget as HTMLInputElement).value;
 		if (raw === '') {
+			depthInvalid = false;
 			onNavigate({ depth: undefined }, NAV_INTENT.REFINE);
 			return;
 		}
-		if (!isShapeInteger(raw)) return;
+		if (!isShapeInteger(raw)) {
+			depthInvalid = true;
+			return;
+		}
+		depthInvalid = false;
 		onNavigate({ depth: Number(raw) }, NAV_INTENT.REFINE);
 	}
 </script>
@@ -136,6 +151,7 @@
 				value={depth ?? ''}
 				onchange={handleDepthChange}
 				data-testid="neighbors-depth-input"
+				aria-invalid={depthInvalid}
 			/>
 		</label>
 		{#if blastRadius.kind === 'loading'}

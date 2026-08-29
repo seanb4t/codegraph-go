@@ -177,6 +177,23 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 		await fireEvent.change(input, { target: { value: '-1' } });
 		expect(onNavigate).toHaveBeenCalledWith({ depth: -1 }, NAV_INTENT.REFINE);
 	});
+
+	it('IN-08: a non-conforming committed value surfaces aria-invalid, cleared once a conforming value is committed', async () => {
+		const onNavigate = vi.fn();
+		render(NeighborsPanel, {
+			props: { calledBy: [], calls: [], blastRadius: IDLE_BLAST, depth: 2, onNavigate }
+		});
+		const input = screen.getByTestId('neighbors-depth-input');
+
+		expect(input).toHaveAttribute('aria-invalid', 'false');
+
+		await fireEvent.change(input, { target: { value: '2.5' } });
+		expect(input).toHaveAttribute('aria-invalid', 'true');
+
+		await fireEvent.change(input, { target: { value: '4' } });
+		expect(onNavigate).toHaveBeenCalledWith({ depth: 4 }, NAV_INTENT.REFINE);
+		expect(input).toHaveAttribute('aria-invalid', 'false');
+	});
 });
 
 describe('NeighborsPanel: empty and failed states are distinguishable, never an absent region', () => {
