@@ -16,7 +16,7 @@
 - [x] **SRV-02**: Origin/Host exact-match validation rejects DNS-rebinding requests (CVE-2024-28224 Ollama, CVE-2025-66414/66416 MCP SDK class); loopback binding alone is insufficient and is not treated as sufficient
 - [x] **SRV-03**: Read-only by construction; bind address and auth exist as explicit seams so a later `--host` is a change, not a rewrite — neither is exposed in v1
 - [x] **SRV-04**: Every RPC opens-snapshots-closes the store and never caches an `Engine`/`GraphStore` handle; an `ErrStoreLocked` that outlives `graphstore.Open`'s bounded retry renders as "indexing in progress", never as an error
-- [ ] **SRV-05**: Verbatim source serving reuses the existing MCP path-confinement fix rather than reimplementing it
+- [x] **SRV-05**: Verbatim source serving reuses the existing MCP path-confinement fix rather than reimplementing it
 
 ### Wire Protocol
 
@@ -137,7 +137,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | SRV-02 | Phase 1 | Complete |
 | SRV-03 | Phase 1 | Complete |
 | SRV-04 | Phase 1 | Complete |
-| SRV-05 | Phase 3 | Pending |
+| SRV-05 | Phase 3 | Complete |
 | RPC-01 | Phase 1 | Complete |
 | RPC-02 | Phase 1 | Complete |
 | RPC-03 | Phase 2 | Complete |

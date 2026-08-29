@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Completed 03-04-PLAN.md
-last_updated: "2026-08-29T00:37:42.324Z"
+stopped_at: Completed 03-05-PLAN.md
+last_updated: "2026-08-29T01:13:35.714Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 03 execution started
-state_head: 9253d6da0243d37207a0cc0696f9c68a58402c29
+state_head: 52dadeb74447bfff66818980a9aa8f2da8abc5b4
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 22
+  completed_plans: 23
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
-Plan: 5 of 10
+Plan: 6 of 10
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 03 execution started
 
@@ -83,6 +83,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03-browse-inspect-navigation P02 | 25min | 2 tasks | 1 files |
 | Phase 03 P03 | ~90min | 3 tasks | 7 files |
 | Phase 03 P04 | ~35min | 3 tasks | 12 files |
+| Phase 03 P05 | ~40min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,9 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: [Phase 03-03]: Wire-oracle toolslist-repeat ordering flake root-caused (SERVER-EMITTED-OUT-OF-ORDER, live Linux repro + modelcontextprotocol/go-sdk@v1.7.0 source citation) and resolved via R2 (CanonicalizeResponseOrder) — maintainer rejected R1 because the SDK is not silent about concurrent dispatch, and rejected NR because an intermittent red required gate teaches "re-run CI"
 - [Phase 03]: [Phase 03-04]: highlight.js emits `hljs-*` class names only, no inline colour — added a `highlight.js/styles/github.css` theme import — Caught via mandated manual browser UAT, not any grep: markup was structurally correct but invisible without a loaded theme stylesheet.
 - [Phase 03]: [Phase 03-04]: 03-04's Go coverage guard binds HIGHLIGHT_COVERAGE to the indexer registry with a REVERSE binding check beyond the plan's literal three assertions — Without it, a deleted registerLanguage(...) call with a stale array left behind failed only on a bare count, never naming the specific language — verified live before/after adding the check.
+- [Phase 03]: [Phase 03]: 03-05: GetPermalink wire shape frozen via human checkpoint — PermalinkAvailability as a closed enum (not open string), and a tri-state RemotePresence{Unknown,Observed,NotObserved} + structured GitHubRemote{Owner,Repo,Host,Reason} so "could not check" never collapses into a false claim of no-link
+- [Phase 03]: [Phase 03]: 03-05: since-deleted-file disposition CHOSEN as deleted-classify-in-handler (not the deleted-accept-internal default) — a since-deleted file is a NORMAL outcome for permalinks (they outlive the files they point at), so it is reclassified in internal/uiserver/permalink.go ONLY to CodeInvalidArgument naming the caller's own repo-relative path, never the underlying absolute host path
+- [Phase 03]: [Phase 03]: 03-05: TestUIServiceMethodSetIsExactlyTheReadSet's hardcoded method-count literal (9->10) was updated alongside wantUIServiceMethods' new GetPermalink entry — the plan text said "change nothing else" but the literal makes the test permanently unpassable otherwise (Rule 3 deviation)
 
 ### Pending Todos
 
@@ -263,8 +267,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T00:37:23.386Z
-Stopped at: Completed 03-04-PLAN.md
+Last session: 2026-08-29T01:13:35.614Z
+Stopped at: Completed 03-05-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
