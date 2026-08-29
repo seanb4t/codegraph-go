@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-08-29T00:03:10.781Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-08-29T00:37:42.324Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 03 execution started
-state_head: 55f4a8d6d35a901cd02c294b4d9cc6153196655e
+state_head: 9253d6da0243d37207a0cc0696f9c68a58402c29
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 21
+  completed_plans: 22
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 03 execution started
 
@@ -82,6 +82,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P01 | ~5min active work | 3 tasks | 8 files |
 | Phase 03-browse-inspect-navigation P02 | 25min | 2 tasks | 1 files |
 | Phase 03 P03 | ~90min | 3 tasks | 7 files |
+| Phase 03 P04 | ~35min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -139,6 +140,8 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: 03-01: @testing-library/jest-dom newly tripped too-new legitimacy flag at install (published 2026-08-09, after 03-RESEARCH.md); approved under same fallback reasoning as the two tabled [SUS] packages — A recent release on a 2019-vintage, 63M-weekly-download project is not a new or hijacked package
 - [Phase 03]: 03-01: added resolve.conditions:['browser'] to web/vite.config.ts, guarded on process.env.VITEST — Default jsdom resolution picked Svelte's server build for .svelte imports (lifecycle_function_unavailable from mount()); scoping to vitest only leaves vite build/dev resolution unaffected
 - [Phase 03]: [Phase 03-03]: Wire-oracle toolslist-repeat ordering flake root-caused (SERVER-EMITTED-OUT-OF-ORDER, live Linux repro + modelcontextprotocol/go-sdk@v1.7.0 source citation) and resolved via R2 (CanonicalizeResponseOrder) — maintainer rejected R1 because the SDK is not silent about concurrent dispatch, and rejected NR because an intermittent red required gate teaches "re-run CI"
+- [Phase 03]: [Phase 03-04]: highlight.js emits `hljs-*` class names only, no inline colour — added a `highlight.js/styles/github.css` theme import — Caught via mandated manual browser UAT, not any grep: markup was structurally correct but invisible without a loaded theme stylesheet.
+- [Phase 03]: [Phase 03-04]: 03-04's Go coverage guard binds HIGHLIGHT_COVERAGE to the indexer registry with a REVERSE binding check beyond the plan's literal three assertions — Without it, a deleted registerLanguage(...) call with a stale array left behind failed only on a bare count, never naming the specific language — verified live before/after adding the check.
 
 ### Pending Todos
 
@@ -260,8 +263,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T00:03:10.690Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-08-29T00:37:23.386Z
+Stopped at: Completed 03-04-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
