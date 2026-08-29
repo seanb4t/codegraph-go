@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
@@ -418,5 +419,60 @@ func TestGetPermalinkRefusesSinceDeletedFile(t *testing.T) {
 	// checkout path, which the underlying *fs.PathError carries.
 	if strings.Contains(msg, dir) {
 		t.Fatalf("GetPermalink(path=%q): message %q contains the fixture's absolute host checkout path %q", relPath, msg, dir)
+	}
+}
+
+// --- remotePresenceResponse: the default arm's safe direction (IN-08) ---
+
+// TestRemotePresenceResponse_KnownValues proves the two currently-real
+// RemotePresence values still map to their documented outcome after the
+// switch was reordered — the reordering must not change observable
+// behavior for any value that actually exists today.
+func TestRemotePresenceResponse_KnownValues(t *testing.T) {
+	const blobURL = "https://github.com/owner/repo/blob/deadbeef/pkga/pkga.go"
+
+	observed := remotePresenceResponse(blobURL, gitmeta.RemotePresenceObserved)
+	if observed.GetAvailability() != uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE {
+		t.Fatalf("RemotePresenceObserved: availability = %v, want LINKABLE", observed.GetAvailability())
+	}
+	if observed.GetReason() != "" {
+		t.Fatalf("RemotePresenceObserved: reason = %q, want empty", observed.GetReason())
+	}
+
+	notObserved := remotePresenceResponse(blobURL, gitmeta.RemotePresenceNotObserved)
+	if notObserved.GetAvailability() != uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED {
+		t.Fatalf("RemotePresenceNotObserved: availability = %v, want LINKABLE_UNVERIFIED", notObserved.GetAvailability())
+	}
+	if notObserved.GetReason() != notObservedReason {
+		t.Fatalf("RemotePresenceNotObserved: reason = %q, want %q", notObserved.GetReason(), notObservedReason)
+	}
+
+	unknown := remotePresenceResponse(blobURL, gitmeta.RemotePresenceUnknown)
+	if unknown.GetAvailability() != uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED {
+		t.Fatalf("RemotePresenceUnknown: availability = %v, want LINKABLE_UNVERIFIED", unknown.GetAvailability())
+	}
+	if unknown.GetReason() != checkUnknownReason {
+		t.Fatalf("RemotePresenceUnknown: reason = %q, want %q", unknown.GetReason(), checkUnknownReason)
+	}
+}
+
+// TestRemotePresenceResponse_UnrecognizedValueDegradesToUnknown reproduces
+// IN-08: a RemotePresence value this switch does not recognize at all —
+// simulating a future member added to the gitmeta package's enum without
+// a corresponding case here — must degrade to the SAFE "could not check"
+// wording (checkUnknownReason), never to notObservedReason's positive
+// "this commit is not observed" claim, which D-07 forbids stating without
+// having actually checked.
+func TestRemotePresenceResponse_UnrecognizedValueDegradesToUnknown(t *testing.T) {
+	const blobURL = "https://github.com/owner/repo/blob/deadbeef/pkga/pkga.go"
+
+	future := gitmeta.RemotePresence(99) // a value no case in the switch names
+	got := remotePresenceResponse(blobURL, future)
+
+	if got.GetAvailability() != uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED {
+		t.Fatalf("unrecognized RemotePresence(99): availability = %v, want LINKABLE_UNVERIFIED", got.GetAvailability())
+	}
+	if got.GetReason() != checkUnknownReason {
+		t.Fatalf("unrecognized RemotePresence(99): reason = %q, want the SAFE checkUnknownReason %q — never notObservedReason's positive claim", got.GetReason(), checkUnknownReason)
 	}
 }

@@ -141,26 +141,7 @@ func (s *uiService) GetPermalink(ctx context.Context, req *connect.Request[uiv1.
 		}
 
 		blobURL := buildGitHubBlobURL(remote.Owner, remote.Repo, sha, path, req.Msg.Line, req.Msg.EndLine)
-
-		switch gitmeta.CommitOnRemoteTrackingBranch(ctx, s.repoPath, sha) {
-		case gitmeta.RemotePresenceObserved:
-			resp = &uiv1.GetPermalinkResponse{
-				Url:          blobURL,
-				Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE,
-			}
-		case gitmeta.RemotePresenceUnknown:
-			resp = &uiv1.GetPermalinkResponse{
-				Url:          blobURL,
-				Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED,
-				Reason:       checkUnknownReason,
-			}
-		default: // gitmeta.RemotePresenceNotObserved
-			resp = &uiv1.GetPermalinkResponse{
-				Url:          blobURL,
-				Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED,
-				Reason:       notObservedReason,
-			}
-		}
+		resp = remotePresenceResponse(blobURL, gitmeta.CommitOnRemoteTrackingBranch(ctx, s.repoPath, sha))
 		return nil
 	})
 	if err != nil {
@@ -170,6 +151,44 @@ func (s *uiService) GetPermalink(ctx context.Context, req *connect.Request[uiv1.
 		return nil, classifiedErr
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// remotePresenceResponse maps one gitmeta.RemotePresence value plus the
+// already-built blobURL into a GetPermalinkResponse (IN-08). Extracted
+// from GetPermalink's inline switch specifically so its default-arm
+// behavior is independently unit-testable with a synthetic,
+// out-of-range RemotePresence value — GetPermalink itself has no way to
+// force gitmeta.CommitOnRemoteTrackingBranch to return anything other
+// than its three real, known values.
+//
+// default falls back to the SAFE direction — "could not check" — rather
+// than to the positive "not observed" claim RemotePresenceNotObserved
+// carries. A future RemotePresence member this switch does not yet know
+// about (e.g. a "could not determine" style addition) would otherwise
+// silently fall into notObservedReason's positive assertion about the
+// commit, which D-07 explicitly forbids ("could not check" must never be
+// stated as fact). Any unrecognized value degrades to the honest
+// "unknown" wording instead.
+func remotePresenceResponse(blobURL string, presence gitmeta.RemotePresence) *uiv1.GetPermalinkResponse {
+	switch presence {
+	case gitmeta.RemotePresenceObserved:
+		return &uiv1.GetPermalinkResponse{
+			Url:          blobURL,
+			Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE,
+		}
+	case gitmeta.RemotePresenceNotObserved:
+		return &uiv1.GetPermalinkResponse{
+			Url:          blobURL,
+			Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED,
+			Reason:       notObservedReason,
+		}
+	default: // gitmeta.RemotePresenceUnknown, and any future member
+		return &uiv1.GetPermalinkResponse{
+			Url:          blobURL,
+			Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED,
+			Reason:       checkUnknownReason,
+		}
+	}
 }
 
 // buildGitHubBlobURL assembles a GitHub permalink from its parts (D-09).
