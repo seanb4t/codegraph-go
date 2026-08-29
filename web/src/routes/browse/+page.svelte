@@ -115,7 +115,7 @@
 	onQueryChange={handleQueryChange}
 />
 
-<SourcePane state={targetState} />
+<SourcePane state={targetState} onNavigate={handleNeighborNavigate} />
 
 {#if targetState.kind === 'single-def'}
 	<NeighborsPanel
