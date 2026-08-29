@@ -3,6 +3,10 @@ created: 2026-08-07T17:53:31.671Z
 title: Wire oracle toolslist-repeat response ordering flake
 area: mcp
 severity: major
+status: resolved
+resolved_at: 2026-08-28T00:00:00.000Z
+resolved_by_phase: 3
+resolution_option: R2
 files:
 
   - test/wireoracle/scenarios.go:559-573
@@ -73,7 +77,43 @@ twice over: it blocks merges at random, and it teaches people that a red
 blocking gate means "re-run CI" — which is exactly how a real regression gets
 waved through later.
 
-## Solution
+## Resolution (2026-08-28, Phase 03-03)
+
+**VERDICT: SERVER-EMITTED-OUT-OF-ORDER** (full evidence:
+`.planning/phases/03-browse-inspect-navigation/03-03-EVIDENCE.md`).
+Reproduced live on Linux under contention (4/60 attempts failed, matching
+the CI symptom exactly). Root cause confirmed by reading
+`github.com/modelcontextprotocol/go-sdk@v1.7.0` directly: `mcp/server.go`'s
+`ServerSession.handle` calls `jsonrpc2.Async(ctx)` unconditionally for
+every call except `initialize` (citing `modelcontextprotocol/go-sdk#26`),
+and `internal/jsonrpc2/conn.go`'s `handleAsync` dequeues requests
+sequentially but only blocks until `Async()` fires or the handler
+completes — so two consecutive `tools/list` calls run in independently
+scheduled goroutines with no ordering guarantee between them. The
+scenario's "handled synchronously in request order" comment described the
+OLD `mark3labs/mcp-go` transport, never updated after Phase 2's SDK-01
+migration.
+
+**Maintainer selected R2** at the Task 2 `checkpoint:decision`: canonicalize
+response order by request id before comparison, rather than R1 (impose
+in-order emission in production dispatch — rejected because the SDK is not
+silent, it actively documents concurrent-by-default handling) or NR (leave
+open — rejected because an intermittently-red required PR leg teaches that
+a blocking gate means re-run CI).
+
+`CanonicalizeResponseOrder` (`test/wireoracle/normalize.go`) now reorders
+response lines by request id before the frozen-transcript comparison,
+narrowing what the oracle freezes to response CONTENT (still byte-exact)
+rather than arrival order. Proven RED-first
+(`TestToolsListRepeatOrderingResolution`), and proven not to weaken the
+oracle's content-discrimination (`TestFrozenTranscriptComparisonDetectsContentMutation`,
+plus a manual planted-mutation run against the live gate). Re-ran the exact
+60-attempt Linux contention reproduction that previously failed 4/60 times:
+60/60 pass with the fix applied. No frozen transcript was regenerated.
+
+Full detail: `.planning/phases/03-browse-inspect-navigation/03-03-SUMMARY.md`.
+
+## Solution (original problem statement, retained for history)
 
 TBD — establish the root cause before changing anything.
 
