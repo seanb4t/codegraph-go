@@ -61,14 +61,26 @@ export function classifyStatus(response: GetStatusResponse): IndexStatus {
 	return { verdict: 'unknown', commit };
 }
 
+// VIEW_LOCAL_PARAMS lists query params that select no distinct view and
+// therefore must not mint a new navigation identity by themselves
+// (WR-04). `q` is Browse's search box (+page.svelte:64-66 documents it
+// as view-local, undebounced, written on every keystroke by D-11's own
+// shareable-URL contract) — before this exclusion, typing a five-letter
+// query fired five extra GetStatus RPCs on top of the one the
+// navigation contract allows, each one re-entering withEngine/openEngine
+// server-side and contending with the store lock during an active
+// re-index.
+const VIEW_LOCAL_PARAMS = ['q'];
+
 // navigationIdentity is the ONE normalizer both the gate's constructor
 // call site and the layout's navigation effect derive their identity
-// from (Task 2 wires both) — pathname plus the SORTED query string, so
-// two renders of the same view never read as two distinct navigations,
-// and the two call sites can never disagree because there is only one
-// implementation.
+// from (Task 2 wires both) — pathname plus the SORTED query string,
+// minus VIEW_LOCAL_PARAMS, so two renders of the same view never read
+// as two distinct navigations, and the two call sites can never
+// disagree because there is only one implementation.
 export function navigationIdentity(url: URL): string {
 	const params = new URLSearchParams(url.searchParams);
+	for (const k of VIEW_LOCAL_PARAMS) params.delete(k);
 	params.sort();
 	const qs = params.toString();
 	return qs ? `${url.pathname}?${qs}` : url.pathname;

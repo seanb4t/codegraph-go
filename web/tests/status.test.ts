@@ -107,6 +107,24 @@ describe('navigationIdentity: pathname plus sorted query string', () => {
 		const b = navigationIdentity(new URL('http://localhost/graph?symbol=Foo'));
 		expect(a).not.toBe(b);
 	});
+
+	it('WR-04: varying ONLY q (Browse\'s view-local search box) produces the SAME identity', () => {
+		// q is written on every keystroke, undebounced (+page.svelte:64-66,
+		// D-11) — before this exclusion, each character typed minted a
+		// fresh navigation identity and fired an extra GetStatus RPC.
+		const a = navigationIdentity(new URL('http://localhost/browse?q=hel'));
+		const b = navigationIdentity(new URL('http://localhost/browse?q=hello'));
+		expect(a).toBe(b);
+	});
+
+	it('a target field (symbol) still produces a DIFFERENT identity, paired against the q case above', () => {
+		// The positive control for the q-exclusion above: q must be the
+		// ONLY thing dropped from the identity — an ordinary target-field
+		// change must still be seen as a distinct navigation.
+		const a = navigationIdentity(new URL('http://localhost/browse?symbol=Foo'));
+		const b = navigationIdentity(new URL('http://localhost/browse?symbol=Bar'));
+		expect(a).not.toBe(b);
+	});
 });
 
 describe('createStatusGate: a rejected GetStatus call never throws', () => {
@@ -162,6 +180,24 @@ describe('createStatusGate: the identity guard', () => {
 		expect(calls).toHaveBeenCalledTimes(1);
 
 		gate.notifyNavigated(identityB);
+		await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
+	});
+
+	it('WR-04: notifying through navigationIdentity as q varies fires no extra GetStatus, paired against a target-field change that does', async () => {
+		// End-to-end version of the navigationIdentity unit tests above,
+		// through the actual gate the layout drives: typing in Browse's
+		// search box must never re-trigger GetStatus, while a real
+		// navigation (a different symbol) still must.
+		const { client, calls } = statusClient(() => Promise.resolve(statusResponse()));
+		const gate = createStatusGate(client, navigationIdentity(new URL('http://localhost/browse?q=h')));
+		await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(1));
+
+		for (const q of ['he', 'hel', 'hell', 'hello']) {
+			gate.notifyNavigated(navigationIdentity(new URL(`http://localhost/browse?q=${q}`)));
+		}
+		expect(calls).toHaveBeenCalledTimes(1);
+
+		gate.notifyNavigated(navigationIdentity(new URL('http://localhost/browse?q=hello&symbol=Bar')));
 		await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
 	});
 });
