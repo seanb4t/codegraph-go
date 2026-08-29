@@ -1,7 +1,10 @@
-// Minimal reactive stand-in for `$app/state`'s `page`, used ONLY by
-// browse-page.test.ts (CR-01's route-level regression test, 03-REVIEW.md)
-// to drive +page.svelte's own `$derived(params)` exactly as SvelteKit's
-// real client-side router does when a navigation changes `page.url`.
+// Minimal reactive stand-in for `$app/state`'s `page`, originally added
+// for browse-page.test.ts (CR-01's route-level regression test,
+// 03-REVIEW.md) and reused as-is by workbench-tracer.test.ts (04-01 Task
+// 2) — both drive a route's own `$derived(params)` exactly as SvelteKit's
+// real client-side router does when a navigation changes `page.url`. The
+// shape here is already route-agnostic (a bare `{ url: URL }`), so no
+// second stand-in was created for the second route.
 //
 // This has to live in its own `.svelte.ts` module rather than inline in
 // the test file: Svelte 5's `$state` rune is compiled by the Svelte

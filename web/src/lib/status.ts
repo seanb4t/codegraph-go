@@ -70,17 +70,51 @@ export function classifyStatus(response: GetStatusResponse): IndexStatus {
 // navigation contract allows, each one re-entering withEngine/openEngine
 // server-side and contending with the store lock during an active
 // re-index.
+//
+// This list is GLOBAL — applied under every route — and stays that way:
+// `q` selects no distinct view under ANY route it might appear on. It is
+// never widened in place to carry a route-specific parameter; see
+// ROUTE_LOCAL_PARAMS immediately below for that case.
 const VIEW_LOCAL_PARAMS = ['q'];
+
+// ROUTE_LOCAL_PARAMS is the route-SCOPED counterpart to VIEW_LOCAL_PARAMS
+// (04-01 Task 2, T-04-32): a parameter that selects a different QUERY
+// within one view is view-local for that route; a parameter that selects
+// a different VIEW is not, and must keep minting a new identity.
+//
+// `/workbench`'s `mode`/`symbol`/`file`/`depth`/`limit` are exactly this
+// first kind under `/workbench` — every Workbench control change is a
+// refinement of the SAME view, never a navigation to a different one —
+// but `symbol`/`file`/`depth`/`limit` are ALSO Browse parameters
+// (browse-url.ts:24) where each one legitimately selects a DIFFERENT
+// Browse view (a different symbol, a different file). Excluding them
+// globally would silently stop refreshing the index verdict as a
+// developer moves through Browse — an invisible behavior change to a
+// shipped Phase-3 contract. The table below is keyed by pathname so the
+// exclusion applies only where it is actually view-local.
+//
+// Without this table, `web/src/routes/+layout.svelte`'s `$effect` (which
+// calls `statusGate.notifyNavigated(navigationIdentity(page.url))` on
+// every `page.url` change) would fire one extra GetStatus RPC per
+// Workbench control change — a symbol keystroke, a limit edit, later a
+// depth slider move — each one re-entering withEngine/openEngine
+// server-side, exactly the amplification the `q` exclusion above was
+// added to fix, reintroduced through a different route.
+const ROUTE_LOCAL_PARAMS: Record<string, readonly string[]> = {
+	'/workbench': ['mode', 'symbol', 'file', 'depth', 'limit']
+};
 
 // navigationIdentity is the ONE normalizer both the gate's constructor
 // call site and the layout's navigation effect derive their identity
 // from (Task 2 wires both) — pathname plus the SORTED query string,
-// minus VIEW_LOCAL_PARAMS, so two renders of the same view never read
-// as two distinct navigations, and the two call sites can never
-// disagree because there is only one implementation.
+// minus VIEW_LOCAL_PARAMS and minus this route's own ROUTE_LOCAL_PARAMS
+// entry (if any), so two renders of the same view never read as two
+// distinct navigations, and the two call sites can never disagree
+// because there is only one implementation.
 export function navigationIdentity(url: URL): string {
 	const params = new URLSearchParams(url.searchParams);
 	for (const k of VIEW_LOCAL_PARAMS) params.delete(k);
+	for (const k of ROUTE_LOCAL_PARAMS[url.pathname] ?? []) params.delete(k);
 	params.sort();
 	const qs = params.toString();
 	return qs ? `${url.pathname}?${qs}` : url.pathname;

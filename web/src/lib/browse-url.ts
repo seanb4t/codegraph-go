@@ -61,7 +61,12 @@ export function isShapeInteger(raw: string): boolean {
 // as 0 and never as a thrown error. This is a shape check, not a range
 // check (D-12): an out-of-range integer that IS a valid integer literal
 // (e.g. `limit=999999`) passes through unchanged for the server to judge.
-function parseShapeInteger(raw: string | null): number | undefined {
+//
+// Exported (D-10) so web/src/lib/workbench-url.ts can import this exact
+// function for its own depth/limit reading rather than redefining the
+// integer shape grammar — the two URL grammars can never disagree on
+// what an integer looks like because there is only one implementation.
+export function parseShapeInteger(raw: string | null): number | undefined {
 	if (raw === null || raw === '') return undefined;
 	if (!isShapeInteger(raw)) return undefined;
 	return Number(raw);
