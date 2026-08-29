@@ -241,19 +241,27 @@ func remotePresenceResponse(blobURL string, presence gitmeta.RemotePresence) *ui
 }
 
 // buildGitHubBlobURL assembles a GitHub permalink from its parts (D-09).
-// Each path segment is percent-encoded independently, via url.PathEscape
-// on the SPLIT segments rather than on the joined string, so a literal
-// "/" inside a filename can never be misinterpreted as a path separator
-// and no URL-significant character (#, ?, a space) in a path segment
-// silently produces a link to a different location than requested. The
-// anchor is a range when endLine is set, a single line when only line is
-// set, and absent entirely when line itself is unset.
+// owner and repo are each percent-encoded with url.PathEscape (IN-03: a
+// remote of "github.com:owner/re#po.git" previously wrote repo="re#po"
+// straight into the URL, which a browser resolves as
+// "https://github.com/owner/re" with everything from "#" on read as a
+// fragment — RemoteGitHubRepo's exact-equality host check keeps this from
+// ever crossing an origin, so it was a correctness wart rather than a
+// vulnerability, but a wart this function's own doc comment falsely
+// claimed didn't exist). The repo-relative path is percent-encoded
+// independently, via url.PathEscape on the SPLIT segments rather than on
+// the joined string, so a literal "/" inside a filename can never be
+// misinterpreted as a path separator and no URL-significant character
+// (#, ?, a space) in a path segment silently produces a link to a
+// different location than requested. The anchor is a range when endLine
+// is set, a single line when only line is set, and absent entirely when
+// line itself is unset.
 func buildGitHubBlobURL(owner, repo, sha, path string, line, endLine *int32) string {
 	var b strings.Builder
 	b.WriteString("https://github.com/")
-	b.WriteString(owner)
+	b.WriteString(url.PathEscape(owner))
 	b.WriteString("/")
-	b.WriteString(repo)
+	b.WriteString(url.PathEscape(repo))
 	b.WriteString("/blob/")
 	b.WriteString(sha)
 	b.WriteString("/")

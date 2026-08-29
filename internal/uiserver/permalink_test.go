@@ -406,6 +406,26 @@ func TestGetPermalink_PercentEncodesURLSignificantCharacters(t *testing.T) {
 	}
 }
 
+// TestBuildGitHubBlobURL_PercentEncodesOwnerAndRepo reproduces IN-03: a
+// remote of "github.com:owner/re#po.git" previously wrote repo="re#po"
+// straight into the rendered URL, which a browser resolves as
+// "https://github.com/owner/re" with everything from "#" on read as a
+// URL FRAGMENT, not a path segment — silently truncating the link.
+// RemoteGitHubRepo's exact-equality host check keeps this from ever
+// crossing an origin (not a vulnerability), but it is a correctness
+// defect this unit test targets directly at buildGitHubBlobURL, the one
+// function that assembles the URL.
+func TestBuildGitHubBlobURL_PercentEncodesOwnerAndRepo(t *testing.T) {
+	got := buildGitHubBlobURL("owner", "re#po", "0123456789abcdef0123456789abcdef01234567", "a.go", nil, nil)
+	const want = "https://github.com/owner/re%23po/blob/0123456789abcdef0123456789abcdef01234567/a.go"
+	if got != want {
+		t.Fatalf("buildGitHubBlobURL = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "re#po") {
+		t.Fatalf("buildGitHubBlobURL = %q, contains the RAW unencoded repo name — '#' was not percent-encoded", got)
+	}
+}
+
 // --- Confinement (SRV-05, T-03-01b): the SAME gate GetNodeDetail uses,
 // proven at this endpoint's own boundary with a passing control. ---
 
