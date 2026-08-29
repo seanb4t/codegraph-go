@@ -274,3 +274,7 @@ Per the plan's own text, this plan's outcome is reported separately and does not
 ---
 *Phase: 03-browse-inspect-navigation*
 *Completed: 2026-08-29*
+
+## Self-Check: PASSED
+
+All key files found on disk (.golangci.yml, go.tool-golangci.mod, go.tool-golangci.sum, completed todo, this SUMMARY). All 6 commit hashes (2fd3cf14, dd90ecfb, 1e20225d, 3957e7e6, ee925da5, fa11db1a) confirmed present in git log.
