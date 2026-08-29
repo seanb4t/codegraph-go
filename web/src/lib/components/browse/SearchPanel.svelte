@@ -61,11 +61,20 @@
 	let {
 		client,
 		initialQuery = '',
-		onSelect
+		onSelect,
+		onQueryChange
 	}: {
 		client: SearchClient;
 		initialQuery?: string;
 		onSelect: (selection: SearchSelection) => void;
+		// onQueryChange (03-07, D-11): typing is a REFINE intent — the
+		// caller is expected to write it into the URL with `replaceState`
+		// so the address bar stays correct and shareable at every
+		// instant, without growing history one entry per keystroke.
+		// Optional so a caller that only needs the live-search behavior
+		// (any pre-03-07 test, or a future non-URL-backed use of this
+		// panel) is unaffected.
+		onQueryChange?: (query: string) => void;
 	} = $props();
 
 	// untrack: the controller is built ONCE from whatever client is
@@ -139,6 +148,7 @@
 	function handleInputChange(value: string) {
 		open = true;
 		controller.setQuery(value);
+		onQueryChange?.(value);
 	}
 
 	function symbolKey(loc: Location): string {

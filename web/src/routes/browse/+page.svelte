@@ -95,11 +95,25 @@
 	function handleNeighborNavigate(delta: BrowseNavDelta, intent: NavIntent): void {
 		navigator.navigate(page.url, delta, intent);
 	}
+
+	// Typing in search is a REFINE intent (D-11) — every keystroke
+	// replaces the current history entry so the address bar stays
+	// correct and shareable at every instant, without growing history
+	// one entry per character. An empty query clears the `q` param
+	// entirely rather than leaving `q=` in the URL.
+	function handleQueryChange(query: string): void {
+		navigator.navigate(page.url, { q: query || undefined }, NAV_INTENT.REFINE);
+	}
 </script>
 
 <h1 class="text-lg font-semibold">Browse</h1>
 
-<SearchPanel client={uiClient} initialQuery={params.q ?? ''} onSelect={handleSearchSelect} />
+<SearchPanel
+	client={uiClient}
+	initialQuery={params.q ?? ''}
+	onSelect={handleSearchSelect}
+	onQueryChange={handleQueryChange}
+/>
 
 <SourcePane state={targetState} />
 
