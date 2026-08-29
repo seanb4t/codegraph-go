@@ -36,8 +36,8 @@
 ### Browse & Inspect
 
 - [x] **BRW-01**: User can search symbols and files as they type
-- [ ] **BRW-02**: User can open a node and see verbatim source, callers, callees, and blast radius
-- [ ] **BRW-03**: User can click any neighbor and continue navigating from there
+- [x] **BRW-02**: User can open a node and see verbatim source, callers, callees, and blast radius
+- [x] **BRW-03**: User can click any neighbor and continue navigating from there
 - [ ] **BRW-04**: User can jump from a symbol reference in rendered source to its definition
 - [ ] **BRW-05**: User is offered a disambiguation picker when a bare symbol name resolves to multiple definitions
 - [x] **BRW-06**: Source is syntax-highlighted using a lightweight highlighter with only the indexed languages registered
@@ -47,8 +47,8 @@
 
 ### Navigation
 
-- [ ] **NAV-01**: Every view, symbol, and query state is addressable by a shareable URL encoding view, target, depth and limit
-- [ ] **NAV-02**: Browser back and forward navigate view history correctly
+- [x] **NAV-01**: Every view, symbol, and query state is addressable by a shareable URL encoding view, target, depth and limit
+- [x] **NAV-02**: Browser back and forward navigate view history correctly
 - [x] **NAV-03**: User can drive search and result selection from the keyboard, including a focus shortcut and `Esc` to dismiss
 - [ ] **NAV-04**: No-index, stale-index, and symbol-not-found each render an explicit state rather than an empty pane
 
@@ -148,16 +148,16 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | ENG-03 | Phase 5 | Pending |
 | ENG-04 | Phase 1 | Complete |
 | BRW-01 | Phase 3 | Complete |
-| BRW-02 | Phase 3 | Pending |
-| BRW-03 | Phase 3 | Pending |
+| BRW-02 | Phase 3 | Complete |
+| BRW-03 | Phase 3 | Complete |
 | BRW-04 | Phase 3 | Pending |
 | BRW-05 | Phase 3 | Pending |
 | BRW-06 | Phase 3 | Complete |
 | BRW-07 | Phase 3 | Pending |
 | BRW-08 | Phase 3 | Complete |
 | BRW-09 | Phase 3 | Pending |
-| NAV-01 | Phase 3 | Pending |
-| NAV-02 | Phase 3 | Pending |
+| NAV-01 | Phase 3 | Complete |
+| NAV-02 | Phase 3 | Complete |
 | NAV-03 | Phase 3 | Complete |
 | NAV-04 | Phase 3 | Pending |
 | WRK-01 | Phase 4 | Pending |

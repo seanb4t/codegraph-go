@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-08-29T02:37:38.766Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-08-29T03:08:22.003Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 03 execution started
-state_head: 3ced35013c6aced86e35d0207d01a64144b55320
+state_head: 99fcd9371aba8a747aa0eda1692e39d6309211ad
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 24
+  completed_plans: 25
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 03 execution started
 
@@ -85,6 +85,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P04 | ~35min | 3 tasks | 12 files |
 | Phase 03 P05 | ~40min | 3 tasks | 10 files |
 | Phase 03 P06 | ~50min active | 3 tasks | 44 files |
+| Phase 03-browse-inspect-navigation P07 | ~50min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -152,6 +153,10 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: [Phase 03]: 03-06: Explore submission wired via a single leading unlabeled Command.Item ("Ask") reusing the primitive's own item-select mechanism, rather than hijacking Enter globally — avoids racing against "Enter opens the highlighted item"
 - [Phase 03]: [Phase 03]: 03-06: found live (manual UAT, not assumed) that FilesOptions.Pattern's glob (path/filepath.Match) never crosses '/' and has no recursive '**' — Files' live-search pattern only matches root-level files for nested repos; documented in search.ts, filed as a todo, not fixed (server-side/cross-cutting, out of scope). Search's own file-kind pseudo-node matches already cover arbitrary-depth file discovery
 - [Phase 03]: [Phase 03]: 03-06: never name a Svelte 5 $state()-backed local variable literally 'state' — svelte-check reports spurious 'used before declaration'/implicit-any errors; renamed to searchState
+- [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: browse-nav.ts's symbol/file/line target-kind clearing — setting symbol without file clears file+line, setting file without symbol clears symbol (+line unless the same delta also sets line), and the symbol+file+line disambiguation triple (or any caller-directed symbol+file pair) clears nothing
+- [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: NavigationGeneration is a plain module-scoped counter (createNavigationGate) rather than tied to $app/state/runes, kept testable with no SvelteKit runtime — closes the cross-load race a per-call AbortController alone cannot (a response in flight can still arrive after abort fires)
+- [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: extended SourcePane.svelte for single-def/multi-def rendering though not in the plan's declared files_modified — Task 2's own pnpm check broke on the BrowseTargetState union growing, and the plan's must-haves require source+callers+callees+blast-radius visible together for an opened symbol
+- [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: found live (manual UAT) that typing in search never wrote q into the URL — added SearchPanel's onQueryChange prop wired to a REFINE navigate() call in +page.svelte, required by the plan's own must_haves though not in Task 3's task-level behavior bullets
 
 ### Pending Todos
 
@@ -273,8 +278,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T02:37:38.682Z
-Stopped at: Completed 03-06-PLAN.md
+Last session: 2026-08-29T03:08:21.928Z
+Stopped at: Completed 03-07-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

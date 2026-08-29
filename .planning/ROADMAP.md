@@ -232,7 +232,7 @@ Plans:
 - [x] 03-04-PLAN.md — TRACER: URL → `GetNodeDetail` → error classification → highlighted source, end to end, plus the highlighter coverage guard
 - [x] 03-05-PLAN.md — BRW-09 server side: additive `GetPermalink` RPC, git remote/pushed derivation, confinement reuse
 - [x] 03-06-PLAN.md — search surface: live `Search`/`Files`, `Explore` on Enter, keyboard drivability
-- [ ] 03-07-PLAN.md — node detail, callers/callees/blast radius, click-through, and URL push-vs-replace history
+- [x] 03-07-PLAN.md — node detail, callers/callees/blast radius, click-through, and URL push-vs-replace history
 - [ ] 03-08-PLAN.md — click-to-definition, disambiguation picker, copy affordance, truncation notice and permalink surface
 - [ ] 03-09-PLAN.md — shared status gate, the three explicit degrade states, and the rebuilt committed bundle
 - [ ] 03-10-PLAN.md — golangci-lint gate (folded todo, third fold; does not gate the phase criteria)
