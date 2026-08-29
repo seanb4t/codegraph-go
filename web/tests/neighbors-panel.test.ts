@@ -114,6 +114,35 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 	it('the click-through intent and the depth-change intent are demonstrably different values', () => {
 		expect(NAV_INTENT.NAVIGATE).not.toBe(NAV_INTENT.REFINE);
 	});
+
+	it('WR-05: a non-integer depth value is never written to the URL', async () => {
+		// browse-url.ts's parseShapeInteger accepts only a base-10 integer
+		// literal, no decimal point, no exponent. Before this fix,
+		// handleDepthChange accepted anything Number.isFinite() approves —
+		// "2.5" and "1e3" both pass that check but neither round-trips
+		// through the app's own URL parser, producing a URL claiming a
+		// depth the app itself then silently discards on the next read.
+		const onNavigate = vi.fn();
+		render(NeighborsPanel, {
+			props: { calledBy: [], calls: [], blastRadius: IDLE_BLAST, depth: 2, onNavigate }
+		});
+		const input = screen.getByTestId('neighbors-depth-input');
+
+		await fireEvent.change(input, { target: { value: '2.5' } });
+		expect(onNavigate).not.toHaveBeenCalled();
+
+		await fireEvent.change(input, { target: { value: '1e3' } });
+		expect(onNavigate).not.toHaveBeenCalled();
+
+		// Clearing the field explicitly clears the param, rather than being
+		// silently ignored or writing a stale/NaN value.
+		await fireEvent.change(input, { target: { value: '' } });
+		expect(onNavigate).toHaveBeenCalledWith({ depth: undefined }, NAV_INTENT.REFINE);
+
+		// A conforming value still works.
+		await fireEvent.change(input, { target: { value: '-1' } });
+		expect(onNavigate).toHaveBeenCalledWith({ depth: -1 }, NAV_INTENT.REFINE);
+	});
 });
 
 describe('NeighborsPanel: empty and failed states are distinguishable, never an absent region', () => {

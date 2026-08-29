@@ -37,6 +37,24 @@ export type BrowseParams = {
 	unknown: Array<[string, string]>;
 };
 
+// INTEGER_SHAPE is the one grammar this module accepts for line/depth/
+// limit: a base-10 integer literal, optionally signed, no decimal point,
+// no exponent. Exported (WR-05) so every WRITER of these params — today
+// NeighborsPanel's depth control — can check a raw input against the
+// exact shape this module's own reader (isShapeInteger/parseShapeInteger
+// below) accepts, rather than maintaining a second, looser check
+// (`Number.isFinite`) that can silently disagree with the parser and
+// write a URL value the reader then drops.
+const INTEGER_SHAPE = /^-?\d+$/;
+
+// isShapeInteger reports whether raw is a value parseShapeInteger would
+// accept (a shape check, not a range check — see parseShapeInteger's own
+// doc comment). Intended for a writer to validate BEFORE serializing, so
+// the URL this app writes and the URL this app reads never disagree.
+export function isShapeInteger(raw: string): boolean {
+	return INTEGER_SHAPE.test(raw) && Number.isSafeInteger(Number(raw));
+}
+
 // parseShapeInteger accepts only a base-10 integer literal (optionally
 // signed) and rejects everything else — "1.5", "abc", "" and a value
 // outside Number.isSafeInteger's range are all treated as ABSENT, never
@@ -45,10 +63,8 @@ export type BrowseParams = {
 // (e.g. `limit=999999`) passes through unchanged for the server to judge.
 function parseShapeInteger(raw: string | null): number | undefined {
 	if (raw === null || raw === '') return undefined;
-	if (!/^-?\d+$/.test(raw)) return undefined;
-	const value = Number(raw);
-	if (!Number.isSafeInteger(value)) return undefined;
-	return value;
+	if (!isShapeInteger(raw)) return undefined;
+	return Number(raw);
 }
 
 export function parseBrowseParams(params: URLSearchParams): BrowseParams {

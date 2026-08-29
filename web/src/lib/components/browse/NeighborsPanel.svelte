@@ -19,6 +19,7 @@
 	import type { Node, Location } from '$lib/gen/ui_pb';
 	import type { BlastRadiusState } from '$lib/browse-state';
 	import { NAV_INTENT, type BrowseNavDelta, type NavIntent } from '$lib/browse-nav';
+	import { isShapeInteger } from '$lib/browse-url';
 
 	let {
 		calls,
@@ -53,12 +54,26 @@
 	// A depth-control change is a REFINE intent — it rewrites the URL in
 	// place so the address bar stays correct and shareable at every
 	// instant, without filling history with one entry per adjustment.
+	//
+	// WR-05: this writer must speak the exact same grammar browse-url.ts's
+	// reader (parseShapeInteger) accepts — a base-10 integer literal, no
+	// decimal point, no exponent — via the shared isShapeInteger
+	// predicate. An `<input type="number">` happily accepts "2.5" or
+	// "1e3"; writing either into the URL previously produced a value the
+	// app's own parser then silently dropped on the very next read,
+	// leaving the address bar and the rendered blast radius disagreeing
+	// with no error anywhere. A non-conforming value is simply not
+	// written — the input keeps showing what the user typed, but the URL
+	// (and thus any link shared from it) never claims a depth this app
+	// cannot itself parse back.
 	function handleDepthChange(e: Event): void {
 		const raw = (e.currentTarget as HTMLInputElement).value;
-		const parsed = Number(raw);
-		if (raw !== '' && Number.isFinite(parsed)) {
-			onNavigate({ depth: parsed }, NAV_INTENT.REFINE);
+		if (raw === '') {
+			onNavigate({ depth: undefined }, NAV_INTENT.REFINE);
+			return;
 		}
+		if (!isShapeInteger(raw)) return;
+		onNavigate({ depth: Number(raw) }, NAV_INTENT.REFINE);
 	}
 </script>
 
