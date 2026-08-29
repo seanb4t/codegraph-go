@@ -37,8 +37,43 @@ Per **D-18**, Phase 4 *fills* them and does not restructure navigation.
 
 ### Health Data on the Wire (HLT-01, HLT-02, HLT-03)
 
-- **D-01:** **A new `GetIndexHealth` RPC carries the rich health data.
+- **D-01:** **A new health RPC carries the rich health data.
   `GetStatusResponse` is NOT extended.**
+
+  > **⚠ CORRECTED after research (2026-08-29) — the rpc is named `GetHealth`,
+  > NOT `GetIndexHealth`. Read this before writing any proto or test.**
+  >
+  > Discussion named this rpc `GetIndexHealth` throughout. That name **fails an
+  > existing test** and must not be used. `internal/uiserver/readonly_test.go:89-93`
+  > defines `mutatingVerbs`, a literal fixture of write-verb substrings that
+  > includes **`"Index"`**, and applies it with a bare `strings.Contains` over
+  > every `UIServiceHandler` method name. `"GetIndexHealth"` contains `"Index"`,
+  > so `TestUIServiceDeclaresNoMutatingMethod` would fail.
+  >
+  > **The guard is correct and must NOT be weakened.** It is deliberately built
+  > as a complementary pair — a negative verb-substring check alongside
+  > `TestUIServiceMethodSetIsExactlyTheReadSet`'s positive set equality — and it
+  > asserts a positive count of inspected method names *before* applying the verb
+  > check, citing rule `84d1gfpywd` in its own comment. Adding an allowlist
+  > exception would punch a hole in a guard designed not to go vacuous. **Rename
+  > the rpc; do not touch `mutatingVerbs`.**
+  >
+  > **Chosen name: `GetHealth`** — matches the existing `/health` route, keeps the
+  > domain concept ("index health") intact in requirement and UI language, and is
+  > the minimal change that clears the collision. Verified clean against the full
+  > `mutatingVerbs` list, positive-controlled by confirming all ten existing
+  > method names also pass (so the check discriminates rather than accepting
+  > everything). `GetGraphHealth` and `GetDiagnostics` are also clean if a later
+  > reviewer prefers one; `GetIndexStats` is NOT (same `"Index"` collision).
+  >
+  > **Two literals must be updated in the same change** (`readonly_test.go`), and
+  > research confirmed a third does NOT need updating:
+  > - `wantUIServiceMethods` (lines 31-42) — add `"GetHealth": {}`.
+  > - the `10` literal at line 61 (`if len(got) != 10`) — becomes `11`.
+  > - **`proto:drift`'s `nfiles -lt 4` floor (`Taskfile.yml:339-348`) needs NO
+  >   change** — it counts generated *files*, and adding an rpc to the existing
+  >   `ui.proto` does not change the file count. This corrects an assumption in
+  >   the research brief itself.
 
   Phase 3's `createStatusGate` (`web/src/lib/status.ts`) fetches `GetStatus` on
   **every navigation** — that is its documented contract ("fetch on load and
@@ -48,12 +83,12 @@ Per **D-18**, Phase 4 *fills* them and does not restructure navigation.
 
   The split follows the standard health-endpoint discipline: a cheap,
   frequently-polled signal and a separate diagnostic endpoint. `GetStatus` keeps
-  its nine scalars unchanged; `GetIndexHealth` is the 11th rpc on `UIService`,
+  its nine scalars unchanged; `GetHealth` is the 11th rpc on `UIService`,
   additive and read-only per **D-02a**.
   — **Reversibility:** cheap — collapsing the two messages later is a mechanical
   merge; splitting them after the fact would require re-auditing every caller.
 
-- **D-02:** **The worktree-mismatch check runs ONLY inside `GetIndexHealth`.**
+- **D-02:** **The worktree-mismatch check runs ONLY inside `GetHealth`.**
 
   `gitmeta.DetectIndexMismatch` spawns **up to four git subprocesses** — its own
   doc comment says so (`internal/gitmeta/detect.go:22`). A worktree mismatch is a
@@ -293,7 +328,7 @@ part of this phase, following 03-03's precedent (`git mv`, verifiable resolution
   server error". The pieces exist; the composition is the planner's.
 - **The health page's concrete layout** — what "above the raw numbers" means
   visually for HLT-02, and how the HLT-03 worktree warning is made "impossible to miss".
-- **Whether `GetIndexHealth` defines its own message or reuses `GetStatusResponse`
+- **Whether `GetHealth` defines its own message or reuses `GetStatusResponse`
   fragments.**
 - **The render-cost threshold value** in D-08, and how it is measured.
 - Empty, loading and error states for each of the four analyses.
@@ -387,7 +422,7 @@ part of this phase, following 03-03's precedent (`git mv`, verifiable resolution
 
 ### Reusable Assets
 - **`StatusResult`'s health fields** (`internal/query/status.go:47-65`) — every
-  value HLT-01/02/03 needs is already computed. `GetIndexHealth` is a mapping
+  value HLT-01/02/03 needs is already computed. `GetHealth` is a mapping
   layer, not new engine work.
 - **All four analysis RPCs** — `Callers`, `Callees`, `Impact`, `Affected` already
   exist and are already bounded server-side. Phase 4 adds no analysis capability.
@@ -413,7 +448,7 @@ part of this phase, following 03-03's precedent (`git mv`, verifiable resolution
   Notes for this phase; enforced by D-07.
 
 ### Integration Points
-- `internal/uiserver/handlers.go` — where `GetIndexHealth` mounts, alongside the
+- `internal/uiserver/handlers.go` — where `GetHealth` mounts, alongside the
   existing `Files` handler at line 433 that D-14's fix flows through.
 - `internal/uiproto/uiv1/ui.proto` + `task proto:gen` — the new rpc regenerates
   both the Go and the committed TypeScript client; `proto:drift` must stay green.
