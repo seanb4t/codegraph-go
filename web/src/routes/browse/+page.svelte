@@ -12,7 +12,7 @@
 	// state assignment (03-06's own placeholder, replaced below).
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { getContext } from 'svelte';
+	import { getContext, untrack } from 'svelte';
 	import { uiClient } from '$lib/client';
 	import type { IndexStatus, StatusGate } from '$lib/status';
 	import { parseBrowseParams, type BrowseParams } from '$lib/browse-url';
@@ -59,8 +59,46 @@
 	const navigator = createBrowseNavigator(goto);
 	const gate = createNavigationGate();
 
+	// CR-01 (03-REVIEW.md): the load effect must depend ONLY on the
+	// target-identifying fields, never on the whole `params` object.
+	// `q` is view-local (SearchPanel writes it on every keystroke,
+	// undebounced, by D-11's own shareable-URL contract) — if the
+	// effect below read `params` directly, `page.url`'s fresh
+	// searchParams object on every `q` write would produce a fresh
+	// `params` object literal each time (browse-url.ts's
+	// parseBrowseParams), and Svelte 5 invalidates a dependent effect by
+	// REFERENTIAL identity, tearing down the open node view (loading
+	// state, re-issued GetNodeDetail/Impact) once per character typed.
+	//
+	// targetKey is JSON.stringify of the five target fields rather than
+	// a hand-joined string with a chosen separator: a separator has to
+	// be PROVABLY absent from every field it separates, and neither a
+	// symbol name nor a file-path segment is guaranteed to exclude any
+	// single printable character (POSIX forbids only '/' and NUL inside
+	// a path segment) — so no separator character is actually safe to
+	// pick. JSON.stringify escapes each element independently, so two
+	// different five-tuples can never collide onto the same string and
+	// the same tuple always serializes identically, with nothing to
+	// choose. The result is a PRIMITIVE (string), which is what makes
+	// this work at all: Svelte compares primitives by value, not by
+	// reference, so an unchanged target produces an EQUAL key and the
+	// effect below does not re-run.
+	let targetKey = $derived(
+		JSON.stringify([
+			params.symbol ?? null,
+			params.file ?? null,
+			params.line ?? null,
+			params.depth ?? null,
+			params.limit ?? null
+		])
+	);
+
 	$effect(() => {
-		const currentParams = params;
+		targetKey; // the ONLY tracked read — never read `params` here directly.
+		// `params` is read through untrack so this effect does not
+		// re-establish a dependency on the whole object (which would
+		// undo the narrowing above the moment `q` changes again).
+		const currentParams = untrack(() => params);
 		const generation = gate.advance();
 		const controller = new AbortController();
 
