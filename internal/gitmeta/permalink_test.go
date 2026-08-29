@@ -60,6 +60,42 @@ func TestRemoteGitHubRepo_SCPLikeSyntaxNoUser(t *testing.T) {
 	}
 }
 
+// TestParseGitHubRemote_BareLocalPathWithColonNotMisparsedAsSCP reproduces
+// IN-04: WR-06 made the scp-like syntax's user@ prefix optional, which
+// also removed the implicit "@ must be present" gate that had kept bare
+// filesystem paths out of that branch. A Windows-style path with a colon
+// before its first path separator (a drive letter) previously parsed as
+// host="D" — a single-letter host that is never a valid git remote host —
+// echoing a fragment of a local path into RemoteGitHubRepo's Reason text
+// instead of the more accurate "not a recognized URL".
+func TestParseGitHubRemote_BareLocalPathWithColonNotMisparsedAsSCP(t *testing.T) {
+	cases := []string{
+		`D:\src\myrepo`,
+		`C:/src/myrepo`,
+		`c:\Users\me\repo`,
+	}
+	for _, raw := range cases {
+		t.Run(raw, func(t *testing.T) {
+			host, owner, repo := parseGitHubRemote(raw)
+			if host != "" || owner != "" || repo != "" {
+				t.Fatalf("parseGitHubRemote(%q) = host=%q owner=%q repo=%q, want all empty (not misparsed as scp-like)", raw, host, owner, repo)
+			}
+		})
+	}
+}
+
+// TestParseGitHubRemote_ShortHostSCPStillParses is the positive control
+// for the guard above (rule 84d1gfpywd): a genuinely short but VALID
+// scp-like host (2+ characters, no path separator) must still parse,
+// proving the fix rejects single-character/path-separator candidates
+// specifically, not short hosts in general.
+func TestParseGitHubRemote_ShortHostSCPStillParses(t *testing.T) {
+	host, owner, repo := parseGitHubRemote("ab:owner/repo.git")
+	if host != "ab" || owner != "owner" || repo != "repo" {
+		t.Fatalf("parseGitHubRemote(%q) = host=%q owner=%q repo=%q, want host=ab owner=owner repo=repo", "ab:owner/repo.git", host, owner, repo)
+	}
+}
+
 func TestRemoteGitHubRepo_SSHScheme(t *testing.T) {
 	dir := initRepo(t, t.TempDir())
 	runGit(t, dir, "remote", "add", "origin", "ssh://git@github.com/owner/repo.git")

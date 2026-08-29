@@ -148,9 +148,25 @@ func parseGitHubRemote(raw string) (host, owner, repo string) {
 		if colon := strings.Index(rest, ":"); colon >= 0 {
 			slash := strings.Index(rest, "/")
 			if slash == -1 || colon < slash {
-				host = rest[:colon]
-				owner, repo = splitOwnerRepo(rest[colon+1:])
-				return host, owner, repo
+				candidateHost := rest[:colon]
+				// IN-04: reject a candidate host that is a single
+				// character or contains a path separator. WR-06 made the
+				// user@ prefix optional, which also removed the implicit
+				// "@ must be present" gate that had kept bare filesystem
+				// paths out of this branch — without this check,
+				// `D:\src\myrepo` (or any local path with a colon before
+				// its first "/") parses as host="D", misclassifying a
+				// local path as a remote scp-like URL and echoing a
+				// fragment of it into RemoteGitHubRepo's Reason text.
+				// git's own scp-like grammar names a HOST here
+				// ([user@]host.xz:path/to/repo.git/); a single-letter
+				// drive designator or a string containing "\" or "/" is
+				// never a valid one.
+				if len(candidateHost) > 1 && !strings.ContainsAny(candidateHost, `\/`) {
+					host = candidateHost
+					owner, repo = splitOwnerRepo(rest[colon+1:])
+					return host, owner, repo
+				}
 			}
 		}
 		return "", "", ""
