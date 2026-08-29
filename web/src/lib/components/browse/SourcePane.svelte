@@ -74,7 +74,7 @@
 			Something went wrong: {failure.message}
 		{/if}
 	</p>
-{:else}
+{:else if state.kind === 'file'}
 	{@const text = new TextDecoder().decode(state.source)}
 	{@const language = languageForPath(state.path)}
 	<div class="mt-4" data-testid="browse-source">
@@ -88,4 +88,30 @@
 				language
 			)}</code></pre>
 	</div>
+{:else if state.kind === 'single-def'}
+	{@const source = state.source}
+	{@const language = state.node.language}
+	<div class="mt-4" data-testid="browse-source">
+		{#if source}
+			{@const text = new TextDecoder().decode(source.content)}
+			{#if source.truncated}
+				<p class="mb-2 text-xs text-muted-foreground" data-testid="browse-truncated">
+					Showing first {source.returnedLines} of {source.totalLines} lines.
+				</p>
+			{/if}
+			<pre class="overflow-x-auto rounded border p-4 text-sm"><code>{@html highlightSource(
+					text,
+					language
+				)}</code></pre>
+		{:else}
+			<p class="text-sm text-muted-foreground" data-testid="browse-no-source">
+				No source available for this definition.
+			</p>
+		{/if}
+	</div>
+{:else if state.kind === 'multi-def'}
+	<p class="mt-4 text-sm text-muted-foreground" data-testid="browse-multi-def">
+		{state.totalCandidates} definitions found for &quot;{state.symbol}&quot; — a picker is
+		not yet built (coming in a later plan).
+	</p>
 {/if}

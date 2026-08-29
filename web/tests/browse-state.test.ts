@@ -99,7 +99,7 @@ describe('loadBrowseTarget: mode discrimination (never inferred from field empti
 				totalBytes: 13,
 				returnedLines: 1,
 				returnedBytes: 13
-			}
+			} as unknown as GetNodeDetailResponse['source']
 		});
 		const state = await loadBrowseTarget({ symbol: 'Foo', unknown: [] }, stubDetailClient(response));
 		expect(state.kind).toBe('single-def');
@@ -113,7 +113,7 @@ describe('loadBrowseTarget: mode discrimination (never inferred from field empti
 	it('a multi-def response yields a distinct multi-def state carrying the candidate list and true total', async () => {
 		const definitions = [
 			{ node: node('Foo'), calls: [], calledBy: [], detailGathered: true, source: undefined }
-		];
+		] as unknown as GetNodeDetailResponse['definitions'];
 		const response = multiDefResponse({ symbol: 'Foo', definitions, totalCandidates: 5 });
 		const state = await loadBrowseTarget({ symbol: 'Foo', unknown: [] }, stubDetailClient(response));
 		expect(state.kind).toBe('multi-def');
