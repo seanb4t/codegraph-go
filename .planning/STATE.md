@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Completed 03-07-PLAN.md
-last_updated: "2026-08-29T03:08:22.003Z"
+stopped_at: Completed 03-08-PLAN.md
+last_updated: "2026-08-29T03:35:41.954Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 03 execution started
-state_head: 99fcd9371aba8a747aa0eda1692e39d6309211ad
+state_head: d4e6eeaff91cb2da21194089006062736fad37e6
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 25
+  completed_plans: 26
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 03 execution started
 
@@ -86,6 +86,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P05 | ~40min | 3 tasks | 10 files |
 | Phase 03 P06 | ~50min active | 3 tasks | 44 files |
 | Phase 03-browse-inspect-navigation P07 | ~50min | 3 tasks | 10 files |
+| Phase 03 P08 | ~13min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -157,6 +158,8 @@ Standing decisions that outlive every milestone:
 - [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: NavigationGeneration is a plain module-scoped counter (createNavigationGate) rather than tied to $app/state/runes, kept testable with no SvelteKit runtime — closes the cross-load race a per-call AbortController alone cannot (a response in flight can still arrive after abort fires)
 - [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: extended SourcePane.svelte for single-def/multi-def rendering though not in the plan's declared files_modified — Task 2's own pnpm check broke on the BrowseTargetState union growing, and the plan's must-haves require source+callers+callees+blast-radius visible together for an opened symbol
 - [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: found live (manual UAT) that typing in search never wrote q into the URL — added SearchPanel's onQueryChange prop wired to a REFINE navigate() call in +page.svelte, required by the plan's own must_haves though not in Task 3's task-level behavior bullets
+- [Phase 03]: [Phase 03-browse-inspect-navigation]: [Phase 03-08]: truncated-file permalink requests carry NO anchor at all (neither line nor end_line) — the strict reading of D-20's "the rest of the file is what the local view could not show"; any partial anchor still frames the remote view around the truncated portion
+- [Phase 03]: [Phase 03-browse-inspect-navigation]: [Phase 03-08]: SourcePane.svelte's local `state` prop binding renamed to `target` internally (destructure rename, external prop name unchanged) — a bare local named `state` collides with the `$state` rune used elsewhere in the same component, the same pitfall 03-06/03-07 already documented, hit a third time
 
 ### Pending Todos
 
@@ -278,8 +281,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T03:08:21.928Z
-Stopped at: Completed 03-07-PLAN.md
+Last session: 2026-08-29T03:35:41.881Z
+Stopped at: Completed 03-08-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
