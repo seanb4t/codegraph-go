@@ -8,7 +8,7 @@ import {
 	buildCallTargetIndex,
 	lookupCallTarget,
 	decorateCallTargets,
-	IDENTIFIER_PATTERN,
+	identifierPattern,
 	type CallTargetIndex
 } from '$lib/call-targets';
 import type { Node } from '$lib/gen/ui_pb';
@@ -88,15 +88,34 @@ describe('lookupCallTarget: exact match only, in both directions', () => {
 	});
 });
 
-describe('IDENTIFIER_PATTERN: the tokenizer', () => {
+describe('identifierPattern: the tokenizer', () => {
 	it('splits short locals and keywords out as ordinary tokens', () => {
-		const tokens = [...'err := ctx.Value(i)'.matchAll(IDENTIFIER_PATTERN)].map((m) => m[0]);
+		const tokens = [...'err := ctx.Value(i)'.matchAll(identifierPattern())].map((m) => m[0]);
 		expect(tokens).toEqual(['err', 'ctx', 'Value', 'i']);
 	});
 
 	it('treats a non-ASCII identifier as ONE token, not split at its first non-ASCII code point', () => {
-		const tokens = [...'résumé + café'.matchAll(IDENTIFIER_PATTERN)].map((m) => m[0]);
+		const tokens = [...'résumé + café'.matchAll(identifierPattern())].map((m) => m[0]);
 		expect(tokens).toEqual(['résumé', 'café']);
+	});
+
+	it('IN-06: each call returns a FRESH regex — .test() on one instance never advances another\'s lastIndex', () => {
+		// The historical failure mode this factory closes: a single shared
+		// `g`-flagged RegExp instance has a mutable lastIndex. Advancing it
+		// via .test()/.exec() on one call's result would silently make a
+		// LATER matchAll() (which seeds its internal clone from the
+		// original's lastIndex) skip the start of a subsequent input.
+		const first = identifierPattern();
+		first.test('someIdentifier'); // advances first's OWN lastIndex
+		expect(first.lastIndex).not.toBe(0);
+
+		// A second call must be entirely unaffected by the first's mutated
+		// state — proving these are independent instances, not the same
+		// shared object.
+		const second = identifierPattern();
+		expect(second.lastIndex).toBe(0);
+		const tokens = [...'anotherIdentifier here'.matchAll(second)].map((m) => m[0]);
+		expect(tokens).toEqual(['anotherIdentifier', 'here']);
 	});
 });
 

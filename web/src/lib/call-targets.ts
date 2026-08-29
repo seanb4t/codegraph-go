@@ -45,14 +45,28 @@
 // interface this module's TreeWalker/element code depends on.
 import type { Node as GraphNode } from '$lib/gen/ui_pb';
 
-// IDENTIFIER_PATTERN is the Unicode-aware identifier tokenizer: an
-// ID_Start code point (or `_`/`$`) followed by zero or more ID_Continue
-// code points (or `_`/`$`, plus the two zero-width joiner characters
-// ECMAScript's own IdentifierPart grammar permits). Using Unicode
-// property escapes means a non-ASCII identifier is captured as ONE
-// token, never split at its first non-ASCII code point and matched as a
-// fragment.
-export const IDENTIFIER_PATTERN = /[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*/gu;
+// identifierPattern returns a FRESH Unicode-aware identifier tokenizer
+// regex on every call: an ID_Start code point (or `_`/`$`) followed by
+// zero or more ID_Continue code points (or `_`/`$`, plus the two
+// zero-width joiner characters ECMAScript's own IdentifierPart grammar
+// permits). Using Unicode property escapes means a non-ASCII identifier
+// is captured as ONE token, never split at its first non-ASCII code point
+// and matched as a fragment.
+//
+// IN-06: this is a FACTORY, not a shared exported const, specifically
+// because the pattern carries the `g` flag. String.prototype.matchAll
+// clones its regex argument internally, so calling this once per
+// matchAll call site (as decorateTextNode does below) is always safe \u2014
+// but a single shared `g`-flagged RegExp instance exported as a const
+// would let any future .test()/.exec() call on it advance its mutable
+// lastIndex, after which a SUBSEQUENT matchAll (which seeds its clone
+// from the original's lastIndex) would silently skip the beginning of
+// later inputs, with no error anywhere. A factory makes that entire
+// failure class unreachable: every caller gets its own regex, lastIndex
+// and all.
+export function identifierPattern(): RegExp {
+	return /[\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*/gu;
+}
 
 // CallTargetIndex maps a call target's exact NAME (as the wire sent it)
 // to every GraphNode sharing that name — a list, not a single value, so
@@ -122,7 +136,7 @@ function decorateTextNode(
 	handlers: HandlerRecord[]
 ): void {
 	const text = textNode.data;
-	const matches = [...text.matchAll(IDENTIFIER_PATTERN)];
+	const matches = [...text.matchAll(identifierPattern())];
 	if (matches.length === 0) return;
 
 	const parts: globalThis.Node[] = [];
