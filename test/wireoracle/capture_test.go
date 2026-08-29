@@ -7,10 +7,23 @@ import (
 )
 
 // TestCaptureArrivalLedgerPreservesWireOrder is 03-03-PLAN.md Task 1(b)'s
-// evidence test: it drives scanArrivalLines — the same scan-and-timestamp
-// primitive Capture's own stdout-reading goroutine uses (capture.go) —
-// with a synthetic writer emitting a known line sequence, and asserts the
+// evidence test: it drives scanArrivalLines, which wraps scanTimestamped —
+// the ONE scan-and-timestamp primitive Capture's own stdout-reading
+// goroutine ACTUALLY CALLS (capture.go), not a lookalike copy — with a
+// synthetic writer emitting a known line sequence, and asserts the
 // returned ledger reproduces that emission order EXACTLY.
+//
+// WR-03: before this fix, Capture's stdout goroutine had its own inline
+// copy of the scanner construction (same buffer size, same per-line
+// copy-then-timestamp shape) and scanArrivalLines/scanTimestamped had
+// exactly one caller in the repository — this test. The assertion below
+// passed while proving nothing about the code that actually runs:
+// changing Capture's inline goroutine to fan out across two scanner
+// goroutines, or to buffer and sort lines before sending, would have left
+// this test green while silently invalidating the "capture preserves
+// wire order" claim 03-03-EVIDENCE.md's VERDICT rests on. Capture now
+// calls scanTimestamped directly (capture.go), so this test and the
+// running server binary exercise the same code.
 //
 // The emitted sequence is deliberately NOT ascending by its embedded
 // JSON-RPC id (1, 3, 2, notification, 5): a ledger that silently sorted or

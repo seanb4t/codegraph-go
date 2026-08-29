@@ -203,30 +203,45 @@ type ArrivalLine struct {
 	Arrived time.Time
 }
 
-// scanArrivalLines reads newline-delimited lines from r and returns them,
-// each timestamped at the moment its bytes were fully scanned, in the
-// EXACT order bufio.Scanner.Scan() returned them — no sorting, no
-// bucketing, no reordering of any kind, and nothing runs concurrently with
-// this single sequential loop that could reorder what it returns.
+// scanTimestamped reads newline-delimited lines from r and calls emit for
+// each one, stamped with the wall-clock time its bytes were fully
+// scanned, in the EXACT order bufio.Scanner.Scan() returned them — no
+// sorting, no bucketing, no reordering of any kind, and nothing runs
+// concurrently with this single sequential loop that could reorder what
+// it produces. Returns scanner.Err() once the reader is exhausted.
 //
-// This is the identical scan-and-timestamp primitive Capture's own
-// stdout-reading goroutine uses below (same bufio.Scanner construction,
-// same buffer size, same per-line copy-then-timestamp shape) — extracted
-// here as a standalone, independently testable function specifically so
-// TestCaptureArrivalLedgerPreservesWireOrder can drive it with a synthetic
-// writer and assert the order-preservation property directly and durably,
-// rather than relying on a one-time manual read of this source file.
-func scanArrivalLines(r io.Reader) ([]ArrivalLine, error) {
-	var out []ArrivalLine
+// WR-03: this is now the ONE scan-and-timestamp primitive — Capture's own
+// stdout-reading goroutine below calls this function directly (adapting
+// its emit callback onto the internal lines channel) rather than
+// duplicating the scanner construction, buffer size, and per-line
+// copy-then-timestamp shape inline. Before this fix, an identical-looking
+// copy of this logic lived inline in Capture with zero callers of THIS
+// function outside its own test — TestCaptureArrivalLedgerPreservesWireOrder
+// exercised a function the running server binary never actually invoked,
+// so a reordering bug introduced into Capture's inline copy would have
+// left that test green while silently invalidating the "capture preserves
+// wire order" claim 03-03-EVIDENCE.md's VERDICT rests on.
+func scanTimestamped(r io.Reader, emit func(ArrivalLine)) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 	for scanner.Scan() {
-		out = append(out, ArrivalLine{
+		emit(ArrivalLine{
 			Raw:     append([]byte(nil), scanner.Bytes()...),
 			Arrived: time.Now(),
 		})
 	}
-	return out, scanner.Err()
+	return scanner.Err()
+}
+
+// scanArrivalLines collects scanTimestamped's output into a slice, in the
+// same exact order — the shape TestCaptureArrivalLedgerPreservesWireOrder
+// asserts against with a synthetic writer.
+func scanArrivalLines(r io.Reader) ([]ArrivalLine, error) {
+	var out []ArrivalLine
+	err := scanTimestamped(r, func(al ArrivalLine) {
+		out = append(out, al)
+	})
+	return out, err
 }
 
 // syncBuffer is a concurrency-safe io.Writer wrapping a bytes.Buffer.
@@ -368,18 +383,19 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 	lines := make(chan scannedLine)
 	go func() {
 		defer close(lines)
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
-		for scanner.Scan() {
-			// arrived is stamped HERE, immediately after Scan() returns and
-			// before the line is handed to drainUntil — the earliest point
-			// at which this process has observed the line at all. This is
-			// the timestamp 03-03-EVIDENCE.md's arrival sequence uses; it
-			// is captured unconditionally, not only on a later assertion
-			// failure, so ArrivalLedger is always available to a caller
-			// that wants to dump it (03-03-PLAN.md Task 1(b)).
-			lines <- scannedLine{raw: append([]byte(nil), scanner.Bytes()...), arrived: time.Now()}
-		}
+		// WR-03: calls scanTimestamped directly — the SAME function
+		// TestCaptureArrivalLedgerPreservesWireOrder drives — rather than
+		// a second, inline copy of its scanner construction. emit is
+		// invoked HERE, immediately after Scan() returns and before the
+		// line is handed to drainUntil — the earliest point at which this
+		// process has observed the line at all. This is the timestamp
+		// 03-03-EVIDENCE.md's arrival sequence uses; it is captured
+		// unconditionally, not only on a later assertion failure, so
+		// ArrivalLedger is always available to a caller that wants to
+		// dump it (03-03-PLAN.md Task 1(b)).
+		_ = scanTimestamped(stdout, func(al ArrivalLine) {
+			lines <- scannedLine{raw: al.Raw, arrived: al.Arrived}
+		})
 	}()
 
 	var out bytes.Buffer
