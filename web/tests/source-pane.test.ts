@@ -251,6 +251,39 @@ describe('CopyAction: a clipboard failure surfaces visibly, never a silent no-op
 	});
 });
 
+describe('CopyAction: the copy-state reset timer is cleared on unmount (IN-07)', () => {
+	it('unmounting mid-window clears the pending reset timer rather than leaving it scheduled', async () => {
+		vi.useFakeTimers();
+		try {
+			Object.defineProperty(navigator, 'clipboard', {
+				value: { writeText: vi.fn().mockResolvedValue(undefined) },
+				configurable: true,
+				writable: true
+			});
+
+			const { unmount } = render(CopyAction, { props: { value: 'internal/query/node.go', label: 'file path' } });
+			const button = screen.getByTestId('copy-action-file path');
+			await fireEvent.click(button);
+			// Flush the writeText microtask so handleCopy reaches
+			// `resetTimer = setTimeout(...)` before asserting on it.
+			await vi.advanceTimersByTimeAsync(0);
+			expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+			unmount();
+			expect(vi.getTimerCount()).toBe(0);
+
+			// Advancing well past the 1.5s window after unmount must not
+			// throw — the old bug's failure mode (assigning copyState on a
+			// destroyed component) is harmless in Svelte 5 at runtime, but
+			// vi.getTimerCount() above is the direct proof the timer itself
+			// is gone, not merely that nothing visibly broke.
+			await vi.advanceTimersByTimeAsync(2000);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
 describe('SourcePane: copy affordances for a single-def target', () => {
 	it('offers a distinctly-labelled copy control for the file path and the symbol name', () => {
 		render(SourcePane, { props: { state: singleDefState({ node: node('Foo', { filePath: 'a/b.go' }) }) } });

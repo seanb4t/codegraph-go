@@ -32,6 +32,14 @@
 	let copyState = $state<'idle' | 'copied' | 'failed'>('idle');
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
+	// IN-07: WR-09's fix schedules resetTimer after every copy attempt and
+	// only ever clears it on the NEXT click (the line above, inside
+	// handleCopy). Unmounting within the 1.5s window left the timer
+	// pending, later assigning copyState on a destroyed component — a
+	// cleanup-only effect (nothing inside is reactively read, so this
+	// runs exactly once, on unmount) closes that gap.
+	$effect(() => () => clearTimeout(resetTimer));
+
 	async function handleCopy(): Promise<void> {
 		clearTimeout(resetTimer);
 		try {
