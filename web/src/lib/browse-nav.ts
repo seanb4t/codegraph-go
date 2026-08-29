@@ -125,11 +125,21 @@ export function createBrowseNavigator(gotoFn: GotoFn): BrowseNavigator {
 			const url = new URL(currentUrl.href);
 			url.search = nextSearch.toString();
 
-			gotoFn(url, {
+			// IN-09: gotoFn returns Promise<void> — SvelteKit's goto rejects
+			// during SSR and a navigation can be aborted (e.g. superseded by
+			// a newer one). Left neither awaited nor handled, a rejection
+			// became an unhandled promise rejection with no diagnostic, in
+			// the one module documented as "the ONE URL writer". void +
+			// .catch: this is a fire-and-forget navigation by design (the
+			// caller does not wait on it), so there is nothing meaningful
+			// to do with a rejection here beyond not letting it surface as
+			// unhandled — it is exactly the same "expected, ignorable
+			// failure" shape as browse-tracer.ts's own hljs fallback.
+			void gotoFn(url, {
 				replaceState: intent === NAV_INTENT.REFINE,
 				noScroll: true,
 				keepFocus: true
-			});
+			}).catch(() => {});
 		}
 	};
 }

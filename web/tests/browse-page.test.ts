@@ -56,8 +56,16 @@ vi.mock('$app/navigation', async () => {
 		// `page.url`, which is what the component's own
 		// `$derived(params)` actually reacts to. No real navigation/
 		// routing stack is mounted in this test.
+		//
+		// IN-09: returns a resolved Promise, matching the real `goto`'s
+		// Promise<void> return type ($app/navigation) that this mock
+		// otherwise stands in for — browse-nav.ts's navigate() calls
+		// `.catch()` on gotoFn's return value, which threw
+		// "Cannot read properties of undefined (reading 'catch')" against
+		// the old undefined-returning version of this mock.
 		goto: (url: URL | string) => {
 			mockPage.url = typeof url === 'string' ? new URL(url) : new URL(url.href);
+			return Promise.resolve();
 		}
 	};
 });

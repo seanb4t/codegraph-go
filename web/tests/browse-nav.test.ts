@@ -172,3 +172,31 @@ describe('createBrowseNavigator: exactly one serialization', () => {
 		expect(url.search).toBe('?' + serializeBrowseParams(expected).toString());
 	});
 });
+
+describe('createBrowseNavigator: a rejected navigation never becomes an unhandled rejection (IN-09)', () => {
+	it('navigate() attaches a .catch() to the value gotoFn returns', () => {
+		// A real rejected Promise's rejection timing (and whether vitest's
+		// global unhandledRejection listener attributes it to THIS test)
+		// is not deterministic enough to assert against directly. Instead,
+		// prove the actual code coupling IN-09's fix requires: navigate()
+		// must call `.catch()` on gotoFn's return value. A fake thenable
+		// recording whether its own .catch was invoked is a direct,
+		// environment-independent proof of that coupling.
+		let catchCalled = false;
+		const fakeGotoResult = {
+			catch(onRejected: (reason: unknown) => void) {
+				catchCalled = true;
+				return this;
+			}
+		};
+		const gotoFn = vi.fn().mockReturnValue(fakeGotoResult) as unknown as GotoFn;
+		const nav = createBrowseNavigator(gotoFn);
+		const currentUrl = new URL('http://x/browse?symbol=Old');
+
+		expect(() => {
+			nav.navigate(currentUrl, { symbol: 'New', file: undefined, line: undefined }, NAV_INTENT.NAVIGATE);
+		}).not.toThrow();
+
+		expect(catchCalled).toBe(true);
+	});
+});
