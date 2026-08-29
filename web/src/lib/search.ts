@@ -110,6 +110,20 @@ export interface SearchController extends Readable<SearchControllerState> {
 	// CURRENT query value is, on its own cancellation lineage,
 	// independent of the live path — a submit never clears live results.
 	submit(): void;
+	// dispose (IN-13) tears down this controller's own async surface: it
+	// clears any pending debounce timer and aborts both in-flight RPC
+	// lineages (live and explore). Every OTHER async surface built in
+	// this phase has an explicit lifecycle exit (search.ts's own
+	// liveAbort/exploreAbort per-call, browse-state.ts's
+	// NavigationGeneration, status.ts's request-id guard) — this
+	// controller had none: a pending 150ms debounce timer was never
+	// cleared on teardown, so unmounting the panel within that window
+	// still dispatched Search + Files for a component that no longer
+	// exists (harmless today, since the results are simply discarded by
+	// whatever subscribes next — but a caller SHOULD call this from its
+	// own teardown so the underlying RPC is actually cancelled, not just
+	// its result ignored).
+	dispose(): void;
 }
 
 export function createSearchController(client: SearchClient): SearchController {
@@ -254,9 +268,25 @@ export function createSearchController(client: SearchClient): SearchController {
 			});
 	}
 
+	function dispose(): void {
+		if (debounceTimer !== undefined) {
+			clearTimeout(debounceTimer);
+			debounceTimer = undefined;
+		}
+		if (liveAbort) {
+			liveAbort.abort();
+			liveAbort = undefined;
+		}
+		if (exploreAbort) {
+			exploreAbort.abort();
+			exploreAbort = undefined;
+		}
+	}
+
 	return {
 		subscribe: state.subscribe,
 		setQuery,
-		submit
+		submit,
+		dispose
 	};
 }

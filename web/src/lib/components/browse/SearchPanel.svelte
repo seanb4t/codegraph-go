@@ -95,6 +95,16 @@
 		return unsubscribe;
 	});
 
+	// IN-13: the panel unsubscribes from the controller's store above,
+	// but that alone does not stop a pending debounce timer or an
+	// in-flight RPC — controller.dispose() is the panel's own lifecycle
+	// exit for the controller's async surface, run once on unmount (a
+	// cleanup-only effect: nothing inside is reactively read, so this
+	// runs exactly once).
+	$effect(() => {
+		return () => controller.dispose();
+	});
+
 	let open = $state(true);
 	let inputRef: HTMLInputElement | null = $state(null);
 

@@ -362,3 +362,28 @@ describe('SearchPanel: initialQuery seeds the query ONCE on mount (IN-12)', () =
 		);
 	});
 });
+
+describe('SearchPanel: unmounting mid-debounce never dispatches a stale search (IN-13)', () => {
+	it('a pending debounce timer started before unmount never fires the RPC afterward', async () => {
+		const searchSpy = vi.fn(
+			() => Promise.resolve({ locations: [] }) as unknown as Promise<SearchResponse>
+		);
+		const client = stubClient({ search: searchSpy });
+		const onSelect = vi.fn();
+
+		const { unmount } = render(SearchPanel, { props: { client, onSelect } });
+		const input = screen.getByPlaceholderText(/search/i);
+
+		// Start a debounce window, then unmount BEFORE it elapses — a
+		// component torn down mid-debounce, the exact scenario IN-13
+		// describes. Before this fix, search.ts's controller had no
+		// dispose() and nothing called it on unmount, so this timer would
+		// still fire and dispatch Search for a component that no longer
+		// exists.
+		await fireEvent.input(input, { target: { value: 'ab' } });
+		unmount();
+
+		await vi.advanceTimersByTimeAsync(DEBOUNCE_SETTLE_MS);
+		expect(searchSpy).not.toHaveBeenCalled();
+	});
+});

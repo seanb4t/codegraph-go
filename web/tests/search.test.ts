@@ -289,3 +289,52 @@ describe('search: order preservation', () => {
 		expect(state.live.files.map((f) => f.path)).toEqual(['z.go', 'a.go', 'm.go']);
 	});
 });
+
+describe('search: dispose (IN-13)', () => {
+	it('a pending debounce timer never fires after dispose', async () => {
+		const { client, calls } = recordingClient();
+		const controller = createSearchController(client);
+
+		controller.setQuery('go');
+		// Dispose BEFORE the debounce interval elapses — a component
+		// unmounting mid-debounce, the exact scenario IN-13 describes.
+		controller.dispose();
+		await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS * 2);
+
+		expect(calls.filter((c) => c.method === 'search')).toHaveLength(0);
+		expect(calls.filter((c) => c.method === 'files')).toHaveLength(0);
+	});
+
+	it('dispose aborts an in-flight live request', async () => {
+		const searchDeferred = deferred<SearchResponse>();
+		const { client, calls } = recordingClient({
+			search: () => searchDeferred.promise
+		});
+		const controller = createSearchController(client);
+
+		controller.setQuery('go');
+		await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+		expect(calls.filter((c) => c.method === 'search')).toHaveLength(1);
+		const signal = calls.find((c) => c.method === 'search')?.signal;
+		expect(signal?.aborted).toBe(false);
+
+		controller.dispose();
+		expect(signal?.aborted).toBe(true);
+	});
+
+	it('dispose aborts an in-flight explore request', async () => {
+		const exploreDeferred = deferred<ExploreResponse>();
+		const { client, calls } = recordingClient({
+			explore: () => exploreDeferred.promise
+		});
+		const controller = createSearchController(client);
+
+		controller.submit();
+		expect(calls.filter((c) => c.method === 'explore')).toHaveLength(1);
+		const signal = calls.find((c) => c.method === 'explore')?.signal;
+		expect(signal?.aborted).toBe(false);
+
+		controller.dispose();
+		expect(signal?.aborted).toBe(true);
+	});
+});
