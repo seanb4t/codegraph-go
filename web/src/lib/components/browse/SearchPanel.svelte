@@ -102,8 +102,20 @@
 	// box immediately, exactly as if the user had just typed it —
 	// deliberately routed through setQuery (the same debounced path
 	// typing uses), not a special-cased initial dispatch.
+	//
+	// IN-12: `initialQuery` is read through untrack() specifically so
+	// this effect has ZERO tracked dependencies and therefore runs
+	// exactly once, at mount — matching what this comment already
+	// claimed. Before this fix, the bare reactive read re-ran the effect
+	// on every `initialQuery` prop change; since `initialQuery` is
+	// `params.q ?? ''` (+page.svelte) and CR-01's fix means `q` still
+	// changes on every keystroke once a search is in flight, this called
+	// setQuery a SECOND time per character, resetting the 150ms debounce
+	// timer an extra time on every keystroke — a real, if minor, delay to
+	// the live search, and a comment/code mismatch either way.
 	$effect(() => {
-		if (initialQuery) controller.setQuery(initialQuery);
+		const initial = untrack(() => initialQuery);
+		if (initial) controller.setQuery(initial);
 	});
 
 	function isTextEditable(el: Element | null): boolean {

@@ -319,3 +319,46 @@ describe('SearchPanel: keyboard navigation across sections', () => {
 		expect(onSelect).toHaveBeenCalledWith({ kind: 'symbol', location: expect.objectContaining({ name: 'Foo' }) });
 	});
 });
+
+describe('SearchPanel: initialQuery seeds the query ONCE on mount (IN-12)', () => {
+	it('a later change to the initialQuery prop never re-seeds the query or resets the debounce timer', async () => {
+		// Reproduces IN-12: `initialQuery` is `params.q ?? ''`
+		// (+page.svelte), which — once CR-01's fix is in play — still
+		// changes on every keystroke while a search is live. Before this
+		// fix, a bare (tracked) read of `initialQuery` inside the seed
+		// effect re-ran it on every prop change, calling setQuery a
+		// SECOND time and resetting the 150ms debounce timer.
+		const searchSpy = vi.fn(
+			() => Promise.resolve({ locations: [] }) as unknown as Promise<SearchResponse>
+		);
+		const client = stubClient({ search: searchSpy });
+		const onSelect = vi.fn();
+
+		const { rerender } = render(SearchPanel, { props: { client, initialQuery: 'Foo', onSelect } });
+
+		// Advance to just under the debounce window the INITIAL seed
+		// started.
+		await vi.advanceTimersByTimeAsync(100);
+		expect(searchSpy).not.toHaveBeenCalled();
+
+		// Simulate the URL-driven prop change: initialQuery changes to a
+		// DIFFERENT value on a re-render, exactly as params.q does on
+		// each subsequent keystroke.
+		await rerender({ client, initialQuery: 'FooBar', onSelect });
+
+		// If the seed effect had re-run (the bug), it would call
+		// setQuery('FooBar') and reset the debounce clock to 0.
+		// Advancing only the REMAINING 50ms of the ORIGINAL 150ms window
+		// must fire the search — proving the effect did NOT re-run and
+		// the debounce timer was never reset.
+		await vi.advanceTimersByTimeAsync(50);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(searchSpy).toHaveBeenCalledTimes(1);
+		expect(searchSpy).toHaveBeenCalledWith(
+			expect.objectContaining({ term: 'Foo' }),
+			expect.anything()
+		);
+	});
+});
