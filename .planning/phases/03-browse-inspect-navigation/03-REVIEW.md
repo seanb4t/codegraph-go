@@ -1,770 +1,572 @@
 ---
 phase: 03-browse-inspect-navigation
-reviewed: 2026-08-29T00:00:00Z
+reviewed: 2026-08-29T13:59:52Z
+head: 76d7e417
+iteration: 2
 depth: deep
-files_reviewed: 41
+files_reviewed: 88
 files_reviewed_list:
+  - .github/workflows/ci.yml
+  - .golangci.yml
+  - Taskfile.yml
+  - go.tool-golangci.mod
+  - internal/agents/antigravity_test.go
+  - internal/agents/opencode.go
+  - internal/cli/present/sanitize_test.go
+  - internal/cli/upgrade.go
+  - internal/cli/upgrade_test.go
+  - internal/corpora/coverage.go
+  - internal/corpora/coverage_test.go
+  - internal/daemon/daemon_test.go
   - internal/gitmeta/permalink.go
   - internal/gitmeta/permalink_test.go
-  - internal/uiserver/permalink.go
-  - internal/uiserver/permalink_test.go
-  - internal/uiserver/confinement_test.go
-  - internal/uiserver/degrade.go
-  - internal/uiserver/readonly_test.go
-  - internal/uiserver/handlers.go
-  - internal/query/node.go
-  - internal/mcp/tools.go
-  - internal/agents/opencode.go
-  - internal/corpora/coverage.go
   - internal/graphstore/export.go
   - internal/graphstore/pebble_store.go
+  - internal/graphstore/store_test.go
+  - internal/indexer/commit.go
+  - internal/indexer/languages.go
   - internal/indexer/languages_python.go
-  - internal/cli/upgrade.go
+  - internal/mcp/skill_claims_drift_test.go
+  - internal/mcp/tools.go
+  - internal/query/node.go
+  - internal/query/render_status_test.go
+  - internal/schema/meta.go
+  - internal/uiproto/uiv1/ui.proto
+  - internal/uiserver/confinement_test.go
+  - internal/uiserver/degrade.go
+  - internal/uiserver/handlers.go
+  - internal/uiserver/handlers_test.go
+  - internal/uiserver/permalink.go
+  - internal/uiserver/permalink_test.go
+  - internal/uiserver/readonly_test.go
+  - internal/uiserver/server_test.go
+  - internal/uiserver/spa_test.go
+  - internal/upgrade/golangci_shape_test.go
+  - internal/upgrade/release_workflow_shape_test.go
+  - internal/upgrade/swap_test.go
   - internal/upgrade/taskfile_shape_test.go
-  - tools/corpora/prose.go
-  - tools/transcriptfreeze/classify.go
+  - internal/upgrade/upgrade_test.go
   - test/wireoracle/capture.go
   - test/wireoracle/capture_test.go
   - test/wireoracle/normalize.go
-  - test/wireoracle/scenarios.go
+  - test/wireoracle/normalize_test.go
   - test/wireoracle/oracle_test.go
+  - test/wireoracle/scenarios.go
+  - tools/corpora/measure_test.go
+  - tools/corpora/prose.go
+  - tools/corpora/prose_test.go
+  - tools/transcriptfreeze/classify.go
   - web/highlight_coverage_test.go
-  - web/src/lib/browse-url.ts
-  - web/src/lib/browse-state.ts
+  - web/highlight_extension_coverage_test.go
+  - web/package.json
+  - web/src/ambient-node.d.ts
   - web/src/lib/browse-nav.ts
+  - web/src/lib/browse-state.ts
+  - web/src/lib/browse-url.ts
   - web/src/lib/call-targets.ts
-  - web/src/lib/highlight.ts
-  - web/src/lib/rpc-errors.ts
-  - web/src/lib/search.ts
-  - web/src/lib/status.ts
   - web/src/lib/components/StatusBanner.svelte
   - web/src/lib/components/browse/CopyAction.svelte
   - web/src/lib/components/browse/DefinitionPicker.svelte
   - web/src/lib/components/browse/NeighborsPanel.svelte
   - web/src/lib/components/browse/SearchPanel.svelte
   - web/src/lib/components/browse/SourcePane.svelte
-  - web/src/routes/browse/+page.svelte
+  - web/src/lib/highlight.ts
+  - web/src/lib/rpc-errors.ts
+  - web/src/lib/search.ts
+  - web/src/lib/status.ts
   - web/src/routes/+layout.svelte
-  - Taskfile.yml
-  - .github/workflows/ci.yml
-  - .golangci.yml
+  - web/src/routes/browse/+page.svelte
+  - web/tests/browse-history.test.ts
+  - web/tests/browse-nav.test.ts
+  - web/tests/browse-page.test.ts
+  - web/tests/browse-state.test.ts
+  - web/tests/browse-tracer.test.ts
+  - web/tests/browse-url.test.ts
+  - web/tests/call-targets.test.ts
+  - web/tests/definition-picker.test.ts
+  - web/tests/degrade-states.test.ts
+  - web/tests/fixtures/Harness.svelte
+  - web/tests/harness.test.ts
+  - web/tests/neighbors-panel.test.ts
+  - web/tests/rpc-errors.test.ts
+  - web/tests/search-panel.test.ts
+  - web/tests/search.test.ts
+  - web/tests/setup.ts
+  - web/tests/source-pane.test.ts
+  - web/tests/status.test.ts
+  - web/tests/support/browse-page-state.svelte.ts
+  - web/vite.config.ts
 findings:
-  critical: 1
-  warning: 9
-  info: 14
-  total: 24
+  critical: 0
+  warning: 5
+  info: 9
+  total: 14
 status: issues_found
 ---
 
-# Phase 3: Code Review Report
+# Phase 3: Code Review Report (iteration 2 — post-fix re-review)
 
-**Reviewed:** 2026-08-29
-**Depth:** deep (cross-file: import graph, call chains, TS↔Go boundary, wire contract)
-**Files Reviewed:** 41 in-scope source files (generated proto/connect output, `web/build/**`, and the 36 vendored `components/ui/**` files excluded per scope)
+**Reviewed:** 2026-08-29T13:59:52Z
+**HEAD:** 76d7e417
+**Depth:** deep
+**Diff base:** f2c0bcda (the phase's full change set); fix pass is 74c8f5e7..e57268d9 plus 6ff79d4a / 77b75129
 **Status:** issues_found
 
 ## Summary
 
-Ten plans, ~14.7k inserted lines. The Go server side is in good shape: `GetPermalink`
-reuses the one confinement gate rather than adding a second (`internal/query/node.go:91`
-delegates to `resolveSourcePath` unchanged), the `fs.ErrNotExist` reclassification in
-`internal/uiserver/permalink.go:90-95` builds its message only from the caller's own
-repo-relative path and does **not** weaken `mapEngineError`'s default scrub, and
-`percentEncodeRepoPath` escapes per-segment correctly. I traced every changed code path
-that can reach the wire and found **no absolute-host-path disclosure**. The two
-confinement guards' `strings.Contains(msg, dir)` negative checks were suspect (macOS
-`t.TempDir()` returns the unresolved `/var/...` form while `EvalSymlinks` errors carry
-`/private/var/...`); I verified empirically that `/private/var/folders/…` *does* contain
-`/var/folders/…` as a substring, so those guards are sound. `web/highlight_coverage_test.go`
-is the strongest new guard in the phase — real set equality in both directions, a reverse
-binding, and a planted positive control.
+This pass audits the 22 applied fixes plus the two pre-applied maintainer fixes, not
+the original findings. Twenty of the twenty-two do exactly what the fix report claims
+and introduce nothing new; I re-derived the load-bearing ones directly rather than
+taking the report's word for them.
 
-The client side is where the defects are. One is a live, user-visible correctness bug on
-the phase's own primary interaction path (CR-01, traced across four files). One more is a
-proven DOM-corruption bug in a shared exported module that today's single caller happens
-to mask (WR-01, reproduced under vitest). Three findings are rule-`84d1gfpywd`
-instances — a guard that tests a copy of the code it claims to guard (WR-03), a negative
-containment check anchored to an input that cannot contain the forbidden string (WR-04),
-and a hand-enumerated population with no binding to its source of truth (WR-02, the
-memory-`v4zqxrz6b3` shape).
+Verified good, in the reviewer's own hands:
 
-**Verification caveat:** the Go test suite could not be executed on this host. `go build ./...`
-fails inside `github.com/cockroachdb/swiss@v0.0.0-20251224182025` (`undefined: hashFn`,
-`undefined: fastrand64`) because the local toolchain is go1.27.0 while `go.mod` declares
-go 1.26.5 and CI pins via `go-version-file`. That is a pre-existing transitive-dependency /
-toolchain mismatch, unrelated to this phase's diff, and no finding below depends on running
-Go tests. The vitest suite does run; WR-01 was reproduced with it.
+- **WR-02** — ran `GOTOOLCHAIN=go1.26.5 go test ./web/ -run 'TestExtensionLanguage' -v`.
+  Both sides are 23 entries and set-equal key-and-value; the discriminator produces
+  exactly `missing=[.rs] extra=[.zig] mismatched=[.py: indexer="python" ts="ruby"]`.
+  The binding is transitive (EXTENSION_LANGUAGE values -> indexer IDs via this guard;
+  indexer IDs -> hljs registration via `highlight_coverage_test.go`), and neither
+  guard can pass over an empty parse: both fail loudly on a zero-entry parse and both
+  carry a positive floor (`< 20`, `< 14`).
+- **WR-03** — `Capture`'s stdout goroutine now genuinely calls `scanTimestamped`, the
+  same function `TestCaptureArrivalLedgerPreservesWireOrder` drives. The tested code
+  is the running code.
+- **WR-07** — `schema.IsCommitSHA` is applied at `internal/uiserver/permalink.go:164`,
+  before `buildGitHubBlobURL` and before `gitmeta.CommitOnRemoteTrackingBranch`. The
+  rejection of the `git branch --contains -- sha` suggestion is documented in place at
+  `internal/gitmeta/permalink.go:230-242` and I did not reproduce a defect it would
+  fix; I accept the rejection.
+- **Wire shape (criterion 3)** — `git diff 74c8f5e7~1..HEAD -- internal/uiproto web/src/lib/gen`
+  is empty. `PermalinkAvailability` still has its four members
+  (`ui.proto:586-589`), `RemotePresence` still has its three states
+  (`internal/gitmeta/permalink.go:196-209`), and IN-08 made `RemotePresenceNotObserved`
+  an explicit case rather than removing anything. Nothing was renumbered or collapsed.
+- **Disclosure scrub (criterion 4)** — `mapEngineError`'s default arm
+  (`internal/uiserver/handlers.go:112-132`) is untouched. `GetPermalink`'s one
+  reclassified arm still matches only `errors.Is(verr, fs.ErrNotExist)` and builds its
+  message from the caller's own repo-relative `path`, never from the `*fs.PathError`
+  text. IN-10's new pre-`withEngine` returns are `connect.NewError` values built from
+  request fields only. No new path for an absolute host path to cross the wire.
+- **Ignore directives (criterion 5)** — IN-01 removed the blanket
+  `//nolint:staticcheck` by construction; `rg nolint --type go` returns four remaining
+  directives, all pre-existing and all carrying inline reasons. IN-14's comments cover
+  8 of 8 `defer func() { _ = close() }()` sites in `internal/mcp/tools.go` (the ninth
+  regex hit is the doc comment itself at line 66).
 
----
-
-## Critical Issues
-
-### CR-01: Typing in the search box tears down and re-issues the entire open-node view on every keystroke
-
-**Files:**
-- `web/src/lib/components/browse/SearchPanel.svelte:148-152`
-- `web/src/routes/browse/+page.svelte:37`, `:62-89`, `:120-122`
-- `web/src/routes/+layout.svelte:47-49`
-- `web/src/lib/components/browse/SourcePane.svelte:149-175`
-
-**Issue:** `handleInputChange` calls `onQueryChange?.(value)` on **every** `oninput` event,
-undebounced (`SearchPanel.svelte:151`). `+page.svelte:120-122` routes that straight into
-`navigator.navigate(page.url, { q: query || undefined }, NAV_INTENT.REFINE)`, which calls
-`goto()` and therefore changes `page.url`. `params` is
-`$derived(parseBrowseParams(page.url.searchParams))` (`+page.svelte:37`) and returns a
-**fresh object literal** every time, so the derived signal is invalidated on each URL write.
-The load effect at `+page.svelte:62-89` reads `params`, so it re-runs — and its first act
-for any non-idle target is `targetState = { kind: 'loading' }` (`:73`), which makes
-`SourcePane` render the `browse-loading` branch (`SourcePane.svelte:210-211`).
-
-Concrete scenario. Open `/browse?symbol=resolveSourcePath&file=internal/query/node.go&line=33`
-(the exact URL the 03-07 manual UAT used). Type the 7 characters `Callees` into the search box.
-Result, per character:
-
-1. `q` is rewritten in the URL → `params` identity changes → the load effect re-runs;
-2. the previous `AbortController` is aborted and a new `GetNodeDetail` **and** `Impact` are
-   dispatched for the *same, unchanged* symbol target;
-3. `targetState` is set to `loading`, so the syntax-highlighted source, the callers/callees
-   lists and the blast radius **all disappear** and are replaced by `Loading…` until the
-   round trip completes;
-4. `SourcePane`'s permalink effect (`:149-175`) also depends on `target`, so `GetPermalink`
-   is re-issued too;
-5. `navigationIdentity(url)` in `+layout.svelte:48` includes the sorted query string, so
-   `?q=Ca` and `?q=Cal` are distinct identities — `statusGate.notifyNavigated` fires and
-   `GetStatus` is re-fetched as well.
-
-That is **4 RPCs per keystroke** (28 for a 7-character query) and a source pane that flickers
-to `Loading…` on every character. This directly contradicts the phase goal's own wording
-("keep clicking outward without losing their place") and D-05's "no timer, no polling loop" —
-typing is now a de-facto polling loop keyed to keystrokes. No test covers it: every
-`browse-*.test.ts` exercises the loaders and the navigator in isolation, never the
-route-level `q`-write → `params`-change → reload cycle.
-
-**Fix:** the load effect must depend only on the *target* params, not on the whole
-`BrowseParams` object. Derive a narrow target key and gate on it:
-
-```ts
-// +page.svelte
-let params = $derived(parseBrowseParams(page.url.searchParams));
-// The load effect's real dependencies — q is view-local, not a target field.
-let targetKey = $derived(
-    `${params.symbol ?? ''}\0${params.file ?? ''}\0${params.line ?? ''}\0${params.depth ?? ''}\0${params.limit ?? ''}`
-);
-
-$effect(() => {
-    targetKey;                        // the only tracked read
-    const currentParams = untrack(() => params);
-    ...
-});
-```
-
-`targetKey` is a string, so an unchanged target produces an equal value and Svelte does not
-invalidate dependents — typing no longer restarts the load. Independently,
-`navigationIdentity` (`web/src/lib/status.ts:70-75`) should exclude view-local params such
-as `q`, or `+layout.svelte:47-49` should compare only `page.url.pathname` plus the target
-params, so `GetStatus` is not re-fetched per character either. Add a route-level test that
-mounts the browse page with a fixed `symbol`/`file`, fires three `input` events, and asserts
-the `getNodeDetail` stub was called exactly once.
-
----
+Five fixes are less clean than the report claims, and the five WARNINGs below are all
+consequences of the fix pass rather than survivors of the original review. Two of them
+(**WR-01**, **WR-04**) are behavior the fix pass changed or masked beyond its own
+finding, which is the class this re-review exists to catch. Nothing here is Critical:
+I could not construct a security, data-loss, or crash scenario from any of it.
 
 ## Warnings
 
-### WR-01: `decorateCallTargets`' teardown re-attaches the previous node's source text into the live `<code>` element
-
-**File:** `web/src/lib/call-targets.ts:216-234` (specifically `:227-229`), reached via
-`web/src/lib/call-targets.ts:253-263` and `web/src/lib/components/browse/SourcePane.svelte:260-263`
-
-**Issue:** The teardown closure restores each decorated span by inserting the recorded
-`originalText` node back before `insertedNodes[0]`. When that anchor is no longer a child of
-the recorded `parent`, it falls back to `parent.appendChild(originalText)` (`:228`). If
-`parent` is the `<code>` element itself — which it is for every top-level, unhighlighted text
-node hljs emits, i.e. the common case — and Svelte's `{@html}` has *already* replaced that
-element's children, the fallback appends **stale text from the previous node's source** onto
-the freshly rendered source. The user then reads two different functions' bodies concatenated
-with no separator, presented as verbatim repository source.
-
-Reproduced directly against the shipped component (vitest, jsdom, `@testing-library/svelte`):
-
-```
-render(SourcePane, { state: singleDef('alpha Target beta\n', calls: [Target]) })
-rerender({ state: singleDef('gamma Other delta\n', calls: [Other]) })
-
-code.textContent === "gamma Other delta\nalpha Target beta\n"   // observed
-code.innerHTML   === 'gamma <button data-call-target="true">Other</button> delta\nalpha Target beta\n'
-```
-
-It also reproduces across three hops. It does **not** reproduce when the previous render had
-no decorated target (`calls: []`), nor when the same state is re-rendered, nor when a
-`{ kind: 'loading' }` render is interposed — and that last case is exactly what
-`+page.svelte:73` currently does, which is why this is masked in production today rather than
-live. The masking is incidental (it depends on Svelte flushing the `loading` DOM before the
-RPC promise resolves) and is pinned by no test; removing the loading flash, or Phase 6's
-live-push replacing content in place, exposes it immediately. The existing teardown test
-(`web/tests/call-targets.test.ts:163-183`) only exercises the happy path where nothing else
-mutated the subtree, so the `:228` fallback branch has zero coverage.
-
-**Fix:** never re-insert into a parent the decorator no longer owns.
-
-```ts
-for (const { parent, originalText, insertedNodes } of decorations) {
-    const anchor = insertedNodes[0];
-    if (anchor && anchor.parentNode === parent) {
-        parent.insertBefore(originalText, anchor);
-        for (const inserted of insertedNodes) inserted.parentNode?.removeChild(inserted);
-    }
-    // else: the subtree was replaced by its owner (Svelte's {@html}); the
-    // inserted nodes are already detached. Restoring here would inject stale
-    // content into DOM this decorator no longer owns — drop it silently.
-}
-```
-
-Add a regression test asserting `code.textContent` equals the new source exactly after a
-direct single-def → single-def rerender.
-
-### WR-02: `EXTENSION_LANGUAGE` is a hand-enumerated population with no binding to the indexer's extension registry
-
-**File:** `web/src/lib/components/browse/SourcePane.svelte:74-105`
-
-**Issue:** The extension→language map is transcribed by hand from
-`internal/indexer/languages_*.go`. I verified it is *currently* correct — both sides carry
-exactly the same 23 extensions (`.c .cc .cjs .cpp .cs .cxx .go .h .hh .hpp .java .js .jsx
-.kt .kts .mjs .php .py .rb .rs .swift .ts .tsx`). But nothing binds it: `rg
-'EXTENSION_LANGUAGE|languageForPath' web/` returns only `SourcePane.svelte` itself — no TS
-test, no Go guard — and `internal/indexer` exports `RegisteredLanguageIDs()` but no
-equivalent for extensions.
-
-This is the memory-`v4zqxrz6b3` shape: the population narrows silently because a new subject
-passes by being absent. Concrete: add `".hxx"` to `languages_cpp.go`'s `Extensions` list.
-`RegisteredLanguageIDs()` is unchanged (still `cpp`), so
-`TestHighlightRegistrationCoversRegisteredLanguages` — the phase's own coverage guard — stays
-green. `/browse?file=foo.hxx` then renders `languageForPath` → `''` →
-`highlightSource(text, '')` → `console.warn` + escaped plaintext. BRW-06's "syntax-highlighted
-verbatim source" silently fails for that file type, with no failing test anywhere. The same
-holds for any 15th language's extensions.
-
-**Fix:** export the extension registry from the indexer and extend the existing Go guard,
-which already parses `highlight.ts` as text and already sits in `web_test`:
-
-```go
-// internal/indexer/languages.go
-func RegisteredLanguageExtensions() map[string]string { /* ext -> LanguageSpec.ID */ }
-```
-
-Then move `EXTENSION_LANGUAGE` out of the `.svelte` file into a single-purpose, literal-only
-declaration (`web/src/lib/highlight.ts`, alongside `HIGHLIGHT_COVERAGE`, whose declaration
-shape the Go guard already parses) and add a set-equality assertion in
-`web/highlight_coverage_test.go` with a planted-fixture control matching
-`TestHighlightCoverageComparisonDiscriminates`.
-
-### WR-03: `TestCaptureArrivalLedgerPreservesWireOrder` guards a copy of the code, not the code
-
-**Files:** `test/wireoracle/capture_test.go:26-75`, `test/wireoracle/capture.go:191-211` and
-`:366-385`
-
-**Issue:** The test drives `scanArrivalLines` (`capture.go:203`), which the file's own doc
-comment describes as "the identical scan-and-timestamp primitive Capture's own
-stdout-reading goroutine uses below … extracted here as a standalone, independently testable
-function". `Capture` does **not** call it. The production path is the inline goroutine at
-`capture.go:369-385`, which duplicates the scanner construction, the buffer size and the
-copy-then-timestamp shape. `scanArrivalLines` has exactly one caller in the repository, and
-it is this test.
-
-The consequence is the failure mode rule `84d1gfpywd` names: the assertion passes while doing
-nothing about the property it claims to protect. Concrete: change the inline goroutine at
-`capture.go:369-385` to fan out across two scanner goroutines, or to buffer and sort lines
-before sending, and `TestCaptureArrivalLedgerPreservesWireOrder` still passes green — the
-"capture preserves wire order" claim that 03-03-EVIDENCE.md's whole VERDICT rests on becomes
-unbacked, silently. This matters more than usual because the R2 resolution
-(`CanonicalizeResponseOrder`) deliberately removed the oracle's own ability to detect
-response reordering, leaving this test as the only remaining evidence that reordering is not
-introduced downstream.
-
-**Fix:** make `Capture` call the primitive. Replace the inline goroutine body with a channel
-adapter over the same function, or extract a `scanTimestamped(r io.Reader, emit func(ArrivalLine))`
-used by both, so the tested code and the running code are the same code:
-
-```go
-go func() {
-    defer close(lines)
-    _ = scanTimestamped(stdout, func(al ArrivalLine) {
-        lines <- scannedLine{raw: al.Raw, arrived: al.Arrived}
-    })
-}()
-```
-
-### WR-04: the `{@html}` XSS guard's negative assertion is vacuous for the registered-language path
-
-**File:** `web/tests/browse-tracer.test.ts:121-130`
-
-**Issue:**
-
-```ts
-const highlighted = highlightSource('func main() {}', 'go');
-expect(highlighted).toContain('class="hljs-');
-expect(highlighted).not.toContain('<script>');       // <-- vacuous
-```
-
-The input `'func main() {}'` contains no `<`, so `not.toContain('<script>')` is trivially true
-regardless of what `highlightSource` does. The paired positive
-(`toContain('class="hljs-')`) proves the *highlighting* ran; it proves nothing about
-*escaping*. The only genuine escaping assertion in the suite
-(`:127-129`) covers the **unregistered**-language fallback (`escapeHtml`), which is the branch
-`highlight.ts:110` itself says "should be unreachable in a correct tree".
-
-`SourcePane.svelte:238` and `:262` are the repository's only `{@html}` sites, and the string
-they render is produced by `hljs.highlight()` for a **registered** language — the path with no
-escaping coverage at all. Concrete: change `highlightSource` to
-`hljs.highlight(code, { language }).value` plus any HTML-passthrough plugin, or to a
-hand-built `<span class="...">${code}</span>` concatenation, and both assertions still pass
-while a Go source file containing `// <script>alert(1)</script>` becomes executable markup in
-the browse view.
-
-**Fix:** anchor the negative to an input that *can* contain the forbidden string, on the
-registered-language path:
-
-```ts
-const hostile = highlightSource('func main() { /* <script>alert(1)</script> */ }', 'go');
-expect(hostile).toContain('&lt;script&gt;');   // positive: escaping happened
-expect(hostile).not.toContain('<script>');     // negative: now non-vacuous
-```
-
-### WR-05: the depth control writes a URL value that this app's own parser then silently discards
-
-**Files:** `web/src/lib/components/browse/NeighborsPanel.svelte:56-62`,
-`web/src/lib/browse-url.ts:46-52`
-
-**Issue:** `handleDepthChange` accepts any value for which `Number.isFinite(Number(raw))` is
-true, then writes it into the URL via `onNavigate({ depth: parsed }, REFINE)`.
-`serializeBrowseParams` emits `String(p.depth)`. But `parseShapeInteger` accepts only
-`/^-?\d+$/`, so a non-integer round-trips to `undefined`.
-
-Concrete: type `2.5` into the Depth input (an `<input type="number">` accepts it; `min="0"`
-does not constrain the decimal). The URL becomes `?symbol=Foo&…&depth=2.5`. On the next
-`params` read, `depth` is `undefined`, so `loadBlastRadius` sends `depth: 0`
-(`browse-state.ts:212`) and the server uses its own default. The address bar claims depth 2.5,
-the rendered blast radius is the default depth, the input still shows `2.5`, and no error
-surfaces anywhere. Sharing that URL reproduces the same silent disagreement for the recipient —
-and NAV-01's whole premise is that the URL *is* the state. `1e3` behaves similarly (it
-serializes as `1000`, silently changing the value the user typed).
-
-The finding is specifically about the writer/parser asymmetry, not about range validation:
-D-12 correctly leaves range to the server, and `depth=-1` (which *is* a valid integer literal)
-correctly reaches the server and returns `CodeInvalidArgument`.
-
-**Fix:** make the writer speak the same grammar as the reader.
-
-```ts
-function handleDepthChange(e: Event): void {
-    const raw = (e.currentTarget as HTMLInputElement).value;
-    if (raw === '') { onNavigate({ depth: undefined }, NAV_INTENT.REFINE); return; }
-    if (!/^-?\d+$/.test(raw)) return;   // same shape check browse-url.ts applies
-    onNavigate({ depth: Number(raw), }, NAV_INTENT.REFINE);
-}
-```
-
-Better still, export the shape predicate from `browse-url.ts` so there is one definition
-rather than two that can drift.
-
-### WR-06: a valid GitHub origin in git's user-less scp-like form is classified as `NO_LINK`
-
-**File:** `internal/gitmeta/permalink.go:135-151`
-
-**Issue:** `parseGitHubRemote`'s no-scheme branch recognises the scp-like form **only** when an
-`@` is present (`:139`). Git's own documented syntax makes the user optional:
-`[user@]host.xz:path/to/repo.git/`. A repository configured with
-`git remote add origin github.com:seanb4t/codegraph-go.git` is a perfectly ordinary,
-git-accepted remote, but `strings.Index(raw, "@")` returns `-1`, the function returns
-`("", "", "")`, and `RemoteGitHubRepo` (`:106-109`) reports
-`Reason: "origin remote is not a recognized URL"`.
-
-Concrete effect: BRW-09's permalink surface renders
-`No permalink available: origin remote is not a recognized URL`
-(`SourcePane.svelte:198-201`) for a repository that *does* have a GitHub origin — and D-20's
-truncated-file escape hatch disappears with it. The unit tests only cover
-`https://github.com/owner/repo.git` and `https://gitlab.com/...`
-(`internal/uiserver/permalink_test.go:61,86,110,134,166`), so the shape is untested in both
-directions.
-
-**Fix:** treat the `@` as optional, keying the scp-like decision on the colon-before-slash
-rule the code already implements:
-
-```go
-if idx := strings.Index(raw, "://"); idx == -1 {
-    rest := raw
-    if at := strings.Index(raw, "@"); at >= 0 {
-        rest = raw[at+1:]
-    }
-    if colon := strings.Index(rest, ":"); colon >= 0 {
-        slash := strings.Index(rest, "/")
-        if slash == -1 || colon < slash {
-            host = rest[:colon]
-            owner, repo = splitOwnerRepo(rest[colon+1:])
-            return host, owner, repo
-        }
-    }
-    return "", "", ""
-}
-```
-
-Add table cases for `github.com:owner/repo.git` and `git@github.com:owner/repo.git` to
-`internal/gitmeta/permalink_test.go`.
-
-### WR-07: the indexed commit SHA reaches a git CLI argument and a rendered URL with no read-side validation
-
-**Files:** `internal/uiserver/permalink.go:104`, `:122`, `:124`;
-`internal/gitmeta/permalink.go:224`, `internal/uiserver/permalink.go:162-180`
-
-**Issue:** `schema.IndexedCommitSHA` (`internal/schema/meta.go:41-50`) returns the stored
-string with no format check. `internal/indexer/commit.go:75` validates the SHA with
-`isLowercaseHexCommitSHA` at **write** time — the read side skips that validator entirely.
-The unvalidated value is then used in two places that both assume it is opaque-safe:
-
-1. `exec.CommandContext(ctx, "git", "branch", "-r", "--contains", sha)`
-   (`gitmeta/permalink.go:224`) — the argument is not preceded by `--`, so a value beginning
-   with `-` is parsed by git as an option rather than a rev.
-2. `b.WriteString(sha)` spliced raw into the blob URL (`uiserver/permalink.go:169`), between
-   `/blob/` and the percent-encoded path. Every other component of that URL is escaped; this
-   one is not.
-
-Concrete input: a graph store whose `Meta.commit_sha` is
-`../../attacker/attacker-repo/blob/main`. `GetPermalink` then returns
-`https://github.com/owner/repo/blob/../../attacker/attacker-repo/blob/main/pkga/pkga.go`,
-which the browser normalises to
-`https://github.com/attacker/attacker-repo/blob/main/pkga/pkga.go` and which
-`SourcePane.svelte:182-190` renders as a `View on GitHub` link with
-`availability = LINKABLE`. The user believes they are following a permalink into their own
-repository.
-
-Honest caveat on reachability: no shipped command imports a store today —
-`graphstore.Import` (`internal/graphstore/export.go:154`) has no CLI caller, only tests. The
-attacker-supplied-index precondition is therefore not reachable through the current binary.
-It is, however, exactly the shape `.claude/CLAUDE.md` names as the milestone-2 architecture
-("CI-distributed indexes"), and both hardening steps are one-liners against a validator that
-already exists.
-
-**Fix:** validate once at the read boundary and pass `--` to git.
-
-```go
-// internal/schema/meta.go — reuse the same predicate the indexer already applies at write.
-sha, ok := schema.IndexedCommitSHA(meta)
-if !ok || !schema.IsCommitSHA(sha) {   // promote isLowercaseHexCommitSHA to schema
-    resp = &uiv1.GetPermalinkResponse{
-        Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_NO_LINK,
-        Reason:       noCommitSHAReason,
-    }
-    return nil
-}
-```
-
-```go
-// internal/gitmeta/permalink.go
-cmd := exec.CommandContext(ctx, "git", "branch", "-r", "--contains", "--", sha)
-```
-
-### WR-08: `createStatusGate` has no cancellation or response-identity guard; a stale verdict can overwrite a fresh one
-
-**File:** `web/src/lib/status.ts:125-137`, `:147-151`
-
-**Issue:** `fetchStatus()` fires `client.getStatus({})` with no `AbortSignal` and no
-monotonic request id, and whichever promise settles last wins via `emit`. Every other
-async surface built in this phase guards this explicitly —
-`search.ts:133,176,188` (abort + `liveRequestId`), `browse-state.ts:239-261`
-(`NavigationGeneration`), `+page.svelte:77` — and `status.ts`'s own doc comment
-(`:97-100`) reasons carefully about *fetch count* while never addressing *response order*.
-
-Concrete: the user runs `codegraph index` in another terminal. They click Browse (fetch A
-starts, server still reports `stale: true`), then click Health ~50 ms later (fetch B starts,
-indexing has finished, server reports `stale: false`). If A's response lands after B's — an
-ordinary loopback interleaving, and one made far more likely by CR-01, which fires a
-`GetStatus` per keystroke — the banner reverts to
-`The index is stale — it may not reflect recent changes` and stays there until the next
-navigation. That is precisely the case D-05's "sees the change on their next click" contract
-promises to handle.
-
-`web/tests/status.test.ts` asserts fetch *counts* (1 → 1 → 2) but never lands two responses
-out of order, so this is untested.
-
-**Fix:** mint an id per fetch and drop superseded responses, mirroring `search.ts`:
-
-```ts
-let statusRequestId = 0;
-function fetchStatus(): void {
-    const requestId = ++statusRequestId;
-    client.getStatus({})
-        .then((r) => { if (requestId === statusRequestId) emit(classifyStatus(r)); })
-        .catch(() => { if (requestId === statusRequestId) emit(UNKNOWN_STATUS); });
-}
-```
-
-Add a test that resolves two `getStatus` promises out of order and asserts the final verdict
-is the later request's.
-
-### WR-09: `CopyAction` swallows every clipboard failure — no feedback, no handling, unhandled rejection
-
-**File:** `web/src/lib/components/browse/CopyAction.svelte:20-22`
-
-**Issue:**
-
-```ts
-async function handleCopy(): Promise<void> {
-    await navigator.clipboard.writeText(value);
-}
-```
-
-There is no `try`/`catch` and no success/failure surface. `onclick={handleCopy}` discards the
-returned promise, so every rejection becomes an unhandled rejection in the console and a
-no-op on screen.
-
-Two concrete failures, both ordinary:
-
-1. `navigator.clipboard` is `undefined` outside a secure context. `codegraph ui` binds
-   loopback today so `http://127.0.0.1` is secure — but Phase 1's D-08 shipped the bind
-   address as an unwired field explicitly intended to be wired later; the first time it is
-   pointed at a LAN address, `handleCopy` throws `TypeError: Cannot read properties of
-   undefined (reading 'writeText')` and the button becomes silently inert.
-2. Even on loopback, `writeText` rejects with `NotAllowedError` when the document is not
-   focused (e.g. the click is dispatched while a devtools panel holds focus). Nothing is
-   copied; the user is given no signal and will paste whatever was on the clipboard before.
-
-This is exactly the pattern `~/.claude/CLAUDE.md` forbids ("MUST surface problems clearly,
-never hide them"), and the component's own doc comment argues *against* silent inertness
-("a present-but-inert affordance promises an action it cannot perform").
-
-**Fix:** handle both branches and give the user a signal.
-
-```ts
-let copyState = $state<'idle' | 'copied' | 'failed'>('idle');
-
-async function handleCopy(): Promise<void> {
-    try {
-        if (!navigator.clipboard) throw new Error('clipboard API unavailable in this context');
-        await navigator.clipboard.writeText(value);
-        copyState = 'copied';
-    } catch {
-        copyState = 'failed';
-    }
-    setTimeout(() => (copyState = 'idle'), 1500);
-}
-```
-
-and render `Copied` / `Copy failed` from `copyState` with a `data-testid` a test can assert.
-
----
-
-## Info
-
-### IN-01: `//nolint:staticcheck` suppresses the whole linter on that line, not just ST1005
-
-**File:** `internal/uiserver/degrade.go:106-111`
-
-The justification is sound on its merits — `indexingInProgressMessage` is user-facing prose
-crossing to a browser, never a wrapped internal error, so ST1005 genuinely does not apply, and
-the reasoning is stated inline as the project's rules require. The narrow issue is
-granularity: `//nolint:staticcheck` disables *all* staticcheck classes on that line (SA
-correctness checks, S simplifications, QF quickfixes), not only ST1005. A future real
-`SA`-class finding on `connect.NewError(...)` would be silently suppressed.
-
-A directive-free alternative removes the trade-off entirely, because ST1005 only inspects
-string literals passed to `errors.New`/`fmt.Errorf`:
-
-```go
-type indexingInProgressError struct{}
-func (indexingInProgressError) Error() string { return indexingInProgressMessage }
-// ...
-connErr := connect.NewError(connect.CodeUnavailable, indexingInProgressError{})
-```
-
-### IN-02: the `classifiedErr` outer variable is a second, unaudited error path out of `GetPermalink`
-
-**File:** `internal/uiserver/permalink.go:76-98`, `:145-150`
-
-The pattern is correct today and its rationale (avoiding `withEngine`'s unconditional
-`mapEngineError` re-wrap) is documented well. But it establishes a return path that bypasses
-the one information-disclosure scrub the package relies on. Nothing prevents a future edit
-inside the closure from writing `classifiedErr = err` for a raw engine error carrying an
-absolute host path, and `TestGetPermalinkRefusesSinceDeletedFile` only exercises the one
-existing branch. Consider constraining the variable's type to make misuse hard, e.g.
-`var classified *connect.Error` with a small helper that only accepts a code plus a
-caller-supplied message.
-
-### IN-03: `TestToolModfilesPopulationMatchesDisk` is a count check whose set-equality property is only complete alongside its sibling
-
-**File:** `internal/upgrade/taskfile_shape_test.go:990-999`
-
-`len(matches) != len(isolatedModfilePaths)` is genuinely set-complete *in conjunction with*
-`TestToolModfilesRemainIsolated`, which `os.Stat`s every registered path (so slice ⊆ disk) and
-pairwise-`SameFile`s them (so the slice has no duplicates). Equal cardinality plus containment
-plus distinctness does imply equality. The dependency is implicit, though: run
-`go test -run '^TestToolModfilesPopulationMatchesDisk$'` alone and it is a bare count. Making
-it self-contained is three lines:
-
-```go
-sort.Strings(matches)
-want := append([]string(nil), isolatedModfilePaths...)
-sort.Strings(want)
-if !slices.Equal(matches, want) { t.Fatalf(...) }
-```
-
-### IN-04: the new `lint-go` job is not in `requiredCheckNames`, so it does not block merge
-
-**Files:** `.github/workflows/ci.yml:453-481`, `internal/upgrade/taskfile_shape_test.go:76-84`
-
-`lint-go` was added to `inScopeJobs` (`:154`) but not to `requiredCheckNames`, the fixture of
-GitHub ruleset 20157557's required status-check contexts. `actionlint (workflow static
-analysis)` and `test` are in that list; `lint-go` is not. A PR with a red `lint-go` leg is
-therefore mergeable. 03-CONTEXT.md's Folded Todo #1 asked for "CI invokes it" and this
-satisfies the letter of that, but if the intent was a blocking gate, the repository ruleset
-needs the new context added and the fixture updated alongside it (re-verified with
-`gh api repos/seanb4t/codegraph-go/rulesets/20157557`, per the fixture's own instructions).
-
-### IN-05: `inScopeJobs` and `requiredCheckNames` remain hand-enumerated with no disk binding
-
-**File:** `internal/upgrade/taskfile_shape_test.go:76-84`, `:151-165`
-
-Plan 03-10 correctly closed this class for tool modfiles
-(`TestToolModfilesPopulationMatchesDisk`) but left the same shape untouched two declarations
-above it, in the file it was already editing. `inScopeJobs` has only a non-empty guard
-(`:1429-1431`); nothing asserts that every job in `ci.yml` appears in it. A new CI job added
-without a matching entry is bound by nothing and the suite stays green — the identical defect,
-one fixture over. The modfile guard's own doc comment even points at `inScopeJobs` as the
-precedent it is imitating.
-
-### IN-06: `IDENTIFIER_PATTERN` is exported with the `g` flag, sharing mutable `lastIndex`
-
-**File:** `web/src/lib/call-targets.ts:55`
-
-`String.prototype.matchAll` clones the regex, so the current single call site
-(`:125`) is safe. But the symbol is exported and any future `.test()` or `.exec()` call on it
-advances `lastIndex` on the shared instance, after which `matchAll` (which seeds the clone
-from the original's `lastIndex`) silently skips the beginning of subsequent inputs —
-identifiers at the start of a text node stop being clickable, with no error. Prefer exporting
-a factory (`export const identifierPattern = () => /.../gu`) or a non-global source string.
-
-### IN-07: `CanonicalizeResponseOrder` classifies "any line with a numeric id" as a response
-
-**File:** `test/wireoracle/normalize.go:230-243`, using `responseID`
-(`test/wireoracle/capture.go:605-613`)
-
-`responseID` returns ok for any JSON line carrying a numeric top-level `id` — which, per
-JSON-RPC 2.0, includes *requests*, not only responses. Every server→client request
-(`sampling/createMessage`, `roots/list`, `elicitation/create`) carries both `method` and `id`.
-No current scenario emits one, so this is latent. When one is added, that request frame joins
-the sorted-by-id set and can be swapped with an unrelated response line, masking or
-fabricating an ordering discrepancy in the frozen transcript. Narrow the predicate to
-`id present AND method absent` — `frameMethod` (`capture.go:619`) already exists next door.
-
-### IN-08: the `RemotePresence` switch's `default` arm silently asserts "not observed"
-
-**File:** `internal/uiserver/permalink.go:124-142`
-
-`default: // gitmeta.RemotePresenceNotObserved` means any future `RemotePresence` member is
-reported to the user as `notObservedReason` — "this commit is not observed on any
-remote-tracking branch; it may be unpushed" — a positive claim about the commit that a new
-"could not determine" style member would make false. Given D-07's insistence that "could not
-check" must never be stated as fact, prefer an explicit
-`case gitmeta.RemotePresenceNotObserved:` with `default:` falling back to the *Unknown*
-wording, which is the safe direction.
-
-### IN-09: the tri-state `RemotePresence` collapses to two wire values, with the distinction surviving only as free-text prose
-
-**File:** `internal/uiserver/permalink.go:130-141`
-
-`RemotePresenceUnknown` and `RemotePresenceNotObserved` both map to
-`PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED`, differing only in `reason` — a human-readable
-string, not a machine-readable field. This is the recorded and frozen design (the enum shape
-was fixed at 03-05's blocking-human checkpoint, and the code documents the choice at
-`:38-47`), so it is not a defect. It is worth recording that the wire is now additive-only:
-a future client that needs to distinguish "checked, not there" from "could not check"
-programmatically cannot, and adding a fourth availability member later would change the
-meaning of `LINKABLE_UNVERIFIED` for existing clients.
-
-### IN-10: `GetPermalink` performs no validation of `line` / `end_line`
-
-**File:** `internal/uiserver/permalink.go:162-180`
-
-`buildGitHubBlobURL` dereferences `line` and `endLine` without checking `*line >= 1` or
-`*endLine >= *line`. A client may send `line: -1` (`#L-1`) or `endLine: 0` with
-`line: 42` (`#L42-L0`), producing an anchor GitHub cannot resolve. I could not construct a
-reachable path from the shipped client: `SourcePane.permalinkParamsFor` (`:129-140`) sources
-both values from `Node.start_line`/`Node.end_line`, every extractor populates both
-(`internal/indexer/*/…extract.go`), and the one node kind with neither — the package
-pseudo-node built at `internal/indexer/resolve.go:206` — carries no `FilePath`, so
-`ValidateRepoRelativePath("")` refuses the request before any URL is built. Recorded as Info
-for that reason. Since the RPC is now a frozen public method callable by anything, a
-`connect.CodeInvalidArgument` for `line < 1` or `end_line < line` would be cheap and matches
-the service's own validation posture elsewhere (`validateLimit`, `validateFilesDepth`).
-
-### IN-11: `NeighborsPanel` emits duplicate `data-testid` values across its three sections
-
-**File:** `web/src/lib/components/browse/NeighborsPanel.svelte:78`, `:102`, `:145`
-
-All three regions build `neighbor-entry-${entryKey(entry)}` from `filePath:startLine:name`.
-A node that appears both as a callee and in the blast radius — the common case for a
-self-referential impact set, which 03-07's own manual UAT observed ("one blast-radius entry
-(itself)") — yields two elements with the same test id, and
-`screen.getByTestId(...)` throws `Found multiple elements`. Prefix the id with the region
-(`neighbor-callee-…`, `neighbor-blast-…`).
-
-### IN-12: SearchPanel's "seed the query once on mount" effect actually re-runs on every `q` change
-
-**File:** `web/src/lib/components/browse/SearchPanel.svelte:101-107`, with
-`web/src/routes/browse/+page.svelte:129`
-
-```ts
-// Seed the query once on mount ...
+### WR-01: IN-12's `untrack()` broke URL-to-search-box resynchronization on back/forward
+
+**File:** `web/src/lib/components/browse/SearchPanel.svelte:126-129`
+(`web/src/lib/components/browse/SearchPanel.svelte:84`, `web/src/routes/browse/+page.svelte:165-170`)
+
+**Issue:** The seed effect now reads `initialQuery` through `untrack()`, so it has zero
+tracked dependencies and runs exactly once at mount. That is what the comment asked
+for, but `initialQuery` is `params.q ?? ''` and `SearchPanel` is **not** keyed or
+remounted on navigation (`+page.svelte:165` renders it unconditionally, no `{#key}`).
+The search box's displayed text is `searchState.query` (line 191), which only ever
+changes via `controller.setQuery` — called at line 128 (once, at mount) and line 172
+(typing). So a URL change to `q` that did not originate from typing can no longer
+reach the panel at all.
+
+Concrete reproduction (all pushState/replaceState behavior is this phase's own, D-11):
+
+1. Open `/browse`. Type `alpha` — REFINE replaces the entry, URL is `/browse?q=alpha`.
+2. Click a search result — `handleSearchSelect` (`+page.svelte:135-147`) NAVIGATEs,
+   pushing `/browse?q=alpha&file=x.go` (`applyDelta` carries `q` forward untouched,
+   `browse-nav.ts:99-116`).
+3. Type `beta` — REFINE replaces entry 2, URL is `/browse?q=beta&file=x.go`.
+   History is now `[/browse?q=alpha, /browse?q=beta&file=x.go]`.
+4. Press the browser Back button. URL returns to `/browse?q=alpha`; `initialQuery`
+   becomes `"alpha"`.
+5. The search input still reads `beta` and still lists beta's results. The address bar
+   and the rendered view disagree — the exact failure D-11's "correct and shareable at
+   every instant" contract exists to prevent. Before this fix the effect re-ran and
+   resynced.
+
+The fix's own new test pins the regression rather than catching it:
+`web/tests/search-panel.test.ts:340-360` rerenders with `initialQuery: 'FooBar'` and
+asserts the search still fires with `term: 'Foo'`.
+
+**Fix:** Keep the debounce-reset fix but make the effect react to a URL-originated
+change only. Track `initialQuery` and skip re-seeding when it already equals the
+controller's current query:
+
+```svelte
 $effect(() => {
-    if (initialQuery) controller.setQuery(initialQuery);
+	const incoming = initialQuery; // tracked on purpose
+	if (incoming === untrack(() => searchState.query)) return; // typing echo: no-op
+	controller.setQuery(incoming);
 });
 ```
 
-`initialQuery` is `params.q ?? ''`, which changes on every keystroke once CR-01's URL write
-is in play, so the effect re-runs and calls `setQuery` a second time per character. That
-resets the 150 ms debounce timer an extra time on each keystroke, delaying the live search by
-one URL-settle round trip. Behaviour still converges, but the comment describes a
-mount-once seed the code does not implement. Guard it (`untrack`, or a `seeded` flag) so the
-stated contract and the code agree.
-
-### IN-13: `createSearchController` exposes no disposal; a pending debounce fires after unmount
-
-**File:** `web/src/lib/search.ts:115-261`
-
-`debounceTimer` is never cleared on teardown and the controller has no `destroy()`.
-`SearchPanel` unsubscribes from the store (`:91-96`) but cannot stop the timer, so unmounting
-the panel within 150 ms of the last keystroke still dispatches `Search` + `Files` for a
-component that no longer exists. Harmless today (the results are discarded), but it is the
-one async surface in this phase without a lifecycle exit. Add
-`dispose() { clearTimeout(debounceTimer); liveAbort?.abort(); exploreAbort?.abort(); }` and
-call it from the panel's `$effect` cleanup.
-
-### IN-14: several golangci-lint `errcheck` fixes discard the error rather than handle it
-
-**Files:** `internal/agents/opencode.go:245`, `internal/mcp/tools.go:210,416,432,449,466,483,507,524`
-
-`removeOpencodeEntry(stalePath)` → `_, _ = removeOpencodeEntry(stalePath)` and
-`defer close()` → `defer func() { _ = close() }()` satisfy the linter by making the discard
-explicit without changing behaviour. Both are defensible (a best-effort stale-file sweep; an
-engine closer on a read-only path), and neither is a regression — the errors were already
-being dropped. Recording it because the project's own rule is "MUST attempt proper fix first
-(not ignore directives)", and `_ =` is an ignore directive expressed in the type system. At
-minimum the nine `defer func() { _ = close() }()` sites would benefit from a one-line comment
-stating why a closer error is non-actionable there, in the style the rest of this codebase
-uses.
-
-### IN-15: `.golangci.yml`'s `# enabled-linters: 5` header has no durable guard
-
-**File:** `.golangci.yml:1-12`
-
-The count is described as "machine-read by 03-10-PLAN.md Task 2's `<verify>` block" — a
-one-shot plan-time check, not a repository test. Nothing in `internal/upgrade/*_test.go`
-parses it. Enabling a sixth linter without updating the comment produces no failure anywhere,
-so the header will drift from the config it annotates. Either bind it (a small test parsing
-the comment and counting `linters.enable` + `formatters.enable`, mirroring
-`TestUIProtoFieldNumbersAreStableAndUnique`'s pinned-length pattern) or delete the count and
-keep only the prose rationale.
+That is a no-op for the per-keystroke echo IN-12 was fixing (the values are equal, so
+no `setQuery` and no debounce reset) and still resyncs on back/forward, where they
+differ. Add a test that rerenders with a `initialQuery` differing from the current
+`searchState.query` and asserts the input value follows the URL.
 
 ---
 
-_Reviewed: 2026-08-29_
+### WR-02: WR-07's malformed-SHA arm reuses `noCommitSHAReason`, putting a false statement on the wire and collapsing two distinct causes
+
+**File:** `internal/uiserver/permalink.go:164-170` (reason constant at `:36`)
+
+**Issue:** When `schema.IsCommitSHA(sha)` rejects a stored value, the handler answers
+with the reason string `"this index has no recorded commit SHA (a pre-upgrade graph)
+- re-index to enable permalinks"`. For this branch that sentence is factually wrong on
+both clauses: the index *does* carry a recorded commit SHA, and the store is not a
+pre-upgrade graph. An operator whose store was written by a foreign indexer (the
+milestone-2 CI-distributed-index shape WR-07's own commit message invokes) is told the
+field is absent, which is the one diagnosis that hides the real signal — that something
+wrote an unvalidated value into `Meta.commit_sha`.
+
+This also contradicts the module's own stated discipline three lines up: the
+`notObservedReason` / `checkUnknownReason` split at `permalink.go:44-47` exists
+precisely so two different causes never collapse into the same wire string ("the text
+differs, so an operator reading `reason` can still tell ... without conflating them
+into the SAME string"). WR-07 reintroduced the collapse it argues against.
+
+Concrete: run `overwriteCommitSHA(t, dir, "not-a-sha")` against a store whose
+`Meta.commit_sha` was previously the real 40-hex HEAD, then call `GetPermalink`. The
+response is byte-identical to the response for a genuine pre-upgrade graph with an
+empty `commit_sha`; no client or operator can tell the two apart.
+
+The regression test does not distinguish them either:
+`internal/uiserver/permalink_test.go:362` asserts only
+`strings.Contains(resp.Msg.GetReason(), "re-index")`, which both strings satisfy.
+
+**Fix:** Give the branch its own constant and assert on it:
+
+```go
+const malformedCommitSHAReason = "this index's recorded commit SHA is not a well-formed git object id; the store may have been written by a different tool - re-index to repair it"
+
+if !schema.IsCommitSHA(sha) {
+	resp = &uiv1.GetPermalinkResponse{
+		Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_NO_LINK,
+		Reason:       malformedCommitSHAReason,
+	}
+	return nil
+}
+```
+
+and change `permalink_test.go:362` to compare against `malformedCommitSHAReason`
+exactly, so the two NO_LINK causes stay distinguishable by construction.
+
+---
+
+### WR-03: IN-05's new population guard is itself bound to a hand-enumerated file set — 9 of 14 workflow files are covered by neither the guard nor a declared exception
+
+**File:** `internal/upgrade/taskfile_shape_test.go:1509-1512` (`inScopeWorkflowFiles`),
+consumed at `:1560-1571`
+
+**Issue:** IN-05 correctly closed the gap for *jobs inside three files*, and its
+`usesOnlyJobExceptions` carve-out is properly validated against disk
+(`validateUsesOnlyJobExceptions`, `:1499-1533`) — a stale exception fails loudly. But
+the file population it iterates is itself a bare hardcoded list:
+
+```go
+var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml"}
+```
+
+with no disk binding and no validated exception record. Its doc comment states that
+"bench.yml and release.yml carry their own documented D-01 exceptions ... and are
+deliberately excluded from this population check too", which reads as though the
+directory holds five files. It holds fourteen
+(`ls .github/workflows/*.yml | wc -l` -> `14`). Nine are named nowhere:
+`auto-close-unsolicited-prs.yml`, `auto-label-issues.yml`, `close-draft-prs.yml`,
+`darwin-toolchain-canary.yml`, `linux-cross-canary.yml`, `post-release-verify.yml`,
+`pr-template-format.yml`, `pr-title.yml`, `require-issue-link.yml`.
+
+This is criterion 2's shape moved one level up: the new subject passes *because it is
+absent*. Concrete: add `.github/workflows/security-scan.yml` with a job whose only
+step is `run: go test ./... -tags=security` (a raw invocation duplicating a Taskfile
+definition — the exact D-01 single-definition violation `TestWorkflowRunBodiesInvokeTask`
+exists to catch). `TestInScopeJobsPopulationMatchesDisk` never opens the file because
+it is not in `inScopeWorkflowFiles`; `TestWorkflowRunBodiesInvokeTask` iterates
+`inScopeJobs`, which does not name it. Both stay GREEN and the whole suite stays
+GREEN.
+
+That the invariant is genuinely not universal today is checkable:
+`.github/workflows/post-release-verify.yml:122` is a multi-line raw shell `run: |`
+body, not a `task <target>` call.
+
+**Fix:** Glob the directory instead of enumerating it, and demote the two D-01
+exclusions to a validated exception record with the same shape
+`usesOnlyJobExceptions` already uses:
+
+```go
+type workflowFileException struct{ Workflow, Reason string }
+
+var workflowFileExceptions = []workflowFileException{
+	{"bench.yml", "rebless/publish/diagnostic jobs run `go run ./tools/bench/runner` inline, commented in-file above the rebless job"},
+	{"release.yml", "native build matrix, D-08"},
+	// ... one entry per remaining out-of-scope workflow, each with a reason
+}
+
+files, err := filepath.Glob(filepath.Join(workflowsDir, "*.yml"))
+// fail if a workflowFileExceptions entry names a file that no longer exists,
+// then require every non-excepted globbed file's jobs to appear in inScopeJobs.
+```
+
+`requiredCheckNames` stays untouched — it mirrors an out-of-repo GitHub ruleset and is
+correctly hand-written.
+
+---
+
+### WR-04: the status gate fires one GetStatus per keystroke; WR-08's fix hides the visible symptom without restoring the documented trigger contract
+
+**File:** `web/src/routes/+layout.svelte:47-49`, `web/src/lib/status.ts:70-75` and
+`:163-167`
+
+**Issue:** `navigationIdentity(url)` is `pathname + sorted query string`, so it changes
+whenever *any* query param changes — including `q`. The layout effect reads `page.url`
+reactively and calls `statusGate.notifyNavigated(...)` on every change;
+`notifyNavigated` fires a fresh `fetchStatus()` whenever the identity differs from the
+last one. Typing in the Browse search box writes `q` to the URL on every keystroke by
+design (D-11 REFINE, `+page.svelte:158-160` -> `browse-nav.ts:128`), which updates
+`page.url`, which mints a new identity, which fires a `GetStatus` RPC.
+
+Concrete: with the Browse view open, type `hello` into the search box. Five additional
+`GetStatus` calls are issued, one per character, on top of the one the navigation
+contract allows. Each one enters `withEngine` -> `openEngine` server-side and opens the
+Pebble store; during an active re-index this repeatedly contends with the store lock
+that `graphstore.Open`'s bounded retry budget guards, so the banner can flap into the
+degrade path purely because a human is typing.
+
+`status.ts`'s own module doc states the gate is "the ONE fetch trigger this app has for
+'on load, on navigation, nothing else' ... deliberately a small seam, never a polling
+subsystem." Per-keystroke firing violates that as written. WR-08's `requestId` guard is
+correct in itself and I verified it works, but its effect here is to make the *visible*
+consequence (a superseded response reverting the banner) invisible while leaving the
+storm in place — a fix that quiets a symptom rather than the cause.
+
+No guard binds this: `web/tests/status.test.ts:152-167` and `:169-210` only ever vary
+the identity by `symbol` (`/browse?symbol=Foo` vs `/browse?symbol=Bar`), never by `q`.
+
+**Fix:** Make the gate's identity the *target* identity, not the full query string —
+`q` is explicitly view-local (`+page.svelte:64-66` says so). Either narrow
+`navigationIdentity` to the params that select a view, or drop the view-local ones:
+
+```ts
+const VIEW_LOCAL_PARAMS = ['q'];
+
+export function navigationIdentity(url: URL): string {
+	const params = new URLSearchParams(url.searchParams);
+	for (const k of VIEW_LOCAL_PARAMS) params.delete(k);
+	params.sort();
+	const qs = params.toString();
+	return qs ? `${url.pathname}?${qs}` : url.pathname;
+}
+```
+
+Add a test asserting `notifyNavigated('/browse?q=a')` after
+`notifyNavigated('/browse?q=ab')` produces **one** fetch total, and keep the existing
+`symbol`-varying test so the guard still discriminates in the direction that must
+still fire.
+
+---
+
+### WR-05: IN-15's "planted positive control" exercises a copy of the comparison, not the function under test — WR-03's own defect shape, reintroduced in the same pass
+
+**File:** `internal/upgrade/golangci_shape_test.go:90-148` (subject under test at
+`:54-84`)
+
+**Issue:** `TestGolangciEnabledLintersHeaderDiscriminates` declares itself "the planted
+positive control (rule 84d1gfpywd): proves the comparison above can actually fail". It
+does not exercise the comparison above. Lines 121-142 re-implement the regex match, the
+`strconv.Atoi`, the YAML decode, the `len(Linters.Enable) + len(Formatters.Enable)` sum,
+the `headerCount != actual` predicate, and even the failure message, against local
+fixtures. `TestGolangciEnabledLintersHeaderMatchesConfig` is never called and there is
+no extracted function both tests could share.
+
+This is exactly what WR-03 fixed for `test/wireoracle/capture.go` earlier in this same
+pass ("the test guards a copy of the code"), landed here at commit `dbad7ae1`.
+
+Concrete: change `golangci_shape_test.go:78-83` from `t.Errorf(...)` to `t.Logf(...)`,
+or change line 77 to `actual := len(cfg.Linters.Enable)` while bumping the header to 4.
+The real guard stops discriminating; `TestGolangciEnabledLintersHeaderDiscriminates`
+stays GREEN and still claims in its own doc comment to have proven otherwise.
+
+**Fix:** Extract the comparison so both tests drive one implementation:
+
+```go
+func compareEnabledLintersHeader(src []byte) (headerCount, actual int, err error) { ... }
+
+func TestGolangciEnabledLintersHeaderMatchesConfig(t *testing.T) {
+	data, _ := os.ReadFile(golangciConfigPath)
+	h, a, err := compareEnabledLintersHeader(data)
+	// ... assert err == nil && h == a
+}
+
+func TestGolangciEnabledLintersHeaderDiscriminates(t *testing.T) {
+	for _, c := range cases {
+		h, a, err := compareEnabledLintersHeader([]byte(c.src)) // SAME function
+		// ... assert (h != a) == c.wantMismatch
+	}
+}
+```
+
+## Info
+
+### IN-01: IN-07 inserted `isResponseLine` inside `CanonicalizeResponseOrder`'s doc comment
+
+**File:** `test/wireoracle/normalize.go:194-216`
+
+**Issue:** The paragraph beginning `// CanonicalizeResponseOrder is 03-03-PLAN.md Task
+3's R2 resolution ...` (lines 194-205) is now the doc comment attached to
+`func isResponseLine` at line 217. `CanonicalizeResponseOrder`'s own remaining comment
+(line 225 onward) no longer carries the R2 rationale that explains why the function
+exists. godoc will attribute the go-sdk `jsonrpc2.Async` explanation to the wrong
+symbol.
+
+**Fix:** Move the `isResponseLine` block (lines 206-216) plus its function above line
+194 so the R2 paragraph is reunited with `CanonicalizeResponseOrder`.
+
+---
+
+### IN-02: WR-03's `_ = scanTimestamped(...)` discards the scanner error with no justification, while IN-14 in the same pass required one everywhere else
+
+**File:** `test/wireoracle/capture.go:396-398`
+
+**Issue:** Behavior is unchanged from the pre-fix inline loop (which also never checked
+`scanner.Err()`), so this is not a regression. But it is now an explicit `_ =` discard,
+and IN-14 (`e57268d9`) established in this same pass that every such discard carries a
+one-line reason pointing at the authoritative explanation. This one does not. If the
+10 MiB `scanner.Buffer` cap is exceeded the goroutine closes `lines` silently and the
+capture looks like a clean EOF, which surfaces downstream as a confusing `drainUntil`
+timeout rather than "line too long".
+
+**Fix:** Either add the one-line reason, or surface it — e.g. record the error on the
+`Capture` result so a truncated stream fails as a truncated stream.
+
+---
+
+### IN-03: the WR-07 comment claims "every OTHER component of that URL is escaped"; `owner` and `repo` are written raw
+
+**File:** `internal/uiserver/permalink.go:156-157`, sinks at `:243-245`
+
+**Issue:** `buildGitHubBlobURL` percent-encodes the path per segment
+(`percentEncodeRepoPath`) and now validates `sha`, but writes `owner` and `repo`
+verbatim. A remote of `github.com:owner/re#po.git` yields `repo = "re#po"` and a
+rendered URL of `https://github.com/owner/re#po/blob/<sha>/<path>`, which a browser
+resolves as `https://github.com/owner/re` with everything after `#` as a fragment. The
+host is pinned to `github.com` by `RemoteGitHubRepo`'s exact-equality check, so this
+cannot cross an origin — it is a correctness wart and an inaccurate comment, not a
+vulnerability.
+
+**Fix:** Run `owner` and `repo` through `url.PathEscape` in `buildGitHubBlobURL`, or
+correct the comment to say which components are escaped.
+
+---
+
+### IN-04: WR-06 broadened `parseGitHubRemote` so a bare local path with a colon before any slash is now parsed as a host
+
+**File:** `internal/gitmeta/permalink.go:144-155`
+
+**Issue:** Making the `user@` optional was the right fix, but it also removed the `@`
+requirement that previously kept bare filesystem paths out of the scp-like branch.
+`D:\src\myrepo` (or any local path with a colon before its first `/`) now yields
+`host = "D"`, so `RemoteGitHubRepo` answers
+`origin remote host "D" is not github.com` instead of the previous, more accurate
+`origin remote is not a recognized URL`. Both are NO_LINK; only the operator-facing
+sentence changes, and it can echo a fragment of a local path.
+
+**Fix:** Reject a candidate host that contains a path separator or is a single
+character, before returning it — or require the host to contain a `.` (git's own
+scp-like grammar documents `host.xz`).
+
+---
+
+### IN-05: `gitSHA1HexLen` / `gitSHA256HexLen` now exist in two packages, bound only by a comment
+
+**File:** `internal/indexer/commit.go:35-38` and `internal/schema/meta.go:58-61`
+
+**Issue:** WR-07 promoted the *predicate* to `schema.IsCommitSHA` (good), but left a
+second copy of the two length constants in `internal/indexer`, documented as
+"numerically identical to schema's" (`commit.go:92-94`). Nothing asserts that. The
+indexer's tests build fixtures from the local constants, so a change to schema's values
+would be caught only indirectly.
+
+**Fix:** Delete the indexer copies and reference `schema`'s (exporting them if the
+indexer tests need them), or add a one-line compile-time assertion binding the pairs.
+
+---
+
+### IN-06: `GetStatus` still puts the unvalidated stored `commit_sha` on the wire
+
+**File:** `internal/uiserver/handlers.go:324`
+
+**Issue:** WR-07's own doc comment (`internal/schema/meta.go:63-76`) states the rule as
+"callers that read a commit SHA out of a Meta record and pass it to either of those
+[sinks] should call this first". `GetStatus` reads it with
+`commitSHA, _ := schema.IndexedCommitSHA(meta)` and does not validate. That is
+defensible today — the SPA renders it as escaped text (`web/src/routes/+page.svelte:91`)
+and never builds a URL from it (`web/src/lib/status.ts:50` only tests truthiness) — so
+there is no reachable sink. But the rule is applied at one of two read sites with
+nothing binding it, so a future consumer of `GetStatusResponse.commit_sha` inherits the
+hazard silently.
+
+**Fix:** Validate in `GetStatus` too and emit `""` on failure (which already means
+"unknown" per D-05), so the invariant "a commit SHA that leaves this server is
+well-formed" holds at every exit.
+
+---
+
+### IN-07: `CopyAction`'s 1.5 s reset timer is never cleared on destroy
+
+**File:** `web/src/lib/components/browse/CopyAction.svelte:44-46`
+
+**Issue:** WR-09's fix schedules `setTimeout(..., 1500)` after every copy attempt and
+clears it only on the *next* click. Unmounting within the window leaves the timer
+pending; it later assigns `copyState` on a destroyed component. Harmless in Svelte 5 at
+runtime, but under vitest's fake timers a later `advanceTimersByTime` in another test
+can run it.
+
+**Fix:** Add `$effect(() => () => clearTimeout(resetTimer));`.
+
+---
+
+### IN-08: WR-05's fix added an empty-input clear that was not part of its finding, and silently ignores non-conforming input
+
+**File:** `web/src/lib/components/browse/NeighborsPanel.svelte:69-77`
+
+**Issue:** WR-05's finding was the writer/parser grammar asymmetry, and
+`isShapeInteger` fixes it correctly. The same edit also added a new behavior — an empty
+input now writes `{ depth: undefined }`, clearing the URL param, where the previous
+code did nothing. The input is `onchange` (line 137), not `oninput`, so this only fires
+on commit and the blast radius is limited; but committing an empty value now drops
+`depth` from `targetKey` (`+page.svelte:87-95`) and tears the whole node view down to
+`loading` for a reload at the default depth. Separately, a committed non-conforming
+value (`2.5` in a `type="number"` input) is discarded with no feedback, leaving the
+control showing one depth and the URL another.
+
+**Fix:** Keep the grammar check; either revert the empty branch to a no-op or make the
+clear explicit in the UI (a "reset" affordance). Give the ignored-input case visible
+feedback (`aria-invalid`, or reset the input to the URL's value on blur).
+
+---
+
+### IN-09: `createBrowseNavigator` ignores the promise `goto` returns
+
+**File:** `web/src/lib/browse-nav.ts:128-132`
+
+**Issue:** `gotoFn(...)` returns a `Promise<void>` that is neither awaited nor
+`.catch`ed. A rejection (SvelteKit throws for `goto` during SSR, and navigation can be
+aborted) becomes an unhandled rejection with no diagnostic, in the module documented as
+"the ONE URL writer".
+
+**Fix:** `void gotoFn(url, {...}).catch(() => {});` with a comment, or propagate the
+promise out of `navigate` so callers can decide.
+
+---
+
+_Reviewed: 2026-08-29T13:59:52Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
+_Iteration: 2 (post-fix re-review)_
