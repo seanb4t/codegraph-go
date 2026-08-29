@@ -17,8 +17,35 @@
 		label: string;
 	} = $props();
 
+	// copyState (WR-09): handleCopy previously had no try/catch and no
+	// success/failure surface — every clipboard rejection became an
+	// unhandled promise rejection and a silent no-op, exactly the pattern
+	// this project's own CLAUDE.md forbids ("MUST surface problems
+	// clearly, never hide them") and this component's own doc comment
+	// argues against ("a present-but-inert affordance promises an action
+	// it cannot perform"). Two ordinary failures reach here:
+	// navigator.clipboard is undefined outside a secure context (D-08's
+	// bind-address field is explicitly meant to be wired to a non-
+	// loopback address later), and writeText rejects with
+	// NotAllowedError when the document is not focused. Both now surface
+	// a visible, transient state instead of a console-only failure.
+	let copyState = $state<'idle' | 'copied' | 'failed'>('idle');
+	let resetTimer: ReturnType<typeof setTimeout> | undefined;
+
 	async function handleCopy(): Promise<void> {
-		await navigator.clipboard.writeText(value);
+		clearTimeout(resetTimer);
+		try {
+			if (!navigator.clipboard) {
+				throw new Error('clipboard API unavailable in this context');
+			}
+			await navigator.clipboard.writeText(value);
+			copyState = 'copied';
+		} catch {
+			copyState = 'failed';
+		}
+		resetTimer = setTimeout(() => {
+			copyState = 'idle';
+		}, 1500);
 	}
 </script>
 
@@ -30,6 +57,12 @@
 		data-testid={`copy-action-${label}`}
 		onclick={handleCopy}
 	>
-		Copy {label}
+		{#if copyState === 'copied'}
+			Copied
+		{:else if copyState === 'failed'}
+			Copy failed
+		{:else}
+			Copy {label}
+		{/if}
 	</button>
 {/if}

@@ -213,6 +213,42 @@ describe('CopyAction: writes the EXACT displayed string, untrimmed and unnormali
 		await fireEvent.click(screen.getByTestId('copy-action-symbol name'));
 		expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith('SymbolTwo');
 	});
+
+	it('a successful copy surfaces a visible "Copied" state on the button (WR-09)', async () => {
+		render(CopyAction, { props: { value: 'internal/query/node.go', label: 'file path' } });
+		const button = screen.getByTestId('copy-action-file path');
+		expect(button.textContent).toContain('Copy file path');
+		await fireEvent.click(button);
+		await waitFor(() => expect(button.textContent).toContain('Copied'));
+	});
+});
+
+describe('CopyAction: a clipboard failure surfaces visibly, never a silent no-op (WR-09)', () => {
+	it('navigator.clipboard being undefined (outside a secure context) surfaces "Copy failed" instead of throwing unhandled', async () => {
+		Object.defineProperty(navigator, 'clipboard', {
+			value: undefined,
+			configurable: true,
+			writable: true
+		});
+
+		render(CopyAction, { props: { value: 'internal/query/node.go', label: 'file path' } });
+		const button = screen.getByTestId('copy-action-file path');
+		await fireEvent.click(button);
+		await waitFor(() => expect(button.textContent).toContain('Copy failed'));
+	});
+
+	it('a rejected writeText (e.g. NotAllowedError, document not focused) surfaces "Copy failed"', async () => {
+		Object.defineProperty(navigator, 'clipboard', {
+			value: { writeText: vi.fn().mockRejectedValue(new Error('NotAllowedError')) },
+			configurable: true,
+			writable: true
+		});
+
+		render(CopyAction, { props: { value: 'internal/query/node.go', label: 'file path' } });
+		const button = screen.getByTestId('copy-action-file path');
+		await fireEvent.click(button);
+		await waitFor(() => expect(button.textContent).toContain('Copy failed'));
+	});
 });
 
 describe('SourcePane: copy affordances for a single-def target', () => {
