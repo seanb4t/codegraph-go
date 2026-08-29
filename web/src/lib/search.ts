@@ -142,6 +142,29 @@ export function createSearchController(client: SearchClient): SearchController {
 		// comment in ui.proto states the server's own bound (MaxLimit,
 		// defaultMaxFiles, "0 means unlimited" for Files' depth) is
 		// authoritative; this module adds no second copy of any of them.
+		//
+		// CONFIRMED LIMITATION (found live in Task 3's mandated manual
+		// UAT against this repository's own index, not merely assumed):
+		// path/filepath.Match's `*` never crosses a `/` — empirically
+		// verified (filepath.Match("*detail*", "internal/query/detail.go")
+		// = false; filepath.Match("*claude*", "claudeassets.go") = true).
+		// Go's glob dialect has no recursive `**`, and the RPC's own doc
+		// comment confirms it matches the FULL forward-slashed path, not
+		// a basename — so no single glob string can express "term
+		// appears anywhere, at any depth" the way a fuzzy file-finder
+		// would. `*term*` therefore only surfaces ROOT-LEVEL file
+		// matches; it is the best available single-glob approximation
+		// within Files' actual (glob, not substring) contract, not a
+		// silently-broken feature — Search's own file-kind pseudo-node
+		// matches (confirmed live: Search("detail") returned
+		// internal/query/detail.go et al. with kind="file") already
+		// cover arbitrary-depth file discovery via the Symbols section,
+		// so BRW-01's "search files as you type" is not actually unmet,
+		// only served by a different RPC than "Files" for nested paths.
+		// Changing FilesOptions.Pattern's matching semantics is a server-
+		// side, cross-cutting change (CLI/MCP callers share this exact
+		// contract) — out of this plan's scope; filed as a todo instead
+		// of scope-creeping this plan (D-08/D-20 precedent).
 		Promise.all([
 			client.search({ term, kind: '', limit: 0 }, { signal: abort.signal }),
 			client.files(
