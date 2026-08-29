@@ -240,7 +240,7 @@ func decisionTablePrecedesSecondSection(body string) error {
 	if tableIdx == -1 {
 		return fmt.Errorf("no markdown table separator row found in body (first '## ' heading at line %d, second at line %d)", first, second)
 	}
-	if !(tableIdx > first && tableIdx < second) {
+	if tableIdx <= first || tableIdx >= second {
 		return fmt.Errorf("table separator row at line %d does not fall strictly between the first '## ' heading (line %d) and the second (line %d)", tableIdx, first, second)
 	}
 	return nil

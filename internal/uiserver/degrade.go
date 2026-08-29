@@ -103,7 +103,12 @@ const indexingInProgressMessage = "The index is being rebuilt. Please retry shor
 // through this constructor, via mapEngineError, so there is exactly one
 // place this error shape is built.
 func errIndexingInProgress() error {
-	connErr := connect.NewError(connect.CodeUnavailable, errors.New(indexingInProgressMessage))
+	// indexingInProgressMessage is deliberately punctuated, user-facing
+	// prose crossing to an unauthenticated browser caller (see its own doc
+	// comment) — never wrapped with fmt.Errorf/%w into a chained internal
+	// error, so the "error strings should not be capitalized or end with
+	// punctuation" Go convention ST1005 enforces does not apply here.
+	connErr := connect.NewError(connect.CodeUnavailable, errors.New(indexingInProgressMessage)) //nolint:staticcheck // ST1005: intentional, see comment above
 	if detail, detailErr := connect.NewErrorDetail(&uiv1.IndexingInProgress{Message: indexingInProgressMessage}); detailErr == nil {
 		connErr.AddDetail(detail)
 	}

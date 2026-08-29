@@ -92,7 +92,7 @@ func startedServer(t *testing.T, repoPath string) *Server {
 		cancel()
 		srv.Close()
 	})
-	go srv.Serve(ctx)
+	go func() { _ = srv.Serve(ctx) }()
 	waitForConnectable(t, strings.TrimPrefix(srv.URL(), "http://"))
 	return srv
 }

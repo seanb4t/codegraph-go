@@ -292,8 +292,8 @@ func buildSwapExemptionNotice(transcripts, serverChanges []string, depTouched bo
 		causes = append(causes, "the MCP dependency line in go.mod")
 	}
 	sb.WriteString(strings.Join(causes, " and "))
-	sb.WriteString(fmt.Sprintf(". This is SDK-01's one-time %s -> %s transition. ", mcpSDKModulePrefixes[0], mcpSDKModulePrefixes[1]))
+	fmt.Fprintf(&sb, ". This is SDK-01's one-time %s -> %s transition. ", mcpSDKModulePrefixes[0], mcpSDKModulePrefixes[1])
 	sb.WriteString("02-CONTEXT.md D-01/D-02/D-03 replaced this guard's byte-identity bar with semantic equivalence plus one human diff read, so these transcripts moving is expected, not a violation. ")
-	sb.WriteString(fmt.Sprintf("This exemption is self-expiring: once %s is absent from go.mod, no future diff can reproduce a removal line for it, so this exact waiver can fire at most once in this repository's history.", mcpSDKModulePrefixes[0]))
+	fmt.Fprintf(&sb, "This exemption is self-expiring: once %s is absent from go.mod, no future diff can reproduce a removal line for it, so this exact waiver can fire at most once in this repository's history.", mcpSDKModulePrefixes[0])
 	return sb.String()
 }

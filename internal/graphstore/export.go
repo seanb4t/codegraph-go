@@ -66,12 +66,12 @@ func (s *pebbleStore) Export(w io.Writer) error {
 
 	var meta schema.Meta
 	err := getProto(snap, metaKey(metaRecordName), &meta)
-	switch {
-	case err == nil:
+	switch err {
+	case nil:
 		if err := writeExportRecord(bw, exportKindMeta, &meta); err != nil {
 			return fmt.Errorf("export meta: %w", err)
 		}
-	case err == ErrNotFound:
+	case ErrNotFound:
 		// No meta record has ever been written to this store — nothing to
 		// export for it; nodes/edges/files can still legitimately exist.
 	default:

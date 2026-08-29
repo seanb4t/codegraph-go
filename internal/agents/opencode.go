@@ -242,7 +242,7 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 	for _, name := range []string{"opencode.jsonc", "opencode.json"} {
 		stalePath := filepath.Join(appData, "opencode", name)
 		if fileExists(stalePath) {
-			removeOpencodeEntry(stalePath)
+			_, _ = removeOpencodeEntry(stalePath)
 		}
 	}
 }

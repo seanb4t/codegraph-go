@@ -207,7 +207,7 @@ func exploreHandler(repoPath, defaultPath string, detector *gitmeta.CachingDetec
 		if err != nil {
 			return nil, nil, err
 		}
-		defer close()
+		defer func() { _ = close() }()
 
 		out, err := eng.Explore(args.Query, args.MaxFiles)
 		if err != nil {
@@ -413,7 +413,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			out, err := eng.Node(args.Symbol, args.File, lineHint)
 			if err != nil {
@@ -429,7 +429,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			locs, err := eng.Search(args.Query, args.Kind, args.Limit)
 			if err != nil {
@@ -446,7 +446,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			result, err := eng.Callers(args.Symbol, args.Limit)
 			if err != nil {
@@ -463,7 +463,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			result, err := eng.Callees(args.Symbol, args.Limit)
 			if err != nil {
@@ -480,7 +480,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			result, err := eng.Impact(args.Symbol, args.Depth)
 			if err != nil {
@@ -504,7 +504,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			result, err := eng.Files(opts)
 			if err != nil {
@@ -521,7 +521,7 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			defer func() { _ = close() }()
 
 			// codegraph_status is EXCLUDED from the compact notice
 			// (WORK-02/D-12): Engine.Status() already computes

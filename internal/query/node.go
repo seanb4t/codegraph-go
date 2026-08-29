@@ -416,4 +416,3 @@ func (e *Engine) fetchCalledBy(node *schema.Node, rev map[string][]*schema.Edge)
 	}
 	return calledBy, nil
 }
-

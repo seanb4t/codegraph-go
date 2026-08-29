@@ -168,7 +168,7 @@ func TestRenderStatusTextBreakdownFilterSortPad(t *testing.T) {
 	if idxGo < 0 || idxJS < 0 || idxPy < 0 {
 		t.Fatalf("RenderStatusText output missing one of go/javascript/python\n--- output ---\n%s", out)
 	}
-	if !(idxGo < idxJS && idxJS < idxPy) {
+	if idxGo >= idxJS || idxJS >= idxPy {
 		t.Errorf("RenderStatusText breakdown order = go@%d javascript@%d python@%d, want ascending (count DESC: go(42) > javascript(19) > python(7))\n--- output ---\n%s", idxGo, idxJS, idxPy, out)
 	}
 
@@ -411,7 +411,7 @@ func TestRenderStatusTextEdgesByKindSection(t *testing.T) {
 	if idxNodes < 0 || idxEdges < 0 || idxFiles < 0 {
 		t.Fatalf("RenderStatusText output missing one of Nodes by Kind:/Edges by Kind:/Files by Language:\n--- output ---\n%s", out)
 	}
-	if !(idxNodes < idxEdges && idxEdges < idxFiles) {
+	if idxNodes >= idxEdges || idxEdges >= idxFiles {
 		t.Errorf("RenderStatusText section order = Nodes@%d Edges@%d Files@%d, want Nodes < Edges < Files\n--- output ---\n%s", idxNodes, idxEdges, idxFiles, out)
 	}
 	if !strings.Contains(out, goextract.RefKindCalls) || !strings.Contains(out, goextract.RefKindImports) {
@@ -433,7 +433,7 @@ func TestRenderStatusMarkdownEdgesByKindSection(t *testing.T) {
 	if idxNodes < 0 || idxEdges < 0 || idxLangs < 0 {
 		t.Fatalf("RenderStatusMarkdown output missing one of **Nodes by Kind:**/**Edges by Kind:**/**Languages:**\n--- output ---\n%s", out)
 	}
-	if !(idxNodes < idxEdges && idxEdges < idxLangs) {
+	if idxNodes >= idxEdges || idxEdges >= idxLangs {
 		t.Errorf("RenderStatusMarkdown section order = Nodes@%d Edges@%d Languages@%d, want Nodes < Edges < Languages\n--- output ---\n%s", idxNodes, idxEdges, idxLangs, out)
 	}
 	if !strings.Contains(out, goextract.RefKindCalls) || !strings.Contains(out, goextract.RefKindImports) {

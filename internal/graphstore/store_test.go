@@ -111,10 +111,10 @@ func TestConcurrentReadersSingleWriter(t *testing.T) {
 			seen := 0
 			for i := 0; i < numNodes; i++ {
 				_, err := snap.GetNode(fmt.Sprintf("node-%d", i))
-				switch {
-				case err == nil:
+				switch err {
+				case nil:
 					seen++
-				case err == ErrNotFound:
+				case ErrNotFound:
 					// Fine: this snapshot's point-in-time predates the commit.
 				default:
 					t.Errorf("GetNode: %v", err)

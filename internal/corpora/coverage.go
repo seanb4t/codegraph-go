@@ -204,9 +204,7 @@ func CheckCoverage(m Manifest, obs Observations, sel Selection) CoverageResult {
 	// Step 8: synthetic coverage is not accepted for FIXT-01 in this phase.
 	if len(sel.SyntheticKinds) > 0 {
 		names := make([]string, 0, len(sel.SyntheticKinds))
-		for _, k := range sel.SyntheticKinds {
-			names = append(names, k)
-		}
+		names = append(names, sel.SyntheticKinds...)
 		sort.Strings(names)
 		failures = append(failures, "synthetic coverage is not accepted: "+strings.Join(names, ", "))
 	}

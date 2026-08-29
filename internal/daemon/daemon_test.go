@@ -889,7 +889,7 @@ func TestRunWithRetryCtxCancelDuringSleep(t *testing.T) {
 	if err := acquire(codegraphDir); err != nil {
 		t.Fatalf("acquire (holding the lock ourselves): %v", err)
 	}
-	defer release(codegraphDir)
+	defer func() { _ = release(codegraphDir) }()
 
 	d, err := New(root, indexer.Options{Quiet: true}, WithProbe(watch.Probe{IsWSL: func() bool { return false }}))
 	if err != nil {

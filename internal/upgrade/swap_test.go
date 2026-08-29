@@ -52,7 +52,7 @@ func TestSwap_NotWritableTargetDirLeavesOriginalIntact(t *testing.T) {
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatalf("chmod dir read-only: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
 
 	err := atomicSwap(target, []byte("new-binary-bytes"))
 	if err == nil {

@@ -48,15 +48,6 @@ func parseWorkflowTopLevelName(src string) (string, error) {
 	return "", fmt.Errorf("parseWorkflowTopLevelName: no column-0 name: key found")
 }
 
-func mustWorkflowTopLevelName(t *testing.T, src string) string {
-	t.Helper()
-	v, err := parseWorkflowTopLevelName(src)
-	if err != nil {
-		t.Fatalf("mustWorkflowTopLevelName: %v", err)
-	}
-	return v
-}
-
 // parseWorkflowOnKeys returns the two-space-indented keys directly under the
 // column-0 `on:` key.
 func parseWorkflowOnKeys(src string) ([]string, error) {

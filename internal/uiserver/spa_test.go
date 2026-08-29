@@ -612,7 +612,7 @@ func TestSPARPCPathReachesConnectHandler(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go srv.Serve(ctx)
+	go func() { _ = srv.Serve(ctx) }()
 	waitForConnectable(t, strings.TrimPrefix(srv.URL(), "http://"))
 
 	// The Connect protocol's unary mode is plain HTTP POST with a JSON
@@ -671,7 +671,7 @@ func TestSPAInheritsOriginHostGuard(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go srv.Serve(ctx)
+	go func() { _ = srv.Serve(ctx) }()
 	waitForConnectable(t, strings.TrimPrefix(srv.URL(), "http://"))
 
 	req, err := http.NewRequest(http.MethodGet, srv.URL()+"/browse/some/deep/route", nil)

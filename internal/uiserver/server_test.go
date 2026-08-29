@@ -158,7 +158,7 @@ func TestUIServerServesGetStatusEndToEnd(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go srv.Serve(ctx)
+	go func() { _ = srv.Serve(ctx) }()
 	waitForConnectable(t, strings.TrimPrefix(srv.URL(), "http://"))
 
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
@@ -232,7 +232,7 @@ func TestUIServerRejectsForeignHostEndToEnd(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go srv.Serve(ctx)
+	go func() { _ = srv.Serve(ctx) }()
 	waitForConnectable(t, strings.TrimPrefix(srv.URL(), "http://"))
 
 	// Positive control (required before the absence claim can mean
@@ -275,7 +275,7 @@ func TestUIServerHoldsNoStoreHandleBetweenCalls(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go srv.Serve(ctx)
+	go func() { _ = srv.Serve(ctx) }()
 	waitForConnectable(t, strings.TrimPrefix(srv.URL(), "http://"))
 
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())

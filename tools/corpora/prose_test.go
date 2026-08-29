@@ -3,7 +3,6 @@
 package main
 
 import (
-	"sort"
 	"strings"
 	"testing"
 
@@ -155,15 +154,4 @@ func TestProseCoversPriorityLanguages(t *testing.T) {
 			t.Fatalf("language table missing priority language %q", g.Name)
 		}
 	}
-}
-
-// sortedKindNames returns the RankEdges kind names sorted, for tests
-// that need to iterate the rank set deterministically.
-func sortedKindNames() []string {
-	out := make([]string, 0, len(query.RankEdges))
-	for k := range query.RankEdges {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
