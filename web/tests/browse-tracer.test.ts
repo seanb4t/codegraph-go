@@ -129,6 +129,24 @@ describe('browse tracer: open a file by URL and read its highlighted verbatim so
 		expect(escaped).toContain('&lt;script&gt;');
 	});
 
+	it('highlightSource escapes hostile input on the REGISTERED-language path too (WR-04)', async () => {
+		// The two assertions above never exercise escaping on the
+		// registered-language branch: 'func main() {}' contains no '<', so
+		// `not.toContain('<script>')` against it is vacuously true
+		// regardless of what highlightSource does, and the genuine
+		// escaping assertion above covers only the UNREGISTERED-language
+		// fallback (escapeHtml) — the branch highlight.ts's own doc
+		// comment says "should be unreachable in a correct tree".
+		// SourcePane.svelte's {@html} sites render hljs.highlight()'s
+		// output for a REGISTERED language, which had zero escaping
+		// coverage before this test. Anchor the negative to an input that
+		// CAN contain the forbidden string, on that path.
+		const { highlightSource } = await import('$lib/highlight');
+		const hostile = highlightSource('func main() { /* <script>alert(1)</script> */ }', 'go');
+		expect(hostile).toContain('&lt;script&gt;'); // positive: escaping happened
+		expect(hostile).not.toContain('<script>'); // negative: now non-vacuous
+	});
+
 	it('HIGHLIGHT_COVERAGE is exactly the registered module set plus the declared alias-map keys (no drift)', async () => {
 		// Mirrors highlight.ts's own registerLanguage() argument list — kept
 		// as an independent, hand-written list (not imported from
