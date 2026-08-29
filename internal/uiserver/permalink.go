@@ -109,7 +109,19 @@ func (s *uiService) GetPermalink(ctx context.Context, req *connect.Request[uiv1.
 	// outcome this reclassification exists to avoid. Recording it in this
 	// outer variable and returning nil from fn instead lets GetPermalink
 	// return it verbatim, once withEngine itself has returned successfully.
-	var classifiedErr error
+	//
+	// IN-02: typed *connect.Error rather than the broader `error`. This
+	// establishes a second, unaudited error path out of GetPermalink that
+	// bypasses the package's one information-disclosure scrub
+	// (mapEngineError) — nothing previously stopped a future edit inside
+	// the closure below from writing `classifiedErr = err` for a raw
+	// engine error that might carry an absolute host path (exactly the
+	// class of leak WR-01/T-01-06 fixed elsewhere in this package).
+	// Constraining the type makes that assignment a COMPILE ERROR unless
+	// the caller explicitly builds a *connect.Error via connect.NewError
+	// — the same deliberate, reviewable step
+	// TestGetPermalinkRefusesSinceDeletedFile already exercises.
+	var classifiedErr *connect.Error
 	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
 		path := req.Msg.GetPath()
 		if verr := eng.ValidateRepoRelativePath(path); verr != nil {
