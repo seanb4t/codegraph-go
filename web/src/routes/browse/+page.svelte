@@ -12,7 +12,9 @@
 	// state assignment (03-06's own placeholder, replaced below).
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { getContext } from 'svelte';
 	import { uiClient } from '$lib/client';
+	import type { IndexStatus, StatusGate } from '$lib/status';
 	import { parseBrowseParams, type BrowseParams } from '$lib/browse-url';
 	import {
 		loadBrowseTarget,
@@ -35,6 +37,19 @@
 	let params = $derived(parseBrowseParams(page.url.searchParams));
 	let targetState = $state<BrowseTargetState>({ kind: 'idle' });
 	let blastState = $state<BlastRadiusState>({ kind: 'idle' });
+
+	// D-03: this view's own copy of the layout's shared index-health
+	// status (03-09), read by SUBSCRIBING to the SAME gate the layout
+	// created — never a second gate, which would be a second fetch
+	// trigger (D-05). Drives the source pane's stale-vs-plain
+	// no-source message split below.
+	const statusGate = getContext<StatusGate>('statusGate');
+	let indexStatus = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown' });
+	$effect(() => {
+		return statusGate.subscribe((s) => {
+			indexStatus = s;
+		});
+	});
 
 	// One navigator (built once, over the real goto), one gate (one
 	// NavigationGeneration per URL change, minted here — the route —
@@ -127,7 +142,12 @@
 		onNavigate={handleNeighborNavigate}
 	/>
 {:else}
-	<SourcePane state={targetState} client={uiClient} onNavigate={handleNeighborNavigate} />
+	<SourcePane
+		state={targetState}
+		client={uiClient}
+		indexStale={indexStatus.verdict === 'stale'}
+		onNavigate={handleNeighborNavigate}
+	/>
 
 	{#if targetState.kind === 'single-def'}
 		<NeighborsPanel

@@ -42,10 +42,18 @@
 	let {
 		state: target,
 		client,
+		indexStale = false,
 		onNavigate
 	}: {
 		state: BrowseTargetState;
 		client?: PermalinkClient;
+		// indexStale (03-09, D-03): the SAME `GetStatusResponse.stale` flag
+		// the layout's status banner already reads, passed down so this
+		// pane's own source-absent message can split by cause. Optional
+		// so a caller that renders this pane with no index-status context
+		// (e.g. 03-04's pre-existing tracer fixtures) is unaffected — the
+		// default (false) preserves the plain no-source message.
+		indexStale?: boolean;
 		onNavigate?: (delta: BrowseNavDelta, intent: NavIntent) => void;
 	} = $props();
 
@@ -253,6 +261,20 @@
 					use:callTargets={{ index: callIndex, onSelect: handleCallTargetSelect }}
 					>{@html highlightSource(text, language)}</code
 				></pre>
+		{:else if indexStale}
+			<!-- D-03: singleDefSourceBlob (internal/uiserver/handlers.go)
+			     collapses three read failures into one nil source — an
+			     empty file path, a confinement rejection, and a file
+			     removed since indexing. The reasoning holds for the first
+			     two, but not the third: it is the stale-index case NAV-04
+			     names by hand, and the one the user CAN act on by
+			     re-indexing. No proto change: GetStatusResponse.stale is
+			     already on the wire, and the SAME flag drives the layout's
+			     own status banner. -->
+			<p class="text-sm text-muted-foreground" data-testid="browse-no-source-stale">
+				Source unavailable — the index is stale, and this file may have moved or been removed
+				since the last index. Run <code>codegraph index</code> to refresh it, then try again.
+			</p>
 		{:else}
 			<p class="text-sm text-muted-foreground" data-testid="browse-no-source">
 				No source available for this definition.
