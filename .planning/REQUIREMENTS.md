@@ -35,21 +35,21 @@
 
 ### Browse & Inspect
 
-- [ ] **BRW-01**: User can search symbols and files as they type
+- [x] **BRW-01**: User can search symbols and files as they type
 - [ ] **BRW-02**: User can open a node and see verbatim source, callers, callees, and blast radius
 - [ ] **BRW-03**: User can click any neighbor and continue navigating from there
 - [ ] **BRW-04**: User can jump from a symbol reference in rendered source to its definition
 - [ ] **BRW-05**: User is offered a disambiguation picker when a bare symbol name resolves to multiple definitions
 - [x] **BRW-06**: Source is syntax-highlighted using a lightweight highlighter with only the indexed languages registered
 - [ ] **BRW-07**: User can copy a file path or symbol name in one action
-- [ ] **BRW-08**: User can enter a natural-language query and get `Explore`'s relevance-selected results, alongside exact-name search
+- [x] **BRW-08**: User can enter a natural-language query and get `Explore`'s relevance-selected results, alongside exact-name search
 - [ ] **BRW-09**: User can open the current file/line on GitHub, permalinked to the **indexed** commit so the remote view matches what the UI showed
 
 ### Navigation
 
 - [ ] **NAV-01**: Every view, symbol, and query state is addressable by a shareable URL encoding view, target, depth and limit
 - [ ] **NAV-02**: Browser back and forward navigate view history correctly
-- [ ] **NAV-03**: User can drive search and result selection from the keyboard, including a focus shortcut and `Esc` to dismiss
+- [x] **NAV-03**: User can drive search and result selection from the keyboard, including a focus shortcut and `Esc` to dismiss
 - [ ] **NAV-04**: No-index, stale-index, and symbol-not-found each render an explicit state rather than an empty pane
 
 ### Query Workbench
@@ -147,18 +147,18 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | ENG-02 | Phase 1 | Complete |
 | ENG-03 | Phase 5 | Pending |
 | ENG-04 | Phase 1 | Complete |
-| BRW-01 | Phase 3 | Pending |
+| BRW-01 | Phase 3 | Complete |
 | BRW-02 | Phase 3 | Pending |
 | BRW-03 | Phase 3 | Pending |
 | BRW-04 | Phase 3 | Pending |
 | BRW-05 | Phase 3 | Pending |
 | BRW-06 | Phase 3 | Complete |
 | BRW-07 | Phase 3 | Pending |
-| BRW-08 | Phase 3 | Pending |
+| BRW-08 | Phase 3 | Complete |
 | BRW-09 | Phase 3 | Pending |
 | NAV-01 | Phase 3 | Pending |
 | NAV-02 | Phase 3 | Pending |
-| NAV-03 | Phase 3 | Pending |
+| NAV-03 | Phase 3 | Complete |
 | NAV-04 | Phase 3 | Pending |
 | WRK-01 | Phase 4 | Pending |
 | WRK-02 | Phase 4 | Pending |

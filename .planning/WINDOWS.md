@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 2
 fixed_count: 14
-total_count: 21
-last_updated: 2026-08-24T17:08:46.409Z
+total_count: 22
+last_updated: 2026-08-29T02:37:45.131Z
 ---
 
 # Broken Windows Ledger
@@ -36,6 +36,7 @@ last_updated: 2026-08-24T17:08:46.409Z
 | 19 | 05 | deviation | internal/indexer/goextract/goextract.go | 858 | CODE-01 BACKSTOP finding (05-08 bare-\\bTS\\b classification, not the formal 13-pattern gate): 'this is a deliberate, bounded scope, not a silent drop of ground truth: TS's own references semantic is already a broad, heuristic identifier-use signal' cites TS's own semantic as ongoing design-rationale precedent — borderline D-01 framing, structurally exempted from the formal census only because internal/indexer/** is blanket-excluded (justified for tree-sitter grammar-node-shape hits, not for this scope-bounding rationale). Outside 05-08's authorized files_modified; not edited. Recorded as waived (not open) to preserve the orchestrator-mandated open_count==3 invariant (Correction 3) — a future sweep pass should fold this into its edit set. | waived | Deferred as borderline, NOT closed by the formal gate. 'TS's own references semantic' is cited as ongoing design-rationale precedent, escaping the 13-pattern census only via the internal/indexer/** blanket exclusion, which is justified for tree-sitter grammar-node-shape hits and NOT for this scope-bounding rationale. Orchestrator correction: same as entry 18 — the numeric open_count==3 justification is withdrawn; the deferral stands on its substance and remains open for adjudication. | 2026-08-16T01:57:31.236Z | 2026-08-16T01:57:33.612Z |
 | 20 | 2 | deviation | web/vite.config.ts |  | svelte.config.js does not exist in this SvelteKit toolchain version (kit ^2.63.0's sv 0.17.0 scaffold) — adapter config moved into the sveltekit() Vite plugin's options in vite.config.ts; no separate svelte.config.js is authored | open |  | 2026-08-24T17:08:46.317Z |  |
 | 21 | 2 | deviation | web/package.json |  | typescript pinned to 6.0.3 (the version sv@0.17.0's own scaffold selected as compatible) rather than the plan's literal 5.9.3 pin — the 5.x-vs-7.x compatibility concern the plan flagged does not name 6.x, which is now the toolchain's own verified-compatible default | open |  | 2026-08-24T17:08:46.409Z |  |
+| 22 | 03 | deviation | web/src/lib/search.ts |  | Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope) | open |  | 2026-08-29T02:37:45.131Z |  |
 
 ````json
 [
@@ -289,6 +290,18 @@ last_updated: 2026-08-24T17:08:46.409Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-24T17:08:46.409Z",
+    "resolved_at": null
+  },
+  {
+    "id": 22,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "web/src/lib/search.ts",
+    "line": null,
+    "description": "Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-29T02:37:45.131Z",
     "resolved_at": null
   }
 ]

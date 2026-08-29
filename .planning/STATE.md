@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-08-29T01:13:35.714Z"
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-08-29T02:37:38.766Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 03 execution started
-state_head: 52dadeb74447bfff66818980a9aa8f2da8abc5b4
+state_head: 3ced35013c6aced86e35d0207d01a64144b55320
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 23
+  completed_plans: 24
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
-Plan: 6 of 10
+Plan: 7 of 10
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 03 execution started
 
@@ -84,6 +84,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P03 | ~90min | 3 tasks | 7 files |
 | Phase 03 P04 | ~35min | 3 tasks | 12 files |
 | Phase 03 P05 | ~40min | 3 tasks | 10 files |
+| Phase 03 P06 | ~50min active | 3 tasks | 44 files |
 
 ## Accumulated Context
 
@@ -146,6 +147,11 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: [Phase 03]: 03-05: GetPermalink wire shape frozen via human checkpoint — PermalinkAvailability as a closed enum (not open string), and a tri-state RemotePresence{Unknown,Observed,NotObserved} + structured GitHubRemote{Owner,Repo,Host,Reason} so "could not check" never collapses into a false claim of no-link
 - [Phase 03]: [Phase 03]: 03-05: since-deleted-file disposition CHOSEN as deleted-classify-in-handler (not the deleted-accept-internal default) — a since-deleted file is a NORMAL outcome for permalinks (they outlive the files they point at), so it is reclassified in internal/uiserver/permalink.go ONLY to CodeInvalidArgument naming the caller's own repo-relative path, never the underlying absolute host path
 - [Phase 03]: [Phase 03]: 03-05: TestUIServiceMethodSetIsExactlyTheReadSet's hardcoded method-count literal (9->10) was updated alongside wantUIServiceMethods' new GetPermalink entry — the plan text said "change nothing else" but the literal makes the test permanently unpassable otherwise (Rule 3 deviation)
+- [Phase 03]: [Phase 03]: 03-06: vendor gate approved — bits-ui@2.19.0, @internationalized/date@3.12.3 direct plus 10 transitive packages, 36-file shadcn-svelte command surface (registry v1.5.1); textarea/input-group-textarea kept unimported (atomic registry unit, stripping would defeat source-match discipline)
+- [Phase 03]: [Phase 03]: 03-06: Command primitive confirmed (spike + live UAT) to traverse Command.Group boundaries in visual order — Task 3 used real grouped sections, no flat-list workaround
+- [Phase 03]: [Phase 03]: 03-06: Explore submission wired via a single leading unlabeled Command.Item ("Ask") reusing the primitive's own item-select mechanism, rather than hijacking Enter globally — avoids racing against "Enter opens the highlighted item"
+- [Phase 03]: [Phase 03]: 03-06: found live (manual UAT, not assumed) that FilesOptions.Pattern's glob (path/filepath.Match) never crosses '/' and has no recursive '**' — Files' live-search pattern only matches root-level files for nested repos; documented in search.ts, filed as a todo, not fixed (server-side/cross-cutting, out of scope). Search's own file-kind pseudo-node matches already cover arbitrary-depth file discovery
+- [Phase 03]: [Phase 03]: 03-06: never name a Svelte 5 $state()-backed local variable literally 'state' — svelte-check reports spurious 'used before declaration'/implicit-any errors; renamed to searchState
 
 ### Pending Todos
 
@@ -267,8 +273,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T01:13:35.614Z
-Stopped at: Completed 03-05-PLAN.md
+Last session: 2026-08-29T02:37:38.682Z
+Stopped at: Completed 03-06-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
