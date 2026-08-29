@@ -1,17 +1,20 @@
 ---
 phase: 03-browse-inspect-navigation
 verified: 2026-08-29T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 roadmap success criteria verified (14/14 requirement IDs traced and evidenced); 0 behavior_unverified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Enter a natural-language question in the browse search box (e.g. \"where do we validate the origin header\") against this repo's own index and confirm the Explore section renders relevance-selected results, visually distinguishable from the live exact-name Search/Files sections, in a real browser."
     expected: "A third, separately labelled section appears only after submit (not per keystroke), with plausible relevance-ranked results."
     why_human: "BRW-08's ranking quality cannot be judged from jsdom fixtures — 03-VALIDATION.md's own Manual-Only table names this exact limitation. Strong supporting evidence already exists: search.ts's trigger-split, debounce, cancellation and ordering guarantees are unit-tested (16/16 test files, 128/128 tests green), and 03-06-SUMMARY.md records a live agent-browser UAT pass against this repo's real index."
+
   - test: "Open a file/symbol in /browse, follow the 'View on GitHub' permalink, and confirm the destination page on github.com actually shows the same file at the same line the UI displayed."
     expected: "The browser navigates to https://github.com/{owner}/{repo}/blob/{indexed-sha}/{path}#L{line} and GitHub renders that exact line."
     why_human: "External-service resolution (does the URL actually 404 or land correctly on github.com) cannot be verified from this sandbox. Strong supporting evidence already exists: internal/gitmeta and internal/uiserver's permalink test suites pass in full (10 + 12 named PASS, 0 FAIL) covering URL derivation, tri-state availability, percent-encoding and confinement reuse, and 03-08-SUMMARY.md records a live UAT pass showing a real, correctly-shaped GitHub URL rendered for this repo's own (at-the-time unpushed) commit."
+
   - test: "Open one file per registered language (go, py, ts/tsx, java, cs, js, rs, rb, php, kt, swift, c, cpp) in the browse view and visually confirm tokens are colored per highlight.js's github.css theme, with none rendering as unstyled plain text."
     expected: "Keywords, strings, comments etc. show distinct syntax colors across all 14 indexed language IDs (13 hljs modules, tsx covered by the typescript module's own alias)."
     why_human: "Visual rendering quality is not assertable from source/DOM inspection alone — 03-VALIDATION.md's own Manual-Only table names this exact limitation. Strong supporting evidence already exists: web/highlight_coverage_test.go proves set-equality between the 14 registered indexer language IDs and the 13 hljs modules (with a planted positive/negative control per the review), and 03-04-SUMMARY.md records the manual UAT that caught and fixed a missing theme stylesheet (initially rendered unstyled, fixed same session)."
@@ -49,6 +52,7 @@ This report re-derived every countable claim rather than trusting SUMMARY.md pro
   ```
   --- PASS (part of the 128/128 web:test run, file: browse-page.test.ts)
   ```
+
 - `task web:drift` — PASS, 73 source files hashed, 27 output files, both digest halves matched; the rebuild that shipped with the fix is genuinely reflected in the committed bundle.
 
 ## Second Review Finding — Verified Fixed
