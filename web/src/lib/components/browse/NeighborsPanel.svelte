@@ -90,7 +90,7 @@
 					<li>
 						<button
 							type="button"
-							data-testid={`neighbor-entry-${entryKey(entry)}`}
+							data-testid={`neighbor-caller-${entryKey(entry)}`}
 							onclick={() => openEntry(entry)}
 						>
 							{entry.name}
@@ -114,7 +114,7 @@
 					<li>
 						<button
 							type="button"
-							data-testid={`neighbor-entry-${entryKey(entry)}`}
+							data-testid={`neighbor-callee-${entryKey(entry)}`}
 							onclick={() => openEntry(entry)}
 						>
 							{entry.name}
@@ -157,7 +157,7 @@
 						<li>
 							<button
 								type="button"
-								data-testid={`neighbor-entry-${entryKey(entry)}`}
+								data-testid={`neighbor-blast-${entryKey(entry)}`}
 								onclick={() => openEntry(entry)}
 							>
 								{entry.name}

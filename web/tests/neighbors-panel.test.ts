@@ -61,7 +61,7 @@ describe('NeighborsPanel: three labelled regions, entries in supplied order', ()
 
 		const callerButtons = screen
 			.getByTestId('neighbors-callers')
-			.querySelectorAll('[data-testid^="neighbor-entry-"]');
+			.querySelectorAll('[data-testid^="neighbor-caller-"]');
 		expect(Array.from(callerButtons).map((el) => el.textContent)).toEqual([
 			expect.stringContaining('CallerA'),
 			expect.stringContaining('CallerB')
@@ -71,9 +71,43 @@ describe('NeighborsPanel: three labelled regions, entries in supplied order', ()
 
 		const blastEntries = screen
 			.getByTestId('neighbors-blast-radius')
-			.querySelectorAll('[data-testid^="neighbor-entry-"]');
+			.querySelectorAll('[data-testid^="neighbor-blast-"]');
 		expect(blastEntries).toHaveLength(1);
 		expect(blastEntries[0]?.textContent).toContain('Affected1');
+	});
+
+	it('IN-11: a node appearing as BOTH a callee and a blast-radius entry gets two DISTINCT test ids, never a getByTestId collision', () => {
+		// Reproduces 03-07's own manual UAT observation ("one blast-radius
+		// entry (itself)") — a self-referential impact set is the common
+		// case for a node that calls itself, or is otherwise its own
+		// affected node. entryKey (filePath:startLine:name) is identical
+		// for the SAME logical node whether it appears as a callee or in
+		// the blast radius, so before this fix both regions emitted the
+		// literal SAME data-testid value.
+		const shared = node('Shared', { filePath: 'shared.go', startLine: 7 });
+		render(NeighborsPanel, {
+			props: {
+				calledBy: [],
+				calls: [shared],
+				blastRadius: {
+					kind: 'loaded',
+					depth: 1,
+					nodeCount: 1,
+					edgeCount: 1,
+					affected: [{ ...location('Shared'), filePath: 'shared.go', startLine: 7 } as Location]
+				},
+				depth: 1,
+				onNavigate: vi.fn()
+			}
+		});
+
+		// getByTestId throws "Found multiple elements" if two elements ever
+		// share a test id — this call succeeding at all is the assertion.
+		const calleeButton = screen.getByTestId('neighbor-callee-shared.go:7:Shared');
+		const blastButton = screen.getByTestId('neighbor-blast-shared.go:7:Shared');
+		expect(calleeButton).toBeInTheDocument();
+		expect(blastButton).toBeInTheDocument();
+		expect(calleeButton).not.toBe(blastButton);
 	});
 });
 
@@ -91,7 +125,7 @@ describe('NeighborsPanel: click-through and depth-change use DIFFERENT intents',
 		});
 		const button = screen
 			.getByTestId('neighbors-callers')
-			.querySelector('[data-testid^="neighbor-entry-"]') as HTMLElement;
+			.querySelector('[data-testid^="neighbor-caller-"]') as HTMLElement;
 		await fireEvent.click(button);
 
 		expect(onNavigate).toHaveBeenCalledWith(
