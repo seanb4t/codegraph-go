@@ -1,12 +1,44 @@
-<!--
-  Placeholder slot for Phase 3 (Browse, Inspect & Navigation): find any
-  symbol or file, read its verbatim source with callers, callees and
-  blast radius. This route is a real client-side page — not a
-  restructuring point — so Phase 3 fills it rather than building
-  navigation from scratch (D-18).
--->
+<script lang="ts">
+	// D-18: fills the Phase 2 placeholder this route mounted. Reads view
+	// state EXCLUSIVELY from page.url.searchParams (via $app/state) — never
+	// a `load` function (this app is ssr=false/prerender=false, and the
+	// RPC calls are already client-only) — so back/forward and a fresh load
+	// of the same URL derive identical state (NAV-01/NAV-02). This route
+	// never imports SvelteKit's shallow-routing history exports from
+	// $app/navigation for view state: those only ever assign to
+	// page.state, never page.url — a component reading page.url would not
+	// react to them (03-RESEARCH.md Pitfall 1). URL WRITES (goto-driven
+	// navigation, search-as-you-type) land in plan 03-07; this plan is
+	// read-only against the URL.
+	import { page } from '$app/state';
+	import { uiClient } from '$lib/client';
+	import { parseBrowseParams } from '$lib/browse-url';
+	import { loadBrowseTarget, type BrowseTargetState } from '$lib/browse-state';
+	import SourcePane from '$lib/components/browse/SourcePane.svelte';
+
+	let params = $derived(parseBrowseParams(page.url.searchParams));
+	let state = $state<BrowseTargetState>({ kind: 'idle' });
+
+	$effect(() => {
+		const currentParams = params;
+		const controller = new AbortController();
+
+		if (!currentParams.symbol && !currentParams.file) {
+			state = { kind: 'idle' };
+			return;
+		}
+
+		state = { kind: 'loading' };
+		loadBrowseTarget(currentParams, uiClient, controller.signal).then((result) => {
+			if (!controller.signal.aborted) {
+				state = result;
+			}
+		});
+
+		return () => controller.abort();
+	});
+</script>
+
 <h1 class="text-lg font-semibold">Browse</h1>
-<p class="mt-1 text-sm text-muted-foreground">
-	Phase 3: find any symbol or file, read its verbatim source with callers, callees and blast
-	radius.
-</p>
+
+<SourcePane {state} />

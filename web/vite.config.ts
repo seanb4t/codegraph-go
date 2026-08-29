@@ -99,6 +99,15 @@ export default defineConfig({
 		environment: 'jsdom',
 		include: ['tests/**/*.test.ts'],
 		setupFiles: ['./tests/setup.ts'],
-		globals: false
+		globals: false,
+		// 03-04: 'verbose' always names every test file/case in `pnpm test`'s
+		// own stdout, even on a fully green run — vitest's 'default' reporter
+		// collapses to bare pass/fail counts once nothing fails, which would
+		// make `pnpm --dir web test`'s output unable to prove any SPECIFIC
+		// test (e.g. browse-tracer) actually executed (rule 84d1gfpywd: a
+		// guard needs a positive assertion it did its work). `task web:test`
+		// is unaffected — its `--reporter=json` CLI flag overrides this
+		// config value entirely, per vitest's own CLI-over-config precedence.
+		reporters: ['verbose']
 	}
 });
