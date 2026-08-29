@@ -3,10 +3,17 @@ created: 2026-08-29T00:00:00.000Z
 title: Files RPC's Pattern glob cannot cross directory boundaries — live file search only surfaces root-level matches
 area: query
 severity: minor
+resolves_phase: 4
+status: resolved
+resolved_at: 2026-08-29T00:00:00.000Z
+resolved_by_phase: 4
 files:
 
   - web/src/lib/search.ts
   - internal/query/files.go
+  - go.mod
+  - go.sum
+  - internal/query/files_status_test.go
 ---
 
 ## Problem
@@ -93,3 +100,48 @@ several real options:
 Whichever direction is chosen, re-verify against a live index with genuinely
 nested paths (this repo's own `internal/` tree is a good fixture) — the unit
 test suite's flat fixture data never would have caught this.
+
+## Resolution (2026-08-29, Phase 4, 04-02-PLAN.md)
+
+Closed via option adjacent to none of the four sketched above: rather than
+adding a substring mode alongside the glob (rejected by 04-CONTEXT.md D-14 —
+"two overlapping mechanisms on one API"), the glob matcher itself was
+replaced. `internal/query/files.go` now matches `FilesOptions.Pattern` with
+`github.com/bmatcuk/doublestar/v4 v4.10.0` (`doublestar.Match`) instead of
+`path/filepath.Match`, at both existing call sites (the pre-scan sanity
+check and the per-entry match). `doublestar`'s `**` crosses directory
+separators AND matches zero path segments, so the same pattern shape now
+finds both nested and root-level matches — no second mechanism, no
+UI-local or MCP-local workaround, the fix lands once for every
+`Engine.Files` caller (CLI, MCP, this RPC).
+
+Proven by `internal/query/files_status_test.go`'s
+`TestFilesPatternRecursiveGlob`, a two-direction regression test built as a
+committed RED-then-GREEN pair:
+
+- `nested`: `Pattern: "**/*term*"` returns `internal/deep/termnested.go`
+  (a two-directories-deep fixture file) — failed before the swap, passes
+  after.
+- `root_level`: the SAME pattern also returns the root-level
+  `termroot.go` — the regression guard proving the fix does not lose what
+  a plain, non-recursive pattern already found. (Empirically, this
+  subtest ALSO failed pre-fix, not just `nested` — `**/*term*` requires a
+  literal `/` in the candidate under `filepath.Match`'s dialect, so a
+  slash-less root-level filename could never match it either. The bug was
+  more complete than "doesn't cross directories": the recursive-glob
+  shape matched nothing at all under the old matcher. See
+  04-02-SUMMARY.md for the full RED-phase account.)
+- `non_recursive_unchanged`, `malformed_refused`, `refusal_precedes_scan`
+  and `escaped_metacharacter_is_literal` (the matcher-level escape
+  contract this todo's future consumer, 04-06's `escapeGlobLiteral`, is
+  written against) all passed both before and after — proving existing
+  patterns, the pre-scan refusal ordering, and CLI/MCP goldens are
+  unaffected.
+
+Commits: `f679b2e1` (RED test + dependency), `cad025ea` (GREEN matcher
+swap). `web/src/lib/search.ts`'s comment documenting this limitation as
+live has been rewritten in the same plan to describe the closed root
+cause — see its own history for the corrected account, including the
+one caveat that this RPC's OWN pattern construction (`*term*`, still
+single-star) is deliberately unchanged; 04-06 is the plan that will build
+a `**/*term*`-shaped client for arbitrary-depth file search.

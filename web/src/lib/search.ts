@@ -148,37 +148,43 @@ export function createSearchController(client: SearchClient): SearchController {
 
 		// D-15: two independent RPCs, never merged. Files' pattern is a
 		// substring-style glob (`*term*`) over the forward-slashed repo
-		// path — internal/query.FilesOptions.Pattern is a raw
-		// path/filepath.Match glob passed straight through with no
-		// substring convenience of its own, so a search BOX (not a glob
-		// box) needs this module to build that shape. limit/max_files/
-		// depth are all passed as 0 — every one of those fields' own doc
-		// comment in ui.proto states the server's own bound (MaxLimit,
-		// defaultMaxFiles, "0 means unlimited" for Files' depth) is
-		// authoritative; this module adds no second copy of any of them.
+		// path — internal/query.FilesOptions.Pattern is a raw glob passed
+		// straight through with no substring convenience of its own, so a
+		// search BOX (not a glob box) needs this module to build that
+		// shape. limit/max_files/depth are all passed as 0 — every one of
+		// those fields' own doc comment in ui.proto states the server's
+		// own bound (MaxLimit, defaultMaxFiles, "0 means unlimited" for
+		// Files' depth) is authoritative; this module adds no second copy
+		// of any of them.
 		//
-		// CONFIRMED LIMITATION (found live in Task 3's mandated manual
-		// UAT against this repository's own index, not merely assumed):
-		// path/filepath.Match's `*` never crosses a `/` — empirically
-		// verified (filepath.Match("*detail*", "internal/query/detail.go")
-		// = false; filepath.Match("*claude*", "claudeassets.go") = true).
-		// Go's glob dialect has no recursive `**`, and the RPC's own doc
-		// comment confirms it matches the FULL forward-slashed path, not
-		// a basename — so no single glob string can express "term
-		// appears anywhere, at any depth" the way a fuzzy file-finder
-		// would. `*term*` therefore only surfaces ROOT-LEVEL file
-		// matches; it is the best available single-glob approximation
-		// within Files' actual (glob, not substring) contract, not a
-		// silently-broken feature — Search's own file-kind pseudo-node
-		// matches (confirmed live: Search("detail") returned
-		// internal/query/detail.go et al. with kind="file") already
-		// cover arbitrary-depth file discovery via the Symbols section,
-		// so BRW-01's "search files as you type" is not actually unmet,
-		// only served by a different RPC than "Files" for nested paths.
-		// Changing FilesOptions.Pattern's matching semantics is a server-
-		// side, cross-cutting change (CLI/MCP callers share this exact
-		// contract) — out of this plan's scope; filed as a todo instead
-		// of scope-creeping this plan (D-08/D-20 precedent).
+		// FORMER LIMITATION, NOW CLOSED AT THE ROOT (04-02-PLAN.md,
+		// 04-CONTEXT.md's D-14 — not this file's own top-of-file D-14,
+		// which is 03-06's unrelated decision of the same label):
+		// internal/query.FilesOptions.Pattern used to be matched with
+		// Go's path/filepath.Match, whose `*` never crossed a `/` and
+		// whose dialect lacked a recursive `**` wildcard entirely, so a
+		// term appearing only in a nested path (e.g.
+		// internal/query/detail.go) was invisible to any single glob
+		// string — confirmed live during this file's
+		// original 03-06 UAT. 04-02 replaced that matcher with
+		// github.com/bmatcuk/doublestar/v4 in internal/query/files.go,
+		// which DOES support `**` crossing directory boundaries (proven
+		// by TestFilesPatternRecursiveGlob's `nested`/`root_level`
+		// subtests, internal/query/files_status_test.go) — the fix lands
+		// once for every Files caller (CLI, MCP, this RPC).
+		//
+		// This module's own pattern below is still the single-star
+		// `*term*` shape it always was — unchanged by 04-02, deliberately
+		// (see Task 3's "no executable line changed" scope) — so THIS
+		// live search still only surfaces root-level file matches. That
+		// is now a scope choice for this call site, not a server-side
+		// ceiling: 04-06 adds web/src/lib/file-search.ts, a second Files
+		// client that builds a `**/*term*` pattern (escaping the user's
+		// literal text first) to search at any depth for the workbench's
+		// multi-file picker. Search's own file-kind pseudo-node matches
+		// (Search("detail") returns internal/query/detail.go et al. with
+		// kind="file") still cover arbitrary-depth file discovery via the
+		// Symbols section for this module in the meantime.
 		Promise.all([
 			client.search({ term, kind: '', limit: 0 }, { signal: abort.signal }),
 			client.files(
