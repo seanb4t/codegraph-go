@@ -45,7 +45,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file internal/uiproto/uiv1/ui.proto.
  */
 export const file_internal_uiproto_uiv1_ui: GenFile = /*@__PURE__*/
-  fileDesc("Ch5pbnRlcm5hbC91aXByb3RvL3VpdjEvdWkucHJvdG8SD2NvZGVncmFwaC51aS52MSKZAgoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEgwKBG5hbWUYAyABKAkSFgoOcXVhbGlmaWVkX25hbWUYBCABKAkSEQoJZmlsZV9wYXRoGAUgASgJEhAKCGxhbmd1YWdlGAYgASgJEhIKCnN0YXJ0X2xpbmUYByABKAUSEAoIZW5kX2xpbmUYCCABKAUSEQoJc3RhcnRfY29sGAkgASgFEg8KB2VuZF9jb2wYCiABKAUSEQoJc2lnbmF0dXJlGAsgASgJEhEKCWRvY3N0cmluZxgMIAEoCRISCgp2aXNpYmlsaXR5GA0gASgJEhMKC2lzX2V4cG9ydGVkGA4gASgIEhMKC3JldHVybl90eXBlGA8gASgJIk0KCExvY2F0aW9uEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIRCglmaWxlX3BhdGgYAyABKAkSEgoKc3RhcnRfbGluZRgEIAEoBSIgChBHZXRTdGF0dXNSZXF1ZXN0EgwKBHBhdGgYASABKAkizAEKEUdldFN0YXR1c1Jlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKbm9kZV9jb3VudBgDIAEoAxISCgplZGdlX2NvdW50GAQgASgDEhIKCmZpbGVfY291bnQYBSABKAMSDQoFc3RhbGUYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCRIUCgxzdG9yZV9leGlzdHMYCCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYCSABKAgiOgoNU2VhcmNoUmVxdWVzdBIMCgR0ZXJtGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGltaXQYAyABKAUiPgoOU2VhcmNoUmVzcG9uc2USLAoJbG9jYXRpb25zGAEgAygLMhkuY29kZWdyYXBoLnVpLnYxLkxvY2F0aW9uIlMKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhIKCm5vZGVfY291bnQYAyABKAMSEgoKZWRnZV9jb3VudBgEIAEoAyJ9CgxGaWxlVHJlZU5vZGUSDAoEbmFtZRgBIAEoCRIOCgZpc19kaXIYAiABKAgSDAoEcGF0aBgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIvCghjaGlsZHJlbhgFIAMoCzIdLmNvZGVncmFwaC51aS52MS5GaWxlVHJlZU5vZGUiWwoMRmlsZXNSZXF1ZXN0Eg8KB3BhdHRlcm4YASABKAkSDgoGZmlsdGVyGAIgASgJEgsKA2RpchgDIAEoCRINCgVkZXB0aBgEIAEoBRIOCgZmb3JtYXQYBSABKAkidwoNRmlsZXNSZXNwb25zZRIOCgZmb3JtYXQYASABKAkSKQoFZmlsZXMYAiADKAsyGi5jb2RlZ3JhcGgudWkudjEuRmlsZUVudHJ5EisKBHRyZWUYAyADKAsyHS5jb2RlZ3JhcGgudWkudjEuRmlsZVRyZWVOb2RlIi8KDkNhbGxlcnNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVsaW1pdBgCIAEoBSJNCg9DYWxsZXJzUmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEioKB2NhbGxlcnMYAiADKAsyGS5jb2RlZ3JhcGgudWkudjEuTG9jYXRpb24iLwoOQ2FsbGVlc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEg0KBWxpbWl0GAIgASgFIk0KD0NhbGxlZXNSZXNwb25zZRIOCgZzeW1ib2wYASABKAkSKgoHY2FsbGVlcxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIuCg1JbXBhY3RSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVkZXB0aBgCIAEoBSKEAQoOSW1wYWN0UmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEg0KBWRlcHRoGAIgASgFEhIKCm5vZGVfY291bnQYAyABKAUSEgoKZWRnZV9jb3VudBgEIAEoBRIrCghhZmZlY3RlZBgFIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIvCg9BZmZlY3RlZFJlcXVlc3QSDQoFZmlsZXMYASADKAkSDQoFZGVwdGgYAiABKAUiVAoQQWZmZWN0ZWRSZXNwb25zZRINCgVmaWxlcxgBIAMoCRIxCg5hZmZlY3RlZF90ZXN0cxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiJQChRHZXROb2RlRGV0YWlsUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSDAoEZmlsZRgCIAEoCRIRCgRsaW5lGAMgASgFSACIAQFCBwoFX2xpbmUikAEKClNvdXJjZUJsb2ISDwoHY29udGVudBgBIAEoDBIRCgl0cnVuY2F0ZWQYAiABKAgSEwoLdG90YWxfbGluZXMYAyABKAUSEwoLdG90YWxfYnl0ZXMYBCABKAUSFgoOcmV0dXJuZWRfbGluZXMYBSABKAUSFgoOcmV0dXJuZWRfYnl0ZXMYBiABKAVKBAgyEDwiywEKDk5vZGVEZWZpbml0aW9uEiMKBG5vZGUYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIkCgVjYWxscxgCIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEigKCWNhbGxlZF9ieRgDIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhcKD2RldGFpbF9nYXRoZXJlZBgEIAEoCBIrCgZzb3VyY2UYBSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiLWAgoVR2V0Tm9kZURldGFpbFJlc3BvbnNlEi0KBG1vZGUYASABKA4yHy5jb2RlZ3JhcGgudWkudjEuTm9kZURldGFpbE1vZGUSDAoEcGF0aBgCIAEoCRIjCgRub2RlGAMgASgLMhUuY29kZWdyYXBoLnVpLnYxLk5vZGUSJAoFY2FsbHMYBCADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIoCgljYWxsZWRfYnkYBSADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIOCgZzeW1ib2wYBiABKAkSNAoLZGVmaW5pdGlvbnMYByADKAsyHy5jb2RlZ3JhcGgudWkudjEuTm9kZURlZmluaXRpb24SGAoQdG90YWxfY2FuZGlkYXRlcxgIIAEoBRIrCgZzb3VyY2UYCSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiIyCg5FeHBsb3JlUmVxdWVzdBINCgVxdWVyeRgBIAEoCRIRCgltYXhfZmlsZXMYAiABKAUihwEKDEV4cGxvcmVHcm91cBIMCgRwYXRoGAEgASgJEiYKB3N5bWJvbHMYAiADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxza2VsZXRvbml6ZWQYAyABKAgSKwoGc291cmNlGAQgASgLMhsuY29kZWdyYXBoLnVpLnYxLlNvdXJjZUJsb2IiXQoKQmxhc3RFbnRyeRIlCgZzeW1ib2wYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxjYWxsZXJfY291bnQYAiABKAUSEgoKdGVzdF9maWxlcxgDIAMoCSKwAQoPRXhwbG9yZVJlc3BvbnNlEg0KBXF1ZXJ5GAEgASgJEg0KBWVtcHR5GAIgASgIEg0KBXN0YWxlGAMgASgIEhQKDHN5bWJvbF9jb3VudBgEIAEoBRItCgZncm91cHMYBSADKAsyHS5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZUdyb3VwEisKBmJsYXN0cxgGIAMoCzIbLmNvZGVncmFwaC51aS52MS5CbGFzdEVudHJ5IiUKEkluZGV4aW5nSW5Qcm9ncmVzcxIPCgdtZXNzYWdlGAEgASgJKo4BCg5Ob2RlRGV0YWlsTW9kZRIgChxOT0RFX0RFVEFJTF9NT0RFX1VOU1BFQ0lGSUVEEAASGQoVTk9ERV9ERVRBSUxfTU9ERV9GSUxFEAESHwobTk9ERV9ERVRBSUxfTU9ERV9TSU5HTEVfREVGEAISHgoaTk9ERV9ERVRBSUxfTU9ERV9NVUxUSV9ERUYQAzLYBQoJVUlTZXJ2aWNlElIKCUdldFN0YXR1cxIhLmNvZGVncmFwaC51aS52MS5HZXRTdGF0dXNSZXF1ZXN0GiIuY29kZWdyYXBoLnVpLnYxLkdldFN0YXR1c1Jlc3BvbnNlEkkKBlNlYXJjaBIeLmNvZGVncmFwaC51aS52MS5TZWFyY2hSZXF1ZXN0Gh8uY29kZWdyYXBoLnVpLnYxLlNlYXJjaFJlc3BvbnNlEkYKBUZpbGVzEh0uY29kZWdyYXBoLnVpLnYxLkZpbGVzUmVxdWVzdBoeLmNvZGVncmFwaC51aS52MS5GaWxlc1Jlc3BvbnNlEkwKB0NhbGxlcnMSHy5jb2RlZ3JhcGgudWkudjEuQ2FsbGVyc1JlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuQ2FsbGVyc1Jlc3BvbnNlEkwKB0NhbGxlZXMSHy5jb2RlZ3JhcGgudWkudjEuQ2FsbGVlc1JlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuQ2FsbGVlc1Jlc3BvbnNlEkkKBkltcGFjdBIeLmNvZGVncmFwaC51aS52MS5JbXBhY3RSZXF1ZXN0Gh8uY29kZWdyYXBoLnVpLnYxLkltcGFjdFJlc3BvbnNlEk8KCEFmZmVjdGVkEiAuY29kZWdyYXBoLnVpLnYxLkFmZmVjdGVkUmVxdWVzdBohLmNvZGVncmFwaC51aS52MS5BZmZlY3RlZFJlc3BvbnNlEl4KDUdldE5vZGVEZXRhaWwSJS5jb2RlZ3JhcGgudWkudjEuR2V0Tm9kZURldGFpbFJlcXVlc3QaJi5jb2RlZ3JhcGgudWkudjEuR2V0Tm9kZURldGFpbFJlc3BvbnNlEkwKB0V4cGxvcmUSHy5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZVJlcXVlc3QaIC5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZVJlc3BvbnNlQjxaOmdpdGh1Yi5jb20vc2VhbmI0dC9jb2RlZ3JhcGgtZ28vaW50ZXJuYWwvdWlwcm90by91aXYxO3VpdjFiBnByb3RvMw");
+  fileDesc("Ch5pbnRlcm5hbC91aXByb3RvL3VpdjEvdWkucHJvdG8SD2NvZGVncmFwaC51aS52MSKZAgoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEgwKBG5hbWUYAyABKAkSFgoOcXVhbGlmaWVkX25hbWUYBCABKAkSEQoJZmlsZV9wYXRoGAUgASgJEhAKCGxhbmd1YWdlGAYgASgJEhIKCnN0YXJ0X2xpbmUYByABKAUSEAoIZW5kX2xpbmUYCCABKAUSEQoJc3RhcnRfY29sGAkgASgFEg8KB2VuZF9jb2wYCiABKAUSEQoJc2lnbmF0dXJlGAsgASgJEhEKCWRvY3N0cmluZxgMIAEoCRISCgp2aXNpYmlsaXR5GA0gASgJEhMKC2lzX2V4cG9ydGVkGA4gASgIEhMKC3JldHVybl90eXBlGA8gASgJIk0KCExvY2F0aW9uEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIRCglmaWxlX3BhdGgYAyABKAkSEgoKc3RhcnRfbGluZRgEIAEoBSIgChBHZXRTdGF0dXNSZXF1ZXN0EgwKBHBhdGgYASABKAkizAEKEUdldFN0YXR1c1Jlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKbm9kZV9jb3VudBgDIAEoAxISCgplZGdlX2NvdW50GAQgASgDEhIKCmZpbGVfY291bnQYBSABKAMSDQoFc3RhbGUYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCRIUCgxzdG9yZV9leGlzdHMYCCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYCSABKAgiOgoNU2VhcmNoUmVxdWVzdBIMCgR0ZXJtGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGltaXQYAyABKAUiPgoOU2VhcmNoUmVzcG9uc2USLAoJbG9jYXRpb25zGAEgAygLMhkuY29kZWdyYXBoLnVpLnYxLkxvY2F0aW9uIlMKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhIKCm5vZGVfY291bnQYAyABKAMSEgoKZWRnZV9jb3VudBgEIAEoAyJ9CgxGaWxlVHJlZU5vZGUSDAoEbmFtZRgBIAEoCRIOCgZpc19kaXIYAiABKAgSDAoEcGF0aBgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIvCghjaGlsZHJlbhgFIAMoCzIdLmNvZGVncmFwaC51aS52MS5GaWxlVHJlZU5vZGUiWwoMRmlsZXNSZXF1ZXN0Eg8KB3BhdHRlcm4YASABKAkSDgoGZmlsdGVyGAIgASgJEgsKA2RpchgDIAEoCRINCgVkZXB0aBgEIAEoBRIOCgZmb3JtYXQYBSABKAkidwoNRmlsZXNSZXNwb25zZRIOCgZmb3JtYXQYASABKAkSKQoFZmlsZXMYAiADKAsyGi5jb2RlZ3JhcGgudWkudjEuRmlsZUVudHJ5EisKBHRyZWUYAyADKAsyHS5jb2RlZ3JhcGgudWkudjEuRmlsZVRyZWVOb2RlIi8KDkNhbGxlcnNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVsaW1pdBgCIAEoBSJNCg9DYWxsZXJzUmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEioKB2NhbGxlcnMYAiADKAsyGS5jb2RlZ3JhcGgudWkudjEuTG9jYXRpb24iLwoOQ2FsbGVlc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEg0KBWxpbWl0GAIgASgFIk0KD0NhbGxlZXNSZXNwb25zZRIOCgZzeW1ib2wYASABKAkSKgoHY2FsbGVlcxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIuCg1JbXBhY3RSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVkZXB0aBgCIAEoBSKEAQoOSW1wYWN0UmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEg0KBWRlcHRoGAIgASgFEhIKCm5vZGVfY291bnQYAyABKAUSEgoKZWRnZV9jb3VudBgEIAEoBRIrCghhZmZlY3RlZBgFIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIvCg9BZmZlY3RlZFJlcXVlc3QSDQoFZmlsZXMYASADKAkSDQoFZGVwdGgYAiABKAUiVAoQQWZmZWN0ZWRSZXNwb25zZRINCgVmaWxlcxgBIAMoCRIxCg5hZmZlY3RlZF90ZXN0cxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiJQChRHZXROb2RlRGV0YWlsUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSDAoEZmlsZRgCIAEoCRIRCgRsaW5lGAMgASgFSACIAQFCBwoFX2xpbmUikAEKClNvdXJjZUJsb2ISDwoHY29udGVudBgBIAEoDBIRCgl0cnVuY2F0ZWQYAiABKAgSEwoLdG90YWxfbGluZXMYAyABKAUSEwoLdG90YWxfYnl0ZXMYBCABKAUSFgoOcmV0dXJuZWRfbGluZXMYBSABKAUSFgoOcmV0dXJuZWRfYnl0ZXMYBiABKAVKBAgyEDwiywEKDk5vZGVEZWZpbml0aW9uEiMKBG5vZGUYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIkCgVjYWxscxgCIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEigKCWNhbGxlZF9ieRgDIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhcKD2RldGFpbF9nYXRoZXJlZBgEIAEoCBIrCgZzb3VyY2UYBSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiLWAgoVR2V0Tm9kZURldGFpbFJlc3BvbnNlEi0KBG1vZGUYASABKA4yHy5jb2RlZ3JhcGgudWkudjEuTm9kZURldGFpbE1vZGUSDAoEcGF0aBgCIAEoCRIjCgRub2RlGAMgASgLMhUuY29kZWdyYXBoLnVpLnYxLk5vZGUSJAoFY2FsbHMYBCADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIoCgljYWxsZWRfYnkYBSADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIOCgZzeW1ib2wYBiABKAkSNAoLZGVmaW5pdGlvbnMYByADKAsyHy5jb2RlZ3JhcGgudWkudjEuTm9kZURlZmluaXRpb24SGAoQdG90YWxfY2FuZGlkYXRlcxgIIAEoBRIrCgZzb3VyY2UYCSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiIyCg5FeHBsb3JlUmVxdWVzdBINCgVxdWVyeRgBIAEoCRIRCgltYXhfZmlsZXMYAiABKAUihwEKDEV4cGxvcmVHcm91cBIMCgRwYXRoGAEgASgJEiYKB3N5bWJvbHMYAiADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxza2VsZXRvbml6ZWQYAyABKAgSKwoGc291cmNlGAQgASgLMhsuY29kZWdyYXBoLnVpLnYxLlNvdXJjZUJsb2IiXQoKQmxhc3RFbnRyeRIlCgZzeW1ib2wYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxjYWxsZXJfY291bnQYAiABKAUSEgoKdGVzdF9maWxlcxgDIAMoCSKwAQoPRXhwbG9yZVJlc3BvbnNlEg0KBXF1ZXJ5GAEgASgJEg0KBWVtcHR5GAIgASgIEg0KBXN0YWxlGAMgASgIEhQKDHN5bWJvbF9jb3VudBgEIAEoBRItCgZncm91cHMYBSADKAsyHS5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZUdyb3VwEisKBmJsYXN0cxgGIAMoCzIbLmNvZGVncmFwaC51aS52MS5CbGFzdEVudHJ5IiUKEkluZGV4aW5nSW5Qcm9ncmVzcxIPCgdtZXNzYWdlGAEgASgJImMKE0dldFBlcm1hbGlua1JlcXVlc3QSDAoEcGF0aBgBIAEoCRIRCgRsaW5lGAIgASgFSACIAQESFQoIZW5kX2xpbmUYAyABKAVIAYgBAUIHCgVfbGluZUILCglfZW5kX2xpbmUicQoUR2V0UGVybWFsaW5rUmVzcG9uc2USCwoDdXJsGAEgASgJEjwKDGF2YWlsYWJpbGl0eRgCIAEoDjImLmNvZGVncmFwaC51aS52MS5QZXJtYWxpbmtBdmFpbGFiaWxpdHkSDgoGcmVhc29uGAMgASgJKo4BCg5Ob2RlRGV0YWlsTW9kZRIgChxOT0RFX0RFVEFJTF9NT0RFX1VOU1BFQ0lGSUVEEAASGQoVTk9ERV9ERVRBSUxfTU9ERV9GSUxFEAESHwobTk9ERV9ERVRBSUxfTU9ERV9TSU5HTEVfREVGEAISHgoaTk9ERV9ERVRBSUxfTU9ERV9NVUxUSV9ERUYQAyq4AQoVUGVybWFsaW5rQXZhaWxhYmlsaXR5EiYKIlBFUk1BTElOS19BVkFJTEFCSUxJVFlfVU5TUEVDSUZJRUQQABIjCh9QRVJNQUxJTktfQVZBSUxBQklMSVRZX0xJTktBQkxFEAESLgoqUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9MSU5LQUJMRV9VTlZFUklGSUVEEAISIgoeUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9OT19MSU5LEAMytQYKCVVJU2VydmljZRJSCglHZXRTdGF0dXMSIS5jb2RlZ3JhcGgudWkudjEuR2V0U3RhdHVzUmVxdWVzdBoiLmNvZGVncmFwaC51aS52MS5HZXRTdGF0dXNSZXNwb25zZRJJCgZTZWFyY2gSHi5jb2RlZ3JhcGgudWkudjEuU2VhcmNoUmVxdWVzdBofLmNvZGVncmFwaC51aS52MS5TZWFyY2hSZXNwb25zZRJGCgVGaWxlcxIdLmNvZGVncmFwaC51aS52MS5GaWxlc1JlcXVlc3QaHi5jb2RlZ3JhcGgudWkudjEuRmlsZXNSZXNwb25zZRJMCgdDYWxsZXJzEh8uY29kZWdyYXBoLnVpLnYxLkNhbGxlcnNSZXF1ZXN0GiAuY29kZWdyYXBoLnVpLnYxLkNhbGxlcnNSZXNwb25zZRJMCgdDYWxsZWVzEh8uY29kZWdyYXBoLnVpLnYxLkNhbGxlZXNSZXF1ZXN0GiAuY29kZWdyYXBoLnVpLnYxLkNhbGxlZXNSZXNwb25zZRJJCgZJbXBhY3QSHi5jb2RlZ3JhcGgudWkudjEuSW1wYWN0UmVxdWVzdBofLmNvZGVncmFwaC51aS52MS5JbXBhY3RSZXNwb25zZRJPCghBZmZlY3RlZBIgLmNvZGVncmFwaC51aS52MS5BZmZlY3RlZFJlcXVlc3QaIS5jb2RlZ3JhcGgudWkudjEuQWZmZWN0ZWRSZXNwb25zZRJeCg1HZXROb2RlRGV0YWlsEiUuY29kZWdyYXBoLnVpLnYxLkdldE5vZGVEZXRhaWxSZXF1ZXN0GiYuY29kZWdyYXBoLnVpLnYxLkdldE5vZGVEZXRhaWxSZXNwb25zZRJMCgdFeHBsb3JlEh8uY29kZWdyYXBoLnVpLnYxLkV4cGxvcmVSZXF1ZXN0GiAuY29kZWdyYXBoLnVpLnYxLkV4cGxvcmVSZXNwb25zZRJbCgxHZXRQZXJtYWxpbmsSJC5jb2RlZ3JhcGgudWkudjEuR2V0UGVybWFsaW5rUmVxdWVzdBolLmNvZGVncmFwaC51aS52MS5HZXRQZXJtYWxpbmtSZXNwb25zZUI8WjpnaXRodWIuY29tL3NlYW5iNHQvY29kZWdyYXBoLWdvL2ludGVybmFsL3VpcHJvdG8vdWl2MTt1aXYxYgZwcm90bzM");
 
 /**
  * Node is the shared wire projection of a graph symbol record — the
@@ -1209,6 +1209,90 @@ export const IndexingInProgressSchema: GenMessage<IndexingInProgress> = /*@__PUR
   messageDesc(file_internal_uiproto_uiv1_ui, 26);
 
 /**
+ * GetPermalinkRequest carries the repo-relative path and optional line
+ * anchor GetPermalink needs to build a GitHub blob URL pinned to the
+ * indexed commit (D-06, D-09). path is confined by the same gate
+ * GetNodeDetailRequest.file goes through
+ * ((*query.Engine).ValidateRepoRelativePath, a delegating wrapper over
+ * the existing resolveSourcePath gate — SRV-05's reuse, never a second
+ * implementation). line and end_line are both `optional` (proto3
+ * presence) so the wire can distinguish "no anchor at all" (line unset)
+ * from an explicit line 0: when end_line is also set the anchor is a
+ * range (D-09), when line alone is set the anchor is a single line, and
+ * when line itself is unset there is no anchor at all.
+ *
+ * @generated from message codegraph.ui.v1.GetPermalinkRequest
+ */
+export type GetPermalinkRequest = Message<"codegraph.ui.v1.GetPermalinkRequest"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: optional int32 line = 2;
+   */
+  line?: number | undefined;
+
+  /**
+   * @generated from field: optional int32 end_line = 3;
+   */
+  endLine?: number | undefined;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.GetPermalinkRequest.
+ * Use `create(GetPermalinkRequestSchema)` to create a new message.
+ */
+export const GetPermalinkRequestSchema: GenMessage<GetPermalinkRequest> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 27);
+
+/**
+ * GetPermalinkResponse answers honestly in every availability situation
+ * (D-07): no combination of these three fields is ever an error — an
+ * ordinary "no link here" is a SUCCESSFUL response, the same
+ * successful-empty-result discipline ExploreResponse.empty already
+ * follows for Explore's own five "no results" cases.
+ *
+ * @generated from message codegraph.ui.v1.GetPermalinkResponse
+ */
+export type GetPermalinkResponse = Message<"codegraph.ui.v1.GetPermalinkResponse"> & {
+  /**
+   * url is populated when availability is LINKABLE or
+   * LINKABLE_UNVERIFIED, and empty when availability is NO_LINK. Each
+   * path segment is percent-encoded before being joined, so a path
+   * containing a URL-significant character (#, ?, a space) never
+   * silently produces a link to a different location than requested.
+   *
+   * @generated from field: string url = 1;
+   */
+  url: string;
+
+  /**
+   * @generated from field: codegraph.ui.v1.PermalinkAvailability availability = 2;
+   */
+  availability: PermalinkAvailability;
+
+  /**
+   * reason is populated whenever availability is not LINKABLE, naming
+   * the specific cause (unsupported/lookalike host, no remote
+   * configured, unverified commit, absent commit_sha, git absent) so a
+   * caller can act on it rather than receiving one undifferentiated
+   * refusal.
+   *
+   * @generated from field: string reason = 3;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.GetPermalinkResponse.
+ * Use `create(GetPermalinkResponseSchema)` to create a new message.
+ */
+export const GetPermalinkResponseSchema: GenMessage<GetPermalinkResponse> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 28);
+
+/**
  * NodeDetailMode discriminates which of GetNodeDetailResponse's three
  * shapes is populated, mirroring internal/query.NodeDetailMode's three
  * constants exactly (D-02). NODE_DETAIL_MODE_UNSPECIFIED is the required
@@ -1243,6 +1327,61 @@ export enum NodeDetailMode {
  */
 export const NodeDetailModeSchema: GenEnum<NodeDetailMode> = /*@__PURE__*/
   enumDesc(file_internal_uiproto_uiv1_ui, 0);
+
+/**
+ * PermalinkAvailability is a CLOSED, three-valued classification of a
+ * permalink's trustworthiness (D-07) — deliberately never a boolean and
+ * never an open string: collapsing "checked and not observed" into
+ * "could not check" would render a transient git failure as a confident
+ * claim that no link exists. PERMALINK_AVAILABILITY_UNSPECIFIED is the
+ * required proto3 zero value and is never a state GetPermalink itself
+ * produces.
+ *
+ *   - LINKABLE: the commit was OBSERVED on a remote-tracking branch
+ *     (`git branch -r --contains`, local knowledge only — no fetch is
+ *     ever performed). url is populated.
+ *   - LINKABLE_UNVERIFIED: url is populated, but the containment check
+ *     either ran and found no remote-tracking branch containing the
+ *     commit, or could not run at all (git absent, non-repo directory,
+ *     timeout). Both degrade to this SAME wire value deliberately: from
+ *     the caller's perspective the link is equally uncertain either way,
+ *     and reason names which case it was. This is never a claim the
+ *     commit is absent from the remote — only that this local clone does
+ *     not know it is there (D-07's one-directional-soundness rule).
+ *   - NO_LINK: url is empty. No GitHub remote could be resolved (no
+ *     origin, non-GitHub or lookalike host, malformed remote, git
+ *     absent — D-08) or the index carries no commit_sha at all (D-05, a
+ *     pre-upgrade graph). reason always names the specific cause.
+ *
+ * @generated from enum codegraph.ui.v1.PermalinkAvailability
+ */
+export enum PermalinkAvailability {
+  /**
+   * @generated from enum value: PERMALINK_AVAILABILITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: PERMALINK_AVAILABILITY_LINKABLE = 1;
+   */
+  LINKABLE = 1,
+
+  /**
+   * @generated from enum value: PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED = 2;
+   */
+  LINKABLE_UNVERIFIED = 2,
+
+  /**
+   * @generated from enum value: PERMALINK_AVAILABILITY_NO_LINK = 3;
+   */
+  NO_LINK = 3,
+}
+
+/**
+ * Describes the enum codegraph.ui.v1.PermalinkAvailability.
+ */
+export const PermalinkAvailabilitySchema: GenEnum<PermalinkAvailability> = /*@__PURE__*/
+  enumDesc(file_internal_uiproto_uiv1_ui, 1);
 
 /**
  * UIService is codegraph ui's RPC surface. Plan 01-01 (the phase's tracer)
@@ -1329,6 +1468,22 @@ export const UIService: GenService<{
     methodKind: "unary";
     input: typeof ExploreRequestSchema;
     output: typeof ExploreResponseSchema;
+  },
+  /**
+   * GetPermalink is plan 03-05's tenth rpc (D-06): it turns a repo-relative
+   * path and an optional line/end_line anchor into a GitHub blob URL
+   * pinned to the commit the index was built at. Read-only: it performs
+   * no network operation and mutates nothing (SRV-03). Its path argument
+   * is confined by the SAME gate GetNodeDetailRequest.file uses
+   * ((*query.Engine).ValidateRepoRelativePath, SRV-05) — no second
+   * confinement implementation.
+   *
+   * @generated from rpc codegraph.ui.v1.UIService.GetPermalink
+   */
+  getPermalink: {
+    methodKind: "unary";
+    input: typeof GetPermalinkRequestSchema;
+    output: typeof GetPermalinkResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_internal_uiproto_uiv1_ui, 0);

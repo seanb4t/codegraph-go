@@ -57,6 +57,14 @@ service UIService {
   rpc Affected(AffectedRequest) returns (AffectedResponse);
   rpc GetNodeDetail(GetNodeDetailRequest) returns (GetNodeDetailResponse);
   rpc Explore(ExploreRequest) returns (ExploreResponse);
+  // GetPermalink is plan 03-05's tenth rpc (D-06): it turns a repo-relative
+  // path and an optional line/end_line anchor into a GitHub blob URL
+  // pinned to the commit the index was built at. Read-only: it performs
+  // no network operation and mutates nothing (SRV-03). Its path argument
+  // is confined by the SAME gate GetNodeDetailRequest.file uses
+  // ((*query.Engine).ValidateRepoRelativePath, SRV-05) — no second
+  // confinement implementation.
+  rpc GetPermalink(GetPermalinkRequest) returns (GetPermalinkResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -532,4 +540,72 @@ message IndexingInProgress {
   // that constructs this message always sets a non-empty generic
   // constant.
   string message = 1;
+}
+
+// GetPermalinkRequest carries the repo-relative path and optional line
+// anchor GetPermalink needs to build a GitHub blob URL pinned to the
+// indexed commit (D-06, D-09). path is confined by the same gate
+// GetNodeDetailRequest.file goes through
+// ((*query.Engine).ValidateRepoRelativePath, a delegating wrapper over
+// the existing resolveSourcePath gate — SRV-05's reuse, never a second
+// implementation). line and end_line are both `optional` (proto3
+// presence) so the wire can distinguish "no anchor at all" (line unset)
+// from an explicit line 0: when end_line is also set the anchor is a
+// range (D-09), when line alone is set the anchor is a single line, and
+// when line itself is unset there is no anchor at all.
+message GetPermalinkRequest {
+  string path = 1;
+  optional int32 line = 2;
+  optional int32 end_line = 3;
+}
+
+// PermalinkAvailability is a CLOSED, three-valued classification of a
+// permalink's trustworthiness (D-07) — deliberately never a boolean and
+// never an open string: collapsing "checked and not observed" into
+// "could not check" would render a transient git failure as a confident
+// claim that no link exists. PERMALINK_AVAILABILITY_UNSPECIFIED is the
+// required proto3 zero value and is never a state GetPermalink itself
+// produces.
+//
+//   - LINKABLE: the commit was OBSERVED on a remote-tracking branch
+//     (`git branch -r --contains`, local knowledge only — no fetch is
+//     ever performed). url is populated.
+//   - LINKABLE_UNVERIFIED: url is populated, but the containment check
+//     either ran and found no remote-tracking branch containing the
+//     commit, or could not run at all (git absent, non-repo directory,
+//     timeout). Both degrade to this SAME wire value deliberately: from
+//     the caller's perspective the link is equally uncertain either way,
+//     and reason names which case it was. This is never a claim the
+//     commit is absent from the remote — only that this local clone does
+//     not know it is there (D-07's one-directional-soundness rule).
+//   - NO_LINK: url is empty. No GitHub remote could be resolved (no
+//     origin, non-GitHub or lookalike host, malformed remote, git
+//     absent — D-08) or the index carries no commit_sha at all (D-05, a
+//     pre-upgrade graph). reason always names the specific cause.
+enum PermalinkAvailability {
+  PERMALINK_AVAILABILITY_UNSPECIFIED = 0;
+  PERMALINK_AVAILABILITY_LINKABLE = 1;
+  PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED = 2;
+  PERMALINK_AVAILABILITY_NO_LINK = 3;
+}
+
+// GetPermalinkResponse answers honestly in every availability situation
+// (D-07): no combination of these three fields is ever an error — an
+// ordinary "no link here" is a SUCCESSFUL response, the same
+// successful-empty-result discipline ExploreResponse.empty already
+// follows for Explore's own five "no results" cases.
+message GetPermalinkResponse {
+  // url is populated when availability is LINKABLE or
+  // LINKABLE_UNVERIFIED, and empty when availability is NO_LINK. Each
+  // path segment is percent-encoded before being joined, so a path
+  // containing a URL-significant character (#, ?, a space) never
+  // silently produces a link to a different location than requested.
+  string url = 1;
+  PermalinkAvailability availability = 2;
+  // reason is populated whenever availability is not LINKABLE, naming
+  // the specific cause (unsupported/lookalike host, no remote
+  // configured, unverified commit, absent commit_sha, git absent) so a
+  // caller can act on it rather than receiving one undifferentiated
+  // refusal.
+  string reason = 3;
 }

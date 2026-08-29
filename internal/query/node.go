@@ -78,6 +78,21 @@ func (e *Engine) resolveSourcePath(relPath string) (string, error) {
 	return abs, nil
 }
 
+// ValidateRepoRelativePath exposes resolveSourcePath's confinement gate to
+// callers outside this package, for validation only — it returns just the
+// error, discarding the resolved absolute path resolveSourcePath computes
+// as a byproduct. This is the same "wrapper over the existing confinement
+// gate, not a second read path" pattern SourceFor already documents:
+// GetPermalink (plan 03-05, SRV-05) needs to confirm a caller-supplied
+// path is safe without reading the file it names, and this wrapper lets
+// it do so through the ONE gate GetNodeDetail, Explore and the MCP path
+// all already share, rather than duplicating any of resolveSourcePath's
+// logic.
+func (e *Engine) ValidateRepoRelativePath(relPath string) error {
+	_, err := e.resolveSourcePath(relPath)
+	return err
+}
+
 // readSourceFile reads relPath fresh from disk, confined to the repo root
 // (resolveSourcePath) — the shared "read fresh from disk" primitive Node
 // (file mode) and Explore both use (D-05a).

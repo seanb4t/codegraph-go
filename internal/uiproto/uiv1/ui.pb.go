@@ -112,6 +112,81 @@ func (NodeDetailMode) EnumDescriptor() ([]byte, []int) {
 	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{0}
 }
 
+// PermalinkAvailability is a CLOSED, three-valued classification of a
+// permalink's trustworthiness (D-07) — deliberately never a boolean and
+// never an open string: collapsing "checked and not observed" into
+// "could not check" would render a transient git failure as a confident
+// claim that no link exists. PERMALINK_AVAILABILITY_UNSPECIFIED is the
+// required proto3 zero value and is never a state GetPermalink itself
+// produces.
+//
+//   - LINKABLE: the commit was OBSERVED on a remote-tracking branch
+//     (`git branch -r --contains`, local knowledge only — no fetch is
+//     ever performed). url is populated.
+//   - LINKABLE_UNVERIFIED: url is populated, but the containment check
+//     either ran and found no remote-tracking branch containing the
+//     commit, or could not run at all (git absent, non-repo directory,
+//     timeout). Both degrade to this SAME wire value deliberately: from
+//     the caller's perspective the link is equally uncertain either way,
+//     and reason names which case it was. This is never a claim the
+//     commit is absent from the remote — only that this local clone does
+//     not know it is there (D-07's one-directional-soundness rule).
+//   - NO_LINK: url is empty. No GitHub remote could be resolved (no
+//     origin, non-GitHub or lookalike host, malformed remote, git
+//     absent — D-08) or the index carries no commit_sha at all (D-05, a
+//     pre-upgrade graph). reason always names the specific cause.
+type PermalinkAvailability int32
+
+const (
+	PermalinkAvailability_PERMALINK_AVAILABILITY_UNSPECIFIED         PermalinkAvailability = 0
+	PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE            PermalinkAvailability = 1
+	PermalinkAvailability_PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED PermalinkAvailability = 2
+	PermalinkAvailability_PERMALINK_AVAILABILITY_NO_LINK             PermalinkAvailability = 3
+)
+
+// Enum value maps for PermalinkAvailability.
+var (
+	PermalinkAvailability_name = map[int32]string{
+		0: "PERMALINK_AVAILABILITY_UNSPECIFIED",
+		1: "PERMALINK_AVAILABILITY_LINKABLE",
+		2: "PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED",
+		3: "PERMALINK_AVAILABILITY_NO_LINK",
+	}
+	PermalinkAvailability_value = map[string]int32{
+		"PERMALINK_AVAILABILITY_UNSPECIFIED":         0,
+		"PERMALINK_AVAILABILITY_LINKABLE":            1,
+		"PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED": 2,
+		"PERMALINK_AVAILABILITY_NO_LINK":             3,
+	}
+)
+
+func (x PermalinkAvailability) Enum() *PermalinkAvailability {
+	p := new(PermalinkAvailability)
+	*p = x
+	return p
+}
+
+func (x PermalinkAvailability) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PermalinkAvailability) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_uiproto_uiv1_ui_proto_enumTypes[1].Descriptor()
+}
+
+func (PermalinkAvailability) Type() protoreflect.EnumType {
+	return &file_internal_uiproto_uiv1_ui_proto_enumTypes[1]
+}
+
+func (x PermalinkAvailability) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PermalinkAvailability.Descriptor instead.
+func (PermalinkAvailability) EnumDescriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{1}
+}
+
 // Node is the shared wire projection of a graph symbol record — the
 // fields a UI view actually renders, mirroring internal/schema/graph.proto's
 // Node message field-for-field (minus its reserved 50-59 annotation
@@ -2203,6 +2278,152 @@ func (x *IndexingInProgress) GetMessage() string {
 	return ""
 }
 
+// GetPermalinkRequest carries the repo-relative path and optional line
+// anchor GetPermalink needs to build a GitHub blob URL pinned to the
+// indexed commit (D-06, D-09). path is confined by the same gate
+// GetNodeDetailRequest.file goes through
+// ((*query.Engine).ValidateRepoRelativePath, a delegating wrapper over
+// the existing resolveSourcePath gate — SRV-05's reuse, never a second
+// implementation). line and end_line are both `optional` (proto3
+// presence) so the wire can distinguish "no anchor at all" (line unset)
+// from an explicit line 0: when end_line is also set the anchor is a
+// range (D-09), when line alone is set the anchor is a single line, and
+// when line itself is unset there is no anchor at all.
+type GetPermalinkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Line          *int32                 `protobuf:"varint,2,opt,name=line,proto3,oneof" json:"line,omitempty"`
+	EndLine       *int32                 `protobuf:"varint,3,opt,name=end_line,json=endLine,proto3,oneof" json:"end_line,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPermalinkRequest) Reset() {
+	*x = GetPermalinkRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPermalinkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPermalinkRequest) ProtoMessage() {}
+
+func (x *GetPermalinkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPermalinkRequest.ProtoReflect.Descriptor instead.
+func (*GetPermalinkRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *GetPermalinkRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GetPermalinkRequest) GetLine() int32 {
+	if x != nil && x.Line != nil {
+		return *x.Line
+	}
+	return 0
+}
+
+func (x *GetPermalinkRequest) GetEndLine() int32 {
+	if x != nil && x.EndLine != nil {
+		return *x.EndLine
+	}
+	return 0
+}
+
+// GetPermalinkResponse answers honestly in every availability situation
+// (D-07): no combination of these three fields is ever an error — an
+// ordinary "no link here" is a SUCCESSFUL response, the same
+// successful-empty-result discipline ExploreResponse.empty already
+// follows for Explore's own five "no results" cases.
+type GetPermalinkResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// url is populated when availability is LINKABLE or
+	// LINKABLE_UNVERIFIED, and empty when availability is NO_LINK. Each
+	// path segment is percent-encoded before being joined, so a path
+	// containing a URL-significant character (#, ?, a space) never
+	// silently produces a link to a different location than requested.
+	Url          string                `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Availability PermalinkAvailability `protobuf:"varint,2,opt,name=availability,proto3,enum=codegraph.ui.v1.PermalinkAvailability" json:"availability,omitempty"`
+	// reason is populated whenever availability is not LINKABLE, naming
+	// the specific cause (unsupported/lookalike host, no remote
+	// configured, unverified commit, absent commit_sha, git absent) so a
+	// caller can act on it rather than receiving one undifferentiated
+	// refusal.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPermalinkResponse) Reset() {
+	*x = GetPermalinkResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPermalinkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPermalinkResponse) ProtoMessage() {}
+
+func (x *GetPermalinkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPermalinkResponse.ProtoReflect.Descriptor instead.
+func (*GetPermalinkResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetPermalinkResponse) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *GetPermalinkResponse) GetAvailability() PermalinkAvailability {
+	if x != nil {
+		return x.Availability
+	}
+	return PermalinkAvailability_PERMALINK_AVAILABILITY_UNSPECIFIED
+}
+
+func (x *GetPermalinkResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 var File_internal_uiproto_uiv1_ui_proto protoreflect.FileDescriptor
 
 const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
@@ -2363,12 +2584,27 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x06groups\x18\x05 \x03(\v2\x1d.codegraph.ui.v1.ExploreGroupR\x06groups\x123\n" +
 	"\x06blasts\x18\x06 \x03(\v2\x1b.codegraph.ui.v1.BlastEntryR\x06blasts\".\n" +
 	"\x12IndexingInProgress\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage*\x8e\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"x\n" +
+	"\x13GetPermalinkRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x17\n" +
+	"\x04line\x18\x02 \x01(\x05H\x00R\x04line\x88\x01\x01\x12\x1e\n" +
+	"\bend_line\x18\x03 \x01(\x05H\x01R\aendLine\x88\x01\x01B\a\n" +
+	"\x05_lineB\v\n" +
+	"\t_end_line\"\x8c\x01\n" +
+	"\x14GetPermalinkResponse\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12J\n" +
+	"\favailability\x18\x02 \x01(\x0e2&.codegraph.ui.v1.PermalinkAvailabilityR\favailability\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason*\x8e\x01\n" +
 	"\x0eNodeDetailMode\x12 \n" +
 	"\x1cNODE_DETAIL_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15NODE_DETAIL_MODE_FILE\x10\x01\x12\x1f\n" +
 	"\x1bNODE_DETAIL_MODE_SINGLE_DEF\x10\x02\x12\x1e\n" +
-	"\x1aNODE_DETAIL_MODE_MULTI_DEF\x10\x032\xd8\x05\n" +
+	"\x1aNODE_DETAIL_MODE_MULTI_DEF\x10\x03*\xb8\x01\n" +
+	"\x15PermalinkAvailability\x12&\n" +
+	"\"PERMALINK_AVAILABILITY_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fPERMALINK_AVAILABILITY_LINKABLE\x10\x01\x12.\n" +
+	"*PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED\x10\x02\x12\"\n" +
+	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\xb5\x06\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
@@ -2378,7 +2614,8 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x06Impact\x12\x1e.codegraph.ui.v1.ImpactRequest\x1a\x1f.codegraph.ui.v1.ImpactResponse\x12O\n" +
 	"\bAffected\x12 .codegraph.ui.v1.AffectedRequest\x1a!.codegraph.ui.v1.AffectedResponse\x12^\n" +
 	"\rGetNodeDetail\x12%.codegraph.ui.v1.GetNodeDetailRequest\x1a&.codegraph.ui.v1.GetNodeDetailResponse\x12L\n" +
-	"\aExplore\x12\x1f.codegraph.ui.v1.ExploreRequest\x1a .codegraph.ui.v1.ExploreResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\aExplore\x12\x1f.codegraph.ui.v1.ExploreRequest\x1a .codegraph.ui.v1.ExploreResponse\x12[\n" +
+	"\fGetPermalink\x12$.codegraph.ui.v1.GetPermalinkRequest\x1a%.codegraph.ui.v1.GetPermalinkResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -2392,85 +2629,91 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 	return file_internal_uiproto_uiv1_ui_proto_rawDescData
 }
 
-var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
-	(*Node)(nil),                  // 1: codegraph.ui.v1.Node
-	(*Location)(nil),              // 2: codegraph.ui.v1.Location
-	(*GetStatusRequest)(nil),      // 3: codegraph.ui.v1.GetStatusRequest
-	(*GetStatusResponse)(nil),     // 4: codegraph.ui.v1.GetStatusResponse
-	(*SearchRequest)(nil),         // 5: codegraph.ui.v1.SearchRequest
-	(*SearchResponse)(nil),        // 6: codegraph.ui.v1.SearchResponse
-	(*FileEntry)(nil),             // 7: codegraph.ui.v1.FileEntry
-	(*FileTreeNode)(nil),          // 8: codegraph.ui.v1.FileTreeNode
-	(*FilesRequest)(nil),          // 9: codegraph.ui.v1.FilesRequest
-	(*FilesResponse)(nil),         // 10: codegraph.ui.v1.FilesResponse
-	(*CallersRequest)(nil),        // 11: codegraph.ui.v1.CallersRequest
-	(*CallersResponse)(nil),       // 12: codegraph.ui.v1.CallersResponse
-	(*CalleesRequest)(nil),        // 13: codegraph.ui.v1.CalleesRequest
-	(*CalleesResponse)(nil),       // 14: codegraph.ui.v1.CalleesResponse
-	(*ImpactRequest)(nil),         // 15: codegraph.ui.v1.ImpactRequest
-	(*ImpactResponse)(nil),        // 16: codegraph.ui.v1.ImpactResponse
-	(*AffectedRequest)(nil),       // 17: codegraph.ui.v1.AffectedRequest
-	(*AffectedResponse)(nil),      // 18: codegraph.ui.v1.AffectedResponse
-	(*GetNodeDetailRequest)(nil),  // 19: codegraph.ui.v1.GetNodeDetailRequest
-	(*SourceBlob)(nil),            // 20: codegraph.ui.v1.SourceBlob
-	(*NodeDefinition)(nil),        // 21: codegraph.ui.v1.NodeDefinition
-	(*GetNodeDetailResponse)(nil), // 22: codegraph.ui.v1.GetNodeDetailResponse
-	(*ExploreRequest)(nil),        // 23: codegraph.ui.v1.ExploreRequest
-	(*ExploreGroup)(nil),          // 24: codegraph.ui.v1.ExploreGroup
-	(*BlastEntry)(nil),            // 25: codegraph.ui.v1.BlastEntry
-	(*ExploreResponse)(nil),       // 26: codegraph.ui.v1.ExploreResponse
-	(*IndexingInProgress)(nil),    // 27: codegraph.ui.v1.IndexingInProgress
+	(PermalinkAvailability)(0),    // 1: codegraph.ui.v1.PermalinkAvailability
+	(*Node)(nil),                  // 2: codegraph.ui.v1.Node
+	(*Location)(nil),              // 3: codegraph.ui.v1.Location
+	(*GetStatusRequest)(nil),      // 4: codegraph.ui.v1.GetStatusRequest
+	(*GetStatusResponse)(nil),     // 5: codegraph.ui.v1.GetStatusResponse
+	(*SearchRequest)(nil),         // 6: codegraph.ui.v1.SearchRequest
+	(*SearchResponse)(nil),        // 7: codegraph.ui.v1.SearchResponse
+	(*FileEntry)(nil),             // 8: codegraph.ui.v1.FileEntry
+	(*FileTreeNode)(nil),          // 9: codegraph.ui.v1.FileTreeNode
+	(*FilesRequest)(nil),          // 10: codegraph.ui.v1.FilesRequest
+	(*FilesResponse)(nil),         // 11: codegraph.ui.v1.FilesResponse
+	(*CallersRequest)(nil),        // 12: codegraph.ui.v1.CallersRequest
+	(*CallersResponse)(nil),       // 13: codegraph.ui.v1.CallersResponse
+	(*CalleesRequest)(nil),        // 14: codegraph.ui.v1.CalleesRequest
+	(*CalleesResponse)(nil),       // 15: codegraph.ui.v1.CalleesResponse
+	(*ImpactRequest)(nil),         // 16: codegraph.ui.v1.ImpactRequest
+	(*ImpactResponse)(nil),        // 17: codegraph.ui.v1.ImpactResponse
+	(*AffectedRequest)(nil),       // 18: codegraph.ui.v1.AffectedRequest
+	(*AffectedResponse)(nil),      // 19: codegraph.ui.v1.AffectedResponse
+	(*GetNodeDetailRequest)(nil),  // 20: codegraph.ui.v1.GetNodeDetailRequest
+	(*SourceBlob)(nil),            // 21: codegraph.ui.v1.SourceBlob
+	(*NodeDefinition)(nil),        // 22: codegraph.ui.v1.NodeDefinition
+	(*GetNodeDetailResponse)(nil), // 23: codegraph.ui.v1.GetNodeDetailResponse
+	(*ExploreRequest)(nil),        // 24: codegraph.ui.v1.ExploreRequest
+	(*ExploreGroup)(nil),          // 25: codegraph.ui.v1.ExploreGroup
+	(*BlastEntry)(nil),            // 26: codegraph.ui.v1.BlastEntry
+	(*ExploreResponse)(nil),       // 27: codegraph.ui.v1.ExploreResponse
+	(*IndexingInProgress)(nil),    // 28: codegraph.ui.v1.IndexingInProgress
+	(*GetPermalinkRequest)(nil),   // 29: codegraph.ui.v1.GetPermalinkRequest
+	(*GetPermalinkResponse)(nil),  // 30: codegraph.ui.v1.GetPermalinkResponse
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
-	2,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
-	8,  // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
-	7,  // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
-	8,  // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
-	2,  // 4: codegraph.ui.v1.CallersResponse.callers:type_name -> codegraph.ui.v1.Location
-	2,  // 5: codegraph.ui.v1.CalleesResponse.callees:type_name -> codegraph.ui.v1.Location
-	2,  // 6: codegraph.ui.v1.ImpactResponse.affected:type_name -> codegraph.ui.v1.Location
-	2,  // 7: codegraph.ui.v1.AffectedResponse.affected_tests:type_name -> codegraph.ui.v1.Location
-	1,  // 8: codegraph.ui.v1.NodeDefinition.node:type_name -> codegraph.ui.v1.Node
-	1,  // 9: codegraph.ui.v1.NodeDefinition.calls:type_name -> codegraph.ui.v1.Node
-	1,  // 10: codegraph.ui.v1.NodeDefinition.called_by:type_name -> codegraph.ui.v1.Node
-	20, // 11: codegraph.ui.v1.NodeDefinition.source:type_name -> codegraph.ui.v1.SourceBlob
+	3,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
+	9,  // 1: codegraph.ui.v1.FileTreeNode.children:type_name -> codegraph.ui.v1.FileTreeNode
+	8,  // 2: codegraph.ui.v1.FilesResponse.files:type_name -> codegraph.ui.v1.FileEntry
+	9,  // 3: codegraph.ui.v1.FilesResponse.tree:type_name -> codegraph.ui.v1.FileTreeNode
+	3,  // 4: codegraph.ui.v1.CallersResponse.callers:type_name -> codegraph.ui.v1.Location
+	3,  // 5: codegraph.ui.v1.CalleesResponse.callees:type_name -> codegraph.ui.v1.Location
+	3,  // 6: codegraph.ui.v1.ImpactResponse.affected:type_name -> codegraph.ui.v1.Location
+	3,  // 7: codegraph.ui.v1.AffectedResponse.affected_tests:type_name -> codegraph.ui.v1.Location
+	2,  // 8: codegraph.ui.v1.NodeDefinition.node:type_name -> codegraph.ui.v1.Node
+	2,  // 9: codegraph.ui.v1.NodeDefinition.calls:type_name -> codegraph.ui.v1.Node
+	2,  // 10: codegraph.ui.v1.NodeDefinition.called_by:type_name -> codegraph.ui.v1.Node
+	21, // 11: codegraph.ui.v1.NodeDefinition.source:type_name -> codegraph.ui.v1.SourceBlob
 	0,  // 12: codegraph.ui.v1.GetNodeDetailResponse.mode:type_name -> codegraph.ui.v1.NodeDetailMode
-	1,  // 13: codegraph.ui.v1.GetNodeDetailResponse.node:type_name -> codegraph.ui.v1.Node
-	1,  // 14: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
-	1,  // 15: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
-	21, // 16: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
-	20, // 17: codegraph.ui.v1.GetNodeDetailResponse.source:type_name -> codegraph.ui.v1.SourceBlob
-	1,  // 18: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
-	20, // 19: codegraph.ui.v1.ExploreGroup.source:type_name -> codegraph.ui.v1.SourceBlob
-	1,  // 20: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
-	24, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
-	25, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
-	3,  // 23: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	5,  // 24: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	9,  // 25: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	11, // 26: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
-	13, // 27: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
-	15, // 28: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
-	17, // 29: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
-	19, // 30: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
-	23, // 31: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
-	4,  // 32: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	6,  // 33: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	10, // 34: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	12, // 35: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	14, // 36: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	16, // 37: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	18, // 38: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	22, // 39: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	26, // 40: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
-	32, // [32:41] is the sub-list for method output_type
-	23, // [23:32] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	2,  // 13: codegraph.ui.v1.GetNodeDetailResponse.node:type_name -> codegraph.ui.v1.Node
+	2,  // 14: codegraph.ui.v1.GetNodeDetailResponse.calls:type_name -> codegraph.ui.v1.Node
+	2,  // 15: codegraph.ui.v1.GetNodeDetailResponse.called_by:type_name -> codegraph.ui.v1.Node
+	22, // 16: codegraph.ui.v1.GetNodeDetailResponse.definitions:type_name -> codegraph.ui.v1.NodeDefinition
+	21, // 17: codegraph.ui.v1.GetNodeDetailResponse.source:type_name -> codegraph.ui.v1.SourceBlob
+	2,  // 18: codegraph.ui.v1.ExploreGroup.symbols:type_name -> codegraph.ui.v1.Node
+	21, // 19: codegraph.ui.v1.ExploreGroup.source:type_name -> codegraph.ui.v1.SourceBlob
+	2,  // 20: codegraph.ui.v1.BlastEntry.symbol:type_name -> codegraph.ui.v1.Node
+	25, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
+	26, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
+	1,  // 23: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
+	4,  // 24: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	6,  // 25: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	10, // 26: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	12, // 27: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	14, // 28: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	16, // 29: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	18, // 30: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	20, // 31: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
+	24, // 32: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
+	29, // 33: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
+	5,  // 34: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	7,  // 35: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	11, // 36: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	13, // 37: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	15, // 38: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	17, // 39: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	19, // 40: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	23, // 41: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	27, // 42: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	30, // 43: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
+	34, // [34:44] is the sub-list for method output_type
+	24, // [24:34] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -2479,13 +2722,14 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 		return
 	}
 	file_internal_uiproto_uiv1_ui_proto_msgTypes[18].OneofWrappers = []any{}
+	file_internal_uiproto_uiv1_ui_proto_msgTypes[27].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   27,
+			NumEnums:      2,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
