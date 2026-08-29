@@ -75,6 +75,20 @@ jobs:
       - name: Vet (go vet ./...)
         run: task vet
 
+      # IN-04 (03-REVIEW.md): folded into this ALREADY-REQUIRED `test` job
+      # rather than kept as the separate `lint-go` job 03-10-PLAN.md
+      # originally added — GitHub ruleset 20157557 (this repository's
+      # required-status-check config) lives OUTSIDE this repo, so a new
+      # top-level job is not required to merge without an out-of-band `gh
+      # api` edit, and requiredCheckNames
+      # (internal/upgrade/taskfile_shape_test.go) deliberately mirrors that
+      # ruleset rather than asserting a requirement that does not exist.
+      # Phase 2's D-13 made the identical call for this job's other gates.
+      # Placed right after Vet — before the slower Go/JS test and build
+      # steps below — so a lint failure surfaces early.
+      - name: Lint (golangci-lint via task lint:go)
+        run: task lint:go
+
       - name: Test (excluding internal/daemon — isolated below)
         # IN-08 (03-REVIEW.md): `set -e` does not propagate failures out of
         # a process substitution — `mapfile -t pkgs < <(go list ... | grep
@@ -449,36 +463,6 @@ jobs:
 
       - name: Run actionlint
         run: task lint:actions
-
-  # lint-go: this repository's first formatting + idiomatic-Go gate
-  # (03-10-PLAN.md — folded into two prior phases and implemented in
-  # neither). Built from go.tool-golangci.mod at a pinned version via the
-  # shared install-task/Taskfile bootstrap, mirroring the actionlint job
-  # above — see go.tool-golangci.mod's own header for why golangci-lint is
-  # isolated from the other three tool modfiles' directives.
-  lint-go:
-    name: lint-go (gofmt + errcheck/ineffassign/staticcheck/unused)
-    runs-on: namespace-profile-linux-amd64-2x4
-    steps:
-      - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Cache Go modules and build
-        uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547 # v1.6.1
-        with:
-          cache: go
-
-      - name: Install Task
-        uses: ./.github/actions/install-task
-
-      - name: Run golangci-lint
-        run: task lint:go
 
   transcript-freeze:
     name: transcript-freeze
