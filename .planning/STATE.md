@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 03
 current_phase_name: Browse, Inspect & Navigation
 status: executing
-stopped_at: Completed 03-08-PLAN.md
-last_updated: "2026-08-29T03:35:41.954Z"
+stopped_at: Completed 03-09-PLAN.md
+last_updated: "2026-08-29T03:54:39.910Z"
 last_activity: 2026-08-28
 last_activity_desc: Phase 03 execution started
-state_head: d4e6eeaff91cb2da21194089006062736fad37e6
+state_head: a2955b4ee2c51784bdcfec03356b4c7a48d4bffe
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 28
-  completed_plans: 26
+  completed_plans: 27
   percent: 33
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 03 (Browse, Inspect & Navigation) — EXECUTING
-Plan: 9 of 10
+Plan: 10 of 10
 Status: Ready to execute
 Last activity: 2026-08-28 — Phase 03 execution started
 
@@ -87,6 +87,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P06 | ~50min active | 3 tasks | 44 files |
 | Phase 03-browse-inspect-navigation P07 | ~50min | 3 tasks | 10 files |
 | Phase 03 P08 | ~13min | 3 tasks | 10 files |
+| Phase 03 P09 | 9min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,8 @@ Standing decisions that outlive every milestone:
 - [Phase 03-browse-inspect-navigation]: [Phase 03]: [Phase 03-07]: found live (manual UAT) that typing in search never wrote q into the URL — added SearchPanel's onQueryChange prop wired to a REFINE navigate() call in +page.svelte, required by the plan's own must_haves though not in Task 3's task-level behavior bullets
 - [Phase 03]: [Phase 03-browse-inspect-navigation]: [Phase 03-08]: truncated-file permalink requests carry NO anchor at all (neither line nor end_line) — the strict reading of D-20's "the rest of the file is what the local view could not show"; any partial anchor still frames the remote view around the truncated portion
 - [Phase 03]: [Phase 03-browse-inspect-navigation]: [Phase 03-08]: SourcePane.svelte's local `state` prop binding renamed to `target` internally (destructure rename, external prop name unchanged) — a bare local named `state` collides with the `$state` rune used elsewhere in the same component, the same pitfall 03-06/03-07 already documented, hit a third time
+- [Phase 03]: Shared status gate (D-04/D-05) exposes reactive status via the Svelte store contract so both the layout banner and a descendant route's stale-source-message split can subscribe to the SAME gate instance with zero adapter code and no second fetch. — One shared reactive interface serves two consumers (layout banner, browse source-pane message) without duplicating the fetch trigger — keeps D-05's no-polling constraint intact even as more views need the same index-health data.
+- [Phase 03]: Closed the intended-RED web:drift window opened by 03-01: rebuilt and re-committed web/build/ (source digest fc4ae27b...->f9a3632a..., 22->73 files; output digest c599a63e...->5162b279..., 25->27 files), verified GREEN. — The window was scheduled to close at 03-09 Task 3 from the start (03-01-SUMMARY.md), so every intervening plan's red web:drift leg was expected, not a regression.
 
 ### Pending Todos
 
@@ -281,8 +284,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T03:35:41.881Z
-Stopped at: Completed 03-08-PLAN.md
+Last session: 2026-08-29T03:54:39.837Z
+Stopped at: Completed 03-09-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

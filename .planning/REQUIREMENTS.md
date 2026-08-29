@@ -50,7 +50,7 @@
 - [x] **NAV-01**: Every view, symbol, and query state is addressable by a shareable URL encoding view, target, depth and limit
 - [x] **NAV-02**: Browser back and forward navigate view history correctly
 - [x] **NAV-03**: User can drive search and result selection from the keyboard, including a focus shortcut and `Esc` to dismiss
-- [ ] **NAV-04**: No-index, stale-index, and symbol-not-found each render an explicit state rather than an empty pane
+- [x] **NAV-04**: No-index, stale-index, and symbol-not-found each render an explicit state rather than an empty pane
 
 ### Query Workbench
 
@@ -159,7 +159,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | NAV-01 | Phase 3 | Complete |
 | NAV-02 | Phase 3 | Complete |
 | NAV-03 | Phase 3 | Complete |
-| NAV-04 | Phase 3 | Pending |
+| NAV-04 | Phase 3 | Complete |
 | WRK-01 | Phase 4 | Pending |
 | WRK-02 | Phase 4 | Pending |
 | WRK-03 | Phase 4 | Pending |
