@@ -1464,6 +1464,150 @@ func TestWorkflowRunBodiesInvokeTask(t *testing.T) {
 	}
 }
 
+// usesOnlyJobException names one job, by (workflow, job ID), that is
+// legitimately absent from inScopeJobs because every one of its steps is
+// a `uses:` step with no run: body at all — nothing for
+// TestWorkflowRunBodiesInvokeTask to check. Mirrors runBodyException's
+// own carve-out shape (IN-05) so a stale entry — the job no longer
+// exists, or has gained a real run: step — fails loudly here rather than
+// silently widening the population TestInScopeJobsPopulationMatchesDisk
+// trusts.
+type usesOnlyJobException struct {
+	Workflow string
+	JobID    string
+	Reason   string
+}
+
+var usesOnlyJobExceptions = []usesOnlyJobException{
+	{
+		Workflow: "ci.yml",
+		JobID:    "govulncheck",
+		Reason:   "runs via `uses: golang/govulncheck-action`, an action with no run: body at all",
+	},
+	{
+		Workflow: "release-please.yml",
+		JobID:    "release-please",
+		Reason:   "every step is `uses:` (create-github-app-token, release-please-action) — no run: body at all",
+	},
+}
+
+// inScopeWorkflowFiles is the SAME set of workflow files inScopeJobs
+// already covers — bench.yml and release.yml carry their own documented
+// D-01 exceptions decided in earlier plans (see inScopeJobs's own doc
+// comment) and are deliberately excluded from this population check too,
+// for the identical reason.
+var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml"}
+
+// validateUsesOnlyJobExceptions proves every usesOnlyJobExceptions entry
+// still exists on disk, still carries a non-empty reason, and still
+// declares ZERO run: steps — mirroring validateRunBodyExceptions's own
+// "a stale exception cannot silently widen" discipline. A job that gains
+// even one run: step must move to inScopeJobs and be held to
+// TestWorkflowRunBodiesInvokeTask like every other in-scope job, not stay
+// carved out here.
+func validateUsesOnlyJobExceptions(excs []usesOnlyJobException) error {
+	for _, exc := range excs {
+		if strings.TrimSpace(exc.Reason) == "" {
+			return fmt.Errorf("%s/%s: empty reason", exc.Workflow, exc.JobID)
+		}
+		path := filepath.Join(workflowsDir, exc.Workflow)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("%s/%s: read %s: %w", exc.Workflow, exc.JobID, path, err)
+		}
+		var wf workflowFileYAML
+		if err := yaml.Unmarshal(data, &wf); err != nil {
+			return fmt.Errorf("%s/%s: parse %s: %w", exc.Workflow, exc.JobID, path, err)
+		}
+		job, ok := wf.Jobs[exc.JobID]
+		if !ok {
+			return fmt.Errorf("%s/%s: job no longer exists in %s", exc.Workflow, exc.JobID, path)
+		}
+		if len(job.Steps) == 0 {
+			return fmt.Errorf("%s/%s: declares zero steps", exc.Workflow, exc.JobID)
+		}
+		for _, step := range job.Steps {
+			if strings.TrimSpace(step.Run) != "" {
+				return fmt.Errorf("%s/%s: step %q now has a run: body — this job is no longer uses:-only and must move to inScopeJobs", exc.Workflow, exc.JobID, step.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// TestInScopeJobsPopulationMatchesDisk is IN-05's disk-binding fix,
+// mirroring TestToolModfilesPopulationMatchesDisk's own pattern (that
+// test's own doc comment is this one's precedent, named directly in
+// 03-REVIEW.md's IN-05 finding). Before this fix, inScopeJobs was a
+// hand-enumerated fixture with only a non-empty guard
+// (TestWorkflowRunBodiesInvokeTask's `len(inScopeJobs) == 0` check) —
+// nothing asserted that every job actually declared in
+// inScopeWorkflowFiles appears in it. A new CI job added to ci.yml,
+// release-please.yml, or corpora.yml without a matching inScopeJobs entry
+// was bound by nothing and the suite stayed green — the memory-v4zqxrz6b3
+// shape: a hand-enumerated population narrows silently because a new
+// subject passes by being absent.
+func TestInScopeJobsPopulationMatchesDisk(t *testing.T) {
+	if err := validateUsesOnlyJobExceptions(usesOnlyJobExceptions); err != nil {
+		t.Fatalf("usesOnlyJobExceptions: %v", err)
+	}
+
+	want := make(map[string]bool, len(inScopeJobs))
+	for _, ij := range inScopeJobs {
+		want[ij.Workflow+"/"+ij.JobID] = true
+	}
+	excluded := make(map[string]bool, len(usesOnlyJobExceptions))
+	for _, exc := range usesOnlyJobExceptions {
+		excluded[exc.Workflow+"/"+exc.JobID] = true
+	}
+
+	var onDisk []string
+	for _, wf := range inScopeWorkflowFiles {
+		path := filepath.Join(workflowsDir, wf)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var parsed workflowFileYAML
+		if err := yaml.Unmarshal(data, &parsed); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		if len(parsed.Jobs) == 0 {
+			t.Fatalf("%s declares no jobs: at all — this guard would vacuously pass over zero jobs", path)
+		}
+		for jobID := range parsed.Jobs {
+			onDisk = append(onDisk, wf+"/"+jobID)
+		}
+	}
+	sort.Strings(onDisk)
+
+	var missing, extra []string
+	seen := make(map[string]bool, len(onDisk))
+	for _, key := range onDisk {
+		seen[key] = true
+		if excluded[key] {
+			continue
+		}
+		if !want[key] {
+			missing = append(missing, key)
+		}
+	}
+	for key := range want {
+		if !seen[key] {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+
+	if len(missing) > 0 {
+		t.Errorf("job(s) on disk in %v not present in inScopeJobs and not in usesOnlyJobExceptions: %v — a new CI job was added without registering it here", inScopeWorkflowFiles, missing)
+	}
+	if len(extra) > 0 {
+		t.Errorf("inScopeJobs names job(s) that no longer exist on disk: %v", extra)
+	}
+}
+
 // TestRunBodyExceptionsHaveReasons_EmptyReasonIsError proves
 // validateRunBodyExceptions actually catches what it claims to: a blank
 // reason must produce a non-nil error, never a silent pass.
