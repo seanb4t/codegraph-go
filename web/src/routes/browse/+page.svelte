@@ -29,6 +29,7 @@
 	} from '$lib/browse-nav';
 	import SourcePane from '$lib/components/browse/SourcePane.svelte';
 	import NeighborsPanel from '$lib/components/browse/NeighborsPanel.svelte';
+	import DefinitionPicker from '$lib/components/browse/DefinitionPicker.svelte';
 	import SearchPanel, { type SearchSelection } from '$lib/components/browse/SearchPanel.svelte';
 
 	let params = $derived(parseBrowseParams(page.url.searchParams));
@@ -115,14 +116,26 @@
 	onQueryChange={handleQueryChange}
 />
 
-<SourcePane state={targetState} client={uiClient} onNavigate={handleNeighborNavigate} />
-
-{#if targetState.kind === 'single-def'}
-	<NeighborsPanel
-		calls={targetState.calls}
-		calledBy={targetState.calledBy}
-		blastRadius={blastState}
-		depth={params.depth}
+{#if targetState.kind === 'multi-def'}
+	<!-- BRW-05: a bare name resolving to several definitions gets the
+	     disambiguation picker instead of SourcePane's old placeholder
+	     text (03-07's WINDOWS.md entry #23, closed here). -->
+	<DefinitionPicker
+		symbol={targetState.symbol}
+		definitions={targetState.definitions}
+		totalCandidates={targetState.totalCandidates}
 		onNavigate={handleNeighborNavigate}
 	/>
+{:else}
+	<SourcePane state={targetState} client={uiClient} onNavigate={handleNeighborNavigate} />
+
+	{#if targetState.kind === 'single-def'}
+		<NeighborsPanel
+			calls={targetState.calls}
+			calledBy={targetState.calledBy}
+			blastRadius={blastState}
+			depth={params.depth}
+			onNavigate={handleNeighborNavigate}
+		/>
+	{/if}
 {/if}

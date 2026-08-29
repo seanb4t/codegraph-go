@@ -259,9 +259,9 @@
 			</p>
 		{/if}
 	</div>
-{:else if target.kind === 'multi-def'}
-	<p class="mt-4 text-sm text-muted-foreground" data-testid="browse-multi-def">
-		{target.totalCandidates} definitions found for &quot;{target.symbol}&quot; — a picker is
-		not yet built (coming in a later plan).
-	</p>
 {/if}
+<!-- 'multi-def' has NO branch here (03-08, closes WINDOWS.md entry #23):
+     web/src/routes/browse/+page.svelte routes that state to
+     DefinitionPicker.svelte instead of mounting SourcePane at all, so
+     this component is never asked to render it. -->
+
