@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -986,13 +987,27 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 // without a matching isolatedModfilePaths entry fails LOUDLY here rather
 // than silently falling behind — the same population-vs-assertion gap
 // this plan closed for go.tool-proto.mod, guarded from recurring.
+//
+// IN-03: a bare count comparison is genuinely set-complete only IN
+// CONJUNCTION with TestToolModfilesRemainIsolated, which os.Stats every
+// registered path (slice ⊆ disk) and pairwise-SameFiles them (the slice
+// has no duplicates) — equal cardinality plus containment plus
+// distinctness does imply equality, but that dependency was implicit:
+// `go test -run '^TestToolModfilesPopulationMatchesDisk$'` in isolation
+// was a bare count, not a self-contained set-equality assertion (verified:
+// swapping one real path in isolatedModfilePaths for a same-cardinality
+// but WRONG bogus path left the old count-only check green). Sorting both
+// sides and comparing with slices.Equal makes this test self-contained.
 func TestToolModfilesPopulationMatchesDisk(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(filepath.Dir(rootGoModPath), "go.tool*.mod"))
 	if err != nil {
 		t.Fatalf("glob go.tool*.mod: %v", err)
 	}
-	if len(matches) != len(isolatedModfilePaths) {
-		t.Fatalf("found %d go.tool*.mod file(s) on disk (%v) but isolatedModfilePaths names %d (%v) — a new tool modfile was added without registering it here, or a registered one no longer exists on disk", len(matches), matches, len(isolatedModfilePaths), isolatedModfilePaths)
+	sort.Strings(matches)
+	want := append([]string(nil), isolatedModfilePaths...)
+	sort.Strings(want)
+	if !slices.Equal(matches, want) {
+		t.Fatalf("go.tool*.mod files on disk %v do not match isolatedModfilePaths %v — a new tool modfile was added without registering it here, or a registered one no longer exists on disk", matches, want)
 	}
 }
 
