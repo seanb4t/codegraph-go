@@ -6,15 +6,21 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // FilesOptions configures Engine.Files' browse of the indexed file
 // structure (QRY-07). The zero value browses every indexed file, in the
 // default "flat" format, with no depth limit.
 type FilesOptions struct {
-	// Pattern is a shell glob (path/filepath.Match semantics, matched
-	// against the full forward-slashed file path) that narrows the
-	// result set. Empty matches every file.
+	// Pattern is a shell glob (github.com/bmatcuk/doublestar/v4's Match
+	// semantics, matched against the full forward-slashed file path)
+	// that narrows the result set (D-14). "**" crosses directory
+	// separators and matches zero or more path segments, so "**/*x*"
+	// matches both a root-level and a nested "x" -- the recursive-glob
+	// fix this doc comment describes. "{a,b}" brace alternation is also
+	// supported. Empty matches every file.
 	Pattern string
 
 	// Filter narrows results to files whose Language exactly matches.
@@ -145,7 +151,7 @@ func (e *Engine) Files(opts FilesOptions) (FilesResult, error) {
 		return FilesResult{}, invalidArgumentf("query: unknown files format %q — allowed: flat, tree", format)
 	}
 	if opts.Pattern != "" {
-		if _, err := filepath.Match(opts.Pattern, "sanity-check"); err != nil {
+		if _, err := doublestar.Match(opts.Pattern, "sanity-check"); err != nil {
 			return FilesResult{}, fmt.Errorf("query: invalid pattern %q: %w", opts.Pattern, err)
 		}
 	}
@@ -168,7 +174,7 @@ func (e *Engine) Files(opts FilesOptions) (FilesResult, error) {
 			continue
 		}
 		if opts.Pattern != "" {
-			matched, err := filepath.Match(opts.Pattern, p)
+			matched, err := doublestar.Match(opts.Pattern, p)
 			if err != nil {
 				return FilesResult{}, fmt.Errorf("query: invalid pattern %q: %w", opts.Pattern, err)
 			}
