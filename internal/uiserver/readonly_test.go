@@ -23,6 +23,11 @@ import (
 // mutating verb or otherwise) fails the length check or the membership
 // check, and a REMOVED method fails the membership check — neither
 // direction can pass vacuously.
+// UPDATED at plan 03-05: GetPermalink (D-06) is the tenth read-only rpc,
+// added additively to internal/uiproto/uiv1/ui.proto's `service
+// UIService` block. It is a read-only verb — it performs no network
+// operation and mutates nothing — and belongs in this read set for
+// exactly the same reason the original nine do.
 var wantUIServiceMethods = map[string]struct{}{
 	"GetStatus":     {},
 	"Search":        {},
@@ -33,17 +38,18 @@ var wantUIServiceMethods = map[string]struct{}{
 	"Affected":      {},
 	"GetNodeDetail": {},
 	"Explore":       {},
+	"GetPermalink":  {},
 }
 
 // TestUIServiceMethodSetIsExactlyTheReadSet reflects over the generated
 // uiv1connect.UIServiceHandler interface — the machine-readable method
 // inventory a mutating rpc would have to appear in before it could ever
 // be dispatched — and asserts the observed method-name set is EXACTLY
-// wantUIServiceMethods: same length (9) AND same membership. A
-// negative-only guard ("no method name contains a write verb") passes
-// vacuously the moment its verb list stops matching a newly-added verb;
-// this positive set-equality guard instead fails in BOTH directions
-// (SRV-03, T-01-04).
+// wantUIServiceMethods: same length (10, as of plan 03-05's GetPermalink)
+// AND same membership. A negative-only guard ("no method name contains a
+// write verb") passes vacuously the moment its verb list stops matching
+// a newly-added verb; this positive set-equality guard instead fails in
+// BOTH directions (SRV-03, T-01-04).
 func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	typ := reflect.TypeOf((*uiv1connect.UIServiceHandler)(nil)).Elem()
 
@@ -52,8 +58,8 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 		got[typ.Method(i).Name] = struct{}{}
 	}
 
-	if len(got) != 9 {
-		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 9: %v", len(got), got)
+	if len(got) != 10 {
+		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 10: %v", len(got), got)
 	}
 	if len(got) != len(wantUIServiceMethods) {
 		t.Fatalf("observed method set size %d != fixture size %d — the fixture itself is stale", len(got), len(wantUIServiceMethods))
@@ -66,7 +72,7 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	}
 	for name := range got {
 		if _, ok := wantUIServiceMethods[name]; !ok {
-			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the nine-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
+			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the ten-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
 		}
 	}
 }
@@ -154,6 +160,15 @@ const uiProtoFieldFixtureLenAtPlan0110 = uiProtoFieldFixtureLenAtPlan0109 + 9
 // of the prior constant, never as a bare literal, mirroring plan 01-10's
 // own +9 pattern.
 const uiProtoFieldFixtureLenAtPlan0111 = uiProtoFieldFixtureLenAtPlan0110 + 2
+
+// uiProtoFieldFixtureLenAtPlan0305 EXTENDS uiProtoFieldFixtureLenAtPlan0111
+// by exactly 6 (plan 03-05, BRW-09/SRV-05): GetPermalinkRequest's three
+// fields (path = 1, line = 2, end_line = 3) and GetPermalinkResponse's
+// three (url = 1, availability = 2, reason = 3) — the tenth rpc's two new
+// messages, additive from field 1 on each since both are new messages.
+// Declared in terms of the prior constant, never as a bare literal,
+// mirroring plan 01-10's and 01-11's own chained-extension pattern.
+const uiProtoFieldFixtureLenAtPlan0305 = uiProtoFieldFixtureLenAtPlan0111 + 6
 
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
@@ -299,6 +314,16 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	// Two entries total, matching uiProtoFieldFixtureLenAtPlan0111's +2.
 	{"GetStatusResponse", "store_exists", 8},
 	{"GetStatusResponse", "indexing_in_progress", 9},
+
+	// Plan 03-05 (BRW-09/SRV-05): GetPermalink's two new messages, the
+	// tenth rpc. Six entries total, matching
+	// uiProtoFieldFixtureLenAtPlan0305's +6.
+	{"GetPermalinkRequest", "path", 1},
+	{"GetPermalinkRequest", "line", 2},
+	{"GetPermalinkRequest", "end_line", 3},
+	{"GetPermalinkResponse", "url", 1},
+	{"GetPermalinkResponse", "availability", 2},
+	{"GetPermalinkResponse", "reason", 3},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -325,8 +350,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0111 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0111 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0111)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0305 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0305 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0305)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")
