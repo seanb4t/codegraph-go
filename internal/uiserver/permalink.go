@@ -73,6 +73,32 @@ const (
 // PRESENTATION of one already-refused case; it does not add a second
 // confinement decision.
 func (s *uiService) GetPermalink(ctx context.Context, req *connect.Request[uiv1.GetPermalinkRequest]) (*connect.Response[uiv1.GetPermalinkResponse], error) {
+	// IN-10: line/end_line are never passed to the Engine at all (they
+	// only ever reach buildGitHubBlobURL, below), so unlike every other
+	// numeric field on this service (limit, depth, max_files) there is no
+	// existing validateX call anywhere that bounds them — this RPC is a
+	// frozen public method callable by anything, and a client sending
+	// line:-1 or end_line:0 with line:42 previously produced a GitHub
+	// anchor (#L-1, #L42-L0) the target site cannot resolve, with no
+	// error anywhere. Validated HERE, before withEngine, rather than
+	// inside its closure: this is pure request-shape validation with no
+	// Engine dependency, so returning connect.NewError directly avoids
+	// the classifiedErr reclassification dance IN-02 already documents
+	// the risk of (withEngine's own mapEngineError would otherwise
+	// re-wrap an already-built *connect.Error into an opaque
+	// CodeInternal).
+	if line := req.Msg.Line; line != nil && *line < 1 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("line %d must be >= 1", *line))
+	}
+	if endLine := req.Msg.EndLine; endLine != nil {
+		if req.Msg.Line == nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("end_line requires line to be set"))
+		}
+		if *endLine < *req.Msg.Line {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("end_line %d must be >= line %d", *endLine, *req.Msg.Line))
+		}
+	}
+
 	var resp *uiv1.GetPermalinkResponse
 	// classifiedErr carries the since-deleted-file reclassification
 	// (disposition B) OUTSIDE withEngine's own error-mapping path.

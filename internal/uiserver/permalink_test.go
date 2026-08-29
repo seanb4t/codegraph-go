@@ -129,6 +129,69 @@ func TestGetPermalink_LinkableNoLineAnchorAtAll(t *testing.T) {
 	}
 }
 
+// --- line/end_line validation (IN-10) ---
+
+func TestGetPermalink_RejectsLineBelowOne(t *testing.T) {
+	dir, _ := newGitBackedGofixture(t)
+	setOriginRemote(t, dir, "https://github.com/owner/repo.git")
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	line := int32(-1)
+	_, err := client.GetPermalink(context.Background(), connect.NewRequest(&uiv1.GetPermalinkRequest{
+		Path: "pkga/pkga.go",
+		Line: &line,
+	}))
+	if err == nil {
+		t.Fatalf("GetPermalink(line=-1): expected a non-nil error, got nil")
+	}
+	if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+		t.Fatalf("GetPermalink(line=-1): code = %v, want CodeInvalidArgument", code)
+	}
+}
+
+func TestGetPermalink_RejectsEndLineBelowLine(t *testing.T) {
+	dir, _ := newGitBackedGofixture(t)
+	setOriginRemote(t, dir, "https://github.com/owner/repo.git")
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	line, endLine := int32(42), int32(0)
+	_, err := client.GetPermalink(context.Background(), connect.NewRequest(&uiv1.GetPermalinkRequest{
+		Path:    "pkga/pkga.go",
+		Line:    &line,
+		EndLine: &endLine,
+	}))
+	if err == nil {
+		t.Fatalf("GetPermalink(line=42, end_line=0): expected a non-nil error, got nil")
+	}
+	if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+		t.Fatalf("GetPermalink(line=42, end_line=0): code = %v, want CodeInvalidArgument", code)
+	}
+}
+
+func TestGetPermalink_RejectsEndLineWithoutLine(t *testing.T) {
+	dir, _ := newGitBackedGofixture(t)
+	setOriginRemote(t, dir, "https://github.com/owner/repo.git")
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	endLine := int32(9)
+	_, err := client.GetPermalink(context.Background(), connect.NewRequest(&uiv1.GetPermalinkRequest{
+		Path:    "pkga/pkga.go",
+		EndLine: &endLine,
+	}))
+	if err == nil {
+		t.Fatalf("GetPermalink(end_line=9, line unset): expected a non-nil error, got nil")
+	}
+	if code := connect.CodeOf(err); code != connect.CodeInvalidArgument {
+		t.Fatalf("GetPermalink(end_line=9, line unset): code = %v, want CodeInvalidArgument", code)
+	}
+}
+
 // --- LINKABLE_UNVERIFIED: commit not observed on any remote-tracking branch ---
 
 func TestGetPermalink_LinkableUnverifiedWhenCommitNotObserved(t *testing.T) {
