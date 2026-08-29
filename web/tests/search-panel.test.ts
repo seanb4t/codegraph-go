@@ -320,14 +320,15 @@ describe('SearchPanel: keyboard navigation across sections', () => {
 	});
 });
 
-describe('SearchPanel: initialQuery seeds the query ONCE on mount (IN-12)', () => {
-	it('a later change to the initialQuery prop never re-seeds the query or resets the debounce timer', async () => {
-		// Reproduces IN-12: `initialQuery` is `params.q ?? ''`
-		// (+page.svelte), which — once CR-01's fix is in play — still
-		// changes on every keystroke while a search is live. Before this
-		// fix, a bare (tracked) read of `initialQuery` inside the seed
-		// effect re-ran it on every prop change, calling setQuery a
-		// SECOND time and resetting the 150ms debounce timer.
+describe('SearchPanel: initialQuery seeds on mount and resyncs only on a non-typing change (WR-01 fix for IN-12)', () => {
+	it('a typing-originated initialQuery change (query already in sync) does not re-seed or reset the debounce timer', async () => {
+		// IN-12's original bug: a bare tracked read of `initialQuery`
+		// re-ran the seed effect on every prop change, including the
+		// echo of the user's own typing, resetting the 150ms debounce
+		// timer a second time per keystroke. The fix must still treat
+		// this case as a no-op — but by comparing against the
+		// controller's CURRENT query, not by ignoring `initialQuery`
+		// changes altogether (that over-correction is WR-01).
 		const searchSpy = vi.fn(
 			() => Promise.resolve({ locations: [] }) as unknown as Promise<SearchResponse>
 		);
@@ -341,23 +342,65 @@ describe('SearchPanel: initialQuery seeds the query ONCE on mount (IN-12)', () =
 		await vi.advanceTimersByTimeAsync(100);
 		expect(searchSpy).not.toHaveBeenCalled();
 
-		// Simulate the URL-driven prop change: initialQuery changes to a
-		// DIFFERENT value on a re-render, exactly as params.q does on
-		// each subsequent keystroke.
+		// Simulate typing, not a URL-only change: `handleInputChange`
+		// calls `controller.setQuery` SYNCHRONOUSLY (search.ts), starting
+		// a FRESH 150ms debounce window at t=100 (deadline t=250). By the
+		// time the caller's `q` param — and thus this prop — reflects
+		// 'FooBar', `searchState.query` already equals 'FooBar'. Fire the
+		// input event first, exactly as the real component does, then
+		// rerender with the matching `initialQuery` a little later (t=120)
+		// so a second reset would be distinguishable in time from the
+		// typing-triggered one.
+		const input = screen.getByPlaceholderText(/search/i);
+		await fireEvent.input(input, { target: { value: 'FooBar' } });
+		await vi.advanceTimersByTimeAsync(20); // now t=120
 		await rerender({ client, initialQuery: 'FooBar', onSelect });
 
-		// If the seed effect had re-run (the bug), it would call
-		// setQuery('FooBar') and reset the debounce clock to 0.
-		// Advancing only the REMAINING 50ms of the ORIGINAL 150ms window
-		// must fire the search — proving the effect did NOT re-run and
-		// the debounce timer was never reset.
-		await vi.advanceTimersByTimeAsync(50);
+		// Advance to just under the typing-triggered deadline (t=250).
+		// If the seed effect had ALSO re-seeded at the t=120 rerender
+		// (the old IN-12 bug, or a fix that ignores the current query),
+		// the debounce clock would have reset AGAIN to a t=270 deadline,
+		// and the search would not have fired yet here.
+		await vi.advanceTimersByTimeAsync(125); // now t=245
+		expect(searchSpy).not.toHaveBeenCalled();
+
+		// Cross the ORIGINAL typing deadline (t=250) — proving the
+		// rerender's seed effect did NOT reset the timer.
+		await vi.advanceTimersByTimeAsync(10); // now t=255
 		await Promise.resolve();
 		await Promise.resolve();
 
 		expect(searchSpy).toHaveBeenCalledTimes(1);
 		expect(searchSpy).toHaveBeenCalledWith(
-			expect.objectContaining({ term: 'Foo' }),
+			expect.objectContaining({ term: 'FooBar' }),
+			expect.anything()
+		);
+	});
+
+	it('a URL-originated initialQuery change NOT preceded by typing (browser Back/Forward) resyncs the box and refires search (WR-01)', async () => {
+		// Concrete repro from WR-01: type 'alpha', navigate away (q stays
+		// 'alpha' in a pushed history entry), type 'beta' (replaces the
+		// entry), then press Back — the URL reverts to q=alpha WITHOUT
+		// the user typing it. `searchState.query` is still 'beta' at that
+		// point; only `initialQuery` (the prop) changes.
+		const searchSpy = vi.fn(
+			() => Promise.resolve({ locations: [] }) as unknown as Promise<SearchResponse>
+		);
+		const client = stubClient({ search: searchSpy });
+		const onSelect = vi.fn();
+
+		const { rerender } = render(SearchPanel, { props: { client, initialQuery: 'beta', onSelect } });
+		await vi.advanceTimersByTimeAsync(DEBOUNCE_SETTLE_MS);
+		searchSpy.mockClear();
+
+		await rerender({ client, initialQuery: 'alpha', onSelect });
+		await vi.advanceTimersByTimeAsync(DEBOUNCE_SETTLE_MS);
+		await Promise.resolve();
+
+		const input = screen.getByPlaceholderText(/search/i) as HTMLInputElement;
+		expect(input.value).toBe('alpha');
+		expect(searchSpy).toHaveBeenCalledWith(
+			expect.objectContaining({ term: 'alpha' }),
 			expect.anything()
 		);
 	});

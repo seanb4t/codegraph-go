@@ -108,24 +108,32 @@
 	let open = $state(true);
 	let inputRef: HTMLInputElement | null = $state(null);
 
-	// Seed the query once on mount so a shared ?q=... link narrows the
-	// box immediately, exactly as if the user had just typed it —
-	// deliberately routed through setQuery (the same debounced path
-	// typing uses), not a special-cased initial dispatch.
+	// Seed the query on mount, and resync it whenever `initialQuery`
+	// changes for a reason OTHER than this panel's own typing — deliberately
+	// routed through setQuery (the same debounced path typing uses), not a
+	// special-cased dispatch.
 	//
-	// IN-12: `initialQuery` is read through untrack() specifically so
-	// this effect has ZERO tracked dependencies and therefore runs
-	// exactly once, at mount — matching what this comment already
-	// claimed. Before this fix, the bare reactive read re-ran the effect
-	// on every `initialQuery` prop change; since `initialQuery` is
-	// `params.q ?? ''` (+page.svelte) and CR-01's fix means `q` still
-	// changes on every keystroke once a search is in flight, this called
-	// setQuery a SECOND time per character, resetting the 150ms debounce
-	// timer an extra time on every keystroke — a real, if minor, delay to
-	// the live search, and a comment/code mismatch either way.
+	// IN-12 made this effect untrack `initialQuery` entirely so it ran
+	// exactly once, at mount. That over-corrected: `initialQuery` is
+	// `params.q ?? ''` (+page.svelte), and SearchPanel is never remounted
+	// on navigation, so a `q` change that reaches this prop from something
+	// OTHER than typing here — most concretely, the browser Back/Forward
+	// buttons replaying an earlier history entry — could no longer reach
+	// the panel at all. The box would keep showing stale text while the
+	// address bar (and the rest of the view) had already moved on (WR-01).
+	//
+	// WR-01: track `initialQuery` again, but skip the reseed when it
+	// already equals the controller's CURRENT query. `handleInputChange`
+	// calls `controller.setQuery` synchronously on every keystroke
+	// (search.ts's `setQuery` is a synchronous store update), so by the
+	// time a typed character's value round-trips back through the URL
+	// into this prop, `searchState.query` already holds that same value —
+	// the comparison below makes typing a no-op here, exactly as IN-12
+	// intended, without blinding the effect to non-typing changes.
 	$effect(() => {
-		const initial = untrack(() => initialQuery);
-		if (initial) controller.setQuery(initial);
+		const incoming = initialQuery; // tracked on purpose — see WR-01 above
+		if (incoming === untrack(() => searchState.query)) return; // typing echo: no-op
+		controller.setQuery(incoming);
 	});
 
 	function isTextEditable(el: Element | null): boolean {
