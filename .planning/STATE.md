@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 4
 current_phase_name: Query Workbench & Index Health
 status: executing
-stopped_at: Phase 03 complete, ready to plan Phase 4
-last_updated: "2026-08-29T22:10:32.684Z"
+stopped_at: Completed 04-02-PLAN.md (recursive glob fix, Engine.Files)
+last_updated: "2026-08-29T22:33:54.784Z"
 last_activity: 2026-08-29
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 86c19060291155ada2571c64f79235bc63102fb7
+last_activity_desc: Phase 4 execution started
+state_head: 069d4f1da5781c1ae406e1746c3480fea8bc191a
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 35
-  completed_plans: 28
+  completed_plans: 29
   percent: 50
 ---
 
@@ -25,16 +25,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 03 — Browse, Inspect & Navigation
+**Current focus:** Phase 4 — Query Workbench & Index Health
 
 ## Current Position
 
-Phase: 4 (Query Workbench & Index Health) — READY TO EXECUTE
-Plan: Not started
+Phase: 4 (Query Workbench & Index Health) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-08-29 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-08-29 — Phase 4 execution started
 
-Progress: [███░░░░░░░] 33% (1/6 phases)
+Progress: [█████░░░░░] 50% (1/6 phases)
 
 ## Performance Metrics
 
@@ -89,6 +89,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P08 | ~13min | 3 tasks | 10 files |
 | Phase 03 P09 | 9min | 3 tasks | 9 files |
 | Phase 03 P10 | ~90 min | 3 tasks | 34 files |
+| Phase 04 P02 | 30min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,8 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: golangci-lint pinned in a fourth isolated tool modfile (go.tool-golangci.mod); gofmt (not gofumpt) chosen for the first formatting gate; std-error-handling exclusion preset and unlimited issue-reporting caps enabled for correctness.
 - [Phase 03]: Task 2's real first-run backlog was 47 issues/26 files (not the plan's pre-measured 8-file formatting-only set); all fixed per the plan's own fix-dont-suppress mandate rather than narrowing the linter set.
 - [Phase 03]: The pre-existing go.tool-proto.mod isolation/vuln-scan gap (since Phase 1) was closed alongside golangci-lint's own registration, with a new population-vs-disk guard preventing recurrence for any future tool modfile.
+- [Phase 4]: D-14 (04-CONTEXT.md): Engine.Files glob bug fixed by swapping filepath.Match for doublestar.Match — one matcher mechanism, not a second Substring option
+- [Phase 4]: go.mod's doublestar require added by hand (go get + manual indirect->direct promotion) rather than via full go mod tidy — pre-existing unrelated tree-sitter-swift module-resolution failure blocks tidy on this branch (confirmed on clean checkout)
 
 ### Pending Todos
 
@@ -288,8 +291,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T04:26:44.471Z
-Stopped at: Phase 03 complete, ready to plan Phase 4
+Last session: 2026-08-29T22:33:54.686Z
+Stopped at: Completed 04-02-PLAN.md (recursive glob fix, Engine.Files)
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

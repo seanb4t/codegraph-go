@@ -1,4 +1,5 @@
 .planning/research/.cache/
+.planning/milestone.lock
 
 # Go build/test artifacts
 /dist/
