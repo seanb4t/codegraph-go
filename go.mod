@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.8
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/alex-pinkus/tree-sitter-swift v0.0.0-20260601004120-31d17fe7e818
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cockroachdb/pebble/v2 v2.1.6
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0

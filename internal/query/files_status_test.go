@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 )
 
@@ -620,6 +624,236 @@ func TestDbSizeBytes(t *testing.T) {
 		}
 		if got.DbSizeBytes != 0 {
 			t.Fatalf("Status.DbSizeBytes: got %d, want 0 when Engine has no repoRoot (D-07 best-effort degrade)", got.DbSizeBytes)
+		}
+	})
+}
+
+// filesGlobFixture augments the shared gofixture with a root-level file, a
+// two-directories-deep file, and a second registered language (typescript)
+// at the same nested location -- the corpus TestFilesPatternRecursiveGlob
+// needs but the shared fixture does not provide (verified in-tree during
+// cycle-1 review: gofixture is one directory level deep and Go-only). The
+// extra files are written into the copied temp tree BEFORE indexFixture
+// runs, so they are indexed like any other source file.
+func filesGlobFixture(t *testing.T) *Engine {
+	t.Helper()
+
+	dir := copyFixture(t)
+
+	extra := map[string]string{
+		"termroot.go":                 "package main\n\nfunc TermRoot() {}\n",
+		"internal/deep/termnested.go": "package deep\n\nfunc TermNested() {}\n",
+		"internal/deep/termnested.ts": "export function termNested(): void {}\n",
+	}
+	for rel, content := range extra {
+		full := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir for %s: %v", rel, err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	indexFixture(t, dir)
+
+	engine, closer, err := OpenAt(dir)
+	if err != nil {
+		t.Fatalf("OpenAt: unexpected error: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	return engine
+}
+
+// globRefusingReader is a graphstore.Reader whose IterateFiles fails the
+// test if it is ever invoked -- the instrumented-reader convention
+// search_test.go's searchFakeReader established (D-06's ranking tests),
+// reused here to prove refusal of a malformed pattern precedes the store
+// scan (T-04-05's actual property), rather than merely producing the same
+// error text after paying for a scan that already ran.
+type globRefusingReader struct {
+	t *testing.T
+}
+
+func (r *globRefusingReader) GetNode(string) (*schema.Node, error) {
+	return nil, errors.New("globRefusingReader: GetNode not implemented")
+}
+
+func (r *globRefusingReader) GetFile(string) (*schema.File, error) {
+	return nil, errors.New("globRefusingReader: GetFile not implemented")
+}
+
+func (r *globRefusingReader) GetMeta() (*schema.Meta, error) {
+	return nil, errors.New("globRefusingReader: GetMeta not implemented")
+}
+
+func (r *globRefusingReader) IterateEdges(string) (graphstore.EdgeIterator, error) {
+	return nil, errors.New("globRefusingReader: IterateEdges not implemented")
+}
+
+func (r *globRefusingReader) IterateFiles() (graphstore.FileIterator, error) {
+	r.t.Fatal("globRefusingReader: IterateFiles called -- a malformed pattern must be refused before the store is scanned")
+	return nil, nil
+}
+
+func (r *globRefusingReader) IterateFileIndex(string) (graphstore.FileIndexIterator, error) {
+	return nil, errors.New("globRefusingReader: IterateFileIndex not implemented")
+}
+
+func (r *globRefusingReader) IterateNodes() (graphstore.NodeIterator, error) {
+	return nil, errors.New("globRefusingReader: IterateNodes not implemented")
+}
+
+func (r *globRefusingReader) Close() error { return nil }
+
+// filesPathSet extracts the sorted set of Paths from a []FileEntry, for
+// exact-set (never count-only) comparison against an expected set.
+func filesPathSet(entries []FileEntry) []string {
+	paths := make([]string, len(entries))
+	for i, e := range entries {
+		paths[i] = e.Path
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func assertFilesPathSet(t *testing.T, got []FileEntry, want []string) {
+	t.Helper()
+	gotSet := filesPathSet(got)
+	wantSet := append([]string(nil), want...)
+	sort.Strings(wantSet)
+	if strings.Join(gotSet, ",") != strings.Join(wantSet, ",") {
+		t.Fatalf("Files: got path set %v, want %v", gotSet, wantSet)
+	}
+}
+
+// containsPath (explore_gate_test.go, same package) reports whether path
+// is present in paths -- reused here rather than redeclared.
+
+// expectedGlobMatches computes the independent-oracle expected result set
+// for pattern by filtering the RAW indexed path set (rawFilePaths) through
+// doublestar.Match directly -- the same independent-oracle convention this
+// file's rawFilePaths already establishes for TestFiles (comparing against
+// the graph's own IterateFiles rather than re-implementing Files'
+// filtering), applied here so each subtest's expected set is derived from
+// what the indexer actually produced (which varies by build tags/platform
+// -- e.g. skip_linux.go is excluded on darwin but present on linux) rather
+// than a hardcoded, platform-fragile literal list.
+func expectedGlobMatches(t *testing.T, raw []string, pattern string) []string {
+	t.Helper()
+	var want []string
+	for _, p := range raw {
+		matched, err := doublestar.Match(pattern, p)
+		if err != nil {
+			t.Fatalf("doublestar.Match(%q, %q): unexpected error: %v", pattern, p, err)
+		}
+		if matched {
+			want = append(want, p)
+		}
+	}
+	sort.Strings(want)
+	return want
+}
+
+// TestFilesPatternRecursiveGlob is the two-direction regression test for
+// D-14: a Pattern of "**/*term*" must return both a nested match
+// (internal/deep/termnested.go) and the root-level match (termroot.go)
+// that works today, and existing non-recursive patterns must keep
+// behaving identically. See 04-02-PLAN.md Task 1/2.
+func TestFilesPatternRecursiveGlob(t *testing.T) {
+	engine := filesGlobFixture(t)
+
+	raw := rawFilePaths(t, engine)
+	sortedRaw := append([]string(nil), raw...)
+	sort.Strings(sortedRaw)
+	t.Logf("indexed path set: %v", sortedRaw)
+
+	t.Run("nested", func(t *testing.T) {
+		got, err := engine.Files(FilesOptions{Pattern: "**/*term*"})
+		if err != nil {
+			t.Fatalf("Files: unexpected error: %v", err)
+		}
+		want := expectedGlobMatches(t, raw, "**/*term*")
+		if !containsPath(want, "internal/deep/termnested.go") {
+			t.Fatal("fixture setup: expected corpus to include internal/deep/termnested.go, cannot test nested match")
+		}
+		assertFilesPathSet(t, got.Files, want)
+	})
+
+	t.Run("root_level", func(t *testing.T) {
+		got, err := engine.Files(FilesOptions{Pattern: "**/*term*"})
+		if err != nil {
+			t.Fatalf("Files: unexpected error: %v", err)
+		}
+		want := expectedGlobMatches(t, raw, "**/*term*")
+		if !containsPath(want, "termroot.go") {
+			t.Fatal("fixture setup: expected corpus to include termroot.go, cannot test root-level match")
+		}
+		assertFilesPathSet(t, got.Files, want)
+	})
+
+	t.Run("non_recursive_unchanged", func(t *testing.T) {
+		got, err := engine.Files(FilesOptions{Pattern: "*term*"})
+		if err != nil {
+			t.Fatalf("Files: unexpected error: %v", err)
+		}
+		want := expectedGlobMatches(t, raw, "*term*")
+		assertFilesPathSet(t, got.Files, want)
+		for _, f := range got.Files {
+			if strings.Contains(f.Path, "/") {
+				t.Fatalf("Files with pattern *term*: got nested path %q, want root-level only (non-recursive pattern must not cross '/')", f.Path)
+			}
+		}
+	})
+
+	t.Run("brace_alternation", func(t *testing.T) {
+		got, err := engine.Files(FilesOptions{Pattern: "**/*.{go,ts}"})
+		if err != nil {
+			t.Fatalf("Files: unexpected error: %v", err)
+		}
+		want := expectedGlobMatches(t, raw, "**/*.{go,ts}")
+		if !containsPath(want, "internal/deep/termnested.go") || !containsPath(want, "internal/deep/termnested.ts") {
+			t.Fatal("fixture setup: expected corpus to include both a nested .go and .ts file, cannot test brace alternation")
+		}
+		assertFilesPathSet(t, got.Files, want)
+	})
+
+	t.Run("malformed_refused", func(t *testing.T) {
+		_, err := engine.Files(FilesOptions{Pattern: "["})
+		if err == nil {
+			t.Fatal("Files with malformed pattern: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `query: invalid pattern "["`) {
+			t.Fatalf(`Files with malformed pattern: got error %q, want it to contain query: invalid pattern "["`, err.Error())
+		}
+	})
+
+	t.Run("refusal_precedes_scan", func(t *testing.T) {
+		refusingEngine := New(&globRefusingReader{t: t})
+		_, err := refusingEngine.Files(FilesOptions{Pattern: "["})
+		if err == nil {
+			t.Fatal("Files with malformed pattern: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `query: invalid pattern "["`) {
+			t.Fatalf(`Files with malformed pattern: got error %q, want it to contain query: invalid pattern "["`, err.Error())
+		}
+	})
+
+	t.Run("escaped_metacharacter_is_literal", func(t *testing.T) {
+		matched, err := doublestar.Match(`**/*\[*`, "weird[name.go")
+		if err != nil {
+			t.Fatalf("doublestar.Match: unexpected error: %v", err)
+		}
+		if !matched {
+			t.Fatal(`doublestar.Match("**/*\[*", "weird[name.go"): got false, want true (escaped metacharacter matches literally)`)
+		}
+
+		notMatched, err := doublestar.Match(`**/*\[*`, "plainname.go")
+		if err != nil {
+			t.Fatalf("doublestar.Match: unexpected error: %v", err)
+		}
+		if notMatched {
+			t.Fatal(`doublestar.Match("**/*\[*", "plainname.go"): got true, want false`)
 		}
 	})
 }
