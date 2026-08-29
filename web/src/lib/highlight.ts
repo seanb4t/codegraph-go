@@ -95,6 +95,57 @@ export const HIGHLIGHT_COVERAGE: string[] = [
 	'typescript'
 ];
 
+// EXTENSION_LANGUAGE maps a file extension (including the leading ".") to
+// the language identifier registered above — a rendering-layer best-effort
+// hint for file-mode opens, which carry no Node.language field (only
+// NODE_DETAIL_MODE_SINGLE_DEF/MULTI_DEF do, via Node.language). It is
+// transcribed by hand from internal/indexer/languages_*.go's own
+// LanguageSpec.Extensions lists (WR-02): nothing in the type system binds
+// the two together, so web/highlight_extension_coverage_test.go parses
+// THIS EXACT DECLARATION as text (Go cannot import TypeScript) and asserts
+// it is set-equal, key AND value, to indexer.RegisteredLanguageExtensions()
+// — mirroring HIGHLIGHT_COVERAGE's own guard below. Changing this map's
+// shape — a computed key, a spread, a multi-entry line — will break that
+// guard exactly as changing HIGHLIGHT_COVERAGE's shape would.
+//
+// An unmatched extension is never guessed at: languageForPath returns ''
+// and highlightSource degrades to its own honest plaintext-escape path.
+export const EXTENSION_LANGUAGE: Record<string, string> = {
+	'.c': 'c',
+	'.h': 'c',
+	'.cpp': 'cpp',
+	'.cc': 'cpp',
+	'.cxx': 'cpp',
+	'.hpp': 'cpp',
+	'.hh': 'cpp',
+	'.cs': 'csharp',
+	'.go': 'go',
+	'.java': 'java',
+	'.js': 'javascript',
+	'.jsx': 'javascript',
+	'.mjs': 'javascript',
+	'.cjs': 'javascript',
+	'.kt': 'kotlin',
+	'.kts': 'kotlin',
+	'.php': 'php',
+	'.py': 'python',
+	'.rb': 'ruby',
+	'.rs': 'rust',
+	'.swift': 'swift',
+	'.ts': 'typescript',
+	'.tsx': 'tsx'
+};
+
+// languageForPath derives a best-effort language identifier from a file
+// path's extension via EXTENSION_LANGUAGE, or '' when the extension is
+// absent or unregistered — never a guess.
+export function languageForPath(path: string): string {
+	const dot = path.lastIndexOf('.');
+	if (dot === -1) return '';
+	const ext = path.slice(dot).toLowerCase();
+	return EXTENSION_LANGUAGE[ext] ?? '';
+}
+
 function escapeHtml(input: string): string {
 	return input.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

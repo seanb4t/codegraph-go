@@ -5,7 +5,7 @@
 	// directive) in all of web/src — every other view in this repository
 	// renders plain text or Svelte's own escaped interpolation.
 	import type { MessageInitShape } from '@bufbuild/protobuf';
-	import { highlightSource } from '$lib/highlight';
+	import { highlightSource, languageForPath } from '$lib/highlight';
 	import { buildCallTargetIndex, callTargets } from '$lib/call-targets';
 	import { NAV_INTENT, type BrowseNavDelta, type NavIntent } from '$lib/browse-nav';
 	import type { BrowseTargetState } from '$lib/browse-state';
@@ -62,47 +62,12 @@
 		onNavigate?.({ symbol: entry[0].name }, NAV_INTENT.NAVIGATE);
 	}
 
-	// EXTENSION_LANGUAGE: a file-mode GetNodeDetailResponse carries no
-	// Node.language field (only NODE_DETAIL_MODE_SINGLE_DEF/MULTI_DEF do,
-	// via Node.language) — so for a bare file open, the language is
-	// derived here from the path extension, mirroring the same extension
-	// lists internal/indexer/languages_*.go registers each LanguageSpec
-	// under. This is a rendering-layer best-effort hint, not a second
-	// confinement or classification implementation: an unmatched extension
-	// falls through to highlightSource's own honest plaintext-escape
-	// degrade, never a guess.
-	const EXTENSION_LANGUAGE: Record<string, string> = {
-		'.c': 'c',
-		'.h': 'c',
-		'.cpp': 'cpp',
-		'.cc': 'cpp',
-		'.cxx': 'cpp',
-		'.hpp': 'cpp',
-		'.hh': 'cpp',
-		'.cs': 'csharp',
-		'.go': 'go',
-		'.java': 'java',
-		'.js': 'javascript',
-		'.jsx': 'javascript',
-		'.mjs': 'javascript',
-		'.cjs': 'javascript',
-		'.kt': 'kotlin',
-		'.kts': 'kotlin',
-		'.php': 'php',
-		'.py': 'python',
-		'.rb': 'ruby',
-		'.rs': 'rust',
-		'.swift': 'swift',
-		'.ts': 'typescript',
-		'.tsx': 'tsx'
-	};
-
-	function languageForPath(path: string): string {
-		const dot = path.lastIndexOf('.');
-		if (dot === -1) return '';
-		const ext = path.slice(dot).toLowerCase();
-		return EXTENSION_LANGUAGE[ext] ?? '';
-	}
+	// languageForPath (moved to $lib/highlight — WR-02): a file-mode
+	// GetNodeDetailResponse carries no Node.language field (only
+	// NODE_DETAIL_MODE_SINGLE_DEF/MULTI_DEF do, via Node.language), so for
+	// a bare file open the language is derived from the path extension via
+	// highlight.ts's EXTENSION_LANGUAGE map, which is bound to the
+	// indexer's own registry by web/highlight_extension_coverage_test.go.
 
 	// permalinkParamsFor computes GetPermalink's request shape from the
 	// CURRENTLY RENDERED state (D-06, D-09, D-20). File mode carries no
