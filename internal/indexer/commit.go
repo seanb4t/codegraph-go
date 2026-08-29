@@ -24,19 +24,6 @@ var gitExecLookPath = exec.LookPath
 // (T-01-21).
 const resolveHeadCommitGitTimeout = 5 * time.Second
 
-// gitSHA1HexLen and gitSHA256HexLen are the two lowercase-hex lengths
-// resolveHeadCommitSHA accepts: 40 characters for Git's SHA-1 object
-// format, 64 for SHA-256. Both are legitimate `git rev-parse HEAD` outputs
-// depending on the repository's object format; accepting only 40 would
-// silently record an ABSENT commit on a SHA-256 repository (T-01-19),
-// which surfaces downstream as a permalink that simply never renders
-// rather than as any visible error. Named here, once, rather than as two
-// bare numeric literals at the comparison site.
-const (
-	gitSHA1HexLen   = 40
-	gitSHA256HexLen = 64
-)
-
 // resolveHeadCommitSHA resolves the git commit HEAD points at for the
 // repository rooted at repoPath (ENG-04, D-05), for stamping into
 // schema.Meta.commit_sha. It deliberately returns a bare string and NEVER
@@ -54,9 +41,9 @@ const (
 // exec.CommandContext — never a shell string — with repoPath passed as a
 // `-C` argument rather than interpolated into anything git parses as
 // shell syntax (T-01-19). Output is accepted only when it is exactly
-// gitSHA1HexLen or gitSHA256HexLen characters of lowercase hex; any other
-// length, or any uppercase character, yields the empty string just as
-// firmly as git failing outright.
+// schema.SHA1HexLen or schema.SHA256HexLen characters of lowercase hex;
+// any other length, or any uppercase character, yields the empty string
+// just as firmly as git failing outright.
 func resolveHeadCommitSHA(repoPath string) string {
 	if _, err := gitExecLookPath("git"); err != nil {
 		return ""
@@ -79,19 +66,20 @@ func resolveHeadCommitSHA(repoPath string) string {
 }
 
 // isLowercaseHexCommitSHA reports whether s is a well-formed git commit
-// object id: exactly gitSHA1HexLen or gitSHA256HexLen characters, every
-// one of them a lowercase hex digit. Widening from one accepted length to
-// two is an ENUMERATED SET, not a relaxation — any other length (39, 41,
-// 63, 65, ...) and any uppercase hex character are rejected exactly as
-// firmly as before.
+// object id: exactly schema.SHA1HexLen or schema.SHA256HexLen characters,
+// every one of them a lowercase hex digit. Widening from one accepted
+// length to two is an ENUMERATED SET, not a relaxation — any other length
+// (39, 41, 63, 65, ...) and any uppercase hex character are rejected
+// exactly as firmly as before.
 //
 // Delegates to schema.IsCommitSHA (WR-07: promoted so the read side —
 // internal/uiserver.GetPermalink — validates a stored commit_sha with the
 // exact same predicate this write-time check applies, rather than two
-// definitions that can drift). The local gitSHA1HexLen/gitSHA256HexLen
-// constants above remain the package's own named lengths (this package's
-// tests reference them directly) and are numerically identical to
-// schema's.
+// definitions that can drift). IN-05: this package previously kept its
+// own gitSHA1HexLen/gitSHA256HexLen constants too, "numerically identical
+// to schema's" by comment alone with nothing asserting it — deleted; this
+// package's tests now reference schema.SHA1HexLen/schema.SHA256HexLen
+// directly, so there is exactly one definition of each length.
 func isLowercaseHexCommitSHA(s string) bool {
 	return schema.IsCommitSHA(s)
 }

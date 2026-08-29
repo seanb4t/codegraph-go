@@ -104,8 +104,8 @@ func TestResolveHeadCommitSHA(t *testing.T) {
 	t.Run("sha1-40-hex", func(t *testing.T) {
 		dir := newGitCommitFixture(t)
 		want := gitRevParseHEAD(t, dir)
-		if len(want) != gitSHA1HexLen {
-			t.Fatalf("fixture repo's own HEAD is %d chars, want %d (test setup assumption broken)", len(want), gitSHA1HexLen)
+		if len(want) != schema.SHA1HexLen {
+			t.Fatalf("fixture repo's own HEAD is %d chars, want %d (test setup assumption broken)", len(want), schema.SHA1HexLen)
 		}
 		got := resolveHeadCommitSHA(dir)
 		if got != want {
@@ -119,8 +119,8 @@ func TestResolveHeadCommitSHA(t *testing.T) {
 			t.Skip("local git does not support --object-format=sha256; the synthetic 64-char case below still exercises the length-validation path")
 		}
 		want := gitRevParseHEAD(t, dir)
-		if len(want) != gitSHA256HexLen {
-			t.Fatalf("fixture repo's own HEAD is %d chars, want %d (test setup assumption broken)", len(want), gitSHA256HexLen)
+		if len(want) != schema.SHA256HexLen {
+			t.Fatalf("fixture repo's own HEAD is %d chars, want %d (test setup assumption broken)", len(want), schema.SHA256HexLen)
 		}
 		got := resolveHeadCommitSHA(dir)
 		if got != want {
@@ -143,7 +143,7 @@ func TestResolveHeadCommitSHA(t *testing.T) {
 		{"41", strings.Repeat("a", 41)},
 		{"63", strings.Repeat("a", 63)},
 		{"65", strings.Repeat("a", 65)},
-		{"uppercase", strings.Repeat("A", gitSHA1HexLen)},
+		{"uppercase", strings.Repeat("A", schema.SHA1HexLen)},
 	}
 	for _, tc := range invalid {
 		t.Run(tc.name, func(t *testing.T) {

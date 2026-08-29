@@ -49,33 +49,37 @@ func IndexedCommitSHA(m *Meta) (string, bool) {
 	return sha, true
 }
 
-// gitSHA1HexLen and gitSHA256HexLen are the two lowercase-hex lengths a
+// SHA1HexLen and SHA256HexLen are the two lowercase-hex lengths a
 // well-formed git commit object id can have — promoted here from
 // internal/indexer/commit.go (WR-07) so the ONE validator a commit SHA is
 // checked against at WRITE time (internal/indexer/commit.go's
 // resolveHeadCommitSHA) is also available to check it again at READ time,
 // rather than trusting the stored value is well-formed forever.
+//
+// IN-05: exported (were gitSHA1HexLen/gitSHA256HexLen, unexported) so
+// internal/indexer/commit.go can reference these directly instead of
+// keeping its own copy "numerically identical to schema's" by comment
+// alone, with nothing asserting that claim stayed true.
 const (
-	gitSHA1HexLen   = 40
-	gitSHA256HexLen = 64
+	SHA1HexLen   = 40
+	SHA256HexLen = 64
 )
 
 // IsCommitSHA reports whether s is a well-formed git commit object id:
-// exactly gitSHA1HexLen or gitSHA256HexLen characters, every one a
-// lowercase hex digit (WR-07). internal/indexer applies this at WRITE
-// time before a commit_sha is ever stamped into a Meta record — but
-// IndexedCommitSHA above returns whatever string a Meta record on disk
-// happens to carry, unvalidated. A store built or edited by anything
-// other than this binary's own indexer (the milestone-2 "CI-distributed
-// indexes" shape .claude/CLAUDE.md names as this project's own
-// architecture target) is not bound by that write-time guarantee, and the
-// unvalidated value is used both as a git CLI argument
-// (gitmeta.CommitOnRemoteTrackingBranch) and spliced raw into a rendered
-// GitHub blob URL (uiserver.buildGitHubBlobURL) — callers that read a
-// commit SHA out of a Meta record and pass it to either of those should
-// call this first.
+// exactly SHA1HexLen or SHA256HexLen characters, every one a lowercase
+// hex digit (WR-07). internal/indexer applies this at WRITE time before a
+// commit_sha is ever stamped into a Meta record — but IndexedCommitSHA
+// above returns whatever string a Meta record on disk happens to carry,
+// unvalidated. A store built or edited by anything other than this
+// binary's own indexer (the milestone-2 "CI-distributed indexes" shape
+// .claude/CLAUDE.md names as this project's own architecture target) is
+// not bound by that write-time guarantee, and the unvalidated value is
+// used both as a git CLI argument (gitmeta.CommitOnRemoteTrackingBranch)
+// and spliced raw into a rendered GitHub blob URL
+// (uiserver.buildGitHubBlobURL) — callers that read a commit SHA out of a
+// Meta record and pass it to either of those should call this first.
 func IsCommitSHA(s string) bool {
-	if len(s) != gitSHA1HexLen && len(s) != gitSHA256HexLen {
+	if len(s) != SHA1HexLen && len(s) != SHA256HexLen {
 		return false
 	}
 	for _, r := range s {
