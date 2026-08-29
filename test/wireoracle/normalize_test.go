@@ -261,6 +261,36 @@ func TestToolsListRepeatOrderingResolution(t *testing.T) {
 	}
 }
 
+// TestCanonicalizeResponseOrderIgnoresRequestFrames reproduces IN-07: per
+// JSON-RPC 2.0, a numeric "id" appears on REQUESTS too, not only
+// responses — every server->client request this protocol defines
+// (sampling/createMessage, roots/list, elicitation/create) carries both
+// "method" and "id". A request frame sitting BETWEEN two genuine
+// responses, carrying an id numerically between theirs, must be left at
+// its ORIGINAL position — never folded into the ascending-id sort
+// alongside the genuine responses on either side of it.
+func TestCanonicalizeResponseOrderIgnoresRequestFrames(t *testing.T) {
+	// A server->client "roots/list" REQUEST carrying id:3, sitting between
+	// the id:1 and id:2 responses. Before this fix (bare responseID
+	// check, id present only): all three lines classify as "response
+	// positions", and a stable ascending-id sort (1, 2, 3) would swap the
+	// request (id:3) with the id:2 response, producing VISIBLE reordering
+	// of a line that carries a method — the exact defect IN-07 describes.
+	in := []byte(
+		`{"jsonrpc":"2.0","id":1,"result":"a"}` + "\n" +
+			`{"jsonrpc":"2.0","method":"roots/list","id":3}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"result":"b"}` + "\n",
+	)
+
+	got, hits := CanonicalizeResponseOrder(in)
+	if !bytes.Equal(got, in) {
+		t.Fatalf("CanonicalizeResponseOrder must leave a request frame (method present, id present) untouched at its original position:\n got:  %s\nwant: %s (unchanged)", got, in)
+	}
+	if hits != 0 {
+		t.Fatalf("CanonicalizeResponseOrder reported %d changed positions, want 0 — the request frame must never be classified as a response or reordered against real responses", hits)
+	}
+}
+
 // TestFrozenTranscriptComparisonDetectsContentMutation is 03-03-PLAN.md
 // Task 3's automated discrimination proof (rule 84d1gfpywd): it proves R2's
 // canonicalization narrows response ORDER only, never CONTENT. A planted

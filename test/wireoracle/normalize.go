@@ -203,10 +203,30 @@ func looksLikeRFC3339(val string) bool {
 // consecutive same-method calls run in independently scheduled goroutines
 // with no ordering guarantee between them.
 //
+// isResponseLine reports whether raw is a JSON-RPC RESPONSE line — id
+// present AND method absent (IN-07). responseID alone (id present) is
+// NOT sufficient: per JSON-RPC 2.0, a numeric id appears on requests too,
+// not only responses, and every server->client REQUEST this protocol
+// defines (sampling/createMessage, roots/list, elicitation/create)
+// carries both a "method" and an "id". No current scenario emits one, so
+// misclassifying it here is latent — but were one added, that request
+// frame would join the sorted-by-id set below and could be swapped with
+// an unrelated response line, masking or fabricating an ordering
+// discrepancy in the frozen transcript. frameMethod already exists next
+// door (capture.go) for exactly this distinction.
+func isResponseLine(raw []byte) bool {
+	if _, ok := responseID(raw); !ok {
+		return false
+	}
+	_, hasMethod := frameMethod(raw)
+	return !hasMethod
+}
+
 // CanonicalizeResponseOrder narrows what the oracle freezes to response
 // CONTENT, never touching a byte within a line: it identifies every line
-// position that holds a JSON-RPC RESPONSE (id present, per responseID's
-// existing classification in capture.go — reused here rather than
+// position that holds a JSON-RPC RESPONSE (id present AND method absent,
+// per isResponseLine's classification above — built from responseID and
+// frameMethod, capture.go's existing extractors, reused rather than
 // re-derived, "no second copy of a rule") and reassigns those SAME
 // positions the response bytes sorted ascending by id, via a stable sort.
 // Every other line — notifications, blank lines, anything without a
@@ -239,7 +259,7 @@ func CanonicalizeResponseOrder(raw []byte) ([]byte, int) {
 	var positions []int
 	var respLines [][]byte
 	for i, line := range lines {
-		if _, ok := responseID(line); ok {
+		if isResponseLine(line) {
 			positions = append(positions, i)
 			respLines = append(respLines, line)
 		}
