@@ -290,8 +290,8 @@ func TestGetPermalink_NoLinkNoCommitSHA(t *testing.T) {
 	if resp.Msg.GetUrl() != "" {
 		t.Fatalf("url = %q, want empty", resp.Msg.GetUrl())
 	}
-	if !strings.Contains(resp.Msg.GetReason(), "re-index") {
-		t.Fatalf("reason = %q, want it to name re-indexing as the remedy", resp.Msg.GetReason())
+	if got := resp.Msg.GetReason(); got != noCommitSHAReason {
+		t.Fatalf("reason = %q, want the exact absent-field reason %q", got, noCommitSHAReason)
 	}
 }
 
@@ -359,8 +359,22 @@ func TestGetPermalink_NoLinkMalformedCommitSHA(t *testing.T) {
 	if resp.Msg.GetUrl() != "" {
 		t.Fatalf("url = %q, want empty — a malformed commit_sha must never reach buildGitHubBlobURL", resp.Msg.GetUrl())
 	}
-	if !strings.Contains(resp.Msg.GetReason(), "re-index") {
-		t.Fatalf("reason = %q, want it to name re-indexing as the remedy", resp.Msg.GetReason())
+	// WR-02: this is a DIFFERENT cause from the absent-field case above —
+	// Meta DOES carry a commit_sha, it just fails schema.IsCommitSHA — so
+	// the handler must not reuse noCommitSHAReason (which would tell an
+	// operator the field is absent when it is actually present and
+	// unvalidated). Assert the exact malformed-specific string, and assert
+	// it is not the absent-field string, so the two NO_LINK causes stay
+	// discriminable on the wire.
+	got := resp.Msg.GetReason()
+	if got != malformedCommitSHAReason {
+		t.Fatalf("reason = %q, want the exact malformed-SHA reason %q", got, malformedCommitSHAReason)
+	}
+	if got == noCommitSHAReason {
+		t.Fatalf("reason = %q, must not equal the absent-field reason %q — the two causes must not collapse", got, noCommitSHAReason)
+	}
+	if !strings.Contains(got, "re-index") {
+		t.Fatalf("reason = %q, want it to name re-indexing as the remedy", got)
 	}
 }
 

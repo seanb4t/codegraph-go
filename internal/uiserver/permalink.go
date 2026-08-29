@@ -35,6 +35,17 @@ import (
 // re-indexing — rather than leaving the caller to guess.
 const noCommitSHAReason = "this index has no recorded commit SHA (a pre-upgrade graph) — re-index to enable permalinks"
 
+// malformedCommitSHAReason is GetPermalink's NO_LINK reason when Meta DOES
+// carry a commit_sha value but it fails schema.IsCommitSHA (WR-02). This is
+// a DIFFERENT cause from noCommitSHAReason above — the field is present,
+// the store is not a pre-upgrade graph — and must not reuse that string:
+// telling an operator the field is "absent" when it is actually
+// unvalidated is the one diagnosis that hides the real signal (something
+// wrote a non-well-formed value into Meta.commit_sha), and it collapses
+// exactly the two-cause distinction notObservedReason/checkUnknownReason
+// below exist to preserve.
+const malformedCommitSHAReason = "this index's recorded commit SHA is not a well-formed git object id; the store may have been written by a different tool — re-index to repair it"
+
 // notObservedReason and checkUnknownReason are GetPermalink's
 // LINKABLE_UNVERIFIED reasons (D-07). Both cases share ONE availability
 // value on the wire — from the caller's perspective the link is equally
@@ -164,7 +175,7 @@ func (s *uiService) GetPermalink(ctx context.Context, req *connect.Request[uiv1.
 		if !schema.IsCommitSHA(sha) {
 			resp = &uiv1.GetPermalinkResponse{
 				Availability: uiv1.PermalinkAvailability_PERMALINK_AVAILABILITY_NO_LINK,
-				Reason:       noCommitSHAReason,
+				Reason:       malformedCommitSHAReason,
 			}
 			return nil
 		}
