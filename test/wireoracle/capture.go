@@ -381,6 +381,16 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 		arrived time.Time
 	}
 	lines := make(chan scannedLine)
+	// scanErr records scanTimestamped's own return (IN-02): written only
+	// by the goroutine below, strictly before its deferred close(lines)
+	// runs; drainUntil only reads it after observing `lines` closed
+	// (`ok == false`), and a channel close happens-after every statement
+	// preceding it in the same goroutine — so this handoff needs no
+	// separate lock. Without this, a scanner error (e.g. a wire line
+	// exceeding the 10 MiB scanner.Buffer cap) closed `lines` silently
+	// and looked identical to a clean EOF, surfacing downstream only as a
+	// confusing "stdout closed" from drainUntil with no hint why.
+	var scanErr error
 	go func() {
 		defer close(lines)
 		// WR-03: calls scanTimestamped directly — the SAME function
@@ -393,7 +403,7 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 		// unconditionally, not only on a later assertion failure, so
 		// ArrivalLedger is always available to a caller that wants to
 		// dump it (03-03-PLAN.md Task 1(b)).
-		_ = scanTimestamped(stdout, func(al ArrivalLine) {
+		scanErr = scanTimestamped(stdout, func(al ArrivalLine) {
 			lines <- scannedLine{raw: al.Raw, arrived: al.Arrived}
 		})
 	}()
@@ -434,6 +444,13 @@ func Capture(ctx context.Context, binPath, fixtureSrc, workDir string, sc Scenar
 			case ln, ok := <-lines:
 				if !ok {
 					killAndJoin()
+					// IN-02: scanErr is safe to read here — `lines`
+					// closing happens-after the goroutine's assignment to
+					// scanErr (see its declaration above).
+					if scanErr != nil {
+						return fmt.Errorf("wireoracle: scenario %q: stdout closed after %d/%d responses (scan error: %v); stderr:\n%s",
+							sc.Name, len(seen), len(wantIDs), scanErr, stderrBuf.String())
+					}
 					return fmt.Errorf("wireoracle: scenario %q: stdout closed after %d/%d responses; stderr:\n%s",
 						sc.Name, len(seen), len(wantIDs), stderrBuf.String())
 				}
