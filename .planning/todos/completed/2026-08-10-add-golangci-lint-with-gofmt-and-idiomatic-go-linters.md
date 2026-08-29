@@ -3,13 +3,17 @@ created: 2026-08-10T22:39:46.876Z
 title: Add golangci-lint with gofmt and idiomatic Go linters
 area: ci
 severity: minor
+resolves_phase: 3
+status: resolved
+resolved_at: 2026-08-29T00:00:00.000Z
+resolved_by_phase: 3
 files:
-
-  - go.tool-lint.mod:24
-  - Taskfile.yml:10
-  - Taskfile.yml:3163
-  - Taskfile.yml:3521
-  - internal/query/files_status_test.go
+  - go.tool-golangci.mod
+  - go.tool-golangci.sum
+  - .golangci.yml
+  - Taskfile.yml
+  - .github/workflows/ci.yml
+  - internal/upgrade/taskfile_shape_test.go
 
 audit_acknowledged:
   milestone: v0.11.0
@@ -92,3 +96,43 @@ target name from Taskfile.yml, not the CI check's display name.
 
 Open question for whoever picks this up: whether to enable `gofumpt` (stricter
 superset) or plain `gofmt`, and how aggressive the idiomatic set should be.
+
+## Resolution (2026-08-29, Phase 3, 03-10-PLAN.md)
+
+Landed on the THIRD fold, after being folded into Phase 1 and Phase 2 and
+implemented in neither. `.golangci.yml` enables errcheck/ineffassign/
+staticcheck/unused (the todo's own four named categories, verbatim) plus
+the `gofmt` formatter, with `linters.exclusions.presets: [std-error-handling]`
+(golangci-lint's own documented convention for the common Close/Flush/Print*
+errcheck non-issue) and `issues.max-issues-per-linter`/`max-same-issues`
+disabled — both default to non-zero caps that were measured live to
+silently truncate real findings.
+
+**One deviation from the sketch:** golangci-lint is pinned in its OWN
+modfile, `go.tool-golangci.mod` — NOT co-located in `go.tool-lint.mod`
+alongside actionlint as originally sketched here. `go.tool-lint.mod`'s
+own header already documents a live-verified MVS collision from exactly
+that co-location pattern (actionlint's expected YAML API losing its
+version bid), and golangci-lint's own dependency tree (211 modules) is
+large enough to make it the most likely candidate in this repository to
+win or lose a similar bid. A fourth isolated tool modfile follows the
+already-proven pattern rather than re-discovering the collision.
+
+`gofmt` (not `gofumpt`) was chosen for this first landing — see
+`.golangci.yml`'s own header comment for the full reasoning. The measured
+first-run backlog (47 issues across 26 files, once the linter set beyond
+plain formatting was accounted for) was fixed by hand, file by file — none
+suppressed, one targeted `//nolint:staticcheck` for a single deliberately
+punctuated, user-facing error string.
+
+`task lint:go` runs in CI as the `lint-go` job (`.github/workflows/ci.yml`),
+bound by the single-definition guard (`inScopeJobs` in
+`internal/upgrade/taskfile_shape_test.go`), and demonstrated failing on
+both a formatting and an idiomatic violation before being proven to
+restore byte-identically. `Taskfile.yml`'s `vuln` gate now scans a fifth
+binary (golangci-lint) alongside the other four, closing the gap where a
+large new third-party dependency tree could otherwise enter CI unscanned.
+
+See `.planning/phases/03-browse-inspect-navigation/03-10-SUMMARY.md` for
+the full account, including the pre-existing `go.tool-proto.mod` gap this
+resolution observed but deliberately left unfixed (out of scope).

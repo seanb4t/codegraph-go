@@ -139,6 +139,7 @@ type inScopeJob struct {
 var inScopeJobs = []inScopeJob{
 	{Workflow: "ci.yml", JobID: "test"},
 	{Workflow: "ci.yml", JobID: "actionlint"},
+	{Workflow: "ci.yml", JobID: "lint-go"},
 	{Workflow: "ci.yml", JobID: "goreleaser-check"},
 	{Workflow: "ci.yml", JobID: "reproducibility"},
 	{Workflow: "ci.yml", JobID: "perf-regression"},
