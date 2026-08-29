@@ -1,0 +1,1 @@
+import{D as e,k as t,st as n}from"../chunks/c75jjzRJ.js";import"../chunks/xihTtKlq.js";var r=t(`<h1 class="text-lg font-semibold">Health</h1> <p class="mt-1 text-sm text-muted-foreground">Phase 4: tell at a glance whether the index is worth trusting.</p>`,1);function i(t){var i=r();n(2),e(t,i)}export{i as component};
