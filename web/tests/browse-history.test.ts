@@ -17,7 +17,7 @@ import { parseBrowseParams } from '$lib/browse-url';
 // the real SvelteKit goto() makes — rather than a spy that only records
 // what it was called with.
 function realGotoFn(): GotoFn {
-	return ((url, opts) => {
+	const fn = (url: string | URL, opts?: { replaceState?: boolean }) => {
 		const href = typeof url === 'string' ? url : url.toString();
 		if (opts?.replaceState) {
 			window.history.replaceState(null, '', href);
@@ -25,7 +25,8 @@ function realGotoFn(): GotoFn {
 			window.history.pushState(null, '', href);
 		}
 		return Promise.resolve();
-	}) as unknown as GotoFn;
+	};
+	return fn as unknown as GotoFn;
 }
 
 function currentUrl(): URL {

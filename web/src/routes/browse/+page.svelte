@@ -7,65 +7,93 @@
 	// never imports SvelteKit's shallow-routing history exports from
 	// $app/navigation for view state: those only ever assign to
 	// page.state, never page.url — a component reading page.url would not
-	// react to them (03-RESEARCH.md Pitfall 1). URL WRITES (goto-driven
-	// navigation, search-as-you-type) land in plan 03-07; this plan is
-	// read-only against the URL.
+	// react to them (03-RESEARCH.md Pitfall 1). URL WRITES go exclusively
+	// through browse-nav.ts's navigator, built on goto() — never a direct
+	// state assignment (03-06's own placeholder, replaced below).
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { uiClient } from '$lib/client';
 	import { parseBrowseParams, type BrowseParams } from '$lib/browse-url';
-	import { loadBrowseTarget, type BrowseTargetState } from '$lib/browse-state';
+	import {
+		loadBrowseTarget,
+		loadBlastRadius,
+		createNavigationGate,
+		type BrowseTargetState,
+		type BlastRadiusState
+	} from '$lib/browse-state';
+	import {
+		createBrowseNavigator,
+		NAV_INTENT,
+		type BrowseNavDelta,
+		type NavIntent
+	} from '$lib/browse-nav';
 	import SourcePane from '$lib/components/browse/SourcePane.svelte';
+	import NeighborsPanel from '$lib/components/browse/NeighborsPanel.svelte';
 	import SearchPanel, { type SearchSelection } from '$lib/components/browse/SearchPanel.svelte';
 
 	let params = $derived(parseBrowseParams(page.url.searchParams));
-	let state = $state<BrowseTargetState>({ kind: 'idle' });
+	let targetState = $state<BrowseTargetState>({ kind: 'idle' });
+	let blastState = $state<BlastRadiusState>({ kind: 'idle' });
+
+	// One navigator (built once, over the real goto), one gate (one
+	// NavigationGeneration per URL change, minted here — the route —
+	// never by a loader). The gate is what keeps a node-detail load and
+	// a blast-radius load started for two DIFFERENT URL states from
+	// ever being combined into one rendered view.
+	const navigator = createBrowseNavigator(goto);
+	const gate = createNavigationGate();
 
 	$effect(() => {
 		const currentParams = params;
+		const generation = gate.advance();
 		const controller = new AbortController();
 
 		if (!currentParams.symbol && !currentParams.file) {
-			state = { kind: 'idle' };
+			targetState = { kind: 'idle' };
+			blastState = { kind: 'idle' };
 			return;
 		}
 
-		state = { kind: 'loading' };
+		targetState = { kind: 'loading' };
+		blastState = currentParams.symbol ? { kind: 'loading' } : { kind: 'idle' };
+
 		loadBrowseTarget(currentParams, uiClient, controller.signal).then((result) => {
-			if (!controller.signal.aborted) {
-				state = result;
-			}
+			if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+			targetState = result;
 		});
+
+		if (currentParams.symbol) {
+			loadBlastRadius(currentParams, uiClient, controller.signal).then((result) => {
+				if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+				blastState = result;
+			});
+		}
 
 		return () => controller.abort();
 	});
 
-	// PLACEHOLDER-03-07
-	//
-	// Selecting a search result calls back into this page; the actual URL
-	// write (a goto()-driven push, per D-11) lands in plan 03-07. For
-	// this one wave, selecting sets the page's target state DIRECTLY —
-	// bypassing `params`/the URL entirely — a deliberate, named, one-wave
-	// deviation from the URL-as-source-of-truth contract (03-06's own
-	// plan text records why: bringing 03-07's browse-nav.ts forward here
-	// would put five tasks and two subsystems in one plan). 03-07 Task 3
-	// replaces this function's body with a goto() call and removes the
-	// marker above; its own acceptance criterion asserts that exact
-	// marker's count in web/src/ has returned to zero afterward.
-	async function handleSearchSelect(selection: SearchSelection): Promise<void> {
-		const target: BrowseParams =
+	// Every navigation (search selection, neighbour click) and every
+	// refinement (blast-radius depth control) goes through the SAME
+	// navigator, which is the one place in the client that writes a URL
+	// (D-11). This page holds no view state of its own past this call —
+	// everything renders from `params`/`state`/`blastState`, which the
+	// effect above derives from the URL.
+	function handleSearchSelect(selection: SearchSelection): void {
+		const delta: BrowseNavDelta =
 			selection.kind === 'symbol'
 				? {
 						symbol: selection.location.name,
 						file: selection.location.filePath,
-						line: selection.location.startLine,
-						unknown: []
+						line: selection.location.startLine
 					}
 				: selection.kind === 'file'
-					? { file: selection.entry.path, unknown: [] }
-					: { file: selection.path, unknown: [] };
+					? { file: selection.entry.path }
+					: { file: selection.path };
+		navigator.navigate(page.url, delta, NAV_INTENT.NAVIGATE);
+	}
 
-		state = { kind: 'loading' };
-		state = await loadBrowseTarget(target, uiClient);
+	function handleNeighborNavigate(delta: BrowseNavDelta, intent: NavIntent): void {
+		navigator.navigate(page.url, delta, intent);
 	}
 </script>
 
@@ -73,4 +101,14 @@
 
 <SearchPanel client={uiClient} initialQuery={params.q ?? ''} onSelect={handleSearchSelect} />
 
-<SourcePane {state} />
+<SourcePane state={targetState} />
+
+{#if targetState.kind === 'single-def'}
+	<NeighborsPanel
+		calls={targetState.calls}
+		calledBy={targetState.calledBy}
+		blastRadius={blastState}
+		depth={params.depth}
+		onNavigate={handleNeighborNavigate}
+	/>
+{/if}

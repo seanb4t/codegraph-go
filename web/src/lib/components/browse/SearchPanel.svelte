@@ -1,8 +1,11 @@
 <script lang="ts" module>
 	// SearchSelection is what the panel hands back to its caller when a
 	// result is opened (click or Enter-on-highlighted-item) — the panel
-	// itself never navigates; the caller decides what "opening" means
-	// (browse-url.ts params today; a goto()-driven URL write in 03-07).
+	// itself never navigates; the caller decides what "opening" means.
+	// 03-07's +page.svelte routes every SearchSelection through
+	// browse-nav.ts's navigator (a goto()-driven, NAVIGATE-intent URL
+	// write), replacing the direct-state-assignment placeholder 03-06
+	// left here for exactly this handover.
 	import type { Location, FileEntry } from '$lib/gen/ui_pb';
 
 	export type SearchSelection =
