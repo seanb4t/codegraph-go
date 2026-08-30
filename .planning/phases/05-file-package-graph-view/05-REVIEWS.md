@@ -1,7 +1,7 @@
 ---
 phase: 5
 reviewers: [codex]
-reviewed_at: 2026-08-30T13:22:06.920Z
+reviewed_at: 2026-08-30T13:53:52.000Z
 plans_reviewed: [05-01-PLAN.md, 05-02-PLAN.md, 05-03-PLAN.md, 05-04-PLAN.md, 05-05-PLAN.md, 05-06-PLAN.md, 05-07-PLAN.md]
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
@@ -298,3 +298,285 @@ failure modes. All passed.
 Not applicable — a single reviewer ran. Where the orchestrator's independent verification
 disagreed with Codex, the disagreement is recorded under **Downgraded on Verification**
 above rather than left as an open divergence.
+
+---
+
+# Cross-AI Plan Review — Phase 5 — Convergence Cycle 2
+
+Reviewed at 2026-08-30T13:53:52Z against the plan text at commit `dc95b06a`
+("docs(05): revise phase plans for cross-AI review cycle 1"). Reviewer: Codex
+(`gpt-5.6-sol`, reasoning=low), source-grounded with repo access. Cycle 1's findings and
+the orchestrator's verification of them are preserved above, unmodified.
+
+## Codex Review (cycle 2)
+
+## Summary
+
+The revision resolves two of the three cycle-1 HIGH findings cleanly. **H-2 holds:**
+`MaxFileSymbols` has one proposed owner in `internal/query`, and the existing dependency
+direction supports `internal/uiserver` referencing it without duplication or a cycle.
+**H-3 holds:** expansion is now an unambiguous three-click sequence — expand, collapse,
+re-expand from cache — with cumulative request count fixed at one. **H-1 is substantially
+improved but only partially resolved:** measurement failures are now valid, committable
+FAIL outcomes, distinct from malformed verification; however, the wrapper still has no
+required timeout around browser launch, navigation, seam polling, or sampling. A promise
+that hangs never reaches `finally`, despite the plan claiming that hanging sessions always
+leave an artifact. The remaining cycle-1 findings are otherwise resolved. Overall risk
+remains **HIGH** because the phase's blocking measurement gate still has one path to
+producing no verdict.
+
+## Cycle-1 Fix Verification
+
+| Cycle-1 finding | Status | Verification |
+|---|---|---|
+| H-1: failed/absent measurement could not be durably recorded | **PARTIALLY RESOLVED** | The comparator must accept `{value:null,status:"measurement-failed",failureReason}` as a normal per-metric FAIL (`05-04-PLAN.md:147`, `:201`). The wrapper must write from `finally` and exit zero after recording (`05-04-PLAN.md:223`, `:231`). Task 2's verifier accepts well-formed FAIL artifacts and rejects inconsistent ones (`05-04-PLAN.md:387`). But the plan specifies no timeout or `Promise.race`; a hung await never enters `finally`. |
+| H-2: incoherent symbol-cap ownership | **RESOLVED** | The cap is explicitly owned by `internal/query` and referenced as `query.MaxFileSymbols` from the wire layer (`05-06-PLAN.md:44`, `:389`). This matches the actual dependency direction: `internal/uiserver` imports `internal/query` (`internal/uiserver/handlers.go:9`); production files under `internal/query` do not import `internal/uiserver`. The acceptance checks prohibit a second declaration (`05-06-PLAN.md:301`). |
+| H-3: contradictory second-click behavior | **RESOLVED** | The cases now describe different actions: click one fetches and expands, click two collapses to zero without fetching, and click three re-expands from cache without fetching (`05-07-PLAN.md:183`, `:187`, `:192`). Exact child counts and a cumulative request count of one are required. |
+| `FileGraphRequest.path` contradicted the "no path" prohibition | **RESOLVED** | The prohibition now distinguishes a declared field from one that reaches the store and explicitly requires the handler to ignore it (`05-02-PLAN.md:50`). |
+| Pending-request unmount expected a destruction that could not occur | **RESOLVED** | The plan now separates pending unmount — zero constructions and zero applied elements — from mounted-canvas unmount — one destruction (`05-03-PLAN.md:34`, `:430`). |
+| `SymbolCount` included the file node | **RESOLVED** | The semantic contract now says declared symbols only and excludes the `KindFile` record (`05-01-PLAN.md:26`); the fixture requires exactly three symbols rather than four. |
+| Deep-chain test did not prove an iterative SCC implementation | **RESOLVED** | The deep-chain case is now corroborating evidence, accompanied by a structural check that permits only the function declaration and no self-call plus an explicit-stack check (`05-01-PLAN.md:563`). |
+| Observation schema could compare the wrong corpus | **RESOLVED** | The comparator judges only `bindingObservation`, checks its repo and SHA against the threshold, and copies `additionalCorpora` without scoring it (`05-04-PLAN.md:209`, `:387`). |
+| Browser gesture was not reproducible | **RESOLVED** | Viewport, reload count, warm-up, sampling duration, pan path, and zoom sweep are locked in the threshold artifact (`05-01-PLAN.md:258`, `:329`). The wrapper is forbidden from carrying defaults (`05-04-PLAN.md:275`). |
+| `timeToInteractiveMs` measured only layout time | **RESOLVED** | It is now defined from request issuance through `layoutstop`, including RPC, decode, transform, and layout; `layoutDurationMs` remains a separate non-binding metric (`05-01-PLAN.md:235`, `05-03-PLAN.md:34`). |
+| Cycle grouping parsed renderer classes | **RESOLVED** | The route must group from typed `cycleId`, with class parsing prohibited and a class-stripped behavioral fixture required (`05-05-PLAN.md:42`, `:203`). |
+| Expansion relayout risk to LIV-04 was unrecorded | **RESOLVED** | The plan explicitly accepts whole-layout movement, measures unaffected-node displacement, and records it as a Phase-6 constraint (`05-07-PLAN.md:31`, `:252`). |
+| `truncate.go` missing from 05-06 file scope | **RESOLVED BY DESIGN CHANGE** | The cap no longer belongs there. The plan requires `truncate.go` to remain unchanged and positively controls that absence against changes elsewhere in `internal/uiserver` (`05-06-PLAN.md:301`). |
+| Direct versus transitive dependency accounting was inconsistent | **RESOLVED** | `cytoscape` and `cytoscape-elk` are exact direct pins; `elkjs` is explicitly transitive and lockfile-pinned (`05-03-PLAN.md:253`). |
+| New proto fields lacked durable numbering guards | **RESOLVED** | Both RPC plans append field fixtures and extend chained fixture-length constants rather than replacing them with literals (`05-02-PLAN.md:290`, `05-06-PLAN.md:357`). |
+| M-1: frame sample floor existed only in prose | **RESOLVED** | The observation verifier requires `frameSampleCount >= 60` whenever frame metrics are numeric and requires overall FAIL otherwise (`05-04-PLAN.md:387`, `:395`). |
+| M-2: clean `web/build` status was vacuous | **RESOLVED** | All three bundle-producing plans pair clean status with a positive tracked-file count and separately require the hash-based drift guard (`05-03-PLAN.md:472`, `05-05-PLAN.md:332`, `05-07-PLAN.md:353`). |
+| 05-06 and 05-07 lacked explicit GRF-01 PASS preconditions | **RESOLVED** | Both now require a PASS artifact and recorded `release` decision (`05-06-PLAN.md:109`, `05-07-PLAN.md:98`). |
+
+## Strengths
+
+- The revised measurement artifact distinguishes three states correctly: numeric
+  measurement, declared measurement failure, and broken invocation. That is a meaningful
+  improvement over merely allowing `null`.
+- The independent observation verifier rechecks corpus identity, metric coverage,
+  finite-number/failure shape, per-metric versus overall verdict consistency, and the
+  frame-sample floor (`05-04-PLAN.md:387`). A comparator bug is therefore less likely to
+  silently bless its own output.
+- D-08 remains correctly anchored to this repository rather than guava. The plan requires
+  the 572-node/1,057-pair own-index regression (`05-01-PLAN.md:390`). The source confirms
+  why: synthetic package nodes are created without `FilePath`
+  (`internal/indexer/resolve.go:21`, `:203`).
+- All scoped Go test commands retain both `GOTOOLCHAIN=go1.26.5` and a non-zero
+  `--- PASS` floor (`05-01-PLAN.md:472`, `05-02-PLAN.md:330`, `05-06-PLAN.md:405`).
+- The read-only service guards are being extended rather than weakened. The current source
+  reflects exact method-set equality and a separately positive-controlled mutating-verb
+  scan (`internal/uiserver/readonly_test.go:53`, `:89`, `:110`).
+- The CSP reasoning is consistent with the repository: the server supplies
+  `default-src 'self'` without `worker-src` (`internal/uiserver/spa.go:99`), and the plans
+  prohibit remote/blob workers.
+
+## Concerns
+
+- **HIGH — H-1 still does not cover a hanging browser operation.** The plan repeatedly
+  claims that a hanging or crashing session always records a FAIL (`05-04-PLAN.md:514`),
+  but no timeout, abort controller, deadline, or `Promise.race` is specified anywhere in
+  05-04. A `finally` block executes after settlement; it does not make a never-settling
+  launch/navigation/seam-poll promise settle. This leaves the original "no artifact and no
+  verdict" failure mode open for a hang, even though thrown failures are now handled
+  correctly.
+
+- **MEDIUM — the live measurement path for the second corpus is underspecified.** Task 2
+  first invokes the wrapper with the binding corpus, then says to repeat the run for this
+  repository and place it in `additionalCorpora` (`05-04-PLAN.md:304`, `:353`). The
+  wrapper's arguments and merge behavior are not concretely defined: it is unclear whether
+  the second invocation appends to the first raw artifact, writes a second raw artifact
+  that the comparator merges, or overwrites the binding observation. The comparator's
+  separation is strong, but the producer-side assembly remains ambiguous.
+
+- **LOW — the wrapper's "no defaults" grep does not cover all locked protocol fields.**
+  The check covers viewport, reload, warm-up, sampling, pan, and `zoomSteps`, but omits
+  literal assignments for `deviceScaleFactor`, `zoomMin`, and `zoomMax`
+  (`05-04-PLAN.md:275`). `readProtocol` tests are intended to catch missing fields, but
+  this particular structural guard could still pass if those three values were hard-coded
+  in the live browser path.
+
+## Suggestions
+
+- Add a locked timeout policy to `measurementProtocol`, or derive explicit deadlines from
+  existing locked durations. Wrap browser launch, navigation, seam polling, each reload,
+  and frame sampling with a rejecting deadline. Test a never-settling promise and require
+  it to produce a written `measurement-failed` artifact.
+- Define the raw observation assembly explicitly. A clean shape would be one wrapper
+  invocation per corpus producing separate raw files, followed by a deterministic merge
+  step that names exactly one binding file and an array of additional files before invoking
+  the comparator.
+- Expand the no-default structural check to include `deviceScaleFactor`, `zoomMin`, and
+  `zoomMax`, or better, test the live-session configuration builder as a pure function and
+  assert it equals `readProtocol(threshold)` field-for-field.
+
+## Risk Assessment
+
+**Overall risk: HIGH.**
+
+Most cycle-1 defects are convincingly resolved, including H-2 and H-3, and the plans now
+have strong positive controls around scoped tests, generated bundles, corpus
+discrimination, field numbering, and package-node exclusion. The remaining risk is
+concentrated rather than broad: the phase's blocking GRF-01 gate still claims to record
+browser hangs without specifying a mechanism that can turn a hang into a thrown failure.
+Until explicit deadlines make `finally` reachable for never-settling operations, the
+phase's worst failure mode remains possible.
+
+---
+
+## Consensus Summary (cycle 2)
+
+One external reviewer ran (Codex, `gpt-5.6-sol`), with repo access and citing `file:line`
+evidence throughout. With a single reviewer there is no cross-reviewer consensus to
+compute, so the orchestrator independently re-verified Codex's HIGH and both non-HIGH
+findings against the plans and the repository, re-ran every standing check, and swept for
+the two failure shapes this project has recorded three phases running: (a) a fix that
+satisfies its own literal check while the symptom persists, and (b) a vacuous guard
+created *inside* a fix for a vacuity finding. One additional finding of shape (b) was
+found by the orchestrator and is recorded below.
+
+The settled ground held. Codex did **not** re-open the Cytoscape/ELK renderer selection
+(D-02/D-07), did **not** re-raise 05-03's wave ordering (D-10), and did **not** treat the
+`uiProtoFieldNumbers` fixture extension as scope creep.
+
+### Cycle-1 Convergence
+
+**15 of 16 cycle-1 findings are RESOLVED.** Independently confirmed by the orchestrator
+against the current plan text: H-2 (`05-06-PLAN.md:44`, `:51`, `:389`, `:483` — the cap is
+declared once in `internal/query`, the wire layer references `query.MaxFileSymbols`, and
+`internal/uiserver/truncate.go` is removed from scope entirely rather than added to
+`files_modified`); H-3 (`05-07-PLAN.md:174-192` — three explicitly ordered clicks with a
+cumulative request count of exactly 1 held across all three, and the plan names the
+mis-specification it corrects); the `FileGraphRequest.path` wording (`05-02-PLAN.md:50`
+now scopes the prohibition to READING); M-1 (`05-03-PLAN.md:34`, `:424-430`); M-3
+(`05-01-PLAN.md:26`, `:434`, `:481`); M-4 (`05-01-PLAN.md:563` — structural, not just
+behavioural); M-5 (`05-05-PLAN.md:42`, `:47`, `:202-205`); M-6 (`05-01-PLAN.md:258-270`,
+`:329` — 11 protocol values locked in the same commit as the bars); M-7 (`05-04-PLAN.md:387`
+— `bindingObservation` corpus/sha asserted before any comparison); M-8 (`05-01-PLAN.md:230`,
+`05-03-PLAN.md:379-385` — `timeToInteractiveMs` widened to request-issued→layoutstop,
+`layoutDurationMs` split off as recorded-non-binding); M-9 (`05-07-PLAN.md:250-264` — the
+whole-relayout consequence is recorded as an explicit Phase-6 constraint with displacement
+numbers captured to size it); the orchestrator's own M-2 (`05-03:472`, `05-05:332`,
+`05-07:353` — all three `web/build` zeros now chained to a `git ls-files … -ge 1` positive
+control); L-1, L-2 (`05-03-PLAN.md:317`), L-3 (preconditions now in all three of 05-05,
+05-06 and 05-07), and L-4 (`uiProtoFieldNumbers` extended in both RPC plans with chained
+length constants).
+
+### Open — HIGH
+
+- **HIGH — 05-04: the hang half of T-05-21 is asserted, not mechanised.** *Verified
+  independently.* T-05-21 (`05-04-PLAN.md:514`) names the threat as "the measurement
+  session itself **hanging** or crashing the browser at corpus scale, leaving no record",
+  and the mitigation names exactly one mechanism: "runs the whole session inside one `try`
+  whose `finally` ALWAYS writes the raw observation". `finally` runs on settlement. A
+  browser launch, `page.goto`, seam poll or rAF-sampling promise that never settles never
+  reaches it, and the process holds until something outside the plan kills it — at which
+  point there is no artifact, the comparator never runs, `test -f
+  corpora/graph-render-observations.json` (`:387`) fails, and Task 2 stalls with no
+  recorded verdict. `rg -ni "timeout|deadline|promise\.race|abortcontroller|watchdog"`
+  over `05-04-PLAN.md` and `05-01-PLAN.md` returns **zero** matches, so no deadline exists
+  anywhere in the locked protocol or the wrapper's specification. This is precisely failure
+  shape (a): the fix satisfies its own literal check — `rg -c 'finally'
+  web/scripts/graph-measure.mjs` reports at least 1 (`:277`) — while the symptom the
+  finding was about persists for the hang case. The crash and throw cases ARE genuinely
+  fixed; the hang case is not.
+
+  **What the plan needs:** a `timeoutMs`-class value (or a small set of them) added to the
+  locked `measurementProtocol` block in `05-01-PLAN.md:258-270` and to its 11-value
+  verify at `:329`; a requirement in `05-04-PLAN.md` Task 1 that every awaited browser
+  operation in `graph-measure.mjs` is raced against a rejecting deadline derived from that
+  block; and a `graph-measure.test.ts` case feeding a never-settling promise through the
+  deadline helper and asserting it yields `failedObservation`'s shape. Without that, the
+  `finally` acceptance criterion at `:277` is satisfiable by a script that still hangs.
+
+### Open — Actionable MEDIUM / LOW
+
+- **MEDIUM — 05-04: the producer-side assembly of the two-corpus observation is
+  undefined.** *Verified.* Task 2 step (b) (`05-04-PLAN.md:304-309`) runs the wrapper once
+  against guava "giving it the corpus repo and sha for the binding entry and a path to
+  write the raw observation to", and step (e) (`:353-360`) says to "Repeat the
+  time-to-interactive and frame-time measurement against THIS repository's own index and
+  record it as an entry in `additionalCorpora`". Nothing states whether that is a second
+  wrapper invocation to a second path plus a merge step, an append to the first artifact,
+  or a wrapper flag — and a second invocation writing to the same path would overwrite
+  `bindingObservation` outright. `failedObservation(reason, metricKeys)` (`:171-178`) is
+  specified as producing a `bindingObservation` only, so the failure path for the second
+  corpus is undefined too. The comparator's read side is airtight (`:387` reads
+  `bindingObservation` and copies `additionalCorpora`); the write side is not.
+  **PLAN.md change needed:** name the wrapper's corpus-role argument explicitly in Task 1's
+  behavior block, state one raw file per invocation plus a deterministic merge that names
+  exactly one binding file and an array of additional files, and add an acceptance criterion
+  that the merged artifact carries exactly one `bindingObservation` and at least one
+  `additionalCorpora` entry.
+
+- **MEDIUM — 05-06 Task 2's new positive control is unsatisfiable at the point it runs.**
+  *Raised independently by the orchestrator — failure shape (b).* The cycle-1 L-1 fix
+  replaced "add `truncate.go` to `files_modified`" with a guard that the file is never
+  written. At `05-06-PLAN.md:302` that guard reads: "`git diff --name-only
+  internal/uiserver/truncate.go | wc -l` reports 0 across this plan's commits,
+  positive-controlled by `git diff --name-only internal/uiserver/ | wc -l` reporting at
+  least 1". But Task 2's `<files>` (`:243`) is `internal/query/filesymbols.go,
+  internal/query/filesymbols_test.go` — Task 2 touches **nothing** under
+  `internal/uiserver`, so the positive control reports 0 and the criterion cannot pass at
+  Task 2 under either reading of `git diff` (working-tree scope or plan-commit-range
+  scope). Task 3's copy of the same guard (`:410`) is sound, because Task 3's `<files>`
+  (`:314`) does include `internal/uiserver/handlers.go`. **PLAN.md change needed:** drop
+  the criterion from Task 2 (it belongs to the task that writes the wire layer), or
+  re-point Task 2's positive control at a tree Task 2 demonstrably modifies — e.g.
+  `git diff --name-only internal/query/ | wc -l` reporting at least 1 — while keeping the
+  `internal/uiserver/truncate.go` zero.
+
+- **LOW — 05-04's no-defaults structural check covers 8 of the 11 locked protocol
+  values.** *Verified.* `05-01-PLAN.md:329` locks and machine-checks exactly eleven:
+  `viewportWidth`, `viewportHeight`, `deviceScaleFactor`, `coldReloads`, `warmupMs`,
+  `sampleDurationMs`, `panStepPx`, `panSteps`, `zoomMin`, `zoomMax`, `zoomSteps`. The
+  acceptance criterion at `05-04-PLAN.md:275` greps for literal assignments to only eight
+  of them — `deviceScaleFactor`, `zoomMin` and `zoomMax` are absent from the alternation,
+  so a wrapper hard-coding those three would pass the guard whose whole purpose is to prove
+  the wrapper carries no gesture defaults. **PLAN.md change needed:** add the three missing
+  keys to the alternation at `:275`, or replace the grep with the stronger form Codex
+  suggests — a pure `sessionConfig(protocol)` builder asserted field-for-field equal to
+  `readProtocol(threshold)`.
+
+- **LOW — two uncontrolled zero-assertions remain in 05-04 (pre-existing, missed in cycle
+  1).** `05-04-PLAN.md:281` and `:490` both read "`git diff --name-only
+  corpora/graph-render-threshold.json | wc -l` reports 0" with no positive control on
+  either. Rule `84d1gfpywd` requires every guard to carry a positive assertion that it did
+  its work; these two zeros are equally produced by "the plan did not touch the threshold"
+  and by "the diff was scoped to a path that does not exist". Cycle 1 asserted the three
+  `web/build` cases were "the only exceptions" — these two were missed, and `git show
+  01475f19` confirms they predate the revision rather than being introduced by it.
+  **PLAN.md change needed:** chain each to a positive control over a tree the same diff
+  demonstrably reaches, e.g. `git diff --name-only corpora/ | wc -l` reporting at least 1
+  at `:281` (where the observations file is being written in the same task).
+
+### Verified Clean in Cycle 2 (standing checks re-run)
+
+- **`go test -run` gates.** All six scoped invocations (`05-01:472`, `05-01:557`,
+  `05-02:330`, `05-02:422`, `05-06:296`, `05-06:405`) still chain a `--- PASS` line count
+  with a non-zero floor via a single `&&`. The `RC=$?` anti-pattern is still explicitly
+  prohibited in all seven plans.
+- **`GOTOOLCHAIN=go1.26.5`.** Present on every Go command in all seven plans; zero bare
+  `go test`/`go build`/`go vet` invocations.
+- **`go mod tidy`.** Appears only as a prohibition (`05-06:56`, `05-03:263`).
+- **Vitest floors.** All eight `pnpm test --` gates count `✓|√` lines against a non-zero
+  floor, and successor floors strictly increase within each plan (05-05: 6→12; 05-07:
+  6→15), which is what proves new cases exist rather than the same suite re-running.
+- **No upper-bound-only gates.** `rg -n '\-le [0-9]|at most [0-9]|no more than [0-9]'`
+  over all seven plans returns nothing — the `<= N` corollary of rule `84d1gfpywd` has no
+  violations.
+- **Threat IDs.** 39 definition rows across the seven registers, 39 distinct, zero
+  duplicates. Unchanged in count from cycle 1; no renumbering occurred.
+- **`mutatingVerbs`.** Still protected by an explicit MUST NOT in both 05-02 (`:44`) and
+  05-06 (`:47`), with the collision remedy being to rename the rpc. `wantUIServiceMethods`
+  grows by exactly one entry per new rpc.
+- **D-08.** The package-pseudo-node exclusion is still tested against this repository's own
+  index, with the 572/1,057 figures stated and the guava-cannot-catch-this reasoning intact.
+- **Wave DAG.** Coherent and unchanged: 05-01 → 05-02 → 05-03 → 05-04 → 05-05 → 05-06 →
+  05-07, one plan per wave, `depends_on` consistent with the wave numbers.
+
+### Divergent Views
+
+Not applicable — a single reviewer ran. Where the orchestrator's independent verification
+went beyond Codex, the additional finding is recorded above under **Open — Actionable
+MEDIUM / LOW** rather than left as an open divergence. The orchestrator concurs with
+Codex's HIGH on evidence and with both of its non-HIGH findings.
