@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { describeWorkbenchFailure } from '$lib/workbench-failure';
 import type { IndexStatus } from '$lib/status';
+import { IndexingInProgressSchema } from '$lib/gen/ui_pb';
 
 function status(verdict: IndexStatus['verdict']): IndexStatus {
 	return { verdict, commit: 'unknown', commitSha: '' };
@@ -93,5 +94,29 @@ describe('describeWorkbenchFailure: composition over classifyRpcError + IndexSta
 		expect(describeWorkbenchFailure(undefined, status('ok')).kind).toBe('server-error');
 		expect(describeWorkbenchFailure('a plain string', status('ok')).kind).toBe('server-error');
 		expect(describeWorkbenchFailure({ some: 'object' }, status('ok')).kind).toBe('server-error');
+	});
+
+	it('WR-01: a NotFound rejection with verdict no-index does NOT say "Index is being rebuilt" — nothing is being rebuilt, there is no index at all, and TrustVerdict.svelte says so for the identical verdict', () => {
+		const noIndexResult = describeWorkbenchFailure(
+			new ConnectError('no such symbol', Code.NotFound),
+			status('no-index')
+		);
+		expect(noIndexResult.title).not.toBe('Index is being rebuilt');
+		expect(noIndexResult.title).toMatch(/no index/i);
+
+		// The 'indexing' branch (an actual rebuild in progress) keeps its
+		// own title — the two states are genuinely different and must
+		// not collide now that the no-index title changed.
+		const indexingResult = describeWorkbenchFailure(
+			new ConnectError('unavailable', Code.Unavailable, undefined, [
+				{
+					desc: IndexingInProgressSchema,
+					value: { message: 'The index is being rebuilt. Please retry shortly.' }
+				}
+			]),
+			status('ok')
+		);
+		expect(indexingResult.title).toBe('Index is being rebuilt');
+		expect(noIndexResult.title).not.toBe(indexingResult.title);
 	});
 });

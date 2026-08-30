@@ -39,11 +39,21 @@ export function describeWorkbenchFailure(err: unknown, status: IndexStatus): Wor
 			};
 		case 'not-found':
 			if (status.verdict === 'no-index') {
+				// Title text intentionally mirrors TrustVerdict.svelte's
+				// 'no-index' copy ("No index was found for this
+				// repository — there is nothing to trust yet. Run
+				// `codegraph init` to create one.") — same verdict, same
+				// vocabulary (D-04's spirit). 'Index is being rebuilt'
+				// (the 'indexing' branch above) tells a developer to
+				// WAIT; this state has no index at all and the correct
+				// action is `codegraph init`, so it must not share that
+				// title even though both currently share the
+				// 'index-stale' kind for testid grouping.
 				return {
 					kind: 'index-stale',
-					title: 'Index is being rebuilt',
+					title: 'No index for this repository',
 					detail:
-						'No index exists yet for this repository, so the symbol could not be looked up.'
+						'No index exists yet for this repository, so the symbol could not be looked up. Run `codegraph init` to create one.'
 				};
 			}
 			return {
