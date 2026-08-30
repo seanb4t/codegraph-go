@@ -6,15 +6,15 @@ current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
 stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-30T17:34:49.458Z"
+last_updated: "2026-08-30T18:35:40.398Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 663fc303cb81a6382269d090cb35312d5466b784
+state_head: 8d53c1d896ea3742f1ad1d5034d08fd51c913197
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 38
+  completed_plans: 39
   percent: 67
 ---
 
@@ -241,6 +241,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
+- 05-04 Task 3 (checkpoint:decision, gate=blocking-human) is open: GRF-01's recorded verdict is FAIL (guava-scale layout never became interactive within the locked 60s seamReadyTimeoutMs). 05-05/05-06/05-07 are blocked pending a human answer of release / halt-collapse-default / halt-reconsider-stack. See .planning/phases/05-file-package-graph-view/05-04-SUMMARY.md and corpora/graph-render-observations.json.
 
 ### Quick Tasks Completed
 
