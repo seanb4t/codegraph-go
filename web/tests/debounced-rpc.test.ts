@@ -240,6 +240,40 @@ describe('createDebouncedRpc: dispose', () => {
 		rpc.dispose();
 		expect(signal?.aborted).toBe(true);
 	});
+
+	it('WR-08 regression: dispose invalidates the request identity — an in-flight request that settles AFTER dispose never reaches onFailure', async () => {
+		const inflight = deferred<string>();
+		let signal: AbortSignal | undefined;
+		const dispatch = vi.fn((_term: string, s: AbortSignal) => {
+			signal = s;
+			return inflight.promise;
+		});
+		const onFailure = vi.fn();
+		const rpc = createDebouncedRpc({
+			debounceMs: DEBOUNCE_MS,
+			minChars: MIN_CHARS,
+			dispatch,
+			onResult: vi.fn(),
+			onFailure,
+			onBelowMinimum: vi.fn()
+		});
+
+		rpc.setQuery('ab');
+		await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+
+		rpc.dispose();
+		expect(signal?.aborted).toBe(true);
+
+		// The disposed request's own promise settles AFTER dispose(),
+		// mirroring the real abort rejection connect-web delivers —
+		// exactly what a component (e.g. FilePicker.svelte) unmounting
+		// mid-search triggers.
+		inflight.reject(new Error('This operation was aborted'));
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(onFailure).not.toHaveBeenCalled();
+	});
 });
 
 describe('createDebouncedRpc: below the minimum while a request is in flight (cycle-2 finding)', () => {

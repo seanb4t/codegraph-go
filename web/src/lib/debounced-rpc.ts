@@ -106,6 +106,17 @@ export function createDebouncedRpc<TResult>(options: DebouncedRpcOptions<TResult
 			abort.abort();
 			abort = undefined;
 		}
+		// WR-08 (04-REVIEW.md): mirrors the below-minimum path's own
+		// invalidation above — without this, a caller that disposes while
+		// a request is in flight (e.g. FilePicker.svelte unmounting on tab
+		// switch mid-search) gets that request's abort rejection delivered
+		// to onFailure anyway, because nothing moved requestId and the
+		// `id !== requestId` guard in dispatchNow's .catch still passes.
+		// That writes into state belonging to a component already being
+		// torn down — this module's own header comment claims stale
+		// responses are discarded "in BOTH the resolve and the reject
+		// paths", which was not true across dispose() until this line.
+		requestId += 1; // invalidate any in-flight response, mirroring the below-minimum path
 	}
 
 	return { setQuery, dispose };
