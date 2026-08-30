@@ -56,8 +56,8 @@
 
 - [ ] **WRK-01**: User can run `Impact` on a symbol and adjust traversal depth interactively
 - [x] **WRK-02**: User can select multiple files and see what they affect
-- [ ] **WRK-03**: User can run `Callers`/`Callees` with an adjustable result limit
-- [ ] **WRK-04**: Workbench results render as structured, sortable tables
+- [x] **WRK-03**: User can run `Callers`/`Callees` with an adjustable result limit
+- [x] **WRK-04**: Workbench results render as structured, sortable tables
 
 ### Graph View
 
@@ -162,8 +162,8 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | NAV-04 | Phase 3 | Complete |
 | WRK-01 | Phase 4 | Pending |
 | WRK-02 | Phase 4 | Complete |
-| WRK-03 | Phase 4 | Pending |
-| WRK-04 | Phase 4 | Pending |
+| WRK-03 | Phase 4 | Complete |
+| WRK-04 | Phase 4 | Complete |
 | GRF-01 | Phase 5 | Pending |
 | GRF-02 | Phase 5 | Pending |
 | GRF-03 | Phase 5 | Pending |

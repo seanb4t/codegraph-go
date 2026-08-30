@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 4
 current_phase_name: Query Workbench & Index Health
 status: executing
-stopped_at: Completed 04-02-PLAN.md (recursive glob fix, Engine.Files)
-last_updated: "2026-08-29T22:33:54.784Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-08-30T00:06:15.307Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 4 execution started
-state_head: 069d4f1da5781c1ae406e1746c3480fea8bc191a
+state_head: 2205935d2ffc9e0a706f7568561a0d730398d428
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 35
-  completed_plans: 29
+  completed_plans: 30
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 4 (Query Workbench & Index Health) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 4 execution started
 
@@ -90,6 +90,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 03 P09 | 9min | 3 tasks | 9 files |
 | Phase 03 P10 | ~90 min | 3 tasks | 34 files |
 | Phase 04 P02 | 30min | 3 tasks | 6 files |
+| Phase 04 P01 | 85min | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,9 @@ Standing decisions that outlive every milestone:
 - [Phase 03]: The pre-existing go.tool-proto.mod isolation/vuln-scan gap (since Phase 1) was closed alongside golangci-lint's own registration, with a new population-vs-disk guard preventing recurrence for any future tool modfile.
 - [Phase 4]: D-14 (04-CONTEXT.md): Engine.Files glob bug fixed by swapping filepath.Match for doublestar.Match — one matcher mechanism, not a second Substring option
 - [Phase 4]: go.mod's doublestar require added by hand (go get + manual indirect->direct promotion) rather than via full go mod tidy — pre-existing unrelated tree-sitter-swift module-resolution failure blocks tidy on this branch (confirmed on clean checkout)
+- [Phase 4]: 04-01: Maintainer approved both [SUS] package-legitimacy verdicts (@tanstack/svelte-table@9.2.4, shadcn-svelte@1.5.1) — same too-new false-positive shape 03-01 already approved.
+- [Phase 4]: 04-01: DataTable.svelte is generic over its row type (TRow extends RowData), never Location-typed, so 04-05's CountRow health tables reuse the same shell.
+- [Phase 4]: 04-01: status.ts's navigationIdentity gained a route-scoped ROUTE_LOCAL_PARAMS table (T-04-32) — Workbench control changes mint no new navigation identity, while the same parameter names under /browse still correctly refetch.
 
 ### Pending Todos
 
@@ -291,8 +295,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-29T22:33:54.686Z
-Stopped at: Completed 04-02-PLAN.md (recursive glob fix, Engine.Files)
+Last session: 2026-08-30T00:06:15.230Z
+Stopped at: Completed 04-01-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
