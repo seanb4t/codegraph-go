@@ -77,6 +77,33 @@
 			placeholder="Search files to add..."
 			data-testid="file-picker-input"
 		/>
+		{#if searchState.failure}
+			<!-- WR-07 (04-REVIEW.md): searchState.failure was written by
+				 file-search.ts's onFailure and never read anywhere — a
+				 failed Files RPC (server unavailable, index rebuilding, a
+				 pattern that slipped past escapeGlobLiteral) left the
+				 results array empty, and Command.Empty's flat "No results."
+				 read identically to "nothing matched", training the
+				 developer to conclude their file does not exist and stop
+				 looking. searchState.failure is ALREADY the classified
+				 RpcFailure file-search.ts's own classifyRpcError produced
+				 (not a raw error) — rendering describeWorkbenchFailure(
+				 searchState.failure, ...) here would re-classify an
+				 already-classified object through classifyRpcError's
+				 `!(err instanceof ConnectError)` fallback and collapse
+				 every kind to 'unknown' with a garbage "[object Object]"
+				 message, inventing a second, WRONG classification path
+				 rather than reusing the one file-search.ts already ran.
+				 Surfacing the message it already computed is the correct
+				 minimal fix, not merely a fallback. -->
+			<p
+				role="status"
+				data-testid="file-picker-failure"
+				class="px-2 py-1 text-sm text-destructive"
+			>
+				{searchState.failure.message}
+			</p>
+		{/if}
 		<Command.List>
 			<Command.Empty>No results.</Command.Empty>
 			{#if searchState.results.length > 0}

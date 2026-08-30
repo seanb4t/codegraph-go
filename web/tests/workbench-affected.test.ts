@@ -174,6 +174,20 @@ describe('FilePicker: search-and-add with removable chips (WRK-02)', () => {
 		expect(screen.getByTestId('file-picker-chip-a.go')).toBeInTheDocument();
 		expect(screen.getByTestId('file-picker-chip-c.go')).toBeInTheDocument();
 	});
+
+	it('WR-07 regression: a rejected Files RPC renders a visible failure message, not an indistinguishable "No results."', async () => {
+		vi.useFakeTimers();
+		const client: FilesClient = {
+			files: () => Promise.reject(new Error('server unavailable'))
+		};
+		mountPicker(client);
+
+		const input = screen.getByTestId('file-picker-input');
+		await typeQuery(input, 'foo');
+
+		expect(screen.getByTestId('file-picker-failure')).toHaveTextContent('server unavailable');
+		vi.useRealTimers();
+	});
 });
 
 describe('FilePicker + workbench-url.ts: the URL round trip (D-11)', () => {
