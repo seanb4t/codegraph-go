@@ -42,6 +42,7 @@ import type {
 	BlastEntry
 } from '$lib/gen/ui_pb';
 import { classifyRpcError, type RpcFailure } from '$lib/rpc-errors';
+import { createDebouncedRpc } from '$lib/debounced-rpc';
 
 export const SEARCH_DEBOUNCE_MS = 150;
 export const SEARCH_MIN_CHARS = 2;
@@ -134,107 +135,86 @@ export function createSearchController(client: SearchClient): SearchController {
 		explore: undefined
 	});
 
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-	let liveAbort: AbortController | undefined;
-	let liveRequestId = 0;
 	let exploreAbort: AbortController | undefined;
 	let exploreRequestId = 0;
 
-	function dispatchLive(term: string): void {
-		if (liveAbort) liveAbort.abort();
-		const abort = new AbortController();
-		liveAbort = abort;
-		const requestId = ++liveRequestId;
-
-		// D-15: two independent RPCs, never merged. Files' pattern is a
-		// substring-style glob (`*term*`) over the forward-slashed repo
-		// path — internal/query.FilesOptions.Pattern is a raw glob passed
-		// straight through with no substring convenience of its own, so a
-		// search BOX (not a glob box) needs this module to build that
-		// shape. limit/max_files/depth are all passed as 0 — every one of
-		// those fields' own doc comment in ui.proto states the server's
-		// own bound (MaxLimit, defaultMaxFiles, "0 means unlimited" for
-		// Files' depth) is authoritative; this module adds no second copy
-		// of any of them.
-		//
-		// FORMER LIMITATION, NOW CLOSED AT THE ROOT (04-02-PLAN.md,
-		// 04-CONTEXT.md's D-14 — not this file's own top-of-file D-14,
-		// which is 03-06's unrelated decision of the same label):
-		// internal/query.FilesOptions.Pattern used to be matched with
-		// Go's path/filepath.Match, whose `*` never crossed a `/` and
-		// whose dialect lacked a recursive `**` wildcard entirely, so a
-		// term appearing only in a nested path (e.g.
-		// internal/query/detail.go) was invisible to any single glob
-		// string — confirmed live during this file's
-		// original 03-06 UAT. 04-02 replaced that matcher with
-		// github.com/bmatcuk/doublestar/v4 in internal/query/files.go,
-		// which DOES support `**` crossing directory boundaries (proven
-		// by TestFilesPatternRecursiveGlob's `nested`/`root_level`
-		// subtests, internal/query/files_status_test.go) — the fix lands
-		// once for every Files caller (CLI, MCP, this RPC).
-		//
-		// This module's own pattern below is still the single-star
-		// `*term*` shape it always was — unchanged by 04-02, deliberately
-		// (see Task 3's "no executable line changed" scope) — so THIS
-		// live search still only surfaces root-level file matches. That
-		// is now a scope choice for this call site, not a server-side
-		// ceiling: 04-06 adds web/src/lib/file-search.ts, a second Files
-		// client that builds a `**/*term*` pattern (escaping the user's
-		// literal text first) to search at any depth for the workbench's
-		// multi-file picker. Search's own file-kind pseudo-node matches
-		// (Search("detail") returns internal/query/detail.go et al. with
-		// kind="file") still cover arbitrary-depth file discovery via the
-		// Symbols section for this module in the meantime.
-		Promise.all([
-			client.search({ term, kind: '', limit: 0 }, { signal: abort.signal }),
-			client.files(
-				{ pattern: `*${term}*`, filter: '', dir: '', depth: 0, format: 'flat' },
-				{ signal: abort.signal }
-			)
-		])
-			.then(([searchResp, filesResp]) => {
-				if (requestId !== liveRequestId) return; // superseded — discard
-				// FilesResponse is a UNION (ui.proto's own doc comment): read
-				// format before deciding which field is populated, never
-				// assume "flat".
-				const files = filesResp.format === 'flat' ? filesResp.files : [];
-				state.update((s) => ({
-					...s,
-					live: { symbols: searchResp.locations, files },
-					liveFailure: undefined
-				}));
-			})
-			.catch((err: unknown) => {
-				if (requestId !== liveRequestId) return; // superseded — discard, not a real failure
-				state.update((s) => ({ ...s, liveFailure: classifyRpcError(err) }));
-			});
-	}
+	// D-15: two independent RPCs, never merged. Files' pattern is a
+	// substring-style glob (`*term*`) over the forward-slashed repo
+	// path — internal/query.FilesOptions.Pattern is a raw glob passed
+	// straight through with no substring convenience of its own, so a
+	// search BOX (not a glob box) needs this module to build that
+	// shape. limit/max_files/depth are all passed as 0 — every one of
+	// those fields' own doc comment in ui.proto states the server's
+	// own bound (MaxLimit, defaultMaxFiles, "0 means unlimited" for
+	// Files' depth) is authoritative; this module adds no second copy
+	// of any of them.
+	//
+	// FORMER LIMITATION, NOW CLOSED AT THE ROOT (04-02-PLAN.md,
+	// 04-CONTEXT.md's D-14 — not this file's own top-of-file D-14,
+	// which is 03-06's unrelated decision of the same label):
+	// internal/query.FilesOptions.Pattern used to be matched with
+	// Go's path/filepath.Match, whose `*` never crossed a `/` and
+	// whose dialect lacked a recursive `**` wildcard entirely, so a
+	// term appearing only in a nested path (e.g.
+	// internal/query/detail.go) was invisible to any single glob
+	// string — confirmed live during this file's
+	// original 03-06 UAT. 04-02 replaced that matcher with
+	// github.com/bmatcuk/doublestar/v4 in internal/query/files.go,
+	// which DOES support `**` crossing directory boundaries (proven
+	// by TestFilesPatternRecursiveGlob's `nested`/`root_level`
+	// subtests, internal/query/files_status_test.go) — the fix lands
+	// once for every Files caller (CLI, MCP, this RPC).
+	//
+	// This module's own pattern below is still the single-star
+	// `*term*` shape it always was — unchanged by 04-02, deliberately
+	// (see Task 3's "no executable line changed" scope) — so THIS
+	// live search still only surfaces root-level file matches. That
+	// is now a scope choice for this call site, not a server-side
+	// ceiling: 04-06 adds web/src/lib/file-search.ts, a second Files
+	// client that builds a `**/*term*` pattern (escaping the user's
+	// literal text first) to search at any depth for the workbench's
+	// multi-file picker. Search's own file-kind pseudo-node matches
+	// (Search("detail") returns internal/query/detail.go et al. with
+	// kind="file") still cover arbitrary-depth file discovery via the
+	// Symbols section for this module in the meantime.
+	//
+	// The debounce timer, the per-dispatch AbortController and the
+	// monotonic request identity all live in debounced-rpc.ts (04-06
+	// Task 1's extraction) — this is that mechanism's FIRST of two
+	// configurations, file-search.ts is its second. onBelowMinimum
+	// below is exactly this branch's former third action (the store
+	// clear); the abort-and-invalidate half now lives in the extracted
+	// mechanism.
+	const liveDebounced = createDebouncedRpc<{ searchResp: SearchResponse; filesResp: FilesResponse }>({
+		debounceMs: SEARCH_DEBOUNCE_MS,
+		minChars: SEARCH_MIN_CHARS,
+		dispatch: (term, signal) =>
+			Promise.all([
+				client.search({ term, kind: '', limit: 0 }, { signal }),
+				client.files({ pattern: `*${term}*`, filter: '', dir: '', depth: 0, format: 'flat' }, { signal })
+			]).then(([searchResp, filesResp]) => ({ searchResp, filesResp })),
+		onResult: ({ searchResp, filesResp }) => {
+			// FilesResponse is a UNION (ui.proto's own doc comment): read
+			// format before deciding which field is populated, never
+			// assume "flat".
+			const files = filesResp.format === 'flat' ? filesResp.files : [];
+			state.update((s) => ({
+				...s,
+				live: { symbols: searchResp.locations, files },
+				liveFailure: undefined
+			}));
+		},
+		onFailure: (err) => {
+			state.update((s) => ({ ...s, liveFailure: classifyRpcError(err) }));
+		},
+		onBelowMinimum: () => {
+			state.update((s) => ({ ...s, live: { symbols: [], files: [] }, liveFailure: undefined }));
+		}
+	});
 
 	function setQuery(value: string): void {
 		state.update((s) => ({ ...s, query: value }));
-
-		if (debounceTimer !== undefined) {
-			clearTimeout(debounceTimer);
-			debounceTimer = undefined;
-		}
-
-		if (value.length < SEARCH_MIN_CHARS) {
-			// A query shorter than the minimum issues no RPC at all — and
-			// cancels whatever was still in flight for a longer prefix, so a
-			// backspace-to-short never lets a stale result land later.
-			if (liveAbort) {
-				liveAbort.abort();
-				liveAbort = undefined;
-			}
-			liveRequestId += 1; // invalidate any in-flight response too
-			state.update((s) => ({ ...s, live: { symbols: [], files: [] }, liveFailure: undefined }));
-			return;
-		}
-
-		debounceTimer = setTimeout(() => {
-			debounceTimer = undefined;
-			dispatchLive(value);
-		}, SEARCH_DEBOUNCE_MS);
+		liveDebounced.setQuery(value);
 	}
 
 	function submit(): void {
@@ -275,14 +255,7 @@ export function createSearchController(client: SearchClient): SearchController {
 	}
 
 	function dispose(): void {
-		if (debounceTimer !== undefined) {
-			clearTimeout(debounceTimer);
-			debounceTimer = undefined;
-		}
-		if (liveAbort) {
-			liveAbort.abort();
-			liveAbort = undefined;
-		}
+		liveDebounced.dispose();
 		if (exploreAbort) {
 			exploreAbort.abort();
 			exploreAbort = undefined;
