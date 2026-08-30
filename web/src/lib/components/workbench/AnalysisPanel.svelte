@@ -77,7 +77,7 @@
 	// GetStatus call of its own (must_haves: "Moving the depth control or
 	// the limit control issues NO additional GetStatus call").
 	const statusGate = getContext<StatusGate>('statusGate');
-	let indexStatus: IndexStatus = $state({ verdict: 'unknown', commit: 'unknown' });
+	let indexStatus: IndexStatus = $state({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
 	$effect(() => {
 		return statusGate.subscribe((s) => {
 			indexStatus = s;

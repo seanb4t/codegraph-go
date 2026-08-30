@@ -44,7 +44,7 @@
 	// trigger (D-05). Drives the source pane's stale-vs-plain
 	// no-source message split below.
 	const statusGate = getContext<StatusGate>('statusGate');
-	let indexStatus = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown' });
+	let indexStatus = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
 	$effect(() => {
 		return statusGate.subscribe((s) => {
 			indexStatus = s;

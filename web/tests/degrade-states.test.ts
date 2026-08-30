@@ -15,7 +15,8 @@ import type { BrowseTargetState } from '$lib/browse-state';
 import type { Node } from '$lib/gen/ui_pb';
 
 function status(overrides: Partial<IndexStatus> = {}): IndexStatus {
-	return { verdict: 'ok', commit: 'known', ...overrides };
+	const commit = overrides.commit ?? 'known';
+	return { verdict: 'ok', commit, commitSha: commit === 'known' ? 'deadbeef' : '', ...overrides };
 }
 
 function node(name: string, overrides: Partial<Node> = {}): Node {

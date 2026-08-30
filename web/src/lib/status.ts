@@ -36,9 +36,20 @@ export type CommitKnowledge = 'known' | 'unknown';
 export interface IndexStatus {
 	verdict: StatusVerdict;
 	commit: CommitKnowledge;
+	// commitSha is the ADDITIVE field 04-05 Task 1 adds (cycle-2 review):
+	// the raw commit SHA `commit`'s presence flag was deliberately
+	// derived from, carried alongside it rather than instead of it.
+	// '' means "not recorded" — the wire's own representation
+	// (ui.proto:151/GetHealthResponse's commit_sha), so there is one
+	// representation of unknown, not two. Required (not optional) so
+	// `pnpm check` enumerates every construction site rather than
+	// letting one silently default to undefined. `commit === 'known'`
+	// if and only if `commitSha !== ''` — the invariant every call site
+	// below preserves.
+	commitSha: string;
 }
 
-const UNKNOWN_STATUS: IndexStatus = { verdict: 'unknown', commit: 'unknown' };
+const UNKNOWN_STATUS: IndexStatus = { verdict: 'unknown', commit: 'unknown', commitSha: '' };
 
 // classifyStatus is a pure function over one GetStatus answer. It never
 // throws — a shape this function does not recognize (initialized false,
@@ -48,17 +59,18 @@ const UNKNOWN_STATUS: IndexStatus = { verdict: 'unknown', commit: 'unknown' };
 // sixth verdict for a case the server never actually sends.
 export function classifyStatus(response: GetStatusResponse): IndexStatus {
 	const commit: CommitKnowledge = response.commitSha ? 'known' : 'unknown';
+	const commitSha = response.commitSha;
 
 	if (response.initialized) {
-		return { verdict: response.stale ? 'stale' : 'ok', commit };
+		return { verdict: response.stale ? 'stale' : 'ok', commit, commitSha };
 	}
 	if (!response.storeExists) {
-		return { verdict: 'no-index', commit };
+		return { verdict: 'no-index', commit, commitSha };
 	}
 	if (response.indexingInProgress) {
-		return { verdict: 'indexing', commit };
+		return { verdict: 'indexing', commit, commitSha };
 	}
-	return { verdict: 'unknown', commit };
+	return { verdict: 'unknown', commit, commitSha };
 }
 
 // VIEW_LOCAL_PARAMS lists query params that select no distinct view and

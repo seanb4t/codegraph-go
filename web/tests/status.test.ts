@@ -74,16 +74,16 @@ describe('classifyStatus: health verdicts from the field combination', () => {
 });
 
 describe('classifyStatus: commit knowledge is orthogonal to the health verdict', () => {
-	it('an empty commit_sha yields commit: unknown paired with a populated commit_sha yielding commit: known — the two results differ in exactly one field', () => {
+	it('an empty commit_sha yields commit: unknown paired with a populated commit_sha yielding commit: known — the verdict is unchanged and the SHA travels through verbatim', () => {
 		const noSha = classifyStatus(
 			statusResponse({ initialized: true, stale: false, commitSha: '' })
 		);
 		const withSha = classifyStatus(
 			statusResponse({ initialized: true, stale: false, commitSha: 'deadbeef' })
 		);
-		expect(noSha).toEqual({ verdict: 'ok', commit: 'unknown' });
-		expect(withSha).toEqual({ verdict: 'ok', commit: 'known' });
-		// Exactly one field differs between the two.
+		expect(noSha).toEqual({ verdict: 'ok', commit: 'unknown', commitSha: '' });
+		expect(withSha).toEqual({ verdict: 'ok', commit: 'known', commitSha: 'deadbeef' });
+		// The verdict is unchanged between the two; commit and commitSha both differ.
 		expect(noSha.verdict).toBe(withSha.verdict);
 		expect(noSha.commit).not.toBe(withSha.commit);
 	});
@@ -92,7 +92,19 @@ describe('classifyStatus: commit knowledge is orthogonal to the health verdict',
 		const status = classifyStatus(
 			statusResponse({ initialized: true, stale: true, commitSha: '' })
 		);
-		expect(status).toEqual({ verdict: 'stale', commit: 'unknown' });
+		expect(status).toEqual({ verdict: 'stale', commit: 'unknown', commitSha: '' });
+	});
+
+	it('04-05 T1: classifyStatus over a response carrying a populated commitSha returns the SHA verbatim in a new commitSha field alongside the existing verdict and presence flag', () => {
+		const sha = 'a'.repeat(40);
+		const status = classifyStatus(statusResponse({ initialized: true, stale: false, commitSha: sha }));
+		expect(status).toEqual({ verdict: 'ok', commit: 'known', commitSha: sha });
+	});
+
+	it('04-05 T1: classifyStatus over a response with an empty commitSha returns "" paired with the presence flag reading unknown — known iff the SHA field is non-empty', () => {
+		const status = classifyStatus(statusResponse({ initialized: true, stale: false, commitSha: '' }));
+		expect(status).toEqual({ verdict: 'ok', commit: 'unknown', commitSha: '' });
+		expect(status.commit === 'known').toBe(status.commitSha !== '');
 	});
 });
 
@@ -174,7 +186,7 @@ describe('createStatusGate: a rejected GetStatus call never throws', () => {
 			});
 		}).not.toThrow();
 		await vi.waitFor(() => {
-			expect(received).toEqual({ verdict: 'unknown', commit: 'unknown' });
+			expect(received).toEqual({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
 		});
 	});
 });
@@ -217,6 +229,38 @@ describe('createStatusGate: the identity guard', () => {
 
 		gate.notifyNavigated(identityB);
 		await vi.waitFor(() => expect(calls).toHaveBeenCalledTimes(2));
+	});
+
+	it('04-05 T1: a notifyNavigated with a new identity that fetches a response with a different SHA emits a status whose commitSha changed — the field travels through emit to subscribers, not computed and dropped', async () => {
+		let callCount = 0;
+		const client: StatusClient = {
+			getStatus: () => {
+				callCount += 1;
+				return Promise.resolve(
+					statusResponse({
+						initialized: true,
+						stale: false,
+						commitSha: callCount === 1 ? 'a'.repeat(40) : 'b'.repeat(40)
+					})
+				);
+			}
+		};
+		const gate = createStatusGate(client, '/browse?symbol=Foo');
+		const observed: string[] = [];
+		// subscribe() fires synchronously with the current (pre-fetch,
+		// unknown) value first, per the store contract (status.ts's
+		// StatusGate.subscribe doc comment) — observed[0] is that initial
+		// value, not the first fetch's result.
+		gate.subscribe((status) => observed.push(status.commitSha));
+		expect(observed).toEqual(['']);
+
+		await vi.waitFor(() => expect(observed).toHaveLength(2));
+		expect(observed[1]).toBe('a'.repeat(40));
+
+		gate.notifyNavigated('/browse?symbol=Bar');
+		await vi.waitFor(() => expect(observed).toHaveLength(3));
+		expect(observed[2]).toBe('b'.repeat(40));
+		expect(observed[1]).not.toBe(observed[2]);
 	});
 
 	it('WR-04: notifying through navigationIdentity as q varies fires no extra GetStatus, paired against a target-field change that does', async () => {

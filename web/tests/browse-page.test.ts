@@ -176,8 +176,8 @@ describe('browse route: typing in search does not tear down the open node view (
 		const { default: BrowsePage } = await import('../src/routes/browse/+page.svelte');
 
 		const statusGate = {
-			subscribe(run: (s: { verdict: string; commit: string }) => void) {
-				run({ verdict: 'ok', commit: 'known' });
+			subscribe(run: (s: { verdict: string; commit: string; commitSha: string }) => void) {
+				run({ verdict: 'ok', commit: 'known', commitSha: 'deadbeef' });
 				return () => {};
 			},
 			notifyNavigated: () => {}

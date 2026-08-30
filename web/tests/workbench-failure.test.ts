@@ -10,7 +10,7 @@ import { describeWorkbenchFailure } from '$lib/workbench-failure';
 import type { IndexStatus } from '$lib/status';
 
 function status(verdict: IndexStatus['verdict']): IndexStatus {
-	return { verdict, commit: 'unknown' };
+	return { verdict, commit: 'unknown', commitSha: '' };
 }
 
 describe('describeWorkbenchFailure: composition over classifyRpcError + IndexStatus', () => {

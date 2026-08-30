@@ -27,7 +27,7 @@
 	// fetch.
 	setContext('statusGate', statusGate);
 
-	let status = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown' });
+	let status = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
 	$effect(() => {
 		return statusGate.subscribe((s) => {
 			status = s;
