@@ -81,7 +81,7 @@ findings:
   warning: 8
   info: 9
   total: 19
-status: issues_found
+status: clean
 ---
 
 # Phase 4: Code Review Report
@@ -1120,3 +1120,28 @@ _Re-reviewed: 2026-08-30T07:12:03Z_
 _Reviewer: Claude (gsd-code-reviewer), independent post-fix verification pass_
 _Depth: deep_
 _Fix-pass base: d8f4289f_
+
+---
+
+## Re-review findings — resolution (2026-08-30)
+
+RR-W-01, RR-W-02 and RR-W-03 were all fixed in commit `4f746d57`, after the re-review
+section above was written. This note closes the currency gap the Phase 4 verifier
+identified: the section above records them as they stood at re-review time, not as they
+stand now.
+
+- **RR-W-01** — `aria-rowcount` is now `table.getRowModel().rows.length + 1`
+  (`DataTable.svelte:128`), so it can never be smaller than the largest `aria-rowindex`
+  (header at 1, data rows at `index + 2`). The render-cost assertion that read
+  `aria-rowcount` as a model-row proxy subtracts the header rather than being relaxed;
+  verified it still fails against a truncated (500) and a blank (1) table.
+- **RR-W-02** — `<Command.Empty>No results.</Command.Empty>` is now gated on
+  `{#if !searchState.failure}` (`FilePicker.svelte:113`), so the literal DOM text
+  "server unavailable No results." can no longer occur.
+- **RR-W-03** — the virtualization guard gained `expect(domRows.length).toBeGreaterThan(0)`
+  alongside its existing upper bound (`data-table-virtualization.test.ts`), so a blanked
+  component (0 rows) now fails where it previously passed.
+
+Verified after the fix: `task web:test` 268/268, `pnpm check` 1020 files / 0 errors,
+`web:drift` / `web:components:drift` / `proto:drift` / `web:render-cost` all PASS, bundle
+rebuilt. Frontmatter `status` moved `issues_found` → `clean` accordingly.
