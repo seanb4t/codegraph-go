@@ -746,3 +746,377 @@ _Reviewed: 2026-08-30T06:36:36Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
 _Diff base: ab95f70a_
+
+---
+
+## Re-review (post-fix)
+
+**Re-reviewed:** 2026-08-30T07:12:03Z
+**Depth:** deep
+**Fix-pass range:** `d8f4289f..HEAD` (10 fix commits + 2 bundle rebuilds + 1 dispositions doc)
+**Verdict:** 10/10 findings have a fix present. **8 are correct. 1 (WR-05) is present but
+introduces a new WAI-ARIA MUST violation. 1 (WR-07) is present but leaves the exact
+misleading string it was raised against still on screen.** Three new WARNINGs, four new
+INFOs. `status:` stays `issues_found`.
+
+**New findings:** 0 Critical, 3 Warning, 4 Info.
+
+### Gates run this session (commands + verbatim results)
+
+| Gate | Command | Result |
+|---|---|---|
+| web unit tests | `pnpm vitest run` (cwd `web/`) | `Test Files 28 passed (28)` / `Tests 268 passed (268)` |
+| type check | `pnpm check` | `1020 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS` |
+| bundle drift | `task web:drift` | `PASS — hashed 103 source files, manifested 31 output files` |
+| proto drift | `task proto:drift` | `all 4 generated files byte-identical to the pinned toolchain's regeneration` |
+| component drift | `task web:components:drift` | `PASS — all 50 vendored component files across 8 components byte-identical` |
+| Go | `GOTOOLCHAIN=go1.26.5 go test -count=1 -run TestGetHealth ./internal/uiserver/` | 6/6 PASS |
+
+`go test` under the ambient toolchain (`go version go1.27.0 darwin/arm64`) fails to build
+`github.com/cockroachdb/swiss` (`undefined: fastrand64`, `undefined: getRuntimeHasher`).
+That is a pre-existing toolchain-vs-dependency issue unrelated to this fix pass —
+`GOTOOLCHAIN=go1.26.5` (go.mod's `go 1.26.5`) builds and passes.
+
+### Locked decisions — verified not violated
+
+`git diff d8f4289f..HEAD --stat -- internal/uiserver/readonly_test.go go.mod go.sum
+web/package.json web/pnpm-lock.yaml .github/` produces **no output** — `mutatingVerbs` is
+byte-unchanged, and no npm or Go dependency was added. Drift floors are unchanged:
+`rg -n "nfiles.*-lt|ncomponents.*-lt" Taskfile.yml` → `347: -lt 4` (proto), `1323: -lt 8`
+and `1327: -lt 2` (components) — **not** raised to today's 50/8. `GetHealthResponse`'s
+field numbers are untouched (`pending_changes = 12` still present; the diff on `ui.proto`
+is comment-only). No test was deleted: the same diff filtered for removed `func Test` /
+`it(` / `describe(` / `t.Run(` lines returns nothing — `health_test.go`'s tautological
+assertion was **restated**, not removed.
+
+### Per-finding verdicts
+
+#### CR-01 — CONFIRMED FIXED
+
+`AnalysisPanel.svelte:137-140` returns `() => { controller.abort(); requestId += 1; }`.
+Svelte runs the previous run's cleanup before the re-run, so on `run → undefined` the
+sequence is `abort()` → `requestId = N+1` → body sets `panelState = {kind:'idle'}` and
+returns no cleanup; the abort's `Code.Canceled` rejection then fails the `id !== requestId`
+guard at `:133` and is discarded. Locked by
+`workbench-callers-callees.test.ts:298-325`, which drives the real route.
+
+#### WR-02 — CONFIRMED FIXED, and NOT over-cancelling
+
+Verified empirically, not by reading. A throwaway probe (`web/tests/zzz-rereview-probe2.test.ts`,
+written, run, deleted — `git status --porcelain` clean afterwards) mounted the real
+`+page.svelte` with a callers stub that records its `AbortSignal`:
+
+```
+PROBE aborted before tab switch = false
+PROBE aborted after tab switch  = true
+PROBE failure banner present    = false
+PROBE aborted after unmount     = true
+PROBE callers dispatches after unrelated write = 1
+PROBE first signal aborted (after unrelated write) = false
+```
+
+The last two lines are the over-cancellation check the brief asked for: writing an
+unrelated URL param (`depth`, which `callersKey` does not include) neither re-dispatches
+nor aborts. The `untrack(() => run)` + primitive-keyed `$derived` combination still holds
+after the change.
+
+#### CR-02 — CONFIRMED FIXED, and the replacement assertion is genuinely falsifiable
+
+I did not take the claim. I mutated `handlers.go:906` from
+`Added: int32(result.PendingChanges.Added)` to `Added: int32(result.FileCount)` and ran
+the test. Verbatim:
+
+```
+--- FAIL: TestGetHealthProjectsStatusResult (0.16s)
+    health_test.go:190: pending_changes = added:4, want the documented all-zero placeholder {0,0,0}
+FAIL
+```
+
+`handlers.go` was restored (`git status --porcelain` clean). The old assertion could not
+have failed here; the new one does. The `pc == nil` fatal at `health_test.go:186` also
+still covers a dropped mapping. `status.go:34` is verified to be the `pendingChanges`
+mapping-table row the comment cites, and `files_status_test.go:471` is verified to be the
+named subtest.
+
+The hand-written NOTE comments added to the **generated** `internal/uiproto/uiv1/ui.pb.go`
+and `web/src/lib/gen/ui_pb.ts` are not a hand-edit defect: `task proto:drift` (whose file
+set includes `web/src/lib/gen/*.ts`, `Taskfile.yml:341`) reports all 4 files byte-identical
+to regeneration from `ui.proto`.
+
+`/health` no longer renders the tally: `rg -n "pendingChanges|pending-changes" web/src/`
+returns only the generated type at `ui_pb.ts:1560`.
+
+#### WR-01 — CONFIRMED FIXED
+
+`workbench-failure.ts:54` now reads `title: 'No index for this repository'`. See RR-I-02
+for the stale doc comment this left behind.
+
+#### WR-03 — CONFIRMED FIXED
+
+`+page.svelte:88-96`: the timer, the `clearTimeout` on each keystroke, and — importantly —
+the `$effect` cleanup that clears a pending timer on destroy, so a `replaceState` can never
+fire after the route component is gone. Locked by
+`workbench-callers-callees.test.ts:327-349` (13 keystrokes → one call, asserted as
+`expect(calls).toEqual([{ symbol: 'HandleRequest', limit: 5 }])`).
+
+#### WR-04 — CONFIRMED FIXED, and it does not mask data
+
+The brief asked whether `{#if row}` silently skips real rows. It does not. Probe
+(`web/tests/zzz-rereview-probe.test.ts`, written, run, deleted): mount 60 rows, scroll to
+`60*37-600`, then `rerender` in place with 5 rows:
+
+```
+PROBE after shrink to 5, dom data rows = 5 [
+  'table-row-pkg/file0.go:1:symbol-0', … 'table-row-pkg/file4.go:5:symbol-4'
+]
+```
+
+All five survive. The guard covers exactly the one transient frame in which the template
+reads virtual items computed from the pre-`setOptions` count — the `$effect` at
+`DataTable.svelte:114-124` then corrects it. See RR-W-03 for the regression test that
+would not notice if this stopped being true.
+
+#### WR-05 — PRESENT BUT INCORRECT → see RR-W-01
+
+#### WR-06 — CONFIRMED FIXED
+
+`Taskfile.yml:1286-1299`. `task web:components:drift` executed end-to-end this session and
+printed `PASS — all 50 vendored component files across 8 components byte-identical to
+shadcn-svelte@1.5.1's regeneration`. Floors unchanged. See RR-I-03 for what the copied
+block dropped.
+
+#### WR-07 — PRESENT, REASONING CORRECT, OUTCOME PARTIAL → see RR-W-02
+
+The fixer's rejection of the review's own suggested `describeWorkbenchFailure(searchState.failure, …)`
+is **right**, and I verified the mechanism rather than the prose: `searchState.failure` is
+an `RpcFailure` plain object (`file-search.ts:103` → `classifyRpcError(err)`), and
+`rpc-errors.ts:30-35` would take the `!(err instanceof ConnectError)` arm, hit
+`err instanceof Error ? err.message : String(err)`, and produce the literal string
+`"[object Object]"` with `kind: 'unknown'` for every input. Deviating from the suggestion
+was correct.
+
+#### WR-08 — CONFIRMED FIXED
+
+`debounced-rpc.ts:119`. No dispose-then-late-resolve path survives: `dispose()` aborts and
+bumps in the same synchronous block, and the rejection can only be delivered on a later
+microtask. The double-bump interaction the brief flagged is benign — `setQuery` below
+minimum sets `abort = undefined` first, so a subsequent `dispose()` only bumps.
+`debounced-rpc.test.ts:244-276` locks it.
+
+---
+
+## Narrative Findings (AI reviewer) — re-review
+
+### RR-W-01 (WARNING): WR-05's `aria-rowindex` now exceeds `aria-rowcount` — a WAI-ARIA MUST violation the fix itself created
+
+**File:** `web/src/lib/components/workbench/DataTable.svelte:128` (`aria-rowcount`), `:131` (header `aria-rowindex={1}`), `:190` (`aria-rowindex={virtualRow.index + 2}`)
+
+**Issue:** The fix assigns the header row `aria-rowindex={1}` and each data row
+`virtualRow.index + 2`, but left `aria-rowcount` at
+`{table.getRowModel().rows.length}` — the **data** row count, which does not include the
+header row the fix just numbered as row 1. So for N data rows the maximum
+`aria-rowindex` is `N + 1` while `aria-rowcount` is `N`.
+
+WAI-ARIA 1.2, `aria-rowindex`, verbatim from `https://www.w3.org/TR/wai-aria-1.2/`
+(fetched this session):
+
+> Authors **MUST** set the value for `aria-rowindex` to an integer greater than or equal to
+> 1, greater than the `aria-rowindex` value of any previous rows, and **less than or equal
+> to the number of rows in the full table**.
+
+**Reproduced, not theorised.** Probe (`web/tests/zzz-rereview-probe.test.ts`, written, run,
+deleted): 50 rows, scrolled to `50*37-600` so the window includes the last row:
+
+```
+PROBE aria-rowcount    = 50
+PROBE max aria-rowindex = 51
+```
+
+A screen reader on the last row announces "row 51 of 50". Before the fix `aria-rowcount`
+was merely unaccompanied; now it is contradicted by a sibling attribute on the same table.
+`data-table-virtualization.test.ts:31-41` asserts only header=1 and first-data-row=2, so it
+locks the off-by-one in rather than catching it.
+
+**Fix:**
+
+```svelte
+<Table.Root aria-rowcount={table.getRowModel().rows.length + 1}>
+```
+
+and extend `data-table-virtualization.test.ts` with the invariant that actually matters:
+
+```ts
+const idx = within(table).getAllByRole('row').map((r) => Number(r.getAttribute('aria-rowindex')));
+expect(Math.max(...idx)).toBeLessThanOrEqual(Number(table.getAttribute('aria-rowcount')));
+```
+
+---
+
+### RR-W-02 (WARNING): WR-07 surfaces the failure but leaves the misleading "No results." rendering directly beneath it
+
+**File:** `web/src/lib/components/workbench/FilePicker.svelte:99-108`
+
+**Issue:** WR-07's stated harm was the string *"No results."*: *"the developer concludes
+their file does not exist and stops looking"* (04-REVIEW.md, WR-07). The fix added a
+failure paragraph at `:99-105` but did not gate `Command.Empty`'s literal at `:108`, which
+still renders whenever `searchState.results.length === 0` — which is exactly the failed
+case.
+
+**Reproduced.** Probe (`web/tests/zzz-rereview-probe3.test.ts`, written, run, deleted),
+mounting the real `FilePicker` with `files: () => Promise.reject(new Error('server unavailable'))`:
+
+```
+PROBE failure text          = "server unavailable"
+PROBE "No results." present = true
+PROBE full text             = "server unavailable No results."
+```
+
+The user is now told two contradictory things at once: the search broke, **and** there are
+no results. The existing regression test
+(`workbench-affected.test.ts:178-190`) asserts only `toHaveTextContent('server unavailable')`
+on the new element — it passes with the contradiction still on screen. This is the
+"satisfies its own literal check while the user-facing property stays broken" shape.
+
+Confirmed non-issue in the same probe: the message is correctly cleared on the
+below-minimum path (`PROBE after fail = true`, `PROBE after backspace-to-1char = false`).
+
+**Fix:** make the two mutually exclusive.
+
+```svelte
+<Command.List>
+	{#if !searchState.failure}
+		<Command.Empty>No results.</Command.Empty>
+	{/if}
+	…
+```
+
+and add `expect(root.textContent).not.toContain('No results.')` to
+`workbench-affected.test.ts`'s WR-07 case.
+
+---
+
+### RR-W-03 (WARNING): WR-04's regression guard cannot fail — its only row assertion passes at zero rows
+
+**File:** `web/tests/data-table-virtualization.test.ts:74-75`
+
+**Issue:**
+
+```ts
+const domRows = within(result.getByRole('table')).getAllByRole('row').slice(1);
+expect(domRows.length).toBeLessThanOrEqual(5);
+```
+
+The failure mode WR-04's `{#if row}` guard introduces is *silently skipping rows*, and
+`toBeLessThanOrEqual(5)` is satisfied by **0**. If a future change made the guard swallow
+every row — the precise regression this file exists to detect — this test stays green.
+`expect(result.getByRole('table')).toBeInTheDocument()` only proves the component did not
+throw.
+
+I measured the real value this session (probe output quoted under WR-04 above): it is
+exactly 5, all five present and correct. So the strict assertion is available today at no
+cost.
+
+**Fix:**
+
+```ts
+expect(domRows.map((r) => r.getAttribute('data-testid'))).toEqual([
+	'table-row-pkg/file0.go:1:symbol-0',
+	'table-row-pkg/file1.go:2:symbol-1',
+	'table-row-pkg/file2.go:3:symbol-2',
+	'table-row-pkg/file3.go:4:symbol-3',
+	'table-row-pkg/file4.go:5:symbol-4'
+]);
+```
+
+---
+
+## Info — re-review
+
+### RR-I-01: The header row's `aria-rowindex={1}` is hardcoded inside the header-group loop
+
+**File:** `web/src/lib/components/workbench/DataTable.svelte:130-131`
+
+```svelte
+{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+	<Table.Row aria-rowindex={1}>
+```
+
+With a grouped column definition TanStack emits more than one header group, and every
+header row would then claim `aria-rowindex="1"` — violating the same spec clause quoted in
+RR-W-01 ("greater than the `aria-rowindex` value of any previous rows"), and colliding with
+the data rows' `+2` offset. Unreachable today: all four `*-columns.ts` files define flat
+`ColumnDef` arrays with no `columns:` nesting. Worth deriving it from the loop index while
+the code is being touched, since `DataTable` is the deliberately generic shell D-06 hands
+to Phase 5.
+
+### RR-I-02: `workbench-failure.ts`'s "four titles" doc comment is now stale, and the test it points at samples 4 of 5 branches
+
+**File:** `web/src/lib/workbench-failure.ts:26-29`
+
+> `// The four titles below are PAIRWISE DISTINCT … and is asserted by web/tests/workbench-failure.test.ts.`
+
+WR-01 made the `not-found` + `no-index` branch a fifth distinct title, so there are now
+five. The test the comment cites (`workbench-failure.test.ts:78-86`) builds its Set from
+four inputs and never exercises the `indexing` branch, so its `Set(titles).size === 4`
+assertion still passes — but it no longer asserts what the comment claims. The new WR-01
+test (`:99-121`) covers the one newly-risky pair (`indexing` vs `no-index`) directly, so
+nothing is unguarded; only the comment and the older test's framing are out of date.
+
+### RR-I-03: WR-06's copied Corepack block drops `web:deps`'s pnpm-version guard and announces success unconditionally
+
+**File:** `Taskfile.yml:1286-1299` (compare `web:deps` at `:419-432`)
+
+Two divergences from the block it says it mirrors:
+
+1. `web:deps`'s `elif` arm rejects a pnpm older than major 10 with a named error
+   (`Taskfile.yml:423-428`); `web:components:drift`'s `elif` just echoes and proceeds, so
+   a pnpm-8 host reaches `pnpm install --frozen-lockfile` against a lockfile it cannot
+   honour and fails with a confusing message instead of the diagnostic one that already
+   exists a thousand lines up the same file.
+2. `corepack enable >/dev/null 2>&1 || true` swallows failure, yet the very next line
+   echoes `"corepack resolved the pnpm version from web/package.json's packageManager
+   field"` unconditionally. On a host where `corepack enable` cannot write its shims, the
+   log claims success and the recipe then dies at `pnpm: command not found`. (`web:deps`
+   has the identical shape, so this is a copied trait, not a novel one.)
+
+Neither is a merge blocker — this target is schedule-only per D-16 — and it did run green
+here.
+
+### RR-I-04: `GetHealthResponse.stale` is populated on the wire and read by nothing
+
+**Files:** `internal/uiserver/handlers.go:917` (`Stale: result.Stale`), `web/src/lib/gen/ui_pb.ts:1584` (field 15), `web/src/routes/health/+page.svelte`
+
+`rg -n "\bstale\b" web/src/` shows `GetStatusResponse.stale` **is** rendered
+(`routes/+page.svelte:86`, `<dd>{status.stale ? 'yes' : 'no'}</dd>`) and `IndexStatus`'s
+`'stale'` verdict drives `TrustVerdict.svelte:25-31` — but nothing reads
+`GetHealthResponse.stale`. CR-02's fix took the "remove the render" branch rather than the
+review's suggested "gate on the real `stale` signal" branch, which is defensible, but the
+result is that `/health` now carries **no** pending-work signal at all and `stale` joins
+`pending_changes` as a wire field with no consumer.
+
+Correcting the original review's own record while I am here: CR-02 asserted the fabricated
+tally *"actively repudiates the `stale` flag rendered two lines above it."* That was wrong
+— `stale` was never rendered on `/health`; the line two above it is
+`Re-index recommended: {freshness.reindexRecommended ? 'yes' : 'no'}`. The finding's
+substance stands; that one sentence did not.
+
+---
+
+## Evidence hygiene
+
+Three throwaway probe files were written under `web/tests/`
+(`zzz-rereview-probe.test.ts`, `zzz-rereview-probe2.test.ts`, `zzz-rereview-probe3.test.ts`)
+and one source mutation was applied to `internal/uiserver/handlers.go`. All four were
+reverted; `git status --porcelain` returns empty. Every quoted probe output above is
+verbatim stdout from a run in this session.
+
+Not verified, stated as such: I did not exercise the `web:components:drift` corepack branch
+on a corepack-only host (RR-I-03 is a read of the recipe against its sibling, plus one
+successful local run on a host that has both).
+
+---
+
+_Re-reviewed: 2026-08-30T07:12:03Z_
+_Reviewer: Claude (gsd-code-reviewer), independent post-fix verification pass_
+_Depth: deep_
+_Fix-pass base: d8f4289f_
