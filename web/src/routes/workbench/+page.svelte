@@ -40,6 +40,7 @@
 	import AnalysisPanel, {
 		type AnalysisResult
 	} from '$lib/components/workbench/AnalysisPanel.svelte';
+	import { SEARCH_DEBOUNCE_MS } from '$lib/search';
 	import { impactColumns } from '$lib/components/workbench/impact-columns';
 	import { callersColumns } from '$lib/components/workbench/callers-columns';
 	import { calleesColumns } from '$lib/components/workbench/callees-columns';
@@ -73,10 +74,26 @@
 		writeParams({ mode: next as WorkbenchMode });
 	}
 
+	// Debounced (WR-03) — this is the free-text field only; depth/limit
+	// stay immediate since those are committed values, not keystroke
+	// streams. Undebounced, every keystroke re-derives requestKey and
+	// re-triggers AnalysisPanel's dispatch effect, issuing a fresh
+	// Callers/Callees/Impact RPC (the most expensive calls this UI can
+	// make) that re-enters withEngine/openEngine and contends for the
+	// Pebble store lock — reusing the same SEARCH_DEBOUNCE_MS the
+	// codebase already applies to the cheaper search.ts/file-search.ts
+	// surfaces rather than inventing a second constant. D-12's "full
+	// input state lives in the URL" still holds — this only delays WHEN
+	// the URL write happens, not whether it happens.
+	let symbolTimer: ReturnType<typeof setTimeout> | undefined;
 	function handleSymbolInput(e: Event): void {
 		const value = (e.currentTarget as HTMLInputElement).value;
-		writeParams({ symbol: value || undefined });
+		clearTimeout(symbolTimer);
+		symbolTimer = setTimeout(() => writeParams({ symbol: value || undefined }), SEARCH_DEBOUNCE_MS);
 	}
+	$effect(() => {
+		return () => clearTimeout(symbolTimer);
+	});
 
 	// FilePicker owns no selection state of its own (its own doc comment)
 	// — this is the one write path the chip set travels back through, the

@@ -324,4 +324,27 @@ describe('Callers/Callees limit controls (WRK-03)', () => {
 		);
 		expect(screen.queryByTestId(/^workbench-failure-/)).not.toBeInTheDocument();
 	});
+
+	it('WR-03 regression: typing a symbol one character at a time issues at most one Callers RPC, not one per keystroke', async () => {
+		const calls: Array<{ symbol: string; limit: number }> = [];
+		currentCallersImpl = (req) => {
+			calls.push(req);
+			return Promise.resolve(callersResponse(req.symbol, [loc('Alpha', 'func', 'a.go', 10)]));
+		};
+
+		resetMockPage('http://localhost/workbench?mode=callers&limit=5');
+		mountWorkbench();
+
+		const input = screen.getByTestId('workbench-symbol-input');
+		const target = 'HandleRequest';
+		for (let i = 1; i <= target.length; i++) {
+			// No await/delay between keystrokes — every prior debounce timer
+			// must be cleared by the next one, mirroring how fast an
+			// interactive typist actually drives this field.
+			await fireEvent.input(input, { target: { value: target.slice(0, i) } });
+		}
+
+		await waitFor(() => expect(screen.getByText('Alpha')).toBeInTheDocument());
+		expect(calls).toEqual([{ symbol: target, limit: 5 }]);
+	});
 });
