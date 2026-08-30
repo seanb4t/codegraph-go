@@ -285,7 +285,7 @@
 
 <h1 class="text-lg font-semibold">Workbench</h1>
 <p class="mt-1 text-sm text-muted-foreground">
-	Phase 4: run the four graph analyses interactively with their own knobs.
+	Run Impact, Affected, Callers and Callees over this repository's index.
 </p>
 
 <Tabs.Root value={activeMode} onValueChange={handleModeChange} class="mt-4">
