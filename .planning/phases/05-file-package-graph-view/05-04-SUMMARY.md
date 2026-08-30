@@ -18,8 +18,8 @@ affects: [05-05, 05-06, 05-07]
 # Actuals (#2632) — pairs with the plan's estimate to calibrate future estimates.
 actuals:
   tokens: 21561
-  tasks: 2
-  commits: 3
+  tasks: 3
+  commits: 4
 
 # Tech tracking
 tech-stack:
@@ -47,7 +47,7 @@ key-decisions:
   - "Task 2's literal action text says `task build`, but that target is compile-check-only (go build ./...) and retains no binary. Used `task build:release` instead (Rule 3 — a blocking issue: the plan's literal command cannot produce the ./codegraph binary Task 2 needs to run `codegraph ui`)."
   - "Rule 3 blocking-issue fix: added @types/node@^24 as a devDependency. It was not anticipated by the plan (no prior .mjs script existed in web/), but `cd web && pnpm check` — a hard Task 1 acceptance criterion — fails without Node ambient types once graph-measure.mjs/graph-verdict.mjs use node:fs/node:path/node:url and process.*."
   - "The collapsed directory-level count's exact definition was reverse-engineered against the threshold's own recorded approxNodes/approxEdges (134/819) rather than guessed: 'top-level directory' collapsing produced 7/14 (wrong); 'immediate parent directory of each file, DIRECTED distinct cross-directory pairs, self-pairs excluded' produced 134/819 — an EXACT match to both figures the threshold already committed. Documented in graph-measure.mjs's --collapsed-nodes/--collapsed-edges CLI flags rather than hand-computed once and pasted into the artifact."
-  - "Task 3 (checkpoint:decision, gate=blocking-human) is NOT answered in this SUMMARY. auto_advance is true for this project, but blocking-human checkpoints are never auto-approved in any mode — the executor halted and returned the recorded verdict to the orchestrator/human rather than selecting an option. This SUMMARY's status is `halted`, not `complete`, per the template's own guidance for a designed stop that intentionally leaves a task unfinished."
+  - "MAINTAINER DECISION, 2026-08-30: `halt-collapse-default`. GRF-01's recorded verdict is FAIL and the maintainer selected remedy (a) `halt-collapse-default` from the two the locked `onFailure` field made available before any measurement existed. Widening, lowering or re-scoping the threshold was explicitly NOT available and was NOT done — `corpora/graph-render-threshold.json` retains exactly one commit, `2fb27746`, the pre-measurement lock. The remedy: make the collapsed directory view (134 nodes / 819 edges) the default first paint, with progressive expansion. Keep Cytoscape + `cytoscape-elk`. Re-measure at collapsed scale against the SAME locked bars before 05-05, 05-06 and 05-07 may resume."
 
 requirements-completed: []
 
@@ -87,23 +87,23 @@ coverage:
     requirement: GRF-01
     verification: []
     human_judgment: true
-    rationale: "Task 3 is a checkpoint:decision with gate=blocking-human, deliberately never auto-approved (even though this project's auto_advance is true) because an auto-selected 'release' would walk straight through a FAIL verdict unread, which D-02 forbids. Not yet answered — this is the open item this SUMMARY exists to surface."
+    rationale: "Task 3 is a checkpoint:decision with gate=blocking-human, deliberately never auto-approved (even though this project's auto_advance is true) because an auto-selected 'release' would walk straight through a FAIL verdict unread, which D-02 forbids. ANSWERED 2026-08-30: maintainer selected halt-collapse-default. See 'Task 3: Maintainer Decision' below for the verbatim decision and rationale."
 
-duration: ~75min
+duration: ~80min
 completed: 2026-08-30
-status: halted
+status: complete
 ---
 
-# Phase 5 Plan 4: GRF-01 Measurement — Verdict FAIL Summary
+# Phase 5 Plan 4: GRF-01 Measurement — Verdict FAIL, Maintainer Halts on Collapse-Default Summary
 
-**Built a fail-closed comparator and an always-records Playwright measurement wrapper (both TDD, 40 new tests), then measured the shipped file-graph view against the pinned `google/guava` corpus: the renderer's layout never became interactive within the locked 60-second seam deadline — independently reproduced still not interactive after 10+ minutes of unbounded observation — so GRF-01's committed verdict is FAIL, and Task 3's human decision checkpoint is now open.**
+**Built a fail-closed comparator and an always-records Playwright measurement wrapper (both TDD, 40 new tests), then measured the shipped file-graph view against the pinned `google/guava` corpus: the renderer's layout never became interactive within the locked 60-second seam deadline — independently reproduced still not interactive after 10+ minutes of unbounded observation — so GRF-01's committed verdict is FAIL. The maintainer read the recorded verdict and selected remedy (a), `halt-collapse-default`: make the collapsed directory view the default first paint with progressive expansion, keep Cytoscape + `cytoscape-elk`, and re-measure at collapsed scale before 05-05, 05-06 and 05-07 resume.**
 
 ## Performance
 
-- **Duration:** ~75 min (includes ~11 minutes of real browser measurement time: two 60-second binding timeouts, one successful ~15s additional-corpus run, plus a ~10-minute unbounded diagnostic probe)
+- **Duration:** ~80 min (includes ~11 minutes of real browser measurement time: two 60-second binding timeouts, one successful ~15s additional-corpus run, plus a ~10-minute unbounded diagnostic probe)
 - **Started:** 2026-08-30T17:40:00Z (approx)
-- **Completed:** 2026-08-30T18:55:00Z (approx, at the Task 3 halt)
-- **Tasks:** 2 of 3 complete (Task 3 is the open blocking-human checkpoint)
+- **Completed:** 2026-08-30T19:00:00Z (approx, Task 3 answered)
+- **Tasks:** 3 of 3 complete
 - **Files modified:** 8 (5 created, 3 modified — see key-files)
 
 ## Accomplishments
@@ -120,7 +120,7 @@ status: halted
 1. **Task 1 RED: failing tests for graph-verdict and graph-measure** — `e5a66ff5` (test)
    **Task 1 GREEN: fail-closed verdict comparator + always-records measurement wrapper** — `b71d387625f7b8a8dd8d23af19779daa4cb1f456` (feat)
 2. **Task 2: record GRF-01's measurement** — `1cb8c71e342a51d89db7d08011907a6db443976a` (docs)
-3. **Task 3: OPEN** — checkpoint:decision, gate=blocking-human, awaiting the answer this SUMMARY surfaces.
+3. **Task 3: record maintainer decision `halt-collapse-default`** — this commit (docs, closes out 05-04).
 
 ## RED Output (Task 1, verbatim)
 
@@ -267,6 +267,39 @@ metrics judged: 4 verdict: FAIL frameSampleCount: null failed: 3 additionalCorpo
 
 Exit 0 — **this is a well-formed FAIL, and the verify command's exit 0 IS the successful outcome** per the plan's own design (a FAIL is this gate working, not something to fix).
 
+## Task 3: Maintainer Decision (verbatim)
+
+**MAINTAINER DECISION, 2026-08-30: `halt-collapse-default`.**
+
+GRF-01's recorded verdict is **FAIL** and the maintainer selected remedy **(a) `halt-collapse-default`** from the two the locked `onFailure` field made available before any measurement existed. Widening, lowering or re-scoping the threshold was explicitly NOT available and was NOT done — `corpora/graph-render-threshold.json` retains exactly one commit, `2fb27746`, the pre-measurement lock.
+
+**The remedy:** make the collapsed directory view (134 nodes / 819 edges) the default first paint, with progressive expansion. Keep Cytoscape + `cytoscape-elk`. Re-measure at collapsed scale against the SAME locked bars before 05-05, 05-06 and 05-07 may resume.
+
+**Rationale, recorded so the decision is auditable:**
+
+1. **`halt-reconsider-stack` had nowhere to go.** D-02 established native compound-node support as a locked prerequisite of D-04's in-place expansion, and the alternatives were already eliminated before measurement: `cytoscape-fcose` is force-directed (GRF-02 bans it outright) and `cytoscape-dagre` has zero compound support. Reopening the stack would most likely have ended by relaxing GRF-02 or D-04 rather than by finding a better renderer.
+
+2. **The measurement did not merely find a performance limit — it found the binding view was the wrong view.** ROADMAP criterion 2 requires that a developer opens the graph view on a real repository and **can read it**. A 3,233-node graph is not one readable picture at any rendering speed. Collapsing by default with progressive expansion serves the stated requirement better than rendering a hairball quickly would have.
+
+3. **The stack itself is sound, and this is measured, not assumed.** On this repository's own index the same code achieved `timeToInteractiveMs` 2,604.8 ms (raw 2700 / 2602.3 / 2604.8), `panZoomFrameTimeMs` 8.3 ms median and 8.9 ms p95 over 461 sampled frames at 714 nodes / 1,074 edges — inside every bar by a wide margin, with real-mouse pan and zoom exercised. The collapsed default is roughly 5× smaller again than that already-passing view.
+
+**What the gate proved about itself:** the failure was reachable and actionable exactly as D-02 required, and the threshold's pre-commit made post-hoc adjustment impossible to argue for. The failure mode caught was not the expected "slightly too slow" but "does not complete at all" — >10.1 minutes unbounded with ~11 minutes of accumulated renderer CPU and no errors — a distinction only a fail-closed comparator draws from "not yet measured."
+
+**Scope of this plan's close-out:** per the plan's own Task 3 action text, no remedy work begins in this plan. 05-05, 05-06 and 05-07 stay blocked until the collapse-default remedy is itself planned (D-10 names all three; each carries its own explicit PASS precondition written where its executor reads it).
+
+**Verify command output (verbatim, re-run at close-out):**
+
+```
+verdict presented: FAIL metrics judged: 4
+```
+
+**Threshold-untouched control (verbatim, re-run at close-out):**
+
+```
+$ git log --oneline -- corpora/graph-render-threshold.json | wc -l
+1
+```
+
 ## Files Created/Modified
 
 - `web/scripts/graph-verdict.mjs` — the fail-closed comparator and CLI entry point.
@@ -281,7 +314,7 @@ Exit 0 — **this is a well-formed FAIL, and the verify command's exit 0 IS the 
 - **`task build` vs `task build:release`** — see key-decisions above (Rule 3).
 - **`@types/node` added** — see key-decisions above (Rule 3).
 - **Collapsed-view definition reverse-engineered from the threshold's own recorded figures** — see key-decisions above.
-- **Task 3 left open** — see key-decisions above; this is the deliberate design of a `gate=blocking-human` checkpoint, not an omission.
+- **Task 3 answered: `halt-collapse-default`** — see key-decisions above and "Task 3: Maintainer Decision" for the verbatim answer and rationale.
 
 ## Deviations from Plan
 
@@ -323,12 +356,9 @@ None — no external service configuration required.
 
 ## Next Phase Readiness
 
-- **05-05, 05-06 and 05-07 are BLOCKED** pending Task 3's answer (D-10 names all three).
-- The recorded verdict is FAIL. Per `corpora/graph-render-threshold.json`'s own `onFailure` field (locked in 05-01, before any measurement existed), exactly two remedies are available:
-  - **(a)** Make the collapsed directory view the default first paint with progressive expansion. Keeps `cytoscape`/`cytoscape-elk`. The already-measured collapsed-view counts (134 nodes / 819 edges — ~24x fewer nodes, ~26x fewer edges than the failing expanded view) size this remedy rather than leaving it speculative, and this repository's own successful measurement (714/1074 nodes/edges, 2.6s TTI) is a rough scale-comparable data point in the same direction.
-  - **(b)** Reconsider the renderer and layout stack. Re-opens D-02, D-07 and D-04 together.
-  - Widening, lowering or re-scoping the threshold is explicitly NOT an available remedy.
-- No blockers on this plan's own deliverables — Tasks 1 and 2 are complete, verified, and committed.
+- **Task 3 answered: `halt-collapse-default`** (maintainer, 2026-08-30). See "Task 3: Maintainer Decision" above for the verbatim answer and rationale.
+- **05-05, 05-06 and 05-07 stay BLOCKED** — this plan does not begin the remedy (per its own Task 3 action text). They resume only once the collapse-default-as-default-first-paint work is itself planned and re-measured against the same locked bars (D-10 names all three; each carries its own explicit PASS precondition).
+- No work remains open on this plan's own deliverables — all three tasks are complete, verified, and committed.
 
 ## Self-Check: PASSED
 
@@ -346,7 +376,10 @@ None — no external service configuration required.
 - `GOTOOLCHAIN=go1.26.5 task web:drift / web:audit / web:lockfile / web:deps:strict` → all PASS
 - `git diff --name-only corpora/graph-render-threshold.json` → empty
 - `git merge-base` check: threshold lock commit is an ancestor of the observation commit → CONFIRMED
+- `git log --oneline -- corpora/graph-render-threshold.json | wc -l` → 1 (unchanged since lock)
+- `rg -c 'release|halt-collapse-default|halt-reconsider-stack' .planning/phases/05-file-package-graph-view/05-04-SUMMARY.md` → matches present (this SUMMARY records `halt-collapse-default` verbatim)
+- Same answer recorded in `.planning/STATE.md`'s decision log → CONFIRMED
 
 ---
 *Phase: 05-file-package-graph-view*
-*Completed (Tasks 1-2; Task 3 open): 2026-08-30*
+*Completed (all 3 tasks; Task 3 answered `halt-collapse-default`): 2026-08-30*
