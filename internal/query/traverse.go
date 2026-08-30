@@ -60,6 +60,251 @@ func BuildReverseAdjacency(r graphstore.Reader) (map[string][]*schema.Edge, erro
 // from the code (ENG-01 performance invariant).
 var buildReverseAdjacency = BuildReverseAdjacency
 
+// filegraphKindPackage is internal/indexer/resolve.go's unexported
+// kindPackage — its value is duplicated here as a string literal, not
+// imported, because it is deliberately unexported by internal/indexer and
+// this comment is what ties the two together (mirrors validate.go's
+// knownKinds convention); if kindPackage's value ever changes, this
+// literal must change with it. D-08 forbids touching resolve.go itself —
+// the correction stays inside this phase's new code, at the read site.
+const filegraphKindPackage = "package"
+
+// FileGraphNode is one file-granularity node in Engine.FileGraph()'s
+// rollup (ENG-03, GRF-02).
+type FileGraphNode struct {
+	// Path is the file's repo-relative path (schema.Node.FilePath).
+	Path string
+	// Language is the file's language, taken from its own KindFile
+	// record when one is present, else the first non-empty Language seen
+	// among the file's retained symbol records.
+	Language string
+	// SymbolCount is the number of DECLARED symbols in the file. The
+	// file's own file-kind record is NOT a symbol the file declares and
+	// is never counted, nor is a synthetic package record (both are
+	// excluded before this tally runs) — a file declaring three symbols
+	// reports three, never four (review M-4).
+	SymbolCount int64
+	// CycleID is 0 for a node in no strongly-connected cycle and is
+	// populated by the cycle detector, not by this scan.
+	CycleID int
+}
+
+// FileGraphEdge is one aggregated source-file-to-target-file edge in
+// Engine.FileGraph()'s rollup, with a sparse per-kind count.
+type FileGraphEdge struct {
+	SourceFile string
+	TargetFile string
+	// KindCounts holds one entry per observed edge kind rolled into this
+	// file pair. A kind with zero observed edges is absent from the map,
+	// never present with value 0 (mirrors edgesByKind's sparse-map
+	// convention, status.go).
+	KindCounts map[string]int64
+	TotalCount int64
+	// InCycle is true when both this edge's endpoints carry the same
+	// non-zero CycleID — populated by the cycle detector, not by this
+	// scan.
+	InCycle bool
+}
+
+// FileGraphResult is Engine.FileGraph()'s return value: the aggregated
+// file-granularity node and edge rollup, plus counts of every exclusion
+// the scan made — an exclusion is never silent (D-03, D-08).
+type FileGraphResult struct {
+	Nodes []FileGraphNode
+	Edges []FileGraphEdge
+	// ExcludedPackageNodes counts synthetic "package"-kind pseudo-nodes
+	// (and any other record with an empty FilePath) skipped in the node
+	// scan (D-08).
+	ExcludedPackageNodes int64
+	// ExcludedSelfEdges counts edges of a retained kind whose source and
+	// target roll up to the same file (D-03).
+	ExcludedSelfEdges int64
+	// ExcludedContainsEdges counts edges of kind "contains" excluded
+	// before aggregation (D-03).
+	ExcludedContainsEdges int64
+	// CycleCount is the number of distinct strongly-connected components
+	// of size 2 or more found over the aggregated file adjacency —
+	// populated by the cycle detector, not by this scan.
+	CycleCount int
+}
+
+// fileAgg accumulates FileGraph's scan-one state per distinct file path:
+// the language to report and the count of declared (non-file-kind,
+// non-excluded) symbol records.
+type fileAgg struct {
+	language             string
+	languageFromFileKind bool
+	symbolCount          int64
+}
+
+// filePairKey identifies one aggregated source-file/target-file pair in
+// FileGraph's scan-two accumulation map.
+type filePairKey struct {
+	source string
+	target string
+}
+
+// FileGraph computes Engine.FileGraph()'s file-granularity rollup
+// (ENG-03, GRF-02, D-05/D-09).
+//
+// It is built FRESH inside every call, with no package-level cache and no
+// once-latch — mirroring BuildReverseAdjacency's fresh-per-call
+// discipline above (D-05).
+//
+// It needs TWO scans, not one: schema.Edge carries no file path and node
+// IDs are opaque content hashes, so resolving an edge's endpoints to
+// their containing files requires a full node scan (mapping node id to
+// file path) before the edge scan can be aggregated (D-09, correcting
+// D-05's single-scan assumption).
+//
+// Synthetic "package"-kind pseudo-nodes (internal/indexer/resolve.go's
+// unexported kindPackage) are excluded from the node scan: they are
+// synthetic intra-module-import targets with no owning file (FilePath ==
+// "" always), and a naive node-to-file lookup would otherwise roll their
+// edges into a phantom "" file (D-08).
+//
+// "contains" edges and file-level self-edges (an edge whose source and
+// target roll up to the SAME file) are excluded from the edge scan, for
+// every retained kind — "contains" is symbol-in-file containment, which
+// at file granularity is near-universal self-edge noise; an edge between
+// two different symbols in the same file is not a dependency between
+// files (D-03).
+func (e *Engine) FileGraph() (FileGraphResult, error) {
+	// Scan one: IterateNodes() over the whole n/ namespace, building the
+	// node-id-to-file-path map that scan two's edge aggregation depends
+	// on, and the per-file symbol tally and language.
+	nodeIt, err := e.reader.IterateNodes()
+	if err != nil {
+		return FileGraphResult{}, err
+	}
+	defer nodeIt.Close()
+
+	nodeFile := make(map[string]string)
+	fileAggs := make(map[string]*fileAgg)
+	var excludedPackageNodes int64
+
+	for nodeIt.Next() {
+		n := nodeIt.Node()
+		if n.Kind == filegraphKindPackage || n.FilePath == "" {
+			excludedPackageNodes++
+			continue
+		}
+		nodeFile[n.Id] = n.FilePath
+
+		agg, ok := fileAggs[n.FilePath]
+		if !ok {
+			agg = &fileAgg{}
+			fileAggs[n.FilePath] = agg
+		}
+		if n.Kind == goextract.KindFile {
+			agg.language = n.Language
+			agg.languageFromFileKind = true
+			continue
+		}
+		agg.symbolCount++
+		if !agg.languageFromFileKind && agg.language == "" && n.Language != "" {
+			agg.language = n.Language
+		}
+	}
+	if err := nodeIt.Err(); err != nil {
+		return FileGraphResult{}, err
+	}
+
+	// Scan two: IterateEdges("") — the empty prefix, because ten of the
+	// eleven edge kinds are retained and only "contains" is dropped, so a
+	// per-kind-filtered scan would need to run ten times over.
+	edgeIt, err := e.reader.IterateEdges("")
+	if err != nil {
+		return FileGraphResult{}, err
+	}
+	defer edgeIt.Close()
+
+	pairCounts := make(map[filePairKey]map[string]int64)
+	var excludedContainsEdges, excludedSelfEdges int64
+
+	for edgeIt.Next() {
+		edge := edgeIt.Edge()
+		if edge.Kind == goextract.RefKindContains {
+			excludedContainsEdges++
+			continue
+		}
+		srcFile, ok := nodeFile[edge.Source]
+		if !ok {
+			continue
+		}
+		tgtFile, ok := nodeFile[edge.Target]
+		if !ok {
+			continue
+		}
+		if srcFile == tgtFile {
+			excludedSelfEdges++
+			continue
+		}
+		key := filePairKey{source: srcFile, target: tgtFile}
+		counts, ok := pairCounts[key]
+		if !ok {
+			counts = make(map[string]int64)
+			pairCounts[key] = counts
+		}
+		counts[edge.Kind]++
+	}
+	if err := edgeIt.Err(); err != nil {
+		return FileGraphResult{}, err
+	}
+
+	// Materialize nodes, sorted ascending by path.
+	paths := make([]string, 0, len(fileAggs))
+	for path := range fileAggs {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	resultNodes := make([]FileGraphNode, 0, len(paths))
+	for _, path := range paths {
+		agg := fileAggs[path]
+		resultNodes = append(resultNodes, FileGraphNode{
+			Path:        path,
+			Language:    agg.language,
+			SymbolCount: agg.symbolCount,
+		})
+	}
+
+	// Materialize edges, sorted ascending by source file then target file.
+	pairKeys := make([]filePairKey, 0, len(pairCounts))
+	for key := range pairCounts {
+		pairKeys = append(pairKeys, key)
+	}
+	sort.Slice(pairKeys, func(i, j int) bool {
+		if pairKeys[i].source != pairKeys[j].source {
+			return pairKeys[i].source < pairKeys[j].source
+		}
+		return pairKeys[i].target < pairKeys[j].target
+	})
+	resultEdges := make([]FileGraphEdge, 0, len(pairKeys))
+	for _, key := range pairKeys {
+		counts := pairCounts[key]
+		var total int64
+		for _, c := range counts {
+			total += c
+		}
+		resultEdges = append(resultEdges, FileGraphEdge{
+			SourceFile: key.source,
+			TargetFile: key.target,
+			KindCounts: counts,
+			TotalCount: total,
+		})
+	}
+
+	result := FileGraphResult{
+		Nodes:                 resultNodes,
+		Edges:                 resultEdges,
+		ExcludedPackageNodes:  excludedPackageNodes,
+		ExcludedSelfEdges:     excludedSelfEdges,
+		ExcludedContainsEdges: excludedContainsEdges,
+	}
+
+	return result, nil
+}
+
 // BuildImplementsIndex builds an in-memory index of "implements" edges
 // keyed by edge.Target (the interface node), from one full
 // IterateEdges("") scan — mirrors BuildReverseAdjacency's shape exactly

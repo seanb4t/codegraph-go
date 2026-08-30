@@ -335,11 +335,26 @@ func TestFileGraphConcurrentCallsAgree(t *testing.T) {
 }
 
 // TestFileGraphAgainstThisRepositoryIndex is gated on this repository's
-// own .codegraph/store being present: it asserts the corrected D-08
-// figures (572 nodes, 1,057 distinct source-to-target file pairs).
-// google/guava carries zero package pseudo-nodes, so the measurement
-// corpus GRF-01 uses structurally cannot catch a regression here — only
-// this repository's own index can.
+// own .codegraph/store being present. google/guava carries zero package
+// pseudo-nodes, so the measurement corpus GRF-01 uses structurally cannot
+// catch the D-08 phantom-empty-path regression — only this repository's
+// own index, which genuinely carries package pseudo-nodes, can.
+//
+// This asserts the STRUCTURAL invariant D-08 exists to guarantee — no
+// node or edge ever carries an empty file path, and the package-exclusion
+// mechanism demonstrably engaged (ExcludedPackageNodes > 0) — rather than
+// pinning an exact node/edge count. This repository indexes itself via a
+// live, continuously-running daemon (dogfooding): measured empirically
+// during this task's own execution, a byte-for-byte fresh reindex of the
+// commit immediately preceding this plan's own work already reported 571
+// nodes / 1,091 edges (not the 572/1,057 CONTEXT.md/05-01-PLAN.md
+// recorded), and the live store's count shifts again the moment this very
+// test file lands and gets auto-indexed. An exact-count assertion here
+// would therefore be pinned against a target that moves with this plan's
+// own commits — not a stable regression guard. The measured counts at
+// each stage are recorded in 05-01-SUMMARY.md per the plan's own
+// action (f), which anticipates the figures may not match the originally
+// estimated baseline.
 func TestFileGraphAgainstThisRepositoryIndex(t *testing.T) {
 	e, closer, err := OpenAt(".")
 	if err != nil {
@@ -351,10 +366,24 @@ func TestFileGraphAgainstThisRepositoryIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FileGraph: unexpected error: %v", err)
 	}
-	if len(got.Nodes) != 572 {
-		t.Fatalf("FileGraph: got %d nodes against this repository's own index, want 572 (the corrected D-08 figure)", len(got.Nodes))
+	if len(got.Nodes) == 0 {
+		t.Fatalf("FileGraph: node count is zero against this repository's own index, want > 0")
 	}
-	if len(got.Edges) != 1057 {
-		t.Fatalf("FileGraph: got %d distinct source-to-target file pairs against this repository's own index, want 1057 (the corrected D-08 figure)", len(got.Edges))
+	if len(got.Edges) == 0 {
+		t.Fatalf("FileGraph: edge count is zero against this repository's own index, want > 0")
 	}
+	if got.ExcludedPackageNodes == 0 {
+		t.Fatalf("FileGraph: ExcludedPackageNodes is zero against this repository's own index — this repository carries real package pseudo-nodes (unlike the guava measurement corpus), so a zero here means the exclusion did not engage")
+	}
+	for _, n := range got.Nodes {
+		if n.Path == "" {
+			t.Fatalf("FileGraph: node with empty path present against this repository's own index — the D-08 phantom-file regression")
+		}
+	}
+	for _, edge := range got.Edges {
+		if edge.SourceFile == "" || edge.TargetFile == "" {
+			t.Fatalf("FileGraph: edge referencing an empty path present against this repository's own index: %+v", edge)
+		}
+	}
+	t.Logf("this repository's own index: %d nodes, %d edges, ExcludedPackageNodes=%d", len(got.Nodes), len(got.Edges), got.ExcludedPackageNodes)
 }
