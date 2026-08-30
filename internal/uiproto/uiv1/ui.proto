@@ -65,6 +65,19 @@ service UIService {
   // ((*query.Engine).ValidateRepoRelativePath, SRV-05) — no second
   // confinement implementation.
   rpc GetPermalink(GetPermalinkRequest) returns (GetPermalinkResponse);
+  // GetHealth is plan 04-03's eleventh rpc (D-01): it projects
+  // internal/query.StatusResult's richer per-language file counts,
+  // per-kind node/edge counts, pending-change tallies, index-health
+  // block and worktree-mismatch detection onto the wire. It exists
+  // SEPARATELY from GetStatus, deliberately: GetStatus is fetched on
+  // every navigation by the client's status gate (Phase 3's
+  // createStatusGate) and must stay cheap, so none of this richer data
+  // is added to GetStatusResponse (D-01). Confining
+  // gitmeta.DetectIndexMismatch's up-to-four git subprocess cost to this
+  // rpc's response shape, rather than GetStatusResponse, is D-02. Read-
+  // only and additive per D-02a — it performs no network operation and
+  // mutates nothing (SRV-03).
+  rpc GetHealth(GetHealthRequest) returns (GetHealthResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -608,4 +621,136 @@ message GetPermalinkResponse {
   // caller can act on it rather than receiving one undifferentiated
   // refusal.
   string reason = 3;
+}
+
+// GetHealthRequest is presently unread of any consulted field, mirroring
+// GetStatusRequest's own shape (D-01, 04-03 Task 1 checkpoint).
+message GetHealthRequest {
+  // path is declared for a future milestone in which one server process
+  // answers for more than one repository; the v1 handler does not read
+  // it — every response reports on the server's own configured
+  // RepoPath regardless of this field's value. This is NOT a protobuf
+  // `reserved` declaration: the field IS on the wire and IS serialized
+  // by every client, it is simply not read by this version's handler.
+  string path = 1;
+}
+
+// WorktreeMismatch is the uiv1 projection of internal/gitmeta.Mismatch,
+// field-for-field (04-03 Task 1 checkpoint). A PLAIN message field on
+// GetHealthResponse, not `optional`: proto3 message fields are
+// presence-tracked by construction, so the generated Go field is already
+// a nil-able pointer with no extra keyword needed. Populated (non-nil)
+// only when internal/query.Engine.WorktreeMismatch detects a genuine
+// mismatch between the caller's working tree and the resolved index
+// root (D-02/WORK-01); nil for a clean, in-tree repository. Deliberately
+// carries host-absolute paths — the ONE scoped exception to this
+// service's project_path/index_path privacy stance, because the warning
+// is useless without naming both trees, and a clean tree still leaks
+// nothing (T-04-09, accepted; extends the same exception already
+// granted on the MCP surface).
+message WorktreeMismatch {
+  string worktree_root = 1;
+  string index_root = 2;
+}
+
+// PendingChanges is the uiv1 projection of internal/query.PendingChanges
+// (status.go:70-74), field-for-field (04-03 Task 1 checkpoint). Kept
+// unprefixed despite shadowing the Go domain type name of the same
+// name — handlers.go's mapper disambiguates via package qualifiers
+// (query.PendingChanges vs uiv1.PendingChanges), the same discipline
+// query.Location/uiv1.Location already establish in that file.
+message PendingChanges {
+  int32 added = 1;
+  int32 modified = 2;
+  int32 removed = 3;
+}
+
+// IndexHealth is the uiv1 projection of internal/query.IndexHealth
+// (status.go:76-86), field-for-field (04-03 Task 1 checkpoint). Kept
+// unprefixed for the same reason PendingChanges is — see that message's
+// comment.
+message IndexHealth {
+  string built_with_version = 1;
+  uint32 built_with_extraction_version = 2;
+  uint32 current_extraction_version = 3;
+  bool reindex_recommended = 4;
+  string state = 5;
+  int32 pending_refs = 6;
+}
+
+// GetHealthResponse is the uiv1 projection of internal/query.StatusResult
+// (status.go:47-65), frozen field-for-field at the 04-03 Task 1
+// checkpoint (a maintainer-approved one-way door, D-02a). Every field
+// here mirrors its StatusResult counterpart exactly, mapped by the named
+// healthToProto function in internal/uiserver/handlers.go — never an
+// inline literal at the handler call site, so the mapping cannot drift
+// from its source silently.
+//
+// project_path/index_path are DELIBERATELY ABSENT, matching
+// GetStatusResponse's existing privacy stance (status.go's mapping
+// table): they are blanked everywhere to avoid leaking host-local
+// absolute paths, except for worktree_mismatch below, the one
+// maintainer-approved scoped exception (T-04-09).
+//
+// commit_sha is deliberately DUPLICATED from GetStatusResponse (Task 1
+// checkpoint sub-decision 2): the health page reads freshness from this
+// rpc alone, without a second GetStatus round trip. It is computed by
+// the SAME (*query.Engine).IndexMeta + schema.IndexedCommitSHA +
+// schema.IsCommitSHA validation gate GetStatus applies — never a second,
+// independently-drifting derivation.
+message GetHealthResponse {
+  // initialized mirrors StatusResult.Initialized. GetHealth does not
+  // degrade-and-answer (unlike GetStatus's documented single exception,
+  // D-16) — an unopenable store is an ordinary withEngine error for this
+  // rpc, so initialized is always true on any successful response.
+  bool initialized = 1;
+
+  // version mirrors StatusResult.Version.
+  string version = 2;
+
+  // file_count mirrors StatusResult.FileCount.
+  int64 file_count = 3;
+
+  // node_count mirrors StatusResult.NodeCount.
+  int64 node_count = 4;
+
+  // edge_count mirrors StatusResult.EdgeCount.
+  int64 edge_count = 5;
+
+  // db_size_bytes mirrors StatusResult.DbSizeBytes (D-07).
+  int64 db_size_bytes = 6;
+
+  // backend mirrors StatusResult.Backend (the literal "pebble").
+  string backend = 7;
+
+  // files_by_language mirrors StatusResult.FilesByLanguage.
+  map<string, int64> files_by_language = 8;
+
+  // languages mirrors StatusResult.Languages.
+  repeated string languages = 9;
+
+  // nodes_by_kind mirrors StatusResult.NodesByKind.
+  map<string, int64> nodes_by_kind = 10;
+
+  // edges_by_kind mirrors StatusResult.EdgesByKind.
+  map<string, int64> edges_by_kind = 11;
+
+  // pending_changes mirrors StatusResult.PendingChanges.
+  PendingChanges pending_changes = 12;
+
+  // index_health mirrors StatusResult.Index.
+  IndexHealth index_health = 13;
+
+  // worktree_mismatch mirrors StatusResult.WorktreeMismatch — see the
+  // WorktreeMismatch message comment above for its privacy disposition.
+  WorktreeMismatch worktree_mismatch = 14;
+
+  // stale mirrors StatusResult.Stale (D-04a). This is the raw signal
+  // only — GetHealth defines no second staleness or trust verdict; the
+  // verdict is the client's, computed by classifyStatus (D-04).
+  bool stale = 15;
+
+  // commit_sha is duplicated from GetStatusResponse — see this
+  // message's doc comment above for why and how it is validated.
+  string commit_sha = 16;
 }

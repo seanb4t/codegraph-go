@@ -2424,6 +2424,484 @@ func (x *GetPermalinkResponse) GetReason() string {
 	return ""
 }
 
+// GetHealthRequest is presently unread of any consulted field, mirroring
+// GetStatusRequest's own shape (D-01, 04-03 Task 1 checkpoint).
+type GetHealthRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// path is declared for a future milestone in which one server process
+	// answers for more than one repository; the v1 handler does not read
+	// it — every response reports on the server's own configured
+	// RepoPath regardless of this field's value. This is NOT a protobuf
+	// `reserved` declaration: the field IS on the wire and IS serialized
+	// by every client, it is simply not read by this version's handler.
+	Path          string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHealthRequest) Reset() {
+	*x = GetHealthRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHealthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHealthRequest) ProtoMessage() {}
+
+func (x *GetHealthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHealthRequest.ProtoReflect.Descriptor instead.
+func (*GetHealthRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GetHealthRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+// WorktreeMismatch is the uiv1 projection of internal/gitmeta.Mismatch,
+// field-for-field (04-03 Task 1 checkpoint). A PLAIN message field on
+// GetHealthResponse, not `optional`: proto3 message fields are
+// presence-tracked by construction, so the generated Go field is already
+// a nil-able pointer with no extra keyword needed. Populated (non-nil)
+// only when internal/query.Engine.WorktreeMismatch detects a genuine
+// mismatch between the caller's working tree and the resolved index
+// root (D-02/WORK-01); nil for a clean, in-tree repository. Deliberately
+// carries host-absolute paths — the ONE scoped exception to this
+// service's project_path/index_path privacy stance, because the warning
+// is useless without naming both trees, and a clean tree still leaks
+// nothing (T-04-09, accepted; extends the same exception already
+// granted on the MCP surface).
+type WorktreeMismatch struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WorktreeRoot  string                 `protobuf:"bytes,1,opt,name=worktree_root,json=worktreeRoot,proto3" json:"worktree_root,omitempty"`
+	IndexRoot     string                 `protobuf:"bytes,2,opt,name=index_root,json=indexRoot,proto3" json:"index_root,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorktreeMismatch) Reset() {
+	*x = WorktreeMismatch{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorktreeMismatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorktreeMismatch) ProtoMessage() {}
+
+func (x *WorktreeMismatch) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorktreeMismatch.ProtoReflect.Descriptor instead.
+func (*WorktreeMismatch) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *WorktreeMismatch) GetWorktreeRoot() string {
+	if x != nil {
+		return x.WorktreeRoot
+	}
+	return ""
+}
+
+func (x *WorktreeMismatch) GetIndexRoot() string {
+	if x != nil {
+		return x.IndexRoot
+	}
+	return ""
+}
+
+// PendingChanges is the uiv1 projection of internal/query.PendingChanges
+// (status.go:70-74), field-for-field (04-03 Task 1 checkpoint). Kept
+// unprefixed despite shadowing the Go domain type name of the same
+// name — handlers.go's mapper disambiguates via package qualifiers
+// (query.PendingChanges vs uiv1.PendingChanges), the same discipline
+// query.Location/uiv1.Location already establish in that file.
+type PendingChanges struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Added         int32                  `protobuf:"varint,1,opt,name=added,proto3" json:"added,omitempty"`
+	Modified      int32                  `protobuf:"varint,2,opt,name=modified,proto3" json:"modified,omitempty"`
+	Removed       int32                  `protobuf:"varint,3,opt,name=removed,proto3" json:"removed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PendingChanges) Reset() {
+	*x = PendingChanges{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PendingChanges) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PendingChanges) ProtoMessage() {}
+
+func (x *PendingChanges) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PendingChanges.ProtoReflect.Descriptor instead.
+func (*PendingChanges) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *PendingChanges) GetAdded() int32 {
+	if x != nil {
+		return x.Added
+	}
+	return 0
+}
+
+func (x *PendingChanges) GetModified() int32 {
+	if x != nil {
+		return x.Modified
+	}
+	return 0
+}
+
+func (x *PendingChanges) GetRemoved() int32 {
+	if x != nil {
+		return x.Removed
+	}
+	return 0
+}
+
+// IndexHealth is the uiv1 projection of internal/query.IndexHealth
+// (status.go:76-86), field-for-field (04-03 Task 1 checkpoint). Kept
+// unprefixed for the same reason PendingChanges is — see that message's
+// comment.
+type IndexHealth struct {
+	state                      protoimpl.MessageState `protogen:"open.v1"`
+	BuiltWithVersion           string                 `protobuf:"bytes,1,opt,name=built_with_version,json=builtWithVersion,proto3" json:"built_with_version,omitempty"`
+	BuiltWithExtractionVersion uint32                 `protobuf:"varint,2,opt,name=built_with_extraction_version,json=builtWithExtractionVersion,proto3" json:"built_with_extraction_version,omitempty"`
+	CurrentExtractionVersion   uint32                 `protobuf:"varint,3,opt,name=current_extraction_version,json=currentExtractionVersion,proto3" json:"current_extraction_version,omitempty"`
+	ReindexRecommended         bool                   `protobuf:"varint,4,opt,name=reindex_recommended,json=reindexRecommended,proto3" json:"reindex_recommended,omitempty"`
+	State                      string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	PendingRefs                int32                  `protobuf:"varint,6,opt,name=pending_refs,json=pendingRefs,proto3" json:"pending_refs,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
+}
+
+func (x *IndexHealth) Reset() {
+	*x = IndexHealth{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IndexHealth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IndexHealth) ProtoMessage() {}
+
+func (x *IndexHealth) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IndexHealth.ProtoReflect.Descriptor instead.
+func (*IndexHealth) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *IndexHealth) GetBuiltWithVersion() string {
+	if x != nil {
+		return x.BuiltWithVersion
+	}
+	return ""
+}
+
+func (x *IndexHealth) GetBuiltWithExtractionVersion() uint32 {
+	if x != nil {
+		return x.BuiltWithExtractionVersion
+	}
+	return 0
+}
+
+func (x *IndexHealth) GetCurrentExtractionVersion() uint32 {
+	if x != nil {
+		return x.CurrentExtractionVersion
+	}
+	return 0
+}
+
+func (x *IndexHealth) GetReindexRecommended() bool {
+	if x != nil {
+		return x.ReindexRecommended
+	}
+	return false
+}
+
+func (x *IndexHealth) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *IndexHealth) GetPendingRefs() int32 {
+	if x != nil {
+		return x.PendingRefs
+	}
+	return 0
+}
+
+// GetHealthResponse is the uiv1 projection of internal/query.StatusResult
+// (status.go:47-65), frozen field-for-field at the 04-03 Task 1
+// checkpoint (a maintainer-approved one-way door, D-02a). Every field
+// here mirrors its StatusResult counterpart exactly, mapped by the named
+// healthToProto function in internal/uiserver/handlers.go — never an
+// inline literal at the handler call site, so the mapping cannot drift
+// from its source silently.
+//
+// project_path/index_path are DELIBERATELY ABSENT, matching
+// GetStatusResponse's existing privacy stance (status.go's mapping
+// table): they are blanked everywhere to avoid leaking host-local
+// absolute paths, except for worktree_mismatch below, the one
+// maintainer-approved scoped exception (T-04-09).
+//
+// commit_sha is deliberately DUPLICATED from GetStatusResponse (Task 1
+// checkpoint sub-decision 2): the health page reads freshness from this
+// rpc alone, without a second GetStatus round trip. It is computed by
+// the SAME (*query.Engine).IndexMeta + schema.IndexedCommitSHA +
+// schema.IsCommitSHA validation gate GetStatus applies — never a second,
+// independently-drifting derivation.
+type GetHealthResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// initialized mirrors StatusResult.Initialized. GetHealth does not
+	// degrade-and-answer (unlike GetStatus's documented single exception,
+	// D-16) — an unopenable store is an ordinary withEngine error for this
+	// rpc, so initialized is always true on any successful response.
+	Initialized bool `protobuf:"varint,1,opt,name=initialized,proto3" json:"initialized,omitempty"`
+	// version mirrors StatusResult.Version.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// file_count mirrors StatusResult.FileCount.
+	FileCount int64 `protobuf:"varint,3,opt,name=file_count,json=fileCount,proto3" json:"file_count,omitempty"`
+	// node_count mirrors StatusResult.NodeCount.
+	NodeCount int64 `protobuf:"varint,4,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	// edge_count mirrors StatusResult.EdgeCount.
+	EdgeCount int64 `protobuf:"varint,5,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	// db_size_bytes mirrors StatusResult.DbSizeBytes (D-07).
+	DbSizeBytes int64 `protobuf:"varint,6,opt,name=db_size_bytes,json=dbSizeBytes,proto3" json:"db_size_bytes,omitempty"`
+	// backend mirrors StatusResult.Backend (the literal "pebble").
+	Backend string `protobuf:"bytes,7,opt,name=backend,proto3" json:"backend,omitempty"`
+	// files_by_language mirrors StatusResult.FilesByLanguage.
+	FilesByLanguage map[string]int64 `protobuf:"bytes,8,rep,name=files_by_language,json=filesByLanguage,proto3" json:"files_by_language,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// languages mirrors StatusResult.Languages.
+	Languages []string `protobuf:"bytes,9,rep,name=languages,proto3" json:"languages,omitempty"`
+	// nodes_by_kind mirrors StatusResult.NodesByKind.
+	NodesByKind map[string]int64 `protobuf:"bytes,10,rep,name=nodes_by_kind,json=nodesByKind,proto3" json:"nodes_by_kind,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// edges_by_kind mirrors StatusResult.EdgesByKind.
+	EdgesByKind map[string]int64 `protobuf:"bytes,11,rep,name=edges_by_kind,json=edgesByKind,proto3" json:"edges_by_kind,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// pending_changes mirrors StatusResult.PendingChanges.
+	PendingChanges *PendingChanges `protobuf:"bytes,12,opt,name=pending_changes,json=pendingChanges,proto3" json:"pending_changes,omitempty"`
+	// index_health mirrors StatusResult.Index.
+	IndexHealth *IndexHealth `protobuf:"bytes,13,opt,name=index_health,json=indexHealth,proto3" json:"index_health,omitempty"`
+	// worktree_mismatch mirrors StatusResult.WorktreeMismatch — see the
+	// WorktreeMismatch message comment above for its privacy disposition.
+	WorktreeMismatch *WorktreeMismatch `protobuf:"bytes,14,opt,name=worktree_mismatch,json=worktreeMismatch,proto3" json:"worktree_mismatch,omitempty"`
+	// stale mirrors StatusResult.Stale (D-04a). This is the raw signal
+	// only — GetHealth defines no second staleness or trust verdict; the
+	// verdict is the client's, computed by classifyStatus (D-04).
+	Stale bool `protobuf:"varint,15,opt,name=stale,proto3" json:"stale,omitempty"`
+	// commit_sha is duplicated from GetStatusResponse — see this
+	// message's doc comment above for why and how it is validated.
+	CommitSha     string `protobuf:"bytes,16,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetHealthResponse) Reset() {
+	*x = GetHealthResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetHealthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetHealthResponse) ProtoMessage() {}
+
+func (x *GetHealthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetHealthResponse.ProtoReflect.Descriptor instead.
+func (*GetHealthResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *GetHealthResponse) GetInitialized() bool {
+	if x != nil {
+		return x.Initialized
+	}
+	return false
+}
+
+func (x *GetHealthResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *GetHealthResponse) GetFileCount() int64 {
+	if x != nil {
+		return x.FileCount
+	}
+	return 0
+}
+
+func (x *GetHealthResponse) GetNodeCount() int64 {
+	if x != nil {
+		return x.NodeCount
+	}
+	return 0
+}
+
+func (x *GetHealthResponse) GetEdgeCount() int64 {
+	if x != nil {
+		return x.EdgeCount
+	}
+	return 0
+}
+
+func (x *GetHealthResponse) GetDbSizeBytes() int64 {
+	if x != nil {
+		return x.DbSizeBytes
+	}
+	return 0
+}
+
+func (x *GetHealthResponse) GetBackend() string {
+	if x != nil {
+		return x.Backend
+	}
+	return ""
+}
+
+func (x *GetHealthResponse) GetFilesByLanguage() map[string]int64 {
+	if x != nil {
+		return x.FilesByLanguage
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetLanguages() []string {
+	if x != nil {
+		return x.Languages
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetNodesByKind() map[string]int64 {
+	if x != nil {
+		return x.NodesByKind
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetEdgesByKind() map[string]int64 {
+	if x != nil {
+		return x.EdgesByKind
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetPendingChanges() *PendingChanges {
+	if x != nil {
+		return x.PendingChanges
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetIndexHealth() *IndexHealth {
+	if x != nil {
+		return x.IndexHealth
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetWorktreeMismatch() *WorktreeMismatch {
+	if x != nil {
+		return x.WorktreeMismatch
+	}
+	return nil
+}
+
+func (x *GetHealthResponse) GetStale() bool {
+	if x != nil {
+		return x.Stale
+	}
+	return false
+}
+
+func (x *GetHealthResponse) GetCommitSha() string {
+	if x != nil {
+		return x.CommitSha
+	}
+	return ""
+}
+
 var File_internal_uiproto_uiv1_ui_proto protoreflect.FileDescriptor
 
 const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
@@ -2594,7 +3072,55 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x14GetPermalinkResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12J\n" +
 	"\favailability\x18\x02 \x01(\x0e2&.codegraph.ui.v1.PermalinkAvailabilityR\favailability\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason*\x8e\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"&\n" +
+	"\x10GetHealthRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"V\n" +
+	"\x10WorktreeMismatch\x12#\n" +
+	"\rworktree_root\x18\x01 \x01(\tR\fworktreeRoot\x12\x1d\n" +
+	"\n" +
+	"index_root\x18\x02 \x01(\tR\tindexRoot\"\\\n" +
+	"\x0ePendingChanges\x12\x14\n" +
+	"\x05added\x18\x01 \x01(\x05R\x05added\x12\x1a\n" +
+	"\bmodified\x18\x02 \x01(\x05R\bmodified\x12\x18\n" +
+	"\aremoved\x18\x03 \x01(\x05R\aremoved\"\xa6\x02\n" +
+	"\vIndexHealth\x12,\n" +
+	"\x12built_with_version\x18\x01 \x01(\tR\x10builtWithVersion\x12A\n" +
+	"\x1dbuilt_with_extraction_version\x18\x02 \x01(\rR\x1abuiltWithExtractionVersion\x12<\n" +
+	"\x1acurrent_extraction_version\x18\x03 \x01(\rR\x18currentExtractionVersion\x12/\n" +
+	"\x13reindex_recommended\x18\x04 \x01(\bR\x12reindexRecommended\x12\x14\n" +
+	"\x05state\x18\x05 \x01(\tR\x05state\x12!\n" +
+	"\fpending_refs\x18\x06 \x01(\x05R\vpendingRefs\"\xf3\a\n" +
+	"\x11GetHealthResponse\x12 \n" +
+	"\vinitialized\x18\x01 \x01(\bR\vinitialized\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1d\n" +
+	"\n" +
+	"file_count\x18\x03 \x01(\x03R\tfileCount\x12\x1d\n" +
+	"\n" +
+	"node_count\x18\x04 \x01(\x03R\tnodeCount\x12\x1d\n" +
+	"\n" +
+	"edge_count\x18\x05 \x01(\x03R\tedgeCount\x12\"\n" +
+	"\rdb_size_bytes\x18\x06 \x01(\x03R\vdbSizeBytes\x12\x18\n" +
+	"\abackend\x18\a \x01(\tR\abackend\x12c\n" +
+	"\x11files_by_language\x18\b \x03(\v27.codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntryR\x0ffilesByLanguage\x12\x1c\n" +
+	"\tlanguages\x18\t \x03(\tR\tlanguages\x12W\n" +
+	"\rnodes_by_kind\x18\n" +
+	" \x03(\v23.codegraph.ui.v1.GetHealthResponse.NodesByKindEntryR\vnodesByKind\x12W\n" +
+	"\redges_by_kind\x18\v \x03(\v23.codegraph.ui.v1.GetHealthResponse.EdgesByKindEntryR\vedgesByKind\x12H\n" +
+	"\x0fpending_changes\x18\f \x01(\v2\x1f.codegraph.ui.v1.PendingChangesR\x0ependingChanges\x12?\n" +
+	"\findex_health\x18\r \x01(\v2\x1c.codegraph.ui.v1.IndexHealthR\vindexHealth\x12N\n" +
+	"\x11worktree_mismatch\x18\x0e \x01(\v2!.codegraph.ui.v1.WorktreeMismatchR\x10worktreeMismatch\x12\x14\n" +
+	"\x05stale\x18\x0f \x01(\bR\x05stale\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x10 \x01(\tR\tcommitSha\x1aB\n" +
+	"\x14FilesByLanguageEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a>\n" +
+	"\x10NodesByKindEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a>\n" +
+	"\x10EdgesByKindEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01*\x8e\x01\n" +
 	"\x0eNodeDetailMode\x12 \n" +
 	"\x1cNODE_DETAIL_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15NODE_DETAIL_MODE_FILE\x10\x01\x12\x1f\n" +
@@ -2604,7 +3130,7 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\"PERMALINK_AVAILABILITY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fPERMALINK_AVAILABILITY_LINKABLE\x10\x01\x12.\n" +
 	"*PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED\x10\x02\x12\"\n" +
-	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\xb5\x06\n" +
+	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\x89\a\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
@@ -2615,7 +3141,8 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\bAffected\x12 .codegraph.ui.v1.AffectedRequest\x1a!.codegraph.ui.v1.AffectedResponse\x12^\n" +
 	"\rGetNodeDetail\x12%.codegraph.ui.v1.GetNodeDetailRequest\x1a&.codegraph.ui.v1.GetNodeDetailResponse\x12L\n" +
 	"\aExplore\x12\x1f.codegraph.ui.v1.ExploreRequest\x1a .codegraph.ui.v1.ExploreResponse\x12[\n" +
-	"\fGetPermalink\x12$.codegraph.ui.v1.GetPermalinkRequest\x1a%.codegraph.ui.v1.GetPermalinkResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\fGetPermalink\x12$.codegraph.ui.v1.GetPermalinkRequest\x1a%.codegraph.ui.v1.GetPermalinkResponse\x12R\n" +
+	"\tGetHealth\x12!.codegraph.ui.v1.GetHealthRequest\x1a\".codegraph.ui.v1.GetHealthResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -2630,7 +3157,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
 	(PermalinkAvailability)(0),    // 1: codegraph.ui.v1.PermalinkAvailability
@@ -2663,6 +3190,14 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*IndexingInProgress)(nil),    // 28: codegraph.ui.v1.IndexingInProgress
 	(*GetPermalinkRequest)(nil),   // 29: codegraph.ui.v1.GetPermalinkRequest
 	(*GetPermalinkResponse)(nil),  // 30: codegraph.ui.v1.GetPermalinkResponse
+	(*GetHealthRequest)(nil),      // 31: codegraph.ui.v1.GetHealthRequest
+	(*WorktreeMismatch)(nil),      // 32: codegraph.ui.v1.WorktreeMismatch
+	(*PendingChanges)(nil),        // 33: codegraph.ui.v1.PendingChanges
+	(*IndexHealth)(nil),           // 34: codegraph.ui.v1.IndexHealth
+	(*GetHealthResponse)(nil),     // 35: codegraph.ui.v1.GetHealthResponse
+	nil,                           // 36: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	nil,                           // 37: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	nil,                           // 38: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	3,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
@@ -2689,31 +3224,39 @@ var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	25, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
 	26, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
 	1,  // 23: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
-	4,  // 24: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	6,  // 25: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	10, // 26: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	12, // 27: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
-	14, // 28: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
-	16, // 29: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
-	18, // 30: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
-	20, // 31: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
-	24, // 32: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
-	29, // 33: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
-	5,  // 34: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	7,  // 35: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	11, // 36: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	13, // 37: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	15, // 38: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	17, // 39: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	19, // 40: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	23, // 41: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	27, // 42: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
-	30, // 43: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
-	34, // [34:44] is the sub-list for method output_type
-	24, // [24:34] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	36, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	37, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	38, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	33, // 27: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
+	34, // 28: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
+	32, // 29: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
+	4,  // 30: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	6,  // 31: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	10, // 32: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	12, // 33: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	14, // 34: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	16, // 35: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	18, // 36: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	20, // 37: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
+	24, // 38: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
+	29, // 39: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
+	31, // 40: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
+	5,  // 41: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	7,  // 42: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	11, // 43: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	13, // 44: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	15, // 45: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	17, // 46: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	19, // 47: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	23, // 48: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	27, // 49: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	30, // 50: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
+	35, // 51: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
+	41, // [41:52] is the sub-list for method output_type
+	30, // [30:41] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -2729,7 +3272,7 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   29,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

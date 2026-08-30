@@ -878,3 +878,18 @@ func (s *uiService) Explore(ctx context.Context, req *connect.Request[uiv1.Explo
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// GetHealth is plan 04-03 Task 2's build-satisfying PLACEHOLDER: adding
+// GetHealth to ui.proto's service block adds it to the generated
+// uiv1connect.UIServiceHandler interface, and Go requires *uiService (no
+// forward-compat embed) to implement every interface method for the
+// package to compile at all — so this stub exists solely to keep the
+// tree buildable between Task 2's proto/codegen commit and Task 3's real
+// implementation, and is REPLACED (not extended) by Task 3's
+// withEngine-wrapped handler and healthToProto mapper. It deliberately
+// returns CodeUnimplemented rather than a fabricated response, so
+// Task 3's health_test.go RED phase observes real, honest failures
+// against it.
+func (s *uiService) GetHealth(_ context.Context, _ *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("GetHealth not yet implemented (plan 04-03 Task 3)"))
+}

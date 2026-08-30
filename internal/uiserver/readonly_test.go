@@ -28,6 +28,14 @@ import (
 // UIService` block. It is a read-only verb — it performs no network
 // operation and mutates nothing — and belongs in this read set for
 // exactly the same reason the original nine do.
+// UPDATED at plan 04-03: GetHealth (D-01) is the eleventh read-only rpc,
+// added additively to internal/uiproto/uiv1/ui.proto's `service
+// UIService` block. It projects internal/query.StatusResult's richer
+// per-language/per-kind/index-health data onto the wire, separately from
+// GetStatus (which stays cheap for every-navigation polling, D-01). It is
+// a read-only verb — it performs no network operation and mutates
+// nothing — and belongs in this read set for exactly the same reason the
+// other ten do.
 var wantUIServiceMethods = map[string]struct{}{
 	"GetStatus":     {},
 	"Search":        {},
@@ -39,13 +47,14 @@ var wantUIServiceMethods = map[string]struct{}{
 	"GetNodeDetail": {},
 	"Explore":       {},
 	"GetPermalink":  {},
+	"GetHealth":     {},
 }
 
 // TestUIServiceMethodSetIsExactlyTheReadSet reflects over the generated
 // uiv1connect.UIServiceHandler interface — the machine-readable method
 // inventory a mutating rpc would have to appear in before it could ever
 // be dispatched — and asserts the observed method-name set is EXACTLY
-// wantUIServiceMethods: same length (10, as of plan 03-05's GetPermalink)
+// wantUIServiceMethods: same length (11, as of plan 04-03's GetHealth)
 // AND same membership. A negative-only guard ("no method name contains a
 // write verb") passes vacuously the moment its verb list stops matching
 // a newly-added verb; this positive set-equality guard instead fails in
@@ -58,8 +67,8 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 		got[typ.Method(i).Name] = struct{}{}
 	}
 
-	if len(got) != 10 {
-		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 10: %v", len(got), got)
+	if len(got) != 11 {
+		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 11: %v", len(got), got)
 	}
 	if len(got) != len(wantUIServiceMethods) {
 		t.Fatalf("observed method set size %d != fixture size %d — the fixture itself is stale", len(got), len(wantUIServiceMethods))

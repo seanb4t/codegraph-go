@@ -88,6 +88,8 @@ const (
 	UIServiceExploreProcedure = "/codegraph.ui.v1.UIService/Explore"
 	// UIServiceGetPermalinkProcedure is the fully-qualified name of the UIService's GetPermalink RPC.
 	UIServiceGetPermalinkProcedure = "/codegraph.ui.v1.UIService/GetPermalink"
+	// UIServiceGetHealthProcedure is the fully-qualified name of the UIService's GetHealth RPC.
+	UIServiceGetHealthProcedure = "/codegraph.ui.v1.UIService/GetHealth"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -109,6 +111,19 @@ type UIServiceClient interface {
 	// ((*query.Engine).ValidateRepoRelativePath, SRV-05) — no second
 	// confinement implementation.
 	GetPermalink(context.Context, *connect.Request[uiv1.GetPermalinkRequest]) (*connect.Response[uiv1.GetPermalinkResponse], error)
+	// GetHealth is plan 04-03's eleventh rpc (D-01): it projects
+	// internal/query.StatusResult's richer per-language file counts,
+	// per-kind node/edge counts, pending-change tallies, index-health
+	// block and worktree-mismatch detection onto the wire. It exists
+	// SEPARATELY from GetStatus, deliberately: GetStatus is fetched on
+	// every navigation by the client's status gate (Phase 3's
+	// createStatusGate) and must stay cheap, so none of this richer data
+	// is added to GetStatusResponse (D-01). Confining
+	// gitmeta.DetectIndexMismatch's up-to-four git subprocess cost to this
+	// rpc's response shape, rather than GetStatusResponse, is D-02. Read-
+	// only and additive per D-02a — it performs no network operation and
+	// mutates nothing (SRV-03).
+	GetHealth(context.Context, *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -182,6 +197,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("GetPermalink")),
 			connect.WithClientOptions(opts...),
 		),
+		getHealth: connect.NewClient[uiv1.GetHealthRequest, uiv1.GetHealthResponse](
+			httpClient,
+			baseURL+UIServiceGetHealthProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("GetHealth")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -197,6 +218,7 @@ type uIServiceClient struct {
 	getNodeDetail *connect.Client[uiv1.GetNodeDetailRequest, uiv1.GetNodeDetailResponse]
 	explore       *connect.Client[uiv1.ExploreRequest, uiv1.ExploreResponse]
 	getPermalink  *connect.Client[uiv1.GetPermalinkRequest, uiv1.GetPermalinkResponse]
+	getHealth     *connect.Client[uiv1.GetHealthRequest, uiv1.GetHealthResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -249,6 +271,11 @@ func (c *uIServiceClient) GetPermalink(ctx context.Context, req *connect.Request
 	return c.getPermalink.CallUnary(ctx, req)
 }
 
+// GetHealth calls codegraph.ui.v1.UIService.GetHealth.
+func (c *uIServiceClient) GetHealth(ctx context.Context, req *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error) {
+	return c.getHealth.CallUnary(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
@@ -268,6 +295,19 @@ type UIServiceHandler interface {
 	// ((*query.Engine).ValidateRepoRelativePath, SRV-05) — no second
 	// confinement implementation.
 	GetPermalink(context.Context, *connect.Request[uiv1.GetPermalinkRequest]) (*connect.Response[uiv1.GetPermalinkResponse], error)
+	// GetHealth is plan 04-03's eleventh rpc (D-01): it projects
+	// internal/query.StatusResult's richer per-language file counts,
+	// per-kind node/edge counts, pending-change tallies, index-health
+	// block and worktree-mismatch detection onto the wire. It exists
+	// SEPARATELY from GetStatus, deliberately: GetStatus is fetched on
+	// every navigation by the client's status gate (Phase 3's
+	// createStatusGate) and must stay cheap, so none of this richer data
+	// is added to GetStatusResponse (D-01). Confining
+	// gitmeta.DetectIndexMismatch's up-to-four git subprocess cost to this
+	// rpc's response shape, rather than GetStatusResponse, is D-02. Read-
+	// only and additive per D-02a — it performs no network operation and
+	// mutates nothing (SRV-03).
+	GetHealth(context.Context, *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -337,6 +377,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("GetPermalink")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceGetHealthHandler := connect.NewUnaryHandler(
+		UIServiceGetHealthProcedure,
+		svc.GetHealth,
+		connect.WithSchema(uIServiceMethods.ByName("GetHealth")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -359,6 +405,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceExploreHandler.ServeHTTP(w, r)
 		case UIServiceGetPermalinkProcedure:
 			uIServiceGetPermalinkHandler.ServeHTTP(w, r)
+		case UIServiceGetHealthProcedure:
+			uIServiceGetHealthHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -406,4 +454,8 @@ func (UnimplementedUIServiceHandler) Explore(context.Context, *connect.Request[u
 
 func (UnimplementedUIServiceHandler) GetPermalink(context.Context, *connect.Request[uiv1.GetPermalinkRequest]) (*connect.Response[uiv1.GetPermalinkResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetPermalink is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) GetHealth(context.Context, *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetHealth is not implemented"))
 }
