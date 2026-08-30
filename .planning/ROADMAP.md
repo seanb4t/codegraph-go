@@ -278,12 +278,18 @@ Plans:
   5. The rollup is computed fresh per request from edges that already exist — no precomputed projection, no new record kind, no re-indexing — and the rendering library sits behind a component seam that a swap would not reach past (ENG-03, GRF-05)
 
 **Notes**: `GRF-01`'s result selects between Cytoscape.js and Sigma.js + graphology; this roadmap deliberately pre-commits to neither. `ENG-03` follows `BuildReverseAdjacency`'s fresh-per-call full-scan discipline. Criterion 2 must be demonstrated against the project's own largest real corpus, not a toy repository — a graph view that only reads well on a small demo is the documented failure mode this phase exists to avoid. The exact aggregation semantics (edge counts by kind over distinct source-file/target-file/kind tuples) are pinned during planning, informed by `GRF-01`'s measurement.
-**Plans**: TBD
+**Plans**: 7 plans
 **UI hint**: yes
 
 Plans:
 
-- [ ] TBD (run `/gsd-plan-phase 5`)
+- [ ] 05-01-PLAN.md — Lock GRF-01's pass condition; `Engine.FileGraph()` rollup and server-side cycle detection
+- [ ] 05-02-PLAN.md — The twelfth rpc: `FileGraph` on the wire, with a measured guava response size
+- [ ] 05-03-PLAN.md — Tracer: the Cytoscape seam, the wire-to-elements transform, and the filled `/graph` route
+- [ ] 05-04-PLAN.md — GRF-01 resolves: the recorded measurement and its computed verdict
+- [ ] 05-05-PLAN.md — Cycles visually distinguished and counted; per-kind edge counts made readable
+- [ ] 05-06-PLAN.md — The thirteenth rpc: `FileSymbols`, the data in-place expansion needs
+- [ ] 05-07-PLAN.md — In-place expansion of a file into its symbols, and the final rebuilt bundle
 
 ### Phase 6: Live Push
 

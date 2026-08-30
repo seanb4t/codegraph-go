@@ -59,14 +59,27 @@ below and must be preserved when the task IDs land.*
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | ENG-03 | TBD | Rollup aggregates only over the indexed record set; no filesystem read | unit (Go) | `go test ./internal/query/... -run TestFileGraph` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | ENG-03 (D-08) | TBD | `"package"`-kind pseudo-nodes excluded — no phantom `""` file node | unit (Go) | `go test ./internal/query/... -run TestFileGraph` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | GRF-04 | TBD | Cycle detection over the aggregated file graph, server-side | unit (Go) | `go test ./internal/query/... -run TestFileGraphCycles` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | RPC surface (12th rpc) | TBD | `FileGraph` clean against all 19 `mutatingVerbs`; method count 11→12 | unit (Go) | `go test ./internal/uiserver/... -run TestUIService` | ✅ extend `readonly_test.go` | ⬜ pending |
-| TBD | TBD | TBD | GRF-02 | TBD | Compound `parent` chains built from `FilePath`; never emits force-directed layout config | unit (vitest, DOM-free) | `pnpm test -- file-graph-transform` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | GRF-04 (client) | TBD | Cycle membership maps to a distinguishing class on the correct nodes | unit (vitest, Cytoscape `headless: true`) | `pnpm test -- graph-canvas` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | GRF-01 | TBD | Measured latency recorded against a threshold locked **before** dispatch | spike (recorded measurement) | see the GRF-01 spike plan | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | GRF-03, GRF-05 | TBD | In-place expansion works; renderer stays behind the swappable seam | manual + unit | see Manual-Only Verifications | ⬜ pending |
+| 05-01 T1 | 05-01 | 1 | GRF-01 | T-05-01, T-05-06 | The pass condition is committed alone, before any measurement artifact exists | artifact + git ordering | `test -f corpora/graph-render-threshold.json && test ! -e corpora/graph-render-observations.json` | ❌ W0 | ⬜ pending |
+| 05-01 T2 | 05-01 | 1 | ENG-03 | T-05-02, T-05-05 | Rollup aggregates only over the indexed record set; no filesystem read; package pseudo-nodes excluded and counted | unit (Go) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... -run TestFileGraph -race` | ❌ W0 | ⬜ pending |
+| 05-01 T3 | 05-01 | 1 | GRF-04 | T-05-04 | Cycle detection over the aggregated file graph, server-side and iterative | unit (Go) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... -run TestFileGraphCycles` | ❌ W0 | ⬜ pending |
+| 05-02 T1 | 05-02 | 2 | ENG-03 | T-05-11 | Wire shape frozen by a human before codegen; field numbers additive-only | checkpoint (recorded) | recorded in 05-02-SUMMARY.md | ❌ W0 | ⬜ pending |
+| 05-02 T2 | 05-02 | 2 | ENG-03 | T-05-07 | `FileGraph` clean against all 19 mutating verbs; method count 11→12; verb fixture byte-unchanged | unit (Go) | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run TestUIService` | ✅ extend `readonly_test.go` | ⬜ pending |
+| 05-02 T3 | 05-02 | 2 | ENG-03 | T-05-08, T-05-09, T-05-12 | Handler never degrades; request path unread; response size MEASURED under the transport ceiling | unit (Go) + measurement | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run TestFileGraph` | ❌ W0 | ⬜ pending |
+| 05-03 T1 | 05-03 | 3 | GRF-05 | T-05-SC | Package legitimacy approved by a human before any install runs | checkpoint (recorded) | recorded in 05-03-SUMMARY.md | ❌ W0 | ⬜ pending |
+| 05-03 T2 | 05-03 | 3 | GRF-02 | T-05-14 | Compound parent chains built from file paths; DOM-free and renderer-free | unit (vitest, DOM-free) | `cd web && pnpm test -- file-graph-transform` | ❌ W0 | ⬜ pending |
+| 05-03 T3 | 05-03 | 3 | GRF-02, GRF-05 | T-05-13, T-05-15, T-05-17 | Exactly one importer of the renderer; no worker; no force-directed layout; no planning vocabulary | unit (vitest, headless) + manual | `cd web && pnpm test -- graph-tracer` | ❌ W0 | ⬜ pending |
+| 05-04 T1 | 05-04 | 4 | GRF-01 | T-05-19 | Comparator fails closed on a missing, non-numeric or unreadable metric | unit (vitest) | `cd web && pnpm test -- graph-verdict` | ❌ W0 | ⬜ pending |
+| 05-04 T2 | 05-04 | 4 | GRF-01 | T-05-18, T-05-20, T-05-22 | Measured latency recorded against a threshold whose commit provably predates it | spike (recorded measurement) | `node -e` verdict-completeness gate in 05-04 T2 | ❌ W0 | ⬜ pending |
+| 05-04 T3 | 05-04 | 4 | GRF-01 | T-05-18 | A human reads the verdict; the threshold is never edited in response | checkpoint (recorded) | recorded in 05-04-SUMMARY.md and STATE.md | ❌ W0 | ⬜ pending |
+| 05-05 T1 | 05-05 | 5 | GRF-04 | T-05-25 | Cycle classes come from wire fields only; no client-side connectivity derivation | unit (vitest, Cytoscape headless) | `cd web && pnpm test -- graph-cycles` | ❌ W0 | ⬜ pending |
+| 05-05 T2 | 05-05 | 5 | GRF-04 | T-05-24 | Cycle count stated without interaction; focus passed as data, not a renderer call | unit (vitest) | `cd web && pnpm test -- graph-cycles` | ❌ W0 | ⬜ pending |
+| 05-05 T3 | 05-05 | 5 | GRF-02 | T-05-23, T-05-26, T-05-27 | Per-kind rows only for kinds the sparse wire map carries; shared table reused | unit (vitest) + manual | `cd web && pnpm test -- graph-edge-detail` | ❌ W0 | ⬜ pending |
+| 05-06 T1 | 05-06 | 6 | GRF-03 | T-05-29 | Thirteenth rpc's name and shape frozen by a human before codegen | checkpoint (recorded) | recorded in 05-06-SUMMARY.md | ❌ W0 | ⬜ pending |
+| 05-06 T2 | 05-06 | 6 | GRF-03 | T-05-28, T-05-30, T-05-32 | Repo-root confinement runs before any read; capped and counted; index records not disk | unit (Go) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... -run TestFileSymbols -race` | ❌ W0 | ⬜ pending |
+| 05-06 T3 | 05-06 | 6 | GRF-03 | T-05-29, T-05-31 | Method count 12→13; verb fixture byte-unchanged; both rejection cases assert invalid-argument | unit (Go) | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run 'TestUIService\|TestFileSymbols'` | ❌ W0 | ⬜ pending |
+| 05-07 T1 | 05-07 | 7 | GRF-03 | T-05-36 | Symbol element ids cannot collide with a file or directory path | unit (vitest, DOM-free) | `cd web && pnpm test -- graph-expand` | ❌ W0 | ⬜ pending |
+| 05-07 T2 | 05-07 | 7 | GRF-03 | T-05-33, T-05-34, T-05-35 | One request per file; no duplicate children; truncation stated in both directions | unit (vitest, Cytoscape headless) | `cd web && pnpm test -- graph-expand` | ❌ W0 | ⬜ pending |
+| 05-07 T3 | 05-07 | 7 | GRF-02, GRF-03, GRF-05 | T-05-37, T-05-38 | Shipped bundle matches its source; whole view confirmed in a real browser on two repositories | full suite + manual | `task web:drift && cd web && pnpm test` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
