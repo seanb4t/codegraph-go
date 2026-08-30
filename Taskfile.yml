@@ -623,6 +623,29 @@ tasks:
 
         echo "web:test: PASS — ${PASSED} of ${TOTAL} tests passed"
 
+  web:render-cost:
+    desc: >-
+      D-08's OPT-IN threshold comparison for
+      web/tests/data-table-render-cost.test.ts (04-07 Task 3) — the
+      1000-row (internal/query/validate.go:26 MaxLimit) DataTable render
+      and sort-toggle measurement. This target is NEVER wired into any
+      workflow and is NEVER run by web:test: web:test is the PR-triggered
+      REQUIRED job at .github/workflows/ci.yml:149, and a wall-clock
+      duration compared against a fixed constant there varies with runner
+      load, architecture and coverage instrumentation — a flake generator.
+      Sets RENDER_COST_ASSERT=1 (read by the test file itself to gate its
+      threshold assertions) and runs ONLY that one file — every other file
+      under web/tests/ is unaffected and untouched by this target. A
+      non-zero exit here means the measured median crossed the plan's
+      fixed threshold (400ms initial render / 200ms sort toggle in jsdom —
+      a coarse detector, not a performance budget), which is itself a
+      MEANINGFUL, expected outcome per D-08 (measurement first): it does
+      NOT authorize installing @tanstack/svelte-virtual on its own — that
+      needs its own separate, explicit package-legitimacy checkpoint.
+    deps: [web:deps]
+    cmds:
+      - "cd web && RENDER_COST_ASSERT=1 pnpm exec vitest run tests/data-table-render-cost.test.ts"
+
   web:build:
     desc: >-
       BLD-01's build step and BLD-03's marker-writing step, in one

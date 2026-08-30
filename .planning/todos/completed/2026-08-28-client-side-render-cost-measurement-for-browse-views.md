@@ -87,3 +87,62 @@ virtualization is warranted for `NeighborsPanel`/`SearchPanel` specifically
 `<pre><code>` block, not a list — so that path, if the numbers warrant
 action, is more likely a re-look at `sourceLineCap`/`sourceByteCap`
 themselves than a client-side virtualization change).
+
+## Resolution (2026-08-30, Phase 4, 04-07-PLAN.md)
+
+**Redirected by 04-CONTEXT.md D-08**, not resolved against the original
+three-part ask verbatim: this todo's own text named "the workbench's denser
+views (Phase 4, interactive `impact`/`affected`/`callers`/`callees` with
+tweakable depth/limits)" as the natural place to take this measurement, and
+D-08 made that redirection the phase's actual decision — measure the
+Workbench's shared `DataTable` shell (D-06) at `MaxLimit` = 1000 rows
+(`internal/query/validate.go:26`), the real worst case any of the four
+analyses can return, rather than re-measuring `SourcePane`/`NeighborsPanel`/
+`SearchPanel` from Phase 3.
+
+**Method:** `web/tests/data-table-render-cost.test.ts` mounts `DataTable`
+(via a concretely-typed test host, `web/tests/support/data-table-location-host.svelte`)
+with a 1000-row `Location` fixture whose insertion order is a fixed,
+deterministic, non-monotonic permutation (`(i * 457) % n`) — neither
+ascending nor descending, so a sort toggle is proven to do real reordering
+work rather than a no-op over already-sorted data. `performance.now()`
+around 5 independent mounts (initial render) and 5 sort-toggle clicks on
+one mount (sort toggle), MEDIAN reported for each, plus a positive-control
+assertion that exactly 1000 `<tr>` rows actually rendered.
+
+**Observed (reproduced consistently across 4 separate runs this session,
+`RENDER_COST_ASSERT=1 pnpm exec vitest run tests/data-table-render-cost.test.ts`
+/ `task web:render-cost`):**
+
+| Metric | Threshold (plan-fixed) | Observed median (4 runs) |
+|---|---|---|
+| Initial render, 1000 rows | ≤ 400ms | 408–421ms |
+| Sort-toggle, 1000 rows | ≤ 200ms | 363–480ms |
+
+Both medians consistently exceed the plan's fixed jsdom threshold (a coarse
+order-of-magnitude detector, not a performance budget) — this is a stable,
+reproducible over-threshold result, not run-to-run noise.
+
+**Branch taken: OVER THRESHOLD → HALT, per D-08 and this plan's own
+prohibitions.** `@tanstack/svelte-virtual@3.13.36` is NOT installed —
+adding it carries the same `[SUS]`/too-new verdict as this phase's other
+npm packages and needs its own separate, explicit, blocking-human
+package-legitimacy checkpoint, which 04-07-PLAN.md explicitly states it
+does not pre-authorize. No client-side row cap was added either (D-08
+names that as rejected: never re-cap what the server already bounded). The
+measured numbers are reported here and in `04-07-SUMMARY.md`; the
+executing session returned a `CHECKPOINT REACHED` requesting that
+package-legitimacy decision from the maintainer.
+
+**Scope note:** `SourcePane`/`NeighborsPanel`/`SearchPanel` (Phase 3's
+Browse views, the todo's original three-part ask) were NOT separately
+re-measured in this plan — D-08's redirection scoped Phase 4's obligation
+to the Workbench table specifically. If those three components' render
+cost remains a live concern, it needs its own fresh todo; this resolution
+does not claim to have measured them.
+
+Deterministic, unconditional assertions (1000 rows rendered; sort toggle
+genuinely reorders by rendered text content) run on every `task web:test`
+invocation and are documented as passing (260/260) in `04-07-SUMMARY.md`.
+The threshold comparison itself lives behind the new opt-in
+`task web:render-cost` target, wired into no workflow.
