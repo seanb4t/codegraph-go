@@ -1180,6 +1180,156 @@ tasks:
 
         echo "web:drift: PASS — hashed ${SRC_N} source files, manifested ${OUT_N} output files, committed web/build/ matches both digests"
 
+  web:components:drift:
+    desc: >-
+      D-16's real drift guard over vendored shadcn-svelte component source
+      (T-04-27), closing the gap 03-CONTEXT.md D-22 recorded: `shadcn-svelte
+      add` writes `.svelte` source into web/src/lib/components/ui/ that
+      never enters web/pnpm-lock.yaml, so web:audit, web:deps:strict and
+      web:lockfile structurally cannot see it. Follows proto:drift's
+      regenerate-into-scratch-and-byte-compare shape (this file, above), NOT
+      web:drift's hash-against-a-committed-manifest shape — vendored
+      components have no .build-manifest-equivalent marker to compare
+      against.
+
+      The subject set is derived from disk, never hand-listed: `git ls-files
+      -- 'web/src/lib/components/ui/'` (NO trailing slash appended to the
+      pathspec — see 04-07-SUMMARY.md and 04-07-PLAN.md for the verified
+      evidence that appending one to this exact pathspec returns ZERO files
+      in this repository, because git tracks files, not directory entries;
+      a subject set derived from a zero-returning enumeration is exactly
+      the vacuous pass T-04-29 exists to prevent), with the component
+      family list derived from the same listing via `awk -F/ '{print $6}' |
+      sort -u` (layout:
+      web/src/lib/components/ui/<component>/<file>, so $6 is the component
+      directory). Both the file count and the component count are printed
+      BEFORE any comparison runs (rule 84d1gfpywd), each guarded by a small
+      STRUCTURAL floor (8 files, 2 components) — deliberately far below
+      today's actual count (50 files, 8 components) so that intentionally
+      removing a component does not ratchet the floor upward; the floor
+      exists only to catch "enumerated nothing" or "enumerated almost
+      nothing", never to track today's count, matching web:test's FLOOR
+      comment and web:drift's SRC_FLOOR convention above.
+
+      Regenerates into a scratch tree, never in place: `mktemp -d`, an
+      rsync copy of web/ (excluding node_modules, .svelte-kit, build — this
+      target's own components.json travels with the rest of the copied
+      tree, never hand-retyped), a real `pnpm install --frozen-lockfile`
+      inside the scratch copy (04-07-SUMMARY.md Task 1: a symlinked
+      node_modules is REJECTED by pnpm's own ERR_PNPM_UNSAFE_MODULES_DIR
+      safety check, because it resolves outside the scratch project root; a
+      real install is fast because it hydrates from the local
+      content-addressable pnpm store, not the network), then `pnpm dlx
+      shadcn-svelte@1.5.1 add <derived component list> -y -o` — the SAME
+      pinned version 04-01 and 04-04 vendored table/tabs with, verified live
+      (04-07-SUMMARY.md Task 1) to reproduce ALL EIGHT vendored families
+      byte-identically, including the six 03-06 vendored via `@latest` at an
+      earlier date. Never `@latest` here: a registry-side change must never
+      silently pass.
+
+      Byte-compares with `cmp -s`, accumulating into a drift_found flag so
+      EVERY differing file is reported, not only the first — proto:drift's
+      loop above, verbatim in structure. The comparison is scoped STRICTLY
+      to web/src/lib/components/ui/: 04-07-SUMMARY.md Task 1 found the
+      CLI's own "Installing dependencies" step mutates the scratch tree's
+      package.json (a devDependency caret-range bump) as an unrelated side
+      effect of vendoring input-group — comparing package.json here would
+      fail this guard for a reason that has nothing to do with component
+      drift, so it is never compared. No normalization is applied: Task 1
+      found the output byte-identical to committed source with zero
+      differences of any kind, across two independent scratch runs, and
+      that `-o` overwrites a dirty target back to canonical exactly as it
+      does an empty one.
+
+      Runs from a schedule/workflow_dispatch-only workflow
+      (.github/workflows/components-drift.yml), never from ci.yml's
+      PR-triggered jobs, never from release.yml, and never in
+      requiredCheckNames (D-16) — a live registry fetch has no place in a
+      merge gate.
+    preconditions:
+      - sh: command -v git
+        msg: "git not found — web:components:drift enumerates the committed component file set via git ls-files."
+      - sh: command -v rsync
+        msg: "rsync not found — web:components:drift copies web/ into a scratch tree via rsync, never in place."
+      - sh: command -v corepack || command -v pnpm
+        msg: "neither corepack nor pnpm is on PATH — web:components:drift regenerates via `pnpm install` and `pnpm dlx shadcn-svelte` inside a scratch tree."
+    cmds:
+      - |
+        set -euo pipefail
+        repo_root=$(pwd)
+        scratch=$(mktemp -d)
+        trap 'rm -rf "${scratch}"' EXIT
+
+        # (a) Enumerate from disk — NO trailing slash (see desc: for why the
+        # trailing-slash form is rejected: it returns zero files here).
+        files=$(git ls-files -- 'web/src/lib/components/ui/')
+        nfiles=0
+        if [ -n "${files}" ]; then
+          nfiles=$(printf '%s\n' "${files}" | wc -l | tr -d ' ')
+        fi
+        components=""
+        if [ -n "${files}" ]; then
+          components=$(printf '%s\n' "${files}" | awk -F/ '{print $6}' | sort -u)
+        fi
+        ncomponents=0
+        if [ -n "${components}" ]; then
+          ncomponents=$(printf '%s\n' "${components}" | wc -l | tr -d ' ')
+        fi
+
+        # (b) Report BEFORE comparing anything (rule 84d1gfpywd).
+        echo "web:components:drift: compared ${nfiles} vendored component files across ${ncomponents} components"
+
+        # Structural floors — small and deliberate, never today's observed
+        # count (see desc:). A floor equal to today's count would ratchet
+        # on intentional removal.
+        if [ "${nfiles}" -lt 8 ]; then
+          echo "::error::web:components:drift: enumerated only ${nfiles} committed component files via \`git ls-files -- 'web/src/lib/components/ui/'\` — check the pathspec has NO trailing slash appended (appending one to this exact pathspec is verified, in 04-07-SUMMARY.md, to return ZERO files in this repository); a narrowed enumeration must fail loud, never read as a clean pass" >&2
+          exit 1
+        fi
+        if [ "${ncomponents}" -lt 2 ]; then
+          echo "::error::web:components:drift: enumerated only ${ncomponents} component families via \`awk -F/ '{print \$6}'\` over \`git ls-files -- 'web/src/lib/components/ui/'\` — check the pathspec has NO trailing slash; a narrowed subject set must fail loud, never read as a clean pass" >&2
+          exit 1
+        fi
+
+        # (c) Regenerate into a scratch tree, never in place. A real
+        # `pnpm install`, not a symlinked node_modules: pnpm's own
+        # ERR_PNPM_UNSAFE_MODULES_DIR safety check refuses to operate
+        # through a node_modules symlink resolving outside the scratch
+        # project root (04-07-SUMMARY.md Task 1) — a real install hydrates
+        # from the local content-addressable pnpm store and is fast.
+        rsync -a --exclude node_modules --exclude .svelte-kit --exclude build "${repo_root}/web/" "${scratch}/web/"
+        (cd "${scratch}/web" && pnpm install --frozen-lockfile)
+
+        # shellcheck disable=SC2086 -- intentional word-splitting:
+        # components is a newline-separated list of bare identifiers (no
+        # spaces, no globs), each becoming a separate CLI positional
+        # argument.
+        (cd "${scratch}/web" && pnpm dlx shadcn-svelte@1.5.1 add ${components} -y -o)
+
+        # (d) Byte-compare, scoped to web/src/lib/components/ui/ only —
+        # never package.json (see desc: for why the CLI's own
+        # dependency-install step mutates it as an unrelated side effect).
+        drift_found=0
+        while IFS= read -r f; do
+          [ -z "${f}" ] && continue
+          fresh="${scratch}/${f}"
+          if [ ! -f "${fresh}" ]; then
+            echo "::error::web:components:drift: regeneration produced no output for ${f} at ${fresh}" >&2
+            drift_found=1
+            continue
+          fi
+          if ! cmp -s "${f}" "${fresh}"; then
+            echo "::error::web:components:drift: ${f} differs from shadcn-svelte@1.5.1's regeneration" >&2
+            drift_found=1
+          fi
+        done <<< "${files}"
+
+        if [ "${drift_found}" -ne 0 ]; then
+          exit 1
+        fi
+
+        echo "web:components:drift: PASS — all ${nfiles} vendored component files across ${ncomponents} components byte-identical to shadcn-svelte@1.5.1's regeneration (scratch tree only — source tree untouched)"
+
   vuln:
     desc: >-
       ADVISORY (VULN-01/VULN-03; D-04 superseded 04-01 Task 1 checkpoint —

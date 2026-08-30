@@ -166,4 +166,52 @@ Every block is empty — `diff -rq` reports nothing when trees are identical. No
 
 No repository file outside `.planning/` was modified by this task; all scratch trees live under the session scratchpad directory (`/private/tmp/claude-...`) and were never enumerated with `git ls-files`.
 
+## Task 2: `task web:components:drift` — enumerate from disk, report the count, byte-compare, and prove it goes RED
+
+Added `web:components:drift` to `Taskfile.yml` (placed after `web:drift`, before `vuln:`), following `proto:drift`'s regenerate-into-scratch-and-byte-compare shape, corrected against Task 1's live evidence: the scratch tree is a full `rsync -a --exclude node_modules --exclude .svelte-kit --exclude build` copy of `web/` (so `components.json` and every alias-resolution input travel verbatim, never hand-retyped) plus a real `pnpm install --frozen-lockfile` inside the scratch copy — a symlinked `node_modules` is rejected outright by pnpm's own `ERR_PNPM_UNSAFE_MODULES_DIR` safety check because it resolves outside the scratch project root (Task 1's finding). The real install is cheap: it hydrates from the local content-addressable pnpm store, no meaningful network cost.
+
+**(a)/(b) Disk-derived enumeration, reported before comparing:**
+
+```
+files=$(git ls-files -- 'web/src/lib/components/ui/')                          # NO trailing slash
+components=$(printf '%s\n' "${files}" | awk -F/ '{print $6}' | sort -u)
+echo "web:components:drift: compared ${nfiles} vendored component files across ${ncomponents} components"
+```
+
+Observed on the green run: `web:components:drift: compared 50 vendored component files across 8 components`, then `web:components:drift: PASS — all 50 vendored component files across 8 components byte-identical to shadcn-svelte@1.5.1's regeneration (scratch tree only — source tree untouched)`. Floors: `nfiles -lt 8`, `ncomponents -lt 2` — small structural minima, never today's observed count, matching `web:test`'s FLOOR / `web:drift`'s `SRC_FLOOR` convention.
+
+**(c) Regenerate into scratch, never in place:** `pnpm dlx shadcn-svelte@1.5.1 add <disk-derived components> -y -o` — never `@latest`.
+
+**(d) Byte-compare, scoped to `web/src/lib/components/ui/` only** — `package.json` is deliberately never compared (Task 1's finding: the CLI's own dependency-install step bumps an unrelated devDependency range as a side effect).
+
+**(f) Both RED proofs, run live and recorded here verbatim:**
+
+1. **Planted one-byte mutation.** Appended `// planted drift byte` to the committed `web/src/lib/components/ui/button/button.svelte`. Re-ran the target: exited non-zero (task's wrapped exit 201, underlying `exit 1`) and printed:
+   ```
+   ::error::web:components:drift: web/src/lib/components/ui/button/button.svelte differs from shadcn-svelte@1.5.1's regeneration
+   ```
+   Reverted the file (`cp` from a pristine copy) and re-ran: `web:components:drift: PASS — all 50 vendored component files across 8 components byte-identical ...` — clean `git diff --stat` on the reverted file confirmed no residue.
+
+2. **Trailing-slash pathspec.** Temporarily replaced the pathspec in `Taskfile.yml` with the trailing-slash form, re-ran the target:
+   ```
+   web:components:drift: compared 0 vendored component files across 0 components
+   ::error::web:components:drift: enumerated only 0 committed component files via `git ls-files -- 'web/src/lib/components/ui/*/'` — check the pathspec has NO trailing slash appended (appending one to this exact pathspec is verified, in 04-07-SUMMARY.md, to return ZERO files in this repository); a narrowed enumeration must fail loud, never read as a clean pass
+   ```
+   The population floor rejected the empty enumeration rather than passing silently. Restored the pristine `Taskfile.yml` from a pre-edit copy and re-ran: `PASS` again, with `git diff --stat Taskfile.yml` showing only the intended target addition (149 insertions), no residue from the trailing-slash experiment.
+
+**(g) Workflow wiring:** `.github/workflows/components-drift.yml` — `schedule` (weekly, Monday 08:00 UTC, deliberately offset from `bench.yml`'s Monday 06:00 UTC) + `workflow_dispatch` only, no per-PR/per-push trigger. Bootstrap chain: `actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10` (same SHA as `ci.yml`) → `uses: ./.github/actions/install-task` → `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020` (same SHA as `ci.yml`) with `node-version: "24"` → `run: task web:components:drift`. Ordering gate (extracting each line number, `test -n` guarded, asserting the full chain) ran and printed:
+```
+ci pins: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 actions/setup-node@820762786026740c76f36085b0efc47a31fe5020; drift lines: checkout=74 install-task=77 setup-node=86 node-version=88 run=91
+GATE PASS
+```
+`rg -c 'run:' .github/workflows/components-drift.yml` → `1`; `rg -c 'uses:' ...` → `4`. `task lint:actions` (actionlint, `GOTOOLCHAIN=go1.26.5`) accepted the new workflow with no output.
+
+**Note on the plan's own negative-grep discipline:** the plan's Task 2 action text (and this SUMMARY) discusses the trailing-slash pathspec and other forbidden literals in prose; the guarded files themselves (`Taskfile.yml`, `components-drift.yml`) were edited to describe these reasons WITHOUT reproducing the literal substrings the acceptance criteria assert are absent (e.g. `components/ui/*/`, `pull_request`, a second `run:`, an early match for `task web:components:drift` or `node-version: "24"` inside prose) — an initial draft of both files inadvertently included several of these literals in explanatory comments, which was caught by re-running the acceptance-criteria greps themselves and corrected before commit.
+
+**Registration:** `internal/upgrade/taskfile_shape_test.go` — `inScopeWorkflowFiles` gained `"components-drift.yml"`; `inScopeJobs` gained `{Workflow: "components-drift.yml", JobID: "components-drift"}`. `requiredCheckNames` and `runBodyExceptions` are UNCHANGED (`git diff` confirmed). `GOTOOLCHAIN=go1.26.5 go test ./internal/upgrade/... -run 'TestWorkflowRunBodiesInvokeTask|TestWorkflowFilePopulationMatchesDisk|TestInScopeJobsPopulationMatchesDisk' -v` → 3/3 `--- PASS`, exit 0. Full `go test ./internal/upgrade/...` also green.
+
+Todo `.planning/todos/pending/2026-08-28-shadcn-svelte-registry-version-pinning-with-source-match.md` moved to `.planning/todos/completed/` with a resolution record naming the target, the pinned CLI version, the observed counts, the workflow, and both RED-proofs.
+
+`git diff Taskfile.yml` confirms no change to `web:drift`'s hashing pipeline, `SRC_FLOOR`, or `proto:drift`.
+
 <!-- gsd:write-continue -->

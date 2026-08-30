@@ -69,3 +69,42 @@ Open question for whoever picks this up: whether a source-match assertion is
 even meaningful for a registry that can legitimately change its output between
 runs at the same pinned CLI version (e.g. upstream Bits UI patch releases) —
 this may turn out to need a different mechanism than a literal digest compare.
+
+## Resolution (2026-08-30, Phase 4, 04-07-PLAN.md)
+
+Closed by adding `task web:components:drift` (`Taskfile.yml`), following
+`proto:drift`'s regenerate-into-scratch-and-byte-compare shape rather than
+`web:drift`'s manifest-hash shape (no marker file exists for vendored
+component source). The determinism premise was proven live before the guard
+was wired (04-07-SUMMARY.md Task 1): all 8 disk-derived component families
+(`button`, `command`, `dialog`, `input`, `input-group`, `table`, `tabs`,
+`textarea` — 50 files) regenerate byte-identically at pinned
+`shadcn-svelte@1.5.1`, across two independent scratch runs, including the
+six families 03-06 originally vendored via `@latest`.
+
+The subject set is derived from `git ls-files -- 'web/src/lib/components/ui/'`
+(no trailing slash — a trailing-slash pathspec returns zero files in this
+repository and was the vacuous-pass shape rejected here) and its component
+family list via `awk -F/ '{print $6}' | sort -u`. Both the file count and
+component count print before any comparison (`compared 50 vendored component
+files across 8 components`), guarded by small structural floors (8 files, 2
+components) that never ratchet to today's observed count. The guard was
+watched fail two independent ways: (1) a planted one-byte mutation in
+`button/button.svelte` failed and named the exact file, then passed clean
+after revert; (2) temporarily swapping to the trailing-slash pathspec made
+the population floor reject with `compared 0 vendored component files
+across 0 components` rather than a silent pass.
+
+Wired into `.github/workflows/components-drift.yml` — `schedule` (weekly,
+Monday 08:00 UTC) + `workflow_dispatch` only, deliberately never a
+per-PR/per-push trigger and never added to `requiredCheckNames`
+(`internal/upgrade/taskfile_shape_test.go`) or `release.yml` — so a live
+registry fetch never becomes a merge blocker (D-16, T-04-28). The workflow's
+bootstrap chain (`actions/checkout` → `./.github/actions/install-task` →
+`actions/setup-node` at Node 24 → the run step) is registered in
+`inScopeWorkflowFiles`/`inScopeJobs` and verified green:
+`GOTOOLCHAIN=go1.26.5 go test ./internal/upgrade/... -run
+'TestWorkflowRunBodiesInvokeTask|TestWorkflowFilePopulationMatchesDisk|TestInScopeJobsPopulationMatchesDisk'`.
+
+See `.planning/phases/04-query-workbench-index-health/04-07-SUMMARY.md` for
+the full probe evidence and both RED-proof transcripts.

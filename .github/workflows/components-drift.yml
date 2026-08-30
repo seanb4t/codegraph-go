@@ -1,0 +1,91 @@
+# D-16's real drift guard over vendored shadcn-svelte component source
+# (T-04-27), actually wired to run somewhere without a human remembering.
+#
+# The web:components:drift Taskfile target regenerates every vendored
+# component family at the pinned shadcn-svelte@1.5.1 CLI into a scratch tree
+# and byte-compares it against what is committed under
+# web/src/lib/components/ui/ — the supply-chain surface no lockfile-based
+# gate (web:audit, web:deps:strict, web:lockfile) can see, because
+# `shadcn-svelte add` writes .svelte source that never enters
+# web/pnpm-lock.yaml (03-CONTEXT.md D-22).
+#
+# WHY schedule + workflow_dispatch ONLY, deliberately never a per-PR or
+# per-push trigger (D-16, T-04-28). The target regenerates against a LIVE external
+# network service (shadcn-svelte.com's registry) — a materially different
+# risk profile from web:drift/proto:drift, which diff a locally regenerated
+# artifact with no network dependency at all. Wiring a network-dependent
+# check into a PR-required gate would make an unreachable third-party
+# service a merge blocker, and per rule f18zrdsgx5 a wedged required check on
+# protect-main is painful to recover from. This job's name is therefore
+# deliberately NOT added to requiredCheckNames
+# (internal/upgrade/taskfile_shape_test.go) — that fixture mirrors a GitHub
+# ruleset outside this repository, and it must keep asserting the truth, not
+# a wish.
+#
+# WHY NOT release.yml. That file carries a LOCKED contract: its name, path
+# and tag-only trigger are anchored by releaseWorkflowRefPattern
+# (internal/upgrade/verify.go) for cosign OIDC SAN verification. A
+# network-dependent step inside (or alongside) the signing job could fail a
+# release for a reason entirely unrelated to the release itself. A scheduled
+# job that can be re-dispatched on demand is the right urgency for vendored-
+# source drift; a release blocker is not.
+#
+# THE BOOTSTRAP CHAIN IS LOAD-BEARING (cycle-2/cycle-3 review). Without
+# checkout, the repository is not on disk. Without the repository's own
+# ./.github/actions/install-task, there is no `task` binary and the run step
+# fails immediately. Without actions/setup-node pinned to Node 24, this
+# repository's pinned pnpm (resolved via Corepack, D-16) is unreachable —
+# Corepack is NOT distributed with Node.js 25+ (ci.yml:124-130 carries the
+# identical pin for the identical reason). All three are `uses:` steps
+# carrying no run body at all, so TestWorkflowRunBodiesInvokeTask's checkStepInvokesTask
+# (internal/upgrade/taskfile_shape_test.go:1399-1402) never inspects them —
+# no runBodyExceptions entry is needed or permitted for any of the three.
+# Their ORDER matters as much as their presence: checkout, then
+# install-task, then setup-node, then the run step — placing either
+# bootstrap step after the run step produces a workflow that registers
+# cleanly, passes actionlint, and fails every single scheduled run.
+#
+# The two third-party action SHAs below are the SAME pins ci.yml already
+# uses for actions/checkout and actions/setup-node — a second SHA for the
+# same action version would itself be a form of drift.
+#
+# Security note: both third-party Actions are pinned to a full commit SHA,
+# matching every other workflow in this repository.
+
+name: components-drift
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 08:00 UTC — deliberately offset from bench.yml's
+    # Monday 06:00 UTC schedule so the two non-gating scheduled jobs don't
+    # contend for the same runner pool slot.
+    - cron: "0 8 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  components-drift:
+    name: components drift (T-04-27, scheduled/dispatch only — never required)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Install Task
+        uses: ./.github/actions/install-task
+
+      # BLD-01/D-16: Corepack resolves the pnpm version pinned by
+      # web/package.json's packageManager field. Node 24 is pinned
+      # deliberately, matching ci.yml:131-134 for the identical reason:
+      # Corepack is NOT distributed with Node.js 25+, and this target
+      # shells out to `pnpm install` and `pnpm dlx shadcn-svelte@1.5.1`
+      # inside a scratch tree.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Vendored component drift (T-04-27)
+        run: task web:components:drift
