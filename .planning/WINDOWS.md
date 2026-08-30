@@ -2,9 +2,9 @@
 schema_version: 1
 open_count: 8
 waived_count: 2
-fixed_count: 15
-total_count: 25
-last_updated: 2026-08-30T17:33:51.859Z
+fixed_count: 16
+total_count: 26
+last_updated: 2026-08-30T17:40:44.178Z
 ---
 
 # Broken Windows Ledger
@@ -39,7 +39,8 @@ last_updated: 2026-08-30T17:33:51.859Z
 | 22 | 03 | deviation | web/src/lib/search.ts |  | Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope) | open |  | 2026-08-29T02:37:45.131Z |  |
 | 23 | 03 | stub | web/src/lib/components/browse/SourcePane.svelte |  | multi-def source-pane branch renders a placeholder text (no picker) — full disambiguation-picker rendering is deliberately deferred to plan 03-08, which already owns BRW-05 | fixed |  | 2026-08-29T03:05:42.794Z | 2026-08-29T03:30:28.701Z |
 | 24 | 04 | stub | web/src/routes/workbench/+page.svelte |  | Affected tab renders an explicit not-yet-wired placeholder — intentional, resolved by 04-06 per 04-04-PLAN.md's own scope (Impact/Callers/Callees only). | open |  | 2026-08-30T00:53:19.859Z |  |
-| 25 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam. | open |  | 2026-08-30T17:33:51.859Z |  |
+| 25 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam. | fixed |  | 2026-08-30T17:33:51.859Z | 2026-08-30T17:40:33.198Z |
+| 26 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | Deterministic uncaught page error on /graph's happy path: TypeError: Cannot read properties of null (reading 'notify') at cytoscape-elk adapter -> nc.layoutPositions -> nc.positions -> jc.endBatch -> Array.forEach. Found by orchestrator live e2e 2026-08-30 (Playwright, real binary) AFTER all 284 automated tests were green — jsdom + headless:true never exercises the real renderer's positions/endBatch path. NON-FATAL: layout completes correctly (709 nodes with 709 distinct positions, instance alive, pan/zoom verified working). Does NOT fire when navigating away mid-layout, so it is not a teardown race. Fault is inside the cytoscape-elk dependency's adapter, not GraphCanvas.svelte's own code, which is a standard init + layered ELK layout. IMPORTANT for 05-04: the measured page emits exactly one uncaught error on every load — a measurement harness that treats any page error as a failed measurement would produce a spurious FAIL against a graph that demonstrably works. | open |  | 2026-08-30T17:40:44.178Z |  |
 
 ````json
 [
@@ -338,9 +339,21 @@ last_updated: 2026-08-30T17:33:51.859Z
     "file": "web/src/lib/components/graph/GraphCanvas.svelte",
     "line": null,
     "description": "Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam.",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-08-30T17:33:51.859Z",
+    "resolved_at": "2026-08-30T17:40:33.198Z"
+  },
+  {
+    "id": 26,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/lib/components/graph/GraphCanvas.svelte",
+    "line": null,
+    "description": "Deterministic uncaught page error on /graph's happy path: TypeError: Cannot read properties of null (reading 'notify') at cytoscape-elk adapter -> nc.layoutPositions -> nc.positions -> jc.endBatch -> Array.forEach. Found by orchestrator live e2e 2026-08-30 (Playwright, real binary) AFTER all 284 automated tests were green — jsdom + headless:true never exercises the real renderer's positions/endBatch path. NON-FATAL: layout completes correctly (709 nodes with 709 distinct positions, instance alive, pan/zoom verified working). Does NOT fire when navigating away mid-layout, so it is not a teardown race. Fault is inside the cytoscape-elk dependency's adapter, not GraphCanvas.svelte's own code, which is a standard init + layered ELK layout. IMPORTANT for 05-04: the measured page emits exactly one uncaught error on every load — a measurement harness that treats any page error as a failed measurement would produce a spurious FAIL against a graph that demonstrably works.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-30T17:40:44.178Z",
     "resolved_at": null
   }
 ]
