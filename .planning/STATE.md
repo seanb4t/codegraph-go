@@ -5,11 +5,11 @@ milestone_name: Local Graph UI
 current_phase: 4
 current_phase_name: Query Workbench & Index Health
 status: verifying
-stopped_at: "Completed 04-07-PLAN.md — CHECKPOINT: package-legitimacy decision pending for @tanstack/svelte-virtual"
-last_updated: "2026-08-30T02:02:52.522Z"
+stopped_at: Completed 04-07-PLAN.md including maintainer-approved virtualization continuation — all gates green
+last_updated: "2026-08-30T06:20:49.292Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 4 execution started
-state_head: b96cc8d18b4792f21e4a5852d0e19ddc9e7ad33a
+state_head: 3b7de15d95ad0f7a49b709393fd1e6b3de60bc45
 progress:
   total_phases: 6
   completed_phases: 3
@@ -96,6 +96,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P05 | 55min | 3 tasks | 15 files |
 | Phase 04-query-workbench-index-health P06 | 25min | 3 tasks | 9 files |
 | Phase 04 P07 | 40min | 3 tasks | 40 files |
+| Phase 04 P07 | 70min | 4 tasks | 44 files |
 
 ## Accumulated Context
 
@@ -191,6 +192,7 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: All 8 vendored shadcn-svelte component families reproduce byte-identically at pinned 1.5.1 (04-07 Task 1)
 - [Phase 4]: web:components:drift scopes its comparison strictly to components/ui/ — the CLI's own dependency-install step mutates package.json as a side effect
 - [Phase 4]: Workbench DataTable's 1000-row render cost measured OVER threshold on both metrics (reproduced 4x); virtualization NOT installed — package-legitimacy checkpoint requested
+- [Phase 4]: Maintainer approved @tanstack/svelte-virtual@3.13.36; wired into DataTable.svelte, render-cost medians now ~20-40x under threshold (task web:render-cost passes)
 
 ### Pending Todos
 
@@ -312,8 +314,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-30T02:02:52.418Z
-Stopped at: Completed 04-07-PLAN.md — CHECKPOINT: package-legitimacy decision pending for @tanstack/svelte-virtual
+Last session: 2026-08-30T06:20:49.199Z
+Stopped at: Completed 04-07-PLAN.md including maintainer-approved virtualization continuation — all gates green
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

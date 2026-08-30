@@ -10,15 +10,17 @@ requires:
 provides:
   - "task web:components:drift — pinned-CLI regeneration into scratch, disk-derived subject set, byte-compare, RED-proven twice"
   - ".github/workflows/components-drift.yml — schedule + workflow_dispatch invocation of the drift target, out of required CI"
-  - "task web:render-cost — opt-in 1000-row render/sort measurement, never asserted inside task web:test"
+  - "task web:render-cost — opt-in 1000-row render/sort measurement, never asserted inside task web:test; PASSES after Task 4's virtualization"
   - "committed web/build/ rebuilt and matching source again — task web:drift GREEN"
-  - "three folded todos closed with resolution records"
+  - "@tanstack/svelte-virtual@3.13.36 wired into DataTable.svelte (maintainer-approved), 1000-row render/sort medians ~20-40x under threshold"
+  - "web/tests/setup.ts's scoped jsdom offsetWidth/offsetHeight stub — the root-cause fix for testing any @tanstack/virtual-based component under jsdom"
+  - "four folded/filed todos closed with resolution records"
 affects: ["05", "verify-work"]
 
 actuals:
-  tokens: 13200
-  tasks: 3
-  commits: 4
+  tokens: 20800
+  tasks: 4
+  commits: 7
 
 tech-stack:
   added: []
@@ -35,11 +37,17 @@ key-files:
     - Taskfile.yml
     - internal/upgrade/taskfile_shape_test.go
     - web/build/
+    - web/src/lib/components/workbench/DataTable.svelte
+    - web/tests/setup.ts
+    - web/package.json
+    - web/pnpm-lock.yaml
 
 key-decisions:
   - "Task 1 live probe: all 8 vendored component families (including the six vendored via @latest in 03-06) reproduce byte-identically at shadcn-svelte@1.5.1 — no per-family exception or normalization needed."
   - "web:components:drift's comparison is scoped strictly to web/src/lib/components/ui/ — the CLI's own dependency-install step mutates package.json (a devDependency caret range) as a side effect, which the guard must never compare against."
-  - "Render-cost measurement came back OVER the plan's fixed threshold (400ms/200ms) on both metrics, reproduced across 4 runs — @tanstack/svelte-virtual was NOT installed (this plan does not pre-authorize that package); a follow-up todo and a CHECKPOINT REACHED request the required blocking-human package-legitimacy decision."
+  - "Render-cost measurement came back OVER the plan's fixed threshold (400ms/200ms) on both metrics, reproduced across 4 runs — @tanstack/svelte-virtual was NOT installed pending an explicit package-legitimacy checkpoint (D-08, T-04-31)."
+  - "Maintainer approved @tanstack/svelte-virtual@3.13.36 in the same session; Task 4 installed the exact approved pair, wired it into the ONE shared DataTable.svelte shell (D-06), and remeasured — both medians now ~20-40x under threshold."
+  - "jsdom root cause found and fixed at its source (web/tests/setup.ts scoped offsetWidth/offsetHeight stub), not worked around per-test — @tanstack/virtual-core reads offsetWidth/offsetHeight synchronously, which jsdom always reports as 0, permanently zeroing the visible range regardless of initialRect."
 
 requirements-completed: [WRK-04]
 
@@ -61,7 +69,7 @@ coverage:
         status: pass
     human_judgment: false
   - id: D3
-    description: "1000-row render/sort-toggle cost measured with median-of-five and a row-count positive control; wall-clock threshold opt-in only, never in task web:test"
+    description: "1000-row render/sort-toggle cost measured with median-of-five and a row-count positive control (restated against the row MODEL post-virtualization); wall-clock threshold opt-in only, never in task web:test; PASSES after Task 4's virtualization (was over-threshold before)"
     requirement: "WRK-04"
     verification:
       - kind: unit
@@ -77,26 +85,33 @@ coverage:
         status: pass
     human_judgment: false
   - id: D5
-    description: "render-cost measurement came back OVER the plan's fixed threshold on both metrics (reproduced across 4 runs); virtualization was correctly NOT installed without authorization — a blocking-human package-legitimacy decision for @tanstack/svelte-virtual@3.13.36 is requested via CHECKPOINT REACHED and a follow-up todo"
-    verification: []
+    description: "maintainer approved @tanstack/svelte-virtual@3.13.36 via a blocking-human package-legitimacy checkpoint (D-08, T-04-31); installed the exact approved pair, wired into the one shared DataTable.svelte shell (D-06), and remeasured both medians under threshold"
+    requirement: "WRK-04"
+    verification:
+      - kind: other
+        ref: "task web:render-cost (exit 0, 4 consecutive runs)"
+        status: pass
+      - kind: manual_procedural
+        ref: "maintainer decision: \"Approve @tanstack/svelte-virtual and wire it\""
+        status: pass
     human_judgment: true
-    rationale: "Installing a new [SUS]/too-new npm dependency requires an explicit maintainer legitimacy decision this plan does not pre-authorize (D-08, T-04-31) — automation cannot self-approve this."
+    rationale: "The install itself required an explicit maintainer legitimacy decision this plan did not pre-authorize; the decision was obtained and is recorded verbatim here and in the closed todo's resolution."
 
-duration: 40min
+duration: 70min
 completed: 2026-08-30
 status: complete
 ---
 
-# Phase 4 Plan 07: Drift Guard, Render Cost, Bundle Rebuild Summary
+# Phase 4 Plan 07: Drift Guard, Render Cost, Bundle Rebuild, Virtualization Summary
 
-**Closed the phase's three remaining obligations: a disk-derived byte-compare guard over vendored shadcn-svelte source (proven RED two independent ways and wired into a schedule-only workflow), a measurement-first render-cost record for the 1000-row workbench table (which came back OVER threshold, correctly halting before an unauthorized package install), and a rebuilt committed `web/build/` that closes the RED window opened at 04-01.**
+**Closed the phase's three remaining obligations — a disk-derived byte-compare guard over vendored shadcn-svelte source, a measurement-first render-cost record for the 1000-row workbench table, and a rebuilt committed `web/build/` — then, on maintainer approval following the render-cost measurement coming back over threshold, installed and wired `@tanstack/svelte-virtual`, bringing both medians ~20-40x under threshold and finding/fixing a real jsdom testing gap along the way.**
 
 ## Performance
 
-- **Duration:** ~40min
+- **Duration:** ~70min
 - **Started:** 2026-08-30T01:35:00Z
-- **Tasks:** 3 completed
-- **Files modified:** 40 (987 insertions, 47 deletions)
+- **Tasks:** 4 completed (3 from the plan + 1 maintainer-approved continuation)
+- **Files modified:** 44+ (across two sessions of this same plan)
 
 ## Task Commits
 
@@ -105,6 +120,9 @@ Each task was committed atomically:
 1. **Task 1: Prove the premise — determinism probe** — `0bf304c1` (docs)
 2. **Task 2: `task web:components:drift` guard + workflow** — `b518b79e` (feat)
 3. **Task 3: render-cost measurement + bundle rebuild** — `b96cc8d1` (feat)
+4. **Task 3 plan metadata (SUMMARY/STATE/ROADMAP + follow-up todo filed)** — `0f41a387` (docs)
+5. **Task 4: install @tanstack/svelte-virtual, close the render-cost todo** — `7deec843` (feat) — a `git add` pathspec error meant this commit staged only the todo closure; the code changes landed in the next commit
+6. **Task 4 (continued): virtualize DataTable, rebuild web/build/** — `3b7de15d` (feat)
 
 **Plan metadata:** commit pending (this session's final `docs(04-07): complete` commit, made after this SUMMARY).
 
@@ -264,7 +282,7 @@ Both metrics consistently exceed the fixed threshold (initial render: 400ms; sor
 AssertionError: median initial render of 1000 rows in jsdom (coarse detector, not a budget): expected 411.1572500000002 to be less than or equal to 400
 ```
 
-**Branch taken: OVER THRESHOLD → HALT, per D-08 and this plan's own prohibitions.** `@tanstack/svelte-virtual@3.13.36` was **NOT** installed. `web/package.json` has zero `svelte-virtual` entries (`rg -c "svelte-virtual" web/package.json` → 0). No client-side row cap was added either (D-08 names that rejected: never re-cap what the server already bounded). **This session returns a CHECKPOINT requesting a blocking-human package-legitimacy decision for `@tanstack/svelte-virtual@3.13.36`** before any virtualization work proceeds — see the CHECKPOINT REACHED section of this session's final response.
+**Branch taken: OVER THRESHOLD → HALT, per D-08 and this plan's own prohibitions.** `@tanstack/svelte-virtual@3.13.36` was **NOT** installed. `web/package.json` has zero `svelte-virtual` entries (`rg -c "svelte-virtual" web/package.json` → 0). No client-side row cap was added either (D-08 names that rejected: never re-cap what the server already bounded). **This session returned a CHECKPOINT requesting a blocking-human package-legitimacy decision for `@tanstack/svelte-virtual@3.13.36`** before any virtualization work proceeded. **Resolved within the same session: see Task 4 below** — the maintainer approved the package, it was installed and wired, and both medians now pass with a wide margin.
 
 The deterministic, unconditional assertions (tests 1 and 2 above) are unaffected by the threshold outcome and pass on every `task web:test` run — see below.
 
@@ -298,7 +316,7 @@ Output file count moved 27 → 30 (three additional immutable chunks from this p
 | `task web:test` | `PASS — 260 of 260 tests passed` (up from 257 at end of 04-06; +3 new render-cost tests) |
 | `task web:drift` | `PASS — hashed 103 source files, manifested 30 output files` |
 | `task web:components:drift` | `PASS — all 50 vendored component files across 8 components byte-identical` |
-| `task web:render-cost` | Ran once (and 3 more times for reproducibility); **FAILS by design** — over-threshold result recorded above, checkpoint requested, no virtualization installed |
+| `task web:render-cost` | **PASS** after Task 4's virtualization — see Task 4 section below (was FAILING by design before the maintainer's approval) |
 | `task proto:drift` | `PASS — compared 4 generated files ... all 4 generated files byte-identical` |
 | `GOTOOLCHAIN=go1.26.5 task test:unit` | all packages `ok` |
 | `cd web && pnpm check` | `1016 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS` |
@@ -313,6 +331,73 @@ Both remaining folded todos moved to `.planning/todos/completed/` with resolutio
 - `2026-08-28-client-side-render-cost-measurement-for-browse-views.md` — resolution records the D-08 redirection (this todo's own text named the Workbench as the natural denser-view target), the observed numbers, the OVER-THRESHOLD branch, and an explicit scope note that `SourcePane`/`NeighborsPanel`/`SearchPanel` (the todo's original three-part ask) were NOT separately re-measured — D-08 scoped this phase's obligation to the Workbench table specifically.
 
 `ls .planning/todos/pending/ | wc -l` → 4 (confirmed: the four pre-existing unrelated todos; none of the three Phase-4 todos remain pending — the third, `2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md`, was closed in 04-02, verified already present under `.planning/todos/completed/`).
+
+## Task 4: Maintainer-approved virtualization — install, wire, remeasure, rebuild
+
+**Package-legitimacy decision, verbatim from the maintainer:** "Approve @tanstack/svelte-virtual and wire it." Verified live against npm before the decision: `time.created` 2022-07-19 (~4 years old, not a new package), `dist-tags.latest` 3.13.36 (published 2026-08-18), repo `github.com/TanStack/virtual` (same org as `@tanstack/svelte-table`), exactly ONE transitive dependency (`@tanstack/virtual-core@3.17.8`, same org), ~78,281 weekly downloads — the same `[SUS]`/too-new false-positive shape already adjudicated for `@tanstack/svelte-table`/`shadcn-svelte` in 04-01.
+
+### Install — exactly the approved pair
+
+`pnpm add -D @tanstack/svelte-virtual@3.13.36` (exact-pinned, no caret, matching how `@tanstack/svelte-table` was pinned). `web/package.json` diff: exactly one new line, `"@tanstack/svelte-virtual": "3.13.36"`. `web/pnpm-lock.yaml` gained exactly two new package entries: `@tanstack/svelte-virtual@3.13.36` and its one transitive, `@tanstack/virtual-core@3.17.8` — confirmed via `rg` against the lockfile, nothing else. `task web:lockfile` → `233 packages declared` (231 + 2), `233 of 233 resolutions integrity-bearing`. `task web:deps:strict` → PASS, 0 entries/0 denials (no build script needed approval). `task web:audit` → CLEAN, zero advisories.
+
+### Wiring — the ONE shared `DataTable.svelte` shell, D-06 still binds
+
+No second table component or virtualized variant was created. `DataTable.svelte` gained:
+- `createVirtualizer` from `@tanstack/svelte-virtual`, targeting a new scroll-container `<div>` (`max-height: 600px`, `overflow-y: auto`, `data-testid="data-table-scroll"`) wrapping the existing `Table.Root`.
+- A uniform `estimateSize` (37px per row — every row shares the same `Table.Cell` padding/text-sm classes, so a fixed estimate is accurate without `measureElement`/`ResizeObserver`, which is unreliable under jsdom anyway).
+- The standard two-padding-row technique for virtualizing native `<table>` markup (a `<tr>` cannot be individually absolute-positioned without breaking table layout, unlike a plain list): one spacer `<tr>` above and below the rendered slice, each sized to stand in for the rows currently outside the DOM.
+- A reactive `$effect` calling `get(rowVirtualizer).setOptions(...)` (never `$rowVirtualizer` inside the same effect — that would subscribe to the virtualizer's own scroll-driven store updates and loop forever, since every `setOptions` call unconditionally pushes a new store value per the wrapper's own source) to keep the virtualizer's row count and scroll element in sync when `rows`/`columns` change after mount (a depth/limit control re-running an analysis).
+- `aria-rowcount={table.getRowModel().rows.length}` forwarded onto the underlying `<table>` element — the row MODEL's true count, for assistive technology and for this plan's own restated test assertion (below).
+
+The row MODEL (`table.getRowModel().rows`) still carries every row the server returned — sorting, selection and `aria-rowcount` all operate over the FULL set. Only the DOM footprint shrinks to the scrolled-into-view window. This is explicitly NOT a client-side row cap (D-08): virtualization renders a window of a full result set; it does not truncate one.
+
+### A real jsdom gap, found and fixed at its root
+
+Landing virtualization first broke 15 existing tests (245/260), across every file that renders a `DataTable` — not just the new render-cost test, but `workbench-tracer.test.ts`, `workbench-impact.test.ts`, `workbench-callers-callees.test.ts`, `workbench-affected.test.ts`, and — surprisingly at first — `health-page.test.ts` (which does not import `DataTable` directly; investigation traced it to `CountTable.svelte`, D-06's shared shell reused by the health page's three count tables).
+
+**Root cause, isolated by direct instrumentation of the `Virtualizer` instance:** `@tanstack/virtual-core`'s default `observeElementRect` calls `element.offsetWidth`/`offsetHeight` SYNCHRONOUSLY on every `setOptions` (`getRect()` in its source), regardless of whether `ResizeObserver` exists. jsdom has no layout engine at all, so `offsetWidth`/`offsetHeight` are always 0 for every element. This synchronous zero-measurement PERMANENTLY overwrites the virtualizer's internal `scrollRect` the instant a real (but jsdom-zeroed) scroll element becomes available — confirmed by printing `(virtualizer as any).scrollRect` directly, which showed `{ width: 0, height: 0 }` even with an `initialRect: { width: 0, height: 600 }` option set. **`initialRect` alone does NOT fix this** — it only helps the true SSR case (`getScrollElement()` returning `null`), never the jsdom-has-a-real-but-zero-sized-element case. With `outerSize` pinned at 0, `calculateRangeImpl` short-circuits to `range = null` → zero virtual items → zero rendered rows, regardless of row count.
+
+**Fix, applied at the root (`web/tests/setup.ts`, the shared setup file every test file already loads), not per-test:** a scoped `Object.defineProperty` stub for `offsetWidth`/`offsetHeight` that returns a realistic non-zero size (600×800) ONLY for the element carrying `data-testid="data-table-scroll"` — every other element keeps jsdom's native (0) behavior, so the stub cannot mask an unrelated layout bug elsewhere. This is the standard, well-known workaround for testing `@tanstack/virtual`-family components under jsdom (jsdom has never implemented `ResizeObserver` or real layout — a long-standing, deliberate limitation, not a bug to work around per-project).
+
+### Deterministic assertions restated against the row MODEL, per the maintainer's explicit instruction — not deleted
+
+`web/tests/data-table-render-cost.test.ts`'s two unconditional tests were rewritten, exactly as instructed:
+- **"renders exactly 1000 rows"** now reads `table.getAttribute('aria-rowcount')` (the row MODEL count) rather than counting DOM `<tr>` elements, WITH a new complementary assertion that the DOM row count is strictly LESS than the model count (proving virtualization is genuinely windowing the DOM, not merely claiming to via the attribute) and greater than zero (proving something rendered). This still catches the exact failure mode the original positive control existed for — a change that silently drops rows from the MODEL — while additionally catching a regression that removes virtualization but leaves the attribute stale.
+- **"clicking the Name header genuinely reorders the rendered rows"** now compares the rendered (windowed) slice of names against the SAME leading slice of the full ascending-sorted name list, since only the top of the scroll position is in the DOM after a sort (the scroll offset does not move on sort). Still deterministic, still unconditional, still compares actual rendered text content — never a toggled indicator class.
+
+Both restated tests, plus the timing test, run unconditionally on every `task web:test` — no wall-clock assertion was added to any PR-triggered required job.
+
+### Remeasured — before and after, verbatim
+
+| Metric | Threshold | Before (no virtualization, Task 3) | After (virtualized, Task 4) |
+|---|---|---|---|
+| Initial render, 1000 rows | ≤ 400ms | 408–421ms (FAILED, 4 runs) | 17.78–20.22ms (PASS, 4 runs) |
+| Sort-toggle, 1000 rows | ≤ 200ms | 363–480ms (FAILED, 4 runs) | 10.59–12.19ms (PASS, 4 runs) |
+
+Roughly a 20–40x improvement on both metrics — `task web:render-cost` now exits 0 on every run.
+
+### Bundle rebuilt again — closing the window `DataTable.svelte`'s change opened
+
+`task web:drift` BEFORE this task's rebuild: source-half mismatch (103 files, digest changed — `DataTable.svelte`, `web/package.json`, `web/pnpm-lock.yaml` all changed content, not count), output-half still matched (nobody hand-edited the committed bundle). `task web:build` → `web:build: wrote web/build/.build-manifest (source-files=103, output-files=31)`. `task web:drift` AFTER: `PASS — hashed 103 source files, manifested 31 output files, committed web/build/ matches both digests` (output count moved 30 → 31: one new immutable chunk for `@tanstack/virtual-core`).
+
+### Full gate re-sweep, post-virtualization
+
+| Gate | Result |
+|---|---|
+| `task web:test` | `PASS — 260 of 260 tests passed` (unchanged from Task 3 — same tests, restated assertions) |
+| `task web:render-cost` | `PASS` (both medians under threshold, 4 consecutive runs) |
+| `task web:drift` | `PASS — hashed 103 source files, manifested 31 output files` |
+| `task web:components:drift` | `PASS — all 50 vendored component files across 8 components byte-identical` (unaffected by this change) |
+| `task proto:drift` | `PASS — all 4 generated files byte-identical` |
+| `GOTOOLCHAIN=go1.26.5 task test:unit` | all packages `ok` |
+| `cd web && pnpm check` | `1019 FILES 0 ERRORS 0 WARNINGS 0 FILES_WITH_PROBLEMS` |
+| `task web:lockfile` | `PASS — 233 packages declared, 233 of 233 resolutions integrity-bearing, zero non-registry/non-link sources` |
+| `task web:deps:strict` | `PASS — 0 entries (0 denials)` |
+| `task web:audit` | `PASS — CLEAN, zero advisories` |
+
+### Todo closure
+
+`.planning/todos/pending/2026-08-30-workbench-datatable-1000-row-render-cost-exceeds-threshold-virtualization-needs-legitimacy-checkpoint.md` (filed at the end of Task 3) moved to `.planning/todos/completed/` with a full resolution record — the approval, the install, the wiring, the jsdom root-cause investigation, and the before/after numbers.
 
 ## Deviations from Plan
 
@@ -342,9 +427,33 @@ Both remaining folded todos moved to `.planning/todos/completed/` with resolutio
 - **Verification:** every negative/positive grep and the full bootstrap-ordering gate re-run clean (see Task 2 section above).
 - **Commit:** `b518b79e` (folded into Task 2's commit, since it landed before that commit).
 
-### Halted (not a bug — a designed stop)
+**4. [Rule 3 - blocking issue] Virtualization broke 15 existing tests via a jsdom `offsetWidth`/`offsetHeight` gap**
+- **Found during:** Task 4, first `task web:test` run after wiring `@tanstack/svelte-virtual` into `DataTable.svelte` (245/260 passed).
+- **Issue:** `@tanstack/virtual-core`'s `observeElementRect` reads the scroll container's `offsetWidth`/`offsetHeight` synchronously on every `setOptions` call; jsdom has no layout engine, so these are always 0, permanently zeroing the virtualizer's computed visible range (`initialRect` does not help — the synchronous real measurement overwrites it immediately). Every test rendering any `DataTable` instance (directly or via `CountTable.svelte`) got zero rendered rows.
+- **Fix:** Added a scoped `offsetWidth`/`offsetHeight` stub to `web/tests/setup.ts`, applying only to the element carrying `data-testid="data-table-scroll"` (`DataTable.svelte`'s own scroll container) — every other element keeps jsdom's native behavior.
+- **Files modified:** `web/tests/setup.ts`.
+- **Verification:** `task web:test` → 260/260 (from 245/260).
+- **Commit:** `3b7de15d`.
 
-**Render-cost measurement came back OVER THRESHOLD (D-08).** See "The threshold, fixed by the plan before the number was seen, and OVER-THRESHOLD" above. No virtualization dependency was installed; a `CHECKPOINT REACHED` is returned requesting the blocking-human package-legitimacy decision for `@tanstack/svelte-virtual@3.13.36`, per this plan's own prohibitions and D-08.
+**5. [Rule 1 - bug] Deterministic render-cost assertions needed restating for a virtualized DOM, per the maintainer's own explicit instruction**
+- **Found during:** Task 4, after fixing deviation 4 — 2 of the render-cost test's own 3 tests still failed (`renders exactly 1000 rows` and the sort-reorder check), since they read DOM `<tr>` count/order directly, which virtualization now legitimately windows.
+- **Issue:** "1000 rows rendered in the DOM" is no longer true by construction after virtualization.
+- **Fix:** Restated against the row MODEL (`aria-rowcount`, a new attribute `DataTable.svelte` now forwards) plus a DOM-count-is-strictly-smaller complementary check; the reorder check now compares the rendered window against the matching leading slice of the full sorted order.
+- **Files modified:** `web/tests/data-table-render-cost.test.ts`.
+- **Verification:** `task web:test` → 260/260.
+- **Commit:** `3b7de15d`.
+
+### Resolved (not a bug — the plan's own designed stop, then a maintainer decision)
+
+**Render-cost measurement came back OVER THRESHOLD (D-08) in Task 3.** No virtualization dependency was installed at that point; a `CHECKPOINT REACHED` was returned requesting the blocking-human package-legitimacy decision for `@tanstack/svelte-virtual@3.13.36`, per this plan's own prohibitions and D-08. **The maintainer approved it** ("Approve @tanstack/svelte-virtual and wire it") in the same session; Task 4 installs, wires, remeasures (now PASSING with a 20–40x margin), and rebuilds. See the Task 4 section above for the full account.
+
+**6. [Process — no code impact] A `git add` pathspec error silently limited the first Task 4 commit to only the todo closure**
+- **Found during:** Task 4, immediately after committing — `git log --stat` on the just-made commit showed only 2 files, not the expected code changes.
+- **Issue:** A single `git add <path1> <path2> ...` invocation included one already-renamed (no-longer-existent) pathspec alongside several valid ones; the invocation errored on the bad pathspec and staged NONE of the paths in that call, including the valid ones — not merely skipping the bad one as might be assumed.
+- **Fix:** Verified via `git status --short` that the expected files were still unstaged, staged them explicitly in a second `git add`, and created a second commit (`3b7de15d`) carrying the actual code — no `git commit --amend` was used (this repository's own protocol: prefer a new commit).
+- **Files modified:** none — this is a git-workflow correction, not a code change.
+- **Verification:** `git log --stat` on both commits together shows the full expected file set; working tree clean after.
+- **Commit:** `3b7de15d` (the corrective commit).
 
 ## Known Stubs
 
@@ -354,18 +463,22 @@ None — no stub was introduced. The over-threshold render-cost result is a genu
 
 None — T-04-27 through T-04-31 are all addressed by this plan's own deliverables (see the plan's Threat Model table); no new, un-modeled surface was introduced.
 
-## Follow-up Todo Filed
+## Follow-up Todo Filed and Closed
 
-`.planning/todos/pending/2026-08-30-workbench-datatable-1000-row-render-cost-exceeds-threshold-virtualization-needs-legitimacy-checkpoint.md` — records the over-threshold measurement, both observed numbers, and the pending `blocking-human` package-legitimacy checkpoint for `@tanstack/svelte-virtual@3.13.36`. This is a NEW todo, not one of the three this plan was chartered to close.
+`.planning/todos/completed/2026-08-30-workbench-datatable-1000-row-render-cost-exceeds-threshold-virtualization-needs-legitimacy-checkpoint.md` — filed pending at the end of Task 3 recording the over-threshold measurement and the pending `blocking-human` package-legitimacy checkpoint; closed in Task 4 with the maintainer's approval, the install, the wiring, and the after-measurements, once the checkpoint resolved within the same session.
 
 ## Self-Check: PASSED
 
-All created files found on disk; all three task commit hashes found in `git log`:
+Re-run after Task 4. All created/modified files found on disk; all six task commit hashes found in `git log`; the render-cost todo confirmed moved OUT of pending and INTO completed; `@tanstack/svelte-virtual` confirmed present in `web/package.json`:
 - `.github/workflows/components-drift.yml` — FOUND
 - `web/tests/data-table-render-cost.test.ts` — FOUND
 - `web/tests/support/data-table-location-host.svelte` — FOUND
+- `web/tests/setup.ts` — FOUND
+- `web/src/lib/components/workbench/DataTable.svelte` — FOUND
 - `.planning/todos/completed/2026-08-28-shadcn-svelte-registry-version-pinning-with-source-match.md` — FOUND
 - `.planning/todos/completed/2026-08-28-client-side-render-cost-measurement-for-browse-views.md` — FOUND
-- `.planning/todos/pending/2026-08-30-workbench-datatable-1000-row-render-cost-exceeds-threshold-virtualization-needs-legitimacy-checkpoint.md` — FOUND
-- Commits `0bf304c1`, `b518b79e`, `b96cc8d1` — all FOUND in `git log --oneline --all`
+- `.planning/todos/completed/2026-08-30-workbench-datatable-1000-row-render-cost-exceeds-threshold-virtualization-needs-legitimacy-checkpoint.md` — FOUND
+- `.planning/todos/pending/2026-08-30-...-legitimacy-checkpoint.md` — CONFIRMED ABSENT (no longer pending)
+- `rg -c "svelte-virtual" web/package.json` → 1
+- Commits `0bf304c1`, `b518b79e`, `b96cc8d1`, `0f41a387`, `7deec843`, `3b7de15d` — all FOUND in `git log --oneline --all`
 
