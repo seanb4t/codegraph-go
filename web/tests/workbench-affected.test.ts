@@ -12,12 +12,81 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import FilePicker from '$lib/components/workbench/FilePicker.svelte';
 import type { FilesClient } from '$lib/file-search';
-import type { FileEntry, FilesResponse } from '$lib/gen/ui_pb';
-import { parseWorkbenchParams, serializeWorkbenchParams } from '$lib/workbench-url';
+import type { AffectedResponse, FileEntry, FilesResponse, Location } from '$lib/gen/ui_pb';
+import {
+	parseWorkbenchParams,
+	serializeWorkbenchParams,
+	WORKBENCH_MODES
+} from '$lib/workbench-url';
+
+import { mockPage, resetMockPage } from './support/browse-page-state.svelte';
+
+// The Affected-tab half (Task 3) mounts the full route, mirroring
+// workbench-impact.test.ts / workbench-callers-callees.test.ts's mocking
+// conventions exactly.
+vi.mock('$app/state', async () => {
+	const { mockPage } = await import('./support/browse-page-state.svelte');
+	return { page: mockPage };
+});
+
+vi.mock('$app/navigation', async () => {
+	const { mockPage } = await import('./support/browse-page-state.svelte');
+	return {
+		replaceState: (url: URL | string) => {
+			mockPage.url = typeof url === 'string' ? new URL(url, mockPage.url) : new URL(url.href);
+		},
+		goto: vi.fn()
+	};
+});
+
+let currentAffectedImpl: (req: { files: string[]; depth: number }) => Promise<AffectedResponse> =
+	() => Promise.reject(new Error('workbench-affected.test.ts: no affected stub configured'));
+let currentFilesImpl: () => Promise<FilesResponse> = () =>
+	Promise.resolve({ format: 'flat', files: [], tree: [] } as unknown as FilesResponse);
+
+vi.doMock('$lib/client', () => ({
+	uiClient: {
+		impact: () => Promise.reject(new Error('not used by this test file')),
+		callers: () => Promise.reject(new Error('not used by this test file')),
+		callees: () => Promise.reject(new Error('not used by this test file')),
+		affected: (req: { files: string[]; depth: number }) => currentAffectedImpl(req),
+		files: () => currentFilesImpl()
+	}
+}));
+
+const { default: WorkbenchPage } = await import('../src/routes/workbench/+page.svelte');
+
+function loc(name: string, kind: string, filePath: string, startLine: number): Location {
+	return { name, kind, filePath, startLine } as unknown as Location;
+}
+
+function affectedResponse(files: string[], affectedTests: Location[]): AffectedResponse {
+	return { files, affectedTests } as unknown as AffectedResponse;
+}
+
+function okStatusGate() {
+	return {
+		subscribe(run: (s: { verdict: string; commit: string }) => void) {
+			run({ verdict: 'ok', commit: 'known' });
+			return () => {};
+		},
+		notifyNavigated: () => {}
+	};
+}
+
+function mountWorkbench(affectedImpl: (req: { files: string[]; depth: number }) => Promise<AffectedResponse>) {
+	currentAffectedImpl = affectedImpl;
+	return render(WorkbenchPage, { context: new Map([['statusGate', okStatusGate()]]) });
+}
+
+beforeEach(async () => {
+	const { goto } = await import('$app/navigation');
+	vi.mocked(goto).mockClear();
+});
 
 function fileEntry(path: string): FileEntry {
 	return { path, language: 'go', nodeCount: 1n, edgeCount: 0n } as FileEntry;
@@ -143,5 +212,216 @@ describe('FilePicker + workbench-url.ts: the URL round trip (D-11)', () => {
 		const client = stubFilesClient([]);
 		mountPicker(client, roundTripped.files);
 		expect(screen.getByTestId('file-picker-chip-a,b.go')).toBeInTheDocument();
+	});
+});
+
+describe('workbench Affected tab: multi-file selection drives a sortable table (WRK-02, Task 3)', () => {
+	it('parseWorkbenchParams -> Affected rpc -> DataTable renders all rows, recording exactly one call with the URL files and depth', async () => {
+		const calls: Array<{ files: string[]; depth: number }> = [];
+		const response = affectedResponse(
+			['a.go', 'b.go'],
+			[loc('TestAlpha', 'func', 'a_test.go', 5), loc('TestBeta', 'func', 'b_test.go', 9)]
+		);
+
+		resetMockPage('http://localhost/workbench?mode=affected&file=a.go&file=b.go&depth=3');
+		mountWorkbench((req) => {
+			calls.push({ files: req.files, depth: req.depth });
+			return Promise.resolve(response);
+		});
+
+		await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+		expect(screen.getByText('TestAlpha')).toBeInTheDocument();
+		expect(screen.getByText('TestBeta')).toBeInTheDocument();
+
+		expect(calls).toEqual([{ files: ['a.go', 'b.go'], depth: 3 }]);
+	});
+
+	it('the echoed files render in an element PRECEDING the table and do NOT appear as a column — the Affected stub records exactly ONE call', async () => {
+		const response = affectedResponse(['a.go', 'b.go'], [loc('TestAlpha', 'func', 'a_test.go', 5)]);
+		const calls: Array<{ files: string[]; depth: number }> = [];
+
+		resetMockPage('http://localhost/workbench?mode=affected&file=a.go&file=b.go');
+		mountWorkbench((req) => {
+			calls.push({ files: req.files, depth: req.depth });
+			return Promise.resolve(response);
+		});
+
+		const table = await screen.findByRole('table');
+		const summaryEl = await screen.findByTestId('workbench-affected-files-summary');
+
+		// Node.compareDocumentPosition's DOCUMENT_POSITION_FOLLOWING bit,
+		// set on `table` as observed from `summaryEl`, means summaryEl
+		// precedes table in document order (workbench-impact.test.ts's
+		// own D-06 precedent).
+		const position = summaryEl.compareDocumentPosition(table);
+		expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+		const headers = within(table)
+			.getAllByRole('columnheader')
+			.map((h) => h.textContent?.trim());
+		expect(new Set(headers)).toEqual(new Set(['Name', 'Kind', 'File', 'Line']));
+
+		expect(calls).toHaveLength(1);
+	});
+
+	it("T-04-32-equivalent: adding a chip issues NO additional GetStatus call — 'file' is a per-key ROUTE_LOCAL_PARAMS entry under /workbench", async () => {
+		const { navigationIdentity, createStatusGate } = await import('$lib/status');
+
+		const getStatus = vi.fn(() =>
+			Promise.resolve({
+				initialized: true,
+				version: '',
+				nodeCount: 0,
+				edgeCount: 0,
+				fileCount: 0,
+				stale: false,
+				commitSha: '',
+				storeExists: true,
+				indexingInProgress: false
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			} as any)
+		);
+		const client = { getStatus };
+
+		const initialUrl = new URL('http://localhost/workbench?mode=affected&file=a.go');
+		const gate = createStatusGate(client, navigationIdentity(initialUrl));
+		await vi.waitFor(() => expect(getStatus).toHaveBeenCalledTimes(1));
+
+		const nextParams = parseWorkbenchParams(initialUrl.searchParams);
+		nextParams.files = ['a.go', 'b.go'];
+		const nextUrl = new URL(initialUrl.href);
+		nextUrl.search = serializeWorkbenchParams(nextParams).toString();
+
+		gate.notifyNavigated(navigationIdentity(nextUrl));
+		expect(getStatus).toHaveBeenCalledTimes(1);
+
+		// Positive control (rule 84d1gfpywd): the SAME kind of parameter
+		// change under /browse still mints a new identity and DOES
+		// refetch, proving the exclusion above is scoped to /workbench.
+		gate.notifyNavigated(navigationIdentity(new URL('http://localhost/browse?symbol=Foo')));
+		await vi.waitFor(() => expect(getStatus).toHaveBeenCalledTimes(2));
+	});
+
+	it('with zero chips selected, no Affected request is issued and an explicit empty state renders — not a bare table', async () => {
+		const calls: Array<{ files: string[]; depth: number }> = [];
+		resetMockPage('http://localhost/workbench?mode=affected');
+		mountWorkbench((req) => {
+			calls.push({ files: req.files, depth: req.depth });
+			return Promise.resolve(affectedResponse([], []));
+		});
+
+		expect(await screen.findByTestId('workbench-affected-empty')).toBeInTheDocument();
+		expect(screen.queryByRole('table')).not.toBeInTheDocument();
+		expect(calls).toHaveLength(0);
+	});
+
+	it('adding a chip issues a new Affected request and replaces the rows, without remounting the route or navigating', async () => {
+		currentFilesImpl = () =>
+			Promise.resolve({
+				format: 'flat',
+				files: [{ path: 'c.go', language: 'go', nodeCount: 1n, edgeCount: 0n }],
+				tree: []
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			} as any);
+
+		const calls: Array<{ files: string[]; depth: number }> = [];
+		resetMockPage('http://localhost/workbench?mode=affected&file=a.go');
+		mountWorkbench((req) => {
+			calls.push({ files: req.files, depth: req.depth });
+			return Promise.resolve(
+				affectedResponse(req.files, [
+					loc(`Test-for-${req.files.join(',')}`, 'func', 'x_test.go', 1)
+				])
+			);
+		});
+
+		await waitFor(() => expect(screen.getByText('Test-for-a.go')).toBeInTheDocument());
+		const headingBefore = screen.getByRole('heading', { name: /workbench/i });
+
+		const input = screen.getByTestId('file-picker-input');
+		await fireEvent.input(input, { target: { value: 'c.go' } });
+		// Real time — SEARCH_DEBOUNCE_MS (150) plus margin — rather than
+		// fake timers, so this interaction does not need to coordinate
+		// with the route's own (timer-free) request effects.
+		await new Promise((resolve) => setTimeout(resolve, 250));
+
+		const result = await screen.findByTestId('file-picker-result-c.go');
+		await fireEvent.click(result);
+
+		await waitFor(() => expect(screen.getByText('Test-for-a.go,c.go')).toBeInTheDocument());
+		expect(screen.queryByText('Test-for-a.go')).not.toBeInTheDocument();
+		expect(calls).toEqual([
+			{ files: ['a.go'], depth: 0 },
+			{ files: ['a.go', 'c.go'], depth: 0 }
+		]);
+
+		// (a) the route component instance is not re-created.
+		const headingAfter = screen.getByRole('heading', { name: /workbench/i });
+		expect(headingAfter).toBe(headingBefore);
+
+		// (b) no navigation was dispatched.
+		const { goto } = await import('$app/navigation');
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('D-07: a depth above MaxDepth (9999) reaches the stub client unchanged — the UI applies no client-side bound', async () => {
+		const calls: Array<{ files: string[]; depth: number }> = [];
+		resetMockPage('http://localhost/workbench?mode=affected&file=a.go&depth=9999');
+		mountWorkbench((req) => {
+			calls.push({ files: req.files, depth: req.depth });
+			return Promise.resolve(affectedResponse(req.files, []));
+		});
+
+		await waitFor(() => expect(calls).toEqual([{ files: ['a.go'], depth: 9999 }]));
+	});
+
+	it('WRK-04: clicking the Name column header sorts ascending, clicking again reverses to descending', async () => {
+		resetMockPage('http://localhost/workbench?mode=affected&file=a.go');
+		mountWorkbench(() =>
+			Promise.resolve(
+				affectedResponse(
+					['a.go'],
+					[
+						loc('Beta', 'func', 'b_test.go', 20),
+						loc('Gamma', 'func', 'c_test.go', 30),
+						loc('Alpha', 'func', 'a_test.go', 10)
+					]
+				)
+			)
+		);
+
+		const table = await screen.findByRole('table');
+		const nameHeader = screen.getByRole('button', { name: /Name/ });
+
+		await fireEvent.click(nameHeader);
+		await waitFor(() => {
+			const rows = within(table).getAllByRole('row').slice(1);
+			expect(rows.map((r) => r.textContent)).toEqual([
+				expect.stringContaining('Alpha'),
+				expect.stringContaining('Beta'),
+				expect.stringContaining('Gamma')
+			]);
+		});
+
+		await fireEvent.click(nameHeader);
+		await waitFor(() => {
+			const rows = within(table).getAllByRole('row').slice(1);
+			expect(rows.map((r) => r.textContent)).toEqual([
+				expect.stringContaining('Gamma'),
+				expect.stringContaining('Beta'),
+				expect.stringContaining('Alpha')
+			]);
+		});
+	});
+
+	it('every WORKBENCH_MODES tab renders a live panel — none renders a not-yet-wired placeholder', async () => {
+		for (const mode of WORKBENCH_MODES) {
+			resetMockPage(`http://localhost/workbench?mode=${mode}&symbol=Engine.Status&file=a.go`);
+			const { unmount } = mountWorkbench(() => Promise.resolve(affectedResponse(['a.go'], [])));
+
+			expect(screen.queryByTestId('workbench-mode-placeholder')).not.toBeInTheDocument();
+
+			unmount();
+		}
 	});
 });

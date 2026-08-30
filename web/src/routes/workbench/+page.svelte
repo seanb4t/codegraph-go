@@ -1,17 +1,18 @@
 <script lang="ts">
-	// D-18: fills the Phase 4 placeholder this route mounted. Reads view
-	// state EXCLUSIVELY from page.url.searchParams via workbench-url.ts's
+	// D-18: fills the four-tab surface this route mounted (04-01's
+	// tracer, 04-04's Impact/Callers/Callees, 04-06's Affected). Reads
+	// view state EXCLUSIVELY from page.url.searchParams via workbench-url.ts's
 	// parseWorkbenchParams — the full input state lives in the URL (D-12)
 	// — and every control write goes through serializeWorkbenchParams +
 	// replaceState, never a direct state assignment.
 	//
 	// 04-01's tracer wired only `callers` inline, with its own
 	// idle/loading/loaded/failed state machine duplicated per analysis.
-	// This plan (04-04) extracts that state machine into
-	// AnalysisPanel.svelte (D-06) and instantiates it three more times —
-	// Impact (with its depth control, WRK-01), Callers, Callees (each with
-	// a limit control, WRK-03). `affected` remains the explicit
-	// placeholder 04-06 replaces.
+	// 04-04 extracts that state machine into AnalysisPanel.svelte (D-06)
+	// and instantiates it three more times — Impact (with its depth
+	// control, WRK-01), Callers, Callees (each with a limit control,
+	// WRK-03). 04-06 wires the fourth: `affected`, driven by FilePicker's
+	// multi-file chip set (WRK-02) instead of a single symbol.
 	//
 	// D-13: the four analyses are TABS, with `mode` the URL parameter
 	// selecting which one is active. Each mode's AnalysisPanel is gated by
@@ -42,6 +43,8 @@
 	import { impactColumns } from '$lib/components/workbench/impact-columns';
 	import { callersColumns } from '$lib/components/workbench/callers-columns';
 	import { calleesColumns } from '$lib/components/workbench/callees-columns';
+	import { affectedColumns } from '$lib/components/workbench/affected-columns';
+	import FilePicker from '$lib/components/workbench/FilePicker.svelte';
 
 	let params = $derived(parseWorkbenchParams(page.url.searchParams));
 	let activeMode = $derived(params.mode ?? 'impact');
@@ -73,6 +76,13 @@
 	function handleSymbolInput(e: Event): void {
 		const value = (e.currentTarget as HTMLInputElement).value;
 		writeParams({ symbol: value || undefined });
+	}
+
+	// FilePicker owns no selection state of its own (its own doc comment)
+	// — this is the one write path the chip set travels back through, the
+	// same writeParams/replaceState mechanism every other control uses.
+	function handleAffectedFilesChange(files: string[]): void {
+		writeParams({ files });
 	}
 
 	// depthInvalid/limitInvalid (mirror NeighborsPanel.svelte's
@@ -148,6 +158,26 @@
 			uiClient.callees({ symbol, limit }, { signal }).then((resp) => ({ rows: resp.callees }));
 	}
 
+	type AffectedSummary = { files: string[] };
+
+	// AffectedResponse's own `files` is the echo of the REQUEST's files —
+	// carried through AnalysisResult's `summary` (04-04's widened
+	// contract) rather than read from `params.files` directly, so a late
+	// response from a superseded dispatch can never pair its rows with a
+	// DIFFERENT (newer) file selection's echo: AnalysisPanel's own
+	// request-identity guard discards the whole result, echo included, in
+	// one piece.
+	function makeAffectedRun(
+		files: string[],
+		depth: number
+	): (signal: AbortSignal) => Promise<AnalysisResult<AffectedSummary>> {
+		return (signal) =>
+			uiClient.affected({ files, depth }, { signal }).then((resp) => ({
+				rows: resp.affectedTests,
+				summary: { files: resp.files }
+			}));
+	}
+
 	// requestKey composes ONLY the fields that select THIS analysis's
 	// query (mirrors the tracer's own callersKey discipline) — mode is
 	// included so a freshly (re-)mounted panel always fires its effect at
@@ -162,6 +192,7 @@
 	let calleesKey = $derived(
 		JSON.stringify([activeMode, params.symbol ?? null, params.limit ?? null])
 	);
+	let affectedKey = $derived(JSON.stringify([activeMode, params.files, params.depth ?? null]));
 </script>
 
 {#snippet symbolInput()}
@@ -212,6 +243,29 @@
 	<span class="ml-4" data-testid="workbench-impact-edge-count">Edges: {s.edgeCount}</span>
 {/snippet}
 
+{#snippet affectedDepthInput()}
+	<label class="text-sm">
+		Depth
+		<input
+			type="number"
+			value={params.depth ?? ''}
+			oninput={handleDepthInput}
+			data-testid="workbench-affected-depth-input"
+			aria-invalid={depthInvalid}
+			class="block rounded-md border border-input bg-background px-2 py-1 text-sm"
+		/>
+	</label>
+{/snippet}
+
+{#snippet affectedSummary(s: AffectedSummary)}
+	<div data-testid="workbench-affected-files-summary">
+		<span class="font-medium">Files:</span>
+		{#each s.files as f (f)}
+			<span class="ml-2" data-testid={`workbench-affected-file-${f}`}>{f}</span>
+		{/each}
+	</div>
+{/snippet}
+
 <h1 class="text-lg font-semibold">Workbench</h1>
 <p class="mt-1 text-sm text-muted-foreground">
 	Phase 4: run the four graph analyses interactively with their own knobs.
@@ -241,9 +295,27 @@
 
 	<Tabs.Content value="affected">
 		{#if activeMode === 'affected'}
-			<p class="mt-4 text-sm text-muted-foreground" data-testid="workbench-mode-placeholder">
-				This analysis is not yet wired.
-			</p>
+			<div class="mt-4">
+				<FilePicker
+					client={uiClient}
+					files={params.files}
+					onChange={handleAffectedFilesChange}
+				/>
+			</div>
+			{#if params.files.length === 0}
+				<p class="mt-4 text-sm text-muted-foreground" data-testid="workbench-affected-empty">
+					Select at least one file to run Affected.
+				</p>
+			{:else}
+				<AnalysisPanel
+					requestKey={affectedKey}
+					run={makeAffectedRun(params.files, params.depth ?? 0)}
+					columns={affectedColumns}
+					summary={affectedSummary}
+					inputs={affectedDepthInput}
+					emptyMessage="No affected tests found."
+				/>
+			{/if}
 		{/if}
 	</Tabs.Content>
 
