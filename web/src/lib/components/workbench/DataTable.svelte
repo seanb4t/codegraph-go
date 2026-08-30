@@ -128,7 +128,7 @@
 	<Table.Root aria-rowcount={table.getRowModel().rows.length}>
 		<Table.Header>
 			{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
-				<Table.Row>
+				<Table.Row aria-rowindex={1}>
 					{#each headerGroup.headers as header (header.id)}
 						<Table.Head colspan={header.colSpan}>
 							{#if !header.isPlaceholder}
@@ -175,15 +175,27 @@
 				{/if}
 				{#each virtualRows as virtualRow (virtualRow.key)}
 					{@const row = table.getRowModel().rows[virtualRow.index]}
-					<Table.Row
-						data-testid={`table-row-${row.id}`}
-						class={onSelect ? 'cursor-pointer' : undefined}
-						onclick={onSelect ? () => onSelect(row.original) : undefined}
-					>
-						{#each row.getAllCells() as cell (cell.id)}
-							<Table.Cell><FlexRender {cell} /></Table.Cell>
-						{/each}
-					</Table.Row>
+					{#if row}
+						<!-- WR-05: aria-rowindex is 1-based and row 1 is the
+							 header row (set above), so a data row's WAI-ARIA
+							 index is its position in the FULL (unvirtualized)
+							 row model, offset by 2 — not its DOM position among
+							 the ~27 rows actually rendered. Required once
+							 aria-rowcount (below) reports the full model size
+							 while the DOM holds only a windowed subset;
+							 without it, assistive tech is told "N rows" and
+							 handed a subset with no way to place them. -->
+						<Table.Row
+							data-testid={`table-row-${row.id}`}
+							aria-rowindex={virtualRow.index + 2}
+							class={onSelect ? 'cursor-pointer' : undefined}
+							onclick={onSelect ? () => onSelect(row.original) : undefined}
+						>
+							{#each row.getAllCells() as cell (cell.id)}
+								<Table.Cell><FlexRender {cell} /></Table.Cell>
+							{/each}
+						</Table.Row>
+					{/if}
 				{/each}
 				{#if paddingBottom > 0}
 					<tr aria-hidden="true" data-testid="table-virtual-padding-bottom">
