@@ -1,30 +1,29 @@
 // file-graph-transform.ts is the pure, DOM-free FileGraphResponse ->
-// Cytoscape element-data transform (05-03 Task 2, GRF-02). Mirrors
-// browse-url.ts's doc-comment-as-contract style: state up front what this
-// module does NOT do.
+// Cytoscape element-data transform. Mirrors browse-url.ts's
+// doc-comment-as-contract style: state up front what this module does
+// NOT do.
 //
 // This module MUST NOT:
 //   - touch the DOM. It reads and writes plain data only — no `document`,
 //     no `window`, no browser global of any kind.
-//   - import any cytoscape API. GraphCanvas.svelte (05-03 Task 3) is the
-//     ONLY file in web/src permitted to import cytoscape or a cytoscape
-//     extension (GRF-05's seam) — this module hands GraphCanvas plain
+//   - import any cytoscape API. GraphCanvas.svelte is the ONLY file in
+//     web/src permitted to import cytoscape or a cytoscape extension
+//     (the renderer swap seam) — this module hands GraphCanvas plain
 //     element-data objects shaped the way cytoscape's element list
 //     expects, without ever calling into cytoscape itself.
 //   - compute cycle membership. Cycle detection is server-side (D-06,
 //     internal/query/filegraph_cycles.go) and arrives already computed on
 //     the wire as FileGraphNode.cycleId / FileGraphEdge.inCycle. This
 //     module copies those fields onto element data unchanged; deriving
-//     membership here would recreate exactly the renderer coupling
-//     GRF-05's seam exists to prevent.
+//     membership here would recreate exactly the renderer coupling the
+//     swap seam exists to prevent.
 //
-// Directory-structural grouping (GRF-02) is derived entirely from
-// FilePath splitting: the server sends flat repository-relative paths
-// (05-01's ENG-03 rollup), never a directory tree, so no new server
-// concept is required — this is the client half of that split (see
-// 05-RESEARCH.md's Architectural Responsibility Map). Paths are
-// guaranteed repository-relative and non-absolute by 05-01's rollup, so
-// no normalization or traversal handling is invented here.
+// Directory-structural grouping is derived entirely from FilePath
+// splitting: the server sends flat repository-relative paths, never a
+// directory tree, so no new server concept is required — this is the
+// client half of that split. Paths are guaranteed repository-relative
+// and non-absolute by the server-side rollup, so no normalization or
+// traversal handling is invented here.
 //
 // bigint -> number: the wire carries symbolCount/totalCount/kindCounts
 // values as int64 (bigint in the generated TS types) because a Go int64
@@ -96,7 +95,7 @@ function fileNodeElement(n: FileGraphNode): { data: FileGraphNodeData } {
 // file itself) and adds a compound-node element for each DISTINCT
 // directory not already present in `seen`. seen/out are threaded through
 // by the caller so many files sharing a directory prefix produce exactly
-// one compound node for that directory (05-03 must_haves: dedup).
+// one compound node for that directory (deduplication is required).
 function directoryElements(
 	path: string,
 	seen: Set<string>,

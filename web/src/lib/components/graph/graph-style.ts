@@ -1,18 +1,22 @@
 // graph-style.ts exports the Cytoscape style sheet as plain data — a
-// selector-and-properties array with no cytoscape import (05-03 Task 2,
-// GRF-02). GraphCanvas.svelte (05-03 Task 3) is the only file permitted
-// to import cytoscape itself; this module hands it a plain array cytoscape
-// accepts as its own `style` option unmodified.
+// selector-and-properties array with no cytoscape import. GraphCanvas.svelte
+// is the only file permitted to import cytoscape itself; this module hands
+// it a plain array cytoscape accepts as its own `style` option unmodified.
 //
-// Deliberately minimal for this plan's tracer scope: a file-node style, a
+// Deliberately minimal for this tracer's scope: a file-node style, a
 // directory-compound style that makes the grouping legible, and a default
 // edge style whose width is derived from totalCount so a heavier
-// dependency reads as a heavier line. Cycle styling (GRF-04) is 05-05's
-// job and must NOT be added here — this module only knows about the
+// dependency reads as a heavier line. Cycle styling is a later
+// concern and must NOT be added here — this module only knows about the
 // directory/file/edge distinction file-graph-transform.ts produces.
+// Boolean data selectors use cytoscape's truthy/falsy existence syntax
+// (`[?field]` / `[!field]`), NOT a `[field = true]` equality comparison —
+// confirmed live against a real browser this task: `[isDirectory = true]`
+// logs "The selector ... is invalid" to the console and the rule never
+// matches, silently leaving every node under cytoscape's default style.
 export const fileGraphStyle: unknown[] = [
 	{
-		selector: 'node[isDirectory = true]',
+		selector: 'node[?isDirectory]',
 		style: {
 			shape: 'round-rectangle',
 			'background-color': '#e5e7eb',
@@ -28,7 +32,7 @@ export const fileGraphStyle: unknown[] = [
 		}
 	},
 	{
-		selector: 'node[isDirectory = false]',
+		selector: 'node[!isDirectory]',
 		style: {
 			shape: 'ellipse',
 			width: 16,
