@@ -1,9 +1,19 @@
-// Tests for graph-verdict.mjs's pure comparator (05-04 Task 1 behavior block).
-// Pure-module vitest convention, mirroring browse-url.test.ts: no DOM, no
-// browser, no SvelteKit runtime. compareObservation is exercised directly
-// so a fail-closed regression here can never hide behind a mocked browser.
+// Tests for graph-verdict.mjs's pure comparator (05-04 Task 1 behavior block)
+// plus its output-path/note extension (05-08 Task 1). Pure-module vitest
+// convention, mirroring browse-url.test.ts: no DOM, no browser, no
+// SvelteKit runtime. compareObservation is exercised directly so a
+// fail-closed regression here can never hide behind a mocked browser.
+//
+// The four new cases below use `writeVerdict`/`resolveOutputPath`/`parseArgs`
+// with an EXPLICIT scratch output path, never the real fixed default —
+// writeVerdict never touches corpora/graph-render-observations.json
+// (the recorded FAIL, T-05-41) inside a test.
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
-import { compareObservation } from '../scripts/graph-verdict.mjs';
+import { compareObservation, parseArgs, resolveOutputPath, writeVerdict } from '../scripts/graph-verdict.mjs';
 import { mergeRawObservations, failedObservation } from '../scripts/graph-measure.mjs';
 
 // Test fixtures below deliberately populate only the fields
@@ -237,6 +247,93 @@ describe('mergeRawObservations: role split', () => {
 		expect(merged.additionalCorpora).toHaveLength(2);
 		expect(merged.additionalCorpora[0]).toBe(additional1);
 		expect(merged.additionalCorpora[1]).toBe(additional2);
+	});
+});
+
+describe('parseArgs: output-path and note flags (05-08)', () => {
+	it('an invocation using neither flag parses to exactly the keys it does today', () => {
+		const parsed = parseArgs(['--binding', '/tmp/x.json']);
+		expect(new Set(Object.keys(parsed))).toEqual(new Set(['binding', 'additional']));
+	});
+
+	it('an invocation using both flags carries them through by name', () => {
+		const parsed = parseArgs(['--binding', '/tmp/x.json', '--out', '/tmp/y.json', '--note', 'hello']);
+		expect(parsed.out).toBe('/tmp/y.json');
+		expect(parsed.note).toBe('hello');
+	});
+});
+
+describe('writeVerdict: default output path targeting (05-08)', () => {
+	it('resolveOutputPath with no --out flag targets the fixed observations path under the given root', () => {
+		const resolved = resolveOutputPath('/fake/repo/root', undefined);
+		expect(resolved).toBe(path.join('/fake/repo/root', 'corpora', 'graph-render-observations.json'));
+	});
+
+	it('resolveOutputPath with an --out flag returns that path unchanged, never the default', () => {
+		const resolved = resolveOutputPath('/fake/repo/root', '/scratch/custom.json');
+		expect(resolved).toBe('/scratch/custom.json');
+	});
+});
+
+describe('writeVerdict: written object key set (05-08)', () => {
+	it('writing with no note produces EXACTLY the eleven top-level keys the comparator writes today', () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-verdict-test-'));
+		const outputPath = path.join(dir, 'observation.json');
+		try {
+			const obj = writeVerdict({ threshold: threshold(), binding: passingBinding(), output: outputPath });
+			expect(new Set(Object.keys(obj))).toEqual(
+				new Set([
+					'schemaVersion',
+					'thresholdRef',
+					'corpus',
+					'bindingView',
+					'bindingObservation',
+					'additionalCorpora',
+					'metricResults',
+					'verdict',
+					'recordedNonBinding',
+					'generatedBy',
+					'generatedAt'
+				])
+			);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	it('writing with a note carries it verbatim and gains exactly one key relative to the no-note case', () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-verdict-test-'));
+		const outputPath = path.join(dir, 'observation.json');
+		try {
+			const withoutNote = writeVerdict({ threshold: threshold(), binding: passingBinding(), output: outputPath });
+			const withNote = writeVerdict({
+				threshold: threshold(),
+				binding: passingBinding(),
+				output: outputPath,
+				note: 'a provenance note'
+			});
+			expect(withNote.note).toBe('a provenance note');
+			expect(Object.keys(withNote)).toHaveLength(Object.keys(withoutNote).length + 1);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe('writeVerdict: an explicit output path leaves an unrelated path untouched (05-08)', () => {
+	it('writing to a custom path does not modify a separate pre-seeded file standing in for the default', () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'graph-verdict-test-'));
+		const standInDefaultPath = path.join(dir, 'default-observation.json');
+		const customPath = path.join(dir, 'custom-observation.json');
+		const seeded = JSON.stringify({ seeded: true });
+		fs.writeFileSync(standInDefaultPath, seeded);
+		try {
+			writeVerdict({ threshold: threshold(), binding: passingBinding(), output: customPath });
+			expect(fs.readFileSync(standInDefaultPath, 'utf8')).toBe(seeded);
+			expect(fs.existsSync(customPath)).toBe(true);
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });
 
