@@ -214,6 +214,51 @@ decisions so the planner reads settled ground, not open questions.
   unverified and measure it — an estimate presented as a measurement is the failure mode
   this phase's own GRF-01 exists to avoid.
 
+### Maintainer Ruling on the GRF-01 Ordering Clause (2026-08-30)
+
+- **D-10:** **Plan 05-03 — the measurement instrument — is an AUTHORIZED EXCEPTION to the
+  ROADMAP's "no GRF implementation work may be planned before `GRF-01` resolves" clause.**
+
+  **How this arose.** The plan-checker raised it as a BLOCKER, correctly: 05-03 delivers
+  GRF-02 and GRF-05 as production, committed, user-facing work in wave 3 — three runtime
+  dependencies into the signed binary, the GRF-05 seam component, the directory-grouped
+  hierarchical layout, the `/graph` copy replacement, and a rebuilt committed `web/build` —
+  while GRF-01's verdict is not computed until 05-04 in wave 4. Read strictly, "resolves"
+  means *reaches a verdict*, not *has its threshold locked*. The finding is accurate and was
+  not waved away.
+
+  **Why the exception is granted.** D-01 locks the pass condition on **interaction latency**.
+  Latency cannot be measured without a renderer, and measuring a view *other than the one a
+  developer actually sees* would measure the wrong thing — which is precisely the failure the
+  ROADMAP's own Notes warn about: *"a graph view that only reads well on a small demo is the
+  documented failure mode this phase exists to avoid."* A throwaway spike would satisfy the
+  ordering clause while defeating the measurement it exists to enable.
+
+  **What the ordering clause actually protects, and why it is still protected.** The risk is
+  sunk-cost bias — a threshold chosen or defended after seeing results. That channel is
+  **closed by construction, independently of this exception**:
+  - The threshold is locked in **05-01, before 05-03 builds anything**.
+  - The comparator is committed code, not a judgement call, and **fails closed**: a metric
+    that is absent, non-numeric, or unreadable is FAIL, never PASS and never a skipped
+    comparison.
+  - 05-04 states explicitly that **the threshold is never widened, lowered or re-scoped in
+    response to a measurement**, and that a FAIL halts the phase.
+
+  What remains after that is **rework cost on FAIL**, not an integrity risk. That is a
+  pricing question, and the maintainer priced it.
+
+  **What this ruling does NOT do.** It does not weaken GRF-01, relax the threshold, or make
+  the gate advisory. D-02's requirement stands in full: a FAIL must be reachable and
+  actionable, halting the phase and forcing reconsideration of the renderer or of D-04's
+  in-place expansion. On a FAIL, 05-03's shipped work is reworked or discarded — that
+  consequence is accepted, not avoided.
+
+  **Recorded openly rather than absorbed.** This follows D-02's own precedent: where a
+  constraint is genuinely narrowed, the narrowing is written down in plain terms instead of
+  being disguised as compliance. Downstream agents must treat 05-03 as authorized, and must
+  NOT treat this as licence to move any *other* GRF work ahead of 05-04's verdict — 05-05,
+  05-06 and 05-07 remain gated on it.
+
 ### Claude's Discretion
 
 - **The `Engine.FileGraph` wire shape.** A new rpc means another additive, one-way proto
