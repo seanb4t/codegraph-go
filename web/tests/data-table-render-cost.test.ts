@@ -92,17 +92,36 @@ function mountTable() {
 }
 
 describe('DataTable render cost at MaxLimit (D-08, measurement-first)', () => {
-	it('renders exactly 1000 rows — positive control (rule 84d1gfpywd)', async () => {
+	it('represents exactly 1000 rows in the row MODEL, with a genuinely virtualized (smaller) DOM window — positive control (rule 84d1gfpywd)', async () => {
 		const result = mountTable();
 		await Promise.resolve();
 		const table = result.getByRole('table');
-		const renderedRowCount = within(table).getAllByRole('row').length - 1; // minus header row
+
+		// Virtualization (D-08, 04-07 Task 4 — @tanstack/svelte-virtual)
+		// means the DOM no longer holds all 1000 <tr> elements at once, so
+		// the "all rows represented" positive control is restated against
+		// the table's row MODEL — aria-rowcount, which DataTable.svelte
+		// forwards from table.getRowModel().rows.length onto the <table>
+		// element for exactly this reason — never the DOM node count. This
+		// still catches the failure mode the control exists for: a change
+		// that silently drops rows from the MODEL, not merely from the
+		// DOM window.
+		const modelRowCount = Number(table.getAttribute('aria-rowcount'));
+		const domRowCount = within(table).getAllByRole('row').length - 1; // minus header row
 		result.unmount();
 
 		// A measurement over an empty or truncated render would read as fast
 		// and prove nothing — this is UNCONDITIONAL, never gated behind
 		// RENDER_COST_ASSERT.
-		expect(renderedRowCount).toBe(ROW_COUNT);
+		expect(modelRowCount).toBe(ROW_COUNT);
+
+		// The complementary half of the same control: DOM row count must be
+		// STRICTLY LESS than the model count (proving virtualization is
+		// actually windowing the DOM, not merely claiming to via
+		// aria-rowcount while still rendering everything) and greater than
+		// zero (proving something actually rendered).
+		expect(domRowCount).toBeGreaterThan(0);
+		expect(domRowCount).toBeLessThan(ROW_COUNT);
 	});
 
 	it('clicking the Name header genuinely reorders the rendered rows', async () => {
@@ -124,9 +143,16 @@ describe('DataTable render cost at MaxLimit (D-08, measurement-first)', () => {
 		// Deterministic and UNCONDITIONAL: the sort toggle genuinely reorders
 		// the RENDERED rows, compared by actual rendered text content — never
 		// a toggled indicator class standing in for the real thing.
+		//
+		// Virtualization means only the scrolled-into-view WINDOW is in the
+		// DOM (scroll position stays at the top across the click — sorting
+		// re-derives the row model but does not move the scroll offset), so
+		// this compares that window's rendered names against the SAME
+		// leading slice of the full ascending-sorted name list, rather than
+		// requiring all 1000 rows in the DOM at once.
 		const ascNames = [...ROWS].map((r) => r.name).sort((a, b) => a.localeCompare(b));
 		expect(afterOrder).not.toEqual(beforeOrder);
-		expect(rowsMatchNameOrder(afterOrder, ascNames)).toBe(true);
+		expect(rowsMatchNameOrder(afterOrder, ascNames.slice(0, afterOrder.length))).toBe(true);
 	});
 
 	it(

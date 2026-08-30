@@ -24,6 +24,7 @@
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "4.3.3",
 		"@tanstack/svelte-table": "9.2.4",
+		"@tanstack/svelte-virtual": "3.13.36",
 		"@testing-library/jest-dom": "7.0.1",
 		"@testing-library/svelte": "5.4.2",
 		"bits-ui": "^2.19.0",
