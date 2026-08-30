@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
-stopped_at: Phase 04 complete, ready to plan Phase 5
-last_updated: "2026-08-30T10:55:35.774Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-08-30T15:33:48.995Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 53e969eaf2ba40ee8c5b278e61659a1ec58de8ab
+state_head: 2d1c4469afb9f32edc94b92e9ea1cc0fc7a0d499
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 35
-  completed_plans: 35
+  total_plans: 42
+  completed_plans: 36
   percent: 67
 ---
 
@@ -29,12 +29,12 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 5 — File/Package Graph View
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-30 — Phase 04 complete, transitioned to Phase 5
+Phase: 5 (File/Package Graph View) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-08-30 — Phase 5 execution started
 
-Progress: [█████░░░░░] 50% (1/6 phases)
+Progress: [███████░░░] 67% (1/6 phases)
 
 ## Performance Metrics
 
@@ -97,6 +97,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04-query-workbench-index-health P06 | 25min | 3 tasks | 9 files |
 | Phase 04 P07 | 40min | 3 tasks | 40 files |
 | Phase 04 P07 | 70min | 4 tasks | 44 files |
+| Phase 05 P01 | 20min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -193,6 +194,8 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: web:components:drift scopes its comparison strictly to components/ui/ — the CLI's own dependency-install step mutates package.json as a side effect
 - [Phase 4]: Workbench DataTable's 1000-row render cost measured OVER threshold on both metrics (reproduced 4x); virtualization NOT installed — package-legitimacy checkpoint requested
 - [Phase 4]: Maintainer approved @tanstack/svelte-virtual@3.13.36; wired into DataTable.svelte, render-cost medians now ~20-40x under threshold (task web:render-cost passes)
+- [Phase 05]: GRF-01 pass condition locked and committed alone (05-01 Task 1, maintainer approve-as-proposed) before any measurement exists: google/guava corpus, expanded file-level binding view, 4 metric bars with stated timer boundaries, 16-value measurement protocol including 5 deadline budgets, two-remedy onFailure path.
+- [Phase 05]: Engine.FileGraph()'s regression test against this repository's own live index asserts the D-08 structural invariant (no empty-path node/edge, ExcludedPackageNodes > 0) rather than the plan's literal 572/1057 counts, because this repository indexes itself via a live daemon and exact counts are not stable across this plan's own commits.
 
 ### Pending Todos
 
@@ -314,8 +317,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-30T06:20:49.199Z
-Stopped at: Phase 04 complete, ready to plan Phase 5
+Last session: 2026-08-30T15:33:48.856Z
+Stopped at: Completed 05-01-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

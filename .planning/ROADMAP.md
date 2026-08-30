@@ -278,12 +278,12 @@ Plans:
   5. The rollup is computed fresh per request from edges that already exist — no precomputed projection, no new record kind, no re-indexing — and the rendering library sits behind a component seam that a swap would not reach past (ENG-03, GRF-05)
 
 **Notes**: `GRF-01`'s result selects between Cytoscape.js and Sigma.js + graphology; this roadmap deliberately pre-commits to neither. `ENG-03` follows `BuildReverseAdjacency`'s fresh-per-call full-scan discipline. Criterion 2 must be demonstrated against the project's own largest real corpus, not a toy repository — a graph view that only reads well on a small demo is the documented failure mode this phase exists to avoid. The exact aggregation semantics (edge counts by kind over distinct source-file/target-file/kind tuples) are pinned during planning, informed by `GRF-01`'s measurement.
-**Plans**: 7 plans
+**Plans**: 1/7 plans executed
 **UI hint**: yes
 
 Plans:
 
-- [ ] 05-01-PLAN.md — Lock GRF-01's pass condition; `Engine.FileGraph()` rollup and server-side cycle detection
+- [x] 05-01-PLAN.md — Lock GRF-01's pass condition; `Engine.FileGraph()` rollup and server-side cycle detection
 - [ ] 05-02-PLAN.md — The twelfth rpc: `FileGraph` on the wire, with a measured guava response size
 - [ ] 05-03-PLAN.md — Tracer: the Cytoscape seam, the wire-to-elements transform, and the filled `/graph` route
 - [ ] 05-04-PLAN.md — GRF-01 resolves: the recorded measurement and its computed verdict
@@ -323,7 +323,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 | 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 7/7 | Complete    | 2026-08-24 |
 | 3. Browse, Inspect & Navigation | 10/10 | Complete    | 2026-08-29 |
 | 4. Query Workbench & Index Health | 7/7 | Complete    | 2026-08-30 |
-| 5. File/Package Graph View | 0/TBD | Not started | - |
+| 5. File/Package Graph View | 1/7 | In Progress|  |
 | 6. Live Push | 0/TBD | Not started | - |
 
 6 milestones shipped. v0.12.0 scoped: 6 phases, 51 requirements, 0/6 phases complete (0%). Backlog below is preserved across milestone closes.
