@@ -45,7 +45,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file internal/uiproto/uiv1/ui.proto.
  */
 export const file_internal_uiproto_uiv1_ui: GenFile = /*@__PURE__*/
-  fileDesc("Ch5pbnRlcm5hbC91aXByb3RvL3VpdjEvdWkucHJvdG8SD2NvZGVncmFwaC51aS52MSKZAgoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEgwKBG5hbWUYAyABKAkSFgoOcXVhbGlmaWVkX25hbWUYBCABKAkSEQoJZmlsZV9wYXRoGAUgASgJEhAKCGxhbmd1YWdlGAYgASgJEhIKCnN0YXJ0X2xpbmUYByABKAUSEAoIZW5kX2xpbmUYCCABKAUSEQoJc3RhcnRfY29sGAkgASgFEg8KB2VuZF9jb2wYCiABKAUSEQoJc2lnbmF0dXJlGAsgASgJEhEKCWRvY3N0cmluZxgMIAEoCRISCgp2aXNpYmlsaXR5GA0gASgJEhMKC2lzX2V4cG9ydGVkGA4gASgIEhMKC3JldHVybl90eXBlGA8gASgJIk0KCExvY2F0aW9uEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIRCglmaWxlX3BhdGgYAyABKAkSEgoKc3RhcnRfbGluZRgEIAEoBSIgChBHZXRTdGF0dXNSZXF1ZXN0EgwKBHBhdGgYASABKAkizAEKEUdldFN0YXR1c1Jlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKbm9kZV9jb3VudBgDIAEoAxISCgplZGdlX2NvdW50GAQgASgDEhIKCmZpbGVfY291bnQYBSABKAMSDQoFc3RhbGUYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCRIUCgxzdG9yZV9leGlzdHMYCCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYCSABKAgiOgoNU2VhcmNoUmVxdWVzdBIMCgR0ZXJtGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGltaXQYAyABKAUiPgoOU2VhcmNoUmVzcG9uc2USLAoJbG9jYXRpb25zGAEgAygLMhkuY29kZWdyYXBoLnVpLnYxLkxvY2F0aW9uIlMKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhIKCm5vZGVfY291bnQYAyABKAMSEgoKZWRnZV9jb3VudBgEIAEoAyJ9CgxGaWxlVHJlZU5vZGUSDAoEbmFtZRgBIAEoCRIOCgZpc19kaXIYAiABKAgSDAoEcGF0aBgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIvCghjaGlsZHJlbhgFIAMoCzIdLmNvZGVncmFwaC51aS52MS5GaWxlVHJlZU5vZGUiWwoMRmlsZXNSZXF1ZXN0Eg8KB3BhdHRlcm4YASABKAkSDgoGZmlsdGVyGAIgASgJEgsKA2RpchgDIAEoCRINCgVkZXB0aBgEIAEoBRIOCgZmb3JtYXQYBSABKAkidwoNRmlsZXNSZXNwb25zZRIOCgZmb3JtYXQYASABKAkSKQoFZmlsZXMYAiADKAsyGi5jb2RlZ3JhcGgudWkudjEuRmlsZUVudHJ5EisKBHRyZWUYAyADKAsyHS5jb2RlZ3JhcGgudWkudjEuRmlsZVRyZWVOb2RlIi8KDkNhbGxlcnNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVsaW1pdBgCIAEoBSJNCg9DYWxsZXJzUmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEioKB2NhbGxlcnMYAiADKAsyGS5jb2RlZ3JhcGgudWkudjEuTG9jYXRpb24iLwoOQ2FsbGVlc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEg0KBWxpbWl0GAIgASgFIk0KD0NhbGxlZXNSZXNwb25zZRIOCgZzeW1ib2wYASABKAkSKgoHY2FsbGVlcxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIuCg1JbXBhY3RSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVkZXB0aBgCIAEoBSKEAQoOSW1wYWN0UmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEg0KBWRlcHRoGAIgASgFEhIKCm5vZGVfY291bnQYAyABKAUSEgoKZWRnZV9jb3VudBgEIAEoBRIrCghhZmZlY3RlZBgFIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIvCg9BZmZlY3RlZFJlcXVlc3QSDQoFZmlsZXMYASADKAkSDQoFZGVwdGgYAiABKAUiVAoQQWZmZWN0ZWRSZXNwb25zZRINCgVmaWxlcxgBIAMoCRIxCg5hZmZlY3RlZF90ZXN0cxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiJQChRHZXROb2RlRGV0YWlsUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSDAoEZmlsZRgCIAEoCRIRCgRsaW5lGAMgASgFSACIAQFCBwoFX2xpbmUikAEKClNvdXJjZUJsb2ISDwoHY29udGVudBgBIAEoDBIRCgl0cnVuY2F0ZWQYAiABKAgSEwoLdG90YWxfbGluZXMYAyABKAUSEwoLdG90YWxfYnl0ZXMYBCABKAUSFgoOcmV0dXJuZWRfbGluZXMYBSABKAUSFgoOcmV0dXJuZWRfYnl0ZXMYBiABKAVKBAgyEDwiywEKDk5vZGVEZWZpbml0aW9uEiMKBG5vZGUYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIkCgVjYWxscxgCIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEigKCWNhbGxlZF9ieRgDIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhcKD2RldGFpbF9nYXRoZXJlZBgEIAEoCBIrCgZzb3VyY2UYBSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiLWAgoVR2V0Tm9kZURldGFpbFJlc3BvbnNlEi0KBG1vZGUYASABKA4yHy5jb2RlZ3JhcGgudWkudjEuTm9kZURldGFpbE1vZGUSDAoEcGF0aBgCIAEoCRIjCgRub2RlGAMgASgLMhUuY29kZWdyYXBoLnVpLnYxLk5vZGUSJAoFY2FsbHMYBCADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIoCgljYWxsZWRfYnkYBSADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIOCgZzeW1ib2wYBiABKAkSNAoLZGVmaW5pdGlvbnMYByADKAsyHy5jb2RlZ3JhcGgudWkudjEuTm9kZURlZmluaXRpb24SGAoQdG90YWxfY2FuZGlkYXRlcxgIIAEoBRIrCgZzb3VyY2UYCSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiIyCg5FeHBsb3JlUmVxdWVzdBINCgVxdWVyeRgBIAEoCRIRCgltYXhfZmlsZXMYAiABKAUihwEKDEV4cGxvcmVHcm91cBIMCgRwYXRoGAEgASgJEiYKB3N5bWJvbHMYAiADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxza2VsZXRvbml6ZWQYAyABKAgSKwoGc291cmNlGAQgASgLMhsuY29kZWdyYXBoLnVpLnYxLlNvdXJjZUJsb2IiXQoKQmxhc3RFbnRyeRIlCgZzeW1ib2wYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxjYWxsZXJfY291bnQYAiABKAUSEgoKdGVzdF9maWxlcxgDIAMoCSKwAQoPRXhwbG9yZVJlc3BvbnNlEg0KBXF1ZXJ5GAEgASgJEg0KBWVtcHR5GAIgASgIEg0KBXN0YWxlGAMgASgIEhQKDHN5bWJvbF9jb3VudBgEIAEoBRItCgZncm91cHMYBSADKAsyHS5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZUdyb3VwEisKBmJsYXN0cxgGIAMoCzIbLmNvZGVncmFwaC51aS52MS5CbGFzdEVudHJ5IiUKEkluZGV4aW5nSW5Qcm9ncmVzcxIPCgdtZXNzYWdlGAEgASgJImMKE0dldFBlcm1hbGlua1JlcXVlc3QSDAoEcGF0aBgBIAEoCRIRCgRsaW5lGAIgASgFSACIAQESFQoIZW5kX2xpbmUYAyABKAVIAYgBAUIHCgVfbGluZUILCglfZW5kX2xpbmUicQoUR2V0UGVybWFsaW5rUmVzcG9uc2USCwoDdXJsGAEgASgJEjwKDGF2YWlsYWJpbGl0eRgCIAEoDjImLmNvZGVncmFwaC51aS52MS5QZXJtYWxpbmtBdmFpbGFiaWxpdHkSDgoGcmVhc29uGAMgASgJIiAKEEdldEhlYWx0aFJlcXVlc3QSDAoEcGF0aBgBIAEoCSI9ChBXb3JrdHJlZU1pc21hdGNoEhUKDXdvcmt0cmVlX3Jvb3QYASABKAkSEgoKaW5kZXhfcm9vdBgCIAEoCSJCCg5QZW5kaW5nQ2hhbmdlcxINCgVhZGRlZBgBIAEoBRIQCghtb2RpZmllZBgCIAEoBRIPCgdyZW1vdmVkGAMgASgFIrYBCgtJbmRleEhlYWx0aBIaChJidWlsdF93aXRoX3ZlcnNpb24YASABKAkSJQodYnVpbHRfd2l0aF9leHRyYWN0aW9uX3ZlcnNpb24YAiABKA0SIgoaY3VycmVudF9leHRyYWN0aW9uX3ZlcnNpb24YAyABKA0SGwoTcmVpbmRleF9yZWNvbW1lbmRlZBgEIAEoCBINCgVzdGF0ZRgFIAEoCRIUCgxwZW5kaW5nX3JlZnMYBiABKAUiiwYKEUdldEhlYWx0aFJlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKZmlsZV9jb3VudBgDIAEoAxISCgpub2RlX2NvdW50GAQgASgDEhIKCmVkZ2VfY291bnQYBSABKAMSFQoNZGJfc2l6ZV9ieXRlcxgGIAEoAxIPCgdiYWNrZW5kGAcgASgJElIKEWZpbGVzX2J5X2xhbmd1YWdlGAggAygLMjcuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLkZpbGVzQnlMYW5ndWFnZUVudHJ5EhEKCWxhbmd1YWdlcxgJIAMoCRJKCg1ub2Rlc19ieV9raW5kGAogAygLMjMuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLk5vZGVzQnlLaW5kRW50cnkSSgoNZWRnZXNfYnlfa2luZBgLIAMoCzIzLmNvZGVncmFwaC51aS52MS5HZXRIZWFsdGhSZXNwb25zZS5FZGdlc0J5S2luZEVudHJ5EjgKD3BlbmRpbmdfY2hhbmdlcxgMIAEoCzIfLmNvZGVncmFwaC51aS52MS5QZW5kaW5nQ2hhbmdlcxIyCgxpbmRleF9oZWFsdGgYDSABKAsyHC5jb2RlZ3JhcGgudWkudjEuSW5kZXhIZWFsdGgSPAoRd29ya3RyZWVfbWlzbWF0Y2gYDiABKAsyIS5jb2RlZ3JhcGgudWkudjEuV29ya3RyZWVNaXNtYXRjaBINCgVzdGFsZRgPIAEoCBISCgpjb21taXRfc2hhGBAgASgJGjYKFEZpbGVzQnlMYW5ndWFnZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMgoQTm9kZXNCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBGjIKEEVkZ2VzQnlLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASqOAQoOTm9kZURldGFpbE1vZGUSIAocTk9ERV9ERVRBSUxfTU9ERV9VTlNQRUNJRklFRBAAEhkKFU5PREVfREVUQUlMX01PREVfRklMRRABEh8KG05PREVfREVUQUlMX01PREVfU0lOR0xFX0RFRhACEh4KGk5PREVfREVUQUlMX01PREVfTVVMVElfREVGEAMquAEKFVBlcm1hbGlua0F2YWlsYWJpbGl0eRImCiJQRVJNQUxJTktfQVZBSUxBQklMSVRZX1VOU1BFQ0lGSUVEEAASIwofUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9MSU5LQUJMRRABEi4KKlBFUk1BTElOS19BVkFJTEFCSUxJVFlfTElOS0FCTEVfVU5WRVJJRklFRBACEiIKHlBFUk1BTElOS19BVkFJTEFCSUxJVFlfTk9fTElOSxADMokHCglVSVNlcnZpY2USUgoJR2V0U3RhdHVzEiEuY29kZWdyYXBoLnVpLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuR2V0U3RhdHVzUmVzcG9uc2USSQoGU2VhcmNoEh4uY29kZWdyYXBoLnVpLnYxLlNlYXJjaFJlcXVlc3QaHy5jb2RlZ3JhcGgudWkudjEuU2VhcmNoUmVzcG9uc2USRgoFRmlsZXMSHS5jb2RlZ3JhcGgudWkudjEuRmlsZXNSZXF1ZXN0Gh4uY29kZWdyYXBoLnVpLnYxLkZpbGVzUmVzcG9uc2USTAoHQ2FsbGVycxIfLmNvZGVncmFwaC51aS52MS5DYWxsZXJzUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5DYWxsZXJzUmVzcG9uc2USTAoHQ2FsbGVlcxIfLmNvZGVncmFwaC51aS52MS5DYWxsZWVzUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5DYWxsZWVzUmVzcG9uc2USSQoGSW1wYWN0Eh4uY29kZWdyYXBoLnVpLnYxLkltcGFjdFJlcXVlc3QaHy5jb2RlZ3JhcGgudWkudjEuSW1wYWN0UmVzcG9uc2USTwoIQWZmZWN0ZWQSIC5jb2RlZ3JhcGgudWkudjEuQWZmZWN0ZWRSZXF1ZXN0GiEuY29kZWdyYXBoLnVpLnYxLkFmZmVjdGVkUmVzcG9uc2USXgoNR2V0Tm9kZURldGFpbBIlLmNvZGVncmFwaC51aS52MS5HZXROb2RlRGV0YWlsUmVxdWVzdBomLmNvZGVncmFwaC51aS52MS5HZXROb2RlRGV0YWlsUmVzcG9uc2USTAoHRXhwbG9yZRIfLmNvZGVncmFwaC51aS52MS5FeHBsb3JlUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5FeHBsb3JlUmVzcG9uc2USWwoMR2V0UGVybWFsaW5rEiQuY29kZWdyYXBoLnVpLnYxLkdldFBlcm1hbGlua1JlcXVlc3QaJS5jb2RlZ3JhcGgudWkudjEuR2V0UGVybWFsaW5rUmVzcG9uc2USUgoJR2V0SGVhbHRoEiEuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuR2V0SGVhbHRoUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9zZWFuYjR0L2NvZGVncmFwaC1nby9pbnRlcm5hbC91aXByb3RvL3VpdjE7dWl2MWIGcHJvdG8z");
+  fileDesc("Ch5pbnRlcm5hbC91aXByb3RvL3VpdjEvdWkucHJvdG8SD2NvZGVncmFwaC51aS52MSKZAgoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEgwKBG5hbWUYAyABKAkSFgoOcXVhbGlmaWVkX25hbWUYBCABKAkSEQoJZmlsZV9wYXRoGAUgASgJEhAKCGxhbmd1YWdlGAYgASgJEhIKCnN0YXJ0X2xpbmUYByABKAUSEAoIZW5kX2xpbmUYCCABKAUSEQoJc3RhcnRfY29sGAkgASgFEg8KB2VuZF9jb2wYCiABKAUSEQoJc2lnbmF0dXJlGAsgASgJEhEKCWRvY3N0cmluZxgMIAEoCRISCgp2aXNpYmlsaXR5GA0gASgJEhMKC2lzX2V4cG9ydGVkGA4gASgIEhMKC3JldHVybl90eXBlGA8gASgJIk0KCExvY2F0aW9uEgwKBG5hbWUYASABKAkSDAoEa2luZBgCIAEoCRIRCglmaWxlX3BhdGgYAyABKAkSEgoKc3RhcnRfbGluZRgEIAEoBSIgChBHZXRTdGF0dXNSZXF1ZXN0EgwKBHBhdGgYASABKAkizAEKEUdldFN0YXR1c1Jlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKbm9kZV9jb3VudBgDIAEoAxISCgplZGdlX2NvdW50GAQgASgDEhIKCmZpbGVfY291bnQYBSABKAMSDQoFc3RhbGUYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCRIUCgxzdG9yZV9leGlzdHMYCCABKAgSHAoUaW5kZXhpbmdfaW5fcHJvZ3Jlc3MYCSABKAgiOgoNU2VhcmNoUmVxdWVzdBIMCgR0ZXJtGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGltaXQYAyABKAUiPgoOU2VhcmNoUmVzcG9uc2USLAoJbG9jYXRpb25zGAEgAygLMhkuY29kZWdyYXBoLnVpLnYxLkxvY2F0aW9uIlMKCUZpbGVFbnRyeRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhIKCm5vZGVfY291bnQYAyABKAMSEgoKZWRnZV9jb3VudBgEIAEoAyJ9CgxGaWxlVHJlZU5vZGUSDAoEbmFtZRgBIAEoCRIOCgZpc19kaXIYAiABKAgSDAoEcGF0aBgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIvCghjaGlsZHJlbhgFIAMoCzIdLmNvZGVncmFwaC51aS52MS5GaWxlVHJlZU5vZGUiWwoMRmlsZXNSZXF1ZXN0Eg8KB3BhdHRlcm4YASABKAkSDgoGZmlsdGVyGAIgASgJEgsKA2RpchgDIAEoCRINCgVkZXB0aBgEIAEoBRIOCgZmb3JtYXQYBSABKAkidwoNRmlsZXNSZXNwb25zZRIOCgZmb3JtYXQYASABKAkSKQoFZmlsZXMYAiADKAsyGi5jb2RlZ3JhcGgudWkudjEuRmlsZUVudHJ5EisKBHRyZWUYAyADKAsyHS5jb2RlZ3JhcGgudWkudjEuRmlsZVRyZWVOb2RlIi8KDkNhbGxlcnNSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVsaW1pdBgCIAEoBSJNCg9DYWxsZXJzUmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEioKB2NhbGxlcnMYAiADKAsyGS5jb2RlZ3JhcGgudWkudjEuTG9jYXRpb24iLwoOQ2FsbGVlc1JlcXVlc3QSDgoGc3ltYm9sGAEgASgJEg0KBWxpbWl0GAIgASgFIk0KD0NhbGxlZXNSZXNwb25zZRIOCgZzeW1ib2wYASABKAkSKgoHY2FsbGVlcxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIuCg1JbXBhY3RSZXF1ZXN0Eg4KBnN5bWJvbBgBIAEoCRINCgVkZXB0aBgCIAEoBSKEAQoOSW1wYWN0UmVzcG9uc2USDgoGc3ltYm9sGAEgASgJEg0KBWRlcHRoGAIgASgFEhIKCm5vZGVfY291bnQYAyABKAUSEgoKZWRnZV9jb3VudBgEIAEoBRIrCghhZmZlY3RlZBgFIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiIvCg9BZmZlY3RlZFJlcXVlc3QSDQoFZmlsZXMYASADKAkSDQoFZGVwdGgYAiABKAUiVAoQQWZmZWN0ZWRSZXNwb25zZRINCgVmaWxlcxgBIAMoCRIxCg5hZmZlY3RlZF90ZXN0cxgCIAMoCzIZLmNvZGVncmFwaC51aS52MS5Mb2NhdGlvbiJQChRHZXROb2RlRGV0YWlsUmVxdWVzdBIOCgZzeW1ib2wYASABKAkSDAoEZmlsZRgCIAEoCRIRCgRsaW5lGAMgASgFSACIAQFCBwoFX2xpbmUikAEKClNvdXJjZUJsb2ISDwoHY29udGVudBgBIAEoDBIRCgl0cnVuY2F0ZWQYAiABKAgSEwoLdG90YWxfbGluZXMYAyABKAUSEwoLdG90YWxfYnl0ZXMYBCABKAUSFgoOcmV0dXJuZWRfbGluZXMYBSABKAUSFgoOcmV0dXJuZWRfYnl0ZXMYBiABKAVKBAgyEDwiywEKDk5vZGVEZWZpbml0aW9uEiMKBG5vZGUYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIkCgVjYWxscxgCIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEigKCWNhbGxlZF9ieRgDIAMoCzIVLmNvZGVncmFwaC51aS52MS5Ob2RlEhcKD2RldGFpbF9nYXRoZXJlZBgEIAEoCBIrCgZzb3VyY2UYBSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiLWAgoVR2V0Tm9kZURldGFpbFJlc3BvbnNlEi0KBG1vZGUYASABKA4yHy5jb2RlZ3JhcGgudWkudjEuTm9kZURldGFpbE1vZGUSDAoEcGF0aBgCIAEoCRIjCgRub2RlGAMgASgLMhUuY29kZWdyYXBoLnVpLnYxLk5vZGUSJAoFY2FsbHMYBCADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIoCgljYWxsZWRfYnkYBSADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIOCgZzeW1ib2wYBiABKAkSNAoLZGVmaW5pdGlvbnMYByADKAsyHy5jb2RlZ3JhcGgudWkudjEuTm9kZURlZmluaXRpb24SGAoQdG90YWxfY2FuZGlkYXRlcxgIIAEoBRIrCgZzb3VyY2UYCSABKAsyGy5jb2RlZ3JhcGgudWkudjEuU291cmNlQmxvYiIyCg5FeHBsb3JlUmVxdWVzdBINCgVxdWVyeRgBIAEoCRIRCgltYXhfZmlsZXMYAiABKAUihwEKDEV4cGxvcmVHcm91cBIMCgRwYXRoGAEgASgJEiYKB3N5bWJvbHMYAiADKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxza2VsZXRvbml6ZWQYAyABKAgSKwoGc291cmNlGAQgASgLMhsuY29kZWdyYXBoLnVpLnYxLlNvdXJjZUJsb2IiXQoKQmxhc3RFbnRyeRIlCgZzeW1ib2wYASABKAsyFS5jb2RlZ3JhcGgudWkudjEuTm9kZRIUCgxjYWxsZXJfY291bnQYAiABKAUSEgoKdGVzdF9maWxlcxgDIAMoCSKwAQoPRXhwbG9yZVJlc3BvbnNlEg0KBXF1ZXJ5GAEgASgJEg0KBWVtcHR5GAIgASgIEg0KBXN0YWxlGAMgASgIEhQKDHN5bWJvbF9jb3VudBgEIAEoBRItCgZncm91cHMYBSADKAsyHS5jb2RlZ3JhcGgudWkudjEuRXhwbG9yZUdyb3VwEisKBmJsYXN0cxgGIAMoCzIbLmNvZGVncmFwaC51aS52MS5CbGFzdEVudHJ5IiUKEkluZGV4aW5nSW5Qcm9ncmVzcxIPCgdtZXNzYWdlGAEgASgJImMKE0dldFBlcm1hbGlua1JlcXVlc3QSDAoEcGF0aBgBIAEoCRIRCgRsaW5lGAIgASgFSACIAQESFQoIZW5kX2xpbmUYAyABKAVIAYgBAUIHCgVfbGluZUILCglfZW5kX2xpbmUicQoUR2V0UGVybWFsaW5rUmVzcG9uc2USCwoDdXJsGAEgASgJEjwKDGF2YWlsYWJpbGl0eRgCIAEoDjImLmNvZGVncmFwaC51aS52MS5QZXJtYWxpbmtBdmFpbGFiaWxpdHkSDgoGcmVhc29uGAMgASgJIiAKEEdldEhlYWx0aFJlcXVlc3QSDAoEcGF0aBgBIAEoCSI9ChBXb3JrdHJlZU1pc21hdGNoEhUKDXdvcmt0cmVlX3Jvb3QYASABKAkSEgoKaW5kZXhfcm9vdBgCIAEoCSJCCg5QZW5kaW5nQ2hhbmdlcxINCgVhZGRlZBgBIAEoBRIQCghtb2RpZmllZBgCIAEoBRIPCgdyZW1vdmVkGAMgASgFIrYBCgtJbmRleEhlYWx0aBIaChJidWlsdF93aXRoX3ZlcnNpb24YASABKAkSJQodYnVpbHRfd2l0aF9leHRyYWN0aW9uX3ZlcnNpb24YAiABKA0SIgoaY3VycmVudF9leHRyYWN0aW9uX3ZlcnNpb24YAyABKA0SGwoTcmVpbmRleF9yZWNvbW1lbmRlZBgEIAEoCBINCgVzdGF0ZRgFIAEoCRIUCgxwZW5kaW5nX3JlZnMYBiABKAUiiwYKEUdldEhlYWx0aFJlc3BvbnNlEhMKC2luaXRpYWxpemVkGAEgASgIEg8KB3ZlcnNpb24YAiABKAkSEgoKZmlsZV9jb3VudBgDIAEoAxISCgpub2RlX2NvdW50GAQgASgDEhIKCmVkZ2VfY291bnQYBSABKAMSFQoNZGJfc2l6ZV9ieXRlcxgGIAEoAxIPCgdiYWNrZW5kGAcgASgJElIKEWZpbGVzX2J5X2xhbmd1YWdlGAggAygLMjcuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLkZpbGVzQnlMYW5ndWFnZUVudHJ5EhEKCWxhbmd1YWdlcxgJIAMoCRJKCg1ub2Rlc19ieV9raW5kGAogAygLMjMuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlc3BvbnNlLk5vZGVzQnlLaW5kRW50cnkSSgoNZWRnZXNfYnlfa2luZBgLIAMoCzIzLmNvZGVncmFwaC51aS52MS5HZXRIZWFsdGhSZXNwb25zZS5FZGdlc0J5S2luZEVudHJ5EjgKD3BlbmRpbmdfY2hhbmdlcxgMIAEoCzIfLmNvZGVncmFwaC51aS52MS5QZW5kaW5nQ2hhbmdlcxIyCgxpbmRleF9oZWFsdGgYDSABKAsyHC5jb2RlZ3JhcGgudWkudjEuSW5kZXhIZWFsdGgSPAoRd29ya3RyZWVfbWlzbWF0Y2gYDiABKAsyIS5jb2RlZ3JhcGgudWkudjEuV29ya3RyZWVNaXNtYXRjaBINCgVzdGFsZRgPIAEoCBISCgpjb21taXRfc2hhGBAgASgJGjYKFEZpbGVzQnlMYW5ndWFnZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMgoQTm9kZXNCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBGjIKEEVkZ2VzQnlLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASIgChBGaWxlR3JhcGhSZXF1ZXN0EgwKBHBhdGgYASABKAkiVwoNRmlsZUdyYXBoTm9kZRIMCgRwYXRoGAEgASgJEhAKCGxhbmd1YWdlGAIgASgJEhQKDHN5bWJvbF9jb3VudBgDIAEoAxIQCghjeWNsZV9pZBgEIAEoBSLYAQoNRmlsZUdyYXBoRWRnZRITCgtzb3VyY2VfZmlsZRgBIAEoCRITCgt0YXJnZXRfZmlsZRgCIAEoCRJDCgtraW5kX2NvdW50cxgDIAMoCzIuLmNvZGVncmFwaC51aS52MS5GaWxlR3JhcGhFZGdlLktpbmRDb3VudHNFbnRyeRITCgt0b3RhbF9jb3VudBgEIAEoAxIQCghpbl9jeWNsZRgFIAEoCBoxCg9LaW5kQ291bnRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASLzAQoRRmlsZUdyYXBoUmVzcG9uc2USLQoFbm9kZXMYASADKAsyHi5jb2RlZ3JhcGgudWkudjEuRmlsZUdyYXBoTm9kZRItCgVlZGdlcxgCIAMoCzIeLmNvZGVncmFwaC51aS52MS5GaWxlR3JhcGhFZGdlEiMKG2V4Y2x1ZGVkX3BhY2thZ2Vfbm9kZV9jb3VudBgDIAEoAxIgChhleGNsdWRlZF9zZWxmX2VkZ2VfY291bnQYBCABKAMSJAocZXhjbHVkZWRfY29udGFpbnNfZWRnZV9jb3VudBgFIAEoAxITCgtjeWNsZV9jb3VudBgGIAEoBSqOAQoOTm9kZURldGFpbE1vZGUSIAocTk9ERV9ERVRBSUxfTU9ERV9VTlNQRUNJRklFRBAAEhkKFU5PREVfREVUQUlMX01PREVfRklMRRABEh8KG05PREVfREVUQUlMX01PREVfU0lOR0xFX0RFRhACEh4KGk5PREVfREVUQUlMX01PREVfTVVMVElfREVGEAMquAEKFVBlcm1hbGlua0F2YWlsYWJpbGl0eRImCiJQRVJNQUxJTktfQVZBSUxBQklMSVRZX1VOU1BFQ0lGSUVEEAASIwofUEVSTUFMSU5LX0FWQUlMQUJJTElUWV9MSU5LQUJMRRABEi4KKlBFUk1BTElOS19BVkFJTEFCSUxJVFlfTElOS0FCTEVfVU5WRVJJRklFRBACEiIKHlBFUk1BTElOS19BVkFJTEFCSUxJVFlfTk9fTElOSxADMt0HCglVSVNlcnZpY2USUgoJR2V0U3RhdHVzEiEuY29kZWdyYXBoLnVpLnYxLkdldFN0YXR1c1JlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuR2V0U3RhdHVzUmVzcG9uc2USSQoGU2VhcmNoEh4uY29kZWdyYXBoLnVpLnYxLlNlYXJjaFJlcXVlc3QaHy5jb2RlZ3JhcGgudWkudjEuU2VhcmNoUmVzcG9uc2USRgoFRmlsZXMSHS5jb2RlZ3JhcGgudWkudjEuRmlsZXNSZXF1ZXN0Gh4uY29kZWdyYXBoLnVpLnYxLkZpbGVzUmVzcG9uc2USTAoHQ2FsbGVycxIfLmNvZGVncmFwaC51aS52MS5DYWxsZXJzUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5DYWxsZXJzUmVzcG9uc2USTAoHQ2FsbGVlcxIfLmNvZGVncmFwaC51aS52MS5DYWxsZWVzUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5DYWxsZWVzUmVzcG9uc2USSQoGSW1wYWN0Eh4uY29kZWdyYXBoLnVpLnYxLkltcGFjdFJlcXVlc3QaHy5jb2RlZ3JhcGgudWkudjEuSW1wYWN0UmVzcG9uc2USTwoIQWZmZWN0ZWQSIC5jb2RlZ3JhcGgudWkudjEuQWZmZWN0ZWRSZXF1ZXN0GiEuY29kZWdyYXBoLnVpLnYxLkFmZmVjdGVkUmVzcG9uc2USXgoNR2V0Tm9kZURldGFpbBIlLmNvZGVncmFwaC51aS52MS5HZXROb2RlRGV0YWlsUmVxdWVzdBomLmNvZGVncmFwaC51aS52MS5HZXROb2RlRGV0YWlsUmVzcG9uc2USTAoHRXhwbG9yZRIfLmNvZGVncmFwaC51aS52MS5FeHBsb3JlUmVxdWVzdBogLmNvZGVncmFwaC51aS52MS5FeHBsb3JlUmVzcG9uc2USWwoMR2V0UGVybWFsaW5rEiQuY29kZWdyYXBoLnVpLnYxLkdldFBlcm1hbGlua1JlcXVlc3QaJS5jb2RlZ3JhcGgudWkudjEuR2V0UGVybWFsaW5rUmVzcG9uc2USUgoJR2V0SGVhbHRoEiEuY29kZWdyYXBoLnVpLnYxLkdldEhlYWx0aFJlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuR2V0SGVhbHRoUmVzcG9uc2USUgoJRmlsZUdyYXBoEiEuY29kZWdyYXBoLnVpLnYxLkZpbGVHcmFwaFJlcXVlc3QaIi5jb2RlZ3JhcGgudWkudjEuRmlsZUdyYXBoUmVzcG9uc2VCPFo6Z2l0aHViLmNvbS9zZWFuYjR0L2NvZGVncmFwaC1nby9pbnRlcm5hbC91aXByb3RvL3VpdjE7dWl2MWIGcHJvdG8z");
 
 /**
  * Node is the shared wire projection of a graph symbol record — the
@@ -1600,6 +1600,208 @@ export const GetHealthResponseSchema: GenMessage<GetHealthResponse> = /*@__PURE_
   messageDesc(file_internal_uiproto_uiv1_ui, 33);
 
 /**
+ * FileGraphRequest is presently unread of any consulted field, mirroring
+ * GetHealthRequest's own shape (05-02 Task 1 checkpoint).
+ *
+ * @generated from message codegraph.ui.v1.FileGraphRequest
+ */
+export type FileGraphRequest = Message<"codegraph.ui.v1.FileGraphRequest"> & {
+  /**
+   * path is declared for a future milestone in which one server process
+   * answers for more than one repository; the v1 handler does not read
+   * it — every response reports on the server's own configured
+   * RepoPath regardless of this field's value. This is NOT a protobuf
+   * `reserved` declaration: the field IS on the wire and IS serialized
+   * by every client, it is simply not read by this version's handler.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.FileGraphRequest.
+ * Use `create(FileGraphRequestSchema)` to create a new message.
+ */
+export const FileGraphRequestSchema: GenMessage<FileGraphRequest> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 34);
+
+/**
+ * FileGraphNode is the uiv1 projection of internal/query.FileGraphNode,
+ * field-for-field (05-02 Task 1 checkpoint).
+ *
+ * @generated from message codegraph.ui.v1.FileGraphNode
+ */
+export type FileGraphNode = Message<"codegraph.ui.v1.FileGraphNode"> & {
+  /**
+   * path mirrors FileGraphNode.Path.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * language mirrors FileGraphNode.Language.
+   *
+   * @generated from field: string language = 2;
+   */
+  language: string;
+
+  /**
+   * symbol_count mirrors FileGraphNode.SymbolCount.
+   *
+   * @generated from field: int64 symbol_count = 3;
+   */
+  symbolCount: bigint;
+
+  /**
+   * cycle_id mirrors FileGraphNode.CycleID: 0 for a file in no
+   * strongly-connected cycle, else a 1-based component identifier
+   * (GRF-04, D-06).
+   *
+   * @generated from field: int32 cycle_id = 4;
+   */
+  cycleId: number;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.FileGraphNode.
+ * Use `create(FileGraphNodeSchema)` to create a new message.
+ */
+export const FileGraphNodeSchema: GenMessage<FileGraphNode> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 35);
+
+/**
+ * FileGraphEdge is the uiv1 projection of internal/query.FileGraphEdge,
+ * field-for-field (05-02 Task 1 checkpoint).
+ *
+ * @generated from message codegraph.ui.v1.FileGraphEdge
+ */
+export type FileGraphEdge = Message<"codegraph.ui.v1.FileGraphEdge"> & {
+  /**
+   * source_file mirrors FileGraphEdge.SourceFile.
+   *
+   * @generated from field: string source_file = 1;
+   */
+  sourceFile: string;
+
+  /**
+   * target_file mirrors FileGraphEdge.TargetFile.
+   *
+   * @generated from field: string target_file = 2;
+   */
+  targetFile: string;
+
+  /**
+   * kind_counts mirrors FileGraphEdge.KindCounts, mirroring
+   * GetHealthResponse.edges_by_kind's map field exactly, including its
+   * sparse convention: a kind with zero observed edges is ABSENT from
+   * the map, never present with value 0.
+   *
+   * @generated from field: map<string, int64> kind_counts = 3;
+   */
+  kindCounts: { [key: string]: bigint };
+
+  /**
+   * total_count mirrors FileGraphEdge.TotalCount.
+   *
+   * @generated from field: int64 total_count = 4;
+   */
+  totalCount: bigint;
+
+  /**
+   * in_cycle mirrors FileGraphEdge.InCycle: true when both this edge's
+   * endpoints carry the same non-zero cycle_id. Deliberately redundant
+   * with cycle_id on both endpoints — see 05-02 Task 1 checkpoint
+   * sub-decision 2 for why: D-06's whole point is that GRF-04's
+   * correctness must not be re-implemented by whatever renders the
+   * graph, and a client-derived edge flag is exactly that
+   * re-implementation in miniature.
+   *
+   * @generated from field: bool in_cycle = 5;
+   */
+  inCycle: boolean;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.FileGraphEdge.
+ * Use `create(FileGraphEdgeSchema)` to create a new message.
+ */
+export const FileGraphEdgeSchema: GenMessage<FileGraphEdge> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 36);
+
+/**
+ * FileGraphResponse is the uiv1 projection of internal/query.FileGraphResult
+ * (internal/query/traverse.go), frozen field-for-field at the 05-02 Task 1
+ * checkpoint (a maintainer-approved one-way door, D-02a). Every field
+ * here mirrors its FileGraphResult counterpart exactly, mapped by the
+ * named fileGraphToProto function in internal/uiserver/handlers.go —
+ * never an inline literal at the handler call site, so the mapping
+ * cannot drift from its source silently.
+ *
+ * The three excluded_* counters are on the wire deliberately (05-02
+ * Task 1 checkpoint sub-decision 1): D-03 drops contains edges and
+ * file-level self-edges and D-08 drops synthetic package pseudo-nodes;
+ * putting the counts on the response is what lets the UI state plainly
+ * what it is not showing, rather than silently misleading by omission.
+ *
+ * @generated from message codegraph.ui.v1.FileGraphResponse
+ */
+export type FileGraphResponse = Message<"codegraph.ui.v1.FileGraphResponse"> & {
+  /**
+   * nodes mirrors FileGraphResult.Nodes.
+   *
+   * @generated from field: repeated codegraph.ui.v1.FileGraphNode nodes = 1;
+   */
+  nodes: FileGraphNode[];
+
+  /**
+   * edges mirrors FileGraphResult.Edges.
+   *
+   * @generated from field: repeated codegraph.ui.v1.FileGraphEdge edges = 2;
+   */
+  edges: FileGraphEdge[];
+
+  /**
+   * excluded_package_node_count mirrors FileGraphResult.ExcludedPackageNodes
+   * (D-08).
+   *
+   * @generated from field: int64 excluded_package_node_count = 3;
+   */
+  excludedPackageNodeCount: bigint;
+
+  /**
+   * excluded_self_edge_count mirrors FileGraphResult.ExcludedSelfEdges
+   * (D-03).
+   *
+   * @generated from field: int64 excluded_self_edge_count = 4;
+   */
+  excludedSelfEdgeCount: bigint;
+
+  /**
+   * excluded_contains_edge_count mirrors FileGraphResult.ExcludedContainsEdges
+   * (D-03).
+   *
+   * @generated from field: int64 excluded_contains_edge_count = 5;
+   */
+  excludedContainsEdgeCount: bigint;
+
+  /**
+   * cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
+   *
+   * @generated from field: int32 cycle_count = 6;
+   */
+  cycleCount: number;
+};
+
+/**
+ * Describes the message codegraph.ui.v1.FileGraphResponse.
+ * Use `create(FileGraphResponseSchema)` to create a new message.
+ */
+export const FileGraphResponseSchema: GenMessage<FileGraphResponse> = /*@__PURE__*/
+  messageDesc(file_internal_uiproto_uiv1_ui, 37);
+
+/**
  * NodeDetailMode discriminates which of GetNodeDetailResponse's three
  * shapes is populated, mirroring internal/query.NodeDetailMode's three
  * constants exactly (D-02). NODE_DETAIL_MODE_UNSPECIFIED is the required
@@ -1812,6 +2014,28 @@ export const UIService: GenService<{
     methodKind: "unary";
     input: typeof GetHealthRequestSchema;
     output: typeof GetHealthResponseSchema;
+  },
+  /**
+   * FileGraph is plan 05-02's twelfth rpc (ENG-03/GRF-02/GRF-04): it
+   * projects internal/query.Engine.FileGraph()'s file-granularity
+   * dependency rollup onto the wire for the /graph view — every file
+   * node, every aggregated source-file-to-target-file edge with its
+   * sparse per-kind counts, the three exclusion counters that keep
+   * D-03's and D-08's omissions visible rather than silent, and the
+   * total cycle count. The rollup is computed FRESH per call from the
+   * existing edges (D-05/D-09) — no precomputed projection, no new
+   * record kind, no re-indexing. Cycle membership is computed
+   * SERVER-SIDE (D-06), so the answer is independent of whichever
+   * renderer GRF-01 selects — this is what protects GRF-05's swappable
+   * seam. Read-only and additive per D-02a — it performs no network
+   * operation and mutates nothing (SRV-03).
+   *
+   * @generated from rpc codegraph.ui.v1.UIService.FileGraph
+   */
+  fileGraph: {
+    methodKind: "unary";
+    input: typeof FileGraphRequestSchema;
+    output: typeof FileGraphResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_internal_uiproto_uiv1_ui, 0);

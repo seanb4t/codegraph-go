@@ -78,6 +78,20 @@ service UIService {
   // only and additive per D-02a — it performs no network operation and
   // mutates nothing (SRV-03).
   rpc GetHealth(GetHealthRequest) returns (GetHealthResponse);
+  // FileGraph is plan 05-02's twelfth rpc (ENG-03/GRF-02/GRF-04): it
+  // projects internal/query.Engine.FileGraph()'s file-granularity
+  // dependency rollup onto the wire for the /graph view — every file
+  // node, every aggregated source-file-to-target-file edge with its
+  // sparse per-kind counts, the three exclusion counters that keep
+  // D-03's and D-08's omissions visible rather than silent, and the
+  // total cycle count. The rollup is computed FRESH per call from the
+  // existing edges (D-05/D-09) — no precomputed projection, no new
+  // record kind, no re-indexing. Cycle membership is computed
+  // SERVER-SIDE (D-06), so the answer is independent of whichever
+  // renderer GRF-01 selects — this is what protects GRF-05's swappable
+  // seam. Read-only and additive per D-02a — it performs no network
+  // operation and mutates nothing (SRV-03).
+  rpc FileGraph(FileGraphRequest) returns (FileGraphResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -764,4 +778,98 @@ message GetHealthResponse {
   // commit_sha is duplicated from GetStatusResponse — see this
   // message's doc comment above for why and how it is validated.
   string commit_sha = 16;
+}
+
+// FileGraphRequest is presently unread of any consulted field, mirroring
+// GetHealthRequest's own shape (05-02 Task 1 checkpoint).
+message FileGraphRequest {
+  // path is declared for a future milestone in which one server process
+  // answers for more than one repository; the v1 handler does not read
+  // it — every response reports on the server's own configured
+  // RepoPath regardless of this field's value. This is NOT a protobuf
+  // `reserved` declaration: the field IS on the wire and IS serialized
+  // by every client, it is simply not read by this version's handler.
+  string path = 1;
+}
+
+// FileGraphNode is the uiv1 projection of internal/query.FileGraphNode,
+// field-for-field (05-02 Task 1 checkpoint).
+message FileGraphNode {
+  // path mirrors FileGraphNode.Path.
+  string path = 1;
+
+  // language mirrors FileGraphNode.Language.
+  string language = 2;
+
+  // symbol_count mirrors FileGraphNode.SymbolCount.
+  int64 symbol_count = 3;
+
+  // cycle_id mirrors FileGraphNode.CycleID: 0 for a file in no
+  // strongly-connected cycle, else a 1-based component identifier
+  // (GRF-04, D-06).
+  int32 cycle_id = 4;
+}
+
+// FileGraphEdge is the uiv1 projection of internal/query.FileGraphEdge,
+// field-for-field (05-02 Task 1 checkpoint).
+message FileGraphEdge {
+  // source_file mirrors FileGraphEdge.SourceFile.
+  string source_file = 1;
+
+  // target_file mirrors FileGraphEdge.TargetFile.
+  string target_file = 2;
+
+  // kind_counts mirrors FileGraphEdge.KindCounts, mirroring
+  // GetHealthResponse.edges_by_kind's map field exactly, including its
+  // sparse convention: a kind with zero observed edges is ABSENT from
+  // the map, never present with value 0.
+  map<string, int64> kind_counts = 3;
+
+  // total_count mirrors FileGraphEdge.TotalCount.
+  int64 total_count = 4;
+
+  // in_cycle mirrors FileGraphEdge.InCycle: true when both this edge's
+  // endpoints carry the same non-zero cycle_id. Deliberately redundant
+  // with cycle_id on both endpoints — see 05-02 Task 1 checkpoint
+  // sub-decision 2 for why: D-06's whole point is that GRF-04's
+  // correctness must not be re-implemented by whatever renders the
+  // graph, and a client-derived edge flag is exactly that
+  // re-implementation in miniature.
+  bool in_cycle = 5;
+}
+
+// FileGraphResponse is the uiv1 projection of internal/query.FileGraphResult
+// (internal/query/traverse.go), frozen field-for-field at the 05-02 Task 1
+// checkpoint (a maintainer-approved one-way door, D-02a). Every field
+// here mirrors its FileGraphResult counterpart exactly, mapped by the
+// named fileGraphToProto function in internal/uiserver/handlers.go —
+// never an inline literal at the handler call site, so the mapping
+// cannot drift from its source silently.
+//
+// The three excluded_* counters are on the wire deliberately (05-02
+// Task 1 checkpoint sub-decision 1): D-03 drops contains edges and
+// file-level self-edges and D-08 drops synthetic package pseudo-nodes;
+// putting the counts on the response is what lets the UI state plainly
+// what it is not showing, rather than silently misleading by omission.
+message FileGraphResponse {
+  // nodes mirrors FileGraphResult.Nodes.
+  repeated FileGraphNode nodes = 1;
+
+  // edges mirrors FileGraphResult.Edges.
+  repeated FileGraphEdge edges = 2;
+
+  // excluded_package_node_count mirrors FileGraphResult.ExcludedPackageNodes
+  // (D-08).
+  int64 excluded_package_node_count = 3;
+
+  // excluded_self_edge_count mirrors FileGraphResult.ExcludedSelfEdges
+  // (D-03).
+  int64 excluded_self_edge_count = 4;
+
+  // excluded_contains_edge_count mirrors FileGraphResult.ExcludedContainsEdges
+  // (D-03).
+  int64 excluded_contains_edge_count = 5;
+
+  // cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
+  int32 cycle_count = 6;
 }

@@ -2913,6 +2913,332 @@ func (x *GetHealthResponse) GetCommitSha() string {
 	return ""
 }
 
+// FileGraphRequest is presently unread of any consulted field, mirroring
+// GetHealthRequest's own shape (05-02 Task 1 checkpoint).
+type FileGraphRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// path is declared for a future milestone in which one server process
+	// answers for more than one repository; the v1 handler does not read
+	// it — every response reports on the server's own configured
+	// RepoPath regardless of this field's value. This is NOT a protobuf
+	// `reserved` declaration: the field IS on the wire and IS serialized
+	// by every client, it is simply not read by this version's handler.
+	Path          string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileGraphRequest) Reset() {
+	*x = FileGraphRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileGraphRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileGraphRequest) ProtoMessage() {}
+
+func (x *FileGraphRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileGraphRequest.ProtoReflect.Descriptor instead.
+func (*FileGraphRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *FileGraphRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+// FileGraphNode is the uiv1 projection of internal/query.FileGraphNode,
+// field-for-field (05-02 Task 1 checkpoint).
+type FileGraphNode struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// path mirrors FileGraphNode.Path.
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// language mirrors FileGraphNode.Language.
+	Language string `protobuf:"bytes,2,opt,name=language,proto3" json:"language,omitempty"`
+	// symbol_count mirrors FileGraphNode.SymbolCount.
+	SymbolCount int64 `protobuf:"varint,3,opt,name=symbol_count,json=symbolCount,proto3" json:"symbol_count,omitempty"`
+	// cycle_id mirrors FileGraphNode.CycleID: 0 for a file in no
+	// strongly-connected cycle, else a 1-based component identifier
+	// (GRF-04, D-06).
+	CycleId       int32 `protobuf:"varint,4,opt,name=cycle_id,json=cycleId,proto3" json:"cycle_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileGraphNode) Reset() {
+	*x = FileGraphNode{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileGraphNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileGraphNode) ProtoMessage() {}
+
+func (x *FileGraphNode) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileGraphNode.ProtoReflect.Descriptor instead.
+func (*FileGraphNode) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *FileGraphNode) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FileGraphNode) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *FileGraphNode) GetSymbolCount() int64 {
+	if x != nil {
+		return x.SymbolCount
+	}
+	return 0
+}
+
+func (x *FileGraphNode) GetCycleId() int32 {
+	if x != nil {
+		return x.CycleId
+	}
+	return 0
+}
+
+// FileGraphEdge is the uiv1 projection of internal/query.FileGraphEdge,
+// field-for-field (05-02 Task 1 checkpoint).
+type FileGraphEdge struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// source_file mirrors FileGraphEdge.SourceFile.
+	SourceFile string `protobuf:"bytes,1,opt,name=source_file,json=sourceFile,proto3" json:"source_file,omitempty"`
+	// target_file mirrors FileGraphEdge.TargetFile.
+	TargetFile string `protobuf:"bytes,2,opt,name=target_file,json=targetFile,proto3" json:"target_file,omitempty"`
+	// kind_counts mirrors FileGraphEdge.KindCounts, mirroring
+	// GetHealthResponse.edges_by_kind's map field exactly, including its
+	// sparse convention: a kind with zero observed edges is ABSENT from
+	// the map, never present with value 0.
+	KindCounts map[string]int64 `protobuf:"bytes,3,rep,name=kind_counts,json=kindCounts,proto3" json:"kind_counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// total_count mirrors FileGraphEdge.TotalCount.
+	TotalCount int64 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	// in_cycle mirrors FileGraphEdge.InCycle: true when both this edge's
+	// endpoints carry the same non-zero cycle_id. Deliberately redundant
+	// with cycle_id on both endpoints — see 05-02 Task 1 checkpoint
+	// sub-decision 2 for why: D-06's whole point is that GRF-04's
+	// correctness must not be re-implemented by whatever renders the
+	// graph, and a client-derived edge flag is exactly that
+	// re-implementation in miniature.
+	InCycle       bool `protobuf:"varint,5,opt,name=in_cycle,json=inCycle,proto3" json:"in_cycle,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileGraphEdge) Reset() {
+	*x = FileGraphEdge{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileGraphEdge) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileGraphEdge) ProtoMessage() {}
+
+func (x *FileGraphEdge) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileGraphEdge.ProtoReflect.Descriptor instead.
+func (*FileGraphEdge) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *FileGraphEdge) GetSourceFile() string {
+	if x != nil {
+		return x.SourceFile
+	}
+	return ""
+}
+
+func (x *FileGraphEdge) GetTargetFile() string {
+	if x != nil {
+		return x.TargetFile
+	}
+	return ""
+}
+
+func (x *FileGraphEdge) GetKindCounts() map[string]int64 {
+	if x != nil {
+		return x.KindCounts
+	}
+	return nil
+}
+
+func (x *FileGraphEdge) GetTotalCount() int64 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *FileGraphEdge) GetInCycle() bool {
+	if x != nil {
+		return x.InCycle
+	}
+	return false
+}
+
+// FileGraphResponse is the uiv1 projection of internal/query.FileGraphResult
+// (internal/query/traverse.go), frozen field-for-field at the 05-02 Task 1
+// checkpoint (a maintainer-approved one-way door, D-02a). Every field
+// here mirrors its FileGraphResult counterpart exactly, mapped by the
+// named fileGraphToProto function in internal/uiserver/handlers.go —
+// never an inline literal at the handler call site, so the mapping
+// cannot drift from its source silently.
+//
+// The three excluded_* counters are on the wire deliberately (05-02
+// Task 1 checkpoint sub-decision 1): D-03 drops contains edges and
+// file-level self-edges and D-08 drops synthetic package pseudo-nodes;
+// putting the counts on the response is what lets the UI state plainly
+// what it is not showing, rather than silently misleading by omission.
+type FileGraphResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// nodes mirrors FileGraphResult.Nodes.
+	Nodes []*FileGraphNode `protobuf:"bytes,1,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	// edges mirrors FileGraphResult.Edges.
+	Edges []*FileGraphEdge `protobuf:"bytes,2,rep,name=edges,proto3" json:"edges,omitempty"`
+	// excluded_package_node_count mirrors FileGraphResult.ExcludedPackageNodes
+	// (D-08).
+	ExcludedPackageNodeCount int64 `protobuf:"varint,3,opt,name=excluded_package_node_count,json=excludedPackageNodeCount,proto3" json:"excluded_package_node_count,omitempty"`
+	// excluded_self_edge_count mirrors FileGraphResult.ExcludedSelfEdges
+	// (D-03).
+	ExcludedSelfEdgeCount int64 `protobuf:"varint,4,opt,name=excluded_self_edge_count,json=excludedSelfEdgeCount,proto3" json:"excluded_self_edge_count,omitempty"`
+	// excluded_contains_edge_count mirrors FileGraphResult.ExcludedContainsEdges
+	// (D-03).
+	ExcludedContainsEdgeCount int64 `protobuf:"varint,5,opt,name=excluded_contains_edge_count,json=excludedContainsEdgeCount,proto3" json:"excluded_contains_edge_count,omitempty"`
+	// cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
+	CycleCount    int32 `protobuf:"varint,6,opt,name=cycle_count,json=cycleCount,proto3" json:"cycle_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileGraphResponse) Reset() {
+	*x = FileGraphResponse{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileGraphResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileGraphResponse) ProtoMessage() {}
+
+func (x *FileGraphResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileGraphResponse.ProtoReflect.Descriptor instead.
+func (*FileGraphResponse) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *FileGraphResponse) GetNodes() []*FileGraphNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *FileGraphResponse) GetEdges() []*FileGraphEdge {
+	if x != nil {
+		return x.Edges
+	}
+	return nil
+}
+
+func (x *FileGraphResponse) GetExcludedPackageNodeCount() int64 {
+	if x != nil {
+		return x.ExcludedPackageNodeCount
+	}
+	return 0
+}
+
+func (x *FileGraphResponse) GetExcludedSelfEdgeCount() int64 {
+	if x != nil {
+		return x.ExcludedSelfEdgeCount
+	}
+	return 0
+}
+
+func (x *FileGraphResponse) GetExcludedContainsEdgeCount() int64 {
+	if x != nil {
+		return x.ExcludedContainsEdgeCount
+	}
+	return 0
+}
+
+func (x *FileGraphResponse) GetCycleCount() int32 {
+	if x != nil {
+		return x.CycleCount
+	}
+	return 0
+}
+
 var File_internal_uiproto_uiv1_ui_proto protoreflect.FileDescriptor
 
 const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
@@ -3131,7 +3457,35 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a>\n" +
 	"\x10EdgesByKindEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01*\x8e\x01\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"&\n" +
+	"\x10FileGraphRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"}\n" +
+	"\rFileGraphNode\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
+	"\blanguage\x18\x02 \x01(\tR\blanguage\x12!\n" +
+	"\fsymbol_count\x18\x03 \x01(\x03R\vsymbolCount\x12\x19\n" +
+	"\bcycle_id\x18\x04 \x01(\x05R\acycleId\"\x9d\x02\n" +
+	"\rFileGraphEdge\x12\x1f\n" +
+	"\vsource_file\x18\x01 \x01(\tR\n" +
+	"sourceFile\x12\x1f\n" +
+	"\vtarget_file\x18\x02 \x01(\tR\n" +
+	"targetFile\x12O\n" +
+	"\vkind_counts\x18\x03 \x03(\v2..codegraph.ui.v1.FileGraphEdge.KindCountsEntryR\n" +
+	"kindCounts\x12\x1f\n" +
+	"\vtotal_count\x18\x04 \x01(\x03R\n" +
+	"totalCount\x12\x19\n" +
+	"\bin_cycle\x18\x05 \x01(\bR\ainCycle\x1a=\n" +
+	"\x0fKindCountsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xd9\x02\n" +
+	"\x11FileGraphResponse\x124\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x1e.codegraph.ui.v1.FileGraphNodeR\x05nodes\x124\n" +
+	"\x05edges\x18\x02 \x03(\v2\x1e.codegraph.ui.v1.FileGraphEdgeR\x05edges\x12=\n" +
+	"\x1bexcluded_package_node_count\x18\x03 \x01(\x03R\x18excludedPackageNodeCount\x127\n" +
+	"\x18excluded_self_edge_count\x18\x04 \x01(\x03R\x15excludedSelfEdgeCount\x12?\n" +
+	"\x1cexcluded_contains_edge_count\x18\x05 \x01(\x03R\x19excludedContainsEdgeCount\x12\x1f\n" +
+	"\vcycle_count\x18\x06 \x01(\x05R\n" +
+	"cycleCount*\x8e\x01\n" +
 	"\x0eNodeDetailMode\x12 \n" +
 	"\x1cNODE_DETAIL_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15NODE_DETAIL_MODE_FILE\x10\x01\x12\x1f\n" +
@@ -3141,7 +3495,7 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\"PERMALINK_AVAILABILITY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fPERMALINK_AVAILABILITY_LINKABLE\x10\x01\x12.\n" +
 	"*PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED\x10\x02\x12\"\n" +
-	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\x89\a\n" +
+	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\xdd\a\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
@@ -3153,7 +3507,8 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\rGetNodeDetail\x12%.codegraph.ui.v1.GetNodeDetailRequest\x1a&.codegraph.ui.v1.GetNodeDetailResponse\x12L\n" +
 	"\aExplore\x12\x1f.codegraph.ui.v1.ExploreRequest\x1a .codegraph.ui.v1.ExploreResponse\x12[\n" +
 	"\fGetPermalink\x12$.codegraph.ui.v1.GetPermalinkRequest\x1a%.codegraph.ui.v1.GetPermalinkResponse\x12R\n" +
-	"\tGetHealth\x12!.codegraph.ui.v1.GetHealthRequest\x1a\".codegraph.ui.v1.GetHealthResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\tGetHealth\x12!.codegraph.ui.v1.GetHealthRequest\x1a\".codegraph.ui.v1.GetHealthResponse\x12R\n" +
+	"\tFileGraph\x12!.codegraph.ui.v1.FileGraphRequest\x1a\".codegraph.ui.v1.FileGraphResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -3168,7 +3523,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
 	(PermalinkAvailability)(0),    // 1: codegraph.ui.v1.PermalinkAvailability
@@ -3206,9 +3561,14 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*PendingChanges)(nil),        // 33: codegraph.ui.v1.PendingChanges
 	(*IndexHealth)(nil),           // 34: codegraph.ui.v1.IndexHealth
 	(*GetHealthResponse)(nil),     // 35: codegraph.ui.v1.GetHealthResponse
-	nil,                           // 36: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	nil,                           // 37: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	nil,                           // 38: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	(*FileGraphRequest)(nil),      // 36: codegraph.ui.v1.FileGraphRequest
+	(*FileGraphNode)(nil),         // 37: codegraph.ui.v1.FileGraphNode
+	(*FileGraphEdge)(nil),         // 38: codegraph.ui.v1.FileGraphEdge
+	(*FileGraphResponse)(nil),     // 39: codegraph.ui.v1.FileGraphResponse
+	nil,                           // 40: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	nil,                           // 41: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	nil,                           // 42: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	nil,                           // 43: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	3,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
@@ -3235,39 +3595,44 @@ var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	25, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
 	26, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
 	1,  // 23: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
-	36, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	37, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	38, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	40, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	41, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	42, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
 	33, // 27: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
 	34, // 28: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
 	32, // 29: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
-	4,  // 30: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
-	6,  // 31: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
-	10, // 32: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
-	12, // 33: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
-	14, // 34: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
-	16, // 35: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
-	18, // 36: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
-	20, // 37: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
-	24, // 38: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
-	29, // 39: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
-	31, // 40: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
-	5,  // 41: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	7,  // 42: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	11, // 43: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	13, // 44: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	15, // 45: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	17, // 46: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	19, // 47: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	23, // 48: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	27, // 49: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
-	30, // 50: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
-	35, // 51: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
-	41, // [41:52] is the sub-list for method output_type
-	30, // [30:41] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	43, // 30: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	37, // 31: codegraph.ui.v1.FileGraphResponse.nodes:type_name -> codegraph.ui.v1.FileGraphNode
+	38, // 32: codegraph.ui.v1.FileGraphResponse.edges:type_name -> codegraph.ui.v1.FileGraphEdge
+	4,  // 33: codegraph.ui.v1.UIService.GetStatus:input_type -> codegraph.ui.v1.GetStatusRequest
+	6,  // 34: codegraph.ui.v1.UIService.Search:input_type -> codegraph.ui.v1.SearchRequest
+	10, // 35: codegraph.ui.v1.UIService.Files:input_type -> codegraph.ui.v1.FilesRequest
+	12, // 36: codegraph.ui.v1.UIService.Callers:input_type -> codegraph.ui.v1.CallersRequest
+	14, // 37: codegraph.ui.v1.UIService.Callees:input_type -> codegraph.ui.v1.CalleesRequest
+	16, // 38: codegraph.ui.v1.UIService.Impact:input_type -> codegraph.ui.v1.ImpactRequest
+	18, // 39: codegraph.ui.v1.UIService.Affected:input_type -> codegraph.ui.v1.AffectedRequest
+	20, // 40: codegraph.ui.v1.UIService.GetNodeDetail:input_type -> codegraph.ui.v1.GetNodeDetailRequest
+	24, // 41: codegraph.ui.v1.UIService.Explore:input_type -> codegraph.ui.v1.ExploreRequest
+	29, // 42: codegraph.ui.v1.UIService.GetPermalink:input_type -> codegraph.ui.v1.GetPermalinkRequest
+	31, // 43: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
+	36, // 44: codegraph.ui.v1.UIService.FileGraph:input_type -> codegraph.ui.v1.FileGraphRequest
+	5,  // 45: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	7,  // 46: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	11, // 47: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	13, // 48: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	15, // 49: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	17, // 50: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	19, // 51: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	23, // 52: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	27, // 53: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	30, // 54: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
+	35, // 55: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
+	39, // 56: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
+	45, // [45:57] is the sub-list for method output_type
+	33, // [33:45] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_internal_uiproto_uiv1_ui_proto_init() }
@@ -3283,7 +3648,7 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   37,
+			NumMessages:   42,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

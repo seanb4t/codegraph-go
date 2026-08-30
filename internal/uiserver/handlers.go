@@ -979,3 +979,18 @@ func (s *uiService) GetHealth(ctx context.Context, _ *connect.Request[uiv1.GetHe
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// FileGraph is a MINIMAL placeholder, added here in plan 05-02 Task 2's
+// own commit solely so *uiService keeps satisfying the regenerated
+// uiv1connect.UIServiceHandler interface — Go requires every method to
+// be implemented for the package to build at all, and Task 2's own file
+// list does not include this file, but the interface it regenerates
+// unconditionally does (the identical Rule 3 blocking-issue precedent
+// 04-03's Task 2 recorded for GetHealth). Returns connect.CodeUnimplemented
+// rather than a fabricated response, deliberately, so Task 3's
+// filegraph_test.go RED phase observes real, honest "unimplemented"
+// failures against this placeholder rather than a compile error. Task 3
+// REPLACES this placeholder with the real handler.
+func (s *uiService) FileGraph(_ context.Context, _ *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("FileGraph: not yet implemented (plan 05-02 Task 3)"))
+}

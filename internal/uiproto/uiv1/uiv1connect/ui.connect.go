@@ -90,6 +90,8 @@ const (
 	UIServiceGetPermalinkProcedure = "/codegraph.ui.v1.UIService/GetPermalink"
 	// UIServiceGetHealthProcedure is the fully-qualified name of the UIService's GetHealth RPC.
 	UIServiceGetHealthProcedure = "/codegraph.ui.v1.UIService/GetHealth"
+	// UIServiceFileGraphProcedure is the fully-qualified name of the UIService's FileGraph RPC.
+	UIServiceFileGraphProcedure = "/codegraph.ui.v1.UIService/FileGraph"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -124,6 +126,20 @@ type UIServiceClient interface {
 	// only and additive per D-02a — it performs no network operation and
 	// mutates nothing (SRV-03).
 	GetHealth(context.Context, *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error)
+	// FileGraph is plan 05-02's twelfth rpc (ENG-03/GRF-02/GRF-04): it
+	// projects internal/query.Engine.FileGraph()'s file-granularity
+	// dependency rollup onto the wire for the /graph view — every file
+	// node, every aggregated source-file-to-target-file edge with its
+	// sparse per-kind counts, the three exclusion counters that keep
+	// D-03's and D-08's omissions visible rather than silent, and the
+	// total cycle count. The rollup is computed FRESH per call from the
+	// existing edges (D-05/D-09) — no precomputed projection, no new
+	// record kind, no re-indexing. Cycle membership is computed
+	// SERVER-SIDE (D-06), so the answer is independent of whichever
+	// renderer GRF-01 selects — this is what protects GRF-05's swappable
+	// seam. Read-only and additive per D-02a — it performs no network
+	// operation and mutates nothing (SRV-03).
+	FileGraph(context.Context, *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -203,6 +219,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("GetHealth")),
 			connect.WithClientOptions(opts...),
 		),
+		fileGraph: connect.NewClient[uiv1.FileGraphRequest, uiv1.FileGraphResponse](
+			httpClient,
+			baseURL+UIServiceFileGraphProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("FileGraph")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -219,6 +241,7 @@ type uIServiceClient struct {
 	explore       *connect.Client[uiv1.ExploreRequest, uiv1.ExploreResponse]
 	getPermalink  *connect.Client[uiv1.GetPermalinkRequest, uiv1.GetPermalinkResponse]
 	getHealth     *connect.Client[uiv1.GetHealthRequest, uiv1.GetHealthResponse]
+	fileGraph     *connect.Client[uiv1.FileGraphRequest, uiv1.FileGraphResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -276,6 +299,11 @@ func (c *uIServiceClient) GetHealth(ctx context.Context, req *connect.Request[ui
 	return c.getHealth.CallUnary(ctx, req)
 }
 
+// FileGraph calls codegraph.ui.v1.UIService.FileGraph.
+func (c *uIServiceClient) FileGraph(ctx context.Context, req *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error) {
+	return c.fileGraph.CallUnary(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
@@ -308,6 +336,20 @@ type UIServiceHandler interface {
 	// only and additive per D-02a — it performs no network operation and
 	// mutates nothing (SRV-03).
 	GetHealth(context.Context, *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error)
+	// FileGraph is plan 05-02's twelfth rpc (ENG-03/GRF-02/GRF-04): it
+	// projects internal/query.Engine.FileGraph()'s file-granularity
+	// dependency rollup onto the wire for the /graph view — every file
+	// node, every aggregated source-file-to-target-file edge with its
+	// sparse per-kind counts, the three exclusion counters that keep
+	// D-03's and D-08's omissions visible rather than silent, and the
+	// total cycle count. The rollup is computed FRESH per call from the
+	// existing edges (D-05/D-09) — no precomputed projection, no new
+	// record kind, no re-indexing. Cycle membership is computed
+	// SERVER-SIDE (D-06), so the answer is independent of whichever
+	// renderer GRF-01 selects — this is what protects GRF-05's swappable
+	// seam. Read-only and additive per D-02a — it performs no network
+	// operation and mutates nothing (SRV-03).
+	FileGraph(context.Context, *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -383,6 +425,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("GetHealth")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceFileGraphHandler := connect.NewUnaryHandler(
+		UIServiceFileGraphProcedure,
+		svc.FileGraph,
+		connect.WithSchema(uIServiceMethods.ByName("FileGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -407,6 +455,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceGetPermalinkHandler.ServeHTTP(w, r)
 		case UIServiceGetHealthProcedure:
 			uIServiceGetHealthHandler.ServeHTTP(w, r)
+		case UIServiceFileGraphProcedure:
+			uIServiceFileGraphHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -458,4 +508,8 @@ func (UnimplementedUIServiceHandler) GetPermalink(context.Context, *connect.Requ
 
 func (UnimplementedUIServiceHandler) GetHealth(context.Context, *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.GetHealth is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) FileGraph(context.Context, *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.FileGraph is not implemented"))
 }
