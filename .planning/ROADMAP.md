@@ -261,7 +261,7 @@ Plans:
 - [x] 04-03-PLAN.md — `GetHealth`, the eleventh read-only rpc, and its handler and mapper
 - [x] 04-04-PLAN.md — four-tab Workbench shell, Impact depth control, Callees limit
 - [x] 04-05-PLAN.md — the health view: trust verdict above the numbers, loud worktree warning
-- [ ] 04-06-PLAN.md — multi-file selection with removable chips driving Affected
+- [x] 04-06-PLAN.md — multi-file selection with removable chips driving Affected
 - [ ] 04-07-PLAN.md — `web:components:drift`, render-cost measurement, committed-bundle refresh
 
 ### Phase 5: File/Package Graph View
