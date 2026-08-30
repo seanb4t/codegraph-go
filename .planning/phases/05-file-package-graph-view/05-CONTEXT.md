@@ -151,6 +151,69 @@ Per **D-18**, Phase 5 *fills* it and does not restructure navigation.
   Consequence the planner must handle: cycle output joins the wire shape, which is a
   one-way proto field-numbering decision (see Claude's Discretion).
 
+### Post-Research Amendments (2026-08-30)
+
+Three findings from `05-RESEARCH.md` required maintainer rulings. Recorded here as
+decisions so the planner reads settled ground, not open questions.
+
+- **D-07:** **The layout extension is `cytoscape-elk` (with `elkjs`). This is forced by the
+  two locked constraints, not chosen by preference.**
+
+  Research established a genuine three-way tension, and only one option survives it:
+  - `cytoscape-fcose` — best compound support, but **self-describes as force-directed**,
+    which GRF-02 bans outright.
+  - `cytoscape-dagre` — hierarchical and small, but **zero compound support**, which D-04's
+    in-place expansion requires.
+  - `cytoscape-elk` — the only candidate confirmed both non-force-directed and
+    compound-aware (`hierarchyHandling`). `elkjs`'s own description: *"Automatic graph
+    layout based on Sugiyama's algorithm."*
+
+  **Bundle cost, measured not assumed:** cytoscape core ~137KB gzip + elkjs ~423KB gzip
+  ≈ 560KB, against a current embedded JS bundle of **160KB gzip** (`web/build/`, 892K on
+  disk). That is a 3.5× increase in the JS — but it embeds into a **75MB binary**, so it is
+  **~0.7% of what ships**, in an artifact the tree-sitter grammars already dominate by
+  three orders of magnitude. The maintainer accepted the cost on that basis, consistent
+  with the standing ruling to prefer established dependencies over half-baked alternatives.
+
+  Versions confirmed live: `cytoscape@3.34.2`, `cytoscape-elk@2.3.0`, `elkjs@0.12.0`.
+
+  This does NOT pre-empt GRF-01. The spike still measures whether this stack stays
+  interactive at the largest corpus, and a failure remains actionable — see D-02.
+
+- **D-08:** **`FileGraph()` MUST exclude `Kind == "package"` nodes from the rollup.**
+
+  Research found a real defect that hides on the measurement corpus and appears in
+  production. `internal/indexer/resolve.go` mints synthetic `"package"`-kind pseudo-nodes
+  for intra-module import targets — its own comment says they are *"not one of goextract's
+  declared node kinds, since no source declaration produces it"* — and they carry
+  `FilePath == ""`. There are **43** in this repository (`nodesByKind.package: 43`,
+  measured live). A naive node→file lookup rolls their edges into a phantom `""` file.
+
+  Verified impact of the exclusion: **573→572 nodes, 1,540→1,326 edges**.
+
+  **`google/guava` has ZERO such nodes.** So `GRF-01`'s measurement corpus cannot surface
+  this, and the defect would appear only when a developer opened the graph on *this*
+  repository — at launch.
+
+  The fix stays inside this phase's new code; `resolve.go` is NOT changed (that would alter
+  indexer behaviour every CLI, MCP and golden consumer depends on). **A regression test
+  against this repository's own index is mandatory** — guava cannot catch it, which is
+  precisely why an explicit test is required rather than relying on corpus coverage.
+
+- **D-09 (CORRECTION to D-05):** **`FileGraph()` requires TWO scans, not one.**
+
+  D-05 states FileGraph follows `BuildReverseAdjacency`'s discipline. The *discipline*
+  (fresh per call, no precomputed projection, no new record kind) holds and is unchanged.
+  But the *single-scan* shape does not transfer: `schema.Edge` carries only node IDs, and
+  node IDs are opaque content hashes — so resolving a node to its containing file needs a
+  node scan before the edge scan can be aggregated. Confirmed by reading `graph.pb.go` and
+  `nodeid.go`. Do not attempt to force a single pass.
+
+  **Open, for the planner:** research estimated (did not measure) the wire response at
+  guava scale at ~5-6MB against a 16MB `transportSendMaxBytes` ceiling. Treat that as
+  unverified and measure it — an estimate presented as a measurement is the failure mode
+  this phase's own GRF-01 exists to avoid.
+
 ### Claude's Discretion
 
 - **The `Engine.FileGraph` wire shape.** A new rpc means another additive, one-way proto
