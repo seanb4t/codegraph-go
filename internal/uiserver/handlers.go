@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/seanb4t/codegraph-go/internal/gitmeta"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
@@ -879,17 +880,102 @@ func (s *uiService) Explore(ctx context.Context, req *connect.Request[uiv1.Explo
 	return connect.NewResponse(resp), nil
 }
 
-// GetHealth is plan 04-03 Task 2's build-satisfying PLACEHOLDER: adding
-// GetHealth to ui.proto's service block adds it to the generated
-// uiv1connect.UIServiceHandler interface, and Go requires *uiService (no
-// forward-compat embed) to implement every interface method for the
-// package to compile at all — so this stub exists solely to keep the
-// tree buildable between Task 2's proto/codegen commit and Task 3's real
-// implementation, and is REPLACED (not extended) by Task 3's
-// withEngine-wrapped handler and healthToProto mapper. It deliberately
-// returns CodeUnimplemented rather than a fabricated response, so
-// Task 3's health_test.go RED phase observes real, honest failures
-// against it.
-func (s *uiService) GetHealth(_ context.Context, _ *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("GetHealth not yet implemented (plan 04-03 Task 3)"))
+// healthToProto maps internal/query.StatusResult onto
+// uiv1.GetHealthResponse field-for-field, mirroring statusToProto's
+// convention — a named mapper, never an inline literal at the handler
+// call site, so the mapping cannot drift from its source silently. The
+// field set and numbering were frozen at the 04-03 Task 1 maintainer
+// checkpoint (approve-as-proposed, D-02a one-way door). commitSHA is
+// supplied by the caller (GetHealth), computed through the SAME
+// schema.IndexedCommitSHA + schema.IsCommitSHA validation gate GetStatus
+// applies — never re-derived here (Task 1 checkpoint sub-decision 2).
+func healthToProto(result query.StatusResult, commitSHA string) *uiv1.GetHealthResponse {
+	return &uiv1.GetHealthResponse{
+		Initialized:     result.Initialized,
+		Version:         result.Version,
+		FileCount:       result.FileCount,
+		NodeCount:       result.NodeCount,
+		EdgeCount:       result.EdgeCount,
+		DbSizeBytes:     result.DbSizeBytes,
+		Backend:         result.Backend,
+		FilesByLanguage: result.FilesByLanguage,
+		Languages:       result.Languages,
+		NodesByKind:     result.NodesByKind,
+		EdgesByKind:     result.EdgesByKind,
+		PendingChanges: &uiv1.PendingChanges{
+			Added:    int32(result.PendingChanges.Added),
+			Modified: int32(result.PendingChanges.Modified),
+			Removed:  int32(result.PendingChanges.Removed),
+		},
+		IndexHealth: &uiv1.IndexHealth{
+			BuiltWithVersion:           result.Index.BuiltWithVersion,
+			BuiltWithExtractionVersion: result.Index.BuiltWithExtractionVersion,
+			CurrentExtractionVersion:   result.Index.CurrentExtractionVersion,
+			ReindexRecommended:         result.Index.ReindexRecommended,
+			State:                      result.Index.State,
+			PendingRefs:                int32(result.Index.PendingRefs),
+		},
+		WorktreeMismatch: worktreeMismatchToProto(result.WorktreeMismatch),
+		Stale:            result.Stale,
+		CommitSha:        commitSHA,
+	}
+}
+
+// worktreeMismatchToProto maps internal/gitmeta.Mismatch onto its uiv1
+// wire projection, field-for-field, returning nil for a nil input so the
+// nil case — the ordinary, no-mismatch outcome on every clean repository
+// — is one obvious branch rather than an inline conditional inside
+// healthToProto.
+func worktreeMismatchToProto(m *gitmeta.Mismatch) *uiv1.WorktreeMismatch {
+	if m == nil {
+		return nil
+	}
+	return &uiv1.WorktreeMismatch{
+		WorktreeRoot: m.WorktreeRoot,
+		IndexRoot:    m.IndexRoot,
+	}
+}
+
+// GetHealth answers internal/query.Engine.Status's full StatusResult over
+// the wire (D-01/D-02, HLT-01/HLT-02/HLT-03): every per-language file
+// count, per-kind node/edge count, pending-change tally, index-health
+// block and worktree-mismatch detection that GetStatus deliberately
+// omits to stay cheap for per-navigation polling (D-01). Uses the
+// ORDINARY withEngine shape — Callers/Callees/Files' convention — NOT
+// GetStatus's openEngine-direct degrade-and-answer shape: GetStatus's
+// own doc comment records that shape as a single deliberate exception
+// justified by partial availability, and GetHealth is a diagnostic
+// endpoint with no such requirement, so an unopenable store is an
+// ordinary withEngine error here.
+//
+// eng.Status(ctx) is called exactly once inside the closure: it already
+// populates WorktreeMismatch via Engine.WorktreeMismatch's once-per-Engine
+// latch (status.go:359), so a second explicit detection call would
+// re-pay nothing and add a second code path (D-02).
+func (s *uiService) GetHealth(ctx context.Context, _ *connect.Request[uiv1.GetHealthRequest]) (*connect.Response[uiv1.GetHealthResponse], error) {
+	var resp *uiv1.GetHealthResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.Status(ctx)
+		if err != nil {
+			return err
+		}
+		meta, err := eng.IndexMeta()
+		if err != nil {
+			return err
+		}
+		// IN-06: the SAME schema.IndexedCommitSHA + schema.IsCommitSHA
+		// validation gate GetStatus applies (see GetStatus's own doc
+		// comment above) — a Meta record on disk is not covered by
+		// internal/indexer's write-time validation alone.
+		commitSHA, ok := schema.IndexedCommitSHA(meta)
+		if ok && !schema.IsCommitSHA(commitSHA) {
+			commitSHA = ""
+		}
+		resp = healthToProto(result, commitSHA)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
 }

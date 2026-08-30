@@ -179,6 +179,16 @@ const uiProtoFieldFixtureLenAtPlan0111 = uiProtoFieldFixtureLenAtPlan0110 + 2
 // mirroring plan 01-10's and 01-11's own chained-extension pattern.
 const uiProtoFieldFixtureLenAtPlan0305 = uiProtoFieldFixtureLenAtPlan0111 + 6
 
+// uiProtoFieldFixtureLenAtPlan0403 EXTENDS uiProtoFieldFixtureLenAtPlan0305
+// by exactly 28 (plan 04-03, D-01/D-02, the eleventh rpc GetHealth):
+// GetHealthRequest's one field, WorktreeMismatch's two, PendingChanges'
+// three, IndexHealth's six, and GetHealthResponse's sixteen — all five
+// new messages, additive from field 1 on each since every one is new.
+// Declared in terms of the prior constant, never as a bare literal,
+// mirroring the established chained-extension pattern (01-10, 01-11,
+// 03-05).
+const uiProtoFieldFixtureLenAtPlan0403 = uiProtoFieldFixtureLenAtPlan0305 + 28
+
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
 // the wave that completes GetNodeDetail and Explore). Per the corrected
@@ -333,6 +343,39 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"GetPermalinkResponse", "url", 1},
 	{"GetPermalinkResponse", "availability", 2},
 	{"GetPermalinkResponse", "reason", 3},
+
+	// Plan 04-03 (D-01/D-02, the eleventh rpc GetHealth): five new
+	// messages, frozen at the 04-03 Task 1 maintainer checkpoint.
+	// Twenty-eight entries total, matching
+	// uiProtoFieldFixtureLenAtPlan0403's +28.
+	{"GetHealthRequest", "path", 1},
+	{"WorktreeMismatch", "worktree_root", 1},
+	{"WorktreeMismatch", "index_root", 2},
+	{"PendingChanges", "added", 1},
+	{"PendingChanges", "modified", 2},
+	{"PendingChanges", "removed", 3},
+	{"IndexHealth", "built_with_version", 1},
+	{"IndexHealth", "built_with_extraction_version", 2},
+	{"IndexHealth", "current_extraction_version", 3},
+	{"IndexHealth", "reindex_recommended", 4},
+	{"IndexHealth", "state", 5},
+	{"IndexHealth", "pending_refs", 6},
+	{"GetHealthResponse", "initialized", 1},
+	{"GetHealthResponse", "version", 2},
+	{"GetHealthResponse", "file_count", 3},
+	{"GetHealthResponse", "node_count", 4},
+	{"GetHealthResponse", "edge_count", 5},
+	{"GetHealthResponse", "db_size_bytes", 6},
+	{"GetHealthResponse", "backend", 7},
+	{"GetHealthResponse", "files_by_language", 8},
+	{"GetHealthResponse", "languages", 9},
+	{"GetHealthResponse", "nodes_by_kind", 10},
+	{"GetHealthResponse", "edges_by_kind", 11},
+	{"GetHealthResponse", "pending_changes", 12},
+	{"GetHealthResponse", "index_health", 13},
+	{"GetHealthResponse", "worktree_mismatch", 14},
+	{"GetHealthResponse", "stale", 15},
+	{"GetHealthResponse", "commit_sha", 16},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -359,8 +402,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0305 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0305 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0305)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0403 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0403 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0403)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")
