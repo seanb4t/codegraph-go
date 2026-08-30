@@ -23,6 +23,7 @@ import { mergeRawObservations } from './graph-measure.mjs';
 /**
  * @typedef {import('./graph-measure.mjs').RawObservation} RawObservation
  * @typedef {import('./graph-measure.mjs').MetricEntry} MetricEntry
+ * @typedef {import('./graph-measure.mjs').CollapsedView} CollapsedView
  */
 
 /**
@@ -61,6 +62,22 @@ import { mergeRawObservations } from './graph-measure.mjs';
  * @property {MetricResult[]} metricResults
  * @property {RawObservation} bindingObservation
  * @property {RawObservation[]} additionalCorpora
+ */
+
+/**
+ * @typedef {Object} WrittenVerdict
+ * @property {number} schemaVersion
+ * @property {string} thresholdRef
+ * @property {{repo: string, sha: string}} corpus
+ * @property {string|undefined} bindingView
+ * @property {RawObservation} bindingObservation
+ * @property {RawObservation[]} additionalCorpora
+ * @property {MetricResult[]} metricResults
+ * @property {'PASS'|'FAIL'} verdict
+ * @property {{layoutDurationMs: number|null, frameSampleCount: number|null, collapsedView: CollapsedView|null}} recordedNonBinding
+ * @property {string} generatedBy
+ * @property {string} generatedAt
+ * @property {string} [note]
  */
 
 const COMPARISON = '<=';
@@ -171,6 +188,8 @@ export function compareObservation(threshold, observation) {
  * @typedef {Object} VerdictArgs
  * @property {string} [binding]
  * @property {string[]} additional
+ * @property {string} [out]
+ * @property {string} [note]
  */
 
 /** @returns {string} */
@@ -180,10 +199,15 @@ function repoRoot() {
 }
 
 /**
+ * parseArgs — exported (05-08) so a test can exercise the flag surface
+ * directly. An invocation using neither --out nor --note parses to
+ * exactly the same keys it always has ({binding, additional}); the two
+ * new flags are added to the returned object ONLY when supplied.
+ *
  * @param {string[]} argv
  * @returns {VerdictArgs}
  */
-function parseArgs(argv) {
+export function parseArgs(argv) {
 	/** @type {VerdictArgs} */
 	const out = { additional: [] };
 	for (let i = 0; i < argv.length; i++) {
@@ -192,11 +216,75 @@ function parseArgs(argv) {
 			out.binding = argv[++i];
 		} else if (arg === '--additional') {
 			out.additional.push(argv[++i]);
+		} else if (arg === '--out') {
+			out.out = argv[++i];
+		} else if (arg === '--note') {
+			out.note = argv[++i];
 		} else {
 			throw new Error(`graph-verdict: unrecognized argument "${arg}"`);
 		}
 	}
 	return out;
+}
+
+/**
+ * resolveOutputPath — pure path resolution, no I/O. Exported (05-08) so
+ * "no --out flag targets the fixed default" can be asserted against a
+ * FAKE root in a test, without ever touching the real repository's
+ * corpora/graph-render-observations.json (the recorded FAIL, T-05-41).
+ *
+ * @param {string} root
+ * @param {string|undefined} outFlag
+ * @returns {string}
+ */
+export function resolveOutputPath(root, outFlag) {
+	return outFlag || path.join(root, 'corpora', 'graph-render-observations.json');
+}
+
+/**
+ * writeVerdict — the write step (05-08), extracted so a re-measure at a
+ * DIFFERENT rendered view (e.g. the collapsed default) can write to a NEW
+ * artifact path without ever overwriting corpora/graph-render-observations.json
+ * (T-05-41). Takes threshold/binding/additional/output/note explicitly —
+ * it computes the verdict itself via compareObservation rather than
+ * accepting a pre-computed one, so it stays a single self-contained unit
+ * a test can call directly. `output` is REQUIRED here (no repo-root
+ * default) — the CLI entry point below is the only caller allowed to fall
+ * back to the fixed default path, via resolveOutputPath.
+ *
+ * @param {Object} args
+ * @param {Threshold} args.threshold
+ * @param {RawObservation} args.binding
+ * @param {RawObservation[]} [args.additional]
+ * @param {string} args.output
+ * @param {string} [args.note]
+ * @returns {WrittenVerdict} the written object (also the return value of JSON.parse(fs.readFileSync(args.output)))
+ */
+export function writeVerdict({ threshold, binding, additional = [], output, note }) {
+	const result = compareObservation(threshold, { bindingObservation: binding, additionalCorpora: additional });
+	/** @type {WrittenVerdict} */
+	const written = {
+		schemaVersion: 1,
+		thresholdRef: 'corpora/graph-render-threshold.json',
+		corpus: threshold.corpus,
+		bindingView: threshold.bindingView,
+		bindingObservation: result.bindingObservation,
+		additionalCorpora: result.additionalCorpora,
+		metricResults: result.metricResults,
+		verdict: result.verdict,
+		recordedNonBinding: {
+			layoutDurationMs: result.bindingObservation.layoutDurationMs ?? null,
+			frameSampleCount: result.bindingObservation.frameSampleCount ?? null,
+			collapsedView: result.bindingObservation.collapsedView ?? null
+		},
+		generatedBy: 'web/scripts/graph-verdict.mjs',
+		generatedAt: new Date().toISOString()
+	};
+	if (typeof note === 'string' && note.trim().length > 0) {
+		written.note = note;
+	}
+	fs.writeFileSync(output, JSON.stringify(written, null, 2) + '\n');
+	return written;
 }
 
 /**
@@ -222,7 +310,7 @@ async function main() {
 
 	const root = repoRoot();
 	const thresholdPath = path.join(root, 'corpora', 'graph-render-threshold.json');
-	const observationsPath = path.join(root, 'corpora', 'graph-render-observations.json');
+	const outputPath = resolveOutputPath(root, args.out);
 
 	/** @type {Threshold} */
 	const threshold = JSON.parse(fs.readFileSync(thresholdPath, 'utf8'));
@@ -233,29 +321,15 @@ async function main() {
 	}
 
 	const merged = mergeRawObservations(raws);
-	const result = compareObservation(threshold, merged);
+	const written = writeVerdict({
+		threshold,
+		binding: merged.bindingObservation,
+		additional: merged.additionalCorpora,
+		output: outputPath,
+		note: args.note
+	});
 
-	const binding = result.bindingObservation;
-	const output = {
-		schemaVersion: 1,
-		thresholdRef: 'corpora/graph-render-threshold.json',
-		corpus: threshold.corpus,
-		bindingView: threshold.bindingView,
-		bindingObservation: binding,
-		additionalCorpora: result.additionalCorpora,
-		metricResults: result.metricResults,
-		verdict: result.verdict,
-		recordedNonBinding: {
-			layoutDurationMs: binding.layoutDurationMs ?? null,
-			frameSampleCount: binding.frameSampleCount ?? null,
-			collapsedView: binding.collapsedView ?? null
-		},
-		generatedBy: 'web/scripts/graph-verdict.mjs',
-		generatedAt: new Date().toISOString()
-	};
-
-	fs.writeFileSync(observationsPath, JSON.stringify(output, null, 2) + '\n');
-	process.stdout.write(`graph-verdict: wrote ${observationsPath} — verdict: ${result.verdict}\n`);
+	process.stdout.write(`graph-verdict: wrote ${outputPath} — verdict: ${written.verdict}\n`);
 }
 
 const isMain = process.argv[1] && url.pathToFileURL(process.argv[1]).href === import.meta.url;

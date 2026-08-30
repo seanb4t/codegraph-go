@@ -9,7 +9,7 @@
 	import { uiClient } from '$lib/client';
 	import { classifyRpcError, type RpcFailure } from '$lib/rpc-errors';
 	import {
-		fileGraphToElements,
+		rollupToElements,
 		type FileGraphElement
 	} from '$lib/components/graph/file-graph-transform';
 	import { fileGraphStyle } from '$lib/components/graph/graph-style';
@@ -35,7 +35,11 @@
 			.then((response) => {
 				state = {
 					kind: 'loaded',
-					elements: fileGraphToElements(response),
+					// The collapsed default (05-08, GRF-01's remedy):
+					// progressive directory-to-file expansion lands in a
+					// later task on this same route; this call already
+					// renders the correct first-paint view.
+					elements: rollupToElements(response, new Set()),
 					requestIssuedAt
 				};
 			})

@@ -29,7 +29,7 @@ import { render, screen, waitFor } from '@testing-library/svelte';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { FileGraphEdge, FileGraphNode, FileGraphResponse } from '$lib/gen/ui_pb';
-import { fileGraphToElements } from '$lib/components/graph/file-graph-transform';
+import { rollupToElements } from '$lib/components/graph/file-graph-transform';
 
 // --- Part 1: mocked cytoscape/cytoscape-elk for route-mount lifecycle ---
 
@@ -149,8 +149,12 @@ describe('graph tracer: mount issues exactly one FileGraph call and renders the 
 
 		expect(calls).toBe(1);
 		expect(constructedCount).toBe(1);
-		// 1 file + 2 directory compounds ('internal', 'internal/query') = 3
-		expect(appliedElementCounts).toEqual([3]);
+		// The collapsed default (05-08, GRF-01's remedy) is what paints
+		// first: the file's immediate parent ('internal/query') is a
+		// single collapsed directory node, and there is no 'internal'
+		// ancestor node — the flat collapsed model builds only immediate
+		// parents of files, never a chain.
+		expect(appliedElementCounts).toEqual([1]);
 	});
 
 	it('a rejected FileGraph call renders the named failure state and never constructs a renderer', async () => {
@@ -247,11 +251,16 @@ describe('graph tracer: the graph MODEL (real cytoscape, headless, no DOM)', () 
 		);
 		realCytoscape.use(realElk);
 
-		const elements = fileGraphToElements(
+		// The directory is EXPANDED here — the collapsed default (05-08)
+		// has no compound relationship at all to test; this proves the
+		// compound placement the real renderer receives once a directory
+		// is expanded.
+		const elements = rollupToElements(
 			response(
 				[node('internal/query/traverse.go'), node('internal/query/other.go')],
 				[edge('internal/query/traverse.go', 'internal/query/other.go')]
-			)
+			),
+			new Set(['internal/query'])
 		);
 
 		const cy = realCytoscape({
