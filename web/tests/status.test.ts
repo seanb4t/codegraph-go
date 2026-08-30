@@ -10,6 +10,7 @@ import {
 	type StatusClient
 } from '$lib/status';
 import type { GetStatusResponse } from '$lib/gen/ui_pb';
+import { WORKBENCH_PARAM_KEYS } from '$lib/workbench-url';
 
 function statusResponse(overrides: Partial<GetStatusResponse> = {}): GetStatusResponse {
 	return {
@@ -123,6 +124,41 @@ describe('navigationIdentity: pathname plus sorted query string', () => {
 		// change must still be seen as a distinct navigation.
 		const a = navigationIdentity(new URL('http://localhost/browse?symbol=Foo'));
 		const b = navigationIdentity(new URL('http://localhost/browse?symbol=Bar'));
+		expect(a).not.toBe(b);
+	});
+
+	it('04-01 T-04-32: every WORKBENCH_PARAM_KEYS member is route-local under /workbench', () => {
+		// Iterates the module's own array rather than a hand-listed
+		// five-name loop — a hand-written list narrows silently the
+		// moment a sixth Workbench parameter is added (the "new subject
+		// passes by being absent" shape this repo has already fixed
+		// twice elsewhere).
+		const base = navigationIdentity(new URL('http://localhost/workbench?mode=callers&symbol=Engine.Status'));
+		for (const key of WORKBENCH_PARAM_KEYS) {
+			const url = new URL('http://localhost/workbench?mode=callers&symbol=Engine.Status');
+			url.searchParams.set(key, key === 'depth' || key === 'limit' ? '99' : `changed-${key}`);
+			const changed = navigationIdentity(url);
+			expect(changed).toBe(base);
+		}
+	});
+
+	it('04-01 T-04-32: the SAME parameters under /browse still mint DISTINCT identities — the route scoping proven in both directions', () => {
+		const a = navigationIdentity(new URL('http://localhost/browse?symbol=Foo&depth=1&limit=10'));
+		const b = navigationIdentity(new URL('http://localhost/browse?symbol=Bar&depth=2&limit=20'));
+		expect(a).not.toBe(b);
+
+		// file is not a BROWSE_PARAM_KEYS-known key under /browse's own
+		// grammar in the sense of a route-local exclusion — it is still a
+		// real query-string byte navigationIdentity does not special-case
+		// for /browse, so changing it still changes the identity.
+		const c = navigationIdentity(new URL('http://localhost/browse?file=a.go'));
+		const d = navigationIdentity(new URL('http://localhost/browse?file=b.go'));
+		expect(c).not.toBe(d);
+	});
+
+	it('04-01 T-04-32: /workbench?mode=callers and /graph?mode=callers remain distinct — the pathname is still part of the identity', () => {
+		const a = navigationIdentity(new URL('http://localhost/workbench?mode=callers'));
+		const b = navigationIdentity(new URL('http://localhost/graph?mode=callers'));
 		expect(a).not.toBe(b);
 	});
 });
