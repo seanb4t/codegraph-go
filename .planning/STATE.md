@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-08-30T16:32:03.342Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-08-30T17:34:49.458Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 39bb4d20e14d002d1317dc0e9e51ad8c3d2dcb97
+state_head: 663fc303cb81a6382269d090cb35312d5466b784
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 37
+  completed_plans: 38
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 5 (File/Package Graph View) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 5 execution started
 
@@ -99,6 +99,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P07 | 70min | 4 tasks | 44 files |
 | Phase 05 P01 | 20min | 3 tasks | 5 files |
 | Phase 05 P02 | 30min | 3 tasks | 7 files |
+| Phase 05 P03 | 40 min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -199,6 +200,8 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: Engine.FileGraph()'s regression test against this repository's own live index asserts the D-08 structural invariant (no empty-path node/edge, ExcludedPackageNodes > 0) rather than the plan's literal 572/1057 counts, because this repository indexes itself via a live daemon and exact counts are not stable across this plan's own commits.
 - [Phase 5]: FileGraph frozen at Task 1 blocking-human checkpoint, approve-as-proposed: FileGraphRequest(1)/FileGraphNode(4)/FileGraphEdge(5)/FileGraphResponse(6), all four sub-decisions confirmed (excluded_* counters kept, in_cycle kept redundant, name FileGraph re-verified against 19 mutatingVerbs substrings, unprefixed message names).
 - [Phase 5]: Guava-scale FileGraph response measured (not estimated): 3,713,528 bytes serialized, 3233 nodes, 21554 edges, 162 cycles — 22.1% of the 16 MiB transportSendMaxBytes ceiling, replacing 05-RESEARCH.md's unverified 5-6 MB estimate.
+- [Phase 05]: Maintainer approved all three renderer dependencies (cytoscape, cytoscape-elk, elkjs) by name; elkjs resolved transitively to 0.9.3, not the 0.12.0 research measured, and an override to force 0.12.0 was explicitly declined.
+- [Phase 05]: Live browser verification against this repository's own index found and fixed a real bug: cytoscape boolean data selectors require [?field]/[!field] existence syntax, not [field = true] equality, which silently never matches.
 
 ### Pending Todos
 
@@ -320,8 +323,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-30T16:32:03.237Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-08-30T17:34:32.955Z
+Stopped at: Completed 05-03-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

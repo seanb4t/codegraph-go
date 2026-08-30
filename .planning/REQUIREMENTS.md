@@ -65,7 +65,7 @@
 - [ ] **GRF-02**: User can view a whole-repo file/package graph with aggregated edges, laid out hierarchically with directory-structural grouping — never a force-directed whole-graph view
 - [ ] **GRF-03**: User can drill into a file to see its symbols
 - [ ] **GRF-04**: Dependency cycles are visually distinguished
-- [ ] **GRF-05**: The rendering library sits behind a narrow component seam so it can be swapped without an architecture change
+- [x] **GRF-05**: The rendering library sits behind a narrow component seam so it can be swapped without an architecture change
 
 ### Index Health
 
@@ -168,7 +168,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | GRF-02 | Phase 5 | Pending |
 | GRF-03 | Phase 5 | Pending |
 | GRF-04 | Phase 5 | Pending |
-| GRF-05 | Phase 5 | Pending |
+| GRF-05 | Phase 5 | Complete |
 | HLT-01 | Phase 4 | Complete |
 | HLT-02 | Phase 4 | Complete |
 | HLT-03 | Phase 4 | Complete |

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 7
+open_count: 8
 waived_count: 2
 fixed_count: 15
-total_count: 24
-last_updated: 2026-08-30T00:53:19.859Z
+total_count: 25
+last_updated: 2026-08-30T17:33:51.859Z
 ---
 
 # Broken Windows Ledger
@@ -39,6 +39,7 @@ last_updated: 2026-08-30T00:53:19.859Z
 | 22 | 03 | deviation | web/src/lib/search.ts |  | Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope) | open |  | 2026-08-29T02:37:45.131Z |  |
 | 23 | 03 | stub | web/src/lib/components/browse/SourcePane.svelte |  | multi-def source-pane branch renders a placeholder text (no picker) — full disambiguation-picker rendering is deliberately deferred to plan 03-08, which already owns BRW-05 | fixed |  | 2026-08-29T03:05:42.794Z | 2026-08-29T03:30:28.701Z |
 | 24 | 04 | stub | web/src/routes/workbench/+page.svelte |  | Affected tab renders an explicit not-yet-wired placeholder — intentional, resolved by 04-06 per 04-04-PLAN.md's own scope (Impact/Callers/Callees only). | open |  | 2026-08-30T00:53:19.859Z |  |
+| 25 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam. | open |  | 2026-08-30T17:33:51.859Z |  |
 
 ````json
 [
@@ -328,6 +329,18 @@ last_updated: 2026-08-30T00:53:19.859Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-08-30T00:53:19.859Z",
+    "resolved_at": null
+  },
+  {
+    "id": 25,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/lib/components/graph/GraphCanvas.svelte",
+    "line": null,
+    "description": "Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-30T17:33:51.859Z",
     "resolved_at": null
   }
 ]
