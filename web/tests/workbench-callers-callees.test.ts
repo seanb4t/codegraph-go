@@ -34,16 +34,24 @@ vi.mock('$app/navigation', async () => {
 	};
 });
 
-let currentCallersImpl: (req: { symbol: string; limit: number }) => Promise<CallersResponse> =
-	() => Promise.reject(new Error('workbench-callers-callees.test.ts: no callers stub configured'));
-let currentCalleesImpl: (req: { symbol: string; limit: number }) => Promise<CalleesResponse> =
-	() => Promise.reject(new Error('workbench-callers-callees.test.ts: no callees stub configured'));
+let currentCallersImpl: (
+	req: { symbol: string; limit: number },
+	opts?: { signal?: AbortSignal }
+) => Promise<CallersResponse> = () =>
+	Promise.reject(new Error('workbench-callers-callees.test.ts: no callers stub configured'));
+let currentCalleesImpl: (
+	req: { symbol: string; limit: number },
+	opts?: { signal?: AbortSignal }
+) => Promise<CalleesResponse> = () =>
+	Promise.reject(new Error('workbench-callers-callees.test.ts: no callees stub configured'));
 
 vi.doMock('$lib/client', () => ({
 	uiClient: {
 		impact: () => Promise.reject(new Error('not used by this test file')),
-		callers: (req: { symbol: string; limit: number }) => currentCallersImpl(req),
-		callees: (req: { symbol: string; limit: number }) => currentCalleesImpl(req)
+		callers: (req: { symbol: string; limit: number }, opts?: { signal?: AbortSignal }) =>
+			currentCallersImpl(req, opts),
+		callees: (req: { symbol: string; limit: number }, opts?: { signal?: AbortSignal }) =>
+			currentCalleesImpl(req, opts)
 	}
 }));
 
@@ -285,5 +293,35 @@ describe('Callers/Callees limit controls (WRK-03)', () => {
 		expect(new Set(renderedTestIds).size).toBe(4);
 		const collapsed = new Set(renderedTitles);
 		expect(collapsed.size, `collapsed pair(s) found in: ${JSON.stringify(renderedTitles)}`).toBe(4);
+	});
+
+	it('CR-01 regression: clearing the Symbol field while a request is in flight returns to idle, not a false "Something went wrong" failure', async () => {
+		// The stub never settles on its own — it only rejects once its
+		// AbortSignal fires, mirroring connect-web's real behavior when
+		// AnalysisPanel's effect cleanup calls `controller.abort()`
+		// (ConnectError with Code.Canceled). This reproduces the exact
+		// `run → undefined` transition CR-01 describes: an in-flight
+		// request aborted by clearing the input, not superseded by a new
+		// request.
+		currentCallersImpl = (_req, opts) =>
+			new Promise<CallersResponse>((_resolve, reject) => {
+				opts?.signal?.addEventListener('abort', () => {
+					reject(new ConnectError('This operation was aborted', Code.Canceled));
+				});
+			});
+
+		resetMockPage('http://localhost/workbench?mode=callers&symbol=X&limit=5');
+		mountWorkbench();
+
+		await waitFor(() => expect(screen.getByTestId('workbench-loading')).toBeInTheDocument());
+
+		await fireEvent.input(screen.getByTestId('workbench-symbol-input'), {
+			target: { value: '' }
+		});
+
+		await waitFor(() =>
+			expect(screen.getByText('Enter a symbol to run this analysis.')).toBeInTheDocument()
+		);
+		expect(screen.queryByTestId(/^workbench-failure-/)).not.toBeInTheDocument();
 	});
 });

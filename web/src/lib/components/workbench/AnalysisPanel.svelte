@@ -86,7 +86,6 @@
 
 	let panelState: PanelState<TSummary> = $state({ kind: 'idle' });
 
-	let abortController: AbortController | undefined;
 	let requestId = 0;
 
 	// The effect's ONLY tracked dependency is requestKey — reading `run`
@@ -97,11 +96,24 @@
 	// GetStatus call" property: replaceState changes page.url, params
 	// re-derives, but requestKey (and therefore this effect) only changes
 	// when a field that identifies THIS query actually changed.
+	//
+	// Cancellation and request-identity invalidation are BOTH owned by
+	// this effect's own returned cleanup — not by a hand-rolled
+	// module-level AbortController variable. Svelte calls the previous
+	// run's cleanup before every re-run (requestKey changed) AND on
+	// unmount (tab switch away from Workbench), so there is exactly one
+	// mechanism, not two: it aborts the in-flight request AND bumps
+	// requestId in the same step, which is what makes the abort's own
+	// rejection unambiguously stale on every path that aborts — including
+	// the `run → undefined` transition (CR-01) and component teardown
+	// (WR-02). Without the requestId bump, an aborted request's
+	// `Code.Canceled` rejection still carries the id that (until the next
+	// dispatch) still equals `requestId`, so the `id !== requestId` guard
+	// below passes and a stale abort overwrites a freshly-set `idle`
+	// state with a false "Something went wrong" failure.
 	$effect(() => {
 		requestKey;
 		const currentRun = untrack(() => run);
-
-		if (abortController) abortController.abort();
 
 		if (!currentRun) {
 			panelState = { kind: 'idle' };
@@ -110,7 +122,6 @@
 
 		panelState = { kind: 'loading' };
 		const controller = new AbortController();
-		abortController = controller;
 		const id = ++requestId;
 
 		currentRun(controller.signal)
@@ -122,6 +133,11 @@
 				if (id !== requestId) return; // superseded — discard, not a real failure
 				panelState = { kind: 'failed', failure: describeWorkbenchFailure(err, indexStatus) };
 			});
+
+		return () => {
+			controller.abort();
+			requestId += 1; // invalidate this request's own settlement, on every teardown path
+		};
 	});
 </script>
 
