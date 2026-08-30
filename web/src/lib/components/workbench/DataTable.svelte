@@ -125,7 +125,7 @@
 </script>
 
 <div bind:this={scrollContainer} class="overflow-y-auto" style={`max-height: ${CONTAINER_HEIGHT_PX}px;`} data-testid="data-table-scroll">
-	<Table.Root aria-rowcount={table.getRowModel().rows.length}>
+	<Table.Root aria-rowcount={table.getRowModel().rows.length + 1}>
 		<Table.Header>
 			{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
 				<Table.Row aria-rowindex={1}>

@@ -73,6 +73,11 @@ describe('WR-04: DataTable does not crash when rows shrink in place past the vir
 		// by an uncaught mid-render TypeError.
 		expect(result.getByRole('table')).toBeInTheDocument();
 		const domRows = within(result.getByRole('table')).getAllByRole('row').slice(1);
+		// RR-W-03: an upper bound ALONE is satisfied by 0 — i.e. by the blanked
+		// component this guard exists to detect. The lower bound is what makes
+		// it discriminate (rule 84d1gfpywd: pair every upper bound with a
+		// non-zero lower bound).
+		expect(domRows.length).toBeGreaterThan(0);
 		expect(domRows.length).toBeLessThanOrEqual(5);
 	});
 });

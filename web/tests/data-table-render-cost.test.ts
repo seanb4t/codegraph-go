@@ -106,7 +106,12 @@ describe('DataTable render cost at MaxLimit (D-08, measurement-first)', () => {
 		// still catches the failure mode the control exists for: a change
 		// that silently drops rows from the MODEL, not merely from the
 		// DOM window.
-		const modelRowCount = Number(table.getAttribute('aria-rowcount'));
+		// aria-rowcount counts EVERY row in the full table, header included
+		// (WAI-ARIA 1.2), so the model row count is one less. RR-W-01 corrected
+		// aria-rowcount from rows.length to rows.length + 1 precisely so it can
+		// never be smaller than the largest aria-rowindex, which the header
+		// occupies at 1 and data rows at index + 2.
+		const modelRowCount = Number(table.getAttribute('aria-rowcount')) - 1;
 		const domRowCount = within(table).getAllByRole('row').length - 1; // minus header row
 		result.unmount();
 

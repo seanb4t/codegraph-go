@@ -105,7 +105,14 @@
 			</p>
 		{/if}
 		<Command.List>
-			<Command.Empty>No results.</Command.Empty>
+			<!-- RR-W-02: gated on failure. An empty result set caused by a
+				 failed RPC is NOT "nothing matched" — rendering both produced
+				 the literal DOM text "server unavailable No results.", which
+				 contradicts the error above it and re-creates the exact
+				 read-as-absence failure WR-07 was raised against. -->
+			{#if !searchState.failure}
+				<Command.Empty>No results.</Command.Empty>
+			{/if}
 			{#if searchState.results.length > 0}
 				<Command.Group heading="Files">
 					{#each searchState.results as entry (entry.path)}
