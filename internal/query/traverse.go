@@ -302,6 +302,33 @@ func (e *Engine) FileGraph() (FileGraphResult, error) {
 		ExcludedContainsEdges: excludedContainsEdges,
 	}
 
+	// Cycle detection (GRF-04, D-06) runs server-side over the aggregated
+	// file adjacency this scan just built — kind-agnostic, since a
+	// dependency cycle is a cycle regardless of which edge kinds compose
+	// it. Built fresh here alongside everything else FileGraph derives;
+	// no separate cache.
+	cycleAdj := make(map[string][]string, len(resultEdges))
+	for _, edge := range resultEdges {
+		cycleAdj[edge.SourceFile] = append(cycleAdj[edge.SourceFile], edge.TargetFile)
+	}
+	cycleIDs := stronglyConnectedCycles(cycleAdj)
+
+	distinctCycles := make(map[int]struct{})
+	for i := range result.Nodes {
+		if id, ok := cycleIDs[result.Nodes[i].Path]; ok {
+			result.Nodes[i].CycleID = id
+			distinctCycles[id] = struct{}{}
+		}
+	}
+	for i := range result.Edges {
+		srcID, srcOK := cycleIDs[result.Edges[i].SourceFile]
+		tgtID, tgtOK := cycleIDs[result.Edges[i].TargetFile]
+		// An edge between two DIFFERENT cycles is not itself part of a
+		// cycle and must not be marked.
+		result.Edges[i].InCycle = srcOK && tgtOK && srcID == tgtID
+	}
+	result.CycleCount = len(distinctCycles)
+
 	return result, nil
 }
 
