@@ -43,6 +43,8 @@
 		"@connectrpc/connect": "2.1.2",
 		"@connectrpc/connect-web": "2.1.2",
 		"clsx": "2.1.1",
+		"cytoscape": "3.34.2",
+		"cytoscape-elk": "2.3.0",
 		"highlight.js": "11.12.0",
 		"tailwind-merge": "3.6.0"
 	}
