@@ -251,14 +251,14 @@ Plans:
   5. Staleness reads as a verdict about whether to trust what is shown, placed above the raw numbers rather than buried among them, and a worktree mismatch is impossible to miss (HLT-02, HLT-03)
 
 **Notes**: Depth and limit are passed straight through to the existing Engine methods — `validateDepth`/`clampDepth`/`clampAffectedDepth`/`validateLimit`/`MaxLimit` already enforce bounds server-side for every caller, and a second copy in the UI would be a driftable duplicate. Criterion 3's error distinction exists because ConnectRPC's typed error model is easy to flatten into a single catch-all on the client, which is exactly where the difference between "not found" and "server crashed" matters to the user.
-**Plans**: 2/7 plans executed
+**Plans**: 3/7 plans executed
 **UI hint**: yes
 
 Plans:
 
 - [x] 04-01-PLAN.md — tracer: table dependency intake, the Workbench URL grammar, and one end-to-end Callers slice
 - [x] 04-02-PLAN.md — `Files` recursive glob via `doublestar/v4`, fixing CLI, MCP and UI at once
-- [ ] 04-03-PLAN.md — `GetHealth`, the eleventh read-only rpc, and its handler and mapper
+- [x] 04-03-PLAN.md — `GetHealth`, the eleventh read-only rpc, and its handler and mapper
 - [ ] 04-04-PLAN.md — four-tab Workbench shell, Impact depth control, Callees limit
 - [ ] 04-05-PLAN.md — the health view: trust verdict above the numbers, loud worktree warning
 - [ ] 04-06-PLAN.md — multi-file selection with removable chips driving Affected
@@ -316,7 +316,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 | 1. Engine Seam, Wire Protocol & Secure Transport | 11/11 | Complete    | 2026-08-23 |
 | 2. SPA Toolchain, Embedded App Shell & JS Supply Chain | 7/7 | Complete    | 2026-08-24 |
 | 3. Browse, Inspect & Navigation | 10/10 | Complete    | 2026-08-29 |
-| 4. Query Workbench & Index Health | 2/7 | In Progress|  |
+| 4. Query Workbench & Index Health | 3/7 | In Progress|  |
 | 5. File/Package Graph View | 0/TBD | Not started | - |
 | 6. Live Push | 0/TBD | Not started | - |
 

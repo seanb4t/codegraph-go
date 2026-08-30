@@ -69,9 +69,9 @@
 
 ### Index Health
 
-- [ ] **HLT-01**: User can see index freshness, coverage, per-language file counts, and node/edge counts
-- [ ] **HLT-02**: Staleness renders as a trust verdict above the raw numbers, not as a figure buried among them
-- [ ] **HLT-03**: Worktree mismatch renders as a loud, first-class visual warning
+- [x] **HLT-01**: User can see index freshness, coverage, per-language file counts, and node/edge counts
+- [x] **HLT-02**: Staleness renders as a trust verdict above the raw numbers, not as a figure buried among them
+- [x] **HLT-03**: Worktree mismatch renders as a loud, first-class visual warning
 
 ### Live Push
 
@@ -169,9 +169,9 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | GRF-03 | Phase 5 | Pending |
 | GRF-04 | Phase 5 | Pending |
 | GRF-05 | Phase 5 | Pending |
-| HLT-01 | Phase 4 | Pending |
-| HLT-02 | Phase 4 | Pending |
-| HLT-03 | Phase 4 | Pending |
+| HLT-01 | Phase 4 | Complete |
+| HLT-02 | Phase 4 | Complete |
+| HLT-03 | Phase 4 | Complete |
 | LIV-01 | Phase 6 | Pending |
 | LIV-02 | Phase 6 | Pending |
 | LIV-03 | Phase 6 | Pending |
