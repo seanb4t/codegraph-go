@@ -30,7 +30,7 @@
 
 - [x] **ENG-01**: A structured `NodeDetail` variant is exposed; `Node()` and every frozen golden covering it remain byte-identical
 - [x] **ENG-02**: A structured `ExploreResult` variant is exposed; `Explore()` and every frozen golden covering it remain byte-identical
-- [ ] **ENG-03**: `Engine.FileGraph()` returns aggregated file/package adjacency with per-kind edge counts, computed fresh per call following `BuildReverseAdjacency`'s full-scan discipline
+- [x] **ENG-03**: `Engine.FileGraph()` returns aggregated file/package adjacency with per-kind edge counts, computed fresh per call following `BuildReverseAdjacency`'s full-scan discipline
 - [x] **ENG-04**: `schema.Meta` records the indexed commit SHA as an additive field, following the `HasFileIndex` precedent (absent ⇒ pre-upgrade graph, degrades gracefully)
 
 ### Browse & Inspect
@@ -145,7 +145,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | RPC-05 | Phase 1 | Complete |
 | ENG-01 | Phase 1 | Complete |
 | ENG-02 | Phase 1 | Complete |
-| ENG-03 | Phase 5 | Pending |
+| ENG-03 | Phase 5 | Complete |
 | ENG-04 | Phase 1 | Complete |
 | BRW-01 | Phase 3 | Complete |
 | BRW-02 | Phase 3 | Complete |

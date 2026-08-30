@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-08-30T15:33:48.995Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-08-30T16:32:03.342Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 2d1c4469afb9f32edc94b92e9ea1cc0fc7a0d499
+state_head: 39bb4d20e14d002d1317dc0e9e51ad8c3d2dcb97
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 42
-  completed_plans: 36
+  completed_plans: 37
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 5 (File/Package Graph View) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 5 execution started
 
@@ -98,6 +98,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P07 | 40min | 3 tasks | 40 files |
 | Phase 04 P07 | 70min | 4 tasks | 44 files |
 | Phase 05 P01 | 20min | 3 tasks | 5 files |
+| Phase 05 P02 | 30min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,8 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: Maintainer approved @tanstack/svelte-virtual@3.13.36; wired into DataTable.svelte, render-cost medians now ~20-40x under threshold (task web:render-cost passes)
 - [Phase 05]: GRF-01 pass condition locked and committed alone (05-01 Task 1, maintainer approve-as-proposed) before any measurement exists: google/guava corpus, expanded file-level binding view, 4 metric bars with stated timer boundaries, 16-value measurement protocol including 5 deadline budgets, two-remedy onFailure path.
 - [Phase 05]: Engine.FileGraph()'s regression test against this repository's own live index asserts the D-08 structural invariant (no empty-path node/edge, ExcludedPackageNodes > 0) rather than the plan's literal 572/1057 counts, because this repository indexes itself via a live daemon and exact counts are not stable across this plan's own commits.
+- [Phase 5]: FileGraph frozen at Task 1 blocking-human checkpoint, approve-as-proposed: FileGraphRequest(1)/FileGraphNode(4)/FileGraphEdge(5)/FileGraphResponse(6), all four sub-decisions confirmed (excluded_* counters kept, in_cycle kept redundant, name FileGraph re-verified against 19 mutatingVerbs substrings, unprefixed message names).
+- [Phase 5]: Guava-scale FileGraph response measured (not estimated): 3,713,528 bytes serialized, 3233 nodes, 21554 edges, 162 cycles — 22.1% of the 16 MiB transportSendMaxBytes ceiling, replacing 05-RESEARCH.md's unverified 5-6 MB estimate.
 
 ### Pending Todos
 
@@ -317,8 +320,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-30T15:33:48.856Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-08-30T16:32:03.237Z
+Stopped at: Completed 05-02-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
