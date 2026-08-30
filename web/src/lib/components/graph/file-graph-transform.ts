@@ -20,16 +20,18 @@
 //
 // ONE function of (the decoded response, the set of expanded directory
 // paths) produces BOTH the collapsed default and every expanded view —
-// the remedy selected for GRF-01's FAIL (05-04-SUMMARY.md, maintainer
-// decision `halt-collapse-default`). The collapsed view is deliberately
-// FLAT: the endpoint of a file is the file itself when it has no
-// directory or its IMMEDIATE parent is in the expanded set, otherwise its
-// immediate parent directory — NO ancestor chain is built. This matches
-// the collapsed figures (134 nodes / 819 edges on the guava corpus) the
-// locked threshold recorded before any measurement existed
-// (corpora/graph-render-threshold.json's recordedNonBinding.collapsedView),
-// reverse-engineered in 05-04 as: immediate parent directory of each file,
-// directed distinct cross-directory pairs, self-pairs excluded.
+// the remedy a maintainer selected after the expanded-view latency
+// measurement missed its locked bar (decision `halt-collapse-default`,
+// recorded in this repository's own planning history). The collapsed
+// view is deliberately FLAT: the endpoint of a file is the file itself
+// when it has no directory or its IMMEDIATE parent is in the expanded
+// set, otherwise its immediate parent directory — NO ancestor chain is
+// built. This matches the collapsed figures (134 nodes / 819 edges on
+// the guava corpus) the locked threshold recorded before any
+// measurement existed (corpora/graph-render-threshold.json's
+// recordedNonBinding.collapsedView), reverse-engineered as: immediate
+// parent directory of each file, directed distinct cross-directory
+// pairs, self-pairs excluded.
 //
 // Directory-structural grouping is derived entirely from FilePath
 // splitting: the server sends flat repository-relative paths, never a
@@ -80,11 +82,11 @@ export type FileGraphElement = { data: FileGraphNodeData } | { data: FileGraphEd
 
 // EXPANSION_NODE_CEILING bounds the rendered node count an expansion may
 // reach. Strictly between the largest scale this renderer stack was
-// measured INTERACTIVE at (714 nodes, this repository's own index,
-// 05-04-SUMMARY.md) and the scale at which it did NOT become interactive
-// within the locked seam deadline (3,233 nodes, google/guava expanded,
-// the recorded FAIL). This is an implementation ceiling derived from
-// those two measured scales — it is NOT a value from
+// measured INTERACTIVE at (714 nodes, this repository's own live index)
+// and the scale at which it did NOT become interactive within the
+// locked seam deadline (3,233 nodes, google/guava expanded, the
+// recorded FAIL). This is an implementation ceiling derived from those
+// two measured scales — it is NOT a value from
 // corpora/graph-render-threshold.json and does not touch that locked
 // artifact.
 export const EXPANSION_NODE_CEILING = 1500;

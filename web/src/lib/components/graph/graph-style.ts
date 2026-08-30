@@ -4,8 +4,8 @@
 // it a plain array cytoscape accepts as its own `style` option unmodified.
 //
 // A file-node style, a directory-compound style that makes the grouping
-// legible, a COLLAPSED-directory style (05-08, GRF-01's remedy) that
-// distinguishes a directory rendered as a single collapsed node from one
+// legible, a COLLAPSED-directory style that distinguishes a directory
+// rendered as a single collapsed node from one
 // whose files are showing, and a default edge style whose width is
 // derived from totalCount so a heavier dependency reads as a heavier
 // line. Cycle styling is a later concern and must NOT be added here —
