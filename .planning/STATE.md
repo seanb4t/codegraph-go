@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 4
 current_phase_name: Query Workbench & Index Health
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-08-30T00:32:03.101Z"
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-08-30T00:55:30.984Z"
 last_activity: 2026-08-29
 last_activity_desc: Phase 4 execution started
-state_head: a212d769742c352ab6fef423f0816c5c36434025
+state_head: 28cba4f074b5b9abefacd4a4e2825603a747b762
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 35
-  completed_plans: 31
+  completed_plans: 32
   percent: 50
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 4 (Query Workbench & Index Health) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-08-29 — Phase 4 execution started
 
@@ -92,6 +92,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 04 P02 | 30min | 3 tasks | 6 files |
 | Phase 04 P01 | 85min | 3 tasks | 25 files |
 | Phase 04 P03 | 70min | 3 tasks | 7 files |
+| Phase 04 P04 | 40min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,9 @@ Standing decisions that outlive every milestone:
 - [Phase 4]: 04-01: status.ts's navigationIdentity gained a route-scoped ROUTE_LOCAL_PARAMS table (T-04-32) — Workbench control changes mint no new navigation identity, while the same parameter names under /browse still correctly refetch.
 - [Phase 4]: 04-03 Task 1 checkpoint: maintainer approved GetHealth's frozen wire shape (16-field GetHealthResponse + WorktreeMismatch/PendingChanges/IndexHealth), all 5 sub-decisions answered explicitly
 - [Phase 4]: 04-03: GetHealth follows the ordinary withEngine handler shape (Callers/Callees/Files convention), not GetStatus's degrade-and-answer exception
+- [Phase 4]: AnalysisPanel.svelte's dispatch effect tracks only requestKey (via untrack on run) — the mechanism behind no-extra-GetStatus on depth/limit edits
+- [Phase 4]: Each tab's AnalysisPanel is {#if}-gated inside its Tabs.Content, since bits-ui mounts every tab's content simultaneously and toggles only 'hidden'
+- [Phase 4]: WRK-01 no-remount property asserted via DOM node identity on the always-rendered heading, not an injected onMount spy
 
 ### Pending Todos
 
@@ -298,8 +302,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-30T00:32:02.994Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-08-30T00:55:30.877Z
+Stopped at: Completed 04-04-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

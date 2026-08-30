@@ -54,7 +54,7 @@
 
 ### Query Workbench
 
-- [ ] **WRK-01**: User can run `Impact` on a symbol and adjust traversal depth interactively
+- [x] **WRK-01**: User can run `Impact` on a symbol and adjust traversal depth interactively
 - [x] **WRK-02**: User can select multiple files and see what they affect
 - [x] **WRK-03**: User can run `Callers`/`Callees` with an adjustable result limit
 - [x] **WRK-04**: Workbench results render as structured, sortable tables
@@ -160,7 +160,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | NAV-02 | Phase 3 | Complete |
 | NAV-03 | Phase 3 | Complete |
 | NAV-04 | Phase 3 | Complete |
-| WRK-01 | Phase 4 | Pending |
+| WRK-01 | Phase 4 | Complete |
 | WRK-02 | Phase 4 | Complete |
 | WRK-03 | Phase 4 | Complete |
 | WRK-04 | Phase 4 | Complete |

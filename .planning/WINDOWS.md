@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 6
+open_count: 7
 waived_count: 2
 fixed_count: 15
-total_count: 23
-last_updated: 2026-08-29T03:30:28.701Z
+total_count: 24
+last_updated: 2026-08-30T00:53:19.859Z
 ---
 
 # Broken Windows Ledger
@@ -38,6 +38,7 @@ last_updated: 2026-08-29T03:30:28.701Z
 | 21 | 2 | deviation | web/package.json |  | typescript pinned to 6.0.3 (the version sv@0.17.0's own scaffold selected as compatible) rather than the plan's literal 5.9.3 pin — the 5.x-vs-7.x compatibility concern the plan flagged does not name 6.x, which is now the toolchain's own verified-compatible default | open |  | 2026-08-24T17:08:46.409Z |  |
 | 22 | 03 | deviation | web/src/lib/search.ts |  | Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope) | open |  | 2026-08-29T02:37:45.131Z |  |
 | 23 | 03 | stub | web/src/lib/components/browse/SourcePane.svelte |  | multi-def source-pane branch renders a placeholder text (no picker) — full disambiguation-picker rendering is deliberately deferred to plan 03-08, which already owns BRW-05 | fixed |  | 2026-08-29T03:05:42.794Z | 2026-08-29T03:30:28.701Z |
+| 24 | 04 | stub | web/src/routes/workbench/+page.svelte |  | Affected tab renders an explicit not-yet-wired placeholder — intentional, resolved by 04-06 per 04-04-PLAN.md's own scope (Impact/Callers/Callees only). | open |  | 2026-08-30T00:53:19.859Z |  |
 
 ````json
 [
@@ -316,6 +317,18 @@ last_updated: 2026-08-29T03:30:28.701Z
     "reason": "",
     "recorded_at": "2026-08-29T03:05:42.794Z",
     "resolved_at": "2026-08-29T03:30:28.701Z"
+  },
+  {
+    "id": 24,
+    "kind": "stub",
+    "phase": "04",
+    "file": "web/src/routes/workbench/+page.svelte",
+    "line": null,
+    "description": "Affected tab renders an explicit not-yet-wired placeholder — intentional, resolved by 04-06 per 04-04-PLAN.md's own scope (Impact/Callers/Callees only).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-30T00:53:19.859Z",
+    "resolved_at": null
   }
 ]
 ````
