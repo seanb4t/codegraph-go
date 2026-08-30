@@ -82,7 +82,7 @@ coverage:
     description: "Opening /health issues exactly one GetHealth call and renders, in document order, the worktree warning (when present), the trust verdict, then the numeric blocks; a GetHealth failure renders a named failure state while the verdict still renders"
     requirement: HLT-02
     verification:
-      - kind: component
+      - kind: unit
         ref: "web/tests/health-page.test.ts#HLT-02 — compareDocumentPosition proves health-verdict-stale precedes health-freshness; #one call — exactly one getHealth invocation, zero getStatus calls; #failure path — workbench-failure-server-error renders with health-verdict-ok still present and health-freshness absent"
         status: pass
       - kind: other
@@ -93,7 +93,7 @@ coverage:
     description: "A worktree mismatch renders WorktreeMismatchWarning with role=alert, both roots named, preceding the verdict; a clean repository renders NO such element — both directions asserted"
     requirement: HLT-03
     verification:
-      - kind: component
+      - kind: unit
         ref: "web/tests/health-page.test.ts#HLT-03 presence/order — role=alert, both roots in text, precedes health-verdict-ok; #HLT-03 absence — queryByTestId returns null for a nil worktreeMismatch"
         status: pass
     human_judgment: false
@@ -101,7 +101,7 @@ coverage:
     description: "HLT-03's 'impossible to miss' loudness is asserted by a distinct, loaded style hook where the test environment supports it, or an explicit documented fallback where it does not"
     requirement: HLT-03
     verification:
-      - kind: component
+      - kind: unit
         ref: "web/tests/health-page.test.ts#HLT-03 loudness — getComputedStyle was tried and found to resolve the unstyled jsdom default (no app.css loaded by this test file); falls back to a class-list-differs assertion between the warning and TrustVerdict's 'ok' branch, with the reason recorded in the test's own comment per the plan's documented fallback"
         status: pass
     human_judgment: false
@@ -120,7 +120,7 @@ coverage:
       - kind: unit
         ref: "web/tests/health-view.test.ts — all three snapshotAgreement outcomes (agree/differs/unknown) asserted, including a case where status.commit='known' but the SHAs genuinely match, proving the comparison reads commitSha and not the presence flag"
         status: pass
-      - kind: component
+      - kind: unit
         ref: "web/tests/health-page.test.ts#snapshot disagreement — health-snapshot-differs present with both the verdict and health-freshness still rendered when SHAs disagree; ABSENT when SHAs agree"
         status: pass
     human_judgment: false

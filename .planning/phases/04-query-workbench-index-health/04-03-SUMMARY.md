@@ -49,7 +49,7 @@ coverage:
   - id: D0
     description: "GetHealthResponse's field set and numbering, and its five design sub-decisions, were frozen by explicit maintainer approval before any codegen ran (D-02a one-way door)"
     verification:
-      - kind: human
+      - kind: manual_procedural
         ref: "Task 1 checkpoint (gate=blocking-human): maintainer reply \"Approve as proposed\" with all five sub-decisions answered individually, recorded verbatim in this SUMMARY's key-decisions"
         status: pass
     human_judgment: true
@@ -134,6 +134,7 @@ coverage:
       - kind: other
         ref: "cd web && pnpm check — 991 files, 0 errors, 0 warnings"
         status: pass
+    human_judgment: false
 
 duration: 70min
 completed: 2026-08-30

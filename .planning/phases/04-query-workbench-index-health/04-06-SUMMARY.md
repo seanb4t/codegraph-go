@@ -82,7 +82,7 @@ coverage:
     description: "A developer searches, adds several files as removable chips (de-duplicated, order-preserving), and the chip set round-trips through repeated file= URL parameters in both directions, including a path containing a comma"
     requirement: WRK-02
     verification:
-      - kind: component
+      - kind: unit
         ref: "web/tests/workbench-affected.test.ts (picker half) — 6/6 passed: append on select, de-duplication, remove-preserves-order with an accessible name naming the path, write-direction (chips -> file= entries in order), read-direction (file= entries -> chips in order, asserted separately), comma-in-path round trip"
         status: pass
       - kind: other
@@ -93,7 +93,7 @@ coverage:
     description: "Running Affected over the selected files renders affected_tests as a sortable table with the echoed files as a header summary preceding the table (never a column, never a second request); zero files selected issues no request and renders an explicit empty state; all four Workbench tabs are live"
     requirement: WRK-04
     verification:
-      - kind: component
+      - kind: unit
         ref: "web/tests/workbench-affected.test.ts (Affected half) — 8/8 passed: URL -> Affected rpc -> table with exactly one call; echoed files precede the table in document order and are absent from the <th> set (exactly ONE call recorded); GetStatus call count unchanged when adding a chip ('file' already in ROUTE_LOCAL_PARAMS, with a Browse positive control proving the exclusion is scoped); zero-chip empty state with zero requests; adding a chip issues a new request and replaces rows without remounting the route or calling goto; depth=9999 reaches the stub unbounded; Name-column sort ascending then descending; every WORKBENCH_MODES entry (iterated from the module) renders no not-yet-wired placeholder"
         status: pass
       - kind: other
