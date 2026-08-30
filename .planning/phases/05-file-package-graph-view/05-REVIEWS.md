@@ -1,7 +1,7 @@
 ---
 phase: 5
 reviewers: [codex]
-reviewed_at: 2026-08-30T13:53:52.000Z
+reviewed_at: 2026-08-30T14:21:45.000Z
 plans_reviewed: [05-01-PLAN.md, 05-02-PLAN.md, 05-03-PLAN.md, 05-04-PLAN.md, 05-05-PLAN.md, 05-06-PLAN.md, 05-07-PLAN.md]
 models:
   codex: "gpt-5.6-sol (reasoning=low)"
@@ -580,3 +580,242 @@ Not applicable — a single reviewer ran. Where the orchestrator's independent v
 went beyond Codex, the additional finding is recorded above under **Open — Actionable
 MEDIUM / LOW** rather than left as an open divergence. The orchestrator concurs with
 Codex's HIGH on evidence and with both of its non-HIGH findings.
+
+---
+
+# Cross-AI Plan Review — Phase 5 — Convergence Cycle 3
+
+Reviewed at 2026-08-30T14:21:45Z against the plan text at commit `0c6a151d`
+("docs(05): revise phase plans for cross-AI review cycle 2 — close H-1's hang path, define
+two-corpus assembly, repair a vacuous control"). Reviewer: Codex (`gpt-5.6-sol`,
+reasoning=low), source-grounded with repo access. Cycles 1 and 2 and the orchestrator's
+verification of them are preserved above, unmodified.
+
+**This was the last automatic convergence cycle.** Findings left open below escalate to the
+maintainer as a go/no-go decision.
+
+## Codex Review (cycle 3)
+
+## Summary
+
+The plan set is substantially improved and generally coherent. Cycle 2's fixes for locked
+deadlines, role-tagged corpus observations, the `filesymbols.go` control, and symmetric
+history-window guards are present and mostly discriminating. Plans 05-01, 05-02, 05-03,
+05-05, 05-06 and 05-07 are ready. One execution-blocking gap remains in 05-04: the live
+measurement wrapper has neither a specified browser-automation implementation nor coverage
+for browser setup/teardown operations outside the four measured actions. As written, the
+"every awaited browser operation" guarantee can pass its literal guards while the
+measurement still cannot run — or can hang before writing its artifact.
+
+## Cycle-2 Fix Verification
+
+Verified against the plan text AND, for every claim about repository state, against the
+source. Each fix was additionally checked for whether it DISCRIMINATES — whether the new
+guard would go red if the threat were open.
+
+| Cycle-2 finding | Status | Verification |
+|---|---|---|
+| **H-1 part 1** — deadlines locked before dispatch | **RESOLVED** | Five deadline values (`launchTimeoutMs` 30000, `navigationTimeoutMs` 30000, `seamReadyTimeoutMs` 60000, `samplerTimeoutMs` 30000, `sessionTimeoutMs` 600000) are written into `measurementProtocol` at `05-01-PLAN.md:284-306` and raised as **sub-decision 5** on the blocking human checkpoint (`05-01-PLAN.md:347-357`). They are locked in the SAME commit as the bars, and the lock commit is proven to predate any measurement by a positive-existence-then-absence chain (`test -f corpora/graph-render-threshold.json && test ! -e corpora/graph-render-observations.json`). D-10 safeguard 3 holds: no threshold or deadline value can be set after seeing results, and `05-04-PLAN.md` carries a prohibition against editing the threshold for any reason. |
+| **H-1 part 1** — does the 16-value check discriminate? | **RESOLVED** | Yes. The printed `locked protocol values: 16` is itself a constant (`nums.length`), but the discriminating work is done by four `process.exit(1)` branches: any missing or non-positive key; `seamReadyTimeoutMs <= timeToInteractiveMs`; `samplerTimeoutMs <= warmupMs + sampleDurationMs`; and `sessionTimeoutMs <= launch + coldReloads x (navigation + seamReady) + sampler`. The plan additionally requires the command be run against **three deliberately broken copies** written outside the repository, each rejected with a named reason, with all three messages pasted into `05-01-SUMMARY.md` (`05-01-PLAN.md:369`). That is a real RED demonstration, not a passing case only. |
+| **H-1 part 2** — every awaited operation races a deadline | **PARTIALLY RESOLVED — see H-1 (carried) below** | `withDeadline(promise, ms, label)` is specified with per-operation budgets and a strictly-wider backstop (`05-04-PLAN.md:304-312`), and the prohibition list forbids a bare await and explicitly rejects a single outer deadline as sufficient. But the coverage GUARD is `rg -c 'await +(browser\|page)\.'` reports 0 (`05-04-PLAN.md:406`), and the same task mandates injected `ops` (`05-04-PLAN.md:322-327`) — so the live path is expected to await `ops.*`, which the guard cannot see. Setup and teardown are never enumerated. |
+| **H-1 part 3** — the test is proven RED | **RESOLVED** | `runSession({ops, protocol, corpus, outputPath})` takes injected browser operations (`05-04-PLAN.md:230-237`); two tests drive never-settling promises and assert the artifact **EXISTS on disk** with `status: "measurement-failed"` and a reason naming the timed-out operation — not merely that a rejection occurred (`05-04-PLAN.md:232-237`, criterion at `:409`). Step (b3) requires the same two cases be re-run with `withDeadline` stubbed to a pass-through and to **FAIL**, then restored and confirmed green, with all three outputs pasted into `05-04-SUMMARY.md` (`05-04-PLAN.md:366-378`, `:408`). The plan states outright: "If the stubbed run PASSES, the test does not discriminate and this task is not done." |
+| **T-05-21** names both mechanisms | **RESOLVED** | The row now separates **the crash/throw path** (`finally` on settlement) from **the hang path** (a never-settling promise never reaches `finally`), states that cycle 1's fix closed the first while leaving the second open, and states that a `finally`-exists guard passed in both states (`05-04-PLAN.md:666`). The `finally` acceptance criterion carries an explicit "this covers the THROW path ONLY and is not sufficient on its own — do not read a green `finally` count as evidence about a hang." |
+| **M-1** two-corpus assembly | **RESOLVED** | The wrapper takes `--role binding\|additional`, `--repo`, `--sha`, `--out`; one invocation writes exactly one role-tagged raw file and never appends to, merges into, or overwrites another's output (`05-04-PLAN.md:349-362`). `mergeRawObservations` throws unless exactly one binding raw is present and cross-checks each file's stamped role against the flag it arrived under. `failedObservation(reason, metricKeys, {role, repo, sha})` is role-aware and is asserted **for the binding role AND the additional role** precisely so "a failed run of the second corpus must not fabricate a binding entry" (`05-04-PLAN.md:205-211`). A failed second corpus therefore yields a failed ADDITIONAL entry; there is no path by which it becomes the binding observation. |
+| **M-2** vacuous control repaired | **RESOLVED — and satisfiable, which is what failed last time** | The control now reads `C = commits-since-BASE + working-tree changes to internal/query/filesymbols.go` (`05-06-PLAN.md:302`). That file is in Task 2's own `<files>` list (`05-06-PLAN.md:243`) and is CREATED by Task 2 step (b) (`:277`), so `C >= 1` is reachable — both before the task commits (working tree) and after (commit log). The previous control pointed at `internal/uiserver/`, a tree Task 2 does not touch, so it collapsed to 0 under either reading. Both sides of the criterion use the same machinery over the same window, so it reads identically before and after commit. **No new vacuity was introduced by this repair.** |
+| **L-1** 16-key alternation | **RESOLVED** | The no-hard-coded-defaults alternation now covers all sixteen locked values including all five deadlines (`05-04-PLAN.md:404`), filtered to non-comment lines, positive-controlled two ways (`measurementProtocol` at least 1 and `protocol.` at least 4). More importantly the plan states the grep is "a floor, not the guard" and pins the real guard on the `sessionConfig` SENTINEL test — a protocol whose every value is distinct must produce a config whose every value differs correspondingly, field by field. A hard-coded literal cannot track a mutated protocol; this does not decay as the protocol grows. |
+| **L-2** symmetric window guards | **RESOLVED** | Both the 05-04 threshold-untouched guard (`05-04-PLAN.md:412`) and the 05-06 truncate.go guard (`05-06-PLAN.md:302`) now compute the zero side and the control side with identical machinery over an identical window — commits since a named base PLUS `git status --porcelain`. A broken range, a mistyped path, or a task that did no work collapses the control to 0 and fails the criterion rather than passing vacuously. The 05-03 elkjs direct-vs-transitive accounting (`05-03-PLAN.md:317`) is likewise positive-controlled. |
+
+## Standing Checks (re-run against the revised text)
+
+| Check | Result |
+|---|---|
+| Rule `84d1gfpywd` — every upper bound carries a non-zero floor | **PASS.** Every ceiling assertion is paired: the guava response is above 1,000,000 and below 16,777,216 (`05-02-PLAN.md:381`, `:429`); the capped `FileSymbols` response is above 0 bytes and below `transportSendMaxBytes` (`05-06-PLAN.md:339`, `:397`, `:411`); `frameSampleCount` has a floor of 60 (`05-04-PLAN.md:537`). `05-01-PLAN.md:57` carries the rule as an explicit prohibition. No bare upper bound found. |
+| `go test -run` exits 0 on a zero-match pattern | **PASS.** All six `-run`-scoped verify commands count `^--- PASS` lines with a non-zero floor: `-ge 9`, `-ge 6`, `-ge 3`, `-ge 5`, `-ge 7`, `-ge 10`. The frontend `pnpm test --` filters likewise count check-mark lines with floors (`-ge 6`, `-ge 7`, `-ge 12`, `-ge 15`, `-ge 20`). Each is stated as "exits 0 AND reports at least N — both, because a filtered run exits 0 when the filter matches nothing." |
+| `GOTOOLCHAIN=go1.26.5` on every local Go command; no `go mod tidy` | **PASS.** All six Go verify commands carry the prefix; no `go mod tidy` appears in any plan. |
+| `mutatingVerbs` never modified; `wantUIServiceMethods` may gain entries | **PASS.** Both 05-02 and 05-06 carry a MUST NOT prohibition naming the nineteen substrings and directing a rename on collision (`05-02-PLAN.md:44`, `05-06-PLAN.md:47`), plus in-task instructions not to add an exception, allowlist or skip (`05-02-PLAN.md:280`, `05-06-PLAN.md:364`). `wantUIServiceMethods` gains one entry per new RPC with its count literal and `Fatalf` format string updated together. |
+| D-08 exclusion tested against THIS repository's own index | **PASS, and non-skippable.** `TestFileGraphAgainstThisRepositoryIndex` asserts 572 nodes and 1,057 distinct file pairs against `.codegraph/store` (`05-01-PLAN.md:430`). Task 2's behavior block names exactly nine tests and the verify floor is `-ge 9`, so a skipped own-index test drops the PASS count to 8 and fails the criterion — the gate cannot be satisfied without actually running it. Confirmed against source: `internal/indexer/resolve.go:21-25` declares the synthetic `"package"` kind and `:185-217` constructs it with no `FilePath`; `.codegraph/store` is present in this working tree. |
+| Threat IDs — definition rows, distinctness, duplicates | **CLEAN, with a count correction.** Parsed from `<threat_model>` blocks across all seven plans: **38 definition rows, 38 distinct, zero duplicates**, contiguous `T-05-01` through `T-05-38` with no gaps. The set of IDs *referenced* anywhere in the plans is exactly the set defined — no dangling reference, no orphan definition. The brief's figure of 39 is one high; nothing in this revision added or renumbered a threat, and the set is internally consistent as it stands. |
+
+## Concerns
+
+### HIGH — carried, PARTIALLY RESOLVED
+
+**H-1 (part 2 only) — the deadline-coverage guard cannot see an unwrapped injected
+operation, and setup/teardown are never enumerated.** `05-04-PLAN.md:304-312`, `:322-327`,
+`:406`.
+
+Parts 1 and 3 of H-1 are fully resolved (see the table above). Part 2 is not.
+
+The plan mandates `runSession({ops, protocol, corpus, outputPath})` with browser operations
+injected as an `ops` object — which is exactly what makes part 3's RED demonstration
+possible. But it then asserts coverage with a guard over the *direct* handles: a
+non-comment-filtered `rg -c 'await +(browser|page)\.'` must report 0, and a
+non-comment-filtered `rg -c 'withDeadline\('` must report at least 5.
+
+Three ways this passes while the symptom persists:
+
+1. **`await ops.*` is invisible to it.** With operations injected, the live path awaits
+   `ops.launch()`, `ops.navigate()`, `ops.seamReady()`, `ops.sample()` — never
+   `await page.goto(...)`. The zero is satisfied by construction, not by coverage. The
+   positive control (`rg -c 'browser|page'` at least 2) matches the words anywhere,
+   including in `const browser = await ops.launch()` and in comments, so it does not
+   establish that a direct-handle await was ever the shape at risk.
+2. **The at-least-5 floor absorbs one missing call site.** `rg -c 'withDeadline\('` counts
+   the helper's own `export function withDeadline(` declaration line. Five inner sites plus
+   a declaration is six; a script missing the frame-sampler deadline entirely still counts
+   five and passes.
+3. **Only two of the four inner operations get a never-settling test.** The plan specifies
+   a never-settling `ops.launch` and a never-settling `ops.seamReady` (`:236`). Navigation
+   and the frame sampler are named in prose but never driven. An unwrapped navigation or
+   sampler is caught by neither the grep nor a test.
+
+For an unwrapped *inner* operation the `sessionTimeoutMs` backstop still fires and the
+artifact is still written — the consequence there is a reason text naming the session
+instead of the operation, which the plan itself calls "most of the artifact's value." That
+alone would be MEDIUM. **What makes this HIGH is teardown.** The plan never mentions page
+or context creation, close, teardown, or cleanup anywhere — a case-insensitive search for
+those words over `05-04-PLAN.md` returns only "closed"/"fail-closed" in unrelated prose.
+Nothing orders the observation write BEFORE cleanup. A `finally` that awaits a cleanup
+operation and only then writes the file hangs on a wedged browser and leaves **no artifact
+at all** — the exact T-05-21 outcome — while every literal guard stays green: the
+`withDeadline` count is at least 5, the direct-handle await count is 0, the `finally` count
+is at least 1, and both never-settling tests pass because they inject `launch` and
+`seamReady`, not `close`.
+
+That is the canonical shape this cycle was told to hunt for: **the fix satisfies its own
+literal check while the symptom persists.**
+
+*Minimal change:* (a) enumerate the COMPLETE `ops` interface in `05-04-PLAN.md` Task 1,
+including page/context creation and teardown; (b) state that the raw observation is written
+BEFORE any cleanup await, and that cleanup is best-effort and separately deadlined; (c)
+replace the handle-scoped grep with one over the injected surface — a non-comment-filtered
+`rg -c 'await +(browser|page|ops)\.'` reporting 0, positive-controlled by counting
+`withDeadline(ops.` call sites; (d) raise the `withDeadline` floor to at least 6 and state
+that the declaration line is one of them; (e) add never-settling `runSession` cases for
+`ops.navigate`, `ops.sample` AND `ops.close`, the last asserting the artifact exists anyway.
+
+### HIGH — new
+
+**H-4 — 05-04's blocking measurement has no browser-automation mechanism in scope.**
+`web/package.json:17-41`, `05-04-PLAN.md:1-13`, `:134`, `:393`.
+
+`web/scripts/graph-measure.mjs` must launch and drive a real browser at corpus scale. No
+browser-automation driver exists in this repository: `web/package.json` carries Vitest and
+jsdom and nothing else that can drive a browser; a case-insensitive search for
+playwright/puppeteer over the repo (excluding `.planning/`) matches only
+`web/pnpm-lock.yaml`, and no such package entry is present there either. 05-04's
+`files_modified` and its Task 1 `<files>` list neither name `web/package.json` nor
+`web/pnpm-lock.yaml`, and the plan explicitly forbids adding a package.json script entry
+(`:393`). The prohibition list closes the escape hatch too: "MUST NOT drive the browser by
+hand, by ad-hoc agent-browser steps, or by any path that can end without writing a raw
+observation."
+
+So the plan requires a real browser session, forbids every improvised way of getting one,
+and names no sanctioned one. An executing agent reaching Task 1 either stalls, or silently
+adds a driver dependency — which would bypass the supply-chain discipline 05-03 establishes
+for exactly this class of change: a blocking human approval checkpoint, exact version
+pinning in `web/package.json`, and a threat-model row tracing "npm registry to
+web/package.json, pnpm-lock.yaml, the committed web/build tree, and thence the signed
+binary" (`05-03-PLAN.md:190`, `:212-218`, `:485`, `:522-523`). A devDependency for a
+one-shot script does not reach the signed binary, but it does reach the developer machine
+and the lockfile, and 05-03's own precedent is that such an addition is a decision, not an
+implementation detail.
+
+This is execution-blocking rather than cosmetic because 05-04 is `autonomous: false` and
+D-10 gates 05-05, 05-06 and 05-07 on its recorded verdict — the whole back half of the
+phase waits behind a task that cannot start.
+
+*Minimal change:* in `05-04-PLAN.md`, either (a) add the driver as a pinned devDependency
+with `web/package.json` and `web/pnpm-lock.yaml` in Task 1's `<files>`, a blocking approval
+sub-decision mirroring 05-03 Task 1, and a threat-model row; or (b) name an existing
+external executable (for example a system Chrome/Chromium driven over CDP) plus a checked
+precondition and a recorded version probe, and state that the browser identity the protocol
+already requires comes from that probe. Either way the choice must be written down before
+Task 1 runs.
+
+### MEDIUM — new, actionable
+
+**M-3 — 05-07 specifies no handling for an in-flight `FileSymbols` response that resolves
+after its file is collapsed or the route unmounts.** `05-07-PLAN.md` (absent throughout);
+contrast `05-03-PLAN.md:34`, `:424-430`.
+
+05-03 established that a pending request outliving its consumer is a distinct lifecycle
+worth asserting, and pins it as two separate cases: unmount-while-pending creates zero
+renderer instances and applies zero elements; unmount-after-mount destroys exactly one.
+05-07 introduces a SECOND async fetch path — one `FileSymbols` request per expanded file —
+and carries none of that discipline forward: a case-insensitive search for
+unmount/in-flight/stale/abort over `05-07-PLAN.md` returns nothing. The three-click sequence
+(expand, collapse, re-expand from cache) assumes each RPC resolves before the next click. A
+response arriving after its file was collapsed would add child nodes under a collapsed
+parent; one arriving after route unmount would call into a destroyed Cytoscape instance and
+throw. Neither is tested and neither is prohibited.
+
+*Minimal change:* add one behavior case to `05-07-PLAN.md` Task 1 — a `FileSymbols`
+response that resolves after its file has been collapsed (and after the route has
+unmounted) applies zero elements and constructs no children — with a matching acceptance
+criterion, mirroring 05-03's two-lifecycle split.
+
+## Suggestions — recorded, NOT gates
+
+These are refinements the reviewer offered. The orchestrator judges none of them
+execution-blocking, and none is required for these plans to be executable. They are recorded
+here so they are not lost, and are explicitly NOT proposed as PLAN.md changes.
+
+- 05-01: use the real Pebble reader or an explicitly concurrency-safe fake in the concurrent
+  `FileGraph` test, so `-race` validates the intended layer.
+- 05-03: declare the measurement global's TypeScript type explicitly rather than casting
+  `window`; consider recording whether the seam's node/edge counts include directory
+  compound parents.
+- 05-05: cycle-focus controls should be keyboard reachable and announce "cycle N of M" to
+  assistive technology. The plan implies but does not test this.
+- 05-06: prove "validation occurs before scanning" with a fake reader whose `IterateNodes`
+  fails the test if called — stronger than relying on a path whose contents would not match.
+- 05-07: measure unaffected-node displacement by stable node id and Euclidean distance after
+  the completed `layoutstop`, not immediately after element insertion.
+
+## Risk Assessment
+
+**MEDIUM-HIGH overall, concentrated entirely in 05-04.** Six of seven plans are LOW or
+MEDIUM risk and ready to execute. 05-04 is the phase's blocking gate and carries both open
+HIGH findings; because D-10 gates waves 5 through 7 on its verdict, its risk is the phase's
+risk. Both open findings are narrow and locally fixable — neither reopens a settled
+decision, changes the renderer stack, or touches D-10's authorized wave ordering.
+
+## Consensus Summary
+
+One reviewer ran (Codex, source-grounded with repo access), so this section records the
+orchestrator's independent verification alongside it rather than a multi-reviewer consensus.
+
+### Agreed Strengths
+
+- H-1 parts 1 and 3 are genuinely closed. The deadlines are locked as part of the blocking
+  human decision before any measurement exists, the coherence checks discriminate, and the
+  RED demonstration is required in both the threshold check (three broken artifacts) and the
+  deadline test (stubbed pass-through must fail).
+- M-1's two-corpus split is structural rather than procedural: role is stamped per file, the
+  merge refuses any set without exactly one binding raw, and a failed additional corpus is
+  incapable of producing a binding entry.
+- M-2's repair introduced no new vacuity — the replacement control points at a file the task
+  actually creates, verified against Task 2's own `<files>` list.
+- Every `-run`-scoped test criterion counts `--- PASS` lines with a non-zero floor, and the
+  D-08 own-index regression test is made non-skippable by the floor.
+
+### Agreed Concerns
+
+- **05-04 Task 1 is the only unready plan**, for two related reasons: no browser driver is in
+  scope (H-4), and the deadline-coverage guard cannot see the injected operations it is
+  supposed to police, with teardown unenumerated (H-1 part 2). Codex reported these as one
+  HIGH; the orchestrator separates them because they require different fixes and either can
+  be repaired without the other.
+
+### Divergent Views
+
+None material. The orchestrator's independent verification confirmed Codex's HIGH on
+evidence and extended it with three specific mechanisms Codex did not name (the at-least-5
+`withDeadline` floor absorbing a missing call site because the declaration line counts; only
+two of four inner operations receiving a never-settling test; the write-before-cleanup
+ordering being unspecified). The orchestrator additionally raised M-3, which Codex offered
+only as a suggestion, on the grounds that 05-03 already treats the same lifecycle as an
+asserted requirement and 05-07 silently drops it. The orchestrator corrects the threat-ID
+count from 39 to 38 — the set is contiguous, distinct and complete, so this is a counting
+correction and not a finding.
