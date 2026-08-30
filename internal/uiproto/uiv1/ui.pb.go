@@ -2743,6 +2743,17 @@ type GetHealthResponse struct {
 	// edges_by_kind mirrors StatusResult.EdgesByKind.
 	EdgesByKind map[string]int64 `protobuf:"bytes,11,rep,name=edges_by_kind,json=edgesByKind,proto3" json:"edges_by_kind,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	// pending_changes mirrors StatusResult.PendingChanges.
+	//
+	// NOTE: inert placeholder — internal/query/status.go's StatusResult
+	// composite literal never assigns PendingChanges, so this is always
+	// the zero value {0,0,0} on every response (see status.go:34's own
+	// mapping-table entry and files_status_test.go's "PendingChanges
+	// stays an inert placeholder" subtest, which locks it). CR-02
+	// (04-REVIEW.md) found the health page rendering this as if it were
+	// a live trust signal; the fix removed that rendering rather than
+	// populating this field. Computing a real value is engine work
+	// (re-running Sync's diff at Status() time) — do not surface this
+	// field again until that lands.
 	PendingChanges *PendingChanges `protobuf:"bytes,12,opt,name=pending_changes,json=pendingChanges,proto3" json:"pending_changes,omitempty"`
 	// index_health mirrors StatusResult.Index.
 	IndexHealth *IndexHealth `protobuf:"bytes,13,opt,name=index_health,json=indexHealth,proto3" json:"index_health,omitempty"`

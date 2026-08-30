@@ -209,3 +209,19 @@ describe('snapshot disagreement: both directions asserted', () => {
 		expect(screen.queryByTestId('health-snapshot-differs')).toBeNull();
 	});
 });
+
+describe('CR-02: the fabricated always-zero "Pending changes" tally is never rendered', () => {
+	it('renders no pending-changes element or text even when the response carries a populated pendingChanges value — internal/query/status.go never assigns this field for real, so displaying it (even non-zero) would present engine-fabricated data as a live trust signal', async () => {
+		mountHealth(() =>
+			Promise.resolve(
+				healthResponse({
+					pendingChanges: { added: 3, modified: 2, removed: 1 } as never
+				})
+			)
+		);
+
+		await waitFor(() => expect(screen.getByTestId('health-freshness')).toBeInTheDocument());
+		expect(screen.queryByTestId('health-pending-changes')).toBeNull();
+		expect(screen.queryByText(/Pending changes/)).toBeNull();
+	});
+});

@@ -1544,6 +1544,17 @@ export type GetHealthResponse = Message<"codegraph.ui.v1.GetHealthResponse"> & {
   /**
    * pending_changes mirrors StatusResult.PendingChanges.
    *
+   * NOTE: inert placeholder — internal/query/status.go's StatusResult
+   * composite literal never assigns PendingChanges, so this is always
+   * the zero value {0,0,0} on every response (see status.go:34's own
+   * mapping-table entry and files_status_test.go's "PendingChanges
+   * stays an inert placeholder" subtest, which locks it). CR-02
+   * (04-REVIEW.md) found the health page rendering this as if it were
+   * a live trust signal; the fix removed that rendering rather than
+   * populating this field. Computing a real value is engine work
+   * (re-running Sync's diff at Status() time) — do not surface this
+   * field again until that lands.
+   *
    * @generated from field: codegraph.ui.v1.PendingChanges pending_changes = 12;
    */
   pendingChanges?: PendingChanges | undefined;

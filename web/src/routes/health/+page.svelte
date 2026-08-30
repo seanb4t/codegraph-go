@@ -89,12 +89,6 @@
 				Schema version: <span data-testid="health-schema-version">{freshness.schemaVersion}</span>
 			</p>
 			<p>Re-index recommended: {freshness.reindexRecommended ? 'yes' : 'no'}</p>
-			{#if pageState.response.pendingChanges}
-				<p data-testid="health-pending-changes">
-					Pending changes: {pageState.response.pendingChanges.added} added, {pageState.response
-						.pendingChanges.modified} modified, {pageState.response.pendingChanges.removed} removed
-				</p>
-			{/if}
 			{#if freshness.snapshotAgreement === 'differs'}
 				<p
 					class="mt-2 font-semibold text-amber-700"

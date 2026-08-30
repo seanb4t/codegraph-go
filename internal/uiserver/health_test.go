@@ -163,14 +163,31 @@ func TestGetHealthProjectsStatusResult(t *testing.T) {
 		}
 	}
 
+	// pending_changes is a documented inert placeholder — status.go's
+	// StatusResult composite literal never assigns PendingChanges, and
+	// files_status_test.go's "PendingChanges stays an inert placeholder"
+	// subtest locks that as an engine-level invariant. Comparing against
+	// want.PendingChanges (itself always the zero value) would be
+	// tautological: it can never distinguish "correctly wired real
+	// data" from "correctly wired always-zero placeholder", which is
+	// exactly the gap CR-02 (04-REVIEW.md) found — this RPC put the
+	// placeholder on the wire and the web page rendered it as if it
+	// were live. Asserting the literal known-zero shape here, rather
+	// than mirroring whatever want happens to hold, makes this test
+	// fail the moment either side stops being zero — the wire mapping
+	// silently starts fabricating a non-zero value, or the engine
+	// starts computing a real one without this test being updated to
+	// match — either of which is a case this test must not pass
+	// silently through.
 	pc := got.GetPendingChanges()
 	if pc == nil {
 		t.Fatal("pending_changes = nil, want a populated message")
 	}
-	if int(pc.GetAdded()) != want.PendingChanges.Added ||
-		int(pc.GetModified()) != want.PendingChanges.Modified ||
-		int(pc.GetRemoved()) != want.PendingChanges.Removed {
-		t.Errorf("pending_changes = %+v, want %+v", pc, want.PendingChanges)
+	if want.PendingChanges.Added != 0 || want.PendingChanges.Modified != 0 || want.PendingChanges.Removed != 0 {
+		t.Fatalf("test fixture assumption broken: eng.Status's PendingChanges is no longer the documented all-zero placeholder (%+v) — update this test's expectations deliberately, not silently", want.PendingChanges)
+	}
+	if pc.GetAdded() != 0 || pc.GetModified() != 0 || pc.GetRemoved() != 0 {
+		t.Errorf("pending_changes = %+v, want the documented all-zero placeholder {0,0,0}", pc)
 	}
 
 	ih := got.GetIndexHealth()
