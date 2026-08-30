@@ -980,17 +980,84 @@ func (s *uiService) GetHealth(ctx context.Context, _ *connect.Request[uiv1.GetHe
 	return connect.NewResponse(resp), nil
 }
 
-// FileGraph is a MINIMAL placeholder, added here in plan 05-02 Task 2's
-// own commit solely so *uiService keeps satisfying the regenerated
-// uiv1connect.UIServiceHandler interface — Go requires every method to
-// be implemented for the package to build at all, and Task 2's own file
-// list does not include this file, but the interface it regenerates
-// unconditionally does (the identical Rule 3 blocking-issue precedent
-// 04-03's Task 2 recorded for GetHealth). Returns connect.CodeUnimplemented
-// rather than a fabricated response, deliberately, so Task 3's
-// filegraph_test.go RED phase observes real, honest "unimplemented"
-// failures against this placeholder rather than a compile error. Task 3
-// REPLACES this placeholder with the real handler.
-func (s *uiService) FileGraph(_ context.Context, _ *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("FileGraph: not yet implemented (plan 05-02 Task 3)"))
+// fileGraphToProto maps internal/query.FileGraphResult onto
+// uiv1.FileGraphResponse field-for-field, mirroring healthToProto's
+// convention — a named mapper, never an inline literal at the handler
+// call site, so the mapping cannot drift from its source silently. The
+// field set and numbering were frozen at the 05-02 Task 1 maintainer
+// checkpoint (approve-as-proposed, D-02a one-way door).
+func fileGraphToProto(result query.FileGraphResult) *uiv1.FileGraphResponse {
+	nodes := make([]*uiv1.FileGraphNode, len(result.Nodes))
+	for i, n := range result.Nodes {
+		nodes[i] = fileGraphNodeToProto(n)
+	}
+	edges := make([]*uiv1.FileGraphEdge, len(result.Edges))
+	for i, e := range result.Edges {
+		edges[i] = fileGraphEdgeToProto(e)
+	}
+	return &uiv1.FileGraphResponse{
+		Nodes:                     nodes,
+		Edges:                     edges,
+		ExcludedPackageNodeCount:  result.ExcludedPackageNodes,
+		ExcludedSelfEdgeCount:     result.ExcludedSelfEdges,
+		ExcludedContainsEdgeCount: result.ExcludedContainsEdges,
+		CycleCount:                int32(result.CycleCount),
+	}
+}
+
+// fileGraphNodeToProto maps one internal/query.FileGraphNode onto its
+// uiv1 wire projection, field-for-field — one obvious per-element
+// mapping function rather than an inline loop body inside
+// fileGraphToProto's response literal.
+func fileGraphNodeToProto(n query.FileGraphNode) *uiv1.FileGraphNode {
+	return &uiv1.FileGraphNode{
+		Path:        n.Path,
+		Language:    n.Language,
+		SymbolCount: n.SymbolCount,
+		CycleId:     int32(n.CycleID),
+	}
+}
+
+// fileGraphEdgeToProto maps one internal/query.FileGraphEdge onto its
+// uiv1 wire projection, field-for-field — one obvious per-element
+// mapping function rather than an inline loop body inside
+// fileGraphToProto's response literal. KindCounts is passed through
+// unchanged: it is already the sparse map (a kind with zero observed
+// edges is absent, never present with value 0) FileGraphEdge's own
+// comment documents.
+func fileGraphEdgeToProto(e query.FileGraphEdge) *uiv1.FileGraphEdge {
+	return &uiv1.FileGraphEdge{
+		SourceFile: e.SourceFile,
+		TargetFile: e.TargetFile,
+		KindCounts: e.KindCounts,
+		TotalCount: e.TotalCount,
+		InCycle:    e.InCycle,
+	}
+}
+
+// FileGraph answers internal/query.Engine.FileGraph()'s file-granularity
+// dependency rollup over the wire (ENG-03, GRF-02, GRF-04) for the
+// /graph view. Uses the ORDINARY withEngine shape — Callers/Callees/
+// Files/GetHealth's convention — NOT GetStatus's openEngine-direct
+// degrade-and-answer shape: GetStatus's own doc comment records that
+// shape as a single deliberate exception justified by partial
+// availability, and FileGraph has no such requirement, so an unopenable
+// store is an ordinary withEngine error here. The request's path field
+// is deliberately ignored (05-02 Task 1 checkpoint): it is declared for
+// a future milestone and ignored by this version's handler, exactly as
+// GetHealthRequest.path already is.
+func (s *uiService) FileGraph(ctx context.Context, _ *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error) {
+	var resp *uiv1.FileGraphResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.FileGraph()
+		if err != nil {
+			return err
+		}
+		resp = fileGraphToProto(result)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
 }
