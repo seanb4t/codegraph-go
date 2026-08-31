@@ -44,6 +44,16 @@ import (
 // wire for the /graph view. It is a read-only verb — it performs no
 // network operation and mutates nothing — and belongs in this read set
 // for exactly the same reason the other eleven do.
+// UPDATED at plan 05-06: FileSymbols (GRF-03) is the thirteenth read-only
+// rpc, added additively to internal/uiproto/uiv1/ui.proto's `service
+// UIService` block. It projects internal/query.Engine.FileSymbols's
+// per-file symbol enumeration — ordered, capped and counted — onto the
+// wire, separately from GetNodeDetail (whose file mode carries a path and
+// a source blob only, and does not enumerate symbols) so that every-
+// navigation message stays cheap (D-01 precedent). It is a read-only
+// verb — it performs no network operation and mutates nothing — and
+// belongs in this read set for exactly the same reason the other twelve
+// do.
 var wantUIServiceMethods = map[string]struct{}{
 	"GetStatus":     {},
 	"Search":        {},
@@ -57,13 +67,14 @@ var wantUIServiceMethods = map[string]struct{}{
 	"GetPermalink":  {},
 	"GetHealth":     {},
 	"FileGraph":     {},
+	"FileSymbols":   {},
 }
 
 // TestUIServiceMethodSetIsExactlyTheReadSet reflects over the generated
 // uiv1connect.UIServiceHandler interface — the machine-readable method
 // inventory a mutating rpc would have to appear in before it could ever
 // be dispatched — and asserts the observed method-name set is EXACTLY
-// wantUIServiceMethods: same length (12, as of plan 05-02's FileGraph)
+// wantUIServiceMethods: same length (13, as of plan 05-06's FileSymbols)
 // AND same membership. A negative-only guard ("no method name contains a
 // write verb") passes vacuously the moment its verb list stops matching
 // a newly-added verb; this positive set-equality guard instead fails in
@@ -76,8 +87,8 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 		got[typ.Method(i).Name] = struct{}{}
 	}
 
-	if len(got) != 12 {
-		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 12: %v", len(got), got)
+	if len(got) != 13 {
+		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 13: %v", len(got), got)
 	}
 	if len(got) != len(wantUIServiceMethods) {
 		t.Fatalf("observed method set size %d != fixture size %d — the fixture itself is stale", len(got), len(wantUIServiceMethods))
@@ -208,6 +219,17 @@ const uiProtoFieldFixtureLenAtPlan0403 = uiProtoFieldFixtureLenAtPlan0305 + 28
 // 03-05, 04-03).
 const uiProtoFieldFixtureLenAtPlan0502 = uiProtoFieldFixtureLenAtPlan0403 + 16
 
+// uiProtoFieldFixtureLenAtPlan0506 EXTENDS uiProtoFieldFixtureLenAtPlan0502
+// by exactly 4 (plan 05-06, GRF-03, the thirteenth rpc FileSymbols):
+// FileSymbolsRequest's one field (path) and FileSymbolsResponse's three
+// (symbols, total_count, truncated) — both new messages, additive from
+// field 1 on each since both are new. FileSymbolsResponse.symbols reuses
+// the EXISTING shared Node message rather than a new symbol shape, so no
+// entry is added for Node itself. Declared in terms of the prior
+// constant, never as a bare literal, mirroring the established
+// chained-extension pattern (01-10, 01-11, 03-05, 04-03, 05-02).
+const uiProtoFieldFixtureLenAtPlan0506 = uiProtoFieldFixtureLenAtPlan0502 + 4
+
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
 // the wave that completes GetNodeDetail and Explore). Per the corrected
@@ -240,6 +262,12 @@ const uiProtoFieldFixtureLenAtPlan0502 = uiProtoFieldFixtureLenAtPlan0403 + 16
 // this plan's Task 1 blocking-human checkpoint (approve-as-proposed)
 // before task proto:gen ran. Every entry written by an earlier plan
 // still resolves unchanged after this extension.
+//
+// Plan 05-06 (GRF-03, dated 2026-08-31) EXTENDS this fixture with
+// FileSymbolsRequest and FileSymbolsResponse — the thirteenth rpc's two
+// new messages, frozen at this plan's Task 1 blocking-human checkpoint
+// (approve-as-proposed) before task proto:gen ran. Every entry written
+// by an earlier plan still resolves unchanged after this extension.
 var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"Node", "id", 1},
 	{"Node", "kind", 2},
@@ -420,6 +448,12 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"FileGraphResponse", "excluded_self_edge_count", 4},
 	{"FileGraphResponse", "excluded_contains_edge_count", 5},
 	{"FileGraphResponse", "cycle_count", 6},
+	// Plan 05-06's four — see uiProtoFieldFixtureLenAtPlan0506's own
+	// doc comment for the arithmetic.
+	{"FileSymbolsRequest", "path", 1},
+	{"FileSymbolsResponse", "symbols", 1},
+	{"FileSymbolsResponse", "total_count", 2},
+	{"FileSymbolsResponse", "truncated", 3},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -446,8 +480,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0502 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0502 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0502)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0506 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0506 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0506)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")
