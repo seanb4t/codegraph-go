@@ -579,3 +579,119 @@ describe('route: file tap expand / collapse / re-expand (Task 2)', () => {
 		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
 	});
 });
+
+// --- Task 2 (continued): the position-displacement finding (review M-9) ---
+//
+// A mock's own arbitrary index-based positions (wrapNode above) are not a
+// meaningful measurement of a real layout's displacement — this section
+// exercises createFileGraphRenderer directly against a REAL headless
+// cytoscape+elk instance, mirroring web/tests/graph-expansion.test.ts's own
+// "the renderer (real headless cytoscape, no DOM)" section, specifically to
+// produce the actual number this plan owes Phase 6's LIV-04: re-running the
+// whole layered layout after an expansion MAY move unrelated nodes (an
+// ACCEPTED consequence of D-04's in-place expansion, not asserted away
+// here) — this measures how many moved and by how much, rather than
+// asserting they did not.
+describe('the renderer (real headless cytoscape, no DOM): position-displacement finding', () => {
+	async function realRendererModule() {
+		const { default: realCytoscape } = await vi.importActual<{
+			default: typeof import('cytoscape');
+		}>('cytoscape');
+		const { default: realElk } = await vi.importActual<typeof import('cytoscape-elk')>('cytoscape-elk');
+		realCytoscape.use(realElk);
+		const mod = await vi.importActual<typeof import('../src/lib/components/graph/GraphCanvas.svelte')>(
+			'../src/lib/components/graph/GraphCanvas.svelte'
+		);
+		return { realCytoscape, createFileGraphRenderer: mod.createFileGraphRenderer };
+	}
+
+	it('measures how many unaffected nodes move, and the largest displacement, when add() re-runs the layout after a file expansion', async () => {
+		const { realCytoscape, createFileGraphRenderer } = await realRendererModule();
+
+		// Three collapsed directories, each with one file, plus a fourth
+		// (dirD/target.go) that is the one about to be expanded with a
+		// symbol child. dirA/dirB/dirC's own file nodes are the "unaffected"
+		// nodes this test tracks identity, parent, and position for.
+		const elementsA = [
+			{ data: { id: 'dirA', isDirectory: true } },
+			{ data: { id: 'dirA/a.go', isDirectory: false, parent: 'dirA' } },
+			{ data: { id: 'dirB', isDirectory: true } },
+			{ data: { id: 'dirB/b.go', isDirectory: false, parent: 'dirB' } },
+			{ data: { id: 'dirC', isDirectory: true } },
+			{ data: { id: 'dirC/c.go', isDirectory: false, parent: 'dirC' } },
+			{ data: { id: 'dirD', isDirectory: true } },
+			{ data: { id: 'dirD/target.go', isDirectory: false, parent: 'dirD' } }
+		];
+		const unaffectedIds = ['dirA', 'dirA/a.go', 'dirB', 'dirB/b.go', 'dirC', 'dirC/c.go'];
+
+		const cy = realCytoscape({ headless: true, elements: elementsA });
+		const waiters: Array<() => void> = [];
+		function nextSettle() {
+			return new Promise<void>((resolve) => waiters.push(resolve));
+		}
+		const renderer = createFileGraphRenderer({
+			cy,
+			requestIssuedAt: performance.now(),
+			onMetrics: () => {},
+			onGeometry: () => waiters.shift()?.()
+		});
+
+		renderer.start();
+		await nextSettle();
+
+		const before = new Map(
+			cy.nodes().map((n: { id: () => string; position: () => { x: number; y: number }; data: (k: string) => unknown }) => [
+				n.id(),
+				{ pos: n.position(), parent: n.data('parent') }
+			])
+		);
+		for (const id of unaffectedIds) {
+			expect(before.has(id)).toBe(true);
+		}
+
+		renderer.add([
+			{
+				data: {
+					id: 'symbol dirD/target.go Handler',
+					isDirectory: false,
+					isSymbol: true,
+					kind: 'function',
+					startLine: 1,
+					label: 'Handler',
+					parent: 'dirD/target.go'
+				}
+			}
+		]);
+		await nextSettle();
+
+		const after = new Map(
+			cy.nodes().map((n: { id: () => string; position: () => { x: number; y: number }; data: (k: string) => unknown }) => [
+				n.id(),
+				{ pos: n.position(), parent: n.data('parent') }
+			])
+		);
+
+		// IDENTITY and CONTAINMENT are preserved regardless of position —
+		// this is asserted, not merely measured.
+		let moved = 0;
+		let maxDisplacement = 0;
+		for (const id of unaffectedIds) {
+			const b = before.get(id)!;
+			const a = after.get(id);
+			expect(a).toBeDefined();
+			expect(a!.parent).toBe(b.parent);
+			const d = Math.hypot(a!.pos.x - b.pos.x, a!.pos.y - b.pos.y);
+			if (d > 0.5) {
+				moved++;
+				maxDisplacement = Math.max(maxDisplacement, d);
+			}
+		}
+
+		// eslint-disable-next-line no-console
+		console.log(
+			`[05-07 finding, review M-9] re-running the layered layout after add() moved ${moved} of ${unaffectedIds.length} unaffected nodes; largest displacement ${maxDisplacement.toFixed(2)} model units. Recorded in 05-07-SUMMARY.md as the constraint Phase 6's LIV-04 inherits.`
+		);
+
+		cy.destroy();
+	});
+});
