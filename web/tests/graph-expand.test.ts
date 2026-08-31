@@ -904,7 +904,7 @@ describe('the renderer (real headless cytoscape, no DOM): position-displacement 
 			return new Promise<void>((resolve) => waiters.push(resolve));
 		}
 		let geometryCallCount = 0;
-		let lastGeometry: Array<{ id: string }> = [];
+		let lastGeometry: Array<{ id: string; x: number; y: number }> = [];
 		const renderer = createFileGraphRenderer({
 			cy,
 			requestIssuedAt: performance.now(),
@@ -920,6 +920,7 @@ describe('the renderer (real headless cytoscape, no DOM): position-displacement 
 		await nextSettle();
 		const countAfterStart = geometryCallCount;
 		expect(countAfterStart).toBeGreaterThan(0);
+		const beforeFocusGeometry = new Map(lastGeometry.map((g) => [g.id, { x: g.x, y: g.y }]));
 
 		// focus() has no layoutstop event to hang a republish on (no
 		// layout re-run), so this must happen synchronously, the same
@@ -928,6 +929,25 @@ describe('the renderer (real headless cytoscape, no DOM): position-displacement 
 
 		expect(geometryCallCount).toBe(countAfterStart + 1);
 		expect(lastGeometry.map((g) => g.id).sort()).toEqual(['a', 'b']);
+
+		// The call-count and id-set assertions above would ALSO pass if
+		// focus() republished a STALE snapshot -- e.g. a future refactor
+		// that memoizes computeGeometry's result across a fit() call, or
+		// captures it before fit() actually runs. Neither reads x/y at
+		// all, so neither catches the specific "stale values" failure
+		// mode the fix this test guards is actually closing.
+		// cy.fit(['a']) refits the WHOLE viewport to a SINGLE node out of
+		// two, which genuinely moves the pan/zoom and therefore the
+		// reported container-relative pixel coordinates for BOTH nodes
+		// -- assert the republished x/y for every node actually changed
+		// from what start() published, not merely that a call fired
+		// carrying the same node ids.
+		expect(lastGeometry.length).toBeGreaterThan(0);
+		for (const g of lastGeometry) {
+			const before = beforeFocusGeometry.get(g.id);
+			expect(before).toBeDefined();
+			expect({ x: g.x, y: g.y }).not.toEqual(before);
+		}
 
 		cy.destroy();
 	});
