@@ -64,6 +64,18 @@
 	// once per actual add or remove.
 	let addedElements = $state<FileGraphElement[]>([]);
 	let removedElementIds = $state<string[]>([]);
+	// pendingFileSymbols is the WHOLE of "which files currently have an
+	// outstanding fileSymbols request" — a plain module-local Set, never
+	// $state, since it exists only to gate DISPATCH inside toggleFile
+	// (never read by a template or an effect). Without it, a re-expand
+	// (collapse then expand again) arriving before the first request
+	// settles falls through the fetch branch a second time: expandedFiles
+	// alone cannot distinguish "no request outstanding" from "a request is
+	// already in flight," since the collapse branch clears expandedFiles
+	// regardless of whether anything is still pending. Consulted and
+	// mutated ONLY inside toggleFile's fetch branch and its two response
+	// handlers below (CR-01).
+	let pendingFileSymbols = new Set<string>();
 	// mounted guards the file-symbols response handler against applying a
 	// response that outlived its consumer — the SAME
 	// pending-request-outliving-its-consumer lifecycle the FileGraph fetch
@@ -252,6 +264,13 @@
 	//      arriving before it resolves is recognised as a collapse, not a
 	//      second expand — this is what keeps the cumulative request
 	//      count at exactly 1 even under the stale-response races below.
+	//      Also consults pendingFileSymbols FIRST: expandedFiles alone
+	//      cannot tell "no request outstanding" apart from "a request for
+	//      this exact path is already in flight," since case 1's collapse
+	//      branch clears expandedFiles regardless of whether anything is
+	//      still pending — a THIRD click (re-expand, arriving before the
+	//      first request settles) would otherwise fall through to a
+	//      second, duplicate fetch for the same path.
 	function toggleFile(id: string) {
 		if (graphState.kind !== 'loaded') return;
 
@@ -277,9 +296,27 @@
 		next.add(id);
 		expandedFiles = next;
 
+		if (pendingFileSymbols.has(id)) {
+			// A request for this exact path is already in flight — this is
+			// a re-expand (collapse, then expand again) arriving before
+			// that earlier request settled. expandedFiles now reflects the
+			// wanted "expanded" state (set above); the in-flight request's
+			// own .then, guarded by expandedFiles.has(id) below, applies it
+			// when it resolves. Dispatching a SECOND request here would
+			// double the once-per-file contract this function's own header
+			// comment documents, and — since a symbol element's id is a
+			// pure function of file path + wire symbol id
+			// (symbolElementId, file-graph-transform.ts) — two responses
+			// for the same file would each try to add the SAME element ids
+			// (CR-01).
+			return;
+		}
+		pendingFileSymbols.add(id);
+
 		uiClient
 			.fileSymbols({ path: id })
 			.then((response) => {
+				pendingFileSymbols.delete(id);
 				// The guard is at the point of APPLICATION, not at the
 				// point of dispatch — the request itself is never
 				// cancelled. A response that is no longer wanted (its file
@@ -302,6 +339,7 @@
 				addedElements = symbolElementsForFile(id, response);
 			})
 			.catch((err: unknown) => {
+				pendingFileSymbols.delete(id);
 				if (!mounted) return;
 				const stillWanted = new Set(expandedFiles);
 				stillWanted.delete(id);

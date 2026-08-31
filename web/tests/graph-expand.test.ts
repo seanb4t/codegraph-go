@@ -527,6 +527,43 @@ describe('route: file tap expand / collapse / re-expand (Task 2)', () => {
 		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
 	});
 
+	it('CLICK FOUR and FIVE, a re-expand THEN another collapse arriving before the first request settles, issue no further requests and apply correctly once it resolves (CR-01)', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
+		let resolveFn: ((r: FileSymbolsResponse) => void) | undefined;
+		rt_fileSymbolsImpls.set(
+			'a.go',
+			() =>
+				new Promise((resolve) => {
+					resolveFn = resolve;
+				})
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go'); // click 1: expand, request A dispatched, in flight
+		rt_currentInstance!.simulateTap('a.go'); // click 2: collapse, still before A settles
+		rt_currentInstance!.simulateTap('a.go'); // click 3: re-expand, still before A settles
+
+		// Exactly ONE fileSymbols request has ever been issued for this
+		// path -- click 3 must not dispatch a second one while A is still
+		// outstanding.
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+
+		rt_currentInstance!.simulateTap('a.go'); // click 4: collapse again, still before A settles
+		rt_currentInstance!.simulateTap('a.go'); // click 5: re-expand again, still before A settles
+
+		// Still exactly one request after five rapid clicks, all before A
+		// resolves.
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+
+		resolveFn!(fileSymbolsResponse([symbol('s1', 'Foo'), symbol('s2', 'Bar')]));
+		// Click 5 left the file in the "expanded" state, so A's resolution
+		// must apply its elements -- exactly once, never doubled.
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(2));
+
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+	});
+
 	it('STALE resolved-after-unmount: exactly one destruction and zero element additions after it, and resolving the promise throws nothing', async () => {
 		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
 		let resolveFn: ((r: FileSymbolsResponse) => void) | undefined;
