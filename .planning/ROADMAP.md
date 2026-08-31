@@ -289,7 +289,7 @@ Plans:
 - [x] 05-04-PLAN.md — GRF-01 resolves: the recorded measurement and its computed verdict (FAIL; maintainer selected `halt-collapse-default`)
 - [x] 05-08-PLAN.md — The remedy, and it runs BEFORE 05-05: collapsed directory view as the default first paint, progressive directory-to-file expansion, and a re-measure against the unchanged locked bars
 - [x] 05-05-PLAN.md — Cycles visually distinguished and counted; per-kind edge counts made readable
-- [ ] 05-06-PLAN.md — The thirteenth rpc: `FileSymbols`, the data in-place expansion needs
+- [x] 05-06-PLAN.md — The thirteenth rpc: `FileSymbols`, the data in-place expansion needs
 - [ ] 05-07-PLAN.md — In-place expansion of a file into its symbols, and the final rebuilt bundle
 
 ### Phase 6: Live Push

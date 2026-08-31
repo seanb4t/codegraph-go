@@ -5,16 +5,16 @@ milestone_name: Local Graph UI
 current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-08-31T14:56:59.434Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-08-31T15:37:05.381Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: ce078cf7795ea055f143ce90a79f16ae1c63e136
+state_head: 17b8515779b0adc2ea52d10ceb81a578e645847d
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 43
-  completed_plans: 41
+  completed_plans: 42
   percent: 67
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 5 (File/Package Graph View) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 5 execution started
 
@@ -101,6 +101,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P02 | 30min | 3 tasks | 7 files |
 | Phase 05 P03 | 40 min | 3 tasks | 12 files |
 | Phase 05 P05 | 3h40min | 3 tasks | 7 files |
+| Phase 05-file-package-graph-view P06 | 45min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -207,6 +208,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: 05-08 Task 4 (checkpoint:decision, gate=blocking-human) is answered: maintainer selected `release-collapsed` (2026-08-30). GRF-01's re-measure at the collapsed scale cleared all four locked bars with wide margin against corpora/graph-render-threshold.json (timeToInteractiveMs 1179.2ms vs 5000ms, panZoomFrameTimeMs 8.3ms vs 33.3ms, panZoomFrameTimeP95Ms 9ms vs 100ms, fileGraphResponseBytes 3,713,528 vs 16,777,216). Rendered 134/819 exactly equal the collapsed-view figures the locked artifact pre-recorded. Controls independently re-verified: threshold has exactly 1 commit, clean diff over threshold/graph-measure.mjs/graph-render-observations.json, no value widened, lowered or re-scoped. 05-05, 05-06 and 05-07 resume onto the collapsed default — their preconditions and wave numbers (6/7/8) were already re-pointed at corpora/graph-render-observations-collapsed.json and this answer. The collapse-by-click hit-testing defect (WINDOWS.md 27, ~1.1px clickable margin around a compound directory once it has children, three mitigations tried and each measured ineffective) does NOT block this gate — GRF-01 asks whether the qualifying renderer stays interactive at the largest corpus, which it does decisively; the defect is assigned to 05-07, whose verified three-click contract requires an explicit collapse affordance rather than depending on the sub-2px margin. See 05-08-SUMMARY.md and corpora/graph-render-observations-collapsed.json.
 - [Phase 05]: Cycle discriminator classes extend to collapsed directory nodes, not just file nodes. — 05-08's collapsed default means a file's cycleId is invisible until its directory is expanded, so collapsedDirElement's existing cycleIds union needed its own classes too.
 - [Phase 05]: Cycle-focus grouping reads both data.cycleId (file nodes) and data.cycleIds (collapsed directories). — Every file cycle id is represented by exactly one element in any given view, so grouping always yields exactly cycleCount distinct groups regardless of expansion state.
+- [Phase 05-file-package-graph-view]: 05-06 Task 1 checkpoint (blocking-human, one-way): maintainer approved FileSymbols (UIService's 13th rpc) exactly as proposed - reuse the shared Node message, MaxFileSymbols=2000 owned by internal/query, and an index-miss returns an empty result not an error.
 
 ### Pending Todos
 
@@ -328,8 +330,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-31T14:56:59.307Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-08-31T15:37:05.257Z
+Stopped at: Completed 05-06-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
