@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "collapsedNodes": 106,
+  "expandedDirCount": 111,
+  "dirTarget": "web/src/lib/components/workbench",
+  "dirCollapseRestoredExactly": true,
+  "dirExpandedCountAfterReExpand": 111,
+  "fileTarget": "web/src/lib/components/workbench/affected-columns.ts",
+  "expandedFileCount": 112,
+  "fileCollapseRestoredExactly": true,
+  "pageErrorCount": 0,
+  "pageErrors": [],
+  "browserIdentity": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  }
+}
