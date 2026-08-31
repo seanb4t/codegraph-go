@@ -1062,14 +1062,49 @@ func (s *uiService) FileGraph(ctx context.Context, _ *connect.Request[uiv1.FileG
 	return connect.NewResponse(resp), nil
 }
 
-// FileSymbols is a MINIMAL placeholder (Rule 3, identical precedent to
-// 05-02 Task 2's FileGraph placeholder and 04-03 Task 2's GetHealth
-// placeholder): the regenerated uiv1connect.UIServiceHandler interface
-// requires this method for the package to build at all, so this returns
-// connect.CodeUnimplemented — never a fabricated response — deliberately
-// so filesymbols_test.go's RED phase observes honest "unimplemented"
-// failures rather than a compile error. Task 3(d) REPLACES (not extends)
-// this placeholder with the real handler and mapper.
-func (s *uiService) FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("FileSymbols: not yet implemented (plan 05-06 Task 3)"))
+// fileSymbolsToProto maps internal/query.FileSymbolsResult onto
+// uiv1.FileSymbolsResponse field-for-field, mirroring fileGraphToProto's
+// convention — a named mapper, never an inline literal at the handler
+// call site, so the mapping cannot drift from its source silently.
+// Symbols reuses the EXISTING nodesToProto mapper over the shared Node
+// message (05-06 Task 1 checkpoint sub-decision 1) rather than a new
+// per-element mapping function for a narrower symbol shape. The field
+// set and numbering were frozen at the 05-06 Task 1 maintainer
+// checkpoint (approve-as-proposed, D-02a one-way door).
+func fileSymbolsToProto(result query.FileSymbolsResult) *uiv1.FileSymbolsResponse {
+	return &uiv1.FileSymbolsResponse{
+		Symbols:    nodesToProto(result.Symbols),
+		TotalCount: int32(result.Total),
+		Truncated:  result.Truncated,
+	}
+}
+
+// FileSymbols answers internal/query.Engine.FileSymbols's per-file
+// symbol enumeration over the wire (GRF-03), for the /graph view's
+// in-place expansion (05-07). Uses the ORDINARY withEngine shape —
+// Callers/Callees/Files/GetHealth/FileGraph's convention — NOT
+// GetStatus's openEngine-direct degrade-and-answer shape: FileSymbols
+// has no partial-availability requirement, so an unopenable store is an
+// ordinary withEngine error here.
+//
+// The path validation happens through the Engine's own confinement
+// INSIDE the closure, exactly as GetNodeDetail and GetPermalink do it:
+// the error is returned unwrapped from inside the closure so
+// withEngine's shared mapEngineError translation assigns the
+// invalid-argument Connect code (query.ErrInvalidArgument ->
+// connect.CodeInvalidArgument) — no second mapping is added here (SRV-05).
+func (s *uiService) FileSymbols(ctx context.Context, req *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error) {
+	var resp *uiv1.FileSymbolsResponse
+	err := withEngine(ctx, s.repoPath, func(eng *query.Engine) error {
+		result, err := eng.FileSymbols(req.Msg.GetPath())
+		if err != nil {
+			return err
+		}
+		resp = fileSymbolsToProto(result)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(resp), nil
 }
