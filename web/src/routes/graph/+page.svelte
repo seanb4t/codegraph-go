@@ -40,6 +40,64 @@
 	let nodeCount = $derived(elements.filter((el) => !('source' in el.data)).length);
 	let edgeCount = $derived(elements.filter((el) => 'source' in el.data).length);
 
+	// cycleGroups regroups the CURRENT elements array (already respecting
+	// expandedDirs) by the typed numeric cycleId already on element data —
+	// a file node's own cycleId, or a collapsed directory's cycleIds
+	// union (collapsedDirElement's own union of its files, a server-side
+	// value — see D-06).
+	// Every file's cycle id is represented by SOME element in the current
+	// view (itself when its directory is expanded, its collapsed
+	// directory's union otherwise), so this always yields exactly
+	// cycleCount distinct groups regardless of expansion state. Sorted by
+	// cycle id ascending for a stable visiting order across activations.
+	// Reads ONLY data.cycleId / data.cycleIds — never a class list, never
+	// a computed adjacency: this is a grouping of typed data the server
+	// already computed, not a second derivation of it.
+	let cycleGroups = $derived.by(() => {
+		const groups = new Map<number, string[]>();
+		function addTo(cycleId: number, id: string) {
+			const existing = groups.get(cycleId);
+			if (existing) {
+				existing.push(id);
+			} else {
+				groups.set(cycleId, [id]);
+			}
+		}
+		for (const el of elements) {
+			const data = el.data;
+			if ('source' in data) continue;
+			if (data.cycleId !== undefined && data.cycleId !== 0) {
+				addTo(data.cycleId, data.id);
+			}
+			if (data.cycleIds !== undefined) {
+				for (const cycleId of data.cycleIds) {
+					addTo(cycleId, data.id);
+				}
+			}
+		}
+		return [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([, ids]) => ids);
+	});
+
+	// The whole of cycle-focus state (T-05-47's discipline, applied
+	// here): cycleFocusIds is the id set currently handed to GraphCanvas
+	// as its focusNodeIds prop; cycleFocusNextIndex is which group
+	// activateCycleFocus visits next (wraps via modulo);
+	// cycleFocusViewing is the 1-based "cycle N of M" the control's own
+	// label states, so repeated activation is legible rather than a jump
+	// to somewhere unexplained.
+	let cycleFocusIds = $state<string[]>([]);
+	let cycleFocusNextIndex = $state(0);
+	let cycleFocusViewing = $state<number | undefined>(undefined);
+
+	function activateCycleFocus() {
+		const groups = cycleGroups;
+		if (groups.length === 0) return;
+		const idx = cycleFocusNextIndex % groups.length;
+		cycleFocusIds = groups[idx];
+		cycleFocusViewing = idx + 1;
+		cycleFocusNextIndex = idx + 1;
+	}
+
 	onMount(() => {
 		// requestIssuedAt is captured HERE, before the rpc call, and
 		// handed to GraphCanvas as a plain number prop — the canvas does
@@ -131,6 +189,30 @@
 		{nodeCount} nodes, {edgeCount} edges. Select a directory to reveal the files inside it; select
 		it again to collapse it back.
 	</p>
+	<p class="mt-1 text-xs text-muted-foreground" data-testid="graph-cycle-summary">
+		{#if graphState.response.cycleCount > 0}
+			This repository has {graphState.response.cycleCount} dependency cycle{graphState.response
+				.cycleCount === 1
+				? ''
+				: 's'}.
+		{:else}
+			This repository has no dependency cycles.
+		{/if}
+	</p>
+	{#if graphState.response.cycleCount > 0}
+		<button
+			type="button"
+			class="mt-1 text-xs text-primary underline"
+			data-testid="graph-cycle-focus"
+			onclick={activateCycleFocus}
+		>
+			{#if cycleFocusViewing !== undefined}
+				Focus next cycle (cycle {cycleFocusViewing} of {graphState.response.cycleCount})
+			{:else}
+				Focus a cycle ({graphState.response.cycleCount} total)
+			{/if}
+		</button>
+	{/if}
 	{#if refusalMessage}
 		<p class="mt-1 text-xs text-destructive" data-testid="graph-refusal">{refusalMessage}</p>
 	{/if}
@@ -139,6 +221,7 @@
 			{elements}
 			style={fileGraphStyle}
 			requestIssuedAt={graphState.requestIssuedAt}
+			focusNodeIds={cycleFocusIds}
 			onNodeSelected={handleNodeSelected}
 		/>
 	</div>

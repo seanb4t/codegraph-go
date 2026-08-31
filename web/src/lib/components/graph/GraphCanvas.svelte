@@ -258,11 +258,12 @@
 
 		return {
 			// start runs the FIRST layout, fitting the whole graph into
-			// the viewport — the one and only fit this component ever
-			// performs. The instance was already constructed WITH its
-			// initial element array (never an empty one followed by a
-			// synthetic first "replace") — so the very first layout is
-			// not preceded by a remove/add cycle.
+			// the viewport — one of only two fits this component ever
+			// performs on its own initiative (the other is an explicit
+			// focus() call below). The instance was already constructed
+			// WITH its initial element array (never an empty one followed
+			// by a synthetic first "replace") — so the very first layout
+			// is not preceded by a remove/add cycle.
 			start() {
 				runLayout(performance.now(), true);
 			},
@@ -277,6 +278,31 @@
 				opts.cy.add(newElements as any);
 				opts.cy.endBatch();
 				runLayout(performance.now(), false);
+			},
+			// focus fits the viewport to exactly the elements named by
+			// `ids`, built by direct id lookup (getElementById) rather
+			// than a selector string — a repository-relative file path
+			// can contain characters (`/`, `.`) a CSS-like selector would
+			// mis-parse, so this never composes a selector string out of
+			// caller-supplied ids. A no-op for an empty list, matching
+			// this seam's data-in contract: the caller decides WHETHER to
+			// focus, this method only decides HOW. No layout re-run and
+			// no element mutation — a pure viewport operation, requested
+			// with plain id data rather than the route reaching for a
+			// cytoscape method of its own.
+			focus(ids: string[]) {
+				if (ids.length === 0) return;
+				if (typeof opts.cy.collection !== 'function' || typeof opts.cy.getElementById !== 'function') {
+					return;
+				}
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				let matched: any = opts.cy.collection();
+				for (const id of ids) {
+					matched = matched.union(opts.cy.getElementById(id));
+				}
+				if (matched.length > 0) {
+					opts.cy.fit(matched);
+				}
 			}
 		};
 	}
@@ -290,6 +316,7 @@
 		elements,
 		style,
 		requestIssuedAt,
+		focusNodeIds,
 		onNodeSelected
 	}: {
 		// The rollup's plain element-data array — never a cytoscape type.
@@ -306,6 +333,14 @@
 		// for why this component does not guess it or reach for a
 		// navigation timing API itself.
 		requestIssuedAt: number;
+		// A list of node ids to bring into view — plain string data, never
+		// a cytoscape selector or a bound viewport method handed back to
+		// the route. A non-empty array fits the viewport to exactly those
+		// elements; an empty array leaves the current viewport alone. The
+		// route decides WHICH ids (grouping by the typed cycleId already
+		// on element data); this component decides only HOW to bring them
+		// into view — see createFileGraphRenderer's focus() above.
+		focusNodeIds?: string[];
 		// Fired on a node tap, carrying the tapped element's id and
 		// whether it is a directory compound — never a cytoscape Element
 		// or event object. The route decides what a directory tap means
@@ -411,6 +446,20 @@
 			return;
 		}
 		renderer?.replace(current);
+	});
+
+	// A THIRD effect tracks focusNodeIds and, on every change, asks the
+	// renderer to fit the viewport to exactly those ids. No
+	// trackedInitialized-style first-run guard is needed here (unlike the
+	// elements effect above): the first run's default is an empty array,
+	// and focus() itself no-ops on an empty list, so an unguarded first
+	// run is already inert. `renderer` is read as a plain closure
+	// variable, not $state — this effect only re-runs when
+	// `focusNodeIds` itself changes, never when construction completes.
+	$effect(() => {
+		const ids = focusNodeIds ?? [];
+		if (ids.length === 0) return;
+		renderer?.focus(ids);
 	});
 </script>
 
