@@ -75,7 +75,9 @@
 	// already in flight," since the collapse branch clears expandedFiles
 	// regardless of whether anything is still pending. Consulted and
 	// mutated ONLY inside toggleFile's fetch branch and its two response
-	// handlers below (CR-01).
+	// handlers below — the guard that keeps a re-expand arriving before an
+	// earlier request settles from ever dispatching a second, duplicate
+	// fileSymbols request for the same path.
 	let pendingFileSymbols = new Set<string>();
 	// mounted guards the file-symbols response handler against applying a
 	// response that outlived its consumer — the SAME
@@ -339,8 +341,8 @@
 			// comment documents, and — since a symbol element's id is a
 			// pure function of file path + wire symbol id
 			// (symbolElementId, file-graph-transform.ts) — two responses
-			// for the same file would each try to add the SAME element ids
-			// (CR-01).
+			// for the same file would each try to add the SAME element ids,
+			// which the renderer cannot accept twice.
 			return;
 		}
 		pendingFileSymbols.add(id);

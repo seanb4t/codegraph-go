@@ -226,11 +226,12 @@
 		// seam's own state: every element add() has merged in, minus
 		// whatever removeByIds() has since removed — tracked here, at the
 		// renderer's own level, specifically so replace() (below) can
-		// compose with it rather than silently destroying it (CR-01/CR-02
-		// review). A plain array, never cytoscape state of its own: this
-		// component still treats the live cy instance as the single
-		// source of truth for what is actually rendered; this list exists
-		// only to know what to RE-APPLY after a full swap.
+		// compose with it rather than silently destroying it whenever a
+		// directory-level full-replace runs. A plain array, never
+		// cytoscape state of its own: this component still treats the
+		// live cy instance as the single source of truth for what is
+		// actually rendered; this list exists only to know what to
+		// RE-APPLY after a full swap.
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		let liveAddedElements: any[] = [];
 
@@ -299,8 +300,8 @@
 			// EVERYTHING, including any symbol children a prior add()
 			// merged in, so a bare remove-then-add-newElements would
 			// silently destroy an expanded file's symbols on every
-			// unrelated directory toggle (CR-02, found in review). After
-			// the swap, re-apply whichever of liveAddedElements survive
+			// unrelated directory toggle. After the swap, re-apply
+			// whichever of liveAddedElements survive
 			// it: an added element whose own PARENT id is present among
 			// newElements' own ids. A symbol's parent is the file id
 			// that declares it (file-graph-transform.ts's
@@ -412,7 +413,7 @@
 			// Republishes the geometry seam directly (computeGeometry +
 			// the caller's onGeometry callback), synchronously, so a
 			// previously-published entry's x/y never goes stale the
-			// instant a cycle-focus fit runs (WR-01, found in review).
+			// instant a cycle-focus fit runs.
 			focus(ids: string[]) {
 				if (ids.length === 0) return;
 				if (typeof opts.cy.collection !== 'function' || typeof opts.cy.getElementById !== 'function') {
