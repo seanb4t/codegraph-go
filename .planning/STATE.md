@@ -5,11 +5,11 @@ milestone_name: Local Graph UI
 current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-08-31T15:37:05.381Z"
+stopped_at: Completed 05-07-PLAN.md — Phase 5 complete
+last_updated: "2026-08-31T16:26:03.431Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 17b8515779b0adc2ea52d10ceb81a578e645847d
+state_head: d9b6a1ed0792bcf8f4ff9b4f5bc02644cc9cf3fb
 progress:
   total_phases: 6
   completed_phases: 4
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 5 (File/Package Graph View) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-08-30 — Phase 5 execution started
 
@@ -102,6 +102,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P03 | 40 min | 3 tasks | 12 files |
 | Phase 05 P05 | 3h40min | 3 tasks | 7 files |
 | Phase 05-file-package-graph-view P06 | 45min | 3 tasks | 9 files |
+| Phase 05 P07 | ~100 min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -209,6 +210,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: Cycle discriminator classes extend to collapsed directory nodes, not just file nodes. — 05-08's collapsed default means a file's cycleId is invisible until its directory is expanded, so collapsedDirElement's existing cycleIds union needed its own classes too.
 - [Phase 05]: Cycle-focus grouping reads both data.cycleId (file nodes) and data.cycleIds (collapsed directories). — Every file cycle id is represented by exactly one element in any given view, so grouping always yields exactly cycleCount distinct groups regardless of expansion state.
 - [Phase 05-file-package-graph-view]: 05-06 Task 1 checkpoint (blocking-human, one-way): maintainer approved FileSymbols (UIService's 13th rpc) exactly as proposed - reuse the shared Node message, MaxFileSymbols=2000 owned by internal/query, and an index-miss returns an empty result not an error.
+- [Phase 5]: Symbol expansion added an explicit DOM collapse-affordance button (shared with directory-level collapse) rather than relying on canvas re-click, closing WINDOWS.md 27 with real-mouse Playwright proof at both this repo's and google/guava's scale
 
 ### Pending Todos
 
@@ -330,8 +332,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-31T15:37:05.257Z
-Stopped at: Completed 05-06-PLAN.md
+Last session: 2026-08-31T16:26:03.299Z
+Stopped at: Completed 05-07-PLAN.md — Phase 5 complete
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
