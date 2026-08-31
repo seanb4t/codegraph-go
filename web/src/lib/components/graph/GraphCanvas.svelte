@@ -317,7 +317,9 @@
 		style,
 		requestIssuedAt,
 		focusNodeIds,
-		onNodeSelected
+		onNodeSelected,
+		onEdgeSelected,
+		onBackgroundTapped
 	}: {
 		// The rollup's plain element-data array — never a cytoscape type.
 		// GraphCanvas is what turns this application vocabulary into
@@ -347,6 +349,17 @@
 		// (expand/collapse); a file tap is handed through unchanged and
 		// this plan's route ignores it.
 		onNodeSelected?: (id: string, isDirectory: boolean) => void;
+		// Fired on an edge tap, carrying the edge's source id, target id
+		// and its element data (kindCounts/totalCount/inCycle/
+		// aggregatedFrom, the FileGraphEdgeData shape) — never a
+		// cytoscape Element or event object, exactly the same
+		// vocabulary-at-the-seam rule onNodeSelected already follows.
+		onEdgeSelected?: (source: string, target: string, data: Record<string, unknown>) => void;
+		// Fired on a tap that lands on neither a node nor an edge (the
+		// graph background) — the route's deselect signal, kept separate
+		// from onNodeSelected/onEdgeSelected so "nothing is selected" is
+		// its own event rather than an inferred absence.
+		onBackgroundTapped?: () => void;
 	} = $props();
 
 	let container: HTMLDivElement | undefined = $state();
@@ -401,6 +414,32 @@
 		cy.on('tap', 'node', (evt: any) => {
 			const target = evt.target;
 			onNodeSelected?.(target.id(), Boolean(target.data('isDirectory')));
+		});
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		cy.on('tap', 'edge', (evt: any) => {
+			const target = evt.target;
+			// A minimal cytoscape test double covering only an earlier
+			// task's own node-tap path (a legitimate mock for THAT path)
+			// may not implement source()/target() on the shape it hands
+			// this handler — real cytoscape's own selector scoping
+			// guarantees this handler only ever fires for a genuine edge,
+			// so this guard exists for such doubles, not for production.
+			if (typeof target.source !== 'function' || typeof target.target !== 'function') return;
+			onEdgeSelected?.(target.source().id(), target.target().id(), target.data());
+		});
+
+		// A bare `cy.on('tap', handler)` (no selector) fires for every
+		// tap, including ones cytoscape.js's own event-target rules
+		// already route through the two selector-scoped handlers above —
+		// the `evt.target === cy` check below is what narrows this to
+		// ONLY the background case (cytoscape.js's own documented pattern
+		// for distinguishing a background tap from an element tap).
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		cy.on('tap', (evt: any) => {
+			if (evt.target === cy) {
+				onBackgroundTapped?.();
+			}
 		});
 
 		renderer = createFileGraphRenderer({

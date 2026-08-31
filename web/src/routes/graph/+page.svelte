@@ -18,7 +18,10 @@
 	} from '$lib/components/graph/file-graph-transform';
 	import { fileGraphStyle } from '$lib/components/graph/graph-style';
 	import GraphCanvas from '$lib/components/graph/GraphCanvas.svelte';
+	import DataTable from '$lib/components/workbench/DataTable.svelte';
+	import { edgeKindColumns, edgeKindRowId, type EdgeKindRow } from '$lib/components/graph/edge-kind-columns';
 	import type { FileGraphResponse } from '$lib/gen/ui_pb';
+	import type { FileGraphEdgeData } from '$lib/components/graph/file-graph-transform';
 
 	type GraphState =
 		| { kind: 'loading' }
@@ -96,6 +99,34 @@
 		cycleFocusIds = groups[idx];
 		cycleFocusViewing = idx + 1;
 		cycleFocusNextIndex = idx + 1;
+	}
+
+	// selectedEdge is the WHOLE of edge-selection state — a single value,
+	// never a list, so selecting a different edge REPLACES the previous
+	// selection by construction rather than by any explicit "clear first"
+	// step. A background tap (GraphCanvas's onBackgroundTapped) sets it
+	// back to undefined, which is this route's deselect signal.
+	let selectedEdge = $state<
+		{ source: string; target: string; data: FileGraphEdgeData } | undefined
+	>(undefined);
+
+	// edgeKindRows iterates the SELECTED edge's own wire kindCounts map
+	// entries directly — never a fixed list of known kinds — so a kind
+	// the server did not report for this edge produces no row. The map
+	// is sparse by convention (D-03/D-06's aggregation): an absent key
+	// means "never observed," not "observed zero times."
+	let edgeKindRows = $derived<EdgeKindRow[]>(
+		selectedEdge
+			? Object.entries(selectedEdge.data.kindCounts).map(([kind, count]) => ({ kind, count }))
+			: []
+	);
+
+	function handleEdgeSelected(source: string, target: string, data: Record<string, unknown>) {
+		selectedEdge = { source, target, data: data as unknown as FileGraphEdgeData };
+	}
+
+	function handleBackgroundTapped() {
+		selectedEdge = undefined;
 	}
 
 	onMount(() => {
@@ -223,6 +254,28 @@
 			requestIssuedAt={graphState.requestIssuedAt}
 			focusNodeIds={cycleFocusIds}
 			onNodeSelected={handleNodeSelected}
+			onEdgeSelected={handleEdgeSelected}
+			onBackgroundTapped={handleBackgroundTapped}
 		/>
 	</div>
+	{#if selectedEdge}
+		<div class="mt-4 rounded-md border border-border p-4" data-testid="graph-edge-detail">
+			<p class="text-sm">
+				<span data-testid="graph-edge-detail-source">{selectedEdge.source}</span>
+				<span aria-hidden="true">→</span>
+				<span data-testid="graph-edge-detail-target">{selectedEdge.target}</span>
+			</p>
+			<p class="mt-1 text-xs text-muted-foreground" data-testid="graph-edge-detail-total">
+				Total dependency count: {selectedEdge.data.totalCount}
+			</p>
+			<div class="mt-2">
+				<DataTable
+					rows={edgeKindRows}
+					columns={edgeKindColumns}
+					getRowId={edgeKindRowId}
+					emptyMessage="No edge kinds recorded"
+				/>
+			</div>
+		</div>
+	{/if}
 {/if}
