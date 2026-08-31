@@ -404,6 +404,15 @@
 			// no element mutation — a pure viewport operation, requested
 			// with plain id data rather than the route reaching for a
 			// cytoscape method of its own.
+			//
+			// cy.fit() changes the current pan/zoom exactly as much as a
+			// layout settle does, yet has no layoutstop event of its own
+			// to hang a republish on — the same gap removeByIds() above
+			// was already found and fixed to close for element removal.
+			// Republishes the geometry seam directly (computeGeometry +
+			// the caller's onGeometry callback), synchronously, so a
+			// previously-published entry's x/y never goes stale the
+			// instant a cycle-focus fit runs (WR-01, found in review).
 			focus(ids: string[]) {
 				if (ids.length === 0) return;
 				if (typeof opts.cy.collection !== 'function' || typeof opts.cy.getElementById !== 'function') {
@@ -416,6 +425,10 @@
 				}
 				if (matched.length > 0) {
 					opts.cy.fit(matched);
+					const geometry = computeGeometry(opts.cy);
+					if (geometry !== undefined) {
+						opts.onGeometry(geometry);
+					}
 				}
 			}
 		};

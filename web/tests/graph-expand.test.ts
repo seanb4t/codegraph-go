@@ -803,4 +803,55 @@ describe('the renderer (real headless cytoscape, no DOM): position-displacement 
 
 		cy.destroy();
 	});
+
+	it('focus() republishes the geometry seam, since fit() changes the viewport just like a layout settle does (WR-01)', async () => {
+		// The rendered-geometry seam publishes container-relative pixel
+		// coordinates that account for the current pan/zoom/fit
+		// (FileGraphNodeGeometry's own doc comment above). removeByIds()
+		// was already found and fixed to republish directly, since removing
+		// elements changes the model without a layoutstop event. focus()
+		// changes the CURRENT pan/zoom via cy.fit() exactly as much as a
+		// layout settle does, so it must republish too -- otherwise a
+		// previously-published entry's x/y goes stale the instant a
+		// cycle-focus fit runs.
+		const { realCytoscape, createFileGraphRenderer } = await realRendererModule();
+
+		const elementsA = [
+			{ data: { id: 'a', isDirectory: false } },
+			{ data: { id: 'b', isDirectory: false } }
+		];
+
+		const cy = realCytoscape({ headless: true, elements: elementsA });
+		const waiters: Array<() => void> = [];
+		function nextSettle() {
+			return new Promise<void>((resolve) => waiters.push(resolve));
+		}
+		let geometryCallCount = 0;
+		let lastGeometry: Array<{ id: string }> = [];
+		const renderer = createFileGraphRenderer({
+			cy,
+			requestIssuedAt: performance.now(),
+			onMetrics: () => {},
+			onGeometry: (g) => {
+				geometryCallCount++;
+				lastGeometry = g;
+				waiters.shift()?.();
+			}
+		});
+
+		renderer.start();
+		await nextSettle();
+		const countAfterStart = geometryCallCount;
+		expect(countAfterStart).toBeGreaterThan(0);
+
+		// focus() has no layoutstop event to hang a republish on (no
+		// layout re-run), so this must happen synchronously, the same
+		// discipline removeByIds() already follows.
+		renderer.focus(['a']);
+
+		expect(geometryCallCount).toBe(countAfterStart + 1);
+		expect(lastGeometry.map((g) => g.id).sort()).toEqual(['a', 'b']);
+
+		cy.destroy();
+	});
 });
