@@ -6,14 +6,14 @@ current_phase: 5
 current_phase_name: File/Package Graph View
 status: planning
 stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-08-30T18:35:40.398Z"
+last_updated: "2026-08-31T14:17:28.797Z"
 last_activity: 2026-08-30
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 8d53c1d896ea3742f1ad1d5034d08fd51c913197
+state_head: 923296576ca867e67dbc28363633a49dbd1c6a7b
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 42
+  total_plans: 43
   completed_plans: 39
   percent: 67
 ---
@@ -203,6 +203,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: Maintainer approved all three renderer dependencies (cytoscape, cytoscape-elk, elkjs) by name; elkjs resolved transitively to 0.9.3, not the 0.12.0 research measured, and an override to force 0.12.0 was explicitly declined.
 - [Phase 05]: Live browser verification against this repository's own index found and fixed a real bug: cytoscape boolean data selectors require [?field]/[!field] existence syntax, not [field = true] equality, which silently never matches.
 - [Phase 05]: GRF-01 measured FAIL against the pinned google/guava corpus (expanded file-level scale, 3,233 nodes / 21,554 edges) — the layout never became interactive within the locked 60s seamReadyTimeoutMs, independently reproduced still not interactive after 10+ minutes. Maintainer decision, 2026-08-30: `halt-collapse-default` — make the collapsed directory view (134 nodes / 819 edges) the default first paint with progressive expansion, keep Cytoscape + cytoscape-elk, re-measure at collapsed scale before 05-05/05-06/05-07 resume. `halt-reconsider-stack` was rejected (the compound-node-narrowed field had nowhere better to go) and widening/lowering the threshold was never an available answer (corpora/graph-render-threshold.json retains exactly one commit, 2fb27746). See 05-04-SUMMARY.md.
+- [Phase 05]: 05-08 Task 4 (checkpoint:decision, gate=blocking-human) is answered: maintainer selected `release-collapsed` (2026-08-30). GRF-01's re-measure at the collapsed scale cleared all four locked bars with wide margin against corpora/graph-render-threshold.json (timeToInteractiveMs 1179.2ms vs 5000ms, panZoomFrameTimeMs 8.3ms vs 33.3ms, panZoomFrameTimeP95Ms 9ms vs 100ms, fileGraphResponseBytes 3,713,528 vs 16,777,216). Rendered 134/819 exactly equal the collapsed-view figures the locked artifact pre-recorded. Controls independently re-verified: threshold has exactly 1 commit, clean diff over threshold/graph-measure.mjs/graph-render-observations.json, no value widened, lowered or re-scoped. 05-05, 05-06 and 05-07 resume onto the collapsed default — their preconditions and wave numbers (6/7/8) were already re-pointed at corpora/graph-render-observations-collapsed.json and this answer. The collapse-by-click hit-testing defect (WINDOWS.md 27, ~1.1px clickable margin around a compound directory once it has children, three mitigations tried and each measured ineffective) does NOT block this gate — GRF-01 asks whether the qualifying renderer stays interactive at the largest corpus, which it does decisively; the defect is assigned to 05-07, whose verified three-click contract requires an explicit collapse affordance rather than depending on the sub-2px margin. See 05-08-SUMMARY.md and corpora/graph-render-observations-collapsed.json.
 
 ### Pending Todos
 
@@ -242,7 +243,6 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
-- 05-04 Task 3 (checkpoint:decision, gate=blocking-human) is answered: maintainer selected `halt-collapse-default` (2026-08-30). GRF-01's recorded verdict is FAIL (guava-scale layout never became interactive within the locked 60s seamReadyTimeoutMs); the remedy makes the collapsed directory view (134 nodes / 819 edges) the default first paint with progressive expansion, keeping Cytoscape + cytoscape-elk. 05-05/05-06/05-07 stay BLOCKED until the collapse-default work is planned and re-measured against the same locked bars. See .planning/phases/05-file-package-graph-view/05-04-SUMMARY.md and corpora/graph-render-observations.json.
 
 ### Quick Tasks Completed
 

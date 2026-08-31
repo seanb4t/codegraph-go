@@ -61,7 +61,7 @@
 
 ### Graph View
 
-- [ ] **GRF-01**: A spike measures real file/package rollup node and edge counts against indexed repos, with its pass condition locked **before** dispatch, and its result selects the renderer (Cytoscape.js vs Sigma.js + graphology)
+- [x] **GRF-01**: A spike measures real file/package rollup node and edge counts against indexed repos, with its pass condition locked **before** dispatch, and its result selects the renderer (Cytoscape.js vs Sigma.js + graphology)
 - [ ] **GRF-02**: User can view a whole-repo file/package graph with aggregated edges, laid out hierarchically with directory-structural grouping — never a force-directed whole-graph view
 - [ ] **GRF-03**: User can drill into a file to see its symbols
 - [ ] **GRF-04**: Dependency cycles are visually distinguished
@@ -164,7 +164,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | WRK-02 | Phase 4 | Complete |
 | WRK-03 | Phase 4 | Complete |
 | WRK-04 | Phase 4 | Complete |
-| GRF-01 | Phase 5 | Pending |
+| GRF-01 | Phase 5 | Complete |
 | GRF-02 | Phase 5 | Pending |
 | GRF-03 | Phase 5 | Pending |
 | GRF-04 | Phase 5 | Pending |
