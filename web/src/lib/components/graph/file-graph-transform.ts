@@ -16,7 +16,11 @@
 //     the wire as FileGraphNode.cycleId / FileGraphEdge.inCycle. This
 //     module copies or unions those fields onto element data unchanged;
 //     deriving membership here would recreate exactly the renderer
-//     coupling the swap seam exists to prevent.
+//     coupling the swap seam exists to prevent. The `classes` string this
+//     module also attaches (CYCLE_CLASS / cycleDiscriminatorClass below)
+//     is presentation vocabulary copied straight FROM those same wire
+//     fields — it is a second encoding of data already computed, never a
+//     new computation.
 //
 // ONE function of (the decoded response, the set of expanded directory
 // paths) produces BOTH the collapsed default and every expanded view —
@@ -78,7 +82,27 @@ export type FileGraphEdgeData = {
 	aggregatedFrom: number;
 };
 
-export type FileGraphElement = { data: FileGraphNodeData } | { data: FileGraphEdgeData };
+// classes is cytoscape's own element-descriptor field for a space-
+// separated class list — this module's SECOND piece of element-data
+// vocabulary alongside `data`, used only to copy the wire cycle fields
+// onto something the style sheet can select on. CYCLE_CLASS marks any
+// element the server said is a cycle member (a file node's non-zero
+// cycleId, a collapsed directory's non-empty cycleIds union, or an
+// edge's inCycle flag); cycleDiscriminatorClass additionally marks WHICH
+// cycle a node belongs to, so two adjacent single-node cycles are told
+// apart from one larger one rather than blurred into a single blob.
+// Both are copies of wire fields already on the element's own `data` —
+// this is presentation vocabulary derived FROM data already computed
+// server-side (D-06), never a second, class-string-only source of truth.
+const CYCLE_CLASS = 'graph-cycle';
+
+function cycleDiscriminatorClass(cycleId: number): string {
+	return `graph-cycle-${cycleId}`;
+}
+
+export type FileGraphElement =
+	| { data: FileGraphNodeData; classes?: string }
+	| { data: FileGraphEdgeData; classes?: string };
 
 // EXPANSION_NODE_CEILING bounds the rendered node count an expansion may
 // reach. Strictly between the largest scale this renderer stack was
@@ -122,7 +146,10 @@ function endpointOf(path: string, expandedDirs: ReadonlySet<string>): string {
 	return dir;
 }
 
-function fileNodeElement(n: FileGraphNode, parent: string | undefined): { data: FileGraphNodeData } {
+function fileNodeElement(
+	n: FileGraphNode,
+	parent: string | undefined
+): { data: FileGraphNodeData; classes?: string } {
 	const data: FileGraphNodeData = {
 		id: n.path,
 		label: baseName(n.path),
@@ -133,6 +160,9 @@ function fileNodeElement(n: FileGraphNode, parent: string | undefined): { data: 
 	};
 	if (parent !== undefined) {
 		data.parent = parent;
+	}
+	if (n.cycleId !== 0) {
+		return { data, classes: `${CYCLE_CLASS} ${cycleDiscriminatorClass(n.cycleId)}` };
 	}
 	return { data };
 }
@@ -147,7 +177,10 @@ function expandedDirElement(dir: string): { data: FileGraphNodeData } {
 	};
 }
 
-function collapsedDirElement(dir: string, files: FileGraphNode[]): { data: FileGraphNodeData } {
+function collapsedDirElement(
+	dir: string,
+	files: FileGraphNode[]
+): { data: FileGraphNodeData; classes?: string } {
 	const cycleIdSet = new Set<number>();
 	for (const f of files) {
 		if (f.cycleId !== 0) cycleIdSet.add(f.cycleId);
@@ -162,6 +195,8 @@ function collapsedDirElement(dir: string, files: FileGraphNode[]): { data: FileG
 	};
 	if (cycleIds.length > 0) {
 		data.cycleIds = cycleIds;
+		const classes = [CYCLE_CLASS, ...cycleIds.map(cycleDiscriminatorClass)].join(' ');
+		return { data, classes };
 	}
 	return { data };
 }
@@ -219,7 +254,7 @@ function buildNodeElements(
 function buildEdgeElements(
 	response: FileGraphResponse,
 	expandedDirs: ReadonlySet<string>
-): Array<{ data: FileGraphEdgeData }> {
+): Array<{ data: FileGraphEdgeData; classes?: string }> {
 	const byKey = new Map<string, FileGraphEdgeData>();
 
 	for (const e of response.edges) {
@@ -245,7 +280,7 @@ function buildEdgeElements(
 		agg.aggregatedFrom += 1;
 	}
 
-	return [...byKey.values()].map((data) => ({ data }));
+	return [...byKey.values()].map((data) => (data.inCycle ? { data, classes: CYCLE_CLASS } : { data }));
 }
 
 // plannedNodeCount returns the number of node elements rollupToElements

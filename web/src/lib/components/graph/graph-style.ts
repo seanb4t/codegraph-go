@@ -8,9 +8,22 @@
 // rendered as a single collapsed node from one
 // whose files are showing, and a default edge style whose width is
 // derived from totalCount so a heavier dependency reads as a heavier
-// line. Cycle styling is a later concern and must NOT be added here —
-// this module only knows about the directory/file/edge distinction
-// file-graph-transform.ts produces.
+// line.
+//
+// The cycle selectors at the bottom match `.graph-cycle`, the class
+// file-graph-transform.ts attaches to any node or edge the wire already
+// marked as a cycle member (a file's non-zero cycleId, a collapsed
+// directory's non-empty cycleIds union, or an edge's inCycle flag). They
+// are placed LAST in this array — see the selector-order note below —
+// and distinguish a cycle member on two independent channels (a dashed
+// border/line plus colour), never colour alone, so the distinction still
+// reads for someone who cannot see the colour difference. cytoscape.js
+// does not resolve CSS custom properties in a style value (confirmed
+// against its own property-type documentation: colours are name/hex/RGB/
+// HSL only) — the colour below is a literal hex value chosen to MATCH
+// this application's own `--destructive` design token (Tailwind's
+// red-600, oklch(0.577 0.245 27.325) ≈ #dc2626), not a `var()` reference
+// this renderer cannot read.
 //
 // Selector ORDER matters: the collapsed-directory selector is placed
 // AFTER the general directory selector. A collapsed directory node
@@ -92,6 +105,32 @@ export const fileGraphStyle: unknown[] = [
 			'target-arrow-shape': 'triangle',
 			'curve-style': 'bezier',
 			opacity: 0.6
+		}
+	},
+	{
+		// Matches ANY node carrying the cycle class — a file node whose
+		// wire cycleId is non-zero, or a collapsed directory whose union
+		// of member cycleIds is non-empty. Placed after every other node
+		// selector so its border overrides whichever base rule
+		// (file/directory/collapsed-directory) already matched, per the
+		// selector-order note above.
+		selector: 'node.graph-cycle',
+		style: {
+			'border-width': 4,
+			'border-style': 'dashed',
+			'border-color': '#dc2626'
+		}
+	},
+	{
+		// Matches an edge the server marked in-cycle. line-style and
+		// target-arrow-shape are the non-colour channels; width is left
+		// alone so the count-driven mapData sizing above still applies.
+		selector: 'edge.graph-cycle',
+		style: {
+			'line-style': 'dashed',
+			'line-color': '#dc2626',
+			'target-arrow-color': '#dc2626',
+			'target-arrow-shape': 'diamond'
 		}
 	}
 ];
