@@ -307,14 +307,19 @@ describe('file-graph-transform: module surface', () => {
 		// 05-07 (GRF-03) adds symbolElementsForFile/symbolElementIdsForFile
 		// alongside the existing directory-level rollup surface — a second,
 		// separate element builder for file-to-symbol expansion, not a
-		// replacement for rollupToElements.
+		// replacement for rollupToElements. dirOf is exported so +page.svelte
+		// can reconcile its own expandedFiles bookkeeping against the SAME
+		// immediate-parent-directory rule this module's node rollup already
+		// uses, rather than a second, independently-written rule that could
+		// drift out of sync with it.
 		expect(names).toEqual(
 			new Set([
 				'rollupToElements',
 				'plannedNodeCount',
 				'EXPANSION_NODE_CEILING',
 				'symbolElementsForFile',
-				'symbolElementIdsForFile'
+				'symbolElementIdsForFile',
+				'dirOf'
 			])
 		);
 	});
