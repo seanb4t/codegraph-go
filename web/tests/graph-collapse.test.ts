@@ -304,7 +304,19 @@ describe('rollupToElements / plannedNodeCount: the ceiling', () => {
 describe('file-graph-transform: module surface', () => {
 	it('exports exactly the rollup surface as a SET, with no retired whole-graph builder', () => {
 		const names = new Set(Object.keys(transformModule));
-		expect(names).toEqual(new Set(['rollupToElements', 'plannedNodeCount', 'EXPANSION_NODE_CEILING']));
+		// 05-07 (GRF-03) adds symbolElementsForFile/symbolElementIdsForFile
+		// alongside the existing directory-level rollup surface — a second,
+		// separate element builder for file-to-symbol expansion, not a
+		// replacement for rollupToElements.
+		expect(names).toEqual(
+			new Set([
+				'rollupToElements',
+				'plannedNodeCount',
+				'EXPANSION_NODE_CEILING',
+				'symbolElementsForFile',
+				'symbolElementIdsForFile'
+			])
+		);
 	});
 });
 

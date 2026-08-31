@@ -52,7 +52,7 @@
 // cytoscape's own style functions (e.g. edge width by totalCount) expect
 // plain numbers, not bigint. This module performs that narrowing once,
 // here, so nothing downstream has to.
-import type { FileGraphEdge, FileGraphNode, FileGraphResponse } from '$lib/gen/ui_pb';
+import type { FileGraphEdge, FileGraphNode, FileGraphResponse, FileSymbolsResponse } from '$lib/gen/ui_pb';
 
 export type FileGraphNodeData = {
 	id: string;
@@ -68,6 +68,15 @@ export type FileGraphNodeData = {
 	collapsed?: boolean;
 	fileCount?: number;
 	cycleIds?: number[];
+	// isSymbol/kind/startLine are present ONLY on a symbol element — a
+	// leaf produced by symbolElementsForFile below, parented to the file
+	// that declares it (05-07, GRF-03). isSymbol lets styling and
+	// collapse logic tell a symbol apart from a file or a directory
+	// without parsing its id; kind and startLine are copied verbatim from
+	// the wire symbol, never derived.
+	isSymbol?: boolean;
+	kind?: string;
+	startLine?: number;
 };
 
 export type FileGraphEdgeData = {
@@ -305,4 +314,51 @@ export function rollupToElements(
 	expandedDirs: ReadonlySet<string>
 ): FileGraphElement[] {
 	return [...buildNodeElements(response, expandedDirs), ...buildEdgeElements(response, expandedDirs)];
+}
+
+// symbolElementId builds a symbol element's id from the file path that
+// declares it and the symbol's own wire id — deterministic (stable
+// across two calls with the same input) and prefixed with a control
+// character no repository-relative path can ever contain (the same
+// discipline buildEdgeElements above already uses for its own composite
+// key), so the result cannot collide with a file path or a directory path
+// already in the graph, regardless of what the symbol's own name or wire
+// id happen to be. This is exported so the route can rebuild the exact
+// same ids for the removal prop when COLLAPSING a file, without a second,
+// independent id-construction rule that could drift out of sync with the
+// one used to CREATE the elements.
+const SYMBOL_ID_SEPARATOR = '\u0000';
+const SYMBOL_ID_PREFIX = `symbol${SYMBOL_ID_SEPARATOR}`;
+
+function symbolElementId(filePath: string, symbolWireId: string): string {
+	return `${SYMBOL_ID_PREFIX}${filePath}${SYMBOL_ID_SEPARATOR}${symbolWireId}`;
+}
+
+export function symbolElementIdsForFile(filePath: string, response: FileSymbolsResponse): string[] {
+	return response.symbols.map((s) => symbolElementId(filePath, s.id));
+}
+
+// symbolElementsForFile maps a file path and its decoded FileSymbols
+// response onto symbol element descriptors — the second element builder
+// this module exports, alongside rollupToElements. Still no DOM, still no
+// renderer import, still no derivation of any graph property: every
+// field below is copied verbatim from the wire symbol. The file path is
+// set as each element's compound PARENT at creation time — the same
+// parent mechanism directory grouping already uses, never a second
+// grouping concept.
+export function symbolElementsForFile(
+	filePath: string,
+	response: FileSymbolsResponse
+): Array<{ data: FileGraphNodeData }> {
+	return response.symbols.map((s) => ({
+		data: {
+			id: symbolElementId(filePath, s.id),
+			label: s.name,
+			isDirectory: false,
+			isSymbol: true,
+			kind: s.kind,
+			startLine: s.startLine,
+			parent: filePath
+		}
+	}));
 }

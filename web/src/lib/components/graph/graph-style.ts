@@ -97,6 +97,36 @@ export const fileGraphStyle: unknown[] = [
 		}
 	},
 	{
+		// Matches a symbol element (05-07, GRF-03) — a node also carrying
+		// `isSymbol:true`, always parented to the file that declares it.
+		// Placed AFTER the general file selector above, per the same
+		// selector-ORDER cascade rule the collapsed-directory selector
+		// already follows: a symbol also matches `node[!isDirectory]`
+		// (isDirectory is false on both), so this LATER rule is what makes
+		// its own shape/size actually apply. Distinguished from a file on
+		// `shape` (rectangle vs ellipse) — a non-colour property — and
+		// smaller, visually subordinate width/height, so a symbol reads as
+		// "inside" its parent file rather than a sibling of it. The colour
+		// is a literal hex approximating this app's own `--muted-foreground`
+		// design token (oklch(0.556 0 0), a mid grey ≈ #737373 / Tailwind
+		// neutral-500) — cytoscape does not resolve CSS custom properties
+		// in a style value (same constraint the cycle selectors below
+		// document), so a `var()` reference is not an option here either.
+		selector: 'node[?isSymbol]',
+		style: {
+			shape: 'rectangle',
+			width: 8,
+			height: 8,
+			'background-color': '#737373',
+			label: 'data(label)',
+			'font-size': 7,
+			color: '#404040',
+			'text-valign': 'right',
+			'text-halign': 'right',
+			'text-margin-x': 4
+		}
+	},
+	{
 		selector: 'edge',
 		style: {
 			width: 'mapData(totalCount, 1, 20, 1, 6)',
