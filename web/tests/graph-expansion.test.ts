@@ -32,7 +32,8 @@ function wrapNode(el: FakeElement, index: number) {
 	return {
 		id: () => el.data.id as string,
 		data: (key: string) => (el.data as Record<string, unknown>)[key],
-		renderedPosition: () => ({ x: index * 10, y: index * 10 })
+		renderedPosition: () => ({ x: index * 10, y: index * 10 }),
+		renderedBoundingBox: () => ({ x1: index * 10, y1: index * 10, w: 20, h: 20 })
 	};
 }
 

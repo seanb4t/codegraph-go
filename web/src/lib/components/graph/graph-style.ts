@@ -36,6 +36,7 @@ export const fileGraphStyle: unknown[] = [
 			label: 'data(label)',
 			'text-valign': 'top',
 			'text-halign': 'center',
+			'text-events': 'yes',
 			'font-size': 10,
 			color: '#374151',
 			padding: '12px'

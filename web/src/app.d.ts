@@ -36,6 +36,7 @@ declare global {
 			x: number;
 			y: number;
 			expandable: boolean;
+			fileCount?: number;
 		}>;
 	}
 }

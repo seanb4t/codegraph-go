@@ -75,19 +75,36 @@
 	// for both this plan's expansion check and a later file-to-symbol
 	// expansion check.
 	//
-	//   x / y — the node's RENDERED position (cytoscape's
-	//     `renderedPosition()`, container-relative pixel coordinates
-	//     accounting for the current pan/zoom/fit), never the model
-	//     position — a real mouse click targets pixels on screen, not
-	//     model-space coordinates.
+	//   x / y — a point inside the node's own RENDERED bounding box
+	//     (container-relative pixel coordinates accounting for the
+	//     current pan/zoom/fit), inset a few pixels from its top-left
+	//     corner — deliberately NOT the node's centroid
+	//     (`renderedPosition()`). For a compound (expanded directory)
+	//     node, the centroid typically falls on top of one of its own
+	//     CHILD nodes, since children are laid out to fill the parent's
+	//     interior — a real mouse click there hits the child, not the
+	//     parent, silently no-opping an attempt to re-collapse it (found
+	//     by this plan's own real-browser check). An inset corner point
+	//     sits inside the parent's padding border, never inside a child,
+	//     and is equally valid for a leaf node (file or collapsed
+	//     directory), which has no children to collide with.
 	//   expandable — true only for a collapsed directory node (isDirectory
 	//     AND collapsed both true, read from element data cytoscape
 	//     already carries — never a rendered class list or parsed id).
+	//   fileCount — present only when expandable; the collapsed node's own
+	//     file count (element data, never computed here). Lets a caller
+	//     choose a SMALL directory to expand: this component's `fit:true`
+	//     layout re-fits the WHOLE graph on every expansion, so expanding
+	//     a large directory can zoom the rendered view out far enough
+	//     that fixed-pixel style padding shrinks below one screen pixel —
+	//     a real finding from this plan's own real-browser check, not a
+	//     hypothetical.
 	export type FileGraphNodeGeometry = {
 		id: string;
 		x: number;
 		y: number;
 		expandable: boolean;
+		fileCount?: number;
 	};
 
 	// The only elk algorithm requested anywhere in this file — a layered
@@ -103,7 +120,20 @@
 		elk: {
 			algorithm: 'layered',
 			'elk.hierarchyHandling': 'INCLUDE_CHILDREN'
-		}
+		},
+		// nodeLayoutOptions is cytoscape-elk's PER-NODE ELK option hook
+		// (its own layout.js: `k.layoutOptions = options.nodeLayoutOptions(node)`)
+		// — the graph-level `elk.padding` above does NOT reach a compound's
+		// own child spacing; a compound's OWN padding is a property of
+		// THAT node, not the whole graph. Without this, elk lays a
+		// compound's children out against its own border with under 2px
+        // of margin at this stack's typical density — confirmed by a
+		// live-browser measurement this task (box.y1 vs its topmost
+		// child's y1 differed by ~1px), leaving no real-mouse-clickable
+		// area on the parent once it has children.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		nodeLayoutOptions: (node: any) =>
+			node.isParent() ? { 'elk.padding': '[top=40,left=20,bottom=20,right=20]' } : {}
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	} as any;
 
@@ -122,13 +152,54 @@
 		if (typeof nodeCollection.map !== 'function') return undefined;
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		return nodeCollection.map((n: any) => {
-			const pos = n.renderedPosition();
-			return {
-				id: n.id(),
-				x: pos.x,
-				y: pos.y,
-				expandable: Boolean(n.data('isDirectory')) && Boolean(n.data('collapsed'))
-			};
+			// includeLabels: false — cytoscape's bounding box otherwise
+			// includes label overflow (the collapsed-directory label wraps
+			// onto a second line, per graph-style.ts), which can push the
+			// box's own top-left corner outside the node's actual
+			// rendered shape. Confirmed by a live-browser screenshot this
+			// task: with labels included, the computed inset point landed
+			// visibly outside the node's rectangle.
+			const box = n.renderedBoundingBox({ includeLabels: false });
+			const expandable = Boolean(n.data('isDirectory')) && Boolean(n.data('collapsed'));
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const children = typeof n.children === 'function' ? n.children() : null;
+			let x: number;
+			let y: number;
+			if (children && children.length > 0 && typeof children.renderedBoundingBox === 'function') {
+				// A compound (EXPANDED directory) node: elk lays children
+				// out with under a couple of screen pixels of margin from
+				// the compound's own border at this stack's typical
+				// density — confirmed live this task; neither cytoscape's
+				// own style `padding` (cosmetic only under an external
+				// layout extension) nor elk's own `elk.padding` (tried
+				// both graph-level and per-node via `nodeLayoutOptions`)
+				// changed that measurably. The one region reliably WIDER
+				// than a couple of pixels and reliably free of children is
+				// the directory's own LABEL band, drawn above its content
+				// via `text-valign: 'top'` — graph-style.ts sets
+				// `text-events: 'yes'` specifically so that band is
+				// hit-testable (cytoscape's default is 'no': a label is
+				// not clickable on its own). The click point is the
+				// vertical midpoint of that band — between the box's own
+				// top edge WITH its label and the box's top edge WITHOUT
+				// it (i.e. where the actual node shape / its children
+				// begin).
+				const boxWithLabel = n.renderedBoundingBox({ includeLabels: true });
+				x = box.x1 + box.w / 2;
+				y = (boxWithLabel.y1 + box.y1) / 2;
+			} else {
+				// A leaf node (a file, or a collapsed directory with no
+				// rendered children) — no child to collide with, so an
+				// inset corner point is safely inside its own shape.
+				const inset = Math.min(5, box.w / 4, box.h / 4);
+				x = box.x1 + inset;
+				y = box.y1 + inset;
+			}
+			const entry: FileGraphNodeGeometry = { id: n.id(), x, y, expandable };
+			if (expandable) {
+				entry.fileCount = n.data('fileCount');
+			}
+			return entry;
 		});
 	}
 
@@ -152,7 +223,20 @@
 	}) {
 		let metricsPublished = false;
 
-		function runLayout(layoutRunStartedAt: number) {
+		// runLayout always uses the SAME layered/hierarchyHandling elk
+		// algorithm configuration — never a different layout. Only `fit`
+		// varies between the initial paint and a later replace: fitting
+		// the WHOLE viewport to the WHOLE graph on every expansion (not
+		// merely on first paint) is what a real-browser interaction check
+		// this task found actually broken — each fit re-zooms the ENTIRE
+		// graph out further, and at this corpus's edge density, unrelated
+		// nodes end up within single-digit screen pixels of each other,
+		// making ANY subsequent click (by a real user OR a real-mouse
+		// test) land on the wrong element. A stable pan/zoom across
+		// expansions is also the more usable behaviour on its own
+		// merits: a developer expanding one directory should not have
+		// the WHOLE graph jump to a new scale underneath them.
+		function runLayout(layoutRunStartedAt: number, fit: boolean) {
 			opts.cy.one('layoutstop', () => {
 				const stoppedAt = performance.now();
 				if (!metricsPublished) {
@@ -169,28 +253,30 @@
 					opts.onGeometry(geometry);
 				}
 			});
-			opts.cy.layout(LAYOUT_OPTIONS).run();
+			opts.cy.layout({ ...LAYOUT_OPTIONS, fit }).run();
 		}
 
 		return {
-			// start runs the FIRST layout. The instance was already
-			// constructed WITH its initial element array (never an empty
-			// one followed by a synthetic first "replace") — so the very
-			// first layout is not preceded by a remove/add cycle.
+			// start runs the FIRST layout, fitting the whole graph into
+			// the viewport — the one and only fit this component ever
+			// performs. The instance was already constructed WITH its
+			// initial element array (never an empty one followed by a
+			// synthetic first "replace") — so the very first layout is
+			// not preceded by a remove/add cycle.
 			start() {
-				runLayout(performance.now());
+				runLayout(performance.now(), true);
 			},
 			// replace swaps the live instance's element set in ONE batch
-			// and re-runs the SAME layered layout. This is what a
-			// directory expansion or collapse calls — the instance itself
-			// is never torn down.
+			// and re-runs the SAME layered layout WITHOUT re-fitting —
+			// the current pan/zoom is preserved across an expansion or a
+			// collapse. The instance itself is never torn down.
 			replace(newElements: unknown[]) {
 				opts.cy.startBatch();
 				opts.cy.elements().remove();
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				opts.cy.add(newElements as any);
 				opts.cy.endBatch();
-				runLayout(performance.now());
+				runLayout(performance.now(), false);
 			}
 		};
 	}
