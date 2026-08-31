@@ -170,3 +170,412 @@ describe('graph-style.ts: a symbol selector distinguishable from file and direct
 		expect(differsFrom(dirEntry!.style)).toBe(true);
 	});
 });
+
+// --- Task 2: route-level tap-to-expand / tap-to-collapse / re-expand ---
+//
+// Mirrors web/tests/graph-expansion.test.ts's two-part split:
+//   1. Route-lifecycle half: 'cytoscape'/'cytoscape-elk' are MOCKED with a
+//      FULLER fake core than graph-expansion.test.ts's own — this file's
+//      own, extended with add()/removeByIds() support (the two
+//      capabilities this plan's incremental, non-replace seam needs) —
+//      GraphCanvas.svelte itself is NOT mocked; its real effects/
+//      cleanup/event wiring run.
+//   2. Renderer half (further below): the position-displacement finding
+//      review M-9 asks this plan to record, captured against a REAL
+//      headless cytoscape+elk instance — a mock's own arbitrary index-
+//      based positions would not be a meaningful measurement of a real
+//      layout's displacement.
+import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
+import { vi, beforeEach as beforeEachTop } from 'vitest';
+import type { FileGraphNode as FileGraphNodeT } from '$lib/gen/ui_pb';
+
+type FakeElement = { data: Record<string, unknown> };
+type FakeCoreOptions = { elements?: FakeElement[] };
+
+function wrapNode(el: FakeElement, index: number) {
+	return {
+		id: () => el.data.id as string,
+		data: (key: string) => (el.data as Record<string, unknown>)[key],
+		renderedPosition: () => ({ x: index * 10, y: index * 10 }),
+		renderedBoundingBox: () => ({ x1: index * 10, y1: index * 10, w: 20, h: 20 })
+	};
+}
+
+let rt_constructedCount = 0;
+let rt_destroyedCount = 0;
+let rt_appliedElementCounts: number[] = [];
+
+class RtFakeCore {
+	private listeners = new Map<string, Array<(evt?: unknown) => void>>();
+	els: FakeElement[];
+
+	constructor(opts: FakeCoreOptions) {
+		rt_constructedCount++;
+		this.els = opts.elements ?? [];
+		rt_appliedElementCounts.push(this.els.length);
+	}
+	on(event: string, ...args: unknown[]) {
+		const handler = args[args.length - 1] as (evt?: unknown) => void;
+		const list = this.listeners.get(event) ?? [];
+		list.push(handler);
+		this.listeners.set(event, list);
+		return this;
+	}
+	one(event: string, handler: (evt?: unknown) => void) {
+		return this.on(event, handler);
+	}
+	startBatch() {}
+	endBatch() {}
+	elements() {
+		const self = this;
+		return {
+			remove: () => {
+				self.els = [];
+			}
+		};
+	}
+	add(newElements: FakeElement[]) {
+		this.els = [...this.els, ...newElements];
+		rt_appliedElementCounts.push(this.els.length);
+	}
+	getElementById(id: string) {
+		const self = this;
+		const found = self.els.some((e) => e.data.id === id);
+		return {
+			length: found ? 1 : 0,
+			remove: () => {
+				if (!found) return;
+				self.els = self.els.filter((e) => e.data.id !== id);
+				rt_appliedElementCounts.push(self.els.length);
+			}
+		};
+	}
+	layout(_opts: unknown) {
+		return {
+			run: () => {
+				queueMicrotask(() => {
+					for (const h of this.listeners.get('layoutstop') ?? []) h();
+				});
+			}
+		};
+	}
+	nodes() {
+		const nodeEls = this.els.filter((e) => !('source' in e.data));
+		return {
+			length: nodeEls.length,
+			map: <T,>(fn: (n: ReturnType<typeof wrapNode>) => T) => nodeEls.map((el, i) => fn(wrapNode(el, i)))
+		};
+	}
+	edges() {
+		return { length: this.els.filter((e) => 'source' in e.data).length };
+	}
+	resize() {}
+	destroy() {
+		rt_destroyedCount++;
+	}
+	// simulateTap drives the SAME 'tap' handler GraphCanvas registers on a
+	// real node click — invoked by the test, never by production code.
+	simulateTap(nodeId: string) {
+		const el = this.els.find((e) => e.data.id === nodeId);
+		if (!el) throw new Error(`simulateTap: no element with id "${nodeId}" in the currently applied set`);
+		const handlers = this.listeners.get('tap') ?? [];
+		const evt = { target: wrapNode(el, 0) };
+		for (const h of handlers) h(evt);
+	}
+	elementIds(): string[] {
+		return this.els.map((e) => e.data.id as string).sort();
+	}
+	nodeIds(): string[] {
+		return this.els
+			.filter((e) => !('source' in e.data))
+			.map((e) => e.data.id as string)
+			.sort();
+	}
+	childCountOf(parentId: string): number {
+		return this.els.filter((e) => e.data.parent === parentId).length;
+	}
+	elementsData(): Record<string, unknown>[] {
+		return this.els.map((e) => e.data);
+	}
+}
+
+let rt_currentInstance: RtFakeCore | undefined;
+
+function rtFakeCytoscapeFactory(opts: FakeCoreOptions) {
+	const instance = new RtFakeCore(opts);
+	rt_currentInstance = instance;
+	return instance;
+}
+rtFakeCytoscapeFactory.use = () => {};
+
+vi.mock('cytoscape', () => ({ default: rtFakeCytoscapeFactory }));
+vi.mock('cytoscape-elk', () => ({ default: () => {} }));
+
+let rt_currentFileGraphImpl: () => Promise<FileGraphResponse> = () =>
+	Promise.reject(new Error('graph-expand.test.ts: no fileGraph stub configured for this test'));
+let rt_fileGraphCallCount = 0;
+
+const rt_fileSymbolsImpls = new Map<string, () => Promise<FileSymbolsResponse>>();
+const rt_fileSymbolsCallCounts = new Map<string, number>();
+
+vi.doMock('$lib/client', () => ({
+	uiClient: {
+		fileGraph: () => {
+			rt_fileGraphCallCount++;
+			return rt_currentFileGraphImpl();
+		},
+		fileSymbols: (req: { path: string }) => {
+			rt_fileSymbolsCallCounts.set(req.path, (rt_fileSymbolsCallCounts.get(req.path) ?? 0) + 1);
+			const impl = rt_fileSymbolsImpls.get(req.path);
+			if (!impl) {
+				return Promise.reject(
+					new Error(`graph-expand.test.ts: no fileSymbols stub configured for path "${req.path}"`)
+				);
+			}
+			return impl();
+		}
+	}
+}));
+
+const { default: RtGraphPage } = await import('../src/routes/graph/+page.svelte');
+
+function rtNode(path: string): FileGraphNodeT {
+	return { path, language: 'go', symbolCount: 1n, cycleId: 0 } as unknown as FileGraphNodeT;
+}
+
+function rtResponse(nodes: FileGraphNodeT[]): FileGraphResponse {
+	return {
+		nodes,
+		edges: [],
+		excludedPackageNodeCount: 0n,
+		excludedSelfEdgeCount: 0n,
+		excludedContainsEdgeCount: 0n,
+		cycleCount: 0
+	} as unknown as FileGraphResponse;
+}
+
+beforeEachTop(() => {
+	rt_constructedCount = 0;
+	rt_destroyedCount = 0;
+	rt_appliedElementCounts = [];
+	rt_fileGraphCallCount = 0;
+	rt_fileSymbolsCallCounts.clear();
+	rt_fileSymbolsImpls.clear();
+	rt_currentInstance = undefined;
+});
+
+describe('route: file tap expand / collapse / re-expand (Task 2)', () => {
+	it('CLICK ONE expands: exactly one fileSymbols request for that path, and the file reports itself as a parent with a child count equal to the response symbol count', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
+		rt_fileSymbolsImpls.set('a.go', () =>
+			Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo'), symbol('s2', 'Bar')]))
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(2));
+
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+	});
+
+	it('CLICK TWO collapses: NO further request (cumulative still 1), child count returns to ZERO, and a SECOND expanded file keeps its own children', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go'), rtNode('b.go')]));
+		rt_fileSymbolsImpls.set('a.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
+		rt_fileSymbolsImpls.set('b.go', () =>
+			Promise.resolve(fileSymbolsResponse([symbol('s2', 'Baz'), symbol('s3', 'Qux')]))
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(1));
+		rt_currentInstance!.simulateTap('b.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('b.go')).toBe(2));
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(0));
+
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+		expect(rt_currentInstance!.childCountOf('b.go')).toBe(2);
+	});
+
+	it('CLICK THREE re-expands from cache: NO further request (cumulative still 1), child count returns to EXACTLY the symbol count, never doubled', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
+		rt_fileSymbolsImpls.set('a.go', () =>
+			Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo'), symbol('s2', 'Bar')]))
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(2));
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(0));
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(2));
+
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+	});
+
+	it('expanding one file leaves every other file node and every edge element untouched — full counts compared before and after', async () => {
+		rt_currentFileGraphImpl = () =>
+			Promise.resolve(rtResponse([rtNode('a.go'), rtNode('b.go'), rtNode('c.go')]));
+		rt_fileSymbolsImpls.set('a.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+		const before = rt_currentInstance!.nodeIds();
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(1));
+
+		const after = rt_currentInstance!.nodeIds();
+		// Exactly one new node id (the symbol's own, an implementation
+		// detail this test does not predict) was added; every id present
+		// before the expansion is still present, unchanged, afterward.
+		expect(after.length).toBe(before.length + 1);
+		expect(before.every((id) => after.includes(id))).toBe(true);
+		expect(rt_currentInstance!.els.filter((e) => 'source' in e.data)).toHaveLength(0);
+	});
+
+	it('the identity and compound parent of every unaffected file node are preserved across an expansion', async () => {
+		rt_currentFileGraphImpl = () =>
+			Promise.resolve(rtResponse([rtNode('x/a.go'), rtNode('y/b.go'), rtNode('z/c.go'), rtNode('w/d.go')]));
+		rt_fileSymbolsImpls.set('w/d.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		// Collapsed default: one node per directory (x, y, z, w) — three of
+		// these (x, y, z) are the unaffected nodes this test tracks.
+		const before = new Map(rt_currentInstance!.elementsData().map((d) => [d.id as string, d.parent]));
+		expect(before.size).toBeGreaterThanOrEqual(3);
+
+		rt_currentInstance!.simulateTap('w');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('w')).toBeGreaterThan(0));
+		rt_currentInstance!.simulateTap('w/d.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('w/d.go')).toBe(1));
+
+		for (const trackedId of ['x', 'y', 'z']) {
+			const afterEl = rt_currentInstance!.elementsData().find((d) => d.id === trackedId);
+			expect(afterEl).toBeDefined();
+			expect(afterEl!.parent).toBe(before.get(trackedId));
+		}
+	});
+
+	it('a rejected file-symbols request renders the named failure, leaves the file unexpanded, and leaves the rest of the model intact and non-empty', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go'), rtNode('b.go')]));
+		rt_fileSymbolsImpls.set('a.go', () => Promise.reject(new Error('boom')));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+		const before = rt_currentInstance!.elementIds();
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(screen.getByTestId('graph-file-failure-unknown')).toBeInTheDocument());
+
+		expect(rt_currentInstance!.childCountOf('a.go')).toBe(0);
+		expect(rt_currentInstance!.elementIds()).toEqual(before);
+		expect(rt_currentInstance!.elementIds().length).toBeGreaterThan(0);
+	});
+
+	it('a truncated response renders a statement naming the shown count and the true total; an untruncated response renders no such statement', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go'), rtNode('b.go')]));
+		rt_fileSymbolsImpls.set('a.go', () =>
+			Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')], { totalCount: 500, truncated: true }))
+		);
+		rt_fileSymbolsImpls.set('b.go', () => Promise.resolve(fileSymbolsResponse([symbol('s2', 'Bar')])));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(screen.getByTestId('graph-file-truncated-a.go')).toBeInTheDocument());
+		expect(screen.getByTestId('graph-file-truncated-a.go').textContent).toContain('1');
+		expect(screen.getByTestId('graph-file-truncated-a.go').textContent).toContain('500');
+
+		rt_currentInstance!.simulateTap('b.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('b.go')).toBe(1));
+		expect(screen.queryByTestId('graph-file-truncated-b.go')).not.toBeInTheDocument();
+	});
+
+	it('STALE resolved-after-collapse: a response arriving after its file was collapsed applies ZERO elements, then a later re-expand serves from the now-cached response with NO new request', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
+		let resolveFn: ((r: FileSymbolsResponse) => void) | undefined;
+		rt_fileSymbolsImpls.set(
+			'a.go',
+			() =>
+				new Promise((resolve) => {
+					resolveFn = resolve;
+				})
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+		const preClickCount = rt_currentInstance!.els.length;
+
+		rt_currentInstance!.simulateTap('a.go'); // expand: request in flight
+		rt_currentInstance!.simulateTap('a.go'); // collapse: BEFORE the request settles
+
+		resolveFn!(fileSymbolsResponse([symbol('s1', 'Foo'), symbol('s2', 'Bar')]));
+		await new Promise((r) => setTimeout(r, 20));
+
+		expect(rt_currentInstance!.childCountOf('a.go')).toBe(0);
+		expect(rt_currentInstance!.elementsData().some((d) => d.parent === 'a.go')).toBe(false);
+		expect(rt_currentInstance!.els.length).toBe(preClickCount);
+
+		// The stale response was CACHED, not discarded: a further tap
+		// re-expands from it with no new request.
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(2));
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+	});
+
+	it('STALE resolved-after-unmount: exactly one destruction and zero element additions after it, and resolving the promise throws nothing', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
+		let resolveFn: ((r: FileSymbolsResponse) => void) | undefined;
+		rt_fileSymbolsImpls.set(
+			'a.go',
+			() =>
+				new Promise((resolve) => {
+					resolveFn = resolve;
+				})
+		);
+		const { unmount } = render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go'); // expand: request in flight
+		const countsBeforeUnmount = rt_appliedElementCounts.length;
+		unmount();
+		expect(rt_destroyedCount).toBe(1);
+
+		expect(() => resolveFn!(fileSymbolsResponse([symbol('s1', 'Foo')]))).not.toThrow();
+		await new Promise((r) => setTimeout(r, 20));
+
+		expect(rt_destroyedCount).toBe(1);
+		expect(rt_appliedElementCounts.length).toBe(countsBeforeUnmount);
+	});
+
+	it('selecting a directory compound node does NOT issue a file-symbols request', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('x/a.go'), rtNode('x/b.go')]));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('x');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('x')).toBe(2));
+
+		expect(rt_fileSymbolsCallCounts.size).toBe(0);
+	});
+
+	it('the explicit collapse-affordance button collapses an expanded file WITHOUT a canvas tap, calling the SAME toggleFile path (WINDOWS.md 27)', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
+		rt_fileSymbolsImpls.set('a.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(1));
+
+		const collapseButton = screen.getByTestId('graph-collapse-file-a.go');
+		await fireEvent.click(collapseButton);
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(0));
+
+		expect(rt_fileSymbolsCallCounts.get('a.go')).toBe(1);
+	});
+});
