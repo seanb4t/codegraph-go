@@ -92,6 +92,20 @@ service UIService {
   // seam. Read-only and additive per D-02a — it performs no network
   // operation and mutates nothing (SRV-03).
   rpc FileGraph(FileGraphRequest) returns (FileGraphResponse);
+  // FileSymbols is plan 05-06's thirteenth rpc (GRF-03): it projects
+  // internal/query.Engine.FileSymbols's per-file symbol enumeration onto
+  // the wire — ordered, capped and counted. It exists SEPARATELY from
+  // GetNodeDetail, deliberately: GetNodeDetail's file mode is fetched on
+  // every Browse file navigation and carries a path and a source blob
+  // only (internal/query.FileDetail has exactly two fields) — it does
+  // not enumerate symbols, and hanging a symbol list off it would make
+  // every navigation pay for data that view does not render. path is
+  // confined by the SAME gate GetNodeDetailRequest.file and
+  // GetPermalinkRequest.path use ((*query.Engine).ValidateRepoRelativePath,
+  // SRV-05) — no second confinement implementation. Read-only and
+  // additive per D-02a — it performs no network operation and mutates
+  // nothing (SRV-03).
+  rpc FileSymbols(FileSymbolsRequest) returns (FileSymbolsResponse);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -872,4 +886,42 @@ message FileGraphResponse {
 
   // cycle_count mirrors FileGraphResult.CycleCount (GRF-04, D-06).
   int32 cycle_count = 6;
+}
+
+// FileSymbolsRequest is the uiv1 projection of
+// internal/query.Engine.FileSymbols's input (05-06 Task 1 checkpoint).
+message FileSymbolsRequest {
+  // path is a repo-relative file path, confined by the same
+  // ValidateRepoRelativePath gate GetNodeDetailRequest.file and
+  // GetPermalinkRequest.path use (SRV-05). There is no limit field in
+  // v1: the response is capped server-side by query.MaxFileSymbols, and
+  // a limit can be added additively later if a caller ever needs a
+  // smaller page — a field added speculatively can never be taken back.
+  string path = 1;
+}
+
+// FileSymbolsResponse is the uiv1 projection of
+// internal/query.FileSymbolsResult (internal/query/filesymbols.go),
+// frozen field-for-field at the 05-06 Task 1 checkpoint (a
+// maintainer-approved one-way door, D-02a). Mapped by a named mapper in
+// internal/uiserver/handlers.go — never an inline literal at the handler
+// call site, so the mapping cannot drift from its source silently.
+message FileSymbolsResponse {
+  // symbols mirrors FileSymbolsResult.Symbols. Reuses the EXISTING
+  // shared Node message rather than a new, narrower symbol shape (05-06
+  // Task 1 checkpoint sub-decision 1): a repository has one symbol
+  // shape, and a second one is how two vocabularies for the same domain
+  // object start.
+  repeated Node symbols = 1;
+
+  // total_count mirrors FileSymbolsResult.Total: the TRUE number of
+  // symbols the file has, whether or not the list below was capped.
+  int32 total_count = 2;
+
+  // truncated mirrors FileSymbolsResult.Truncated: true exactly when the
+  // returned list was capped by query.MaxFileSymbols (05-06 Task 1
+  // checkpoint sub-decision 2). A capped list is never returned without
+  // both total_count and this flag riding along, so a partial answer is
+  // never presented as complete.
+  bool truncated = 3;
 }

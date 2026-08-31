@@ -92,6 +92,8 @@ const (
 	UIServiceGetHealthProcedure = "/codegraph.ui.v1.UIService/GetHealth"
 	// UIServiceFileGraphProcedure is the fully-qualified name of the UIService's FileGraph RPC.
 	UIServiceFileGraphProcedure = "/codegraph.ui.v1.UIService/FileGraph"
+	// UIServiceFileSymbolsProcedure is the fully-qualified name of the UIService's FileSymbols RPC.
+	UIServiceFileSymbolsProcedure = "/codegraph.ui.v1.UIService/FileSymbols"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -140,6 +142,20 @@ type UIServiceClient interface {
 	// seam. Read-only and additive per D-02a — it performs no network
 	// operation and mutates nothing (SRV-03).
 	FileGraph(context.Context, *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error)
+	// FileSymbols is plan 05-06's thirteenth rpc (GRF-03): it projects
+	// internal/query.Engine.FileSymbols's per-file symbol enumeration onto
+	// the wire — ordered, capped and counted. It exists SEPARATELY from
+	// GetNodeDetail, deliberately: GetNodeDetail's file mode is fetched on
+	// every Browse file navigation and carries a path and a source blob
+	// only (internal/query.FileDetail has exactly two fields) — it does
+	// not enumerate symbols, and hanging a symbol list off it would make
+	// every navigation pay for data that view does not render. path is
+	// confined by the SAME gate GetNodeDetailRequest.file and
+	// GetPermalinkRequest.path use ((*query.Engine).ValidateRepoRelativePath,
+	// SRV-05) — no second confinement implementation. Read-only and
+	// additive per D-02a — it performs no network operation and mutates
+	// nothing (SRV-03).
+	FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -225,6 +241,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("FileGraph")),
 			connect.WithClientOptions(opts...),
 		),
+		fileSymbols: connect.NewClient[uiv1.FileSymbolsRequest, uiv1.FileSymbolsResponse](
+			httpClient,
+			baseURL+UIServiceFileSymbolsProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("FileSymbols")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -242,6 +264,7 @@ type uIServiceClient struct {
 	getPermalink  *connect.Client[uiv1.GetPermalinkRequest, uiv1.GetPermalinkResponse]
 	getHealth     *connect.Client[uiv1.GetHealthRequest, uiv1.GetHealthResponse]
 	fileGraph     *connect.Client[uiv1.FileGraphRequest, uiv1.FileGraphResponse]
+	fileSymbols   *connect.Client[uiv1.FileSymbolsRequest, uiv1.FileSymbolsResponse]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -304,6 +327,11 @@ func (c *uIServiceClient) FileGraph(ctx context.Context, req *connect.Request[ui
 	return c.fileGraph.CallUnary(ctx, req)
 }
 
+// FileSymbols calls codegraph.ui.v1.UIService.FileSymbols.
+func (c *uIServiceClient) FileSymbols(ctx context.Context, req *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error) {
+	return c.fileSymbols.CallUnary(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
@@ -350,6 +378,20 @@ type UIServiceHandler interface {
 	// seam. Read-only and additive per D-02a — it performs no network
 	// operation and mutates nothing (SRV-03).
 	FileGraph(context.Context, *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error)
+	// FileSymbols is plan 05-06's thirteenth rpc (GRF-03): it projects
+	// internal/query.Engine.FileSymbols's per-file symbol enumeration onto
+	// the wire — ordered, capped and counted. It exists SEPARATELY from
+	// GetNodeDetail, deliberately: GetNodeDetail's file mode is fetched on
+	// every Browse file navigation and carries a path and a source blob
+	// only (internal/query.FileDetail has exactly two fields) — it does
+	// not enumerate symbols, and hanging a symbol list off it would make
+	// every navigation pay for data that view does not render. path is
+	// confined by the SAME gate GetNodeDetailRequest.file and
+	// GetPermalinkRequest.path use ((*query.Engine).ValidateRepoRelativePath,
+	// SRV-05) — no second confinement implementation. Read-only and
+	// additive per D-02a — it performs no network operation and mutates
+	// nothing (SRV-03).
+	FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error)
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -431,6 +473,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("FileGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceFileSymbolsHandler := connect.NewUnaryHandler(
+		UIServiceFileSymbolsProcedure,
+		svc.FileSymbols,
+		connect.WithSchema(uIServiceMethods.ByName("FileSymbols")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -457,6 +505,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceGetHealthHandler.ServeHTTP(w, r)
 		case UIServiceFileGraphProcedure:
 			uIServiceFileGraphHandler.ServeHTTP(w, r)
+		case UIServiceFileSymbolsProcedure:
+			uIServiceFileSymbolsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -512,4 +562,8 @@ func (UnimplementedUIServiceHandler) GetHealth(context.Context, *connect.Request
 
 func (UnimplementedUIServiceHandler) FileGraph(context.Context, *connect.Request[uiv1.FileGraphRequest]) (*connect.Response[uiv1.FileGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.FileGraph is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.FileSymbols is not implemented"))
 }

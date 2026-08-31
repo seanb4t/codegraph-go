@@ -1061,3 +1061,15 @@ func (s *uiService) FileGraph(ctx context.Context, _ *connect.Request[uiv1.FileG
 	}
 	return connect.NewResponse(resp), nil
 }
+
+// FileSymbols is a MINIMAL placeholder (Rule 3, identical precedent to
+// 05-02 Task 2's FileGraph placeholder and 04-03 Task 2's GetHealth
+// placeholder): the regenerated uiv1connect.UIServiceHandler interface
+// requires this method for the package to build at all, so this returns
+// connect.CodeUnimplemented — never a fabricated response — deliberately
+// so filesymbols_test.go's RED phase observes honest "unimplemented"
+// failures rather than a compile error. Task 3(d) REPLACES (not extends)
+// this placeholder with the real handler and mapper.
+func (s *uiService) FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("FileSymbols: not yet implemented (plan 05-06 Task 3)"))
+}
