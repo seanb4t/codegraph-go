@@ -128,7 +128,17 @@ vi.doMock('$lib/client', () => ({
 		fileGraph: () => {
 			fileGraphCallCount++;
 			return currentFileGraphImpl();
-		}
+		},
+		// 05-07 (GRF-03) wires a FILE tap to a fileSymbols request — a
+		// concern this file's own tests (05-08's directory-level
+		// expansion lifecycle) do not exercise. A rejected stub is enough
+		// to prove the isolation this file's one file-tap test below
+		// actually checks: a file-symbols failure never touches the
+		// DIRECTORY-level rollup's elements array or fileGraph call count.
+		// web/tests/graph-expand.test.ts is where the file-symbols path
+		// itself is exercised, with its own fuller mock.
+		fileSymbols: () =>
+			Promise.reject(new Error('graph-expansion.test.ts: fileSymbols is not this file\'s concern'))
 	}
 }));
 
@@ -232,7 +242,16 @@ describe('graph expansion: route lifecycle (mocked renderer)', () => {
 		expect(fileGraphCallCount).toBe(1);
 	});
 
-	it('selecting a FILE node applies no new element array and issues no call', async () => {
+	it('selecting a FILE node never issues a SECOND fileGraph call and never applies a new DIRECTORY-level element array on a rejected file-symbols request', async () => {
+		// 05-07 (GRF-03) wires a file tap to a fileSymbols request, tested
+		// in full in web/tests/graph-expand.test.ts against a fuller mock.
+		// What THIS file's own test proves is narrower and still true: the
+		// two async paths are isolated from each other. A file-symbols
+		// failure (this file's mock always rejects fileSymbols) never
+		// re-issues the DIRECTORY-level fileGraph call and never touches
+		// the `elements` prop's full-replace element array — only the
+		// SEPARATE addedElements/removedElementIds seam this plan adds,
+		// which this file's minimal FakeCore does not track.
 		currentFileGraphImpl = () => Promise.resolve(response([node('x/a.go'), node('x/b.go'), node('y/c.go')], []));
 		render(GraphPage);
 		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());

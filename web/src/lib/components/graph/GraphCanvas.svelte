@@ -236,8 +236,17 @@
 		// expansions is also the more usable behaviour on its own
 		// merits: a developer expanding one directory should not have
 		// the WHOLE graph jump to a new scale underneath them.
-		function runLayout(layoutRunStartedAt: number, fit: boolean) {
+		function runLayout(layoutRunStartedAt: number, fit: boolean, resizeAfter = false) {
 			opts.cy.one('layoutstop', () => {
+				// resizeAfter is set only by add() above — an addition can
+				// grow a compound's rendered extent, which cytoscape does
+				// not observe on its own; replace() and the initial start()
+				// never pass it, since removing-then-re-adding the SAME
+				// element count never grows the extent past what the prior
+				// layout already accounted for.
+				if (resizeAfter && typeof opts.cy.resize === 'function') {
+					opts.cy.resize();
+				}
 				const stoppedAt = performance.now();
 				if (!metricsPublished) {
 					metricsPublished = true;
@@ -279,6 +288,50 @@
 				opts.cy.endBatch();
 				runLayout(performance.now(), false);
 			},
+			// add MERGES a batch of new elements into the live instance
+			// WITHOUT touching anything already present — the incremental
+			// counterpart to replace() above, added for 05-07's file-to-
+			// symbol expansion: a symbol element is layered on top of
+			// whatever the directory-level `elements` prop currently holds,
+			// never derived by recomputing that whole array. A no-op for an
+			// empty batch, matching this seam's data-in contract (the
+			// caller decides WHETHER to add; this method only decides HOW).
+			// Re-runs the same layered layout WITHOUT re-fitting (`fit:
+			// false`, mirroring replace()) so the new children are placed
+			// rather than stacked at the origin, and calls resize() once
+			// the layout settles: adding children changes the graph's own
+			// rendered extent, which cytoscape does not observe on its own
+			// (the ResizeObserver above watches the CONTAINER element's
+			// pixel size, a different thing entirely).
+			add(newElements: unknown[]) {
+				if (newElements.length === 0) return;
+				opts.cy.startBatch();
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				opts.cy.add(newElements as any);
+				opts.cy.endBatch();
+				runLayout(performance.now(), false, true);
+			},
+			// removeByIds removes EXACTLY the named elements from the live
+			// instance — no layout re-run (removing a symbol's children
+			// does not require re-placing anything else) and no re-fit.
+			// Direct id lookup (getElementById), the same discipline
+			// focus() below already follows, never a composed selector
+			// string built from caller-supplied ids. An id with no current
+			// match is silently skipped rather than throwing — the route's
+			// own once-per-file bookkeeping is the source of truth for
+			// WHICH ids to remove; this method does not second-guess it.
+			removeByIds(ids: string[]) {
+				if (ids.length === 0) return;
+				if (typeof opts.cy.getElementById !== 'function') return;
+				opts.cy.startBatch();
+				for (const id of ids) {
+					const el = opts.cy.getElementById(id);
+					if (el && el.length > 0 && typeof el.remove === 'function') {
+						el.remove();
+					}
+				}
+				opts.cy.endBatch();
+			},
 			// focus fits the viewport to exactly the elements named by
 			// `ids`, built by direct id lookup (getElementById) rather
 			// than a selector string — a repository-relative file path
@@ -317,6 +370,8 @@
 		style,
 		requestIssuedAt,
 		focusNodeIds,
+		addedElements,
+		removedElementIds,
 		onNodeSelected,
 		onEdgeSelected,
 		onBackgroundTapped
@@ -324,9 +379,12 @@
 		// The rollup's plain element-data array — never a cytoscape type.
 		// GraphCanvas is what turns this application vocabulary into
 		// cytoscape's ElementDefinition shape, not the other way around.
-		// Reactive: a CHANGED array (an expansion or a collapse) replaces
-		// the live instance's elements without reconstructing it — see the
-		// second $effect below.
+		// Reactive: a CHANGED array (an expansion or a collapse of a
+		// DIRECTORY) replaces the live instance's elements without
+		// reconstructing it — see the second $effect below. This is the
+		// directory-level FULL-REPLACE path; addedElements/
+		// removedElementIds below are the separate, INCREMENTAL path a
+		// file's symbol expansion uses instead.
 		elements: FileGraphElement[];
 		// graph-style.ts's plain style-sheet data.
 		style: unknown[];
@@ -343,12 +401,28 @@
 		// on element data); this component decides only HOW to bring them
 		// into view — see createFileGraphRenderer's focus() above.
 		focusNodeIds?: string[];
-		// Fired on a node tap, carrying the tapped element's id and
-		// whether it is a directory compound — never a cytoscape Element
-		// or event object. The route decides what a directory tap means
-		// (expand/collapse); a file tap is handed through unchanged and
-		// this plan's route ignores it.
-		onNodeSelected?: (id: string, isDirectory: boolean) => void;
+		// addedElements: a plain element-data array to MERGE into the live
+		// instance without touching anything already present (05-07's
+		// file-to-symbol expansion). A NEW array reference triggers a
+		// fresh add via createFileGraphRenderer's add() above — see the
+		// fourth $effect below. The route is responsible for handing this
+		// a genuinely new batch each time; an unchanged reference is a
+		// no-op by construction (Svelte's own reactivity, not a guard this
+		// component adds).
+		addedElements?: FileGraphElement[];
+		// removedElementIds: a plain string-id array — the live instance
+		// removes exactly these ids via removeByIds() above. A NEW array
+		// reference triggers a fresh removal — see the fifth $effect
+		// below.
+		removedElementIds?: string[];
+		// Fired on a node tap, carrying the tapped element's id and its
+		// element kind — 'directory', 'file', or 'symbol' (05-07 adds the
+		// third kind; never a cytoscape Element or event object). The
+		// route decides what a tap means for each kind (a directory or a
+		// file each expand/collapse in place; a symbol tap is currently a
+		// no-op on the route side, since a symbol has nothing further to
+		// expand).
+		onNodeSelected?: (id: string, kind: 'directory' | 'file' | 'symbol') => void;
 		// Fired on an edge tap, carrying the edge's source id, target id
 		// and its element data (kindCounts/totalCount/inCycle/
 		// aggregatedFrom, the FileGraphEdgeData shape) — never a
@@ -413,7 +487,17 @@
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		cy.on('tap', 'node', (evt: any) => {
 			const target = evt.target;
-			onNodeSelected?.(target.id(), Boolean(target.data('isDirectory')));
+			// Read the two boolean discriminators directly off element
+			// data (never a rendered class list, never a parsed id) — the
+			// same typed-data-over-class-string discipline this
+			// application's cycle grouping already follows. A node is
+			// never both a directory AND a symbol, so this is a genuine
+			// three-way discriminator, not a priority order between
+			// overlapping cases.
+			const isDirectory = Boolean(target.data('isDirectory'));
+			const isSymbol = Boolean(target.data('isSymbol'));
+			const kind: 'directory' | 'file' | 'symbol' = isDirectory ? 'directory' : isSymbol ? 'symbol' : 'file';
+			onNodeSelected?.(target.id(), kind);
 		});
 
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -499,6 +583,27 @@
 		const ids = focusNodeIds ?? [];
 		if (ids.length === 0) return;
 		renderer?.focus(ids);
+	});
+
+	// A FOURTH effect tracks addedElements and, on every NEW array
+	// reference, merges that batch into the live instance via add() above
+	// — the incremental counterpart to the second effect's full replace.
+	// Same no-guard-needed reasoning as the THIRD effect: the prop
+	// defaults to an empty array and add() itself no-ops on an empty
+	// batch, so an unguarded first run is already inert.
+	$effect(() => {
+		const batch = addedElements ?? [];
+		if (batch.length === 0) return;
+		renderer?.add(batch);
+	});
+
+	// A FIFTH effect tracks removedElementIds and, on every NEW array
+	// reference, removes exactly those ids via removeByIds() above.
+	// Same reasoning as the fourth effect above.
+	$effect(() => {
+		const ids = removedElementIds ?? [];
+		if (ids.length === 0) return;
+		renderer?.removeByIds(ids);
 	});
 </script>
 
