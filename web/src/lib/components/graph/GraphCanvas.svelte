@@ -320,6 +320,19 @@
 			// match is silently skipped rather than throwing — the route's
 			// own once-per-file bookkeeping is the source of truth for
 			// WHICH ids to remove; this method does not second-guess it.
+			//
+			// Republishes the geometry seam directly (computeGeometry + the
+			// caller's onGeometry callback) even though no layout ran: the
+			// seam publishes after every SETTLE elsewhere because that is
+			// the only point positions are known to have changed, but a
+			// removal changes WHICH ids exist even when no position moves,
+			// and every consumer of that seam (a real-browser interaction
+			// driver, or any future one) reads it as the live, current
+			// element list — not "current as of the last layout." Skipping
+			// this republish leaves the seam reporting an id the model no
+			// longer has, discovered via a live-browser check driving real
+			// mouse input against the collapse-affordance button this task
+			// added.
 			removeByIds(ids: string[]) {
 				if (ids.length === 0) return;
 				if (typeof opts.cy.getElementById !== 'function') return;
@@ -331,6 +344,10 @@
 					}
 				}
 				opts.cy.endBatch();
+				const geometry = computeGeometry(opts.cy);
+				if (geometry !== undefined) {
+					opts.onGeometry(geometry);
+				}
 			},
 			// focus fits the viewport to exactly the elements named by
 			// `ids`, built by direct id lookup (getElementById) rather

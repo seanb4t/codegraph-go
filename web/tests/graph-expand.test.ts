@@ -694,4 +694,53 @@ describe('the renderer (real headless cytoscape, no DOM): position-displacement 
 
 		cy.destroy();
 	});
+
+	it('removeByIds republishes the geometry seam even though no layout re-runs, so a collapsed symbol is not still reported as live', async () => {
+		// Found during a live-browser real-mouse check of the collapse-
+		// affordance button: removeByIds() correctly removes the element
+		// from the cytoscape model, but the geometry seam only republishes
+		// from inside runLayout's own layoutstop handler — a removal-only
+		// operation that intentionally skips re-running layout was
+		// therefore leaving the seam reporting a symbol id the model no
+		// longer had. Real screen pixels were unaffected (cytoscape
+		// redraws on any mutation independent of layout); the seam a
+		// real-browser driver reads to find its next click target was the
+		// only thing stale.
+		const { realCytoscape, createFileGraphRenderer } = await realRendererModule();
+
+		const elementsA = [
+			{ data: { id: 'a.go', isDirectory: false } },
+			{ data: { id: 'symbol-1', isDirectory: false, isSymbol: true, parent: 'a.go', label: 'Foo' } }
+		];
+
+		const cy = realCytoscape({ headless: true, elements: elementsA });
+		const waiters: Array<() => void> = [];
+		function nextSettle() {
+			return new Promise<void>((resolve) => waiters.push(resolve));
+		}
+		let lastGeometry: Array<{ id: string }> = [];
+		const renderer = createFileGraphRenderer({
+			cy,
+			requestIssuedAt: performance.now(),
+			onMetrics: () => {},
+			onGeometry: (g) => {
+				lastGeometry = g;
+				waiters.shift()?.();
+			}
+		});
+
+		renderer.start();
+		await nextSettle();
+		expect(lastGeometry.map((g) => g.id).sort()).toEqual(['a.go', 'symbol-1']);
+
+		// removeByIds republishes SYNCHRONOUSLY (no layout re-run, so no
+		// layoutstop event to await) — the assertion below reads
+		// lastGeometry immediately, not after another nextSettle() wait.
+		renderer.removeByIds(['symbol-1']);
+
+		expect(lastGeometry.map((g) => g.id)).toEqual(['a.go']);
+		expect(cy.getElementById('symbol-1').length).toBe(0);
+
+		cy.destroy();
+	});
 });
