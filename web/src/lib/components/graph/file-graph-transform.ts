@@ -127,7 +127,11 @@ export const EXPANSION_NODE_CEILING = 1500;
 // dirOf returns the IMMEDIATE parent directory of a repository-relative
 // path, or undefined for a repository-root file (no '/' in the path at
 // all). This module never walks an ancestor chain — only this one level.
-function dirOf(path: string): string | undefined {
+// Exported so +page.svelte can reconcile its own file-expansion
+// bookkeeping against the SAME immediate-parent rule this module's own
+// node rollup already uses, rather than a second, independently-written
+// path-splitting rule that could drift out of sync with it.
+export function dirOf(path: string): string | undefined {
 	const idx = path.lastIndexOf('/');
 	return idx === -1 ? undefined : path.slice(0, idx);
 }

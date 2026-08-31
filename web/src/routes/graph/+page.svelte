@@ -18,6 +18,7 @@
 		EXPANSION_NODE_CEILING,
 		symbolElementsForFile,
 		symbolElementIdsForFile,
+		dirOf,
 		type FileGraphElement
 	} from '$lib/components/graph/file-graph-transform';
 	import { fileGraphStyle } from '$lib/components/graph/graph-style';
@@ -230,6 +231,37 @@
 			next.delete(id);
 			expandedDirs = next;
 			refusalMessage = undefined;
+
+			// Collapsing a directory removes every file node directly
+			// inside it from the rendered element set — rollupToElements
+			// replaces them with the single collapsed-directory node, and
+			// GraphCanvas's replace() correctly drops any of that file's
+			// own symbol children too, since a symbol's parent id no
+			// longer exists in the same element batch. But expandedFiles/
+			// fileSymbolsCache are THIS route's own, entirely separate
+			// bookkeeping (see the module doc comment above) — nothing
+			// else reconciles them when a file's own directory, rather
+			// than an unrelated one, is what just collapsed. Left alone,
+			// a file whose directory just collapsed keeps claiming
+			// "expanded" (its collapse-affordance button stays visible)
+			// while rendering zero symbols, and re-expanding the
+			// directory later does not bring them back on its own — the
+			// state and the rendered graph diverge, reached through the
+			// file's own directory instead of an unrelated one. Dropping
+			// it from expandedFiles here (fileSymbolsCache is left
+			// untouched) means a later tap on the file, once its
+			// directory is expanded again, correctly re-applies the
+			// still-cached response rather than issuing a new request —
+			// the once-per-file contract is preserved, it just requires
+			// one further tap to reactivate after a same-directory
+			// round trip, exactly as toggleFile's own re-expand-from-
+			// cache branch already handles for every other case.
+			const filesToCollapse = [...expandedFiles].filter((file) => dirOf(file) === id);
+			if (filesToCollapse.length > 0) {
+				const nextFiles = new Set(expandedFiles);
+				for (const file of filesToCollapse) nextFiles.delete(file);
+				expandedFiles = nextFiles;
+			}
 			return;
 		}
 

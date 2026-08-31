@@ -623,6 +623,83 @@ describe('route: file tap expand / collapse / re-expand (Task 2)', () => {
 		expect(rt_currentInstance!.elementsData().filter((d) => d.parent === 'a.go')).toHaveLength(2);
 	});
 
+	it('a file whose OWN directory is collapsed and re-expanded is correctly resynced: no stale "expanded" claim, and a further tap restores it from cache with no new request', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('dir/a.go'), rtNode('dir/b.go')]));
+		rt_fileSymbolsImpls.set('dir/b.go', () =>
+			Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo'), symbol('s2', 'Bar')]))
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(2));
+
+		rt_currentInstance!.simulateTap('dir/b.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir/b.go')).toBe(2));
+		expect(rt_fileSymbolsCallCounts.get('dir/b.go')).toBe(1);
+
+		// Collapse the file's OWN directory (not an unrelated one) — the
+		// file node itself, and therefore its symbol children, leave the
+		// rendered element set entirely.
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(0));
+
+		// Re-expand the SAME directory. Before this fix, expandedFiles
+		// still claimed 'dir/b.go' was expanded (the collapse-affordance
+		// button stayed visible) even though it rendered zero symbols,
+		// and nothing brought them back.
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(2));
+
+		// The route's own state must not lie: a file no longer showing
+		// its symbols must not still claim "expanded" via the
+		// collapse-affordance button.
+		expect(rt_currentInstance!.childCountOf('dir/b.go')).toBe(0);
+		expect(screen.queryByTestId('graph-collapse-file-dir/b.go')).not.toBeInTheDocument();
+
+		// A further tap restores it from the still-warm cache — zero new
+		// fileSymbols requests, ever, for this path.
+		rt_currentInstance!.simulateTap('dir/b.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir/b.go')).toBe(2));
+		expect(rt_fileSymbolsCallCounts.get('dir/b.go')).toBe(1);
+	});
+
+	it('toggling a directory before ever expanding a file inside it is inert, and a SECOND round trip after the file is expanded still resyncs correctly (reverse toggle order)', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('dir/a.go'), rtNode('dir/b.go')]));
+		rt_fileSymbolsImpls.set('dir/b.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(2));
+
+		// Round trip #1 — toggling the directory BEFORE the file inside it
+		// has ever been expanded. Nothing to reconcile; must not issue any
+		// fileSymbols request on its own.
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(0));
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(2));
+		expect(rt_fileSymbolsCallCounts.size).toBe(0);
+
+		rt_currentInstance!.simulateTap('dir/b.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir/b.go')).toBe(1));
+		expect(rt_fileSymbolsCallCounts.get('dir/b.go')).toBe(1);
+
+		// Round trip #2 — AFTER the file was expanded.
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(0));
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(2));
+
+		expect(rt_currentInstance!.childCountOf('dir/b.go')).toBe(0);
+		expect(screen.queryByTestId('graph-collapse-file-dir/b.go')).not.toBeInTheDocument();
+
+		rt_currentInstance!.simulateTap('dir/b.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir/b.go')).toBe(1));
+		expect(rt_fileSymbolsCallCounts.get('dir/b.go')).toBe(1);
+	});
+
 	it('the explicit collapse-affordance button collapses an expanded file WITHOUT a canvas tap, calling the SAME toggleFile path (WINDOWS.md 27)', async () => {
 		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
 		rt_fileSymbolsImpls.set('a.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
