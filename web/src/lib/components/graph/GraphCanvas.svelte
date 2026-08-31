@@ -290,10 +290,10 @@
 			},
 			// add MERGES a batch of new elements into the live instance
 			// WITHOUT touching anything already present — the incremental
-			// counterpart to replace() above, added for 05-07's file-to-
-			// symbol expansion: a symbol element is layered on top of
-			// whatever the directory-level `elements` prop currently holds,
-			// never derived by recomputing that whole array. A no-op for an
+			// counterpart to replace() above, for file-to-symbol expansion:
+			// a symbol element is layered on top of whatever the
+			// directory-level `elements` prop currently holds, never
+			// derived by recomputing that whole array. A no-op for an
 			// empty batch, matching this seam's data-in contract (the
 			// caller decides WHETHER to add; this method only decides HOW).
 			// Re-runs the same layered layout WITHOUT re-fitting (`fit:
@@ -402,8 +402,9 @@
 		// into view — see createFileGraphRenderer's focus() above.
 		focusNodeIds?: string[];
 		// addedElements: a plain element-data array to MERGE into the live
-		// instance without touching anything already present (05-07's
-		// file-to-symbol expansion). A NEW array reference triggers a
+		// instance without touching anything already present — the
+		// incremental counterpart to `elements`' full replace, used for
+		// file-to-symbol expansion. A NEW array reference triggers a
 		// fresh add via createFileGraphRenderer's add() above — see the
 		// fourth $effect below. The route is responsible for handing this
 		// a genuinely new batch each time; an unchanged reference is a
@@ -416,10 +417,10 @@
 		// below.
 		removedElementIds?: string[];
 		// Fired on a node tap, carrying the tapped element's id and its
-		// element kind — 'directory', 'file', or 'symbol' (05-07 adds the
-		// third kind; never a cytoscape Element or event object). The
-		// route decides what a tap means for each kind (a directory or a
-		// file each expand/collapse in place; a symbol tap is currently a
+		// element kind — 'directory', 'file', or 'symbol' (never a
+		// cytoscape Element or event object). The route decides what a
+		// tap means for each kind (a directory or a file each
+		// expand/collapse in place; a symbol tap is currently a
 		// no-op on the route side, since a symbol has nothing further to
 		// expand).
 		onNodeSelected?: (id: string, kind: 'directory' | 'file' | 'symbol') => void;

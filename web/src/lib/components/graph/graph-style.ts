@@ -97,8 +97,8 @@ export const fileGraphStyle: unknown[] = [
 		}
 	},
 	{
-		// Matches a symbol element (05-07, GRF-03) — a node also carrying
-		// `isSymbol:true`, always parented to the file that declares it.
+		// Matches a symbol element — a node also carrying `isSymbol:true`,
+		// always parented to the file that declares it.
 		// Placed AFTER the general file selector above, per the same
 		// selector-ORDER cascade rule the collapsed-directory selector
 		// already follows: a symbol also matches `node[!isDirectory]`

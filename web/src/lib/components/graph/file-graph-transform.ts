@@ -70,10 +70,10 @@ export type FileGraphNodeData = {
 	cycleIds?: number[];
 	// isSymbol/kind/startLine are present ONLY on a symbol element — a
 	// leaf produced by symbolElementsForFile below, parented to the file
-	// that declares it (05-07, GRF-03). isSymbol lets styling and
-	// collapse logic tell a symbol apart from a file or a directory
-	// without parsing its id; kind and startLine are copied verbatim from
-	// the wire symbol, never derived.
+	// that declares it. isSymbol lets styling and collapse logic tell a
+	// symbol apart from a file or a directory without parsing its id;
+	// kind and startLine are copied verbatim from the wire symbol, never
+	// derived.
 	isSymbol?: boolean;
 	kind?: string;
 	startLine?: number;

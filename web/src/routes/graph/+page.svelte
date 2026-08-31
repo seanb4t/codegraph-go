@@ -6,9 +6,9 @@
 	// view is the default first paint; selecting a directory reveals its
 	// files in place, with zero further requests — the whole file graph
 	// already arrived on mount. Selecting a FILE node fetches and expands
-	// its symbols in place (05-07, GRF-03) — the second, INCREMENTAL
-	// expansion path this route drives, layered on top of the directory
-	// rollup rather than recomputed by it.
+	// its symbols in place — the second, INCREMENTAL expansion path this
+	// route drives, layered on top of the directory rollup rather than
+	// recomputed by it.
 	import { onMount } from 'svelte';
 	import { uiClient } from '$lib/client';
 	import { classifyRpcError, type RpcFailure } from '$lib/rpc-errors';
@@ -41,8 +41,8 @@
 	let expandedDirs = $state<Set<string>>(new Set());
 	let refusalMessage = $state<string | undefined>(undefined);
 
-	// File-to-symbol expansion state (05-07, GRF-03) — deliberately
-	// SEPARATE from expandedDirs/elements above rather than folded into
+	// File-to-symbol expansion state — deliberately SEPARATE from
+	// expandedDirs/elements above rather than folded into
 	// the same rollup: a file's symbols are fetched incrementally, per
 	// file, and applied to GraphCanvas through its addedElements/
 	// removedElementIds props (an ADD/REMOVE seam), never through a
@@ -65,7 +65,7 @@
 	let addedElements = $state<FileGraphElement[]>([]);
 	let removedElementIds = $state<string[]>([]);
 	// mounted guards the file-symbols response handler against applying a
-	// response that outlived its consumer (review M-3) — the SAME
+	// response that outlived its consumer — the SAME
 	// pending-request-outliving-its-consumer lifecycle the FileGraph fetch
 	// in onMount below is naturally exempt from (unmounting before that
 	// ONE request settles simply never transitions graphState past
@@ -209,8 +209,7 @@
 	// EXPANSION_NODE_CEILING FIRST and leaving the graph untouched with a
 	// readable refusal when the ceiling would be exceeded. Shared by the
 	// canvas tap handler above AND the explicit collapse-affordance
-	// buttons rendered below (WINDOWS.md 27) — one collapse rule, two
-	// ways to reach it.
+	// buttons rendered below — one collapse rule, two ways to reach it.
 	function toggleDirectory(id: string) {
 		if (graphState.kind !== 'loaded') return;
 
@@ -234,13 +233,13 @@
 	}
 
 	// toggleFile is the file-to-symbol expand/collapse/re-expand-from-
-	// cache dispatcher (05-07, GRF-03). Shared by the canvas tap handler
-	// above AND the explicit collapse-affordance buttons rendered below
-	// (WINDOWS.md 27) — one expansion rule, two ways to reach it, exactly
-	// mirroring toggleDirectory's own split.
+	// cache dispatcher. Shared by the canvas tap handler above AND the
+	// explicit collapse-affordance buttons rendered below — one expansion
+	// rule, two ways to reach it, exactly mirroring toggleDirectory's own
+	// split.
 	//
-	// Three cases, in the order this plan's own three-click contract
-	// tests them:
+	// Three cases, in the order the three-click contract below tests
+	// them:
 	//   1. Already expanded -> COLLAPSE. Remove its symbol children (ids
 	//      built from whatever is cached, so a still-in-flight file with
 	//      nothing cached yet removes nothing — there is nothing to
@@ -283,8 +282,8 @@
 			.then((response) => {
 				// The guard is at the point of APPLICATION, not at the
 				// point of dispatch — the request itself is never
-				// cancelled (review M-3). A response that is no longer
-				// wanted (its file was collapsed by a second click while
+				// cancelled. A response that is no longer wanted (its file
+				// was collapsed by a second click while
 				// this was in flight, or the whole route unmounted) is
 				// still CACHED — never discarded — so a later re-expand of
 				// the same path is served from it with zero further
@@ -332,9 +331,9 @@
 
 	// expandedItems is the shared read of expandedDirs+expandedFiles the
 	// collapse-affordance list below iterates — a real DOM control for
-	// each currently-expanded directory or file (WINDOWS.md entry 27):
-	// re-collapsing a compound via a real mouse click on the canvas alone
-	// is not reliably hit-testable at this renderer's typical density (a
+	// each currently-expanded directory or file: re-collapsing a compound
+	// via a real mouse click on the canvas alone is not reliably
+	// hit-testable at this renderer's typical density (a
 	// measured sub-2px margin around a compound's own border once it has
 	// children); this list is a genuinely hit-testable alternative that
 	// serves both levels through the SAME toggleDirectory/toggleFile
@@ -368,8 +367,8 @@
 	</p>
 {:else}
 	<p class="mt-1 text-xs text-muted-foreground" data-testid="graph-summary">
-		{nodeCount} nodes, {edgeCount} edges. Select a directory to reveal the files inside it; select
-		it again to collapse it back.
+		{nodeCount} nodes, {edgeCount} edges. Select a directory to reveal the files inside it, or a file
+		to reveal the symbols it declares; select it again to collapse it back.
 	</p>
 	<p class="mt-1 text-xs text-muted-foreground" data-testid="graph-cycle-summary">
 		{#if graphState.response.cycleCount > 0}
@@ -413,15 +412,16 @@
 	</div>
 	{#if expandedItems.length > 0}
 		<!--
-			The explicit collapse affordance (WINDOWS.md 27): re-collapsing a
-			compound by clicking it a second time on the canvas is not
-			reliably hit-testable at this renderer's typical density, so
+			The explicit collapse affordance: re-collapsing a compound by
+			clicking it a second time on the canvas is not reliably
+			hit-testable at this renderer's typical density, so
 			every currently-expanded directory or file also gets a genuine
 			DOM button here — clicking it calls the SAME toggleDirectory/
 			toggleFile the canvas tap handler calls, so this is a second way
 			to reach one collapse rule, not a second rule.
 		-->
-		<div class="mt-2 flex flex-wrap gap-2" data-testid="graph-expanded-list">
+		<div class="mt-2 flex flex-wrap items-center gap-2" data-testid="graph-expanded-list">
+			<span class="text-xs text-muted-foreground">Expanded — click to collapse:</span>
 			{#each expandedItems as item (item.id)}
 				<button
 					type="button"
