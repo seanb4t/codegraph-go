@@ -222,6 +222,17 @@
 		onGeometry: (geometry: FileGraphNodeGeometry[]) => void;
 	}) {
 		let metricsPublished = false;
+		// liveAddedElements is the WHOLE of the incremental (non-replace)
+		// seam's own state: every element add() has merged in, minus
+		// whatever removeByIds() has since removed — tracked here, at the
+		// renderer's own level, specifically so replace() (below) can
+		// compose with it rather than silently destroying it (CR-01/CR-02
+		// review). A plain array, never cytoscape state of its own: this
+		// component still treats the live cy instance as the single
+		// source of truth for what is actually rendered; this list exists
+		// only to know what to RE-APPLY after a full swap.
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		let liveAddedElements: any[] = [];
 
 		// runLayout always uses the SAME layered/hierarchyHandling elk
 		// algorithm configuration — never a different layout. Only `fit`
@@ -280,13 +291,41 @@
 			// and re-runs the SAME layered layout WITHOUT re-fitting —
 			// the current pan/zoom is preserved across an expansion or a
 			// collapse. The instance itself is never torn down.
+			//
+			// This is the directory-level FULL-REPLACE path; add()/
+			// removeByIds() below are the separate, INCREMENTAL path a
+			// file's symbol expansion uses instead — but the two seams
+			// are not independent: `opts.cy.elements().remove()` clears
+			// EVERYTHING, including any symbol children a prior add()
+			// merged in, so a bare remove-then-add-newElements would
+			// silently destroy an expanded file's symbols on every
+			// unrelated directory toggle (CR-02, found in review). After
+			// the swap, re-apply whichever of liveAddedElements survive
+			// it: an added element whose own PARENT id is present among
+			// newElements' own ids. A symbol's parent is the file id
+			// that declares it (file-graph-transform.ts's
+			// symbolElementsForFile) — that file id is present in
+			// newElements only when its directory is still expanded, so
+			// a symbol whose file just collapsed away is correctly
+			// dropped (cytoscape's add() cannot attach a child to a
+			// parent that does not exist in the same batch), while a
+			// symbol whose file remains visible survives an unrelated
+			// directory's own expand or collapse.
 			replace(newElements: unknown[]) {
 				opts.cy.startBatch();
 				opts.cy.elements().remove();
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				opts.cy.add(newElements as any);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const newIds = new Set((newElements as any[]).map((el) => el.data.id));
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const survivors = liveAddedElements.filter((el: any) => newIds.has(el.data.parent));
+				if (survivors.length > 0) {
+					opts.cy.add(survivors as any);
+				}
+				liveAddedElements = survivors;
 				opts.cy.endBatch();
-				runLayout(performance.now(), false);
+				runLayout(performance.now(), false, survivors.length > 0);
 			},
 			// add MERGES a batch of new elements into the live instance
 			// WITHOUT touching anything already present — the incremental
@@ -308,6 +347,8 @@
 				opts.cy.startBatch();
 				// eslint-disable-next-line @typescript-eslint/no-explicit-any
 				opts.cy.add(newElements as any);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				liveAddedElements = [...liveAddedElements, ...(newElements as any[])];
 				opts.cy.endBatch();
 				runLayout(performance.now(), false, true);
 			},
@@ -343,6 +384,9 @@
 						el.remove();
 					}
 				}
+				const removedIds = new Set(ids);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				liveAddedElements = liveAddedElements.filter((el: any) => !removedIds.has(el.data.id));
 				opts.cy.endBatch();
 				const geometry = computeGeometry(opts.cy);
 				if (geometry !== undefined) {

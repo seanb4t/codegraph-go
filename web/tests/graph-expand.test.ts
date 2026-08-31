@@ -600,6 +600,29 @@ describe('route: file tap expand / collapse / re-expand (Task 2)', () => {
 		expect(rt_fileSymbolsCallCounts.size).toBe(0);
 	});
 
+	it('expanding a root file\'s symbols survives toggling an UNRELATED directory elsewhere (CR-02)', async () => {
+		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go'), rtNode('dir/b.go')]));
+		rt_fileSymbolsImpls.set('a.go', () =>
+			Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo'), symbol('s2', 'Bar')]))
+		);
+		render(RtGraphPage);
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+
+		rt_currentInstance!.simulateTap('a.go');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('a.go')).toBe(2));
+
+		// Toggling an UNRELATED directory recomputes `elements` and fires
+		// GraphCanvas's full-replace path -- it must compose with the
+		// separate incremental symbol-expansion seam rather than silently
+		// destroying it. 'a.go' is a repository-root file, never inside
+		// 'dir', so this expand/collapse of 'dir' has nothing to do with it.
+		rt_currentInstance!.simulateTap('dir');
+		await waitFor(() => expect(rt_currentInstance!.childCountOf('dir')).toBe(1));
+
+		expect(rt_currentInstance!.childCountOf('a.go')).toBe(2);
+		expect(rt_currentInstance!.elementsData().filter((d) => d.parent === 'a.go')).toHaveLength(2);
+	});
+
 	it('the explicit collapse-affordance button collapses an expanded file WITHOUT a canvas tap, calling the SAME toggleFile path (WINDOWS.md 27)', async () => {
 		rt_currentFileGraphImpl = () => Promise.resolve(rtResponse([rtNode('a.go')]));
 		rt_fileSymbolsImpls.set('a.go', () => Promise.resolve(fileSymbolsResponse([symbol('s1', 'Foo')])));
