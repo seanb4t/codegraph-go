@@ -64,13 +64,23 @@ must be preserved when the IDs land.*
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | RPC-04 | TBD | integration (Go, real `httptest.Server` + real client) | `go test ./internal/uiserver/... -run TestStream` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | LIV-01 | TBD | unit (Go) — event fires only on a real `Meta` change | `go test ./internal/uiserver/... -run TestWatcherPublish` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | LIV-02 | TBD | component (vitest) — open view updates in place | `pnpm test -- live-store` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | LIV-03 | TBD | Playwright multi-tab + Go goleak soak | `node web/scripts/live-push-multitab-check.mjs` · `go test ./internal/uiserver/... -run TestSoak` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | LIV-03 (verdict) | TBD | **recorded finding**, not a test | see Recorded Verdicts below | ❌ | ⬜ pending |
-| TBD | TBD | TBD | LIV-04 | TBD | Playwright e2e at guava scale | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | LIV-01 (criterion 5) | TBD | **real multi-process**, never a stub | see Real-Process Gates below | ❌ W0 | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | RPC-04 | T-06-01 | unit (Go) — rpc name clean against the live fixture, with a positive control | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestRPCName' -v -count=1` | ❌ W0 | ⬜ pending |
+| 06-01 T3 | 06-01 | 1 | RPC-04 | T-06-02, T-06-03 | fixture (Go) — descriptor field-number stability, both directions | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestKnownUIProtoFieldNumbersAreStable' -v -count=1` · `task proto:drift` | ✅ | ⬜ pending |
+| 06-02 T1 | 06-02 | 2 | LIV-01 | T-06-05, T-06-11, T-06-12 | unit (Go) — event fires only on a real metadata change; open/close balanced | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveChange' -v -count=1` | ❌ W0 | ⬜ pending |
+| 06-02 T2 | 06-02 | 2 | LIV-03 | T-06-07, T-06-08, T-06-09, T-06-10 | unit (Go, `-race` + goleak) — bounded coalescing, cleanup, counter separation | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveRegistry' -v -count=1 -race` | ❌ W0 | ⬜ pending |
+| 06-02 T3 | 06-02 | 2 | LIV-01 | T-06-06 | integration (Go) — real store write through fsnotify + debounce | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveWatcher' -v -count=1 -race` | ❌ W0 | ⬜ pending |
+| 06-03 T1 | 06-03 | 2 | LIV-03 | T-06-13, T-06-16 | unit (vitest) — incremental consumption, jittered backoff, generation resume | `cd web && pnpm exec vitest run tests/live-client.test.ts` | ❌ W0 | ⬜ pending |
+| 06-03 T2 | 06-03 | 2 | LIV-02 | T-06-15 | unit (vitest) — one classifier for both inputs; chrome updates with no round trip | `cd web && pnpm exec vitest run tests/live-store.test.ts` | ❌ W0 | ⬜ pending |
+| 06-03 T3 | 06-03 | 2 | LIV-02 | T-06-14 | component (vitest) — open view re-fetches exactly once per new generation | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
+| 06-04 T1 | 06-04 | 3 | RPC-04 | T-06-19, T-06-21, T-06-22 | integration (Go) — stream outlives a deliberately tiny write deadline; a unary path does not | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestStreamDeadline' -v -count=1 -race` | ❌ W0 | ⬜ pending |
+| 06-04 T2 | 06-04 | 3 | LIV-03 | T-06-20, T-06-23, T-06-24 | unit (Go, `-race` + goleak) — subscribe / send / deregister lifecycle | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphHandler' -v -count=1 -race` | ❌ W0 | ⬜ pending |
+| 06-04 T3 | 06-04 | 3 | RPC-04 (criterion 2) | T-06-21 | **tracer** — real client, real store write, per-message TIMING not arrival | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphStream' -v -count=1 -race` | ❌ W0 | ⬜ pending |
+| 06-05 T1 | 06-05 | 3 | LIV-04 | T-06-27, T-06-31 | unit (vitest, headless graph model) — fast path runs no layout; survivors written back | `cd web && pnpm exec vitest run tests/graph-live-update.test.ts` | ❌ W0 | ⬜ pending |
+| 06-05 T2 | 06-05 | 3 | LIV-02 | T-06-28, T-06-29 | component (vitest) — graph re-fetches through its own rpcs, coalesced | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
+| 06-05 T3 | 06-05 | 3 | LIV-04 | T-06-30 | Playwright e2e at guava scale — survivor displacement measured and committed | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
+| 06-06 T1 | 06-06 | 4 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing, backpressure, jittered reconnect | `node web/scripts/live-push-multitab-check.mjs` | ❌ W0 | ⬜ pending |
+| 06-06 T2 | 06-06 | 4 | LIV-01 (criterion 5) | T-06-32, T-06-37 | **real multi-process**, never a stub — see Real-Process Gates below | `bash scripts/live-push-concurrency-check.sh` | ❌ W0 | ⬜ pending |
+| 06-06 T3 | 06-06 | 4 | LIV-03 (verdict) | T-06-35, T-06-36, T-06-SC | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below | `test "$(rg -c 'pendingWriter' internal/mcp/server.go)" -ge 1` (the control) | ❌ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
