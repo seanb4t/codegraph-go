@@ -164,6 +164,46 @@ discriminates (asserting that `GetIndexHealth` still collides is the standing co
 
 </decisions>
 
+### ⚠ Criterion 5 — non-negotiable, and MISSING from this document's first draft
+
+**Phase 6 has FIVE success criteria, not four.** The orchestrator's first read of the
+ROADMAP truncated at criterion 4, so the original version of this file never mentioned the
+fifth. It is recorded here because the ROADMAP calls it **non-negotiable** and it is the
+stated reason the phase carries a research flag.
+
+> **Criterion 5:** *With `codegraph daemon` and `serve --mcp` running against the same
+> store, a live-push session survives repeated real re-index flushes without starving a
+> sync or holding the store open — verified against the real processes, not a stub
+> (LIV-01).*
+
+The ROADMAP's Notes explain why it cannot be waved through:
+
+> *"Criterion 5 is non-negotiable and is the reason this phase carries a research flag: the
+> property it must not violate is only observable under genuine concurrent multi-process
+> use, and running `codegraph ui` alone is the dev workflow that hides it."*
+
+**This directly stresses D-01.** `internal/graphstore/store.go:14-21` documents the
+concurrency model as *"many lock-free readers via Snapshot, plus one [writer]"*, and
+`Snapshot()` returns a consistent point-in-time `Reader`. Concurrent reading is therefore
+supported — but **a Pebble snapshot held open pins the SSTables it observes and prevents
+compaction from reclaiming them.** A live-push loop that holds a snapshot for the lifetime
+of a stream would do exactly what criterion 5 forbids: hold the store open against a writer.
+
+**The binding constraint on D-01's implementation:** take a snapshot, read `Meta`, and
+**release it promptly** on every wake. Never hold a snapshot across a stream's lifetime, and
+never hold one while blocked on a client write. Verify against **real `codegraph daemon` and
+`serve --mcp` processes running concurrently**, not a stub — the criterion says so
+explicitly, and a stub is precisely the shape that would pass while the property is violated.
+
+Two further Notes from the same ROADMAP block, both binding:
+
+- **Criterion 2 measures per-message delivery latency, not eventual arrival.** *"Streaming
+  that is silently buffered still passes an 'it all arrived' test."* Any test asserting only
+  that N messages showed up is vacuous for this criterion — assert the **timing between**
+  messages.
+- **Criterion 4 is verified against the graph view specifically.** *"List and table views do
+  not exhibit this failure."* Do not spend LIV-04 effort on Browse or Workbench.
+
 ### Post-Research Corrections (2026-09-01)
 
 Research verified two of the decisions above against installed source and upstream, and
