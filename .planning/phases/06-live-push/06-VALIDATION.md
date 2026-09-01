@@ -1,0 +1,163 @@
+---
+phase: 6
+slug: live-push
+# status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
+status: draft
+nyquist_compliant: false
+wave_0_complete: false
+created: 2026-09-01
+---
+
+# Phase 6 — Validation Strategy
+
+> Per-phase validation contract for feedback sampling during execution.
+> Seeded from `06-RESEARCH.md` §Validation Architecture before plans exist. The Per-Task
+> Verification Map is filled once PLAN.md task IDs are assigned; `/gsd-validate-phase` sets
+> `status: validated`.
+
+---
+
+## Test Infrastructure
+
+Three stacks. All must be green.
+
+| Property | Go | Frontend (unit) | Real browser |
+|----------|----|-----------------|--------------|
+| **Framework** | stdlib `testing` + `go.uber.org/goleak` | Vitest `4.1.11` + `@testing-library/svelte` | `@playwright/test@1.62.1` |
+| **Config** | none — flags only | inline `test:` block in `web/vite.config.ts` | none — standalone `.mjs` scripts |
+| **Location** | `internal/**/[name]_test.go` | `web/tests/*.test.ts` (never beside source) | `web/scripts/*-check.mjs` |
+| **Quick run** | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/...` | `cd web && pnpm test -- <pattern>` | `node web/scripts/<script>.mjs` |
+| **Full suite** | `GOTOOLCHAIN=go1.26.5 task test:unit` | `task web:test` | all check scripts |
+
+> **`GOTOOLCHAIN=go1.26.5` is required on every local Go command** — go1.27 breaks the
+> `cockroachdb/swiss` build. CI is unaffected.
+>
+> **`task test:unit` deliberately excludes `internal/daemon`** (`Taskfile.yml:131`) and
+> isolates it separately, because its watchdog test is timing-sensitive under parallel load.
+> A bare `go test ./...` will fail there; that is known, not a regression.
+>
+> **jsdom has no layout engine** — `offsetWidth`/`offsetHeight` are always `0`. Cytoscape
+> tests use `headless: true` and assert over the graph model, never pixels.
+>
+> **Real gestures need trusted input** — cytoscape's drag path uses `setPointerCapture`,
+> which `dispatchEvent` cannot satisfy. Playwright's `page.mouse.*` drives it correctly.
+> Follow `web/scripts/graph-collapse-affordance-check.mjs`'s established pattern: real input,
+> a committed diagnostic JSON record written on **every** run including failure.
+
+---
+
+## Sampling Rate
+
+- **After every task commit:** `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/...` for Go
+  changes · `cd web && pnpm test -- <touched-pattern>` for frontend changes.
+- **After every plan wave:** `GOTOOLCHAIN=go1.26.5 task test:unit` + `task web:test`.
+- **Before `/gsd-verify-work`:** full suites green, **plus** the two real-process gates below,
+  which no unit test can substitute for.
+- **Max feedback latency:** ~60 seconds.
+
+---
+
+## Per-Task Verification Map
+
+*Filled once PLAN.md task IDs are assigned. The requirement→test mapping below is fixed and
+must be preserved when the IDs land.*
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------|-------------------|-------------|--------|
+| TBD | TBD | TBD | RPC-04 | TBD | integration (Go, real `httptest.Server` + real client) | `go test ./internal/uiserver/... -run TestStream` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | LIV-01 | TBD | unit (Go) — event fires only on a real `Meta` change | `go test ./internal/uiserver/... -run TestWatcherPublish` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | LIV-02 | TBD | component (vitest) — open view updates in place | `pnpm test -- live-store` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | LIV-03 | TBD | Playwright multi-tab + Go goleak soak | `node web/scripts/live-push-multitab-check.mjs` · `go test ./internal/uiserver/... -run TestSoak` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | LIV-03 (verdict) | TBD | **recorded finding**, not a test | see Recorded Verdicts below | ❌ | ⬜ pending |
+| TBD | TBD | TBD | LIV-04 | TBD | Playwright e2e at guava scale | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | LIV-01 (criterion 5) | TBD | **real multi-process**, never a stub | see Real-Process Gates below | ❌ W0 | ⬜ pending |
+
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+---
+
+## Wave 0 Requirements
+
+- [ ] `internal/uiserver/livepublish_test.go` — LIV-01, plus the goleak-guarded soak shape
+      criterion 5 needs.
+- [ ] `internal/uiserver/livehandler_test.go` — RPC-04 at the handler level, with
+      **message-by-message** `httptest` assertions (see the criterion-2 warning below).
+- [ ] `web/tests/live-client.test.ts` — browser-side reconnect/backoff and generation
+      tracking; vitest can mock `fetch`'s streaming body.
+- [ ] `web/scripts/live-push-multitab-check.mjs` — **new**, 3+ real tabs, following
+      `graph-collapse-affordance-check.mjs`'s precedent.
+- [ ] `web/scripts/graph-live-update-check.mjs` — **new**, measures guava-scale survivor
+      displacement across a live update. This is D-06's mandated measurement.
+- [ ] No framework install needed — vitest, Playwright and goleak are all already present.
+
+---
+
+## ⚠ Two criteria that ordinary tests CANNOT satisfy
+
+These come from the ROADMAP's own Notes and are the reason this phase carries a research
+flag. A plan that satisfies only the table above has not satisfied the phase.
+
+### Criterion 2 — assert per-message TIMING, not arrival
+
+> *"Criterion 2's message-by-message assertion measures per-message delivery latency, not
+> eventual arrival — streaming that is silently buffered still passes an 'it all arrived'
+> test."*
+
+**A test asserting that N messages were received is vacuous here.** Silent buffering
+delivers all N at the end and passes. Assert the **interval between** messages, or assert
+that message *k* is observable before message *k+1* is sent.
+
+### Criterion 5 — real processes, never a stub
+
+> *"With `codegraph daemon` and `serve --mcp` running against the same store, a live-push
+> session survives repeated real re-index flushes without starving a sync or holding the
+> store open — verified against the real processes, not a stub."*
+
+The ROADMAP calls this **non-negotiable** and explains why: *"the property it must not
+violate is only observable under genuine concurrent multi-process use, and running
+`codegraph ui` alone is the dev workflow that hides it."*
+
+The concrete hazard: `internal/graphstore/store.go:14-21` documents *"many lock-free readers
+via Snapshot, plus one [writer]"*. A Pebble snapshot **held open pins SSTables and blocks
+compaction**. So the gate must show that repeated real re-index flushes proceed while a
+live-push session is open — with actual `codegraph daemon` and `serve --mcp` processes
+running against the same store.
+
+---
+
+## Manual-Only Verifications
+
+| Behavior | Requirement | Why not automatable here | Instructions |
+|----------|-------------|--------------------------|--------------|
+| *(none identified yet)* | — | — | Before recording anything here, **try to verify it**. In Phase 3 two of three `why_human` claims were false on arrival, and in Phase 5 a "needs a human on a real trackpad" item turned out to be a `setPointerCapture` limitation in the tooling — disproved by driving Playwright directly. A `why_human` claim is a **testable claim, not a category**. |
+
+---
+
+## Recorded Verdicts (criterion 3)
+
+LIV-03 requires the stream's lifecycle bookkeeping be *"checked against Phase 1's
+`pendingWriter` root cause — server-initiated writes counted separately from
+client-initiated pending state — with the verdict recorded rather than assumed."*
+
+Research already established the finding to confirm and record: **no `pendingWriter`
+analogue exists in `internal/uiserver`** — a full read of every non-test file found zero
+counters or in-flight trackers. Record that verdict explicitly in the SUMMARY with the
+evidence; "we checked and it's fine" does not satisfy the criterion.
+
+---
+
+## Validation Sign-Off
+
+- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
+- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [ ] Wave 0 covers all MISSING references
+- [ ] No watch-mode flags
+- [ ] Feedback latency < 60s
+- [ ] Every zero-count assertion paired with a positive control (rule `84d1gfpywd`)
+- [ ] Every upper bound paired with a non-zero lower bound
+- [ ] **Criterion 2's timing assertion present** — not merely an arrival count
+- [ ] **Criterion 5 verified against real `daemon` + `serve --mcp` processes** — not a stub
+- [ ] The `pendingWriter`-analogue verdict recorded in the SUMMARY
+- [ ] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** pending
