@@ -315,8 +315,8 @@ Plans:
 - [ ] 06-02-PLAN.md — The publisher: store watcher, index-metadata change detector with open/read/close discipline, and a bounded coalescing fan-out registry
 - [ ] 06-03-PLAN.md — The browser client: incremental stream consumption, jittered reconnect with generation resume, and the chrome updating from the event with no round trip
 - [ ] 06-04-PLAN.md — The transport: path-scoped write-deadline clearing, the streaming handler's subscriber lifecycle, and the end-to-end per-message timing tracer
-- [ ] 06-05-PLAN.md — Graph stability: no-layout fast path, authoritative survivor position write-back, and the guava-scale displacement measurement
-- [ ] 06-06-PLAN.md — The two gates ordinary tests cannot satisfy: three real tabs with timing and backpressure, and real `daemon` + `serve --mcp` concurrency; plus the recorded lifecycle verdict and the bundle rebuild
+- [ ] 06-05-PLAN.md — Graph stability: no-layout fast path, authoritative survivor position write-back, layout generation token against overlapping runs, and the guava-scale displacement measurement
+- [ ] 06-06-PLAN.md — The two gates ordinary tests cannot satisfy: three real tabs with per-tab timing, fan-out isolation and a jittered reconnect behind a fixed-port proxy, and real `daemon` + `serve --mcp` concurrency measured against a no-UI baseline; plus the recorded lifecycle verdict and the bundle rebuild
 
 ## Progress
 

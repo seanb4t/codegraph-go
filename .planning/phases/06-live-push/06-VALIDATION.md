@@ -65,7 +65,7 @@ must be preserved when the IDs land.*
 | Task ID | Plan | Wave | Requirement | Threat Ref | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------|-------------------|-------------|--------|
 | 06-01 T1 | 06-01 | 1 | RPC-04 | T-06-01 | unit (Go) — rpc name clean against the live fixture, with a positive control | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestRPCName' -v -count=1` | ❌ W0 | ⬜ pending |
-| 06-01 T3 | 06-01 | 1 | RPC-04 | T-06-02, T-06-03 | fixture (Go) — descriptor field-number stability, both directions | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestKnownUIProtoFieldNumbersAreStable' -v -count=1` · `task proto:drift` | ✅ | ⬜ pending |
+| 06-01 T3 | 06-01 | 1 | RPC-04 | T-06-02, T-06-03 | fixture (Go) — descriptor field-number stability, both directions | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestUIProtoFieldNumbersAreStableAndUnique' -v -count=1` · `task proto:drift` | ✅ | ⬜ pending |
 | 06-02 T1 | 06-02 | 2 | LIV-01 | T-06-05, T-06-11, T-06-12 | unit (Go) — event fires only on a real metadata change; open/close balanced | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveChange' -v -count=1` | ❌ W0 | ⬜ pending |
 | 06-02 T2 | 06-02 | 2 | LIV-03 | T-06-07, T-06-08, T-06-09, T-06-10 | unit (Go, `-race` + goleak) — bounded coalescing, cleanup, counter separation | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveRegistry' -v -count=1 -race` | ❌ W0 | ⬜ pending |
 | 06-02 T3 | 06-02 | 2 | LIV-01 | T-06-06 | integration (Go) — real store write through fsnotify + debounce | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveWatcher' -v -count=1 -race` | ❌ W0 | ⬜ pending |
@@ -75,14 +75,31 @@ must be preserved when the IDs land.*
 | 06-04 T1 | 06-04 | 3 | RPC-04 | T-06-19, T-06-21, T-06-22 | integration (Go) — stream outlives a deliberately tiny write deadline; a unary path does not | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestStreamDeadline' -v -count=1 -race` | ❌ W0 | ⬜ pending |
 | 06-04 T2 | 06-04 | 3 | LIV-03 | T-06-20, T-06-23, T-06-24 | unit (Go, `-race` + goleak) — subscribe / send / deregister lifecycle | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphHandler' -v -count=1 -race` | ❌ W0 | ⬜ pending |
 | 06-04 T3 | 06-04 | 3 | RPC-04 (criterion 2) | T-06-21 | **tracer** — real client, real store write, per-message TIMING not arrival | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphStream' -v -count=1 -race` | ❌ W0 | ⬜ pending |
-| 06-05 T1 | 06-05 | 3 | LIV-04 | T-06-27, T-06-31 | unit (vitest, headless graph model) — fast path runs no layout; survivors written back | `cd web && pnpm exec vitest run tests/graph-live-update.test.ts` | ❌ W0 | ⬜ pending |
-| 06-05 T2 | 06-05 | 3 | LIV-02 | T-06-28, T-06-29 | component (vitest) — graph re-fetches through its own rpcs, coalesced | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
-| 06-05 T3 | 06-05 | 3 | LIV-04 | T-06-30 | Playwright e2e at guava scale — survivor displacement measured and committed | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
-| 06-06 T1 | 06-06 | 4 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing, backpressure, jittered reconnect | `node web/scripts/live-push-multitab-check.mjs` | ❌ W0 | ⬜ pending |
-| 06-06 T2 | 06-06 | 4 | LIV-01 (criterion 5) | T-06-32, T-06-37 | **real multi-process**, never a stub — see Real-Process Gates below | `bash scripts/live-push-concurrency-check.sh` | ❌ W0 | ⬜ pending |
-| 06-06 T3 | 06-06 | 4 | LIV-03 (verdict) | T-06-35, T-06-36, T-06-SC | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below | `test "$(rg -c 'pendingWriter' internal/mcp/server.go)" -ge 1` (the control) | ❌ | ⬜ pending |
+| 06-05 T1 | 06-05 | 4 | LIV-04 | T-06-27, T-06-31 | unit (vitest, headless graph model) — fast path runs no layout; survivors written back | `cd web && pnpm exec vitest run tests/graph-live-update.test.ts` | ❌ W0 | ⬜ pending |
+| 06-05 T2 | 06-05 | 4 | LIV-02 | T-06-28, T-06-29 | component (vitest) — graph re-fetches through its own rpcs, coalesced | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
+| 06-05 T3 | 06-05 | 4 | LIV-04 | T-06-30 | Playwright e2e at guava scale — survivor displacement measured and committed | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
+| 06-06 T1 | 06-06 | 5 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing paired with a per-tab received-generation superset, fan-out isolation, jittered reconnect behind a fixed-port proxy | `node web/scripts/live-push-multitab-check.mjs` | ❌ W0 | ⬜ pending |
+| 06-06 T2 | 06-06 | 5 | LIV-01 (criterion 5) | T-06-32, T-06-37 | **real multi-process**, never a stub — see Real-Process Gates below | `bash scripts/live-push-concurrency-check.sh` | ❌ W0 | ⬜ pending |
+| 06-06 T3 | 06-06 | 5 | LIV-03 (verdict) | T-06-35, T-06-36, T-06-SC | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below | `test "$(rg -c 'type pendingWriter struct' internal/mcp/server.go)" -eq 1` (the control) | ❌ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+> ⚠ **Corrected 2026-09-01 (plan review cycle 1).** The 06-01 T3 row previously named
+> `TestKnownUIProtoFieldNumbersAreStable` and marked it **File Exists ✅**. That test does not
+> exist in `internal/uiserver`: `rg -n 'func TestKnownUIProtoFieldNumbersAreStable'
+> internal/uiserver/readonly_test.go` returns ZERO matches, and the name belongs to
+> `internal/schema/meta_commit_test.go:120`. The real guard is
+> **`TestUIProtoFieldNumbersAreStableAndUnique`** at `internal/uiserver/readonly_test.go:482`.
+> Because `go test -run` exits 0 when its pattern matches nothing, the wrong name meant the
+> sole enforcer of the seven pinned field numbers would never have run in the task that adds
+> them. Every citation in `06-01-PLAN.md` was corrected in the same pass, and that plan's
+> Task 3 verify now asserts the guard's `--- PASS` line BY NAME, separately from its aggregate
+> count, so the same skip cannot recur silently.
+
+> **Waves changed in the same pass.** `06-05` gained an undeclared dependency on `06-04`
+> (its Task 3 waits for live traffic that only exists once `06-04` replaces `livehandler.go`'s
+> placeholder), so `06-05` moved to wave 4 and `06-06` to wave 5. The wave column below
+> reflects the corrected assignment.
 
 ---
 
@@ -165,9 +182,11 @@ evidence; "we checked and it's fine" does not satisfy the criterion.
 - [ ] Feedback latency < 60s
 - [ ] Every zero-count assertion paired with a positive control (rule `84d1gfpywd`)
 - [ ] Every upper bound paired with a non-zero lower bound
-- [ ] **Criterion 2's timing assertion present** — not merely an arrival count
-- [ ] **Criterion 5 verified against real `daemon` + `serve --mcp` processes** — not a stub
-- [ ] The `pendingWriter`-analogue verdict recorded in the SUMMARY
+- [ ] **Criterion 2's timing assertion present** — not merely an arrival count — and PAIRED with a receipt floor at both levels (Go: triggered-receipt count equals trigger count, floor 3; browser: every tab's received-generation set is a superset of `triggeredGenerations`), because an inter-arrival minimum computed over one receipt is vacuously satisfied
+- [ ] **Criterion 5 verified against real `daemon` + `serve --mcp` processes** — not a stub — with `serve --mcp` held open over persistent stdio pipes for the whole run and the stream held by a real envelope-decoding Connect client, not `curl`
+- [ ] Flush duration bounded against a measured no-UI baseline, so a slowed-but-completing sync cannot pass as unstarved
+- [ ] The `pendingWriter`-analogue verdict recorded in the SUMMARY, with a control that discriminates on `type pendingWriter struct` rather than on the bare word
+- [ ] Every named test cited in this file and in any PLAN.md verified to EXIST (`rg -n 'func <Name>'` with a positive control) — the cycle-1 review found a cited test that did not
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
