@@ -164,6 +164,77 @@ discriminates (asserting that `GetIndexHealth` still collides is the standing co
 
 </decisions>
 
+### Post-Research Corrections (2026-09-01)
+
+Research verified two of the decisions above against installed source and upstream, and
+**both were wrong as originally written**. The maintainer ruled on each. These supersede the
+corresponding text in D-03 and D-05; where they conflict, **these win**.
+
+- **D-06 (CORRECTS D-03): the 0px guarantee comes from OUR write-back, not from ELK.**
+
+  D-03 said "pin surviving node positions" and promised a *"survivors move 0px"* gate.
+  **ELK cannot deliver that.** The ELK maintainer states it directly on `eclipse-elk#355`:
+  the interactive options *"cannot be used to precisely fix the positions of the nodes
+  during layered layout. You can use the various interactive strategies to somewhat
+  preserve the topology."*
+
+  What IS true, verified in the installed build (`elkjs@0.9.3`, with a positive control
+  proving the extractor ran):
+  - `interactive` ×12, `INTERACTIVE` ×4, `semiInteractive` ×1, `org.eclipse.elk.position` ×2
+    — the interactive strategies genuinely exist and are usable.
+  - `cytoscape-elk` **already sends every node's current position to ELK**
+    (`src/layout.js:47-51` sets `k.x`/`k.y` from `node.position()`), so ELK lays out with
+    full knowledge of the existing arrangement.
+
+  **The decided shape:** run ELK with the interactive strategies enabled (so new nodes are
+  placed sensibly, knowing where the survivors are), then **authoritatively write back each
+  surviving node's prior x/y**. New nodes keep ELK's placement. The zero-displacement
+  guarantee lives in the write-back, which is exact, rather than in ELK's best effort, which
+  is explicitly approximate.
+
+  The guava-scale measurement D-03 requires still stands — but it now measures a property
+  the implementation *enforces*, rather than hoping ELK approximated it well enough.
+
+  > ⚠ **Trap for anyone re-checking this:** `elkjs` is a *transitive* dep of `cytoscape-elk`
+  > and pnpm does NOT hoist it. It exists **only** at
+  > `web/node_modules/.pnpm/elkjs@0.9.3/node_modules/elkjs/`, never at
+  > `web/node_modules/elkjs/`. A grep against the un-hoisted path returns zero for every
+  > option — including ones that demonstrably work — which is indistinguishable from the
+  > options being absent. The orchestrator hit exactly this and was saved only by a positive
+  > control. **Pair any search of this bundle with a control term you know is present**
+  > (`hierarchyHandling`, `INCLUDE_CHILDREN`, `layered`).
+
+- **D-07 (CORRECTS D-05): the event carries what `classifyStatus` actually consumes.**
+
+  D-05 claimed the health and staleness chrome could render directly from `Meta`'s fields.
+  **Verified false.** `classifyStatus(response: GetStatusResponse)` (`web/src/lib/status.ts:60`)
+  reads `initialized`, `stale`, `storeExists`, `indexingInProgress` and `commitSha` — **none
+  of which were in D-05's field set** — and **nothing in the shipped UI renders `healthy` or
+  `health_message` at all**. D-05's stated reason for rejecting a bare ping (that it would
+  force a round trip for values the server already had in hand) was therefore based on a
+  false premise: the server has those values in `StatusResult`, not in `Meta`.
+
+  **The decided event shape** — mirroring `GetStatusResponse`'s own field names so
+  `classifyStatus` can be fed directly, with no second representation of the same state:
+
+  ```protobuf
+  int64  generation           = 1;
+  bool   initialized          = 2;
+  bool   stale                = 3;
+  bool   store_exists         = 4;
+  bool   indexing_in_progress = 5;
+  string commit_sha           = 6;
+  ```
+
+  **Dropped:** `node_count`, `edge_count`, `healthy`, `health_message` — no shipped component
+  renders them. Graph, browse and workbench continue to re-fetch through their existing rpcs,
+  exactly as D-05 intended.
+
+  **D-01 is unaffected.** `Meta.last_sync_unix_ms` remains the authoritative *change detector*
+  on the server side; it simply is not the *payload*. Detecting the change and describing the
+  new state are two different jobs, and this is what the event carries, not how the event is
+  triggered.
+
 ### Claude's Discretion
 
 - The rpc's final name, chosen from the verified-clean set, and its request message shape.
