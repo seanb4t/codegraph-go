@@ -78,9 +78,11 @@ must be preserved when the IDs land.*
 | 06-05 T1 | 06-05 | 4 | LIV-04 | T-06-27, T-06-31 | unit (vitest, headless graph model) — fast path runs no layout; survivors written back | `cd web && pnpm exec vitest run tests/graph-live-update.test.ts` | ❌ W0 | ⬜ pending |
 | 06-05 T2 | 06-05 | 4 | LIV-02 | T-06-28, T-06-29 | component (vitest) — graph re-fetches through its own rpcs, coalesced | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
 | 06-05 T3 | 06-05 | 4 | LIV-04 | T-06-30 | Playwright e2e at guava scale — survivor displacement measured and committed | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
-| 06-06 T1 | 06-06 | 5 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing paired with a per-tab received-generation superset, fan-out isolation, jittered reconnect behind a fixed-port proxy | `node web/scripts/live-push-multitab-check.mjs` | ❌ W0 | ⬜ pending |
-| 06-06 T2 | 06-06 | 5 | LIV-01 (criterion 5) | T-06-32, T-06-37 | **real multi-process**, never a stub — see Real-Process Gates below | `bash scripts/live-push-concurrency-check.sh` | ❌ W0 | ⬜ pending |
-| 06-06 T3 | 06-06 | 5 | LIV-03 (verdict) | T-06-35, T-06-36, T-06-SC | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below | `test "$(rg -c 'type pendingWriter struct' internal/mcp/server.go)" -eq 1` (the control) | ❌ | ⬜ pending |
+| 06-06 T1 | 06-06 | 5 | LIV-03 | T-06-45 | harness gate (node) — the fixed-port proxy rewrites BOTH Host and Origin to the upstream authority and streams rather than buffers, proven against a recording upstream | `node -e '<proxy gate>' --input-type=module` (the full command is in the plan) | ❌ W0 | ⬜ pending |
+| 06-06 T2 | 06-06 | 5 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing paired with a per-tab received-generation superset, fan-out isolation with the blocked tab proven blocked, jittered reconnect behind the Task 1 proxy | `node web/scripts/live-push-multitab-check.mjs` | ❌ W0 | ⬜ pending |
+| 06-07 T1 | 06-07 | 6 | LIV-01 | T-06-SC | build-exclusion gate (Go) — the `//go:build ignore` probe compiles and runs but never enters the shipped build, and uses the generated client rather than curl | `GOTOOLCHAIN=go1.26.5 go build ./... && go vet ./... && go run scripts/live-push-probe.go --help` | ❌ W0 | ⬜ pending |
+| 06-07 T2 | 06-07 | 6 | LIV-01 (criterion 5) | T-06-32, T-06-37, T-06-46 | **real multi-process**, never a stub — see Real-Process Gates below; flush duration bounded against a measured no-UI baseline | `bash scripts/live-push-concurrency-check.sh` | ❌ W0 | ⬜ pending |
+| 06-07 T3 | 06-07 | 6 | LIV-03 (verdict) | T-06-35, T-06-36 | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below; plus the post-commit bundle staging assertion | `test "$(rg -c 'type pendingWriter struct' internal/mcp/server.go)" -eq 1` (the control) · `test -z "$(git status --porcelain -- web/build)"` after the bundle commit | ❌ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -100,6 +102,12 @@ must be preserved when the IDs land.*
 > (its Task 3 waits for live traffic that only exists once `06-04` replaces `livehandler.go`'s
 > placeholder), so `06-05` moved to wave 4 and `06-06` to wave 5. The wave column below
 > reflects the corrected assignment.
+>
+> **Re-slice (maintainer decision, same date).** `06-06` carried BOTH real-world gates at an
+> estimated 100k tokens. It was split into `06-06` (wave 5 — the browser gates: the fixed-port
+> proxy and the three-tab check) and `06-07` (wave 6 — criterion 5's real-process gate, the
+> recorded verdict, and the phase's single `web/build` rebuild). `06-06` sat at the END of the
+> DAG, so no other plan's `depends_on` changed. The phase now has SEVEN plans.
 
 ---
 

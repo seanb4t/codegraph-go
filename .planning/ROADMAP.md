@@ -306,7 +306,7 @@ Plans:
   5. With `codegraph daemon` and `serve --mcp` running against the same store, a live-push session survives repeated real re-index flushes without starving a sync or holding the store open — verified against the real processes, not a stub (LIV-01)
 
 **Notes**: Criterion 5 is non-negotiable and is the reason this phase carries a research flag: the property it must not violate is only observable under genuine concurrent multi-process use, and running `codegraph ui` alone is the dev workflow that hides it. Criterion 2's message-by-message assertion measures per-message delivery latency, not eventual arrival — streaming that is silently buffered still passes an "it all arrived" test. Criterion 4 is verified against the graph view specifically; list and table views do not exhibit this failure.
-**Plans**: 6 plans
+**Plans**: 7 plans
 **UI hint**: yes
 
 Plans:
@@ -316,7 +316,8 @@ Plans:
 - [ ] 06-03-PLAN.md — The browser client: incremental stream consumption, jittered reconnect with generation resume, and the chrome updating from the event with no round trip
 - [ ] 06-04-PLAN.md — The transport: path-scoped write-deadline clearing, the streaming handler's subscriber lifecycle, and the end-to-end per-message timing tracer
 - [ ] 06-05-PLAN.md — Graph stability: no-layout fast path, authoritative survivor position write-back, layout generation token against overlapping runs, and the guava-scale displacement measurement
-- [ ] 06-06-PLAN.md — The two gates ordinary tests cannot satisfy: three real tabs with per-tab timing, fan-out isolation and a jittered reconnect behind a fixed-port proxy, and real `daemon` + `serve --mcp` concurrency measured against a no-UI baseline; plus the recorded lifecycle verdict and the bundle rebuild
+- [ ] 06-06-PLAN.md — The browser gate ordinary tests cannot satisfy: three real tabs with per-tab timing paired to a received-generation superset, fan-out isolation with the blocked tab proven blocked, and a jittered reconnect behind a fixed-port proxy that survives a server restart
+- [ ] 06-07-PLAN.md — Criterion 5's real-process gate: real `daemon` + `serve --mcp` + `ui` against one store, flush duration bounded against a measured no-UI baseline; plus the recorded lifecycle verdict and the phase's single bundle rebuild
 
 ## Progress
 
