@@ -648,3 +648,289 @@ Ordered by severity. Every HIGH below was reproduced against source.
   (`06-06-PLAN.md:229-233`). Both are right about different things: the *intent* is sound and should
   be kept, the *command* is inverted and must change (concern 4). Fixing the command does not
   reopen the decision to assert staging directly rather than rely on `web:drift`.
+
+
+---
+---
+
+# Cross-AI Plan Review — Phase 6 · CONVERGENCE CYCLE 2
+
+- **reviewed_at:** 2026-09-01T21:40:00Z
+- **reviewers:** codex
+- **models:** codex: `gpt-5.6-sol (reasoning=low)`
+- **model_sources:** codex: `banner`
+- **plans_reviewed:** 06-01, 06-02, 06-03, 06-04, 06-05, 06-06, 06-07 (seven plans, six waves)
+- **baseline:** cycle-1 revision `7d1b908c`, re-slice `9f3a75b8`
+- **cycle-1 carried in:** 9 HIGH + 31 actionable = 40 findings
+
+## Codex Review (cycle 2)
+
+### Overall assessment
+
+Cycle 2 resolves all nine prior HIGH findings and the spot-checked MEDIUM/LOW vacuity family.
+The watcher now handles first-index creation and directory replacement; restart testing has a
+stable-origin proxy; generation ordering is connection-epoch scoped; layout runs are
+generation-guarded; shutdown stops the publisher before `Shutdown`; and the bundle staging
+assertion now runs after the commit. The seven-plan re-slice preserved every cycle-1 resolution.
+
+Two NEW execution risks remain, both on criterion 3, and both were confirmed by the
+orchestrator with independent evidence rather than taken on the lane's word:
+
+1. `06-06` requires per-event browser instrumentation that **no plan in the phase creates**.
+2. `06-04`'s "2000 tiny messages comfortably exceed any socket write buffer" is **measurably
+   false on this project's own development platform** — the real figure is ~7,800.
+
+Apart from those, the revision is substantially stronger and close to executable.
+
+### Cycle-1 fix verification
+
+| Finding | Verdict | Evidence |
+|---|---|---|
+| **H1** citations / `-ge 4` floor / named PASS | **VERIFIED** | `06-01-PLAN.md:294` invokes `TestUIProtoFieldNumbersAreStableAndUnique` and asserts its `^--- PASS:` line `-eq 1` separately from the aggregate. Floor reachable: `internal/uiserver/readonly_test.go` declares exactly three matching tests (`:82`, `:130`, `:482`); Task 1 adds `TestRPCNameIsCleanAgainstMutatingVerbs` → 4. Subtest lines are indented, so `^--- PASS: Test` cannot inflate the count. |
+| **H2** publisher arming | **VERIFIED** | `06-02-PLAN.md:278-291` — `armWatches` over `[repoRoot, .codegraph, store]`, deepest existing path **plus its parent**, shallower watches dropped; three reachable states. Re-run at construction, on every raw Create/Remove/Rename, and on every debounced flush. Two named tests asserted `-eq 1` each (`06-02-PLAN.md:335`), the rename test carrying a pre-rename positive control. |
+| **H3** deadlock | **VERIFIED** | `06-05-PLAN.md:5-6` — `wave: 4`, `depends_on: ["06-03","06-04"]`. |
+| **H4** inverted staging assertion | **VERIFIED** | `06-07-PLAN.md:316` — `git add -A web/build` → conditional commit → `test -z "$(git status --porcelain -- web/build)"`, after the commit. Positive control `git ls-files --error-unmatch web/build/.build-manifest` confirmed to resolve against the live tree. |
+| **H5** reconnect / fixed-port proxy | **VERIFIED — and the new guard proven RED by the orchestrator** | See "The one new guard" below. |
+| **H6** criterion-2 pairing mechanized | **VERIFIED as a check, BLOCKED as a measurement** | `supersetOK` is genuinely computed in the verify command from `receivedGenerationsPerTab` × `triggeredGenerations` (`06-06-PLAN.md:228`) — no longer prose. But nothing produces `receivedGenerationsPerTab`. See HIGH-1. |
+| **H7** seeded `Subscribe` + restart deafness | **VERIFIED** | `06-03-PLAN.md:88`, `:158`, `:209` — epoch-scoped gate with three asserted cases including lower-generation-in-a-new-epoch. The server-side mirror of this bug does **not** exist: `since_generation` is explicitly inert server-side (`06-04-PLAN.md:154`, `T-06-26`), so a restarted server at generation 1 still delivers its seeded current state to a tab resuming from 4. |
+| **H8** overlapping layouts | **VERIFIED** | `06-05-PLAN.md:136` — one shared generation incremented inside `runLayout`, stale callbacks rejected before restoration or publication, three race tests. Confirmed against unprotected source at `GraphCanvas.svelte:251` and `:315-354`. |
+| **H9** coalescing / fan-out split | **PARTIAL** | The division of labour is honest and correctly recorded as `coalescingProvenBy`; the browser half explicitly disclaims the coalescing claim (`06-06-PLAN.md` Task 2 action). Its server half is blocked — see HIGH-2. |
+
+**Planner-discovered defects (no review raised these):**
+
+- **`Serve` shutdown ordering — VERIFIED.** Current source calls `Shutdown` directly
+  (`internal/uiserver/server.go:196`); `06-04` stops the publisher first and bounds the return at 2s.
+- **Restart deafness — VERIFIED** (H7 above).
+- **`06-04` missing `server_test.go` — VERIFIED.** Present at `06-04-PLAN.md:12`.
+
+**MEDIUM/LOW vacuity spot-checks — all VERIFIED:**
+
+- **M10** contaminated floor — `06-01-PLAN.md:139-141` scopes counts *per message block* with
+  exact equality (`event -eq 6`, `request -eq 1`), and records the synthetic RED that the
+  unscoped `-ge 7` form passed a file with `commit_sha = 6;` commented out. `ui.proto:563`
+  (`bool stale = 3;` on `ExploreResponse`) is the named contaminant.
+- **M20** mocked cytoscape-elk — `06-05-PLAN.md:169` now limits jsdom to proving nodes reached
+  layout and defers placement to the real-browser measurement. `graph-expansion.test.ts:73`/`:120`
+  confirm `FakeCore.layout()` only queues `layoutstop`.
+- **M21** `numTotalTests < 1` — replaced by named-file collection + pass checks in `06-03`/`06-05`.
+- **M27** `LAYOUT_OPTIONS >= 2` — now paired with a negative fork-name check (`06-05-PLAN.md:172`).
+- **M32** bare `pendingWriter` — now targets `type pendingWriter struct`, which occurs exactly
+  once (`internal/mcp/server.go:466`).
+- **M35** three string hits — replaced by a compile-time `AsyncIterable<WatchGraphEvent>`
+  assignment, string counts demoted to a presence control (`06-01-PLAN.md:272`).
+
+### The re-slice
+
+**Verified byte-identical.** `git show 7d1b908c:...06-06-PLAN.md` diffed against the new pair:
+the criterion-5 task body differs by exactly two hunks — the `<files>` line dropping
+`scripts/live-push-probe.go`, and the probe-program prose moving verbatim into `06-07` Task 1
+with a `read_first` pointer added. The browser task carried across unchanged apart from the
+Task-1/Task-2 split. No cycle-1 resolution was lost, and `06-06` sat at the end of the DAG so no
+other plan's `depends_on` moved.
+
+### The one new guard — RED proof independently reproduced
+
+The re-slice introduced exactly one new guard: the proxy check at `06-06-PLAN.md:129`. The
+orchestrator extracted that verify command verbatim and ran it against three implementations:
+
+| Implementation | Result | Failure names |
+|---|---|---|
+| correct proxy | **PASS** | — |
+| rewrites `Host` but not `Origin` | **FAIL** | `originNotRewrittenOrNotPairedWithHost` (streaming checks still passed) |
+| rewrites both, buffers the body | **FAIL** | `proxyBufferedTheResponse`, `chunksArrivedTogether` (header checks still passed) |
+
+The two failure modes discriminate **independently**, exactly as claimed. The guard is real; the
+recurring "vacuous guard created inside a vacuity fix" pattern did **not** recur here.
+(`node -e … --input-type=module` was also confirmed to enable top-level `await` — the trailing
+flag is honoured.)
+
+### Concerns
+
+#### HIGH — NEW: `06-06`'s browser instrumentation has no implementation seam
+
+`06-06-PLAN.md:168` says, in six words, "Instrument each tab to record, per event, the generation
+and a client-side receipt timestamp." Its verify command then reads **eight** application-level
+fields: `receivedGenerationsPerTab`, `seedGenerationPerTab`, `triggeredGenerations`,
+`blockedTabReceiptsDuringBlock`, `reconnectDelaysPerTab`, `reconnectAttemptsPerTab`,
+`postReconnectAppliedPerTab`, `resumeCursorSentPerTab`.
+
+Nothing in the phase produces them:
+
+- `06-06`'s `files_modified` is `web/scripts/live-push-stable-proxy.mjs`,
+  `web/scripts/live-push-multitab-check.mjs`, `corpora/live-push-multitab-check.json` — no
+  browser source, so it cannot add a seam itself, and it sits in wave 5 behind a frozen client.
+- `06-03` (the browser-client plan, wave 2) modifies `live-client.ts`, `live-store.ts`,
+  `status.ts`, three routes and three test files. It does **not** touch `web/src/app.d.ts` and
+  declares no global. `rg` for `app.d.ts|window\.|__codegraph|globalThis|instrument` across
+  `06-03-PLAN.md` returns one unrelated hit (`:298`, a threat row).
+- The existing ambient surface is exactly two globals — `__codegraphFileGraphMetrics` and
+  `__codegraphFileGraphGeometry` (`web/src/app.d.ts:26-45`) — both graph-only.
+
+The contrast with `06-05` is the proof this is an omission rather than a convention: `06-05`
+reads the geometry seam and **cites its declaration explicitly** (`06-05-PLAN.md:79-80`, `:227`)
+and lists `GraphCanvas.svelte` in `files_modified`. `06-06` does neither.
+
+Playwright can observe *network* stream attempts, but the required facts are post-decode and
+post-generation-gate: "the tab **applied** this event" is precisely what the epoch rule filters,
+and `resumeCursorSentPerTab` lives inside a length-prefixed Connect protobuf envelope no plan
+teaches the harness to decode.
+
+**This is a recurrence of the project's failure shape (a): the H6 fix satisfies its own literal
+check — `supersetOK` really is computed now — while the symptom (an unrunnable browser gate)
+persists one level down.** Criterion 3 and the browser half of criterion 2 both rest on it.
+
+*Fix:* give `06-03` a documented, observation-only live seam typed in `web/src/app.d.ts`
+(generation, epoch, applied-at timestamp, reconnect attempt + scheduled delay, resume cursor),
+following the two established `__codegraph*` precedents; add `web/src/app.d.ts` to `06-03`'s
+`files_modified`; and have `06-06` `read_first` it the way `06-05` does.
+
+#### HIGH — NEW: 2,000 messages do not create socket backpressure — measured, not argued
+
+`06-04-PLAN.md:232` asserts: *"2000 tiny messages comfortably exceed any socket write buffer, so
+the send loop blocks and the capacity-1 channel genuinely fills."*
+
+The orchestrator measured this on the project's own development platform (macOS,
+`net.inet.tcp.sendspace` = `net.inet.tcp.recvspace` = 131072) with a Go test reproducing the
+exact shape — `httptest` HTTP/1.1, 65-byte payloads (5-byte Connect envelope header + a
+generation, four bools and a short SHA), `Write` + `Flush` per message, client never reading:
+
+```
+RESULT: handler flushed 7827 messages (508755 bytes ≈ 496 KB) before the write blocked
+RESULT: is 2000 enough to block? false
+```
+
+**2,000 is ~3.9× too few.** Linux is worse, not better: `tcp_rmem`/`tcp_wmem` autotune to
+megabytes. With the socket never blocking, the capacity-1 registry channel never fills, the send
+loop drains every publish, `received == published`, and `received < published` **fails** — or,
+worse, passes nondeterministically on incidental goroutine-scheduling races, making a green run
+no evidence at all.
+
+This is the sole transport-level proof behind `coalescingProvenBy`, and the browser half honestly
+disclaims the claim, so **nothing in the phase currently closes D-04 end to end.**
+
+*Fix:* make the pressure deterministic rather than raising the constant — set a deliberately tiny
+`SO_SNDBUF` on the accepted connection via a wrapped listener, or publish until an observable
+send counter stops advancing (proving the handler is blocked) and only then publish the
+generations that must be coalesced.
+
+#### MEDIUM — NEW: `06-06`'s reconnect gate can fail on correct behaviour
+
+`grew` requires `reconnectDelaysPerTab.every(d => d.length >= 2 && …)`, but the fail list only
+enforces `Math.min(...reconnectAttemptsPerTab) >= 1`. A tab that reconnects on its first attempt
+— entirely correct behaviour — yields one delay and fails `backoffNotGrowing`. The action block
+never specifies how long the upstream stays down. State a minimum downtime spanning at least two
+backoff intervals, and raise the attempt floor to 2 so the two assertions agree.
+
+#### MEDIUM — NEW: reconnect-delay provenance is unspecified
+
+The plan requires raw delay arrays but does not say whether they come from the client's own
+scheduling or are inferred from network-request timestamps. Network-derived intervals fold in
+process startup, proxy 502 handling, fetch scheduling and browser throttling, so *strict*
+monotonic growth can fail even when the exponential base is correct. Pin the source (the seam
+from HIGH-1 is the natural home); if network-derived, compare against ranges with tolerance
+rather than requiring every observed interval to strictly increase.
+
+#### MEDIUM — NEW: criterion 5's flush interval has no exact start signal, and the debounce dilutes the bound
+
+`06-07-PLAN.md:177-179` says "modify a source file … wait for the daemon's own debounce, and
+confirm the index actually moved". The completion signal is pinned (`last_sync_unix_ms` advanced)
+but the start is not. Because the same script measures both runs, the comparison stays
+apples-to-apples — but the daemon's debounce constant (2000 ms default) is then included in
+*both* measurements, inflating `baselineMaxFlushDurationMs` and making the
+`maxFlushDurationMs <= 3 * baseline + 1000` bound substantially less sensitive to real
+degradation. Start the clock after the debounce window has elapsed, or subtract it from both,
+and tie completion to a content-derived fact from the specific revision written so an unrelated
+metadata advance cannot be mistaken for the intended flush.
+
+#### LOW — NEW: `06-01` prose misplaces the nonexistent test name
+
+`06-01-PLAN.md:297` says the wrong name `TestKnownUIProtoFieldNumbersAreStable` "lives in
+`internal/schema/meta_commit_test.go:120`". It lives nowhere — `rg` returns zero repo-wide. What
+is at `meta_commit_test.go:120` is `TestKnownMetaFieldNumbersAreStable`, a different guard over a
+different message. The mechanism is correct; only the sentence is wrong.
+
+#### LOW — NEW: `startProxy`'s handle contract omits `url`
+
+`06-06-PLAN.md` Task 1 specifies "an exported `startProxy({ port })` returning a handle with a
+`setUpstream(url)` method and a `close()`". Both the Task 1 verify (`px.url`) and Task 2 ("open
+… tabs ON THE PROXY'S URL") require a `url` property that the contract never names.
+
+#### LOW — NEW: "three processes" understates the harness topology
+
+`06-07` runs a daemon, an MCP harness process, a UI process and a stream probe. Three are product
+processes; four OS processes participate. Say which, so the PID/liveness records are unambiguous.
+
+### Suggestions
+
+1. Add the live observation seam to `06-03` (HIGH-1) — typed in `web/src/app.d.ts`,
+   observation-only, installed before the live client starts, following the two existing
+   `__codegraph*` precedents. Then have `06-06` read it.
+2. Replace the fixed 2,000-message publish with a deterministic pressure mechanism (HIGH-2). Do
+   not simply raise the constant — 7,827 is a *measured* figure for one platform, not a portable one.
+3. Reconcile `06-06`'s reconnect attempt floor with `grew`'s `length >= 2` requirement and state
+   a minimum upstream downtime.
+4. Pin the provenance of `reconnectDelaysPerTab`.
+5. Pin criterion 5's flush start signal and exclude the debounce from both measurements.
+6. Correct the stale test-name sentence at `06-01-PLAN.md:297`.
+7. Name `startProxy`'s `url` property in the Task 1 contract.
+8. State the four-OS-process / three-product-process distinction in `06-07`.
+
+### Risk assessment
+
+**Overall risk: HIGH.**
+
+No cycle-1 HIGH remains unfixed, and the structural work — waves, dependencies, threat coverage,
+the re-slice, the new proxy guard — all holds under direct verification. The residual HIGH risk is
+entirely *verification executability* on criterion 3: the multi-tab gate has no defined source for
+the facts it must record, and the sole coalescing proof rests on a socket-buffer assumption
+measured false by a factor of four. Both are bounded, well-localised plan edits. With them fixed
+the phase should drop to MEDIUM/LOW, with the remaining uncertainty concentrated in the real
+multi-process timing harness rather than in the product design.
+
+---
+
+## Consensus Summary (cycle 2)
+
+Single-lane cycle (codex, source-grounded, `file:line` citations present throughout), so
+"consensus" here means *lane finding corroborated by independent orchestrator verification*. Every
+finding below was re-derived against the tree rather than accepted from the lane.
+
+### Agreed strengths
+
+- All nine cycle-1 HIGH findings are genuinely fixed, each with a mechanism that survives direct
+  inspection — not restated claims.
+- The re-slice is a true re-slice: diffed byte-for-byte against `7d1b908c`, the only substantive
+  change is the probe-program prose relocating from `06-06` Task 2 into `06-07` Task 1.
+- The one new guard introduced by the fix pass (the proxy check) was independently proven RED
+  against two distinct broken implementations, discriminating on header rewriting and streaming
+  **independently**. The project's recurring "vacuous guard inside a vacuity fix" pattern did not
+  recur.
+- The vacuity family (M10, M20, M21, M27, M32, M35) is comprehensively repaired: scoped exact
+  counts, negative controls paired with positive ones, compile-time assertions replacing string
+  greps.
+- H7's fix is deeper than the finding asked for — the epoch rule is mirrored by making
+  `since_generation` deliberately inert server-side, so the same restart bug cannot reappear from
+  the server end.
+
+### Agreed concerns
+
+1. **HIGH — `06-06` records eight application-level fields no plan produces.** The H6 fix
+   mechanized the *check* while leaving the *measurement* undefined. Failure shape (a).
+2. **HIGH — the 2,000-message coalescing pressure is measurably insufficient** (7,827 needed on
+   the dev platform; more on Linux). The sole proof of D-04 is environment-dependent at best and
+   nondeterministic at worst.
+3. **MEDIUM — three smaller gate-fragility issues** in `06-06`'s reconnect assertions and
+   `06-07`'s flush interval, plus two LOW documentation defects.
+
+### Divergent views
+
+- **H9's rating.** The lane rated H9 PARTIAL and filed the socket-buffer problem as a separate
+  HIGH. The orchestrator agrees the split of labour is *honest* — the browser scenario explicitly
+  disclaims the coalescing claim rather than quietly implying it, which is the right call — so
+  H9's design is resolved and its remaining exposure is entirely HIGH-2. Counted once, as HIGH-2.
+- **Magnitude of HIGH-2.** The lane described the 2,000-message figure as "not a safe assumption"
+  and "environment-dependent". Direct measurement is stronger than that: it is *wrong on the
+  machine this phase will be developed on*, by a factor of 3.9. This upgrades the finding from a
+  portability caveat to a plan defect.
+- **Read-deadline clearing.** Settled in cycle 1 (`$GOROOT/src/net/http/server.go:697`) and
+  correctly not re-raised by either party. Recorded here only so a future cycle does not reopen it.
