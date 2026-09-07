@@ -113,13 +113,39 @@
 	// rather than as opaque boxes — required for the directory-structural
 	// grouping this component renders. Reused, byte-identical, for every
 	// layout run — an expansion re-runs the SAME layout, never a
-	// different one.
+	// different one. Never forked into a second configuration for a live
+	// update — the interactive strategies below apply to EVERY layout
+	// this component ever runs, including the first paint.
+	//
+	// The three interactive-strategy options below are D-06's approximate
+	// half of the live-update stability guarantee: cycle-breaking and
+	// layering run in their interactive variant, and crossing
+	// minimisation runs semi-interactively, so a structural live update's
+	// new nodes are placed with knowledge of where the current
+	// arrangement already sits (cytoscape-elk already sends every node's
+	// current model position into ELK — src/layout.js). This is only ever
+	// an approximation — ELK's own maintainer states on the record
+	// (eclipse-elk#355) that the layered algorithm "cannot be used to
+	// precisely fix the positions of the nodes," only "somewhat preserve
+	// the topology." The EXACT half of the guarantee — a surviving node's
+	// displacement is exactly zero — comes from the authoritative
+	// position write-back in runLayout below, never from these options
+	// alone. Option names verified present in the installed elkjs bundle
+	// this task (elkjs@0.9.3, pnpm's un-hoisted store path — a grep
+	// against the top-level web/node_modules/elkjs/ returns nothing for
+	// every option, hoisted or not, so any verification must target the
+	// pnpm store path directly and pair the search with a known-present
+	// control term).
 	const LAYOUT_OPTIONS = {
 		name: 'elk',
 		fit: true,
 		elk: {
 			algorithm: 'layered',
-			'elk.hierarchyHandling': 'INCLUDE_CHILDREN'
+			'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+			'org.eclipse.elk.interactive': true,
+			'org.eclipse.elk.layered.cycleBreaking.strategy': 'INTERACTIVE',
+			'org.eclipse.elk.layered.layering.strategy': 'INTERACTIVE',
+			'org.eclipse.elk.layered.crossingMinimization.semiInteractive': true
 		},
 		// nodeLayoutOptions is cytoscape-elk's PER-NODE ELK option hook
 		// (its own layout.js: `k.layoutOptions = options.nodeLayoutOptions(node)`)
@@ -235,6 +261,28 @@
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		let liveAddedElements: any[] = [];
 
+		// layoutGeneration/activeLayoutRun are this renderer INSTANCE's own
+		// overlapping-layout guard (D-06's serialization requirement).
+		// runLayout takes the next token itself, on every call — start(),
+		// replace(), add() and liveUpdate() below all inherit it simply by
+		// going through runLayout, rather than each call site minting its
+		// own. A `layoutstop` callback whose captured token is no longer
+		// the current one performs NO survivor restoration and publishes
+		// NO geometry: without this, a live refresh arriving while a user
+		// expansion's layout is still running leaves two pending
+		// callbacks, each holding a DIFFERENT captured survivor map, each
+		// racing to restore positions and republish geometry — and
+		// cytoscape's layout events bubble from the LAYOUT instance up to
+		// `cy` (confirmed by reading the installed cytoscape's own
+		// extension.mjs this task: `bubble: function(){ return true; }`),
+		// so a `cy.one('layoutstop', ...)` registered by an OLDER call can
+		// genuinely be invoked by a NEWER layout's completion event —
+		// whichever lands last wins, and it may be the older one, which is
+		// exactly the movement this guard exists to prevent.
+		let layoutGeneration = 0;
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		let activeLayoutRun: any;
+
 		// runLayout always uses the SAME layered/hierarchyHandling elk
 		// algorithm configuration — never a different layout. Only `fit`
 		// varies between the initial paint and a later replace: fitting
@@ -248,14 +296,63 @@
 		// expansions is also the more usable behaviour on its own
 		// merits: a developer expanding one directory should not have
 		// the WHOLE graph jump to a new scale underneath them.
-		function runLayout(layoutRunStartedAt: number, fit: boolean, resizeAfter = false) {
+		//
+		// survivorPositions, when provided, is D-06's authoritative
+		// write-back: a map of node id -> the MODEL position that node
+		// held immediately before the element swap that preceded this
+		// layout run, captured by liveUpdate()'s structural path below.
+		// On settle — before geometry republishes — every NON-PARENT node
+		// still present that has a captured entry is set back to it
+		// EXACTLY (`===` on x and y, since the value written is the exact
+		// object read). Parents are excluded deliberately: a compound's
+		// position is DERIVED from its children in cytoscape, so writing
+		// it back would fight the very children this same pass just
+		// restored. This is the EXACT half of the stability guarantee;
+		// LAYOUT_OPTIONS' interactive strategies above are only the
+		// approximate half that decides where genuinely NEW nodes land.
+		function runLayout(
+			layoutRunStartedAt: number,
+			fit: boolean,
+			resizeAfter = false,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			survivorPositions?: Map<string, { x: number; y: number }>
+		) {
+			layoutGeneration += 1;
+			const myGeneration = layoutGeneration;
+			// Best-effort cleanup of the superseded run — NOT the
+			// correctness mechanism. cytoscape's layout `stop()` is not
+			// guaranteed to prevent an already-queued `layoutstop` from
+			// firing (per the installed library's own semantics), so the
+			// token check inside the callback below is what actually
+			// matters and must stand on its own regardless of whether
+			// stop() has any effect here.
+			if (activeLayoutRun && typeof activeLayoutRun.stop === 'function') {
+				activeLayoutRun.stop();
+			}
 			opts.cy.one('layoutstop', () => {
-				// resizeAfter is set only by add() above — an addition can
-				// grow a compound's rendered extent, which cytoscape does
-				// not observe on its own; replace() and the initial start()
-				// never pass it, since removing-then-re-adding the SAME
-				// element count never grows the extent past what the prior
-				// layout already accounted for.
+				// The token check is FIRST and unconditional: a superseded
+				// run does no resize, no metrics, no survivor restoration,
+				// and no geometry publish — it returns immediately.
+				if (myGeneration !== layoutGeneration) return;
+				if (survivorPositions) {
+					const nodeCollection = opts.cy.nodes();
+					if (typeof nodeCollection.forEach === 'function') {
+						// eslint-disable-next-line @typescript-eslint/no-explicit-any
+						nodeCollection.forEach((n: any) => {
+							if (typeof n.isParent === 'function' && n.isParent()) return;
+							const pos = survivorPositions.get(n.id());
+							if (pos !== undefined) n.position(pos);
+						});
+					}
+				}
+				// resizeAfter is set by add() above and by liveUpdate()'s
+				// structural path below when it merged symbol survivors
+				// back in — an addition can grow a compound's rendered
+				// extent, which cytoscape does not observe on its own;
+				// replace() and the initial start() only pass it when the
+				// SAME symbol-survivor merge happened, since removing-
+				// then-re-adding the SAME element count never grows the
+				// extent past what the prior layout already accounted for.
 				if (resizeAfter && typeof opts.cy.resize === 'function') {
 					opts.cy.resize();
 				}
@@ -274,7 +371,33 @@
 					opts.onGeometry(geometry);
 				}
 			});
-			opts.cy.layout({ ...LAYOUT_OPTIONS, fit }).run();
+			activeLayoutRun = opts.cy.layout({ ...LAYOUT_OPTIONS, fit }).run();
+		}
+
+		// swapElements is the ONE element-swap implementation replace()
+		// and liveUpdate()'s structural path below both call — the
+		// symbol-survivor rule (an added element whose own PARENT id is
+		// present among the new element set survives; one whose parent
+		// just disappeared does not, because cytoscape's add() cannot
+		// attach a child to a parent absent from the same batch) lives
+		// here exactly once rather than being reimplemented a second time
+		// for live updates. Returns whether any symbol survivors were
+		// merged back in, which the caller uses to decide `resizeAfter`.
+		function swapElements(newElements: unknown[]): boolean {
+			opts.cy.startBatch();
+			opts.cy.elements().remove();
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			opts.cy.add(newElements as any);
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const newIds = new Set((newElements as any[]).map((el) => el.data.id));
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			const survivors = liveAddedElements.filter((el: any) => newIds.has(el.data.parent));
+			if (survivors.length > 0) {
+				opts.cy.add(survivors as any);
+			}
+			liveAddedElements = survivors;
+			opts.cy.endBatch();
+			return survivors.length > 0;
 		}
 
 		return {
@@ -313,20 +436,8 @@
 			// symbol whose file remains visible survives an unrelated
 			// directory's own expand or collapse.
 			replace(newElements: unknown[]) {
-				opts.cy.startBatch();
-				opts.cy.elements().remove();
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				opts.cy.add(newElements as any);
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const newIds = new Set((newElements as any[]).map((el) => el.data.id));
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				const survivors = liveAddedElements.filter((el: any) => newIds.has(el.data.parent));
-				if (survivors.length > 0) {
-					opts.cy.add(survivors as any);
-				}
-				liveAddedElements = survivors;
-				opts.cy.endBatch();
-				runLayout(performance.now(), false, survivors.length > 0);
+				const hadSymbolSurvivors = swapElements(newElements);
+				runLayout(performance.now(), false, hadSymbolSurvivors);
 			},
 			// add MERGES a batch of new elements into the live instance
 			// WITHOUT touching anything already present — the incremental
@@ -394,6 +505,100 @@
 					opts.onGeometry(geometry);
 				}
 			},
+			// liveUpdate is D-06's two-path live-update seam, applied
+			// against an incoming element set produced by a re-index
+			// event — never called for a user-driven expand/collapse,
+			// which keep using replace()/add()/removeByIds() exactly as
+			// they already do (a live update and a user gesture are
+			// different events and must not be merged into one code
+			// path).
+			//
+			// FAST PATH: the rendered NODE id set is unchanged (only
+			// data — counts, cycle membership, health — moved, or an
+			// edge appeared/disappeared between two already-rendered
+			// nodes). Every element present in both the current and the
+			// incoming set has its data (and classes) updated in place;
+			// an edge id only the incoming set names is added; an edge
+			// id only the current set names is removed. NO layout runs
+			// at all — running one here would move nodes for no reason,
+			// which is precisely the failure LIV-04 names — and geometry
+			// republishes directly, the same "no layout, but still
+			// republish" discipline removeByIds() above already
+			// established.
+			//
+			// STRUCTURAL PATH: nodes were added or removed. Every
+			// currently-rendered node's own model position is captured
+			// BEFORE the swap (this is what survives the swap — the swap
+			// itself, like replace()'s, removes and re-adds every
+			// element, which resets position); the swap runs through the
+			// SAME swapElements() replace() uses, so the symbol-survivor
+			// rule is not duplicated; then the shared layout runs with
+			// the interactive strategies LAYOUT_OPTIONS carries, and
+			// runLayout's own write-back (above) restores every
+			// surviving non-parent node to its captured position on
+			// settle, before geometry republishes.
+			liveUpdate(newElements: unknown[]) {
+				if (typeof opts.cy.getElementById !== 'function') return;
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const isNodeElement = (el: any) => !('source' in el.data);
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				const currentNodeIds = new Set(opts.cy.nodes().map((n: any) => n.id()));
+				const newNodeIds = new Set(
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					(newElements as any[]).filter(isNodeElement).map((el) => el.data.id)
+				);
+				const nodeSetUnchanged =
+					currentNodeIds.size === newNodeIds.size &&
+					[...currentNodeIds].every((id) => newNodeIds.has(id));
+
+				if (nodeSetUnchanged) {
+					opts.cy.startBatch();
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					const newById = new Map((newElements as any[]).map((el) => [el.data.id, el]));
+					const currentIds = new Set<string>();
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					opts.cy.elements().forEach((ele: any) => currentIds.add(ele.id()));
+					for (const [id, el] of newById) {
+						if (currentIds.has(id)) {
+							const ele = opts.cy.getElementById(id);
+							if (ele && ele.length > 0 && typeof ele.data === 'function') {
+								ele.data(el.data);
+								if (typeof ele.classes === 'function') {
+									ele.classes(el.classes ?? '');
+								}
+							}
+						} else {
+							opts.cy.add([el]);
+						}
+					}
+					for (const id of currentIds) {
+						if (!newById.has(id)) {
+							const ele = opts.cy.getElementById(id);
+							if (ele && ele.length > 0 && typeof ele.remove === 'function') {
+								ele.remove();
+							}
+						}
+					}
+					opts.cy.endBatch();
+					const geometry = computeGeometry(opts.cy);
+					if (geometry !== undefined) {
+						opts.onGeometry(geometry);
+					}
+					return;
+				}
+
+				const survivorPositions = new Map<string, { x: number; y: number }>();
+				const nodeCollection = opts.cy.nodes();
+				if (typeof nodeCollection.forEach === 'function') {
+					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+					nodeCollection.forEach((n: any) => {
+						const pos = n.position();
+						survivorPositions.set(n.id(), { x: pos.x, y: pos.y });
+					});
+				}
+				const hadSymbolSurvivors = swapElements(newElements);
+				runLayout(performance.now(), false, hadSymbolSurvivors, survivorPositions);
+			},
 			// focus fits the viewport to exactly the elements named by
 			// `ids`, built by direct id lookup (getElementById) rather
 			// than a selector string — a repository-relative file path
@@ -447,6 +652,7 @@
 		focusNodeIds,
 		addedElements,
 		removedElementIds,
+		liveElements,
 		onNodeSelected,
 		onEdgeSelected,
 		onBackgroundTapped
@@ -491,6 +697,18 @@
 		// reference triggers a fresh removal — see the fifth $effect
 		// below.
 		removedElementIds?: string[];
+		// liveElements: a plain element-data array produced by a LIVE
+		// re-index event (never a user gesture) — a NEW array reference
+		// triggers createFileGraphRenderer's liveUpdate() above via the
+		// sixth $effect below, which applies D-06's two-path decision
+		// (data-only fast path when the node id set is unchanged; a
+		// layout-and-write-back structural path otherwise). Deliberately
+		// SEPARATE from `elements`/`addedElements`/`removedElementIds` —
+		// a live update and a user-driven expand/collapse are different
+		// events reaching this component through different props, never
+		// merged into one code path. undefined/an unchanged reference is
+		// a no-op, matching every other incremental prop's own contract.
+		liveElements?: FileGraphElement[];
 		// Fired on a node tap, carrying the tapped element's id and its
 		// element kind — 'directory', 'file', or 'symbol' (never a
 		// cytoscape Element or event object). The route decides what a
@@ -680,6 +898,19 @@
 		const ids = removedElementIds ?? [];
 		if (ids.length === 0) return;
 		renderer?.removeByIds(ids);
+	});
+
+	// A SIXTH effect tracks liveElements and, on every NEW array
+	// reference, hands the batch to createFileGraphRenderer's liveUpdate()
+	// above — D-06's two-path live-update seam, entirely separate from
+	// the second effect's user-driven full replace. Same no-guard-needed
+	// reasoning as the third/fourth/fifth effects: the prop defaults to
+	// undefined and this effect no-ops on an empty/absent batch, so an
+	// unguarded first run is already inert.
+	$effect(() => {
+		const batch = liveElements ?? [];
+		if (batch.length === 0) return;
+		renderer?.liveUpdate(batch);
 	});
 </script>
 
