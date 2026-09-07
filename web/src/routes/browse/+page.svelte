@@ -15,6 +15,7 @@
 	import { getContext, untrack } from 'svelte';
 	import { uiClient } from '$lib/client';
 	import type { IndexStatus, StatusGate } from '$lib/status';
+	import type { LiveStore } from '$lib/live/live-store';
 	import { parseBrowseParams, type BrowseParams } from '$lib/browse-url';
 	import {
 		loadBrowseTarget,
@@ -124,6 +125,74 @@
 		}
 
 		return () => controller.abort();
+	});
+
+	// 06-03 Task 3 (LIV-02): a new generation from the live store
+	// re-issues the SAME loadBrowseTarget/loadBlastRadius calls this
+	// route already owns, going through the SAME NavigationGate — so a
+	// live-triggered load and a URL-driven one can never race to a stale
+	// answer (whichever advances `gate` last wins; the other's response
+	// is discarded by `gate.isCurrent`). Coalesced with a
+	// PENDING-GENERATION flag: an event arriving while a live-triggered
+	// re-fetch is still in flight is recorded (newest wins) rather than
+	// starting a second concurrent one, and exactly one follow-up fires
+	// once the in-flight one settles.
+	const liveStore = getContext<LiveStore | undefined>('liveStore');
+	let browseLiveIssuedGeneration: bigint | null = null;
+	let browseLivePendingGeneration: bigint | null = null;
+	let browseLiveInFlight = false;
+
+	function issueBrowseLiveRefetch(): void {
+		const currentParams = untrack(() => params);
+		if (!currentParams.symbol && !currentParams.file) return;
+
+		browseLiveInFlight = true;
+		const generation = gate.advance();
+		const controller = new AbortController();
+		const tasks: Promise<unknown>[] = [
+			loadBrowseTarget(currentParams, uiClient, controller.signal).then((result) => {
+				if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+				targetState = result;
+			})
+		];
+		if (currentParams.symbol) {
+			tasks.push(
+				loadBlastRadius(currentParams, uiClient, controller.signal).then((result) => {
+					if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+					blastState = result;
+				})
+			);
+		}
+		Promise.allSettled(tasks).then(() => {
+			browseLiveInFlight = false;
+			if (browseLivePendingGeneration !== null) {
+				browseLivePendingGeneration = null;
+				issueBrowseLiveRefetch();
+			}
+		});
+	}
+
+	$effect(() => {
+		if (!liveStore) return;
+		let first = true;
+		return liveStore.subscribe((live) => {
+			if (first) {
+				first = false;
+				if (live) browseLiveIssuedGeneration = live.event.generation;
+				return;
+			}
+			if (!live) return;
+			const generation = live.event.generation;
+			if (browseLiveIssuedGeneration !== null && generation <= browseLiveIssuedGeneration) return;
+			browseLiveIssuedGeneration = generation;
+			if (browseLiveInFlight) {
+				if (browseLivePendingGeneration === null || generation > browseLivePendingGeneration) {
+					browseLivePendingGeneration = generation;
+				}
+				return;
+			}
+			issueBrowseLiveRefetch();
+		});
 	});
 
 	// Every navigation (search selection, neighbour click) and every

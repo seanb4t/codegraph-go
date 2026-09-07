@@ -151,6 +151,15 @@ afterEach(() => {
 
 describe('browse route: typing in search does not tear down the open node view (CR-01)', () => {
 	it('leaves the RPC call count and the rendered target unchanged across three keystrokes, but still updates the URL every time, and DOES reload for a target-field change', async () => {
+		// 06-03 (deviation, Rule 3): the default 5000ms test timeout leaves
+		// no margin once the suite grows past this plan's four new test
+		// files — measured in isolation, this test's own body consistently
+		// takes ~5.06s regardless of this plan's changes (reproduced against
+		// this file's pre-06-03 content too), so the added suite-wide
+		// contention was already right at the edge. Widening ONLY this
+		// test's own timeout (no logic change) is what the framework's own
+		// error message suggests; see 06-03-SUMMARY.md for the full
+		// isolation trace that ruled out a regression in this plan's code.
 		const nodeDetailReqs: Array<{ symbol: string; file: string }> = [];
 		const nodeDetailDeferreds: Array<Deferred<GetNodeDetailResponse>> = [];
 		let impactCalls = 0;
@@ -234,5 +243,5 @@ describe('browse route: typing in search does not tear down the open node view (
 
 		nodeDetailDeferreds[1].resolve(nodeDetailResponse('otherFunc', 'internal/query/node.go', 33));
 		await waitFor(() => expect(screen.getByTestId('browse-source')).toBeInTheDocument());
-	});
+	}, 15000);
 });

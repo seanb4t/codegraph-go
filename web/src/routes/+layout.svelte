@@ -9,6 +9,7 @@
 	import { setContext } from 'svelte';
 	import { uiClient } from '$lib/client';
 	import { createStatusGate, navigationIdentity, type IndexStatus } from '$lib/status';
+	import { createLiveStore } from '$lib/live/live-store';
 	import StatusBanner from '$lib/components/StatusBanner.svelte';
 
 	let { children } = $props();
@@ -26,6 +27,27 @@
 	// subscription only registers a listener, it never triggers a
 	// fetch.
 	setContext('statusGate', statusGate);
+
+	// 06-03 Task 2: the live store is constructed once here, alongside
+	// the status gate, and put into context under a stable key so
+	// descendant routes (Task 3) can subscribe to the SAME generation
+	// stream to re-fetch through their own rpcs. Every admitted event is
+	// ALSO applied to the status gate directly — criterion 1's "chrome
+	// updates by the same mechanism rather than staying stale itself
+	// while the data around it moves". The live trigger deliberately
+	// bypasses notifyNavigated's identity guard (that guard exists to
+	// suppress duplicate NAVIGATIONS; a live event is not one).
+	const liveStore = createLiveStore();
+	setContext('liveStore', liveStore);
+	$effect(() => {
+		return liveStore.subscribe((live) => {
+			if (!live) return;
+			statusGate.applyLiveEvent({ ...live.event, epoch: live.epoch });
+		});
+	});
+	$effect(() => {
+		return () => liveStore.stop();
+	});
 
 	let status = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
 	$effect(() => {

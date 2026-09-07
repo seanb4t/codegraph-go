@@ -14,6 +14,7 @@
 	import { getContext } from 'svelte';
 	import { uiClient } from '$lib/client';
 	import type { IndexStatus, StatusGate } from '$lib/status';
+	import type { LiveStore } from '$lib/live/live-store';
 	import type { GetHealthResponse } from '$lib/gen/ui_pb';
 	import { toCountRows, hasWorktreeMismatch, describeFreshness } from '$lib/health-view';
 	import { describeWorkbenchFailure } from '$lib/workbench-failure';
@@ -56,6 +57,68 @@
 				pageState = { kind: 'failed', failure: describeWorkbenchFailure(err, indexStatus) };
 			});
 		return () => controller.abort();
+	});
+
+	// 06-03 Task 3 (LIV-02): a new generation from the live store
+	// re-issues this SAME GetHealth call — no rpc's wire shape is
+	// duplicated into the live event (D-05). Coalesced with a
+	// PENDING-GENERATION flag rather than suppression: an event arriving
+	// while a live-triggered fetch is still in flight is recorded (the
+	// newest generation wins) and issues exactly ONE follow-up once that
+	// fetch settles — suppression alone would permanently lose whatever
+	// arrived during the in-flight window.
+	const liveStore = getContext<LiveStore | undefined>('liveStore');
+	let liveIssuedGeneration: bigint | null = null;
+	let livePendingGeneration: bigint | null = null;
+	let liveInFlight = false;
+
+	function issueLiveHealthFetch(generation: bigint): void {
+		liveIssuedGeneration = generation;
+		liveInFlight = true;
+		const controller = new AbortController();
+		uiClient
+			.getHealth({}, { signal: controller.signal })
+			.then((response) => {
+				if (controller.signal.aborted) return;
+				pageState = { kind: 'loaded', response };
+			})
+			.catch((err: unknown) => {
+				if (controller.signal.aborted) return;
+				pageState = { kind: 'failed', failure: describeWorkbenchFailure(err, indexStatus) };
+			})
+			.finally(() => {
+				liveInFlight = false;
+				if (livePendingGeneration !== null) {
+					const next = livePendingGeneration;
+					livePendingGeneration = null;
+					issueLiveHealthFetch(next);
+				}
+			});
+	}
+
+	$effect(() => {
+		if (!liveStore) return;
+		let first = true;
+		return liveStore.subscribe((live) => {
+			if (first) {
+				// The store's synchronous initial delivery is a BASELINE, not
+				// a trigger — otherwise mounting this view while a live event
+				// is already current would issue an extra, redundant fetch.
+				first = false;
+				if (live) liveIssuedGeneration = live.event.generation;
+				return;
+			}
+			if (!live) return;
+			const generation = live.event.generation;
+			if (liveIssuedGeneration !== null && generation <= liveIssuedGeneration) return;
+			if (liveInFlight) {
+				if (livePendingGeneration === null || generation > livePendingGeneration) {
+					livePendingGeneration = generation;
+				}
+				return;
+			}
+			issueLiveHealthFetch(generation);
+		});
 	});
 </script>
 

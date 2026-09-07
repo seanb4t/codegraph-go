@@ -30,6 +30,7 @@
 	import { getContext, untrack, type Snippet } from 'svelte';
 	import type { ColumnDef } from '@tanstack/svelte-table';
 	import type { IndexStatus, StatusGate } from '$lib/status';
+	import type { LiveStore } from '$lib/live/live-store';
 	import { describeWorkbenchFailure } from '$lib/workbench-failure';
 	import DataTable from './DataTable.svelte';
 	import { locationRowId } from './callers-columns';
@@ -138,6 +139,66 @@
 			controller.abort();
 			requestId += 1; // invalidate this request's own settlement, on every teardown path
 		};
+	});
+
+	// 06-03 Task 3 (LIV-02): a new generation from the live store
+	// re-issues `run` — but ONLY when this panel currently holds a
+	// result. A live event must not launch an analysis the developer
+	// never asked for (idle/loading/failed all skip it). Coalesced with
+	// a PENDING-GENERATION flag, not suppression — see health/+page.svelte's
+	// identical comment for why suppression alone would lose the newest
+	// state. Reuses the SAME requestId counter as the effect above, so a
+	// param-driven dispatch and a live-triggered one can never race.
+	const liveStore = getContext<LiveStore | undefined>('liveStore');
+	let panelLiveIssuedGeneration: bigint | null = null;
+	let panelLivePendingGeneration: bigint | null = null;
+	let panelLiveInFlight = false;
+
+	function issueLiveRerun(): void {
+		const currentRun = untrack(() => run);
+		if (panelState.kind !== 'loaded' || !currentRun) return;
+		panelLiveInFlight = true;
+		const controller = new AbortController();
+		const id = ++requestId;
+		currentRun(controller.signal)
+			.then((result) => {
+				if (id !== requestId) return;
+				panelState = { kind: 'loaded', result };
+			})
+			.catch((err: unknown) => {
+				if (id !== requestId) return;
+				panelState = { kind: 'failed', failure: describeWorkbenchFailure(err, indexStatus) };
+			})
+			.finally(() => {
+				panelLiveInFlight = false;
+				if (panelLivePendingGeneration !== null) {
+					panelLivePendingGeneration = null;
+					issueLiveRerun();
+				}
+			});
+	}
+
+	$effect(() => {
+		if (!liveStore) return;
+		let first = true;
+		return liveStore.subscribe((live) => {
+			if (first) {
+				first = false;
+				if (live) panelLiveIssuedGeneration = live.event.generation;
+				return;
+			}
+			if (!live) return;
+			const generation = live.event.generation;
+			if (panelLiveIssuedGeneration !== null && generation <= panelLiveIssuedGeneration) return;
+			panelLiveIssuedGeneration = generation;
+			if (panelLiveInFlight) {
+				if (panelLivePendingGeneration === null || generation > panelLivePendingGeneration) {
+					panelLivePendingGeneration = generation;
+				}
+				return;
+			}
+			issueLiveRerun();
+		});
 	});
 </script>
 
