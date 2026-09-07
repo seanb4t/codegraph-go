@@ -1,20 +1,21 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v0.12.0
 milestone_name: Local Graph UI
 current_phase: 6
 current_phase_name: Live Push
-status: planning
-stopped_at: Phase 5 complete, ready to plan Phase 6
-last_updated: "2026-08-31T17:46:47.100Z"
-last_activity: 2026-08-31
+current_plan: 2
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-09-07T15:05:04.702Z"
+last_activity: 2026-09-07
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: 9ed946e401dba5fa377713f6303dafeac970a2d5
+state_head: c5833c5c99c2f06cd6f15593c43bf7984fd7d064
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 43
-  completed_plans: 43
+  total_plans: 50
+  completed_plans: 44
   percent: 83
 ---
 
@@ -30,11 +31,12 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 6 — Live Push
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-08-31 — Phase 5 complete, transitioned to Phase 6
+Current Plan: 2
+Total Plans in Phase: 7
+Status: Ready to execute
+Last activity: 2026-09-07 — Plan 06-01 (WatchGraph wire-surface freeze) complete
 
-Progress: [███████░░░] 67% (1/6 phases)
+Progress: [████████░░] 83% (1/6 phases)
 
 ## Performance Metrics
 
@@ -103,6 +105,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05 P05 | 3h40min | 3 tasks | 7 files |
 | Phase 05-file-package-graph-view P06 | 45min | 3 tasks | 9 files |
 | Phase 05 P07 | ~100 min | 3 tasks | 10 files |
+| Phase 06 P01 | 191min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -211,6 +214,7 @@ Standing decisions that outlive every milestone:
 - [Phase 05]: Cycle-focus grouping reads both data.cycleId (file nodes) and data.cycleIds (collapsed directories). — Every file cycle id is represented by exactly one element in any given view, so grouping always yields exactly cycleCount distinct groups regardless of expansion state.
 - [Phase 05-file-package-graph-view]: 05-06 Task 1 checkpoint (blocking-human, one-way): maintainer approved FileSymbols (UIService's 13th rpc) exactly as proposed - reuse the shared Node message, MaxFileSymbols=2000 owned by internal/query, and an index-miss returns an empty result not an error.
 - [Phase 5]: Symbol expansion added an explicit DOM collapse-affordance button (shared with directory-level collapse) rather than relying on canvas re-click, closing WINDOWS.md 27 with real-mouse Playwright proof at both this repo's and google/guava's scale
+- [Phase 06]: WatchGraph frozen as the 14th UIService rpc, the services first Connect server-streaming method, with seven field numbers pinned (since_generation=1; generation=1, initialized=2, stale=3, store_exists=4, indexing_in_progress=5, commit_sha=6). — Verified clean against the live mutatingVerbs fixture with GetIndexHealth as the positive control; D-07s field set mirrors GetStatusResponse so classifyStatus consumes the event directly; server-streaming chosen because the client has nothing to say after subscribing.
 
 ### Pending Todos
 
@@ -332,8 +336,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-08-31T16:26:03.299Z
-Stopped at: Phase 5 complete, ready to plan Phase 6
+Last session: 2026-09-07T15:05:04.507Z
+Stopped at: Completed 06-01-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
