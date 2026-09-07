@@ -751,6 +751,26 @@
 	// the value TRULY is what's already applied.
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let lastAppliedElements: any;
+	// lastAppliedLiveElements is the SAME discipline as lastAppliedElements
+	// above, applied to the SIXTH effect's `liveElements` prop instead of
+	// the SECOND effect's `elements` prop. Observed this task (real-
+	// browser, guava scale): an `$effect` reading an array-shaped $state
+	// prop can fire MORE THAN ONCE for a single logical value change in
+	// this Svelte version — for `liveElements` specifically, a second,
+	// spurious invocation calls liveUpdate() again with the SAME batch
+	// immediately after the first call's own swapElements() already ran
+	// (synchronously) but before its runLayout()'s asynchronous ELK
+	// computation ever settles. That second call sees the post-swap node
+	// set as "already current" (nodeSetUnchanged) and takes the FAST
+	// PATH — which never touches position and publishes geometry
+	// immediately, synchronously — publishing a geometry snapshot where
+	// every node still sits at cytoscape's (0,0) default from the swap,
+	// BEFORE the first call's own write-back has ever had a chance to
+	// run. A reference comparison, identical in shape to
+	// lastAppliedElements, closes this the same way: a repeated
+	// invocation for the SAME batch reference is a no-op.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let lastAppliedLiveElements: any;
 
 	function publish(metrics: FileGraphMetrics) {
 		if (typeof window === 'undefined') return;
@@ -915,13 +935,24 @@
 	// A SIXTH effect tracks liveElements and, on every NEW array
 	// reference, hands the batch to createFileGraphRenderer's liveUpdate()
 	// above — D-06's two-path live-update seam, entirely separate from
-	// the second effect's user-driven full replace. Same no-guard-needed
-	// reasoning as the third/fourth/fifth effects: the prop defaults to
-	// undefined and this effect no-ops on an empty/absent batch, so an
-	// unguarded first run is already inert.
+	// the second effect's user-driven full replace. Guarded by
+	// lastAppliedLiveElements (the SAME identity-comparison discipline as
+	// lastAppliedElements above), not a bare "batch is non-empty" check:
+	// this effect was observed, at guava scale, to fire TWICE for a
+	// SINGLE logical `liveElements` update — the second, spurious
+	// invocation sees the FIRST invocation's own swapElements() (already
+	// applied synchronously) as the "current" node set, so it takes the
+	// FAST PATH and publishes geometry INSTANTLY, before the first
+	// invocation's own asynchronous ELK layout and write-back ever
+	// settle — a snapshot where every node still sits at cytoscape's
+	// (0,0) post-swap default. Comparing the batch's REFERENCE against
+	// what was last handed to liveUpdate() closes this exactly as
+	// lastAppliedElements closes the equivalent hazard on `elements`.
 	$effect(() => {
 		const batch = liveElements ?? [];
 		if (batch.length === 0) return;
+		if (batch === lastAppliedLiveElements) return;
+		lastAppliedLiveElements = batch;
 		renderer?.liveUpdate(batch);
 	});
 </script>
