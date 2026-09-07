@@ -70,7 +70,7 @@
 		return () => controller.abort();
 	});
 
-	// 06-03 Task 3 (LIV-02): a new generation from the live store
+	// LIV-02: a new generation from the live store
 	// re-issues this SAME GetHealth call — no rpc's wire shape is
 	// duplicated into the live event (D-05). Coalesced with a
 	// PENDING-GENERATION flag rather than suppression: an event arriving

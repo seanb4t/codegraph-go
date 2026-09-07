@@ -93,8 +93,9 @@
 
 	// elements is the array bound to GraphCanvas's full-replace `elements`
 	// prop, whose own effect calls replace() on every reference change
-	// (T-05-47) — deliberately NOT a $derived of graphState any more
-	// (06-05 Task 2). A live-triggered refresh below updates
+	// (T-05-47) — deliberately NOT a $derived of graphState any more, so
+	// live refreshes can update graphState without forcing a full
+	// replace(). A live-triggered refresh below updates
 	// graphState.response (so a SUBSEQUENT user gesture reads fresh data)
 	// but feeds its own recomputed rollup through the SEPARATE
 	// liveElements state further down instead of through this one:
@@ -112,8 +113,7 @@
 	// reference on every applied live refresh, entirely separate from
 	// `elements`/`addedElements`/`removedElementIds`: a live re-index
 	// event and a user gesture are different events and must not be
-	// merged into one code path (06-05-PLAN.md). See
-	// issueLiveGraphRefresh below.
+	// merged into one code path. See issueLiveGraphRefresh below.
 	let liveElements = $state<FileGraphElement[]>([]);
 
 	// cycleGroups regroups the CURRENT elements array (already respecting
@@ -229,14 +229,14 @@
 		};
 	});
 
-	// --- 06-05 Task 2 (LIV-02/LIV-04): the live re-index subscription ---
+	// --- LIV-02/LIV-04: the live re-index subscription ---
 	//
 	// Per D-05, the event carries NO graph payload — only "the index
 	// moved" plus a monotonic generation — so this route re-fetches
 	// through the SAME rpcs it already owns rather than any rpc's wire
 	// shape being duplicated into the event. The coalescer below mirrors
 	// health/+page.svelte's and browse/+page.svelte's own pending-
-	// generation pattern (06-03) exactly: an event arriving while a
+	// generation pattern exactly: an event arriving while a
 	// live-triggered refresh is already in flight is recorded (the
 	// newest generation wins) and issues exactly ONE follow-up once that
 	// refresh settles, rather than stacking a second concurrent call.

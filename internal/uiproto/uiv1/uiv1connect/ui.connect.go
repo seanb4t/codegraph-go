@@ -158,7 +158,7 @@ type UIServiceClient interface {
 	// additive per D-02a — it performs no network operation and mutates
 	// nothing (SRV-03).
 	FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error)
-	// WatchGraph is plan 06-01's fourteenth rpc (RPC-04): the service's
+	// WatchGraph is this service's fourteenth rpc (RPC-04): the service's
 	// FIRST streaming method. It is a server-streaming rpc that pushes one
 	// WatchGraphEvent every time the store's authoritative change signal
 	// — Meta.last_sync_unix_ms — actually changes, so a client learns of a
@@ -419,7 +419,7 @@ type UIServiceHandler interface {
 	// additive per D-02a — it performs no network operation and mutates
 	// nothing (SRV-03).
 	FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error)
-	// WatchGraph is plan 06-01's fourteenth rpc (RPC-04): the service's
+	// WatchGraph is this service's fourteenth rpc (RPC-04): the service's
 	// FIRST streaming method. It is a server-streaming rpc that pushes one
 	// WatchGraphEvent every time the store's authoritative change signal
 	// — Meta.last_sync_unix_ms — actually changes, so a client learns of a

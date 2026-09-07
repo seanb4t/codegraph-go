@@ -28,9 +28,9 @@
 	// fetch.
 	setContext('statusGate', statusGate);
 
-	// 06-03 Task 2: the live store is constructed once here, alongside
-	// the status gate, and put into context under a stable key so
-	// descendant routes (Task 3) can subscribe to the SAME generation
+	// The live store is constructed once here, alongside the status
+	// gate, and put into context under a stable key so descendant routes
+	// can subscribe to the SAME generation
 	// stream to re-fetch through their own rpcs. Every admitted event is
 	// ALSO applied to the status gate directly — criterion 1's "chrome
 	// updates by the same mechanism rather than staying stale itself

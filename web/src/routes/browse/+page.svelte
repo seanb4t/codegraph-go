@@ -127,7 +127,7 @@
 		return () => controller.abort();
 	});
 
-	// 06-03 Task 3 (LIV-02): a new generation from the live store
+	// LIV-02: a new generation from the live store
 	// re-issues the SAME loadBrowseTarget/loadBlastRadius calls this
 	// route already owns, going through the SAME NavigationGate — so a
 	// live-triggered load and a URL-driven one can never race to a stale

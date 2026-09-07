@@ -51,7 +51,7 @@ export interface IndexStatus {
 
 const UNKNOWN_STATUS: IndexStatus = { verdict: 'unknown', commit: 'unknown', commitSha: '' };
 
-// StatusLikeFields (06-03 Task 2, D-07): the exact five fields
+// StatusLikeFields (D-07): the exact five fields
 // classifyStatus reads, expressed as a Pick over GetStatusResponse so
 // the two can never drift apart — `pnpm check` fails if a field is
 // renamed on either side. This is the whole reason D-07 gave
@@ -172,7 +172,7 @@ export interface StatusGate {
 	// identity compose into exactly one fetch, regardless of how the
 	// mounting site is written.
 	notifyNavigated(identity: string): void;
-	// applyLiveEvent (06-03 Task 2, criterion 1): classifies a live event
+	// applyLiveEvent (criterion 1): classifies a live event
 	// through the SAME classifyStatus fetchStatus uses and emits —
 	// WITHOUT calling getStatus. This is what lets the health/staleness
 	// chrome update from the event itself rather than a round trip the
@@ -219,7 +219,7 @@ export function createStatusGate(
 	// longer matches the most recent one, mirroring that convention.
 	let requestId = 0;
 
-	// lastAppliedLive (06-03 Task 2): tracks the (epoch, generation) pair
+	// lastAppliedLive tracks the (epoch, generation) pair
 	// of the most recently APPLIED live event, so a re-delivery of that
 	// exact same event is recognized as a duplicate and skipped — it
 	// mints no new id and therefore cannot supersede a fetch that

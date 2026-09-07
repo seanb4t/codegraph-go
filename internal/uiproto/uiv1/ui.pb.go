@@ -3369,8 +3369,8 @@ func (x *FileSymbolsResponse) GetTruncated() bool {
 	return false
 }
 
-// WatchGraphRequest is plan 06-01's request for the service's first
-// streaming rpc (RPC-04). since_generation is the resume point a
+// WatchGraphRequest is the request for the service's only streaming rpc
+// (RPC-04). since_generation is the resume point a
 // reconnecting client sends: the last generation number it saw before
 // disconnecting, so the server can decide what a resumed stream owes the
 // client (Claude's Discretion, 06-CONTEXT.md). Zero means "no prior
@@ -3419,7 +3419,7 @@ func (x *WatchGraphRequest) GetSinceGeneration() int64 {
 	return 0
 }
 
-// WatchGraphEvent is plan 06-01's push payload (D-07, which corrects an
+// WatchGraphEvent is WatchGraph's push payload (D-07, which corrects an
 // earlier draft's field set): it mirrors GetStatusResponse's own field
 // NAMES exactly — initialized, stale, store_exists, indexing_in_progress,
 // commit_sha — so the browser's existing status-classification logic can

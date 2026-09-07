@@ -141,7 +141,7 @@
 		};
 	});
 
-	// 06-03 Task 3 (LIV-02): a new generation from the live store
+	// LIV-02: a new generation from the live store
 	// re-issues `run` — but ONLY when this panel currently holds a
 	// result. A live event must not launch an analysis the developer
 	// never asked for (idle/loading/failed all skip it). Coalesced with

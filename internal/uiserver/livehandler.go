@@ -19,8 +19,8 @@ type watchGraphSender interface {
 	Send(*uiv1.WatchGraphEvent) error
 }
 
-// WatchGraph is the real body replacing 06-01's CodeUnimplemented
-// placeholder (RPC-04): subscribe to the publisher, loop selecting
+// WatchGraph is the real, functioning body for the service's only
+// streaming rpc (RPC-04): subscribe to the publisher, loop selecting
 // between the subscriber channel and the request context's Done
 // channel, send each event, and deregister on the way out via a
 // deferred unsubscribe.

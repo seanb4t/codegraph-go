@@ -1878,8 +1878,8 @@ export const FileSymbolsResponseSchema: GenMessage<FileSymbolsResponse> = /*@__P
   messageDesc(file_internal_uiproto_uiv1_ui, 39);
 
 /**
- * WatchGraphRequest is plan 06-01's request for the service's first
- * streaming rpc (RPC-04). since_generation is the resume point a
+ * WatchGraphRequest is the request for the service's only streaming rpc
+ * (RPC-04). since_generation is the resume point a
  * reconnecting client sends: the last generation number it saw before
  * disconnecting, so the server can decide what a resumed stream owes the
  * client (Claude's Discretion, 06-CONTEXT.md). Zero means "no prior
@@ -1902,7 +1902,7 @@ export const WatchGraphRequestSchema: GenMessage<WatchGraphRequest> = /*@__PURE_
   messageDesc(file_internal_uiproto_uiv1_ui, 40);
 
 /**
- * WatchGraphEvent is plan 06-01's push payload (D-07, which corrects an
+ * WatchGraphEvent is WatchGraph's push payload (D-07, which corrects an
  * earlier draft's field set): it mirrors GetStatusResponse's own field
  * NAMES exactly — initialized, stale, store_exists, indexing_in_progress,
  * commit_sha — so the browser's existing status-classification logic can
@@ -2231,7 +2231,7 @@ export const UIService: GenService<{
     output: typeof FileSymbolsResponseSchema;
   },
   /**
-   * WatchGraph is plan 06-01's fourteenth rpc (RPC-04): the service's
+   * WatchGraph is this service's fourteenth rpc (RPC-04): the service's
    * FIRST streaming method. It is a server-streaming rpc that pushes one
    * WatchGraphEvent every time the store's authoritative change signal
    * — Meta.last_sync_unix_ms — actually changes, so a client learns of a

@@ -4,10 +4,10 @@
 // anyone, and a bounded, coalescing fan-out registry that hands the news
 // to every open stream without letting a slow reader hurt a fast one.
 //
-// This file has NO HTTP or Connect dependency of any kind — 06-04's
-// handler consumes livePublisher, not the other way round. Every type and
-// function here is unexported: the handler that wires this into the wire
-// layer is 06-04's job, not this file's.
+// This file has NO HTTP or Connect dependency of any kind — the
+// streaming handler consumes livePublisher, not the other way round.
+// Every type and function here is unexported: wiring this into the wire
+// layer is the handler's job, not this file's.
 package uiserver
 
 import (
@@ -67,10 +67,10 @@ type liveSignature struct {
 	lastSync    int64
 }
 
-// computeChange performs ONE open/read/close cycle (SRV-04, T-06-05):
-// open via the package's openEngine seam, defer the returned closer's
-// Close, read IndexMeta, and decide — never a second query.OpenAt call
-// site, and never a store handle retained past this single call.
+// computeChange performs ONE open/read/close cycle (SRV-04): open via
+// the package's openEngine seam, defer the returned closer's Close, read
+// IndexMeta, and decide — never a second query.OpenAt call site, and
+// never a store handle retained past this single call.
 //
 // prevValid distinguishes "never checked before" (always changed, the
 // bootstrap case) from a real prior signature that happens to equal the
@@ -126,9 +126,9 @@ func computeChange(ctx context.Context, repoPath string, prev liveSignature, pre
 	}
 	defer closer.Close()
 
-	// SRV-04/T-06-05: this defer is the ENTIRE store-handle lifetime for
-	// this check. Nothing below retains eng, the Reader, or the store
-	// past this function's return.
+	// SRV-04: this defer is the ENTIRE store-handle lifetime for this
+	// check. Nothing below retains eng, the Reader, or the store past
+	// this function's return.
 
 	meta, metaErr := eng.IndexMeta()
 	if metaErr != nil {
@@ -253,11 +253,9 @@ func (d *changeDetector) check(ctx context.Context) (*uiv1.WatchGraphEvent, bool
 // a counter meaning client-initiated pending state. The streaming rpc
 // has the identical shape — server-initiated event sends alongside
 // client-initiated subscriber lifecycle — so Publish never touches subs'
-// length and Subscribe/unsubscribe never touch sendCount. A full read of
-// every non-test file in this package (at the time this file was
-// written) found no pre-existing counter of that kind to inherit; that
-// verdict and its evidence are recorded in 06-06-SUMMARY.md per
-// 06-CONTEXT.md's "Criterion 3's recorded verdict" requirement.
+// length and Subscribe/unsubscribe never touch sendCount. Verified by a
+// full read of every non-test file in this package: no pre-existing
+// counter of that kind exists for the two kinds of state to collide on.
 type liveRegistry struct {
 	mu      sync.Mutex
 	subs    map[uint64]chan *uiv1.WatchGraphEvent
@@ -290,7 +288,7 @@ func newLiveRegistry() *liveRegistry {
 // exists to end.
 //
 // ctx's cancellation ALSO removes the subscriber, exactly as calling the
-// returned func would — a caller (06-04's stream handler) can rely on
+// returned func would — a caller (the streaming handler) can rely on
 // either. Every code path that can end a subscription (explicit
 // unsubscribe, ctx cancellation, or Stop) converges on removing the
 // entry from subs under mu exactly once, so the returned channel is
@@ -523,7 +521,7 @@ func armWatches(fsw *fsnotify.Watcher, chain [3]string) {
 
 // livePublisher owns the store watcher, the change detector, and the
 // subscriber registry — the whole server-side engine of live push. It
-// has no HTTP or Connect dependency of any kind; 06-04's stream handler
+// has no HTTP or Connect dependency of any kind; the streaming handler
 // consumes Subscribe/Stop, not the other way round.
 type livePublisher struct {
 	registry *liveRegistry
@@ -654,8 +652,8 @@ func (p *livePublisher) Subscribe(ctx context.Context) (<-chan *uiv1.WatchGraphE
 // stop, wg.Wait joins the watch loop (which itself calls deb.Stop()
 // before returning), deb.Wait joins any fire() already in flight, THEN
 // the fsnotify watcher is closed, and finally the registry is stopped —
-// closing every subscriber channel. Server.Serve's shutdown path (06-04)
-// owns this call.
+// closing every subscriber channel. Server.Serve's shutdown path owns
+// this call.
 func (p *livePublisher) Stop() {
 	p.cancel()
 	p.wg.Wait()
