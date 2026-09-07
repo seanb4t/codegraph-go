@@ -272,11 +272,16 @@ export function createStatusGate(
 				return; // a re-delivery of the same event — not new information
 			}
 			lastAppliedLive = { epoch: fields.epoch, generation: fields.generation };
-			const id = ++requestId;
-			// Synchronous end-to-end: nothing can supersede this id between
-			// minting it and emitting, so it always wins UNLESS it was
-			// itself recognized as a duplicate above.
-			if (id !== requestId) return;
+			// IN-01 (06-REVIEW.md): this path used to mint and immediately
+			// re-check a requestId, mirroring fetchStatus's async guard — but
+			// with no `await` between minting and emitting, that check can
+			// never fail (nothing can supersede an id synchronously between
+			// the two statements), so it was dead code masquerading as a
+			// race guard. requestId is still bumped here: a live event must
+			// still supersede any fetchStatus call already in flight, so a
+			// stale response arriving later is correctly discarded by
+			// fetchStatus's own `id !== requestId` check.
+			requestId += 1;
 			emit(classifyStatus(fields));
 		}
 	};
