@@ -5,17 +5,17 @@ milestone_name: Local Graph UI
 current_phase: 6
 current_phase_name: Live Push
 current_plan: 7
-status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-09-07T19:54:57.587Z"
+status: verifying
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-09-07T20:35:11.540Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: 9ad903ed32bdc54a0520f09985f9446418c523ed
+state_head: f070660ab3878214e9793b47f66ed474e2446b53
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 50
-  completed_plans: 49
+  completed_plans: 50
   percent: 83
 ---
 
@@ -33,7 +33,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 Phase: 6 — Live Push
 Current Plan: 7
 Total Plans in Phase: 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-07 — Plan 06-01 (WatchGraph wire-surface freeze) complete
 
 Progress: [████████░░] 83% (1/6 phases)
@@ -111,6 +111,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06-live-push P04 | 95min | 3 tasks | 9 files |
 | Phase 06 P05 | 640min | 3 tasks | 5 files |
 | Phase 06 P06 | 22min | 2 tasks | 3 files |
+| Phase 06 P07 | 45min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -227,6 +228,8 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: clearWatchDeadline clears the absolute write deadline for exactly the WatchGraph procedure, passing the ResponseWriter through unwrapped so connect-go's flush-capability gate still admits the handler
 - [Phase 6]: Server owns the live-push publisher's lifetime end to end: Listen constructs it, Serve and Close both stop it idempotently, and Serve stops it BEFORE calling Shutdown so an open stream cannot hold the 5s shutdown budget
 - [Phase 6]: Two double-invocation Svelte 5 effect bugs fixed via identity-comparison guards (lastAppliedElements/lastAppliedLiveElements), found only by real-browser testing at guava scale
+- [Phase 6]: Criterion 5 verified with a real 3-process gate (daemon+serve --mcp+ui), measured baseline, and a demonstrated RED (store held open -> flushesStarved 3/3)
+- [Phase 6]: pendingWriter-analogue verdict recorded: no analogue in internal/uiserver, discriminating control on 'type pendingWriter struct' (=1) vs bare word (=9)
 
 ### Pending Todos
 
@@ -348,8 +351,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-07T19:54:57.393Z
-Stopped at: Completed 06-06-PLAN.md
+Last session: 2026-09-07T20:35:11.345Z
+Stopped at: Completed 06-07-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 

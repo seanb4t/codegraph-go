@@ -75,9 +75,9 @@
 
 ### Live Push
 
-- [ ] **LIV-01**: Watcher re-index events feed the streaming RPC
+- [x] **LIV-01**: Watcher re-index events feed the streaming RPC
 - [x] **LIV-02**: Open views update in place when the index changes
-- [ ] **LIV-03**: Streaming survives multiple tabs, applies backpressure to slow clients, and shuts down and reconnects cleanly
+- [x] **LIV-03**: Streaming survives multiple tabs, applies backpressure to slow clients, and shuts down and reconnects cleanly
 - [x] **LIV-04**: Graph layout stays stable across live updates — nodes do not jump on re-render
 
 ### Build & Supply Chain
@@ -172,9 +172,9 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | HLT-01 | Phase 4 | Complete |
 | HLT-02 | Phase 4 | Complete |
 | HLT-03 | Phase 4 | Complete |
-| LIV-01 | Phase 6 | Pending |
+| LIV-01 | Phase 6 | Complete |
 | LIV-02 | Phase 6 | Complete |
-| LIV-03 | Phase 6 | Pending |
+| LIV-03 | Phase 6 | Complete |
 | LIV-04 | Phase 6 | Complete |
 | BLD-01 | Phase 2 | Complete |
 | BLD-02 | Phase 2 | Complete |
