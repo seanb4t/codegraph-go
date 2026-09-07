@@ -51,13 +51,28 @@ export interface IndexStatus {
 
 const UNKNOWN_STATUS: IndexStatus = { verdict: 'unknown', commit: 'unknown', commitSha: '' };
 
-// classifyStatus is a pure function over one GetStatus answer. It never
-// throws — a shape this function does not recognize (initialized false,
-// store_exists true, indexing_in_progress false — not a combination
-// degrade.go's degradedStatus produces today) degrades to the same
-// 'unknown' verdict a rejected call reports, rather than inventing a
-// sixth verdict for a case the server never actually sends.
-export function classifyStatus(response: GetStatusResponse): IndexStatus {
+// StatusLikeFields (06-03 Task 2, D-07): the exact five fields
+// classifyStatus reads, expressed as a Pick over GetStatusResponse so
+// the two can never drift apart — `pnpm check` fails if a field is
+// renamed on either side. This is the whole reason D-07 gave
+// WatchGraphEvent GetStatusResponse's own field NAMES: WatchGraphEvent
+// structurally satisfies this type too (same five names, same types),
+// so classifyStatus consumes a live event directly, with no second
+// representation of the same state and no translation layer.
+export type StatusLikeFields = Pick<
+	GetStatusResponse,
+	'initialized' | 'stale' | 'storeExists' | 'indexingInProgress' | 'commitSha'
+>;
+
+// classifyStatus is a pure function over EITHER a full GetStatus answer
+// or a live WatchGraphEvent — both satisfy StatusLikeFields structurally.
+// It never throws — a shape this function does not recognize
+// (initialized false, store_exists true, indexing_in_progress false —
+// not a combination degrade.go's degradedStatus produces today)
+// degrades to the same 'unknown' verdict a rejected call reports, rather
+// than inventing a sixth verdict for a case the server never actually
+// sends.
+export function classifyStatus(response: StatusLikeFields): IndexStatus {
 	const commit: CommitKnowledge = response.commitSha ? 'known' : 'unknown';
 	const commitSha = response.commitSha;
 
@@ -157,6 +172,23 @@ export interface StatusGate {
 	// identity compose into exactly one fetch, regardless of how the
 	// mounting site is written.
 	notifyNavigated(identity: string): void;
+	// applyLiveEvent (06-03 Task 2, criterion 1): classifies a live event
+	// through the SAME classifyStatus fetchStatus uses and emits —
+	// WITHOUT calling getStatus. This is what lets the health/staleness
+	// chrome update from the event itself rather than a round trip the
+	// event merely triggers. `generation` and `epoch` identify the event
+	// for the dedup check below; they play no role in classification.
+	//
+	// One shared monotonic counter orders every fetchStatus START and
+	// every applied live event: whichever mints the id LAST is current,
+	// and an operation may emit only while its id is still current. A
+	// live event applied while a fetch is in flight therefore invalidates
+	// that fetch (its response is dropped when it settles); a fetch
+	// started after a live application invalidates a LATER re-delivery of
+	// that same (epoch, generation) event — recognized as a duplicate and
+	// skipped without mint-and-emit, so it cannot un-invalidate a fetch
+	// that started after the first, genuine application.
+	applyLiveEvent(fields: StatusLikeFields & { generation: bigint; epoch: number }): void;
 }
 
 // createStatusGate fetches exactly ONCE on creation — unconditional,
@@ -186,6 +218,13 @@ export function createStatusGate(
 	// — mint a monotonic id per fetch and drop any response whose id no
 	// longer matches the most recent one, mirroring that convention.
 	let requestId = 0;
+
+	// lastAppliedLive (06-03 Task 2): tracks the (epoch, generation) pair
+	// of the most recently APPLIED live event, so a re-delivery of that
+	// exact same event is recognized as a duplicate and skipped — it
+	// mints no new id and therefore cannot supersede a fetch that
+	// legitimately started after the first, genuine application.
+	let lastAppliedLive: { epoch: number; generation: bigint } | null = null;
 
 	function emit(status: IndexStatus): void {
 		current = status;
@@ -223,6 +262,22 @@ export function createStatusGate(
 			if (identity === lastIdentity) return;
 			lastIdentity = identity;
 			fetchStatus();
+		},
+		applyLiveEvent(fields) {
+			if (
+				lastAppliedLive !== null &&
+				lastAppliedLive.epoch === fields.epoch &&
+				lastAppliedLive.generation === fields.generation
+			) {
+				return; // a re-delivery of the same event — not new information
+			}
+			lastAppliedLive = { epoch: fields.epoch, generation: fields.generation };
+			const id = ++requestId;
+			// Synchronous end-to-end: nothing can supersede this id between
+			// minting it and emitting, so it always wins UNLESS it was
+			// itself recognized as a duplicate above.
+			if (id !== requestId) return;
+			emit(classifyStatus(fields));
 		}
 	};
 }
