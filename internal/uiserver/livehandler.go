@@ -40,6 +40,14 @@ type watchGraphSender interface {
 // the same counter-corruption shape internal/mcp's pendingWriter
 // (server.go:466) already fixed once cannot recur here, because the two
 // kinds of state never touch the same field.
+//
+// The request's since_generation is deliberately unread (IN-02,
+// 06-REVIEW.md): the registry has no per-generation history to serve
+// from, only a single current value, so a resuming client's prior
+// generation cannot change what this subscription gets seeded with.
+// Resumption is entirely a client-side concern (live-store.ts's
+// epoch-scoped admission gate) — this mirrors the equally deliberate
+// doc comments already present on the TypeScript side.
 func (s *uiService) WatchGraph(ctx context.Context, _ *connect.Request[uiv1.WatchGraphRequest], stream *connect.ServerStream[uiv1.WatchGraphEvent]) error {
 	ch, unsubscribe := s.publisher.Subscribe(ctx)
 	defer unsubscribe()
