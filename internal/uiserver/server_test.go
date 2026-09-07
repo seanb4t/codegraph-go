@@ -149,6 +149,53 @@ func TestServeReturnsNilOnContextCancellation(t *testing.T) {
 	}
 }
 
+// TestServeStopsPublisherOnAbnormalExit is WR-01's regression (06-REVIEW.md):
+// Serve's errCh branch — taken when the underlying http.Server.Serve
+// returns on its own, for a reason OTHER than ctx being cancelled by the
+// caller — must still stop the live publisher, exactly like the ctx.Done()
+// branch does. Before the fix, this branch returned directly with no call
+// to stopPublisher(), leaking the fsnotify watcher, the debouncer, and the
+// watch-loop goroutine.
+func TestServeStopsPublisherOnAbnormalExit(t *testing.T) {
+	srv := mustListen(t, t.TempDir())
+
+	// Close the raw listener directly — NOT through Serve/Shutdown/Close —
+	// so s.srv.Serve(s.ln) returns an error other than http.ErrServerClosed
+	// entirely on its own, taking Serve's errCh branch rather than its
+	// ctx.Done() branch. ctx is never cancelled, so only errCh can fire.
+	if err := srv.ln.Close(); err != nil {
+		t.Fatalf("srv.ln.Close(): %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.Serve(context.Background())
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after its listener closed on its own")
+	}
+
+	// Positive assertion that the publisher was actually stopped (rule
+	// 84d1gfpywd — an upper bound or "nothing bad happened" proves
+	// nothing): liveRegistry.Subscribe's own doc comment states a STOPPED
+	// registry hands back a channel that is already closed. A live
+	// (unstopped) registry would instead hand back an open, non-yielding
+	// channel here, which the select below would time out on.
+	ch, unsubscribe := srv.publisher.Subscribe(context.Background())
+	defer unsubscribe()
+	select {
+	case _, ok := <-ch:
+		if ok {
+			t.Fatal("Subscribe's channel yielded a value instead of being closed — the publisher's registry was not stopped")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Subscribe's channel was neither closed nor received from — stopPublisher was never called on Serve's abnormal-exit branch (WR-01)")
+	}
+}
+
 func TestUIServerServesGetStatusEndToEnd(t *testing.T) {
 	dir := copyGofixture(t)
 	indexGofixture(t, dir)

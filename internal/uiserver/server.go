@@ -229,6 +229,14 @@ func (s *Server) Serve(ctx context.Context) error {
 
 	select {
 	case err := <-errCh:
+		// The underlying http.Server.Serve stopped on its own, for a
+		// reason other than this package's own Close()/Shutdown having
+		// been called (e.g. the listener's socket failing on its own).
+		// Serve is the sole owner of the lifecycle here, so it — not the
+		// caller — must release the publisher's fsnotify watcher,
+		// debouncer, and watch-loop goroutine, exactly as the ctx.Done()
+		// branch below does (WR-01, 06-REVIEW.md).
+		s.stopPublisher()
 		return normalizeServeErr(err)
 	case <-ctx.Done():
 		// Stop the publisher BEFORE calling Shutdown — this ORDER IS
