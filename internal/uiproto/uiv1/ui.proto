@@ -106,6 +106,19 @@ service UIService {
   // additive per D-02a — it performs no network operation and mutates
   // nothing (SRV-03).
   rpc FileSymbols(FileSymbolsRequest) returns (FileSymbolsResponse);
+  // WatchGraph is plan 06-01's fourteenth rpc (RPC-04): the service's
+  // FIRST streaming method. It is a server-streaming rpc that pushes one
+  // WatchGraphEvent every time the store's authoritative change signal
+  // — Meta.last_sync_unix_ms — actually changes, so a client learns of a
+  // re-index without polling. It is read-only by construction: it
+  // accepts only a resume cursor and mutates nothing, performs no
+  // network operation, and is proven so by this package's two existing
+  // read-only guards (set-equality against wantUIServiceMethods and the
+  // mutating-verb substring check), both re-extended to cover it. Its
+  // name was chosen and verified CLEAN against the live mutatingVerbs
+  // fixture before being written here — WatchIndex, IndexEvents,
+  // StreamIndex and LiveUpdates were all rejected by that same fixture.
+  rpc WatchGraph(WatchGraphRequest) returns (stream WatchGraphEvent);
 }
 
 // Node is the shared wire projection of a graph symbol record — the
@@ -924,4 +937,50 @@ message FileSymbolsResponse {
   // both total_count and this flag riding along, so a partial answer is
   // never presented as complete.
   bool truncated = 3;
+}
+
+// WatchGraphRequest is plan 06-01's request for the service's first
+// streaming rpc (RPC-04). since_generation is the resume point a
+// reconnecting client sends: the last generation number it saw before
+// disconnecting, so the server can decide what a resumed stream owes the
+// client (Claude's Discretion, 06-CONTEXT.md). Zero means "no prior
+// generation seen" — a fresh subscription.
+message WatchGraphRequest {
+  int64 since_generation = 1;
+}
+
+// WatchGraphEvent is plan 06-01's push payload (D-07, which corrects an
+// earlier draft's field set): it mirrors GetStatusResponse's own field
+// NAMES exactly — initialized, stale, store_exists, indexing_in_progress,
+// commit_sha — so the browser's existing status-classification logic can
+// consume this event directly, with no second representation of the
+// same state. node_count, edge_count, healthy and health_message are
+// deliberately ABSENT: no shipped view renders them, and views that need
+// full data re-fetch through the rpc they already use rather than having
+// their wire shape duplicated into this event.
+//
+// The change this event announces is detected server-side by comparing
+// the store's own change signal across wakeups; that signal is never
+// itself a field here, because detecting a change and describing the
+// new state are two different jobs. This message is the latter.
+message WatchGraphEvent {
+  // generation is a monotonic counter, incremented once per emitted
+  // event, so a reconnecting client's since_generation (above) has
+  // something to resume from.
+  int64 generation = 1;
+
+  // initialized mirrors GetStatusResponse.initialized.
+  bool initialized = 2;
+
+  // stale mirrors GetStatusResponse.stale.
+  bool stale = 3;
+
+  // store_exists mirrors GetStatusResponse.store_exists.
+  bool store_exists = 4;
+
+  // indexing_in_progress mirrors GetStatusResponse.indexing_in_progress.
+  bool indexing_in_progress = 5;
+
+  // commit_sha mirrors GetStatusResponse.commit_sha.
+  string commit_sha = 6;
 }
