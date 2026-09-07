@@ -94,6 +94,8 @@ const (
 	UIServiceFileGraphProcedure = "/codegraph.ui.v1.UIService/FileGraph"
 	// UIServiceFileSymbolsProcedure is the fully-qualified name of the UIService's FileSymbols RPC.
 	UIServiceFileSymbolsProcedure = "/codegraph.ui.v1.UIService/FileSymbols"
+	// UIServiceWatchGraphProcedure is the fully-qualified name of the UIService's WatchGraph RPC.
+	UIServiceWatchGraphProcedure = "/codegraph.ui.v1.UIService/WatchGraph"
 )
 
 // UIServiceClient is a client for the codegraph.ui.v1.UIService service.
@@ -156,6 +158,19 @@ type UIServiceClient interface {
 	// additive per D-02a — it performs no network operation and mutates
 	// nothing (SRV-03).
 	FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error)
+	// WatchGraph is plan 06-01's fourteenth rpc (RPC-04): the service's
+	// FIRST streaming method. It is a server-streaming rpc that pushes one
+	// WatchGraphEvent every time the store's authoritative change signal
+	// — Meta.last_sync_unix_ms — actually changes, so a client learns of a
+	// re-index without polling. It is read-only by construction: it
+	// accepts only a resume cursor and mutates nothing, performs no
+	// network operation, and is proven so by this package's two existing
+	// read-only guards (set-equality against wantUIServiceMethods and the
+	// mutating-verb substring check), both re-extended to cover it. Its
+	// name was chosen and verified CLEAN against the live mutatingVerbs
+	// fixture before being written here — WatchIndex, IndexEvents,
+	// StreamIndex and LiveUpdates were all rejected by that same fixture.
+	WatchGraph(context.Context, *connect.Request[uiv1.WatchGraphRequest]) (*connect.ServerStreamForClient[uiv1.WatchGraphEvent], error)
 }
 
 // NewUIServiceClient constructs a client for the codegraph.ui.v1.UIService service. By default, it
@@ -247,6 +262,12 @@ func NewUIServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...c
 			connect.WithSchema(uIServiceMethods.ByName("FileSymbols")),
 			connect.WithClientOptions(opts...),
 		),
+		watchGraph: connect.NewClient[uiv1.WatchGraphRequest, uiv1.WatchGraphEvent](
+			httpClient,
+			baseURL+UIServiceWatchGraphProcedure,
+			connect.WithSchema(uIServiceMethods.ByName("WatchGraph")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -265,6 +286,7 @@ type uIServiceClient struct {
 	getHealth     *connect.Client[uiv1.GetHealthRequest, uiv1.GetHealthResponse]
 	fileGraph     *connect.Client[uiv1.FileGraphRequest, uiv1.FileGraphResponse]
 	fileSymbols   *connect.Client[uiv1.FileSymbolsRequest, uiv1.FileSymbolsResponse]
+	watchGraph    *connect.Client[uiv1.WatchGraphRequest, uiv1.WatchGraphEvent]
 }
 
 // GetStatus calls codegraph.ui.v1.UIService.GetStatus.
@@ -332,6 +354,11 @@ func (c *uIServiceClient) FileSymbols(ctx context.Context, req *connect.Request[
 	return c.fileSymbols.CallUnary(ctx, req)
 }
 
+// WatchGraph calls codegraph.ui.v1.UIService.WatchGraph.
+func (c *uIServiceClient) WatchGraph(ctx context.Context, req *connect.Request[uiv1.WatchGraphRequest]) (*connect.ServerStreamForClient[uiv1.WatchGraphEvent], error) {
+	return c.watchGraph.CallServerStream(ctx, req)
+}
+
 // UIServiceHandler is an implementation of the codegraph.ui.v1.UIService service.
 type UIServiceHandler interface {
 	GetStatus(context.Context, *connect.Request[uiv1.GetStatusRequest]) (*connect.Response[uiv1.GetStatusResponse], error)
@@ -392,6 +419,19 @@ type UIServiceHandler interface {
 	// additive per D-02a — it performs no network operation and mutates
 	// nothing (SRV-03).
 	FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error)
+	// WatchGraph is plan 06-01's fourteenth rpc (RPC-04): the service's
+	// FIRST streaming method. It is a server-streaming rpc that pushes one
+	// WatchGraphEvent every time the store's authoritative change signal
+	// — Meta.last_sync_unix_ms — actually changes, so a client learns of a
+	// re-index without polling. It is read-only by construction: it
+	// accepts only a resume cursor and mutates nothing, performs no
+	// network operation, and is proven so by this package's two existing
+	// read-only guards (set-equality against wantUIServiceMethods and the
+	// mutating-verb substring check), both re-extended to cover it. Its
+	// name was chosen and verified CLEAN against the live mutatingVerbs
+	// fixture before being written here — WatchIndex, IndexEvents,
+	// StreamIndex and LiveUpdates were all rejected by that same fixture.
+	WatchGraph(context.Context, *connect.Request[uiv1.WatchGraphRequest], *connect.ServerStream[uiv1.WatchGraphEvent]) error
 }
 
 // NewUIServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -479,6 +519,12 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 		connect.WithSchema(uIServiceMethods.ByName("FileSymbols")),
 		connect.WithHandlerOptions(opts...),
 	)
+	uIServiceWatchGraphHandler := connect.NewServerStreamHandler(
+		UIServiceWatchGraphProcedure,
+		svc.WatchGraph,
+		connect.WithSchema(uIServiceMethods.ByName("WatchGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/codegraph.ui.v1.UIService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UIServiceGetStatusProcedure:
@@ -507,6 +553,8 @@ func NewUIServiceHandler(svc UIServiceHandler, opts ...connect.HandlerOption) (s
 			uIServiceFileGraphHandler.ServeHTTP(w, r)
 		case UIServiceFileSymbolsProcedure:
 			uIServiceFileSymbolsHandler.ServeHTTP(w, r)
+		case UIServiceWatchGraphProcedure:
+			uIServiceWatchGraphHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -566,4 +614,8 @@ func (UnimplementedUIServiceHandler) FileGraph(context.Context, *connect.Request
 
 func (UnimplementedUIServiceHandler) FileSymbols(context.Context, *connect.Request[uiv1.FileSymbolsRequest]) (*connect.Response[uiv1.FileSymbolsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.FileSymbols is not implemented"))
+}
+
+func (UnimplementedUIServiceHandler) WatchGraph(context.Context, *connect.Request[uiv1.WatchGraphRequest], *connect.ServerStream[uiv1.WatchGraphEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("codegraph.ui.v1.UIService.WatchGraph is not implemented"))
 }

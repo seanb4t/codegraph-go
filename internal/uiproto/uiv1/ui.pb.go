@@ -3369,6 +3369,162 @@ func (x *FileSymbolsResponse) GetTruncated() bool {
 	return false
 }
 
+// WatchGraphRequest is plan 06-01's request for the service's first
+// streaming rpc (RPC-04). since_generation is the resume point a
+// reconnecting client sends: the last generation number it saw before
+// disconnecting, so the server can decide what a resumed stream owes the
+// client (Claude's Discretion, 06-CONTEXT.md). Zero means "no prior
+// generation seen" — a fresh subscription.
+type WatchGraphRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SinceGeneration int64                  `protobuf:"varint,1,opt,name=since_generation,json=sinceGeneration,proto3" json:"since_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *WatchGraphRequest) Reset() {
+	*x = WatchGraphRequest{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchGraphRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchGraphRequest) ProtoMessage() {}
+
+func (x *WatchGraphRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchGraphRequest.ProtoReflect.Descriptor instead.
+func (*WatchGraphRequest) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *WatchGraphRequest) GetSinceGeneration() int64 {
+	if x != nil {
+		return x.SinceGeneration
+	}
+	return 0
+}
+
+// WatchGraphEvent is plan 06-01's push payload (D-07, which corrects an
+// earlier draft's field set): it mirrors GetStatusResponse's own field
+// NAMES exactly — initialized, stale, store_exists, indexing_in_progress,
+// commit_sha — so the browser's existing status-classification logic can
+// consume this event directly, with no second representation of the
+// same state. node_count, edge_count, healthy and health_message are
+// deliberately ABSENT: no shipped view renders them, and views that need
+// full data re-fetch through the rpc they already use rather than having
+// their wire shape duplicated into this event.
+//
+// The change this event announces is detected server-side by comparing
+// the store's own change signal across wakeups; that signal is never
+// itself a field here, because detecting a change and describing the
+// new state are two different jobs. This message is the latter.
+type WatchGraphEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// generation is a monotonic counter, incremented once per emitted
+	// event, so a reconnecting client's since_generation (above) has
+	// something to resume from.
+	Generation int64 `protobuf:"varint,1,opt,name=generation,proto3" json:"generation,omitempty"`
+	// initialized mirrors GetStatusResponse.initialized.
+	Initialized bool `protobuf:"varint,2,opt,name=initialized,proto3" json:"initialized,omitempty"`
+	// stale mirrors GetStatusResponse.stale.
+	Stale bool `protobuf:"varint,3,opt,name=stale,proto3" json:"stale,omitempty"`
+	// store_exists mirrors GetStatusResponse.store_exists.
+	StoreExists bool `protobuf:"varint,4,opt,name=store_exists,json=storeExists,proto3" json:"store_exists,omitempty"`
+	// indexing_in_progress mirrors GetStatusResponse.indexing_in_progress.
+	IndexingInProgress bool `protobuf:"varint,5,opt,name=indexing_in_progress,json=indexingInProgress,proto3" json:"indexing_in_progress,omitempty"`
+	// commit_sha mirrors GetStatusResponse.commit_sha.
+	CommitSha     string `protobuf:"bytes,6,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchGraphEvent) Reset() {
+	*x = WatchGraphEvent{}
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchGraphEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchGraphEvent) ProtoMessage() {}
+
+func (x *WatchGraphEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_uiproto_uiv1_ui_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchGraphEvent.ProtoReflect.Descriptor instead.
+func (*WatchGraphEvent) Descriptor() ([]byte, []int) {
+	return file_internal_uiproto_uiv1_ui_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *WatchGraphEvent) GetGeneration() int64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *WatchGraphEvent) GetInitialized() bool {
+	if x != nil {
+		return x.Initialized
+	}
+	return false
+}
+
+func (x *WatchGraphEvent) GetStale() bool {
+	if x != nil {
+		return x.Stale
+	}
+	return false
+}
+
+func (x *WatchGraphEvent) GetStoreExists() bool {
+	if x != nil {
+		return x.StoreExists
+	}
+	return false
+}
+
+func (x *WatchGraphEvent) GetIndexingInProgress() bool {
+	if x != nil {
+		return x.IndexingInProgress
+	}
+	return false
+}
+
+func (x *WatchGraphEvent) GetCommitSha() string {
+	if x != nil {
+		return x.CommitSha
+	}
+	return ""
+}
+
 var File_internal_uiproto_uiv1_ui_proto protoreflect.FileDescriptor
 
 const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
@@ -3622,7 +3778,19 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\asymbols\x18\x01 \x03(\v2\x15.codegraph.ui.v1.NodeR\asymbols\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\x05R\n" +
 	"totalCount\x12\x1c\n" +
-	"\ttruncated\x18\x03 \x01(\bR\ttruncated*\x8e\x01\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\">\n" +
+	"\x11WatchGraphRequest\x12)\n" +
+	"\x10since_generation\x18\x01 \x01(\x03R\x0fsinceGeneration\"\xdd\x01\n" +
+	"\x0fWatchGraphEvent\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x01 \x01(\x03R\n" +
+	"generation\x12 \n" +
+	"\vinitialized\x18\x02 \x01(\bR\vinitialized\x12\x14\n" +
+	"\x05stale\x18\x03 \x01(\bR\x05stale\x12!\n" +
+	"\fstore_exists\x18\x04 \x01(\bR\vstoreExists\x120\n" +
+	"\x14indexing_in_progress\x18\x05 \x01(\bR\x12indexingInProgress\x12\x1d\n" +
+	"\n" +
+	"commit_sha\x18\x06 \x01(\tR\tcommitSha*\x8e\x01\n" +
 	"\x0eNodeDetailMode\x12 \n" +
 	"\x1cNODE_DETAIL_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15NODE_DETAIL_MODE_FILE\x10\x01\x12\x1f\n" +
@@ -3632,7 +3800,7 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\"PERMALINK_AVAILABILITY_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fPERMALINK_AVAILABILITY_LINKABLE\x10\x01\x12.\n" +
 	"*PERMALINK_AVAILABILITY_LINKABLE_UNVERIFIED\x10\x02\x12\"\n" +
-	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\xb7\b\n" +
+	"\x1ePERMALINK_AVAILABILITY_NO_LINK\x10\x032\x8d\t\n" +
 	"\tUIService\x12R\n" +
 	"\tGetStatus\x12!.codegraph.ui.v1.GetStatusRequest\x1a\".codegraph.ui.v1.GetStatusResponse\x12I\n" +
 	"\x06Search\x12\x1e.codegraph.ui.v1.SearchRequest\x1a\x1f.codegraph.ui.v1.SearchResponse\x12F\n" +
@@ -3646,7 +3814,9 @@ const file_internal_uiproto_uiv1_ui_proto_rawDesc = "" +
 	"\fGetPermalink\x12$.codegraph.ui.v1.GetPermalinkRequest\x1a%.codegraph.ui.v1.GetPermalinkResponse\x12R\n" +
 	"\tGetHealth\x12!.codegraph.ui.v1.GetHealthRequest\x1a\".codegraph.ui.v1.GetHealthResponse\x12R\n" +
 	"\tFileGraph\x12!.codegraph.ui.v1.FileGraphRequest\x1a\".codegraph.ui.v1.FileGraphResponse\x12X\n" +
-	"\vFileSymbols\x12#.codegraph.ui.v1.FileSymbolsRequest\x1a$.codegraph.ui.v1.FileSymbolsResponseB<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
+	"\vFileSymbols\x12#.codegraph.ui.v1.FileSymbolsRequest\x1a$.codegraph.ui.v1.FileSymbolsResponse\x12T\n" +
+	"\n" +
+	"WatchGraph\x12\".codegraph.ui.v1.WatchGraphRequest\x1a .codegraph.ui.v1.WatchGraphEvent0\x01B<Z:github.com/seanb4t/codegraph-go/internal/uiproto/uiv1;uiv1b\x06proto3"
 
 var (
 	file_internal_uiproto_uiv1_ui_proto_rawDescOnce sync.Once
@@ -3661,7 +3831,7 @@ func file_internal_uiproto_uiv1_ui_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_uiproto_uiv1_ui_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_internal_uiproto_uiv1_ui_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(NodeDetailMode)(0),           // 0: codegraph.ui.v1.NodeDetailMode
 	(PermalinkAvailability)(0),    // 1: codegraph.ui.v1.PermalinkAvailability
@@ -3705,10 +3875,12 @@ var file_internal_uiproto_uiv1_ui_proto_goTypes = []any{
 	(*FileGraphResponse)(nil),     // 39: codegraph.ui.v1.FileGraphResponse
 	(*FileSymbolsRequest)(nil),    // 40: codegraph.ui.v1.FileSymbolsRequest
 	(*FileSymbolsResponse)(nil),   // 41: codegraph.ui.v1.FileSymbolsResponse
-	nil,                           // 42: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	nil,                           // 43: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	nil,                           // 44: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
-	nil,                           // 45: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	(*WatchGraphRequest)(nil),     // 42: codegraph.ui.v1.WatchGraphRequest
+	(*WatchGraphEvent)(nil),       // 43: codegraph.ui.v1.WatchGraphEvent
+	nil,                           // 44: codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	nil,                           // 45: codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	nil,                           // 46: codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	nil,                           // 47: codegraph.ui.v1.FileGraphEdge.KindCountsEntry
 }
 var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	3,  // 0: codegraph.ui.v1.SearchResponse.locations:type_name -> codegraph.ui.v1.Location
@@ -3735,13 +3907,13 @@ var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	25, // 21: codegraph.ui.v1.ExploreResponse.groups:type_name -> codegraph.ui.v1.ExploreGroup
 	26, // 22: codegraph.ui.v1.ExploreResponse.blasts:type_name -> codegraph.ui.v1.BlastEntry
 	1,  // 23: codegraph.ui.v1.GetPermalinkResponse.availability:type_name -> codegraph.ui.v1.PermalinkAvailability
-	42, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
-	43, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
-	44, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
+	44, // 24: codegraph.ui.v1.GetHealthResponse.files_by_language:type_name -> codegraph.ui.v1.GetHealthResponse.FilesByLanguageEntry
+	45, // 25: codegraph.ui.v1.GetHealthResponse.nodes_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.NodesByKindEntry
+	46, // 26: codegraph.ui.v1.GetHealthResponse.edges_by_kind:type_name -> codegraph.ui.v1.GetHealthResponse.EdgesByKindEntry
 	33, // 27: codegraph.ui.v1.GetHealthResponse.pending_changes:type_name -> codegraph.ui.v1.PendingChanges
 	34, // 28: codegraph.ui.v1.GetHealthResponse.index_health:type_name -> codegraph.ui.v1.IndexHealth
 	32, // 29: codegraph.ui.v1.GetHealthResponse.worktree_mismatch:type_name -> codegraph.ui.v1.WorktreeMismatch
-	45, // 30: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
+	47, // 30: codegraph.ui.v1.FileGraphEdge.kind_counts:type_name -> codegraph.ui.v1.FileGraphEdge.KindCountsEntry
 	37, // 31: codegraph.ui.v1.FileGraphResponse.nodes:type_name -> codegraph.ui.v1.FileGraphNode
 	38, // 32: codegraph.ui.v1.FileGraphResponse.edges:type_name -> codegraph.ui.v1.FileGraphEdge
 	2,  // 33: codegraph.ui.v1.FileSymbolsResponse.symbols:type_name -> codegraph.ui.v1.Node
@@ -3758,21 +3930,23 @@ var file_internal_uiproto_uiv1_ui_proto_depIdxs = []int32{
 	31, // 44: codegraph.ui.v1.UIService.GetHealth:input_type -> codegraph.ui.v1.GetHealthRequest
 	36, // 45: codegraph.ui.v1.UIService.FileGraph:input_type -> codegraph.ui.v1.FileGraphRequest
 	40, // 46: codegraph.ui.v1.UIService.FileSymbols:input_type -> codegraph.ui.v1.FileSymbolsRequest
-	5,  // 47: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
-	7,  // 48: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
-	11, // 49: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
-	13, // 50: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
-	15, // 51: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
-	17, // 52: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
-	19, // 53: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
-	23, // 54: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
-	27, // 55: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
-	30, // 56: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
-	35, // 57: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
-	39, // 58: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
-	41, // 59: codegraph.ui.v1.UIService.FileSymbols:output_type -> codegraph.ui.v1.FileSymbolsResponse
-	47, // [47:60] is the sub-list for method output_type
-	34, // [34:47] is the sub-list for method input_type
+	42, // 47: codegraph.ui.v1.UIService.WatchGraph:input_type -> codegraph.ui.v1.WatchGraphRequest
+	5,  // 48: codegraph.ui.v1.UIService.GetStatus:output_type -> codegraph.ui.v1.GetStatusResponse
+	7,  // 49: codegraph.ui.v1.UIService.Search:output_type -> codegraph.ui.v1.SearchResponse
+	11, // 50: codegraph.ui.v1.UIService.Files:output_type -> codegraph.ui.v1.FilesResponse
+	13, // 51: codegraph.ui.v1.UIService.Callers:output_type -> codegraph.ui.v1.CallersResponse
+	15, // 52: codegraph.ui.v1.UIService.Callees:output_type -> codegraph.ui.v1.CalleesResponse
+	17, // 53: codegraph.ui.v1.UIService.Impact:output_type -> codegraph.ui.v1.ImpactResponse
+	19, // 54: codegraph.ui.v1.UIService.Affected:output_type -> codegraph.ui.v1.AffectedResponse
+	23, // 55: codegraph.ui.v1.UIService.GetNodeDetail:output_type -> codegraph.ui.v1.GetNodeDetailResponse
+	27, // 56: codegraph.ui.v1.UIService.Explore:output_type -> codegraph.ui.v1.ExploreResponse
+	30, // 57: codegraph.ui.v1.UIService.GetPermalink:output_type -> codegraph.ui.v1.GetPermalinkResponse
+	35, // 58: codegraph.ui.v1.UIService.GetHealth:output_type -> codegraph.ui.v1.GetHealthResponse
+	39, // 59: codegraph.ui.v1.UIService.FileGraph:output_type -> codegraph.ui.v1.FileGraphResponse
+	41, // 60: codegraph.ui.v1.UIService.FileSymbols:output_type -> codegraph.ui.v1.FileSymbolsResponse
+	43, // 61: codegraph.ui.v1.UIService.WatchGraph:output_type -> codegraph.ui.v1.WatchGraphEvent
+	48, // [48:62] is the sub-list for method output_type
+	34, // [34:48] is the sub-list for method input_type
 	34, // [34:34] is the sub-list for extension type_name
 	34, // [34:34] is the sub-list for extension extendee
 	0,  // [0:34] is the sub-list for field type_name
@@ -3791,7 +3965,7 @@ func file_internal_uiproto_uiv1_ui_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_uiproto_uiv1_ui_proto_rawDesc), len(file_internal_uiproto_uiv1_ui_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   44,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

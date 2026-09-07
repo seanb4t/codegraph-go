@@ -54,6 +54,13 @@ import (
 // verb — it performs no network operation and mutates nothing — and
 // belongs in this read set for exactly the same reason the other twelve
 // do.
+// UPDATED at plan 06-01: WatchGraph (RPC-04) is the fourteenth read-only
+// rpc, added additively to internal/uiproto/uiv1/ui.proto's `service
+// UIService` block. It is the service's FIRST streaming method: a
+// server-streaming rpc that pushes a WatchGraphEvent whenever the
+// store's Meta.last_sync_unix_ms changes. A stream is still a read — it
+// performs no network operation and mutates nothing — and belongs in
+// this read set for exactly the same reason the other thirteen do.
 var wantUIServiceMethods = map[string]struct{}{
 	"GetStatus":     {},
 	"Search":        {},
@@ -68,13 +75,14 @@ var wantUIServiceMethods = map[string]struct{}{
 	"GetHealth":     {},
 	"FileGraph":     {},
 	"FileSymbols":   {},
+	"WatchGraph":    {},
 }
 
 // TestUIServiceMethodSetIsExactlyTheReadSet reflects over the generated
 // uiv1connect.UIServiceHandler interface — the machine-readable method
 // inventory a mutating rpc would have to appear in before it could ever
 // be dispatched — and asserts the observed method-name set is EXACTLY
-// wantUIServiceMethods: same length (13, as of plan 05-06's FileSymbols)
+// wantUIServiceMethods: same length (14, as of plan 06-01's WatchGraph)
 // AND same membership. A negative-only guard ("no method name contains a
 // write verb") passes vacuously the moment its verb list stops matching
 // a newly-added verb; this positive set-equality guard instead fails in
@@ -87,8 +95,8 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 		got[typ.Method(i).Name] = struct{}{}
 	}
 
-	if len(got) != 13 {
-		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 13: %v", len(got), got)
+	if len(got) != 14 {
+		t.Fatalf("uiv1connect.UIServiceHandler has %d methods, want exactly 14: %v", len(got), got)
 	}
 	if len(got) != len(wantUIServiceMethods) {
 		t.Fatalf("observed method set size %d != fixture size %d — the fixture itself is stale", len(got), len(wantUIServiceMethods))
@@ -101,7 +109,7 @@ func TestUIServiceMethodSetIsExactlyTheReadSet(t *testing.T) {
 	}
 	for name := range got {
 		if _, ok := wantUIServiceMethods[name]; !ok {
-			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the ten-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
+			t.Fatalf("uiv1connect.UIServiceHandler declares unexpected method %q, not in the fourteen-name read-only fixture — a method (mutating or otherwise) was ADDED to the service without updating this fixture", name)
 		}
 	}
 }
@@ -230,6 +238,18 @@ const uiProtoFieldFixtureLenAtPlan0502 = uiProtoFieldFixtureLenAtPlan0403 + 16
 // chained-extension pattern (01-10, 01-11, 03-05, 04-03, 05-02).
 const uiProtoFieldFixtureLenAtPlan0506 = uiProtoFieldFixtureLenAtPlan0502 + 4
 
+// uiProtoFieldFixtureLenAtPlan0601 EXTENDS uiProtoFieldFixtureLenAtPlan0506
+// by exactly 7 (plan 06-01, RPC-04, the fourteenth rpc WatchGraph — the
+// service's first streaming method): WatchGraphRequest's one field
+// (since_generation) and WatchGraphEvent's six (generation, initialized,
+// stale, store_exists, indexing_in_progress, commit_sha) — both new
+// messages, additive from field 1 on each since both are new, frozen at
+// this plan's Task 2 blocking-human checkpoint (approved 2026-09-07)
+// before task proto:gen ran. Declared in terms of the prior constant,
+// never as a bare literal, mirroring the established chained-extension
+// pattern (01-10, 01-11, 03-05, 04-03, 05-02, 05-06).
+const uiProtoFieldFixtureLenAtPlan0601 = uiProtoFieldFixtureLenAtPlan0506 + 7
+
 // uiProtoFieldNumbers is a literal fixture transcribed from
 // internal/uiproto/uiv1/ui.proto as of 2026-08-23 (Phase 1, plan 01-09,
 // the wave that completes GetNodeDetail and Explore). Per the corrected
@@ -268,6 +288,13 @@ const uiProtoFieldFixtureLenAtPlan0506 = uiProtoFieldFixtureLenAtPlan0502 + 4
 // new messages, frozen at this plan's Task 1 blocking-human checkpoint
 // (approve-as-proposed) before task proto:gen ran. Every entry written
 // by an earlier plan still resolves unchanged after this extension.
+//
+// Plan 06-01 (RPC-04, dated 2026-09-07) EXTENDS this fixture with
+// WatchGraphRequest and WatchGraphEvent — the fourteenth rpc's two new
+// messages, and the service's first STREAMING method, frozen at this
+// plan's Task 2 blocking-human checkpoint (approved as proposed) before
+// task proto:gen ran. Every entry written by an earlier plan still
+// resolves unchanged after this extension.
 var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"Node", "id", 1},
 	{"Node", "kind", 2},
@@ -454,6 +481,15 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 	{"FileSymbolsResponse", "symbols", 1},
 	{"FileSymbolsResponse", "total_count", 2},
 	{"FileSymbolsResponse", "truncated", 3},
+	// Plan 06-01's seven — see uiProtoFieldFixtureLenAtPlan0601's own
+	// doc comment for the arithmetic.
+	{"WatchGraphRequest", "since_generation", 1},
+	{"WatchGraphEvent", "generation", 1},
+	{"WatchGraphEvent", "initialized", 2},
+	{"WatchGraphEvent", "stale", 3},
+	{"WatchGraphEvent", "store_exists", 4},
+	{"WatchGraphEvent", "indexing_in_progress", 5},
+	{"WatchGraphEvent", "commit_sha", 6},
 }
 
 // TestUIProtoFieldNumbersAreStableAndUnique replaces a contiguity
@@ -480,8 +516,8 @@ var uiProtoFieldNumbers = []uiProtoFieldNumber{
 // covers every field of every message that exists at this wave" means in
 // an executable form, not merely an assertion in prose.
 func TestUIProtoFieldNumbersAreStableAndUnique(t *testing.T) {
-	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0506 {
-		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0506 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0506)
+	if len(uiProtoFieldNumbers) != uiProtoFieldFixtureLenAtPlan0601 {
+		t.Fatalf("len(uiProtoFieldNumbers) = %d, want uiProtoFieldFixtureLenAtPlan0601 (%d) — the fixture and its pinned length constant have drifted apart", len(uiProtoFieldNumbers), uiProtoFieldFixtureLenAtPlan0601)
 	}
 	if len(uiProtoFieldNumbers) == 0 {
 		t.Fatal("uiProtoFieldNumbers is empty — this guard is vacuous")
