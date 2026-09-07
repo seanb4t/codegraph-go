@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/query"
@@ -257,50 +258,182 @@ type liveRegistry struct {
 	nextID  uint64
 	current *uiv1.WatchGraphEvent
 
-	sendCount int64 // placeholder — implemented in the GREEN commit of Task 2
+	sendCount atomic.Int64
 
 	done     chan struct{}
 	stopOnce sync.Once
 }
 
-// newLiveRegistry returns an empty, unstarted registry. Placeholder —
-// implemented in the GREEN commit of Task 2.
+// newLiveRegistry returns an empty, unstarted registry.
 func newLiveRegistry() *liveRegistry {
-	return &liveRegistry{}
+	return &liveRegistry{
+		subs: make(map[uint64]chan *uiv1.WatchGraphEvent),
+		done: make(chan struct{}),
+	}
 }
 
 // Subscribe registers a new subscriber and returns a receive-only
-// channel plus an unsubscribe func. Placeholder — implemented in the
-// GREEN commit of Task 2.
+// channel plus an unsubscribe func. The channel is PRE-LOADED with the
+// registry's current event (if any) before this call returns, so a
+// brand-new subscriber that never waits observes exactly one event — the
+// current one — with no publish having occurred. This is the whole fix
+// for a real defect: without it, the registry emits only on CHANGE, so a
+// tab that disconnects across a generation bump and reconnects would see
+// nothing until the NEXT re-index — indefinitely, for a parked tab. That
+// is precisely the "open views go quietly stale" failure this phase
+// exists to end.
+//
+// ctx's cancellation ALSO removes the subscriber, exactly as calling the
+// returned func would — a caller (06-04's stream handler) can rely on
+// either. Every code path that can end a subscription (explicit
+// unsubscribe, ctx cancellation, or Stop) converges on removing the
+// entry from subs under mu exactly once, so the returned channel is
+// closed exactly once regardless of which path fires.
 func (r *liveRegistry) Subscribe(ctx context.Context) (<-chan *uiv1.WatchGraphEvent, func()) {
-	return nil, func() {}
+	select {
+	case <-r.done:
+		// The registry is already stopped: hand back a channel that is
+		// already closed rather than registering a subscription Stop
+		// will never see again to clean up.
+		ch := make(chan *uiv1.WatchGraphEvent)
+		close(ch)
+		return ch, func() {}
+	default:
+	}
+
+	r.mu.Lock()
+	id := r.nextID
+	r.nextID++
+	ch := make(chan *uiv1.WatchGraphEvent, 1)
+	if r.current != nil {
+		ch <- r.current // capacity 1, freshly made, empty: cannot block.
+	}
+	r.subs[id] = ch
+	r.mu.Unlock()
+
+	stop := make(chan struct{})
+	var once sync.Once
+	unsubscribe := func() {
+		once.Do(func() {
+			close(stop)
+			r.mu.Lock()
+			if existing, ok := r.subs[id]; ok {
+				delete(r.subs, id)
+				close(existing)
+			}
+			r.mu.Unlock()
+		})
+	}
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			unsubscribe()
+		case <-stop:
+			// Explicit unsubscribe already ran (it closed stop itself).
+		case <-r.done:
+			// Stop() closed every channel and cleared subs directly
+			// (under its own Lock) — this goroutine only needs to exit,
+			// never touch subs itself, or it would race Stop's own
+			// delete+close of the same entry.
+		}
+	}()
+
+	return ch, unsubscribe
 }
 
-// Publish fans ev out to every current subscriber. Placeholder —
-// implemented in the GREEN commit of Task 2.
+// Publish fans ev out to every current subscriber (D-04): a full
+// per-subscriber buffer is drained and the newer event enqueued in its
+// place rather than blocking or dropping the newest. current is updated
+// first (under the same lock) so a Subscribe racing this call is
+// guaranteed to observe ev either via this Publish's own fan-out loop or
+// via its own seeding read of current — never neither.
+//
+// sendCount is incremented once per subscriber actually touched by this
+// call — structurally separate storage from subs' own length (T-06-10):
+// Subscribe/unsubscribe never touch sendCount, and Publish never touches
+// len(subs).
 func (r *liveRegistry) Publish(ev *uiv1.WatchGraphEvent) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.current = ev
+	for _, ch := range r.subs {
+		trySend(ch, ev)
+		r.sendCount.Add(1)
+	}
+}
+
+// trySend delivers ev to ch without ever blocking: an empty buffer gets
+// ev directly; a full buffer is drained of its stale value and ev is
+// enqueued in its place (D-04's coalescing semantics). The caller must
+// hold the registry's mu, which serializes this against every other
+// Publish — the only other party that can touch ch is the single reader
+// on the far end, which never blocks this non-blocking send/drain
+// sequence (each select below uses only a default case, never a bare
+// blocking send/receive).
+func trySend(ch chan *uiv1.WatchGraphEvent, ev *uiv1.WatchGraphEvent) {
+	select {
+	case ch <- ev:
+		return
+	default:
+	}
+	// Buffer full: drain the stale value, then enqueue the new one. The
+	// reader could race this drain (it is not blocked by mu), but with
+	// exactly one reader per channel the outcome is safe either way — if
+	// the reader empties ch between our failed send above and this
+	// receive, the receive below is a no-op (default fires) and the
+	// following send still succeeds into the now-empty buffer.
+	select {
+	case <-ch:
+	default:
+	}
+	select {
+	case ch <- ev:
+	default:
+		// The reader raced us again and refilled it — vanishingly
+		// unlikely with a single reader, and D-04's contract is not
+		// violated even so: the NEXT Publish's own drain-then-send will
+		// still coalesce to whatever is newest at that time.
+	}
 }
 
 // Stop closes every subscriber channel and releases the registry.
-// Placeholder — implemented in the GREEN commit of Task 2.
+// Idempotent: calling it more than once is a no-op after the first call.
+// Closing r.done first releases every Subscribe-spawned watcher goroutine
+// blocked in its select (including ones that would otherwise wait
+// forever for a ctx that never cancels), before this method itself
+// closes and removes each subscriber entry under the same lock those
+// goroutines never touch once r.done has fired.
 func (r *liveRegistry) Stop() {
+	r.stopOnce.Do(func() {
+		close(r.done)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for id, ch := range r.subs {
+			close(ch)
+			delete(r.subs, id)
+		}
+	})
 }
 
-// SendCount reports the number of server-initiated event sends.
-// Placeholder — implemented in the GREEN commit of Task 2.
+// SendCount reports the number of server-initiated event sends —
+// structurally separate storage from SubscriberCount (T-06-10).
 func (r *liveRegistry) SendCount() int64 {
-	return 0
+	return r.sendCount.Load()
 }
 
 // SubscriberCount reports the number of currently-registered
-// subscribers. Placeholder — implemented in the GREEN commit of Task 2.
+// subscribers — structurally separate storage from SendCount (T-06-10).
 func (r *liveRegistry) SubscriberCount() int {
-	return 0
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.subs)
 }
 
 // Current returns the registry's last-known event, or nil before the
-// first Publish. Placeholder — implemented in the GREEN commit of
-// Task 2.
+// first Publish.
 func (r *liveRegistry) Current() *uiv1.WatchGraphEvent {
-	return nil
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.current
 }
