@@ -314,7 +314,7 @@ Plans:
 - [x] 06-01-PLAN.md — Freeze the wire surface: the `WatchGraph` server-streaming rpc, its request/event messages, both descriptor fixtures, and a blocking human review of the field numbers
 - [x] 06-02-PLAN.md — The publisher: store watcher, index-metadata change detector with open/read/close discipline, and a bounded coalescing fan-out registry
 - [x] 06-03-PLAN.md — The browser client: incremental stream consumption, jittered reconnect with generation resume, and the chrome updating from the event with no round trip
-- [ ] 06-04-PLAN.md — The transport: path-scoped write-deadline clearing, the streaming handler's subscriber lifecycle, and the end-to-end per-message timing tracer
+- [x] 06-04-PLAN.md — The transport: path-scoped write-deadline clearing, the streaming handler's subscriber lifecycle, and the end-to-end per-message timing tracer
 - [ ] 06-05-PLAN.md — Graph stability: no-layout fast path, authoritative survivor position write-back, layout generation token against overlapping runs, and the guava-scale displacement measurement
 - [ ] 06-06-PLAN.md — The browser gate ordinary tests cannot satisfy: three real tabs with per-tab timing paired to a received-generation superset, fan-out isolation with the blocked tab proven blocked, and a jittered reconnect behind a fixed-port proxy that survives a server restart
 - [ ] 06-07-PLAN.md — Criterion 5's real-process gate: real `daemon` + `serve --mcp` + `ui` against one store, flush duration bounded against a measured no-UI baseline; plus the recorded lifecycle verdict and the phase's single bundle rebuild

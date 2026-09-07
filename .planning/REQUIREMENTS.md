@@ -23,7 +23,7 @@
 - [x] **RPC-01**: Protobuf schema for the UI API, inheriting `internal/schema/graph.proto`'s additive-only evolution discipline (D-02a — field numbers never renumbered or reused; retired fields `reserved`)
 - [x] **RPC-02**: `connect-go` handlers mount on `net/http` alongside the `go:embed`'d SPA
 - [x] **RPC-03**: SPA fallback routing — client-side routes resolve to `index.html`; RPC paths and hashed assets do not
-- [ ] **RPC-04**: A Connect server-streaming method carries re-index events to the browser over plain HTTP/1.1
+- [x] **RPC-04**: A Connect server-streaming method carries re-index events to the browser over plain HTTP/1.1
 - [x] **RPC-05**: Message sizes are bounded; verbatim source blobs are handled without unbounded response growth
 
 ### Engine Seam
@@ -141,7 +141,7 @@ Populated during roadmap creation (2026-08-22). Phase assignments come from `ROA
 | RPC-01 | Phase 1 | Complete |
 | RPC-02 | Phase 1 | Complete |
 | RPC-03 | Phase 2 | Complete |
-| RPC-04 | Phase 6 | Pending |
+| RPC-04 | Phase 6 | Complete |
 | RPC-05 | Phase 1 | Complete |
 | ENG-01 | Phase 1 | Complete |
 | ENG-02 | Phase 1 | Complete |
