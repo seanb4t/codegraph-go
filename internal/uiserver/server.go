@@ -138,7 +138,7 @@ func Listen(o Options) (*Server, error) {
 	}
 	mux.Handle("/", newSPAHandler(buildFS))
 
-	guarded := originHostGuard(port, mux)
+	guarded := originHostGuard(port, clearWatchDeadline(mux))
 
 	return &Server{
 		ln: ln,
