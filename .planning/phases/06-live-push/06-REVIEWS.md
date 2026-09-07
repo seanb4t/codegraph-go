@@ -934,3 +934,351 @@ finding below was re-derived against the tree rather than accepted from the lane
   portability caveat to a plan defect.
 - **Read-deadline clearing.** Settled in cycle 1 (`$GOROOT/src/net/http/server.go:697`) and
   correctly not re-raised by either party. Recorded here only so a future cycle does not reopen it.
+
+
+---
+---
+
+# Cross-AI Plan Review — Phase 6 · CONVERGENCE CYCLE 3
+
+- **reviewed_at:** 2026-09-07T02:10:00Z
+- **reviewers:** codex
+- **models:** codex: `gpt-5.6-sol (reasoning=low)`
+- **model_sources:** codex: `banner`
+- **plans_reviewed:** 06-01, 06-02, 06-03, 06-04, 06-05, 06-06, 06-07 (seven plans, six waves)
+- **baseline:** cycle-2 revision `81aeb64a`
+- **carried in:** cycle-1 40 findings (9 HIGH + 31) → cycle-2 8 findings (2 HIGH + 6) → planner claims 0 open
+- **note:** this was the LAST automatic convergence cycle; anything left open escalates to the maintainer
+
+## Codex Review (cycle 3)
+
+### Overall assessment
+
+The lane's verdict: the disputed coalescing rejection is **justified**, the observation-seam
+repair is **complete**, and most cycle-2 findings are genuinely resolved. It filed one HIGH
+(criterion 5's flush-interval start endpoint races the debounce), one MEDIUM (06-06's reconnect
+assertions are not derivable from 06-03's backoff contract), and one LOW (a stale "2000
+generations" cross-reference), and rated the phase HIGH risk / not ready.
+
+The orchestrator **independently reproduced every measurement in the disputed adjudication** and
+**rebuts the lane's HIGH on mechanism plus source evidence** — the debouncer has no leading edge,
+so the failure mode the lane describes cannot occur, and the residual error runs in the opposite
+(conservative) direction. The lane's MEDIUM and LOW are confirmed and stand.
+
+The lane was unable to write to the filesystem in its sandbox and therefore could not run the
+throwaway experiments it wanted; the orchestrator ran them instead and the results are recorded
+below verbatim.
+
+---
+
+### A. ADJUDICATION — the planner's rejection of cycle-2 HIGH-2
+
+**Verdict: the rejection is CORRECT, on all three counts, and the replacement gate is sound.
+Cycle-2 HIGH-2 is RESOLVED.**
+
+The orchestrator wrote two throwaway Go programs (stdlib only; no repo mutation;
+`GOTOOLCHAIN=go1.26.5`) that model the exact mechanism — an `httptest` HTTP/1.1 server whose
+handler drains a subscriber channel and does `Write` + `Flush` of a 65-byte message per event,
+against a client that does not read — and re-measured all three claims from scratch.
+
+**1. The socket-blocking threshold. Reproduced to within 0.05%.**
+
+`sysctl` on this machine: `net.inet.tcp.sendspace = net.inet.tcp.recvspace = 131072`.
+
+| SO_SNDBUF/SO_RCVBUF | orchestrator (this cycle) | planner's claim | cycle-2 reviewer |
+|---|---|---|---|
+| default | **BLOCKED after 7,829 messages (~496 KB)** | 7,825 | 7,827 |
+| forced 4096 | **BLOCKED after 7,660 (~486 KB)** | 7,647 | — |
+| forced 2048 | **BLOCKED after 7,833 (~497 KB)** | 6,717 ("not reliably observable") | — |
+
+The planner's numbers are accurate. The 2048 figure differs (my run blocked *later*, not
+earlier) but the conclusion is identical and if anything stronger: **`SO_SNDBUF` does not work.**
+Forcing the socket buffers on both the accepted connection and the dialer moves the threshold by
+about 2%, because loopback TCP plus `net/http`'s own `bufio` writer absorb the reduction. The
+cycle-2 suggestion to shrink the buffer is empirically dead.
+
+**2. "Publish-until-blocked hangs on a correct implementation." Confirmed, and quantified.**
+
+Reproducing the planner's 102,400-publish experiment against a correct capacity-1
+replace-on-full registry, three consecutive runs:
+
+| run | published | sends reaching the socket | publishes needed to reach the 7,829-write blocking threshold |
+|---|---|---|---|
+| 0 | 102,400 | 488 | ~1,643,000 |
+| 1 | 102,400 | 423 | ~1,895,000 |
+| 2 | 102,400 | 593 | ~1,352,000 |
+
+(The planner reported 402 sends for 102,400 publishes; I measured 423–593 — same order, same
+conclusion.) A "publish until the handler observably blocks" loop would need on the order of
+**1.4–1.9 million publishes** before the write could block, and that is on the *fast* platform;
+under `GOMAXPROCS=1` the send count drops further and the figure rises by another order of
+magnitude. The predecessor's suggestion is not merely slow, it is unbounded in practice. **The
+objection is correct.**
+
+**3. Does the ratio assertion discriminate? Yes — and the four-clause conjunction is load-bearing.**
+
+Five consecutive runs per implementation, 5,000 publishes, client not reading, gate =
+`received*2 <= published && received < published && received >= 1 && last === published`:
+
+| implementation | published | received | ratio | newest delivered | gate |
+|---|---|---|---|---|---|
+| capacity-1 replace-on-full (**correct**) | 5000 | 2 – 14 | 0.0004 – 0.0028 | yes | **PASS** ×5 |
+| unbounded queue (**broken**) | 5000 | 5000 | 1.0000 | yes | **FAIL** ×5 |
+| bounded FIFO cap-8, drop-newest (**broken**) | 5000 | 9 | 0.0018 | **no** (last = 9) | **FAIL** ×5 |
+| bounded FIFO cap-4096, drop-newest (**broken**) | 5000 | 4097 | 0.8194 | **no** (last = 4097) | **FAIL** ×5 |
+
+This reproduces the planner's table (it reported 3–28 received, ratio 0.0006–0.0056) and extends
+it with the two adversarial cases the planner did not test. Note what they show: a small
+drop-newest queue **passes the ratio clause** (0.0018) and is caught only by the
+newest-survives clause; a large drop-newest queue is caught by both. The planner's insistence
+that the four assertions are made "together" is therefore not rhetorical — remove either the
+ratio clause or the newest clause and a different broken implementation walks through.
+
+**4. Portability and flake direction. The gate is robust, and robust in the right direction.**
+
+The only way a *correct* implementation fails is if the handler drains more than 2,500 of 5,000
+replacements, which requires the publisher to be starved relative to a socket write — roughly a
+250× reversal of the observed ratio. Measured under three adversarial scheduling regimes:
+
+| regime | received (5 runs) | worst ratio | margin to the 0.5 threshold |
+|---|---|---|---|
+| `GOMAXPROCS=1` | 2, 2, 2, 2, 2 | 0.0004 | 1250× |
+| `GOMAXPROCS=2` | 15, 6, 10, 11, 13 | 0.0030 | 167× |
+| default GOMAXPROCS, 8 CPU spinners | 12, 29, 4, 5, 12 | **0.0058** | **86×** |
+
+Contention makes the handler *slower*, which makes coalescing *stronger* — the flake pressure
+runs away from the threshold, not toward it. `GOMAXPROCS=1` is the safest case of all, because
+the publisher's tight loop holds the processor between async-preemption points. There is no
+smuggled platform assumption: 5,000 × 65 B = 325 KB is deliberately under the 496 KB threshold,
+so the socket never blocks in either the correct or the broken case, and the assertion never
+touches socket behaviour.
+
+**Conclusion.** The planner rejected a reviewer suggestion with measurements that are accurate,
+reproducible, and load-bearing, and replaced it with a gate that is strictly better than the one
+that was suggested. This is exactly the shape of reasoned rejection cycle 1 established with its
+own `readTimeout` finding. No further action on cycle-2 HIGH-2.
+
+---
+
+### B. Cycle-2 fix verification
+
+| Cycle-2 finding | Verdict | Evidence |
+|---|---|---|
+| **HIGH-1** — `06-06` read eight per-tab fields no plan produced | **RESOLVED** | `06-03-PLAN.md:5-10` now lists `web/src/app.d.ts` in `files_modified`; `:136-150` declares `__codegraphLiveObservations` with `events[]` (`generation`, `epoch`, `seeded`, `receivedAtMs`, `appliedAtMs`) and `connections[]` (`epoch`, `attempt`, `scheduledDelayMs`, `requestedSinceGeneration`, `openedAtMs`); `:164-178` states the four seam rules (observation-only, installed before attempt 1, client-scheduled provenance, bounded at `LIVE_OBSERVATION_CAP`). `06-06-PLAN.md:158` `read_first`s that declaration with the field→source mapping. Every value the `06-06` verify command reads now resolves to a named producer; `appliedAtMs` is correctly assigned to the store (admission is the store's decision) and `triggeredGenerations` correctly stays harness-side. |
+| **HIGH-1's own patch defect** — `rg -c` over multiple paths | **RESOLVED, independently reproduced** | The guard at `06-03-PLAN.md:122` uses `rg -l … \| wc -l`, never `rg -c`, for the multi-path clauses. Orchestrator re-ran the planner's synthetic-tree check: clean tree → excluded **0** / control **1**; a route reading the seam back → excluded **1** / control **2**. The zero is paired with the identical search minus the exclusion, so it cannot pass on a wrong term or wrong path. |
+| **MEDIUM** — reconnect attempt floor | **PARTIALLY RESOLVED** | The floor is raised to 2 and `minDowntimeMs >= 4 * clientBaseDelayMs` is asserted separately (`06-06-PLAN.md:245-247`, verify clauses `tooFewAttemptsForGrowthToBeMeasurable` and `downtimeTooShortToSpanTwoBackoffs`). But the *unit* of "attempt" and the *jitter bound* remain unpinned — see M-1 below. |
+| **MEDIUM** — `reconnectDelaysPerTab` provenance | **RESOLVED** | `06-06-PLAN.md:254-260` pins it to the client-scheduled `scheduledDelayMs` and forbids network-derived intervals, with the reason stated; `06-03-PLAN.md:170-175` states the same rule at the producing end; `reconnectDelaysProvenance` (literal `client-scheduled`) is a required record field. |
+| **MEDIUM** — criterion 5's flush interval | **RESOLVED in substance** | `06-07-PLAN.md:190-208` excludes the debounce from the interval, requires `CODEGRAPH_DEBOUNCE_MS` to be set and recorded, and pins completion to a per-flush unique marker token becoming *queryable* rather than a bare `last_sync_unix_ms` advance. Floors at `06-07-PLAN.md:245` (`baselineMaxFlushDurationMs >= 1`, `maxFlushDurationMs >= 1`, `debounceExcludedMs >= 1`) keep the bound non-vacuous. One wording imprecision remains — see L-2. |
+| **LOW** — nonexistent test name | **RESOLVED** | Both sentences in `06-01-PLAN.md` corrected; `internal/graphstore/meta_commit_test.go:120` is `TestKnownMetaFieldNumbersAreStable`, correctly described as a different guard. |
+| **LOW** — `startProxy` contract | **RESOLVED** | `06-06-PLAN.md:166` names all three handle members: `url`, `setUpstream(url)`, `close()`. |
+| **LOW** — `06-07` process count | **RESOLVED** | Four participating OS processes, three of them product, with a labelled `processes[]` record. |
+
+**Structure re-checked (spot-check only, as instructed):** 47 threat rows, 47 unique
+(`T-06-01`…`T-06-46` + `T-06-SC`); zero `high`/`critical` + `accept` pairs; waves
+1 {06-01} · 2 {06-02, 06-03} · 3 {06-04} · 4 {06-05} · 5 {06-06} · 6 {06-07}. Matches the
+orchestrator's prior derivation. No structural finding.
+
+---
+
+### C. Findings
+
+#### REBUTTED — the lane's HIGH does not hold: "sleeping out the debounce races the flush"
+
+**Lane's claim.** `06-07-PLAN.md:190-199` tells the harness to write the marker, sleep the
+debounce window, start the clock, and stop when the marker is queryable. The lane argues that
+when the sleep returns the daemon's `time.AfterFunc` callback "may not have started, may be
+running, or the marker may already be indexed and queryable," so short samples can "collapse
+toward zero" and the claimed both-endpoints-pinned property is false. It rated this HIGH and the
+sole reason the phase is not ready.
+
+**Rebuttal, from the source the lane itself cites.** The debouncer has **no leading edge**.
+`internal/watch/debounce.go:71-89` — every `Add` stops the outstanding timer and re-arms
+`time.AfterFunc(d.window, d.fire)`; `:98-112` — `fire` is the *only* path to `d.flush`, and it
+runs only from that timer. There is no immediate-fire branch and no max-wait. Therefore:
+
+    flush_start  >=  write_time + fsnotify_detection_latency + window
+    clock_start   =  write_time + window
+
+so `clock_start <= flush_start`, **always**. The marker cannot be queryable when the clock
+starts, because indexing has not begun. The failure mode the lane describes is unreachable, and
+the sign of the residual error is the opposite of what it claims: the measured interval is
+`indexing_duration + fsnotify_latency (+ any event-spread re-arm)`, i.e. a small
+**over**-measurement, applied identically to the baseline run and the concurrent run, which is
+the fail-safe direction for a degradation bound.
+
+The floors at `06-07-PLAN.md:245` (`baselineMaxFlushDurationMs >= 1`, `maxFlushDurationMs >= 1`)
+independently exclude a degenerate zero sample.
+
+**Not counted as a HIGH.** The one substantive residue is a wording/recording matter, filed as
+L-2 below.
+
+#### M-1 — MEDIUM (ACTIONABLE) — `06-06`'s reconnect assertions are not derivable from `06-03`'s backoff and seam contract
+
+Three distinct mismatches, all in the same seam→gate boundary, all of which make the phase's
+headline browser gate fail on **correct** behaviour. This is the same failure class as the
+cycle-2 MEDIUM that was just fixed, and it is shape (a): the fix hardened the *floor* while
+leaving the *unit* and the *jitter bound* unpinned.
+
+1. **Growth is asserted on the jittered value; only the base term is guaranteed.**
+   `06-03-PLAN.md:95` — "the scheduled delays are strictly non-decreasing **in their base
+   term**"; `:197` — "the growth test asserts **the base term** is strictly increasing";
+   `:116-120` leaves the jitter magnitude to executor discretion ("Claude's Discretion"),
+   recorded only in the SUMMARY. But `06-06-PLAN.md:280` computes
+   `grew = …d.every((v,i)=>i===0||v>d[i-1])` over `reconnectDelaysPerTab`, which
+   `06-06-PLAN.md:254` defines as `scheduledDelayMs` — the **jittered** value.
+   Full jitter (`random(0, base·2^n)`, the AWS-canonical choice) and decorrelated jitter both
+   satisfy `06-03` and routinely produce `delay[1] < delay[0]`, failing `backoffNotGrowing` on a
+   correct client. Only a bounded multiplicative jitter whose spread is narrower than the growth
+   factor makes strict growth of the scheduled value a theorem.
+2. **The initial connect is not excluded from the delay array.** `06-03-PLAN.md:146` declares
+   `scheduledDelayMs: number | null` — "null for the first connect" — and `:167` requires the
+   seam to be installed *before* the first attempt so attempt 1 is recorded. Nothing in `06-06`
+   says to filter `scheduledDelayMs === null` out of `reconnectDelaysPerTab`. If the extraction
+   maps `connections[]` straight through, `d[0]` is `null` for every tab:
+   `new Set([null,null,null]).size === 1 !== 3` fails `distinct` (`noJitter`) deterministically,
+   and `v > d[i-1]` is null-poisoned.
+3. **The attempt floor's unit is ambiguous.** `06-03-PLAN.md:146` defines `attempt` as "1-based
+   attempt index since the last successful open", which counts the initial connect. If
+   `reconnectAttemptsPerTab` is taken from that field unfiltered, `>= 2` is satisfied by a single
+   reconnect, while `grew` needs **two** non-null delays — reopening exactly the floor-vs-growth
+   disagreement the cycle-2 fix set out to close.
+
+**PLAN.md change needed** (either half of the first item, plus both of the others):
+- In `06-03` Task 1, pin the jitter shape to one whose *scheduled* value is strictly increasing
+  across consecutive attempts (e.g. multiplicative jitter bounded strictly inside the growth
+  factor), **or** add `baseDelayMs` to the `connections[]` seam record and change
+  `06-06`'s `grew` to recompute strict growth over `baseDelayMs`, asserting jitter separately
+  via cross-tab deviation.
+- In `06-06` Task 2, state that `reconnectDelaysPerTab` is `connections[]` filtered to
+  `scheduledDelayMs !== null`, and that `reconnectAttemptsPerTab` counts reconnect attempts
+  (initial connect excluded), so the `>= 2` floor and the `>= 2`-delay `grew` check agree by
+  construction.
+- Note in passing: `distinct` compares three tabs' first delays for pairwise inequality. Pinning
+  the jitter range in the first bullet also pins the collision probability; leaving it to
+  discretion leaves a small but real chance of a spurious `noJitter` failure.
+
+#### L-1 — LOW (ACTIONABLE) — `06-06` still cites the superseded "2000 generations" figure
+
+`06-06-PLAN.md:235` describes `06-04`'s coalescing test as one that "publishes 2000 generations,
+and asserts `received < published` with the newest surviving." `06-04-PLAN.md:232` now specifies
+**5000** publishes and a four-clause conjunction including the `received*2 <= published` ratio.
+The stale text is what gets copied into the record's `coalescingProvenBy` field and repeated in
+the SUMMARY, so it would ship an inaccurate description of the only place D-04 is proven.
+
+**PLAN.md change needed:** in `06-06-PLAN.md:235`, change 2000 → 5000 and describe the assertion
+as the ratio-plus-newest conjunction.
+
+#### L-2 — LOW (ACTIONABLE) — "BOTH endpoints pinned" overstates the criterion-5 start endpoint
+
+`06-07-PLAN.md:190` and `:251` and `06-06`'s mirror both say each flush interval has "BOTH
+endpoints pinned". The *completion* endpoint genuinely is pinned (a per-flush unique marker token
+becoming queryable). The *start* endpoint is a **sleep-derived conservative estimate**
+(`write_time + configured debounce`), not an observation of flush start. As established in the
+rebuttal above the estimate is safe — it can only run early, never late — but two things are
+worth recording rather than left implicit:
+- the interval carries the fsnotify detection latency and any event-spread timer re-arm;
+- under `ErrStoreLocked` the daemon **re-arms the debouncer** (`internal/daemon/daemon.go:292-300`,
+  `deb.Add(flushRetryPath)`), so a requeued flush silently carries one or more *additional* full
+  debounce windows inside the recorded duration. That inflates the concurrent measurement
+  relative to the baseline — again fail-safe, and separately caught by the `flushesStarved !== 0`
+  clause — but it means `debounceExcludedMs` does not describe the whole excluded wait.
+
+**PLAN.md change needed:** soften the claim to "the completion endpoint is pinned; the start
+endpoint is a bounded, conservative estimate that can only over-measure", and record the raw
+`write → queryable` elapsed alongside the debounce-excluded figure so the arithmetic is auditable
+and a requeued flush is visible in the record.
+
+---
+
+### Vacuity sweep on the ten new comparator clauses
+
+Every clause added in `81aeb64a` was checked for the two failure shapes. Findings:
+
+- The observation-only guard (`06-03-PLAN.md:122`) is the strongest of the set: a declaration
+  floor, a comment-stripped population floor, a zero over the excluded paths, **and** the same
+  search without the exclusion returning `>= 1`. Reproduced RED and GREEN against a synthetic
+  tree by the orchestrator. No defect.
+- `rg -l … | wc -l` returns `0` with exit status 0 when nothing matches (the pipeline's status is
+  `wc`'s), so the `-eq 0` clause does not accidentally depend on `rg`'s exit code. Correct.
+- `rg -c '…' web/src/app.d.ts` on a single file returns a bare count, so `-ge 1` is well-formed;
+  on zero matches `rg` prints nothing and `test "" -ge 1` errors non-zero, i.e. it fails RED
+  (noisily, but correctly).
+- `supersetOK`, `grew`, `distinct` are all **recomputed** in the verify command from raw arrays
+  rather than read as self-reported booleans, and every failed check is named rather than
+  short-circuiting on the first. The script invocation is chained with `;` so the numbers print
+  on the RED path.
+- `Math.min(...r.postReconnectAppliedPerTab) >= 1`, `Math.min(...r.resumeCursorSentPerTab) > 0`,
+  `baselineMaxFlushDurationMs >= 1`, `maxFlushDurationMs >= 1`, `debounceExcludedMs >= 1`,
+  `flushMarkerTokens.length === flushesAttempted` — every zero-assertion in the set is paired with
+  a non-zero floor or a positive control. No unpaired `=== 0` found.
+- The only clauses that can fail on correct behaviour are `grew` and `distinct` — M-1.
+
+No shape-(b) defect (a vacuous guard created inside a vacuity fix) was found in this revision.
+
+---
+
+### Risk assessment
+
+**Overall risk: LOW–MEDIUM. The plans are ready to execute.**
+
+The one HIGH filed by the lane does not survive contact with `internal/watch/debounce.go` — the
+mechanism it depends on does not exist in the debouncer, and the residual error runs in the
+conservative direction. Zero HIGH findings remain.
+
+M-1 is real and should be fixed before `06-06` executes, but it is a wave-5 concern behind a
+wave-2 plan, it is a five-line specification change in two files, and its failure mode is a
+*visible red gate*, not a silent pass — the phase's own design (recompute from raw arrays, name
+every failed check, print numbers on the RED path) is what makes it diagnosable in one run.
+L-1 and L-2 are documentation accuracy.
+
+The disputed adjudication was the load-bearing question of this cycle and it resolves cleanly in
+the planner's favour, with every measurement independently reproduced.
+
+---
+
+## Consensus Summary (cycle 3)
+
+Single grounded reviewer (codex) plus orchestrator verification. Where they diverge, the
+orchestrator's finding is backed by source citations and re-run measurements and is recorded as
+such.
+
+### Agreed strengths
+
+- The coalescing gate rewrite is a genuine improvement over both the original and the suggested
+  repair: it asserts the property that actually distinguishes the implementations, needs no
+  socket-buffer assumption, and its flake pressure runs away from the threshold under load.
+- The observation seam is complete: every per-tab field `06-06` reads has a named producer, the
+  seam is declared in the plan that owns the client, it is observation-only with a paired
+  positive control, installed before attempt 1, and capped.
+- The verify commands recompute their verdicts from raw recorded arrays rather than trusting
+  self-reported booleans, print all load-bearing numbers on the RED path, and name every failed
+  check individually.
+- The division of labour between what a browser can prove (fan-out isolation) and what only a Go
+  test can prove (coalescing) is stated explicitly and recorded in the artifact.
+
+### Agreed concerns
+
+1. **M-1 (MEDIUM)** — `06-06`'s `grew`/`distinct` reconnect assertions are not derivable from
+   `06-03`'s stated backoff contract (base-term growth, discretionary jitter) or its seam shape
+   (`scheduledDelayMs` null on the first connect; `attempt` counting the initial connect). Both
+   the lane and the orchestrator raised this independently, from different angles.
+2. **L-1 (LOW)** — `06-06-PLAN.md:235` still says "2000 generations".
+3. **L-2 (LOW)** — "both endpoints pinned" overstates the criterion-5 start endpoint.
+
+### Divergent views
+
+- **The criterion-5 timer.** The lane rated it HIGH and called it "the principal cycle-3
+  blocker", arguing the samples can collapse toward zero. The orchestrator rebuts this on the
+  source: `internal/watch/debounce.go:71-112` gives the debouncer no leading edge and no
+  max-wait, so `flush_start >= write_time + latency + window` while `clock_start = write_time +
+  window`. The clock can only start *before* the flush, never after; the marker cannot already be
+  queryable; the error is a small over-measurement applied to both runs. Downgraded to L-2, and
+  only the recording half survives. **This is the one place the orchestrator overrules the lane,
+  and it is why the cycle closes at zero HIGH rather than one.**
+- **Overall readiness.** The lane says not ready (HIGH). The orchestrator says ready
+  (LOW–MEDIUM), because the lane's blocker does not hold and the remaining MEDIUM is a
+  specification tightening on a wave-5 gate whose failure mode is a red gate, not a silent pass.
+- **Whether the planner's rejection was legitimate.** Not divergent — both parties independently
+  reached "justified". The orchestrator adds the reproduction data and two adversarial
+  implementations (drop-newest at cap-8 and cap-4096) that the planner did not test, which
+  confirm the four-clause conjunction is doing real work and that no single clause is redundant.
