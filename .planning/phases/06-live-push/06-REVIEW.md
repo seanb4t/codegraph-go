@@ -342,7 +342,7 @@ citations predate this phase and were not flagged).
 diff, no field-number changes). Then `livehandler.go` (1), `livepublish.go`
 (8), `status.ts` (3), and the four route/component files (`+layout.svelte`,
 `browse/+page.svelte` ×1, `graph/+page.svelte` ×4, `health/+page.svelte` ×1,
-`AnalysisPanel.svelte` ×1) — 20 occurrences total, replaced with
+`AnalysisPanel.svelte` ×1) — 23 occurrences total (corrected 2026-09-07 per `06-REVIEW-2.md` IN-2-01; the commit message’s "20" is immutable history and undercounted the actual diff by 3), replaced with
 descriptions of the invariant each comment was actually pointing at. **30
 occurrences remain** (down from 53), entirely in test files and the
 `.mjs` real-browser measurement harnesses — both explicitly deprioritized
