@@ -12,9 +12,12 @@ package uiserver
 
 import (
 	"context"
+	"errors"
 	"sync"
 
+	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/query"
+	"github.com/seanb4t/codegraph-go/internal/schema"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 )
 
@@ -71,10 +74,118 @@ type liveSignature struct {
 //
 // Returns the new signature (retained by the caller — changeDetector —
 // as the next call's prev, regardless of whether an event was produced),
-// the event when changed is true, and changed itself. This is a
-// placeholder — implemented in the GREEN commit of Task 1.
+// the event when changed is true, and changed itself.
+//
+// query.ErrNotInitialized and any other unclassified openEngine failure
+// are folded into the SAME "not initialized" branch, deliberately: the
+// publisher must never crash on a filesystem it cannot fully interpret
+// (D-01's "never crash" mandate), and GetStatus's own degradedStatus
+// (degrade.go) draws exactly the same "answer from filesystem facts once
+// open has already failed" line for classifyDegrade's degradeNone case —
+// there is no third answer to give here that GetStatus itself would give
+// either. graphstore.ErrStoreLocked is the sole exception, classified by
+// its exported sentinel via errors.Is (never message text, matching
+// classifyOpenError's own discipline) — a re-index in flight is exactly
+// when the store is locked, and escalating that into an event would
+// defeat the point of live push at the one moment it matters most.
 func computeChange(ctx context.Context, repoPath string, prev liveSignature, prevValid bool) (liveSignature, *uiv1.WatchGraphEvent, bool) {
-	return prev, nil, false
+	eng, closer, err := openEngine(repoPath)
+	if err != nil {
+		if errors.Is(err, graphstore.ErrStoreLocked) {
+			// T-06-12: soft outcome, never a crash, never a publish. The
+			// caller (changeDetector.check) treats changed=false as
+			// "leave my retained state exactly as it was" — returning
+			// prev/prevValid unchanged here is what "untouched" means.
+			return prev, nil, false
+		}
+
+		// query.ErrNotInitialized (no ancestor .codegraph/ found) or any
+		// other unclassified failure: mirror degradedStatus's filesystem
+		// read — query.ResolveCodegraphDir succeeds independently of
+		// whatever caused openEngine to fail, since it only os.Stats the
+		// .codegraph/ directory.
+		storeExists := false
+		if _, resolveErr := query.ResolveCodegraphDir(repoPath); resolveErr == nil {
+			storeExists = true
+		}
+		sig := liveSignature{openFailed: true, storeExists: storeExists}
+		if prevValid && sig == prev {
+			return prev, nil, false
+		}
+		return sig, &uiv1.WatchGraphEvent{
+			Initialized: false,
+			StoreExists: storeExists,
+		}, true
+	}
+	defer closer.Close()
+
+	// SRV-04/T-06-05: this defer is the ENTIRE store-handle lifetime for
+	// this check. Nothing below retains eng, the Reader, or the store
+	// past this function's return.
+
+	meta, metaErr := eng.IndexMeta()
+	if metaErr != nil {
+		// A read failure on an already-opened engine — never escalate;
+		// retry next wake with state untouched, same soft-outcome shape
+		// as the lock-held branch above.
+		return prev, nil, false
+	}
+
+	sig := liveSignature{hasMeta: meta != nil}
+	if meta != nil {
+		sig.lastSync = meta.GetLastSyncUnixMs()
+	}
+	if prevValid && sig == prev {
+		// D-01/T-06-40: the correctness filter. Pebble's own compaction,
+		// WAL rotation and MANIFEST churn produce wakes with nothing
+		// changed, and the expensive status derivation below NEVER runs
+		// for them.
+		return prev, nil, false
+	}
+
+	// Only reached when the signature actually changed (or this is the
+	// bootstrap check) — ORDER MATTERS: IndexMeta (a direct reader
+	// lookup) ran first and decided whether to proceed at all;
+	// engineStatus's filesystem-and-graph scans are strictly more
+	// expensive and run only now.
+	result, statusErr := engineStatus(eng, ctx)
+	if statusErr != nil {
+		return prev, nil, false
+	}
+
+	// Reuses the SAME inputs statusToProto (handlers.go) maps onto
+	// GetStatusResponse — result plus IndexMeta's commit SHA — so there
+	// is one mapping from engine state onto these field names, not two;
+	// the destination message type differs (WatchGraphEvent vs
+	// GetStatusResponse) but the source computation does not.
+	//
+	// IN-06: schema.IsCommitSHA is applied here too, exactly as
+	// GetStatus applies it — a commit SHA that leaves this server is
+	// well-formed at every exit, not only GetStatus's.
+	commitSHA, ok := schema.IndexedCommitSHA(meta)
+	if ok && !schema.IsCommitSHA(commitSHA) {
+		commitSHA = ""
+	}
+
+	// indexing_in_progress mirrors GetStatusResponse.indexing_in_progress
+	// for classifyStatus's benefit, but — per the plan's own documented
+	// limitation — this detector never observes an in-flight index: while
+	// a writer holds the store's exclusive lock, computeChange takes the
+	// ErrStoreLocked branch above and emits nothing; by the time the
+	// store opens again, indexing has already finished. So this field
+	// reads false in every live event this detector ever produces. It is
+	// carried anyway because the wire shape mirrors GetStatusResponse's
+	// field set exactly (D-07) and because Status's own IndexHealth
+	// state derivation is the one true source for it if that ever
+	// changes — nothing downstream may treat "false here" as "no index
+	// is running".
+	return sig, &uiv1.WatchGraphEvent{
+		Initialized:        result.Initialized,
+		Stale:              result.Stale,
+		StoreExists:        true,
+		IndexingInProgress: false,
+		CommitSha:          commitSHA,
+	}, true
 }
 
 // changeDetector wraps computeChange with its own retained state (the
@@ -104,8 +215,7 @@ func newChangeDetector(repoPath string) *changeDetector {
 
 // check runs one computeChange cycle against this detector's retained
 // state, updating that state and the generation counter only when
-// changed is true. Placeholder — implemented in the GREEN commit of
-// Task 1.
+// changed is true.
 func (d *changeDetector) check(ctx context.Context) (*uiv1.WatchGraphEvent, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
