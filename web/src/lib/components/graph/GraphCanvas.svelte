@@ -732,13 +732,25 @@
 
 	let container: HTMLDivElement | undefined = $state();
 	let renderer: ReturnType<typeof createFileGraphRenderer> | undefined;
-	// trackedInitialized guards the SECOND effect below from re-applying
-	// the elements the construction effect already handed to cytoscape at
-	// construction time — without this guard, the second effect's own
-	// first run (which happens in the same mount) would immediately
-	// replace the freshly-constructed instance's elements with the exact
-	// same array, running a redundant second layout on every mount.
-	let trackedInitialized = false;
+	// lastAppliedElements tracks the EXACT `elements` array reference the
+	// live cytoscape instance currently reflects — set at construction to
+	// whatever `elements` held then, and updated every time the SECOND
+	// effect below calls replace(). The second effect compares the
+	// CURRENT `elements` reference against this by identity, rather than
+	// a bare "have I run once yet" boolean: a boolean skip-first-run flag
+	// silently eats whichever `elements` change happens to be the FIRST
+	// one the second effect observes, WHETHER OR NOT it actually matches
+	// what construction used — a real hazard if this component's own
+	// construction effect ever runs more than once for a single logical
+	// mount (observed this task: a genuine remount can occur before the
+	// second effect gets its own first natural run, and a real
+	// user-driven expansion arriving in that window was silently
+	// swallowed by the old boolean guard, since it always treated its
+	// OWN first invocation as "matches construction" without checking).
+	// A reference comparison has no such blind spot: it only skips when
+	// the value TRULY is what's already applied.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let lastAppliedElements: any;
 
 	function publish(metrics: FileGraphMetrics) {
 		if (typeof window === 'undefined') return;
@@ -826,7 +838,7 @@
 			onMetrics: publish,
 			onGeometry: publishGeometry
 		});
-		trackedInitialized = false;
+		lastAppliedElements = initialElements;
 		renderer.start();
 
 		// Cytoscape does not observe arbitrary container resize, only the
@@ -849,25 +861,25 @@
 		};
 	});
 
-	// A SECOND effect tracks the element array and, when it changes AFTER
-	// construction, replaces the live instance's elements in one batch
-	// and re-runs the same layered layout — never reconstructing
-	// anything. Deliberately a separate effect from the construction one
-	// above so this is the ONLY reactive read of `elements` — the
-	// construction effect's read is untracked, so this effect firing can
-	// never trigger the construction effect to re-run.
+	// A SECOND effect tracks the element array and, when its REFERENCE
+	// differs from lastAppliedElements (the array construction actually
+	// handed to cytoscape, or whatever replace() last applied), replaces
+	// the live instance's elements in one batch and re-runs the same
+	// layered layout — never reconstructing anything. Deliberately a
+	// separate effect from the construction one above so this is the
+	// ONLY reactive read of `elements` — the construction effect's read
+	// is untracked, so this effect firing can never trigger the
+	// construction effect to re-run.
 	$effect(() => {
 		const current = elements;
-		if (!trackedInitialized) {
-			trackedInitialized = true;
-			return;
-		}
+		if (current === lastAppliedElements) return;
+		lastAppliedElements = current;
 		renderer?.replace(current);
 	});
 
 	// A THIRD effect tracks focusNodeIds and, on every change, asks the
 	// renderer to fit the viewport to exactly those ids. No
-	// trackedInitialized-style first-run guard is needed here (unlike the
+	// lastAppliedElements-style first-run guard is needed here (unlike the
 	// elements effect above): the first run's default is an empty array,
 	// and focus() itself no-ops on an empty list, so an unguarded first
 	// run is already inert. `renderer` is read as a plain closure
