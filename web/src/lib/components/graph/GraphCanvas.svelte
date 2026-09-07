@@ -771,6 +771,24 @@
 	// invocation for the SAME batch reference is a no-op.
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let lastAppliedLiveElements: any;
+	// lastAppliedAddedElements is the SAME discipline as lastAppliedElements
+	// and lastAppliedLiveElements above, applied to the FOURTH effect's
+	// `addedElements` prop (WR-03, 06-REVIEW.md). This effect has the exact
+	// same shape as the two above it — an $effect tracking an array-shaped
+	// $state prop — and both siblings were found, at guava scale, to fire
+	// TWICE for a single logical value change; a bare "batch is non-empty"
+	// check (this effect's prior guard) is not proof against a REPEATED
+	// invocation of the same batch, only against the unguarded FIRST run.
+	// A repeated add() call for the identical batch reference would either
+	// throw (cytoscape rejects a duplicate node id) or double-append to
+	// liveAddedElements, corrupting the symbol-survivor bookkeeping
+	// swapElements()/replace() depend on. Not proven to be hit for this
+	// specific prop (never guava-scale-tested — file-to-symbol expansion is
+	// outside this phase's own measurement scope), but the guard costs
+	// nothing on the already-exercised path and closes the same shape of
+	// hazard the other two effects were found to have.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let lastAppliedAddedElements: any;
 
 	function publish(metrics: FileGraphMetrics) {
 		if (typeof window === 'undefined') return;
@@ -914,12 +932,17 @@
 	// A FOURTH effect tracks addedElements and, on every NEW array
 	// reference, merges that batch into the live instance via add() above
 	// — the incremental counterpart to the second effect's full replace.
-	// Same no-guard-needed reasoning as the THIRD effect: the prop
-	// defaults to an empty array and add() itself no-ops on an empty
-	// batch, so an unguarded first run is already inert.
+	// Guarded by lastAppliedAddedElements (the SAME identity-comparison
+	// discipline as lastAppliedElements/lastAppliedLiveElements above), not
+	// a bare "batch is non-empty" check (WR-03, 06-REVIEW.md) — see
+	// lastAppliedAddedElements's own doc comment above for why a bare
+	// non-empty check guards only the first run, not a repeated invocation
+	// of the same batch.
 	$effect(() => {
 		const batch = addedElements ?? [];
 		if (batch.length === 0) return;
+		if (batch === lastAppliedAddedElements) return;
+		lastAppliedAddedElements = batch;
 		renderer?.add(batch);
 	});
 
