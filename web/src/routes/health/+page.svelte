@@ -37,6 +37,16 @@
 
 	let pageState: PageState = $state({ kind: 'loading' });
 
+	// CR-01 (06-REVIEW.md): the mount fetch below and issueLiveHealthFetch
+	// share ONE monotonic ordering token (mirroring AnalysisPanel.svelte's
+	// requestId discipline) so a stale response can never overwrite a newer
+	// one. Without this, a live-triggered refetch that resolves before a
+	// slower, still-in-flight mount fetch would be silently overwritten by
+	// the mount fetch's own now-stale response, with nothing left to
+	// re-trigger a correction — the same race class status.ts's own WR-08
+	// fix already closed once in this codebase.
+	let requestId = 0;
+
 	// This effect's synchronous body reads no reactive state — it fires
 	// exactly once, on mount, and never re-runs (mirroring AnalysisPanel.
 	// svelte's own untracked-read discipline for the same reason:
@@ -46,14 +56,15 @@
 	// at call time, which establishes no tracked dependency.
 	$effect(() => {
 		const controller = new AbortController();
+		const id = ++requestId;
 		uiClient
 			.getHealth({}, { signal: controller.signal })
 			.then((response) => {
-				if (controller.signal.aborted) return;
+				if (id !== requestId || controller.signal.aborted) return;
 				pageState = { kind: 'loaded', response };
 			})
 			.catch((err: unknown) => {
-				if (controller.signal.aborted) return;
+				if (id !== requestId || controller.signal.aborted) return;
 				pageState = { kind: 'failed', failure: describeWorkbenchFailure(err, indexStatus) };
 			});
 		return () => controller.abort();
@@ -76,14 +87,15 @@
 		liveIssuedGeneration = generation;
 		liveInFlight = true;
 		const controller = new AbortController();
+		const id = ++requestId;
 		uiClient
 			.getHealth({}, { signal: controller.signal })
 			.then((response) => {
-				if (controller.signal.aborted) return;
+				if (id !== requestId || controller.signal.aborted) return;
 				pageState = { kind: 'loaded', response };
 			})
 			.catch((err: unknown) => {
-				if (controller.signal.aborted) return;
+				if (id !== requestId || controller.signal.aborted) return;
 				pageState = { kind: 'failed', failure: describeWorkbenchFailure(err, indexStatus) };
 			})
 			.finally(() => {

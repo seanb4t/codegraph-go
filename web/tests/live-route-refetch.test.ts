@@ -244,6 +244,44 @@ describe('health/+page.svelte: live-triggered re-fetch (LIV-02)', () => {
 
 		resolveThird(healthResponse());
 	});
+
+	it('CR-01 regression: a live event arriving while the mount fetch is still unresolved must not let the stale mount response overwrite the newer live-triggered one', async () => {
+		let calls = 0;
+		let resolveMount!: (r: GetHealthResponse) => void;
+		let resolveLive!: (r: GetHealthResponse) => void;
+		currentGetHealthImpl = () => {
+			calls += 1;
+			if (calls === 1) return new Promise((resolve) => (resolveMount = resolve));
+			return new Promise((resolve) => (resolveLive = resolve));
+		};
+		const live = fakeLiveStore();
+		render(HealthPage, {
+			context: new Map<string, unknown>([
+				['statusGate', fakeStatusGate()],
+				['liveStore', live]
+			])
+		});
+		await waitFor(() => expect(calls).toBe(1)); // mount fetch issued, still unresolved
+
+		// A real re-index publishes a new generation BEFORE the mount fetch
+		// settles — the exact race window CR-01 describes.
+		live.deliver({ event: watchGraphEvent({ generation: 5n }), epoch: 1 });
+		await waitFor(() => expect(calls).toBe(2)); // live-triggered fetch issued while mount fetch still in flight
+
+		// The live-triggered fetch resolves FIRST (plausible: it started
+		// later against an already-unlocked store while the mount fetch may
+		// still be blocked behind a store lock retry).
+		resolveLive(healthResponse({ commitSha: 'b'.repeat(40) }));
+		await waitFor(() =>
+			expect(screen.getByTestId('health-commit-sha')).toHaveTextContent('b'.repeat(40))
+		);
+
+		// The stale mount fetch finally resolves — it must NOT overwrite the
+		// newer live-triggered response with its now-stale data.
+		resolveMount(healthResponse({ commitSha: 'a'.repeat(40) }));
+		await new Promise((r) => setTimeout(r, 0));
+		expect(screen.getByTestId('health-commit-sha')).toHaveTextContent('b'.repeat(40));
+	});
 });
 
 describe('workbench AnalysisPanel: live-triggered re-fetch (LIV-02)', () => {
