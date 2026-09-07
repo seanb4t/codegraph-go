@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"go.uber.org/goleak"
 
+	"github.com/seanb4t/codegraph-go/internal/schema"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 	"github.com/seanb4t/codegraph-go/internal/uiproto/uiv1/uiv1connect"
 )
@@ -522,4 +523,121 @@ func TestServerPublisherLifetimeStopIsIdempotent(t *testing.T) {
 		t.Fatalf("first Close: %v", err)
 	}
 	_ = srv.Close() // must not panic
+}
+
+// --- Task 3: the phase's tracer — end to end, real client, real store ---
+
+// TestWatchGraphStreamDeliversMessageByMessage is the phase's tracer
+// assertion for criterion 2: it wires a real index write on disk,
+// through the fsnotify watcher, the debouncer, the change detector, the
+// publisher's registry, the deadline-cleared middleware, real HTTP/1.1,
+// and into a real generated Connect client — with no stub anywhere on
+// the path.
+//
+// It asserts TIMING, not arrival. A test that merely counts N received
+// messages is vacuous here: silent buffering delivers all N at the very
+// end of the stream and would still pass an "it all arrived" check. This
+// test is structured so buffering FAILS instead: it blocks on RECEIVING
+// message k, over the real socket, before triggering the write for
+// message k+1. A handler that accumulates events and only flushes them
+// when the stream ends can never satisfy that blocking Receive before
+// the next trigger fires, so it times out — this ordering IS the
+// assertion, not a timestamp comparison performed after the fact, which
+// a buffered implementation could still satisfy by accident.
+//
+// RED was demonstrated this session: with the send loop temporarily
+// changed to accumulate every event and flush them all only when the
+// stream ends (the exact buffering failure this test exists to catch),
+// this test FAILED — it hung on Receive (blocked past the stream's own
+// 5-second deadline) discarding the seeded message, because a buffering
+// handler holds EVERY event, including the seed, until the stream ends.
+// See the SUMMARY for the captured failure output. Reverting the send
+// loop to send-as-you-go made it pass again.
+func TestWatchGraphStreamDeliversMessageByMessage(t *testing.T) {
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+
+	dir := copyGofixture(t)
+	indexGofixture(t, dir)
+
+	srv := startedServer(t, dir)
+	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
+
+	// A generous overall deadline bounds the whole stream: a correct,
+	// incremental implementation finishes in well under a second (three
+	// triggers, 150ms apart), while a buffering implementation blocks
+	// until this deadline and the test fails on it rather than hanging
+	// the suite indefinitely.
+	streamCtx, cancelStream := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelStream()
+
+	stream, err := client.WatchGraph(streamCtx, connect.NewRequest(&uiv1.WatchGraphRequest{}))
+	if err != nil {
+		t.Fatalf("WatchGraph: %v", err)
+	}
+	defer stream.Close()
+
+	// Step 0: receive and DISCARD the seeded first message. Every
+	// stream's first message is the publisher's current state (06-02's
+	// Subscribe contract), which arrives at connect time and is
+	// therefore not a triggered event — consuming it explicitly keeps
+	// the trigger accounting below exact rather than off by one.
+	if !stream.Receive() {
+		t.Fatalf("Receive (seeded message): %v", stream.Err())
+	}
+	t.Logf("discarded seeded message: generation=%d", stream.Msg().GetGeneration())
+
+	const triggerCount = 3
+	// triggerSpacing must clear the 20ms debounce window with generous
+	// margin so a slow CI machine's write+debounce+publish latency
+	// cannot itself produce a false inter-arrival-gap failure.
+	const triggerSpacing = 150 * time.Millisecond
+
+	baseMs := time.Now().UnixMilli()
+	receiptTimes := make([]time.Time, 0, triggerCount)
+	receivedGenerations := make([]int64, 0, triggerCount)
+
+	for i := 0; i < triggerCount; i++ {
+		if i > 0 {
+			time.Sleep(triggerSpacing)
+		}
+
+		// Step 1: trigger a REAL index metadata change — a real store
+		// write through graphstore, not a synthetic
+		// registry.Publish call. This is what forces the write to
+		// travel through fsnotify and the debouncer for real.
+		writeLiveMeta(t, dir, &schema.Meta{
+			SchemaVersion:  1,
+			LastSyncUnixMs: baseMs + int64(i+1)*1000,
+			Healthy:        true,
+		})
+
+		// Steps 2-3: BLOCK until the client has received this exact
+		// message before the loop proceeds to trigger the next one.
+		// This blocking-before-next-trigger structure is the timing
+		// assertion itself.
+		if !stream.Receive() {
+			t.Fatalf("Receive (trigger %d): %v", i, stream.Err())
+		}
+		receiptTimes = append(receiptTimes, time.Now())
+		receivedGenerations = append(receivedGenerations, stream.Msg().GetGeneration())
+	}
+
+	// Step 4 repeated triggerCount times above. Now verify the
+	// accounting: the triggered-receipt count must equal the trigger
+	// count (paired with the interval bound below — an inter-arrival
+	// minimum computed over a single receipt would be vacuous), and
+	// every consecutive gap between triggered receipts must be at least
+	// the deliberate trigger spacing.
+	if got := len(receivedGenerations); got != triggerCount {
+		t.Fatalf("received %d triggered messages, want exactly %d", got, triggerCount)
+	}
+
+	for i := 1; i < len(receiptTimes); i++ {
+		gap := receiptTimes[i].Sub(receiptTimes[i-1])
+		if gap < triggerSpacing {
+			t.Fatalf("inter-arrival gap[%d] = %v, want at least the trigger spacing %v — message %d arrived before message %d's trigger could plausibly have caused it", i, gap, triggerSpacing, i, i-1)
+		}
+	}
+
+	t.Logf("triggered receipts: generations=%v, inter-arrival gaps all >= trigger spacing %v", receivedGenerations, triggerSpacing)
 }
