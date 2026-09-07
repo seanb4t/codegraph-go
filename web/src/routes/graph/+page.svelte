@@ -9,7 +9,7 @@
 	// its symbols in place — the second, INCREMENTAL expansion path this
 	// route drives, layered on top of the directory rollup rather than
 	// recomputed by it.
-	import { onMount } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import { uiClient } from '$lib/client';
 	import { classifyRpcError, type RpcFailure } from '$lib/rpc-errors';
 	import {
@@ -25,6 +25,7 @@
 	import GraphCanvas from '$lib/components/graph/GraphCanvas.svelte';
 	import DataTable from '$lib/components/workbench/DataTable.svelte';
 	import { edgeKindColumns, edgeKindRowId, type EdgeKindRow } from '$lib/components/graph/edge-kind-columns';
+	import type { LiveStore } from '$lib/live/live-store';
 	import type { FileGraphResponse, FileSymbolsResponse } from '$lib/gen/ui_pb';
 	import type { FileGraphEdgeData } from '$lib/components/graph/file-graph-transform';
 
@@ -90,11 +91,30 @@
 	// state by the time a given file's request resolves.
 	let mounted = true;
 
-	let elements = $derived(
-		graphState.kind === 'loaded' ? rollupToElements(graphState.response, expandedDirs) : ([] as FileGraphElement[])
-	);
+	// elements is the array bound to GraphCanvas's full-replace `elements`
+	// prop, whose own effect calls replace() on every reference change
+	// (T-05-47) — deliberately NOT a $derived of graphState any more
+	// (06-05 Task 2). A live-triggered refresh below updates
+	// graphState.response (so a SUBSEQUENT user gesture reads fresh data)
+	// but feeds its own recomputed rollup through the SEPARATE
+	// liveElements state further down instead of through this one:
+	// reassigning this one from a live event would trigger GraphCanvas's
+	// plain replace() path, which carries NO position write-back —
+	// exactly the node movement LIV-04 exists to prevent. Recomputed
+	// EXPLICITLY, at exactly the two points a genuine user action changes
+	// what should be rendered: the initial fetch's own .then callback
+	// below, and toggleDirectory's two branches.
+	let elements = $state<FileGraphElement[]>([]);
 	let nodeCount = $derived(elements.filter((el) => !('source' in el.data)).length);
 	let edgeCount = $derived(elements.filter((el) => 'source' in el.data).length);
+
+	// liveElements is D-06/Task 1's live-update seam prop — a NEW array
+	// reference on every applied live refresh, entirely separate from
+	// `elements`/`addedElements`/`removedElementIds`: a live re-index
+	// event and a user gesture are different events and must not be
+	// merged into one code path (06-05-PLAN.md). See
+	// issueLiveGraphRefresh below.
+	let liveElements = $state<FileGraphElement[]>([]);
 
 	// cycleGroups regroups the CURRENT elements array (already respecting
 	// expandedDirs) by the typed numeric cycleId already on element data —
@@ -188,15 +208,17 @@
 		// not guess it and does not reach for a navigation timing API of
 		// its own. This is the start of the WIDE timeToInteractiveMs bar:
 		// rpc round trip, protobuf decode, and the wire-to-elements
-		// transform are all inside it. This is the ONLY FileGraph call
-		// this route ever issues — an expansion or a collapse never
-		// requests again, because the whole file graph already arrived
-		// here.
+		// transform are all inside it. This is the ONLY FileGraph call a
+		// user-driven expand or collapse ever triggers — the whole file
+		// graph already arrived here; a LIVE re-index event is the one
+		// other source of a fileGraph call this route ever issues, and it
+		// is routed entirely separately (see issueLiveGraphRefresh below).
 		const requestIssuedAt = performance.now();
 		uiClient
 			.fileGraph({ path: '' })
 			.then((response) => {
 				graphState = { kind: 'loaded', response, requestIssuedAt };
+				elements = rollupToElements(response, expandedDirs);
 			})
 			.catch((err: unknown) => {
 				graphState = { kind: 'failed', failure: classifyRpcError(err) };
@@ -205,6 +227,100 @@
 		return () => {
 			mounted = false;
 		};
+	});
+
+	// --- 06-05 Task 2 (LIV-02/LIV-04): the live re-index subscription ---
+	//
+	// Per D-05, the event carries NO graph payload — only "the index
+	// moved" plus a monotonic generation — so this route re-fetches
+	// through the SAME rpcs it already owns rather than any rpc's wire
+	// shape being duplicated into the event. The coalescer below mirrors
+	// health/+page.svelte's and browse/+page.svelte's own pending-
+	// generation pattern (06-03) exactly: an event arriving while a
+	// live-triggered refresh is already in flight is recorded (the
+	// newest generation wins) and issues exactly ONE follow-up once that
+	// refresh settles, rather than stacking a second concurrent call.
+	const liveStore = getContext<LiveStore | undefined>('liveStore');
+	let liveIssuedGeneration: bigint | null = null;
+	let livePendingGeneration: bigint | null = null;
+	let liveInFlight = false;
+
+	// issueLiveGraphRefresh re-issues the fileGraph call, PLUS a
+	// fileSymbols call for every file CURRENTLY showing its symbols
+	// (through the same rpc that path already uses — never a new async
+	// surface), and feeds the combined rollup through liveElements
+	// (Task 1's seam) rather than through `elements` — see `elements`'s
+	// own declaration comment above for why. graphState.response and
+	// fileSymbolsCache ARE updated here, so the next user gesture reads
+	// fresh data instead of reverting this refresh on its next toggle.
+	function issueLiveGraphRefresh(generation: bigint): void {
+		liveIssuedGeneration = generation;
+		liveInFlight = true;
+		const expandedFileIds = [...expandedFiles];
+		Promise.all([
+			uiClient.fileGraph({ path: '' }),
+			...expandedFileIds.map((id) => uiClient.fileSymbols({ path: id }))
+		])
+			.then((results) => {
+				if (!mounted) return;
+				const response = results[0] as FileGraphResponse;
+				const symbolResponses = results.slice(1) as FileSymbolsResponse[];
+				const requestIssuedAt =
+					graphState.kind === 'loaded' ? graphState.requestIssuedAt : performance.now();
+				graphState = { kind: 'loaded', response, requestIssuedAt };
+				if (expandedFileIds.length > 0) {
+					const cache = new Map(fileSymbolsCache);
+					expandedFileIds.forEach((id, i) => cache.set(id, symbolResponses[i]));
+					fileSymbolsCache = cache;
+				}
+				const rollup = rollupToElements(response, expandedDirs);
+				const symbolEls = expandedFileIds.flatMap((id, i) =>
+					symbolElementsForFile(id, symbolResponses[i])
+				);
+				liveElements = [...rollup, ...symbolEls];
+			})
+			.catch(() => {
+				// A live refresh failure is non-fatal — the view keeps
+				// showing its last-known-good state, and the NEXT live
+				// event gets another chance. Never surfaced as a blocking
+				// page-level failure (the whole-graph load failure state
+				// above is reserved for the initial mount fetch).
+			})
+			.finally(() => {
+				liveInFlight = false;
+				if (livePendingGeneration !== null) {
+					const next = livePendingGeneration;
+					livePendingGeneration = null;
+					issueLiveGraphRefresh(next);
+				}
+			});
+	}
+
+	$effect(() => {
+		if (!liveStore) return;
+		let first = true;
+		return liveStore.subscribe((live) => {
+			if (first) {
+				// The store's synchronous initial delivery is a BASELINE,
+				// not a trigger — mounting this view while a live event is
+				// already current must not issue an extra, redundant
+				// refresh.
+				first = false;
+				if (live) liveIssuedGeneration = live.event.generation;
+				return;
+			}
+			if (!live) return;
+			if (graphState.kind !== 'loaded') return; // nothing to refresh yet
+			const generation = live.event.generation;
+			if (liveIssuedGeneration !== null && generation <= liveIssuedGeneration) return;
+			if (liveInFlight) {
+				if (livePendingGeneration === null || generation > livePendingGeneration) {
+					livePendingGeneration = generation;
+				}
+				return;
+			}
+			issueLiveGraphRefresh(generation);
+		});
 	});
 
 	// handleNodeSelected is GraphCanvas's onNodeSelected callback,
@@ -232,6 +348,7 @@
 			const next = new Set(expandedDirs);
 			next.delete(id);
 			expandedDirs = next;
+			elements = rollupToElements(graphState.response, next);
 			refusalMessage = undefined;
 
 			// Collapsing a directory removes every file node directly
@@ -276,6 +393,7 @@
 		}
 		refusalMessage = undefined;
 		expandedDirs = next;
+		elements = rollupToElements(graphState.response, next);
 	}
 
 	// toggleFile is the file-to-symbol expand/collapse/re-expand-from-
@@ -477,6 +595,7 @@
 			focusNodeIds={cycleFocusIds}
 			{addedElements}
 			{removedElementIds}
+			{liveElements}
 			onNodeSelected={handleNodeSelected}
 			onEdgeSelected={handleEdgeSelected}
 			onBackgroundTapped={handleBackgroundTapped}

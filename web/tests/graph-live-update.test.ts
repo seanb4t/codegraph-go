@@ -28,7 +28,17 @@
 //      ...)` registered by an OLDER call can genuinely be invoked by a
 //      NEWER layout's completion event; this fake reproduces that
 //      multiple-pending-listener shape directly rather than assuming it.
-import { describe, expect, it, vi } from 'vitest';
+//
+//   3. 06-05 Task 2: a THIRD strategy for the graph ROUTE's own live
+//      subscription — mocked cytoscape/cytoscape-elk (a fuller fake core
+//      than Part 2's, this time implementing getElementById so
+//      liveUpdate()'s real fast-path/structural-path logic actually
+//      exercises against it) plus a mocked $lib/client and a fake
+//      liveStore delivered via Svelte context, mirroring
+//      live-route-refetch.test.ts's own fakeLiveStore() convention.
+import { render, screen, waitFor } from '@testing-library/svelte';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import type { FileGraphNode, FileGraphResponse, FileSymbolsResponse } from '$lib/gen/ui_pb';
 
 async function realRendererModule() {
 	const { default: realCytoscape } = await vi.importActual<{
@@ -625,5 +635,287 @@ describe('graph live update: layout generation guard (serialization)', () => {
 		staleHandler();
 		expect(geometryCalls).toBe(1); // unchanged — no publish
 		expect(cy.getElementById('n1').position()).toEqual({ x: 50, y: 50 }); // unchanged — nothing restored
+	});
+});
+
+// --- 06-05 Task 2: the graph ROUTE's own live subscription ---
+//
+// A fuller fake cytoscape core than Part 2's guard fake above — this one
+// implements getElementById so liveUpdate()'s REAL fast-path/structural-
+// path logic actually runs against it (Part 2's fake didn't need this;
+// it exercised liveUpdate() directly, never through the route's own
+// getElementById-gated entry check). Mirrors graph-expansion.test.ts's
+// own FakeCore shape, extended with getElementById/removeCallCount/
+// dataMergeCallCount so a test can distinguish "the new seam updated
+// data in place" from "the plain replace() path tore down and rebuilt
+// every element" — the two paths this task's own behavior requires stay
+// genuinely distinct, not merged into one.
+
+type RouteFakeElement = { data: Record<string, unknown>; classes?: string };
+
+class RouteFakeCore {
+	private listeners = new Map<string, Array<(evt?: unknown) => void>>();
+	private els: RouteFakeElement[];
+	removeCallCount = 0;
+	dataMergeCallCount = 0;
+
+	// Elements are CLONED at construction and on add() — real cytoscape
+	// snapshots element structure into its own internal model at add
+	// time, never retaining a live reference into the caller's original
+	// object. Without this, a route under test whose `elements`/
+	// `liveElements` props are Svelte $state proxies would have this
+	// fake mutate THOSE reactive objects directly (via getElementById's
+	// data-merge setter below) — creating a genuine read-write cycle on
+	// the same reactive graph the SIXTH effect (liveElements) reads,
+	// which Svelte's own scheduler detects as an infinite update loop
+	// (`effect_update_depth_exceeded`). Observed and fixed this session.
+	constructor(opts: { elements?: RouteFakeElement[] }) {
+		this.els = RouteFakeCore.cloneElements(opts.elements ?? []);
+	}
+	private static cloneElements(elements: RouteFakeElement[]): RouteFakeElement[] {
+		return elements.map((el) => ({ data: { ...el.data }, classes: el.classes }));
+	}
+	on(event: string, ...args: unknown[]) {
+		const handler = args[args.length - 1] as (evt?: unknown) => void;
+		const list = this.listeners.get(event) ?? [];
+		list.push(handler);
+		this.listeners.set(event, list);
+		return this;
+	}
+	one(event: string, handler: (evt?: unknown) => void) {
+		return this.on(event, handler);
+	}
+	startBatch() {}
+	endBatch() {}
+	elements() {
+		return {
+			remove: () => {
+				this.removeCallCount++;
+				this.els = [];
+			},
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			forEach: (fn: (e: any) => void) => this.els.forEach((e) => fn(this.wrap(e)))
+		};
+	}
+	add(newElements: RouteFakeElement[]) {
+		this.els = [...this.els, ...RouteFakeCore.cloneElements(newElements)];
+	}
+	getElementById(id: string) {
+		const el = this.els.find((e) => e.data.id === id);
+		if (!el) return { length: 0 };
+		return {
+			length: 1,
+			id: () => el.data.id as string,
+			data: (arg?: string | Record<string, unknown>) => {
+				if (arg === undefined) return el.data;
+				if (typeof arg === 'string') return el.data[arg];
+				this.dataMergeCallCount++;
+				el.data = { ...el.data, ...arg };
+				return undefined;
+			},
+			position: () => ({ x: 0, y: 0 }),
+			isParent: () => false,
+			classes: (val?: string) => {
+				if (val === undefined) return (el.classes ?? '').split(' ').filter(Boolean);
+				el.classes = val;
+				return undefined;
+			},
+			remove: () => {
+				this.els = this.els.filter((e) => e !== el);
+			}
+		};
+	}
+	layout(_opts: unknown) {
+		return {
+			run: () => {
+				queueMicrotask(() => {
+					for (const h of this.listeners.get('layoutstop') ?? []) h();
+				});
+			},
+			stop: () => {}
+		};
+	}
+	nodes() {
+		const nodeEls = this.els.filter((e) => !('source' in e.data));
+		return {
+			length: nodeEls.length,
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			map: <T,>(fn: (n: any) => T) => nodeEls.map((el) => fn(this.wrap(el))),
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			forEach: (fn: (n: any) => void) => nodeEls.forEach((el) => fn(this.wrap(el)))
+		};
+	}
+	edges() {
+		return { length: this.els.filter((e) => 'source' in e.data).length };
+	}
+	resize() {}
+	destroy() {}
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	private wrap(el: RouteFakeElement): any {
+		return {
+			id: () => el.data.id as string,
+			data: (key: string) => el.data[key],
+			position: () => ({ x: 0, y: 0 }),
+			isParent: () => false,
+			renderedBoundingBox: () => ({ x1: 0, y1: 0, w: 10, h: 10 }),
+			children: () => ({ length: 0 })
+		};
+	}
+	simulateTap(nodeId: string) {
+		const el = this.els.find((e) => e.data.id === nodeId);
+		if (!el) throw new Error(`simulateTap: no element with id "${nodeId}" in the currently applied set`);
+		const handlers = this.listeners.get('tap') ?? [];
+		const evt = { target: this.wrap(el) };
+		for (const h of handlers) h(evt);
+	}
+	currentElementIds(): string[] {
+		return this.els.map((e) => e.data.id as string).sort();
+	}
+}
+
+let currentRouteInstance: RouteFakeCore | undefined;
+
+function routeFakeCytoscapeFactory(opts: { elements?: RouteFakeElement[] }) {
+	const instance = new RouteFakeCore(opts);
+	currentRouteInstance = instance;
+	return instance;
+}
+routeFakeCytoscapeFactory.use = () => {};
+
+vi.mock('cytoscape', () => ({ default: routeFakeCytoscapeFactory }));
+vi.mock('cytoscape-elk', () => ({ default: () => {} }));
+
+let currentFileGraphImpl: () => Promise<FileGraphResponse> = () =>
+	Promise.reject(new Error('graph-live-update.test.ts: no fileGraph stub configured'));
+let currentFileSymbolsImpl: (path: string) => Promise<FileSymbolsResponse> = () =>
+	Promise.reject(new Error('graph-live-update.test.ts: no fileSymbols stub configured'));
+let fileGraphCallCount = 0;
+
+vi.doMock('$lib/client', () => ({
+	uiClient: {
+		fileGraph: () => {
+			fileGraphCallCount++;
+			return currentFileGraphImpl();
+		},
+		fileSymbols: (req: { path: string }) => currentFileSymbolsImpl(req.path)
+	}
+}));
+
+const { default: GraphPage } = await import('../src/routes/graph/+page.svelte');
+
+function routeNode(path: string): FileGraphNode {
+	return { path, language: 'go', symbolCount: 1n, cycleId: 0 } as unknown as FileGraphNode;
+}
+
+function routeResponse(nodes: FileGraphNode[]): FileGraphResponse {
+	return {
+		nodes,
+		edges: [],
+		excludedPackageNodeCount: 0n,
+		excludedSelfEdgeCount: 0n,
+		excludedContainsEdgeCount: 0n,
+		cycleCount: 0
+	} as unknown as FileGraphResponse;
+}
+
+type FakeLiveEvent = { event: { generation: bigint }; epoch: number };
+
+function fakeLiveStore() {
+	const listeners = new Set<(live: FakeLiveEvent | null) => void>();
+	let current: FakeLiveEvent | null = null;
+	return {
+		subscribe(run: (live: FakeLiveEvent | null) => void) {
+			listeners.add(run);
+			run(current);
+			return () => {
+				listeners.delete(run);
+			};
+		},
+		deliver(live: FakeLiveEvent) {
+			current = live;
+			for (const listener of listeners) listener(current);
+		}
+	};
+}
+
+function watchGraphEventLike(generation: bigint): FakeLiveEvent {
+	return { event: { generation }, epoch: 1 };
+}
+
+beforeEach(() => {
+	fileGraphCallCount = 0;
+	currentRouteInstance = undefined;
+});
+
+describe('graph live update: the route subscription (LIV-02)', () => {
+	it('a live event issues exactly ONE additional file-graph call; a replayed lower generation issues none', async () => {
+		currentFileGraphImpl = () => Promise.resolve(routeResponse([routeNode('x/a.go'), routeNode('y/b.go')]));
+		const live = fakeLiveStore();
+		render(GraphPage, { context: new Map<string, unknown>([['liveStore', live]]) });
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+		expect(fileGraphCallCount).toBe(1); // the mount-time fetch only
+
+		live.deliver(watchGraphEventLike(5n));
+		await waitFor(() => expect(fileGraphCallCount).toBe(2));
+
+		live.deliver(watchGraphEventLike(3n)); // replayed lower generation
+		await new Promise((r) => setTimeout(r, 20));
+		expect(fileGraphCallCount).toBe(2); // unchanged
+	});
+
+	it('the live path applies via the NEW seam (no full remove+add), paired with a user-driven expansion still using the plain replace path', async () => {
+		currentFileGraphImpl = () =>
+			Promise.resolve(routeResponse([routeNode('x/a.go'), routeNode('x/b.go'), routeNode('y/c.go')]));
+		const live = fakeLiveStore();
+		render(GraphPage, { context: new Map<string, unknown>([['liveStore', live]]) });
+		await waitFor(() => expect(screen.getByTestId('file-graph-canvas')).toBeInTheDocument());
+		const removeCallsAfterMount = currentRouteInstance!.removeCallCount;
+
+		// The fresh live response has the IDENTICAL collapsed node id set
+		// (x, y) — only data differs — so this takes the FAST PATH: no
+		// elements().remove() call, but a data merge DID happen.
+		currentFileGraphImpl = () =>
+			Promise.resolve(routeResponse([routeNode('x/a.go'), routeNode('x/b.go'), routeNode('y/c.go')]));
+		live.deliver(watchGraphEventLike(5n));
+		await new Promise((r) => setTimeout(r, 20));
+		expect(currentRouteInstance!.removeCallCount).toBe(removeCallsAfterMount); // NOT replace()
+		expect(currentRouteInstance!.dataMergeCallCount).toBeGreaterThan(0); // the new seam DID run
+
+		// Positive control: a user-driven expansion still goes through
+		// replace(), which DOES call elements().remove().
+		currentRouteInstance!.simulateTap('x');
+		await waitFor(() => expect(currentRouteInstance!.removeCallCount).toBeGreaterThan(removeCallsAfterMount));
+	});
+
+	it('an event arriving during an in-flight re-fetch produces no second concurrent call; the newest generation is applied once it settles', async () => {
+		let resolveSecond!: (r: FileGraphResponse) => void;
+		let resolveThird!: (r: FileGraphResponse) => void;
+		let calls = 0;
+		currentFileGraphImpl = () => {
+			calls++;
+			if (calls === 1) return Promise.resolve(routeResponse([routeNode('x/a.go')]));
+			if (calls === 2)
+				return new Promise((resolve) => {
+					resolveSecond = resolve;
+				});
+			return new Promise((resolve) => {
+				resolveThird = resolve;
+			});
+		};
+		const live = fakeLiveStore();
+		render(GraphPage, { context: new Map<string, unknown>([['liveStore', live]]) });
+		await waitFor(() => expect(calls).toBe(1));
+
+		live.deliver(watchGraphEventLike(5n));
+		await waitFor(() => expect(calls).toBe(2)); // the live-triggered fetch is now in flight
+
+		live.deliver(watchGraphEventLike(6n)); // arrives DURING the in-flight fetch
+		await new Promise((r) => setTimeout(r, 20));
+		expect(calls).toBe(2); // no second concurrent call
+
+		resolveSecond(routeResponse([routeNode('x/a.go'), routeNode('x/b.go')]));
+		await waitFor(() => expect(calls).toBe(3)); // exactly one follow-up, for generation 6
+
+		resolveThird(routeResponse([routeNode('x/a.go'), routeNode('x/b.go'), routeNode('z/c.go')]));
 	});
 });
