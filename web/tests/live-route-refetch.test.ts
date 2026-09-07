@@ -17,6 +17,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type {
 	GetHealthResponse,
 	GetNodeDetailResponse,
+	GetStatusResponse,
 	ImpactResponse,
 	CallersResponse,
 	WatchGraphEvent
@@ -57,10 +58,13 @@ let currentImpactImpl: () => Promise<ImpactResponse> = () =>
 	Promise.resolve({ depth: 0, nodeCount: 0, edgeCount: 0, affected: [] } as unknown as ImpactResponse);
 let currentCallersImpl: (req: { symbol: string; limit: number }) => Promise<CallersResponse> = () =>
 	Promise.reject(new Error('no callers stub configured'));
+let currentGetStatusImpl: () => Promise<GetStatusResponse> = () =>
+	Promise.reject(new Error('no getStatus stub configured'));
 
 vi.doMock('$lib/client', () => ({
 	uiClient: {
 		getHealth: (req: unknown, opts?: { signal?: AbortSignal }) => currentGetHealthImpl(),
+		getStatus: (req: unknown, opts?: { signal?: AbortSignal }) => currentGetStatusImpl(),
 		getNodeDetail: (req: { symbol?: string; file?: string }) => currentGetNodeDetailImpl(req),
 		impact: () => currentImpactImpl(),
 		callers: (req: { symbol: string; limit: number }) => currentCallersImpl(req),
@@ -84,6 +88,22 @@ vi.doMock('$lib/client', () => ({
 const { default: HealthPage } = await import('../src/routes/health/+page.svelte');
 const { default: BrowsePage } = await import('../src/routes/browse/+page.svelte');
 const { default: WorkbenchPage } = await import('../src/routes/workbench/+page.svelte');
+const { default: StatusPage } = await import('../src/routes/+page.svelte');
+
+function statusResponse(overrides: Partial<GetStatusResponse> = {}): GetStatusResponse {
+	return {
+		initialized: true,
+		version: '1',
+		nodeCount: 100n,
+		edgeCount: 50n,
+		fileCount: 10n,
+		stale: false,
+		commitSha: 'a'.repeat(40),
+		storeExists: true,
+		indexingInProgress: false,
+		...overrides
+	} as GetStatusResponse;
+}
 
 function healthResponse(overrides: Partial<GetHealthResponse> = {}): GetHealthResponse {
 	return {
@@ -182,6 +202,92 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
+});
+
+// 06-08: the root Status route was the ONLY index-data view this file did
+// not cover, and it was the only one that did not subscribe. That symmetry
+// is not a coincidence — the omission in the suite is why 464 green tests
+// let a landing page render `Stale: no` over a generation-old count.
+describe('+page.svelte (root Status route): live-triggered re-fetch (LIV-02)', () => {
+	it('delivering one live event issues exactly ONE additional status call; a replayed lower generation issues none', async () => {
+		let calls = 0;
+		currentGetStatusImpl = () => {
+			calls += 1;
+			return Promise.resolve(statusResponse());
+		};
+		const live = fakeLiveStore();
+		render(StatusPage, {
+			context: new Map<string, unknown>([['liveStore', live]])
+		});
+
+		await waitFor(() => expect(screen.getByText('Index is healthy.')).toBeInTheDocument());
+		expect(calls).toBe(1); // the mount-time fetch only
+
+		live.deliver({ event: watchGraphEvent({ generation: 5n }), epoch: 1 });
+		await waitFor(() => expect(calls).toBe(2));
+
+		live.deliver({ event: watchGraphEvent({ generation: 3n }), epoch: 1 }); // replayed lower
+		await new Promise((r) => setTimeout(r, 0));
+		expect(calls).toBe(2); // unchanged
+	});
+
+	it('the pending-generation coalescer: an event during an in-flight re-fetch issues no second concurrent call, and exactly one follow-up carries the newer generation once it settles', async () => {
+		let calls = 0;
+		let resolveSecond!: (r: GetStatusResponse) => void;
+		let resolveThird!: (r: GetStatusResponse) => void;
+		currentGetStatusImpl = () => {
+			calls += 1;
+			if (calls === 1) return Promise.resolve(statusResponse());
+			if (calls === 2) return new Promise((resolve) => (resolveSecond = resolve));
+			return new Promise((resolve) => (resolveThird = resolve));
+		};
+		const live = fakeLiveStore();
+		render(StatusPage, {
+			context: new Map<string, unknown>([['liveStore', live]])
+		});
+		await waitFor(() => expect(calls).toBe(1));
+
+		live.deliver({ event: watchGraphEvent({ generation: 5n }), epoch: 1 });
+		await waitFor(() => expect(calls).toBe(2)); // the live-triggered fetch is now in flight
+
+		live.deliver({ event: watchGraphEvent({ generation: 6n }), epoch: 1 }); // arrives DURING it
+		await new Promise((r) => setTimeout(r, 0));
+		expect(calls).toBe(2); // no second concurrent call
+
+		resolveSecond(statusResponse());
+		await waitFor(() => expect(calls).toBe(3)); // exactly one follow-up, for generation 6
+
+		resolveThird(statusResponse());
+	});
+
+	it('CR-01 regression: a live event arriving while the mount fetch is still unresolved must not let the stale mount response overwrite the newer live-triggered one', async () => {
+		let calls = 0;
+		let resolveMount!: (r: GetStatusResponse) => void;
+		let resolveLive!: (r: GetStatusResponse) => void;
+		currentGetStatusImpl = () => {
+			calls += 1;
+			if (calls === 1) return new Promise((resolve) => (resolveMount = resolve));
+			return new Promise((resolve) => (resolveLive = resolve));
+		};
+		const live = fakeLiveStore();
+		render(StatusPage, {
+			context: new Map<string, unknown>([['liveStore', live]])
+		});
+		await waitFor(() => expect(calls).toBe(1)); // mount fetch issued, still unresolved
+
+		live.deliver({ event: watchGraphEvent({ generation: 5n }), epoch: 1 });
+		await waitFor(() => expect(calls).toBe(2)); // live fetch issued while mount fetch in flight
+
+		resolveLive(statusResponse({ commitSha: 'b'.repeat(40) }));
+		await waitFor(() => expect(screen.getByText('b'.repeat(40))).toBeInTheDocument());
+
+		// The stale mount fetch finally resolves — it must NOT overwrite the
+		// newer live-triggered response with its now-stale data.
+		resolveMount(statusResponse({ commitSha: 'a'.repeat(40) }));
+		await new Promise((r) => setTimeout(r, 0));
+		expect(screen.getByText('b'.repeat(40))).toBeInTheDocument();
+		expect(screen.queryByText('a'.repeat(40))).toBeNull();
+	});
 });
 
 describe('health/+page.svelte: live-triggered re-fetch (LIV-02)', () => {

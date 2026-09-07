@@ -3,8 +3,15 @@
 	// browser (embedded asset -> generated TS client -> Connect JSON ->
 	// Phase 1's handler -> real index data). uiClient is 02-03's single
 	// transport site; this page never constructs its own transport.
-	import { onMount } from 'svelte';
+	//
+	// 06-08/LIV-02: this route also APPLIES live events. "Live" in the
+	// paragraph above is Phase 2's sense — real data rather than a
+	// placeholder — and did NOT mean live-updating. Until 06-08 this, the
+	// default landing view, was the one index-data surface that never
+	// re-fetched: it rendered `Stale: no` over counts a generation old.
+	import { onMount, getContext } from 'svelte';
 	import { uiClient } from '$lib/client';
+	import type { LiveStore } from '$lib/live/live-store';
 	import type { GetStatusResponse } from '$lib/gen/ui_pb';
 
 	type LoadState =
@@ -14,10 +21,31 @@
 
 	let state = $state<LoadState>({ kind: 'loading' });
 
-	onMount(() => {
+	const liveStore = getContext<LiveStore | undefined>('liveStore');
+
+	// CR-01 (06-REVIEW.md), applied at this site: the mount fetch and every
+	// live-triggered fetch share ONE monotonic ordering token, so a slower
+	// mount response can never overwrite a newer live-triggered one. Without
+	// it, a live refetch that resolves first is silently reverted by the
+	// mount fetch's now-stale response, with nothing left to correct it.
+	let requestId = 0;
+	let liveIssuedGeneration: bigint | null = null;
+	let livePendingGeneration: bigint | null = null;
+	let liveInFlight = false;
+
+	// One fetch path for both triggers. `generation` is null for the mount
+	// fetch and the event's generation for a live-triggered one; only the
+	// latter participates in the pending-generation coalescer.
+	function issueStatusFetch(generation: bigint | null): void {
+		if (generation !== null) {
+			liveIssuedGeneration = generation;
+			liveInFlight = true;
+		}
+		const id = ++requestId;
 		uiClient
 			.getStatus({})
 			.then((status) => {
+				if (id !== requestId) return;
 				state = { kind: 'loaded', status };
 			})
 			.catch((err: unknown) => {
@@ -25,8 +53,54 @@
 				// error state rather than an indefinite loading spinner.
 				// One catch, one error view — this is a shell, not an
 				// error-handling framework.
+				if (id !== requestId) return;
 				state = { kind: 'error', message: err instanceof Error ? err.message : String(err) };
+			})
+			.finally(() => {
+				if (generation === null) return;
+				liveInFlight = false;
+				if (livePendingGeneration !== null) {
+					const next = livePendingGeneration;
+					livePendingGeneration = null;
+					issueStatusFetch(next);
+				}
 			});
+	}
+
+	onMount(() => {
+		issueStatusFetch(null);
+	});
+
+	// LIV-02: a new generation re-issues this SAME GetStatus call — no rpc's
+	// wire shape is duplicated into the live event (D-05). The event is a
+	// TRIGGER; GetStatus stays the only source of every number rendered
+	// below. Coalesced with a pending-generation flag rather than
+	// suppression: an event arriving while a fetch is in flight is recorded
+	// (newest generation wins) and issues exactly one follow-up once that
+	// fetch settles — suppression alone would permanently lose it.
+	$effect(() => {
+		if (!liveStore) return;
+		let first = true;
+		return liveStore.subscribe((live) => {
+			if (first) {
+				// The store's synchronous initial delivery is a BASELINE, not
+				// a trigger — otherwise mounting this view while a live event
+				// is already current would issue an extra, redundant fetch.
+				first = false;
+				if (live) liveIssuedGeneration = live.event.generation;
+				return;
+			}
+			if (!live) return;
+			const generation = live.event.generation;
+			if (liveIssuedGeneration !== null && generation <= liveIssuedGeneration) return;
+			if (liveInFlight) {
+				if (livePendingGeneration === null || generation > livePendingGeneration) {
+					livePendingGeneration = generation;
+				}
+				return;
+			}
+			issueStatusFetch(generation);
+		});
 	});
 
 	// D-19/T-02-05-07: the re-index-in-progress state is selected
