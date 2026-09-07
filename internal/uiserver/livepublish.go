@@ -230,3 +230,77 @@ func (d *changeDetector) check(ctx context.Context) (*uiv1.WatchGraphEvent, bool
 	ev.Generation = d.gen
 	return ev, true
 }
+
+// liveRegistry is the bounded, coalescing fan-out registry (D-04): every
+// subscriber holds its own capacity-1 channel, guarded under registry's
+// own mu, and a full buffer is drained-then-replaced rather than
+// blocking the publisher or dropping the newest event. No message-queue
+// dependency — a handful of browser tabs does not justify one, and the
+// coalescing semantics are custom regardless of library choice (see
+// 06-PATTERNS.md's own "No Analog Found" entry for this type: nothing in
+// this codebase holds a live multi-subscriber channel map today).
+//
+// sendCount and the subscriber map are STRUCTURALLY separate storage
+// (T-06-10): this repository has already shipped one bug (internal/mcp's
+// pendingWriter, server.go:466) where server-initiated writes corrupted
+// a counter meaning client-initiated pending state. The streaming rpc
+// has the identical shape — server-initiated event sends alongside
+// client-initiated subscriber lifecycle — so Publish never touches subs'
+// length and Subscribe/unsubscribe never touch sendCount. A full read of
+// every non-test file in this package (at the time this file was
+// written) found no pre-existing counter of that kind to inherit; that
+// verdict and its evidence are recorded in 06-06-SUMMARY.md per
+// 06-CONTEXT.md's "Criterion 3's recorded verdict" requirement.
+type liveRegistry struct {
+	mu      sync.Mutex
+	subs    map[uint64]chan *uiv1.WatchGraphEvent
+	nextID  uint64
+	current *uiv1.WatchGraphEvent
+
+	sendCount int64 // placeholder — implemented in the GREEN commit of Task 2
+
+	done     chan struct{}
+	stopOnce sync.Once
+}
+
+// newLiveRegistry returns an empty, unstarted registry. Placeholder —
+// implemented in the GREEN commit of Task 2.
+func newLiveRegistry() *liveRegistry {
+	return &liveRegistry{}
+}
+
+// Subscribe registers a new subscriber and returns a receive-only
+// channel plus an unsubscribe func. Placeholder — implemented in the
+// GREEN commit of Task 2.
+func (r *liveRegistry) Subscribe(ctx context.Context) (<-chan *uiv1.WatchGraphEvent, func()) {
+	return nil, func() {}
+}
+
+// Publish fans ev out to every current subscriber. Placeholder —
+// implemented in the GREEN commit of Task 2.
+func (r *liveRegistry) Publish(ev *uiv1.WatchGraphEvent) {
+}
+
+// Stop closes every subscriber channel and releases the registry.
+// Placeholder — implemented in the GREEN commit of Task 2.
+func (r *liveRegistry) Stop() {
+}
+
+// SendCount reports the number of server-initiated event sends.
+// Placeholder — implemented in the GREEN commit of Task 2.
+func (r *liveRegistry) SendCount() int64 {
+	return 0
+}
+
+// SubscriberCount reports the number of currently-registered
+// subscribers. Placeholder — implemented in the GREEN commit of Task 2.
+func (r *liveRegistry) SubscriberCount() int {
+	return 0
+}
+
+// Current returns the registry's last-known event, or nil before the
+// first Publish. Placeholder — implemented in the GREEN commit of
+// Task 2.
+func (r *liveRegistry) Current() *uiv1.WatchGraphEvent {
+	return nil
+}

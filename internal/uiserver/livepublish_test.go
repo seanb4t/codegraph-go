@@ -6,12 +6,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"go.uber.org/goleak"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
+	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
 )
 
 // --- Task 1 fixtures ---------------------------------------------------
@@ -336,5 +342,333 @@ func TestLiveChangeUnclassifiedOpenErrorNeverPublishesForever(t *testing.T) {
 
 	if _, changed := d.check(context.Background()); !changed {
 		t.Fatal("check after the simulated failure cleared: changed = false, want true (detector went permanently silent)")
+	}
+}
+
+// --- Task 2: the fan-out registry ---------------------------------------
+
+// recvWithTimeout receives one value from ch, failing the test if nothing
+// arrives within timeout. Returns the received value and whether the
+// channel was open (ok).
+func recvWithTimeout(t *testing.T, ch <-chan *uiv1.WatchGraphEvent, timeout time.Duration) (*uiv1.WatchGraphEvent, bool) {
+	t.Helper()
+	select {
+	case ev, ok := <-ch:
+		return ev, ok
+	case <-time.After(timeout):
+		t.Fatal("recvWithTimeout: nothing received within timeout")
+		return nil, false
+	}
+}
+
+// assertNothingReceived asserts ch delivers nothing within a short
+// window — used to prove a channel was NOT touched (e.g. after
+// unsubscribe).
+func assertNothingReceived(t *testing.T, ch <-chan *uiv1.WatchGraphEvent, window time.Duration) {
+	t.Helper()
+	select {
+	case ev, ok := <-ch:
+		t.Fatalf("assertNothingReceived: received (event=%+v, ok=%v), want nothing", ev, ok)
+	case <-time.After(window):
+	}
+}
+
+// TestLiveRegistrySubscribeReturnsIndependentChannels proves subscribing
+// twice yields two independent channels: a publish reaches both, and
+// each is drained independently.
+func TestLiveRegistrySubscribeReturnsIndependentChannels(t *testing.T) {
+	reg := newLiveRegistry()
+	ch1, unsub1 := reg.Subscribe(context.Background())
+	defer unsub1()
+	ch2, unsub2 := reg.Subscribe(context.Background())
+	defer unsub2()
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 1})
+
+	ev1, ok1 := recvWithTimeout(t, ch1, time.Second)
+	if !ok1 || ev1.GetGeneration() != 1 {
+		t.Fatalf("ch1: got (%+v, %v), want generation 1, ok true", ev1, ok1)
+	}
+	ev2, ok2 := recvWithTimeout(t, ch2, time.Second)
+	if !ok2 || ev2.GetGeneration() != 1 {
+		t.Fatalf("ch2: got (%+v, %v), want generation 1, ok true", ev2, ok2)
+	}
+}
+
+// TestLiveRegistrySubscribeSeedsCurrentState proves the seeding contract:
+// a brand-new subscriber observes exactly the publisher's CURRENT state
+// with ZERO publishes having occurred since Subscribe returned — the
+// positive assertion (the observed generation equals the registry's own
+// reported current generation) distinguishes "received the real current
+// state" from "received a zero value".
+func TestLiveRegistrySubscribeSeedsCurrentState(t *testing.T) {
+	reg := newLiveRegistry()
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 7})
+
+	ch, unsub := reg.Subscribe(context.Background())
+	defer unsub()
+
+	ev, ok := recvWithTimeout(t, ch, time.Second)
+	if !ok {
+		t.Fatal("seeded channel: ok = false, want true")
+	}
+	want := reg.Current().GetGeneration()
+	if want != 7 {
+		t.Fatalf("test assumption broken: reg.Current().GetGeneration() = %d, want 7", want)
+	}
+	if ev.GetGeneration() != want {
+		t.Fatalf("seeded event generation = %d, want %d (the registry's own current generation)", ev.GetGeneration(), want)
+	}
+
+	// No publish happened between Subscribe and the receive above — the
+	// channel had exactly one thing in it (the seed), so a second receive
+	// with no intervening Publish must find nothing.
+	assertNothingReceived(t, ch, 50*time.Millisecond)
+}
+
+// TestLiveRegistryTwoSubscribersSeeSameCurrentGeneration proves two
+// subscribers created at different times both observe the same current
+// generation.
+func TestLiveRegistryTwoSubscribersSeeSameCurrentGeneration(t *testing.T) {
+	reg := newLiveRegistry()
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 3})
+
+	ch1, unsub1 := reg.Subscribe(context.Background())
+	defer unsub1()
+	ev1, _ := recvWithTimeout(t, ch1, time.Second)
+
+	ch2, unsub2 := reg.Subscribe(context.Background())
+	defer unsub2()
+	ev2, _ := recvWithTimeout(t, ch2, time.Second)
+
+	if ev1.GetGeneration() != 3 || ev2.GetGeneration() != 3 {
+		t.Fatalf("ev1.Generation = %d, ev2.Generation = %d, want both 3", ev1.GetGeneration(), ev2.GetGeneration())
+	}
+}
+
+// TestLiveRegistryStopClosesSubscriberChannels proves Stop closes every
+// subscriber channel: a consumer blocked on receive observes a clean
+// close (ok=false) rather than hanging, paired with a positive assertion
+// that the same channel delivered at least one real event before Stop.
+func TestLiveRegistryStopClosesSubscriberChannels(t *testing.T) {
+	reg := newLiveRegistry()
+	ch, _ := reg.Subscribe(context.Background())
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 1})
+	if _, ok := recvWithTimeout(t, ch, time.Second); !ok {
+		t.Fatal("receive before Stop: ok = false, want true (a real event must have been delivered first)")
+	}
+
+	reg.Stop()
+
+	if ev, ok := recvWithTimeout(t, ch, time.Second); ok {
+		t.Fatalf("receive after Stop: ok = true (event %+v), want false (clean close)", ev)
+	}
+}
+
+// TestLiveRegistryPublishDeliversToEmptyBuffer proves the base case:
+// publishing to a subscriber whose buffer is empty delivers that event.
+func TestLiveRegistryPublishDeliversToEmptyBuffer(t *testing.T) {
+	reg := newLiveRegistry()
+	ch, unsub := reg.Subscribe(context.Background())
+	defer unsub()
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 5})
+
+	ev, ok := recvWithTimeout(t, ch, time.Second)
+	if !ok || ev.GetGeneration() != 5 {
+		t.Fatalf("got (%+v, %v), want generation 5, ok true", ev, ok)
+	}
+}
+
+// TestLiveRegistryPublishCoalescesFullBuffer proves D-04: publishing to a
+// subscriber whose buffer is FULL replaces the unsent event with the
+// newer one. The subscriber then reads the NEWER generation, never the
+// older — asserted by generation value, not by count.
+func TestLiveRegistryPublishCoalescesFullBuffer(t *testing.T) {
+	reg := newLiveRegistry()
+	ch, unsub := reg.Subscribe(context.Background())
+	defer unsub()
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 1}) // fills the empty buffer
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 2}) // buffer full: must replace, not block or drop-newest
+
+	ev, ok := recvWithTimeout(t, ch, time.Second)
+	if !ok {
+		t.Fatal("ok = false, want true")
+	}
+	if ev.GetGeneration() != 2 {
+		t.Fatalf("received generation = %d, want 2 (the newer event, not the coalesced-away 1)", ev.GetGeneration())
+	}
+}
+
+// TestLiveRegistryPublishNeverBlocksNonReadingSubscriber proves D-04's
+// non-blocking guarantee under a realistic mixed-subscriber scenario:
+// one subscriber never reads, one reads continuously. All N publishes
+// complete (Publish itself never blocks), and the reading subscriber
+// observes at least 2 events with its final observed generation equal to
+// the last published one — the floor rules out "nothing happened", and
+// the equality rules out a stalled/incorrect coalesce.
+func TestLiveRegistryPublishNeverBlocksNonReadingSubscriber(t *testing.T) {
+	reg := newLiveRegistry()
+
+	nonReadingCh, nonReadingUnsub := reg.Subscribe(context.Background())
+	defer nonReadingUnsub()
+	_ = nonReadingCh // deliberately never read
+
+	readingCh, readingUnsub := reg.Subscribe(context.Background())
+	defer readingUnsub()
+
+	var mu sync.Mutex
+	var received []int64
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		for ev := range readingCh {
+			mu.Lock()
+			received = append(received, ev.GetGeneration())
+			mu.Unlock()
+		}
+	}()
+
+	const n = int64(500)
+	publishDone := make(chan struct{})
+	go func() {
+		defer close(publishDone)
+		for i := int64(1); i <= n; i++ {
+			reg.Publish(&uiv1.WatchGraphEvent{Generation: i})
+			runtime.Gosched()
+		}
+	}()
+
+	select {
+	case <-publishDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("publishing did not complete within 5s — Publish must never block")
+	}
+
+	reg.Stop()
+	select {
+	case <-readerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("reader goroutine did not observe the channel close within 5s")
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(received) < 2 {
+		t.Fatalf("reading subscriber observed %d events, want >= 2", len(received))
+	}
+	if got := received[len(received)-1]; got != n {
+		t.Fatalf("final observed generation = %d, want %d (the last published generation)", got, n)
+	}
+}
+
+// TestLiveRegistryUnsubscribeRemovesSubscriber proves unsubscribing
+// removes the subscriber from the registry: the registry's subscriber
+// count returns to its prior value, and a subsequent publish does not
+// touch the removed channel.
+func TestLiveRegistryUnsubscribeRemovesSubscriber(t *testing.T) {
+	reg := newLiveRegistry()
+	before := reg.SubscriberCount()
+
+	ch, unsub := reg.Subscribe(context.Background())
+	if got := reg.SubscriberCount(); got != before+1 {
+		t.Fatalf("SubscriberCount after Subscribe = %d, want %d", got, before+1)
+	}
+
+	unsub()
+	if got := reg.SubscriberCount(); got != before {
+		t.Fatalf("SubscriberCount after unsubscribe = %d, want %d (back to prior value)", got, before)
+	}
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 99})
+	if ev, ok := recvWithTimeout(t, ch, 100*time.Millisecond); ok {
+		t.Fatalf("removed channel received (event=%+v, ok=%v) after a subsequent publish, want closed/nothing", ev, ok)
+	}
+}
+
+// TestLiveRegistryContextCancelRemovesSubscriber proves cancelling a
+// subscriber's context removes it exactly as an explicit unsubscribe
+// would.
+func TestLiveRegistryContextCancelRemovesSubscriber(t *testing.T) {
+	reg := newLiveRegistry()
+	before := reg.SubscriberCount()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	_, unsub := reg.Subscribe(ctx)
+	defer unsub()
+
+	if got := reg.SubscriberCount(); got != before+1 {
+		t.Fatalf("SubscriberCount after Subscribe = %d, want %d", got, before+1)
+	}
+
+	cancel()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if reg.SubscriberCount() == before {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("SubscriberCount after context cancellation = %d, want %d within 2s", reg.SubscriberCount(), before)
+}
+
+// TestLiveRegistryCounterSeparation proves T-06-10's recorded verdict:
+// the count of server-initiated event sends and the count of live
+// client-initiated subscribers are two distinct values that never share
+// storage. Both directions are asserted, and each counter is non-zero at
+// the point it is compared, so neither direction passes vacuously.
+func TestLiveRegistryCounterSeparation(t *testing.T) {
+	reg := newLiveRegistry()
+
+	ch, unsub := reg.Subscribe(context.Background())
+	defer unsub()
+	if got := reg.SendCount(); got != 0 {
+		t.Fatalf("SendCount after Subscribe = %d, want 0 (subscribing must never touch the send counter)", got)
+	}
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 1})
+	recvWithTimeout(t, ch, time.Second)
+	sendsAfterOnePublish := reg.SendCount()
+	if sendsAfterOnePublish == 0 {
+		t.Fatal("SendCount after one publish to one subscriber = 0, want non-zero")
+	}
+	if got := reg.SubscriberCount(); got != 1 {
+		t.Fatalf("SubscriberCount after Publish = %d, want 1 (publishing must never touch the subscriber count)", got)
+	}
+
+	unsub()
+	if got := reg.SendCount(); got != sendsAfterOnePublish {
+		t.Fatalf("SendCount after unsubscribe = %d, want unchanged at %d", got, sendsAfterOnePublish)
+	}
+}
+
+// TestLiveRegistryNoGoroutineLeak proves a publisher started and stopped
+// with N subscribers attached leaks no goroutine — scoped to THIS test
+// via goleak.IgnoreCurrent() rather than a package-wide TestMain, because
+// this package's existing test suite opens many real Pebble stores whose
+// vfs.diskHealthCheckingFS ticker goroutines wind down on their own
+// schedule (verified this session: a package-wide goleak.VerifyTestMain
+// fails on ~40 pre-existing, unrelated goroutines from OTHER tests in
+// this package). IgnoreCurrent() snapshots whatever is already running
+// (including any lingering ticker from an earlier test) and asserts only
+// that nothing NEW survives past this test's own Stop — the guarantee
+// the acceptance criterion actually asks for.
+func TestLiveRegistryNoGoroutineLeak(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
+	reg := newLiveRegistry()
+	var unsubs []func()
+	for i := 0; i < 5; i++ {
+		_, unsub := reg.Subscribe(context.Background())
+		unsubs = append(unsubs, unsub)
+	}
+
+	reg.Publish(&uiv1.WatchGraphEvent{Generation: 1})
+	reg.Stop()
+	for _, unsub := range unsubs {
+		unsub()
 	}
 }
