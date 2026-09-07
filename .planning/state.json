@@ -31,13 +31,13 @@
     {
       "number": "6",
       "name": "Live Push",
-      "status": "in_progress"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 6 of 6 · 83% · ready to verify"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-09-07T20:34:54.462Z"
+  "updated_at": "2026-09-07T22:57:23.709Z"
 }

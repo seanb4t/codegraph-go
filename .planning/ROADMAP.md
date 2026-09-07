@@ -113,7 +113,7 @@ Archived: [`milestones/v0.11.0-ROADMAP.md`](./milestones/v0.11.0-ROADMAP.md) · 
 - [x] **Phase 3: Browse, Inspect & Navigation** - A developer finds any symbol or file, reads its verbatim source with callers, callees and blast radius, keeps clicking outward, and can hand someone a URL that lands them exactly where they were (completed 2026-08-29)
 - [x] **Phase 4: Query Workbench & Index Health** - A developer runs the four graph analyses interactively with their own knobs and can tell at a glance whether the index they are reading is worth trusting (completed 2026-08-30)
 - [x] **Phase 5: File/Package Graph View** - A developer sees the whole repository as one readable picture at file/package granularity and drills into any file — with the renderer chosen by measurement, not assumption (completed 2026-08-31)
-- [ ] **Phase 6: Live Push** - Open views stop going quietly stale: a re-index reaches the browser over the same schema and the same client as every other call, and updates what is on screen in place
+- [x] **Phase 6: Live Push** - Open views stop going quietly stale: a re-index reaches the browser over the same schema and the same client as every other call, and updates what is on screen in place (completed 2026-09-07)
 
 ## Phase Details
 
@@ -332,7 +332,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 | 3. Browse, Inspect & Navigation | 10/10 | Complete    | 2026-08-29 |
 | 4. Query Workbench & Index Health | 7/7 | Complete    | 2026-08-30 |
 | 5. File/Package Graph View | 8/8 | Complete    | 2026-08-31 |
-| 6. Live Push | 8/8 | In Progress|  |
+| 6. Live Push | 8/8 | Complete    | 2026-09-07 |
 
 6 milestones shipped. v0.12.0 scoped: 6 phases, 51 requirements, 0/6 phases complete (0%). Backlog below is preserved across milestone closes.
 
