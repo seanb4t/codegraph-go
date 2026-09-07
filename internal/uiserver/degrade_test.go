@@ -399,6 +399,17 @@ func TestDegradedRPCOpensTheStoreExactlyOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { holder.Close() })
 
+	// The counting wrapper is installed AFTER startedServer, not
+	// before: Listen (06-04) now ALSO opens the engine once, via the
+	// live-push publisher's own synchronous bootstrap check
+	// (livepublish.go), against the SAME package-level openEngine seam.
+	// That open is legitimate and unrelated to what THIS test measures
+	// (D-15: no retry-layer double-open for a single degraded RPC
+	// call), so it must not be swept into the same counter — installing
+	// the wrapper only once the server (and its publisher) already
+	// exist isolates the count to the RPC call below.
+	srv := startedServer(t, dir)
+
 	var opens int64
 	orig := openEngine
 	openEngine = func(start string) (*query.Engine, io.Closer, error) {
@@ -407,7 +418,6 @@ func TestDegradedRPCOpensTheStoreExactlyOnce(t *testing.T) {
 	}
 	t.Cleanup(func() { openEngine = orig })
 
-	srv := startedServer(t, dir)
 	client := uiv1connect.NewUIServiceClient(http.DefaultClient, srv.URL())
 
 	_, err = client.Search(context.Background(), connect.NewRequest(&uiv1.SearchRequest{Term: "Alpha"}))

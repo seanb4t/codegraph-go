@@ -322,7 +322,7 @@ func TestUIServiceHoldsNoStoreTypedField(t *testing.T) {
 		got[typ.Field(i).Type.String()] = struct{}{}
 	}
 
-	want := map[string]struct{}{"string": {}}
+	want := map[string]struct{}{"string": {}, "*uiserver.livePublisher": {}}
 	if len(got) != len(want) {
 		t.Fatalf("uiService field type set = %v, want %v", got, want)
 	}

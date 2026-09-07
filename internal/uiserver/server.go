@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -79,6 +80,20 @@ type Server struct {
 	ln  net.Listener
 	srv *http.Server
 	url string
+
+	// publisher and publisherCancel own live push's server-side engine.
+	// publisher is constructed once, in Listen, against a context
+	// derived from context.Background() — Listen itself takes no
+	// context (Options carries none), so "tied to the server's
+	// lifetime" means this package owns that lifetime explicitly rather
+	// than reusing a context that does not exist yet. stopPublisher
+	// stops it exactly once no matter how many of Serve's ctx.Done()
+	// branch and Close call it (both do, in the ordinary shutdown
+	// sequence a caller like startedServer's own test cleanup already
+	// exercises: cancel() then Close()).
+	publisher         *livePublisher
+	publisherCancel   context.CancelFunc
+	publisherStopOnce sync.Once
 }
 
 // Listen binds addr (defaulting to DefaultAddr), extracts the concrete
@@ -111,6 +126,24 @@ func Listen(o Options) (*Server, error) {
 	port := strconv.Itoa(tcpAddr.Port)
 
 	mux := http.NewServeMux()
+
+	// The publisher is constructed against its OWN context, derived
+	// from context.Background() rather than any context Listen was
+	// handed — Listen takes none (Options carries no context field).
+	// pubCancel is retained on Server and called by stopPublisher
+	// alongside publisher.Stop() itself; construction failing here
+	// closes the listener and returns, the same shape the SPA
+	// sub-filesystem failure path below already uses. Construction
+	// fails ONLY if fsnotify itself cannot be created — an un-indexed
+	// repository is not a failure (newLivePublisher's own doc comment).
+	pubCtx, pubCancel := context.WithCancel(context.Background())
+	pub, err := newLivePublisher(pubCtx, o.RepoPath)
+	if err != nil {
+		pubCancel()
+		_ = ln.Close()
+		return nil, fmt.Errorf("uiserver: Listen could not start the live-push publisher: %w", err)
+	}
+
 	// D-13's transport backstop: connect-go defaults to UNLIMITED on both
 	// send and receive, so RPC-05 is satisfied by no default.
 	// transportSendMaxBytes/transportReadMaxBytes (truncate.go) sit
@@ -119,7 +152,7 @@ func Listen(o Options) (*Server, error) {
 	// ever fires when application truncation was somehow missed — never
 	// on correctly-truncated output.
 	mux.Handle(uiv1connect.NewUIServiceHandler(
-		&uiService{repoPath: o.RepoPath},
+		&uiService{repoPath: o.RepoPath, publisher: pub},
 		connect.WithSendMaxBytes(transportSendMaxBytes),
 		connect.WithReadMaxBytes(transportReadMaxBytes),
 	))
@@ -133,6 +166,8 @@ func Listen(o Options) (*Server, error) {
 	// Origin/Host protection with no extra code (BLD-02).
 	buildFS, err := fs.Sub(web.BuildFS, spaSubdirName)
 	if err != nil {
+		pub.Stop()
+		pubCancel()
 		_ = ln.Close()
 		return nil, fmt.Errorf("uiserver: Listen could not derive SPA build sub-filesystem: %w", err)
 	}
@@ -160,7 +195,9 @@ func Listen(o Options) (*Server, error) {
 			WriteTimeout:      writeTimeout,
 			IdleTimeout:       idleTimeout,
 		},
-		url: "http://127.0.0.1:" + port,
+		url:             "http://127.0.0.1:" + port,
+		publisher:       pub,
+		publisherCancel: pubCancel,
 	}, nil
 }
 
@@ -194,6 +231,17 @@ func (s *Server) Serve(ctx context.Context) error {
 	case err := <-errCh:
 		return normalizeServeErr(err)
 	case <-ctx.Done():
+		// Stop the publisher BEFORE calling Shutdown — this ORDER IS
+		// LOAD-BEARING (T-06-43). An open live stream is an in-flight
+		// connection, and Shutdown waits up to 5 seconds for those to
+		// finish; left running, the stream would hold that budget
+		// until it expired, turning a clean Ctrl-C with one browser
+		// tab open into a non-zero exit code. Stopping the publisher
+		// first closes every subscriber channel, every send loop
+		// returns, the connections finish, and Shutdown completes
+		// immediately.
+		s.stopPublisher()
+
 		// Derived from context.Background(), NOT from the
 		// already-cancelled ctx — Shutdown against an already-done
 		// context returns immediately without draining any in-flight
@@ -221,7 +269,27 @@ func normalizeServeErr(err error) error {
 }
 
 // Close closes the listener without ever calling Serve — for a caller
-// that binds and then decides not to serve.
+// that binds and then decides not to serve. Stops the publisher first
+// (see stopPublisher's own doc comment), so Listen followed directly by
+// Close leaks no fsnotify watcher or debouncer goroutine.
 func (s *Server) Close() error {
+	s.stopPublisher()
 	return s.ln.Close()
+}
+
+// stopPublisher stops the live-push publisher exactly once, regardless
+// of how many call sites reach it — Serve's ctx.Done() branch and Close
+// both do, in the ordinary shutdown sequence a caller commonly performs
+// both of (cancel a context, then Close). Safe to call even when Serve
+// is never invoked at all: Listen always constructs a publisher, so
+// there is always something here to stop.
+func (s *Server) stopPublisher() {
+	s.publisherStopOnce.Do(func() {
+		if s.publisher != nil {
+			s.publisher.Stop()
+		}
+		if s.publisherCancel != nil {
+			s.publisherCancel()
+		}
+	})
 }

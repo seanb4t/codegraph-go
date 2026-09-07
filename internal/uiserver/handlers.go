@@ -194,6 +194,14 @@ type uiService struct {
 	// (Listen). GetStatusRequest.path is reserved for a future
 	// multi-repository milestone and is not consulted here.
 	repoPath string
+
+	// publisher is live push's server-side engine (livepublish.go),
+	// constructed once in Listen and consumed only by WatchGraph
+	// (livehandler.go). It holds no store handle between checks either
+	// — TestUIServiceHoldsNoStoreTypedField's forbidden list
+	// (*query.Engine, graphstore.GraphStore, graphstore.Reader) does
+	// not name it, and it is not one of them.
+	publisher *livePublisher
 }
 
 // statusToProto maps internal/query.StatusResult onto uiv1.GetStatusResponse
