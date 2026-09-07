@@ -306,13 +306,13 @@ Plans:
   5. With `codegraph daemon` and `serve --mcp` running against the same store, a live-push session survives repeated real re-index flushes without starving a sync or holding the store open — verified against the real processes, not a stub (LIV-01)
 
 **Notes**: Criterion 5 is non-negotiable and is the reason this phase carries a research flag: the property it must not violate is only observable under genuine concurrent multi-process use, and running `codegraph ui` alone is the dev workflow that hides it. Criterion 2's message-by-message assertion measures per-message delivery latency, not eventual arrival — streaming that is silently buffered still passes an "it all arrived" test. Criterion 4 is verified against the graph view specifically; list and table views do not exhibit this failure.
-**Plans**: 1/7 plans executed
+**Plans**: 2/7 plans executed
 **UI hint**: yes
 
 Plans:
 
 - [x] 06-01-PLAN.md — Freeze the wire surface: the `WatchGraph` server-streaming rpc, its request/event messages, both descriptor fixtures, and a blocking human review of the field numbers
-- [ ] 06-02-PLAN.md — The publisher: store watcher, index-metadata change detector with open/read/close discipline, and a bounded coalescing fan-out registry
+- [x] 06-02-PLAN.md — The publisher: store watcher, index-metadata change detector with open/read/close discipline, and a bounded coalescing fan-out registry
 - [ ] 06-03-PLAN.md — The browser client: incremental stream consumption, jittered reconnect with generation resume, and the chrome updating from the event with no round trip
 - [ ] 06-04-PLAN.md — The transport: path-scoped write-deadline clearing, the streaming handler's subscriber lifecycle, and the end-to-end per-message timing tracer
 - [ ] 06-05-PLAN.md — Graph stability: no-layout fast path, authoritative survivor position write-back, layout generation token against overlapping runs, and the guava-scale displacement measurement
@@ -331,7 +331,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6. The chain is g
 | 3. Browse, Inspect & Navigation | 10/10 | Complete    | 2026-08-29 |
 | 4. Query Workbench & Index Health | 7/7 | Complete    | 2026-08-30 |
 | 5. File/Package Graph View | 8/8 | Complete    | 2026-08-31 |
-| 6. Live Push | 1/7 | In Progress|  |
+| 6. Live Push | 2/7 | In Progress|  |
 
 6 milestones shipped. v0.12.0 scoped: 6 phases, 51 requirements, 0/6 phases complete (0%). Backlog below is preserved across milestone closes.
 

@@ -4,18 +4,18 @@ milestone: v0.12.0
 milestone_name: Local Graph UI
 current_phase: 6
 current_phase_name: Live Push
-current_plan: 2
+current_plan: 3
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-09-07T15:05:04.702Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-09-07T15:45:30.790Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: c5833c5c99c2f06cd6f15593c43bf7984fd7d064
+state_head: e6079a8f50c831487b1ac2682d6874f1afa62ae6
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 50
-  completed_plans: 44
+  completed_plans: 45
   percent: 83
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 6 — Live Push
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-09-07 — Plan 06-01 (WatchGraph wire-surface freeze) complete
@@ -106,6 +106,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 05-file-package-graph-view P06 | 45min | 3 tasks | 9 files |
 | Phase 05 P07 | ~100 min | 3 tasks | 10 files |
 | Phase 06 P01 | 191min | 3 tasks | 8 files |
+| Phase 06 P02 | 210min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -215,6 +216,8 @@ Standing decisions that outlive every milestone:
 - [Phase 05-file-package-graph-view]: 05-06 Task 1 checkpoint (blocking-human, one-way): maintainer approved FileSymbols (UIService's 13th rpc) exactly as proposed - reuse the shared Node message, MaxFileSymbols=2000 owned by internal/query, and an index-miss returns an empty result not an error.
 - [Phase 5]: Symbol expansion added an explicit DOM collapse-affordance button (shared with directory-level collapse) rather than relying on canvas re-click, closing WINDOWS.md 27 with real-mouse Playwright proof at both this repo's and google/guava's scale
 - [Phase 06]: WatchGraph frozen as the 14th UIService rpc, the services first Connect server-streaming method, with seven field numbers pinned (since_generation=1; generation=1, initialized=2, stale=3, store_exists=4, indexing_in_progress=5, commit_sha=6). — Verified clean against the live mutatingVerbs fixture with GetIndexHealth as the positive control; D-07s field set mirrors GetStatusResponse so classifyStatus consumes the event directly; server-streaming chosen because the client has nothing to say after subscribing.
+- [Phase 06]: Second checkAndPublish mutex (livePublisher.checkMu) serializes compute-then-publish, closing a theoretical publish-reordering gap from concurrent Debouncer fire() calls — internal/watch.Debouncer's own doc comment documents a real possibility of two concurrent fire() invocations; without an extra lock beyond changeDetector's own, two such invocations could Publish out of generation order
+- [Phase 06]: Per-test goleak.VerifyNone(t, goleak.IgnoreCurrent()) substituted for a package-wide TestMain in internal/uiserver — A package-wide goleak.VerifyTestMain probe failed on ~40 pre-existing, unrelated pebble vfs ticker goroutines from other tests in the package; scoping to IgnoreCurrent() proves the same 'no leak from this code' property without that collateral breakage
 
 ### Pending Todos
 
@@ -336,8 +339,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-07T15:05:04.507Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-09-07T15:45:30.603Z
+Stopped at: Completed 06-02-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
