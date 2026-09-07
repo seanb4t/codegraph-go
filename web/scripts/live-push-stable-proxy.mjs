@@ -118,6 +118,32 @@ export function startProxy(opts = {}) {
 			headers['origin'] = `http://${upstream.host}`;
 		}
 
+		// failUpstream is the ONE place that turns "the upstream is gone"
+		// into "the client sees a genuine stream failure". It is reached
+		// from three different signals below because a killed process
+		// (SIGKILL, no graceful FIN — exactly the RECONNECT scenario's own
+		// shape) surfaces differently depending on whether the failure
+		// happens before or after the response headers were already
+		// forwarded: before, `proxyReq` itself emits 'error'; after,
+		// Node's http client reports it on the response object instead
+		// (as 'aborted', as 'error', or as a 'close' that never saw
+		// 'end') — a proxy that only listened on `proxyReq` would forward
+		// an initial connection failure correctly but let a MID-STREAM
+		// kill hang the client's fetch forever, which is exactly the
+		// silent-hang bug this comment exists to prevent a future editor
+		// from reintroducing.
+		let failed = false;
+		function failUpstream() {
+			if (failed) return;
+			failed = true;
+			if (!res.headersSent) {
+				res.writeHead(502, { 'content-type': 'text/plain' });
+				res.end('live-push-stable-proxy: upstream unreachable');
+			} else if (!res.writableEnded) {
+				res.destroy();
+			}
+		}
+
 		const proxyReq = http.request(
 			{
 				hostname: upstream.hostname,
@@ -131,26 +157,16 @@ export function startProxy(opts = {}) {
 				// body is PIPED — no buffering middleware, no response
 				// accumulation of any kind. See header comment, point 2.
 				res.writeHead(upstreamRes.statusCode ?? 502, upstreamRes.headers);
+				upstreamRes.on('error', failUpstream);
+				upstreamRes.on('aborted', failUpstream);
+				upstreamRes.on('close', () => {
+					if (!upstreamRes.complete) failUpstream();
+				});
 				upstreamRes.pipe(res);
 			}
 		);
 
-		proxyReq.on('error', () => {
-			// The upstream is down (stopped for a restart, or never
-			// started): the browser must see a genuine stream failure so
-			// its own reconnect/backoff logic engages, not a proxy that
-			// silently hangs. If headers were already sent (a streaming
-			// response mid-flight when the upstream connection itself
-			// errors), the socket is destroyed outright rather than
-			// attempting a second writeHead on an already-started
-			// response.
-			if (!res.headersSent) {
-				res.writeHead(502, { 'content-type': 'text/plain' });
-				res.end('live-push-stable-proxy: upstream unreachable');
-			} else {
-				res.destroy();
-			}
-		});
+		proxyReq.on('error', failUpstream);
 
 		req.on('error', () => {
 			proxyReq.destroy();
