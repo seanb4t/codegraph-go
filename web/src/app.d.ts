@@ -23,6 +23,22 @@ declare global {
 // different lifetime from the metrics above). Canvas rendering leaves no
 // DOM element per graph node; this is what lets a real browser click a
 // SPECIFIC node by its own reported position.
+//
+// A THIRD global — the live-push observation seam — is populated by
+// web/src/lib/live/live-client.ts (the reconnecting stream consumer) and
+// web/src/lib/live/live-store.ts (the epoch-scoped generation gate, the
+// only place that can know whether an event was ever ADMITTED). Its
+// lifetime differs from both seams above: `events` grows by one entry
+// per event actually delivered off the wire, for as long as the live
+// client is connected, capped at a fixed size (oldest discarded first);
+// `connections` grows by one entry per connection ATTEMPT — successful
+// or not — for the client's whole lifetime, same cap. This seam is
+// OBSERVATION ONLY: nothing under web/src/ ever reads it back — it
+// exists solely for a real-browser harness to inspect reconnect timing,
+// generation-gate admission, and resume cursors that are otherwise
+// unobservable from outside the page (the resume cursor sits inside a
+// length-prefixed wire envelope; "was this event applied" is a
+// post-decode, post-gate fact with no other externally visible trace).
 declare global {
 	interface Window {
 		__codegraphFileGraphMetrics?: {
@@ -38,6 +54,23 @@ declare global {
 			expandable: boolean;
 			fileCount?: number;
 		}>;
+		__codegraphLiveObservations?: {
+			events: Array<{
+				generation: number;
+				epoch: number;
+				seeded: boolean;
+				receivedAtMs: number;
+				appliedAtMs: number | null;
+			}>;
+			connections: Array<{
+				epoch: number;
+				attempt: number;
+				baseDelayMs: number | null;
+				scheduledDelayMs: number | null;
+				requestedSinceGeneration: number;
+				openedAtMs: number | null;
+			}>;
+		};
 	}
 }
 
