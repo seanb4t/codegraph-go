@@ -4,18 +4,18 @@ milestone: v0.12.0
 milestone_name: Local Graph UI
 current_phase: 6
 current_phase_name: Live Push
-current_plan: 5
+current_plan: 6
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-07T17:06:02.211Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-09-07T19:29:54.957Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: c050696c5f993e3649abf2ca54d931a857a3af31
+state_head: 290ecdca22e9cd40b904963c685b10839cb63b82
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 50
-  completed_plans: 47
+  completed_plans: 48
   percent: 83
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 6 — Live Push
-Current Plan: 5
+Current Plan: 6
 Total Plans in Phase: 7
 Status: Ready to execute
 Last activity: 2026-09-07 — Plan 06-01 (WatchGraph wire-surface freeze) complete
@@ -109,6 +109,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P02 | 210min | 3 tasks | 2 files |
 | Phase 06 P03 | 54min | 3 tasks | 12 files |
 | Phase 06-live-push P04 | 95min | 3 tasks | 9 files |
+| Phase 06 P05 | 640min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -224,6 +225,7 @@ Standing decisions that outlive every milestone:
 - [Phase 06]: classifyStatus widened to StatusLikeFields so a WatchGraphEvent satisfies it directly; StatusGate.applyLiveEvent emits with no getStatus call, ordered against fetchStatus by one shared monotonic counter with (epoch,generation) dedup.
 - [Phase 6]: clearWatchDeadline clears the absolute write deadline for exactly the WatchGraph procedure, passing the ResponseWriter through unwrapped so connect-go's flush-capability gate still admits the handler
 - [Phase 6]: Server owns the live-push publisher's lifetime end to end: Listen constructs it, Serve and Close both stop it idempotently, and Serve stops it BEFORE calling Shutdown so an open stream cannot hold the 5s shutdown budget
+- [Phase 6]: Two double-invocation Svelte 5 effect bugs fixed via identity-comparison guards (lastAppliedElements/lastAppliedLiveElements), found only by real-browser testing at guava scale
 
 ### Pending Todos
 
@@ -345,8 +347,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-07T17:06:02.029Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-09-07T19:29:54.787Z
+Stopped at: Completed 06-05-PLAN.md
   NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
   CARRY-OVER:
 
