@@ -13,13 +13,19 @@ package uiserver
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
+
+	"github.com/fsnotify/fsnotify"
 
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/query"
 	"github.com/seanb4t/codegraph-go/internal/schema"
 	uiv1 "github.com/seanb4t/codegraph-go/internal/uiproto/uiv1"
+	"github.com/seanb4t/codegraph-go/internal/watch"
 )
 
 // engineStatus is (*query.Engine).Status indirected behind a
@@ -436,4 +442,226 @@ func (r *liveRegistry) Current() *uiv1.WatchGraphEvent {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.current
+}
+
+// --- Task 3: the store watcher ------------------------------------------
+
+// liveCodegraphDirName and liveStoreSubdir are local re-declarations of
+// internal/query's unexported codegraphDirName/storeSubdir constants
+// (".codegraph" / "store") — internal/query does not export them, and
+// internal/uiserver has no reason to reach into that package's internals
+// for two literal path-segment names it can just as well declare itself,
+// matching the values internal/query/resolve.go:23 and
+// internal/query/engine.go:20 already fix.
+const (
+	liveCodegraphDirName = ".codegraph"
+	liveStoreSubdir      = "store"
+)
+
+// livePublisherPathChain computes the three-element watch chain, shallow
+// to deep: [repoRoot, codegraphDir, storeDir]. codegraphDir prefers
+// query.ResolveCodegraphDir(repoRoot) — so an already-indexed ancestor is
+// the same directory the query engine will open — and falls back to
+// repoRoot/.codegraph on query.ErrNotInitialized, which is exactly the
+// un-indexed case armWatches must still be able to watch toward.
+func livePublisherPathChain(repoRoot string) [3]string {
+	codegraphDir := filepath.Join(repoRoot, liveCodegraphDirName)
+	if resolved, err := query.ResolveCodegraphDir(repoRoot); err == nil {
+		codegraphDir = filepath.Join(resolved, liveCodegraphDirName)
+	}
+	storeDir := filepath.Join(codegraphDir, liveStoreSubdir)
+	return [3]string{repoRoot, codegraphDir, storeDir}
+}
+
+// armWatches implements the T-06-39 arming state machine: it watches the
+// DEEPEST existing path in chain plus that path's immediate parent (so a
+// Remove/Rename OF the watched directory is still observed — an index
+// rebuild that replaces store/ by rename silently invalidates a watch on
+// store/ alone, and without the parent the publisher would go
+// permanently deaf with nothing left to wake it), and drops any watch on
+// a path SHALLOWER than that parent.
+//
+// chain must be ordered shallowest to deepest (repoRoot, codegraphDir,
+// storeDir — see livePublisherPathChain). Calling this on every wake
+// (construction, every raw Create/Remove/Rename event, and every
+// debounced flush) costs three os.Stat calls and a set comparison —
+// cheap enough that re-arming is automatic rather than a case a caller
+// has to remember to handle, and fsnotify.Watcher.Add on an
+// already-watched path is a documented no-op, so idempotence costs
+// nothing extra.
+//
+// repoRoot always exists in practice (codegraph ui resolves it before
+// constructing the server), so deepestIdx < 0 should never happen; if it
+// somehow does, this degrades to watching nothing rather than panicking
+// — construction must never fail because a directory is missing.
+func armWatches(fsw *fsnotify.Watcher, chain [3]string) {
+	deepestIdx := -1
+	for i := len(chain) - 1; i >= 0; i-- {
+		if info, err := os.Stat(chain[i]); err == nil && info.IsDir() {
+			deepestIdx = i
+			break
+		}
+	}
+	if deepestIdx < 0 {
+		return
+	}
+
+	want := map[string]struct{}{chain[deepestIdx]: {}}
+	if deepestIdx > 0 {
+		want[chain[deepestIdx-1]] = struct{}{}
+	}
+
+	for _, p := range fsw.WatchList() {
+		if _, ok := want[p]; !ok {
+			_ = fsw.Remove(p)
+		}
+	}
+	for p := range want {
+		_ = fsw.Add(p)
+	}
+}
+
+// livePublisher owns the store watcher, the change detector, and the
+// subscriber registry — the whole server-side engine of live push. It
+// has no HTTP or Connect dependency of any kind; 06-04's stream handler
+// consumes Subscribe/Stop, not the other way round.
+type livePublisher struct {
+	registry *liveRegistry
+	detector *changeDetector
+
+	fsw *fsnotify.Watcher
+	deb *watch.Debouncer
+
+	// checkMu serializes "compute change, then publish" as one atomic
+	// step, in ADDITION to changeDetector's own internal mutex. This
+	// exists because internal/watch.Debouncer's own doc comment
+	// documents a rare but real possibility: Add() can arm a NEW timer
+	// while a fire() already in flight has not yet returned, so two
+	// flush callbacks can theoretically run concurrently. Without this
+	// lock, two concurrent check-then-publish sequences could reorder
+	// their Publish calls relative to their own generation numbers (a
+	// slow subscriber could then hold an OLDER generation after a
+	// NEWER one was overwritten by a reordered send). Serializing the
+	// whole sequence here — not just the detector's own state mutation
+	// — closes that gap.
+	checkMu sync.Mutex
+
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+}
+
+// newLivePublisher starts a livePublisher watching repoPath for
+// re-index activity (D-01). It runs the change detector once,
+// synchronously, before returning, so Subscribe's seeding (Task 2)
+// always has a current state to hand a brand-new subscriber — even
+// against an un-indexed repository, whose legitimate first state is
+// {initialized:false, store_exists:false} at generation 1.
+//
+// Construction fails ONLY if fsnotify itself cannot be created:
+// repoPath not (yet) containing a .codegraph/ directory is NOT a
+// construction failure (mirroring SRV-04's degrade-and-answer shape) —
+// codegraph ui must remain startable against an un-indexed repository.
+func newLivePublisher(ctx context.Context, repoPath string) (*livePublisher, error) {
+	repoRoot, err := filepath.Abs(repoPath)
+	if err != nil {
+		repoRoot = repoPath
+	}
+
+	fsw, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("uiserver: creating fsnotify watcher for live push: %w", err)
+	}
+
+	pubCtx, cancel := context.WithCancel(ctx)
+	p := &livePublisher{
+		registry: newLiveRegistry(),
+		detector: newChangeDetector(repoRoot),
+		fsw:      fsw,
+		cancel:   cancel,
+	}
+
+	armWatches(fsw, livePublisherPathChain(repoRoot))
+	p.checkAndPublish(pubCtx)
+
+	debounceWindow := watch.DebounceDuration()
+	p.deb = watch.NewDebouncer(pubCtx, debounceWindow, func(_ map[string]struct{}) {
+		armWatches(fsw, livePublisherPathChain(repoRoot))
+		p.checkAndPublish(pubCtx)
+	})
+
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		p.watchLoop(pubCtx, repoRoot)
+	}()
+
+	return p, nil
+}
+
+// checkAndPublish runs the change detector and, when it reports a
+// change, publishes the result — as one atomic step (see checkMu's doc
+// comment for why that matters).
+func (p *livePublisher) checkAndPublish(ctx context.Context) {
+	p.checkMu.Lock()
+	defer p.checkMu.Unlock()
+	if ev, changed := p.detector.check(ctx); changed {
+		p.registry.Publish(ev)
+	}
+}
+
+// watchLoop consumes fsnotify events until ctx is cancelled or the
+// watcher's channels close, re-arming on any raw Create/Remove/Rename
+// (T-06-39) before handing every event's path to the debouncer — mirrors
+// internal/watch's own watchLoop shape (watcher.go), with two
+// deliberate differences: no recursive re-Add (.codegraph/store/ is
+// flat), and no log.Printf on an fsnotify error (this file must never
+// write to stdout/stderr).
+func (p *livePublisher) watchLoop(ctx context.Context, repoRoot string) {
+	for {
+		select {
+		case <-ctx.Done():
+			p.deb.Stop()
+			return
+		case ev, ok := <-p.fsw.Events:
+			if !ok {
+				p.deb.Stop()
+				return
+			}
+			if ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename) {
+				armWatches(p.fsw, livePublisherPathChain(repoRoot))
+			}
+			p.deb.Add(ev.Name)
+		case _, ok := <-p.fsw.Errors:
+			if !ok {
+				p.deb.Stop()
+				return
+			}
+			// Not fatal (mirrors internal/watch's own stance) — the loop
+			// keeps servicing Events after an internal fsnotify error.
+			// Logged nowhere: this file must never write to stdout.
+		}
+	}
+}
+
+// Subscribe registers a new subscriber against this publisher's
+// registry (Task 2) — see liveRegistry.Subscribe's doc comment for the
+// seeding contract.
+func (p *livePublisher) Subscribe(ctx context.Context) (<-chan *uiv1.WatchGraphEvent, func()) {
+	return p.registry.Subscribe(ctx)
+}
+
+// Stop joins cleanly: cancel signals the watch loop and the debouncer to
+// stop, wg.Wait joins the watch loop (which itself calls deb.Stop()
+// before returning), deb.Wait joins any fire() already in flight, THEN
+// the fsnotify watcher is closed, and finally the registry is stopped —
+// closing every subscriber channel. Server.Serve's shutdown path (06-04)
+// owns this call.
+func (p *livePublisher) Stop() {
+	p.cancel()
+	p.wg.Wait()
+	if p.deb != nil {
+		p.deb.Wait()
+	}
+	_ = p.fsw.Close()
+	p.registry.Stop()
 }

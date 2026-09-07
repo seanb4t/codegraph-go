@@ -3,6 +3,7 @@ package uiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -36,7 +37,25 @@ func writeLiveMeta(t *testing.T, repoDir string, meta *schema.Meta) {
 	if err := os.MkdirAll(storeDir, 0o755); err != nil {
 		t.Fatalf("mkdir store dir: %v", err)
 	}
-	store, err := graphstore.Open(storeDir)
+
+	// Task 3's tests run a REAL live publisher concurrently checking this
+	// same store in the background — a transient ErrStoreLocked collision
+	// between the test's own write and the publisher's own debounced
+	// check is exactly the condition graphstore.Open's own bounded retry
+	// exists for (openLockRetryAttempts/openLockRetryBackoff), and under
+	// -race's instrumentation overhead that budget alone is sometimes not
+	// enough. Retry here too, at the fixture level, rather than treating
+	// an expected transient collision as a fixture failure.
+	var store graphstore.GraphStore
+	var err error
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		store, err = graphstore.Open(storeDir)
+		if err == nil || !errors.Is(err, graphstore.ErrStoreLocked) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	if err != nil {
 		t.Fatalf("graphstore.Open: %v", err)
 	}
@@ -671,4 +690,264 @@ func TestLiveRegistryNoGoroutineLeak(t *testing.T) {
 	for _, unsub := range unsubs {
 		unsub()
 	}
+}
+
+// --- Task 3: the store watcher -------------------------------------------
+
+// newTestLivePublisher starts a livePublisher over dir with a short
+// debounce window (fast tests) and registers t.Cleanup to Stop it.
+func newTestLivePublisher(t *testing.T, dir string) *livePublisher {
+	t.Helper()
+	t.Setenv("CODEGRAPH_DEBOUNCE_MS", "20")
+	ctx, cancel := context.WithCancel(context.Background())
+	pub, err := newLivePublisher(ctx, dir)
+	if err != nil {
+		cancel()
+		t.Fatalf("newLivePublisher: %v", err)
+	}
+	t.Cleanup(func() {
+		pub.Stop()
+		cancel()
+	})
+	return pub
+}
+
+// TestLiveWatcherRealIndexWriteReachesSubscriber drives a REAL temporary
+// index end to end: it writes a real index metadata record via the real
+// store, waits past the debounce window, and asserts the subscriber
+// observed the SEEDED current state first and then exactly one further
+// event whose generation is strictly greater. A stubbed detector would
+// not exercise fsnotify at all.
+func TestLiveWatcherRealIndexWriteReachesSubscriber(t *testing.T) {
+	dir := t.TempDir()
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 1000})
+
+	pub := newTestLivePublisher(t, dir)
+	ch, unsub := pub.Subscribe(context.Background())
+	defer unsub()
+
+	seed, ok := recvWithTimeout(t, ch, time.Second)
+	if !ok {
+		t.Fatal("seed: ok = false, want true")
+	}
+	if seed.GetGeneration() != 1 {
+		t.Fatalf("seed generation = %d, want 1", seed.GetGeneration())
+	}
+	if !seed.GetInitialized() {
+		t.Fatal("seed against an already-indexed store: initialized = false, want true")
+	}
+
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 2000})
+
+	ev, ok := recvWithTimeout(t, ch, 5*time.Second)
+	if !ok {
+		t.Fatal("event after a real index write: ok = false, want true")
+	}
+	if ev.GetGeneration() <= seed.GetGeneration() {
+		t.Fatalf("event generation = %d, want strictly greater than seed generation %d", ev.GetGeneration(), seed.GetGeneration())
+	}
+}
+
+// TestLiveWatcherUnrelatedChurnProducesNoEvent proves the debounce +
+// D-01 correctness filter together: touching an unrelated file (no Meta
+// change) produces ZERO further events within twice the debounce window,
+// paired in the SAME test with a subsequent real metadata write that
+// DOES produce one — a zero-count with no positive control would prove
+// only that nothing is running at all.
+func TestLiveWatcherUnrelatedChurnProducesNoEvent(t *testing.T) {
+	dir := t.TempDir()
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 1000})
+
+	pub := newTestLivePublisher(t, dir)
+	ch, unsub := pub.Subscribe(context.Background())
+	defer unsub()
+
+	if _, ok := recvWithTimeout(t, ch, time.Second); !ok {
+		t.Fatal("seed: ok = false, want true")
+	}
+
+	// Touch a file in the WATCHED parent (.codegraph/) that has nothing
+	// to do with the store's own Meta record.
+	unrelated := filepath.Join(dir, ".codegraph", "unrelated.txt")
+	if err := os.WriteFile(unrelated, []byte("churn"), 0o644); err != nil {
+		t.Fatalf("write unrelated file: %v", err)
+	}
+
+	assertNothingReceived(t, ch, 2*debounceMSForTest())
+
+	// Positive control: a REAL metadata change still produces an event.
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 2000})
+	if _, ok := recvWithTimeout(t, ch, 5*time.Second); !ok {
+		t.Fatal("event after a real index write following unrelated churn: ok = false, want true (positive control failed)")
+	}
+}
+
+// debounceMSForTest returns the debounce window newTestLivePublisher
+// configures (CODEGRAPH_DEBOUNCE_MS=20), as a time.Duration, so tests
+// that need to wait "twice the debounce window" stay in lockstep with
+// whatever that constant is set to.
+func debounceMSForTest() time.Duration {
+	return 20 * time.Millisecond
+}
+
+// TestLiveWatcherGoesLiveOnFirstIndex starts the publisher against a
+// temporary repository with NO .codegraph directory at all, subscribes,
+// THEN creates a real first index in that directory, and asserts the
+// subscriber receives an event whose initialized is true within a
+// bounded wait. This is the fix for a real defect: a non-recursive
+// fsnotify watch only sees changes to entries of a directory it is
+// ALREADY watching, so "start idle" alone would mean the store's later
+// creation could never produce an event — a UI opened before the first
+// index would be permanently deaf.
+func TestLiveWatcherGoesLiveOnFirstIndex(t *testing.T) {
+	dir := t.TempDir() // deliberately NO .codegraph directory at all
+
+	pub := newTestLivePublisher(t, dir)
+	ch, unsub := pub.Subscribe(context.Background())
+	defer unsub()
+
+	seed, ok := recvWithTimeout(t, ch, time.Second)
+	if !ok {
+		t.Fatal("seed against an un-indexed repo: ok = false, want true")
+	}
+	if seed.GetInitialized() {
+		t.Fatal("seed against an un-indexed repo: initialized = true, want false")
+	}
+
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 1000})
+
+	ev, ok := recvWithTimeout(t, ch, 5*time.Second)
+	if !ok {
+		t.Fatal("event after the first index was created: ok = false, want true (the publisher went live)")
+	}
+	if !ev.GetInitialized() {
+		t.Fatal("event after the first index was created: initialized = false, want true")
+	}
+
+	// Secondary check only, per this test's own doc comment: Stop must
+	// still return cleanly, but that is not the property this test
+	// exists to prove.
+	pub.Stop()
+}
+
+// TestLiveWatcherReArmsAfterStoreDirectoryReplacement proves T-06-39's
+// re-arm half: with a live, armed publisher, RENAME the store directory
+// away and move a rebuilt one into place (the shape an index rebuild or
+// recovery path takes), then write real index metadata and assert an
+// event still reaches the subscriber. Paired positive inside the same
+// test: an event was received BEFORE the rename too, so "it re-armed"
+// cannot pass on a publisher that was never armed to begin with.
+func TestLiveWatcherReArmsAfterStoreDirectoryReplacement(t *testing.T) {
+	dir := t.TempDir()
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 1000})
+
+	pub := newTestLivePublisher(t, dir)
+	ch, unsub := pub.Subscribe(context.Background())
+	defer unsub()
+
+	seed, ok := recvWithTimeout(t, ch, time.Second)
+	if !ok || seed.GetGeneration() != 1 {
+		t.Fatalf("seed: got (%+v, %v), want generation 1, ok true", seed, ok)
+	}
+
+	// Positive control: a real change reaches the subscriber BEFORE the
+	// rename.
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 2000})
+	preRename, ok := recvWithTimeout(t, ch, 5*time.Second)
+	if !ok {
+		t.Fatal("pre-rename event: ok = false, want true (positive control failed)")
+	}
+
+	storeDir := filepath.Join(dir, ".codegraph", "store")
+	oldDir := filepath.Join(dir, ".codegraph", "store-old")
+	if err := os.Rename(storeDir, oldDir); err != nil {
+		t.Fatalf("rename store dir away: %v", err)
+	}
+
+	// Move a rebuilt store into place at the SAME path — the shape an
+	// index rebuild takes: the old directory is gone, a fresh one exists
+	// at the path the publisher used to watch directly.
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 3000})
+
+	postRename, ok := recvWithTimeout(t, ch, 5*time.Second)
+	if !ok {
+		t.Fatal("post-rename event: ok = false, want true (the publisher went permanently deaf after the store directory was replaced)")
+	}
+	if postRename.GetGeneration() <= preRename.GetGeneration() {
+		t.Fatalf("post-rename generation = %d, want strictly greater than pre-rename generation %d", postRename.GetGeneration(), preRename.GetGeneration())
+	}
+}
+
+// TestLiveWatcherStopJoinsCleanly proves the constructor's documented
+// Stop contract: it returns promptly (never hangs) and every subscriber
+// channel is closed afterward.
+func TestLiveWatcherStopJoinsCleanly(t *testing.T) {
+	dir := t.TempDir()
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 1000})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pub, err := newLivePublisher(ctx, dir)
+	if err != nil {
+		t.Fatalf("newLivePublisher: %v", err)
+	}
+
+	ch, unsub := pub.Subscribe(context.Background())
+	defer unsub()
+	if _, ok := recvWithTimeout(t, ch, time.Second); !ok {
+		t.Fatal("seed: ok = false, want true")
+	}
+
+	stopDone := make(chan struct{})
+	go func() {
+		defer close(stopDone)
+		pub.Stop()
+	}()
+	select {
+	case <-stopDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return within 5s")
+	}
+
+	if ev, ok := recvWithTimeout(t, ch, time.Second); ok {
+		t.Fatalf("receive after Stop: ok = true (event %+v), want false (clean close)", ev)
+	}
+}
+
+// TestLiveWatcherDebounceCoalescesBurst proves the debounce window
+// coalesces a burst of raw filesystem events (many Pebble-internal file
+// writes across a single writeLiveMeta call, plus a following burst of
+// unrelated churn) into a bounded number of published events rather than
+// one per raw fsnotify event.
+func TestLiveWatcherDebounceCoalescesBurst(t *testing.T) {
+	dir := t.TempDir()
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 1000})
+
+	pub := newTestLivePublisher(t, dir)
+	ch, unsub := pub.Subscribe(context.Background())
+	defer unsub()
+
+	if _, ok := recvWithTimeout(t, ch, time.Second); !ok {
+		t.Fatal("seed: ok = false, want true")
+	}
+
+	// A burst of unrelated writes into the watched parent directory,
+	// all within one debounce window, followed by the real change.
+	for i := 0; i < 5; i++ {
+		p := filepath.Join(dir, ".codegraph", fmt.Sprintf("churn-%d.txt", i))
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatalf("write churn file %d: %v", i, err)
+		}
+	}
+	writeLiveMeta(t, dir, &schema.Meta{SchemaVersion: schema.SchemaVersion, LastSyncUnixMs: 2000})
+
+	ev, ok := recvWithTimeout(t, ch, 5*time.Second)
+	if !ok {
+		t.Fatal("event after the burst: ok = false, want true")
+	}
+	if ev.GetGeneration() != 2 {
+		t.Fatalf("event generation after one real change amid a burst = %d, want 2 (exactly one published event, not one per raw fsnotify event)", ev.GetGeneration())
+	}
+
+	assertNothingReceived(t, ch, 2*debounceMSForTest())
 }
