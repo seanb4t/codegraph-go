@@ -948,7 +948,11 @@
 
 	// A FIFTH effect tracks removedElementIds and, on every NEW array
 	// reference, removes exactly those ids via removeByIds() above.
-	// Same reasoning as the fourth effect above.
+	// Unlike the fourth effect above, no identity guard is needed here:
+	// removeByIds() is naturally idempotent against a repeated invocation
+	// with the same id list (getElementById + an el.length guard before
+	// remove(), and a filter() that no-ops on an already-absent id) — a
+	// double-fire republishes geometry redundantly but corrupts nothing.
 	$effect(() => {
 		const ids = removedElementIds ?? [];
 		if (ids.length === 0) return;
