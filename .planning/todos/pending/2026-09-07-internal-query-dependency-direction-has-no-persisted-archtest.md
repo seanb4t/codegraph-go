@@ -11,7 +11,7 @@ files:
 threat_ref: T-01-18
 audit_acknowledged:
   milestone: v0.12.0
-  at: 2026-09-07
+  at: 2026-09-08
 ---
 
 ## Problem

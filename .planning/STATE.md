@@ -2,20 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v0.12.0
 milestone_name: Local Graph UI
-current_phase: 6
-current_plan: Not started
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 6 complete — all phases complete
-last_updated: "2026-09-07T22:57:23.693Z"
-last_activity: 2026-09-07
-last_activity_desc: Phase 6 complete
-state_head: 17bbc3f95956ff003d8766083b8997129ef8780b
+last_updated: "2026-09-08T13:07:02.438Z"
+last_activity: 2026-09-08
+last_activity_desc: Milestone v0.12.0 completed and archived
+state_head: f74784bf2c3c523fd6fc14779f4409d96a629ea6
 progress:
   total_phases: 6
   completed_phases: 6
   total_plans: 51
   completed_plans: 51
   percent: 100
+current_phase: 6
 ---
 
 # Project State
@@ -29,13 +28,10 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 6
-Current Plan: Not started
-Total Plans in Phase: 7
-Status: All phases complete
-Last activity: 2026-09-07 — Phase 6 complete
-
-Progress: [██████████] 100% (1/6 phases)
+Phase: Milestone v0.12.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-08 — Milestone v0.12.0 completed and archived
 
 ## Performance Metrics
 
@@ -290,6 +286,30 @@ Deferred at **v0.12.0 scoping (2026-08-22)** — recorded so the decisions stay 
 | requirement | GRF-06 — community-detection clustering | v2; the schema reserves annotation space, directory-structural grouping is the correct v1 substitute |
 | requirement | GRF-07 — opt-in whole-symbol graph within an already-drilled-into package | v2 |
 
+Acknowledged at the **v0.12.0 close (2026-09-07)** — 1 newly acknowledged, 8 carried forward from the v0.11.0 close.
+
+| Category | Item | Status | Deferred At | Milestone |
+|----------|------|--------|-------------|-----------|
+| todos | 2026-09-07-internal-query-dependency-direction-has-no-persisted-archtest.md | (presence-only) | 2026-09-07 | v0.12.0 |
+
+**Why this one is deferred rather than fixed:** T-01-18 protects the Engine seam's *direction* —
+`internal/query` must never import the wire layer, or the "third consumer, never a second
+implementation" premise inverts. The retroactive Phase 1 security audit found the invariant
+**holds today** (re-ran `go list -deps ./internal/query` live: zero `connectrpc.com/connect`,
+zero `internal/uiproto`, positive-controlled against `google.golang.org/protobuf`, which does
+appear via `internal/schema`) — but its mitigation was a one-shot check written into two plans'
+`<verification>` blocks and never committed as a test. It is an **unguarded invariant**, not an
+open vulnerability: medium severity, below the `high` block_on threshold.
+
+**Process note, recorded because it nearly hid this item.** When the todo was first filed during
+the milestone audit, its frontmatter was copied from a sibling todo — including that sibling's
+`audit_acknowledged` block. That silently suppressed the finding from its own milestone's close
+before anyone decided to defer it. `complete-milestone.md` is explicit that the
+`audit-open acknowledge` writer is the only path permitted to set that marker and that the
+workflow never hand-authors it; the block was removed, the item resurfaced as `1 item requires
+decisions before close`, and the deferral above was then made deliberately through the CLI
+writer. **Copying a todo's frontmatter as a template copies its suppression.**
+
 Acknowledged at the **v0.11.0 close (2026-08-16)** — suppressed at the next `audit-open` scan, not fixed. All 10 predate v0.11.0. Acknowledgment is verdict-preserving and **self-invalidating**: it never rewrites an artifact's own `status:`, and the suppression lapses the moment the artifact's observed state changes again.
 
 | Category | Item | Status | Deferred At | Milestone |
@@ -366,4 +386,4 @@ Stopped at: Phase 6 complete — all phases complete
 
 ## Operator Next Steps
 
-- Plan Phase 2 with `/gsd-plan-phase 2`
+- Start the next milestone with /gsd-new-milestone
