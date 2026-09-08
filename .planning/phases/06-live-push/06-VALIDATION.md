@@ -2,10 +2,11 @@
 phase: 6
 slug: live-push
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-09-01
+validated: 2026-09-07
 ---
 
 # Phase 6 — Validation Strategy
@@ -64,25 +65,25 @@ must be preserved when the IDs land.*
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------|-------------------|-------------|--------|
-| 06-01 T1 | 06-01 | 1 | RPC-04 | T-06-01 | unit (Go) — rpc name clean against the live fixture, with a positive control | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestRPCName' -v -count=1` | ❌ W0 | ⬜ pending |
-| 06-01 T3 | 06-01 | 1 | RPC-04 | T-06-02, T-06-03 | fixture (Go) — descriptor field-number stability, both directions | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestUIProtoFieldNumbersAreStableAndUnique' -v -count=1` · `task proto:drift` | ✅ | ⬜ pending |
-| 06-02 T1 | 06-02 | 2 | LIV-01 | T-06-05, T-06-11, T-06-12 | unit (Go) — event fires only on a real metadata change; open/close balanced | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveChange' -v -count=1` | ❌ W0 | ⬜ pending |
-| 06-02 T2 | 06-02 | 2 | LIV-03 | T-06-07, T-06-08, T-06-09, T-06-10 | unit (Go, `-race` + goleak) — bounded coalescing, cleanup, counter separation | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveRegistry' -v -count=1 -race` | ❌ W0 | ⬜ pending |
-| 06-02 T3 | 06-02 | 2 | LIV-01 | T-06-06 | integration (Go) — real store write through fsnotify + debounce | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveWatcher' -v -count=1 -race` | ❌ W0 | ⬜ pending |
-| 06-03 T1 | 06-03 | 2 | LIV-03 | T-06-13, T-06-16 | unit (vitest) — incremental consumption, jittered backoff, generation resume | `cd web && pnpm exec vitest run tests/live-client.test.ts` | ❌ W0 | ⬜ pending |
-| 06-03 T2 | 06-03 | 2 | LIV-02 | T-06-15 | unit (vitest) — one classifier for both inputs; chrome updates with no round trip | `cd web && pnpm exec vitest run tests/live-store.test.ts` | ❌ W0 | ⬜ pending |
-| 06-03 T3 | 06-03 | 2 | LIV-02 | T-06-14 | component (vitest) — open view re-fetches exactly once per new generation | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
-| 06-04 T1 | 06-04 | 3 | RPC-04 | T-06-19, T-06-21, T-06-22 | integration (Go) — stream outlives a deliberately tiny write deadline; a unary path does not | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestStreamDeadline' -v -count=1 -race` | ❌ W0 | ⬜ pending |
-| 06-04 T2 | 06-04 | 3 | LIV-03 | T-06-20, T-06-23, T-06-24 | unit (Go, `-race` + goleak) — subscribe / send / deregister lifecycle | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphHandler' -v -count=1 -race` | ❌ W0 | ⬜ pending |
-| 06-04 T3 | 06-04 | 3 | RPC-04 (criterion 2) | T-06-21 | **tracer** — real client, real store write, per-message TIMING not arrival | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphStream' -v -count=1 -race` | ❌ W0 | ⬜ pending |
-| 06-05 T1 | 06-05 | 4 | LIV-04 | T-06-27, T-06-31 | unit (vitest, headless graph model) — fast path runs no layout; survivors written back | `cd web && pnpm exec vitest run tests/graph-live-update.test.ts` | ❌ W0 | ⬜ pending |
-| 06-05 T2 | 06-05 | 4 | LIV-02 | T-06-28, T-06-29 | component (vitest) — graph re-fetches through its own rpcs, coalesced | `cd web && pnpm exec vitest run` | ❌ W0 | ⬜ pending |
-| 06-05 T3 | 06-05 | 4 | LIV-04 | T-06-30 | Playwright e2e at guava scale — survivor displacement measured and committed | `node web/scripts/graph-live-update-check.mjs` | ❌ W0 | ⬜ pending |
-| 06-06 T1 | 06-06 | 5 | LIV-03 | T-06-45 | harness gate (node) — the fixed-port proxy rewrites BOTH Host and Origin to the upstream authority and streams rather than buffers, proven against a recording upstream | `node -e '<proxy gate>' --input-type=module` (the full command is in the plan) | ❌ W0 | ⬜ pending |
-| 06-06 T2 | 06-06 | 5 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing paired with a per-tab received-generation superset, fan-out isolation with the blocked tab proven blocked, jittered reconnect behind the Task 1 proxy | `node web/scripts/live-push-multitab-check.mjs` | ❌ W0 | ⬜ pending |
-| 06-07 T1 | 06-07 | 6 | LIV-01 | T-06-SC | build-exclusion gate (Go) — the `//go:build ignore` probe compiles and runs but never enters the shipped build, and uses the generated client rather than curl | `GOTOOLCHAIN=go1.26.5 go build ./... && go vet ./... && go run scripts/live-push-probe.go --help` | ❌ W0 | ⬜ pending |
-| 06-07 T2 | 06-07 | 6 | LIV-01 (criterion 5) | T-06-32, T-06-37, T-06-46 | **real multi-process**, never a stub — see Real-Process Gates below; flush duration bounded against a measured no-UI baseline | `bash scripts/live-push-concurrency-check.sh` | ❌ W0 | ⬜ pending |
-| 06-07 T3 | 06-07 | 6 | LIV-03 (verdict) | T-06-35, T-06-36 | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below; plus the post-commit bundle staging assertion | `test "$(rg -c 'type pendingWriter struct' internal/mcp/server.go)" -eq 1` (the control) · `test -z "$(git status --porcelain -- web/build)"` after the bundle commit | ❌ | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | RPC-04 | T-06-01 | unit (Go) — rpc name clean against the live fixture, with a positive control | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestRPCName' -v -count=1` | ✅ | ✅ green |
+| 06-01 T3 | 06-01 | 1 | RPC-04 | T-06-02, T-06-03 | fixture (Go) — descriptor field-number stability, both directions | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestUIProtoFieldNumbersAreStableAndUnique' -v -count=1` · `task proto:drift` | ✅ | ✅ green |
+| 06-02 T1 | 06-02 | 2 | LIV-01 | T-06-05, T-06-11, T-06-12 | unit (Go) — event fires only on a real metadata change; open/close balanced | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveChange' -v -count=1` | ✅ | ✅ green |
+| 06-02 T2 | 06-02 | 2 | LIV-03 | T-06-07, T-06-08, T-06-09, T-06-10 | unit (Go, `-race` + goleak) — bounded coalescing, cleanup, counter separation | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveRegistry' -v -count=1 -race` | ✅ | ✅ green |
+| 06-02 T3 | 06-02 | 2 | LIV-01 | T-06-06 | integration (Go) — real store write through fsnotify + debounce | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestLiveWatcher' -v -count=1 -race` | ✅ | ✅ green |
+| 06-03 T1 | 06-03 | 2 | LIV-03 | T-06-13, T-06-16 | unit (vitest) — incremental consumption, jittered backoff, generation resume | `cd web && pnpm exec vitest run tests/live-client.test.ts` | ✅ | ✅ green |
+| 06-03 T2 | 06-03 | 2 | LIV-02 | T-06-15 | unit (vitest) — one classifier for both inputs; chrome updates with no round trip | `cd web && pnpm exec vitest run tests/live-store.test.ts` | ✅ | ✅ green |
+| 06-03 T3 | 06-03 | 2 | LIV-02 | T-06-14 | component (vitest) — open view re-fetches exactly once per new generation | `cd web && pnpm exec vitest run` | ✅ | ✅ green |
+| 06-04 T1 | 06-04 | 3 | RPC-04 | T-06-19, T-06-21, T-06-22 | integration (Go) — stream outlives a deliberately tiny write deadline; a unary path does not | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestStreamDeadline' -v -count=1 -race` | ✅ | ✅ green |
+| 06-04 T2 | 06-04 | 3 | LIV-03 | T-06-20, T-06-23, T-06-24 | unit (Go, `-race` + goleak) — subscribe / send / deregister lifecycle | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphHandler' -v -count=1 -race` | ✅ | ✅ green |
+| 06-04 T3 | 06-04 | 3 | RPC-04 (criterion 2) | T-06-21 | **tracer** — real client, real store write, per-message TIMING not arrival | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/ -run '^TestWatchGraphStream' -v -count=1 -race` | ✅ | ✅ green |
+| 06-05 T1 | 06-05 | 4 | LIV-04 | T-06-27, T-06-31 | unit (vitest, headless graph model) — fast path runs no layout; survivors written back | `cd web && pnpm exec vitest run tests/graph-live-update.test.ts` | ✅ | ✅ green |
+| 06-05 T2 | 06-05 | 4 | LIV-02 | T-06-28, T-06-29 | component (vitest) — graph re-fetches through its own rpcs, coalesced | `cd web && pnpm exec vitest run` | ✅ | ✅ green |
+| 06-05 T3 | 06-05 | 4 | LIV-04 | T-06-30 | Playwright e2e at guava scale — survivor displacement measured and committed | `node web/scripts/graph-live-update-check.mjs` | ✅ | ✅ green |
+| 06-06 T1 | 06-06 | 5 | LIV-03 | T-06-45 | harness gate (node) — the fixed-port proxy rewrites BOTH Host and Origin to the upstream authority and streams rather than buffers, proven against a recording upstream | `node -e '<proxy gate>' --input-type=module` (the full command is in the plan) | ✅ | ✅ green |
+| 06-06 T2 | 06-06 | 5 | LIV-03 (criteria 2, 3) | T-06-33, T-06-34 | Playwright, 3+ real tabs — per-message timing paired with a per-tab received-generation superset, fan-out isolation with the blocked tab proven blocked, jittered reconnect behind the Task 1 proxy | `node web/scripts/live-push-multitab-check.mjs` | ✅ | ✅ green |
+| 06-07 T1 | 06-07 | 6 | LIV-01 | T-06-SC | build-exclusion gate (Go) — the `//go:build ignore` probe compiles and runs but never enters the shipped build, and uses the generated client rather than curl | `GOTOOLCHAIN=go1.26.5 go build ./... && go vet ./... && go run scripts/live-push-probe.go --help` | ✅ | ✅ green |
+| 06-07 T2 | 06-07 | 6 | LIV-01 (criterion 5) | T-06-32, T-06-37, T-06-46 | **real multi-process**, never a stub — see Real-Process Gates below; flush duration bounded against a measured no-UI baseline | `bash scripts/live-push-concurrency-check.sh` | ✅ | ✅ green |
+| 06-07 T3 | 06-07 | 6 | LIV-03 (verdict) | T-06-35, T-06-36 | **recorded finding** with a live positive control, not a test — see Recorded Verdicts below; plus the post-commit bundle staging assertion | `test "$(rg -c 'type pendingWriter struct' internal/mcp/server.go)" -eq 1` (the control) · `test -z "$(git status --porcelain -- web/build)"` after the bundle commit | ❌ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -113,17 +114,17 @@ must be preserved when the IDs land.*
 
 ## Wave 0 Requirements
 
-- [ ] `internal/uiserver/livepublish_test.go` — LIV-01, plus the goleak-guarded soak shape
+- [x] `internal/uiserver/livepublish_test.go` — LIV-01, plus the goleak-guarded soak shape
       criterion 5 needs.
-- [ ] `internal/uiserver/livehandler_test.go` — RPC-04 at the handler level, with
+- [x] `internal/uiserver/livehandler_test.go` — RPC-04 at the handler level, with
       **message-by-message** `httptest` assertions (see the criterion-2 warning below).
-- [ ] `web/tests/live-client.test.ts` — browser-side reconnect/backoff and generation
+- [x] `web/tests/live-client.test.ts` — browser-side reconnect/backoff and generation
       tracking; vitest can mock `fetch`'s streaming body.
-- [ ] `web/scripts/live-push-multitab-check.mjs` — **new**, 3+ real tabs, following
+- [x] `web/scripts/live-push-multitab-check.mjs` — **new**, 3+ real tabs, following
       `graph-collapse-affordance-check.mjs`'s precedent.
-- [ ] `web/scripts/graph-live-update-check.mjs` — **new**, measures guava-scale survivor
+- [x] `web/scripts/graph-live-update-check.mjs` — **new**, measures guava-scale survivor
       displacement across a live update. This is D-06's mandated measurement.
-- [ ] No framework install needed — vitest, Playwright and goleak are all already present.
+- [x] No framework install needed — vitest, Playwright and goleak are all already present.
 
 ---
 
@@ -181,20 +182,67 @@ evidence; "we checked and it's fine" does not satisfy the criterion.
 
 ---
 
+## Validation Audit 2026-09-07
+
+| Metric | Count |
+|--------|-------|
+| Map rows | 19 |
+| Gaps found (MISSING) | **0** |
+| Rows green | 19 |
+| Resolved this audit | 0 (none needed) |
+
+Re-run fresh 2026-09-07: **44 `--- PASS`, 0 `--- FAIL`** on the Go side, with `-race` on every
+concurrency-bearing suite — `TestLiveChange` (9), `TestLiveRegistry` (11, race), `TestLiveWatcher`
+(6, race), `TestStreamDeadline` (4, race), `TestWatchGraphHandler` (11, race),
+`TestWatchGraphStream` (1, race), plus the rpc-name and field-number guards (1 each).
+`go build ./... && go vet ./...` exit 0. **Positive control:** a nonexistent `-run` pattern
+returned PASS=0 while exiting 0.
+
+All four vitest suites and all four harness programs exist on disk
+(`live-client`, `live-store`, `graph-live-update`, `live-route-refetch`;
+`graph-live-update-check.mjs`, `live-push-multitab-check.mjs`,
+`live-push-concurrency-check.sh`, `live-push-probe.go`), and `pnpm test` is **467/467**.
+
+**The three browser/multi-process gates are committed records, and all three read
+`success: true`:**
+
+| Corpus | What it proves |
+|---|---|
+| `corpora/graph-live-update-check.json` | criterion 4 — 349 leaf survivors at **0px** max and mean displacement, real guava checkout |
+| `corpora/live-push-multitab-check.json` | criteria 2 & 3 — 3 real tabs, `blockedTabReceiptsDuringBlock: 0`, `reconnectAttemptsPerTab [3,3,3]` |
+| `corpora/live-push-concurrency-check.json` | criterion 5 — real `daemon` + `serve --mcp` + `ui`, 5/5 flushes completed, 0 starved |
+
+Criterion 5's gate was **independently re-executed during this milestone's verification pass**
+and passed against a *freshly measured* baseline (296ms) that differs from the committed
+record's (261ms) — which is itself the proof that the bound is measured rather than hardcoded.
+
+**06-07 T3's verdict control re-checked, not assumed:** `type pendingWriter struct` appears
+exactly **1** time in `internal/mcp/server.go` (the discriminating positive control), and
+`git status --porcelain -- web/build` is empty after the bundle commit.
+
+**Scope note:** `06-08-PLAN.md` was added after this map was seeded, closing the criterion-1 gap
+the live browser UAT found post-verification (the root Status route never applied live events).
+Its verification is the root-route describe block in `web/tests/live-route-refetch.test.ts` —
+three cases, all demonstrated RED before the fix and independently re-demonstrated RED twice by
+the verifier — plus a live browser re-confirmation (616→617 files, applied <50ms, no reload).
+LIV-01 and LIV-02 are covered by rows in this map either way, so no requirement is unverified.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] Every zero-count assertion paired with a positive control (rule `84d1gfpywd`)
-- [ ] Every upper bound paired with a non-zero lower bound
-- [ ] **Criterion 2's timing assertion present** — not merely an arrival count — and PAIRED with a receipt floor at both levels (Go: triggered-receipt count equals trigger count, floor 3; browser: every tab's received-generation set is a superset of `triggeredGenerations`), because an inter-arrival minimum computed over one receipt is vacuously satisfied
-- [ ] **Criterion 5 verified against real `daemon` + `serve --mcp` processes** — not a stub — with `serve --mcp` held open over persistent stdio pipes for the whole run and the stream held by a real envelope-decoding Connect client, not `curl`
-- [ ] Flush duration bounded against a measured no-UI baseline, so a slowed-but-completing sync cannot pass as unstarved
-- [ ] The `pendingWriter`-analogue verdict recorded in the SUMMARY, with a control that discriminates on `type pendingWriter struct` rather than on the bare word
-- [ ] Every named test cited in this file and in any PLAN.md verified to EXIST (`rg -n 'func <Name>'` with a positive control) — the cycle-1 review found a cited test that did not
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] Every zero-count assertion paired with a positive control (rule `84d1gfpywd`)
+- [x] Every upper bound paired with a non-zero lower bound
+- [x] **Criterion 2's timing assertion present** — not merely an arrival count — and PAIRED with a receipt floor at both levels (Go: triggered-receipt count equals trigger count, floor 3; browser: every tab's received-generation set is a superset of `triggeredGenerations`), because an inter-arrival minimum computed over one receipt is vacuously satisfied
+- [x] **Criterion 5 verified against real `daemon` + `serve --mcp` processes** — not a stub — with `serve --mcp` held open over persistent stdio pipes for the whole run and the stream held by a real envelope-decoding Connect client, not `curl`
+- [x] Flush duration bounded against a measured no-UI baseline, so a slowed-but-completing sync cannot pass as unstarved
+- [x] The `pendingWriter`-analogue verdict recorded in the SUMMARY, with a control that discriminates on `type pendingWriter struct` rather than on the bare word
+- [x] Every named test cited in this file and in any PLAN.md verified to EXIST (`rg -n 'func <Name>'` with a positive control) — the cycle-1 review found a cited test that did not
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-07
