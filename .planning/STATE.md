@@ -21,10 +21,10 @@ current_phase: 6
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-22)
+See: .planning/PROJECT.md (updated 2026-09-07 at the v0.12.0 close)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 6 — Live Push
+**Current focus:** Planning next milestone — v0.12.0 shipped 2026-09-07; nothing is scoped. Run /gsd-new-milestone.
 
 ## Current Position
 
