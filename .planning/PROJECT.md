@@ -36,7 +36,9 @@ Closed as `override_closeout`: 10 pre-existing open artifacts (1 debug session, 
 
 Closed as `override_closeout`: **1 newly acknowledged** open artifact (T-01-18's dependency-direction invariant — empirically true, but its mitigation was a one-shot check never committed as a test) and **8 carried forward** from the v0.11.0 close. Two audit findings are worth carrying: **Phase 1 had shipped with no `01-SECURITY.md`** despite 11 plans carrying threat models and `security_enforcement: true` — the only such omission in project history, caught by the milestone audit and closed retroactively against HEAD at 40/40 threats, `threats_open: 0`; and **Phase 4 is a genuine Nyquist PARTIAL** — `web:components:drift` reports a vendored `button.svelte` differing from its pinned regeneration, cause not isolable locally (no corepack, so pnpm 12.3.4 against a pinned 11.23.0), blocking nothing since the gate is schedule/dispatch-only and never a required check.
 
-**Next milestone: unscoped.** Still parked in `ROADMAP.md` → Backlog: 999.2 (tmux TTY harness) and 999.4 (`CheckRegression` positivity guard) — plus this milestone's own v2 deferrals (DOCS-05 self-authored CLI reference, VOCAB-01 vocabulary drift guard, both deliberately declined rather than forgotten), the deferred Team Scale work, SEED-001 (Svelte web UI), SEED-003 (markdown in the index), the v0.5.x deferrals DIST-06 (stapled offline-safe container) and BREW-07 (homebrew-core submission), and v0.10.0's own v2 deferrals: the PreToolUse guard hook (GUARD-HOOK-01/02 — the fallback if skill+resources+nudge prove insufficient, and that evidence doesn't exist yet) and multi-agent skill/hooks porting (AGENT-04…07, blocked on per-agent hook-schema differences across Cursor/Codex CLI/Antigravity). Six pre-existing todos (a wire-oracle response-ordering flake, three CI/release guard gaps, a brew-trust docs note, a tautological tap-secret test) and one carried-forward code-review finding (CR-01 — `internal/mcp/server.go`'s `pendingWriter` counter can be corrupted by server-initiated notifications, predates this milestone) remain open and non-blocking; tracked in `todos/pending/` and STATE.md.
+**Next milestone: v0.13.0 — Guard Hardening & UI Follow-through, scoped 2026-09-08.** A deferral burn-down in two coherent sets: every known guard that cannot fire (999.4, the T-01-18 archtest, three release/CI guard todos, and the 999.2 tmux real-PTY harness as the large item), then v0.12.0's four contained UI follow-ons (BRW-11, BRW-10, HLT-04, GRF-06), with DOCS-05 and the brew-trust framing note as the documentation tail. See `## Current Milestone` below. What it deliberately leaves parked: GRF-07 (whole-symbol graph, on the guava non-convergence evidence), Team Scale, SEED-003, and the items listed next.
+
+**Still parked before v0.13.0 was scoped** — the list as it stood at the v0.12.0 close, kept for the record: `ROADMAP.md` → Backlog 999.2 (tmux TTY harness) and 999.4 (`CheckRegression` positivity guard) — plus that milestone's own v2 deferrals (DOCS-05 self-authored CLI reference, VOCAB-01 vocabulary drift guard, both deliberately declined rather than forgotten), the deferred Team Scale work, SEED-001 (Svelte web UI), SEED-003 (markdown in the index), the v0.5.x deferrals DIST-06 (stapled offline-safe container) and BREW-07 (homebrew-core submission), and v0.10.0's own v2 deferrals: the PreToolUse guard hook (GUARD-HOOK-01/02 — the fallback if skill+resources+nudge prove insufficient, and that evidence doesn't exist yet) and multi-agent skill/hooks porting (AGENT-04…07, blocked on per-agent hook-schema differences across Cursor/Codex CLI/Antigravity). Six pre-existing todos (a wire-oracle response-ordering flake, three CI/release guard gaps, a brew-trust docs note, a tautological tap-secret test) and one carried-forward code-review finding (CR-01 — `internal/mcp/server.go`'s `pendingWriter` counter can be corrupted by server-initiated notifications, predates this milestone) remain open and non-blocking; tracked in `todos/pending/` and STATE.md.
 
 **Accepted limitations carried out of v0.3.0, not closed:** the daemon extreme-load timeout tail and its feedback-latency tradeoff (CI load ruled the governing standard for MAINT-02), and `GO-2026-5932` — a real, unmitigated vulnerability reachable in `goreleaser`'s binary through cosign/rekor's unmaintained openpgp, surfaced by the advisory scan rather than resolved. A latent flake is also open: `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide (tracked in `todos/pending/`).
 
@@ -64,6 +66,22 @@ The artifact line at v1.0's close was `v0.2.0` (signed, SBOM'd, SLSA-attested, c
 - **First signed `v1.0.0` release** — closes v0.1's still-pending DIST-02 (real `v*` tag) and PERF-01 (published numbers); audits the new Charm deps via govulncheck/SBOM.
 
 </details>
+
+## Current Milestone: v0.13.0 Guard Hardening & UI Follow-through
+
+**Goal:** Burn down the deferral backlog in two coherent sets — close every known guard that cannot fire, then finish the contained UI follow-ons v0.12.0 deliberately left — with a self-authored CLI reference as the documentation tail.
+
+**Why these two sets and not the rest.** The deferrals sorted into four themes. Two are burn-down work: *guards that cannot fire* is this repo's own recurring defect shape (an assertion that is true but non-discriminating, so it passes whether the property holds or not — rule `84d1gfpywd`; the same threat survived three green guards in v0.12.0 Phase 5), and every item in it already has a written RED demonstration in mind; *UI follow-through* is four contained follow-ons inside code that shipped a week earlier. The other two are not burn-down work: *agent reach* (GUARD-HOOK-01/02, AGENT-04…07) is gated on evidence that skill+resources+nudge are insufficient, which nobody has measured; *not ours to schedule* (BREW-07 waits on homebrew-core's queue, DIST-06 on offline-launch evidence, Team Scale is its own milestone, SEED-003 has no "why" yet).
+
+**Target features:**
+- **Guards that cannot fire** — `CheckRegression` positivity guard on *current* metrics (999.4: a zero `PeakRSSBytes` reading passes both the relative and the absolute INDX-06 check today); a persisted `internal/query` dependency-direction archtest (T-01-18: empirically true, mitigation was a one-shot check never committed); `release:dry-run-signed`'s additions-only diff guard (passes vacuously when its awk anchor stops matching); `post-release-verify.yml`'s event-aware conclusion guard (no test asserts it, so a regression is silent); the tap App secret-distinctness test (compares two in-test constants and reads no workflow). Each demonstrated RED before it is called fixed.
+- **tmux real-PTY e2e harness (999.2)** — the release binary driven inside a tmux pane via send-keys/capture-pane: bare `daemon` with an empty registry prints only `no running daemons` with no leaked DECRQM responses; the daemon picker enters the alternate screen and restores the main buffer on quit; the install/uninstall checkbox picker renders `[x]`/`[ ]`, `space` toggles, `q`/`esc` cancels with zero config writes; a stable-frames flicker proxy. Gated behind a build tag / CI job with tmux available; skips cleanly elsewhere. This is the missing rung between the piped TTY-blind suite and manual human UAT, and it lands **before** the UI work so that work has a real-terminal rung.
+- **UI follow-through** — BRW-11 editor handoff (`vscode://file/...`-style) with a configurable URI scheme; BRW-10 "where am I" breadcrumb showing the containing symbol while scrolling a long file; HLT-04 coverage denominator — files discovered but NOT indexed, answering "why is my file missing", which needs one new Engine surface; GRF-06 community-detection clustering in the graph view, using the annotation space the schema already reserves (directory-structural grouping was the v1 substitute). Ordered by increasing scope.
+- **Docs tail** — DOCS-05: a self-authored `docs/CLI-REFERENCE.md` replacing what `docs/FLAG-PARITY.md` used to carry, with its own drift guard asserting every registered flag is documented; and the brew-trust instructions rewritten to recommend the narrow grant with security framing.
+
+**Deliberately parked:** GRF-07 (opt-in whole-symbol graph) — the 3,233-node file view already failed to converge once in v0.12.0 Phase 5, and symbols multiply that; revisit only with a measured budget. The agent-reach theme, BREW-07, DIST-06, Team Scale and SEED-003 stay in `ROADMAP.md` → Later.
+
+**Version label:** v0.13.0 is a *prediction*, not a tag — release-please remains the sole tag authority (D-06R). It holds because the UI follow-through lands `feat:` commits; a fixes-only outcome would cut `v0.12.1` instead.
 
 ## Shipped Milestone: v0.12.0 Local Graph UI
 
@@ -281,9 +299,21 @@ stapling-impossibility findings remain live constraints for DIST-06.
 
 ### Active
 
-**None — v0.12.0 shipped 2026-09-07 and the next milestone is unscoped.** Run
-`/gsd-new-milestone` to scope the next one; it creates a fresh `REQUIREMENTS.md` (this
-milestone's is archived to `milestones/v0.12.0-REQUIREMENTS.md`).
+**v0.13.0 — Guard Hardening & UI Follow-through** (scoped 2026-09-08). Requirement IDs are
+defined in `REQUIREMENTS.md` and mapped to phases in `ROADMAP.md`; the shape of the work:
+
+- [ ] `CheckRegression` refuses a non-positive *current* throughput or RSS reading, naming the degenerate field (999.4) — demonstrated RED with a degenerate-input test
+- [ ] Persisted archtest that `internal/query` imports neither `internal/uiserver` nor any wire-layer package (T-01-18)
+- [ ] `release:dry-run-signed` additions-only diff guard carries a positive assertion that the awk anchor matched and the injection happened
+- [ ] `post-release-verify.yml` event-aware conclusion guard has a test that fails when the guard is removed or inverted
+- [ ] Tap App secret-distinctness test reads the real workflow files rather than two in-test constants
+- [ ] tmux real-PTY e2e harness: bare `daemon` empty-registry output, picker alt-screen enter/restore, checkbox picker glyphs/toggle/cancel, stable-frames proxy — build-tagged, skips cleanly without tmux (999.2)
+- [ ] BRW-11 — editor handoff link from node detail with a configurable URI scheme
+- [ ] BRW-10 — containing-symbol breadcrumb while scrolling a long file
+- [ ] HLT-04 — coverage denominator: files discovered but not indexed, with reason, via a new Engine surface
+- [ ] GRF-06 — community-detection clustering in the graph view using the reserved annotation space
+- [ ] DOCS-05 — self-authored `docs/CLI-REFERENCE.md` with a drift guard over every registered flag
+- [ ] brew-trust instructions recommend the narrow grant with security framing
 
 <details>
 <summary>v0.12.0's Active list as it stood during the milestone — all items delivered</summary>
@@ -305,10 +335,10 @@ Requirement IDs were defined in `REQUIREMENTS.md` and mapped to phases in `ROADM
 
 </details>
 
-Remaining backlog (see `ROADMAP.md` → Backlog, preserved across the milestone close):
+Remaining backlog (see `ROADMAP.md` → Backlog, preserved across the milestone close) — **both promoted into v0.13.0 on 2026-09-08**:
 
-- [ ] 999.2 — tmux-driven real-PTY e2e/UAT harness for the interactive TUI (the missing rung between piped TTY-blind integration tests and manual human UAT; motivated by two TTY-only bugs v1.0 Phase 7 UAT caught)
-- [ ] 999.4 — `CheckRegression` current-metrics positivity guard (degenerate `current.PeakRSSBytes = 0` silently passes both the relative and absolute checks)
+- [ ] 999.2 — tmux-driven real-PTY e2e/UAT harness for the interactive TUI (the missing rung between piped TTY-blind integration tests and manual human UAT; motivated by two TTY-only bugs v1.0 Phase 7 UAT caught) — *in v0.13.0 Active above*
+- [ ] 999.4 — `CheckRegression` current-metrics positivity guard (degenerate `current.PeakRSSBytes = 0` silently passes both the relative and absolute checks) — *in v0.13.0 Active above*
 
 Open threads carried out of v0.3.0, deliberately NOT in v0.5.0:
 
@@ -328,7 +358,7 @@ Deferred to later releases:
 - [ ] Worktree support beyond detect-and-warn — auto-init or `git-common-dir` index sharing (v1.0 ships borrowed-index detection with a CLI warning + inline MCP notice only; going further is a deliberate later call)
 - [ ] PreToolUse/UserPromptSubmit guard hook (GUARD-HOOK-01/02) — redirects grep/find/Read toward `codegraph_explore`; the fallback if v0.10.0's skill + resources + nudge alone prove insufficient, and that evidence doesn't exist yet
 - [ ] Multi-agent skill/hooks porting (AGENT-04…07) — Cursor/Codex CLI/Antigravity/opencode; blocked on per-agent hook-schema differences not yet verified (SKILL.md itself is already portable via shared `agentskills.io` frontmatter)
-- [ ] `docs/CLI-REFERENCE.md` (DOCS-05) — a self-authored CLI reference. v0.11.0 deleted the comparison matrix; authoring a replacement is separate work with its own scope
+- [ ] `docs/CLI-REFERENCE.md` (DOCS-05) — a self-authored CLI reference. v0.11.0 deleted the comparison matrix; authoring a replacement is separate work with its own scope — **promoted into v0.13.0 on 2026-09-08**
 - [ ] MEM-02's store half — closed by *acceptance*, not demonstration (`accepted-by-d15-evidence-standard`). No session was ever both genuinely fresh and engram-tooled, so spine recall was never observed. Cheapest discharge: a fresh session probing recall as its **first** action
 
 Deliberately declined (recorded so the decision stays visible, not carried as debt):
@@ -423,4 +453,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-07 at the v0.12.0 (Local Graph UI) milestone close — 12 Active items closed and archived, 5 phase entries added to Validated, 6 Key Decisions logged, Repo state and Current State rewritten. Active is now empty; the next milestone is unscoped.*
+*Last updated: 2026-09-08 at the v0.13.0 (Guard Hardening & UI Follow-through) milestone start — Current Milestone section added, 12 Active items scoped from the deferral backlog (999.2, 999.4, DOCS-05 and three guard todos promoted; BRW-10/11, HLT-04, GRF-06 pulled from v0.12.0's v2 list), Current State's next-milestone paragraph rewritten.*

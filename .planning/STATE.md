@@ -1,37 +1,33 @@
 ---
 gsd_state_version: "1.0"
-milestone: v0.12.0
-milestone_name: Local Graph UI
-status: Awaiting next milestone
-stopped_at: Phase 6 complete — all phases complete
-last_updated: "2026-09-08T13:07:02.438Z"
+milestone: v0.13.0
+milestone_name: Guard Hardening & UI Follow-through
+status: planning
+last_updated: "2026-09-08T18:21:07.950Z"
 last_activity: 2026-09-08
-last_activity_desc: Milestone v0.12.0 completed and archived
-state_head: f74784bf2c3c523fd6fc14779f4409d96a629ea6
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 51
-  completed_plans: 51
-  percent: 100
-current_phase: 6
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-07 at the v0.12.0 close)
+See: .planning/PROJECT.md (updated 2026-09-08 at the v0.13.0 start)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Planning next milestone — v0.12.0 shipped 2026-09-07; nothing is scoped. Run /gsd-new-milestone.
+**Current focus:** v0.13.0 Guard Hardening & UI Follow-through — defining requirements (12 Active items scoped 2026-09-08; guards-that-cannot-fire first, then UI follow-through, then the docs tail)
 
 ## Current Position
 
-Phase: Milestone v0.12.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-08 — Milestone v0.12.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-09-08 — Milestone v0.13.0 started
 
 ## Performance Metrics
 
