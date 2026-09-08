@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/seanb4t/codegraph-go/compare/v0.11.0...v0.12.0) (2026-09-08)
+
+
+### Features
+
+* **ui:** local graph UI — codegraph ui serves a read-only embedded SPA over ConnectRPC ([#66](https://github.com/seanb4t/codegraph-go/issues/66)) ([c9d1959](https://github.com/seanb4t/codegraph-go/commit/c9d19595c272e331b3cbd1a951649917fe172dbf))
+
 ## [0.11.0](https://github.com/seanb4t/codegraph-go/compare/v0.10.0...v0.11.0) (2026-08-17)
 
 
