@@ -2,6 +2,7 @@
 created: 2026-08-09T00:00:00.000Z
 title: post-release-verify.yml's event-aware conclusion guard has no test asserting it, so a regression would be silent
 area: ci
+resolves_phase: 7
 severity: high
 files:
 

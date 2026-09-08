@@ -2,6 +2,7 @@
 created: 2026-08-09T00:00:00.000Z
 title: release:dry-run-signed's additions-only diff guard passes vacuously when the awk anchor stops matching
 area: release
+resolves_phase: 7
 severity: medium
 files:
 

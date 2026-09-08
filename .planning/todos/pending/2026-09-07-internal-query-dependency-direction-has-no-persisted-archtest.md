@@ -2,6 +2,7 @@
 created: 2026-09-07T00:00:00.000Z
 title: internal/query's dependency-direction invariant (T-01-18) has no persisted regression test
 area: architecture
+resolves_phase: 7
 severity: medium
 files:
 

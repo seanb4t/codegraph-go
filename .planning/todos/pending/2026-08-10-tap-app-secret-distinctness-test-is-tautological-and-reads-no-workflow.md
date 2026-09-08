@@ -2,6 +2,7 @@
 created: 2026-08-10T00:00:00.000Z
 title: tap App secret-distinctness test is tautological — it compares two in-test constants and reads no workflow
 area: testing
+resolves_phase: 7
 severity: medium
 files:
 
