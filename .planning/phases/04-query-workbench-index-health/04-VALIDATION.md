@@ -2,10 +2,11 @@
 phase: 4
 slug: query-workbench-index-health
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: false  # PARTIAL: coverage is complete (21/21 rows have verification), but web:components:drift currently exits 1 — see WINDOWS #31
+wave_0_complete: true
 created: 2026-08-29
+validated: 2026-09-07
 ---
 
 # Phase 4 — Validation Strategy
@@ -28,7 +29,7 @@ This phase spans **two** test stacks. Both must be green.
 | **Test location** | `web/tests/*.test.ts` — **not** `web/src/**/*.test.ts`; 16 existing files follow this convention | `internal/**/[name]_test.go`, package-local |
 | **Quick run** | `cd web && pnpm test` (= `vitest run`, `web/package.json:14`) | `go test ./internal/uiserver/... ./internal/query/... ./internal/gitmeta/...` |
 | **Full suite** | `task web:test` (asserts a positive executed-test count before judging pass/fail — 03-01's D3) | `task test:unit` (`Taskfile.yml:117-133`) |
-| **Estimated runtime** | ~5–15s | ~30–60s |
+| **Measured runtime** | `task test:unit` 10s · `pnpm test` ~5s (467 tests) — measured 2026-09-07 | ~30–60s |
 
 > **Toolchain note:** `GOTOOLCHAIN=go1.26.5` is required locally — go1.27 breaks the
 > `cockroachdb/swiss` build (memory `fmss86zf82`). CI is unaffected (`go-version-file` pins 1.26).
@@ -92,27 +93,27 @@ table as it assigns task IDs, and every task must land in it.*
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 04-01-T1 | 04-01 | 1 | WRK-04 | T-04-SC | `[SUS]` npm/CLI legitimacy decided by a human before install; never auto-approvable | checkpoint | *(blocking-human; answer recorded in SUMMARY)* | n/a | ⬜ pending |
-| 04-01-T2 | 04-01 | 1 | WRK-03, WRK-04 | T-04-02, T-04-03, T-04-32 | limit passes through to the server bound, no client-side duplicate; URL round-trip fidelity; a Workbench control change mints NO new navigation identity | component (tracer) | `cd web && pnpm exec vitest run --reporter=json --outputFile=/tmp/wb-tracer.json tests/workbench-tracer.test.ts; RC=$?; node -e '…floor 6…' && test "$RC" -eq 0` | ❌ new | ⬜ pending |
-| 04-01-T3 | 04-01 | 1 | WRK-04 | T-04-01, T-04-32 | vendored source carries no raw-HTML sink; failure kinds pairwise distinct; negative depth/limit pass through; route-local identity asserted for BOTH /workbench and /browse | unit + source review | `cd web && pnpm exec vitest run … tests/workbench-url.test.ts tests/workbench-failure.test.ts tests/status.test.ts` + count floor 16 (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-02-T1 | 04-02 | 1 | WRK-02 | T-04-SC-GO, T-04-05, T-04-06 | `doublestar/v4` installed HERE (after its 04-RESEARCH.md legitimacy row is read) because the escape subtest calls the matcher directly; glob regression asserted in BOTH directions before the fix; refusal proven to precede `IterateFiles` by an instrumented reader; the escape convention 04-06 relies on is matcher-verified | Go unit (RED — **assertion**, not build failure) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... -run TestFilesPatternRecursiveGlob -v` + subtest count ≥7 + build-marker count =0 (positive-controlled by that floor) + exactly 2 `--- FAIL` naming `nested`/`brace_alternation` + exactly 1 `--- PASS` for `escaped_metacharacter_is_literal` + non-zero exit | ✓ extends `files_status_test.go`; adds `go.mod`/`go.sum` | ⬜ pending |
-| 04-02-T2 | 04-02 | 1 | WRK-02 | T-04-SC-GO, T-04-05 | matcher swapped in `files.go` only (the module already landed in T1); pre-scan sanity check retained; no golden or frozen transcript changes | Go unit (GREEN) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... ./internal/cli/... ./internal/mcp/...` + `ok` count ≥3 | ✓ | ⬜ pending |
-| 04-02-T3 | 04-02 | 1 | WRK-02 | — | stale comment asserting a fixed bug is retired | file assertion | `test -f .planning/todos/completed/…files-rpc-pattern-glob…md` + resolution-record grep | n/a | ⬜ pending |
-| 04-03-T1 | 04-03 | 1 | HLT-01, HLT-02, HLT-03 | T-04-09 | one-way proto field numbering frozen by a human; host-path exposure acknowledged | checkpoint | *(blocking-human; decision recorded in SUMMARY)* | n/a | ⬜ pending |
-| 04-03-T2 | 04-03 | 1 | HLT-01 | T-04-08 | read-only method set stays exactly the read set; `mutatingVerbs` untouched | Go unit | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run 'TestUIServiceMethodSetIsExactlyTheReadSet\|TestUIServiceDeclaresNoMutatingMethod' -v` + PASS count ≥2 | ✓ needs literal update | ⬜ pending |
-| 04-03-T3 | 04-03 | 1 | HLT-01, HLT-03 | T-04-10, T-04-11 | one engine open per call; commit SHA validated at the read site; no degrade-and-answer | Go unit | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run TestGetHealth -v` + PASS count ≥6 | ❌ new `health_test.go` | ⬜ pending |
-| 04-04-T1 | 04-04 | 2 | WRK-04 | T-04-SC-TABS | vendored tabs source reviewed with a positive control; lockfile consistent | source review | `test $(ls web/src/lib/components/ui/tabs \| wc -l) -eq 5 && pnpm install --frozen-lockfile && pnpm check` | n/a | ⬜ pending |
-| 04-04-T2 | 04-04 | 2 | WRK-01, WRK-04 | T-04-13, T-04-14, T-04-15, T-04-32 | depth passes through unbounded; no navigation on control change; per-dispatch abort; **`GetStatus` call count unchanged across a depth edit**; `{rows,summary}` result contract carries `nodeCount`/`edgeCount` | component | `cd web && pnpm exec vitest run … tests/workbench-impact.test.ts` + count floor 9 (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-04-T3 | 04-04 | 2 | WRK-03, WRK-04 | T-04-13, T-04-16, T-04-32 | four failure kinds render four provably distinct strings (Set size 4); `GetStatus` call count unchanged across a limit edit | component | `cd web && pnpm exec vitest run … tests/workbench-callers-callees.test.ts` + count floor 8 (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-05-T1 | 04-05 | 2 | HLT-01, HLT-02 | T-04-17, T-04-22 | no second verdict function; blank-roots mismatch is FALSE; two-snapshot disagreement has a stated display rule AND is computable — `IndexStatus` is widened additively with `commitSha` while `StatusVerdict` keeps five members and `CommitKnowledge` keeps two; **all FOUR construction sites updated**, the fourth (`browse-page.test.ts`'s status-gate stub) gated by a positive-controlled grep rather than `pnpm check`, because bivariance through an untyped context `Map` makes the compiler blind to it | unit | `cd web && pnpm exec vitest run … tests/health-view.test.ts` + `… tests/status.test.ts`, SEPARATE floors 8 and 18, both statuses and both floors `&&`-chained as ONE final command | ❌ new (`health-view.test.ts`) + ✓ extends `status.test.ts` | ⬜ pending |
-| 04-05-T2 | 04-05 | 2 | HLT-01, HLT-02, HLT-03 | T-04-18, T-04-20 | one gate, one GetHealth call, no timer API, no project/index path rendered; `CountTable` binds the GENERIC `DataTable` over `CountRow` | component | `cd web && pnpm check` + health-view suite still green (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-05-T3 | 04-05 | 2 | HLT-01, HLT-02, HLT-03 | T-04-17, T-04-21, T-04-22 | verdict precedes numbers (DOM order); warning present AND absent both asserted; stale-snapshot notice asserted in BOTH directions (the ABSENT direction is what catches a comparison reading the presence flag instead of the SHA) | component | `cd web && pnpm exec vitest run … tests/health-page.test.ts` + count floor 9 (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-06-T1 | 04-06 | 3 | WRK-02 | T-04-22, T-04-23 | min-length + debounce + **cleared-timer** (pre-dispatch) + **abort of a genuinely overlapping dispatch** + out-of-order discard; **glob metacharacters escaped**; `search.ts` refactored onto the shared controller with its Phase-3 suite byte-unchanged | unit | `cd web && pnpm exec vitest run … tests/file-search.test.ts tests/debounced-rpc.test.ts tests/search.test.ts` + count floor 8 for file-search (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-06-T2 | 04-06 | 3 | WRK-02 | T-04-24 | repeated `file=` both directions; comma-containing path round-trips | component | `cd web && pnpm exec vitest run … tests/workbench-affected.test.ts` + count floor 6 (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-06-T3 | 04-06 | 3 | WRK-02, WRK-04 | T-04-25, T-04-32 | four-tab completeness asserted against a module-derived mode set; echoed `files` arrive through the `{rows,summary}` contract; chip edits mint no new navigation identity | component | `cd web && pnpm exec vitest run … tests/workbench-affected.test.ts` + count floor 13 (`&&`-chained) | ❌ new | ⬜ pending |
-| 04-07-T1 | 04-07 | 4 | WRK-04 | T-04-27 | regeneration determinism PROVEN before the guard depends on it, over EVERY vendored family (disk-derived), not just this phase's two | live probe | *(recorded finding; five questions answered in SUMMARY)* | n/a | ⬜ pending |
-| 04-07-T2 | 04-07 | 4 | WRK-04 | T-04-27, T-04-28, T-04-29 | disk-derived subject set (pathspec WITHOUT a trailing slash — the trailing-slash form returns zero); non-zero population floor asserted before comparing; RED-proven; wired into a non-PR schedule/dispatch workflow whose bootstrap ORDER is asserted by line number (`checkout < install-task < setup-node < run`, every extraction `test -n` guarded), not merely by presence | Taskfile gate + workflow | `task web:components:drift` + printed `compared N vendored component files` + exit 0; `GOTOOLCHAIN=go1.26.5 go test ./internal/upgrade/... -run 'TestWorkflowFilePopulationMatchesDisk\|TestInScopeJobsPopulationMatchesDisk\|TestWorkflowRunBodiesInvokeTask' -v` | ❌ new target + new workflow | ⬜ pending |
-| 04-07-T3 | 04-07 | 4 | WRK-04 | T-04-30, T-04-31 | 1000-row measurement with a row-count positive control; **wall-clock thresholds are opt-in via `task web:render-cost`, never asserted inside the PR-required `task web:test`**; committed bundle current | component + gate | `cd web && pnpm exec vitest run … tests/data-table-render-cost.test.ts` + count floor 3 (`&&`-chained); `task web:render-cost` (opt-in); `task web:drift` exit 0 | ❌ new | ⬜ pending |
+| 04-01-T1 | 04-01 | 1 | WRK-04 | T-04-SC | `[SUS]` npm/CLI legitimacy decided by a human before install; never auto-approvable | checkpoint | *(blocking-human; answer recorded in SUMMARY)* | n/a | ✅ done (blocking-human / recorded finding; answer in SUMMARY) |
+| 04-01-T2 | 04-01 | 1 | WRK-03, WRK-04 | T-04-02, T-04-03, T-04-32 | limit passes through to the server bound, no client-side duplicate; URL round-trip fidelity; a Workbench control change mints NO new navigation identity | component (tracer) | `cd web && pnpm exec vitest run --reporter=json --outputFile=/tmp/wb-tracer.json tests/workbench-tracer.test.ts; RC=$?; node -e '…floor 6…' && test "$RC" -eq 0` | ✅ | ✅ green |
+| 04-01-T3 | 04-01 | 1 | WRK-04 | T-04-01, T-04-32 | vendored source carries no raw-HTML sink; failure kinds pairwise distinct; negative depth/limit pass through; route-local identity asserted for BOTH /workbench and /browse | unit + source review | `cd web && pnpm exec vitest run … tests/workbench-url.test.ts tests/workbench-failure.test.ts tests/status.test.ts` + count floor 16 (`&&`-chained) | ✅ | ✅ green |
+| 04-02-T1 | 04-02 | 1 | WRK-02 | T-04-SC-GO, T-04-05, T-04-06 | `doublestar/v4` installed HERE (after its 04-RESEARCH.md legitimacy row is read) because the escape subtest calls the matcher directly; glob regression asserted in BOTH directions before the fix; refusal proven to precede `IterateFiles` by an instrumented reader; the escape convention 04-06 relies on is matcher-verified | Go unit (RED — **assertion**, not build failure) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... -run TestFilesPatternRecursiveGlob -v` + subtest count ≥7 + build-marker count =0 (positive-controlled by that floor) + exactly 2 `--- FAIL` naming `nested`/`brace_alternation` + exactly 1 `--- PASS` for `escaped_metacharacter_is_literal` + non-zero exit | ✓ extends `files_status_test.go`; adds `go.mod`/`go.sum` | ✅ green |
+| 04-02-T2 | 04-02 | 1 | WRK-02 | T-04-SC-GO, T-04-05 | matcher swapped in `files.go` only (the module already landed in T1); pre-scan sanity check retained; no golden or frozen transcript changes | Go unit (GREEN) | `GOTOOLCHAIN=go1.26.5 go test ./internal/query/... ./internal/cli/... ./internal/mcp/...` + `ok` count ≥3 | ✓ | ✅ green |
+| 04-02-T3 | 04-02 | 1 | WRK-02 | — | stale comment asserting a fixed bug is retired | file assertion | `test -f .planning/todos/completed/…files-rpc-pattern-glob…md` + resolution-record grep | n/a | ✅ done (blocking-human / recorded finding; answer in SUMMARY) |
+| 04-03-T1 | 04-03 | 1 | HLT-01, HLT-02, HLT-03 | T-04-09 | one-way proto field numbering frozen by a human; host-path exposure acknowledged | checkpoint | *(blocking-human; decision recorded in SUMMARY)* | n/a | ✅ done (blocking-human / recorded finding; answer in SUMMARY) |
+| 04-03-T2 | 04-03 | 1 | HLT-01 | T-04-08 | read-only method set stays exactly the read set; `mutatingVerbs` untouched | Go unit | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run 'TestUIServiceMethodSetIsExactlyTheReadSet\|TestUIServiceDeclaresNoMutatingMethod' -v` + PASS count ≥2 | ✓ needs literal update | ✅ green |
+| 04-03-T3 | 04-03 | 1 | HLT-01, HLT-03 | T-04-10, T-04-11 | one engine open per call; commit SHA validated at the read site; no degrade-and-answer | Go unit | `GOTOOLCHAIN=go1.26.5 go test ./internal/uiserver/... -run TestGetHealth -v` + PASS count ≥6 | ✅ | ✅ green |
+| 04-04-T1 | 04-04 | 2 | WRK-04 | T-04-SC-TABS | vendored tabs source reviewed with a positive control; lockfile consistent | source review | `test $(ls web/src/lib/components/ui/tabs \| wc -l) -eq 5 && pnpm install --frozen-lockfile && pnpm check` | n/a | ✅ done (blocking-human / recorded finding; answer in SUMMARY) |
+| 04-04-T2 | 04-04 | 2 | WRK-01, WRK-04 | T-04-13, T-04-14, T-04-15, T-04-32 | depth passes through unbounded; no navigation on control change; per-dispatch abort; **`GetStatus` call count unchanged across a depth edit**; `{rows,summary}` result contract carries `nodeCount`/`edgeCount` | component | `cd web && pnpm exec vitest run … tests/workbench-impact.test.ts` + count floor 9 (`&&`-chained) | ✅ | ✅ green |
+| 04-04-T3 | 04-04 | 2 | WRK-03, WRK-04 | T-04-13, T-04-16, T-04-32 | four failure kinds render four provably distinct strings (Set size 4); `GetStatus` call count unchanged across a limit edit | component | `cd web && pnpm exec vitest run … tests/workbench-callers-callees.test.ts` + count floor 8 (`&&`-chained) | ✅ | ✅ green |
+| 04-05-T1 | 04-05 | 2 | HLT-01, HLT-02 | T-04-17, T-04-22 | no second verdict function; blank-roots mismatch is FALSE; two-snapshot disagreement has a stated display rule AND is computable — `IndexStatus` is widened additively with `commitSha` while `StatusVerdict` keeps five members and `CommitKnowledge` keeps two; **all FOUR construction sites updated**, the fourth (`browse-page.test.ts`'s status-gate stub) gated by a positive-controlled grep rather than `pnpm check`, because bivariance through an untyped context `Map` makes the compiler blind to it | unit | `cd web && pnpm exec vitest run … tests/health-view.test.ts` + `… tests/status.test.ts`, SEPARATE floors 8 and 18, both statuses and both floors `&&`-chained as ONE final command | ✅ | ✅ green |
+| 04-05-T2 | 04-05 | 2 | HLT-01, HLT-02, HLT-03 | T-04-18, T-04-20 | one gate, one GetHealth call, no timer API, no project/index path rendered; `CountTable` binds the GENERIC `DataTable` over `CountRow` | component | `cd web && pnpm check` + health-view suite still green (`&&`-chained) | ✅ | ✅ green |
+| 04-05-T3 | 04-05 | 2 | HLT-01, HLT-02, HLT-03 | T-04-17, T-04-21, T-04-22 | verdict precedes numbers (DOM order); warning present AND absent both asserted; stale-snapshot notice asserted in BOTH directions (the ABSENT direction is what catches a comparison reading the presence flag instead of the SHA) | component | `cd web && pnpm exec vitest run … tests/health-page.test.ts` + count floor 9 (`&&`-chained) | ✅ | ✅ green |
+| 04-06-T1 | 04-06 | 3 | WRK-02 | T-04-22, T-04-23 | min-length + debounce + **cleared-timer** (pre-dispatch) + **abort of a genuinely overlapping dispatch** + out-of-order discard; **glob metacharacters escaped**; `search.ts` refactored onto the shared controller with its Phase-3 suite byte-unchanged | unit | `cd web && pnpm exec vitest run … tests/file-search.test.ts tests/debounced-rpc.test.ts tests/search.test.ts` + count floor 8 for file-search (`&&`-chained) | ✅ | ✅ green |
+| 04-06-T2 | 04-06 | 3 | WRK-02 | T-04-24 | repeated `file=` both directions; comma-containing path round-trips | component | `cd web && pnpm exec vitest run … tests/workbench-affected.test.ts` + count floor 6 (`&&`-chained) | ✅ | ✅ green |
+| 04-06-T3 | 04-06 | 3 | WRK-02, WRK-04 | T-04-25, T-04-32 | four-tab completeness asserted against a module-derived mode set; echoed `files` arrive through the `{rows,summary}` contract; chip edits mint no new navigation identity | component | `cd web && pnpm exec vitest run … tests/workbench-affected.test.ts` + count floor 13 (`&&`-chained) | ✅ | ✅ green |
+| 04-07-T1 | 04-07 | 4 | WRK-04 | T-04-27 | regeneration determinism PROVEN before the guard depends on it, over EVERY vendored family (disk-derived), not just this phase's two | live probe | *(recorded finding; five questions answered in SUMMARY)* | n/a | ✅ done (blocking-human / recorded finding; answer in SUMMARY) |
+| 04-07-T2 | 04-07 | 4 | WRK-04 | T-04-27, T-04-28, T-04-29 | disk-derived subject set (pathspec WITHOUT a trailing slash — the trailing-slash form returns zero); non-zero population floor asserted before comparing; RED-proven; wired into a non-PR schedule/dispatch workflow whose bootstrap ORDER is asserted by line number (`checkout < install-task < setup-node < run`, every extraction `test -n` guarded), not merely by presence | Taskfile gate + workflow | `task web:components:drift` + printed `compared N vendored component files` + exit 0; `GOTOOLCHAIN=go1.26.5 go test ./internal/upgrade/... -run 'TestWorkflowFilePopulationMatchesDisk\|TestInScopeJobsPopulationMatchesDisk\|TestWorkflowRunBodiesInvokeTask' -v` | ✅ | ⚠️ gate runs and is non-vacuous, but currently exits 1 — see WINDOWS #31 |
+| 04-07-T3 | 04-07 | 4 | WRK-04 | T-04-30, T-04-31 | 1000-row measurement with a row-count positive control; **wall-clock thresholds are opt-in via `task web:render-cost`, never asserted inside the PR-required `task web:test`**; committed bundle current | component + gate | `cd web && pnpm exec vitest run … tests/data-table-render-cost.test.ts` + count floor 3 (`&&`-chained); `task web:render-cost` (opt-in); `task web:drift` exit 0 | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -145,11 +146,11 @@ table as it assigns task IDs, and every task must land in it.*
 
 ## Wave 0 Requirements
 
-- [ ] `web/tests/workbench-url.test.ts` — URL-grammar round-trip, mirroring `browse-url.test.ts`'s existing shape. **Must include a repeated-`file=` case** (D-11's `getAll()` divergence from browse-url's `params.get()`), which is the single easiest thing to get silently wrong in this phase.
-- [ ] `web/tests/workbench-*.test.ts` — component tests for the four analysis tabs (WRK-01..04).
-- [ ] `web/tests/health-page.test.ts` — component test for the health view (HLT-01..03).
-- [ ] `internal/uiserver/health_test.go` (or extend `handlers_test.go`) — Go coverage for the new health handler, mirroring the existing `Callers`/`Callees` handler test shape.
-- [ ] Extend `internal/query`'s existing `Files`-pattern test with the root-level **and** nested `doublestar` cases D-14 requires. **Both directions are mandatory** — a nested-only test would pass while root-level search silently regressed, which is the exact failure mode D-14 exists to prevent.
+- [x] `web/tests/workbench-url.test.ts` — URL-grammar round-trip, mirroring `browse-url.test.ts`'s existing shape. **Must include a repeated-`file=` case** (D-11's `getAll()` divergence from browse-url's `params.get()`), which is the single easiest thing to get silently wrong in this phase.
+- [x] `web/tests/workbench-*.test.ts` — component tests for the four analysis tabs (WRK-01..04).
+- [x] `web/tests/health-page.test.ts` — component test for the health view (HLT-01..03).
+- [x] `internal/uiserver/health_test.go` (or extend `handlers_test.go`) — Go coverage for the new health handler, mirroring the existing `Callers`/`Callees` handler test shape.
+- [x] Extend `internal/query`'s existing `Files`-pattern test with the root-level **and** nested `doublestar` cases D-14 requires. **Both directions are mandatory** — a nested-only test would pass while root-level search silently regressed, which is the exact failure mode D-14 exists to prevent.
 
 > **Corpus finding (cycle-1 review, verified in-tree 2026-08-29 — do NOT assume the
 > shared fixture is sufficient).** `internal/indexer/testdata/gofixture` contains exactly
@@ -161,7 +162,7 @@ table as it assigns task IDs, and every task must land in it.*
 > `indexFixture(t, dir)` runs. `typescript` is a registered language
 > (`internal/indexer/languages_typescript.go`), so a `.ts` file is genuinely indexed.
 
-- [ ] `web/tests/debounced-rpc.test.ts` — the extracted debounce/abort/request-identity
+- [x] `web/tests/debounced-rpc.test.ts` — the extracted debounce/abort/request-identity
       controller 04-06 configures twice (D-15 satisfied structurally, not by sharing two
       constants). `web/tests/search.test.ts` must stay green **byte-unchanged** across
       that refactor; that is the regression proof.
@@ -205,14 +206,74 @@ that can be machine-checked **must** be, and the entries here are scoped to the 
 
 ---
 
+## Validation Audit 2026-09-07 — PARTIAL
+
+| Metric | Count |
+|--------|-------|
+| Map rows | 21 (16 automated, 5 blocking-human/recorded-finding) |
+| Gaps found (MISSING) | **0** |
+| Rows green | 20 |
+| Rows not green | **1** (`04-07-T2`, `web:components:drift`) |
+| Resolved this audit | 0 (none needed) |
+
+**Coverage is complete; one gate is not currently green.** That is the precise reason this
+phase is `nyquist_compliant: false` — a **PARTIAL**, not a coverage gap. Every requirement has
+automated verification and no test needed generating.
+
+Verified fresh 2026-09-07, every declared threshold met and observed:
+
+| Row | Declared floor | Observed |
+|---|---|---|
+| 04-02-T1 (`TestFilesPatternRecursiveGlob`) | ≥ 7 subtests | **8** |
+| 04-03-T2 (read-only method set) | ≥ 2 | **2** |
+| 04-03-T3 (`TestGetHealth`) | ≥ 6 | **6** |
+| 04-07-T2 (`TestWorkflowFilePopulationMatchesDisk`) | 1 | **1** |
+
+All 13 vitest files the map names by filename exist on disk (`workbench-tracer`,
+`workbench-url`, `workbench-failure`, `status`, `workbench-impact`,
+`workbench-callers-callees`, `health-view`, `health-page`, `file-search`, `debounced-rpc`,
+`search`, `workbench-affected`, `data-table-render-cost`) and `pnpm test` is **467/467**.
+`pnpm check` and `task web:drift` both exit 0. **Positive control:** a deliberately
+nonexistent `-run` pattern returned PASS=0 while exiting 0.
+
+### The one non-green row — `web:components:drift` (WINDOWS #31)
+
+```
+::error::web:components:drift: web/src/lib/components/ui/button/button.svelte
+        differs from shadcn-svelte@1.5.1's regeneration
+```
+
+**This is the gate working, not failing.** It named one specific file — a discriminating,
+non-vacuous result — and 04-07 recorded all eight vendored families reproducing byte-identically
+at vendoring time, so something has changed since.
+
+- **Ruled out: local tampering.** `button.svelte` has exactly **one** commit in its entire
+  history (`205da685`, `feat(03-06): vendor shadcn-svelte Command component, human-approved`).
+  It was never hand-edited.
+- **Not ruled out, and not testable from this host: the toolchain.** `web/package.json` pins
+  `packageManager: pnpm@11.23.0` and `components-drift.yml` resolves it through Corepack — but
+  **corepack is not installed on this development machine**, so the target fell back to bare
+  pnpm and reported its own `Done in 3.4s using pnpm v12.3.4`. Whether pnpm 12 changes what
+  `pnpm dlx shadcn-svelte@1.5.1` emits cannot be answered locally.
+- **Remaining hypothesis:** genuine registry-side drift in shadcn-svelte's `button` since 03-06.
+- **Impact on merges: none.** The gate is `schedule` (Mon 08:00 UTC) + `workflow_dispatch` only
+  and deliberately never in `requiredCheckNames` (D-16) — a live registry fetch has no place in
+  a merge gate. Nothing is blocked by this.
+
+**Next step:** trigger `components-drift` via `workflow_dispatch`, where Corepack pins pnpm
+11.23.0. RED there too → diff the regenerated file and decide whether to re-vendor. GREEN → the
+finding is a local-toolchain artifact and #31 can be waived.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or a Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags (`vitest` not `vitest --watch`)
-- [ ] Feedback latency < 60s
-- [ ] Every verify gate honors exit status **and** a positive count floor
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or a Wave 0 dependency
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags (`vitest` not `vitest --watch`)
+- [x] Feedback latency < 60s
+- [x] Every verify gate honors exit status **and** a positive count floor
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated (PARTIAL) 2026-09-07
