@@ -102,39 +102,46 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GRD-01 | — | Pending |
-| GRD-02 | — | Pending |
-| GRD-03 | — | Pending |
-| GRD-04 | — | Pending |
-| GRD-05 | — | Pending |
-| GRD-06 | — | Pending |
-| TTY-01 | — | Pending |
-| TTY-02 | — | Pending |
-| TTY-03 | — | Pending |
-| TTY-04 | — | Pending |
-| TTY-05 | — | Pending |
-| TTY-06 | — | Pending |
-| TTY-07 | — | Pending |
-| BRW-10 | — | Pending |
-| BRW-11 | — | Pending |
-| BRW-12 | — | Pending |
-| BRW-13 | — | Pending |
-| HLT-04 | — | Pending |
-| HLT-05 | — | Pending |
-| HLT-06 | — | Pending |
-| GRF-06 | — | Pending |
-| GRF-08 | — | Pending |
-| GRF-09 | — | Pending |
-| GRF-10 | — | Pending |
-| DOCS-05 | — | Pending |
-| DOCS-06 | — | Pending |
-| DOCS-07 | — | Pending |
+| GRD-01 | Phase 7 | Pending |
+| GRD-02 | Phase 7 | Pending |
+| GRD-03 | Phase 7 | Pending |
+| GRD-04 | Phase 7 | Pending |
+| GRD-05 | Phase 7 | Pending |
+| GRD-06 | Phase 7 | Pending |
+| TTY-01 | Phase 8 | Pending |
+| TTY-02 | Phase 8 | Pending |
+| TTY-03 | Phase 8 | Pending |
+| TTY-04 | Phase 8 | Pending |
+| TTY-05 | Phase 8 | Pending |
+| TTY-06 | Phase 8 | Pending |
+| TTY-07 | Phase 8 | Pending |
+| BRW-10 | Phase 9 | Pending |
+| BRW-11 | Phase 9 | Pending |
+| BRW-12 | Phase 9 | Pending |
+| BRW-13 | Phase 9 | Pending |
+| HLT-04 | Phase 10 | Pending |
+| HLT-05 | Phase 10 | Pending |
+| HLT-06 | Phase 10 | Pending |
+| GRF-06 | Phase 11 | Pending |
+| GRF-08 | Phase 11 | Pending |
+| GRF-09 | Phase 11 | Pending |
+| GRF-10 | Phase 11 | Pending |
+| DOCS-05 | Phase 12 | Pending |
+| DOCS-06 | Phase 12 | Pending |
+| DOCS-07 | Phase 12 | Pending |
 
 **Coverage:**
 - v1 requirements: 27 total
-- Mapped to phases: 0
-- Unmapped: 27 ⚠️ (populated by roadmap creation)
+- Mapped to phases: 27 ✓
+- Unmapped: 0 ✓
+- Duplicated across phases: 0 ✓ (every requirement maps to exactly one phase)
+
+Per-phase totals — Phase 7: 6 (GRD-01…06) · Phase 8: 7 (TTY-01…07) · Phase 9: 4 (BRW-10…13) · Phase 10: 3 (HLT-04…06) · Phase 11: 4 (GRF-06, GRF-08, GRF-09, GRF-10) · Phase 12: 3 (DOCS-05…07). 6 + 7 + 4 + 3 + 4 + 3 = 27.
+
+The v2 requirements (GRF-07, BRW-14, GRD-07, GRD-08) are deliberately unmapped and stay in
+`ROADMAP.md` → Milestones → **Later**; GRD-07 and GRD-08 were *declined for this milestone*
+by maintainer decision (2026-09-08), not deferred by omission.
 
 ---
 *Requirements defined: 2026-09-08*
-*Last updated: 2026-09-08 after initial definition*
+*Last updated: 2026-09-08 after roadmap creation (Phases 7–12; 27/27 mapped)*

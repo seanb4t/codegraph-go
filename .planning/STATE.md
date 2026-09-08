@@ -2,11 +2,15 @@
 gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
+current_phase_name: roadmap complete
 status: planning
-last_updated: "2026-09-08T18:21:07.950Z"
+stopped_at: v0.13.0 roadmap created — Phases 7-12 written, 27/27 requirements mapped, no plans yet
+last_updated: "2026-09-08T20:26:52.732Z"
 last_activity: 2026-09-08
+last_activity_desc: "Roadmap created: Phases 7-12, 27/27 requirements mapped"
+state_head: a478275813b4b9a906185f3bcbc35727bcbe00bf
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-08 at the v0.13.0 start)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** v0.13.0 Guard Hardening & UI Follow-through — defining requirements (12 Active items scoped 2026-09-08; guards-that-cannot-fire first, then UI follow-through, then the docs tail)
+**Current focus:** v0.13.0 Guard Hardening & UI Follow-through — roadmap created 2026-09-08. Six phases (7–12), 27/27 v1 requirements mapped, 0 plans written yet. Guards that cannot fire first, then the tmux real-PTY harness, then the four UI follow-ons by increasing dependency weight, then the docs tail. Next: plan Phase 7.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap complete)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-09-08 — Milestone v0.13.0 started
+Status: Roadmap complete — ready to plan Phase 7
+Last activity: 2026-09-08 — Roadmap created: Phases 7-12, 27/27 requirements mapped
 
 ## Performance Metrics
 
@@ -366,20 +370,22 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-07T20:35:11.345Z
-Stopped at: Phase 6 complete — all phases complete
-  NEXT: `/gsd-plan-phase 2` (SPA Toolchain, Embedded App Shell & JS Supply Chain)
+Last session: 2026-09-08T20:25:32.885Z
+Stopped at: v0.13.0 roadmap created — Phases 7-12 written, 27/27 requirements mapped, no plans yet
+  NEXT: `/gsd-plan-phase 7` (Guards That Cannot Fire)
   CARRY-OVER:
 
-    - **Phase numbering restarts at 1** (this milestone was started with `--reset-phase-numbers`). `.planning/phases/` holds only `999.x` backlog directories, so Phases 1–6 collide with nothing.
-    - **`branching_strategy: milestone`** — this milestone lives on one branch (`gsd/v0.12.0-local-graph-ui`) and is not incrementally merged.
-    - **Phase 1 is complete and verified** (5/5 ROADMAP criteria, `01-VERIFICATION.md`). The Connect server, the nine read-only RPCs, the Origin/Host guard and the `internal/query` seams are live and golden-clean.
-    - **Phase 2 inherits one open UAT item by design:** `01-UAT.md` test 1 records `GET /` → 404 because Phase 1 mounts only the Connect handler prefix and ships no SPA. It is recorded as `deferred` in `01-VERIFICATION.md`, and Phase 2's success criterion 1 (embedded SPA on this same mux) closes it by construction. `phase uat-passed 1` therefore reports `passed:false` on that one named blocker — this is a real, non-vacuous blocker, not the empty-blockers failure mode.
-    - **The protobuf half of the drift guard already exists** (`task proto:drift`, 3 files compared, RED-proven). Phase 2's `dist/`↔SPA guard is the second consumer of that one pattern, not a new one.
-    - **Within Phase 5, `GRF-01` blocks everything else in the phase.** Its pass condition must be written down before it is dispatched, and the roadmap deliberately names no renderer.
-    - **No `v0.12.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline.
+    - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
+    - **Backlog 999.2 and 999.4 are promoted, not deleted.** Both entries stay in `ROADMAP.md` → Backlog, annotated with the phase that consumed them (999.2 → Phase 8 as TTY-01…07; 999.4 → Phase 7 as GRD-01). This closes the standing "backlog bookkeeping inconsistency" recorded in Blockers above.
+    - **Phase 7 gates Phase 10.** `GRD-02`'s archtest fixes the dependency-direction rule `internal/query` must obey, and `HLT-05`'s discovery-exclusion helper has to be wired inside it. The open question of whether the archtest also forbids a `query`→`indexer` edge is resolved in Phase 7, not discovered in Phase 10.
+    - **`GRF-09`'s threshold is committed BEFORE its measurement, in its own commit** — `GRF-01`'s precedent, where the threshold file has exactly one commit that is an ancestor of both observation commits, so the ordering is checkable rather than assertable. A failing measurement triggers the documented index-time-persistence fallback into the reserved 50-59 field range, never a raised bar.
+    - **Every guard in this milestone carries a positive assertion that it did its work** (rule `84d1gfpywd`) and is demonstrated RED against a confirmed-applied, byte-cleanly-reverted mutation before it is trusted green. `GRD-06` is that proof committed rather than asserted.
+    - **The tmux harness (Phase 8) lands before the UI work** so that work has a real-terminal rung. `TTY-02`'s capture-twice-and-compare stability poll is the single highest flake risk in the milestone; no assertion may run against one capture.
+    - **`branching_strategy: milestone`** — this milestone lives on one branch and is not incrementally merged.
+    - **No `v0.13.0` git tag.** release-please owns tagging (D-06R); a hand-created tag would match `release.yml`'s `v[0-9]*` trigger and falsely fire the release pipeline. The label is a prediction that holds because the UI follow-through lands `feat:` commits.
     - **`.planning/` and `CHANGELOG.md` stay tool-owned** — no invented headings, and no version-bearing or ✅-bearing `###` heading under `## Phases` other than the single active-milestone heading.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Review `.planning/ROADMAP.md` → v0.13.0 (Phases 7-12) and approve or send revisions
+- Then plan the first phase with /gsd-plan-phase 7

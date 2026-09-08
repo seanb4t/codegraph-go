@@ -1,12 +1,43 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v0.13.0",
-  "phases": [],
+  "milestone": "v0.13.0 — Guard Hardening & UI Follow-through",
+  "phases": [
+    {
+      "number": "7",
+      "name": "Guards That Cannot Fire",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "tmux Real-PTY Harness",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Source View Follow-Through — Breadcrumb & Editor Handoff",
+      "status": "pending"
+    },
+    {
+      "number": "10",
+      "name": "Index Health — The Coverage Denominator",
+      "status": "pending"
+    },
+    {
+      "number": "11",
+      "name": "Graph View — Community Clustering",
+      "status": "pending"
+    },
+    {
+      "number": "12",
+      "name": "CLI Reference & Docs Tail",
+      "status": "pending"
+    }
+  ],
   "next": {
-    "command": "/gsd:discuss-phase",
-    "label": "Discuss the first phase",
-    "reason": "Project initialized — plan your first phase"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (plan phase 1)",
+    "reason": "Phase ? of 6 — needs a plan"
   },
-  "updated_at": "2026-09-08T18:21:07.953Z"
+  "updated_at": "2026-09-08T20:26:44.445Z"
 }
