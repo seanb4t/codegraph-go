@@ -145,7 +145,14 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
   5. A committed mutation log carries, for each of the four guards, the pasted failing output from its RED demonstration plus evidence of a byte-clean revert, following `03-MUTATION-LOG.md`'s precedent — four demonstrations, none of them summarised away (GRD-06)
 
 **Notes**: Every fix has an exact source location and an exact reusable structural precedent already in-tree — `internal/graphstore/archtest/import_graph_test.go` for `GRD-02`, `internal/upgrade/bench_workflow_shape_test.go` for `GRD-04` — so this phase should skip the research pass. `GRD-01`'s fix must not itself be vacuous: a bare positivity floor is trivially satisfiable by a different measurement bug, so the test exercises the historical degenerate frame rather than a synthetic one. A project-wide mutation-testing framework is out of scope by construction; the hand-authored RED-demonstration convention already works at this scale. Consumes backlog **999.4**, three pending todos (dry-run-signed, post-release-verify, tap secret — the last resolved by deleting the tautological test, not rewriting it) and the T-01-18 archtest item. `GRD-07`/`GRD-08` were declined for this milestone by the maintainer and are recorded in REQUIREMENTS.md → v2, not silently dropped; `GRD-05` joined them at the Phase 7 discussion (2026-09-08). The `query`→`indexer` scoping question was resolved at that discussion: the archtest forbids the `internal/indexer` root and allows the `goextract`/`nodeid` leaves (07-CONTEXT.md D-01), which fixes where Phase 10's helper may live.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+
+- [ ] 07-01-PLAN.md — TRACER: GRD-01 `CheckRegression` current-metrics positivity, watched RED against the pre-fix build, and `07-MUTATION-LOG.md` created with family (a)
+- [ ] 07-02-PLAN.md — GRD-02 `internal/query` dependency-direction archtest over the resolved transitive set, RED-proven on both the wire-layer and indexer-root rules, family (b)
+- [ ] 07-03-PLAN.md — GRD-03 `scripts/inject-cosign-key.sh` extraction plus the exactly-one injected-key count assertion, both Task targets rewired, family (c)
+- [ ] 07-04-PLAN.md — GRD-04 per-job conclusion-guard test (removed and inverted both RED-proven), the tautological tap test deleted per D-09, family (d) and the log closed
 
 ### Phase 8: tmux Real-PTY Harness
 
