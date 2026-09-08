@@ -306,7 +306,7 @@ defined in `REQUIREMENTS.md` and mapped to phases in `ROADMAP.md`; the shape of 
 - [ ] Persisted archtest that `internal/query` imports neither `internal/uiserver` nor any wire-layer package (T-01-18)
 - [ ] `release:dry-run-signed` additions-only diff guard carries a positive assertion that the awk anchor matched and the injection happened
 - [ ] `post-release-verify.yml` event-aware conclusion guard has a test that fails when the guard is removed or inverted
-- [ ] Tap App secret-distinctness test reads the real workflow files rather than two in-test constants
+- [ ] Tap App secret-distinctness test deleted rather than rewritten (GRD-05 declined at the Phase 7 discussion, 2026-09-08 — low-value property, lying test removed)
 - [ ] tmux real-PTY e2e harness: bare `daemon` empty-registry output, picker alt-screen enter/restore, checkbox picker glyphs/toggle/cancel, stable-frames proxy — build-tagged, skips cleanly without tmux (999.2)
 - [ ] BRW-11 — editor handoff link from node detail with a configurable URI scheme
 - [ ] BRW-10 — containing-symbol breadcrumb while scrolling a long file

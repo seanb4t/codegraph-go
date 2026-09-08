@@ -21,8 +21,7 @@
 - [ ] **GRD-02**: A persisted archtest asserts `internal/query` imports no wire-layer package (`internal/uiserver`, `connectrpc.com/connect`, `internal/mcp`), following `internal/graphstore/archtest`'s `go/packages` pattern with a package-count sanity check and a positive control that fails when the expected importer disappears (T-01-18)
 - [ ] **GRD-03**: `release:dry-run-signed`'s additions-only diff guard carries a positive assertion that the awk anchor matched and the `--key=` injection occurred, failing when the anchor stops matching rather than passing vacuously
 - [ ] **GRD-04**: A test parses `post-release-verify.yml` and asserts every job carries the event-aware conclusion guard in its expected shape, failing when the guard is removed or inverted on any job
-- [ ] **GRD-05**: The tap App secret-distinctness test reads secret names from the real release-please and tap workflow files rather than two in-test constants, failing when either workflow's secret name changes to collide
-- [ ] **GRD-06**: Each of GRD-01..05 is recorded in a committed mutation log with pasted failing output from its RED demonstration and a byte-clean revert, following `03-MUTATION-LOG.md`'s precedent
+- [ ] **GRD-06**: Each of GRD-01..04 is recorded in a committed mutation log with pasted failing output from its RED demonstration and a byte-clean revert, following `03-MUTATION-LOG.md`'s precedent
 
 ### tmux Real-PTY Harness
 
@@ -76,6 +75,7 @@ Deferred to a future release. Tracked but not in the current roadmap.
 
 - **GRD-07**: `requiredCheckNames` fixture compared against the live `protect-main` ruleset via `gh api`, skip-clean offline — declined for this milestone by maintainer
 - **GRD-08**: Root `SECURITY.md`'s govulncheck-gates-every-merge claim corrected with the advisory caveat and a drift assertion — declined for this milestone by maintainer
+- **GRD-05**: The tap App secret-distinctness test reads secret names from the real release-please and tap workflow files rather than two in-test constants — declined for this milestone by maintainer (2026-09-08, Phase 7 discussion); the tautological test is deleted in Phase 7 rather than rewritten, and D-16's two-App distinctness rests on documentation and the v0.5.0 one-time proof
 
 ## Out of Scope
 
@@ -106,7 +106,6 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRD-02 | Phase 7 | Pending |
 | GRD-03 | Phase 7 | Pending |
 | GRD-04 | Phase 7 | Pending |
-| GRD-05 | Phase 7 | Pending |
 | GRD-06 | Phase 7 | Pending |
 | TTY-01 | Phase 8 | Pending |
 | TTY-02 | Phase 8 | Pending |
@@ -136,11 +135,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 - Unmapped: 0 ✓
 - Duplicated across phases: 0 ✓ (every requirement maps to exactly one phase)
 
-Per-phase totals — Phase 7: 6 (GRD-01…06) · Phase 8: 7 (TTY-01…07) · Phase 9: 4 (BRW-10…13) · Phase 10: 3 (HLT-04…06) · Phase 11: 4 (GRF-06, GRF-08, GRF-09, GRF-10) · Phase 12: 3 (DOCS-05…07). 6 + 7 + 4 + 3 + 4 + 3 = 27.
+Per-phase totals — Phase 7: 5 (GRD-01…04, GRD-06) · Phase 8: 7 (TTY-01…07) · Phase 9: 4 (BRW-10…13) · Phase 10: 3 (HLT-04…06) · Phase 11: 4 (GRF-06, GRF-08, GRF-09, GRF-10) · Phase 12: 3 (DOCS-05…07). 5 + 7 + 4 + 3 + 4 + 3 = 26.
 
-The v2 requirements (GRF-07, BRW-14, GRD-07, GRD-08) are deliberately unmapped and stay in
+The v2 requirements (GRF-07, BRW-14, GRD-05, GRD-07, GRD-08) are deliberately unmapped and stay in
 `ROADMAP.md` → Milestones → **Later**; GRD-07 and GRD-08 were *declined for this milestone*
-by maintainer decision (2026-09-08), not deferred by omission.
+by maintainer decision (2026-09-08), not deferred by omission; GRD-05 was declined at the Phase 7 discussion the same day.
 
 ---
 *Requirements defined: 2026-09-08*
