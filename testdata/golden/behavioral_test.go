@@ -32,29 +32,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/seanb4t/codegraph-go/internal/corpora"
+	"github.com/seanb4t/codegraph-go/internal/goldenspec"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
-	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
-
-// languageToLockedSlug is the EXPLICIT committed language->locked-slug map (H3),
-// shared with gocapture. hugo supplies the tsjs leg from its JS files even
-// though its manifest language is "go".
-var languageToLockedSlug = map[string]string{
-	"go":     "hugo",
-	"tsjs":   "hugo",
-	"java":   "guava",
-	"csharp": "serilog",
-	"python": "requests",
-}
-
-// slugToRepo maps each locked-slug to its manifest repo slug for lookup.
-var slugToRepo = map[string]string{
-	"hugo":     "gohugoio/hugo",
-	"guava":    "google/guava",
-	"serilog":  "serilog/serilog",
-	"requests": "psf/requests",
-}
 
 // lockedCorpusDir is the single hermetic resolver for locked corpus directories
 // (D-10, constraint 2). It loads the manifest via internal/corpora, resolves the
@@ -67,11 +48,11 @@ var slugToRepo = map[string]string{
 func lockedCorpusDir(t *testing.T, language string) string {
 	t.Helper()
 
-	slug, ok := languageToLockedSlug[language]
+	slug, ok := goldenspec.LanguageToLockedSlug[language]
 	if !ok {
 		t.Fatalf("lockedCorpusDir(%q): no slug found in language map", language)
 	}
-	repo, ok := slugToRepo[slug]
+	repo, ok := goldenspec.SlugToRepo[slug]
 	if !ok {
 		t.Fatalf("lockedCorpusDir(%q): slug %q has no repo mapping", language, slug)
 	}
@@ -191,7 +172,7 @@ func loadBehavioralFixture(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatalf("read behavioral golden %s: %v", path, err)
 	}
-	var capture goldenCapture
+	var capture goldenspec.GoldenCapture
 	if err := json.Unmarshal(data, &capture); err != nil {
 		t.Fatalf("unmarshal behavioral golden %s: %v", path, err)
 	}
@@ -414,13 +395,6 @@ func TestBuildIndexedFixtureIgnoresInheritedStore(t *testing.T) {
 	}
 }
 
-// goldenCapture mirrors the explore.json/node.json wrapper shape:
-// {"command": "...", "output": "<markdown text>"}.
-type goldenCapture struct {
-	Command string `json:"command"`
-	Output  string `json:"output"`
-}
-
 // loadGoldenFixtureIn decodes a golden/behavioral corpus JSON fixture from
 // a named corpus directory under corpus/ (plan 17, D-02).
 func loadGoldenFixtureIn[T any](t *testing.T, corpus, name string) T {
@@ -443,7 +417,7 @@ func loadGoldenFixtureIn[T any](t *testing.T, corpus, name string) T {
 func loadGoldenOutputIn(t *testing.T, corpus, name string) string {
 	t.Helper()
 
-	capture := loadGoldenFixtureIn[goldenCapture](t, corpus, name)
+	capture := loadGoldenFixtureIn[goldenspec.GoldenCapture](t, corpus, name)
 	if capture.Output == "" {
 		t.Fatalf("golden fixture %s/%s has an empty output field", corpus, name)
 	}
@@ -1144,112 +1118,57 @@ func firstNChars(s string, n int) string {
 // Engine.Node) — the test exists to CATCH a future divergence, not to prove
 // something surprising.
 
-// newGoldenSession builds an in-memory client/server session pair for s,
-// mirroring internal/mcp/server_test.go's newTestSession (unexported
-// there; reimplemented here since this file lives in the external golden
-// package). go-sdk's Client.Connect performs the MCP initialize handshake
-// itself — there is no separate, repeatable Initialize call the way
-// mark3labs' client had (02-RESEARCH.md Q1's PROVEN-ABSENT finding: no
-// ServerOptions field or client method lets a caller inject a
-// ProtocolVersion, so internalmcp.ProtocolVersion keeps its role as the
-// asserted pin rather than a value this harness sends on the wire).
-func newGoldenSession(t *testing.T, s *mcp.Server) *mcp.ClientSession {
-	t.Helper()
+// callExploreViaMCP, callNodeViaMCP, callNodeViaMCPWithArgs and
+// mcpResultText below are thin t.Helper() wrappers over
+// internal/goldenspec's error-returning functions of the same name
+// (2026-08-22 move): the real MCP call bodies — including
+// newGoldenSession's in-memory client/server session setup — now live in
+// exactly one place, internal/goldenspec/mcp.go, so this test package and
+// testdata/golden/gocapture cannot silently diverge on what the -mcp
+// goldens were captured through. Each wrapper's only non-trivial statement
+// is the call to its matching goldenspec function.
 
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-
-	ctx := context.Background()
-	go func() {
-		_ = s.Run(ctx, serverTransport)
-	}()
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-behavioral-test", Version: "0.0.0"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		t.Fatalf("client Connect: %v", err)
-	}
-	t.Cleanup(func() { _ = session.Close() })
-
-	return session
-}
-
-// callExploreViaMCP drives codegraph_explore through a real, in-process
-// MCP server (internalmcp.BuildServer + newGoldenSession), mirroring
-// internal/mcp/server_test.go's TestExploreHandlerDelegatesToEngine
-// pattern (reimplemented here since that file's helpers are unexported and
-// this file lives in the external golden package).
+// callExploreViaMCP drives codegraph_explore via goldenspec.CallExploreViaMCP.
 func callExploreViaMCP(t *testing.T, repoDir, query string) string {
 	t.Helper()
-
-	s := internalmcp.BuildServer(true, map[string]bool{}, repoDir, repoDir)
-	session := newGoldenSession(t, s)
-
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "codegraph_explore",
-		Arguments: map[string]any{"query": query},
-	})
+	out, err := goldenspec.CallExploreViaMCP(repoDir, query)
 	if err != nil {
-		t.Fatalf("CallTool codegraph_explore(%q): %v", query, err)
+		t.Fatalf("callExploreViaMCP: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("codegraph_explore(%q) returned an error result: %+v", query, result)
-	}
-	return mcpResultText(t, result)
+	return out
 }
 
-// callNodeViaMCP drives codegraph_node the same way callExploreViaMCP
-// drives codegraph_explore.
+// callNodeViaMCP drives codegraph_node via goldenspec.CallNodeViaMCP.
 func callNodeViaMCP(t *testing.T, repoDir, symbol string) string {
 	t.Helper()
-	return callNodeViaMCPWithArgs(t, repoDir, symbol, "", nil)
+	out, err := goldenspec.CallNodeViaMCP(repoDir, symbol)
+	if err != nil {
+		t.Fatalf("callNodeViaMCP: %v", err)
+	}
+	return out
 }
 
-// callNodeViaMCPWithArgs is callNodeViaMCP's fuller sibling (CR-02): it
-// additionally accepts the "file" and "line" args codegraph_node's schema
-// exposes, so TestNodeLineHintCLIMatchesMCP can drive the SAME
-// codegraph_node MCP call the CLI's --line flag now reaches, proving
-// EXPL-05/NODE-04 byte-identity extends to the new NODE-03 narrowing
-// parameter, not just the pre-CR-02 (symbol, file) surface.
+// callNodeViaMCPWithArgs drives codegraph_node via
+// goldenspec.CallNodeViaMCPWithArgs, so TestNodeLineHintCLIMatchesMCP can
+// exercise the "file"/"line" narrowing args (CR-02).
 func callNodeViaMCPWithArgs(t *testing.T, repoDir, symbol, file string, line *int) string {
 	t.Helper()
-
-	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir, repoDir)
-	session := newGoldenSession(t, s)
-
-	args := map[string]any{"symbol": symbol}
-	if file != "" {
-		args["file"] = file
-	}
-	if line != nil {
-		args["line"] = float64(*line)
-	}
-
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "codegraph_node",
-		Arguments: args,
-	})
+	out, err := goldenspec.CallNodeViaMCPWithArgs(repoDir, symbol, file, line)
 	if err != nil {
-		t.Fatalf("CallTool codegraph_node(%q): %v", symbol, err)
+		t.Fatalf("callNodeViaMCPWithArgs: %v", err)
 	}
-	if result.IsError {
-		t.Fatalf("codegraph_node(%q) returned an error result: %+v", symbol, result)
-	}
-	return mcpResultText(t, result)
+	return out
 }
 
-// mcpResultText extracts the first text content block from a successful
-// CallTool result.
+// mcpResultText extracts a successful CallTool result's text via
+// goldenspec.MCPResultText.
 func mcpResultText(t *testing.T, result *mcp.CallToolResult) string {
 	t.Helper()
-
-	if len(result.Content) == 0 {
-		t.Fatal("CallTool result has no content")
+	text, err := goldenspec.MCPResultText(result)
+	if err != nil {
+		t.Fatal(err)
 	}
-	text, ok := result.Content[0].(*mcp.TextContent)
-	if !ok {
-		t.Fatalf("CallTool result content[0] is not text: %+v", result.Content[0])
-	}
-	return text.Text
+	return text
 }
 
 // TestExploreCLIMatchesMCP drives explore's CLI code path

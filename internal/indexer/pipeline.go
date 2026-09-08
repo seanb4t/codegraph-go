@@ -58,7 +58,12 @@ type Stats struct {
 // the GraphStore is still Closed on that path — mirroring extract.go's
 // parserFactory testing seam; production code always goes through Run,
 // which binds it to the real Resolve.
-type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string) (int, error)
+//
+// The commitSHA parameter (ENG-04/D-05) is HEAD's resolved value at the
+// top of this operation, threaded through rather than re-resolved inside
+// Resolve — see run's own doc comment on why resolution happens exactly
+// once per operation, here, before Resolve is ever called.
+type resolveFunc func(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string) (int, error)
 
 // Run executes the full from-scratch indexing pipeline (D-04, D-01a):
 // Discover walks repoRoot for every source file whose extension is claimed
@@ -80,8 +85,17 @@ func Run(repoRoot, storeDir string, opts Options) (Stats, error) {
 // run is Run's implementation, parameterized on the Pass-2 entry point so
 // tests can inject a failing resolveFunc without depending on a real
 // Resolve error condition.
+//
+// ENG-04/D-05: HEAD is resolved exactly ONCE here, at the top of the
+// operation, before Discover/Extract (which may take real time on a large
+// repo) and before resolve is ever invoked — never inside resolve or
+// writeGraph. HEAD can move mid-run (a rebase, a checkout, a concurrent
+// commit), and re-resolving it at the write site would risk this run's
+// single write recording a different commit than "the indexed commit"
+// actually means: HEAD as it stood when the run began.
 func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, error) {
 	start := time.Now()
+	headCommitSHA := resolveHeadCommitSHA(repoRoot)
 
 	files, modulePath, err := Discover(repoRoot)
 	if err != nil {
@@ -119,7 +133,7 @@ func run(repoRoot, storeDir string, opts Options, resolve resolveFunc) (Stats, e
 	}
 	defer store.Close()
 
-	unresolved, err := resolve(store, results, modulePath)
+	unresolved, err := resolve(store, results, modulePath, headCommitSHA)
 	if err != nil {
 		return Stats{Files: len(files), Unresolved: unresolved, Duration: time.Since(start)}, err
 	}

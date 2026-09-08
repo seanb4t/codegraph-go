@@ -1,0 +1,43 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v0.12.0 — Local Graph UI",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Engine Seam, Wire Protocol & Secure Transport",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "SPA Toolchain, Embedded App Shell & JS Supply Chain",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Browse, Inspect & Navigation",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Query Workbench & Index Health",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "File/Package Graph View",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Live Push",
+      "status": "complete"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
+  },
+  "updated_at": "2026-09-08T13:07:02.457Z"
+}

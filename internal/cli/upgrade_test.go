@@ -98,7 +98,7 @@ func TestUpgradeCommand_HelpDocumentsBrewRefusalAndExitCodes(t *testing.T) {
 	long := newUpgradeCmd().Long
 
 	required := []string{
-		"brew upgrade codegraph",  // the pointer command, verbatim (D-07)
+		"brew upgrade codegraph",   // the pointer command, verbatim (D-07)
 		"Homebrew-managed install", // names what is detected/refused
 		"exits\nnon-zero",          // bare-refusal exit behaviour (D-05, D-10)
 		"exits\nzero",              // --check exit behaviour (D-09, D-10)

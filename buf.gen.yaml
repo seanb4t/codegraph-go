@@ -1,0 +1,17 @@
+# buf.gen.yaml drives `task proto:gen` (RPC-01, BLD-04). Both plugins are
+# referenced by bare name, resolved via PATH — proto:gen builds
+# protoc-gen-go and protoc-gen-connect-go from the pinned go.tool-proto.mod
+# into a scratch dir and prepends it onto PATH before invoking buf, so
+# this file never hardcodes a machine-local binary path.
+# paths=source_relative on both plugins lands generated files beside their
+# .proto input (internal/schema/*.pb.go next to graph.proto,
+# internal/uiproto/uiv1/*.pb.go and uiv1connect/*.connect.go next to
+# ui.proto) rather than under a re-rooted output directory.
+version: v2
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt: paths=source_relative
+  - local: protoc-gen-connect-go
+    out: .
+    opt: paths=source_relative

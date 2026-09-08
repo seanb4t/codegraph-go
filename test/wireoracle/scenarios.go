@@ -656,10 +656,35 @@ func Scenarios() []Scenario {
 			// Two consecutive tools/list requests (ids 2 and 3) in one
 			// session — the deterministic-ordering probe the 2026-07-28
 			// changelog's minor change #3 makes relevant
-			// (TestToolsListOrderIsDeterministic). Both are "tools/list",
-			// not "tools/call", so both are handled synchronously in
-			// request order — no worker-pool race (see the concurrency
-			// ordering constraint documented above Scenarios()).
+			// (TestToolsListOrderIsDeterministic).
+			//
+			// CORRECTED (03-03-PLAN.md Task 3, 03-03-EVIDENCE.md): this
+			// comment previously asserted both calls run race-free, in
+			// request order, purely because both are "tools/list" and
+			// neither is "tools/call" (see the concurrency ordering
+			// constraint documented above Scenarios(), which remains
+			// accurate for the OLD mark3labs/mcp-go transport it
+			// describes). That assertion was never revisited after Phase
+			// 2's SDK-01 migration to github.com/modelcontextprotocol/
+			// go-sdk and is FALSE of the current transport:
+			// mcp/server.go's ServerSession.handle calls
+			// jsonrpc2.Async(ctx) unconditionally for every call except
+			// "initialize" (citing modelcontextprotocol/go-sdk#26), and
+			// internal/jsonrpc2/conn.go's handleAsync dequeues requests
+			// sequentially but only blocks until Async() fires or the
+			// handler completes — so two consecutive tools/list calls run
+			// in independently scheduled goroutines with no ordering
+			// guarantee between their completion times. Reproduced live:
+			// 4/60 attempts under Linux contention (03-03-EVIDENCE.md)
+			// showed the id-3 response arriving before id-2's.
+			//
+			// What this oracle actually enforces for this scenario, per
+			// the R2 resolution: CanonicalizeResponseOrder (normalize.go)
+			// reassigns response lines by request id before comparison,
+			// so this scenario's frozen transcript matches regardless of
+			// which of the two tools/list responses the server writes
+			// first, while response CONTENT stays frozen byte-exact (see
+			// TestFrozenTranscriptComparisonDetectsContentMutation).
 			//
 			// It carries no Env: the full eight-tool surface it needs to
 			// make an ordering probe meaningful is now the default. It used
@@ -1096,9 +1121,23 @@ func Scenarios() []Scenario {
 			//
 			// It carries no tools/call, so the at-most-one-and-last
 			// worker-pool ordering constraint documented above Scenarios()
-			// is trivially satisfied — all three requests (initialize,
-			// tools/list, tools/list) are handled synchronously in
-			// request order.
+			// (which is specifically about "tools/call", never about
+			// "tools/list") is trivially satisfied.
+			//
+			// CORRECTED (03-03-PLAN.md Task 3, 03-03-EVIDENCE.md): this
+			// comment previously asserted all three requests here run
+			// race-free, in request order, on the same over-generalized
+			// premise corrected at the toolslist-repeat scenario above —
+			// see that scenario's comment for the SDK citation showing
+			// the premise is false of the current transport. What
+			// actually keeps THIS scenario's two tools/list calls from
+			// racing is InitAfterRequest itself: Capture blocks until the
+			// id-2 response has been OBSERVED on stdout before the id-3
+			// request is even written to stdin (see
+			// Scenario.InitAfterRequest's doc comment) — there is never a
+			// concurrent in-flight pair here for the SDK's async dispatch
+			// to reorder, because the harness never sends the second
+			// request until the first response has already arrived.
 			//
 			// ExpectTools: 0 is deliberate, not a placeholder: the VRFY-03
 			// session line is written during the id-1 initialize, BEFORE

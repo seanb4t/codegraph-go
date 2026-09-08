@@ -75,6 +75,20 @@ jobs:
       - name: Vet (go vet ./...)
         run: task vet
 
+      # IN-04 (03-REVIEW.md): folded into this ALREADY-REQUIRED `test` job
+      # rather than kept as the separate `lint-go` job 03-10-PLAN.md
+      # originally added — GitHub ruleset 20157557 (this repository's
+      # required-status-check config) lives OUTSIDE this repo, so a new
+      # top-level job is not required to merge without an out-of-band `gh
+      # api` edit, and requiredCheckNames
+      # (internal/upgrade/taskfile_shape_test.go) deliberately mirrors that
+      # ruleset rather than asserting a requirement that does not exist.
+      # Phase 2's D-13 made the identical call for this job's other gates.
+      # Placed right after Vet — before the slower Go/JS test and build
+      # steps below — so a lint failure surfaces early.
+      - name: Lint (golangci-lint via task lint:go)
+        run: task lint:go
+
       - name: Test (excluding internal/daemon — isolated below)
         # IN-08 (03-REVIEW.md): `set -e` does not propagate failures out of
         # a process substitution — `mapfile -t pkgs < <(go list ... | grep
@@ -103,6 +117,83 @@ jobs:
       # green build.
       - name: Corpus coverage claim (committed record)
         run: task corpora:verify
+
+      # BLD-01/D-16: Corepack resolves the pnpm version pinned by
+      # web/package.json's packageManager field — the single source of
+      # truth D-16 chose over a second pnpm/action-setup pin. Node 24 is
+      # pinned deliberately, not 'latest' or a floating major: Corepack is
+      # NOT distributed with Node.js 25+ (RESEARCH.md Pitfall 4), so a
+      # newer pin would silently remove the mechanism D-16 depends on. No
+      # cache: input on this step — 02-04's TestJSInstallPathHasNoMutableCache
+      # fails this build if one appears, because a stale node_modules cache
+      # producing a tree that differs from web/pnpm-lock.yaml is exactly
+      # the divergence a committed web/build/ cannot tolerate.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      # BLD-01/D-13/D-16: frozen-lockfile install at the Corepack-resolved
+      # pnpm version. task web:deps also asserts web/pnpm-lock.yaml was not
+      # rewritten by the install, failing loudly rather than drifting
+      # silently between a developer's machine and this runner.
+      - name: Install JS deps (frozen lockfile, BLD-01)
+        run: task web:deps
+
+      # BRW-06 (03-01): the JS unit-test suite, run immediately after the
+      # frozen install and before the heavier build/audit steps so a
+      # failing suite fails fast. This step's target asserts a POSITIVE
+      # executed-test count before judging pass/fail (rule 84d1gfpywd) —
+      # it cannot report success while having run zero tests.
+      - name: web unit tests (vitest)
+        run: task web:test
+
+      # BLD-05/D-13: positive assertion that strictDepBuilds is actually in
+      # effect and that pnpm-workspace.yaml's allowBuilds approval map is
+      # committed (even if empty) — never a grep of pnpm's own "Ignored
+      # build scripts" warning text, which a reword would silently break.
+      - name: pnpm build-script approval gate (BLD-05)
+        run: task web:deps:strict
+
+      # BLD-06/D-13/D-15: pnpm audit gate, classified on OUTPUT SHAPE (never
+      # on exit code alone — a clean scan and a registry-unreachable scan
+      # both exit 1). Its sibling non-vacuity assertion (task web:lockfile)
+      # runs first and never reads pnpm audit's exit code or output.
+      - name: pnpm audit gate (BLD-06)
+        run: task web:audit
+
+      # BLD-01: proves the pinned toolchain still produces a structurally
+      # valid build from this source on a clean runner — ROADMAP criterion
+      # 3's rebuild half, previously asserted by no gate at all. Builds
+      # into a scratch directory (never web/build/) and asserts the
+      # committed tree is untouched afterwards. Deliberately NOT a
+      # byte-identity check against web/build/: Vite content hashes are not
+      # reproducible across runs (RESEARCH.md Pitfall 1), so comparing
+      # bytes here would reintroduce the false-RED problem this phase's
+      # guard shape exists to avoid.
+      - name: SPA clean-checkout rebuild check (BLD-01)
+        run: task web:build:verify
+
+      # BLD-03: proves both that the committed web/build/ is current with
+      # respect to its source AND that its committed bytes are the ones
+      # task web:build produced, by comparing two independent digests
+      # against the committed web/build/.build-manifest marker. Does not
+      # attempt to reproduce the build — the same Vite non-reproducibility
+      # the rebuild check above already accounts for. Runs last of the two
+      # JS gates on purpose: if the rebuild check above ever did mutate the
+      # committed tree, this guard would catch it.
+      - name: SPA build drift guard (BLD-03)
+        run: task web:drift
+
+      # BLD-04: proves the committed generated files under internal/schema/
+      # and internal/uiproto/uiv1/ still match what the pinned buf toolchain
+      # emits from their .proto sources — including the generated header, a
+      # header-only rewrite counts as drift from 01-01's restamp commit
+      # onward. Regenerates into a temporary tree (never in place) so this
+      # step can never clobber a developer's working-tree edit; it is not
+      # relevant on a CI runner, but the task is written once and shared.
+      - name: Proto codegen drift guard (BLD-04)
+        run: task proto:drift
 
       # D-17/GOLDEN-01 belt-and-braces: test/integration IS already reached
       # by `go list ./...` above (it's a normal package, not testdata/), but
@@ -166,6 +257,20 @@ jobs:
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         with:
+          # go-version-input MUST be explicitly empty. The action's own
+          # action.yml defaults it to 'stable' and passes it to setup-go as
+          # `go-version:` unconditionally, alongside our `go-version-file:`.
+          # setup-go resolves `go-version` FIRST and emits only a warning —
+          # "Both go-version and go-version-file inputs are specified, only
+          # go-version will be used" — so `go-version-file: go.mod` below is
+          # structurally dead unless this is blank. Observed, not theorised:
+          # run 34232338047 scanned under go1.27.1 while go.mod pinned 1.26.6,
+          # and failed loading packages on cockroachdb/swiss's go1.27
+          # incompatibility (undefined: hashFn / fastrand64) — a BLOCKING
+          # security gate that had silently stopped scanning the toolchain it
+          # claims to. Blank here, not a literal version, so go.mod stays the
+          # single definition of the pin.
+          go-version-input: ""
           go-version-file: go.mod
           repo-checkout: false
 

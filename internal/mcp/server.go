@@ -16,6 +16,7 @@ package mcp
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -217,7 +218,14 @@ type goSDKServer struct{ inner *mcp.Server }
 // reader can possibly observe EOF. stdinLingerReader does this via its
 // own line buffering; pendingWriter decrements on the corresponding
 // Write() actually reaching stdout, the only authoritative "this call's
-// response left the process" signal. This is confined entirely to this
+// response left the process" signal — CORRECTED invariant (FIX-01): the
+// increment counts accepted client calls, the decrement counts complete
+// response lines whose bytes the underlying writer reported as written
+// (classified by looksLikeJSONRPCResponse), and a server-initiated
+// notification participates in neither side, since decrementing on every
+// write — the original defect — drove the counter negative and drained it
+// early whenever a notification landed between a call's acceptance and
+// its response being written. This is confined entirely to this
 // method — no change to the Server interface, to BuildServer, to
 // internal/cli/serve.go, or to any wire-visible response content; it
 // only changes WHEN this process finally reports "no more input" once
@@ -259,6 +267,21 @@ type stdinLingerReader struct {
 	br      *bufio.Reader
 	closer  io.Closer
 	pending *atomic.Int64
+	// unparseable counts the increments this reader made for lines it
+	// could NOT parse (WR-06). Such a line is counted as a call by the
+	// conservative default in classifyInboundLine, but the reply go-sdk
+	// produces for it is a JSON-RPC parse-error response carrying
+	// `id: null`, which looksLikeJSONRPCResponse deliberately refuses to
+	// count — so nothing ever balances the increment and pending is
+	// stuck at >=1 for the rest of the session. waitForDrain subtracts
+	// this count from its target so a single malformed line (a partial
+	// write, a stray keepalive newline, a UTF-8 BOM prefix) cannot cost
+	// a full stdinLingerGrace hang at every subsequent exit.
+	//
+	// Owned by this reader alone — unlike pending, which the outbound
+	// pendingWriter also mutates — so it is a value, not a shared
+	// pointer.
+	unparseable atomic.Int64
 	// unread holds the tail of a line already sniffed and buffered but not
 	// yet copied out to a caller-supplied Read(p) slice.
 	unread []byte
@@ -272,8 +295,11 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 	if len(s.unread) == 0 {
 		line, readErr := s.br.ReadBytes('\n')
 		if len(line) > 0 {
-			if looksLikeJSONRPCCall(line) {
+			if isCall, unparseable := classifyInboundLine(line); isCall {
 				s.pending.Add(1)
+				if unparseable {
+					s.unparseable.Add(1)
+				}
 			}
 			s.unread = line
 		}
@@ -295,9 +321,26 @@ func (s *stdinLingerReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// waitForDrain blocks until every accepted call that can still be
+// balanced has been, or stdinLingerGrace elapses.
+//
+// The target is pending MINUS unparseable, not zero (WR-06): an
+// increment made for a line that could not be parsed will never be
+// balanced by a response, because the only reply such a line receives is
+// a `null`-id parse-error response that looksLikeJSONRPCResponse
+// correctly refuses to count. Waiting for zero therefore burns the whole
+// grace period at EOF for the rest of the session, which to an agent
+// harness batching MCP invocations reads as a multi-second hang on every
+// exit rather than as the defensive upper bound it is meant to be — and
+// pendingUnderflows stays at zero throughout, so the counter built to
+// catch imbalance reports all-clear.
+//
+// This corrects the over-count rather than removing it: real in-flight
+// calls are still waited on, and the two sniffers' opposite conservative
+// defaults are both preserved.
 func (s *stdinLingerReader) waitForDrain() {
 	deadline := time.Now().Add(stdinLingerGrace)
-	for s.pending.Load() > 0 && time.Now().Before(deadline) {
+	for s.pending.Load() > s.unparseable.Load() && time.Now().Before(deadline) {
 		time.Sleep(stdinLingerPollInterval)
 	}
 }
@@ -321,24 +364,172 @@ type sniffedMessage struct {
 // handling, and over-counting pending only ever costs a bounded wait
 // against stdinLingerGrace, never incorrect behavior.
 func looksLikeJSONRPCCall(line []byte) bool {
-	var msg sniffedMessage
-	if err := json.Unmarshal(line, &msg); err != nil {
-		return true
-	}
-	return msg.Method != "" && msg.ID != nil
+	isCall, _ := classifyInboundLine(line)
+	return isCall
 }
 
-// pendingWriter wraps stdout and decrements pending on every observed
-// Write() — the authoritative "a message actually reached the wire"
-// signal stdinLingerReader waits on. See ServeStdio's doc comment.
+// classifyInboundLine is looksLikeJSONRPCCall's two-bit form: whether the
+// line counts as a call, AND whether that answer came from the
+// conservative parse-failure default rather than from the line's actual
+// contents (WR-06).
+//
+// The second bit is what makes the over-count self-correcting. Both bits
+// come from one Unmarshal so the two answers can never disagree about
+// the same line — re-testing with json.Valid would not do, since a line
+// like `{"method":1}` is valid JSON yet still fails to unmarshal into
+// sniffedMessage, and would be misclassified as parseable.
+func classifyInboundLine(line []byte) (isCall, unparseable bool) {
+	var msg sniffedMessage
+	if err := json.Unmarshal(line, &msg); err != nil {
+		return true, true
+	}
+	return msg.Method != "" && msg.ID != nil, false
+}
+
+// looksLikeJSONRPCResponse reports whether line is a JSON-RPC response —
+// the OUTBOUND classifier symmetric to looksLikeJSONRPCCall's inbound
+// sniff. A response carries an "id" and no "method"; a notification
+// carries a "method" and no "id"; a server-initiated request (never
+// issued by this process today, per looksLikeJSONRPCCall's own doc
+// comment) carries both and is therefore also excluded here by the
+// Method-non-empty check. Only a response should ever decrement pending —
+// stdinLingerReader.Read increments pending exactly once per accepted
+// client call, so the outbound side must decrement exactly once per
+// complete response line, or the two sides never balance (FIX-01).
+//
+// A `null` id — JSON-RPC's parse-error response shape, sent when the
+// server cannot correlate its error to any request — is deliberately NOT
+// counted as a response. It is not a reply to any pending call (the
+// malformed inbound line that provoked it was never a call whose
+// increment this decrement would balance in the first place), and
+// treating it as one would decrement a counter for a response nothing was
+// actually waiting on.
+//
+// On a parse failure this reports FALSE — the opposite conservative
+// default from looksLikeJSONRPCCall's inbound "true". The two functions'
+// defaults point in opposite directions on purpose: over-decrementing
+// here is exactly the defect FIX-01 exists to fix (it can drive pending
+// negative and drain early), whereas under-decrementing only costs a
+// bounded wait against stdinLingerGrace before stdinLingerReader gives up
+// anyway. The conservative choice is therefore never to decrement on
+// anything this sniff cannot positively identify as a response.
+func looksLikeJSONRPCResponse(line []byte) bool {
+	var msg sniffedMessage
+	if err := json.Unmarshal(line, &msg); err != nil {
+		return false
+	}
+	if msg.Method != "" {
+		return false // notification, or a server-initiated request
+	}
+	if msg.ID == nil {
+		return false // no id at all: not a reply to anything pending
+	}
+	if string(*msg.ID) == "null" {
+		return false // JSON-RPC parse-error response shape; not a reply to a pending call
+	}
+	return true
+}
+
+// pendingUnderflows counts every attempted decrement of pending that
+// decrementPending refused because the counter was already at zero.
+// Production behavior is unchanged by this counter — it exists purely so
+// a future regression in the increment/decrement balance surfaces as a
+// number a test can assert on, rather than as a mysterious early EOF only
+// reproducible under specific timing.
+var pendingUnderflows atomic.Int64
+
+// decrementPending attempts to decrement pending by exactly one via a
+// compare-and-swap loop that refuses to go below zero, and reports
+// whether the decrement actually happened. A refused decrement increments
+// pendingUnderflows rather than being silently absorbed by a clamp —
+// silently absorbing an unowed decrement would hide exactly the invariant
+// violation this fix exists to detect.
+func decrementPending(pending *atomic.Int64) bool {
+	for {
+		cur := pending.Load()
+		if cur <= 0 {
+			pendingUnderflows.Add(1)
+			return false
+		}
+		if pending.CompareAndSwap(cur, cur-1) {
+			return true
+		}
+	}
+}
+
+// pendingWriter wraps stdout. It decrements pending once per complete
+// outbound line classified as a response by looksLikeJSONRPCResponse —
+// the authoritative "a response actually reached the wire" signal
+// stdinLingerReader waits on — and never for a server-initiated
+// notification, which the increment side never counted in the first
+// place. See ServeStdio's doc comment for the invariant this protects.
 type pendingWriter struct {
 	w       io.Writer
 	pending *atomic.Int64
+
+	// mu guards BOTH the underlying write and the classification buffer
+	// below as ONE serialized critical section — not the buffer alone.
+	// io.Writer promises nothing about concurrent calls, so a mutex taken
+	// only around the buffer would let two concurrent Writes reach the
+	// wire in one order and the classification buffer in another: the
+	// copied line stream would stop matching wire order, and a split
+	// response could be reassembled across an interleaving write. The
+	// mutex being held across the underlying write means a slow
+	// downstream write blocks a concurrent one — an accepted trade, and
+	// the same serialization a line-oriented protocol writer needs
+	// anyway: two concurrent unserialized writes to one stdio stream can
+	// already interleave into a corrupt line. Do not "optimize" this back
+	// down to guarding only buf; that silently reintroduces the
+	// divergence TestPendingWriterSerializesWriteAndClassification
+	// exists to catch.
+	mu sync.Mutex
+	// buf holds a COPY of the bytes actually forwarded to w, retained
+	// only for classification — pendingWriter never delays a byte on its
+	// account. A trailing partial line (no terminating '\n' yet) stays
+	// here across calls until its newline arrives.
+	buf []byte
 }
 
 func (p *pendingWriter) Write(b []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// 1. Forward FIRST, inside this same critical section.
+	// pendingWriter IS the protocol writer; it must never hold a byte
+	// back waiting for a newline, and nothing below may delay, reorder or
+	// re-chunk what reaches stdout. "Forward first" means first WITHIN
+	// this serialized section, not before it — see the mu doc comment.
 	n, err := p.w.Write(b)
-	p.pending.Add(-1)
+
+	// 2. Append a COPY of b[:n] — and only b[:n] — to the classification
+	// buffer. io.Writer.Write may return n < len(b) together with an
+	// error; classifying all of b would decrement for a response that
+	// never actually reached the wire.
+	p.buf = append(p.buf, b[:n]...)
+
+	// 3. Split on '\n', classify each COMPLETE line, and retain any
+	// trailing partial line for the next call. A single Write carrying
+	// two responses decrements twice; a Write carrying half a response
+	// decrements zero times, and the remainder decrements once when its
+	// newline arrives.
+	start := 0
+	for {
+		i := bytes.IndexByte(p.buf[start:], '\n')
+		if i < 0 {
+			break
+		}
+		end := start + i + 1
+		if looksLikeJSONRPCResponse(p.buf[start:end]) {
+			decrementPending(p.pending)
+		}
+		start = end
+	}
+	if start > 0 {
+		remaining := copy(p.buf, p.buf[start:])
+		p.buf = p.buf[:remaining]
+	}
+
+	// 4. Return unchanged.
 	return n, err
 }
 

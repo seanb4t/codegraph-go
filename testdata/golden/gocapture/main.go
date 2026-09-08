@@ -12,7 +12,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -20,86 +19,12 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
-
 	"github.com/seanb4t/codegraph-go/internal/corpora"
+	"github.com/seanb4t/codegraph-go/internal/goldenspec"
 	"github.com/seanb4t/codegraph-go/internal/graphstore"
 	"github.com/seanb4t/codegraph-go/internal/indexer"
-	internalmcp "github.com/seanb4t/codegraph-go/internal/mcp"
 	"github.com/seanb4t/codegraph-go/internal/query"
 )
-
-// goldenCapture mirrors the wrap_text envelope shape
-// ({"command": ..., "output": ...}), so go-*.json fixtures are
-// structurally identical to their siblings and can be loaded with
-// the loadGoldenOutputIn helper.
-type goldenCapture struct {
-	Command string `json:"command"`
-	Output  string `json:"output"`
-}
-
-// languageToLockedSlug is the EXPLICIT committed language->locked-slug map (H3).
-// hugo supplies the tsjs leg from its JS files even though its manifest
-// language is "go". The map is shared by the gocapture resolver, the hermetic
-// test resolver (lockedCorpusDir), and the completeness guard.
-var languageToLockedSlug = map[string]string{
-	"go":     "hugo",
-	"tsjs":   "hugo",
-	"java":   "guava",
-	"csharp": "serilog",
-	"python": "requests",
-}
-
-// slugToRepo maps each locked-slug to its manifest repo slug for lookup.
-var slugToRepo = map[string]string{
-	"hugo":     "gohugoio/hugo",
-	"guava":    "google/guava",
-	"serilog":  "serilog/serilog",
-	"requests": "psf/requests",
-}
-
-// perCorpusArgs holds the symbol/query parameters for one locked corpus.
-type perCorpusArgs struct {
-	baselineSymbol     string
-	baselineSymbolFile string
-	baselineQuery      string
-	multiSymbol        string
-	multiQuery         string
-}
-
-// lockedCorpusArgs defines the committed symbol/query values per locked corpus.
-// These produce the expected golden set per corpus: {explore, node, explore-multi,
-// node-multi, explore-mcp, node-mcp} — 6 goldens.
-var lockedCorpusArgs = map[string]perCorpusArgs{
-	"hugo": {
-		baselineSymbol:     "Page",
-		baselineSymbolFile: "",
-		baselineQuery:      "page content",
-		multiSymbol:        "Site",
-		multiQuery:         "page content template",
-	},
-	"guava": {
-		baselineSymbol:     "Preconditions",
-		baselineSymbolFile: "",
-		baselineQuery:      "check precondition",
-		multiSymbol:        "ImmutableList",
-		multiQuery:         "immutable collection",
-	},
-	"serilog": {
-		baselineSymbol:     "LoggerConfiguration",
-		baselineSymbolFile: "",
-		baselineQuery:      "configure logger",
-		multiSymbol:        "LogEvent",
-		multiQuery:         "log configuration",
-	},
-	"requests": {
-		baselineSymbol:     "Session",
-		baselineSymbolFile: "",
-		baselineQuery:      "http session",
-		multiSymbol:        "Request",
-		multiQuery:         "http request session",
-	},
-}
 
 // corpusSpec is one corpus's regeneration recipe: how to resolve its
 // source tree, the output directory for its goldens, and the symbol/query
@@ -164,12 +89,12 @@ func buildSpecs(goldenDir, repoRoot string) []corpusSpec {
 	// Locked-corpus specs, one per slug in order.
 	slugOrder := []string{"hugo", "guava", "serilog", "requests"}
 	for _, slug := range slugOrder {
-		repo := slugToRepo[slug]
+		repo := goldenspec.SlugToRepo[slug]
 		e, ok := lockedByRepo[repo]
 		if !ok {
 			fatal(fmt.Sprintf("gocapture: locked entry %q (slug=%q) not found in manifest", repo, slug))
 		}
-		args := lockedCorpusArgs[slug]
+		args := goldenspec.LockedCorpusArgs[slug]
 		out := filepath.Join(goldenDir, "corpus", slug)
 		specs = append(specs, corpusSpec{
 			name: slug,
@@ -179,11 +104,11 @@ func buildSpecs(goldenDir, repoRoot string) []corpusSpec {
 			resolveSource: func() (string, error) {
 				return e.Dir(corpusRoot), nil
 			},
-			baselineSymbol:     args.baselineSymbol,
-			baselineSymbolFile: args.baselineSymbolFile,
-			baselineQuery:      args.baselineQuery,
-			multiSymbol:        args.multiSymbol,
-			multiQuery:         args.multiQuery,
+			baselineSymbol:     args.BaselineSymbol,
+			baselineSymbolFile: args.BaselineSymbolFile,
+			baselineQuery:      args.BaselineQuery,
+			multiSymbol:        args.MultiSymbol,
+			multiQuery:         args.MultiQuery,
 		})
 	}
 
@@ -305,7 +230,7 @@ func regenerateCorpus(spec corpusSpec) error {
 	}
 
 	if spec.baselineSymbol != "" {
-		mcpExploreOut, err := callExploreViaMCP(mcpTmp, spec.baselineQuery)
+		mcpExploreOut, err := goldenspec.CallExploreViaMCP(mcpTmp, spec.baselineQuery)
 		if err != nil {
 			return fmt.Errorf("MCP Explore(%q): %w", spec.baselineQuery, err)
 		}
@@ -314,7 +239,7 @@ func regenerateCorpus(spec corpusSpec) error {
 			return err
 		}
 
-		mcpNodeOut, err := callNodeViaMCP(mcpTmp, spec.baselineSymbol)
+		mcpNodeOut, err := goldenspec.CallNodeViaMCP(mcpTmp, spec.baselineSymbol)
 		if err != nil {
 			return fmt.Errorf("MCP Node(%q): %w", spec.baselineSymbol, err)
 		}
@@ -335,7 +260,7 @@ func regenerateCorpus(spec corpusSpec) error {
 // rename) returns an error — never leaves a bare golden on the committed path
 // and never partially writes.
 func writeCapture(path, command, output string) error {
-	data, err := json.MarshalIndent(goldenCapture{Command: command, Output: output}, "", "  ")
+	data, err := json.MarshalIndent(goldenspec.GoldenCapture{Command: command, Output: output}, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
@@ -475,83 +400,6 @@ func behavioralCorpusSpec(repoRoot string) corpusSpec {
 		multiSymbol: "Validate",
 		multiQuery:  "user account",
 	}
-}
-
-// --- MCP helpers ---
-
-// callExploreViaMCP drives codegraph_explore through a real, in-process MCP
-// server (internalmcp.BuildServer) over in-memory transports.
-func callExploreViaMCP(repoDir, query string) (string, error) {
-	s := internalmcp.BuildServer(true, map[string]bool{}, repoDir, repoDir)
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-
-	ctx := context.Background()
-	go func() {
-		_ = s.Run(ctx, serverTransport)
-	}()
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-gocapture", Version: "0.0.0"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		return "", fmt.Errorf("client Connect: %w", err)
-	}
-	defer session.Close()
-
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "codegraph_explore",
-		Arguments: map[string]any{"query": query},
-	})
-	if err != nil {
-		return "", fmt.Errorf("CallTool codegraph_explore(%q): %w", query, err)
-	}
-	if result.IsError {
-		return "", fmt.Errorf("codegraph_explore(%q) returned an error result", query)
-	}
-	return mcpResultText(result)
-}
-
-// callNodeViaMCP drives codegraph_node the same way callExploreViaMCP drives
-// codegraph_explore.
-func callNodeViaMCP(repoDir, symbol string) (string, error) {
-	s := internalmcp.BuildServer(true, map[string]bool{"node": true}, repoDir, repoDir)
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-
-	ctx := context.Background()
-	go func() {
-		_ = s.Run(ctx, serverTransport)
-	}()
-
-	client := mcp.NewClient(&mcp.Implementation{Name: "codegraph-gocapture", Version: "0.0.0"}, nil)
-	session, err := client.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		return "", fmt.Errorf("client Connect: %w", err)
-	}
-	defer session.Close()
-
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
-		Name:      "codegraph_node",
-		Arguments: map[string]any{"symbol": symbol},
-	})
-	if err != nil {
-		return "", fmt.Errorf("CallTool codegraph_node(%q): %w", symbol, err)
-	}
-	if result.IsError {
-		return "", fmt.Errorf("codegraph_node(%q) returned an error result", symbol)
-	}
-	return mcpResultText(result)
-}
-
-// mcpResultText extracts the first text content block from a successful
-// CallTool result.
-func mcpResultText(result *mcp.CallToolResult) (string, error) {
-	if len(result.Content) == 0 {
-		return "", fmt.Errorf("CallTool result has no content")
-	}
-	text, ok := result.Content[0].(*mcp.TextContent)
-	if !ok {
-		return "", fmt.Errorf("CallTool result content[0] is not text: %+v", result.Content[0])
-	}
-	return text.Text, nil
 }
 
 func fatal(msg string) {

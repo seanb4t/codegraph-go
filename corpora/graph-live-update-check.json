@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "corpus": {
+    "repo": "google/guava",
+    "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa"
+  },
+  "corpusCheckoutPath": "/Users/sean/.cache/codegraph/corpora/google-guava-2b0cb53f@94f39958baf7ad51ddf9c70e406ed6b188194daa",
+  "bindingView": "The expanded file level: several large real directories expanded to their file children via real mouse clicks (see expandedDirectories), non-binding compound (directory) survivors excluded from the binding leaf-displacement figures below.",
+  "expandedDirectories": [
+    "guava-tests/test/com/google/common/collect"
+  ],
+  "expansionCandidatesTried": 15,
+  "mutationDescription": "Created 6 new minimal Java files (guava-tests/test/com/google/common/collect/LivePushProbe0.java, guava-tests/test/com/google/common/collect/LivePushProbe1.java, guava-tests/test/com/google/common/collect/LivePushProbe2.java, guava-tests/test/com/google/common/collect/LivePushProbe3.java, guava-tests/test/com/google/common/collect/LivePushProbe4.java, guava-tests/test/com/google/common/collect/LivePushProbe5.java) inside \"guava-tests/test/com/google/common/collect\" (package com.google.common.collect), each declaring one empty final class with a private no-op constructor and zero other symbols; ran a real `codegraph sync` re-index against the live corpus checkout. Deviation from the plan's literal \"ONE new source file\": measured this session that a single new file adds exactly one FileGraphResponse.nodes entry regardless of its own symbol count (internal/query/traverse.go's FileGraph() aggregates strictly per FilePath) — see 06-05-SUMMARY.md for the direct RPC-diff evidence disproving the single-file assumption.",
+  "fileLevelNodeCountBefore": 366,
+  "fileLevelNodeCountAfter": 372,
+  "addedNodeCount": 6,
+  "removedNodeCount": 0,
+  "leafSurvivorCount": 349,
+  "maxLeafDisplacementPx": 0,
+  "meanLeafDisplacementPx": 0,
+  "compoundSurvivorCount": 17,
+  "maxCompoundDisplacementPx": 0,
+  "pageErrorCount": 1,
+  "pageErrors": [
+    "Cannot read properties of null (reading 'notify')"
+  ],
+  "browserIdentity": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  },
+  "corpusCleanAtExit": true,
+  "error": null,
+  "success": true
+}

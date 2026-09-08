@@ -1,0 +1,26 @@
+{
+  "success": false,
+  "collapsedNodes": 134,
+  "liveGeometryLengthAtFailure": 135,
+  "candidateAttempts": 5,
+  "candidatesTried": [
+    "guava-gwt/src-super/com/google/common/collect/super/com/google/common/collect",
+    "guava-testlib/src/com/google/common/testing",
+    "guava-gwt/test/com/google/common",
+    "android/guava-tests/test/com/google/common/cache",
+    "android/guava-tests/benchmark/com/google/common/eventbus"
+  ],
+  "lastError": "clickUntilCondition: condition never became true across 17 offsets around (684.3360805896725, 574.7729262395179)",
+  "metricsAtFirstPaint": {
+    "timeToInteractiveMs": 1266.4000000059605,
+    "layoutDurationMs": 721.5,
+    "nodeCount": 134,
+    "edgeCount": 819
+  },
+  "pageErrorCount": 0,
+  "pageErrors": [],
+  "browserIdentity": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  }
+}

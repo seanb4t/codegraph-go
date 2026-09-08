@@ -83,15 +83,14 @@ func init() {
 			rel := relPath
 			if packageRoot != "" {
 				prefix := packageRoot + "/"
-				if strings.HasPrefix(rel, prefix) {
-					rel = strings.TrimPrefix(rel, prefix)
-				}
-				// A file outside the declared package root (e.g. a
-				// top-level tests/ directory alongside a src-layout
-				// package) is still dotted-path-computed, just from its
-				// own repo-root-relative path instead — an accepted,
-				// documented gap (this project models no per-file
-				// sys.path membership).
+				// strings.TrimPrefix is a no-op when rel does not have
+				// prefix, so a file outside the declared package root
+				// (e.g. a top-level tests/ directory alongside a
+				// src-layout package) is still dotted-path-computed, just
+				// from its own repo-root-relative path instead — an
+				// accepted, documented gap (this project models no
+				// per-file sys.path membership).
+				rel = strings.TrimPrefix(rel, prefix)
 			}
 			return dottedModulePath(rel)
 		},

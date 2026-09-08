@@ -268,7 +268,7 @@ func RenderNodeMultiDef(symbol string, matches []*schema.Node, fetch nodeSection
 // emoji, and that it is appended, not a standalone line). A root with
 // ZERO callers gets NEITHER clause, mirroring the documented early-continue before
 // this block is ever reached for a caller-less root.
-func renderBlastBullet(bl exploreBlast) string {
+func renderBlastBullet(bl ExploreBlast) string {
 	n := bl.Symbol
 	s := fmt.Sprintf("- `%s` (%s:%d) — %d %s in `%s`",
 		n.Name, n.FilePath, n.StartLine, bl.CallerCount, pluralize(bl.CallerCount, "caller"), n.FilePath)
@@ -313,7 +313,7 @@ const minPolymorphicSiblings = 3
 // implementsIdx is BuildImplementsIndex's output (traverse.go, interface
 // id -> its implementer edges); implementedInterfaces (traverse.go)
 // inverts it to the struct-id -> []interfaceID view this function walks.
-func computeSkeletonFiles(groups []exploreFileGroup, centralFiles map[string]bool, implementsIdx map[string][]*schema.Edge) map[string]bool {
+func computeSkeletonFiles(groups []ExploreFileGroup, centralFiles map[string]bool, implementsIdx map[string][]*schema.Edge) map[string]bool {
 	skeleton := make(map[string]bool)
 	typeIfaces := implementedInterfaces(implementsIdx)
 	for _, g := range groups {
@@ -357,7 +357,7 @@ func renderSkeleton(symbols []*schema.Node) string {
 // (renderSkeleton) instead of its full verbatim source
 // (renderNumberedSource) — an off-spine file whose classes share a
 // >=3-implementer supertype.
-func RenderExplore(query string, fileCount, symbolCount int, groups []exploreFileGroup, blasts []exploreBlast, sources map[string][]byte, stale bool, skeletonFiles map[string]bool) string {
+func RenderExplore(query string, fileCount, symbolCount int, groups []ExploreFileGroup, blasts []ExploreBlast, sources map[string][]byte, stale bool, skeletonFiles map[string]bool) string {
 	var b strings.Builder
 	b.WriteString(staleBanner(stale))
 	fmt.Fprintf(&b, "**Exploration: %s**\n\n", query)

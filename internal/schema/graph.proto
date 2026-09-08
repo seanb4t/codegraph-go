@@ -148,4 +148,20 @@ message Meta {
   // lacks the index, signaling `sync` to perform a one-time full
   // re-index backfill before switching to incremental updates.
   bool has_file_index = 7;
+
+  // commit_sha records the git commit the index was built at (Phase 1
+  // ENG-04, D-05). Absent or empty means a pre-upgrade graph — one built
+  // before this field existed — OR a non-git checkout; consumers must
+  // treat it as unknown rather than as an error. Accepted forms are
+  // exactly 40 (SHA-1) or 64 (SHA-256) characters of lowercase hex; any
+  // other value is never written. This field number is now spent
+  // permanently (D-02a): once shipped, field 8 can never be renumbered or
+  // reused — retiring it means adding 8 to a `reserved` clause.
+  string commit_sha = 8;
+
+  // Reserved now, for future graph-level provenance (a central server,
+  // CI-distributed indexes) so it lands at a pre-agreed number instead of
+  // colliding with whatever the next organic field would be — mirroring
+  // Node's and Edge's identical reserved ranges above.
+  reserved 50 to 59; // future: team-scale provenance (central server, CI-distributed indexes)
 }

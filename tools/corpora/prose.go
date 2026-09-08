@@ -82,7 +82,7 @@ func renderMeasurementProse(obs corpora.Observations, sel corpora.Selection) str
 	if sel.ThresholdRationale == "" {
 		b.WriteString("**No selection has been recorded yet.** The observations below are informative; the coverage claim and per-kind thresholds will appear once `corpora/selection.json` is authored.\n\n")
 	} else {
-		b.WriteString(fmt.Sprintf("**Threshold rationale:** %s\n\n", sel.ThresholdRationale))
+		fmt.Fprintf(&b, "**Threshold rationale:** %s\n\n", sel.ThresholdRationale)
 	}
 
 	// Locked set / selection overview
@@ -189,7 +189,7 @@ func writeCoverageTable(b *strings.Builder, obs corpora.Observations, sel corpor
 
 	// Synthetic kinds
 	for _, k := range sel.SyntheticKinds {
-		b.WriteString(fmt.Sprintf("| %s | %d | SYNTHETIC — declared by curation, not measured from a third-party repository (D-16) | — |\n", k, sel.MinEdgesPerKind[k]))
+		fmt.Fprintf(b, "| %s | %d | SYNTHETIC — declared by curation, not measured from a third-party repository (D-16) | — |\n", k, sel.MinEdgesPerKind[k])
 	}
 	b.WriteString("\n")
 }
@@ -243,9 +243,9 @@ func writeCandidateLedger(b *strings.Builder, obs corpora.Observations, sel corp
 	keys := sortedObsKeys(obs)
 	for _, k := range keys {
 		o := obs.Observations[k]
-		b.WriteString(fmt.Sprintf("### %s (%s)\n\n", o.Repo, o.SHA[:8]))
-		b.WriteString(fmt.Sprintf("- **License:** %s\n", o.License))
-		b.WriteString(fmt.Sprintf("- **Tracked files:** %d\n", o.TrackedFiles))
+		fmt.Fprintf(b, "### %s (%s)\n\n", o.Repo, o.SHA[:8])
+		fmt.Fprintf(b, "- **License:** %s\n", o.License)
+		fmt.Fprintf(b, "- **Tracked files:** %d\n", o.TrackedFiles)
 		ek := statusNumeric(o.Status, "edgesByKind")
 		if len(ek) > 0 {
 			b.WriteString("- **Edges by kind:**\n")

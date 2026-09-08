@@ -55,7 +55,7 @@ func mkObs(repo, sha string, edges, langs map[string]any) Observation {
 		Language:     "go",
 		TrackedFiles: 100,
 		Status: map[string]any{
-			"edgesByKind":    edges,
+			"edgesByKind":     edges,
 			"filesByLanguage": langs,
 		},
 	}

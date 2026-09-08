@@ -641,9 +641,19 @@ func lastPathSegment(importPath string) string {
 // batched GraphStore.Writer (D-04a). It returns the count of references
 // that could not be resolved (surfaced later via --verbose, never silently
 // dropped — D-06a).
-func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string) (int, error) {
+//
+// commitSHA is the git commit HEAD pointed at when the caller's operation
+// began (ENG-04, D-05), resolved exactly once by run (the full index run's
+// entry point) and threaded down here rather than re-resolved per call —
+// HEAD can move between two resolutions within one run (a rebase, a
+// checkout, a concurrent commit), and two write sites in the same
+// operation recording different commits would be worse than recording
+// none. An empty commitSHA is a legitimate value (non-git checkout, or git
+// unavailable) and is stamped as-is; schema.IndexedCommitSHA treats it as
+// absent.
+func Resolve(store graphstore.GraphStore, results []goextract.FileResult, modulePath string, commitSHA string) (int, error) {
 	nodes, packageNodes, edges, files, unresolvedCount := resolveRefs(results, modulePath)
-	if err := writeGraph(store, nodes, packageNodes, edges, files); err != nil {
+	if err := writeGraph(store, nodes, packageNodes, edges, files, commitSHA); err != nil {
 		return unresolvedCount, err
 	}
 	return unresolvedCount, nil
@@ -710,7 +720,7 @@ func collapseEdges(edges []*schema.Edge, nodeFilePath map[string]string) []*sche
 // source/kind/target) — through exactly one GraphStore.Writer, committing
 // once (D-04a). Any staging error releases the batch via Close() (never a
 // partial Commit) and returns the error.
-func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File) error {
+func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node, edges []*schema.Edge, files []*schema.File, commitSHA string) error {
 	nodeFilePath := make(map[string]string, len(nodes))
 	for _, n := range nodes {
 		nodeFilePath[n.Id] = n.FilePath
@@ -771,6 +781,12 @@ func writeGraph(store graphstore.GraphStore, nodes, packageNodes []*schema.Node,
 	// staleness fallback (04-06) report every freshly indexed repo as
 	// permanently stale.
 	meta.LastSyncUnixMs = time.Now().UnixMilli()
+	// ENG-04/D-05: stamp the commit HEAD pointed at when this operation
+	// began, resolved once by run and threaded down — for the same stated
+	// reason HasFileIndex and LastSyncUnixMs are stamped here rather than
+	// only in Sync's own meta-write steps: stamping at only one site
+	// leaves graphs built through the other paths permanently missing it.
+	meta.CommitSha = commitSHA
 	if err := w.PutMeta(meta); err != nil {
 		w.Close()
 		return err

@@ -62,6 +62,16 @@ func confineToRepoRoot(path, repoPath string) (string, error) {
 // call's worktree detection shares the one cache BuildServer constructed
 // rather than probing git uncached. The caller owns closing the returned
 // io.Closer.
+//
+// IN-14: every call site closes via `defer func() { _ = close() }()` —
+// the returned closer's error is deliberately discarded, not ignored by
+// oversight. This engine is opened read-only for exactly the duration of
+// one handler call and never written to again after this function
+// returns; a close failure here (e.g. releasing an already-consistent
+// read snapshot) has no corrective action a caller could take and no
+// state left dangling for the NEXT call, which opens its own fresh
+// snapshot via this same function. Contrast with a writer's Commit/Close,
+// where a failure DOES matter and is never discarded this way.
 func openEngine(argPath, defaultPath, repoPath string, detector *gitmeta.CachingDetector) (*query.Engine, func() error, error) {
 	path := resolvePath(argPath, defaultPath)
 	confined, err := confineToRepoRoot(path, repoPath)
@@ -207,7 +217,8 @@ func exploreHandler(repoPath, defaultPath string, detector *gitmeta.CachingDetec
 		if err != nil {
 			return nil, nil, err
 		}
-		defer close()
+		// close error is non-actionable here — see openEngine's own doc comment.
+		defer func() { _ = close() }()
 
 		out, err := eng.Explore(args.Query, args.MaxFiles)
 		if err != nil {
@@ -413,7 +424,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			out, err := eng.Node(args.Symbol, args.File, lineHint)
 			if err != nil {
@@ -429,7 +441,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			locs, err := eng.Search(args.Query, args.Kind, args.Limit)
 			if err != nil {
@@ -446,7 +459,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			result, err := eng.Callers(args.Symbol, args.Limit)
 			if err != nil {
@@ -463,7 +477,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			result, err := eng.Callees(args.Symbol, args.Limit)
 			if err != nil {
@@ -480,7 +495,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			result, err := eng.Impact(args.Symbol, args.Depth)
 			if err != nil {
@@ -504,7 +520,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			result, err := eng.Files(opts)
 			if err != nil {
@@ -521,7 +538,8 @@ func companionHandler(s *mcp.Server, name, repoPath, defaultPath string, detecto
 			if err != nil {
 				return nil, nil, err
 			}
-			defer close()
+			// close error is non-actionable here — see openEngine's own doc comment.
+			defer func() { _ = close() }()
 
 			// codegraph_status is EXCLUDED from the compact notice
 			// (WORK-02/D-12): Engine.Status() already computes

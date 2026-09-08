@@ -1,11 +1,13 @@
 package upgrade
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -25,12 +27,44 @@ const workflowsDir = "../../.github/workflows"
 // tool modfiles must exist as distinct files with a non-empty rationale
 // header.
 const (
-	rootGoModPath    = "../../go.mod"
-	toolModfilePath  = "../../go.tool.mod"
-	lintModfilePath  = "../../go.tool-lint.mod"
+	rootGoModPath   = "../../go.mod"
+	toolModfilePath = "../../go.tool.mod"
+	lintModfilePath = "../../go.tool-lint.mod"
+	// golangciModfilePath is the fourth isolated tool modfile
+	// (03-10-PLAN.md Task 1), registered with TestToolModfilesRemainIsolated
+	// below so a new modfile absent from that guard's iterated set is not
+	// silently inspected by nothing (the same shape TestWorkflowRunBodiesInvokeTask
+	// guards for CI jobs — see inScopeJobs).
+	golangciModfilePath = "../../go.tool-golangci.mod"
+	// protoModfilePath was a PRE-EXISTING gap of the identical shape —
+	// absent from this guard's iterated set since 01-01-PLAN.md — closed
+	// alongside golangciModfilePath's registration rather than left as a
+	// second recorded-but-unfixed instance of the same defect (03-10-PLAN.md
+	// Task 1; see 03-10-SUMMARY.md for why this went beyond the plan's own
+	// stated scope).
+	protoModfilePath = "../../go.tool-proto.mod"
 	taskfilePath     = "../../Taskfile.yml"
 	goreleaserPath   = "../../.goreleaser.yaml"
 	checkCrossTaskID = "check:cross"
+
+	// releasePathWorkflowPath is an alias for releaseWorkflowPath
+	// (release_workflow_shape_test.go), declared here too so the BLD-07
+	// release-path fixture block below reads as self-contained beside
+	// goreleaserPath, its sibling ROOT.
+	releasePathWorkflowPath = releaseWorkflowPath
+
+	// ciWorkflowPath is the on-disk path to the workflow BLD-01's
+	// no-mutable-JS-cache invariant (Task 3) scans. Deliberately NOT
+	// releasePathWorkflowPath: ci.yml is not part of the signed release
+	// path — it is the PR/push gate whose `test` job D-13 folds the JS
+	// gates into.
+	ciWorkflowPath = "../../.github/workflows/ci.yml"
+
+	// releasePathRepoRoot is the on-disk path (relative to this package)
+	// to the repository root — used only by the BLD-07 unmodelled-edge
+	// tripwire to test whether a candidate word inside a run:/cmds:/hooks:
+	// scalar names a file that actually exists in the worktree.
+	releasePathRepoRoot = "../.."
 )
 
 // requiredCheckNames is the literal fixture of GitHub ruleset 20157557's
@@ -50,13 +84,22 @@ var requiredCheckNames = []string{
 	"pr-title",
 }
 
-// forbiddenToolPackages are the three build-tool import paths that must
-// live ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod),
-// never as a tool directive or a require line in the root go.mod (D-03).
+// forbiddenToolPackages are the build-tool import paths that must live
+// ONLY in the isolated tool modfiles (go.tool.mod / go.tool-lint.mod /
+// go.tool-proto.mod / go.tool-golangci.mod), never as a tool directive or
+// a require line in the root go.mod (D-03). google.golang.org/protobuf and
+// connectrpc.com/connect are deliberately NOT here even though
+// go.tool-proto.mod also pins their cmd/ tool binaries: both are
+// legitimate RUNTIME dependencies of the main module (the generated
+// .pb.go/.connect.go files import them), so root go.mod requiring them is
+// correct, not a D-03 violation — only the buf CLI itself is pure build
+// tooling with no runtime import anywhere in this module.
 var forbiddenToolPackages = []string{
 	"github.com/go-task/task",
 	"github.com/goreleaser/goreleaser",
 	"github.com/rhysd/actionlint",
+	"github.com/golangci/golangci-lint",
+	"github.com/bufbuild/buf",
 }
 
 // forbiddenTaskfileGateKeys are the two go-task fields that silently SKIP
@@ -117,6 +160,7 @@ var inScopeJobs = []inScopeJob{
 	{Workflow: "release-please.yml", JobID: "pretag-gate"},
 	{Workflow: "corpora.yml", JobID: "corpora"},
 	{Workflow: "corpora.yml", JobID: "golden"},
+	{Workflow: "components-drift.yml", JobID: "components-drift"},
 }
 
 // runBodyException is one literal, reasoned carve-out from the
@@ -876,17 +920,34 @@ func TestGateStancesStated(t *testing.T) {
 // packages, and each tool modfile's header comment must be non-empty and
 // state the isolation rationale — without that header the two files read
 // as an accident and someone merges them.
+// isolatedModfilePaths is every tool modfile TestToolModfilesRemainIsolated
+// holds to the isolation property (D-03). 03-10-PLAN.md's own review
+// (constraint: "hardcoded iteration set") flagged that this guard
+// previously iterated a two-element slice hardcoded in-line — a new
+// modfile absent from it was inspected by NOTHING and the test stayed
+// green, which is why go.tool-proto.mod (present on disk since
+// 01-01-PLAN.md) was never actually checked. Declaring the set here, as a
+// named slice checked against disk by TestToolModfilesPopulationMatchesDisk
+// below, closes both the golangci-lint gap this plan adds AND the
+// pre-existing proto gap in the same change, rather than recording the
+// latter as accepted debt.
+var isolatedModfilePaths = []string{toolModfilePath, lintModfilePath, protoModfilePath, golangciModfilePath}
+
 func TestToolModfilesRemainIsolated(t *testing.T) {
-	toolInfo, err := os.Stat(toolModfilePath)
-	if err != nil {
-		t.Fatalf("stat %s: %v", toolModfilePath, err)
+	infos := make([]os.FileInfo, len(isolatedModfilePaths))
+	for i, path := range isolatedModfilePaths {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		infos[i] = info
 	}
-	lintInfo, err := os.Stat(lintModfilePath)
-	if err != nil {
-		t.Fatalf("stat %s: %v", lintModfilePath, err)
-	}
-	if os.SameFile(toolInfo, lintInfo) {
-		t.Fatalf("go.tool.mod and go.tool-lint.mod resolve to the same file — they must be two distinct modfiles (D-03)")
+	for i := range infos {
+		for j := i + 1; j < len(infos); j++ {
+			if os.SameFile(infos[i], infos[j]) {
+				t.Fatalf("%s and %s resolve to the same file — they must be distinct modfiles (D-03)", isolatedModfilePaths[i], isolatedModfilePaths[j])
+			}
+		}
 	}
 
 	rootData, err := os.ReadFile(rootGoModPath)
@@ -896,16 +957,16 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 	rootSrc := string(rootData)
 
 	if pkgs, toolErr := parseGoModToolPackages(rootSrc); toolErr == nil {
-		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in go.tool.mod/go.tool-lint.mod (D-03)", pkgs)
+		t.Fatalf("root go.mod declares a tool directive %v — build tools must live only in the isolated tool modfiles (D-03)", pkgs)
 	}
 
 	for _, pkg := range forbiddenToolPackages {
 		if version, reqErr := parseGoModRequireVersion(rootSrc, pkg); reqErr == nil {
-			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in go.tool.mod/go.tool-lint.mod (D-03)", pkg, version)
+			t.Fatalf("root go.mod requires %s@%s directly — build tools must live only in the isolated tool modfiles (D-03)", pkg, version)
 		}
 	}
 
-	for _, path := range []string{toolModfilePath, lintModfilePath} {
+	for _, path := range isolatedModfilePaths {
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
 			t.Fatalf("read %s: %v", path, readErr)
@@ -914,6 +975,40 @@ func TestToolModfilesRemainIsolated(t *testing.T) {
 		if !strings.Contains(strings.ToLower(comment), "isolat") {
 			t.Fatalf("%s: header comment does not mention isolation rationale, got: %q", path, comment)
 		}
+	}
+}
+
+// TestToolModfilesPopulationMatchesDisk is the positive-count guard
+// 03-10-PLAN.md's review demanded: TestToolModfilesRemainIsolated's own
+// exit status cannot report its own blindness to a modfile absent from
+// isolatedModfilePaths (a new go.tool-*.mod that's simply never added to
+// that slice is inspected by nothing, and the isolation test still
+// passes). This test instead globs the actual population on disk and
+// asserts the count matches exactly, so a future go.tool-*.mod landing
+// without a matching isolatedModfilePaths entry fails LOUDLY here rather
+// than silently falling behind — the same population-vs-assertion gap
+// this plan closed for go.tool-proto.mod, guarded from recurring.
+//
+// IN-03: a bare count comparison is genuinely set-complete only IN
+// CONJUNCTION with TestToolModfilesRemainIsolated, which os.Stats every
+// registered path (slice ⊆ disk) and pairwise-SameFiles them (the slice
+// has no duplicates) — equal cardinality plus containment plus
+// distinctness does imply equality, but that dependency was implicit:
+// `go test -run '^TestToolModfilesPopulationMatchesDisk$'` in isolation
+// was a bare count, not a self-contained set-equality assertion (verified:
+// swapping one real path in isolatedModfilePaths for a same-cardinality
+// but WRONG bogus path left the old count-only check green). Sorting both
+// sides and comparing with slices.Equal makes this test self-contained.
+func TestToolModfilesPopulationMatchesDisk(t *testing.T) {
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(rootGoModPath), "go.tool*.mod"))
+	if err != nil {
+		t.Fatalf("glob go.tool*.mod: %v", err)
+	}
+	sort.Strings(matches)
+	want := append([]string(nil), isolatedModfilePaths...)
+	sort.Strings(want)
+	if !slices.Equal(matches, want) {
+		t.Fatalf("go.tool*.mod files on disk %v do not match isolatedModfilePaths %v — a new tool modfile was added without registering it here, or a registered one no longer exists on disk", matches, want)
 	}
 }
 
@@ -1382,6 +1477,312 @@ func TestWorkflowRunBodiesInvokeTask(t *testing.T) {
 		if !matched[key] {
 			t.Errorf("exception %s/%s/%q was never matched against a real step in an in-scope job — a stale exception silently widens the allowlist (T-10-07-01); fix the step name or remove the entry", exc.Workflow, exc.Job, exc.Step)
 		}
+	}
+}
+
+// usesOnlyJobException names one job, by (workflow, job ID), that is
+// legitimately absent from inScopeJobs because every one of its steps is
+// a `uses:` step with no run: body at all — nothing for
+// TestWorkflowRunBodiesInvokeTask to check. Mirrors runBodyException's
+// own carve-out shape (IN-05) so a stale entry — the job no longer
+// exists, or has gained a real run: step — fails loudly here rather than
+// silently widening the population TestInScopeJobsPopulationMatchesDisk
+// trusts.
+type usesOnlyJobException struct {
+	Workflow string
+	JobID    string
+	Reason   string
+}
+
+var usesOnlyJobExceptions = []usesOnlyJobException{
+	{
+		Workflow: "ci.yml",
+		JobID:    "govulncheck",
+		Reason:   "runs via `uses: golang/govulncheck-action`, an action with no run: body at all",
+	},
+	{
+		Workflow: "release-please.yml",
+		JobID:    "release-please",
+		Reason:   "every step is `uses:` (create-github-app-token, release-please-action) — no run: body at all",
+	},
+}
+
+// inScopeWorkflowFiles is the SAME set of workflow files inScopeJobs
+// already covers — bench.yml and release.yml carry their own documented
+// D-01 exceptions decided in earlier plans (see inScopeJobs's own doc
+// comment) and are deliberately excluded from this population check too,
+// for the identical reason.
+//
+// WR-03: this list is itself hand-enumerated, and — unlike
+// requiredCheckNames (deliberately hand-written; it mirrors a GitHub
+// ruleset outside this repo, and stays that way) — it names only 3 of the
+// 14 files actually under workflowsDir, with no disk binding of its own.
+// Before TestWorkflowFilePopulationMatchesDisk below, a new workflow file
+// added anywhere under .github/workflows/ was invisible to BOTH this list
+// and workflowFileExceptions: it passed every guard in this file by being
+// named nowhere, the exact "new subject passes because it is absent"
+// shape criterion 2 already fixed one level down (job population). Every
+// file on disk must now appear in EXACTLY ONE of inScopeWorkflowFiles or
+// workflowFileExceptions, or that test fails, naming it.
+var inScopeWorkflowFiles = []string{"ci.yml", "release-please.yml", "corpora.yml", "components-drift.yml"}
+
+// workflowFileException names one workflow file, by its filename under
+// workflowsDir, that is deliberately OUT of inScopeWorkflowFiles's
+// job-level enforcement — with a reason, mirroring
+// runBodyException/usesOnlyJobException's own carve-out shape. A reason
+// here is not merely descriptive: TestWorkflowFilePopulationMatchesDisk
+// requires every entry's Workflow to still exist on disk, so a stale
+// entry (the file was deleted) fails loudly rather than silently
+// widening this list past what it once meant.
+type workflowFileException struct {
+	Workflow string
+	Reason   string
+}
+
+// workflowFileExceptions is the explicit, exhaustive record of every
+// workflow file NOT in inScopeWorkflowFiles (WR-03). Two entries
+// (bench.yml, release.yml) restate inScopeJobs's own pre-existing D-01
+// exceptions; the rest are new as of this fix, closing the 9-of-14 gap
+// 03-REVIEW.md's WR-03 finding named by file: auto-close-unsolicited-prs.yml,
+// auto-label-issues.yml, close-draft-prs.yml, darwin-toolchain-canary.yml,
+// linux-cross-canary.yml, post-release-verify.yml, pr-template-format.yml,
+// pr-title.yml, require-issue-link.yml.
+var workflowFileExceptions = []workflowFileException{
+	{
+		Workflow: "bench.yml",
+		Reason:   "rebless/publish/diagnostic jobs run `go run ./tools/bench/runner` inline, commented in-file above the rebless job (D-01 exception decided in an earlier plan of this phase — see inScopeJobs's own doc comment)",
+	},
+	{
+		Workflow: "release.yml",
+		Reason:   "native build matrix, D-08 — not `task <target>`-shaped by design (see inScopeJobs's own doc comment)",
+	},
+	{
+		Workflow: "darwin-toolchain-canary.yml",
+		Reason:   "most run: steps already call `task check:darwin-toolchain`/`task check:darwin-release-build`, but this file has no dedicated per-job D-01 audit in this test file; excepted rather than newly job-level-audited under this fix, to keep this fix scoped to binding the FILE population (WR-03) rather than also expanding job-level enforcement",
+	},
+	{
+		Workflow: "linux-cross-canary.yml",
+		Reason:   "most run: steps already call `task release:dry-run`/`task check:linux-cross-export`/`task check:linux-cross-exec`, but this file has no dedicated per-job D-01 audit in this test file; excepted for the same reason as darwin-toolchain-canary.yml above",
+	},
+	{
+		Workflow: "post-release-verify.yml",
+		Reason:   "has its own dedicated shape guards in release_workflow_shape_test.go (TestPostReleaseJobsDeclareCheckoutPolicy and neighbors: checkout policy, cosign installer count, credential preconditions); this generic single-definition check is not the tool auditing it, and at least one step (:122, a multi-line diagnostic block) is deliberately raw shell, not a `task <target>` call — the concrete evidence WR-03 itself cites for why this population must not be silently universal",
+	},
+	{
+		Workflow: "auto-close-unsolicited-prs.yml",
+		Reason:   "PR-triage automation: its only step is `uses: actions/github-script`, no run: body at all — nothing for a run:-body guard to check",
+	},
+	{
+		Workflow: "auto-label-issues.yml",
+		Reason:   "issue-triage automation: its only step is `uses: actions/github-script`, no run: body at all — nothing for a run:-body guard to check",
+	},
+	{
+		Workflow: "close-draft-prs.yml",
+		Reason:   "PR-triage automation: its only step is `uses: actions/github-script`, no run: body at all — nothing for a run:-body guard to check",
+	},
+	{
+		Workflow: "pr-template-format.yml",
+		Reason:   "PR-hygiene automation: its run: steps invoke a repo policy script (scripts/pr_template_policy.py) and git plumbing, not a Taskfile-target duplicate",
+	},
+	{
+		Workflow: "pr-title.yml",
+		Reason:   "PR-title validation automation: its run: steps validate the PR title text directly (regex/echo), not a Taskfile-target duplicate",
+	},
+	{
+		Workflow: "require-issue-link.yml",
+		Reason:   "issue-link policy automation: its run: steps are gh CLI/echo/policy checks over changed paths, not a Taskfile-target duplicate",
+	},
+}
+
+// validateWorkflowFileExceptions proves every workflowFileExceptions entry
+// still exists on disk and still carries a non-empty reason — mirroring
+// validateRunBodyExceptions/validateUsesOnlyJobExceptions's own "a stale
+// exception cannot silently widen or narrow the checked population"
+// discipline.
+func validateWorkflowFileExceptions(excs []workflowFileException) error {
+	for _, exc := range excs {
+		if strings.TrimSpace(exc.Reason) == "" {
+			return fmt.Errorf("%s: empty reason", exc.Workflow)
+		}
+		path := filepath.Join(workflowsDir, exc.Workflow)
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("%s: %w", exc.Workflow, err)
+		}
+	}
+	return nil
+}
+
+// TestWorkflowFilePopulationMatchesDisk is WR-03's disk-binding fix for
+// inScopeWorkflowFiles, mirroring TestToolModfilesPopulationMatchesDisk
+// and TestInScopeJobsPopulationMatchesDisk's own pattern one level up:
+// every *.yml file actually present under workflowsDir must appear in
+// EXACTLY ONE of inScopeWorkflowFiles or workflowFileExceptions. Before
+// this fix, a new workflow file added anywhere under .github/workflows/
+// — including one whose jobs raw-invoke a command that duplicates a
+// Taskfile target, the exact D-01 violation this whole file exists to
+// catch — was invisible to every guard in this file simply by not being
+// named in the 3-of-14 inScopeWorkflowFiles literal.
+func TestWorkflowFilePopulationMatchesDisk(t *testing.T) {
+	if err := validateWorkflowFileExceptions(workflowFileExceptions); err != nil {
+		t.Fatalf("workflowFileExceptions: %v", err)
+	}
+
+	entries, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", workflowsDir, err)
+	}
+	var onDisk []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yml") {
+			continue
+		}
+		onDisk = append(onDisk, e.Name())
+	}
+	if len(onDisk) == 0 {
+		t.Fatalf("%s: found zero workflow files — this guard would vacuously pass over zero", workflowsDir)
+	}
+	sort.Strings(onDisk)
+
+	accounted := make(map[string]string, len(inScopeWorkflowFiles)+len(workflowFileExceptions))
+	for _, wf := range inScopeWorkflowFiles {
+		accounted[wf] = "inScopeWorkflowFiles"
+	}
+	for _, exc := range workflowFileExceptions {
+		if src, dup := accounted[exc.Workflow]; dup {
+			t.Errorf("%s: named in BOTH %s and workflowFileExceptions — pick one", exc.Workflow, src)
+			continue
+		}
+		accounted[exc.Workflow] = "workflowFileExceptions"
+	}
+
+	var unaccounted []string
+	for _, name := range onDisk {
+		if _, ok := accounted[name]; !ok {
+			unaccounted = append(unaccounted, name)
+		}
+	}
+	if len(unaccounted) > 0 {
+		t.Errorf("%s: workflow file(s) on disk named in NEITHER inScopeWorkflowFiles nor workflowFileExceptions: %v — add each to one of the two (with a reason, if excepted)", workflowsDir, unaccounted)
+	}
+
+	diskSet := make(map[string]bool, len(onDisk))
+	for _, name := range onDisk {
+		diskSet[name] = true
+	}
+	for _, wf := range inScopeWorkflowFiles {
+		if !diskSet[wf] {
+			t.Errorf("inScopeWorkflowFiles names %q, which no longer exists on disk", wf)
+		}
+	}
+}
+
+// validateUsesOnlyJobExceptions proves every usesOnlyJobExceptions entry
+// still exists on disk, still carries a non-empty reason, and still
+// declares ZERO run: steps — mirroring validateRunBodyExceptions's own
+// "a stale exception cannot silently widen" discipline. A job that gains
+// even one run: step must move to inScopeJobs and be held to
+// TestWorkflowRunBodiesInvokeTask like every other in-scope job, not stay
+// carved out here.
+func validateUsesOnlyJobExceptions(excs []usesOnlyJobException) error {
+	for _, exc := range excs {
+		if strings.TrimSpace(exc.Reason) == "" {
+			return fmt.Errorf("%s/%s: empty reason", exc.Workflow, exc.JobID)
+		}
+		path := filepath.Join(workflowsDir, exc.Workflow)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("%s/%s: read %s: %w", exc.Workflow, exc.JobID, path, err)
+		}
+		var wf workflowFileYAML
+		if err := yaml.Unmarshal(data, &wf); err != nil {
+			return fmt.Errorf("%s/%s: parse %s: %w", exc.Workflow, exc.JobID, path, err)
+		}
+		job, ok := wf.Jobs[exc.JobID]
+		if !ok {
+			return fmt.Errorf("%s/%s: job no longer exists in %s", exc.Workflow, exc.JobID, path)
+		}
+		if len(job.Steps) == 0 {
+			return fmt.Errorf("%s/%s: declares zero steps", exc.Workflow, exc.JobID)
+		}
+		for _, step := range job.Steps {
+			if strings.TrimSpace(step.Run) != "" {
+				return fmt.Errorf("%s/%s: step %q now has a run: body — this job is no longer uses:-only and must move to inScopeJobs", exc.Workflow, exc.JobID, step.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// TestInScopeJobsPopulationMatchesDisk is IN-05's disk-binding fix,
+// mirroring TestToolModfilesPopulationMatchesDisk's own pattern (that
+// test's own doc comment is this one's precedent, named directly in
+// 03-REVIEW.md's IN-05 finding). Before this fix, inScopeJobs was a
+// hand-enumerated fixture with only a non-empty guard
+// (TestWorkflowRunBodiesInvokeTask's `len(inScopeJobs) == 0` check) —
+// nothing asserted that every job actually declared in
+// inScopeWorkflowFiles appears in it. A new CI job added to ci.yml,
+// release-please.yml, or corpora.yml without a matching inScopeJobs entry
+// was bound by nothing and the suite stayed green — the memory-v4zqxrz6b3
+// shape: a hand-enumerated population narrows silently because a new
+// subject passes by being absent.
+func TestInScopeJobsPopulationMatchesDisk(t *testing.T) {
+	if err := validateUsesOnlyJobExceptions(usesOnlyJobExceptions); err != nil {
+		t.Fatalf("usesOnlyJobExceptions: %v", err)
+	}
+
+	want := make(map[string]bool, len(inScopeJobs))
+	for _, ij := range inScopeJobs {
+		want[ij.Workflow+"/"+ij.JobID] = true
+	}
+	excluded := make(map[string]bool, len(usesOnlyJobExceptions))
+	for _, exc := range usesOnlyJobExceptions {
+		excluded[exc.Workflow+"/"+exc.JobID] = true
+	}
+
+	var onDisk []string
+	for _, wf := range inScopeWorkflowFiles {
+		path := filepath.Join(workflowsDir, wf)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		var parsed workflowFileYAML
+		if err := yaml.Unmarshal(data, &parsed); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		if len(parsed.Jobs) == 0 {
+			t.Fatalf("%s declares no jobs: at all — this guard would vacuously pass over zero jobs", path)
+		}
+		for jobID := range parsed.Jobs {
+			onDisk = append(onDisk, wf+"/"+jobID)
+		}
+	}
+	sort.Strings(onDisk)
+
+	var missing, extra []string
+	seen := make(map[string]bool, len(onDisk))
+	for _, key := range onDisk {
+		seen[key] = true
+		if excluded[key] {
+			continue
+		}
+		if !want[key] {
+			missing = append(missing, key)
+		}
+	}
+	for key := range want {
+		if !seen[key] {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(missing)
+	sort.Strings(extra)
+
+	if len(missing) > 0 {
+		t.Errorf("job(s) on disk in %v not present in inScopeJobs and not in usesOnlyJobExceptions: %v — a new CI job was added without registering it here", inScopeWorkflowFiles, missing)
+	}
+	if len(extra) > 0 {
+		t.Errorf("inScopeJobs names job(s) that no longer exist on disk: %v", extra)
 	}
 }
 
@@ -2487,4 +2888,1090 @@ func TestCosignInstallerGuardParsersFailLoudly(t *testing.T) {
 			t.Fatalf("parseWorkflowJobsAllSteps(\"\"): expected a non-nil error, got nil")
 		}
 	})
+}
+
+// === BLD-07: release-path structural scanner (02-04 Tasks 1-2) ===========
+//
+// Proves the signed release path stays pure Go: a fixture-backed scanner
+// over the transitive execution closure of the two ROOTS below finds zero
+// JavaScript-toolchain invocations, and is itself proven able to find one
+// in each reachable unit kind (TestReleasePathScanIsNonVacuous) while
+// leaving this repository's own near-miss strings alone
+// (TestReleasePathScanIgnoresNearMisses). See this plan's
+// <recorded_limitations> for the four boundaries the model does not cover
+// and which three are tripwired.
+
+// releasePathScanRoots is the literal ROOTS fixture: the two documents the
+// signed release path is defined by. 02-CONTEXT.md verified both clean on
+// 2026-08-23 with a positive control (zero matches for node/npm/npx/pnpm,
+// against 29/14 `go` hits in the same two files — proof the search itself
+// works). The scanned SET is NOT these two paths alone —
+// resolveReleasePathClosure derives the transitive closure from them: the
+// local composite actions release.yml `uses:`, and the Taskfile.yml
+// targets its `run:` bodies invoke via `task <target>`. A new EDGE from an
+// existing root (a new `uses: ./…` or `task <target>` line added to
+// release.yml) is picked up automatically — no fixture change required. A
+// new ROOT (a second release workflow, a second GoReleaser config) DOES
+// require adding it here explicitly.
+var releasePathScanRoots = []string{goreleaserPath, releasePathWorkflowPath}
+
+// forbiddenJSToolchainCommands are the four command names BLD-07's
+// requirement text enumerates by name: the Node runtime, the npm CLI, the
+// npm package runner, and the pnpm CLI. Matched by exact path-BASENAME
+// equality (walkNodeForJSToolchain), never by raw substring — a substring
+// search flags this repository's own `pnpm-lock.yaml`, `web/node_modules`
+// and `protoc-gen-es` strings, all of which legitimately exist elsewhere in
+// this tree (TestReleasePathScanIgnoresNearMisses proves the distinction).
+var forbiddenJSToolchainCommands = []string{"node", "npm", "npx", "pnpm"}
+
+// forbiddenJSToolchainActions are marketplace-action owner/repo prefixes
+// that put a JavaScript runtime or package manager onto a runner WITHOUT
+// naming any of forbiddenJSToolchainCommands — an action that installs a
+// runtime is a JS-toolchain invocation even though a command-name scan
+// alone would never see it. Compared against a `uses:` value's text before
+// its first "@" version pin.
+var forbiddenJSToolchainActions = []string{"actions/setup-node", "pnpm/action-setup"}
+
+// unsupportedEdgeKeys names the two workflow job-level keys that introduce
+// an execution context this scanner cannot see into: a job's own container
+// image, or a service container's image. Neither names a command or a
+// marketplace action a token scan can inspect — the image itself may ship
+// a JS runtime. resolveReleasePathClosure refuses
+// (errUnsupportedReachabilityEdge) the moment either key appears on a
+// scanned workflow job, rather than scanning the rest of the document and
+// reporting a clean zero over a job it cannot actually see into
+// (recorded_limitations boundary 2).
+var unsupportedEdgeKeys = []string{"container", "services"}
+
+// executionBodyKeys names the three YAML keys whose scalar content is
+// actually EXECUTED at release time — a workflow step's run:, a Taskfile
+// task's cmds:, and a GoReleaser hooks: entry. The unmodelled-script
+// tripwire (checkExecutionBodyWordsForScript) only walks content reached
+// through one of these keys: a script path named under an unrelated key
+// (e.g. .goreleaser.yaml's `main: ./cmd/codegraph`, a BUILD input, never
+// executed as a shell command) is not an execution edge and must not trip
+// the wire.
+var executionBodyKeys = []string{"run", "cmds", "hooks"}
+
+// errUnsupportedReachabilityEdge is the BLD-07 coverage-model tripwire
+// (T-02-04-07): resolveReleasePathClosure returns it, wrapped with the
+// offending unit and edge kind, when it meets an execution edge its model
+// does not cover — a run:/cmds:/hooks: scalar invoking a repository-local
+// executable script (recorded_limitations boundaries 1 and 4), or a
+// scanned workflow job carrying a container:/services: key
+// (recorded_limitations boundary 2) — rather than scanning past it and
+// reporting a clean zero over a coverage model that just shrank. This is
+// repo rule 84d1gfpywd applied to the scanner's OWN coverage model, not
+// merely its output: a guard that meets something it cannot model must say
+// so. The remedy when this fires is to widen resolveReleasePathClosure's
+// model, sandbox the new content, or record an accepted risk in the threat
+// register — never to add the offending edge to an allowlist and move on.
+// Deliberately NOT tripwired: a JS runtime installed by a general-purpose
+// command (`brew install node`, a piped `curl | sh` installer, or a
+// marketplace action outside forbiddenJSToolchainActions) —
+// recorded_limitations boundary 3, recognisable only by enumerating
+// command spellings, so refusing on it would be a second curated denylist
+// wearing a structural-guard costume, not a structural rule.
+var errUnsupportedReachabilityEdge = errors.New("unsupported reachability edge")
+
+// releasePathScanUnit is one resolved document in the release path's
+// transitive execution closure, together with the provenance
+// resolveReleasePathClosure reached it by — which root, and through which
+// edge kind — so a finding or a resolver error can name the exact path
+// from a root to the offending content.
+type releasePathScanUnit struct {
+	// UnitName is the human-readable identifier used in every finding and
+	// error message: the on-disk path for a root or a local action, or
+	// `Taskfile.yml task "<target>"` for a Taskfile-target unit (whose
+	// Content is a sub-block of Taskfile.yml, not the whole file).
+	UnitName string
+	Root     string // which of releasePathScanRoots reached this unit
+	EdgeKind string // "root" | "local-action" | "taskfile-target"
+	Content  []byte // the actual bytes scanYAMLForJSToolchain parses
+}
+
+// releasePathClosureStats counts what resolveReleasePathClosure actually
+// resolved — the positive assertion repo rule 84d1gfpywd requires. A
+// resolver that silently resolves zero local actions or zero Taskfile
+// targets must not read as "the closure is small and clean": release.yml
+// demonstrably `uses: ./.github/actions/install-task` and runs `task
+// release:goreleaser` / `task release:record-final-hashes` today
+// (T-02-04-01), so a zero count means the resolver is broken, not that the
+// closure is empty.
+type releasePathClosureStats struct {
+	Roots                int
+	ResolvedLocalActions int
+	ResolvedTaskTargets  int
+}
+
+// jsToolchainFinding is one JS-toolchain invocation scanYAMLForJSToolchain
+// found: which unit, where in that unit's YAML structure, and the
+// offending token — precise enough that a failure message identifies the
+// exact line to fix without a human re-deriving it from a raw grep.
+type jsToolchainFinding struct {
+	Unit     string
+	Location string // a YAML-path-shaped breadcrumb, e.g. "$.jobs.release.run"
+	Token    string // the offending command basename or action owner/repo prefix
+	Kind     string // "command" | "action"
+}
+
+func (f jsToolchainFinding) String() string {
+	return fmt.Sprintf("%s at %s: forbidden %s %q", f.Unit, f.Location, f.Kind, f.Token)
+}
+
+// resolveLocalActionPath resolves a workflow uses: value beginning with
+// "./" (a local composite action reference) to its action.yml or
+// action.yaml file on disk, relative to this test package. Returns a
+// non-nil error naming both candidate filenames tried when neither exists
+// — a closure edge pointing at a missing local action is an error, never a
+// silently-skipped unit.
+func resolveLocalActionPath(usesValue string) (string, error) {
+	dir := filepath.Join(releasePathRepoRoot, usesValue)
+	var tried []string
+	for _, name := range []string{"action.yml", "action.yaml"} {
+		candidate := filepath.Join(dir, name)
+		tried = append(tried, candidate)
+		if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("resolveLocalActionPath(%s): neither action.yml nor action.yaml found (tried %v)", usesValue, tried)
+}
+
+// extractTaskCallTargets reuses taskCallLineRe (this file's existing
+// `task <target>` shape) to recover every task target a run: body invokes,
+// after stripRunBodyNoise removes comments/blanks — the same two-step
+// idiom checkStepInvokesTask already applies. Returns nil for a run: body
+// that invokes no task at all (a `uses:`-only step, or a step whose run:
+// body is not a bare `task <target>` line — re-validating D-01's
+// single-definition property is TestWorkflowRunBodiesInvokeTask's job, not
+// this resolver's).
+func extractTaskCallTargets(runBody string) []string {
+	stripped := stripRunBodyNoise(runBody)
+	if stripped == "" {
+		return nil
+	}
+	var targets []string
+	for _, line := range strings.Split(stripped, "\n") {
+		if !taskCallLineRe.MatchString(line) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 2 {
+			targets = append(targets, fields[1])
+		}
+	}
+	return targets
+}
+
+// releasePathGenericWorkflow decodes a workflow file's jobs: as raw
+// key-presence maps rather than a typed struct — the only way to detect a
+// container:/services: key's mere PRESENCE (its value's shape is
+// irrelevant to this check; only whether the key exists at all).
+type releasePathGenericWorkflow struct {
+	Jobs map[string]map[string]interface{} `yaml:"jobs"`
+}
+
+// checkWorkflowJobsForUnsupportedContainerEdges parses src as a workflow
+// document and returns errUnsupportedReachabilityEdge, wrapped with the
+// job's ID and the offending key, the moment any job declares a key in
+// unsupportedEdgeKeys (recorded_limitations boundary 2). unitName
+// identifies the unit in the returned error.
+func checkWorkflowJobsForUnsupportedContainerEdges(unitName string, src []byte) error {
+	var generic releasePathGenericWorkflow
+	if err := yaml.Unmarshal(src, &generic); err != nil {
+		return fmt.Errorf("checkWorkflowJobsForUnsupportedContainerEdges(%s): %w", unitName, err)
+	}
+	jobIDs := make([]string, 0, len(generic.Jobs))
+	for id := range generic.Jobs {
+		jobIDs = append(jobIDs, id)
+	}
+	sort.Strings(jobIDs)
+	for _, id := range jobIDs {
+		job := generic.Jobs[id]
+		for _, key := range unsupportedEdgeKeys {
+			if _, ok := job[key]; ok {
+				return fmt.Errorf("%w: %s job %q carries a %q key — its image is opaque to a structural token scan (recorded_limitations boundary 2)", errUnsupportedReachabilityEdge, unitName, id, key)
+			}
+		}
+	}
+	return nil
+}
+
+// shellWordSplitRe splits a run:/cmds:/hooks: scalar's text into candidate
+// command words on whitespace and the shell metacharacters that separate
+// distinct commands within one line. Used by both the forbidden-command
+// scan and the unmodelled-script tripwire.
+var shellWordSplitRe = regexp.MustCompile("[\\s;&|()<>`$]+")
+
+// tokenizeShellWords splits s into words on shellWordSplitRe, trimming
+// surrounding quote characters from each word and dropping empty results.
+func tokenizeShellWords(s string) []string {
+	var words []string
+	for _, w := range shellWordSplitRe.Split(s, -1) {
+		w = strings.Trim(w, `"'`)
+		if w != "" {
+			words = append(words, w)
+		}
+	}
+	return words
+}
+
+// basenameOf returns the path segment after the last "/" in word, or word
+// itself if it names no path at all — the structural comparison unit for
+// forbiddenJSToolchainCommands. A raw substring search would flag
+// "pnpm-lock.yaml" and "web/node_modules"; comparing basenames does not.
+func basenameOf(word string) string {
+	if idx := strings.LastIndex(word, "/"); idx >= 0 {
+		return word[idx+1:]
+	}
+	return word
+}
+
+// actionPrefix returns a `uses:` value's owner/repo prefix — everything
+// before its first "@" version pin, or the whole value if it carries none.
+func actionPrefix(uses string) string {
+	if idx := strings.Index(uses, "@"); idx >= 0 {
+		return uses[:idx]
+	}
+	return uses
+}
+
+// checkExecutionBodiesForUnsupportedEdges parses content as YAML and walks
+// every run:/cmds:/hooks: scalar (executionBodyKeys) looking for a word
+// that names a repository-local executable script — recorded_limitations
+// boundaries 1 (a shelled-out script from a workflow/Taskfile run:/cmds:
+// body) and 4 (a GoReleaser hook that is a script path rather than an
+// inline command). A candidate word must BOTH look path-shaped (begin with
+// "./" or "../") AND resolve to an existing, non-directory file relative
+// to releasePathRepoRoot before this refuses — a bare word that merely
+// LOOKS path-shaped (e.g. a template placeholder) must not produce a false
+// refusal. unitName identifies the unit in the returned error.
+func checkExecutionBodiesForUnsupportedEdges(unitName string, content []byte) error {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(content, &doc); err != nil {
+		return fmt.Errorf("checkExecutionBodiesForUnsupportedEdges(%s): %w", unitName, err)
+	}
+	return walkForUnsupportedScriptEdge(unitName, &doc)
+}
+
+func walkForUnsupportedScriptEdge(unitName string, node *yaml.Node) error {
+	if node == nil {
+		return nil
+	}
+	switch node.Kind {
+	case yaml.DocumentNode, yaml.SequenceNode:
+		for _, c := range node.Content {
+			if err := walkForUnsupportedScriptEdge(unitName, c); err != nil {
+				return err
+			}
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key, val := node.Content[i], node.Content[i+1]
+			if contains(executionBodyKeys, key.Value) {
+				if err := checkExecutionBodyWordsForScript(unitName, val); err != nil {
+					return err
+				}
+			}
+			if err := walkForUnsupportedScriptEdge(unitName, val); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func checkExecutionBodyWordsForScript(unitName string, node *yaml.Node) error {
+	if node == nil {
+		return nil
+	}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		for _, word := range tokenizeShellWords(node.Value) {
+			if !strings.HasPrefix(word, "./") && !strings.HasPrefix(word, "../") {
+				continue
+			}
+			candidate := filepath.Join(releasePathRepoRoot, word)
+			if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+				return fmt.Errorf("%w: %s's execution body invokes repository-local script %q (recorded_limitations boundary 1/4)", errUnsupportedReachabilityEdge, unitName, word)
+			}
+		}
+	case yaml.SequenceNode, yaml.MappingNode:
+		for _, c := range node.Content {
+			if err := checkExecutionBodyWordsForScript(unitName, c); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// resolveReleasePathClosure walks the release path's two ROOTS
+// (releasePathScanRoots) and returns every unit reachable from them
+// through the two edge kinds the release path actually executes: a
+// workflow step's `uses: ./…` local composite action, and a
+// `run:`/`cmds:`/`hooks:` scalar's `task <target>` invocation into
+// Taskfile.yml. The closure is DERIVED from release.yml's own content —
+// never hardcoded — so a new edge added to release.yml widens the scan
+// automatically; only a new ROOT requires a fixture change
+// (releasePathScanRoots).
+//
+// Four boundaries remain outside this model, recorded in this plan's
+// <recorded_limitations> and in T-02-04-05 (accepted risk):
+//  1. A repository-local executable script a scanned scalar shells out to
+//     (e.g. `run: ./scripts/foo.sh`) — the resolver sees the invocation
+//     but does not open the script. TRIPWIRED via
+//     checkExecutionBodiesForUnsupportedEdges.
+//  2. A container image (`container:`/`services:`) that ships a JS
+//     runtime baked in — opaque to a token scan. TRIPWIRED via
+//     checkWorkflowJobsForUnsupportedContainerEdges.
+//  3. A JS runtime installed by a general-purpose command (`brew install
+//     node`, a piped `curl | sh` installer, or a marketplace action
+//     outside forbiddenJSToolchainActions). NOT tripwired — recognisable
+//     only by enumerating command spellings, which would make the
+//     tripwire a second curated denylist rather than a structural rule.
+//  4. A GoReleaser hook that is a script path rather than an inline
+//     command — same shape as (1). TRIPWIRED.
+//
+// Every one of these is a deliberate boundary, stated here rather than
+// papered over: widening to (1), (2) or (4) means executing or sandboxing
+// untrusted content at test time, a larger change than BLD-07's
+// requirement text asks for; widening to (3) means abandoning the
+// structural property entirely. When (1), (2) or (4) fires, the remedy is
+// to widen this model, sandbox the new content, or record an accepted
+// risk — never to allowlist the edge and move on unchanged.
+func resolveReleasePathClosure() ([]releasePathScanUnit, releasePathClosureStats, error) {
+	var units []releasePathScanUnit
+	var stats releasePathClosureStats
+
+	taskfileData, err := os.ReadFile(taskfilePath)
+	if err != nil {
+		return nil, stats, fmt.Errorf("resolveReleasePathClosure: read %s: %w", taskfilePath, err)
+	}
+	taskBlocks, err := parseTaskBlocks(string(taskfileData))
+	if err != nil {
+		return nil, stats, fmt.Errorf("resolveReleasePathClosure: %s: %w", taskfilePath, err)
+	}
+
+	seenActions := make(map[string]bool)
+	seenTargets := make(map[string]bool)
+
+	for _, root := range releasePathScanRoots {
+		data, err := os.ReadFile(root)
+		if err != nil {
+			return nil, stats, fmt.Errorf("resolveReleasePathClosure: read root %s: %w", root, err)
+		}
+		stats.Roots++
+		units = append(units, releasePathScanUnit{UnitName: root, Root: root, EdgeKind: "root", Content: data})
+
+		if err := checkExecutionBodiesForUnsupportedEdges(root, data); err != nil {
+			return nil, stats, err
+		}
+
+		if root != releasePathWorkflowPath {
+			// .goreleaser.yaml has no jobs:/steps:/uses: shape to derive
+			// further edges from — it IS the whole document, already added
+			// above.
+			continue
+		}
+
+		if err := checkWorkflowJobsForUnsupportedContainerEdges(root, data); err != nil {
+			return nil, stats, err
+		}
+
+		jobsSteps, err := parseWorkflowJobsAllSteps(string(data))
+		if err != nil {
+			return nil, stats, fmt.Errorf("resolveReleasePathClosure: %s: %w", root, err)
+		}
+		jobIDs := make([]string, 0, len(jobsSteps))
+		for id := range jobsSteps {
+			jobIDs = append(jobIDs, id)
+		}
+		sort.Strings(jobIDs)
+
+		for _, jobID := range jobIDs {
+			for _, step := range jobsSteps[jobID] {
+				if strings.HasPrefix(step.Uses, "./") {
+					actionPath, resolveErr := resolveLocalActionPath(step.Uses)
+					if resolveErr != nil {
+						return nil, stats, fmt.Errorf("resolveReleasePathClosure: %s job %q step %q: %w", root, jobID, step.Name, resolveErr)
+					}
+					if !seenActions[actionPath] {
+						seenActions[actionPath] = true
+						actionData, readErr := os.ReadFile(actionPath)
+						if readErr != nil {
+							return nil, stats, fmt.Errorf("resolveReleasePathClosure: local action %s (uses: %s in %s job %q): %w", actionPath, step.Uses, root, jobID, readErr)
+						}
+						stats.ResolvedLocalActions++
+						units = append(units, releasePathScanUnit{UnitName: actionPath, Root: root, EdgeKind: "local-action", Content: actionData})
+						if err := checkExecutionBodiesForUnsupportedEdges(actionPath, actionData); err != nil {
+							return nil, stats, err
+						}
+					}
+				}
+
+				for _, target := range extractTaskCallTargets(step.Run) {
+					if seenTargets[target] {
+						continue
+					}
+					seenTargets[target] = true
+					block, ok := taskBlocks[target]
+					if !ok {
+						return nil, stats, fmt.Errorf("resolveReleasePathClosure: %s job %q step %q invokes task %q, which does not exist in %s", root, jobID, step.Name, target, taskfilePath)
+					}
+					unitName := fmt.Sprintf("%s task %q", taskfilePath, target)
+					stats.ResolvedTaskTargets++
+					units = append(units, releasePathScanUnit{UnitName: unitName, Root: root, EdgeKind: "taskfile-target", Content: []byte(block)})
+					if err := checkExecutionBodiesForUnsupportedEdges(unitName, []byte(block)); err != nil {
+						return nil, stats, err
+					}
+				}
+			}
+		}
+	}
+
+	return units, stats, nil
+}
+
+// scanYAMLForJSToolchain is the content-taking core of the BLD-07
+// structural scanner. It parses content as a YAML document, walks every
+// SCALAR NODE in the tree (comments are not part of a parsed node's value
+// and are never examined — a comment mentioning "npm" is not an
+// invocation), and for each one:
+//   - tokenizes the scalar's text on whitespace/shell metacharacters and
+//     compares each word's BASENAME against forbiddenJSToolchainCommands —
+//     never a raw substring (TestReleasePathScanIgnoresNearMisses proves
+//     the distinction matters: a substring search flags pnpm-lock.yaml,
+//     web/node_modules, and protoc-gen-es, all real strings elsewhere in
+//     this repository);
+//   - when the scalar is a mapping value under the key "uses", ALSO
+//     compares its owner/repo prefix against forbiddenJSToolchainActions —
+//     an action that installs a runtime is a JS-toolchain invocation even
+//     though it names none of the four forbidden commands.
+//
+// Returns a non-nil error when content fails to parse as YAML, or when
+// zero scalar nodes were examined — an empty parse must fail loudly, never
+// silently pass (the CR-01 defect class every parser in this file guards
+// against).
+func scanYAMLForJSToolchain(unitName string, content []byte) ([]jsToolchainFinding, int, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(content, &doc); err != nil {
+		return nil, 0, fmt.Errorf("scanYAMLForJSToolchain(%s): %w", unitName, err)
+	}
+	findings, examined := walkNodeForJSToolchain(unitName, &doc, "$")
+	if examined == 0 {
+		return nil, 0, fmt.Errorf("scanYAMLForJSToolchain(%s): parsed as YAML but examined zero scalar nodes — an empty document must fail loudly, not pass", unitName)
+	}
+	return findings, examined, nil
+}
+
+// scanForJSToolchain is the thin path-reading wrapper around
+// scanYAMLForJSToolchain — the path itself doubles as the unit name.
+// Returns a non-nil error for a path that does not exist, never a nil
+// error with an empty finding slice.
+func scanForJSToolchain(path string) ([]jsToolchainFinding, int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("scanForJSToolchain: read %s: %w", path, err)
+	}
+	return scanYAMLForJSToolchain(path, data)
+}
+
+func walkNodeForJSToolchain(unitName string, node *yaml.Node, path string) ([]jsToolchainFinding, int) {
+	if node == nil {
+		return nil, 0
+	}
+	var findings []jsToolchainFinding
+	examined := 0
+	switch node.Kind {
+	case yaml.DocumentNode:
+		for _, c := range node.Content {
+			f, e := walkNodeForJSToolchain(unitName, c, path)
+			findings = append(findings, f...)
+			examined += e
+		}
+	case yaml.SequenceNode:
+		for i, c := range node.Content {
+			f, e := walkNodeForJSToolchain(unitName, c, fmt.Sprintf("%s[%d]", path, i))
+			findings = append(findings, f...)
+			examined += e
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key, val := node.Content[i], node.Content[i+1]
+			childPath := fmt.Sprintf("%s.%s", path, key.Value)
+			if key.Value == "uses" && val.Kind == yaml.ScalarNode {
+				if prefix := actionPrefix(val.Value); contains(forbiddenJSToolchainActions, prefix) {
+					findings = append(findings, jsToolchainFinding{Unit: unitName, Location: childPath, Token: prefix, Kind: "action"})
+				}
+			}
+			f, e := walkNodeForJSToolchain(unitName, val, childPath)
+			findings = append(findings, f...)
+			examined += e
+		}
+	case yaml.ScalarNode:
+		examined++
+		for _, word := range tokenizeShellWords(node.Value) {
+			base := basenameOf(word)
+			if contains(forbiddenJSToolchainCommands, base) {
+				findings = append(findings, jsToolchainFinding{Unit: unitName, Location: path, Token: base, Kind: "command"})
+			}
+		}
+	}
+	return findings, examined
+}
+
+// releasePathUnitNames extracts UnitName from every unit — used only by
+// test assertions that need to search the closure by name.
+func releasePathUnitNames(units []releasePathScanUnit) []string {
+	names := make([]string, len(units))
+	for i, u := range units {
+		names[i] = u.UnitName
+	}
+	return names
+}
+
+// TestReleasePathClosureIsTransitive is the review-HIGH closure-derivation
+// guard: resolving the closure from the two roots must name, BY NAME, the
+// three execution edges release.yml demonstrably contains today —
+// `.github/actions/install-task/action.yml`, `release:goreleaser`, and
+// `release:record-final-hashes` — and the resolved-local-action and
+// resolved-Taskfile-target counts must each clear a floor derived from
+// what release.yml actually contains, not a guess. A closure whose
+// local-action or Taskfile-target count is zero is a hard failure: those
+// edges exist in the file, so zero means the resolver broke.
+func TestReleasePathClosureIsTransitive(t *testing.T) {
+	units, stats, err := resolveReleasePathClosure()
+	if err != nil {
+		t.Fatalf("resolveReleasePathClosure: %v", err)
+	}
+
+	if stats.Roots != 2 {
+		t.Fatalf("resolveReleasePathClosure: stats.Roots = %d, want exactly 2 (%v)", stats.Roots, releasePathScanRoots)
+	}
+	if stats.ResolvedLocalActions < 1 {
+		t.Fatalf("resolveReleasePathClosure: stats.ResolvedLocalActions = %d, want >= 1 — %s demonstrably `uses: ./.github/actions/install-task` today; zero means the resolver broke, not that the closure is small", stats.ResolvedLocalActions, releasePathWorkflowPath)
+	}
+	if stats.ResolvedTaskTargets < 2 {
+		t.Fatalf("resolveReleasePathClosure: stats.ResolvedTaskTargets = %d, want >= 2 — %s demonstrably runs `task release:goreleaser` and `task release:record-final-hashes` today", stats.ResolvedTaskTargets, releasePathWorkflowPath)
+	}
+
+	names := releasePathUnitNames(units)
+	wantGoreleaserTarget := fmt.Sprintf("%s task %q", taskfilePath, "release:goreleaser")
+	wantRecordHashesTarget := fmt.Sprintf("%s task %q", taskfilePath, "release:record-final-hashes")
+
+	var haveInstallTask, haveGoreleaserTarget, haveRecordHashesTarget bool
+	for _, n := range names {
+		if strings.HasSuffix(n, "/.github/actions/install-task/action.yml") {
+			haveInstallTask = true
+		}
+		if n == wantGoreleaserTarget {
+			haveGoreleaserTarget = true
+		}
+		if n == wantRecordHashesTarget {
+			haveRecordHashesTarget = true
+		}
+	}
+	if !haveInstallTask {
+		t.Errorf("resolveReleasePathClosure: closure does not name .github/actions/install-task/action.yml by unit name — units: %v", names)
+	}
+	if !haveGoreleaserTarget {
+		t.Errorf("resolveReleasePathClosure: closure does not name unit %q — units: %v", wantGoreleaserTarget, names)
+	}
+	if !haveRecordHashesTarget {
+		t.Errorf("resolveReleasePathClosure: closure does not name unit %q — units: %v", wantRecordHashesTarget, names)
+	}
+}
+
+// TestReleasePathHasNoJSToolchain scans every unit resolveReleasePathClosure
+// returns and asserts zero JS-toolchain findings, that each unit
+// contributed a non-zero examined-scalar count, and that the closure's
+// TOTAL examined-scalar count strictly exceeds what the two roots alone
+// contribute — the assertion that the transitive half is really being
+// scanned rather than resolved and discarded. This zero-findings result
+// means nothing on its own; TestReleasePathScanIsNonVacuous is its
+// required pair.
+func TestReleasePathHasNoJSToolchain(t *testing.T) {
+	units, stats, err := resolveReleasePathClosure()
+	if err != nil {
+		t.Fatalf("resolveReleasePathClosure: %v", err)
+	}
+	if stats.Roots == 0 {
+		t.Fatalf("resolveReleasePathClosure: zero roots resolved")
+	}
+
+	var allFindings []jsToolchainFinding
+	totalExamined := 0
+	rootExamined := 0
+	for _, u := range units {
+		findings, examined, scanErr := scanYAMLForJSToolchain(u.UnitName, u.Content)
+		if scanErr != nil {
+			t.Fatalf("scanYAMLForJSToolchain(%s): %v", u.UnitName, scanErr)
+		}
+		if examined == 0 {
+			t.Errorf("scanYAMLForJSToolchain(%s): examined zero scalar nodes — this unit contributed nothing to the scan", u.UnitName)
+		}
+		allFindings = append(allFindings, findings...)
+		totalExamined += examined
+		if u.EdgeKind == "root" {
+			rootExamined += examined
+		}
+	}
+
+	if len(allFindings) > 0 {
+		t.Fatalf("release path contains %d JS-toolchain invocation(s) — a genuine BLD-07 violation, not this guard's fault to fix: %v", len(allFindings), allFindings)
+	}
+
+	if totalExamined <= rootExamined {
+		t.Fatalf("closure total examined-scalar count (%d) does not exceed the two roots' own total (%d) — the transitive units contributed nothing to the scan", totalExamined, rootExamined)
+	}
+}
+
+// TestReleasePathMissingFileIsError is the CR-01 edge case: a path that
+// does not exist on disk must produce a non-nil error, never a nil error
+// with an empty finding slice — the same defect class every parser in
+// this file is built to avoid. A closure edge pointing at a local action
+// that does not exist on disk is also an error, not a silently-skipped
+// unit.
+func TestReleasePathMissingFileIsError(t *testing.T) {
+	missingPath := filepath.Join(t.TempDir(), "does-not-exist.yml")
+	if _, _, err := scanForJSToolchain(missingPath); err == nil {
+		t.Fatalf("scanForJSToolchain(%s): expected a non-nil error for a missing file, got nil", missingPath)
+	}
+
+	if _, err := resolveLocalActionPath("./this/local/action/does/not/exist"); err == nil {
+		t.Fatalf("resolveLocalActionPath: expected a non-nil error for a closure edge pointing at a nonexistent local action, got nil")
+	}
+}
+
+// TestUnsupportedReachabilityEdgeIsLoud is the T-02-04-07 tripwire proof:
+// table-driven over synthetic in-memory documents, one row per unmodelled
+// edge kind — a workflow run: scalar invoking a repository-local
+// executable script, a Taskfile cmds: entry doing the same, a GoReleaser
+// hook that is a script path, a job carrying container:, and a job
+// carrying services:. Each row exercises the SAME two functions
+// resolveReleasePathClosure itself calls
+// (checkExecutionBodiesForUnsupportedEdges,
+// checkWorkflowJobsForUnsupportedContainerEdges) — not a re-implementation
+// — so the synthetic and real-repository code paths are provably
+// identical. A sixth, negative-control row runs the real
+// resolveReleasePathClosure() against this repository's actual content and
+// asserts it returns no such error — proving the tripwire is not merely
+// eager. Without that row, the other five rows would be equally consistent
+// with a tripwire that refuses on everything.
+//
+// Deliberately does NOT exercise boundary 3 (a general-purpose installer)
+// — see errUnsupportedReachabilityEdge's own doc comment for why that
+// boundary is not tripwired at all.
+func TestUnsupportedReachabilityEdgeIsLoud(t *testing.T) {
+	cases := []struct {
+		name    string
+		unit    string
+		src     string
+		checkFn func(unitName string, content []byte) error
+	}{
+		{
+			name:    "workflow run: invokes a repository-local script",
+			unit:    "synthetic-workflow-run-script.yml",
+			src:     "jobs:\n  x:\n    steps:\n      - run: ./Taskfile.yml\n",
+			checkFn: checkExecutionBodiesForUnsupportedEdges,
+		},
+		{
+			name:    "Taskfile cmds: invokes a repository-local script",
+			unit:    "synthetic-taskfile-cmds-script",
+			src:     "cmds:\n  - ./Taskfile.yml\n",
+			checkFn: checkExecutionBodiesForUnsupportedEdges,
+		},
+		{
+			name:    "GoReleaser hook is a script path",
+			unit:    "synthetic-goreleaser-hook-script.yaml",
+			src:     "before:\n  hooks:\n    - ./Taskfile.yml\n",
+			checkFn: checkExecutionBodiesForUnsupportedEdges,
+		},
+		{
+			name:    "job carries container:",
+			unit:    "synthetic-workflow-container.yml",
+			src:     "jobs:\n  x:\n    container: node:20\n    steps:\n      - run: echo hi\n",
+			checkFn: checkWorkflowJobsForUnsupportedContainerEdges,
+		},
+		{
+			name:    "job carries services:",
+			unit:    "synthetic-workflow-services.yml",
+			src:     "jobs:\n  x:\n    services:\n      redis:\n        image: redis\n    steps:\n      - run: echo hi\n",
+			checkFn: checkWorkflowJobsForUnsupportedContainerEdges,
+		},
+	}
+
+	for _, c := range cases {
+		err := c.checkFn(c.unit, []byte(c.src))
+		if err == nil {
+			t.Errorf("%s: expected a non-nil errUnsupportedReachabilityEdge, got nil", c.name)
+			continue
+		}
+		if !errors.Is(err, errUnsupportedReachabilityEdge) {
+			t.Errorf("%s: error %v does not wrap errUnsupportedReachabilityEdge", c.name, err)
+		}
+		if !strings.Contains(err.Error(), c.unit) {
+			t.Errorf("%s: error %v does not name the unit %q", c.name, err, c.unit)
+		}
+	}
+
+	if _, _, err := resolveReleasePathClosure(); err != nil {
+		t.Errorf("resolveReleasePathClosure: negative control failed — real repository content unexpectedly tripped the unmodelled-edge wire: %v (either a genuine new edge was introduced and the model must widen, or the tripwire itself is over-eager)", err)
+	}
+}
+
+// TestReleasePathScanIsNonVacuous is the non-vacuity companion required
+// before TestReleasePathHasNoJSToolchain's zero-findings result means
+// anything (Taskfile.yml's vuln:selftest is this repository's canonical
+// model: assert an exact result against a PLANTED case, never trust a
+// clean run alone — "a transcript grep is a claim about the grep, not
+// about the product", STATE.md). It plants each of the four forbidden
+// command names in each of four reachable unit shapes — a workflow run:
+// scalar, a GoReleaser hooks: list entry, a local composite action's run:
+// scalar, and a Taskfile cmds: entry — the last two proving the
+// TRANSITIVE half of the closure is genuinely scanned: a planted token in
+// a Taskfile cmds: body or a local action's run: scalar is exactly the
+// shape a two-file model could not see. It also plants both forbidden
+// action prefixes in a version-pinned uses: position. Eighteen planted
+// forms total, each asserted to produce exactly one finding.
+func TestReleasePathScanIsNonVacuous(t *testing.T) {
+	type row struct {
+		name string
+		src  string
+	}
+	var rows []row
+
+	const workflowRunTemplate = "jobs:\n  x:\n    steps:\n      - name: bad\n        run: %s script.js\n"
+	const goreleaserHookTemplate = "before:\n  hooks:\n    - %s script.js\n"
+	const localActionRunTemplate = "runs:\n  using: composite\n  steps:\n    - shell: bash\n      run: %s script.js\n"
+	const taskfileCmdsTemplate = "cmds:\n  - %s script.js\n"
+
+	for _, cmd := range forbiddenJSToolchainCommands {
+		rows = append(rows,
+			row{name: fmt.Sprintf("workflow run: %s", cmd), src: fmt.Sprintf(workflowRunTemplate, cmd)},
+			row{name: fmt.Sprintf("goreleaser hooks: %s", cmd), src: fmt.Sprintf(goreleaserHookTemplate, cmd)},
+			row{name: fmt.Sprintf("local action run: %s", cmd), src: fmt.Sprintf(localActionRunTemplate, cmd)},
+			row{name: fmt.Sprintf("taskfile cmds: %s", cmd), src: fmt.Sprintf(taskfileCmdsTemplate, cmd)},
+		)
+	}
+	for _, action := range forbiddenJSToolchainActions {
+		rows = append(rows, row{
+			name: fmt.Sprintf("uses: %s pinned", action),
+			src:  fmt.Sprintf("jobs:\n  x:\n    steps:\n      - uses: %s@v4\n", action),
+		})
+	}
+
+	if len(rows) < 18 {
+		t.Fatalf("TestReleasePathScanIsNonVacuous: only %d planted rows, want at least 18", len(rows))
+	}
+
+	for _, r := range rows {
+		findings, examined, err := scanYAMLForJSToolchain(r.name, []byte(r.src))
+		if err != nil {
+			t.Errorf("scanYAMLForJSToolchain(%q): %v", r.name, err)
+			continue
+		}
+		if examined == 0 {
+			t.Errorf("scanYAMLForJSToolchain(%q): examined zero scalar nodes", r.name)
+			continue
+		}
+		if len(findings) != 1 {
+			t.Errorf("scanYAMLForJSToolchain(%q): got %d finding(s), want exactly 1: %v", r.name, len(findings), findings)
+			continue
+		}
+		// Capture one row's failure-message shape for the SUMMARY: the
+		// finding names the unit, the YAML location, and the token.
+		if r.name == "workflow run: node" {
+			t.Logf("planted-token finding (SUMMARY evidence): %s", findings[0].String())
+		}
+	}
+}
+
+// TestReleasePathScanIgnoresNearMisses proves scanYAMLForJSToolchain
+// degrades gracefully rather than into a substring search: each row below
+// is a REAL string that exists in this repository today (cited to its
+// source, not invented) and MUST NOT be flagged. A row that fails here
+// means the scanner would have to be weakened until it matched nothing —
+// exactly the failure mode this test prevents.
+func TestReleasePathScanIgnoresNearMisses(t *testing.T) {
+	cases := []struct {
+		name   string
+		src    string
+		source string
+	}{
+		{
+			name:   "pnpm lockfile filename",
+			src:    "jobs:\n  x:\n    steps:\n      - run: cat web/pnpm-lock.yaml\n",
+			source: "web/pnpm-lock.yaml, created by 02-01 (wave 1)",
+		},
+		{
+			name:   "dependencies directory path",
+			src:    "jobs:\n  x:\n    steps:\n      - run: du -sh web/node_modules\n",
+			source: "web/node_modules, created by 02-01 (wave 1)",
+		},
+		{
+			name:   "Go setup action owner/repo",
+			src:    "jobs:\n  x:\n    steps:\n      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16\n",
+			source: ".github/workflows/ci.yml's Go setup step, present on main today",
+		},
+		{
+			name:   "cache action owner/repo",
+			src:    "jobs:\n  x:\n    steps:\n      - uses: namespacelabs/nscloud-cache-action@c5f8dab7560444c4bf8dbc64f1b203431873c547\n",
+			source: ".github/workflows/ci.yml's cache action, present on main today",
+		},
+		{
+			name: "generated-plugin binary name (protoc-gen-es)",
+			src:  "cmds:\n  - web/node_modules/.bin/protoc-gen-es --arg\n",
+			source: "02-CONTEXT.md D-05: 02-03 lands this literal into Taskfile.yml/web/package.json " +
+				"in this SAME wave; re-confirm against web/package.json once 02-03 has landed. Not read " +
+				"from that file directly here — this plan must not depend on a sibling in its own wave.",
+		},
+	}
+
+	for _, c := range cases {
+		findings, examined, err := scanYAMLForJSToolchain(c.name, []byte(c.src))
+		if err != nil {
+			t.Errorf("scanYAMLForJSToolchain(%q): %v", c.name, err)
+			continue
+		}
+		if examined == 0 {
+			t.Errorf("scanYAMLForJSToolchain(%q): examined zero scalar nodes", c.name)
+			continue
+		}
+		if len(findings) != 0 {
+			t.Errorf("scanYAMLForJSToolchain(%q): got %d false-positive finding(s) for a real, legitimate string (%s): %v — the scanner degenerated into a substring search", c.name, len(findings), c.source, findings)
+		}
+	}
+}
+
+// === BLD-01: no mutable JS cache on ci.yml's install path (02-04 Task 3) ==
+//
+// D-13's fold-in of the JS gates into ci.yml's existing `test` job relies
+// on the JS install being a pure function of web/pnpm-lock.yaml — a stale
+// mutable cache producing a node_modules that differs from what the
+// lockfile describes is exactly the divergence BLD-01/BLD-03 forbid. This
+// makes that a structural invariant instead of an omission nothing
+// enforces, authored one wave BEFORE 02-06 adds the Node setup step, so it
+// cannot arrive with a cache input already attached.
+
+// forbiddenCacheActions are marketplace-action owner/repo prefixes that
+// restore a MUTABLE cache unconditionally, regardless of any input scoping
+// — a general-purpose cache action whose actual scope is whatever its
+// path: input says, which cannot be reasoned about structurally from the
+// action name alone. This is a SCOPED invariant, not a blanket cache ban:
+// ci.yml's test job legitimately caches the Go module/build cache today
+// (namespacelabs/nscloud-cache-action with cache: go), which is explicitly
+// ALLOWED — see scanContentForMutableCache.
+var forbiddenCacheActions = []string{"actions/cache", "actions/cache/restore", "actions/cache/save"}
+
+// cacheInputKeys are the with: input keys that turn a Node setup action
+// into a cache restorer. A cache: input on actions/setup-node is a
+// FINDING regardless of its value; the identical key on actions/setup-go
+// (cache: false in ci.yml today) is a different action prefix entirely and
+// is not matched by this fixture's use in the Node-setup case.
+var cacheInputKeys = []string{"cache"}
+
+// nodeSetupActionPrefix and nscloudCacheActionPrefix are the two `uses:`
+// owner/repo prefixes scanContentForMutableCache classifies by NAME rather
+// than by forbiddenCacheActions membership — the Node setup action gains
+// cache behavior only via cacheInputKeys, and nscloud-cache-action's
+// cache: input value decides JS-vs-Go, not the action's mere presence.
+const (
+	nodeSetupActionPrefix    = "actions/setup-node"
+	nscloudCacheActionPrefix = "namespacelabs/nscloud-cache-action"
+)
+
+// jsEcosystemCacheValues are nscloud-cache-action's own cache: input
+// vocabulary values that name a JavaScript-ecosystem cache. "go" is
+// deliberately absent — that is the existing, allowed cache this
+// invariant leaves alone (ci.yml's test job today).
+var jsEcosystemCacheValues = []string{"pnpm", "npm", "node", "yarn"}
+
+// mutableCacheFinding is one JS-scoped mutable-cache step
+// scanContentForMutableCache found: which step, its uses: value, and why
+// it was classified as a finding.
+type mutableCacheFinding struct {
+	Step string
+	Uses string
+	Kind string // "forbidden-action" | "node-setup-cache-input" | "js-ecosystem-cache-value"
+}
+
+// mutableCacheScanResult is scanContentForMutableCache's return shape:
+// findings, plus the two positive counts (repo rule 84d1gfpywd) that make
+// a zero-findings result mean something — steps genuinely examined, and
+// cache-bearing steps genuinely classified ALLOWED (the existing Go
+// cache), rather than the scanner never having reached the job at all.
+type mutableCacheScanResult struct {
+	Findings      []mutableCacheFinding
+	StepsExamined int
+	AllowedCaches int
+}
+
+type cacheAwareStep struct {
+	Name string                 `yaml:"name"`
+	Uses string                 `yaml:"uses"`
+	With map[string]interface{} `yaml:"with"`
+}
+
+type cacheAwareJob struct {
+	Steps []cacheAwareStep `yaml:"steps"`
+}
+
+type cacheAwareWorkflow struct {
+	Jobs map[string]cacheAwareJob `yaml:"jobs"`
+}
+
+// hasAnyCacheInputKey reports whether with declares any key named in
+// cacheInputKeys, regardless of that key's value.
+func hasAnyCacheInputKey(with map[string]interface{}) bool {
+	for _, key := range cacheInputKeys {
+		if _, ok := with[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// scanContentForMutableCache is the content-taking core of the BLD-01
+// no-mutable-JS-cache invariant. It classifies every cache-bearing step in
+// job jobID into FINDING or ALLOWED:
+//   - a step whose uses: owner/repo prefix matches forbiddenCacheActions is
+//     a FINDING regardless of inputs;
+//   - a step whose uses: owner/repo prefix is the Node setup action and
+//     whose with: mapping carries any key in cacheInputKeys is a FINDING;
+//   - a step whose uses: owner/repo prefix is nscloud-cache-action whose
+//     cache: input names a JavaScript ecosystem (jsEcosystemCacheValues) is
+//     a FINDING;
+//   - a step whose uses: owner/repo prefix is nscloud-cache-action whose
+//     cache: input is "go" is ALLOWED and COUNTED.
+//
+// Returns a non-nil error when content fails to parse, declares no jobs:,
+// names no job jobID, or that job declares zero steps — never a usable
+// empty result on any of those misses.
+func scanContentForMutableCache(jobID string, content []byte) (mutableCacheScanResult, error) {
+	var wf cacheAwareWorkflow
+	if err := yaml.Unmarshal(content, &wf); err != nil {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: %w", err)
+	}
+	if len(wf.Jobs) == 0 {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: no jobs: found in workflow source")
+	}
+	job, ok := wf.Jobs[jobID]
+	if !ok {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: no job %q found in workflow source", jobID)
+	}
+	if len(job.Steps) == 0 {
+		return mutableCacheScanResult{}, fmt.Errorf("scanContentForMutableCache: job %q declares zero steps", jobID)
+	}
+
+	var result mutableCacheScanResult
+	for _, step := range job.Steps {
+		result.StepsExamined++
+		prefix := actionPrefix(step.Uses)
+
+		switch {
+		case contains(forbiddenCacheActions, prefix):
+			result.Findings = append(result.Findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "forbidden-action"})
+
+		case prefix == nodeSetupActionPrefix && hasAnyCacheInputKey(step.With):
+			result.Findings = append(result.Findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "node-setup-cache-input"})
+
+		case prefix == nscloudCacheActionPrefix:
+			cacheVal, _ := step.With["cache"].(string)
+			switch {
+			case contains(jsEcosystemCacheValues, cacheVal):
+				result.Findings = append(result.Findings, mutableCacheFinding{Step: step.Name, Uses: step.Uses, Kind: "js-ecosystem-cache-value"})
+			case cacheVal == "go":
+				result.AllowedCaches++
+			}
+		}
+	}
+	return result, nil
+}
+
+// scanForMutableCache is the thin path-reading wrapper around
+// scanContentForMutableCache, always reading ciWorkflowPath — the JS
+// install path this invariant guards lives in ci.yml, not release.yml.
+func scanForMutableCache(jobID string) (mutableCacheScanResult, error) {
+	data, err := os.ReadFile(ciWorkflowPath)
+	if err != nil {
+		return mutableCacheScanResult{}, fmt.Errorf("scanForMutableCache: read %s: %w", ciWorkflowPath, err)
+	}
+	return scanContentForMutableCache(jobID, data)
+}
+
+// TestJSInstallPathHasNoMutableCache is the BLD-01 structural invariant:
+// ci.yml's test job carries no mutable JS-scoped cache. The Node-setup
+// clause (actions/setup-node with a cache: input) has NOTHING to match at
+// this wave — 02-06 adds that step two waves later — and that is by
+// design: authoring the invariant BEFORE the step exists means the step
+// cannot arrive with a cache input already attached. What makes this
+// pre-arrival zero mean something is AllowedCaches > 0: ci.yml's test job
+// demonstrably contains a Go cache step (nscloud-cache-action, cache: go)
+// today, so a zero AllowedCaches count would mean this scanner never
+// reached it, and its clean verdict would mean nothing.
+func TestJSInstallPathHasNoMutableCache(t *testing.T) {
+	result, err := scanForMutableCache("test")
+	if err != nil {
+		t.Fatalf("scanForMutableCache(%q): %v", "test", err)
+	}
+	if result.StepsExamined == 0 {
+		t.Fatalf("scanForMutableCache(%q): examined zero steps", "test")
+	}
+	if result.AllowedCaches == 0 {
+		t.Fatalf("scanForMutableCache(%q): AllowedCaches = 0 — ci.yml's test job demonstrably contains a Go cache step today; a zero count means this scanner never reached it, so its clean verdict means nothing", "test")
+	}
+	if len(result.Findings) != 0 {
+		t.Fatalf("scanForMutableCache(%q): found %d mutable-cache finding(s) on the JS install path — a stale cache producing a node_modules that differs from web/pnpm-lock.yaml is exactly the divergence BLD-01/BLD-03 forbid: %+v", "test", len(result.Findings), result.Findings)
+	}
+}
+
+// TestMutableCacheScanIsNonVacuous plants each of the three forbidden
+// forms in synthetic in-memory YAML, one row each, and asserts exactly one
+// finding per row. A fourth row plants the two EXISTING Go forms this
+// repository actually uses (nscloud-cache-action with cache: go,
+// actions/setup-go with cache: false) and asserts zero findings — pinning
+// the boundary so a future widening of the matcher breaks THIS test
+// instead of quietly failing TestJSInstallPathHasNoMutableCache against
+// the real workflow.
+func TestMutableCacheScanIsNonVacuous(t *testing.T) {
+	cases := []struct {
+		name         string
+		src          string
+		wantFindings int
+	}{
+		{
+			name:         "actions/cache step",
+			src:          "jobs:\n  test:\n    steps:\n      - name: bad\n        uses: actions/cache@v4\n        with:\n          path: web/node_modules\n          key: x\n",
+			wantFindings: 1,
+		},
+		{
+			name:         "nscloud-cache-action with a JS ecosystem value",
+			src:          "jobs:\n  test:\n    steps:\n      - name: bad\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: pnpm\n",
+			wantFindings: 1,
+		},
+		{
+			name:         "Node setup action with a cache: input",
+			src:          "jobs:\n  test:\n    steps:\n      - name: bad\n        uses: actions/setup-node@v4\n        with:\n          cache: pnpm\n",
+			wantFindings: 1,
+		},
+		{
+			name:         "existing Go forms stay allowed",
+			src:          "jobs:\n  test:\n    steps:\n      - name: go cache\n        uses: namespacelabs/nscloud-cache-action@v1.6.1\n        with:\n          cache: go\n      - name: setup go\n        uses: actions/setup-go@v6\n        with:\n          cache: false\n",
+			wantFindings: 0,
+		},
+	}
+
+	for _, c := range cases {
+		result, err := scanContentForMutableCache("test", []byte(c.src))
+		if err != nil {
+			t.Errorf("scanContentForMutableCache(%q): %v", c.name, err)
+			continue
+		}
+		if len(result.Findings) != c.wantFindings {
+			t.Errorf("scanContentForMutableCache(%q): got %d finding(s), want %d: %v", c.name, len(result.Findings), c.wantFindings, result.Findings)
+		}
+	}
 }

@@ -1,0 +1,268 @@
+<script lang="ts">
+	// D-18: fills the Phase 2 placeholder this route mounted. Reads view
+	// state EXCLUSIVELY from page.url.searchParams (via $app/state) — never
+	// a `load` function (this app is ssr=false/prerender=false, and the
+	// RPC calls are already client-only) — so back/forward and a fresh load
+	// of the same URL derive identical state (NAV-01/NAV-02). This route
+	// never imports SvelteKit's shallow-routing history exports from
+	// $app/navigation for view state: those only ever assign to
+	// page.state, never page.url — a component reading page.url would not
+	// react to them (03-RESEARCH.md Pitfall 1). URL WRITES go exclusively
+	// through browse-nav.ts's navigator, built on goto() — never a direct
+	// state assignment (03-06's own placeholder, replaced below).
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { getContext, untrack } from 'svelte';
+	import { uiClient } from '$lib/client';
+	import type { IndexStatus, StatusGate } from '$lib/status';
+	import type { LiveStore } from '$lib/live/live-store';
+	import { parseBrowseParams, type BrowseParams } from '$lib/browse-url';
+	import {
+		loadBrowseTarget,
+		loadBlastRadius,
+		createNavigationGate,
+		type BrowseTargetState,
+		type BlastRadiusState
+	} from '$lib/browse-state';
+	import {
+		createBrowseNavigator,
+		NAV_INTENT,
+		type BrowseNavDelta,
+		type NavIntent
+	} from '$lib/browse-nav';
+	import SourcePane from '$lib/components/browse/SourcePane.svelte';
+	import NeighborsPanel from '$lib/components/browse/NeighborsPanel.svelte';
+	import DefinitionPicker from '$lib/components/browse/DefinitionPicker.svelte';
+	import SearchPanel, { type SearchSelection } from '$lib/components/browse/SearchPanel.svelte';
+
+	let params = $derived(parseBrowseParams(page.url.searchParams));
+	let targetState = $state<BrowseTargetState>({ kind: 'idle' });
+	let blastState = $state<BlastRadiusState>({ kind: 'idle' });
+
+	// D-03: this view's own copy of the layout's shared index-health
+	// status (03-09), read by SUBSCRIBING to the SAME gate the layout
+	// created — never a second gate, which would be a second fetch
+	// trigger (D-05). Drives the source pane's stale-vs-plain
+	// no-source message split below.
+	const statusGate = getContext<StatusGate>('statusGate');
+	let indexStatus = $state<IndexStatus>({ verdict: 'unknown', commit: 'unknown', commitSha: '' });
+	$effect(() => {
+		return statusGate.subscribe((s) => {
+			indexStatus = s;
+		});
+	});
+
+	// One navigator (built once, over the real goto), one gate (one
+	// NavigationGeneration per URL change, minted here — the route —
+	// never by a loader). The gate is what keeps a node-detail load and
+	// a blast-radius load started for two DIFFERENT URL states from
+	// ever being combined into one rendered view.
+	const navigator = createBrowseNavigator(goto);
+	const gate = createNavigationGate();
+
+	// CR-01 (03-REVIEW.md): the load effect must depend ONLY on the
+	// target-identifying fields, never on the whole `params` object.
+	// `q` is view-local (SearchPanel writes it on every keystroke,
+	// undebounced, by D-11's own shareable-URL contract) — if the
+	// effect below read `params` directly, `page.url`'s fresh
+	// searchParams object on every `q` write would produce a fresh
+	// `params` object literal each time (browse-url.ts's
+	// parseBrowseParams), and Svelte 5 invalidates a dependent effect by
+	// REFERENTIAL identity, tearing down the open node view (loading
+	// state, re-issued GetNodeDetail/Impact) once per character typed.
+	//
+	// targetKey is JSON.stringify of the five target fields rather than
+	// a hand-joined string with a chosen separator: a separator has to
+	// be PROVABLY absent from every field it separates, and neither a
+	// symbol name nor a file-path segment is guaranteed to exclude any
+	// single printable character (POSIX forbids only '/' and NUL inside
+	// a path segment) — so no separator character is actually safe to
+	// pick. JSON.stringify escapes each element independently, so two
+	// different five-tuples can never collide onto the same string and
+	// the same tuple always serializes identically, with nothing to
+	// choose. The result is a PRIMITIVE (string), which is what makes
+	// this work at all: Svelte compares primitives by value, not by
+	// reference, so an unchanged target produces an EQUAL key and the
+	// effect below does not re-run.
+	let targetKey = $derived(
+		JSON.stringify([
+			params.symbol ?? null,
+			params.file ?? null,
+			params.line ?? null,
+			params.depth ?? null,
+			params.limit ?? null
+		])
+	);
+
+	$effect(() => {
+		targetKey; // the ONLY tracked read — never read `params` here directly.
+		// `params` is read through untrack so this effect does not
+		// re-establish a dependency on the whole object (which would
+		// undo the narrowing above the moment `q` changes again).
+		const currentParams = untrack(() => params);
+		const generation = gate.advance();
+		const controller = new AbortController();
+
+		if (!currentParams.symbol && !currentParams.file) {
+			targetState = { kind: 'idle' };
+			blastState = { kind: 'idle' };
+			return;
+		}
+
+		targetState = { kind: 'loading' };
+		blastState = currentParams.symbol ? { kind: 'loading' } : { kind: 'idle' };
+
+		loadBrowseTarget(currentParams, uiClient, controller.signal).then((result) => {
+			if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+			targetState = result;
+		});
+
+		if (currentParams.symbol) {
+			loadBlastRadius(currentParams, uiClient, controller.signal).then((result) => {
+				if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+				blastState = result;
+			});
+		}
+
+		return () => controller.abort();
+	});
+
+	// LIV-02: a new generation from the live store
+	// re-issues the SAME loadBrowseTarget/loadBlastRadius calls this
+	// route already owns, going through the SAME NavigationGate — so a
+	// live-triggered load and a URL-driven one can never race to a stale
+	// answer (whichever advances `gate` last wins; the other's response
+	// is discarded by `gate.isCurrent`). Coalesced with a
+	// PENDING-GENERATION flag: an event arriving while a live-triggered
+	// re-fetch is still in flight is recorded (newest wins) rather than
+	// starting a second concurrent one, and exactly one follow-up fires
+	// once the in-flight one settles.
+	const liveStore = getContext<LiveStore | undefined>('liveStore');
+	let browseLiveIssuedGeneration: bigint | null = null;
+	let browseLivePendingGeneration: bigint | null = null;
+	let browseLiveInFlight = false;
+
+	function issueBrowseLiveRefetch(): void {
+		const currentParams = untrack(() => params);
+		if (!currentParams.symbol && !currentParams.file) return;
+
+		browseLiveInFlight = true;
+		const generation = gate.advance();
+		const controller = new AbortController();
+		const tasks: Promise<unknown>[] = [
+			loadBrowseTarget(currentParams, uiClient, controller.signal).then((result) => {
+				if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+				targetState = result;
+			})
+		];
+		if (currentParams.symbol) {
+			tasks.push(
+				loadBlastRadius(currentParams, uiClient, controller.signal).then((result) => {
+					if (!gate.isCurrent(generation) || controller.signal.aborted) return;
+					blastState = result;
+				})
+			);
+		}
+		Promise.allSettled(tasks).then(() => {
+			browseLiveInFlight = false;
+			if (browseLivePendingGeneration !== null) {
+				browseLivePendingGeneration = null;
+				issueBrowseLiveRefetch();
+			}
+		});
+	}
+
+	$effect(() => {
+		if (!liveStore) return;
+		let first = true;
+		return liveStore.subscribe((live) => {
+			if (first) {
+				first = false;
+				if (live) browseLiveIssuedGeneration = live.event.generation;
+				return;
+			}
+			if (!live) return;
+			const generation = live.event.generation;
+			if (browseLiveIssuedGeneration !== null && generation <= browseLiveIssuedGeneration) return;
+			browseLiveIssuedGeneration = generation;
+			if (browseLiveInFlight) {
+				if (browseLivePendingGeneration === null || generation > browseLivePendingGeneration) {
+					browseLivePendingGeneration = generation;
+				}
+				return;
+			}
+			issueBrowseLiveRefetch();
+		});
+	});
+
+	// Every navigation (search selection, neighbour click) and every
+	// refinement (blast-radius depth control) goes through the SAME
+	// navigator, which is the one place in the client that writes a URL
+	// (D-11). This page holds no view state of its own past this call —
+	// everything renders from `params`/`state`/`blastState`, which the
+	// effect above derives from the URL.
+	function handleSearchSelect(selection: SearchSelection): void {
+		const delta: BrowseNavDelta =
+			selection.kind === 'symbol'
+				? {
+						symbol: selection.location.name,
+						file: selection.location.filePath,
+						line: selection.location.startLine
+					}
+				: selection.kind === 'file'
+					? { file: selection.entry.path }
+					: { file: selection.path };
+		navigator.navigate(page.url, delta, NAV_INTENT.NAVIGATE);
+	}
+
+	function handleNeighborNavigate(delta: BrowseNavDelta, intent: NavIntent): void {
+		navigator.navigate(page.url, delta, intent);
+	}
+
+	// Typing in search is a REFINE intent (D-11) — every keystroke
+	// replaces the current history entry so the address bar stays
+	// correct and shareable at every instant, without growing history
+	// one entry per character. An empty query clears the `q` param
+	// entirely rather than leaving `q=` in the URL.
+	function handleQueryChange(query: string): void {
+		navigator.navigate(page.url, { q: query || undefined }, NAV_INTENT.REFINE);
+	}
+</script>
+
+<h1 class="text-lg font-semibold">Browse</h1>
+
+<SearchPanel
+	client={uiClient}
+	initialQuery={params.q ?? ''}
+	onSelect={handleSearchSelect}
+	onQueryChange={handleQueryChange}
+/>
+
+{#if targetState.kind === 'multi-def'}
+	<!-- BRW-05: a bare name resolving to several definitions gets the
+	     disambiguation picker instead of SourcePane's old placeholder
+	     text (03-07's WINDOWS.md entry #23, closed here). -->
+	<DefinitionPicker
+		symbol={targetState.symbol}
+		definitions={targetState.definitions}
+		totalCandidates={targetState.totalCandidates}
+		onNavigate={handleNeighborNavigate}
+	/>
+{:else}
+	<SourcePane
+		state={targetState}
+		client={uiClient}
+		indexStale={indexStatus.verdict === 'stale'}
+		onNavigate={handleNeighborNavigate}
+	/>
+
+	{#if targetState.kind === 'single-def'}
+		<NeighborsPanel
+			calls={targetState.calls}
+			calledBy={targetState.calledBy}
+			blastRadius={blastState}
+			depth={params.depth}
+			onNavigate={handleNeighborNavigate}
+		/>
+	{/if}
+{/if}

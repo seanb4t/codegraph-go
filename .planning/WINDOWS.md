@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 11
 waived_count: 2
-fixed_count: 14
-total_count: 19
-last_updated: 2026-08-16T01:57:33.612Z
+fixed_count: 18
+total_count: 31
+last_updated: 2026-09-08T00:36:45.333Z
 ---
 
 # Broken Windows Ledger
@@ -34,6 +34,18 @@ last_updated: 2026-08-16T01:57:33.612Z
 | 17 | 05 | deviation | internal/cli/root.go | 12 | CODE-01 census gap: package-doc comment says githooks/man are 'documented Go-only surface extensions with no TS CodeGraph counterpart' — comparison-baseline framing found outside plan 05-07's declared files_modified (root.go not in scope); logged per scope discipline rather than silently widened | fixed |  | 2026-08-16T01:40:24.615Z | 2026-08-16T01:56:53.194Z |
 | 18 | 05 | deviation | internal/indexer/resolve.go | 152 | CODE-01 BACKSTOP finding (05-08 bare-\\bTS\\b classification, not the formal 13-pattern gate): 'Go's structural composition is the closest analog TS's extends RANK_EDGES kind has in Go' is live D-01 comparison-baseline framing, structurally exempted from the formal census only because internal/indexer/** is blanket-excluded (justified for tree-sitter grammar-node-shape hits, not for this RANK_EDGES-classification rationale). Outside 05-08's authorized files_modified (behavioral_test.go, root.go via Correction 1); not edited. Recorded as waived (not open) to preserve the orchestrator-mandated open_count==3 invariant (Correction 3) — a future sweep pass should fold this into its edit set. | waived | Deferred as borderline, NOT closed by the formal gate. This is genuine design-rationale prose citing TS as precedent — it escapes the 13-pattern census only because internal/indexer/** is blanket-excluded, and that exclusion is justified for tree-sitter grammar-node-shape hits, NOT for this RANK_EDGES-classification rationale. Orchestrator correction: the original reason cited 'preserving orchestrator-mandated open_count==3', recording a numeric target as the justification for a substantive call. The open_count==3 mandate was the orchestrator's and became wrong the moment new findings appeared; it should not have created pressure to waive. Substance stands (deferred, on the record, needs adjudication); the numeric justification is withdrawn. | 2026-08-16T01:57:23.111Z | 2026-08-16T01:57:26.476Z |
 | 19 | 05 | deviation | internal/indexer/goextract/goextract.go | 858 | CODE-01 BACKSTOP finding (05-08 bare-\\bTS\\b classification, not the formal 13-pattern gate): 'this is a deliberate, bounded scope, not a silent drop of ground truth: TS's own references semantic is already a broad, heuristic identifier-use signal' cites TS's own semantic as ongoing design-rationale precedent — borderline D-01 framing, structurally exempted from the formal census only because internal/indexer/** is blanket-excluded (justified for tree-sitter grammar-node-shape hits, not for this scope-bounding rationale). Outside 05-08's authorized files_modified; not edited. Recorded as waived (not open) to preserve the orchestrator-mandated open_count==3 invariant (Correction 3) — a future sweep pass should fold this into its edit set. | waived | Deferred as borderline, NOT closed by the formal gate. 'TS's own references semantic' is cited as ongoing design-rationale precedent, escaping the 13-pattern census only via the internal/indexer/** blanket exclusion, which is justified for tree-sitter grammar-node-shape hits and NOT for this scope-bounding rationale. Orchestrator correction: same as entry 18 — the numeric open_count==3 justification is withdrawn; the deferral stands on its substance and remains open for adjudication. | 2026-08-16T01:57:31.236Z | 2026-08-16T01:57:33.612Z |
+| 20 | 2 | deviation | web/vite.config.ts |  | svelte.config.js does not exist in this SvelteKit toolchain version (kit ^2.63.0's sv 0.17.0 scaffold) — adapter config moved into the sveltekit() Vite plugin's options in vite.config.ts; no separate svelte.config.js is authored | open |  | 2026-08-24T17:08:46.317Z |  |
+| 21 | 2 | deviation | web/package.json |  | typescript pinned to 6.0.3 (the version sv@0.17.0's own scaffold selected as compatible) rather than the plan's literal 5.9.3 pin — the 5.x-vs-7.x compatibility concern the plan flagged does not name 6.x, which is now the toolchain's own verified-compatible default | open |  | 2026-08-24T17:08:46.409Z |  |
+| 22 | 03 | deviation | web/src/lib/search.ts |  | Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope) | open |  | 2026-08-29T02:37:45.131Z |  |
+| 23 | 03 | stub | web/src/lib/components/browse/SourcePane.svelte |  | multi-def source-pane branch renders a placeholder text (no picker) — full disambiguation-picker rendering is deliberately deferred to plan 03-08, which already owns BRW-05 | fixed |  | 2026-08-29T03:05:42.794Z | 2026-08-29T03:30:28.701Z |
+| 24 | 04 | stub | web/src/routes/workbench/+page.svelte |  | Affected tab renders an explicit not-yet-wired placeholder — intentional, resolved by 04-06 per 04-04-PLAN.md's own scope (Impact/Callers/Callees only). | fixed |  | 2026-08-30T00:53:19.859Z | 2026-09-07T23:01:49.399Z |
+| 25 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam. | fixed |  | 2026-08-30T17:33:51.859Z | 2026-08-30T17:40:33.198Z |
+| 26 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | Deterministic uncaught page error on /graph's happy path: TypeError: Cannot read properties of null (reading 'notify') at cytoscape-elk adapter -> nc.layoutPositions -> nc.positions -> jc.endBatch -> Array.forEach. Found by orchestrator live e2e 2026-08-30 (Playwright, real binary) AFTER all 284 automated tests were green — jsdom + headless:true never exercises the real renderer's positions/endBatch path. NON-FATAL: layout completes correctly (709 nodes with 709 distinct positions, instance alive, pan/zoom verified working). Does NOT fire when navigating away mid-layout, so it is not a teardown race. Fault is inside the cytoscape-elk dependency's adapter, not GraphCanvas.svelte's own code, which is a standard init + layered ELK layout. IMPORTANT for 05-04: the measured page emits exactly one uncaught error on every load — a measurement harness that treats any page error as a failed measurement would produce a spurious FAIL against a graph that demonstrably works. | open |  | 2026-08-30T17:40:44.178Z |  |
+| 27 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | COLLAPSE-BY-CLICK UNREACHABLE. Expanding a directory compound by real mouse click works reliably (verified across many directories and corpora: 134->165, 134->241, 134->210 in independent live sessions). RE-COLLAPSING the same compound by a second real click could NOT be demonstrated in 85+ real-mouse attempts across 5 candidate directories x 17 jitter offsets. ROOT CAUSE MEASURED, not assumed: cytoscape-elk's layered algorithm leaves under ~2px (measured ~1.1px via renderedBoundingBox) between a compound directory's own border and its topmost child once it has children, so there is effectively no clickable parent surface. Three mitigations tried and each measured ineffective: cytoscape CSS padding (confirmed cosmetic-only under an external layout extension by reading cytoscape-elk source), ELK graph-level elk.padding, and ELK per-node nodeLayoutOptions padding (the officially correct per-compound hook). text-events:'yes' on the label band also did not resolve it. The toggle LOGIC is correct - 48 headless-cytoscape tests cover expand/collapse/publish-once/geometry. Only the real-mouse collapse GESTURE is unreachable. OWNER: plan 05-07 (maintainer decision 2026-08-30). 05-07's verified three-click contract is expand -> collapse-to-zero -> re-expand, so the identical hit-testing defect will block it at file level. 05-07 MUST ship an explicit collapse affordance (a caret/disclosure control, or a hit-testable label band) rather than depending on clicking a ~1px margin. | fixed |  | 2026-08-31T14:13:42.222Z | 2026-08-31T16:21:04.589Z |
+| 28 | 05 | unrun-verify | web/src/lib/components/graph/GraphCanvas.svelte |  | At google/guava scale (135 collapsed nodes, 163 cycles), cytoscape's own layout logs repeated console.warn 'Edge <id> has invalid endpoints and so it is impossible to draw... expected behaviour when the source node and the target node overlap' on every page load, before any interaction. Cytoscape labels this expected, not an error; verified no console.error/CSP violation accompanies it and pan/zoom/cycle-focus/fit remain functional. Not reproduced against this repository's own smaller index. Root cause (which collapsed directory pair renders at an overlapping position under ELK layout at this density) not yet investigated. | open |  | 2026-08-31T14:53:25.208Z |  |
+| 29 | 05 | unrun-verify | Taskfile.yml |  | web:drift GATE BLIND SPOT (rule 84d1gfpywd family, found 2026-08-31 by the phase-5 fix pass and independently confirmed): the guard's two halves enumerate differently. The SOURCE half uses 'git ls-files' (Taskfile.yml:42) and is git-tree aware; the OUTPUT half uses 'find web/build -type f' (Taskfile.yml:60) and enumerates the FILESYSTEM. Consequence: a build output file that exists on disk but is NOT staged/committed is hashed as though it were committed, so web:drift reports PASS while the git tree is missing files that index.html references by name. Observed concretely: commit 98cd41dd passed 'web/build' as a bare pathspec to git commit, which staged deletions and modifications but silently missed 9 brand-new output files; web:drift reported PASS throughout and only a plain 'git status' surfaced it (fixed in fad3b39c). The gate therefore cannot detect an incompletely-staged bundle - precisely the failure mode it appears to guard. SUGGESTED FIX (not applied, out of phase-5 scope): enumerate the output half with 'git ls-files web/build' like the source half, or add a paired assertion that the find-derived set equals the git-ls-files-derived set with a non-zero floor on both. | open |  | 2026-08-31T16:57:21.989Z |  |
+| 30 | 06 | deviation | web/src/lib/assets/favicon.svg |  | SHIPPED STOCK SVELTE FAVICON THAT ALSO VIOLATES CSP (found 2026-09-07 by the phase-6 live browser UAT; pre-existing since phase 2). web/src/lib/assets/favicon.svg is the unmodified SvelteKit template logo - literally <title>svelte-logo</title> in Svelte orange #ff3e00 - scaffolding never replaced, so a tool called codegraph ships with Svelte's logo as its browser-tab icon. It also fails to load: Vite inlines the small SVG as a data: URI, and spa.go:99 sets spaCSPBaseDirectives = "default-src 'self'; ..." with NO img-src, so the data: URI is blocked. Every page load logs 'Loading the image data:image/svg+xml... violates the following Content-Security-Policy directive: default-src self' and the tab falls back to a blank icon. Two independent defects that happen to cancel into 'no visible logo'. NOT A CSP BUG: spa_test.go:439 asserting default-src is exactly ['self'] is correct and deliberate (T-02-02-06); the asset choice is the defect. Structurally invisible to both test layers - no Go test can flag a correct CSP, and jsdom never fetches images. FIX (out of phase-6 scope): replace the asset with a codegraph mark, and either ship it as a static file under web/static/ (served as 'self') or raise Vite's inline asset threshold so it is emitted as a file rather than a data: URI. Adding img-src data: to the CSP would also work but widens the policy for a cosmetic asset. | open |  | 2026-09-07T23:02:08.159Z |  |
+| 31 | 04 | unrun-verify | web/src/lib/components/ui/button/button.svelte |  | VENDORED COMPONENT DRIFT DETECTED, CAUSE NOT ISOLATED (found 2026-09-07 by the milestone validate-phase pass). 'task web:components:drift' exits 1 with '::error::web:components:drift: web/src/lib/components/ui/button/button.svelte differs from shadcn-svelte@1.5.1 regeneration'. This is the gate WORKING - it named one specific file, which is a discriminating (non-vacuous) result, and 04-07-SUMMARY.md Task 1 recorded all EIGHT vendored families reproducing byte-identically at vendoring time, so something changed since. WHAT IS RULED OUT: local tampering. button.svelte has exactly ONE commit in its entire history (205da685, feat(03-06) vendor shadcn-svelte Command component, human-approved) and was never hand-edited. WHAT IS NOT RULED OUT, and could not be from this machine: the toolchain. web/package.json pins packageManager pnpm@11.23.0 and .github/workflows/components-drift.yml resolves it via Corepack, but corepack is NOT installed on this development host, so the target fell back to bare pnpm 12.3.4 (its own output: 'Done in 3.4s using pnpm v12.3.4'). A pnpm major difference changing what 'pnpm dlx shadcn-svelte@1.5.1' emits is a live hypothesis that a local run cannot test. The remaining hypothesis is genuine registry-side drift in shadcn-svelte's button between 03-06's vendoring and now. IMPACT: none on any merge. The gate is schedule (Mon 08:00 UTC) and workflow_dispatch only, deliberately never in requiredCheckNames per D-16 - a live registry fetch has no place in a merge gate. NEXT STEP: trigger the components-drift workflow via workflow_dispatch, where Corepack pins pnpm 11.23.0, and compare. If it is RED there too, diff the regenerated button.svelte against the committed one and decide whether to re-vendor; if GREEN, the finding is a local-toolchain artifact and this entry can be waived. | open |  | 2026-09-08T00:36:45.333Z |  |
 
 ````json
 [
@@ -264,6 +276,150 @@ last_updated: 2026-08-16T01:57:33.612Z
     "reason": "Deferred as borderline, NOT closed by the formal gate. 'TS's own references semantic' is cited as ongoing design-rationale precedent, escaping the 13-pattern census only via the internal/indexer/** blanket exclusion, which is justified for tree-sitter grammar-node-shape hits and NOT for this scope-bounding rationale. Orchestrator correction: same as entry 18 — the numeric open_count==3 justification is withdrawn; the deferral stands on its substance and remains open for adjudication.",
     "recorded_at": "2026-08-16T01:57:31.236Z",
     "resolved_at": "2026-08-16T01:57:33.612Z"
+  },
+  {
+    "id": 20,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "web/vite.config.ts",
+    "line": null,
+    "description": "svelte.config.js does not exist in this SvelteKit toolchain version (kit ^2.63.0's sv 0.17.0 scaffold) — adapter config moved into the sveltekit() Vite plugin's options in vite.config.ts; no separate svelte.config.js is authored",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T17:08:46.317Z",
+    "resolved_at": null
+  },
+  {
+    "id": 21,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "web/package.json",
+    "line": null,
+    "description": "typescript pinned to 6.0.3 (the version sv@0.17.0's own scaffold selected as compatible) rather than the plan's literal 5.9.3 pin — the 5.x-vs-7.x compatibility concern the plan flagged does not name 6.x, which is now the toolchain's own verified-compatible default",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-24T17:08:46.409Z",
+    "resolved_at": null
+  },
+  {
+    "id": 22,
+    "kind": "deviation",
+    "phase": "03",
+    "file": "web/src/lib/search.ts",
+    "line": null,
+    "description": "Files RPC's glob pattern (path/filepath.Match) cannot cross directory boundaries — live search only matches root-level files for nested repos; documented and filed as todo 2026-08-29-files-rpc-pattern-glob-cannot-cross-directory-boundaries-for-live-file-search.md, not fixed (server-side, out of plan scope)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-29T02:37:45.131Z",
+    "resolved_at": null
+  },
+  {
+    "id": 23,
+    "kind": "stub",
+    "phase": "03",
+    "file": "web/src/lib/components/browse/SourcePane.svelte",
+    "line": null,
+    "description": "multi-def source-pane branch renders a placeholder text (no picker) — full disambiguation-picker rendering is deliberately deferred to plan 03-08, which already owns BRW-05",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-29T03:05:42.794Z",
+    "resolved_at": "2026-08-29T03:30:28.701Z"
+  },
+  {
+    "id": 24,
+    "kind": "stub",
+    "phase": "04",
+    "file": "web/src/routes/workbench/+page.svelte",
+    "line": null,
+    "description": "Affected tab renders an explicit not-yet-wired placeholder — intentional, resolved by 04-06 per 04-04-PLAN.md's own scope (Impact/Callers/Callees only).",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-30T00:53:19.859Z",
+    "resolved_at": "2026-09-07T23:01:49.399Z"
+  },
+  {
+    "id": 25,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/lib/components/graph/GraphCanvas.svelte",
+    "line": null,
+    "description": "Pan/zoom interactivity on /graph could not be conclusively confirmed via synthetic browser automation (agent-browser mouse-wheel/drag produced no observable change); needs a human on a real trackpad/mouse before 05-05/05-06/05-07 build interaction-heavy features on this seam.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-30T17:33:51.859Z",
+    "resolved_at": "2026-08-30T17:40:33.198Z"
+  },
+  {
+    "id": 26,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/lib/components/graph/GraphCanvas.svelte",
+    "line": null,
+    "description": "Deterministic uncaught page error on /graph's happy path: TypeError: Cannot read properties of null (reading 'notify') at cytoscape-elk adapter -> nc.layoutPositions -> nc.positions -> jc.endBatch -> Array.forEach. Found by orchestrator live e2e 2026-08-30 (Playwright, real binary) AFTER all 284 automated tests were green — jsdom + headless:true never exercises the real renderer's positions/endBatch path. NON-FATAL: layout completes correctly (709 nodes with 709 distinct positions, instance alive, pan/zoom verified working). Does NOT fire when navigating away mid-layout, so it is not a teardown race. Fault is inside the cytoscape-elk dependency's adapter, not GraphCanvas.svelte's own code, which is a standard init + layered ELK layout. IMPORTANT for 05-04: the measured page emits exactly one uncaught error on every load — a measurement harness that treats any page error as a failed measurement would produce a spurious FAIL against a graph that demonstrably works.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-30T17:40:44.178Z",
+    "resolved_at": null
+  },
+  {
+    "id": 27,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/lib/components/graph/GraphCanvas.svelte",
+    "line": null,
+    "description": "COLLAPSE-BY-CLICK UNREACHABLE. Expanding a directory compound by real mouse click works reliably (verified across many directories and corpora: 134->165, 134->241, 134->210 in independent live sessions). RE-COLLAPSING the same compound by a second real click could NOT be demonstrated in 85+ real-mouse attempts across 5 candidate directories x 17 jitter offsets. ROOT CAUSE MEASURED, not assumed: cytoscape-elk's layered algorithm leaves under ~2px (measured ~1.1px via renderedBoundingBox) between a compound directory's own border and its topmost child once it has children, so there is effectively no clickable parent surface. Three mitigations tried and each measured ineffective: cytoscape CSS padding (confirmed cosmetic-only under an external layout extension by reading cytoscape-elk source), ELK graph-level elk.padding, and ELK per-node nodeLayoutOptions padding (the officially correct per-compound hook). text-events:'yes' on the label band also did not resolve it. The toggle LOGIC is correct - 48 headless-cytoscape tests cover expand/collapse/publish-once/geometry. Only the real-mouse collapse GESTURE is unreachable. OWNER: plan 05-07 (maintainer decision 2026-08-30). 05-07's verified three-click contract is expand -> collapse-to-zero -> re-expand, so the identical hit-testing defect will block it at file level. 05-07 MUST ship an explicit collapse affordance (a caret/disclosure control, or a hit-testable label band) rather than depending on clicking a ~1px margin.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-08-31T14:13:42.222Z",
+    "resolved_at": "2026-08-31T16:21:04.589Z"
+  },
+  {
+    "id": 28,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "web/src/lib/components/graph/GraphCanvas.svelte",
+    "line": null,
+    "description": "At google/guava scale (135 collapsed nodes, 163 cycles), cytoscape's own layout logs repeated console.warn 'Edge <id> has invalid endpoints and so it is impossible to draw... expected behaviour when the source node and the target node overlap' on every page load, before any interaction. Cytoscape labels this expected, not an error; verified no console.error/CSP violation accompanies it and pan/zoom/cycle-focus/fit remain functional. Not reproduced against this repository's own smaller index. Root cause (which collapsed directory pair renders at an overlapping position under ELK layout at this density) not yet investigated.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T14:53:25.208Z",
+    "resolved_at": null
+  },
+  {
+    "id": 29,
+    "kind": "unrun-verify",
+    "phase": "05",
+    "file": "Taskfile.yml",
+    "line": null,
+    "description": "web:drift GATE BLIND SPOT (rule 84d1gfpywd family, found 2026-08-31 by the phase-5 fix pass and independently confirmed): the guard's two halves enumerate differently. The SOURCE half uses 'git ls-files' (Taskfile.yml:42) and is git-tree aware; the OUTPUT half uses 'find web/build -type f' (Taskfile.yml:60) and enumerates the FILESYSTEM. Consequence: a build output file that exists on disk but is NOT staged/committed is hashed as though it were committed, so web:drift reports PASS while the git tree is missing files that index.html references by name. Observed concretely: commit 98cd41dd passed 'web/build' as a bare pathspec to git commit, which staged deletions and modifications but silently missed 9 brand-new output files; web:drift reported PASS throughout and only a plain 'git status' surfaced it (fixed in fad3b39c). The gate therefore cannot detect an incompletely-staged bundle - precisely the failure mode it appears to guard. SUGGESTED FIX (not applied, out of phase-5 scope): enumerate the output half with 'git ls-files web/build' like the source half, or add a paired assertion that the find-derived set equals the git-ls-files-derived set with a non-zero floor on both.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-08-31T16:57:21.989Z",
+    "resolved_at": null
+  },
+  {
+    "id": 30,
+    "kind": "deviation",
+    "phase": "06",
+    "file": "web/src/lib/assets/favicon.svg",
+    "line": null,
+    "description": "SHIPPED STOCK SVELTE FAVICON THAT ALSO VIOLATES CSP (found 2026-09-07 by the phase-6 live browser UAT; pre-existing since phase 2). web/src/lib/assets/favicon.svg is the unmodified SvelteKit template logo - literally <title>svelte-logo</title> in Svelte orange #ff3e00 - scaffolding never replaced, so a tool called codegraph ships with Svelte's logo as its browser-tab icon. It also fails to load: Vite inlines the small SVG as a data: URI, and spa.go:99 sets spaCSPBaseDirectives = \"default-src 'self'; ...\" with NO img-src, so the data: URI is blocked. Every page load logs 'Loading the image data:image/svg+xml... violates the following Content-Security-Policy directive: default-src self' and the tab falls back to a blank icon. Two independent defects that happen to cancel into 'no visible logo'. NOT A CSP BUG: spa_test.go:439 asserting default-src is exactly ['self'] is correct and deliberate (T-02-02-06); the asset choice is the defect. Structurally invisible to both test layers - no Go test can flag a correct CSP, and jsdom never fetches images. FIX (out of phase-6 scope): replace the asset with a codegraph mark, and either ship it as a static file under web/static/ (served as 'self') or raise Vite's inline asset threshold so it is emitted as a file rather than a data: URI. Adding img-src data: to the CSP would also work but widens the policy for a cosmetic asset.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-07T23:02:08.159Z",
+    "resolved_at": null
+  },
+  {
+    "id": 31,
+    "kind": "unrun-verify",
+    "phase": "04",
+    "file": "web/src/lib/components/ui/button/button.svelte",
+    "line": null,
+    "description": "VENDORED COMPONENT DRIFT DETECTED, CAUSE NOT ISOLATED (found 2026-09-07 by the milestone validate-phase pass). 'task web:components:drift' exits 1 with '::error::web:components:drift: web/src/lib/components/ui/button/button.svelte differs from shadcn-svelte@1.5.1 regeneration'. This is the gate WORKING - it named one specific file, which is a discriminating (non-vacuous) result, and 04-07-SUMMARY.md Task 1 recorded all EIGHT vendored families reproducing byte-identically at vendoring time, so something changed since. WHAT IS RULED OUT: local tampering. button.svelte has exactly ONE commit in its entire history (205da685, feat(03-06) vendor shadcn-svelte Command component, human-approved) and was never hand-edited. WHAT IS NOT RULED OUT, and could not be from this machine: the toolchain. web/package.json pins packageManager pnpm@11.23.0 and .github/workflows/components-drift.yml resolves it via Corepack, but corepack is NOT installed on this development host, so the target fell back to bare pnpm 12.3.4 (its own output: 'Done in 3.4s using pnpm v12.3.4'). A pnpm major difference changing what 'pnpm dlx shadcn-svelte@1.5.1' emits is a live hypothesis that a local run cannot test. The remaining hypothesis is genuine registry-side drift in shadcn-svelte's button between 03-06's vendoring and now. IMPACT: none on any merge. The gate is schedule (Mon 08:00 UTC) and workflow_dispatch only, deliberately never in requiredCheckNames per D-16 - a live registry fetch has no place in a merge gate. NEXT STEP: trigger the components-drift workflow via workflow_dispatch, where Corepack pins pnpm 11.23.0, and compare. If it is RED there too, diff the regenerated button.svelte against the committed one and decide whether to re-vendor; if GREEN, the finding is a local-toolchain artifact and this entry can be waived.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-08T00:36:45.333Z",
+    "resolved_at": null
   }
 ]
 ````

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "tabCount": 3,
+  "triggerSpacingMs": 600,
+  "clientBaseDelayMs": 1000,
+  "jitterSpread": 0.25,
+  "minDowntimeMs": 4000,
+  "reconnectDelaysProvenance": "client-scheduled",
+  "coalescingProvenBy": "internal/uiserver/livehandler_test.go#TestWatchGraphHandlerCoalescesForANonReadingClient",
+  "redSkipRepoint": false,
+  "seedGenerationPerTab": [
+    1,
+    1,
+    1
+  ],
+  "triggeredGenerations": [
+    2,
+    3,
+    4
+  ],
+  "receivedGenerationsPerTab": [
+    [
+      2,
+      3,
+      4
+    ],
+    [
+      2,
+      3,
+      4
+    ],
+    [
+      2,
+      3,
+      4
+    ]
+  ],
+  "minInterArrivalMs": 984.0999999642372,
+  "isolationTriggeredGenerations": [
+    5,
+    6
+  ],
+  "blockedTabIndex": 2,
+  "blockedTabBlockedMs": 1800,
+  "blockedTabReceiptsDuringBlock": 0,
+  "healthyTabsIsolationSupersetOK": true,
+  "healthyTabsIsolationMinInterArrivalMs": 977.5999999642372,
+  "slowTabFinalGeneration": 6,
+  "newestGeneration": 6,
+  "reconnectAttemptsPerTab": [
+    3,
+    3,
+    3
+  ],
+  "reconnectDelaysPerTab": [
+    [
+      1163.2258029752988,
+      1677.6023207913734,
+      3059.373003219311
+    ],
+    [
+      799.7267231372587,
+      2290.261740114615,
+      4330.002151252657
+    ],
+    [
+      1130.3623127774504,
+      1588.3372516271615,
+      4014.430195514384
+    ]
+  ],
+  "reconnectBaseDelaysPerTab": [
+    [
+      1000,
+      2000,
+      4000
+    ],
+    [
+      1000,
+      2000,
+      4000
+    ],
+    [
+      1000,
+      2000,
+      4000
+    ]
+  ],
+  "resumeCursorSentPerTab": [
+    6,
+    6,
+    6
+  ],
+  "postReconnectAppliedPerTab": [
+    1,
+    1,
+    1
+  ],
+  "pageErrorCount": 0,
+  "pageErrors": [],
+  "browserIdentity": {
+    "name": "chromium",
+    "version": "151.0.7922.34"
+  },
+  "corpusCleanAtExit": true,
+  "error": null,
+  "success": true,
+  "actualDowntimeMs": 4338
+}

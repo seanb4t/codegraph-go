@@ -164,7 +164,7 @@ func TestAntigravity_Install_UnifiedWriteFailure_PreservesLegacyEntryNoMarker(t 
 	if err := os.Chmod(unifiedDir, 0o500); err != nil {
 		t.Fatalf("chmod unified dir read-only: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(unifiedDir, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(unifiedDir, 0o755) })
 
 	a := antigravityTarget{}
 	result := a.Install(LocationGlobal, InstallOptions{ExecPath: "/usr/local/bin/codegraph"})

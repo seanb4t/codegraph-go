@@ -1,0 +1,110 @@
+package indexer
+
+import (
+	"context"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/seanb4t/codegraph-go/internal/schema"
+)
+
+// gitExecLookPath is resolveHeadCommitSHA's executable-lookup seam,
+// initialised to exec.LookPath, mirroring internal/graphstore's
+// openLockRetrySleep pattern: an unexported, test-only control point with
+// no exported setter and no production behavior change. Tests reassign it
+// to simulate "no git binary on PATH" deterministically, without emptying
+// the process's real PATH — emptying PATH would also break any helper
+// process the test itself needs to spawn, making the test's own failure
+// mode ambiguous about its cause.
+var gitExecLookPath = exec.LookPath
+
+// resolveHeadCommitGitTimeout bounds the git subprocess resolveHeadCommitSHA
+// shells out to, so a hung or misbehaving git can never stall an index run
+// (T-01-21).
+const resolveHeadCommitGitTimeout = 5 * time.Second
+
+// resolveHeadCommitSHA resolves the git commit HEAD points at for the
+// repository rooted at repoPath (ENG-04, D-05), for stamping into
+// schema.Meta.commit_sha. It deliberately returns a bare string and NEVER
+// an error: indexing must never fail because a commit could not be
+// resolved (T-01-21). Every failure path — git absent from PATH, repoPath
+// not being a git checkout, a repository with no commits yet, a detached
+// or broken HEAD, or the resolveHeadCommitGitTimeout firing — returns the
+// empty string, which schema.IndexedCommitSHA treats identically to a
+// pre-upgrade graph that has never carried this field. This "return a
+// string, never an error" signature is unusual enough that it would
+// otherwise look like a swallowed error; it is not one, it is the D-05
+// degrade-gracefully contract made structural.
+//
+// The command is invoked with a fixed argument vector via
+// exec.CommandContext — never a shell string — with repoPath passed as a
+// `-C` argument rather than interpolated into anything git parses as
+// shell syntax (T-01-19). Output is accepted only when it is exactly
+// schema.SHA1HexLen or schema.SHA256HexLen characters of lowercase hex;
+// any other length, or any uppercase character, yields the empty string
+// just as firmly as git failing outright.
+func resolveHeadCommitSHA(repoPath string) string {
+	if _, err := gitExecLookPath("git"); err != nil {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), resolveHeadCommitGitTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+
+	sha := strings.TrimSpace(string(out))
+	if !isLowercaseHexCommitSHA(sha) {
+		return ""
+	}
+	return sha
+}
+
+// isLowercaseHexCommitSHA reports whether s is a well-formed git commit
+// object id: exactly schema.SHA1HexLen or schema.SHA256HexLen characters,
+// every one of them a lowercase hex digit. Widening from one accepted
+// length to two is an ENUMERATED SET, not a relaxation — any other length
+// (39, 41, 63, 65, ...) and any uppercase hex character are rejected
+// exactly as firmly as before.
+//
+// Delegates to schema.IsCommitSHA (WR-07: promoted so the read side —
+// internal/uiserver.GetPermalink — validates a stored commit_sha with the
+// exact same predicate this write-time check applies, rather than two
+// definitions that can drift). IN-05: this package previously kept its
+// own gitSHA1HexLen/gitSHA256HexLen constants too, "numerically identical
+// to schema's" by comment alone with nothing asserting it — deleted; this
+// package's tests now reference schema.SHA1HexLen/schema.SHA256HexLen
+// directly, so there is exactly one definition of each length.
+func isLowercaseHexCommitSHA(s string) bool {
+	return schema.IsCommitSHA(s)
+}
+
+// syncCommitSHA decides what a Sync writes into Meta.commit_sha (WR-05).
+//
+// resolveHeadCommitSHA returns "" for EVERY failure mode by design — git
+// absent from PATH, the resolveHeadCommitGitTimeout firing, `git
+// rev-parse` exiting non-zero because .git/index.lock is held by a
+// concurrent rebase or commit, or output failing the hex check — so ""
+// means "could not resolve HEAD this run", not "this checkout has no
+// HEAD". Because schema.NewMeta() starts from a zero-valued record, an
+// unconditional assignment does not leave the previous value alone: it
+// REPLACES a known-good commit with absent, and D-05 defines empty as
+// "unknown, never an error", so the erasure surfaces to the user as a
+// status panel that silently flips to unknown with nothing anywhere to
+// explain it.
+//
+// An unresolvable HEAD is not evidence that the previously recorded
+// commit is wrong, so the prior value is preserved. This is deliberately
+// scoped to Sync: a full index Run rebuilds the record from scratch and
+// has no prior value to preserve.
+func syncCommitSHA(resolved string, prev *schema.Meta) string {
+	if resolved != "" {
+		return resolved
+	}
+	return prev.GetCommitSha()
+}

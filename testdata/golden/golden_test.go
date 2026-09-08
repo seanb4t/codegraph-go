@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/seanb4t/codegraph-go/internal/goldenspec"
 )
 
 // volatileKeys are the exact JSON key names the capture path stripped
@@ -137,7 +139,7 @@ func TestGoSideFixturesRegenerated(t *testing.T) {
 			if len(data) == 0 {
 				t.Fatalf("%s is empty", path)
 			}
-			var parsed goldenCapture
+			var parsed goldenspec.GoldenCapture
 			if err := json.Unmarshal(data, &parsed); err != nil {
 				t.Fatalf("%s: does not parse as golden capture: %v", path, err)
 			}
@@ -273,7 +275,7 @@ func TestReFrozenGoldensValid(t *testing.T) {
 				}
 
 				// 3. Parse and assert non-empty output.
-				var capture goldenCapture
+				var capture goldenspec.GoldenCapture
 				if err := json.Unmarshal(data, &capture); err != nil {
 					t.Fatalf("expected golden %s does not parse as goldenCapture: %v", path, err)
 				}

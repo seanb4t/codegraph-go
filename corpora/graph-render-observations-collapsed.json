@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "thresholdRef": "corpora/graph-render-threshold.json",
+  "corpus": {
+    "repo": "google/guava",
+    "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
+    "note": "SHA copied verbatim from corpora/manifest.json, the sole pin authority. Largest of the eight locally indexed corpora at file-rollup scale: 3,233 file-level nodes and 21,554 distinct file-pair edges after D-03's contains/self-edge exclusion and D-08's package-pseudo-node exclusion. apache/arrow is not a candidate — corpora/selection.json records it rejected before measurement. Already fully indexed on this machine under ~/.cache/codegraph/corpora/ at the directory named for this SHA."
+  },
+  "bindingView": "The EXPANDED file level: every file node rendered, grouped inside directory compound parents — the default first paint GRF-02 describes. This is the harder bar and is what binds. The collapsed directory-level view guava also yields (about 134 top-level compound nodes and 819 directory-pair edges) is measured and recorded in recordedNonBinding.collapsedView but is explicitly NOT the binding number — a collapsed view would pass by construction on any renderer and make GRF-01 a formality, which D-02 forbids.",
+  "bindingObservation": {
+    "role": "binding",
+    "corpus": {
+      "repo": "google/guava",
+      "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa"
+    },
+    "metrics": {
+      "timeToInteractiveMs": {
+        "value": 1179.2000000029802,
+        "status": "measured",
+        "method": "median of 3 cold reloads, request-issued to layoutstop (live browser session, playwright chromium)",
+        "raw": [
+          1179.2000000029802,
+          1365.7000000029802,
+          1033.300000011921
+        ]
+      },
+      "panZoomFrameTimeMs": {
+        "value": 8.300000000000182,
+        "status": "measured",
+        "method": "median requestAnimationFrame inter-frame interval over the scripted pan/zoom gesture (live browser session, playwright chromium)"
+      },
+      "panZoomFrameTimeP95Ms": {
+        "value": 9,
+        "status": "measured",
+        "method": "95th percentile requestAnimationFrame inter-frame interval, same sample as panZoomFrameTimeMs (live browser session, playwright chromium)"
+      },
+      "fileGraphResponseBytes": {
+        "value": 3713528,
+        "status": "measured",
+        "method": "cited from 05-02-SUMMARY.md TestFileGraphResponseSizeGuava — real server+client round trip, proto.Marshal on *uiv1.FileGraphResponse"
+      }
+    },
+    "layoutDurationMs": 714.5,
+    "frameSampleCount": 463,
+    "nodeCount": 134,
+    "edgeCount": 819,
+    "collapsedView": {
+      "nodes": 134,
+      "edges": 819,
+      "method": "derived count: distinct top-level directories / directory pairs from the same wire response — not a rendered measurement"
+    },
+    "browserIdentity": {
+      "name": "chromium",
+      "version": "151.0.7922.34"
+    },
+    "sessionError": null,
+    "teardownError": null
+  },
+  "additionalCorpora": [
+    {
+      "role": "additional",
+      "corpus": {
+        "repo": "seanb4t/codegraph-go",
+        "sha": "675eebf46d49f957503c6b41917a587adf5e5908"
+      },
+      "metrics": {
+        "timeToInteractiveMs": {
+          "value": 306.40000000596046,
+          "status": "measured",
+          "method": "median of 3 cold reloads, request-issued to layoutstop (live browser session, playwright chromium)",
+          "raw": [
+            358.3999999910593,
+            199.1000000089407,
+            306.40000000596046
+          ]
+        },
+        "panZoomFrameTimeMs": {
+          "value": 8.300000000000182,
+          "status": "measured",
+          "method": "median requestAnimationFrame inter-frame interval over the scripted pan/zoom gesture (live browser session, playwright chromium)"
+        },
+        "panZoomFrameTimeP95Ms": {
+          "value": 9.099999999999909,
+          "status": "measured",
+          "method": "95th percentile requestAnimationFrame inter-frame interval, same sample as panZoomFrameTimeMs (live browser session, playwright chromium)"
+        }
+      },
+      "layoutDurationMs": 123.79999999701977,
+      "frameSampleCount": 458,
+      "nodeCount": 106,
+      "edgeCount": 152,
+      "collapsedView": null,
+      "browserIdentity": {
+        "name": "chromium",
+        "version": "151.0.7922.34"
+      },
+      "sessionError": null,
+      "teardownError": null
+    }
+  ],
+  "metricResults": [
+    {
+      "metric": "timeToInteractiveMs",
+      "measured": 1179.2000000029802,
+      "status": "measured",
+      "bar": 5000,
+      "comparison": "<=",
+      "verdict": "PASS",
+      "reason": ""
+    },
+    {
+      "metric": "panZoomFrameTimeMs",
+      "measured": 8.300000000000182,
+      "status": "measured",
+      "bar": 33.3,
+      "comparison": "<=",
+      "verdict": "PASS",
+      "reason": ""
+    },
+    {
+      "metric": "panZoomFrameTimeP95Ms",
+      "measured": 9,
+      "status": "measured",
+      "bar": 100,
+      "comparison": "<=",
+      "verdict": "PASS",
+      "reason": ""
+    },
+    {
+      "metric": "fileGraphResponseBytes",
+      "measured": 3713528,
+      "status": "measured",
+      "bar": 16777216,
+      "comparison": "<=",
+      "verdict": "PASS",
+      "reason": ""
+    }
+  ],
+  "verdict": "PASS",
+  "recordedNonBinding": {
+    "layoutDurationMs": 714.5,
+    "frameSampleCount": 463,
+    "collapsedView": {
+      "nodes": 134,
+      "edges": 819,
+      "method": "derived count: distinct top-level directories / directory pairs from the same wire response — not a rendered measurement"
+    }
+  },
+  "generatedBy": "web/scripts/graph-verdict.mjs",
+  "generatedAt": "2026-08-31T01:18:46.850Z",
+  "note": "Re-measure of the collapsed directory default (05-08, GRF-01's remedy: maintainer decision halt-collapse-default) against the SAME locked bars corpora/graph-render-threshold.json committed before any measurement existed. Binding role/corpus/protocol reused byte-identically from graph-measure.mjs; the collapsed-view node/edge counts (134/819) were derived live from the geometry seam this task, matching the threshold's own recordedNonBinding.collapsedView figures exactly."
+}

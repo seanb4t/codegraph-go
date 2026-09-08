@@ -242,7 +242,13 @@ func opencodeSweepStaleAppData(resolvedCfgDir string) {
 	for _, name := range []string{"opencode.jsonc", "opencode.json"} {
 		stalePath := filepath.Join(appData, "opencode", name)
 		if fileExists(stalePath) {
-			removeOpencodeEntry(stalePath)
+			// IN-14: best-effort stale-file sweep — this is cleanup for a
+			// config directory the resolved (correct) path has already
+			// diverged from, so a failure to remove the entry here (e.g. a
+			// permission error) leaves the stale file in place, which is
+			// the same as this cleanup never having run. Nothing
+			// downstream depends on this succeeding.
+			_, _ = removeOpencodeEntry(stalePath)
 		}
 	}
 }

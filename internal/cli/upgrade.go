@@ -97,7 +97,7 @@ func newUpgradeCmd() *cobra.Command {
 			"install with: brew upgrade codegraph.",
 		Example: "  codegraph upgrade --check\n  codegraph upgrade\n  codegraph upgrade v1.4.0\n" +
 			"  codegraph upgrade --check  # brew-managed install: prints the pointer, exits 0",
-		Args:    cobra.MaximumNArgs(1),
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var pinned string
 			if len(args) > 0 {

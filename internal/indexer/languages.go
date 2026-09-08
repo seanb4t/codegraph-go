@@ -108,3 +108,20 @@ func RegisteredLanguageIDs() []string {
 	sort.Strings(ids)
 	return ids
 }
+
+// RegisteredLanguageExtensions returns a copy of the extension -> language
+// ID map built from every registered LanguageSpec's Extensions (WR-02).
+// This is the disk-backed source of truth for "which file extension maps
+// to which language" — web/highlight_extension_coverage_test.go binds
+// web/src/lib/highlight.ts's hand-transcribed EXTENSION_LANGUAGE map back
+// to this registry so a new or changed extension in a LanguageSpec cannot
+// silently narrow the SPA's population the way memory-v4zqxrz6b3 names:
+// a subject added here without a corresponding change on the TS side
+// would otherwise pass by being absent from both sides at once.
+func RegisteredLanguageExtensions() map[string]string {
+	out := make(map[string]string, len(extToLang))
+	for ext, id := range extToLang {
+		out[ext] = id
+	}
+	return out
+}

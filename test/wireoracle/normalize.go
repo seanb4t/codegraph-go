@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"sort"
 	"time"
 )
 
@@ -188,4 +189,104 @@ func looksLikeRFC3339(val string) bool {
 	}
 	_, err := time.Parse(time.RFC3339, val)
 	return err == nil
+}
+
+// isResponseLine reports whether raw is a JSON-RPC RESPONSE line — id
+// present AND method absent (IN-07). responseID alone (id present) is
+// NOT sufficient: per JSON-RPC 2.0, a numeric id appears on requests too,
+// not only responses, and every server->client REQUEST this protocol
+// defines (sampling/createMessage, roots/list, elicitation/create)
+// carries both a "method" and an "id". No current scenario emits one, so
+// misclassifying it here is latent — but were one added, that request
+// frame would join the sorted-by-id set below and could be swapped with
+// an unrelated response line, masking or fabricating an ordering
+// discrepancy in the frozen transcript. frameMethod already exists next
+// door (capture.go) for exactly this distinction.
+func isResponseLine(raw []byte) bool {
+	if _, ok := responseID(raw); !ok {
+		return false
+	}
+	_, hasMethod := frameMethod(raw)
+	return !hasMethod
+}
+
+// CanonicalizeResponseOrder is 03-03-PLAN.md Task 3's R2 resolution
+// (03-03-EVIDENCE.md, VERDICT: SERVER-EMITTED-OUT-OF-ORDER): the frozen
+// transcript oracle was freezing response ARRIVAL order, a property
+// github.com/modelcontextprotocol/go-sdk@v1.7.0 explicitly does not
+// guarantee for pipelined non-initialize calls — mcp/server.go's
+// ServerSession.handle calls jsonrpc2.Async(ctx) unconditionally for
+// every call except "initialize" (modelcontextprotocol/go-sdk#26), and
+// internal/jsonrpc2/conn.go's handleAsync dequeues requests sequentially
+// but only blocks until Async() fires or the handler completes, so two
+// consecutive same-method calls run in independently scheduled goroutines
+// with no ordering guarantee between them.
+//
+// CanonicalizeResponseOrder narrows what the oracle freezes to response
+// CONTENT, never touching a byte within a line: it identifies every line
+// position that holds a JSON-RPC RESPONSE (id present AND method absent,
+// per isResponseLine's classification above — built from responseID and
+// frameMethod, capture.go's existing extractors, reused rather than
+// re-derived, "no second copy of a rule") and reassigns those SAME
+// positions the response bytes sorted ascending by id, via a stable sort.
+// Every other line — notifications, blank lines, anything without a
+// numeric id — is left completely untouched, at its original position,
+// with its original content. On input already in ascending-id order (the
+// common case for every scenario in this package, and for every existing
+// frozen transcript — verified this session against
+// testdata/wireoracle/transcripts/toolslist-repeat.golden, whose ids
+// already read 1,2,3) this is a true no-op: zero hits, byte-identical
+// output.
+//
+// Deliberately NOT folded into Rules/NormalizeWithLedger above: those
+// rules are single-value, named-field placeholder SUBSTITUTIONS (D-04);
+// this reorders whole LINES and substitutes nothing, so it is a
+// structurally different operation with its own name, applied as an
+// explicit separate step by TestFrozenTranscriptsMatch, on both the
+// captured and the frozen side, immediately before the byte comparison —
+// never silently decoding/re-encoding through encoding/json, matching
+// this file's own documented "never a round trip" discipline.
+//
+// hits reports how many response positions actually changed — 0 when the
+// input was already canonical.
+func CanonicalizeResponseOrder(raw []byte) ([]byte, int) {
+	if len(raw) == 0 {
+		return raw, 0
+	}
+	hadTrailingNewline := bytes.HasSuffix(raw, []byte("\n"))
+	lines := bytes.Split(bytes.TrimSuffix(raw, []byte("\n")), []byte("\n"))
+
+	var positions []int
+	var respLines [][]byte
+	for i, line := range lines {
+		if isResponseLine(line) {
+			positions = append(positions, i)
+			respLines = append(respLines, line)
+		}
+	}
+	if len(positions) < 2 {
+		return raw, 0
+	}
+
+	sorted := make([][]byte, len(respLines))
+	copy(sorted, respLines)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		idI, _ := responseID(sorted[i])
+		idJ, _ := responseID(sorted[j])
+		return idI < idJ
+	})
+
+	hits := 0
+	for i, pos := range positions {
+		if !bytes.Equal(lines[pos], sorted[i]) {
+			hits++
+		}
+		lines[pos] = sorted[i]
+	}
+
+	out := bytes.Join(lines, []byte("\n"))
+	if hadTrailingNewline {
+		out = append(out, '\n')
+	}
+	return out, hits
 }

@@ -15,7 +15,7 @@ func TestSanitizeControl(t *testing.T) {
 		{"strips OSC introducer, keeps printable payload", "file\x1b]0;pwned\x07.go", "file]0;pwned.go"},
 		{"strips embedded newline", "line1\nline2", "line1line2"},
 		{"strips tab and CR", "a\tb\rc", "abc"},
-		{"strips DEL", "a\x7fbc", "abc"},
+		{"strips DEL", "a\x7fb\u009bc", "abc"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

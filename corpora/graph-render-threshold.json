@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "purpose": "GRF-01's pass condition, locked before any measurement exists (D-01, D-10 safeguard 3). 05-04's measurement script reads every value here — corpus, bindingView, metrics, measurementProtocol including the five deadlines, and onFailure — rather than carrying its own defaults. Amending, widening or relaxing any value in this file after 05-04 measures against it is forbidden (T-05-01).",
+  "corpus": {
+    "repo": "google/guava",
+    "sha": "94f39958baf7ad51ddf9c70e406ed6b188194daa",
+    "note": "SHA copied verbatim from corpora/manifest.json, the sole pin authority. Largest of the eight locally indexed corpora at file-rollup scale: 3,233 file-level nodes and 21,554 distinct file-pair edges after D-03's contains/self-edge exclusion and D-08's package-pseudo-node exclusion. apache/arrow is not a candidate — corpora/selection.json records it rejected before measurement. Already fully indexed on this machine under ~/.cache/codegraph/corpora/ at the directory named for this SHA."
+  },
+  "bindingView": "The EXPANDED file level: every file node rendered, grouped inside directory compound parents — the default first paint GRF-02 describes. This is the harder bar and is what binds. The collapsed directory-level view guava also yields (about 134 top-level compound nodes and 819 directory-pair edges) is measured and recorded in recordedNonBinding.collapsedView but is explicitly NOT the binding number — a collapsed view would pass by construction on any renderer and make GRF-01 a formality, which D-02 forbids.",
+  "metrics": {
+    "timeToInteractiveMs": {
+      "max": 5000,
+      "definition": "Wall clock from the moment the /graph route issues its FileGraph request to the layout's layoutstop event, INCLUDING the rpc round trip, the protobuf decode and the wire-to-elements transform, taken as the median of three cold reloads (measurementProtocol.coldReloads). This is the WIDE boundary, confirmed deliberately over the narrower layout-only window: a developer waiting for the graph is waiting for the rpc, the decode, the transform and the layout together, and a bar that excluded three of those four would measure something the developer does not experience. The narrower layout.run()-to-layoutstop window is recorded separately, non-binding, as recordedNonBinding.layoutDurationMs."
+    },
+    "panZoomFrameTimeMs": {
+      "max": 33.3,
+      "definition": "Median inter-frame interval, in milliseconds, sampled from requestAnimationFrame during the scripted pan-and-zoom gesture that web/scripts/graph-measure.mjs pins. About thirty frames per second. The gesture script is named by path so the bar and the gesture that produces it stay locked together."
+    },
+    "panZoomFrameTimeP95Ms": {
+      "max": 100,
+      "definition": "The 95th percentile of the same requestAnimationFrame inter-frame-interval sample used for panZoomFrameTimeMs, collected over the same scripted pan-and-zoom gesture pinned by web/scripts/graph-measure.mjs."
+    },
+    "fileGraphResponseBytes": {
+      "max": 16777216,
+      "definition": "The serialized FileGraphResponse body length in bytes for the bindingView's expanded file-level rollup of this corpus, MEASURED against the existing 16 MiB transportSendMaxBytes ceiling in internal/uiserver/truncate.go — not asserted from a fixture. This bar exists because 05-RESEARCH.md estimated 5-6 MB and never measured it; an estimate presented as a measurement is exactly the failure GRF-01 exists to prevent. A measured byte count below this ceiling is required for a PASS."
+    }
+  },
+  "recordedNonBinding": {
+    "layoutDurationMs": {
+      "definition": "The narrower layout.run()-to-layoutstop window, recorded but NOT a bar, kept so the split between transport/decode cost and layout cost stays visible on a FAIL. Not renamed from timeToInteractiveMs because the bound metric keeps that name for the wide measurement — the rename was conditional on binding the narrow window, which was declined."
+    },
+    "frameSampleCount": {
+      "floor": 60,
+      "definition": "The number of inter-frame deltas the sampler collected during the scripted pan-and-zoom gesture. Not a bar itself — machine-checked with a floor of 60 by 05-04's verify command, because a percentile computed over four frames is not a percentile."
+    },
+    "collapsedView": {
+      "definition": "The collapsed directory-level rollup of the same corpus (top-level compound nodes only), measured and recorded for context but explicitly NOT the binding view — see bindingView.",
+      "approxNodes": 134,
+      "approxEdges": 819
+    }
+  },
+  "measurementProtocol": {
+    "viewportWidth": 1600,
+    "viewportHeight": 1000,
+    "deviceScaleFactor": 1,
+    "coldReloads": 3,
+    "coldReloadsNote": "Number of full page reloads whose time-to-interactive values are recorded; the MEDIAN of the three binds, and all three raw values are recorded.",
+    "warmupMs": 500,
+    "warmupNote": "Discarded after the layout stops and before frame sampling begins, so first-frame cost is not sampled as steady-state cost.",
+    "sampleDurationMs": 3000,
+    "panStepPx": 40,
+    "panSteps": 60,
+    "panNote": "A fixed pan path of sixty forty-pixel steps rather than an unspecified continuous drag.",
+    "zoomMin": 0.5,
+    "zoomMax": 2.0,
+    "zoomSteps": 20,
+    "zoomNote": "A fixed zoom sweep, not a free-hand one.",
+    "browserIdentityRecorded": true,
+    "browserIdentityNote": "The observation MUST carry the browser name and version the session actually used; a number without a browser identity is not reproducible.",
+    "launchTimeoutMs": 30000,
+    "launchTimeoutNote": "Deadline for the browser launch.",
+    "navigationTimeoutMs": 30000,
+    "navigationTimeoutNote": "Deadline for each one of the locked cold reloads.",
+    "seamReadyTimeoutMs": 60000,
+    "seamReadyTimeoutNote": "Deliberately TWELVE TIMES the timeToInteractiveMs bar (5000ms): a deadline set near the bar would convert a slow-but-finishing run into measurement-failed and lose the very number the gate wants recorded. A deadline exists to catch a hang, never to enforce a bar — the comparator enforces bars.",
+    "samplerTimeoutMs": 30000,
+    "samplerTimeoutNote": "The warm-up plus the frame-sampling window together are locked at 3,500ms (warmupMs 500 + sampleDurationMs 3000), so this deadline is roughly eight times the work it bounds.",
+    "sessionTimeoutMs": 600000,
+    "sessionTimeoutNote": "An outer whole-session BACKSTOP, not the mechanism. Locked strictly greater than launchTimeoutMs + coldReloads * (navigationTimeoutMs + seamReadyTimeoutMs) + samplerTimeoutMs = 30000 + 3*(30000+60000) + 30000 = 330000ms, so it can never fire first and mask which inner operation hung. An outer timeout that swallowed the inner ones would record 'the session timed out' instead of 'the seam never became ready', and the reason text is the whole value of the record."
+  },
+  "onFailure": "If any binding bar is missed, 05-04 records a FAIL verdict, HALTS the phase, and escalates to the maintainer with exactly two remedies: (a) make the collapsed directory view the default first paint with progressive expansion, which keeps Cytoscape and elk but changes GRF-02's default and forces a re-measure at the collapsed scale, or (b) reconsider the renderer and layout stack, which re-opens D-02, D-07 and D-04. Lowering, widening or re-scoping the threshold is NOT an available remedy and is forbidden by 05-01-PLAN.md's prohibitions.",
+  "lockedBy": "05-01-PLAN.md Task 1 (checkpoint:decision, gate=blocking-human), maintainer decision approve-as-proposed, 2026-08-30. All five sub-decisions in the task's action block were answered explicitly and affirmatively — see 05-01-SUMMARY.md for the verbatim record.",
+  "prohibitions": [
+    "MUST NOT amend, widen, or relax any value in this file after 05-04's measurement runs.",
+    "MUST NOT judge GRF-01 against any value not present in this committed artifact."
+  ]
+}

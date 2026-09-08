@@ -1,0 +1,347 @@
+package uiserver
+
+import (
+	"bytes"
+	"fmt"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
+	"github.com/seanb4t/codegraph-go/internal/query"
+)
+
+// TestCountLinesSemantics proves countLines' locked rule (D-11, the
+// checkpoint) for all five named cases: empty input, a lone newline, two
+// newline-terminated lines, two lines with an unterminated final line, and
+// content with no newline at all.
+func TestCountLinesSemantics(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want int
+	}{
+		{"empty", "", 0},
+		{"lone-newline", "\n", 1},
+		{"two-terminated-lines", "a\nb\n", 2},
+		{"two-lines-unterminated-final", "a\nb", 2},
+		{"no-newline-at-all", "abc", 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := countLines([]byte(c.in)); got != c.want {
+				t.Fatalf("countLines(%q) = %d, want %d", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// TestTruncateSourceUnderBothCaps proves a source under both the line cap
+// and the byte cap returns unchanged content, the truncated flag unset,
+// and totals equal to returned counts.
+func TestTruncateSourceUnderBothCaps(t *testing.T) {
+	src := []byte(strings.Repeat("line\n", 100))
+
+	got := truncateSource(src)
+	if got.Truncated {
+		t.Fatal("truncateSource: truncated = true, want false for a source under both caps")
+	}
+	if !bytes.Equal(got.Content, src) {
+		t.Fatalf("truncateSource: content changed for a source under both caps: got %d bytes, want %d bytes", len(got.Content), len(src))
+	}
+	if got.TotalLines != 100 || got.ReturnedLines != 100 {
+		t.Fatalf("truncateSource: total_lines=%d returned_lines=%d, want both 100", got.TotalLines, got.ReturnedLines)
+	}
+	if got.TotalBytes != len(src) || got.ReturnedBytes != len(src) {
+		t.Fatalf("truncateSource: total_bytes=%d returned_bytes=%d, want both %d", got.TotalBytes, got.ReturnedBytes, len(src))
+	}
+}
+
+// TestTruncateSourceExceedsLineCap proves a source exceeding sourceLineCap
+// returns exactly sourceLineCap lines, the truncated flag set, a total
+// equal to the real line count, and a returned count equal to
+// sourceLineCap.
+func TestTruncateSourceExceedsLineCap(t *testing.T) {
+	const extraLines = 50
+	realLines := sourceLineCap + extraLines
+	src := []byte(strings.Repeat("line\n", realLines))
+
+	got := truncateSource(src)
+	if !got.Truncated {
+		t.Fatal("truncateSource: truncated = false, want true for a source exceeding sourceLineCap")
+	}
+	if got.TotalLines != realLines {
+		t.Fatalf("truncateSource: total_lines = %d, want %d (the real line count)", got.TotalLines, realLines)
+	}
+	if got.ReturnedLines != sourceLineCap {
+		t.Fatalf("truncateSource: returned_lines = %d, want sourceLineCap (%d)", got.ReturnedLines, sourceLineCap)
+	}
+	if gotLines := countLines(got.Content); gotLines != sourceLineCap {
+		t.Fatalf("truncateSource: content actually has %d lines, want exactly sourceLineCap (%d)", gotLines, sourceLineCap)
+	}
+}
+
+// TestTruncateSourceExceedsByteCap proves a single-line source exceeding
+// sourceByteCap returns at most sourceByteCap bytes, the truncated flag
+// set, a total equal to the real byte length, and a returned byte count at
+// most sourceByteCap.
+func TestTruncateSourceExceedsByteCap(t *testing.T) {
+	const extraBytes = 10
+	src := []byte(strings.Repeat("a", sourceByteCap+extraBytes))
+
+	got := truncateSource(src)
+	if !got.Truncated {
+		t.Fatal("truncateSource: truncated = false, want true for a source exceeding sourceByteCap")
+	}
+	if got.TotalBytes != len(src) {
+		t.Fatalf("truncateSource: total_bytes = %d, want %d (the real byte length)", got.TotalBytes, len(src))
+	}
+	if got.ReturnedBytes > sourceByteCap {
+		t.Fatalf("truncateSource: returned_bytes = %d, want at most sourceByteCap (%d)", got.ReturnedBytes, sourceByteCap)
+	}
+	if len(got.Content) > sourceByteCap {
+		t.Fatalf("truncateSource: content is %d bytes, want at most sourceByteCap (%d)", len(got.Content), sourceByteCap)
+	}
+}
+
+// TestTruncateSourceLineCapBoundary asserts the line-cap boundary is
+// INCLUSIVE, at both edges: exactly sourceLineCap lines is not truncated,
+// and one line more sets the truncated flag.
+func TestTruncateSourceLineCapBoundary(t *testing.T) {
+	t.Run("exactly-at-cap-not-truncated", func(t *testing.T) {
+		src := []byte(strings.Repeat("line\n", sourceLineCap))
+
+		got := truncateSource(src)
+		if got.Truncated {
+			t.Fatal("truncateSource: truncated = true at exactly sourceLineCap lines, want false (boundary is inclusive)")
+		}
+		if got.TotalLines != sourceLineCap || got.ReturnedLines != sourceLineCap {
+			t.Fatalf("truncateSource: total_lines=%d returned_lines=%d, want both sourceLineCap (%d)", got.TotalLines, got.ReturnedLines, sourceLineCap)
+		}
+	})
+
+	t.Run("one-line-over-truncated", func(t *testing.T) {
+		src := []byte(strings.Repeat("line\n", sourceLineCap+1))
+
+		got := truncateSource(src)
+		if !got.Truncated {
+			t.Fatal("truncateSource: truncated = false at sourceLineCap+1 lines, want true")
+		}
+		if got.ReturnedLines != sourceLineCap {
+			t.Fatalf("truncateSource: returned_lines = %d, want sourceLineCap (%d)", got.ReturnedLines, sourceLineCap)
+		}
+	})
+}
+
+// TestTruncateSourceNeverSplitsARune builds its input from a repeated
+// multi-byte rune so a byte-naive cut would land mid-rune if it were going
+// to, mirroring internal/mcp/session_line_test.go's
+// TestSanitizeClientFieldTruncatesOnRuneBoundary shape: a length assertion
+// plus a UTF-8 validity assertion.
+func TestTruncateSourceNeverSplitsARune(t *testing.T) {
+	// "中" is 3 bytes wide; repeated enough times to exceed sourceByteCap
+	// without landing on an exact multiple of 3 relative to the cap,
+	// which is exactly the condition that exposes a byte-naive cut.
+	runeCount := sourceByteCap/3 + 100
+	src := []byte(strings.Repeat("中", runeCount))
+
+	got := truncateSource(src)
+	if len(got.Content) > sourceByteCap {
+		t.Fatalf("truncateSource: content is %d bytes, want at most sourceByteCap (%d)", len(got.Content), sourceByteCap)
+	}
+	if !utf8.Valid(got.Content) {
+		t.Fatalf("truncateSource: content is not valid UTF-8 — truncation split a rune: %q", got.Content)
+	}
+}
+
+// TestTruncateSourceEmptyInput proves an empty source is not an error and
+// not a truncation: zero-length content, the truncated flag unset, and
+// all four counts zero.
+func TestTruncateSourceEmptyInput(t *testing.T) {
+	got := truncateSource(nil)
+	if len(got.Content) != 0 {
+		t.Fatalf("truncateSource(nil): content has length %d, want 0", len(got.Content))
+	}
+	if got.Truncated {
+		t.Fatal("truncateSource(nil): truncated = true, want false")
+	}
+	if got.TotalLines != 0 || got.TotalBytes != 0 || got.ReturnedLines != 0 || got.ReturnedBytes != 0 {
+		t.Fatalf("truncateSource(nil): counts = %+v, want all zero", got)
+	}
+}
+
+// TestTruncateSourceTotalsAreExact asserts the line and byte totals equal
+// the untruncated input's real counts, computed independently in this
+// test, for both a truncated and an untruncated input.
+func TestTruncateSourceTotalsAreExact(t *testing.T) {
+	t.Run("untruncated", func(t *testing.T) {
+		src := []byte("alpha\nbeta\ngamma\n")
+		wantLines := strings.Count(string(src), "\n")
+		wantBytes := len(src)
+
+		got := truncateSource(src)
+		if got.TotalLines != wantLines {
+			t.Fatalf("truncateSource: total_lines = %d, want %d (independently counted)", got.TotalLines, wantLines)
+		}
+		if got.TotalBytes != wantBytes {
+			t.Fatalf("truncateSource: total_bytes = %d, want %d (independently counted)", got.TotalBytes, wantBytes)
+		}
+	})
+
+	t.Run("truncated", func(t *testing.T) {
+		const extraLines = 25
+		realLines := sourceLineCap + extraLines
+		src := []byte(strings.Repeat("line\n", realLines))
+		wantBytes := len(src)
+
+		got := truncateSource(src)
+		if !got.Truncated {
+			t.Fatal("test fixture assumption broken: expected this input to be truncated")
+		}
+		if got.TotalLines != realLines {
+			t.Fatalf("truncateSource: total_lines = %d, want %d (independently computed, unaffected by truncation)", got.TotalLines, realLines)
+		}
+		if got.TotalBytes != wantBytes {
+			t.Fatalf("truncateSource: total_bytes = %d, want %d (independently computed, unaffected by truncation)", got.TotalBytes, wantBytes)
+		}
+	})
+}
+
+// TestTransportBackstopSitsAboveApplicationCap asserts the D-13 ordering
+// directly, so a later edit cannot silently invert it: the transport
+// backstop must sit strictly above the application byte cap, or correct
+// truncation would surface to the user as a resource_exhausted error.
+func TestTransportBackstopSitsAboveApplicationCap(t *testing.T) {
+	if transportSendMaxBytes <= sourceByteCap {
+		t.Fatalf("transportSendMaxBytes (%d) is not strictly greater than sourceByteCap (%d) — a correctly-truncated response could be rejected as resource_exhausted", transportSendMaxBytes, sourceByteCap)
+	}
+}
+
+// TestTransportBackstopSitsAboveEveryAggregate extends the single-blob
+// ordering above to the two MULTI-blob aggregates this service can put on
+// one wire message (CR-01). The single-blob inequality alone is not
+// sufficient: a response carrying many correctly-capped blobs can exceed
+// transportSendMaxBytes while every individual blob is under
+// sourceByteCap and every `truncated` flag is false — the exact failure
+// RPC-05's two-layer design exists to prevent, and one no single-blob
+// assertion can see.
+//
+// Both aggregates are asserted by name so raising either per-response cap
+// (uiMultiDefCap, uiExploreSourceGroupCap) or lowering the backstop fails
+// here rather than in production.
+func TestTransportBackstopSitsAboveEveryAggregate(t *testing.T) {
+	cases := []struct {
+		name      string
+		groupCap  int
+		aggregate int
+	}{
+		{"node-detail-multi-def", uiMultiDefCap, uiMultiDefCap * sourceByteCap},
+		{"explore-groups", uiExploreSourceGroupCap, uiExploreSourceGroupCap * sourceByteCap},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.groupCap <= 0 {
+				t.Fatalf("%s: per-response blob cap is %d — an unbounded or absent cap leaves the aggregate unbounded", tc.name, tc.groupCap)
+			}
+			if transportSendMaxBytes <= tc.aggregate {
+				t.Fatalf("%s: aggregate worst case %d bytes (%d blobs x sourceByteCap %d) is not strictly below transportSendMaxBytes (%d) — a response whose every blob is correctly under the application cap could still be rejected as resource_exhausted", tc.name, tc.aggregate, tc.groupCap, sourceByteCap, transportSendMaxBytes)
+			}
+		})
+	}
+}
+
+// TestExploreGroupsBoundTheirAggregateSourceBudget proves the CR-01 fix
+// behaviorally at the mapper, not merely as an inequality between
+// constants: given more groups than uiExploreSourceGroupCap, EVERY group
+// is still mapped (the file list stays complete), the first
+// uiExploreSourceGroupCap carry their own source blob, and every group
+// past the cap carries an UNSET source.
+//
+// The assertions are positive on both sides of the boundary — a mapped
+// group count, a populated blob whose content is the group's own source,
+// and an unset blob past the cap — so removing the cap turns this RED
+// (every group would carry source) rather than passing vacuously.
+func TestExploreGroupsBoundTheirAggregateSourceBudget(t *testing.T) {
+	const extraGroups = 8
+	total := uiExploreSourceGroupCap + extraGroups
+
+	groups := make([]query.ExploreFileGroup, total)
+	sources := make(map[string][]byte, total)
+	for i := range groups {
+		path := fmt.Sprintf("pkg/file%03d.go", i)
+		groups[i] = query.ExploreFileGroup{Path: path}
+		sources[path] = []byte(fmt.Sprintf("package pkg // %d\n", i))
+	}
+
+	out := exploreGroupsToProto(groups, map[string]bool{}, sources)
+
+	if len(out) != total {
+		t.Fatalf("exploreGroupsToProto returned %d groups, want all %d — the cap bounds the SOURCE attachment, never the group list", len(out), total)
+	}
+	for i, g := range out {
+		if g.GetPath() != groups[i].Path {
+			t.Fatalf("group[%d]: path = %q, want %q (order must be preserved)", i, g.GetPath(), groups[i].Path)
+		}
+		if i < uiExploreSourceGroupCap {
+			src := g.Source
+			if src == nil {
+				t.Fatalf("group[%d] (under uiExploreSourceGroupCap %d): source is UNSET, want the group's own blob", i, uiExploreSourceGroupCap)
+			}
+			if !bytes.Equal(src.GetContent(), sources[groups[i].Path]) {
+				t.Fatalf("group[%d]: source content = %q, want %q (looked up by the group's own path)", i, src.GetContent(), sources[groups[i].Path])
+			}
+			continue
+		}
+		if g.Source != nil {
+			t.Fatalf("group[%d] (at or past uiExploreSourceGroupCap %d): source = %v, want UNSET — the aggregate blob budget is unbounded without this cap", i, uiExploreSourceGroupCap, g.Source)
+		}
+	}
+}
+
+// TestExploreGroupDistinguishesAMissingSourceFromAnEmptyFile proves
+// WR-07's fix: a group whose path is absent from the Sources map carries
+// an UNSET source, while a group whose path maps to a genuinely empty
+// file carries a POPULATED, zero-valued blob. Before the fix both
+// rendered as the same wire value — truncateSource(nil) and
+// truncateSource([]byte{}) are identical — so a client had no way to
+// tell "source unavailable" from "file is empty".
+//
+// The empty-file half is the assertion that keeps this honest: a fix that
+// simply dropped every zero-length blob would satisfy the miss case and
+// fail here.
+func TestExploreGroupDistinguishesAMissingSourceFromAnEmptyFile(t *testing.T) {
+	groups := []query.ExploreFileGroup{
+		{Path: "pkg/present.go"},
+		{Path: "pkg/empty.go"},
+		{Path: "pkg/missing.go"},
+	}
+	sources := map[string][]byte{
+		"pkg/present.go": []byte("package pkg\n"),
+		"pkg/empty.go":   {},
+		// pkg/missing.go is deliberately absent.
+	}
+
+	out := exploreGroupsToProto(groups, map[string]bool{}, sources)
+	if len(out) != len(groups) {
+		t.Fatalf("exploreGroupsToProto returned %d groups, want %d", len(out), len(groups))
+	}
+
+	present := out[0]
+	if present.Source == nil {
+		t.Fatal("group with a real source: source is UNSET, want a populated blob")
+	}
+	if !bytes.Equal(present.Source.GetContent(), sources["pkg/present.go"]) {
+		t.Fatalf("group with a real source: content = %q, want %q", present.Source.GetContent(), sources["pkg/present.go"])
+	}
+
+	empty := out[1]
+	if empty.Source == nil {
+		t.Fatal("group whose file is genuinely EMPTY: source is UNSET, want a populated zero-valued blob — an empty file is a known, readable source, not a missing one")
+	}
+	if len(empty.Source.GetContent()) != 0 || empty.Source.GetTotalBytes() != 0 || empty.Source.GetTruncated() {
+		t.Fatalf("group whose file is empty: source = %v, want an empty, non-truncated, zero-total blob", empty.Source)
+	}
+
+	if missing := out[2]; missing.Source != nil {
+		t.Fatalf("group ABSENT from the Sources map: source = %v, want UNSET — an unchecked map read renders it identically to the empty file above", missing.Source)
+	}
+}

@@ -1,0 +1,99 @@
+# enabled-linters: 5
+# This repository's first formatting + idiomatic-Go gate (folded into two
+# prior phases and implemented in neither — see
+# .planning/todos/completed/2026-08-10-add-golangci-lint-with-gofmt-and-idiomatic-go-linters.md).
+#
+# The `# enabled-linters: N` line above is machine-read by 03-10-PLAN.md
+# Task 2's <verify> block, which proves this file byte-unchanged before
+# judging the backlog-clearing gate green. N counts every entry across
+# BOTH linters.enable and formatters.enable below (4 + 1 = 5) — it does
+# NOT count exclusion presets or issues: knobs, which shape HOW the five
+# report, not WHICH five run. If you change the enabled set, changing N
+# here is the visible act that says so.
+#
+# ENABLED, with reasons (todo's own four categories, verbatim):
+#   errcheck    — "unused-result checking": flags ignored/unchecked error
+#                 returns, the todo's own named category.
+#   ineffassign — "ineffectual assignments": the todo's own named category,
+#                 flags a value assigned and never used before being
+#                 overwritten.
+#   staticcheck — "static analysis": the todo's own named category. In the
+#                 v2 config schema this single entry absorbs what used to
+#                 be three separate v1 linters (staticcheck, gosimple,
+#                 stylecheck).
+#   unused      — "unused identifiers": the todo's own named category,
+#                 flags unused constants/variables/functions/types.
+#   gofmt (formatter) — the formatting check this repository has never had
+#                 anywhere (the todo's primary complaint). Plain gofmt was
+#                 chosen over the stricter gofumpt superset: gofmt is the
+#                 ecosystem's own idiomatic formatter, distributed with the
+#                 Go toolchain itself, versus gofumpt's third-party, more
+#                 opinionated rule set. Landing the FIRST formatting gate
+#                 this repository has ever had is itself the win; gofumpt's
+#                 stricter rules can be layered on later as a separate,
+#                 deliberate ratchet rather than bundled into this first
+#                 landing (which already carries an 8-file backlog under
+#                 plain gofmt, 23 under gofumpt).
+#
+# CONSIDERED AND LEFT OFF, with reasons:
+#   govet   — golangci-lint's "standard" default group includes govet
+#             alongside these four, but this repository already runs
+#             `go vet ./...` directly as its own Taskfile `vet` target
+#             (unconditional, in CI). Enabling govet here too would be a
+#             second, redundant invocation of largely the same checks
+#             through a different entry point — left off to keep the two
+#             gates non-overlapping rather than duplicated.
+#   revive  — the todo names it as an example of the "idiomatic set", but
+#             it is a style-opinion linter with a large, team-tunable rule
+#             set of its own; enabling it with defaults on a repository
+#             that has never run ANY idiomatic linter risks a backlog far
+#             larger than the measured formatting backlog this plan
+#             already budgets for, and picking its rule subset is exactly
+#             the kind of "maintainer-visible choice" this file's own
+#             comment insists on recording deliberately rather than
+#             enabling wholesale. Left for a future, dedicated pass.
+#   gofumpt — the stricter formatting superset; see the gofmt reasoning
+#             above for why plain gofmt was chosen for this first landing.
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - ineffassign
+    - staticcheck
+    - unused
+  exclusions:
+    # std-error-handling is golangci-lint's own documented, maintained
+    # preset for errcheck's most common non-actionable pattern: ignoring
+    # the error from a deferred Close/Flush, an fmt.Print*/Fprint* write,
+    # or os.Remove(All)/os.Setenv. This was v1's DEFAULT-ON behavior
+    # (issues.exclude-use-default defaulted to true); v2 made presets
+    # opt-in, so it must be named explicitly to get v1's own long-standing
+    # default scope back. This is NOT the "narrow the linter set to fit
+    # the backlog" the plan prohibits — it is the ecosystem's own
+    # documented, maintained convention for errcheck (CLAUDE.md: "prefer
+    # idiomatic — the ecosystem's standard, conventional tool or
+    # pattern"), applied identically regardless of how large or small the
+    # remaining backlog turned out to be. Measured effect: 50 -> 19
+    # errcheck findings; every one of the remaining 19 was fixed by hand
+    # in Task 2, not suppressed.
+    presets:
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
+
+# Both knobs below default to non-zero caps (max-issues-per-linter: 50,
+# max-same-issues: 3) that SILENTLY DROP issues beyond the cap — a
+# hard-to-notice way for this exact gate to become the "reports N of the
+# real backlog and calls it clean" defect T-03-36 in 03-10-PLAN.md's
+# threat register names by name. Measured live: with the defaults, gofmt
+# under-reported 3 of the real 8-file backlog (max-same-issues truncated
+# identical "File is not properly formatted" text) and staticcheck/
+# errcheck likewise truncated. Set to 0 (unlimited) so the gate can never
+# silently under-report regardless of how large a future backlog grows.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

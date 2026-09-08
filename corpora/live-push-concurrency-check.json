@@ -1,0 +1,80 @@
+{
+  "flushesAttempted": 5,
+  "flushesCompleted": 5,
+  "flushesStarved": 0,
+  "starvationEvidence": [],
+  "flushDurationsMs": [
+    254,
+    252,
+    247,
+    309,
+    260
+  ],
+  "maxFlushDurationMs": 309,
+  "baselineMaxFlushDurationMs": 261,
+  "flushTimeoutMs": 5000,
+  "debounceExcludedMs": 100,
+  "rawWriteToQueryableMs": [
+    354,
+    352,
+    347,
+    409,
+    360
+  ],
+  "flushMarkerTokens": [
+    {
+      "token": "LivePushFlushconc1_1788812702167_27992",
+      "queryable": true
+    },
+    {
+      "token": "LivePushFlushconc2_1788812705111_30888",
+      "queryable": true
+    },
+    {
+      "token": "LivePushFlushconc3_1788812708043_13645",
+      "queryable": true
+    },
+    {
+      "token": "LivePushFlushconc4_1788812710974_17402",
+      "queryable": true
+    },
+    {
+      "token": "LivePushFlushconc5_1788812713989_16265",
+      "queryable": true
+    }
+  ],
+  "liveEventsReceived": 6,
+  "liveEventsExcludingSeed": 5,
+  "sessionHeldSeconds": 22,
+  "mcpAliveAfterRun": true,
+  "mcpToolCallResponse": "**CodeGraph Status**\n\n**Files indexed:** 11\n**Total nodes:** 22\n**Total edges:** 11\n**Database size:** 0.01 MB\n**Backend:** pebble\n\n**Nodes by Kind:**\n- file: 11\n- function: 11\n\n**Edges by Kind:**\n- contains: 11\n\n**Languages:**\n- go: 11\n\nIndex is up to date.",
+  "daemonAliveAfterRun": true,
+  "uiAliveAfterRun": true,
+  "processes": [
+    {
+      "name": "codegraph daemon start",
+      "role": "product",
+      "pid": 97777,
+      "aliveAtEnd": true
+    },
+    {
+      "name": "codegraph serve --mcp",
+      "role": "product",
+      "pid": 98853,
+      "aliveAtEnd": true
+    },
+    {
+      "name": "codegraph ui",
+      "role": "product",
+      "pid": 98835,
+      "aliveAtEnd": true
+    },
+    {
+      "name": "live-push-probe stream",
+      "role": "harness",
+      "pid": 98843,
+      "aliveAtEnd": false
+    }
+  ],
+  "success": true
+}

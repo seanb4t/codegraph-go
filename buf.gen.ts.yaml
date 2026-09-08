@@ -1,0 +1,65 @@
+# buf.gen.ts.yaml drives the TypeScript half of `task proto:gen` (RPC-01,
+# BLD-04, D-05/D-06/D-07). This is a SECOND, deliberately separate buf
+# template from buf.gen.yaml — buf v2 applies every plugin in one
+# buf.gen.yaml's `plugins:` list to the SAME resolved input set, and this
+# repo's single buf module (buf.yaml) contains TWO protos:
+# internal/schema/graph.proto (the on-disk storage schema, no browser use)
+# and internal/uiproto/uiv1/ui.proto (the wire schema the browser needs).
+# protoc-gen-es must never see internal/schema/graph.proto — the
+# module-wide buf.gen.yaml stays Go-only and is NOT modified by this file
+# (D-07).
+#
+# SCOPING MECHANISM — empirically decided, NOT the `inputs: directory:`
+# override RESEARCH.md's Pattern 1 recommended as primary. That mechanism
+# was tried first and FAILS in this repo, identically whether invoked from
+# the main checkout or from a linked git worktree under .claude/worktrees/:
+#
+#   Failure: failed to build input "internal/uiproto/uiv1" because it is
+#   contained by module at path "." specified in your configuration, you
+#   must provide the workspace or module as the input, and filter to this
+#   path using --path
+#
+# buf.yaml already declares a module at "." covering the whole repo tree
+# (including internal/uiproto/uiv1), and buf v1.72.0 refuses to also treat
+# a subdirectory of an already-configured module as an independent
+# `inputs: directory:` input — this is a real behavioral constraint, not a
+# worktree-path-resolution bug (RESEARCH.md's Pitfall citation for
+# `inputs: directory:` predates observing this repo's actual buf.yaml
+# shape). See 02-03-SUMMARY.md for both captured transcripts (main
+# checkout and worktree, byte-identical error).
+#
+# ADOPTED MECHANISM: RESEARCH.md's documented Alternatives-Considered
+# fallback — `buf generate --template buf.gen.ts.yaml --path
+# internal/uiproto/uiv1/ui.proto`, resolving through buf.yaml's default
+# module (no `inputs:` override here at all). This still keeps
+# protoc-gen-es scoped to ui.proto alone (graph.proto is never passed to
+# this template), it just does so via a CLI flag at the call site
+# (Taskfile.yml's proto:gen and proto:drift) rather than a template-level
+# `inputs:` block.
+#
+# CONSEQUENCE for `out:` below — protoc-gen-es has no `paths=source_relative`
+# equivalent (verified against its own bundled README: only `target`,
+# `import_extension`, `js_import_style`, and a handful of unrelated
+# options exist). With the whole module as buf's resolved input root,
+# protoc-gen-es names its output ui_pb.ts's directory after ui.proto's
+# path RELATIVE TO THE MODULE ROOT — i.e. this template alone produces
+# web/src/lib/gen/internal/uiproto/uiv1/ui_pb.ts, not
+# web/src/lib/gen/ui_pb.ts. Taskfile.yml's proto:gen/proto:drift relocate
+# the single emitted file to the exact committed path
+# (web/src/lib/gen/ui_pb.ts) and remove the now-empty intermediate
+# directories immediately after each `buf generate` call — this is a
+# necessary companion step to this template, not optional cleanup.
+#
+# `opt: target=ts` is MANDATORY, not cosmetic: protoc-gen-es's own default
+# target is "js+dts", which emits TWO files per input proto (ui_pb.js +
+# ui_pb.d.ts) instead of one readable ui_pb.ts. Omitting this option would
+# both ship unreadable generated output and silently invalidate
+# task proto:drift's floor of 4 (RESEARCH.md Pitfall 3) — the floor is
+# correct only because target=ts makes protoc-gen-es emit exactly one
+# file.
+version: v2
+plugins:
+  - local: protoc-gen-es
+    out: web/src/lib/gen
+    opt:
+      - target=ts

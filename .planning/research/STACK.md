@@ -1,198 +1,172 @@
 # Stack Research
 
-**Domain:** Agent-onboarding skill/plugin + MCP Resources capability + enforcement hooks, for an existing Go MCP server/CLI (codegraph-go)
-**Researched:** 2026-08-12
-**Confidence:** MEDIUM (official docs for Claude Code/MCP spec/go-sdk are current and cross-checked; per-agent hook/skill claims for the 4 non-Claude roster members are single-search-pass and should be spot-checked against their live docs before the skill ships, especially Antigravity/Kiro which have moved fast in 2026)
+**Domain:** Local, read-only, browser-based graph UI added to an existing mature Go CLI/MCP binary (codegraph-go v0.12.0 "Local Graph UI")
+**Researched:** 2026-08-22 (revised 2026-08-22 — package manager corrected to `pnpm` per maintainer constraint)
+**Confidence:** HIGH (all versions verified against GitHub Releases API / npm registry / pkg.go.dev / official docs on 2026-08-22, not recalled from training data)
 
-This milestone adds **no new Go module dependencies**. Everything needed already exists in the repo's `go.mod` (`modelcontextprotocol/go-sdk@v1.7.0`) or is plain-text authoring (SKILL.md, hooks.json, shell scripts) that `codegraph install` writes to disk, exactly like it already writes the `<!-- CODEGRAPH_START -->` marker block. This file is about *format/schema*, not packages.
+This file researches only the NEW additions for v0.12.0. The wire protocol (ConnectRPC), frontend framework (Svelte + shadcn-svelte), and the committed-assets/`go:embed` distribution model are maintainer directives, not open questions — this research covers their current versions, exact integration mechanics, and the reproducible-build implications of each addition, plus the one genuinely open question (graph-rendering library).
+
+**Package manager is `pnpm`, not `npm`** — a hard project constraint, verified live rather than assumed throughout this revision (see pnpm-specific mechanics below).
 
 ## Recommended Stack
 
-### Core Technologies (already in the repo — no version bump needed)
+### Core Technologies
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `github.com/modelcontextprotocol/go-sdk` | v1.7.0 (pinned, current in `go.mod`) | MCP Resources capability (`resources/list`/`resources/read`) | `(*mcp.Server).AddResource` / `AddResourceTemplate` are stable, documented API on the exact version this repo already runs — SPEC-05's `AddTool`/`RemoveTools` re-check pattern in `internal/mcp/server.go` extends directly to `AddResource`/`RemoveResources` with no new import |
-| Claude Code Agent Skills format (SKILL.md + YAML frontmatter) | current as of v2.1.21x-era docs (verify `claude --version` at ship time) | Teaches WHEN/HOW to use codegraph's tools | This is the format the milestone goal names explicitly, and — new finding this pass — is also the **same open standard** (agentskills.io) Cursor, Codex CLI, and Antigravity now read natively. One SKILL.md authored once is NOT Claude-Code-only |
-| Claude Code plugin `hooks/hooks.json` | current schema (`SessionStart`/`PreToolUse`/`UserPromptSubmit` events) | SessionStart nudge + PreToolUse/UserPromptSubmit guard toward `codegraph_explore` | Matches the milestone's named events exactly; `command`-type hooks are plain shell scripts, no runtime to bundle |
+| `connectrpc.com/connect` (connect-go) | v1.20.0 (released 2026-05-20) | Server-side RPC framework, mounts on `net/http` | Directed by maintainer. Verified: its entire module has **two** direct dependencies — `github.com/google/go-cmp v0.7.0` (test-only) and `google.golang.org/protobuf v1.36.11`. The latter is **already** a direct dependency of this repo (pinned at the exact same `v1.36.11`), so connect-go adds effectively **one new production dependency** to `go.mod`. Contrast with `grpc-go`, which pulls its own HTTP/2 transport stack, `golang.org/x/net`, credentials machinery, and a much larger surface — this is the "much smaller supply-chain surface than gRPC" claim from `PROJECT.md`, now verified rather than asserted. Requires Go 1.25.0+ per connect-go's own `go.mod` (this repo is on 1.26.5 — no gap). |
+| `connectrpc.com/connect/cmd/protoc-gen-connect-go` | ships from the same `connectrpc.com/connect` module/tag (v1.20.0) | Go codegen plugin (`.proto` → `*connect.go`) | Same module as the server library — no separate version to track. Installable as a **Go tool dependency** (`go get -tool`) rather than a standalone binary download; see Build Tooling below. |
+| `@connectrpc/connect` (connect-es core) | v2.1.2 (released 2026-06-12) | Client runtime, transport abstraction, generated-client base | Directed by maintainer. Version-locked release train with `@connectrpc/connect-web`. |
+| `@connectrpc/connect-web` | v2.1.2 | Browser transport (`createConnectTransport`, fetch-based) | The actual in-browser HTTP client. Confirmed: it wraps the `fetch()` API. **Server-streaming works over plain HTTP/1.1** — the Connect wire protocol (not gRPC-Web) uses `application/connect+proto` or `+json` content-type with length-prefixed message envelopes streamed over a normal chunked HTTP response body; connectrpc.com's own protocol docs state "server streaming... support[s] HTTP/1.1" (only bidi-streaming needs HTTP/2). This is exactly why ConnectRPC — not gRPC — was the right call for a loopback-bound, no-TLS, no-h2c local server carrying live push. Client-streaming and bidi-streaming are **not** available from `fetch()` (the browser can't stream a request body) — irrelevant here since the only streaming direction needed is server→browser watcher events. |
+| `@bufbuild/protobuf` | v2.14.0 | Generated TS message runtime (Protobuf-ES) | Companion runtime `connect-es`'s generated code depends on. Protobuf-ES v2 is a from-scratch, fully conformance-tested rewrite (not a wrapper around `protobufjs`), MIT-equivalent-style license, actively released. |
+| `@bufbuild/protoc-gen-es` | v2.13.0 | TS codegen plugin (`.proto` → message types) | Emits Protobuf-ES v2 message schemas consumed by connect-es generated clients. |
+| `@connectrpc/protoc-gen-connect-es` | tracks connect-es release train (v2.x) | TS codegen plugin (`.proto` → typed Connect client stubs) | Generates the `createClient(ServiceName, transport)`-ready service definitions the Svelte app imports directly. |
+| `github.com/bufbuild/buf` (buf CLI) | v1.72.0 (released 2026-07-17) | `.proto` linting + codegen orchestration (`buf generate`) | Standard toolchain for this stack — normalizes plugin invocation (local, remote-BSR, or `go tool`) behind one `buf.gen.yaml`, and `buf lint`/`buf breaking` are available for free if ever needed. **Do not** install buf via `go install`/`tools.go`/Go-tool directive — buf's own docs explicitly warn this resolves buf's dependencies against the *host project's* `go.mod`, causing version incompatibilities. Pin it as a `pnpm` devDependency instead (see Build Tooling) since a Node/pnpm toolchain already exists for the frontend build. |
+| `pnpm` | v11.22.0 (released 2026-08-15) | Package manager for the entire frontend/codegen toolchain | **Project constraint, not a choice.** Verified live against GitHub Releases API. Pin the exact version via Corepack's `packageManager` field in `package.json` (`"packageManager": "pnpm@11.22.0"`) rather than a loose floor — Corepack (shipped with Node 16.9+) reads this field and transparently fetches/uses that exact pnpm binary for every contributor and every CI runner, so "which pnpm" is never ambient-environment-dependent. This is the pnpm-side analogue of this repo's existing `go.mod`/`go.sum` pinning discipline — same property, different ecosystem. |
+| Svelte | v5.56.10 (released 2026-08-20) | UI component framework | Maintainer directive. Svelte 5's runes API (`$state`, `$derived`, `$effect`) is the current stable idiom — this is well past the 5.0 boundary, not an early-adopter risk. `engines.node: >=18` declared in the package; Node 20+ is the de facto recommended floor across the Svelte 5 ecosystem (SvelteKit tooling, `bits-ui`, etc. increasingly assume it). |
+| Vite | v8.2.2 | Dev server + production bundler | The de facto standard Svelte build tool. Vite 8 (current major as of this research) uses Rolldown (Rust-based) as its bundler core internally — faster cold builds, same plugin API surface for `@sveltejs/vite-plugin-svelte`. `engines.node: ^20.19.0 \|\| >=22.12.0`. **Confirmed to work under pnpm's default symlinked/strict `node_modules` layout** — Vite has had native pnpm support since its early versions specifically because its dependency pre-bundling (`optimizeDeps`) resolves through symlinks correctly; pnpm's own FAQ documents this as a supported, common combination, and Vite 8's stricter dependency resolution is reported (community sources) to work *more* reliably under pnpm's non-phantom-dependency model, not less — pnpm's strictness surfaces broken packages that quietly worked under npm's hoisting, it doesn't introduce new breakage in Vite itself. |
+| `shadcn-svelte` | v1.5.0 | Component scaffolding CLI (`shadcn-svelte add <component>`) — NOT a runtime dependency | Maintainer directive. It is a **code generator**, not an installed library: running its CLI copies component source (Svelte + Tailwind classes) directly into `src/lib/components/ui/`, which you then own and commit. Nothing about `shadcn-svelte` itself ships in the built bundle — only the components it wrote into your tree do (which depend on `bits-ui` for accessible primitives). `peerDependencies: svelte ^5.0.0`. **pnpm is explicitly a first-class supported package manager in shadcn-svelte's own docs** (`pnpm dlx shadcn-svelte@latest init` / `add` are the documented commands, alongside npm/yarn/bun) — this is not an npm-only tool retrofitted for pnpm, and there is no known pnpm-specific breakage: the CLI's own dependency resolution is a normal registry install (unaffected by strict `node_modules`, since the CLI doesn't rely on phantom/undeclared dependencies), and its output is inert source files, not a runtime module-resolution concern. |
+| `bits-ui` | v2.19.0 | Headless accessible component primitives shadcn-svelte's generated components are built on | Transitive dependency pulled in by shadcn-svelte-generated component code, not chosen directly. `peerDependencies: svelte ^5.33.0`. MIT. |
+| Tailwind CSS | v4.x | Utility CSS, shadcn-svelte's styling layer | shadcn-svelte's current docs assume Tailwind v4 as the baseline (a dedicated "Migration > Tailwind v4" doc exists precisely because v3→v4 was a real breaking jump). Don't scaffold against Tailwind v3 docs found in older tutorials. |
 
-### Format-only additions (no library — files `codegraph install` writes)
+### Supporting Libraries — Graph Rendering (the one open decision)
 
-| Artifact | Location convention | Purpose | Why this shape |
-|----------|---------------------|---------|-----------------|
-| `SKILL.md` | `skills/codegraph/SKILL.md` (plugin) or `~/.claude/skills/codegraph/SKILL.md` (standalone fallback) | Decision-procedure-first tool guidance | Frontmatter `name`+`description` only (~100 tokens, always in context); body under ~1,500-2,000 words, decision table + 2-3 worked examples first, tool-by-tool catalog last or moved to a resource |
-| `hooks/hooks.json` | plugin root | SessionStart nudge, PreToolUse/UserPromptSubmit guard | `{"description": "...", "hooks": {"SessionStart": [...], "UserPromptSubmit": [...]}}` — plugin wrapper form, not the bare `settings.json` direct form |
-| `.claude-plugin/plugin.json` | plugin root's `.claude-plugin/` subdir ONLY | Plugin manifest (name/description/version/author) | Required if distributing as an installable plugin rather than a standalone `.claude/skills/` copy; unlocks `/codegraph:*` namespacing and `/plugin marketplace` distribution |
-| MCP `resources/list` + `resources/read` handlers | `internal/mcp/resources.go` (new file, same package) | Detailed reference content the skill points to instead of embedding (tool-by-tool docs, `CODEGRAPH_MCP_TOOLS` semantics, index-state preconditions) | Keeps SKILL.md lean; content lives server-side so it can be derived/tested (guarding the "never hand-type numbers into prose" requirement) rather than baked into two separate static text blobs |
+**Scale target from the milestone:** file/package-level rollup graph, hundreds to low-thousands of nodes, aggregated dependency edges — explicitly **not** a whole-symbol graph. This scale number is the entire basis for the recommendation below; it would flip for a future whole-symbol view.
 
-## MCP Resources — go-sdk v1.7.0 API surface
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `cytoscape` (Cytoscape.js) | v3.34.1 (released 2026-08-11) | Graph rendering + interaction + built-in graph algorithms | **Primary recommendation.** Canvas-based (default renderer; WebGL exists as an explicit opt-in constructor flag, still an additive/experimental layer, not the default path) — comfortably handles the low-thousands-of-elements range this milestone targets; official performance guidance flags degradation starting around ~3,000–5,000 elements on default settings, which is at or beyond this milestone's "low-thousands of files" ceiling, not below it. Its real advantage here isn't raw node-count headroom — it's the built-in graph-theory API (BFS/DFS, shortest path, neighborhood traversal, `eles.successors()`/`predecessors()`) that maps directly onto the milestone's "click a neighbor and keep going" and blast-radius interactions, so the UI can reuse Cytoscape's own graph object instead of hand-rolling traversal in Svelte state. MIT license, actively released (last tag 11 days before this research). No pnpm-specific concerns — it's a pure-JS npm package with no build/postinstall step and no phantom-dependency reliance. |
+| `cytoscape-dagre` | latest matching `@dagrejs/dagre` | Layered/hierarchical layout extension for Cytoscape | Gives dependency-DAG-appropriate layered layout (sources at top, sinks at bottom, minimal edge crossings) essentially for free as a Cytoscape layout plugin — no separate layout-engine integration glue needed. **Verify at implementation time** that the installed `cytoscape-dagre` release depends on the maintained `@dagrejs/dagre` fork and not the abandoned unscoped `dagre` package (see What NOT to Use). |
+| `cytoscape-elk` (optional upgrade path) | tracks `elkjs` | Higher-quality layered layout via the Eclipse Layout Kernel | Not needed for v0.12.0's initial scope — `elkjs` is a ~500KB transpiled-Java dependency with materially slower layout computation than dagre. Keep as a named, deferred upgrade if `cytoscape-dagre`'s layout quality proves visibly worse on real dependency graphs once the UI ships (mirrors this project's own established pattern of shipping the cheaper option first and spiking the heavier one only on evidence — see the wazero/tree-sitter decision in this repo's existing STACK.md). |
 
-The Go SDK's resource API (from `design/design.md` and `docs/server.md`, both current for the version this repo pins) is a direct structural parallel to the tool-registration seam `internal/mcp/server.go` already built for SPEC-05:
+**Rejected for this milestone — `sigma.js` (v3.0.3 stable; v4 is in beta as of 2026-08-20, do not adopt a beta for a shipped feature):** Sigma is the right tool at a different scale. It's WebGL-native via `graphology`, and community/vendor comparisons consistently place its practical ceiling in the tens-of-thousands-to-100k+ node range — headroom this milestone's hundreds-to-low-thousands target doesn't need. The tradeoff that matters: Sigma has **no first-party hierarchical/layered layout** — the ecosystem centers on `graphology-layout-forceatlas2` (force-directed, not dependency-DAG-shaped) and expects you to compute layout externally (e.g., run dagre/ELK yourself and inject `x`/`y` positions into the graphology graph) rather than call one built-in layout name the way Cytoscape does. For this milestone's file/package-rollup DAG, that's strictly more integration work for no scale benefit actually needed. Revisit Sigma specifically if/when a future milestone adds a whole-symbol graph view at 10k+ node scale — the "one static binary, no server-side compute" scale ceiling problem doesn't change, but the node-count problem does.
 
-```go
-type ResourceHandler func(context.Context, *ServerSession, *ReadResourceParams) (*ReadResourceResult, error)
+**Rejected — `d3-force` as the primary renderer:** d3-force is a physics simulation, not a renderer — pairing it with hand-rolled SVG or Canvas drawing is real, uncontained engineering work (hit-testing, zoom/pan, label collision) that Cytoscape and Sigma both already solve. Reasonable only if the UI needs a rendering behavior neither library offers; not the case here.
 
-func (*Server) AddResource(*Resource, ResourceHandler)
-func (*Server) AddResourceTemplate(*ResourceTemplate, ResourceHandler)
-func (s *Server) RemoveResources(uris ...string)
-func (s *Server) RemoveResourceTemplates(uriTemplates ...string)
+**Layout library correction — avoid unscoped `dagre`:** the original `dagre` npm package (unscoped) has been unmaintained since ~2022. The community fork `@dagrejs/dagre` (currently v3.1.1, actively released) is the maintained continuation and is what any `cytoscape-dagre` version pulled in for this project should resolve to — confirm this via `pnpm why @dagrejs/dagre` (or `pnpm why dagre`, to make sure the unscoped abandoned package isn't the one actually resolved) at install time, don't assume.
+
+### Development Tools
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `buf generate` | Runs all four codegen plugins (`protoc-gen-go`, `protoc-gen-connect-go`, `protoc-gen-es`, `protoc-gen-connect-es`) from one `buf.gen.yaml` | Never runs inside the `goreleaser release` job — it runs in a **separate, Node/pnpm-toolchain-bearing CI job** that produces the committed `dist/` and generated-Go-code diffs for review, matching the milestone's own stated boundary ("the signed release pipeline must stay pure Go with NO JavaScript toolchain inside the reproducible/signed build"). |
+| `go get -tool` (Go 1.24+ tool directive) | Pins `protoc-gen-go` and `protoc-gen-connect-go` versions in `go.mod`/`go.sum` | Then reference them from `buf.gen.yaml` as `local: ["go", "tool", "protoc-gen-go"]` / `["go", "tool", "protoc-gen-connect-go"]`. This keeps the **Go-side** codegen plugins pinned through the exact same mechanism (`go.sum`) that already governs every other dependency in this repo — no separate binary-download step, no version drift between what CI runs and what `go.mod` says. This repo is already on Go 1.26.5, well past the 1.24 floor this needs. |
+| `pnpm-lock.yaml` (pnpm's lockfile) | Pins `@bufbuild/buf`, `@bufbuild/protoc-gen-es`, `@connectrpc/protoc-gen-connect-es`, and all frontend build tooling to exact resolved versions + content-addressable integrity hashes | `buf.gen.yaml` invokes the TS-side plugins as `local` entries resolved from `node_modules/.bin` (pnpm creates correct `.bin` shims for every **direct** devDependency regardless of its non-flat storage layout — this is unaffected by pnpm's strictness, which only restricts access to *undeclared transitive* dependencies, not direct ones) — same reproducibility guarantee as the Go-tool path, different lockfile. CI and any committed-artifact rebuild must use `pnpm install --frozen-lockfile` (the pnpm equivalent of `npm ci`): it fails loudly if `package.json` and `pnpm-lock.yaml` have drifted apart, rather than silently re-resolving — the correct behavior for a reproducibility gate. |
+| `packageManager` field in `package.json` + Corepack | Pins the pnpm binary version itself | `"packageManager": "pnpm@11.22.0"`. Without this, "which pnpm" is whatever's ambiently installed on a given machine or CI image — a real source of `pnpm-lock.yaml` format drift across pnpm major versions (pnpm has changed lockfile format and build-approval mechanics across recent majors — see below). Corepack is the standard mechanism; it ships with Node itself. |
+| `pnpm approve-builds` / `allowBuilds` in `pnpm-workspace.yaml` | Explicitly approves which dependencies are allowed to run lifecycle (`postinstall`/`preinstall`/etc.) scripts | **Verified, and directly relevant to this milestone's reproducibility story.** Since pnpm 10, lifecycle scripts of dependencies do **not** run during install by default — a real behavioral difference from npm, which runs them unconditionally. Any dependency needing a build/postinstall step (native binaries, codegen steps some transitive package might run) is silently skipped unless explicitly approved. In pnpm 11 (the version this project should pin), the mechanism is `allowBuilds` in `pnpm-workspace.yaml`: unapproved dependencies with scripts are auto-added with a `false` placeholder rather than failing the install, and `pnpm approve-builds` is the CLI to review and flip them to `true`. **This means a routine dependency bump that introduces a new transitive package with a postinstall step will not error — it will silently produce a different `dist/` (or a broken build) with only a warning in the install log.** Commit `pnpm-workspace.yaml`'s `allowBuilds` map, and add a CI check that fails if the install log/warning stream reports any *newly*-ignored build script rather than assuming "no error" means "nothing changed." |
+| Generated-artifact drift guard (CI-only, per rule `84d1gfpywd`) | Proves committed generated output matches its `.proto`/SPA source | Two instances, same shape: (1) re-run `buf generate`, then `git diff --exit-code` on the generated-Go and generated-TS directories; (2) rebuild the SPA (`pnpm run build`, i.e. `vite build`), then `git diff --exit-code` on committed `dist/`. Per this repo's own standing rule, **neither is trusted until demonstrated RED** — mutate a `.proto` field or hand-edit a generated file, confirm the check fails, then revert, before relying on either gate. |
+
+## Installation
+
+```bash
+# Pin pnpm itself via Corepack (do this once, commit the result)
+corepack enable
+corepack use pnpm@11.22.0   # writes "packageManager": "pnpm@11.22.0" into package.json
+
+# Go side — server + codegen plugin tooling (go.mod/go.sum-pinned)
+go get connectrpc.com/connect@v1.20.0
+go get -tool connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.20.0
+go get -tool google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11   # matches the version already in go.mod
+
+# Frontend / codegen tooling — pnpm-lock.yaml-pinned, Node-only, NEVER in the release build
+pnpm add -D @bufbuild/buf@1.72.0
+pnpm add -D @bufbuild/protoc-gen-es@2.13.0
+pnpm add -D @connectrpc/protoc-gen-connect-es@2.1.2
+pnpm add @connectrpc/connect@2.1.2 @connectrpc/connect-web@2.1.2 @bufbuild/protobuf@2.14.0
+
+# Svelte app scaffold + UI
+pnpm add svelte@5.56.10 vite@8.2.2 @sveltejs/vite-plugin-svelte
+pnpm dlx shadcn-svelte@1.5.0 init   # scaffolds Tailwind v4 + writes component source you own
+pnpm dlx shadcn-svelte@1.5.0 add button card table   # per-component as needed
+
+# Graph rendering
+pnpm add cytoscape@3.34.1 cytoscape-dagre
+
+# CI / reproducible install (fails loudly on any package.json <-> pnpm-lock.yaml drift)
+pnpm install --frozen-lockfile
+
+# Review/approve any dependency that wants to run a lifecycle script (see Development Tools)
+pnpm approve-builds
 ```
 
-- **Static vs. templated URIs:** `AddResource` registers one fixed URI (e.g. `codegraph://docs/tools/explore`); `AddResourceTemplate` registers an RFC 6570 URI *pattern* (e.g. `codegraph://docs/tools/{name}`) served by one handler for every matching URI. A template with no accompanying `list`-style enumeration only ever appears in `resources/templates/list`, never in `resources/list` — this repo's reference content (fixed tool count, fixed doc set) is fully enumerable, so **prefer `AddResource` per document over a template** unless the doc set becomes dynamic.
-- **Content shape:** `ReadResourceResult.Contents []*ResourceContents{URI, MIMEType, Text}` for text (use `text/markdown` for the reference docs — matches SURF-06's existing MCP JSON→markdown conversion precedent) or `Blob` (base64) for binary; this milestone needs text only.
-- **Capabilities:** `ServerCapabilities.Resources` must be set **explicitly**, same as the existing D-11 finding for `Tools` in `server.go` (`Server.capabilities()` only advertises a capability key when it's non-nil) — omitting it silently drops `"resources"` from the `initialize` response's capabilities object, exactly the "did the feature register or not" ambiguity D-11 already fixed once for tools. Wire it in the same `BuildServer` construction block: `Capabilities: &mcp.ServerCapabilities{Tools: ..., Resources: &mcp.ResourceCapabilities{ListChanged: false}}` (`ListChanged` false is correct here — the doc set changes with the binary, not with index state, so there's no live-mutation case Phase 3's `AddTool`/`RemoveTools` re-check pattern needs to mirror).
-- **No new dependency, no new CGo, no new import boundary violation:** `AddResource`/`RemoveResources` live on the same `*mcp.Server` type `registerTools`/`unregisterTools` already hold; a `registerResources`/`unregisterResources` pair follows the identical shape and can sit in the same `internal/mcp` package without crossing D-08b's architest boundary.
+## Alternatives Considered
 
-## MCP spec compliance (2026-07-28, the revision this server already targets)
-
-- `resources/list` and `resources/read` both support pagination (`nextCursor`) and the caching envelope (`ttlMs`, `cacheScope: "private"|"public"`) — this server already corrects `cacheScope` to `"private"` for `tools/list` and `server/discover` (D-09/D-03) because the tool catalog depends on local `.codegraph/` state; the new resources catalog does **not** have that dependency (reference docs are fixed per binary build, not per repo), so `resources/list`'s default `cacheScope: "public"` is actually correct here and should be left alone — do not blindly copy the D-09 correction.
-- `resources/templates/list` is a separate optional method; only implement it if `AddResourceTemplate` is actually used (see URI-shape guidance above — likely unnecessary for a fixed doc set).
-- Resource object fields available: `uri`, `name`, `title`, `description`, `mimeType`, `size`, `icons` — `title` (human-readable, distinct from the ID-like `name`) is new since `2024-11-05` and worth using for a friendlier resource listing (e.g. `name: "tools/explore"`, `title: "codegraph_explore reference"`).
-
-## Claude Code Skill authoring — current conventions (verified against `code.claude.com/docs`, `platform.claude.com/docs`, and the shipped `anthropics/claude-code` `plugin-dev` skills, which are the same convention this repo's own `plugin-dev:skill-development`/`hook-development` skills already surface)
-
-### SKILL.md frontmatter (only `description` is truly required; `name` strongly recommended)
-
-| Field | Required | Notes |
-|-------|----------|-------|
-| `name` | No (defaults to directory name) | Lowercase, hyphens, ≤64 chars, no "anthropic"/"claude" |
-| `description` | Recommended (de facto required — Claude reads *only* this to decide whether to trigger) | ≤1024 chars per the Agent Skills spec; Claude Code's own listing truncates the combined `description`+`when_to_use` at 1,536 chars. **Third person, imperative, front-load the trigger phrases**: `"This skill should be used when the user asks to 'X', 'Y', or mentions Z."` |
-| `when_to_use` | No | Extra trigger context, appended to `description`, counts toward the same 1,536-char cap |
-| `disable-model-invocation` | No | Set `true` for a skill only invokable via `/codegraph` — **not** the right choice here, since the whole point is Claude reaching for it unprompted |
-| `user-invocable` | No | Set `false` to hide from `/` menu but keep auto-loadable — worth considering if `/codegraph` as a manual command adds no value over auto-trigger |
-| `allowed-tools` / `disallowed-tools` | No | Pre-approve/restrict tools while the skill is active for the current turn only |
-
-### Progressive disclosure — the three levels (directly answers the milestone's "lead with decision procedure, minimal tool catalog" requirement)
-
-1. **Level 1 (always in context, ~100 tokens):** `name` + `description` only.
-2. **Level 2 (loaded on trigger, target <5k tokens / 1,500-2,000 words):** SKILL.md body. **This is where the decision-procedure-first structure goes** — a "which tool for which question" table plus 2-3 worked examples, per the todo's explicit design constraint. A full tool-by-tool catalog does NOT belong here at length.
-3. **Level 3 (loaded only if Claude reads it / calls a script, unlimited):** `references/`, `scripts/`, `assets/` bundled in the skill directory, OR — the milestone's actual design choice — **MCP resources served by the codegraph server itself**, fetched via `resources/read` rather than a bundled file. This is a legitimate Level-3 substitute: it keeps the reference content live/derivable (satisfying "guard the claims" — the resource handler can read the same `companionNames`/`allToolNames()` this repo already treats as source of truth, rather than hand-typed prose) instead of a static file that drifts from the binary the way `internal/agents/instructions.go`'s stale "Phase 3" promise already did once.
-
-### Common mistake this milestone must specifically avoid (per Anthropic's own docs and the todo's stated failure mode)
-
-> "Most skills fail for one reason: the description reads like documentation instead of matching what you actually type." — the description is a **trigger router**, not a summary. It must contain the literal phrases an agent's own prompt-matching would see in a task like "where is X defined" / "how does Y work" — the exact failure class the 2026-08-08 debug session hit.
-
-## Claude Code hooks.json — schema for SessionStart / PreToolUse / UserPromptSubmit
-
-Plugin-form `hooks/hooks.json` (the shape `codegraph install` should write, distinct from the direct `settings.json` form):
-
-```json
-{
-  "description": "codegraph availability nudge + grep/find redirect guard",
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "startup|resume",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-nudge.sh", "timeout": 5 }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/redirect-guard.sh" }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "Grep|Bash|Read",
-        "hooks": [
-          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/redirect-guard.sh" }
-        ]
-      }
-    ]
-  }
-}
-```
-
-- `SessionStart` matcher values: `startup`, `resume`, `clear`, `compact`, `fork` — filters on how the session began, not on repo state; the `.codegraph/`-exists gate belongs **inside** the script, not the matcher (the script should be a fast, silent no-op when no index resolves — mirroring `hasIndex`'s own MCP-03 zero-tools rule so the hook never nags a repo with no index).
-- `PreToolUse`/`PostToolUse` matcher is a regex over `tool_name` (`Bash`, `Grep`, `Read`, or `Edit|Write`-style alternation) — this is the mechanism for "guard grep/find/Read on where-is-X questions."
-- `UserPromptSubmit` has **no matcher support at all** — it fires on every prompt submission, unconditionally; any "is this a where-is-X question" filtering has to happen inside the hook script itself (e.g. a cheap keyword/regex check against the prompt text passed on stdin), not in the hooks.json matcher field.
-- Hook input arrives as JSON on stdin (`tool_name`, `tool_input` for `PreToolUse`; `user_prompt` for `UserPromptSubmit`); a `PreToolUse` hook can return `hookSpecificOutput.permissionDecision: "ask"|"deny"|"allow"` plus `additionalContext` — this is the mechanism for a genuine *guard* (not just a nudge) that surfaces `codegraph_explore` as the better option before letting a matched `Grep`/`Bash grep` call through.
-- `${CLAUDE_PLUGIN_ROOT}` is the load-bearing path variable for any bundled script reference — installed plugins are copied into a cache directory, so a hard-coded or relative path outside the plugin root breaks silently.
-
-## Plugin structure & distribution — the milestone's real design decision
-
-Full plugin layout (only `plugin.json` goes inside `.claude-plugin/`; everything else is plugin-root-level):
-
-```
-codegraph-plugin/
-├── .claude-plugin/
-│   └── plugin.json          # name, description, version, author
-├── skills/
-│   └── codegraph/
-│       └── SKILL.md         # decision-procedure-first guidance
-├── hooks/
-│   └── hooks.json           # SessionStart nudge + PreToolUse/UserPromptSubmit guard
-└── scripts/
-    ├── session-nudge.sh
-    └── redirect-guard.sh
-```
-
-**Distribution options, mapped onto the todo's open question:**
-
-| Option | Mechanism | Fit for `codegraph install` |
-|--------|-----------|------------------------------|
-| Standalone skill only | `codegraph install` writes `SKILL.md` directly into `~/.claude/skills/codegraph/` (personal) or `.claude/skills/codegraph/` (project) | Simplest; matches the existing `AgentTarget` write-a-file pattern exactly (same shape as the `codegraphInstructionsBlock` marker injection today), but **gets no hooks** — Claude Code's hooks system for a *standalone, non-plugin* skill is limited to hooks declared in the skill/agent's own frontmatter (a narrower mechanism than `hooks/hooks.json`), which cannot express `PreToolUse` tool-name matching cleanly |
-| Full plugin (`.claude-plugin/plugin.json` + `skills/` + `hooks/`) written to a fixed local directory, self-registered via project `.claude/settings.json`'s `extraKnownMarketplaces`/`enabledPlugins` | `codegraph install` writes the whole plugin tree under (e.g.) `~/.codegraph/claude-plugin/` and adds an `extraKnownMarketplaces` (pointing at that local directory, source type `"directory"` or a local git repo) + `enabledPlugins` entry to the target's `.claude/settings.json` | **Closes the milestone's stated design goal** (versioned with the binary, updated by `codegraph upgrade` — since `codegraph install`/`upgrade` already own writing agent config files, this is a natural extension of the existing `AgentTarget` pattern, not a new mechanism) AND is the only path that gets the hooks capability at all |
-| In-repo, manual `--plugin-dir` load | Ship the plugin directory in the codegraph-go repo itself, document `claude --plugin-dir ./path/to/plugin` | Lowest engineering risk, but explicitly the option the todo calls "leaves install's output still deferring to something thin" — does not close the hand-off |
-
-**Recommendation:** the full-plugin route is the only one that satisfies both "hooks work" and "distribution is versioned with the binary, updated by `codegraph upgrade`" — the two things the milestone goal names explicitly. It composes cleanly with the existing `AgentTarget` registry: Claude Code's target implementation gains a second write (plugin tree + `settings.json` entries) alongside its existing MCP-config write and `codegraphInstructionsBlock` marker injection, with the same idempotent install→uninstall round-trip discipline this repo already holds every other `AgentTarget` to.
-
-## Other agent harnesses — this is emphatically NOT Claude-Code-only
-
-This is the most consequential finding of this research pass, and it corrects an assumption embedded in this repo's own comments (`hermes.go`: "Hermes has no AGENTS.md-equivalent instructions convention"; `antigravity.go`/`kiro.go`: "Writes no instructions file of its own" / "Writes NO instructions file") — those were accurate for *instruction files* as of the Phase 6 research (v0.4/v0.5 era) but **skills and hooks are a materially different, newer surface**, and at least two of the three "no instructions" agents have since shipped one or both:
-
-| Agent | Skills (Agent Skills open standard, SKILL.md) | Hooks | Notes |
-|-------|-----------------------------------------------|-------|-------|
-| **Claude Code** | Yes — canonical implementation | Yes — `hooks.json`, PascalCase events (`SessionStart`, `PreToolUse`, `UserPromptSubmit`, ...) | This milestone's primary target |
-| **Cursor** | Yes — `.cursor/skills/` or `.agents/skills/`, same `SKILL.md` shape | Yes — `hooks.json`, but **camelCase** events (`sessionStart`, `preToolUse`, `beforeShellExecution`, `afterFileEdit`, `stop`) — schema is NOT drop-in compatible with Claude Code's | A second, real hooks target if this milestone's scope grows — but the event *names* differ, so the hook scripts (which read stdin JSON) likely still port, only `hooks.json` itself needs a per-agent variant |
-| **Codex CLI** | Yes — `.agents/skills/` (repo) / `~/.agents/skills` (global), same open standard | Yes — `hooks.json` or inline `[hooks]` TOML in `config.toml`, PascalCase events closely matching Claude Code's set (`SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `UserPromptSubmit`, `Stop`, `SubagentStart/Stop`, `PreCompact`/`PostCompact`) | Requires **explicit hook trust** (hash-pinned review) before a non-managed hook runs — a `codegraph install`-written hook will sit untrusted until the user reviews it in `/hooks`; document this rather than assume it "just works" |
-| **opencode** | Yes — native `skill` tool auto-discovers `SKILL.md`; critically, it *also reads `.claude/skills/` directly* as a documented Claude Code compatibility fallback | No `hooks.json` at all — instead an **in-process TypeScript/JS plugin system** (`opencode.json` `plugins[]`, `ctx.tool.hook(...)`, `ctx.session.hook(...)`) — structurally incompatible with a shell-script hooks approach | The skill can likely be shared **verbatim** via the `.claude/skills/` fallback path with zero opencode-specific work; hooks would need a bespoke JS plugin, out of scope for a "thin" milestone |
-| **Gemini CLI** | Not found as a native mechanism (extensions use `contextFileName`/`GEMINI.md` instead) | Yes — `hooks/hooks.json` inside an extension directory (schema not fully captured this pass — low confidence, verify before implementing) | Lower priority; would need an extension package, not a skill |
-| **Hermes** | Not found | Not found | Still appears to have no equivalent mechanism — the existing `hermesTarget` comment is likely still accurate here specifically |
-| **Antigravity** | **Yes, newly confirmed** — `.agents/skills/` (workspace) or `~/.gemini/config/skills/` (global), explicitly the same open Agent Skills standard, progressive disclosure documented | **Yes, newly confirmed** — `hooks.json` in `.agents/` or `~/.gemini/config/`, but event set differs: `PreToolUse`/`PostToolUse`/`PreInvocation`/`PostInvocation`/`Stop` — **no `SessionStart`, no `UserPromptSubmit`** | This repo's `antigravityTarget` comment ("Writes no instructions file... shares `~/.gemini/GEMINI.md`") predates this — Antigravity has since grown a real skills+hooks system separate from the shared GEMINI.md context file. Re-verify against a live Antigravity install before relying on this |
-| **Kiro** | Docs list "Skills" as a first-class feature (alongside Hooks, Custom Agents) in Kiro's own feature comparison, though the SKILL.md schema specifics weren't captured this pass — MEDIUM confidence it exists, LOW confidence on exact shape | **Yes, newly confirmed** — `.kiro/hooks/*.json`, schema closely resembling Claude Code's: `PostFileSave`, `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `SessionStart`, `Stop`, plus Kiro-specific `PreTaskExec`/`PostTaskExec` | Same correction as Antigravity — `kiroTarget`'s "Writes NO instructions file" comment is about the *marker-fenced instructions block* mechanism specifically and is still true for that; it does not mean Kiro lacks skills/hooks entirely |
-
-**Implication for scope:** the milestone's stated goal ("Give agent harnesses... a thin, high-signal skill") is achievable for Claude Code, Cursor, Codex CLI, and (via the `.claude/skills/` fallback, free) opencode using **one shared SKILL.md** with zero or near-zero per-agent variation, since all four converge on the same open standard. Hooks are more fragmented — three different schemas observed (Claude Code/Codex PascalCase-with-`SessionStart`+`UserPromptSubmit`; Cursor camelCase; Antigravity PascalCase-without-those-two-events) — so a single hooks.json cannot be shared verbatim across agents even though the underlying shell scripts likely can. **Recommend scoping this milestone's hooks deliverable to Claude Code only** (as the todo's target already implies) and treating "port hooks.json to Cursor/Codex/Antigravity/Kiro" as a documented follow-up rather than in-scope now — each is a small, mechanical, per-agent hooks.json translation of the same two scripts, not new design work.
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|--------------------------|
+| Cytoscape.js (Canvas, opt-in WebGL) | Sigma.js + graphology (WebGL-native) | A future whole-symbol graph view at 10k+ node scale, where GPU rendering headroom matters more than built-in graph-traversal API and layered-layout convenience. |
+| `cytoscape-dagre` for layout | `cytoscape-elk` (wraps `elkjs`) | Layout quality on real dependency graphs proves visibly worse than dagre's after shipping — `elkjs`'s layered algorithm is more configurable and typically produces fewer edge crossings, at the cost of a heavier (~500KB) dependency and slower computation. Spike-and-upgrade, not a day-one default. |
+| Go-tool-directive pinning for `protoc-gen-go`/`protoc-gen-connect-go` | Versioned binary download (GitHub release tarball) in CI, same as buf itself | Only if this project ever needs the Go codegen plugins available *outside* a Go toolchain context (e.g., a non-Go CI runner) — not a constraint here, since the whole point is this is a Go monorepo with Go already the CI baseline. |
+| pnpm devDependency pinning for buf CLI | Docker image (`bufbuild/buf:1.72.0`) or GitHub release tarball, version-pinned in CI | If the frontend Node/pnpm toolchain is ever removed from CI entirely (it won't be, while `dist/` still needs building) or if buf needs to run in a context with no `package.json` at all. |
+| `connectrpc.com/connect` (Connect protocol) | gRPC-Web via `connect-go`'s built-in gRPC-Web compatibility, or plain `grpc-go` | Only relevant if this UI ever needs to be consumed by non-browser, non-Connect-aware gRPC clients — out of scope for a loopback-only, browser-facing local UI. Connect-go serves gRPC, gRPC-Web, *and* the Connect protocol from the same handler with zero extra code, so this is a non-decision in practice: nothing is being given up by choosing Connect as the primary wire format. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|--------------|
-| Bundling the full tool-by-tool reference as SKILL.md body text | Blows the ~1,500-2,000 word / <5k token Level-2 budget and duplicates content that can drift from the binary (the exact `instructions.go` failure this milestone exists to fix) | Serve it via the new MCP `resources/list`/`resources/read` capability; SKILL.md links to it |
-| Hand-typing tool counts/defaults/flag names into SKILL.md or the resource content | This repo has already had two wire-contract-drift incidents from exactly this pattern (SURF-01's "default 5", the `instructions` visibility claim) — a skill is explicitly called out in the todo as "a third such surface" | Derive resource content from the same `companionNames`/`allToolNames()`/`ResolveCompanions` functions `internal/mcp/server.go` already treats as source of truth, and gate it with a test the way `instructions_contract_test.go` does |
-| A single cross-agent `hooks.json` | Cursor uses camelCase event names, Antigravity's event set omits `SessionStart`/`UserPromptSubmit` entirely — no shared schema exists across the roster today | One `hooks.json` per agent that has the mechanism, sharing the same underlying shell scripts |
-| Writing the plugin as a bundled Node/Python runtime component | Violates the repo's stated single-static-binary / no-bundled-runtime constraint | Plain `SKILL.md` (markdown), `hooks.json` (JSON), and POSIX shell scripts only — no interpreter dependency beyond what's already assumed present (`sh`) |
-| Treating `AddResourceTemplate` as the default resource-registration path | Adds URI-template parsing complexity for a doc set (8 tools + a handful of concept pages) that is fully known and static at server-build time | `AddResource` per document, one call per doc, mirroring `registerTools`' explicit-loop style already in this file |
+| `grpc-go` (`google.golang.org/grpc`) | Requires its own HTTP/2 server (not layered on `net/http`), pulls a materially larger dependency tree (its own transport/credentials/resolver machinery, `golang.org/x/net` at a heavier usage surface) than connect-go's verified 2-dependency footprint. Directly contradicts the "minimal, audited dependencies" constraint for zero functional gain here — connect-go's handlers already speak gRPC-over-HTTP/2 if ever needed, without adding this dependency. | `connectrpc.com/connect` (already the maintainer directive) |
+| Unscoped `dagre` npm package | Unmaintained since ~2022; a supply-chain dead-end for a component the milestone treats as load-bearing (the graph view is a named target feature). | `@dagrejs/dagre` (actively maintained fork, currently v3.1.1) — and verify any `cytoscape-dagre` install resolves to it via `pnpm why` |
+| Sigma.js v4 (currently `4.0.0-beta.5`, published 2026-08-20 — two days before this research) | Beta, not a version to build a shipped feature on. | Sigma v3.0.3 stable if Sigma is ever adopted (not this milestone) |
+| `go install`/`tools.go`/Go-tool directive for the **buf CLI itself** | Buf's own documentation explicitly warns this resolves buf's own dependency graph against the host project's `go.mod`, producing version incompatibilities that don't occur with the codegen *plugins* (which are much smaller, single-purpose Go programs with few dependencies of their own). | pnpm devDependency (`@bufbuild/buf`), pinned in `pnpm-lock.yaml` |
+| `npm`/`npx`/`package-lock.json` anywhere in this toolchain | The package manager is a hard project constraint: `pnpm`. Mixing `npm install` (which writes `package-lock.json`) into a `pnpm-lock.yaml`-governed tree produces two divergent lockfiles and defeats the reproducibility guarantee either one is supposed to provide — this is a correctness bug, not a style preference. | `pnpm add` / `pnpm add -D` for installs, `pnpm dlx` for one-off CLI runs (the `npx` equivalent), `pnpm install --frozen-lockfile` for CI/reproducible installs |
+| Any Node/pnpm invocation inside `.goreleaser.yaml` or `release.yml`'s actual build/sign steps | Directly violates the milestone's explicit constraint: "the signed release pipeline must stay pure Go with NO JavaScript toolchain inside the reproducible/signed build." A Node toolchain in the signed build path also reopens exactly the SBOM/govulncheck/reproducibility problem this project has spent multiple milestones closing for the Go side. | Node/pnpm toolchain lives **only** in a separate CI job that produces committed, reviewed `dist/` output; the release build's only job is to `go:embed` bytes that are already sitting in git. |
+| Skipping an npm-ecosystem vulnerability gate | `govulncheck` is Go-call-graph-aware and covers **only** the Go module graph — it has no visibility into `pnpm-lock.yaml`. The committed `dist/` bytes that `go:embed` pulls into the shipped binary are compiled from this pnpm-managed dependency tree, so today's supply-chain story (govulncheck + Syft SBOM, both scoped to the Go binary/module graph) has a real, currently-unmitigated gap the moment this milestone lands: a vulnerable transitive dependency compiled into `dist/` is invisible to every existing gate. | Add a `pnpm audit --prod --audit-level=high` (or similar threshold) CI gate as **new, explicit scope** for this milestone — see the dedicated note below on making this gate non-vacuous. |
+| Assuming `pnpm install --frozen-lockfile` exiting 0 means "nothing was silently skipped" | Verified pnpm 10+ behavior: lifecycle/build scripts of dependencies are blocked **by default**, and an install with newly-blocked scripts still exits 0 with only a warning — it does not fail the build. A transitive dependency bump that adds a package with a real, load-bearing postinstall step (a native binary fetch, a codegen step) can silently change what ends up in `dist/`, with a clean-looking green CI run. | Commit `pnpm-workspace.yaml`'s `allowBuilds` map explicitly, run `pnpm approve-builds` deliberately (not just accept whatever auto-populates), and add a CI assertion (grep the install log for "Ignored build scripts", or diff `pnpm-workspace.yaml`'s `allowBuilds` map against its last-known state) so a newly-ignored build script fails the build loudly instead of passing silently. |
+
+**On making the `pnpm audit` gate non-vacuous (rule `84d1gfpywd`):** `pnpm audit` shares npm audit's severity-threshold semantics — `--audit-level <low\|moderate\|high\|critical>` sets the failure floor, and (confirmed via multiple independent CI-usage reports, not the sparse official docs alone) the command exits non-zero when vulnerabilities at or above that threshold are found, zero otherwise — this is what makes it usable as a hard CI gate at all. The vacuous-pass risk this repo's standing rule exists to catch: a misconfigured working directory, an empty or unresolved `pnpm-lock.yaml`, or a `--prod`/`--filter` scope that accidentally excludes the one workspace holding the frontend dependencies would **all** report "0 vulnerabilities found" and exit 0 — indistinguishable from a genuine clean scan. `pnpm audit`'s own official docs do not publish a stable JSON field naming a scanned-package count (verify this against the actual installed version's `--json` output before relying on a specific field name — don't hand-type one from memory). The concrete, verifiable fix: pair the audit run with a sibling assertion that does not depend on `pnpm audit`'s own internals — e.g. assert `pnpm-lock.yaml` lists a non-trivial package count (`pnpm list --depth=-1 --json | jq` or equivalent) in the same CI step, so a gate that ran against an empty or misresolved tree fails on that assertion even if `pnpm audit` itself reports a clean "0 vulnerabilities" pass. Demonstrate this RED per the standing rule: temporarily point the gate at an empty directory or a known-vulnerable pinned test dependency and confirm it fails, before trusting it green.
+
+## Stack Patterns by Variant
+
+**If a future milestone adds a whole-symbol graph view (not file/package rollup):**
+- Re-run the Cytoscape-vs-Sigma tradeoff with the new node-count target as the deciding input — Sigma's WebGL ceiling becomes the relevant number, not Cytoscape's built-in traversal API.
+- Keep the graph-rendering library behind a narrow Svelte component boundary (a `<GraphView>` component owning the render-library-specific code) from day one, specifically so this is a swap, not a rewrite — mirrors this project's own established pattern of isolating a volatile external-library choice behind a stable internal interface (see the parser-layer interface recommendation elsewhere in this repo's stack docs).
+
+**If layout quality on real dependency graphs looks poor with dagre:**
+- Swap `cytoscape-dagre` for `cytoscape-elk` (wraps `elkjs`) without touching anything else — both are Cytoscape layout-extension plugins invoked the same way (`cy.layout({name: 'dagre'|'elk', ...}).run()`), so this is a one-line config change plus a new dependency, not an architecture change.
+
+**If the npm-ecosystem vulnerability gate (see What NOT to Use) surfaces a real, unfixable transitive CVE in a frontend dependency:**
+- Follow this project's own established precedent for `GO-2026-5932` (the accepted, measured, unmitigated goreleaser/cosign/rekor vulnerability) — record it as accepted-and-measured rather than silently ignored, and re-evaluate at the next dependency bump. Don't let an unfixable transitive CVE block the milestone; do make sure it's visible in the same place the Go-side ones are.
+
+**If pnpm's default-blocked build scripts break a real dependency in this chain (e.g. a future addition needs a native postinstall step):**
+- Run `pnpm approve-builds`, review exactly what script is being approved and why, commit the resulting `pnpm-workspace.yaml` `allowBuilds` entry — never blanket-approve or disable the protection wholesale; that reopens the exact supply-chain risk (arbitrary code execution from a transitive dependency's install script) pnpm 10+ made an explicit, deliberate default specifically to close.
 
 ## Version Compatibility
 
-| Package/Format | Compatible With | Notes |
-|-----------------|------------------|-------|
-| `modelcontextprotocol/go-sdk@v1.7.0` | MCP spec `2026-07-28` (already the server's declared/asserted protocol version per VRFY-02) | `AddResource`/`AddResourceTemplate` are part of the stable public API surface documented in the SDK's own `design/design.md` and `docs/server.md` — not an experimental/unstable feature gated behind a build tag |
-| Claude Code Agent Skills frontmatter | Agent Skills open spec (agentskills.io) — 6-field cap (`name`, `description`, `when_to_use`, `disable-model-invocation`, `user-invocable`, `allowed-tools`/`disallowed-tools`) when authoring for cross-tool portability | Claude Code accepts all 6 plus Claude-Code-only extras (dynamic context injection via `` !`cmd` `` in body) — **do not use Claude-Code-only frontmatter fields** if the same SKILL.md is meant to be read by Cursor/Codex/Antigravity via their shared-standard support, or verify each target's frontmatter allowlist doesn't reject the extra keys (opencode, for instance, explicitly documents only 5 recognized fields and the behavior on an unrecognized key is unverified this pass) |
-| Claude Code plugin `hooks/hooks.json` | Claude Code CLI/IDE/Desktop/web — all surfaces fire the same hook events per current docs | Distinct schema from Cursor's `hooks.json` (camelCase) and Antigravity's (different event set) — do not assume portability without translation |
+| Package A | Compatible With | Notes |
+|-----------|------------------|-------|
+| `connectrpc.com/connect@v1.20.0` | `google.golang.org/protobuf@v1.36.11` | **Exact version match already in this repo's `go.mod`.** Zero dependency-resolution work needed — connect-go's own `go.mod` requires precisely the protobuf version already pinned here. |
+| `connectrpc.com/connect@v1.20.0` | Go 1.25.0+ | Repo is on Go 1.26.5 — no gap. |
+| `@connectrpc/connect-web@2.1.2` | `@connectrpc/connect@2.1.2` | Same release train (connect-es monorepo); keep both at matching minor versions. |
+| `@bufbuild/protoc-gen-es@2.13.0` | `@bufbuild/protobuf@2.14.0` | Protobuf-ES v2 generator/runtime pair — both must be on the v2 line; the `MIGRATING.md` documents a breaking rename (`typeRegistry` → `registry`) from v1, relevant only if any v1-era example code is copied in. |
+| `shadcn-svelte@1.5.0` / `bits-ui@2.19.0` | `svelte@^5.0.0` (shadcn-svelte) / `svelte@^5.33.0` (bits-ui) | Both peer-depend on Svelte 5; the repo's target `svelte@5.56.10` satisfies both floors comfortably. |
+| `cytoscape-dagre` | `@dagrejs/dagre` (not unscoped `dagre`) | Verify the resolved dependency via `pnpm why` at install time — see What NOT to Use. |
+| `vite@8.2.2` | Node `^20.19.0 || >=22.12.0` | Sets the effective Node floor for the whole frontend build job in CI, independent of Svelte's looser `>=18` — plan CI Node version around Vite's requirement, the stricter of the two. |
+| `pnpm@11.22.0` | Node 18+ (Corepack-managed) | Pin via `packageManager` field in `package.json`, not an ambient global install — see Development Tools. pnpm 11 replaced pnpm 10's `onlyBuiltDependencies`/`ignoredBuiltDependencies` settings with a single `allowBuilds` map in `pnpm-workspace.yaml`; if any existing tooling or documentation references the old field names, they no longer apply at this version. |
 
 ## Sources
 
-- `code.claude.com/docs/en/skills` (web/exa, MEDIUM confidence, official) — SKILL.md frontmatter reference, progressive disclosure levels, dynamic context injection
-- `platform.claude.com/docs/en/agents-and-tools/agent-skills/overview` (web/exa, MEDIUM confidence, official) — required fields, 3-level loading table with token costs
-- `github.com/anthropics/claude-code/blob/main/plugins/plugin-dev/skills/skill-development/SKILL.md` and `.../hook-development/SKILL.md` (web/exa, MEDIUM confidence, official first-party source — this is literally the skill this repo's own `plugin-dev:skill-development`/`hook-development` skills surface) — writing-style rules (third person, imperative), hooks.json plugin-wrapper format, event/matcher reference
-- `code.claude.com/docs/en/hooks` and `code.claude.com/docs/en/plugins-reference` (web/exa, MEDIUM confidence, official) — full hook event table, matcher field-per-event table, plugin directory structure, `.claude-plugin/plugin.json` schema, marketplace.json schema
-- `code.claude.com/docs/en/plugins` and `code.claude.com/docs/en/plugin-marketplaces` (web/exa, MEDIUM confidence, official) — plugin quickstart, `extraKnownMarketplaces`/`enabledPlugins` project-scope self-registration mechanism
-- `modelcontextprotocol.io/specification/2026-07-28/server/resources` (web/exa, MEDIUM confidence, official spec — this is the exact protocol revision codegraph-go's server already targets) — resources/list, resources/read, resources/templates/list wire shapes, caching envelope
-- `modelcontextprotocol/go-sdk` `design/design.md` and `docs/server.md` via Context7 (docs/context7, MEDIUM confidence, official repo source) — `AddResource`/`AddResourceTemplate`/`ResourceHandler`/`RemoveResources` API, `Example_resources` full worked example, `ServerCapabilities.Resources` explicit-set requirement (parallel to this repo's own D-11 finding for `Tools`)
-- `cursor.com/docs/skills`, `cursor.com/docs/rules` (web/exa, MEDIUM confidence, official) — Agent Skills standard support, `.cursor/skills`/`.agents/skills` locations, camelCase hooks.json event names
-- `developers.openai.com/codex/skills`, `.../codex/hooks`, `.../codex/config-reference` (web/exa, MEDIUM confidence, official) — `.agents/skills` locations, PascalCase hooks.json/inline-TOML schema, hook-trust review requirement
-- `opencode.ai/docs/skills/`, `opencode.ai/docs/rules/`, `opencode.ai/v2/docs/build/plugins` (web/exa, MEDIUM confidence, official) — native `skill` tool, `.claude/skills/` compatibility fallback (load-bearing finding for zero-cost opencode support), in-process plugin/hook system as the non-hooks.json alternative
-- `github.com/google-gemini/gemini-cli/blob/main/docs/extensions/reference.md` and `writing-extensions.md` (web/exa, LOW-MEDIUM confidence, official repo docs but hooks.json schema not fully traced this pass) — `gemini-extension.json` manifest, `hooks/hooks.json` existence confirmed but shape not captured
-- `kiro.dev/docs/hooks/`, `kiro.dev/docs/steering/`, `kiro.dev/docs/getting-started/first-project/` (web/exa, MEDIUM confidence, official, dated 2026-08-06 — very current) — `.kiro/hooks/*.json` schema with PascalCase events including `SessionStart`/`UserPromptSubmit`, "Skills" named as a first-class feature
-- `antigravity.google/docs/hooks`, `antigravity.google/docs/skills`, `antigravity.google/docs/rules-workflows` (web/exa, MEDIUM confidence, official) — confirmed Agent Skills standard support at `.agents/skills/`, `hooks.json` schema with `PreToolUse`/`PostToolUse`/`PreInvocation`/`PostInvocation`/`Stop` (notably missing `SessionStart`/`UserPromptSubmit`)
-- `internal/agents/hermes.go`, `internal/agents/antigravity.go`, `internal/agents/kiro.go` (codebase, this repo — ground truth for current per-agent implementation and the Phase 6 research comments this pass partially corrects)
+- `connectrpc.com/connect` GitHub Releases API (verified 2026-08-22) — latest tag `v1.20.0`, published 2026-05-20
+- `connectrpc.com/connect` raw `go.mod` on `main` (fetched 2026-08-22) — `go 1.25.0`, two direct deps (`go-cmp v0.7.0`, `protobuf v1.36.11`) — **directly verifies the dependency-footprint claim, not asserted from memory**
+- `/connectrpc/connect-go` (Context7, HIGH confidence, 464 snippets) — server-streaming handler API, `net/http` mounting pattern
+- `connectrpc.com/docs/protocol/` (WebFetch, HIGH confidence — official protocol spec page) — confirms server-streaming works over HTTP/1.1, envelope framing, content-types
+- `connectrpc/connect-es` GitHub Releases API (verified 2026-08-22) — latest tag `v2.1.2`, published 2026-06-12
+- `/connectrpc/connect-es` (Context7, HIGH confidence, 198 snippets) — browser transport, fetch-based streaming limitation (no client-streaming from browsers)
+- npm registry API (verified 2026-08-22, direct registry query) — exact current versions: `@connectrpc/connect@2.1.2`, `@bufbuild/protobuf@2.14.0`, `shadcn-svelte@1.5.0`, `bits-ui@2.19.0`, `sigma@3.0.3`, `graphology@0.26.0`, `svelte@5.56.10`, `vite@8.2.2`, `pnpm@11.22.0`
+- `pnpm/pnpm` GitHub Releases API (verified 2026-08-22) — latest tag `v11.22.0`, published 2026-08-15
+- `pnpm.io/cli/audit` (WebFetch, HIGH confidence — official docs) — `--audit-level`, `--prod`, `--json` flags confirmed; exit-code semantics for the vulnerability-threshold case cross-checked against independent CI-usage sources (MEDIUM confidence) since the official page does not itself spell out the vulnerabilities-found exit code
+- `pnpm.io/cli/approve-builds` + `pnpm.io/settings/build` (WebFetch, HIGH confidence — official docs) + Socket.dev pnpm-10 announcement + `pnpm/pnpm` GitHub issue #10235 (web, MEDIUM confidence, cross-checked against official docs) — confirms lifecycle scripts blocked by default since pnpm 10, `allowBuilds` map in `pnpm-workspace.yaml` replacing `onlyBuiltDependencies`/`ignoredBuiltDependencies` in pnpm 11, and that unapproved builds are skipped with a warning rather than failing the install
+- `pnpm.io/symlinked-node-modules-structure` + `pnpm.io/faq` (web, MEDIUM confidence) + Vite GitHub issue #324 — confirms pnpm's non-flat, symlinked `node_modules` is a long-supported, common Vite configuration, not a source of new breakage
+- Web search, multiple independent sources (MEDIUM confidence) — `pnpm dlx shadcn-svelte@latest init`/`add` confirmed as shadcn-svelte's own documented pnpm invocation, no reported pnpm-specific breakage
+- `bufbuild/buf` GitHub Releases API (verified 2026-08-22) — latest tag `v1.72.0`, published 2026-07-17
+- `/bufbuild/buf` (Context7, HIGH confidence, 53 snippets) + `buf.build/docs/generate/` (WebFetch) — `buf generate`, local/remote plugin config, explicit warning against `go install`/`go tool` for the buf binary itself
+- Web search cross-check (MEDIUM confidence, multiple independent sources) — `buf.gen.yaml` `local: ["go", "tool", "protoc-gen-connect-go"]` array-form syntax for Go-tool-pinned plugin invocation
+- `cytoscape/cytoscape.js` GitHub Releases API (verified 2026-08-22) — latest tag `v3.34.1`, published 2026-08-11
+- `/cytoscape/cytoscape.js` (Context7, HIGH confidence, 660 snippets) — Canvas/WebGL renderer architecture (WebGL opt-in, not default), official performance-degradation guidance
+- `jacomyal/sigma.js` GitHub Releases API (verified 2026-08-22) — latest tag `sigma@4.0.0-beta.5` (2026-08-20, beta — do not adopt), stable npm `sigma@3.0.3`
+- Web search, multiple cross-checked sources (MEDIUM confidence) — Sigma.js vs Cytoscape.js practical scale ceilings (thousands vs 100k+), dagre-vs-elkjs bundle size and maintenance status, `@dagrejs/dagre` as the maintained fork
+- `sveltejs/svelte` GitHub Releases API (verified 2026-08-22) — latest tag `svelte@5.56.10`, published 2026-08-20
+- `/websites/shadcn-svelte` (Context7, HIGH confidence, 1047 snippets) — non-SvelteKit "Vite" installation path with manual `$lib` alias wiring, confirming plain Svelte+Vite is a first-class, documented shadcn-svelte target (not a workaround)
+- This repo's own `.claude/CLAUDE.md` Technology Stack section (existing, validated project research) — confirms `google.golang.org/protobuf v1.36.11` and Go `1.26.5` already pinned, used to verify zero-conflict version match with connect-go's requirement
 
 ---
-*Stack research for: Agent-onboarding skill/plugin + MCP Resources + hooks (codegraph-go v0.10.0 milestone)*
-*Researched: 2026-08-12*
+*Stack research for: Local Graph UI (v0.12.0), codegraph-go*
+*Researched: 2026-08-22 (revised same day — pnpm correction)*

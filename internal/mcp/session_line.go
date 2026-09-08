@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
-	"unicode/utf8"
+
+	"github.com/seanb4t/codegraph-go/internal/textutil"
 )
 
 // sessionLinePrefix is the fixed, additive-only prefix (D-16) of VRFY-03's
@@ -65,24 +66,11 @@ func sanitizeClientField(s string) string {
 	}, valid)
 
 	if len(sanitized) > clientFieldMaxBytes {
-		sanitized = truncateOnRuneBoundary(sanitized, clientFieldMaxBytes)
+		sanitized = textutil.TruncateOnRuneBoundary(sanitized, clientFieldMaxBytes)
 	}
 
 	if sanitized == "" {
 		return "<unknown>"
 	}
 	return sanitized
-}
-
-// truncateOnRuneBoundary returns the prefix of s that is at most maxBytes
-// long, walking backward from maxBytes to the nearest rune boundary so a
-// multi-byte UTF-8 sequence is never split.
-func truncateOnRuneBoundary(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return s
-	}
-	for maxBytes > 0 && !utf8.RuneStart(s[maxBytes]) {
-		maxBytes--
-	}
-	return s[:maxBytes]
 }

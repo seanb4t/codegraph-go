@@ -58,9 +58,19 @@ What this project defends against:
   `codegraph upgrade` against a compiled-in identity, not a configurable one.
 - **A malicious release built from elsewhere.** The SAN pattern binds signatures
   to this repository's release workflow at a tag ref.
-- **Dependency vulnerabilities.** `govulncheck` gates every merge; it is
-  call-graph aware, so it flags reachable vulnerabilities rather than every CVE
-  in the dependency tree.
+- **Dependency vulnerabilities — two scanners, two disjoint trees, neither
+  covers the other.** `govulncheck` gates every merge against the Go
+  dependency graph; it is call-graph aware, so it flags reachable
+  vulnerabilities rather than every CVE in the tree. `pnpm audit` (BLD-06)
+  separately gates every merge against the JavaScript dependency tree
+  declared in `web/pnpm-lock.yaml` — a tree `govulncheck` cannot see at all,
+  just as `pnpm audit` cannot see anything in the Go module graph. Neither
+  scanner is a superset of the other, and together they still do not cover
+  everything: `pnpm audit` only sees dependencies resolved through
+  `pnpm-lock.yaml`. Component source vendored directly into the repository
+  (for example, a `shadcn-svelte add`-style copy-in) does not appear in that
+  lockfile at all and is invisible to this scan — see the vendored-component
+  gap noted below.
 
 What it does **not** defend against, stated plainly:
 
@@ -78,6 +88,13 @@ What it does **not** defend against, stated plainly:
   it as safe to share when the source is not.
 - **MCP transport security.** `serve --mcp` speaks stdio to a local client and
   performs no authentication, by design. Do not expose it over a network.
+- **Registry-vendored UI component source bypassing `pnpm audit`.** Component
+  source copied directly into the repository by a generator (for example,
+  `shadcn-svelte add`) is not a `pnpm-lock.yaml` dependency and is invisible
+  to the JS vulnerability scan — a structural gap, not an oversight. Not live
+  as of this writing (the SPA ships zero such components); it becomes live
+  at the first `shadcn-svelte add`. No provenance pinning exists for this
+  path yet.
 
 ## Scope
 
