@@ -1,6 +1,6 @@
 module github.com/seanb4t/codegraph-go
 
-go 1.26.5
+go 1.26.6
 
 require (
 	charm.land/bubbles/v2 v2.1.1
