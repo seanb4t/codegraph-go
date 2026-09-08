@@ -257,6 +257,20 @@ jobs:
       - name: Run govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         with:
+          # go-version-input MUST be explicitly empty. The action's own
+          # action.yml defaults it to 'stable' and passes it to setup-go as
+          # `go-version:` unconditionally, alongside our `go-version-file:`.
+          # setup-go resolves `go-version` FIRST and emits only a warning —
+          # "Both go-version and go-version-file inputs are specified, only
+          # go-version will be used" — so `go-version-file: go.mod` below is
+          # structurally dead unless this is blank. Observed, not theorised:
+          # run 34232338047 scanned under go1.27.1 while go.mod pinned 1.26.6,
+          # and failed loading packages on cockroachdb/swiss's go1.27
+          # incompatibility (undefined: hashFn / fastrand64) — a BLOCKING
+          # security gate that had silently stopped scanning the toolchain it
+          # claims to. Blank here, not a literal version, so go.mod stays the
+          # single definition of the pin.
+          go-version-input: ""
           go-version-file: go.mod
           repo-checkout: false
 
