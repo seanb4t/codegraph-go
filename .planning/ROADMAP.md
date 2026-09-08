@@ -148,10 +148,20 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 07-01-PLAN.md — TRACER: GRD-01 `CheckRegression` current-metrics positivity, watched RED against the pre-fix build, and `07-MUTATION-LOG.md` created with family (a)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07-02-PLAN.md — GRD-02 `internal/query` dependency-direction archtest over the resolved transitive set, RED-proven on both the wire-layer and indexer-root rules, family (b)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07-03-PLAN.md — GRD-03 `scripts/inject-cosign-key.sh` extraction plus the exactly-one injected-key count assertion, both Task targets rewired, family (c)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 07-04-PLAN.md — GRD-04 per-job conclusion-guard test (removed and inverted both RED-proven), the tautological tap test deleted per D-09, family (d) and the log closed
 
 ### Phase 8: tmux Real-PTY Harness
@@ -231,7 +241,6 @@ Plans:
 
 **Notes**: A Cobra-generated reference as the source of truth is out of scope by construction: `cobra/doc` silently excludes hidden flags by design, so a guard built on it inherits precisely the blind spot it exists to close. `DOCS-05` was deliberately *declined* at v0.11.0 — recorded, not forgotten — when `docs/FLAG-PARITY.md` and its drift guard `internal/cli/flag_parity_test.go` were deleted; this phase is the deferred replacement, not a new idea. Lowest-risk phase in the milestone: a fully proven, previously-shipped guard pattern is retargetable here rather than invented. `DOCS-07` was considered for Phase 7 (it arrived as a pending todo beside the guard todos and carries security framing) and deliberately kept here so one phase owns the docs tree.
 **Plans**: TBD
-
 
 ## Progress
 
