@@ -1562,22 +1562,6 @@ func TestHomebrewTapTokenScopedToReleaseJob(t *testing.T) {
 	}
 }
 
-// TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets guards
-// against a future "consolidate the two Apps" edit turning a red test
-// instead of silently failing ROADMAP criterion 5 (D-16): the tap-scoped
-// App's two secret names must never equal the release-please App's two
-// secret names (release-please.yml's APP_ID/APP_PRIVATE_KEY).
-func TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets(t *testing.T) {
-	releasePleaseAppSecretNames := []string{"APP_ID", "APP_PRIVATE_KEY"}
-	for _, tapName := range homebrewTapCredentialNames[:2] { // exclude HOMEBREW_TAP_TOKEN, which is not a secret name
-		for _, rpName := range releasePleaseAppSecretNames {
-			if tapName == rpName {
-				t.Errorf("Homebrew tap App secret name %q equals release-please App secret name %q — the two Apps must never share a secret name (D-16)", tapName, rpName)
-			}
-		}
-	}
-}
-
 // TestPostReleaseJobsDeclareCheckoutPolicy is the plan 02-06 Task 3
 // mitigation: every job in post-release-verify.yml must be classified into
 // exactly one of latestVerifierJobIDs or releaseMatchedTestJobIDs, and its

@@ -4,6 +4,9 @@ title: tap App secret-distinctness test is tautological — it compares two in-t
 area: testing
 resolves_phase: 7
 severity: medium
+status: resolved
+resolved_at: 2026-09-08T00:00:00.000Z
+resolved_by_phase: 7
 files:
 
   - internal/upgrade/release_workflow_shape_test.go:1544-1553
@@ -54,3 +57,17 @@ Decode both workflows and compare the **actually referenced** secret names:
    assertion passes vacuously (rule `84d1gfpywd`).
 
 Prove RED by pointing `release.yml`'s mint at `APP_ID` / `APP_PRIVATE_KEY`.
+
+## Resolution (2026-09-08, Phase 7, 07-04-PLAN.md, D-09)
+
+Resolved by **deletion, not rewrite**. GRD-05 was de-scoped from this
+milestone at phase discussion (07-CONTEXT.md D-09): the property is
+low-value, a lying test is worse than none, and rewriting it was judged not
+worth the phase's time. `TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets`
+was removed in full, together with its doc comment and the
+`releasePleaseAppSecretNames` local slice; `homebrewTapCredentialNames`
+survives unchanged since other tests in the same file consume it. GRD-05's
+file-reading rewrite this todo's "Fix shape" describes is recorded in
+REQUIREMENTS.md as a v2 item, deferred rather than abandoned. A deletion
+carries no RED demonstration by construction; it is recorded as a one-line
+entry in `07-MUTATION-LOG.md` rather than a demonstration family.
