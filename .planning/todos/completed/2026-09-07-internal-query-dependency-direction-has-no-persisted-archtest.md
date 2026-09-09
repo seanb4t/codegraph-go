@@ -4,10 +4,14 @@ title: internal/query's dependency-direction invariant (T-01-18) has no persiste
 area: architecture
 resolves_phase: 7
 severity: medium
+status: resolved
+resolved_at: 2026-09-08T00:00:00.000Z
+resolved_by_phase: 7
 files:
 
   - internal/query/
   - internal/graphstore/archtest/import_graph_test.go
+  - internal/query/archtest/import_direction_test.go
 
 threat_ref: T-01-18
 audit_acknowledged:
@@ -77,3 +81,23 @@ inventing a new mechanism:
 Note the "count uses, never the declaration" discipline: assert over the resolved
 dependency set, not over import lines in source files, which a build-tag-guarded or
 transitively-reached import would evade.
+
+## Resolution (2026-09-08, Phase 7, 07-02-PLAN.md)
+
+Landed as `internal/query/archtest/import_direction_test.go`,
+`TestQueryImportsNoWireLayerOrIndexerRoot`. Forbidden wire-layer set expanded to
+the D-02 union of the roadmap list and this todo's list (`internal/uiserver`,
+`internal/mcp`, `internal/uiproto`, `connectrpc.com/connect`), checked over the
+resolved transitive dependency set (`packages.NeedDeps`, not direct imports) of
+every loaded `internal/query`-rooted package including test variants. A second,
+production-scoped rule additionally forbids the `internal/indexer` root while
+allowing the two leaves `internal/query` already resolves
+(`internal/indexer/goextract`, `internal/indexer/nodeid`) — scoped to production
+because `internal/query/engine_test.go` legitimately imports the root to build
+fixtures.
+
+Both forbidden sets were proven RED against a real import (`07-MUTATION-LOG.md`
+family (b)) before being called a guard, then reverted byte-clean. Positive
+controls assert `internal/graphstore` and `internal/indexer/goextract` present,
+and `internal/parser` present-but-not-direct, proving the walk resolves beyond
+one hop rather than passing vacuously on a degenerate load.
