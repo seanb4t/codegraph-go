@@ -47,6 +47,19 @@ if [ ! -r "${COMMITTED_CONFIG}" ]; then
   exit 2
 fi
 
+# The key path is embedded verbatim inside a YAML double-quoted scalar. A
+# literal double quote or backslash in it would emit a malformed line that
+# is still, syntactically, an ADDITION — so the additions-only diff guard
+# below would accept it. Refuse such a path here instead of escaping it:
+# both call sites hand over a mktemp-scoped path that can never contain
+# either byte, so a match is a caller bug worth a loud stop (review WR-01).
+case "${COSIGN_KEY}" in
+  *'"'*|*'\'*)
+    echo "::error::inject-cosign-key.sh: cosign key path must not contain a double quote or backslash (it is embedded in a YAML double-quoted scalar): ${COSIGN_KEY}" >&2
+    exit 2
+    ;;
+esac
+
 # Inject --key into a GENERATED COPY of the committed config — the whole
 # mechanism, not optional. The anchor's exact six-space indent and exact
 # quoting are load-bearing: the committed .goreleaser.yaml carries exactly
