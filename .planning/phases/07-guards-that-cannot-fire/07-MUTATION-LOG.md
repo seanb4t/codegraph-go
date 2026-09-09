@@ -46,3 +46,68 @@ ok  	github.com/seanb4t/codegraph-go/internal/bench	0.055s
 Both `degenerate_current_*` subtests pass alongside the full existing table, confirming `CheckRegression` now refuses a non-positive `current.FilesPerSec` or `current.PeakRSSBytes` with a named error rather than treating it as no regression or misreporting it as one.
 
 ---
+
+## Family (b) — GRD-02: `internal/query` dependency-direction archtest (T-01-18)
+
+**Test name:** `TestQueryImportsNoWireLayerOrIndexerRoot` (`internal/query/archtest/import_direction_test.go`) — proves `internal/query`'s resolved transitive dependency set contains none of the forbidden wire-layer paths (`internal/uiserver`, `internal/mcp`, `internal/uiproto`, `connectrpc.com/connect`), checked over every loaded package variant, and that the production compilation unit's resolved set does not contain the `internal/indexer` root, while `internal/indexer/goextract` and `internal/indexer/nodeid` remain allowed leaves.
+
+Two independent sub-demonstrations, both mutating the same tracked production file, `internal/query/traverse.go`, each fully reverted before the next began.
+
+### b1 — wire layer (`connectrpc.com/connect`)
+
+**Pre-mutation gate:** `git diff --quiet -- internal/query/traverse.go` → exit 0 (clean), checked immediately before the mutation.
+
+**Mutation applied:** Added a blank import `_ "connectrpc.com/connect"` to `internal/query/traverse.go`'s import block. `connectrpc.com/connect` was used rather than a first-party wire package (`internal/uiserver` or `internal/mcp`) because both of those already import `internal/query` — using either would create an import cycle and fail at Go compile time rather than through the archtest's own assertion, which would prove nothing about the guard. `connectrpc.com/connect` is external, already present in `go.mod` (as an indirect dependency, `v1.20.0`), and creates no cycle.
+
+**Observed failure (pasted, `GOTOOLCHAIN=go1.26.6 go test -count=1 -v ./internal/query/archtest/`):**
+
+```
+=== RUN   TestQueryImportsNoWireLayerOrIndexerRoot
+    import_direction_test.go:127: package github.com/seanb4t/codegraph-go/internal/query resolves forbidden wire-layer dependency connectrpc.com/connect in its transitive dependency set (the dependency may be indirect) — internal/query must not depend on the wire layer it is consumed by
+    import_direction_test.go:127: package github.com/seanb4t/codegraph-go/internal/query resolves forbidden wire-layer dependency connectrpc.com/connect in its transitive dependency set (the dependency may be indirect) — internal/query must not depend on the wire layer it is consumed by
+    import_direction_test.go:127: package github.com/seanb4t/codegraph-go/internal/query_test resolves forbidden wire-layer dependency connectrpc.com/connect in its transitive dependency set (the dependency may be indirect) — internal/query must not depend on the wire layer it is consumed by
+    import_direction_test.go:127: package github.com/seanb4t/codegraph-go/internal/query.test resolves forbidden wire-layer dependency connectrpc.com/connect in its transitive dependency set (the dependency may be indirect) — internal/query must not depend on the wire layer it is consumed by
+    import_direction_test.go:169: loaded 7 packages; production internal/query resolved 397 transitive dependencies
+--- FAIL: TestQueryImportsNoWireLayerOrIndexerRoot (0.11s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/query/archtest	0.297s
+FAIL
+```
+
+**Revert:** `git checkout -- internal/query/traverse.go`.
+
+**Post-revert gate:** `git diff --quiet -- internal/query/traverse.go` → exit 0 (clean).
+
+### b2 — indexer root (`internal/indexer`, production scope)
+
+**Pre-mutation gate:** `git diff --quiet -- internal/query/traverse.go` → exit 0 (clean), re-checked immediately before this mutation.
+
+**Mutation applied:** Added a blank import `_ "github.com/seanb4t/codegraph-go/internal/indexer"` to the same import block in `internal/query/traverse.go`. This creates no import cycle — the `internal/indexer` root does not itself import `internal/query`.
+
+**Observed failure (pasted, `GOTOOLCHAIN=go1.26.6 go test -count=1 -v ./internal/query/archtest/`):**
+
+```
+=== RUN   TestQueryImportsNoWireLayerOrIndexerRoot
+    import_direction_test.go:139: production package github.com/seanb4t/codegraph-go/internal/query resolves the forbidden internal/indexer root github.com/seanb4t/codegraph-go/internal/indexer in its transitive dependency set (the dependency may be indirect) — only internal/indexer/goextract and internal/indexer/nodeid are allowed leaves; internal/query/engine_test.go is the one legitimate in-package importer of the root, and this rule is scoped to exclude only that test file, not to permit the root from production code
+    import_direction_test.go:169: loaded 7 packages; production internal/query resolved 425 transitive dependencies
+--- FAIL: TestQueryImportsNoWireLayerOrIndexerRoot (0.08s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/query/archtest	0.223s
+FAIL
+```
+
+**Revert:** `git checkout -- internal/query/traverse.go`.
+
+**Post-revert gate:** `git diff --quiet -- internal/query/traverse.go` → exit 0 (clean).
+
+The two transcripts differ (different forbidden path named in each), confirming each forbidden set discriminates on its own rather than one rule masking the other.
+
+**Byte-clean proof:** `git status --porcelain -- internal/query/traverse.go` is empty after both reverts — four cleanliness-gate checks total (before and after each of the two mutations) all returned exit 0.
+
+**Green re-run (`GOTOOLCHAIN=go1.26.6 go test -count=1 ./internal/query/archtest/`):**
+
+```
+ok  	github.com/seanb4t/codegraph-go/internal/query/archtest	0.148s
+```
+
+---
