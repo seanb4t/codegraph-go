@@ -5,10 +5,10 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 8
 current_phase_name: tmux Real-PTY Harness
 status: planning
-stopped_at: Phase 7 complete, ready to plan Phase 8
-last_updated: "2026-09-09T01:15:35.691Z"
-last_activity: 2026-09-08
-last_activity_desc: Phase 7 complete, transitioned to Phase 8
+stopped_at: Phase 7 verified (UAT 22/22), ready to discuss Phase 8
+last_updated: "2026-09-09T20:50:00.000Z"
+last_activity: 2026-09-09
+last_activity_desc: Phase 7 UAT complete — 22/22 passed, 0 issues; phase verified
 state_head: 1879aea1ba80178cbdc5adaaeaf4d03322d4ff94
 progress:
   total_phases: 6
@@ -22,17 +22,17 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-08 at the v0.13.0 start)
+See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 7 — Guards That Cannot Fire
+**Current focus:** Phase 8 — tmux Real-PTY Harness
 
 ## Current Position
 
 Phase: 8 — tmux Real-PTY Harness
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-09-08 — Phase 7 complete, transitioned to Phase 8
+Last activity: 2026-09-09 — Phase 7 UAT complete (22/22 passed, 0 issues), phase verified
 
 ## Performance Metrics
 
@@ -241,16 +241,14 @@ Standing decisions that outlive every milestone:
 
 ### Pending Todos
 
-8 pending — `/gsd-capture --list` to review. One (`CR-01`) is now in scope as this milestone's `FIX-01` (Phase 1); the `bench pinnedAt` item was expected to reconcile in v0.11.0 Phase 6 and should be re-checked. None block v0.12.0.
+5 listed — `/gsd-capture --list` to review. Phase 7 resolved three (dry-run-signed, post-release-verify, tap-secret distinctness) and code review filed one new. **This table has drifted from `.planning/todos/pending/`, which holds only 2 files** (brew-trust, graphstore archtest): the mcp flake, golangci-lint, `bench pinnedAt` and `CR-01` rows predate v0.13.0 and were never reconciled when their files moved or were folded into a milestone. Reconciling those four is out of Phase 7's scope and is left for a deliberate pass. None block v0.13.0.
 
 | Created | Area | Severity | Title |
 |---------|------|----------|-------|
 | 2026-08-07 | mcp | major | Wire oracle `toolslist-repeat` response ordering flake — id-2 response overtaken by id-3 under parallel load on Linux; latent on main, re-run of the identical commit passed |
-| 2026-08-09 | release | — | `dry-run-signed` additions-only diff guard passes vacuously |
-| 2026-08-09 | ci | — | post-release-verify event-aware conclusion guard has no regression assertion |
 | 2026-08-10 | ci | — | Add golangci-lint with gofmt and idiomatic Go linters |
 | 2026-08-10 | docs | — | `brew trust` instructions recommend broader tap grant with no security framing |
-| 2026-08-10 | ci | — | Tap App secret distinctness test is tautological and reads no workflow |
+| 2026-09-08 | testing | — | `internal/graphstore/archtest` ignores per-package `go/packages` load errors — sibling of the blindness fixed in `internal/query/archtest` (P7 CR-01); filed by code review after the Phase 7 plans closed |
 | 2026-08-14 | bench | — | `tools/bench/runner/main.go:482` `pinnedAt()` validates a checkout by `git rev-parse HEAD` alone — the HEAD-only anti-pattern Phase 1's four-part integrity check replaces |
 | — | mcp | major | **CR-01 — `internal/mcp/server.go` `pendingWriter` counter corrupted by server-initiated notifications. NOW IN SCOPE as v0.12.0 `FIX-01`, Phase 1.** |
 
@@ -262,6 +260,9 @@ Resolved and filed to `.planning/todos/completed/`:
 | 2026-07-31 | perf | Bisect the indexer throughput regression — **REFUTED**; the regression did not exist (cross-platform baseline comparison) |
 | 2026-07-31 | perf | Rebless perf baseline on ubuntu-latest — **DONE**; gate green on main |
 | 2026-08-13 | agents | Author a codegraph usage skill for agents — closed by v0.10.0 Phases 6–8 |
+| 2026-09-08 | release | `dry-run-signed` additions-only diff guard passes vacuously — closed by Phase 7 `GRD-03` (`scripts/inject-cosign-key.sh` asserts exactly one injected `--key=` line) |
+| 2026-09-08 | ci | post-release-verify event-aware conclusion guard has no regression assertion — closed by Phase 7 `GRD-04` (`TestPostReleaseJobsDeclareConclusionGuard`) |
+| 2026-09-08 | ci | Tap App secret distinctness test is tautological and reads no workflow — closed by Phase 7 `GRD-05` by deleting the test, per maintainer decision |
 
 ### Blockers/Concerns
 
@@ -383,9 +384,9 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-09T00:53:25.151Z
-Stopped at: Phase 7 complete, ready to plan Phase 8
-  NEXT: `/gsd-plan-phase 7` (Guards That Cannot Fire)
+Last session: 2026-09-09T20:50:00.000Z
+Stopped at: Phase 7 verified (UAT 22/22 passed, 0 issues), ready to discuss Phase 8
+  NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
     - **Phase numbering continues at 7.** v0.12.0 ran Phases 1–6 and is archived under `milestones/v0.12.0-phases/`; `.planning/phases/` holds only the `999.2` and `999.4` backlog directories, both promoted by this milestone. Phases 7–12 collide with nothing.
@@ -400,5 +401,5 @@ Stopped at: Phase 7 complete, ready to plan Phase 8
 
 ## Operator Next Steps
 
-- Review `.planning/ROADMAP.md` → v0.13.0 (Phases 7-12) and approve or send revisions
-- Then plan the first phase with /gsd-plan-phase 7
+- Phase 7 is verified and closed; Phases 8-12 of v0.13.0 remain
+- Discuss the next phase with /gsd-discuss-phase 8 (tmux Real-PTY Harness)

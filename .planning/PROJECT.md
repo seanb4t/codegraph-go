@@ -302,11 +302,11 @@ stapling-impossibility findings remain live constraints for DIST-06.
 **v0.13.0 — Guard Hardening & UI Follow-through** (scoped 2026-09-08). Requirement IDs are
 defined in `REQUIREMENTS.md` and mapped to phases in `ROADMAP.md`; the shape of the work:
 
-- [ ] `CheckRegression` refuses a non-positive *current* throughput or RSS reading, naming the degenerate field (999.4) — demonstrated RED with a degenerate-input test
-- [ ] Persisted archtest that `internal/query` imports neither `internal/uiserver` nor any wire-layer package (T-01-18)
-- [ ] `release:dry-run-signed` additions-only diff guard carries a positive assertion that the awk anchor matched and the injection happened
-- [ ] `post-release-verify.yml` event-aware conclusion guard has a test that fails when the guard is removed or inverted
-- [ ] Tap App secret-distinctness test deleted rather than rewritten (GRD-05 declined at the Phase 7 discussion, 2026-09-08 — low-value property, lying test removed)
+- [x] `CheckRegression` refuses a non-positive *current* throughput or RSS reading, naming the degenerate field (999.4) — demonstrated RED with a degenerate-input test — **Phase 7**
+- [x] Persisted archtest that `internal/query` imports neither `internal/uiserver` nor any wire-layer package (T-01-18) — **Phase 7**
+- [x] `release:dry-run-signed` additions-only diff guard carries a positive assertion that the awk anchor matched and the injection happened — **Phase 7**
+- [x] `post-release-verify.yml` event-aware conclusion guard has a test that fails when the guard is removed or inverted — **Phase 7**
+- [x] Tap App secret-distinctness test deleted rather than rewritten (GRD-05 declined at the Phase 7 discussion, 2026-09-08 — low-value property, lying test removed) — **Phase 7**
 - [ ] tmux real-PTY e2e harness: bare `daemon` empty-registry output, picker alt-screen enter/restore, checkbox picker glyphs/toggle/cancel, stable-frames proxy — build-tagged, skips cleanly without tmux (999.2)
 - [ ] BRW-11 — editor handoff link from node detail with a configurable URI scheme
 - [ ] BRW-10 — containing-symbol breadcrumb while scrolling a long file
@@ -453,4 +453,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-08 at the v0.13.0 (Guard Hardening & UI Follow-through) milestone start — Current Milestone section added, 12 Active items scoped from the deferral backlog (999.2, 999.4, DOCS-05 and three guard todos promoted; BRW-10/11, HLT-04, GRF-06 pulled from v0.12.0's v2 list), Current State's next-milestone paragraph rewritten.*
+*Last updated: 2026-09-09 after Phase 7 (Guards That Cannot Fire) — GRD-01…04 delivered and GRD-05 closed by deleting the tautological test; each guard proven RED against a confirmed-applied, byte-cleanly-reverted mutation and the four demonstrations committed in 07-MUTATION-LOG.md (GRD-06). Five Active items checked off; nothing invalidated, nothing emerged.*
