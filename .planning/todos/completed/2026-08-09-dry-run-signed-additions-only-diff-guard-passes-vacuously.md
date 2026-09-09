@@ -4,10 +4,13 @@ title: release:dry-run-signed's additions-only diff guard passes vacuously when 
 area: release
 resolves_phase: 7
 severity: medium
+status: resolved
+resolved_at: 2026-09-08T00:00:00.000Z
+resolved_by_phase: 7
 files:
 
-  - Taskfile.yml:586-605
-  - Taskfile.yml:1085-1100
+  - scripts/inject-cosign-key.sh
+  - Taskfile.yml
 
 threat_ref: T-02-08
 audit_acknowledged:
@@ -77,3 +80,27 @@ matters; assert the property directly:
 Prove the fix RED-then-GREEN per this repository's standing rule: deliberately
 perturb the anchor (re-indent the `sign-blob` args block in a generated copy),
 observe the new assertion fail loudly, then restore and observe it pass.
+
+## Resolution (2026-09-08, Phase 7, 07-03-PLAN.md)
+
+The awk injection and the additions-only diff guard were extracted from both
+`release:dry-run-signed` and `release:rehearse-notarize` into one script,
+`scripts/inject-cosign-key.sh` (D-05), taking the committed config path, the
+generated output path, and the cosign key path as positional arguments.
+Neither Task target retains an inline copy of the extracted logic.
+
+The positive assertion this todo asked for was added during the extraction
+(D-06): the script counts the `--key=` lines added in the diff, prints the
+count, and refuses any count other than exactly 1 — zero means the anchor no
+longer matches (the hang case this todo describes), two or more means a
+duplicated `sign-blob` block. No shape test was added asserting either Task
+target calls the script (D-07); the script's own assertion plus its recorded
+RED demonstration is the guard.
+
+Proven RED-then-GREEN exactly as suggested above: a copy of the committed
+`.goreleaser.yaml` with the `sign-blob` anchor re-indented by two extra
+spaces produced `injected --key= lines: 0` and a non-zero exit, with the
+committed `.goreleaser.yaml` itself proven byte-unchanged before and after
+(`git diff --quiet -- .goreleaser.yaml`). A green re-run against the real
+committed config reported exactly 1. Full transcripts in
+`07-MUTATION-LOG.md` family (c).

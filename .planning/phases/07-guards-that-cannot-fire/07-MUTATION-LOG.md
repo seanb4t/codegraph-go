@@ -111,3 +111,45 @@ ok  	github.com/seanb4t/codegraph-go/internal/query/archtest	0.148s
 ```
 
 ---
+
+## Family (c) — GRD-03: `scripts/inject-cosign-key.sh` additions-only diff guard (todo T-02-08)
+
+**Guard:** `scripts/inject-cosign-key.sh`, called by both `release:dry-run-signed` and `release:rehearse-notarize`. It injects `--key=<path>` into a generated copy of a GoReleaser config at the `sign-blob` anchor, asserts the copy differs from its input by additions only, and — the new positive assertion this family proves — counts the added `--key=` lines and refuses any count other than exactly 1.
+
+**What this proves:** the additions-only diff guard alone passes vacuously when the awk anchor stops matching (a re-indent, a requote, a renamed key): the injection becomes a no-op, the generated config is byte-identical to the input, the diff is empty, and every additions-only check is trivially satisfied by that empty diff. The count assertion closes that gap by refusing a count of zero.
+
+**Mutation applied — deliberate deviation from the tracked-file mutation shape used by families (a)/(b):** no tracked file was mutated, and there is no `git checkout` revert step in this family. The mutation instead perturbs a **copy of the committed `.goreleaser.yaml` written into a temporary directory** — the committed release config must never be edited to prove a guard, since it is the actual file every real release pipeline invocation reads. The copy's `sign-blob` anchor line was re-indented by two extra spaces (`      - "sign-blob"` → `        - "sign-blob"`), which is enough to break the awk pattern's exact six-space-indent match while the file remains valid YAML. A reader should read the absence of a `git checkout` here as this deliberate choice, not an omission — see families (a) and (b) above for the tracked-file-mutation shape this family departs from.
+
+**Pre-mutation cleanliness gate:** `git diff --quiet -- .goreleaser.yaml` → exit 0 (clean), checked immediately before writing the re-indented copy.
+
+**Command (`sed` writes the re-indented copy into a temp dir; the script is invoked against that copy only):**
+
+```
+T=$(mktemp -d)
+sed 's/^      - "sign-blob"$/        - "sign-blob"/' .goreleaser.yaml > "$T/reindented.yaml"
+bash scripts/inject-cosign-key.sh "$T/reindented.yaml" "$T/gen.yaml" "$T/cosign.key"
+```
+
+**Observed failure (pasted verbatim, exit code 1):**
+
+```
+generated config differs from /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.TLfOKX6Wir/reindented.yaml by additions only:
+
+injected --key= lines: 0
+::error::expected exactly 1 injected --key= line, found 0 — zero means the sign-blob anchor no longer matches (the hang case), two or more means a duplicated sign-blob block
+```
+
+The additions-only checks passed on the empty diff — the vacuity this family exists to close — and the new count assertion was the only thing that refused, reporting a count of zero and exiting 1.
+
+**Post-demonstration cleanliness gate:** `git diff --quiet -- .goreleaser.yaml` → exit 0 (clean) — the committed config was never touched; the entire mutation lived in the temporary directory shown above.
+
+**Green re-run, against the real committed `.goreleaser.yaml` (`bash scripts/inject-cosign-key.sh .goreleaser.yaml "$T/gen.yaml" "$T/cosign.key"`, exit 0):**
+
+```
+generated config differs from .goreleaser.yaml by additions only:
+330a331
+>       - "--key=/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.DLa0ndkBvu/cosign.key"
+injected --key= lines: 1
+```
+
+---
