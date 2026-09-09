@@ -145,7 +145,7 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
   5. A committed mutation log carries, for each of the four guards, the pasted failing output from its RED demonstration plus evidence of a byte-clean revert, following `03-MUTATION-LOG.md`'s precedent — four demonstrations, none of them summarised away (GRD-06)
 
 **Notes**: Every fix has an exact source location and an exact reusable structural precedent already in-tree — `internal/graphstore/archtest/import_graph_test.go` for `GRD-02`, `internal/upgrade/bench_workflow_shape_test.go` for `GRD-04` — so this phase should skip the research pass. `GRD-01`'s fix must not itself be vacuous: a bare positivity floor is trivially satisfiable by a different measurement bug, so the test exercises the historical degenerate frame rather than a synthetic one. A project-wide mutation-testing framework is out of scope by construction; the hand-authored RED-demonstration convention already works at this scale. Consumes backlog **999.4**, three pending todos (dry-run-signed, post-release-verify, tap secret — the last resolved by deleting the tautological test, not rewriting it) and the T-01-18 archtest item. `GRD-07`/`GRD-08` were declined for this milestone by the maintainer and are recorded in REQUIREMENTS.md → v2, not silently dropped; `GRD-05` joined them at the Phase 7 discussion (2026-09-08). The `query`→`indexer` scoping question was resolved at that discussion: the archtest forbids the `internal/indexer` root and allows the `goextract`/`nodeid` leaves (07-CONTEXT.md D-01), which fixes where Phase 10's helper may live.
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -158,7 +158,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 07-03-PLAN.md — GRD-03 `scripts/inject-cosign-key.sh` extraction plus the exactly-one injected-key count assertion, both Task targets rewired, family (c)
+- [x] 07-03-PLAN.md — GRD-03 `scripts/inject-cosign-key.sh` extraction plus the exactly-one injected-key count assertion, both Task targets rewired, family (c)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -249,7 +249,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Guards That Cannot Fire | 2/4 | In Progress|  |
+| 7. Guards That Cannot Fire | 3/4 | In Progress|  |
 | 8. tmux Real-PTY Harness | 0/TBD | Not started | - |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 0/TBD | Not started | - |
 | 10. Index Health — The Coverage Denominator | 0/TBD | Not started | - |

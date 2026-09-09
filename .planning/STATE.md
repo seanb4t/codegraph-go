@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 7
 current_phase_name: Guards That Cannot Fire
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-09-09T00:24:28.587Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-09-09T00:40:59.931Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 7 execution started
-state_head: 5568e1cf4eb1bd2323f054a18301e844316e7d7f
+state_head: 327706c0fb2615d8a8d657adf8b29913c8b0918b
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 3
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-08 at the v0.13.0 start)
 ## Current Position
 
 Phase: 7 (Guards That Cannot Fire) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 7 execution started
 
@@ -110,6 +110,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P07 | 45min | 3 tasks | 4 files |
 | Phase 07 P01 | 8min | 3 tasks | 3 files |
 | Phase 07 P02 | 22 min | 3 tasks | 5 files |
+| Phase 07 P03 | 18min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -231,6 +232,8 @@ Standing decisions that outlive every milestone:
 - [Phase 07]: Followed D-10 exactly: current-metrics positivity checks inserted immediately after the baseline positivity checks and before delta math
 - [Phase 07]: 07-MUTATION-LOG.md family (a) has no revert step because RED was the absence of the fix, not a mutation of correct code
 - [Phase 07]: GRD-02: internal/query archtest scoped the indexer-root rule to the production compilation unit only, allowing internal/query/engine_test.go's legitimate in-package import of the internal/indexer root for fixture construction, per D-01/D-04.
+- [Phase 7]: [Phase 07]: 07-03: extracted the dry-run-signed cosign-key injection and additions-only diff guard into scripts/inject-cosign-key.sh, adding the missing positive assertion (exactly 1 injected --key= line) that closes T-02-08's vacuous-guard gap; no shape test added asserting the wiring per D-07
+- [Phase 7]: [Phase 07]: 07-03: family (c)'s mutation-log entry has no tracked-file mutation or revert step (deliberate deviation) — the RED perturbation was applied to a copy of .goreleaser.yaml in a temp dir, since the committed release config must never be edited to prove a guard
 
 ### Pending Todos
 
@@ -376,8 +379,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-09T00:24:28.572Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-09-09T00:40:59.915Z
+Stopped at: Completed 07-03-PLAN.md
   NEXT: `/gsd-plan-phase 7` (Guards That Cannot Fire)
   CARRY-OVER:
 

@@ -20,7 +20,7 @@
 
 - [x] **GRD-01**: `CheckRegression` refuses a non-positive *current* throughput or peak-RSS reading with an error naming the degenerate field, mirroring the existing baseline check — demonstrated RED with `current.PeakRSSBytes = 0` on an otherwise-matching frame before the fix lands (999.4)
 - [x] **GRD-02**: A persisted archtest asserts `internal/query` imports no wire-layer package (`internal/uiserver`, `connectrpc.com/connect`, `internal/mcp`), following `internal/graphstore/archtest`'s `go/packages` pattern with a package-count sanity check and a positive control that fails when the expected importer disappears (T-01-18)
-- [ ] **GRD-03**: `release:dry-run-signed`'s additions-only diff guard carries a positive assertion that the awk anchor matched and the `--key=` injection occurred, failing when the anchor stops matching rather than passing vacuously
+- [x] **GRD-03**: `release:dry-run-signed`'s additions-only diff guard carries a positive assertion that the awk anchor matched and the `--key=` injection occurred, failing when the anchor stops matching rather than passing vacuously
 - [ ] **GRD-04**: A test parses `post-release-verify.yml` and asserts every job carries the event-aware conclusion guard in its expected shape, failing when the guard is removed or inverted on any job
 - [ ] **GRD-06**: Each of GRD-01..04 is recorded in a committed mutation log with pasted failing output from its RED demonstration and a byte-clean revert, following `03-MUTATION-LOG.md`'s precedent
 
@@ -105,7 +105,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | GRD-01 | Phase 7 | Complete |
 | GRD-02 | Phase 7 | Complete |
-| GRD-03 | Phase 7 | Pending |
+| GRD-03 | Phase 7 | Complete |
 | GRD-04 | Phase 7 | Pending |
 | GRD-06 | Phase 7 | Pending |
 | TTY-01 | Phase 8 | Pending |
