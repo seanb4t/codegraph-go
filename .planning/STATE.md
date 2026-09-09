@@ -5,11 +5,11 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 7
 current_phase_name: Guards That Cannot Fire
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-09-09T00:07:13.260Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-09-09T00:24:28.587Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 7 execution started
-state_head: 0dd78e73900b1e5257414a302c10783703323bf1
+state_head: 5568e1cf4eb1bd2323f054a18301e844316e7d7f
 progress:
   total_phases: 6
   completed_phases: 0
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-08 at the v0.13.0 start)
 ## Current Position
 
 Phase: 7 (Guards That Cannot Fire) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 7 execution started
 
@@ -109,6 +109,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 06 P06 | 22min | 2 tasks | 3 files |
 | Phase 06 P07 | 45min | 3 tasks | 4 files |
 | Phase 07 P01 | 8min | 3 tasks | 3 files |
+| Phase 07 P02 | 22 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -229,6 +230,7 @@ Standing decisions that outlive every milestone:
 - [Phase 6]: pendingWriter-analogue verdict recorded: no analogue in internal/uiserver, discriminating control on 'type pendingWriter struct' (=1) vs bare word (=9)
 - [Phase 07]: Followed D-10 exactly: current-metrics positivity checks inserted immediately after the baseline positivity checks and before delta math
 - [Phase 07]: 07-MUTATION-LOG.md family (a) has no revert step because RED was the absence of the fix, not a mutation of correct code
+- [Phase 07]: GRD-02: internal/query archtest scoped the indexer-root rule to the production compilation unit only, allowing internal/query/engine_test.go's legitimate in-package import of the internal/indexer root for fixture construction, per D-01/D-04.
 
 ### Pending Todos
 
@@ -374,8 +376,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-09T00:06:45.229Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-09-09T00:24:28.572Z
+Stopped at: Completed 07-02-PLAN.md
   NEXT: `/gsd-plan-phase 7` (Guards That Cannot Fire)
   CARRY-OVER:
 
