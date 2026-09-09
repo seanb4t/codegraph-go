@@ -6,7 +6,7 @@
     {
       "number": "7",
       "name": "Guards That Cannot Fire",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "8",
@@ -36,8 +36,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 7 of 6 · 0% · ready to verify"
+    "label": "Advance to the next step (plan phase 8)",
+    "reason": "Phase 8 of 6 — needs a plan"
   },
-  "updated_at": "2026-09-09T00:53:02.995Z"
+  "updated_at": "2026-09-09T01:15:35.715Z"
 }
