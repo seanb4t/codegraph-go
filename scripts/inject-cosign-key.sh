@@ -54,7 +54,7 @@ fi
 # both call sites hand over a mktemp-scoped path that can never contain
 # either byte, so a match is a caller bug worth a loud stop (review WR-01).
 case "${COSIGN_KEY}" in
-  *'"'*|*'\'*)
+  *'"'*|*"\\"*)
     echo "::error::inject-cosign-key.sh: cosign key path must not contain a double quote or backslash (it is embedded in a YAML double-quoted scalar): ${COSIGN_KEY}" >&2
     exit 2
     ;;
