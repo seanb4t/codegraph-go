@@ -18,7 +18,7 @@ affects: [07-guards-that-cannot-fire, phase-10-hlt-05-discovery-exclusion-helper
 actuals:
   tokens: 4296
   tasks: 3
-  commits: 2
+  commits: 4
   plan_head_before: 815c015f7c99fc219a6446d7231c5f1cd85686cf
 
 # Tech tracking
@@ -128,7 +128,7 @@ Each task was committed atomically:
 2. **Task 2: RED — two forbidden-import mutations, each watched fail and reverted byte-clean** - no commit (verification-only task; both mutations were reverted byte-clean per the plan's own instruction not to commit either mutation or leave a scratch edit in the tree — the transcripts it produced feed Task 3's commit)
 3. **Task 3: Append mutation-log family (b) and close the T-01-18 todo** - `5568e1cf` (docs)
 
-**Plan metadata:** commit created by this SUMMARY's own atomic write+commit step.
+**Plan metadata:** `ffdc073e` (docs: SUMMARY + STATE/ROADMAP/REQUIREMENTS), plus a follow-up fix-up commit `2fe0339f` (fix) that staged the todo-resolution edits `5568e1cf` had dropped and synced `.planning/state.json` — see Deviations.
 
 ## Files Created/Modified
 - `internal/query/archtest/import_direction_test.go` - New archtest package: `TestQueryImportsNoWireLayerOrIndexerRoot`, `transitiveDeps`, `stripTestVariant`, forbidden/allowed import-path constants
@@ -152,10 +152,18 @@ Each task was committed atomically:
 - **Verification:** `GOTOOLCHAIN=go1.26.6 go test -count=1 -v ./internal/query/archtest/` passes green on the untouched tree; both RED demonstrations in Task 2 (which specifically target the production-vs-test-scope boundary) produce the correct, discriminating failure.
 - **Committed in:** `980d2dd9` (Task 1 commit — the fix landed before the task's own commit, since it was found and fixed within Task 1's own acceptance-criteria gate, not after)
 
+**2. [Rule 3 - Blocking] Recovered todo-resolution edits dropped by a failed multi-path `git add`**
+- **Found during:** Post-SUMMARY self-check (`git status --short` showed the completed todo file and `.planning/state.json` still modified after the Task 3 and metadata commits)
+- **Issue:** Task 3's staging step ran `git add <pending-path> <completed-path>` in one invocation. Since `git mv` had already moved the file, `<pending-path>` no longer existed; `git add` failed the ENTIRE invocation on that one bad pathspec (`fatal: pathspec ... did not match any files`) rather than staging the still-valid `<completed-path>`. The `5568e1cf` commit therefore captured only the `git mv` rename (pre-edit content) — the frontmatter (`status: resolved`, `resolved_at`, `resolved_by_phase`, the added `files` entry) and the resolution note were silently left uncommitted in the working tree. Separately, `.planning/state.json` (updated by this plan's own `state.advance-plan`/`record-metric`/`add-decision`/`record-session` calls) was never included in a commit's `--files` list.
+- **Fix:** Staged and committed both files directly (`2fe0339f`), after diffing the working tree against `HEAD:<path>` to confirm the only difference was exactly the intended edits.
+- **Files modified:** `.planning/todos/completed/2026-09-07-internal-query-dependency-direction-has-no-persisted-archtest.md`, `.planning/state.json`
+- **Verification:** `git show HEAD:.planning/todos/completed/2026-09-07-internal-query-dependency-direction-has-no-persisted-archtest.md` now shows `status: resolved`/`resolved_by_phase: 7`; `git status --short` clean; all Task 3 acceptance criteria re-verified against the corrected `HEAD`.
+- **Committed in:** `2fe0339f`
+
 ---
 
-**Total deviations:** 1 auto-fixed (1 bug)
-**Impact on plan:** Necessary for correctness — without this fix the archtest would either never compile/pass on the current tree, or would silently fail to distinguish the production-scope boundary D-01 requires. No scope creep; the plan's own artifact list and acceptance criteria are unchanged.
+**Total deviations:** 2 auto-fixed (1 bug, 1 blocking)
+**Impact on plan:** Both fixes necessary for correctness — the first for the archtest's actual enforcement boundary, the second so the committed history matches what Task 3 claims to have done. No scope creep; the plan's own artifact list and acceptance criteria are unchanged, and both were re-verified against the corrected `HEAD`.
 
 ## Issues Encountered
 
@@ -179,4 +187,4 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-All created/modified files found on disk; both task commits (980d2dd9, 5568e1cf) found in git log. Plan produced 2 commits against `plan_head_before` 815c015f (measured via `git rev-list --count`), matching the two atomic-work commits listed above (Task 2 legitimately produced no commit, as designed).
+All created/modified files found on disk; task commits (980d2dd9, 5568e1cf) and the fix-up commit (2fe0339f) found in git log. Plan produced 4 commits against `plan_head_before` 815c015f (measured via `git rev-list --count`: 980d2dd9, 5568e1cf, ffdc073e, 2fe0339f) — Task 2 legitimately produced no commit (verification-only, as designed); the fourth commit is the Rule-3 fix-up documented above, applied after this SUMMARY's own metadata commit landed.
