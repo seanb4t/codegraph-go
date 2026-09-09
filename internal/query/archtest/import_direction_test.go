@@ -100,6 +100,17 @@ func TestQueryImportsNoWireLayerOrIndexerRoot(t *testing.T) {
 	if len(pkgs) == 0 {
 		t.Fatal("packages.Load returned no packages — the module import graph did not resolve")
 	}
+	// packages.Load reports a per-package failure (an unresolvable import, a
+	// build error reachable from internal/query) in pkg.Errors, NOT in its
+	// top-level error return. A broken subtree is then absent from, or has
+	// an incomplete Imports map in, the returned graph, so every forbidden-
+	// import assertion below looks for members that were never added and
+	// passes vacuously. PrintErrors both surfaces each error on stderr and
+	// returns the count; a non-zero count means this test cannot verify
+	// anything about the affected package(s) and must refuse (CR-01).
+	if n := packages.PrintErrors(pkgs); n > 0 {
+		t.Fatalf("packages.Load reported %d package error(s) — the import graph did not fully resolve, so this test cannot verify anything about the affected package(s); see the errors above", n)
+	}
 
 	foundProductionQuery := false
 	var productionQueryPkg *packages.Package
