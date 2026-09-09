@@ -1836,31 +1836,7 @@ tasks:
         # Env = ToEnv(append(os.Environ(), ...))), so COSIGN_PASSWORD needs
         # no per-pipe env: addition — this one inserted line is the delta.
         GENERATED_CONFIG="${SIGNTEST_DIR}/.goreleaser.signtest.yaml"
-        awk -v keyline="      - \"--key=${SIGNTEST_DIR}/cosign.key\"" '
-          { print }
-          /^      - "sign-blob"$/ { print keyline }
-        ' .goreleaser.yaml > "${GENERATED_CONFIG}"
-
-        # Assert the copy is a MINIMAL, ADDITIONS-ONLY delta before
-        # invoking anything, so the rehearsal cannot silently drift into
-        # testing a different configuration than the one that ships. `<`
-        # lines in default diff(1) output are deletions/replacements —
-        # their presence is a hard failure. Every `>` (added) line must
-        # carry --key= or COSIGN_PASSWORD.
-        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_CONFIG}" || true)"
-        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
-          echo "::error::${GENERATED_CONFIG} differs from the committed .goreleaser.yaml by more than additions:"
-          printf '%s\n' "${DIFF_OUT}"
-          exit 1
-        fi
-        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
-        if [ -n "${BAD_ADDITIONS}" ]; then
-          echo "::error::${GENERATED_CONFIG} has additions not matching --key= or COSIGN_PASSWORD:"
-          printf '%s\n' "${BAD_ADDITIONS}"
-          exit 1
-        fi
-        echo "generated config differs from the committed .goreleaser.yaml by additions only:"
-        printf '%s\n' "${DIFF_OUT}"
+        ./scripts/inject-cosign-key.sh .goreleaser.yaml "${GENERATED_CONFIG}" "${SIGNTEST_DIR}/cosign.key"
 
         # Build GoReleaser NATIVELY, no GOOS/GOARCH in the environment —
         # identical reasoning to release:dry-run's own comment: a
@@ -2376,25 +2352,7 @@ tasks:
         COSIGN_PUBKEY="${REHEARSE_DIR}/cosign.pub"
 
         GENERATED_ENABLED="${REHEARSE_DIR}/.goreleaser.rehearse-notarize.yaml"
-        awk -v keyline="      - \"--key=${REHEARSE_DIR}/cosign.key\"" '
-          { print }
-          /^      - "sign-blob"$/ { print keyline }
-        ' .goreleaser.yaml > "${GENERATED_ENABLED}"
-
-        DIFF_OUT="$(diff .goreleaser.yaml "${GENERATED_ENABLED}" || true)"
-        if printf '%s\n' "${DIFF_OUT}" | grep -q '^<'; then
-          echo "::error::${GENERATED_ENABLED} differs from the committed .goreleaser.yaml by more than additions:"
-          printf '%s\n' "${DIFF_OUT}"
-          exit 1
-        fi
-        BAD_ADDITIONS="$(printf '%s\n' "${DIFF_OUT}" | grep '^> ' | grep -v -- '--key=' | grep -v 'COSIGN_PASSWORD' || true)"
-        if [ -n "${BAD_ADDITIONS}" ]; then
-          echo "::error::${GENERATED_ENABLED} has additions not matching --key= or COSIGN_PASSWORD:"
-          printf '%s\n' "${BAD_ADDITIONS}"
-          exit 1
-        fi
-        echo "generated config (notarize-enabled base) differs from the committed .goreleaser.yaml by additions only:"
-        printf '%s\n' "${DIFF_OUT}"
+        ./scripts/inject-cosign-key.sh .goreleaser.yaml "${GENERATED_ENABLED}" "${REHEARSE_DIR}/cosign.key"
 
         # notarize-DISABLED baseline template: the SAME generated-enabled
         # config, ONE line changed — notarize.macos[0].enabled forced to
