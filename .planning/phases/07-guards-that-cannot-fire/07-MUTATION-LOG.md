@@ -153,3 +153,92 @@ injected --key= lines: 1
 ```
 
 ---
+
+## Family (d) — GRD-04: `post-release-verify.yml` event-aware conclusion guard (todo T-02-18)
+
+**Test name:** `TestPostReleaseJobsDeclareConclusionGuard` (`internal/upgrade/release_workflow_shape_test.go`) — proves every job in `post-release-verify.yml` carries the event-aware conclusion guard verbatim on its `if:` line, with no fixed job-id list and no normaliser, and its companion `TestPostReleaseJobsDeclareConclusionGuard_EmptyDocIsError` (a zero-job document is a decode error, never a usable zero value).
+
+**What this proves:** ROADMAP criterion 4 requires the guard to fail when removed OR inverted. Removal alone would be satisfied by a bare presence check (`if != ""`); only the inverted case proves the assertion discriminates on *content*, not merely on presence — a plausible-looking but logically inverted expression must still fail.
+
+Two independent sub-demonstrations, both mutating the same tracked production file, `.github/workflows/post-release-verify.yml`, each fully reverted before the next began.
+
+### d1 — guard removed (`gatekeeper` job)
+
+**Pre-mutation gate:** `git diff --quiet -- .github/workflows/post-release-verify.yml` → exit 0 (clean), checked immediately before the mutation.
+
+**Mutation applied:** Deleted the entire `if:` line from the `gatekeeper` job only, leaving the other four jobs (`resolve-tag`, `verify-supply-chain`, `self-upgrade`, `notarized-suite`) untouched:
+
+```diff
+   gatekeeper:
+     name: "Gatekeeper verdict (darwin/${{ matrix.goarch }})"
+     needs: resolve-tag
+-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+     strategy:
+```
+
+**Observed failure (pasted verbatim, `GOTOOLCHAIN=go1.26.6 go test -count=1 -v ./internal/upgrade/ -run 'TestPostReleaseJobsDeclareConclusionGuard$'`):**
+
+```
+    release_workflow_shape_test.go:1663: job "gatekeeper" if: = "", want "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'" (the event-aware conclusion guard, verbatim)
+    release_workflow_shape_test.go:1669: inspected 5 job(s) in ../../.github/workflows/post-release-verify.yml for the event-aware conclusion guard
+--- FAIL: TestPostReleaseJobsDeclareConclusionGuard (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.205s
+FAIL
+```
+
+**Revert:** `git checkout -- .github/workflows/post-release-verify.yml`.
+
+**Post-revert gate:** `git diff --quiet -- .github/workflows/post-release-verify.yml` → exit 0 (clean).
+
+### d2 — guard inverted (`resolve-tag` job)
+
+**Pre-mutation gate:** `git diff --quiet -- .github/workflows/post-release-verify.yml` → exit 0 (clean), re-checked immediately before this mutation.
+
+**Mutation applied:** On the `resolve-tag` job only, inverted the conclusion comparison so the expression requires the producing run to have NOT succeeded — the event-name half and every other job left untouched. This mutation keeps an `if:` present and keeps it plausible-looking, which is exactly why a bare presence check or a normaliser would miss it:
+
+```diff
+     name: resolve and validate the tag under verification
+     # Event-aware conclusion guard (T-01-38) — see the header comment. This
+     # exact disjunct is required, verbatim, on every job in this file.
+-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
++    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'
+     runs-on: namespace-profile-linux-amd64-4x8
+```
+
+**Observed failure (pasted verbatim, `GOTOOLCHAIN=go1.26.6 go test -count=1 -v ./internal/upgrade/ -run 'TestPostReleaseJobsDeclareConclusionGuard$'`):**
+
+```
+    release_workflow_shape_test.go:1663: job "resolve-tag" if: = "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'success'", want "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'" (the event-aware conclusion guard, verbatim)
+    release_workflow_shape_test.go:1669: inspected 5 job(s) in ../../.github/workflows/post-release-verify.yml for the event-aware conclusion guard
+--- FAIL: TestPostReleaseJobsDeclareConclusionGuard (0.00s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/upgrade	0.154s
+FAIL
+```
+
+The two transcripts name different jobs (`gatekeeper` vs. `resolve-tag`) and different found-values (empty string vs. a plausible-looking but inverted expression), confirming the removed and inverted modes are distinguished and that the assertion discriminates on content, not presence.
+
+**Revert:** `git checkout -- .github/workflows/post-release-verify.yml`.
+
+**Post-revert gate:** `git diff --quiet -- .github/workflows/post-release-verify.yml` → exit 0 (clean).
+
+**Byte-clean proof:** `git status --porcelain -- .github/workflows/post-release-verify.yml` is empty after both reverts — four cleanliness-gate checks total (before and after each of the two mutations) all returned exit 0.
+
+**Green re-run (`GOTOOLCHAIN=go1.26.6 go test -count=1 ./internal/upgrade/...`):**
+
+```
+ok  	github.com/seanb4t/codegraph-go/internal/upgrade	0.426s
+```
+
+---
+
+## GRD-05 record — tap App secret-distinctness test: deleted, not demonstrated (D-09)
+
+`TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets` was **deleted** in Task 2 of this plan (07-04-PLAN.md) under D-09 rather than rewritten: it compared two constant lists declared inside the test file and read no workflow, so it could only fail if the test file itself was edited. GRD-05 is recorded in REQUIREMENTS.md as a v2 item declined for this milestone. A deletion carries no RED demonstration by construction — there is nothing here to prove RED against, since the defect was the test's existence, not its content.
+
+---
+
+## Closing — phase-wide non-vacuity property (ROADMAP criterion 5)
+
+This log carries **four** demonstration families (a, b, c, d) — GRD-01 through GRD-04 — plus the GRD-05 deletion record above, which is explicitly not a fifth demonstration. Every family's RED evidence is pasted **verbatim failing output**, never a summary, and every tracked-file mutation used to produce that output (families b, c-copy-only, d) was proven reverted **byte-clean** via `git diff --quiet` both immediately before and immediately after. Family (a) is the one documented exception to the tracked-file-mutation shape: its RED condition was the absence of the fix rather than a deliberate mutation of correct code, so it has no revert step by construction, not by omission.
