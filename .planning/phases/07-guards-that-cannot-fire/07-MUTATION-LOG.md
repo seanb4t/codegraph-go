@@ -112,6 +112,47 @@ ok  	github.com/seanb4t/codegraph-go/internal/query/archtest	0.148s
 
 ---
 
+### Family (b) addendum — CR-01: partial `go/packages` load passed vacuously (code review, deep)
+
+**Finding:** `07-REVIEW.md` CR-01. `packages.Load` reports a per-package failure (an unresolvable import reachable from `internal/query`) in `pkg.Errors`, not in its top-level `error` return. The archtest checked only the latter plus `len(pkgs) == 0`, so a broken subtree was silently absent from the returned graph and every forbidden-import assertion looked for members that were never added — a guard that cannot fire, in this phase. The reviewer reproduced it: with an unresolvable blank import in `traverse.go` the test still reported `--- PASS`.
+
+**Fix:** after the zero-package check, `if n := packages.PrintErrors(pkgs); n > 0 { t.Fatalf(...) }` — surfaces each error on stderr and refuses on a non-zero count before the transitive walk runs.
+
+**Pre-mutation gate:** `git diff --quiet -- internal/query/traverse.go` → exit 0 (clean).
+
+**Mutation applied:** inserted `_ "github.com/seanb4t/codegraph-go/internal/does-not-exist-xyz123"` as the first line of `internal/query/traverse.go`'s import block (1 insertion).
+
+**Observed failure (pasted, `GOTOOLCHAIN=go1.26.6 go test -count=1 -v ./internal/query/archtest/`):**
+
+```
+=== RUN   TestQueryImportsNoWireLayerOrIndexerRoot
+../traverse.go:4:2: no required module provides package github.com/seanb4t/codegraph-go/internal/does-not-exist-xyz123; to add it:
+	go get github.com/seanb4t/codegraph-go/internal/does-not-exist-xyz123
+    import_direction_test.go:112: packages.Load reported 1 package error(s) — the import graph did not fully resolve, so this test cannot verify anything about the affected package(s); see the errors above
+--- FAIL: TestQueryImportsNoWireLayerOrIndexerRoot (0.08s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/internal/query/archtest	0.212s
+FAIL
+```
+
+**Revert:** `git checkout -- internal/query/traverse.go`.
+
+**Byte-clean proof:** `git diff --quiet -- internal/query/traverse.go` → exit 0 after revert.
+
+**Green re-run (same command):**
+
+```
+=== RUN   TestQueryImportsNoWireLayerOrIndexerRoot
+    import_direction_test.go:186: loaded 7 packages; production internal/query resolved 392 transitive dependencies
+--- PASS: TestQueryImportsNoWireLayerOrIndexerRoot (0.07s)
+PASS
+ok  	github.com/seanb4t/codegraph-go/internal/query/archtest	0.145s
+```
+
+**Known sibling:** `internal/graphstore/archtest/import_graph_test.go` (the precedent this test was modelled on) has the same hole and is outside this phase's file set; recorded as a pending todo rather than fixed here.
+
+---
+
 ## Family (c) — GRD-03: `scripts/inject-cosign-key.sh` additions-only diff guard (todo T-02-08)
 
 **Guard:** `scripts/inject-cosign-key.sh`, called by both `release:dry-run-signed` and `release:rehearse-notarize`. It injects `--key=<path>` into a generated copy of a GoReleaser config at the `sign-blob` anchor, asserts the copy differs from its input by additions only, and — the new positive assertion this family proves — counts the added `--key=` lines and refuses any count other than exactly 1.
@@ -149,6 +190,31 @@ The additions-only checks passed on the empty diff — the vacuity this family e
 generated config differs from .goreleaser.yaml by additions only:
 330a331
 >       - "--key=/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.DLa0ndkBvu/cosign.key"
+injected --key= lines: 1
+```
+
+---
+
+### Family (c) addendum — WR-01: quote-unsafe key path embedded in a YAML scalar (code review, deep)
+
+**Finding:** `07-REVIEW.md` WR-01. The injected line embeds `` inside a YAML double-quoted scalar; a `"` or `\` in the path would emit a malformed line that is still, syntactically, an *addition* — so the additions-only diff guard accepts it. Not reachable from either call site today (both pass a `mktemp`-scoped path), but nothing in the script's own contract guaranteed it.
+
+**Fix:** refuse, rather than escape — a `case` guard exits 2 with a `::error::` line naming the offending path before any file is written. Both call sites can never trip it; a match is a caller bug worth a loud stop.
+
+**Observed refusal (pasted, key path `…/co"sign.key`; no generated file written):**
+
+```
+::error::inject-cosign-key.sh: cosign key path must not contain a double quote or backslash (it is embedded in a YAML double-quoted scalar): /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.9oUsHtB2LB/co"sign.key
+```
+
+A backslash path (`C:\keys\cosign.key`) is refused with the same message and exit 2.
+
+**Green re-run (mktemp-scoped key path):**
+
+```
+generated config differs from .goreleaser.yaml by additions only:
+330a331
+>       - "--key=/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/tmp.9oUsHtB2LB/cosign.key"
 injected --key= lines: 1
 ```
 
