@@ -122,7 +122,7 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
 - **Backlog 999.2 and 999.4 are promoted, not deleted.** Both entries stay in `## Backlog` below, annotated with the phase that consumed them. This closes the standing "backlog bookkeeping inconsistency" recorded in STATE.md → Blockers: prior promotions (`999.1`, `999.3`, `999.5`, `999.6`) left entries either silently removed or unmarked, and the resulting ambiguity has already cost real time.
 - **`v0.13.0` carries no git tag.** release-please is the sole tag authority (D-06R). The label is a prediction that holds because the UI follow-through lands `feat:` commits; a fixes-only outcome would cut `v0.12.1` instead. No phase schedules a `git tag` step.
 
-- [ ] **Phase 7: Guards That Cannot Fire** - Every guard in the known-vacuous set now fails when the property it claims to check is violated, each proven by a recorded RED demonstration rather than a green run
+- [x] **Phase 7: Guards That Cannot Fire** - Every guard in the known-vacuous set now fails when the property it claims to check is violated, each proven by a recorded RED demonstration rather than a green run (completed 2026-09-08)
 - [ ] **Phase 8: tmux Real-PTY Harness** - The interactive TUI is finally exercised on a terminal that answers escape queries and actually scrolls, closing the gap between the TTY-blind piped suite and manual human UAT
 - [ ] **Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff** - A developer reading a long file always knows which symbol they are inside, and can jump from any node or line straight into their own editor
 - [ ] **Phase 10: Index Health — The Coverage Denominator** - "Why is my file missing" is answered by the index itself: how many files were discovered, how many were indexed, and a recorded reason for every gap
@@ -249,7 +249,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 7. Guards That Cannot Fire | 4/4 | In Progress|  |
+| 7. Guards That Cannot Fire | 4/4 | Complete    | 2026-09-08 |
 | 8. tmux Real-PTY Harness | 0/TBD | Not started | - |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 0/TBD | Not started | - |
 | 10. Index Health — The Coverage Denominator | 0/TBD | Not started | - |

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
-current_phase: 7
-current_phase_name: Guards That Cannot Fire
-status: verifying
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-09-09T00:53:25.167Z"
+current_phase: 8
+current_phase_name: tmux Real-PTY Harness
+status: planning
+stopped_at: Phase 7 complete, ready to plan Phase 8
+last_updated: "2026-09-09T01:15:35.691Z"
 last_activity: 2026-09-08
-last_activity_desc: Phase 7 execution started
-state_head: abf6c8990c548d6cfdd17020eda97e3659e90183
+last_activity_desc: Phase 7 complete, transitioned to Phase 8
+state_head: 1879aea1ba80178cbdc5adaaeaf4d03322d4ff94
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
   completed_plans: 4
-  percent: 0
+  percent: 17
 ---
 
 # Project State
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-09-08 at the v0.13.0 start)
 
 ## Current Position
 
-Phase: 7 (Guards That Cannot Fire) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-09-08 — Phase 7 execution started
+Phase: 8 — tmux Real-PTY Harness
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-08 — Phase 7 complete, transitioned to Phase 8
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Last activity: 2026-09-08 — Phase 7 execution started
 | 04 | 7 | - | - |
 | 5 | 8 | - | - |
 | 6 | 8 | - | - |
+| 7 | 4 | - | - |
 
 **Velocity (v0.11.0 — archived, shipped 2026-08-16):** 6 phases, 30 plans, 60 tasks over 4 days.
 
@@ -383,7 +384,7 @@ against a 10% budget.
 **Resume file:** None
 
 Last session: 2026-09-09T00:53:25.151Z
-Stopped at: Completed 07-04-PLAN.md
+Stopped at: Phase 7 complete, ready to plan Phase 8
   NEXT: `/gsd-plan-phase 7` (Guards That Cannot Fire)
   CARRY-OVER:
 
