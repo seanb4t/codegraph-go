@@ -155,8 +155,14 @@ func TestQueryImportsNoWireLayerOrIndexerRoot(t *testing.T) {
 	if !productionDeps[graphstoreImportPath] {
 		t.Fatalf("production internal/query's resolved transitive dependency set does not contain %s — this test can no longer verify enforcement; check that internal/query still depends on internal/graphstore", graphstoreImportPath)
 	}
-	if !productionDeps[goextractImportPath] {
-		t.Fatalf("production internal/query's resolved transitive dependency set does not contain %s — this test can no longer verify enforcement; check that internal/query still resolves the allowed indexer leaf %s", goextractImportPath, goextractImportPath)
+	// The allow-list is a LIVE assertion, not documentation: every allowed
+	// indexer leaf must actually be in the production dependency set. If a
+	// leaf ever drops out, the exact-path root check above is vacuous for
+	// that leaf (D-01/D-03) and this is the assertion that says so.
+	for _, leaf := range allowedIndexerLeaves {
+		if !productionDeps[leaf] {
+			t.Fatalf("production internal/query's resolved transitive dependency set does not contain the allowed indexer leaf %s — this test can no longer verify enforcement; check that internal/query still resolves it", leaf)
+		}
 	}
 
 	if !productionDeps[parserImportPath] {
