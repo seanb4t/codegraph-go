@@ -8,6 +8,7 @@
 **Consumes:** Backlog 999.2 (tmux TTY harness) and 999.4 (`CheckRegression` positivity guard); three pending todos (dry-run-signed guard, post-release-verify guard, tap-secret test); the T-01-18 archtest todo; DOCS-05 (deferred at v0.11.0); v0.12.0's v2 deferrals BRW-10, BRW-11, HLT-04, GRF-06; the brew-trust docs todo.
 
 **Scope decisions recorded at definition (maintainer, 2026-09-08):**
+
 - GRF-06 clustering is computed **fresh per call, deterministically**, inside `FileGraph()`; index-time persistence into the reserved 50-59 field range is the documented fallback only if GRF-09's measurement fails.
 - BRW-11's editor URI template is set by a **server flag with a per-browser UI override**.
 - HLT-04's pre-extraction exclusion reasons are **recorded at discovery time and persisted additively**, never inferred by a query-time re-walk.
@@ -17,7 +18,7 @@
 
 ### Guard Hardening
 
-- [ ] **GRD-01**: `CheckRegression` refuses a non-positive *current* throughput or peak-RSS reading with an error naming the degenerate field, mirroring the existing baseline check — demonstrated RED with `current.PeakRSSBytes = 0` on an otherwise-matching frame before the fix lands (999.4)
+- [x] **GRD-01**: `CheckRegression` refuses a non-positive *current* throughput or peak-RSS reading with an error naming the degenerate field, mirroring the existing baseline check — demonstrated RED with `current.PeakRSSBytes = 0` on an otherwise-matching frame before the fix lands (999.4)
 - [ ] **GRD-02**: A persisted archtest asserts `internal/query` imports no wire-layer package (`internal/uiserver`, `connectrpc.com/connect`, `internal/mcp`), following `internal/graphstore/archtest`'s `go/packages` pattern with a package-count sanity check and a positive control that fails when the expected importer disappears (T-01-18)
 - [ ] **GRD-03**: `release:dry-run-signed`'s additions-only diff guard carries a positive assertion that the awk anchor matched and the `--key=` injection occurred, failing when the anchor stops matching rather than passing vacuously
 - [ ] **GRD-04**: A test parses `post-release-verify.yml` and asserts every job carries the event-aware conclusion guard in its expected shape, failing when the guard is removed or inverted on any job
@@ -102,7 +103,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GRD-01 | Phase 7 | Pending |
+| GRD-01 | Phase 7 | Complete |
 | GRD-02 | Phase 7 | Pending |
 | GRD-03 | Phase 7 | Pending |
 | GRD-04 | Phase 7 | Pending |
@@ -130,6 +131,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-07 | Phase 12 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 27 total
 - Mapped to phases: 27 ✓
 - Unmapped: 0 ✓
