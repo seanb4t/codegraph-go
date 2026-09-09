@@ -28,11 +28,16 @@ const DefaultRSSTolerance = 0.15
 //
 // CheckRegression NEVER mutates baseline or current, and it never panics:
 // a degenerate baseline (zero or negative FilesPerSec) returns a plain
-// error instead of dividing by zero. Re-blessing the baseline (updating
-// baseline.json to accept a new normal) is a separate, explicit action —
-// an operator-invoked `-rebless` flag on the runner (Plan 08-07) — and is
-// never a side effect of running this check. That separation is D-05's
-// point: an accidental auto-rewrite here would silently defeat the gate.
+// error instead of dividing by zero. A degenerate CURRENT reading (zero or
+// negative FilesPerSec or PeakRSSBytes) is refused the same way, rather
+// than being read as "no regression" or misattributed as a real one —
+// backlog 999.4 recorded a current.PeakRSSBytes of 0 silently passing both
+// the relative RSS check and the absolute INDX-06 ceiling. Re-blessing the
+// baseline (updating baseline.json to accept a new normal) is a separate,
+// explicit action — an operator-invoked `-rebless` flag on the runner
+// (Plan 08-07) — and is never a side effect of running this check. That
+// separation is D-05's point: an accidental auto-rewrite here would
+// silently defeat the gate.
 func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
 	// Platform validity precedes numeric validity: comparing across
 	// GOOS/GOARCH is not a tolerance question, it is a category error.
@@ -109,6 +114,13 @@ func CheckRegression(baseline, current Metrics, ceilingBytes int64) error {
 	}
 	if baseline.PeakRSSBytes <= 0 {
 		return fmt.Errorf("bench: invalid baseline: PeakRSSBytes must be positive, got %d", baseline.PeakRSSBytes)
+	}
+
+	if current.FilesPerSec <= 0 {
+		return fmt.Errorf("bench: invalid current: FilesPerSec must be positive, got %.4f", current.FilesPerSec)
+	}
+	if current.PeakRSSBytes <= 0 {
+		return fmt.Errorf("bench: invalid current: PeakRSSBytes must be positive, got %d", current.PeakRSSBytes)
 	}
 
 	throughputDelta := (baseline.FilesPerSec - current.FilesPerSec) / baseline.FilesPerSec
