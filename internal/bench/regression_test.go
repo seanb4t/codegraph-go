@@ -114,6 +114,41 @@ func TestCheckRegression(t *testing.T) {
 			errHint: "baseline",
 		},
 		{
+			// Backlog 999.4 / GRD-01: the reproduced historical Phase 10
+			// audit frame, not a synthetic one. A degenerate current
+			// PeakRSSBytes reading of 0 must be refused as an unusable
+			// measurement, not silently read as "no regression" (RSS
+			// delta of -1 stays under the ceiling of 1 and the throughput
+			// delta is 0). ceiling is the literal 1 from the historical
+			// frame, deliberately not the file's usual ceiling constant.
+			name: "degenerate current PeakRSSBytes is refused rather than read as no regression",
+			current: Metrics{
+				FilesPerSec:  100.0,
+				PeakRSSBytes: 0,
+			},
+			ceiling: 1,
+			wantErr: true,
+			errHint: "invalid current: PeakRSSBytes",
+		},
+		{
+			// Companion case for backlog 999.4 / GRD-01: a degenerate
+			// current.FilesPerSec of 0 currently returns an error, but
+			// the WRONG one ("throughput regressed 100.0%"), misreporting
+			// a broken measurement as a real regression. The hint below
+			// is the multi-word prefix "invalid current: FilesPerSec",
+			// not the bare word "current" — the pre-fix throughput
+			// message already contains "current=0.00 files/s" and would
+			// satisfy a bare hint for the wrong reason.
+			name: "degenerate current FilesPerSec is refused rather than reported as a throughput regression",
+			current: Metrics{
+				FilesPerSec:  0,
+				PeakRSSBytes: 500_000_000,
+			},
+			ceiling: ceiling,
+			wantErr: true,
+			errHint: "invalid current: FilesPerSec",
+		},
+		{
 			// Regression test for the perf-gate-throughput-regress debug
 			// session: a baseline recorded on one GOOS/GOARCH must never be
 			// silently compared against a current run on a different one -
