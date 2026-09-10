@@ -67,22 +67,31 @@ func requireTmux(t *testing.T) {
 var sessionNameSanitizer = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 
 // newSession creates a new detached tmux session sized sessionWidth x
-// sessionHeight and returns its name. The name is
-// "cgtmux-<pid>-<sanitized test name>" — unique per OS process AND per
-// test function, which makes a session-name collision structurally
-// impossible even though `go test` may run packages concurrently (TTY-05
-// concurrency edge). Teardown is registered via t.Cleanup immediately after
-// creation succeeds, before returning, running `kill-session` and
-// discarding its error: tmux returns exit 1 for an already-gone session or
-// server, and an already-gone session is not a test failure.
+// sessionHeight and returns its name. A thin caller of newSessionSized —
+// see that function's doc comment for the full contract. The three
+// existing tests keep the exact pane geometry they were verified against.
 func newSession(t *testing.T) string {
+	t.Helper()
+	return newSessionSized(t, sessionWidth, sessionHeight)
+}
+
+// newSessionSized creates a new detached tmux session sized width x height
+// and returns its name. The name is "cgtmux-<pid>-<sanitized test name>" —
+// unique per OS process AND per test function, which makes a session-name
+// collision structurally impossible even though `go test` may run packages
+// concurrently (TTY-05 concurrency edge). Teardown is registered via
+// t.Cleanup immediately after creation succeeds, before returning, running
+// `kill-session` and discarding its error: tmux returns exit 1 for an
+// already-gone session or server, and an already-gone session is not a
+// test failure.
+func newSessionSized(t *testing.T, width, height int) string {
 	t.Helper()
 
 	sanitized := sessionNameSanitizer.ReplaceAllString(t.Name(), "-")
 	name := fmt.Sprintf("cgtmux-%d-%s", os.Getpid(), sanitized)
 
 	if _, stderr, err := runTmux("new-session", "-d", "-s", name,
-		"-x", fmt.Sprintf("%d", sessionWidth), "-y", fmt.Sprintf("%d", sessionHeight)); err != nil {
+		"-x", fmt.Sprintf("%d", width), "-y", fmt.Sprintf("%d", height)); err != nil {
 		t.Fatalf("tmux new-session -d -s %s failed: %v: %s", name, err, stderr)
 	}
 

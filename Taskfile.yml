@@ -210,7 +210,7 @@ tasks:
       is set, so a contributor without tmux gets a clean skip report and
       exit 0 while CI fails hard on either mismatch.
     vars:
-      TMUX_EXPECTED_TESTS: 4
+      TMUX_EXPECTED_TESTS: 5
       TMUX_EXPECTED_VERSION: UNPINNED-BOOTSTRAP
     preconditions:
       - sh: command -v jq
@@ -246,7 +246,10 @@ tasks:
 
         echo "test:tmux: executed=${EXECUTED} skipped=${SKIPPED} expected={{.TMUX_EXPECTED_TESTS}}"
 
-        # TTY-06 arrives in plan 08-02; until then this loop matches nothing.
+        # TTY-06 (TestInstallPickerFrameStableWhileIdle) logs this line via
+        # t.Logf, which go test -json carries as an Action=="output" event
+        # regardless of -v — this is what surfaces the reported N in the
+        # job log rather than only under -v.
         jq -r 'select(.Output != null and (.Output | startswith("TTY-06: frame-stable across N="))) | .Output' "${JSON_OUT}" || true
 
         if [ -n "${CI:-}" ]; then
