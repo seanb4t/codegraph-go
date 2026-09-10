@@ -62,13 +62,22 @@ Requirements: TTY-01 … TTY-07.
 
   | Family | Req | File | Mutation |
   |---|---|---|---|
-  | (a) | TTY-03 | `internal/cli/daemon.go:82` | drop `&& len(records) > 0` from the picker guard |
+  | (a) | TTY-03 | `internal/cli/daemon.go:82` **and** `internal/cli/tui/daemonpicker.go:318` | drop `&& len(records) > 0` from the picker guard **and** remove `RunDaemonPicker`'s own empty-registry early return |
   | (b) | TTY-04 | `internal/cli/tui/daemonpicker.go:241` | `v.AltScreen = false` |
   | (c) | TTY-05 | `internal/cli/tui/agentpicker.go` cancel path | make cancel write config |
   | (d) | TTY-06 | `internal/cli/tui/agentpicker.go:147` | `v.AltScreen = false` (inline render ⇒ flicker) |
 
   Log file: `.planning/phases/08-tmux-real-pty-harness/08-MUTATION-LOG.md`, following
   `07-MUTATION-LOG.md`'s shape.
+
+  **CORRECTED 2026-09-09 by 08-RESEARCH.md (empirical).** Family (a) as originally written named
+  one file. That is insufficient: `RunDaemonPicker` carries its own independent, defense-in-depth
+  empty-registry guard at `internal/cli/tui/daemonpicker.go:318` that returns before ever
+  constructing a `tea.Program`. The researcher mutated `daemon.go:82` alone against a real binary
+  in a real pane and it still printed a clean `no running daemons` with no leak. **Both guards must
+  be mutated together** to reach the historical G-07-1 behaviour. The decision's intent is
+  unchanged — watch TTY-03's assertion fail against the real defect — only the recipe was wrong.
+  This also means the product is defended in two places, which is worth stating in the log entry.
 
 ### Location, build tag, and binary provenance (TTY-01)
 
@@ -116,15 +125,29 @@ Requirements: TTY-01 … TTY-07.
 
   **Without `-e -C` the TTY-03 assertion cannot fire at all** — it would pass against every
   capture, fireable or not. That is the milestone's own vacuity shape hiding inside the
-  harness built to catch it. Family (a)'s RED demonstration is what proves the instrument is
-  adequate; if the mutation produces no observable difference under this capture, escalate to
-  `pipe-pane` (raw byte stream, pre-emulator) and **record why in the mutation log** rather
-  than weakening the assertion.
+  harness built to catch it.
+
+  **CONFIRMED 2026-09-09 by 08-RESEARCH.md (empirical).** The G-07-1 leak was reproduced
+  end-to-end against a real mutated binary in a real pane, and `capture-pane -p -e -C -S -`
+  captured it as literal matchable text (`^[[?2026;2$y^[[?2027;0$y`). **No `pipe-pane` escalation
+  is needed** and that fallback stays deferred. One further finding: the leaked bytes appeared a
+  short but NONZERO interval *after* `no running daemons` printed, so a single immediate capture
+  would sometimes miss them — independent empirical support for D-14's stability poll.
 - **D-13:** Alt-screen entry and exit are asserted by **`capture-pane -a` exit status**, a
   two-sided positive probe, not by inferring from buffer contents. `-a` targets the alternate
-  screen and errors when none exists. During the picker it must exit 0 and contain
-  `Running daemons`; after quit it must exit non-zero. Under mutation (b) it is already
-  non-zero during the picker, so the assertion fails loudly and unambiguously.
+  screen and errors when none exists. During the picker it must exit 0; after quit it must exit
+  non-zero. Under mutation (b) it is already non-zero during the picker, so the assertion fails
+  loudly and unambiguously.
+
+  **CORRECTED 2026-09-09 by 08-RESEARCH.md (empirical).** The original wording also said `-a` must
+  *contain* `Running daemons`. That half is backwards and has been struck. Verified live: while the
+  alt-screen picker is active, a plain `capture-pane -p` returns the alt-screen's rendered content
+  (`Running daemons`, the seeded record), while `capture-pane -a -p` returns the frozen **main**
+  buffer underneath — both exit 0. Only after quit does `-a` flip to exit 1. So TTY-04 takes its
+  content assertion from a **plain** capture, gated on `-a`'s exit code (or the tmux format
+  variable `#{alternate_on}`, verified to track the same transition and a cleaner binary signal)
+  confirming alt-mode is still active. The exit-code mechanism — the whole point of the decision —
+  is confirmed correct.
 - **D-14:** The stability poll is a **bounded poll whose non-convergence is a FAILURE**, never
   a skip and never a whole-case retry. Capture on a short interval until two consecutive
   captures are byte-identical, up to a deadline; blowing the deadline fails the test naming
@@ -146,8 +169,11 @@ Requirements: TTY-01 … TTY-07.
 - The expected-count constant's home (Taskfile variable vs a committed file the suite reads).
 - tmux session/window naming, pane geometry, and teardown; helper and test function names.
 - Whether TTY-05's config-tree hash walks the tree in Go or shells out.
-- How the daemon registry is seeded for TTY-04's "seeded record" — `daemon.Register` vs
-  writing the registry file directly.
+- ~~How the daemon registry is seeded for TTY-04's "seeded record"~~ — **settled 2026-09-09 by
+  08-RESEARCH.md:** run the real `codegraph daemon start` as a background subprocess against a
+  throwaway `$HOME` (verified end-to-end including clean SIGTERM teardown). Hand-writing registry
+  JSON was rejected because it would require reimplementing the unexported, platform-gated
+  liveness and clock-corroboration logic in `internal/daemon/lock.go`'s `isStale`.
 - The `jq` precondition message on the Task target (precedent: `Taskfile.yml:3512`).
 - Commit granularity and exact error wording.
 
