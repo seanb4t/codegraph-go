@@ -32,7 +32,7 @@
 - [ ] **TTY-04**: The daemon picker enters the alternate screen, renders `Running daemons` plus a seeded record, and on quit restores the main buffer with no residual escape sequences in scrollback (closes the G-07-2 class)
 - [ ] **TTY-05**: The install/uninstall checkbox picker renders `[x]`/`[ ]` glyphs, `space` toggles, and `q`/`esc` cancel with zero config-file writes, asserted by hashing the config tree before and after
 - [ ] **TTY-06**: A flicker proxy asserts frame stability across N captures on an idle picker
-- [ ] **TTY-07**: A CI job installs a pinned tmux version, runs the harness suite, and asserts a positive count of executed (not skipped) test cases
+- [ ] **TTY-07**: A CI job installs tmux, asserts `tmux -V` matches a committed expected version string, runs the harness suite, and asserts the count of executed (not skipped) test cases equals a committed constant (amended 2026-09-09 at the Phase 8 discussion: a hard apt version pin was rejected as brittle — `apt-get install tmux=<exact>` fails the moment the archive snapshot rolls, reddening the build for a reason unrelated to this repo; install-then-assert gives the same know-exactly-what-ran property, and a positive floor was raised to an exact count because a floor is satisfied by one case running while the rest skip)
 
 ### Browse & Inspect
 
