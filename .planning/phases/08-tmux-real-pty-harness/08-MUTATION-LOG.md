@@ -166,3 +166,132 @@ $ git checkout -- internal/cli/tui/daemonpicker.go
 --- PASS: TestDaemonPickerEntersAltScreenAndRestoresMainBuffer (5.50s)
 ok  	github.com/seanb4t/codegraph-go/test/tmux	8.958s
 ```
+
+---
+
+## Family (c) — TTY-05: a cancel that writes config
+
+**Test name:** `TestInstallPickerCancelWritesNoConfig` (`test/tmux/install_cancel_test.go`).
+
+**Pre-mutation gate:**
+- `git diff --quiet -- internal/cli/tui/agentpicker.go` → exit 0 (clean).
+
+**Mutation applied.** The cancel branch of `Update`'s key switch set to the same confirmed flag the enter branch sets:
+```diff
+ 		case "q", "esc", "ctrl+c":
+-			m.confirmed = false
++			m.confirmed = true
+ 			return m, tea.Quit
+```
+
+That single token makes `resolvedTargets` return the checked set on cancel instead of `nil`, `install`'s `RunE` then hands that set to `printAgentResults`, and real config files land under the throwaway `$HOME` — exactly what TTY-05's before/after tree-hash exists to catch.
+
+**Confirmed applied** (diff, before running):
+```
+$ git diff -- internal/cli/tui/agentpicker.go
+--- a/internal/cli/tui/agentpicker.go
++++ b/internal/cli/tui/agentpicker.go
+@@ -129,7 +129,7 @@ func (m agentPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+ 		case "q", "esc", "ctrl+c":
+-			m.confirmed = false
++			m.confirmed = true
+ 			return m, tea.Quit
+```
+
+**Observed failure (pasted verbatim, `GOTOOLCHAIN=go1.26.6 go test -tags tmux -count=1 -v -run TestInstallPickerCancelWritesNoConfig ./test/tmux/...`, `CODEGRAPH_TEST_BIN` unset, exit 1):**
+
+```
+=== RUN   TestInstallPickerCancelWritesNoConfig
+    install_cancel_test.go:87: TTY-05: config-tree hash changed after cancel — before=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 after=c6de07d31c3a1ff9123053a7d543c7b05fa2a3519bec464cf68214533a755e5c; paths present under /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/TestInstallPickerCancelWritesNoConfig3785278073/001: [/var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/TestInstallPickerCancelWritesNoConfig3785278073/001/.gemini/GEMINI.md /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/TestInstallPickerCancelWritesNoConfig3785278073/001/.gemini/config/.migrated /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/TestInstallPickerCancelWritesNoConfig3785278073/001/.gemini/config/mcp_config.json /var/folders/_b/3hyf5qvs62q0wh2vyh856z580000gn/T/TestInstallPickerCancelWritesNoConfig3785278073/001/.gemini/settings.json]
+--- FAIL: TestInstallPickerCancelWritesNoConfig (14.70s)
+FAIL
+FAIL	github.com/seanb4t/codegraph-go/test/tmux	18.234s
+FAIL
+```
+
+Both tree digests differ (`before=e3b0c44298...` — the SHA-256 of an empty tree — vs `after=c6de07d3...`), and four real config file paths under the throwaway `$HOME`'s `.gemini/` directory are named: `GEMINI.md`, `config/.migrated`, `config/mcp_config.json`, `settings.json`. This is a genuinely-mutated cancel writing real files, not a hash artifact.
+
+**Why the `space` toggle before each cancel is load-bearing.** On a throwaway `$HOME`, no agent is detected, so nothing starts checked. Without the `space` keypress the test sends before each cancel path, `resolvedTargets` — even with the cancel branch wrongly resolving to `confirmed=true` — would still map an all-unchecked `checked` map to an empty target slice, `printAgentResults` would iterate zero targets, and the mutation would produce a false GREEN: the demonstration would prove the opposite of what it claims. The toggle is what gives the wrongly-confirming cancel path something real to be wrong about.
+
+**Revert:**
+```
+$ git checkout -- internal/cli/tui/agentpicker.go
+```
+
+**Post-revert gate:**
+- `git diff --quiet -- internal/cli/tui/agentpicker.go` → exit 0 (clean).
+
+**Green re-run (pasted verbatim, same command, exit 0):**
+```
+--- PASS: TestInstallPickerCancelWritesNoConfig (11.89s)
+ok  	github.com/seanb4t/codegraph-go/test/tmux	17.036s
+```
+
+---
+
+## Family (d) — TTY-06: an inline render that flickers
+
+**Test name:** `TestInstallPickerFrameStableWhileIdle` (`test/tmux/frame_stability_test.go`).
+
+**Pre-mutation gate (freshly re-checked here, after family (c)'s revert, not assumed from it):**
+- `git diff --quiet -- internal/cli/tui/agentpicker.go` → exit 0 (clean).
+
+**Mutation applied.** The checkbox picker's `View()` alternate-screen field disabled — the same token family (b) mutated in the other picker:
+```diff
+ 	v.AltScreen = false
+ 	return v
+ }
+```
+(i.e. `v.AltScreen = true` → `v.AltScreen = false`, at `internal/cli/tui/agentpicker.go:147`.)
+
+**Confirmed applied** (diff, before running, and re-confirmed immediately before the second run below):
+```
+$ git diff -- internal/cli/tui/agentpicker.go
+--- a/internal/cli/tui/agentpicker.go
++++ b/internal/cli/tui/agentpicker.go
+@@ -144,7 +144,7 @@ func (m agentPickerModel) View() tea.View {
+ 	// Alt-screen (bubbletea v2 per-View field) — see daemonpicker.go's
+ 	// View() for the full rationale (07-UAT test 1): prevents the inline
+ 	// full-height render from scrolling/flickering the main buffer.
+-	v.AltScreen = true
++	v.AltScreen = false
+ 	return v
+ }
+```
+
+**Why the 12-row pane is load-bearing regardless of this outcome.** `frameStabilityRows` (12) is deliberately shorter than the package's default 30-row session height specifically so the 8-agent list plus its help footer cannot fit inline — a picker rendering inline in a 12-row pane genuinely overflows during its settling transient, where a 30-row pane might not. That geometry is what makes the *settling-phase* divergence between alt-screen and inline rendering observable at all; it is not what this specific idle-stability assertion measures (see below), but it remains the correct, load-bearing choice for the test's own stated purpose (TTY-06: does an already-settled picker stay stable) and for any future assertion that measures the settling transient itself.
+
+**Observed result: the mutation did NOT produce a failure, run twice, back to back, both against a freshly rebuilt binary (`CODEGRAPH_TEST_BIN` unset, so `TestMain` rebuilds from the mutated working tree every run — confirmed, not assumed).** Per this plan's own instruction, this is reported as observed rather than written up as a RED demonstration that did not happen.
+
+**Run 1 (pasted verbatim, `GOTOOLCHAIN=go1.26.6 go test -tags tmux -count=1 -v -run TestInstallPickerFrameStableWhileIdle ./test/tmux/...`, exit 0):**
+```
+    frame_stability_test.go:61: TTY-06: frame-stable across N=5 captures (pane 100x12, install picker idle)
+--- PASS: TestInstallPickerFrameStableWhileIdle (9.31s)
+ok  	github.com/seanb4t/codegraph-go/test/tmux	14.043s
+```
+
+**Run 2, mutation re-confirmed still applied via `git diff` immediately before (pasted verbatim, same command, exit 0):**
+```
+    frame_stability_test.go:61: TTY-06: frame-stable across N=5 captures (pane 100x12, install picker idle)
+--- PASS: TestInstallPickerFrameStableWhileIdle (7.88s)
+ok  	github.com/seanb4t/codegraph-go/test/tmux	11.355s
+```
+
+**What this implies about the assertion's discriminating power.** `TestInstallPickerFrameStableWhileIdle` converges once via `pollUntilStable` to a settled first frame, then asserts byte-identical captures across `frameStabilityCaptures` (5) further polls with **no further input sent**. `agentPickerModel.Init()` returns no `tea.Cmd` — there is no periodic tick, and bubbletea only re-renders `View()` in response to a `tea.Msg` (a keypress, a resize, a command's result). With no input arriving after the initial `Enter`, the Program simply does not re-render at all once settled, regardless of whether `AltScreen` is `true` or `false` — there is nothing to be unstable. The scrolling/flicker behaviour the `AltScreen` field's doc comment describes ("a full-height list that doesn't fit the remaining space scrolls the main buffer every frame") is a property of the *transient settling phase* — the sequence of renders between the Program starting and reaching its first stable frame — not of a genuinely idle, already-settled Program. `pollUntilStable` itself absorbs that transient before the stability loop's five captures ever begin, so this test's design (converge first, then assert idle stability) structurally cannot observe a defect that only manifests during convergence.
+
+This is a real, reproducible finding about this specific assertion's discriminating power against this specific mutation, not a flake: the mutation was confirmed applied to the tracked file before each of the two runs, `TestMain` rebuilt the binary from the mutated working tree both times (verified via `CODEGRAPH_TEST_BIN` being unset), and both runs produced the identical PASS outcome. TTY-06 as currently specified — "an idle install picker... holds byte-identical across 5 further captures after its first settled frame" — is a real, meaningful, non-vacuous assertion about idle stability (proven non-trivial by D-14's own stability-poll design elsewhere in this harness), but the single-token `v.AltScreen = false` mutation D-06 named for family (d) does not reach it, because that mutation's effect is confined to the settling transient the test deliberately polls past before measurement begins.
+
+**Revert:**
+```
+$ git checkout -- internal/cli/tui/agentpicker.go
+```
+
+**Post-revert gate:**
+- `git diff --quiet -- internal/cli/tui/agentpicker.go` → exit 0 (clean).
+
+**Green re-run (pasted verbatim, same command, exit 0 — identical output to both RED-attempt runs above, since the mutation was never observable):**
+```
+    frame_stability_test.go:61: TTY-06: frame-stable across N=5 captures (pane 100x12, install picker idle)
+--- PASS: TestInstallPickerFrameStableWhileIdle (7.90s)
+ok  	github.com/seanb4t/codegraph-go/test/tmux	11.306s
+```
