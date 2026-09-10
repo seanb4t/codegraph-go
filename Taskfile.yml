@@ -176,6 +176,93 @@ tasks:
     cmds:
       - go test ./test/wireoracle/...
 
+  test:tmux:install:
+    desc: >-
+      Installs tmux, the tmux real-PTY harness's (test/tmux, TTY-01..TTY-07)
+      only external dependency. A task rather than an inline CI step because
+      Taskfile.yml is the single definition of every CI job body
+      (TestWorkflowRunBodiesInvokeTask) — the tmux-e2e job in ci.yml calls
+      this target rather than embedding its own apt-get lines. CI-only: a
+      local contributor without tmux should install it through their own
+      package manager (Homebrew, apt, etc.) instead of running this target.
+    preconditions:
+      - sh: '[ "$(go env GOHOSTOS)" = "linux" ]'
+        msg: "test:tmux:install is the CI installer for a Debian-family (ubuntu-latest) runner — a local contributor should install tmux through their own package manager instead."
+    cmds:
+      - sudo apt-get update
+      - sudo apt-get install -y tmux
+
+  test:tmux:
+    desc: >-
+      Real-PTY harness (test/tmux, TTY-01..TTY-07) — spawns the real
+      codegraph binary inside a real tmux pane and asserts on capture-pane
+      output; build-tagged (`-tags tmux`), so a bare `go test ./...` never
+      reaches it. TMUX_EXPECTED_TESTS is D-02's exact-equality anti-vacuity
+      constant: adding, deleting, or silently skipping a top-level Test*
+      function in test/tmux fails this target until the constant is updated
+      in the SAME commit — a floor (>=N) is deliberately not used, since a
+      floor is satisfied by one case running while the rest skip.
+      TMUX_EXPECTED_VERSION is D-11's install-then-assert pin, deliberately
+      seeded with a value no real tmux can report (bootstrapped from the
+      first real CI run's own failure output, committed in plan 08-03).
+      Always prints an executed count and a skipped count (D-03); enforces
+      the executed-count equality and the tmux-version match only when CI
+      is set, so a contributor without tmux gets a clean skip report and
+      exit 0 while CI fails hard on either mismatch.
+    vars:
+      TMUX_EXPECTED_TESTS: 2
+      TMUX_EXPECTED_VERSION: UNPINNED-BOOTSTRAP
+    preconditions:
+      - sh: command -v jq
+        msg: "jq not found — required to parse go test -json output for test:tmux's anti-vacuity executed-count gate."
+    cmds:
+      - |
+        set -euo pipefail
+
+        # D-11: install-then-assert. Only when CI is set — a contributor's
+        # local tmux version is never asserted, only whatever ubuntu-latest
+        # actually installed. Printing the observed string alongside the
+        # expected one on mismatch is the bootstrap mechanism: the first
+        # real CI run's own failure output supplies the value plan 08-03
+        # commits as the real TMUX_EXPECTED_VERSION.
+        if [ -n "${CI:-}" ]; then
+          OBSERVED_TMUX="$(tmux -V)"
+          if [ "${OBSERVED_TMUX}" != "{{.TMUX_EXPECTED_VERSION}}" ]; then
+            echo "::error::test:tmux: tmux -V reports \"${OBSERVED_TMUX}\" but TMUX_EXPECTED_VERSION is \"{{.TMUX_EXPECTED_VERSION}}\" — D-11 requires drift to be a visible one-line decision, not a silent behavior change"
+            exit 1
+          fi
+        fi
+
+        JSON_OUT="$(mktemp)"
+        trap 'rm -f "${JSON_OUT}"' EXIT
+        STATUS=0
+        GOTOOLCHAIN=go1.26.6 go test -tags tmux -count=1 -json ./test/tmux/... 2>&1 | tee "${JSON_OUT}" || STATUS=$?
+
+        # D-01/Pattern 4: count top-level Test* pass events only — exclude
+        # subtests (.Test contains "/") and the package-level summary event
+        # (Action=="pass" with no .Test field at all).
+        EXECUTED="$(jq -s '[.[] | select(.Action=="pass" and .Test != null and (.Test | contains("/") | not))] | length' "${JSON_OUT}")"
+        SKIPPED="$(jq -s '[.[] | select(.Action=="skip" and .Test != null and (.Test | contains("/") | not))] | length' "${JSON_OUT}")"
+
+        echo "test:tmux: executed=${EXECUTED} skipped=${SKIPPED} expected={{.TMUX_EXPECTED_TESTS}}"
+
+        # TTY-06 arrives in plan 08-02; until then this loop matches nothing.
+        jq -r 'select(.Output != null and (.Output | startswith("TTY-06: frame-stable across N="))) | .Output' "${JSON_OUT}" || true
+
+        if [ -n "${CI:-}" ]; then
+          if ! [[ "${EXECUTED}" =~ ^[0-9]+$ ]] || [ "${EXECUTED}" -ne {{.TMUX_EXPECTED_TESTS}} ]; then
+            echo "::error::test:tmux: executed=${EXECUTED} but TMUX_EXPECTED_TESTS={{.TMUX_EXPECTED_TESTS}} — D-02 requires an exact equality, not a floor: a floor is satisfied by one case running while the rest skip"
+            exit 1
+          fi
+          if [ "${STATUS}" -ne 0 ]; then
+            echo "::error::test:tmux: go test exited ${STATUS} — a matching executed count never masks a genuine assertion failure"
+            exit 1
+          fi
+          exit 0
+        fi
+
+        exit "${STATUS}"
+
   test:daemon:
     desc: >-
       internal/daemon, isolated (-count=1). TestSoak and the flush-lock tests
