@@ -210,7 +210,7 @@ tasks:
       is set, so a contributor without tmux gets a clean skip report and
       exit 0 while CI fails hard on either mismatch.
     vars:
-      TMUX_EXPECTED_TESTS: 2
+      TMUX_EXPECTED_TESTS: 3
       TMUX_EXPECTED_VERSION: UNPINNED-BOOTSTRAP
     preconditions:
       - sh: command -v jq
