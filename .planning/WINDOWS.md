@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 13
 waived_count: 2
 fixed_count: 18
-total_count: 32
-last_updated: 2026-09-10T14:50:53.595Z
+total_count: 33
+last_updated: 2026-09-10T15:16:04.814Z
 ---
 
 # Broken Windows Ledger
@@ -47,6 +47,7 @@ last_updated: 2026-09-10T14:50:53.595Z
 | 30 | 06 | deviation | web/src/lib/assets/favicon.svg |  | SHIPPED STOCK SVELTE FAVICON THAT ALSO VIOLATES CSP (found 2026-09-07 by the phase-6 live browser UAT; pre-existing since phase 2). web/src/lib/assets/favicon.svg is the unmodified SvelteKit template logo - literally <title>svelte-logo</title> in Svelte orange #ff3e00 - scaffolding never replaced, so a tool called codegraph ships with Svelte's logo as its browser-tab icon. It also fails to load: Vite inlines the small SVG as a data: URI, and spa.go:99 sets spaCSPBaseDirectives = "default-src 'self'; ..." with NO img-src, so the data: URI is blocked. Every page load logs 'Loading the image data:image/svg+xml... violates the following Content-Security-Policy directive: default-src self' and the tab falls back to a blank icon. Two independent defects that happen to cancel into 'no visible logo'. NOT A CSP BUG: spa_test.go:439 asserting default-src is exactly ['self'] is correct and deliberate (T-02-02-06); the asset choice is the defect. Structurally invisible to both test layers - no Go test can flag a correct CSP, and jsdom never fetches images. FIX (out of phase-6 scope): replace the asset with a codegraph mark, and either ship it as a static file under web/static/ (served as 'self') or raise Vite's inline asset threshold so it is emitted as a file rather than a data: URI. Adding img-src data: to the CSP would also work but widens the policy for a cosmetic asset. | open |  | 2026-09-07T23:02:08.159Z |  |
 | 31 | 04 | unrun-verify | web/src/lib/components/ui/button/button.svelte |  | VENDORED COMPONENT DRIFT DETECTED, CAUSE NOT ISOLATED (found 2026-09-07 by the milestone validate-phase pass). 'task web:components:drift' exits 1 with '::error::web:components:drift: web/src/lib/components/ui/button/button.svelte differs from shadcn-svelte@1.5.1 regeneration'. This is the gate WORKING - it named one specific file, which is a discriminating (non-vacuous) result, and 04-07-SUMMARY.md Task 1 recorded all EIGHT vendored families reproducing byte-identically at vendoring time, so something changed since. WHAT IS RULED OUT: local tampering. button.svelte has exactly ONE commit in its entire history (205da685, feat(03-06) vendor shadcn-svelte Command component, human-approved) and was never hand-edited. WHAT IS NOT RULED OUT, and could not be from this machine: the toolchain. web/package.json pins packageManager pnpm@11.23.0 and .github/workflows/components-drift.yml resolves it via Corepack, but corepack is NOT installed on this development host, so the target fell back to bare pnpm 12.3.4 (its own output: 'Done in 3.4s using pnpm v12.3.4'). A pnpm major difference changing what 'pnpm dlx shadcn-svelte@1.5.1' emits is a live hypothesis that a local run cannot test. The remaining hypothesis is genuine registry-side drift in shadcn-svelte's button between 03-06's vendoring and now. IMPACT: none on any merge. The gate is schedule (Mon 08:00 UTC) and workflow_dispatch only, deliberately never in requiredCheckNames per D-16 - a live registry fetch has no place in a merge gate. NEXT STEP: trigger the components-drift workflow via workflow_dispatch, where Corepack pins pnpm 11.23.0, and compare. If it is RED there too, diff the regenerated button.svelte against the committed one and decide whether to re-vendor; if GREEN, the finding is a local-toolchain artifact and this entry can be waived. | open |  | 2026-09-08T00:36:45.333Z |  |
 | 32 | 08 | deviation | test/tmux/install_cancel_test.go |  | TTY-05's positive-control assertion uses the picker title, not the help footer text — the footer never renders in the default 100x30 pane with all 8 registered agent targets (bubbles v2 list pagination padding overflows its allocated height before the footer is appended); verified via temporary reverted debug instrumentation, see 08-02-SUMMARY.md | open |  | 2026-09-10T14:50:53.595Z |  |
+| 33 | 08 | unrun-verify | .planning/phases/08-tmux-real-pty-harness/08-03-PLAN.md |  | Task 2's human-check (confirm the tmux-e2e job's version assertion and executed-count=5 line actually fired on a real CI run, then commit the observed tmux -V string) cannot run until a PR opens on this branch and a real ci.yml run exists | open |  | 2026-09-10T15:16:04.814Z |  |
 
 ````json
 [
@@ -432,6 +433,18 @@ last_updated: 2026-09-10T14:50:53.595Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-10T14:50:53.595Z",
+    "resolved_at": null
+  },
+  {
+    "id": 33,
+    "kind": "unrun-verify",
+    "phase": "08",
+    "file": ".planning/phases/08-tmux-real-pty-harness/08-03-PLAN.md",
+    "line": null,
+    "description": "Task 2's human-check (confirm the tmux-e2e job's version assertion and executed-count=5 line actually fired on a real CI run, then commit the observed tmux -V string) cannot run until a PR opens on this branch and a real ci.yml run exists",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-10T15:16:04.814Z",
     "resolved_at": null
   }
 ]

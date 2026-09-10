@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 08
 current_phase_name: tmux Real-PTY Harness
 status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-09-10T14:53:20.645Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-09-10T15:15:49.981Z"
 last_activity: 2026-09-10
 last_activity_desc: Phase 08 execution started
-state_head: 4510b9dd588ee408bfb14294a8852e5903cf1fde
+state_head: f4584c2f17d4f7d36277f6b54ed00267fbc88b87
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
 ## Current Position
 
 Phase: 08 (tmux Real-PTY Harness) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-10 — Phase 08 execution started
 
@@ -115,6 +115,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P04 | 15min | 3 tasks | 4 files |
 | Phase 08 P01 | 35min | 3 tasks | 6 files |
 | Phase 08 P02 | 27min | 3 tasks | 7 files |
+| Phase 08 P03 | ~20min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,8 @@ Standing decisions that outlive every milestone:
 - [Phase 08]: [Phase 08-01]: pollUntilStable's interval pacing uses <-time.After(...), never time.Sleep(...) — the plan's own verify gate greps for zero time.Sleep occurrences in test/tmux; matches test/integration's existing goroutine+time.After bounded-wait convention
 - [Phase 08]: TTY-05's positive-control assertion uses the picker title, not the help footer text — the footer never renders at the default 100x30 pane with all 8 agent targets due to a bubbles/v2/list pagination-padding overflow, verified via temporary reverted debug instrumentation
 - [Phase 08]: confighash.go's doc comment avoids the literal substring 'sha256sum' after the plan's own verify gate tripped on it appearing in explanatory prose rather than a shell-out
+- [Phase 08]: [Phase 08]: [Phase 08-03]: tmux-e2e CI job lands on ubuntu-latest with the TMUX_EXPECTED_VERSION sentinel deliberately unresolved — no real ci.yml run exists for this branch yet (gh run list returned empty), so D-11's bootstrap stays in its designed deferred state rather than guessing a version
+- [Phase 08]: [Phase 08]: [Phase 08-03]: own comment prose in the new tmux-e2e job tripped the plan's own continue-on-error substring-count gate — reworded to describe the same no-soft-fail property without the literal token, third instance of this phase's recurring substring-proxy gate defect (after time.Sleep in 08-01, sha256sum in 08-02)
 
 ### Pending Todos
 
@@ -284,6 +287,7 @@ Nothing blocks v0.12.0. Carried forward from prior milestones:
 - **Daemon extreme-load tail (ACCEPTED, not a gap).** 52/52 real `ci.yml` runs show no daemon failure on the actual runner class; CI load was ruled the governing standard for MAINT-02 (maintainer, 2026-08-06).
 - **Wire-oracle `toolslist-repeat` ordering flake.** `TestFrozenTranscriptsMatch/toolslist-repeat` freezes JSON-RPC response *arrival* order, which the protocol does not guarantee and go-sdk's async dispatch does not provide.
 - **Tooling gaps (not blocking work, and not hand-edited per the planning-artifacts rule):** `gsd-tools query state.advance-plan` failed with "Cannot parse Current Plan or Total Plans in Phase from STATE.md" when Current Position read "Plan: Not started". `gsd-tools query state.sync` counts a SUMMARY with `status: halted` as a completed plan, and MUTATES when invoked with no args — it has no dry-run probe mode.
+- [Phase 08-03] user_setup NOT completed: add the required-status-check context 'tmux e2e (real-pty harness, TTY-01..TTY-07)' to GitHub ruleset 20157557 (repo Settings -> Rules -> Rulesets), then re-verify via gh api repos/seanb4t/codegraph-go/rulesets/20157557 and add the same string to requiredCheckNames in internal/upgrade/taskfile_shape_test.go. Repository-settings action; no agent can perform it.
 
 ### Quick Tasks Completed
 
@@ -390,8 +394,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-10T14:53:20.574Z
-Stopped at: Completed 08-02-PLAN.md
+Last session: 2026-09-10T15:15:49.963Z
+Stopped at: Completed 08-03-PLAN.md
   NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
