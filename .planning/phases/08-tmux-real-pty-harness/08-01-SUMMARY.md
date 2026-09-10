@@ -220,6 +220,10 @@ $ echo $?
 
 The `CI=1` path fails inside the D-11 version-assertion block (`tmux -V` itself under `set -euo pipefail`) before ever reaching the executed-count comparison — a loud, immediate, non-zero exit, which is what ROADMAP criterion 1 requires; it does not need to route through the custom `::error::` message to satisfy the requirement.
 
+## Self-Check: PASSED
+
+All key-files confirmed present on disk; all 4 commits (`74cca61`, `a9b36ae`, `b7d5665`, `964560cc`) confirmed present in `git log --oneline --all`.
+
 ---
 *Phase: 08-tmux-real-pty-harness*
 *Completed: 2026-09-10*

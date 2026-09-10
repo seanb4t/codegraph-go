@@ -26,8 +26,8 @@
 
 ### tmux Real-PTY Harness
 
-- [ ] **TTY-01**: A tmux-driven harness builds the binary, spawns it in a tmux pane, sends keys and captures the pane, gated behind a build tag; without tmux on `PATH` the suite reports a skip with a reason, never a silent pass (999.2)
-- [ ] **TTY-02**: Frame capture polls until two consecutive captures are identical before asserting; no fixed sleeps in the assertion path
+- [x] **TTY-01**: A tmux-driven harness builds the binary, spawns it in a tmux pane, sends keys and captures the pane, gated behind a build tag; without tmux on `PATH` the suite reports a skip with a reason, never a silent pass (999.2)
+- [x] **TTY-02**: Frame capture polls until two consecutive captures are identical before asserting; no fixed sleeps in the assertion path
 - [ ] **TTY-03**: Bare `codegraph daemon` on a TTY with an empty registry renders only the `no running daemons` line, with zero DECRQM/mode-query response bytes in the pane or scrollback (closes the G-07-1 class)
 - [ ] **TTY-04**: The daemon picker enters the alternate screen, renders `Running daemons` plus a seeded record, and on quit restores the main buffer with no residual escape sequences in scrollback (closes the G-07-2 class)
 - [ ] **TTY-05**: The install/uninstall checkbox picker renders `[x]`/`[ ]` glyphs, `space` toggles, and `q`/`esc` cancel with zero config-file writes, asserted by hashing the config tree before and after
@@ -108,8 +108,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | GRD-03 | Phase 7 | Complete |
 | GRD-04 | Phase 7 | Complete |
 | GRD-06 | Phase 7 | Complete |
-| TTY-01 | Phase 8 | Pending |
-| TTY-02 | Phase 8 | Pending |
+| TTY-01 | Phase 8 | Complete |
+| TTY-02 | Phase 8 | Complete |
 | TTY-03 | Phase 8 | Pending |
 | TTY-04 | Phase 8 | Pending |
 | TTY-05 | Phase 8 | Pending |

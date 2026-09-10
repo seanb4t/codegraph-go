@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
-current_phase: 8
+current_phase: 08
 current_phase_name: tmux Real-PTY Harness
-status: planning
-stopped_at: Phase 8 context gathered
-last_updated: "2026-09-10T03:59:45.557Z"
-last_activity: 2026-09-09
-last_activity_desc: Phase 7 UAT complete — 22/22 passed, 0 issues; phase verified
-state_head: f2a0e1dd5441daf66a56cf551d64eb095821d428
+status: executing
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-09-10T14:22:32.843Z"
+last_activity: 2026-09-10
+last_activity_desc: Phase 08 execution started
+state_head: 964560cc012f3c473be95652eff43a46ea34c8f6
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
-  percent: 17
+  completed_phases: 0
+  total_plans: 8
+  completed_plans: 5
+  percent: 0
 ---
 
 # Project State
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 8 — tmux Real-PTY Harness
+**Current focus:** Phase 08 — tmux Real-PTY Harness
 
 ## Current Position
 
-Phase: 8 — tmux Real-PTY Harness
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-09-09 — Phase 7 UAT complete (22/22 passed, 0 issues), phase verified
+Phase: 08 (tmux Real-PTY Harness) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-09-10 — Phase 08 execution started
 
 ## Performance Metrics
 
@@ -113,6 +113,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P02 | 22 min | 3 tasks | 5 files |
 | Phase 07 P03 | 18min | 3 tasks | 4 files |
 | Phase 07 P04 | 15min | 3 tasks | 4 files |
+| Phase 08 P01 | 35min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -238,6 +239,8 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: [Phase 07]: 07-03: family (c)'s mutation-log entry has no tracked-file mutation or revert step (deliberate deviation) — the RED perturbation was applied to a copy of .goreleaser.yaml in a temp dir, since the committed release config must never be edited to prove a guard
 - [Phase 7]: GRD-04 conclusion-guard test is a sibling of TestPostReleaseJobsDeclareCheckoutPolicy, comparing every job's parsed if: against one verbatim const with no fixed job-id list and no normaliser
 - [Phase 7]: Deleted TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets outright (D-09) rather than rewriting it -- a tautological test comparing two in-test constants is worse than none
+- [Phase 08]: [Phase 08-01]: pollUntilStable's interval tuned to 1s/10s deadline (not the initial 100ms/5s guess) — measured a real, consistent 700-900ms pre-execution subprocess-startup plateau on this machine that a sub-second interval would false-converge on; comparison semantics unchanged
+- [Phase 08]: [Phase 08-01]: pollUntilStable's interval pacing uses <-time.After(...), never time.Sleep(...) — the plan's own verify gate greps for zero time.Sleep occurrences in test/tmux; matches test/integration's existing goroutine+time.After bounded-wait convention
 
 ### Pending Todos
 
@@ -382,10 +385,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/08-tmux-real-pty-harness/08-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-10T03:59:45.533Z
-Stopped at: Phase 8 context gathered
+Last session: 2026-09-10T14:22:32.806Z
+Stopped at: Completed 08-01-PLAN.md
   NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
