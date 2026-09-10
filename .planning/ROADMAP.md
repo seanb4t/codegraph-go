@@ -178,7 +178,24 @@ Plans:
   5. A CI job installs tmux and asserts `tmux -V` matches a committed expected version, runs the suite, and asserts the count of *executed* — not skipped — test cases equals a committed constant, so a runner without tmux, a misspelled build tag, or a single silently-skipping case all fail the job rather than passing it empty (TTY-07; wording amended 2026-09-09 at the Phase 8 discussion — hard apt version pinning rejected as brittle, and the positive floor raised to an exact count)
 
 **Notes**: Research flag — external precedent for tmux-driven TUI e2e testing is thin to absent, so the assertion classes are reconstructed from tmux's own scripting primitives plus this repo's incident record rather than copied from a documented convention. `os/exec` wraps the stable tmux CLI directly, matching this repo's existing git/brew interop style; a Go tmux client library is out of scope by construction because no viable one exists. This introduces the first *feature* build tag in the repo. Whether GitHub-hosted runners ship tmux could not be confirmed and is treated as absent-by-default — verify early, since `TTY-07` depends on the answer. Consumes backlog **999.2** and closes the G-07-1 / G-07-2 classes that v1.0 Phase 7's human UAT caught after both the full piped suite and a deep multi-agent code review had missed them.
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — TRACER: the `test/tmux` spine end to end (build tag, own `TestMain` resolver, tmux argv wrappers, the bounded stability poll), the TTY-02/TTY-03 empty-registry escape-hygiene assertion, TTY-01's named skip contract, and the `test:tmux` target with its executed-count equality gate
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 08-02-PLAN.md — TTY-04 alt-screen entry/exit over a really-seeded daemon record, TTY-05 checkbox glyphs plus a whole-tree hash proving cancel writes nothing, TTY-06 idle frame stability with N reported
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 08-03-PLAN.md — TTY-07's `tmux-e2e` CI job on `ubuntu-latest` with both run bodies bare task calls, the same-commit `inScopeJobs` entry, and the deliberate `tmux -V` bootstrap
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 08-04-PLAN.md — the four RED demonstrations (family (a) corrected to mutate both empty-registry guards) and `08-MUTATION-LOG.md` closed with a phase-wide byte-clean proof
 
 ### Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff
 
