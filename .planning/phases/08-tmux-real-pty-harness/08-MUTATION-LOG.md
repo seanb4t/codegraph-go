@@ -295,3 +295,47 @@ $ git checkout -- internal/cli/tui/agentpicker.go
 --- PASS: TestInstallPickerFrameStableWhileIdle (7.90s)
 ok  	github.com/seanb4t/codegraph-go/test/tmux	11.306s
 ```
+
+---
+
+## Closing
+
+### Phase-wide byte-clean proof
+
+Per-family gates (above) prove each revert individually; this proves that no mutation from any family survived into the phase's final state, which is the property that actually matters for shipping.
+
+**Porcelain status across the whole touched product tree (pasted verbatim):**
+```
+$ git status --porcelain -- internal/cli internal/cli/tui
+$
+```
+Empty output — no modified, staged, or untracked file survives under `internal/cli`/`internal/cli/tui`.
+
+**Diff against the phase's branch point, ranged form, across all three touched production files (pasted verbatim, exit 0):**
+```
+$ git diff --quiet "$(git merge-base HEAD origin/main)" -- internal/cli/daemon.go internal/cli/tui/daemonpicker.go internal/cli/tui/agentpicker.go
+$ echo $?
+0
+```
+This is the ranged form deliberately: a bare working-tree diff would report clean for a mutation that was accidentally *committed*, and this phase changes no product behaviour (08-CONTEXT.md), so any diff against the branch point is a surviving mutation. All three restored guard tokens (`len(records) > 0` in `daemon.go`; `len(records) == 0` and `v.AltScreen = true` in `daemonpicker.go`; `m.confirmed = false` and `v.AltScreen = true` in `agentpicker.go`) are present exactly once each, verified per-family above.
+
+### Non-vacuity assertion
+
+These four demonstrations establish that three of the four assertion classes this phase built — TTY-03, TTY-04, and TTY-05 — can actually fail, against the real historical defect behaviour or a real, newly-possible-but-never-exercised defect, observed through a real pty driving a really-built binary. That is the property this milestone exists to guarantee, and neither a checked-in bad-pane fixture nor a fault-injection switch would have established it (D-05): a fixture proves only that a matcher can match a frozen string, never that the harness observes a defect from a real terminal; a fault-injection switch ships a deliberately-broken code path that itself then needs a guard.
+
+**Family (d) is the one demonstration in this log that did not reproduce a failure, and that fact is not minimized here.** The `v.AltScreen = false` mutation D-06 named for TTY-06 was confirmed applied to the tracked file, confirmed to rebuild into the binary under test (`CODEGRAPH_TEST_BIN` unset, verified), and run twice — both runs passed. The reason is structural, not a flake: `TestInstallPickerFrameStableWhileIdle` measures stability *after* `pollUntilStable` has already converged past the picker's settling transient, and the alt-screen-vs-inline scrolling difference this mutation targets is confined to exactly that transient — a Program that receives no further input after its first settled frame does not re-render at all, regardless of `AltScreen`'s value, so there is nothing for this specific idle-stability assertion to observe. TTY-06's assertion itself is real and non-vacuous (an idle picker genuinely could fail to hold a stable frame, and D-14's stability-poll design elsewhere in this harness proves that kind of instability is a real, catchable failure mode) — what is NOT established is that *this specific single-token mutation* is a defect TTY-06's *idle-stability* assertion can detect. That is a narrower, more honest claim than "TTY-06 has been watched fail," and this log states it as such rather than writing up family (d) as a success it was not.
+
+**What none of these four demonstrations establish, even where they succeeded:** they do not prove the assertions catch every possible regression in these surfaces — each is one mutation, not an exhaustive fault model — and they do not prove the harness itself is free of flake. Both are out of scope for a mutation log and always will be.
+
+**Declining a second guard (Phase 7 D-07 precedent, 07-CONTEXT.md).** Family (d)'s finding could be read as motivating a new test — one that observes the settling transient directly, closing the gap this log just described. That is deliberately **not** added here: per 07-CONTEXT.md D-07 ("why are you proposing tests for tests?"), a new assertion class is architectural scope this plan was not given, not a mutation-log deliverable, and the honest, recorded finding above is itself the correct output of a RED demonstration that did not reproduce — not a mandate to expand scope to force one. The finding is left as a candidate for a future phase or todo, not silently absorbed into this plan's file set.
+
+### Family-to-requirement table
+
+| Family | Requirement | Test function | Mutated file(s) | ROADMAP criterion |
+|--------|-------------|----------------|------------------|--------------------|
+| (a) | TTY-03 | `TestDaemonEmptyRegistryLeaksNoModeQueryBytes` | `internal/cli/daemon.go`, `internal/cli/tui/daemonpicker.go` | Criterion 3 (first half) — watched fail against the historical G-07-1 behaviour; **discharged** |
+| (b) | TTY-04 | `TestDaemonPickerEntersAltScreenAndRestoresMainBuffer` | `internal/cli/tui/daemonpicker.go` | Criterion 3 (second half) — watched fail against the historical G-07-2 behaviour; **discharged** |
+| (c) | TTY-05 | `TestInstallPickerCancelWritesNoConfig` | `internal/cli/tui/agentpicker.go` | Criterion 4 describes the functional behaviour only (glyphs/toggle/hash), verified by 08-02; D-06's *extended* watched-fail coverage beyond Criterion 4 — **discharged** |
+| (d) | TTY-06 | `TestInstallPickerFrameStableWhileIdle` | `internal/cli/tui/agentpicker.go` | Criterion 4 describes the functional behaviour only (N-capture stability), verified by 08-02; D-06's *extended* watched-fail coverage beyond Criterion 4 — **NOT discharged via the specified mutation** (see Non-vacuity assertion above) |
+
+Criterion 3 (TTY-03/TTY-04, the ROADMAP's own explicit "watched fail" ask) is fully discharged by families (a) and (b). Criterion 4 (TTY-05/TTY-06)'s functional behaviour is a separate property verified by 08-02-SUMMARY.md's own tests, not this plan's job to re-prove; D-06's *additional*, self-imposed ambition to also watch TTY-05 and TTY-06 fail is met for TTY-05 (family (c)) and not met for TTY-06 (family (d)) via the single mutation D-06 specified — recorded honestly above rather than papered over.
