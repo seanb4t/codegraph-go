@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 08
 current_phase_name: tmux Real-PTY Harness
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-09-10T14:22:32.843Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-09-10T14:53:20.645Z"
 last_activity: 2026-09-10
 last_activity_desc: Phase 08 execution started
-state_head: 964560cc012f3c473be95652eff43a46ea34c8f6
+state_head: 4510b9dd588ee408bfb14294a8852e5903cf1fde
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
 ## Current Position
 
 Phase: 08 (tmux Real-PTY Harness) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-10 — Phase 08 execution started
 
@@ -114,6 +114,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 07 P03 | 18min | 3 tasks | 4 files |
 | Phase 07 P04 | 15min | 3 tasks | 4 files |
 | Phase 08 P01 | 35min | 3 tasks | 6 files |
+| Phase 08 P02 | 27min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -241,6 +242,8 @@ Standing decisions that outlive every milestone:
 - [Phase 7]: Deleted TestHomebrewTapAppSecretsDistinctFromReleasePleaseAppSecrets outright (D-09) rather than rewriting it -- a tautological test comparing two in-test constants is worse than none
 - [Phase 08]: [Phase 08-01]: pollUntilStable's interval tuned to 1s/10s deadline (not the initial 100ms/5s guess) — measured a real, consistent 700-900ms pre-execution subprocess-startup plateau on this machine that a sub-second interval would false-converge on; comparison semantics unchanged
 - [Phase 08]: [Phase 08-01]: pollUntilStable's interval pacing uses <-time.After(...), never time.Sleep(...) — the plan's own verify gate greps for zero time.Sleep occurrences in test/tmux; matches test/integration's existing goroutine+time.After bounded-wait convention
+- [Phase 08]: TTY-05's positive-control assertion uses the picker title, not the help footer text — the footer never renders at the default 100x30 pane with all 8 agent targets due to a bubbles/v2/list pagination-padding overflow, verified via temporary reverted debug instrumentation
+- [Phase 08]: confighash.go's doc comment avoids the literal substring 'sha256sum' after the plan's own verify gate tripped on it appearing in explanatory prose rather than a shell-out
 
 ### Pending Todos
 
@@ -387,8 +390,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-10T14:22:32.806Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-09-10T14:53:20.574Z
+Stopped at: Completed 08-02-PLAN.md
   NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
