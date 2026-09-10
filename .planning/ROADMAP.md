@@ -178,7 +178,7 @@ Plans:
   5. A CI job installs tmux and asserts `tmux -V` matches a committed expected version, runs the suite, and asserts the count of *executed* — not skipped — test cases equals a committed constant, so a runner without tmux, a misspelled build tag, or a single silently-skipping case all fail the job rather than passing it empty (TTY-07; wording amended 2026-09-09 at the Phase 8 discussion — hard apt version pinning rejected as brittle, and the positive floor raised to an exact count)
 
 **Notes**: Research flag — external precedent for tmux-driven TUI e2e testing is thin to absent, so the assertion classes are reconstructed from tmux's own scripting primitives plus this repo's incident record rather than copied from a documented convention. `os/exec` wraps the stable tmux CLI directly, matching this repo's existing git/brew interop style; a Go tmux client library is out of scope by construction because no viable one exists. This introduces the first *feature* build tag in the repo. Whether GitHub-hosted runners ship tmux could not be confirmed and is treated as absent-by-default — verify early, since `TTY-07` depends on the answer. Consumes backlog **999.2** and closes the G-07-1 / G-07-2 classes that v1.0 Phase 7's human UAT caught after both the full piped suite and a deep multi-agent code review had missed them.
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -195,7 +195,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 08-04-PLAN.md — the four RED demonstrations (family (a) corrected to mutate both empty-registry guards) and `08-MUTATION-LOG.md` closed with a phase-wide byte-clean proof
+- [x] 08-04-PLAN.md — the four RED demonstrations (family (a) corrected to mutate both empty-registry guards) and `08-MUTATION-LOG.md` closed with a phase-wide byte-clean proof
 
 ### Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff
 
@@ -267,7 +267,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 7. Guards That Cannot Fire | 4/4 | Complete    | 2026-09-08 |
-| 8. tmux Real-PTY Harness | 3/4 | In Progress|  |
+| 8. tmux Real-PTY Harness | 4/4 | In Progress|  |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 0/TBD | Not started | - |
 | 10. Index Health — The Coverage Denominator | 0/TBD | Not started | - |
 | 11. Graph View — Community Clustering | 0/TBD | Not started | - |
