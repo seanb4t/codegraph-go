@@ -5,11 +5,11 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 8
 current_phase_name: tmux Real-PTY Harness
 status: planning
-stopped_at: Phase 7 verified (UAT 22/22), ready to discuss Phase 8
-last_updated: "2026-09-09T20:50:00.000Z"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-09-10T03:59:45.557Z"
 last_activity: 2026-09-09
 last_activity_desc: Phase 7 UAT complete — 22/22 passed, 0 issues; phase verified
-state_head: 1879aea1ba80178cbdc5adaaeaf4d03322d4ff94
+state_head: f2a0e1dd5441daf66a56cf551d64eb095821d428
 progress:
   total_phases: 6
   completed_phases: 1
@@ -382,10 +382,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** None
+**Resume file:** .planning/phases/08-tmux-real-pty-harness/08-CONTEXT.md
 
-Last session: 2026-09-09T20:50:00.000Z
-Stopped at: Phase 7 verified (UAT 22/22 passed, 0 issues), ready to discuss Phase 8
+Last session: 2026-09-10T03:59:45.533Z
+Stopped at: Phase 8 context gathered
   NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
