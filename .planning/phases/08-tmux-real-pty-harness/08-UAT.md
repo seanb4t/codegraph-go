@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 08-tmux-real-pty-harness
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-VERIFICATION.md]
 started: 2026-09-10T18:08:06.378Z
@@ -162,4 +162,4 @@ blocked: 0
       issue: "TestMain builds a fresh binary per run and never warms it before m.Run()"
   missing:
     - "Either warm the binary once in TestMain before m.Run() (one throwaway exec), or make pollUntilStable require a positive anchor (e.g. the shell prompt returned) before accepting convergence, or raise the interval with a cold-path measurement recorded in the comment"
-  debug_session: ""
+  debug_session: ".planning/debug/tty03-cold-start-poll-race.md"
