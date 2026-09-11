@@ -4,17 +4,17 @@ milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
 current_phase: 08
 current_phase_name: tmux Real-PTY Harness
-status: verifying
-stopped_at: Completed 08-04-PLAN.md
-last_updated: "2026-09-10T15:35:59.717Z"
-last_activity: 2026-09-10
+status: executing
+stopped_at: Completed 08-05-PLAN.md
+last_updated: "2026-09-11T21:59:38.323Z"
+last_activity: 2026-09-11
 last_activity_desc: Phase 08 execution started
-state_head: 6f9bf7acd4ffb6bf2c132e6d2cfd33593513dd7c
+state_head: 21063a2e40cca0d455075c0d84a93e86cfd79c57
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
   percent: 0
 ---
 
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (updated 2026-09-09 after Phase 7)
 ## Current Position
 
 Phase: 08 (tmux Real-PTY Harness) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-09-10 — Phase 08 execution started
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-09-11 — Phase 08 execution started
 
 ## Performance Metrics
 
@@ -117,6 +117,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 08 P02 | 27min | 3 tasks | 7 files |
 | Phase 08 P03 | ~20min | 2 tasks | 2 files |
 | Phase 08 P04 | ~25min | 3 tasks | 5 files |
+| Phase 08 P05 | 25 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -249,6 +250,8 @@ Standing decisions that outlive every milestone:
 - [Phase 08]: [Phase 08]: [Phase 08-03]: tmux-e2e CI job lands on ubuntu-latest with the TMUX_EXPECTED_VERSION sentinel deliberately unresolved — no real ci.yml run exists for this branch yet (gh run list returned empty), so D-11's bootstrap stays in its designed deferred state rather than guessing a version
 - [Phase 08]: [Phase 08]: [Phase 08-03]: own comment prose in the new tmux-e2e job tripped the plan's own continue-on-error substring-count gate — reworded to describe the same no-soft-fail property without the literal token, third instance of this phase's recurring substring-proxy gate defect (after time.Sleep in 08-01, sha256sum in 08-02)
 - [Phase 08]: [Phase 08-04]: Family (d)'s D-06-specified v.AltScreen=false mutation does NOT fail TestInstallPickerFrameStableWhileIdle — the test converges past the settling transient before its idle-stability loop begins, and the AltScreen-driven scroll this mutation targets is confined to that transient. Confirmed reproducibly (two runs); reported honestly in 08-MUTATION-LOG.md and WINDOWS.md (unmet-truth) rather than forced. — Following the plan's own explicit contingency instruction ("stop and report it... do not adjust the test") and Phase 7's D-07 precedent against adding a second guard/test for a property one assertion already covers.
+- [Phase 08]: Fixed pollUntilStable's G-08-1 cold-start race by giving it a required readiness predicate (ready(capture) && capture == predecessor) rather than warming the binary or raising the poll interval.
+- [Phase 08]: Cold-arm evidence runs all showed K<=1 (machine warm); did not re-run chasing K>=2 per the plan's own interpretation rule — relied on the deterministic self-test's RED/GREEN transcripts as proof instead.
 
 ### Pending Todos
 
@@ -396,8 +399,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-10T15:35:59.698Z
-Stopped at: Completed 08-04-PLAN.md
+Last session: 2026-09-11T21:59:38.302Z
+Stopped at: Completed 08-05-PLAN.md
   NEXT: `/gsd-discuss-phase 8` (tmux Real-PTY Harness)
   CARRY-OVER:
 
