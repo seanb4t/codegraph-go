@@ -3,28 +3,46 @@
 package tmux
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
 // stabilityPollInterval and stabilityPollDeadline bound pollUntilStable
-// (D-14): capture on stabilityPollInterval, fail if no two consecutive
-// captures match by stabilityPollDeadline.
+// (D-14, amended by plan 08-05 to close G-08-1): capture on
+// stabilityPollInterval, converge only once the caller's readiness
+// predicate holds for a capture that is ALSO byte-identical to its
+// predecessor, and fail if neither condition is jointly satisfied by
+// stabilityPollDeadline.
 //
-// stabilityPollInterval is deliberately larger than a naive "fast poll"
-// choice: measured directly on this machine (three independent traces,
-// 100ms sampling), the spawned codegraph process consistently takes
-// 700-900ms between the shell echoing the typed command line and its own
-// first stdout output appearing — a real subprocess-startup latency, not a
-// rendering artifact (reproduced identically whether the typed command is
-// long or short). A sub-second interval risks two consecutive samples both
-// landing inside that pre-output window, which is byte-identical to itself
-// and would make pollUntilStable converge on the wrong (pre-execution)
-// stable frame. stabilityPollInterval exceeds the measured worst case with
-// margin, so consecutive samples can never both land inside that window by
-// construction — the comparison stays a literal two-sample
-// immediate-predecessor check (D-14's contract, unmodified); only the
-// sampling cadence was tuned to the real timing this machine exhibits.
+// stabilityPollInterval is the sampling cadence ONLY: it bounds how
+// finely the poll observes the pane and how quickly it can return once a
+// frame has both settled and satisfied readiness. It is NOT what prevents
+// convergence on a pre-output frame — the readiness predicate is. A
+// pre-output frame (shell prompt plus echoed command, before the spawned
+// process has written anything) is byte-identical to itself and therefore
+// "stable" under any interval; no choice of interval alone can tell it
+// apart from a genuine post-output frame.
+//
+// stabilityPollDeadline bounds the total wait and is the only timing
+// value here that must exceed a spawned process's real startup latency:
+// on overrun, the poll fails loudly (t.Fatalf) rather than passing
+// vacuously.
+//
+// Measured on this machine (darwin/arm64, tmux 3.7c):
+//   - 08-01's original 700-900ms trace was the shell-echo-to-first-output
+//     latency of an ALREADY-WARM binary — a warm exec's startup, not a
+//     cold one.
+//   - The G-08-1 debug session measured the FIRST in-pane exec of a
+//     freshly built ~80MB binary at 1.1-1.6s; six fresh builds timed at
+//     the shell were 739-1230ms, five of six above 1s.
+//   - Warm execs of the same binary measured 167-226ms.
+//
+// The 1s interval sits below the cold-exec figure above, which is why the
+// interval alone could never have guaranteed a post-output frame — only
+// the readiness predicate does. The constants stay 1s/10s: retuning the
+// interval moves the cliff rather than removing it and is deliberately
+// not the fix here.
 const (
 	stabilityPollInterval = 1 * time.Second
 	stabilityPollDeadline = 10 * time.Second
@@ -66,6 +84,9 @@ func capturePane(t *testing.T, session string) string {
 // signal (or -a's exit code) tells you whether alt-mode is active; content
 // assertions must always come from the plain capturePane above, never from
 // an -a capture.
+//
+// It is also the basis of the altScreenOff pollUntilStable readiness
+// predicate below, which re-queries it fresh on every poll sample.
 func alternateOn(t *testing.T, session string) bool {
 	t.Helper()
 	stdout, stderr, err := runTmux("display-message", "-t", session, "-p", "#{alternate_on}")
@@ -86,35 +107,109 @@ func trimNewline(s string) string {
 	return s
 }
 
-// pollUntilStable is the package's ONLY wait primitive (D-14): it captures
-// session's pane on stabilityPollInterval, comparing each capture to its
-// immediate predecessor with plain byte equality and no normalization
-// (D-15 — the default capture already trims trailing whitespace, which
-// removes the main source of false differences). It returns the first
-// capture that is byte-identical to its predecessor.
+// pollUntilStable is the package's ONLY wait primitive (D-14, amended by
+// plan 08-05 to close G-08-1): it captures session's pane on
+// stabilityPollInterval, and converges only when the caller's readiness
+// predicate ready holds for a capture AND that capture is byte-identical
+// to its immediate predecessor, with no normalization (D-15 — the default
+// capture already trims trailing whitespace, which removes the main
+// source of false differences).
 //
-// If stabilityPollDeadline elapses with no two consecutive captures
-// matching, pollUntilStable calls t.Fatalf with a message containing both
-// of the last two differing captures verbatim. Non-convergence is a
-// FAILURE — never a skip, never a whole-case retry, and nothing in this
-// package may pause for a fixed duration and then assert without going
-// through this poll.
-func pollUntilStable(t *testing.T, session string) string {
+// Both halves are needed. A pre-output frame — the shell prompt plus the
+// echoed command, before the spawned process has written anything — is
+// byte-identical to itself and therefore "stable" to any plain equality
+// check; only the readiness predicate tells it apart from a genuine
+// post-output frame. This is G-08-1: the cold first exec of a freshly
+// built binary can exceed stabilityPollInterval, leaving two consecutive
+// samples on the identical pre-output frame, which a two-sample equality
+// check with no readiness condition accepted as converged.
+//
+// ready is required: a nil ready is a programming error and fails
+// immediately via t.Fatal, before any capture is taken. Callers state
+// what "settled" means for their own case — paneContains for content a
+// launch or keystroke adds, altScreenOff for a quit key whose only
+// guaranteed change is leaving alternate mode. An anchor must be absent
+// from the typed command line that precedes it, or the pre-output frame
+// satisfies it too.
+//
+// If stabilityPollDeadline elapses with no capture satisfying both
+// halves, pollUntilStable calls t.Fatalf naming the deadline, whether
+// readiness ever held during the poll, and both of the last two captures
+// verbatim. Non-convergence is a FAILURE — never a skip, never a
+// whole-case retry, and nothing in this package may pause for a fixed
+// duration and then assert without going through this poll.
+func pollUntilStable(t *testing.T, session string, ready func(capture string) bool) string {
 	t.Helper()
+	if ready == nil {
+		t.Fatal("pollUntilStable: ready is nil — every caller must state what a settled frame must contain or satisfy (see this function's doc comment); pass paneContains or altScreenOff, never a bare byte-equality wait")
+	}
 
-	deadline := time.Now().Add(stabilityPollDeadline)
+	start := time.Now()
+	deadline := start.Add(stabilityPollDeadline)
+
+	sample := 0
 	prev := capturePane(t, session)
+	readyEverHeld := ready(prev)
+	readyFirstSample := -1
+	if readyEverHeld {
+		readyFirstSample = sample
+	}
+
 	for {
 		if time.Now().After(deadline) {
 			cur := capturePane(t, session)
-			t.Fatalf("pollUntilStable: capture-pane never converged within %s\n--- previous capture ---\n%s\n--- latest capture ---\n%s",
+			if readyEverHeld {
+				t.Fatalf("pollUntilStable: capture-pane never converged within %s (readiness first held at sample %d)\n--- previous capture ---\n%s\n--- latest capture ---\n%s",
+					stabilityPollDeadline, readyFirstSample, prev, cur)
+			}
+			t.Fatalf("pollUntilStable: capture-pane never converged within %s (readiness never held during the poll)\n--- previous capture ---\n%s\n--- latest capture ---\n%s",
 				stabilityPollDeadline, prev, cur)
 		}
 		<-time.After(stabilityPollInterval) // interval pacing via a channel wait, no blocking pause call
+		sample++
 		cur := capturePane(t, session)
-		if cur == prev {
+		curReady := ready(cur)
+		if curReady && !readyEverHeld {
+			readyEverHeld = true
+			readyFirstSample = sample
+		}
+		if cur == prev && curReady {
+			t.Logf("pollUntilStable: converged at sample %d after %s (ready first held at sample %d)", sample, time.Since(start), readyFirstSample)
 			return cur
 		}
 		prev = cur
+	}
+}
+
+// paneContains returns a pollUntilStable readiness predicate reporting
+// whether a capture contains needle. Use it as the anchor after a command
+// launch or a keystroke that adds content — content the caller's own next
+// assertion already requires, so the anchor and the assertion agree on
+// what "settled" means.
+//
+// An empty needle is rejected immediately: it is satisfied by every
+// capture, including a pre-output one, which is exactly the vacuity this
+// whole change removes.
+func paneContains(t *testing.T, needle string) func(string) bool {
+	t.Helper()
+	if needle == "" {
+		t.Fatal("paneContains: needle is empty — an empty needle is satisfied by every capture, including a pre-output one, defeating the readiness predicate's purpose")
+	}
+	return func(capture string) bool {
+		return strings.Contains(capture, needle)
+	}
+}
+
+// altScreenOff returns a pollUntilStable readiness predicate reporting
+// whether session's pane has LEFT the alternate screen, re-querying
+// alternateOn fresh on every evaluation (never cached). Use it as the
+// anchor after a quit key, where the only guaranteed change is tmux
+// leaving alternate mode — the main buffer's content underneath (an
+// echoed command line that wraps at an unpredictable column) is not a
+// usable content anchor.
+func altScreenOff(t *testing.T, session string) func(string) bool {
+	t.Helper()
+	return func(string) bool {
+		return !alternateOn(t, session)
 	}
 }

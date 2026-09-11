@@ -33,7 +33,7 @@ func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 	// First cancel path: q.
 	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s %s install", home, home, binPath))
 	sendKey(t, session, "Enter")
-	capture := pollUntilStable(t, session)
+	capture := pollUntilStable(t, session, paneContains(t, "[ ]"))
 	if !strings.Contains(capture, "[ ]") {
 		t.Fatalf("TTY-05: converged capture does not contain the unchecked checkbox glyph \"[ ]\":\n%s", capture)
 	}
@@ -52,13 +52,13 @@ func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 	}
 
 	sendKey(t, session, "Space")
-	capture = pollUntilStable(t, session)
+	capture = pollUntilStable(t, session, paneContains(t, "[x]"))
 	if !strings.Contains(capture, "[x]") {
 		t.Fatalf("TTY-05: converged capture after space does not contain the checked checkbox glyph \"[x]\":\n%s", capture)
 	}
 
 	sendKey(t, session, "q")
-	capture = pollUntilStable(t, session)
+	capture = pollUntilStable(t, session, altScreenOff(t, session))
 	if alternateOn(t, session) {
 		t.Fatalf("TTY-05: alternateOn is still true after q — the picker did not exit:\n%s", capture)
 	}
@@ -66,11 +66,11 @@ func TestInstallPickerCancelWritesNoConfig(t *testing.T) {
 	// Second cancel path: esc, same session, same home.
 	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s %s install", home, home, binPath))
 	sendKey(t, session, "Enter")
-	pollUntilStable(t, session)
+	pollUntilStable(t, session, paneContains(t, "[ ]"))
 	sendKey(t, session, "Space")
-	pollUntilStable(t, session)
+	pollUntilStable(t, session, paneContains(t, "[x]"))
 	sendKey(t, session, "Escape")
-	capture = pollUntilStable(t, session)
+	capture = pollUntilStable(t, session, altScreenOff(t, session))
 	if alternateOn(t, session) {
 		t.Fatalf("TTY-05: alternateOn is still true after Escape — the picker did not exit:\n%s", capture)
 	}

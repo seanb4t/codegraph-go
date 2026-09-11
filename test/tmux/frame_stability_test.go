@@ -47,7 +47,7 @@ func TestInstallPickerFrameStableWhileIdle(t *testing.T) {
 	// Converge once to reach a settled first frame — this proxy measures
 	// stability of an already-settled picker, not the transient during
 	// startup.
-	settled := pollUntilStable(t, session)
+	settled := pollUntilStable(t, session, paneContains(t, "[ ]"))
 
 	for i := 1; i <= frameStabilityCaptures; i++ {
 		<-time.After(stabilityPollInterval)

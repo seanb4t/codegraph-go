@@ -53,7 +53,7 @@ func TestPollUntilStableDoesNotConvergeOnPreOutputFrame(t *testing.T) {
 	start := time.Now()
 	sendKey(t, session, "Enter")
 
-	capture := pollUntilStable(t, session)
+	capture := pollUntilStable(t, session, paneContains(t, pollContractAnchor))
 	elapsed := time.Since(start)
 
 	if !strings.Contains(capture, pollContractAnchor) {

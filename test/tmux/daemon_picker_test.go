@@ -34,7 +34,7 @@ func TestDaemonPickerEntersAltScreenAndRestoresMainBuffer(t *testing.T) {
 	sendLiteral(t, session, fmt.Sprintf("env HOME=%s USERPROFILE=%s %s daemon", home, home, binPath))
 	sendKey(t, session, "Enter")
 
-	capture := pollUntilStable(t, session)
+	capture := pollUntilStable(t, session, paneContains(t, "Running daemons"))
 
 	if !alternateOn(t, session) {
 		t.Fatalf("TTY-04: alternateOn is false while the daemon picker should be open:\n%s", capture)
@@ -51,7 +51,7 @@ func TestDaemonPickerEntersAltScreenAndRestoresMainBuffer(t *testing.T) {
 	}
 
 	sendKey(t, session, "q")
-	capture = pollUntilStable(t, session)
+	capture = pollUntilStable(t, session, altScreenOff(t, session))
 
 	if alternateOn(t, session) {
 		t.Fatalf("TTY-04: alternateOn is still true after q — the main buffer was not restored:\n%s", capture)
