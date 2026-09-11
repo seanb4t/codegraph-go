@@ -202,16 +202,16 @@ tasks:
       function in test/tmux fails this target until the constant is updated
       in the SAME commit — a floor (>=N) is deliberately not used, since a
       floor is satisfied by one case running while the rest skip.
-      TMUX_EXPECTED_VERSION is D-11's install-then-assert pin, deliberately
-      seeded with a value no real tmux can report (bootstrapped from the
-      first real CI run's own failure output, committed in plan 08-03).
+      TMUX_EXPECTED_VERSION is D-11's install-then-assert pin. Its value is
+      the string ubuntu-latest's own `tmux -V` printed on the first real
+      tmux-e2e run (PR #69, run 34606828356), never a guess from a dev box.
       Always prints an executed count and a skipped count (D-03); enforces
       the executed-count equality and the tmux-version match only when CI
       is set, so a contributor without tmux gets a clean skip report and
       exit 0 while CI fails hard on either mismatch.
     vars:
       TMUX_EXPECTED_TESTS: 5
-      TMUX_EXPECTED_VERSION: UNPINNED-BOOTSTRAP
+      TMUX_EXPECTED_VERSION: tmux 3.4
     preconditions:
       - sh: command -v jq
         msg: "jq not found — required to parse go test -json output for test:tmux's anti-vacuity executed-count gate."
