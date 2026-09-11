@@ -1,20 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 08-tmux-real-pty-harness
 source: [08-01-SUMMARY.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md, 08-04-SUMMARY.md, 08-VERIFICATION.md]
 started: 2026-09-10T18:08:06.378Z
-updated: 2026-09-11T13:48:28Z
+updated: 2026-09-11T20:37:58Z
 ---
 
 ## Current Test
 
-number: 2
-name: TTY-07 backstop: the executed-count assertion fired on a real CI run
-expected: |
-  The tmux-e2e job log shows "test:tmux: executed=5 skipped=0 expected=5", the job status is
-  success, and the tmux -V assertion line matched TMUX_EXPECTED_VERSION (or printed the real
-  string on the deliberately-unpinned first run).
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -39,13 +33,16 @@ note: |
 ### 2. TTY-07 backstop: the executed-count assertion fired on a real CI run
 
 expected: The tmux-e2e job log shows "test:tmux: executed=5 skipped=0 expected=5", the job status is success, and the tmux -V assertion line shows the observed version matched TMUX_EXPECTED_VERSION (or, on the deliberately-unpinned first run, printed the real string for committing per D-11's bootstrap).
-result: [pending]
+result: pass
+source: ci-log
+evidence: "PR #69, run 34607117422, job 103288150463 (ubuntu-latest, pin commit 3899e6de): log contains 'test:tmux: executed=5 skipped=0 expected=5'; tmux -V observed 'tmux 3.4' = committed TMUX_EXPECTED_VERSION; 0 ::error annotations; step 6 success; all 5 tests pass (TTY-03 2.17s, TTY-04 4.08s, TTY-05 11.1s, TTY-06 7.06s, TTY-01 skip-contract 0s); 'TTY-06: frame-stable across N=5 captures' echoed. Run 1 (34606828356) failed at the version pin BY DESIGN printing 'tmux 3.4' — D-11 bootstrap half 1; pin committed as half 2."
 coverage_id: 08-03-D2
 
 ### 3. TTY-06 family (d) non-reproduction — human decision on scope
 
 expected: A decision is recorded on whether the D-06-specified v.AltScreen=false mutation's failure to fail TestInstallPickerFrameStableWhileIdle warrants a follow-up settling-transient-observing assertion, or is accepted as a recorded limitation per Phase 7's D-07 precedent.
-result: [pending]
+result: skipped
+reason: "Deferred follow-up: defer"
 coverage_id: 08-04-D4
 
 ### 4. test/tmux package spine: build tag, TestMain resolver, tmux argv wrappers, D-14 stability poll
@@ -135,11 +132,17 @@ coverage_id: 08-04-D5
 ## Summary
 
 total: 15
-passed: 12
+passed: 13
 issues: 1
-pending: 2
-skipped: 0
+pending: 0
+skipped: 1
 blocked: 0
+
+## Deferred Follow-Ups
+
+- test: 3
+  idea: "Settling-transient-observing assertion for TTY-06: sample during convergence (or mutate something that renders when idle) so an inline-vs-altscreen defect confined to the settling window is discriminable. Family (d)'s v.AltScreen=false non-reproduction is recorded in 08-MUTATION-LOG.md and .planning/WINDOWS.md; user response verbatim: 'defer'."
+  deferred_at: 2026-09-11
 
 ## Gaps
 
@@ -149,7 +152,7 @@ blocked: 0
   reason: "Claude re-executed 08-01 D2's covering check at HEAD 5baba883: FAILED 3/3 at session start (cold machine), PASSED ~13/13 afterwards. In-pane first-exec latency of a freshly built binary = 1567 ms; subsequent = 167-226 ms; stabilityPollInterval = 1000 ms. TestMain builds a fresh binary per run and daemon_empty_test.go is the first test to exec it, so TTY-03 alone pays the cold cost and pollUntilStable converges on the pre-output frame. capture.go:16-27's 'by construction' margin claim does not hold. Not reproducible on demand once warm."
   severity: major
   test: 1
-  root_cause: "stabilityPollInterval (1s) is below the cold first-exec latency of the freshly built 80MB binary (1.1-1.6s measured); pollUntilStable's two-sample check converges on the pre-output frame. Threatens the tmux-e2e CI job, which is always cold."
+  root_cause: "stabilityPollInterval (1s) is below the cold first-exec latency of the freshly built 80MB binary (1.1-1.6s measured); pollUntilStable's two-sample check converges on the pre-output frame. CI evidence (PR #69 run 34607117422, ubuntu-latest, fresh build): TTY-03 PASSED in 2.17s — the race did NOT fire there (n=1). The defect stands as (a) capture.go's false 'by construction' margin claim and (b) 3/3 observed failures on a cold macOS dev machine; it is not, on this evidence, a CI-breaker."
   artifacts:
     - path: "test/tmux/capture.go"
       issue: "stabilityPollInterval=1s justified on a warm-binary measurement (700-900ms); cold path exceeds it"
