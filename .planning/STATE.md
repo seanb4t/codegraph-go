@@ -4,17 +4,17 @@ milestone: v0.13.0
 milestone_name: Guard Hardening & UI Follow-through
 current_phase: 09
 current_phase_name: Source View Follow-Through — Breadcrumb & Editor Handoff
-status: executing
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-09-12T19:08:29.943Z"
+status: verifying
+stopped_at: Completed 09-05-PLAN.md
+last_updated: "2026-09-12T19:39:51.322Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 09 execution started
-state_head: 690330e0f11887117e6fd12bfe636e535c7fca3b
+state_head: d84cf0a4bdfb66557695279c2f5f0343ccdd8781
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
 
 Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-12 — Phase 09 execution started
 
 ## Performance Metrics
@@ -123,6 +123,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 09 P02 | 14min | 2 tasks | 4 files |
 | Phase 09 P03 | 35min | 3 tasks | 45 files |
 | Phase 09 P04 | 25min | 3 tasks | 34 files |
+| Phase 09 P05 | 30min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -268,6 +269,8 @@ Standing decisions that outlive every milestone:
 - [Phase 09]: 09-03: breadcrumb-check.mjs's oracle independently re-implements innermost-range derivation (sort-based) and fetches FileSymbols directly over HTTP, never importing the SPA's own module
 - [Phase 09]: editor-prefs.ts is the SPA's first localStorage consumer: try/catch every access, degrade to no-override on any failure; templateForRequest is the one seam both the probe and a gutter click resolve through
 - [Phase 09]: [Rule 3] Node >=26's built-in global Web Storage API shadows jsdom's real localStorage and no-ops silently without --localstorage-file; fixed with a probe-and-replace in-memory Storage shim in web/tests/setup.ts, test-infra only
+- [Phase 09]: Family (b)'s live-gate demonstration needed a different --file target (internal/cli/editorurl.go) than the script's default, since the default's structure lets the scroll loop's own break condition fire before reaching the exposing gap
+- [Phase 09]: 09-SECURITY.md records Cursor/JetBrains preset templates as still [ASSUMED] rather than confirmed — no real IDE was available to click through in this autonomous session; WINDOWS.md #35 stays open
 
 ### Pending Todos
 
@@ -415,8 +418,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T19:08:29.916Z
-Stopped at: Completed 09-04-PLAN.md
+Last session: 2026-09-12T19:39:51.297Z
+Stopped at: Completed 09-05-PLAN.md
   NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
   CARRY-OVER:
 
