@@ -203,8 +203,13 @@ func ValidateEditorTemplate(template string) error {
 // buildEditorURL substitutes template's {path}/{line}/{col} placeholders
 // with absPath (percent-encoded per its position — before or after the
 // template's first '?') and line/col (decimal). template is assumed
-// already validated by ValidateEditorTemplate.
-func buildEditorURL(template, absPath string, line, col int32) string {
+// already validated by ValidateEditorTemplate — every current call site
+// (editorLinkAnswer) validates first, so the error return below is not
+// reachable today. It exists so a future call site that skips validation
+// degrades to an error (which the caller turns into TEMPLATE_INVALID)
+// instead of panicking on the slice bounds of an unbalanced '{' with no
+// matching '}'.
+func buildEditorURL(template, absPath string, line, col int32) (string, error) {
 	queryStart := strings.IndexByte(template, '?')
 
 	var b strings.Builder
@@ -215,6 +220,13 @@ func buildEditorURL(template, absPath string, line, col int32) string {
 			continue
 		}
 		end := strings.IndexByte(template[i:], '}')
+		if end == -1 {
+			// Mirror source-lines.ts's own malformed-input fallback: write
+			// the unterminated remainder verbatim rather than slicing past
+			// it. The reason string names no absolute path — only the
+			// invariant that broke.
+			return "", errors.New("template has an unbalanced '{' with no matching '}'")
+		}
 		token := template[i+1 : i+end]
 		switch token {
 		case "path":
@@ -227,7 +239,7 @@ func buildEditorURL(template, absPath string, line, col int32) string {
 		}
 		i += end + 1
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 // encodeEditorPathSegments percent-encodes each "/"-separated segment of
@@ -329,8 +341,14 @@ func editorLinkAnswer(opts EditorLinkOptions, override *string, abs string, line
 		return resp
 	}
 
+	url, err := buildEditorURL(effectiveTemplate, abs, line, col)
+	if err != nil {
+		resp.Availability = uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_TEMPLATE_INVALID
+		resp.Reason = err.Error()
+		return resp
+	}
 	resp.Availability = uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_BUILDABLE
-	resp.Url = buildEditorURL(effectiveTemplate, abs, line, col)
+	resp.Url = url
 	return resp
 }
 

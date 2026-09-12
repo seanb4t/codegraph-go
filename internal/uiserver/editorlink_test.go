@@ -442,7 +442,10 @@ func TestGetEditorLinkLineAndColBounds(t *testing.T) {
 func TestEditorLinkPathEncodingPerPosition(t *testing.T) {
 	const path = "/r/a b#c?d:e&f.go"
 
-	pathURL := buildEditorURL("vscode://file/{path}:{line}", path, 1, 1)
+	pathURL, err := buildEditorURL("vscode://file/{path}:{line}", path, 1, 1)
+	if err != nil {
+		t.Fatalf("buildEditorURL(path-position) returned unexpected error: %v", err)
+	}
 	afterFile := strings.TrimPrefix(pathURL, "vscode://file/")
 	for _, raw := range []string{" ", "#", "?"} {
 		if strings.Contains(afterFile, raw) {
@@ -459,7 +462,10 @@ func TestEditorLinkPathEncodingPerPosition(t *testing.T) {
 		t.Fatalf("buildEditorURL(path-position) = %q, want '/' path separators kept literal", pathURL)
 	}
 
-	queryURL := buildEditorURL("idea://open?file={path}&line={line}", path, 1, 1)
+	queryURL, err := buildEditorURL("idea://open?file={path}&line={line}", path, 1, 1)
+	if err != nil {
+		t.Fatalf("buildEditorURL(query-position) returned unexpected error: %v", err)
+	}
 	if !strings.Contains(queryURL, "/r/") {
 		t.Fatalf("buildEditorURL(query-position) = %q, want '/' path separators kept literal", queryURL)
 	}
@@ -482,6 +488,22 @@ func TestEditorLinkPathEncodingPerPosition(t *testing.T) {
 		if strings.Contains(substituted, raw) {
 			t.Fatalf("buildEditorURL(query-position) substituted path %q contains raw %q", substituted, raw)
 		}
+	}
+}
+
+// TestBuildEditorURLRejectsUnbalancedOpenBrace proves WR-01's defensive
+// guard: buildEditorURL is documented as assuming an already-validated
+// template (ValidateEditorTemplate rejects unbalanced braces on every
+// current call site), but must degrade to an error — never panic on a
+// slice-bounds violation — if a future caller skips validation and hands
+// it a template with an unterminated '{'.
+func TestBuildEditorURLRejectsUnbalancedOpenBrace(t *testing.T) {
+	_, err := buildEditorURL("vscode://file/{path", "/r/a.go", 1, 1)
+	if err == nil {
+		t.Fatal("buildEditorURL(unbalanced '{') returned nil error, want a non-nil error instead of panicking")
+	}
+	if strings.Contains(err.Error(), "/r/a.go") {
+		t.Fatalf("buildEditorURL(unbalanced '{') error %q must not name the absolute path", err.Error())
 	}
 }
 
