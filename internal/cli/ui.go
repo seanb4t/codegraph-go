@@ -18,6 +18,13 @@ import (
 // is unchanged.
 var openBrowser = browser.OpenURL
 
+// discoverEditorFn is plan 09-02's discoverEditor indirected behind a
+// package-level func var, the same test-seam shape as openBrowser
+// above: production behavior is unchanged, and ui_test.go can swap in a
+// fake to assert the discovered-default path without depending on
+// whatever editors happen to be installed on the test machine.
+var discoverEditorFn = discoverEditor
+
 // newUiCmd builds `codegraph ui` (SRV-01, SRV-03): a local, read-only web
 // UI over the repository's own already-indexed graph. Foreground until
 // Ctrl-C, matching `serve` and `daemon start` (D-10) — no PID file, no
@@ -66,7 +73,10 @@ func newUiCmd() *cobra.Command {
 				flagTemplate: editorURL,
 				noEditorURL:  noEditorURL,
 				getenv:       os.Getenv,
-				discover:     nil,
+				// discover is plan 09-02's real editor discoverer,
+				// not a stubbed-out absent source (see discoverEditorFn
+				// above).
+				discover: discoverEditorFn,
 			})
 			if err != nil {
 				return err

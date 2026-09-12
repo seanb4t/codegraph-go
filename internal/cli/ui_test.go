@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -333,4 +334,181 @@ func TestUICommandRefusesMalformedEditorURLBeforeBinding(t *testing.T) {
 	if readErr == nil {
 		t.Fatal("expected io.EOF from the closed pipe, got nil")
 	}
+}
+
+// TestUICommandDiscoveredDefaultHasProvenance proves plan 09-02's
+// rewiring end to end through the real command: with no --editor-url
+// flag and no CODEGRAPH_EDITOR_URL/CODEGRAPH_NO_EDITOR_URL set,
+// discovery (D-14's third precedence rung) becomes the effective
+// default, its provenance and launcher name reach GetEditorLink's wire
+// response, a not-found discovery result is never fatal (D-15), and the
+// off switch skips discovery entirely (D-16).
+func TestUICommandDiscoveredDefaultHasProvenance(t *testing.T) {
+	t.Run("discovered", func(t *testing.T) {
+		dir := copyGofixtureForCLI(t)
+		indexGofixtureForCLI(t, dir)
+
+		original := discoverEditorFn
+		discoverEditorFn = func() (discoveredEditor, bool) {
+			return discoveredEditor{
+				Launcher: "goland",
+				PresetID: "jetbrains",
+				Template: "goland://open?file={path}&line={line}",
+			}, true
+		}
+		t.Cleanup(func() { discoverEditorFn = original })
+
+		t.Setenv(editorURLEnvVar, "")
+		t.Setenv(noEditorURLEnvVar, "")
+
+		pr, pw := io.Pipe()
+		cmd := newUiCmd()
+		cmd.SetOut(pw)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"--path", dir, "--no-open"})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		runErr := make(chan error, 1)
+		go func() { runErr <- cmd.ExecuteContext(ctx) }()
+
+		scanner := bufio.NewScanner(pr)
+		if !scanner.Scan() {
+			t.Fatalf("no URL line printed on stdout: %v", scanner.Err())
+		}
+		printedURL := strings.TrimSpace(scanner.Text())
+
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, printedURL)
+		resp, err := client.GetEditorLink(context.Background(), connect.NewRequest(&uiv1.GetEditorLinkRequest{Path: "main.go"}))
+		if err != nil {
+			t.Fatalf("GetEditorLink at %q: %v", printedURL, err)
+		}
+		if got := resp.Msg.GetAvailability(); got != uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_BUILDABLE {
+			t.Fatalf("availability = %v, want BUILDABLE", got)
+		}
+		if got := resp.Msg.GetDefaultSource(); got != uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_DISCOVERED {
+			t.Fatalf("default_source = %v, want DISCOVERED", got)
+		}
+		if got := resp.Msg.GetDefaultEditor(); got != "goland" {
+			t.Fatalf("default_editor = %q, want %q", got, "goland")
+		}
+		if got := resp.Msg.GetUrl(); !strings.HasPrefix(got, "goland://open?file=") {
+			t.Fatalf("url = %q, want prefix %q", got, "goland://open?file=")
+		}
+
+		cancel()
+		select {
+		case err := <-runErr:
+			if err != nil {
+				t.Fatalf("cmd.ExecuteContext returned %v after cancellation, want nil", err)
+			}
+		case <-time.After(6 * time.Second):
+			t.Fatal("cmd.ExecuteContext did not return within the shutdown budget after context cancellation")
+		}
+	})
+
+	t.Run("not found is never fatal", func(t *testing.T) {
+		dir := copyGofixtureForCLI(t)
+		indexGofixtureForCLI(t, dir)
+
+		original := discoverEditorFn
+		discoverEditorFn = func() (discoveredEditor, bool) { return discoveredEditor{}, false }
+		t.Cleanup(func() { discoverEditorFn = original })
+
+		t.Setenv(editorURLEnvVar, "")
+		t.Setenv(noEditorURLEnvVar, "")
+
+		pr, pw := io.Pipe()
+		cmd := newUiCmd()
+		cmd.SetOut(pw)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"--path", dir, "--no-open"})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		runErr := make(chan error, 1)
+		go func() { runErr <- cmd.ExecuteContext(ctx) }()
+
+		scanner := bufio.NewScanner(pr)
+		if !scanner.Scan() {
+			t.Fatalf("no URL line printed on stdout: %v", scanner.Err())
+		}
+		printedURL := strings.TrimSpace(scanner.Text())
+
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, printedURL)
+		resp, err := client.GetEditorLink(context.Background(), connect.NewRequest(&uiv1.GetEditorLinkRequest{Path: "main.go"}))
+		if err != nil {
+			t.Fatalf("GetEditorLink at %q: %v", printedURL, err)
+		}
+		if got := resp.Msg.GetAvailability(); got != uiv1.EditorLinkAvailability_EDITOR_LINK_AVAILABILITY_NO_TEMPLATE {
+			t.Fatalf("availability = %v, want NO_TEMPLATE", got)
+		}
+		if got := resp.Msg.GetDefaultSource(); got != uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_NONE {
+			t.Fatalf("default_source = %v, want NONE", got)
+		}
+
+		cancel()
+		select {
+		case err := <-runErr:
+			if err != nil {
+				t.Fatalf("cmd.ExecuteContext returned %v after cancellation, want nil", err)
+			}
+		case <-time.After(6 * time.Second):
+			t.Fatal("cmd.ExecuteContext did not return within the shutdown budget after context cancellation")
+		}
+	})
+
+	t.Run("off switch skips discovery entirely", func(t *testing.T) {
+		dir := copyGofixtureForCLI(t)
+		indexGofixtureForCLI(t, dir)
+
+		original := discoverEditorFn
+		var discoverCalls int32
+		discoverEditorFn = func() (discoveredEditor, bool) {
+			// discoverEditorFn runs inside cmd.ExecuteContext's own
+			// goroutine below, not this test's goroutine — t.Fatal is
+			// documented as unsafe to call off the test goroutine, so
+			// this records the call for a synchronous assertion after
+			// the command has finished instead.
+			atomic.AddInt32(&discoverCalls, 1)
+			return discoveredEditor{}, false
+		}
+		t.Cleanup(func() { discoverEditorFn = original })
+
+		pr, pw := io.Pipe()
+		cmd := newUiCmd()
+		cmd.SetOut(pw)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs([]string{"--path", dir, "--no-open", "--no-editor-url"})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		runErr := make(chan error, 1)
+		go func() { runErr <- cmd.ExecuteContext(ctx) }()
+
+		scanner := bufio.NewScanner(pr)
+		if !scanner.Scan() {
+			t.Fatalf("no URL line printed on stdout: %v", scanner.Err())
+		}
+		printedURL := strings.TrimSpace(scanner.Text())
+
+		client := uiv1connect.NewUIServiceClient(http.DefaultClient, printedURL)
+		resp, err := client.GetEditorLink(context.Background(), connect.NewRequest(&uiv1.GetEditorLinkRequest{Path: "main.go"}))
+		if err != nil {
+			t.Fatalf("GetEditorLink at %q: %v", printedURL, err)
+		}
+		if got := resp.Msg.GetDefaultSource(); got != uiv1.EditorTemplateSource_EDITOR_TEMPLATE_SOURCE_DISABLED {
+			t.Fatalf("default_source = %v, want DISABLED", got)
+		}
+		if got := atomic.LoadInt32(&discoverCalls); got != 0 {
+			t.Fatalf("discoverEditorFn was called %d time(s) with --no-editor-url set, want 0 (D-16)", got)
+		}
+
+		cancel()
+		select {
+		case err := <-runErr:
+			if err != nil {
+				t.Fatalf("cmd.ExecuteContext returned %v after cancellation, want nil", err)
+			}
+		case <-time.After(6 * time.Second):
+			t.Fatal("cmd.ExecuteContext did not return within the shutdown budget after context cancellation")
+		}
+	})
 }
