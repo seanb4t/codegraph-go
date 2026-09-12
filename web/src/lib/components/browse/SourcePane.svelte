@@ -560,9 +560,13 @@
 	$effect(() => {
 		const isOpen = pickerOpen;
 		if (isOpen && !wasPickerOpen) {
-			// Opened: move focus into the panel's first focusable element
-			// (never redesign the picker itself into a focus-trap — this
-			// is the minimal "focus lands inside the dialog" contract).
+			// Opened: move focus into the panel's first focusable element.
+			// This picker is a non-modal disclosure panel (WR-05 review:
+			// `role="region"`, deliberately no `aria-modal`/focus trap —
+			// a focus trap without `aria-modal` would be pointless, and
+			// `aria-modal="true"` without a matching trap makes assistive
+			// tech and sighted-keyboard users diverge), so this only
+			// moves focus in; it never restricts where Tab can go.
 			const target = panelWrapperEl?.querySelector<HTMLElement>(
 				'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 			);
@@ -570,7 +574,7 @@
 		} else if (!isOpen && wasPickerOpen) {
 			// Closed (Escape or any callback that sets pickerOpen = false):
 			// restore focus to the toggle that opened it, exactly as a
-			// disclosure/dialog pattern is expected to on dismiss.
+			// disclosure panel pattern is expected to on dismiss.
 			toggleButtonEl?.focus();
 		}
 		wasPickerOpen = isOpen;

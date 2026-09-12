@@ -342,7 +342,7 @@ describe('SourcePane: picker integration (Task 3)', () => {
 		expect(readEditorOverride()).toEqual({ kind: 'preset', id: 'cursor' });
 	});
 
-	it('moves focus into the picker on auto-open and restores it to the toggle on Escape (WR-03)', async () => {
+	it('moves focus into the picker on auto-open and restores it to the toggle on Escape (WR-03, WR-05)', async () => {
 		const getEditorLink = vi.fn<GetEditorLinkFn>(async () =>
 			editorLinkResponse({
 				availability: EditorLinkAvailability.NO_TEMPLATE,
@@ -353,6 +353,11 @@ describe('SourcePane: picker integration (Task 3)', () => {
 		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
 		const toggle = await screen.findByTestId('editor-link-picker-toggle');
 		const panel = await screen.findByTestId('editor-link-picker');
+
+		// WR-05: this is a non-modal disclosure panel, not a modal
+		// dialog — no aria-modal promise to assistive tech that the
+		// rest of the page is inert (there's no focus trap to back it).
+		expect(panel.hasAttribute('aria-modal')).toBe(false);
 
 		// Auto-opened by the probe (no user gesture) — focus must still
 		// land inside the panel, on its first focusable element.

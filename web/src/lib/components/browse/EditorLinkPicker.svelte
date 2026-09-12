@@ -79,8 +79,7 @@
 
 <div
 	data-testid="editor-link-picker"
-	role="dialog"
-	aria-modal="true"
+	role="region"
 	aria-label="Editor link"
 	class="mt-2 flex flex-col gap-3 rounded border bg-background p-3 text-xs"
 >

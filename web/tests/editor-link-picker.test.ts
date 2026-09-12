@@ -63,11 +63,11 @@ describe('EditorLinkPicker: renders exactly the wire\'s three presets, a custom 
 		expect(screen.getByTestId('editor-use-server-default')).toBeTruthy();
 	});
 
-	it('declares aria-modal="true" on its dialog root (WR-03)', () => {
+	it('is a non-modal region with no aria-modal attribute (WR-05)', () => {
 		renderPicker();
-		const dialog = screen.getByTestId('editor-link-picker');
-		expect(dialog.getAttribute('role')).toBe('dialog');
-		expect(dialog.getAttribute('aria-modal')).toBe('true');
+		const panel = screen.getByTestId('editor-link-picker');
+		expect(panel.getAttribute('role')).toBe('region');
+		expect(panel.hasAttribute('aria-modal')).toBe(false);
 	});
 
 	it.each([
