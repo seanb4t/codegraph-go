@@ -17,11 +17,8 @@
 //      returns the 1-based index of the first line whose top edge sits
 //      AT OR BELOW the bar's bottom edge (the `>=` adjacency rule — a
 //      line whose top edge exactly touches the bar's bottom counts as
-//      fully visible; one pixel above it does not).
-//
-// RED STUB (test(09-03)): returns the wrong answer on purpose so the
-// target tests fail on assertions, not on module resolution. Replaced by
-// the real implementation in the immediately following feat(09-03) commit.
+//      fully visible; one pixel above it does not — the unit tests pin
+//      the boundary and one step either side).
 
 export interface SymbolRange {
 	name: string;
@@ -29,24 +26,57 @@ export interface SymbolRange {
 	endLine: number;
 }
 
+/**
+ * innermostSymbolAt normalises each range to `[startLine, max(startLine,
+ * endLine)]` (a symbol with endLine <= startLine is treated as a
+ * single-line range at startLine), keeps those containing `line`
+ * inclusively, and returns the one with the smallest `(end - start)`
+ * span. Ties break toward the LATER-starting range; a full tie (equal
+ * span and equal start) breaks toward the LATER index in `symbols` —
+ * both resolve deterministically to whatever FileSymbols' own
+ * (startLine, then name) sort order placed last among equals.
+ */
 export function innermostSymbolAt<T extends SymbolRange>(
 	symbols: readonly T[],
 	line: number
 ): T | null {
-	void symbols;
-	void line;
-	return null;
+	let best: T | null = null;
+	let bestSpan = Infinity;
+	let bestStart = -Infinity;
+
+	for (const s of symbols) {
+		const start = s.startLine;
+		const end = Math.max(start, s.endLine);
+		if (line < start || line > end) continue;
+
+		const span = end - start;
+		if (best === null || span < bestSpan || (span === bestSpan && start >= bestStart)) {
+			best = s;
+			bestSpan = span;
+			bestStart = start;
+		}
+	}
+
+	return best;
 }
 
+/**
+ * firstFullyVisibleLine returns the 1-based index of the first source
+ * line whose top edge is at or below `barBottom` — the "current line"
+ * the sticky breadcrumb names. `lineCount === 0` returns 0 (nothing is
+ * visible in an empty file); a non-positive `lineHeight` returns 1
+ * rather than dividing by zero (never NaN or Infinity). The result is
+ * always clamped to `[1, lineCount]`.
+ */
 export function firstFullyVisibleLine(
 	codeTop: number,
 	lineHeight: number,
 	barBottom: number,
 	lineCount: number
 ): number {
-	void codeTop;
-	void lineHeight;
-	void barBottom;
-	void lineCount;
-	return 0;
+	if (lineCount <= 0) return 0;
+	if (lineHeight <= 0) return 1;
+
+	const raw = Math.ceil((barBottom - codeTop) / lineHeight) + 1;
+	return Math.max(1, Math.min(lineCount, raw));
 }
