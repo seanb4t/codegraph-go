@@ -66,13 +66,52 @@ type editorResolveInputs struct {
 // entirely; plan 09-02's discoverEditor is the production value passed
 // from newUiCmd. A config file is deliberately not a source in this
 // phase (09-CONTEXT.md Deferred Ideas).
-//
-// STUB (RED phase, plan 09-01 Task 2): always returns a zero-value
-// uiserver.EditorLinkOptions and a nil error, so the named tests fail on
-// their own assertions rather than on a missing symbol. Replaced with
-// the real precedence chain in the GREEN commit.
 func resolveEditorLink(in editorResolveInputs) (uiserver.EditorLinkOptions, error) {
-	return uiserver.EditorLinkOptions{}, nil
+	envValue := in.getenv(editorURLEnvVar)
+
+	// (1) D-17: both explicit values are validated regardless of which
+	// wins — an operator who typed a template meant it.
+	var flagErr, envErr error
+	if in.flagTemplate != "" {
+		if err := uiserver.ValidateEditorTemplate(in.flagTemplate); err != nil {
+			flagErr = fmt.Errorf("--editor-url: %s", err)
+		}
+	}
+	if envValue != "" {
+		if err := uiserver.ValidateEditorTemplate(envValue); err != nil {
+			envErr = fmt.Errorf("%s: %s", editorURLEnvVar, err)
+		}
+	}
+	if flagErr != nil {
+		return uiserver.EditorLinkOptions{}, flagErr
+	}
+	if envErr != nil {
+		return uiserver.EditorLinkOptions{}, envErr
+	}
+
+	// (2) D-16: the off switch, consulted only after both explicit
+	// values above have passed validation.
+	disabled, err := parseBoolEnv(in.getenv(noEditorURLEnvVar))
+	if err != nil {
+		return uiserver.EditorLinkOptions{}, fmt.Errorf("%s: %s", noEditorURLEnvVar, err)
+	}
+	if in.noEditorURL || disabled {
+		return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateDisabled}, nil
+	}
+
+	// (3) D-14: flag -> env -> discovered -> unconfigured.
+	if in.flagTemplate != "" {
+		return uiserver.EditorLinkOptions{Template: in.flagTemplate, Source: uiserver.EditorTemplateFlag}, nil
+	}
+	if envValue != "" {
+		return uiserver.EditorLinkOptions{Template: envValue, Source: uiserver.EditorTemplateEnv}, nil
+	}
+	if in.discover != nil {
+		if d, ok := in.discover(); ok {
+			return uiserver.EditorLinkOptions{Template: d.Template, Source: uiserver.EditorTemplateDiscovered, Editor: d.Launcher}, nil
+		}
+	}
+	return uiserver.EditorLinkOptions{Source: uiserver.EditorTemplateNone}, nil
 }
 
 // parseBoolEnv parses a CODEGRAPH_NO_EDITOR_URL-shaped boolean env

@@ -29,11 +29,12 @@ var openBrowser = browser.OpenURL
 // auth be exposed in v1, and D-08 keeps the bind address reachable only
 // as the unwired uiserver.Options.Addr field.
 //
-// D-17: resolveEditorLink runs immediately after resolveStartPath and
-// BEFORE uiserver.Listen — a malformed --editor-url or
-// CODEGRAPH_EDITOR_URL value refuses to start before the port is ever
-// bound and before anything is printed. CODEGRAPH_EDITOR_URL and
-// CODEGRAPH_NO_EDITOR_URL are the two env vars this command reads.
+// D-17: the editor-link default is resolved immediately after
+// resolveStartPath and BEFORE the server binds its port below — a
+// malformed --editor-url or CODEGRAPH_EDITOR_URL value refuses to start
+// before the port is ever bound and before anything is printed.
+// CODEGRAPH_EDITOR_URL and CODEGRAPH_NO_EDITOR_URL are the two env vars
+// this command reads.
 func newUiCmd() *cobra.Command {
 	var path string
 	var noOpen bool

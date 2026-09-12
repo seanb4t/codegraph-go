@@ -291,6 +291,17 @@ func TestUICommandRefusesMalformedEditorURLBeforeBinding(t *testing.T) {
 	cmd := newUiCmd()
 	cmd.SetOut(pw)
 	cmd.SetErr(io.Discard)
+	// In production this command is always reached through the root
+	// command (newRootCmd, root.go), which sets SilenceUsage/
+	// SilenceErrors — cobra's own error/usage printing is the caller's
+	// job, not cobra's. Mirror that here: without it, cobra's default
+	// behavior writes the (large) usage string to c.OutOrStderr(),
+	// which resolves to the SAME pw this test uses for the success-path
+	// URL line, and io.Pipe is unbuffered — an unread write would
+	// deadlock ExecuteContext itself before it could ever return the
+	// RunE error this test is asserting on.
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
 	cmd.SetArgs([]string{"--path", dir, "--no-open", "--editor-url", "javascript:{path}"})
 
 	runErr := make(chan error, 1)
