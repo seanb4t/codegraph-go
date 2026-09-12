@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 09
 current_phase_name: Source View Follow-Through — Breadcrumb & Editor Handoff
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-09-12T17:44:45.149Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-09-12T18:00:53.522Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 09 execution started
-state_head: 1fd7defbe02c35f431dabb4ea71efbd0b0533a45
+state_head: cc48f44f41969fcfa76cb662b0b6a9e25ed76441
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 14
-  completed_plans: 10
+  completed_plans: 11
   percent: 17
 ---
 
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
 ## Current Position
 
 Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 09 execution started
 
@@ -120,6 +120,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 08 P04 | ~25min | 3 tasks | 5 files |
 | Phase 08 P05 | 25 min | 3 tasks | 8 files |
 | Phase 09 P01 | 30min | 2 tasks | 15 files |
+| Phase 09 P02 | 14min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -257,6 +258,8 @@ Standing decisions that outlive every milestone:
 - [Phase 08]: Fixed pollUntilStable's G-08-1 cold-start race by giving it a required readiness predicate (ready(capture) && capture == predecessor) rather than warming the binary or raising the poll interval.
 - [Phase 08]: Cold-arm evidence runs all showed K<=1 (machine warm); did not re-run chasing K>=2 per the plan's own interpretation rule — relied on the deterministic self-test's RED/GREEN transcripts as proof instead.
 - [Phase 09]: GetEditorLink shares GetPermalink's validator/answer-not-error discipline; field-number fixture extended additively (uiProtoFieldFixtureLenAtPlan0901)
+- [Phase 09]: [Phase 09]: 09-02: gofmt's struct-literal column alignment padded discover: with extra spaces, defeating the plan's own single-space literal verify grep -- fixed by adding an explanatory comment above the field to break gofmt's alignment group, satisfying both gofmt and the check without touching either
+- [Phase 09]: [Phase 09]: 09-02: templateForLauncher never restates the vscode/cursor template strings -- it looks them up from uiserver.EditorPresets() by ID, so both presets have exactly one source of truth across plans 09-01 and 09-02
 
 ### Pending Todos
 
@@ -404,8 +407,8 @@ against a 10% budget.
 
 **Resume file:** None
 
-Last session: 2026-09-12T17:44:45.124Z
-Stopped at: Completed 09-01-PLAN.md
+Last session: 2026-09-12T18:00:53.498Z
+Stopped at: Completed 09-02-PLAN.md
   NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
   CARRY-OVER:
 

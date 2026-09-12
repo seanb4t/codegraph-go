@@ -16,7 +16,7 @@
     {
       "number": "9",
       "name": "Source View Follow-Through — Breadcrumb & Editor Handoff",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "10",
@@ -39,5 +39,5 @@
     "label": "Advance to the next step",
     "reason": "Phase 09 of 6 · 17% · executing"
   },
-  "updated_at": "2026-09-12T17:44:37.663Z"
+  "updated_at": "2026-09-12T18:00:25.527Z"
 }
