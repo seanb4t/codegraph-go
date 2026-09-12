@@ -6,6 +6,14 @@
 // imported here — a wrong derivation in the SPA must not be able to
 // agree with itself).
 //
+// 09-04 Task 3 extends the SAME script (D-11 scope: the editor handoff
+// lives in SourcePane alongside the breadcrumb) with three more phases
+// after the breadcrumb loop: the header "Open in editor" href resolved
+// from the load-time probe, a gutter-link count, and a REAL click on
+// gutter-line-3 observed to issue a GetEditorLink rpc naming line 3. The
+// spawned `codegraph ui` gets `--editor-url` so the header link's href
+// is deterministic and assertable.
+//
 // This script owns the `codegraph ui` child process lifecycle itself
 // (graph-live-update-check.mjs's startCodegraphUi shape) rather than
 // taking an externally-provided --url, and follows
@@ -59,13 +67,22 @@ async function pollUntil(check, timeoutMs, pollMs) {
  * startCodegraphUi — the same shape as graph-live-update-check.mjs's
  * function of the same name: spawn `<binary> ui --no-open --path <repo>`,
  * resolve once the printed URL appears in stdout, reject on early exit.
+ * 09-04: an optional editorUrl is passed through as `--editor-url` so
+ * the header link's href is deterministic (graph-live-update-check.mjs
+ * lines 247-280's convention for passing extra flags to the spawned
+ * command).
  * @param {string} binaryPath
  * @param {string} repoPath
+ * @param {string} [editorUrl]
  * @returns {Promise<{child: import('node:child_process').ChildProcess, url: string}>}
  */
-function startCodegraphUi(binaryPath, repoPath) {
+function startCodegraphUi(binaryPath, repoPath, editorUrl) {
 	return new Promise((resolve, reject) => {
-		const child = spawn(binaryPath, ['ui', '--no-open', '--path', repoPath], {
+		const cliArgs = ['ui', '--no-open', '--path', repoPath];
+		if (editorUrl) {
+			cliArgs.push('--editor-url', editorUrl);
+		}
+		const child = spawn(binaryPath, cliArgs, {
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
 		let stdout = '';
@@ -171,6 +188,10 @@ async function main() {
 	const binaryPath = path.resolve(argOr('--binary', path.join(root, 'codegraph')));
 	const repoPath = path.resolve(argOr('--repo', root));
 	const file = argOr('--file', 'internal/query/node.go');
+	// 09-04: default template matches the plan's own success criterion
+	// (`vscode://file/{path}:{line}:{col}`) so the recorded header href
+	// is deterministic without requiring a caller to pass one.
+	const editorUrl = argOr('--editor-url', 'vscode://file/{path}:{line}:{col}');
 
 	/** @type {Record<string, any>} */
 	const record = {
@@ -178,11 +199,16 @@ async function main() {
 		file,
 		binaryPath,
 		repoPath,
+		editorUrl,
 		symbolCount: null,
 		breadcrumbPresent: false,
 		observations: [],
 		nonEmptyObservations: 0,
 		emptyObservations: 0,
+		editorLinkHref: null,
+		gutterLinkCount: null,
+		gutterClickIssuedRpc: false,
+		notes: [],
 		pageErrorCount: null,
 		pageErrors: [],
 		browserIdentity: null,
@@ -206,7 +232,7 @@ async function main() {
 
 	try {
 		try {
-			const started = await startCodegraphUi(binaryPath, repoPath);
+			const started = await startCodegraphUi(binaryPath, repoPath, editorUrl);
 			child = started.child;
 			const baseUrl = started.url;
 
@@ -341,6 +367,52 @@ async function main() {
 			record.observations = observations;
 			record.nonEmptyObservations = nonEmptyObservations;
 			record.emptyObservations = emptyObservations;
+
+			// 09-04 Task 3: the editor-link phases, proving the handoff
+			// (header href + gutter buttons + click->rpc) in the SAME real
+			// Chromium session, against the SAME real index, right after
+			// the breadcrumb phases above.
+			//
+			// The header link is resolved once at page load (D-12's
+			// per-target probe) — by the time the breadcrumb loop above has
+			// finished, it has long since settled, so a short poll suffices
+			// rather than a fresh navigation.
+			await pollUntil(
+				async () => (await page.locator('[data-testid="editor-link"]').count()) > 0,
+				10000,
+				250
+			);
+			record.editorLinkHref = await page.locator('[data-testid="editor-link"]').getAttribute('href');
+			console.log(`breadcrumb-check: editor-link href=${record.editorLinkHref}`);
+
+			record.gutterLinkCount = await page.locator('button[data-testid^="gutter-line-"]').count();
+			console.log(`breadcrumb-check: gutterLinkCount=${record.gutterLinkCount}`);
+
+			// A real click on gutter-line-3, observed via the network layer
+			// to issue a GetEditorLink rpc naming line 3. The resulting
+			// custom-scheme navigation (`location.assign`) cannot itself be
+			// followed by headless Chromium — that half is NOT asserted
+			// here; only the rpc is. Recorded honestly in `notes` (research
+			// A3: Chromium-observed, Safari behavior unverified).
+			const editorLinkRequestPromise = page
+				.waitForRequest(
+					(req) =>
+						req.url().includes('/codegraph.ui.v1.UIService/GetEditorLink') &&
+						(req.postData() ?? '').includes('"line":3'),
+					{ timeout: 5000 }
+				)
+				.then(() => true)
+				.catch(() => false);
+			await page.getByTestId('gutter-line-3').click();
+			record.gutterClickIssuedRpc = await editorLinkRequestPromise;
+			console.log(`breadcrumb-check: gutterClickIssuedRpc=${record.gutterClickIssuedRpc}`);
+			record.notes.push(
+				'Chromium observed the gutter click issuing a GetEditorLink rpc (line:3) and the ' +
+					'subsequent window.location.assign call; the resulting custom-scheme navigation ' +
+					'itself cannot be followed by headless Chromium and is not asserted here. Safari ' +
+					'behavior for this sequence is unverified — see 09-SECURITY.md.'
+			);
+
 			record.pageErrorCount = pageErrors.length;
 			record.pageErrors = pageErrors;
 
@@ -350,6 +422,11 @@ async function main() {
 				observations.every((o) => o.agrees) &&
 				nonEmptyObservations >= 1 &&
 				emptyObservations >= 1 &&
+				typeof record.editorLinkHref === 'string' &&
+				record.editorLinkHref.startsWith('vscode://file/') &&
+				record.editorLinkHref.endsWith(':1:1') &&
+				record.gutterLinkCount >= 10 &&
+				record.gutterClickIssuedRpc === true &&
 				pageErrors.length === 0;
 
 			await context.close();

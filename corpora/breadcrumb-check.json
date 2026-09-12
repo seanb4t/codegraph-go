@@ -3,6 +3,7 @@
   "file": "internal/query/node.go",
   "binaryPath": "/Volumes/Code/github.com/seanb4t/codegraph-go/codegraph",
   "repoPath": "/Volumes/Code/github.com/seanb4t/codegraph-go",
+  "editorUrl": "vscode://file/{path}:{line}:{col}",
   "symbolCount": 13,
   "breadcrumbPresent": true,
   "observations": [
@@ -44,6 +45,12 @@
   ],
   "nonEmptyObservations": 1,
   "emptyObservations": 4,
+  "editorLinkHref": "vscode://file//Volumes/Code/github.com/seanb4t/codegraph-go/internal/query/node.go:1:1",
+  "gutterLinkCount": 418,
+  "gutterClickIssuedRpc": true,
+  "notes": [
+    "Chromium observed the gutter click issuing a GetEditorLink rpc (line:3) and the subsequent window.location.assign call; the resulting custom-scheme navigation itself cannot be followed by headless Chromium and is not asserted here. Safari behavior for this sequence is unverified — see 09-SECURITY.md."
+  ],
   "pageErrorCount": 0,
   "pageErrors": [],
   "browserIdentity": {
