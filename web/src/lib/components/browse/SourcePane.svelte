@@ -427,8 +427,35 @@
 		const template = templateForRequest(override, untrack(() => lastPresets));
 		activeClient
 			.getEditorLink({ path, line, col, template }, { signal: controller.signal })
-			.then((response) => {
+			.then(async (response) => {
 				lastPresets = response.presets;
+				// Corrective re-probe (CR-01): a pending PRESET override
+				// cannot resolve to a template on the very first probe of a
+				// page load, because templateForRequest needed `presets`
+				// (untracked, still []) which only this response supplies.
+				// Detect that exact case — template undefined, override is
+				// a preset — and re-resolve against the presets THIS
+				// response just delivered; if it now resolves to a real
+				// template, re-issue the probe once so the settled state
+				// reflects the user's saved preference instead of the
+				// server's unrelated default. A `custom` override never
+				// needs this: its template never depended on `presets`.
+				if (template === undefined && override?.kind === 'preset') {
+					const resolved = templateForRequest(override, response.presets);
+					if (resolved !== undefined) {
+						const corrected = await activeClient.getEditorLink(
+							{ path, line, col, template: resolved },
+							{ signal: controller.signal }
+						);
+						lastPresets = corrected.presets;
+						editorLinkState = { kind: 'loaded', response: corrected };
+						if (needsPickerPrompt(corrected) && !pickerOpenedOnce) {
+							pickerOpenedOnce = true;
+							pickerOpen = true;
+						}
+						return;
+					}
+				}
 				editorLinkState = { kind: 'loaded', response };
 				if (needsPickerPrompt(response) && !pickerOpenedOnce) {
 					pickerOpenedOnce = true;

@@ -175,6 +175,19 @@ describe('SourcePane: header "Open in editor" load-time probe', () => {
 		expect(getEditorLink.mock.calls[0][0].template).toBe('cursor://file/{path}:{line}');
 	});
 
+	it('sends a pre-seeded PRESET override as the corrected template via a re-probe (CR-01)', async () => {
+		writeEditorOverride({ kind: 'preset', id: 'cursor' });
+		const getEditorLink = vi.fn<GetEditorLinkFn>(async () => editorLinkResponse());
+		render(SourcePane, { props: { state: fileState(), client: stubClient({ getEditorLink }) } });
+		await waitFor(() => expect(getEditorLink).toHaveBeenCalledTimes(2));
+		// First call cannot know the preset's template yet (lastPresets
+		// starts empty) — it must go out with no template.
+		expect(getEditorLink.mock.calls[0][0].template).toBeUndefined();
+		// The corrective re-probe carries the preset's template resolved
+		// from the first response's own presets list.
+		expect(getEditorLink.mock.calls[1][0].template).toBe('cursor://file/{path}:{line}:{col}');
+	});
+
 	it('renders no editor surfaces when the client lacks getEditorLink, and does not throw', () => {
 		expect(() =>
 			render(SourcePane, { props: { state: fileState(), client: stubClient() } })
