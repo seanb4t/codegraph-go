@@ -22,14 +22,23 @@ var openBrowser = browser.OpenURL
 // UI over the repository's own already-indexed graph. Foreground until
 // Ctrl-C, matching `serve` and `daemon start` (D-10) — no PID file, no
 // lock file, no `ui stop` verb, and no lifecycle shared with `daemon`
-// (SRV-01 forbids sharing it). Registers exactly two flags, `--path`/`-p`
-// and `--no-open`, and no flag for a bind address, port, hostname, token
-// or any other credential — SRV-03 requires neither the bind address nor
+// (SRV-01 forbids sharing it). Registers exactly four flags:
+// `--path`/`-p`, `--no-open`, `--editor-url` and `--no-editor-url`
+// (D-14/D-16) — and no flag for a bind address, port, hostname, token or
+// any other credential — SRV-03 requires neither the bind address nor
 // auth be exposed in v1, and D-08 keeps the bind address reachable only
 // as the unwired uiserver.Options.Addr field.
+//
+// D-17: resolveEditorLink runs immediately after resolveStartPath and
+// BEFORE uiserver.Listen — a malformed --editor-url or
+// CODEGRAPH_EDITOR_URL value refuses to start before the port is ever
+// bound and before anything is printed. CODEGRAPH_EDITOR_URL and
+// CODEGRAPH_NO_EDITOR_URL are the two env vars this command reads.
 func newUiCmd() *cobra.Command {
 	var path string
 	var noOpen bool
+	var editorURL string
+	var noEditorURL bool
 
 	cmd := &cobra.Command{
 		Use:   "ui",
@@ -39,10 +48,25 @@ func newUiCmd() *cobra.Command {
 			"It is read-only: it never writes to the graph. The server " +
 			"binds an ephemeral loopback port and runs in the foreground " +
 			"until interrupted (Ctrl-C) — there is no separate `ui stop` " +
-			"command and no shared lifecycle with `codegraph daemon`.",
+			"command and no shared lifecycle with `codegraph daemon`. " +
+			"An editor-link default is resolved once at startup, in order: " +
+			"--editor-url, then CODEGRAPH_EDITOR_URL, then a discovered " +
+			"editor, then unconfigured; --no-editor-url or " +
+			"CODEGRAPH_NO_EDITOR_URL=true|1|yes disables it. A malformed " +
+			"explicit value refuses to start before the port is bound.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			start, err := resolveStartPath(path)
+			if err != nil {
+				return err
+			}
+
+			resolvedEditorLink, err := resolveEditorLink(editorResolveInputs{
+				flagTemplate: editorURL,
+				noEditorURL:  noEditorURL,
+				getenv:       os.Getenv,
+				discover:     nil,
+			})
 			if err != nil {
 				return err
 			}
@@ -55,7 +79,7 @@ func newUiCmd() *cobra.Command {
 			// to publish or launch against before Listen returns, and
 			// Serve (step 5) blocks, so publication and launch can only
 			// happen in the window between them.
-			srv, err := uiserver.Listen(uiserver.Options{RepoPath: start})
+			srv, err := uiserver.Listen(uiserver.Options{RepoPath: start, EditorLink: resolvedEditorLink})
 			if err != nil {
 				return err
 			}
@@ -80,6 +104,13 @@ func newUiCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&path, "path", "p", "", "repo path (default: cwd)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "do not open a browser automatically")
+	cmd.Flags().StringVar(&editorURL, "editor-url", "",
+		"editor URI template with {path}, {line} and {col} placeholders "+
+			"(e.g. 'vscode://file/{path}:{line}:{col}'); overrides "+
+			"CODEGRAPH_EDITOR_URL and startup editor discovery")
+	cmd.Flags().BoolVar(&noEditorURL, "no-editor-url", false,
+		"disable editor links entirely (also CODEGRAPH_NO_EDITOR_URL=true|1|yes); "+
+			"skips editor discovery")
 
 	return cmd
 }
