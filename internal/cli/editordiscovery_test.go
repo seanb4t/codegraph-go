@@ -3,7 +3,9 @@ package cli
 import (
 	"errors"
 	"io/fs"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/seanb4t/codegraph-go/internal/uiserver"
@@ -291,6 +293,50 @@ func TestTemplateForLauncherEmitsAllowlistedTemplates(t *testing.T) {
 
 	if presetID, template := templateForLauncher("not-a-real-launcher"); presetID != "" || template != "" {
 		t.Fatalf("templateForLauncher(unknown) = (%q, %q), want (\"\", \"\")", presetID, template)
+	}
+}
+
+// TestEditorDiscoverySourceNeverSpawnsAProcess is a source-level,
+// structural complement to TestDiscoverEditorNeverExecutes (WR-02):
+// that test proves discoverEditorWith's DI-based fakes see no
+// process-spawning call, but that is a BEHAVIORAL check of one call
+// path — it cannot prove editordiscovery.go's SOURCE contains no
+// exec.Command/os.StartProcess/syscall.Exec call anywhere in the file
+// (e.g. a future helper never routed through editorProbes). This test
+// reads the file's own bytes and asserts none of the three forbidden
+// substrings appear, matching readonly_test.go's "positive,
+// non-vacuous, fails in both directions" discipline (rule 84d1gfpywd):
+// a guard that finds zero forbidden occurrences must also prove it
+// scanned real content, not an empty or renamed file, by asserting a
+// POSITIVE count of the probe-only APIs (exec.LookPath, os.Stat) this
+// file is known to use.
+func TestEditorDiscoverySourceNeverSpawnsAProcess(t *testing.T) {
+	src, err := os.ReadFile("editordiscovery.go")
+	if err != nil {
+		t.Fatalf("read editordiscovery.go: %v", err)
+	}
+	text := string(src)
+
+	forbidden := []string{"exec.Command(", "os.StartProcess(", "syscall.Exec("}
+	for _, f := range forbidden {
+		if strings.Contains(text, f) {
+			t.Fatalf("editordiscovery.go contains %q — SRV-03 forbids any process-spawning call in editor discovery, which must only ever probe (exec.LookPath/os.Stat), never launch", f)
+		}
+	}
+
+	// Positive control: without this, a broken read (empty text) or a
+	// future rename of editordiscovery.go to something this test no
+	// longer targets would still report "PASS", vacuously.
+	required := []string{"exec.LookPath", "os.Stat"}
+	inspected := 0
+	for _, r := range required {
+		if !strings.Contains(text, r) {
+			t.Fatalf("editordiscovery.go does not contain %q — positive control failed, meaning this scan is not actually inspecting the expected probe-only source", r)
+		}
+		inspected++
+	}
+	if inspected == 0 {
+		t.Fatal("inspected 0 required substrings — this guard's positive control is itself broken")
 	}
 }
 
