@@ -341,6 +341,10 @@ None — no external service configuration required.
 - `internal/uiserver/editorlink.go`'s `EditorLinkOptions`/`ValidateEditorTemplate`/`EditorPresets()` are exported and ready for plan 09-04's header-link/gutter UI work and plan 09-05's `09-SECURITY.md`.
 - No blockers. The Cursor/JetBrains preset templates remain `[ASSUMED]` (09-RESEARCH.md A1/A2) — tagged as such in `editorpresets.go`'s doc comment, per this plan's own prohibition against presenting them as verified — and are pending human corroboration at the phase's own end-of-phase checkpoint (09-05).
 
+## Self-Check: PASSED
+
+All key files present on disk; all five commits (`237ab0ef`, `f845cb33`, `d610d029`, `1fd7defb`, `eb5c6c5e`) found in `git log`.
+
 ---
 *Phase: 09-source-view-follow-through-breadcrumb-editor-handoff*
 *Completed: 2026-09-12*
