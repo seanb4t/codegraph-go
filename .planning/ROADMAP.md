@@ -123,7 +123,7 @@ Archived: [`milestones/v0.12.0-ROADMAP.md`](./milestones/v0.12.0-ROADMAP.md) · 
 - **`v0.13.0` carries no git tag.** release-please is the sole tag authority (D-06R). The label is a prediction that holds because the UI follow-through lands `feat:` commits; a fixes-only outcome would cut `v0.12.1` instead. No phase schedules a `git tag` step.
 
 - [x] **Phase 7: Guards That Cannot Fire** - Every guard in the known-vacuous set now fails when the property it claims to check is violated, each proven by a recorded RED demonstration rather than a green run (completed 2026-09-08)
-- [ ] **Phase 8: tmux Real-PTY Harness** - The interactive TUI is finally exercised on a terminal that answers escape queries and actually scrolls, closing the gap between the TTY-blind piped suite and manual human UAT
+- [x] **Phase 8: tmux Real-PTY Harness** - The interactive TUI is finally exercised on a terminal that answers escape queries and actually scrolls, closing the gap between the TTY-blind piped suite and manual human UAT (completed 2026-09-11)
 - [ ] **Phase 9: Source View Follow-Through — Breadcrumb & Editor Handoff** - A developer reading a long file always knows which symbol they are inside, and can jump from any node or line straight into their own editor
 - [ ] **Phase 10: Index Health — The Coverage Denominator** - "Why is my file missing" is answered by the index itself: how many files were discovered, how many were indexed, and a recorded reason for every gap
 - [ ] **Phase 11: Graph View — Community Clustering** - The file/package graph reads as groups rather than a flat mesh, coloured by communities computed deterministically on the layout already shipped
@@ -271,7 +271,7 @@ Phases execute in numeric order: 7 → 8 → 9 → 10 → 11 → 12. Only two ed
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 7. Guards That Cannot Fire | 4/4 | Complete    | 2026-09-08 |
-| 8. tmux Real-PTY Harness | 5/5 | In Progress|  |
+| 8. tmux Real-PTY Harness | 5/5 | Complete    | 2026-09-11 |
 | 9. Source View Follow-Through — Breadcrumb & Editor Handoff | 0/TBD | Not started | - |
 | 10. Index Health — The Coverage Denominator | 0/TBD | Not started | - |
 | 11. Graph View — Community Clustering | 0/TBD | Not started | - |
