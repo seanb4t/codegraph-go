@@ -5,16 +5,16 @@ milestone_name: Guard Hardening & UI Follow-through
 current_phase: 09
 current_phase_name: Source View Follow-Through — Breadcrumb & Editor Handoff
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-09-12T17:09:47.337Z"
-last_activity: 2026-09-11
-last_activity_desc: Phase 08 complete, transitioned to Phase 9
-state_head: 31a150d7f6821b36981e9280a19ca6c95ef8cbae
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-09-12T17:44:45.149Z"
+last_activity: 2026-09-12
+last_activity_desc: Phase 09 execution started
+state_head: 1fd7defbe02c35f431dabb4ea71efbd0b0533a45
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 10
   percent: 17
 ---
 
@@ -25,14 +25,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-11 after Phase 8)
 
 **Core value:** CodeGraph Go gives coding agents a pre-indexed code knowledge graph — fast symbol/call-path/impact queries served from a single static, verifiably-built binary, with no bundled runtime to install or manage.
-**Current focus:** Phase 9 — Source View Follow-Through — Breadcrumb & Editor Handoff
+**Current focus:** Phase 09 — Source View Follow-Through — Breadcrumb & Editor Handoff
 
 ## Current Position
 
-Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — READY TO EXECUTE
-Plan: Not started
+Phase: 09 (Source View Follow-Through — Breadcrumb & Editor Handoff) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-09-11 — Phase 08 complete, transitioned to Phase 9
+Last activity: 2026-09-12 — Phase 09 execution started
 
 ## Performance Metrics
 
@@ -119,6 +119,7 @@ Note the standing reconciliation carried from v1.0: "plans completed" counts SUM
 | Phase 08 P03 | ~20min | 2 tasks | 2 files |
 | Phase 08 P04 | ~25min | 3 tasks | 5 files |
 | Phase 08 P05 | 25 min | 3 tasks | 8 files |
+| Phase 09 P01 | 30min | 2 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -255,6 +256,7 @@ Standing decisions that outlive every milestone:
 - [Phase 08]: verify-work 2026-09-11: 21/21 UAT pass, 0 issues. Family (d) checkpoint asked for "a decision recorded"; the user's "defer" IS that decision, so it is recorded as pass with the deferred follow-up kept under 08-UAT.md → Deferred Follow-Ups (gsd-core's uat-predicate blocks on any `skipped`, contradicting #1921 — see Tooling gaps). 08-VERIFICATION.md status canonicalized to passed after the TTY-07 backstop fired at HEAD 5ffdc2a0 (CI run 34658987243: executed=6 skipped=0 expected=6, tmux 3.4).
 - [Phase 08]: Fixed pollUntilStable's G-08-1 cold-start race by giving it a required readiness predicate (ready(capture) && capture == predecessor) rather than warming the binary or raising the poll interval.
 - [Phase 08]: Cold-arm evidence runs all showed K<=1 (machine warm); did not re-run chasing K>=2 per the plan's own interpretation rule — relied on the deterministic self-test's RED/GREEN transcripts as proof instead.
+- [Phase 09]: GetEditorLink shares GetPermalink's validator/answer-not-error discipline; field-number fixture extended additively (uiProtoFieldFixtureLenAtPlan0901)
 
 ### Pending Todos
 
@@ -400,10 +402,10 @@ against a 10% budget.
 
 ## Session Continuity
 
-**Resume file:** .planning/phases/09-source-view-follow-through-breadcrumb-editor-handoff/09-CONTEXT.md
+**Resume file:** None
 
-Last session: 2026-09-12T16:00:50.285Z
-Stopped at: Phase 9 context gathered
+Last session: 2026-09-12T17:44:45.124Z
+Stopped at: Completed 09-01-PLAN.md
   NEXT: `/gsd-discuss-phase 9` (Source View Follow-Through — Breadcrumb & Editor Handoff; no 09-CONTEXT.md yet)
   CARRY-OVER:
 
