@@ -214,7 +214,7 @@ Plans:
   4. A phase `SECURITY.md` names the browser's external-protocol prompt — not CSP — as the security boundary and covers validation of the template's inputs, with every named threat carrying a test or a recorded verdict rather than prose (BRW-13)
 
 **Notes**: `BRW-10` is sequenced first within the phase despite the milestone scope listing `BRW-11` first: it is pure frontend reuse of the already-shipped `FileSymbols` rpc with no proto edit, no new Engine method and no CLI flag, so it is the smallest demonstrable item in the whole follow-through set. Whether `BRW-11` extends `GetPermalink` — whose availability enum has no real analog for an editor link's buildable/not-buildable state — or uses a small purpose-built message is an open design question to settle at discuss-phase time. Zed is deliberately neither a preset nor a claimed target: file+line open via URL is an open upstream request, and a preset would be a promise this project cannot keep. Server-side shell-out to launch an editor is out of scope by construction — it breaks read-only-by-construction (`SRV-03`); the browser's own URI-handler dispatch is the mechanism. `BRW-13`'s SECURITY.md is not optional paperwork: v0.12.0 Phase 1 shipped with no `01-SECURITY.md` despite 11 plans carrying threat models, the only such omission in project history, and it was caught only by the milestone audit.
-**Plans**: 5/5 plans executed
+**Plans**: 5/6 plans executed
 **UI hint**: yes
 
 Plans:
@@ -234,6 +234,10 @@ Plans:
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 09-05-PLAN.md — mutation-log families (b) stale breadcrumb, (c) bypassed confinement, (d) poisoned allowlist; `09-SECURITY.md` naming the browser's external-protocol prompt (not CSP) as the boundary with every threat carrying a test or a verdict; phase-close gate run
+
+**Wave 5** *(gap closure — 09-VERIFICATION.md's single gap, blocked on Wave 4 completion)*
+
+- [ ] 09-06-PLAN.md — close the svelte-check gap: `SourcePane.svelte` fails `pnpm -C web check` (2 errors at 446:31, introduced by the CR-01 review-fix `28d5d795` and missed by 09-05's phase-close gate list); capture the guard-narrowed `getEditorLink` once so the re-probe type-checks with no behavioural change (CR-01 test byte-identical), rebuild + `web:drift` MATCH in the same commit, and record the silently-red gate in `09-MUTATION-LOG.md`'s Closing
 
 ### Phase 10: Index Health — The Coverage Denominator
 
