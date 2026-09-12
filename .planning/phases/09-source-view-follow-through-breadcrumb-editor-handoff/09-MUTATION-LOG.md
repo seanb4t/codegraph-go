@@ -461,3 +461,7 @@ Three instruments were watched fail on the specific assertion each exists for, n
 
 All four families this phase committed to are discharged: BRW-10's success criterion 1 now has BOTH its empty (a) and stale (b) halves watched fail; BRW-11's rejected-path test (c) and BRW-11/BRW-12's scheme allowlist (d) are both watched fail against the real, shipped implementation.
 
+### Phase-close run (Task 3)
+
+Recorded 2026-09-12 (phase-close date) at HEAD `416b69551068e40c9bb44fd550371fdcd0f809f8` (the commit adding `09-SECURITY.md`, immediately before this line's own commit): `proto:drift`, `web:drift`, `test:unit`, `web:test`, the live gate, and `TestEditorPresetsAreExactlyThreeAndNameNoZed` all green on a clean tree; `web:components:drift` failed for a pre-existing, already-tracked, out-of-scope reason (`.planning/WINDOWS.md` entry 31 — local pnpm/Corepack toolchain mismatch against 8 vendored shadcn-svelte files this phase never touched). Full transcript in `09-05-SUMMARY.md`'s `## Phase close` section.
+
